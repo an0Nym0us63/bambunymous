@@ -60,7 +60,9 @@ export default function TileBench() {
       {ids.map(id => {
         const def = TILES[id];
         // la camera en captures : dix flux continus prendraient les six connexions du navigateur
-        const o = { _title: true, ...Object.fromEntries((def.options || []).map(op => [op.key, op.def])), ...(id === "camera" ? { mode: "images" } : {}) };
+        // ?o=cle:valeur,cle:valeur : des options imposees, pour regarder un autre affichage
+        const forced = Object.fromEntries((new URLSearchParams(location.search).get("o") || "").split(",").filter(Boolean).map(x => x.split(":")));
+        const o = { _title: true, ...Object.fromEntries((def.options || []).map(op => [op.key, op.def])), ...(id === "camera" ? { mode: "images" } : {}), ...forced };
         return (
           <div key={id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ fontWeight: 800, color: "var(--text)" }}>{def.label} <span style={{ color: "var(--muted)", fontWeight: 500 }}>({id})</span></div>

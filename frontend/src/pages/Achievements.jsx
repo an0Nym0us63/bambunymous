@@ -61,7 +61,11 @@ export default function Achievements({ embedded = false }) {
   const [oddsOpen, setOddsOpen] = useState(false);
   // le classement de la famille (compte principal et famille) : lu a l'ouverture
   const [famBoard, setFamBoard] = useState(null);
-  const openFamBoard = () => client.get("/achievements/family-board").then(r => setFamBoard(r.data)).catch(() => {});
+  const [famOpen, setFamOpen] = useState(false);
+  useEffect(() => {
+    if (!data || atFriend || !(data.me?.main || data.family)) return;
+    client.get("/achievements/family-board").then(r => setFamBoard(r.data)).catch(() => setFamBoard(null));
+  }, [!!data, data?.me?.main, !!data?.family]); // eslint-disable-line react-hooks/exhaustive-deps
   const load = () => {
     client.get("/achievements/surprise/odds").then(r => setOdds(r.data?.accounts?.length ? r.data : null)).catch(() => setOdds(null));
     return client.get("/achievements").then(r => setData(r.data)).catch(e => setErr(e.response?.data?.detail || e.message));
@@ -185,9 +189,12 @@ export default function Achievements({ embedded = false }) {
             <MedalShelf tiers={shelfTiers(data.tiers)} medals={data.medals} onOpen={t => setVitrine(t)}/>
           </div>
         </div>
-        {data.family && !atFriend ? <LoupeTreasure fam={data.family} wheel={canSpin ? data.keys?.wheel : null} onWheel={canSpin ? () => setSlot(true) : null}/>
-          : data.keys && !atFriend && <Treasure keys={data.keys} onRules={() => setRules(true)} onSpent={canSpend ? load : null}
-          onWheel={canSpin ? () => setSlot(true) : null}/>}
+        {!atFriend && (data.family ? <Treasure keys={canSpin ? data.keys || {} : {}} loupes={data.family} onRules={() => setRules(true)}
+            onWheel={canSpin ? () => setSlot(true) : null}/>
+          : data.keys && <Treasure keys={data.keys} onRules={() => setRules(true)} onSpent={canSpend ? load : null}
+          onWheel={canSpin ? () => setSlot(true) : null}/>)}
+        {/* la prochaine surprise, sous la roue (sortie de la section Secrets) ; un clic : tous les comptes */}
+        {!atFriend && odds && <OddsBanner odds={odds} onOpen={() => setOddsOpen(true)}/>}
       </div>
 
       {/* Podium general entre copains */}
@@ -203,6 +210,18 @@ export default function Achievements({ embedded = false }) {
               {p.name} : {p.status === "outdated" ? "son BambuNymous n'a pas encore les succès" : "injoignable pour le moment"}</div>
           ))}
         </div>
+      )}
+
+      {/* Classement de la famille (secrets a chercher), sous celui des copains ; un clic : le detail */}
+      {!atFriend && famBoard?.people?.length > 1 && (
+        <button type="button" onClick={() => setFamOpen(true)} className="card" style={{ padding:"14px 16px", display:"flex", flexDirection:"column", gap:10,
+          cursor:"pointer", textAlign:"left", font:"inherit", color:"inherit", ...feltCard("#EC4899", "#8B5CF6"),
+          background:`radial-gradient(45% 70% at 50% 0%, rgba(236,72,153,0.22), transparent 70%), ${feltBg("#EC4899", "#8B5CF6")}` }}>
+          <div style={{ ...sectionTitle, display:"flex", alignItems:"center", gap:6 }}>🏠 Classement de la famille
+            <span style={{ marginLeft:"auto", fontSize:11, fontWeight:800, letterSpacing:0, textTransform:"none", color:"#EC4899" }}>Détail ›</span></div>
+          <Podium places={4} people={famBoard.people.map(x => ({ id: x.username, name: x.username, me: x.username === famBoard.me, score: x.count }))} score={p => p.score}/>
+          <span style={{ fontSize:11.5, color:"var(--muted)" }}>Sur les secrets à chercher : easter eggs, cachettes, farces, fêtes, pages cachées et appli Android.</span>
+        </button>
       )}
 
       {/* Derniers succes */}
@@ -328,35 +347,7 @@ export default function Achievements({ embedded = false }) {
                 )}
                 {/* la prochaine surprise du compte principal ; un clic : tous les comptes. De quoi voir si,
                     chez quelqu'un, elle ne tombe jamais */}
-                {c.id === "secret" && !atFriend && (data.me?.main || data.family) && (
-                  <button type="button" onClick={openFamBoard} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:12,
-                    fontSize:12, lineHeight:1.4, color:"var(--text2)", textAlign:"left", cursor:"pointer", width:"100%",
-                    background:"linear-gradient(135deg, rgba(236,72,153,0.14), rgba(168,85,247,0.06))", border:"1px solid rgba(236,72,153,0.3)" }}>
-                    <span style={{ fontSize:22 }}>🏠</span>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:13, fontWeight:800, color:"var(--text)" }}>Classement de la famille</div>
-                      <div>Qui a trouvé le plus de secrets à chercher : easter eggs, cachettes, farces, fêtes, pages cachées, Android.</div>
-                    </div>
-                    <span style={{ fontSize:11.5, fontWeight:800, color:"#EC4899", whiteSpace:"nowrap" }}>Voir ›</span>
-                  </button>
-                )}
-                {c.id === "secret" && odds && (() => {
-                  const m = odds.accounts.find(x => x.main) || odds.accounts[0];
-                  return (
-                    <button type="button" onClick={() => setOddsOpen(true)} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
-                      borderRadius:12, fontSize:12, lineHeight:1.4, color:"var(--text2)", textAlign:"left", cursor:"pointer", width:"100%",
-                      background:"linear-gradient(135deg, rgba(139,92,246,0.14), rgba(99,102,241,0.06))", border:"1px solid rgba(139,92,246,0.3)" }}>
-                      <span style={{ fontSize:22 }}>🎲</span>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:13, fontWeight:800, color:"var(--text)" }}>
-                          {m.pending ? "Une surprise est tirée : elle attend la prochaine ouverture"
-                            : <>Prochaine surprise : <b style={{ color:"#8B5CF6" }}>{oddsPct(m.next)} %</b> à la prochaine ouverture</>}</div>
-                        <div>{m.username}{m.main ? " (compte principal)" : ""} · {m.n} ouverture{m.n > 1 ? "s" : ""} sans surprise · {m.shown} reçue{m.shown > 1 ? "s" : ""}</div>
-                      </div>
-                      <span style={{ fontSize:11.5, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap" }}>Comptes ›</span>
-                    </button>
-                  );
-                })()}
+
                 {/* Secrets : rangés en sous-sections (calendrier, heures, couleurs…) */}
                 {/* Secrets : les gagnes (et ceux dont une cle a revele la categorie) dans
                     leur sous-section ; les autres « a decouvrir ». Les en-tetes ne disent
@@ -442,7 +433,7 @@ export default function Achievements({ embedded = false }) {
 
       {rules && createPortal(<Rules data={data} onClose={() => setRules(false)}/>, document.body)}
       {slot && <SlotMachine wheel={data.keys?.wheel} onDone={load} onClose={() => setSlot(false)}/>}
-      {famBoard && <Zoom icon={<span style={{ fontSize:20 }}>🏠</span>} color="#EC4899" label="Classement de la famille" onClose={() => setFamBoard(null)}>
+      {famOpen && famBoard && <Zoom icon={<span style={{ fontSize:20 }}>🏠</span>} color="#EC4899" label="Classement de la famille" onClose={() => setFamOpen(false)}>
         <FamilyBoardZoom b={famBoard}/></Zoom>}
       {oddsOpen && odds && <OddsSheet odds={odds} admin={!atFriend && !!data.me?.main} uniq={data.tiers.find(t => t.id === "unique")} onClose={() => setOddsOpen(false)}/>}
       {ceremony && <TicketCeremony {...ceremony} onClose={() => setCeremony(null)}/>}
@@ -547,23 +538,23 @@ function Tile({ it, onOpen, others, shared, rivals }) {
 }
 
 // Podium : les trois premiers (2e, 1er, 3e), moi mis en avant.
-function Podium({ people, score, small = false }) {
-  const top = [...people].sort((a, b) => score(b) - score(a)).slice(0, 3);
-  const order = top.length === 3 ? [top[1], top[0], top[2]] : top.length === 2 ? [top[1], top[0]] : top;
+function Podium({ people, score, small = false, places = 3 }) {
+  const top = [...people].sort((a, b) => score(b) - score(a)).slice(0, places);
+  const order = top.length >= 3 ? [top[1], top[0], top[2], ...top.slice(3)] : top.length === 2 ? [top[1], top[0]] : top;
   const rank = p => top.indexOf(p);
-  const H = small ? [52, 38, 28] : [68, 50, 36];
+  const H = small ? [52, 38, 28, 20] : [68, 50, 36, 26];
   return (
     <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"center", gap:8 }}>
       {order.map(p => {
         const r = rank(p);
         return (
           <div key={p.id} style={{ flex:"0 1 110px", minWidth:0, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
-            <span style={{ fontSize: small ? 18 : 22 }}>{["🥇", "🥈", "🥉"][r]}</span>
+            <span style={{ fontSize: small ? 18 : 22 }}>{["🥇", "🥈", "🥉", "🏅"][r]}</span>
             <span style={{ fontSize:12, fontWeight:800, color: p.me ? "#F59E0B" : "var(--text)", maxWidth:"100%",
               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.me ? "Toi" : p.name}</span>
             <div style={{ width:"100%", height:H[r], borderRadius:"10px 10px 4px 4px", display:"flex", alignItems:"center",
               justifyContent:"center", fontSize:13, fontWeight:900, color:"#fff",
-              background: ["#F5B700", "#B8C2CC", "#CD7F32"][r], boxShadow: p.me ? "0 0 0 2px #F59E0B" : "none" }}>
+              background: ["#F5B700", "#B8C2CC", "#CD7F32", "#8B5CF6"][r], boxShadow: p.me ? "0 0 0 2px #F59E0B" : "none" }}>
               {score(p)}</div>
           </div>
         );
@@ -752,6 +743,25 @@ const oddsPct = p => (p * 100).toLocaleString("fr-FR", { maximumFractionDigits: 
 const oddsWhen = s => { if (!s) return "jamais"; const d = new Date(/Z|[+-]\d\d:\d\d$/.test(s) ? s : s + "Z");
   return `${d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} à ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`; };
 // la surprise de chaque compte : chance a la prochaine ouverture, ouvertures sans, surprises recues
+// la prochaine surprise du compte principal ; un clic : tous les comptes (de quoi voir si, chez quelqu'un, elle ne tombe jamais)
+function OddsBanner({ odds, onOpen }) {
+  const m = odds.accounts.find(x => x.main) || odds.accounts[0];
+  return (
+    <button type="button" onClick={onOpen} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
+      borderRadius:12, fontSize:12, lineHeight:1.4, color:"var(--text2)", textAlign:"left", cursor:"pointer", width:"100%",
+      background:"linear-gradient(135deg, rgba(139,92,246,0.14), rgba(99,102,241,0.06))", border:"1px solid rgba(139,92,246,0.3)" }}>
+      <span style={{ fontSize:22 }}>🎲</span>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:13, fontWeight:800, color:"var(--text)" }}>
+          {m.pending ? "Une surprise est tirée : elle attend la prochaine ouverture"
+            : <>Prochaine surprise : <b style={{ color:"#8B5CF6" }}>{oddsPct(m.next)} %</b> à la prochaine ouverture</>}</div>
+        <div>{m.username}{m.main ? " (compte principal)" : ""} · {m.n} ouverture{m.n > 1 ? "s" : ""} sans surprise · {m.shown} reçue{m.shown > 1 ? "s" : ""}</div>
+      </div>
+      <span style={{ fontSize:11.5, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap" }}>Comptes ›</span>
+    </button>
+  );
+}
+
 function OddsSheet({ odds, admin, uniq, onClose }) {
   useEffect(() => { const k = e => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
   // pour l'administrateur : les secrets que chaque compte a trouves lui-meme (compte ou pas)
@@ -1195,45 +1205,12 @@ function AutoSpend({ keys, onSpent }) {
   );
 }
 
-// le tresor d'un compte de la famille : ses loupes (et la roue si le compte principal la lui a permise)
-function LoupeTreasure({ fam, wheel, onWheel }) {
-  const n = fam.loupes || 0, max = fam.loupes_max || 3, day = fam.loupes_day || 2;
-  return (
-    <div style={{ display:"grid", gridTemplateColumns: wheel ? "minmax(0, 2fr) minmax(0, 1fr)" : "1fr", gap:8 }}>
-      <div style={{ position:"relative", overflow:"hidden", borderRadius:16, padding:"12px 14px", display:"flex", alignItems:"center", gap:14,
-        background:"radial-gradient(circle at 12% 30%, rgba(14,165,233,0.35), transparent 60%), var(--surface2)", border:"1px solid rgba(14,165,233,0.4)" }}>
-        <span style={{ fontSize:34, lineHeight:1, animation:"bn-float 3.5s ease-in-out infinite" }}>🔍</span>
-        <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:4 }}>
-          <div style={{ display:"flex", alignItems:"baseline", gap:6 }}>
-            <span style={{ fontSize:28, fontWeight:900, lineHeight:1, background:"linear-gradient(180deg,#38bdf8,#6366f1)",
-              WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}>{n}</span>
-            <span style={{ fontSize:13, fontWeight:800, color:"var(--text2)" }}>loupe{n > 1 ? "s" : ""}</span>
-            <span style={{ display:"inline-flex", gap:4, marginLeft:4 }}>{[...Array(max).keys()].map(i =>
-              <span key={i} style={{ width:9, height:9, borderRadius:"50%", background: i < n ? "#0EA5E9" : "var(--border)" }}/>)}</span>
-          </div>
-          <span style={{ fontSize:11.5, color:"var(--muted)", lineHeight:1.4 }}>Une loupe révèle l'indice d'un secret que {fam.house} a déjà.
-            {" "}{day} de plus chaque jour, {max} au plus{fam.loupes_used ? ` · ${fam.loupes_used} utilisée${fam.loupes_used > 1 ? "s" : ""}` : ""}.</span>
-        </div>
-      </div>
-      {wheel && (
-        <button type="button" onClick={onWheel || undefined} disabled={!onWheel} style={{ borderRadius:16, padding:"10px 8px", cursor: onWheel ? "pointer" : "default",
-          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:3, font:"inherit", color:"inherit",
-          background:"radial-gradient(circle at 50% 0%, rgba(239,68,68,0.3), transparent 70%), var(--surface2)", border:"1px solid rgba(239,68,68,0.4)" }}>
-          <span style={{ fontSize:24 }}>🎰</span>
-          <span style={{ fontSize:20, fontWeight:900, lineHeight:1, color:"#ef4444" }}>{wheel.spins || 0}</span>
-          <span style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)" }}>tour{(wheel.spins || 0) > 1 ? "s" : ""} de roue</span>
-        </button>
-      )}
-    </div>
-  );
-}
-
 function Treasure(props) {
-  return useNarrow() ? <TreasureRow {...props}/> : <TreasureWide {...props}/>;
+  return useNarrow() || props.loupes ? <TreasureRow {...props}/> : <TreasureWide {...props}/>;
 }
 
 // Sur telephone : cles, tickets et roue cote a cote, trois cases.
-function TreasureRow({ keys, onRules, onWheel, onSpent }) {
+function TreasureRow({ keys, onRules, onWheel, onSpent, loupes = null }) {
   const [open, setOpen] = useState(false);
   const log = keys.log || [];
   const w = keys.wheel;
@@ -1251,7 +1228,21 @@ function TreasureRow({ keys, onRules, onWheel, onSpent }) {
     <div style={{ width:`${pct}%`, height:"100%", background:c }}/></div>;
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:8 }}>
+      <div style={{ display:"grid", gridTemplateColumns:`repeat(${1 + (w && !loupes ? 1 : 0) + (w ? 1 : 0)}, minmax(0, 1fr))`, gap:8 }}>
+        {loupes ? (
+          <div style={{ ...box("rgba(14,165,233,.35)", "rgba(14,165,233,.45)") }}>
+            <button type="button" onClick={onRules} aria-label="Les loupes, comment ça marche" title="Une loupe révèle l'indice d'un secret que la maison a déjà. Deux de plus chaque jour, trois au plus."
+              style={{ position:"absolute", top:4, right:4, width:18, height:18, borderRadius:"50%", border:"none", cursor:"pointer", fontSize:10.5, fontWeight:900,
+                color:"var(--muted)", background:"var(--surface)", boxShadow:"inset 0 0 0 1px var(--border)" }}>?</button>
+            <span style={iconSlot}><span style={{ fontSize:24, lineHeight:1, animation:"bn-float 3.5s ease-in-out infinite" }}>🔍</span></span>
+            <span style={{ fontSize:24, fontWeight:900, lineHeight:1, background:"linear-gradient(180deg,#38bdf8,#6366f1)",
+              WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}>{loupes.loupes || 0}</span>
+            <span style={{ fontSize:10.5, color:"var(--muted)", fontWeight:700 }}>loupe{(loupes.loupes || 0) > 1 ? "s" : ""}</span>
+            <span style={{ display:"flex", gap:4, marginTop:3 }}>{[...Array(loupes.loupes_max || 3).keys()].map(i =>
+              <span key={i} style={{ width:7, height:7, borderRadius:"50%", background: i < (loupes.loupes || 0) ? "#0EA5E9" : "var(--surface)" }}/>)}</span>
+            <span style={{ fontSize:9.5, color:"var(--muted)" }}>+{loupes.loupes_day || 2} demain</span>
+          </div>
+        ) : (
         <button onClick={() => (log.length || onSpent) && setOpen(o => !o)} style={{ ...box("rgba(250,204,21,.35)", "rgba(250,204,21,.45)"), cursor:"pointer",
           font:"inherit", color:"inherit", margin:0, justifyContent:"flex-start" }}>
           <span style={iconSlot}><span style={{ fontSize:24, lineHeight:1, animation:"bn-float 3.5s ease-in-out infinite" }}>🔑</span></span>
@@ -1261,7 +1252,8 @@ function TreasureRow({ keys, onRules, onWheel, onSpent }) {
           {mini(Math.round(100 * (1 - (keys.to_next || prints) / prints)), "linear-gradient(90deg,#fde047,#f59e0b)")}
           <span style={{ fontSize:9.5, color:"var(--muted)" }}>dans {keys.to_next} impr.</span>
         </button>
-        {w && (
+        )}
+        {w && !loupes && (
           <div style={box("rgba(249,115,22,.32)", "rgba(249,115,22,.45)")}>
             <span style={iconSlot}><span style={{ display:"inline-flex", animation:"bn-float 4s ease-in-out infinite" }}>
               <TicketStub size={1.15} dim={!w.tickets}/></span></span>

@@ -3797,6 +3797,7 @@ function FamilyBoard({ b, o, sz }) {
       mini={sz.h === 0.5} summary={<span style={{ fontSize: 13 }}>🥇 {people[0].username} · <b style={{ ...gradText("#DB2777", "#A855F7") }}>{people[0].count}</b></span>}
       zoom={<FamilyBoardZoom b={b}/>}>
       {({ W, H }) => {
+        if (o.style === "podium" && H >= 96) return <FamSteps b={b} people={people} W={W} H={H}/>;
         const n = Math.min(people.length, fitRows(H, 30, 4) || 1), h = Math.max(26, Math.min(48, Math.floor((H - 4 * (n - 1)) / n)));
         const meI = people.findIndex(x => x.username === b.me);
         const shown = people.slice(0, n);
@@ -3806,6 +3807,26 @@ function FamilyBoard({ b, o, sz }) {
       }}
     </Tile>
   );
+}
+// le podium de la famille, jusqu'a quatre marches (2e, 1er, 3e, 4e) : avatar et nom au-dessus, le nombre dans la marche
+function FamSteps({ b, people, W, H }) {
+  const top = people.slice(0, 4);
+  const order = top.length >= 3 ? [top[1], top[0], top[2], ...top.slice(3)] : top.length === 2 ? [top[1], top[0]] : top;
+  const head = H >= 150 ? 46 : 34, av = head >= 46 ? 26 : 20;
+  const room = H - head - 4, hs = [1, 0.74, 0.54, 0.38].map(f => Math.max(18, Math.round(room * f)));
+  const cols = ["#F5B700", "#B8C2CC", "#CD7F32", "#8B5CF6"];
+  return <div style={{ flex: 1, display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 6, minWidth: 0 }}>
+    {order.map(x => { const r = top.indexOf(x), me = x.username === b.me;
+      return <div key={x.username} data-tip={`${x.username}
+${x.count} secret${x.count > 1 ? "s" : ""}`} style={{ flex: "1 1 0", maxWidth: 110, minWidth: 0,
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+        <FamAv name={x.username} size={av}/>
+        <span style={{ fontSize: 11, fontWeight: me ? 900 : 800, color: me ? FAM_C : "var(--text2)", maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden",
+          textOverflow: "ellipsis" }}>{x.username}</span>
+        <div style={{ width: "100%", height: hs[r], borderRadius: "10px 10px 4px 4px", display: "flex", alignItems: "flex-start", justifyContent: "center",
+          paddingTop: 4, boxSizing: "border-box", fontSize: 14, fontWeight: 900, color: "#fff", background: `linear-gradient(180deg, ${cols[r]}, ${cols[r]}bb)`,
+          boxShadow: me ? `0 0 0 2px ${FAM_C}` : "none" }}>{x.count}</div>
+      </div>; })}</div>;
 }
 // la fenetre : les chiffres, le classement en grand, et section par section qui en a trouve combien
 function FamilyBoardZoom({ b }) {
@@ -3900,7 +3921,8 @@ export const TILES = {
   shortcuts: { label: "Raccourcis", w: [2, 1], h: [1, 0.5], render: (d, st, o, it) => <Shortcuts o={o} sz={sz(it)}/>,
     options: [B("iconsOnly", "Icônes seules", false, { hint: "Sinon le nom s'affiche quand il tient." }),
       ...SHORTCUTS.map(([k, l], i) => B(`s_${k}`, l, i < 6, { group: "Raccourcis affichés" }))] },
-  family: { label: "Classement de la famille", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <FamilyBoard b={d.family} o={o} sz={sz(it)}/> },
+  family: { label: "Classement de la famille", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <FamilyBoard b={d.family} o={o} sz={sz(it)}/>,
+    options: [C("style", "Affichage", "list", [["list", "liste"], ["podium", "podium (4 places)"]], { hint: "Le podium a besoin d'un peu de hauteur ; trop bas, la liste revient." })] },
   podium: { label: "Classement des copains", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Podium p={d.podium} a={d.ach} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "list", [["list", "liste"], ["podium", "podium"]]), B("bars", "Barres de score", true), SCROLL(false)] },
   alerts: { label: "Alertes en bref", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Alerts a={d.attention} o={o} sz={sz(it)}/>,
