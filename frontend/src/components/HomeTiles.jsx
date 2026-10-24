@@ -1225,15 +1225,26 @@ function Dry({ v, status, o, sz }) {
         <FanBadge a={a} size={Math.max(14, Math.round(ring * 0.3))}/>
         <span aria-hidden="true" style={{ position: "absolute", inset: -3, borderRadius: "50%", boxShadow: "0 0 14px rgba(249,115,22,0.45)",
           animation: "dryPulse 2.5s ease-in-out infinite", pointerEvents: "none" }}/></span>
-      <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
-          <span style={{ fontSize: ring >= 60 ? 16 : 13.5, fontWeight: 900, color: "var(--text)" }}>{amsLab(a)}</span>
-          {a.dry_filament && W >= 150 && <Muted size={11.5} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.dry_filament}</Muted>}
-        </div>
-        <span style={{ fontSize: ring >= 60 ? 14 : 12, fontWeight: 800, color: "#ea580c", whiteSpace: "nowrap" }}>encore {fmtDur((a.dry_time || 0) * 60)}</span>
-        <div style={{ height: 5, borderRadius: 4, background: "var(--surface2)", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${prog(a) * 100}%`, borderRadius: 4, background: "linear-gradient(90deg, #fb923c, #f97316)" }}/></div>
-      </div>
+      {(() => {
+        // la place a cote de l'anneau : etroite (demi-colonne), le nom court, la matiere dessous, le temps sans « encore »
+        const room = W - ring - 10, tight = room < 130;
+        const one = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 };
+        return <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+          {tight ? <>
+            <span style={{ fontSize: 14, fontWeight: 900, color: "var(--text)", ...one }}>{amsLab(a)}</span>
+            {a.dry_filament && <Muted size={11} style={one}>{a.dry_filament}{a.dry_temperature ? ` · ${a.dry_temperature}°` : ""}</Muted>}
+            <span style={{ fontSize: 13, fontWeight: 900, color: "#ea580c", ...one }}>{fmtDur((a.dry_time || 0) * 60)}</span>
+          </> : <>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
+              <span style={{ fontSize: ring >= 60 ? 16 : 13.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{amsLab(a)}</span>
+              {a.dry_filament && <Muted size={11.5} style={one}>{a.dry_filament}</Muted>}
+            </div>
+            <span style={{ fontSize: ring >= 60 ? 14 : 12, fontWeight: 800, color: "#ea580c", ...one }}>encore {fmtDur((a.dry_time || 0) * 60)}</span>
+          </>}
+          <div style={{ height: 5, borderRadius: 4, background: "var(--surface2)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${prog(a) * 100}%`, borderRadius: 4, background: "linear-gradient(90deg, #fb923c, #f97316)" }}/></div>
+        </div>;
+      })()}
     </div>
   );
   const hero = <Hero visual={o.ring && k?.active ? s => <Ring value={(k.ok || 0) / k.active} size={s} color="#22c55e">{Math.round(100 * (k.ok || 0) / k.active)}%</Ring> : null}
@@ -1318,7 +1329,7 @@ function Dry({ v, status, o, sz }) {
               {drying.length > shown.length && <span style={{ fontSize: 11, fontWeight: 800, color: "#ea580c", paddingLeft: 7 }}>+{drying.length - shown.length} autre{drying.length - shown.length > 1 ? "s" : ""}</span>}
             </div>;
           }
-          const ring = Math.max(34, Math.min(each, W < 215 ? 64 : 84, W * 0.42));
+          const ring = Math.max(34, Math.min(each, W < 215 ? 64 : 84, W * 0.42, W - 100));
           return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>{drying.map(a => dryRow(a, Math.floor(ring), W))}</div>;
         }
         // l'anneau prend ce que la liste « a secher » laisse (rien de liste quand c'est bas)
