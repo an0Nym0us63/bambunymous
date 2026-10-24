@@ -855,6 +855,22 @@ function HubGrid({ list, order, act, actTray, H, climate, onPick, big = false, s
     </div>
   );
 }
+// pas d'AMS a montrer : on dit pourquoi. En chargement (l'etat de l'imprimante pas encore la, ou les
+// premieres secondes, le temps que l'imprimante envoie tout), imprimante injoignable, ou vraiment aucun AMS
+function AmsEmpty({ st }) {
+  const [early, setEarly] = useState(true);
+  useEffect(() => { const t = setTimeout(() => setEarly(false), 8000); return () => clearTimeout(t); }, []);
+  const wait = !st || (early && st.connected !== false);
+  const [icon, title, sub] = wait ? ["⏳", "Chargement des AMS…", "On attend les nouvelles de l'imprimante."]
+    : st.connected === false ? ["📡", "Imprimante injoignable", "Les AMS reviendront dès qu'elle répondra."]
+    : ["🧩", "Aucun AMS détecté", null];
+  return <div style={{ height: "100%", minHeight: 90, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4,
+    padding: 16, textAlign: "center", color: "var(--muted)" }}>
+    <span style={{ fontSize: 22, animation: wait ? "pulse 1.6s ease-in-out infinite" : "none" }}>{icon}</span>
+    <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text2)" }}>{title}</span>
+    {sub && <span style={{ fontSize: 11.5 }}>{sub}</span>}
+  </div>;
+}
 function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
   const list = [...new Map((st?.ams_list || []).map(a => [a.id, a])).values()];
   const [order, setOrder] = useState(null);
@@ -892,7 +908,7 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
   const climate = o?.climate !== false;
   const routes = switchRoutes(st);
   const go = v => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* indisponible */ } };
-  if (!list.length && !hasRack) return <div style={{ padding: 16, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>Aucun AMS détecté</div>;
+  if (!list.length && !hasRack) return <AmsEmpty st={st}/>;
   const H = mh || fitH || 230;
   const low = H < 96;                               // une rangee : ni en-tete ni bascule
   const pill = (on, label, dot, onClick) => <button type="button" onClick={e => { e.stopPropagation(); onClick(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5,
