@@ -280,48 +280,50 @@ function RateForm({ x, targets, onDone }) {
     onDone();
   };
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, borderRadius: 10, background: "var(--surface2)",
-      border: "1px solid var(--border)" }}>
-      <div style={{ display: "flex", gap: 2 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 9, padding: 12, borderRadius: 16, background: "var(--surface)",
+      border: "1px solid rgba(245,158,11,0.35)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
         {[1, 2, 3, 4, 5].map(n => (
           <button key={n} onClick={() => setScore(n)} aria-label={`${n} étoiles`} style={{ background: "none", border: "none", padding: 2,
-            cursor: "pointer", fontSize: 26, lineHeight: 1, color: n <= score ? "#f59e0b" : "var(--border)" }}>★</button>
+            cursor: "pointer", fontSize: 30, lineHeight: 1, color: n <= score ? "#f59e0b" : "var(--border)",
+            filter: n <= score ? "drop-shadow(0 2px 6px rgba(245,158,11,.45))" : "none", transform: n <= score ? "scale(1.04)" : "none", transition: "transform .12s" }}>★</button>
         ))}
+        <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 900, color: "#d97706" }}>{score}/5</span>
       </div>
       {score === 5 && fams?.length > 0 && (
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <select value={fam} onChange={e => { const i = Number(e.target.value); setFam(i); draw(i); }}
-            style={{ flex: 1, minWidth: 0, borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)",
-              color: "var(--text)", padding: "6px 8px", fontSize: 12.5 }}>
+            style={{ flex: 1, minWidth: 0, height: 36, borderRadius: 18, border: "1px solid var(--border)", background: "var(--surface2)",
+              color: "var(--text)", padding: "0 10px", fontSize: 12.5, fontWeight: 700 }}>
             {fams.map((f, i) => <option key={i} value={i}>{f.name} ({f.messages.length})</option>)}
           </select>
-          <button onClick={() => draw()} title="Un autre message de cette famille" style={{ padding: "5px 10px", borderRadius: 8, fontSize: 13,
+          <button onClick={() => draw()} data-tip="Un autre message de cette famille" style={{ width: 36, height: 36, borderRadius: 12, fontSize: 14,
             cursor: "pointer", background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text)" }}>🔀</button>
         </div>
       )}
       <textarea value={text} onChange={e => { setText(e.target.value); setAuto(false); }} rows={4} maxLength={2000}
         placeholder={low ? "Qu'est-ce qui n'a pas marché ? (obligatoire)" : "Ton avis (facultatif)"}
-        style={{ width: "100%", boxSizing: "border-box", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)",
-          color: "var(--text)", padding: 8, fontSize: 13, resize: "vertical", fontFamily: "inherit" }}/>
+        style={{ width: "100%", boxSizing: "border-box", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface2)",
+          color: "var(--text)", padding: 10, fontSize: 13, resize: "vertical", fontFamily: "inherit" }}/>
       <div>
-        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", marginBottom: 5 }}>
           {picked.size ? `Photos jointes (${picked.size}) : touche pour retirer ou ajouter` : "Sans photo, c'est possible aussi"}</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           {(x.photos || []).map(u => (
-            <img key={u} src={u} alt="" onClick={() => toggle(u)} style={{ width: 58, height: 58, borderRadius: 8, objectFit: "cover",
+            <img key={u} src={u} alt="" onClick={() => toggle(u)} style={{ width: 58, height: 58, borderRadius: 12, objectFit: "cover",
               cursor: "pointer", border: picked.has(u) ? "2px solid #f59e0b" : "2px solid transparent", opacity: picked.has(u) ? 1 : 0.4 }}/>
           ))}
           {extras.map(e => (
             <div key={e.key} style={{ position: "relative" }}>
-              <img src={e.preview} alt="" onClick={() => e.id && toggle(e.id)} style={{ width: 58, height: 58, borderRadius: 8, objectFit: "cover",
+              <img src={e.preview} alt="" onClick={() => e.id && toggle(e.id)} style={{ width: 58, height: 58, borderRadius: 12, objectFit: "cover",
                 cursor: "pointer", border: e.id && picked.has(e.id) ? "2px solid #f59e0b" : "2px solid transparent",
                 opacity: e.sending ? 0.5 : e.id && picked.has(e.id) ? 1 : 0.4 }}/>
               {e.sending && <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: 11, color: "white", fontWeight: 700 }}>…</span>}
             </div>
           ))}
-          <button onClick={() => fileRef.current?.click()} disabled={picked.size >= 8} title="Ajouter une photo (hors galerie)"
-            style={{ width: 58, height: 58, borderRadius: 8, border: "1.5px dashed var(--border)", background: "var(--surface)",
+          <button onClick={() => fileRef.current?.click()} disabled={picked.size >= 8} data-tip="Ajouter une photo (hors galerie)"
+            style={{ width: 58, height: 58, borderRadius: 12, border: "1.5px dashed var(--border)", background: "var(--surface)",
               color: "var(--muted)", fontSize: 22, cursor: "pointer", opacity: picked.size >= 8 ? 0.4 : 1 }}>+</button>
           <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden
             onChange={e => { addFiles(e.target.files); e.target.value = ""; }}/>
@@ -329,8 +331,9 @@ function RateForm({ x, targets, onDone }) {
       </div>
       {err && <div style={{ fontSize: 12, color: "#ef4444" }}>{err}</div>}
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-      <button onClick={send} disabled={busy || extras.some(e => e.sending) || (low && text.trim().length < 10)} style={{ alignSelf: "flex-start", padding: "7px 16px",
-        borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: "#f59e0b", color: "white", border: "none",
+      <button onClick={send} disabled={busy || extras.some(e => e.sending) || (low && text.trim().length < 10)} style={{ alignSelf: "flex-start", padding: "10px 18px",
+        borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: "pointer", background: "linear-gradient(135deg, #F59E0B, #F97316)", color: "white", border: "none",
+        boxShadow: "0 8px 18px -10px #F59E0B",
         opacity: busy || (low && text.trim().length < 10) ? 0.5 : 1 }}>{busy ? "Publication…" : "Publier l'évaluation"}</button>
         {!targets && <button onClick={() => forgetIt(x, onDone)} disabled={busy} title="Supprime la demande d'évaluation sur MakerWorld"
           style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 12, fontWeight: 600, color: "var(--muted)",
@@ -340,6 +343,9 @@ function RateForm({ x, targets, onDone }) {
   );
 }
 
+const act = { padding: "9px 8px", borderRadius: 12, fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap", minWidth: 0,
+  overflow: "hidden", textOverflow: "ellipsis", textAlign: "center", boxSizing: "border-box", cursor: "pointer",
+  background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)" };
 export function ToRateSheet({ data, onClose, onOpen }) {
   useTrackDetail("MakerWorld · À évaluer");
   const [view, setView] = useState(null);
@@ -351,31 +357,44 @@ export function ToRateSheet({ data, onClose, onOpen }) {
     <div data-no-pull="" onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 4100, background: "rgba(0,0,0,0.6)",
       display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
       <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ width: "100%", maxWidth: 760, height: "92vh",
-        borderRadius: "18px 18px 0 0", border: "1px solid var(--border)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px 10px", borderBottom: "1px solid var(--border)" }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)" }}>⭐ À évaluer</div>
-            <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
+        borderRadius: "22px 22px 0 0", border: "1px solid var(--border)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "16px 16px 12px", borderBottom: "1px solid var(--border)",
+          background: "linear-gradient(135deg, rgba(245,158,11,0.24), transparent 70%)" }}>
+          <span style={{ width: 40, height: 40, borderRadius: 13, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+            background: "linear-gradient(135deg, #F59E0B, #FBBF24)", boxShadow: "0 6px 16px -6px #F59E0B" }}>⭐</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+              <span style={{ fontSize: 16, fontWeight: 900, color: "var(--text)" }}>À évaluer</span>
+              {items.length > 0 && <span style={{ fontSize: 12, fontWeight: 900, color: "#fff", padding: "1px 8px", borderRadius: 20,
+                background: "linear-gradient(135deg, #F59E0B, #F97316)" }}>{items.length}</span>}</div>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>
               {data?.rated_known === false ? "Tes évaluations n'ont pas pu être lues : tout est listé."
                 : "Imprimés, pas encore évalués. Tes photos sont prêtes à joindre."}
               {data?.stats && <span> · MakerWorld : {data.stats.pending} en attente, {data.stats.rated} déjà notés</span>}</div>
           </div>
-          <button onClick={onClose} aria-label="Fermer" style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 20,
-            cursor: "pointer", padding: 4 }}>✕</button>
+          <button onClick={onClose} aria-label="Fermer" style={{ width: 34, height: 34, borderRadius: "50%", border: "1px solid var(--border)", flexShrink: 0,
+            background: "var(--surface2)", color: "var(--text2)", fontSize: 15, cursor: "pointer" }}>✕</button>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-          {!items.length && <p style={{ textAlign: "center", color: "var(--muted)", fontSize: 13, padding: 24 }}>Rien à évaluer 🎉</p>}
+          {!items.length && <div style={{ textAlign: "center", padding: "30px 16px", borderRadius: 18, border: "1px dashed var(--border)",
+            background: "radial-gradient(80% 80% at 50% 0%, rgba(34,197,94,0.14), transparent 70%), var(--surface2)" }}>
+            <div style={{ fontSize: 34 }}>🎉</div>
+            <p style={{ color: "var(--muted)", fontSize: 13.5, fontWeight: 700, margin: "6px 0 0" }}>Rien à évaluer 🎉</p></div>}
           {items.map(x => (
-            <div key={x.design_id} className="card" style={{ padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div key={x.design_id} style={{ padding: 12, display: "flex", flexDirection: "column", gap: 9, borderRadius: 18,
+              border: open === x.design_id ? "1.5px solid rgba(245,158,11,0.6)" : "1px solid color-mix(in srgb, #F59E0B 25%, var(--border))",
+              background: "linear-gradient(160deg, rgba(245,158,11,0.10), transparent 45%), var(--surface2)" }}>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                {x.cover_url ? <MwImg src={x.cover_url} w={110} style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flexShrink: 0 }}/>
-                  : <span style={{ width: 48, height: 48, borderRadius: 8, background: "var(--surface2)", flexShrink: 0 }}/>}
+                {x.cover_url ? <MwImg src={x.cover_url} w={120} style={{ width: 56, height: 56, borderRadius: 14, objectFit: "cover", flexShrink: 0,
+                  boxShadow: "0 6px 14px -8px rgba(0,0,0,.5)" }}/>
+                  : <span style={{ width: 56, height: 56, borderRadius: 14, background: "var(--surface)", flexShrink: 0 }}/>}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {x.title || x.print_name || `Modèle ${x.design_id}`}</div>
-                  <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>
                     {[x.creator_name && `par ${x.creator_name}`, x.printed > 0 && `imprimé ${x.printed}×`, x.last_date && `le ${day(x.last_date)}`].filter(Boolean).join(" · ")}</div>
-                  {x.awaited && <div style={{ fontSize: 10.5, color: "#f59e0b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {x.awaited && <div style={{ display: "inline-block", maxWidth: "100%", marginTop: 3, fontSize: 10.5, fontWeight: 800, color: "#d97706", padding: "1px 8px",
+                    borderRadius: 20, background: "rgba(245,158,11,0.14)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", boxSizing: "border-box" }}>
                     ⏳ Attendu par MakerWorld{x.profile_title ? ` · profil « ${x.profile_title} »` : ""}</div>}
                 </div>
               </div>
@@ -383,28 +402,26 @@ export function ToRateSheet({ data, onClose, onOpen }) {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {x.photos.map((u, i) => (
                     <img key={i} src={u} alt="" onClick={() => setView({ images: x.photos, index: i })}
-                      style={{ width: 62, height: 62, borderRadius: 8, objectFit: "cover", cursor: "pointer", border: "1px solid var(--border)" }}/>
+                      style={{ width: 62, height: 62, borderRadius: 12, objectFit: "cover", cursor: "pointer", border: "1px solid var(--border)" }}/>
                   ))}
                   <span style={{ alignSelf: "center", fontSize: 10.5, color: "var(--muted)" }}>
                     {x.photo_source === "group" ? "photos du groupe" : "tes photos"}</span>
                 </div>
               ) : <div style={{ fontSize: 11, color: "var(--muted)" }}>Pas de photo de cette impression.</div>}
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6 }}>
                 {x.rating_id ? (
-                  <button onClick={() => setOpen(o => o === x.design_id ? null : x.design_id)} style={{ padding: "6px 12px", borderRadius: 10,
-                    fontSize: 12, fontWeight: 700, cursor: "pointer", background: "#f59e0b", color: "white", border: "none" }}>
+                  <button onClick={() => setOpen(o => o === x.design_id ? null : x.design_id)} style={{ ...act, border: "none", color: "white",
+                    background: open === x.design_id ? "var(--muted)" : "linear-gradient(135deg, #F59E0B, #F97316)", boxShadow: "0 6px 14px -8px #F59E0B" }}>
                     {open === x.design_id ? "Fermer" : "⭐ Évaluer ici"}</button>
                 ) : null}
                 {x.rating_id && (
                   <button onClick={() => forgetIt(x, () => setDone(s => new Set(s).add(x.design_id)))} title="Ne plus me demander d'évaluer ce modèle"
-                    style={{ padding: "6px 12px", borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                      background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--muted)" }}>Oublier</button>
+                    style={{ ...act, color: "var(--muted)" }}>Oublier</button>
                 )}
-                <a href={x.url} target="_blank" rel="noopener noreferrer" style={{ padding: "6px 12px", borderRadius: 10, fontSize: 12, fontWeight: 700,
-                  textDecoration: "none", ...(x.rating_id ? { background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text)" }
-                    : { background: "#f59e0b", color: "white" }) }}>{x.rating_id ? "MakerWorld ↗" : "⭐ Évaluer sur MakerWorld ↗"}</a>
-                <button onClick={() => onOpen?.(x)} style={{ padding: "6px 12px", borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                  background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text)" }}>Fiche</button>
+                <a href={x.url} target="_blank" rel="noopener noreferrer" data-tip={x.rating_id ? "Le modèle sur MakerWorld" : "Évaluer sur MakerWorld"}
+                  style={{ ...act, textDecoration: "none",
+                  ...(x.rating_id ? { color: "#06B6D4" } : { background: "linear-gradient(135deg, #F59E0B, #F97316)", color: "white", border: "none" }) }}>{x.rating_id ? "MakerWorld ↗" : "⭐ Évaluer ↗"}</a>
+                <button onClick={() => onOpen?.(x)} style={{ ...act, color: "#3B82F6" }}>📄 Fiche</button>
               </div>
               {open === x.design_id && <RateForm x={x} onDone={() => { setDone(s => new Set(s).add(x.design_id)); setOpen(null); }}/>}
             </div>
