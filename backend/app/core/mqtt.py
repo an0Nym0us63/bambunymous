@@ -286,9 +286,9 @@ class MQTTManager:
     def _process_print(self, p: dict):
         changed = False
 
-        # ── Porte (24/10/2026) : « stat » (hexa, serie H2) bit 0x00800000, sinon le bit 23 de
-        # home_flag (X1). Chaque ouverture est datee (les dix dernieres) ; le journal le dit, de quoi
-        # verifier sur une imprimante qui ne le donnerait pas de la meme facon.
+        # ── Porte (24/10/2026) : « stat » (hexa, series H2/P2/X2) bit 0x00800000, sinon le bit 23 de
+        # home_flag sur les X1 seulement (numero de serie 00M / 03W), comme l'integration Home Assistant
+        # ha-bambulab. Chaque ouverture est datee (les dix dernieres) et notee au journal.
         _door = None
         # le champ brut : chaque changement au journal, pour trouver les autres capteurs (capot du haut)
         if p.get("stat") not in (None, "") and p.get("stat") != getattr(state, "_stat_raw", None):
@@ -297,7 +297,7 @@ class MQTTManager:
         if p.get("stat") not in (None, ""):
             try: _door = bool(int(str(p["stat"]), 16) & 0x00800000)
             except ValueError: pass
-        elif p.get("home_flag") is not None:
+        elif p.get("home_flag") is not None and str(state.serial or "")[:3] in ("00M", "03W"):
             try: _door = bool((int(p["home_flag"]) >> 23) & 1)
             except (TypeError, ValueError): pass
         if _door is not None and _door != state.door_open:

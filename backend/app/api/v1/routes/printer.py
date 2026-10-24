@@ -7,6 +7,29 @@ from ....services.hms import decode_hms
 from .auth import get_current_user
 
 
+# La porte et le capot du haut par les alertes de l'imprimante (24/10/2026, codes de la serie H2 tires
+# des fichiers HMS de Bambu Studio) : 0300-9600 la porte, 0300-9700 le capot ; 0003-0001 « est ouvert »,
+# 0001-0001 « semble ouvert, impression en pause ». Elles ne partent que si la detection d'ouverture
+# est activee sur l'imprimante.
+_OPEN_CODES = (0x00030001, 0x00010001)
+
+
+def _hms_has(s, attr: int) -> bool:
+    for e in getattr(s, "hms_errors", None) or []:
+        try:
+            if int(e.get("attr", 0)) == attr and int(e.get("code", 0)) in _OPEN_CODES:
+                return True
+        except (TypeError, ValueError):
+            pass
+    return False
+
+
+def _door(s):
+    """La porte : le capteur lu dans « stat » d'abord, sinon l'alerte d'ouverture."""
+    d = getattr(s, "door_open", None)
+    return True if d is None and _hms_has(s, 0x03009600) else d
+
+
 def _catalog_lookup(fila_id: str, color_hex: str, cols: list = None) -> Optional[str]:
     """Lookup nom FR dans le catalogue Bambu local.
     cols = champ MQTT 'cols' du tray. Si len(cols) > 1 → multicolore, sinon mono.
@@ -195,6 +218,7 @@ class PrinterStatusOut(BaseModel):
     chamber_temp: float
     target_chamber_temp: float = 0.0
     door_open: Optional[bool] = None      # None : l'imprimante ne le dit pas
+    top_open: Optional[bool] = None       # capot du haut (H2) : seulement par ses alertes HMS
     print_name: str
     job_id: str
     design_id: str
@@ -332,7 +356,8 @@ async def printer_status(_: str = Depends(get_current_user)):
         target_bed_temp=s.target_bed_temp,
         chamber_temp=s.chamber_temp,
         target_chamber_temp=getattr(s, "target_chamber_temp", 0.0) or 0.0,
-        door_open=getattr(s, "door_open", None),
+        door_open=_door(s),
+        top_open=_hms_has(s, 0x03009700) or None,
         print_name=s.print_name,
         job_id=s.job_id,
         design_id=s.design_id,

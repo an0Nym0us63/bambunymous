@@ -1289,7 +1289,8 @@ function PrinterHead({ status, temps = true, state = true }) {
     {on && status.chamber_temp > 0 && <span data-pk="" title={`Chambre : ${Math.round(status.chamber_temp)}°`}
       style={{ ...chip, color: hot(status.chamber_temp, "#ca8a04") }}><IcoChamber/>{Math.round(status.chamber_temp)}°</span>}
     {/* la porte : seulement quand elle est ouverte (fermee, c'est l'ordinaire) */}
-    {status?.connected && status.door_open === true && <span data-pk="" data-tip="La porte de l'imprimante est ouverte"
+    {status?.connected && (status.door_open === true || status.top_open === true) && <span data-pk=""
+      data-tip={[status.door_open === true && "La porte est ouverte", status.top_open === true && "Le capot du haut est ouvert"].filter(Boolean).join(" · ")}
       style={{ ...chip, padding: "2px 6px", color: "#d97706", background: "rgba(245,158,11,0.14)" }}><DoorOpen size={13}/></span>}
   </>;
 }
@@ -1454,6 +1455,7 @@ function PrinterPopup({ status, img, name, onClose }) {
               {status?.connected && status.door_open != null && <span style={{ display: "inline-flex", alignItems: "center", gap: 3,
                 color: status.door_open ? "#d97706" : "var(--muted)", fontWeight: status.door_open ? 800 : 600 }}>
                 · {status.door_open ? <DoorOpen size={12}/> : <DoorClosed size={12}/>}porte {status.door_open ? "ouverte" : "fermée"}</span>}
+              {status?.connected && status.top_open === true && <span style={{ color: "#d97706", fontWeight: 800 }}>· capot ouvert</span>}
               {status?.fw_version && <span style={{ color: "var(--muted)", fontWeight: 600 }}>· micrologiciel {status.fw_version}</span>}</div>
           </div>
           <button onClick={onClose} aria-label="Fermer" style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid var(--border)",
