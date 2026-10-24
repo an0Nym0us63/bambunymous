@@ -2309,6 +2309,8 @@ CATALOG += [
        lore="Dix alertes différentes : tu connais ton imprimante mieux que son propre manuel."),
     _a("oven", "secret", "🔥", "Four", "La chambre de l'imprimante au-dessus de 45 °C", [1],
        lore="Plus de 45 °C dans la chambre : de quoi faire lever une pâte… ou imprimer de l'ABS."),
+    _a("door_dance", "secret", "🚪", "Courant d'air", "Ouvrir la porte de l'imprimante 3 fois en moins d'une minute", [1],
+       lore="Ouvre, ferme, ouvre, ferme… Elle ne sait plus si elle doit chauffer la chambre ou te dire bonjour."),
     _a("marathon_online", "secret", "🛰️", "Marathon connecté", "Une impression de plus de 24 h réussie sans la moindre coupure", [1],
        lore="Un jour entier d'impression, et pas une seconde hors ligne. Une liaison de satellite."),
     _a("same_taste", "secret", "👯", "Même goût", "Le même modèle MakerWorld qu'un copain, à une semaine près", [1],
@@ -2371,7 +2373,7 @@ SECRET_SUBS = [
      "palindrome_date anniversary all_seasons santa new_years_day star_wars towel_day pi_approx cat_day mid_august back_to_school fete_year beaujolais_print gta_print lunar_print holi_print diwali_print thanksgiving_print all_saints dia_muertos st_nicholas st_john earth_day equinox dst_summer dst_winter programmers mothers_day ascension mardi_gras black_friday double_day twelve"),
     ("clock", "🕛", "Heures et lune", "midnight noon mirror sequence elite last_minute saturday_night monday_morning "
      "sunday_morning full_moon new_moon all_nighter cinderella wake_up night_visit palindrome_time after_midnight snack_time tea_time aperitif wolf_hour end_noon end_evening"),
-    ("measures", "⚖️", "Poids et durées", "mille_feuille oven marathon_online tiny flash titan answer42 beast kilo pi_grams palindrome full_day marathon42 "
+    ("measures", "⚖️", "Poids et durées", "mille_feuille oven door_dance marathon_online tiny flash titan answer42 beast kilo pi_grams palindrome full_day marathon42 "
      "bullseye tortoise hare one_hour watchmaker hundred_pieces triple3 suite123 min42 gram1 g100 g500 g_palindrome equal supersonic wink mammoth"),
     ("colors", "🎨", "Couleurs et matières", "cameleon rainbow_ams rainbow16 panda tricolore carbon rubber barbie smurf hulk fire pumpkin "
      "xmas_tree silk galaxy glow marble wood translucent sparkle soluble rainbow6 vader snow mouse clockwork prince chick belgium italy reggae bee ladybug sailor rainbow_ultimate mix2 lab3 abs_first asa_first pc_first nylon_first"),
@@ -2673,6 +2675,7 @@ HINTS = {
     "mille_feuille": "Un chiffre rond, compté couche par couche.",
     "doctor": "Ton imprimante t'a déjà tout dit… ou presque : collectionne ses messages.",
     "oven": "Il fait chaud là-dedans. Très chaud.",
+    "door_dance": "Elle n'aime pas trop les courants d'air.",
     "marathon_online": "Une très longue impression, et une liaison qui ne lâche jamais.",
     "same_taste": "Les grands esprits impriment la même chose.",
     "home_first": "Ton accueil peut te ressembler : touche à sa disposition.",
@@ -2706,7 +2709,7 @@ LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_l
         "to_order", "acc_images", "bunker", "devices", "mw_income",
         # releves (ach_watch) et etats du moment, lot du 22/10/2026
         "bon_public", "sky_layers", "clean_prints", "online_streak", "dry_days_ams", "swaps_max", "swaps_total", "duels",
-        "band_prints", "queue_cleared", "rainbow_ams", "zero_alert", "mille_feuille", "doctor", "oven", "marathon_online",
+        "band_prints", "queue_cleared", "rainbow_ams", "zero_alert", "mille_feuille", "doctor", "oven", "door_dance", "marathon_online",
         "same_taste", "home_saves", "home_tiles", "home_tweaks", "cam_hours", "home_first", "home_multi", "home_four",
         "home_three", "home_two", "home_copy", "home_minimal", "home_all", "home_pages",
         "guide_minutes", "guide_sections", "guide_opens", "guide_searches"}

@@ -286,6 +286,29 @@ class MQTTManager:
     def _process_print(self, p: dict):
         changed = False
 
+        # ── Porte (24/10/2026) : « stat » (hexa, serie H2) bit 0x00800000, sinon le bit 23 de
+        # home_flag (X1). Chaque ouverture est datee (les dix dernieres) ; le journal le dit, de quoi
+        # verifier sur une imprimante qui ne le donnerait pas de la meme facon.
+        _door = None
+        # le champ brut : chaque changement au journal, pour trouver les autres capteurs (capot du haut)
+        if p.get("stat") not in (None, "") and p.get("stat") != getattr(state, "_stat_raw", None):
+            logger.info(f"[DOOR] stat brut {getattr(state, '_stat_raw', None)} -> {p.get('stat')}")
+            state._stat_raw = p.get("stat")
+        if p.get("stat") not in (None, ""):
+            try: _door = bool(int(str(p["stat"]), 16) & 0x00800000)
+            except ValueError: pass
+        elif p.get("home_flag") is not None:
+            try: _door = bool((int(p["home_flag"]) >> 23) & 1)
+            except (TypeError, ValueError): pass
+        if _door is not None and _door != state.door_open:
+            if state.door_open is not None:
+                logger.info(f"[DOOR] porte {'ouverte' if _door else 'fermee'}")
+                if _door:
+                    import time as _dt
+                    state.door_opens = (list(state.door_opens) + [_dt.time()])[-10:]
+            state.door_open = _door
+            changed = True
+
         # ── Statut ──────────────────────────────────────────────────────
         if "gcode_state" in p:
             if state.status != p["gcode_state"]:

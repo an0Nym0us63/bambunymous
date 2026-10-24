@@ -194,6 +194,7 @@ class PrinterStatusOut(BaseModel):
     target_bed_temp: float
     chamber_temp: float
     target_chamber_temp: float = 0.0
+    door_open: Optional[bool] = None      # None : l'imprimante ne le dit pas
     print_name: str
     job_id: str
     design_id: str
@@ -331,6 +332,7 @@ async def printer_status(_: str = Depends(get_current_user)):
         target_bed_temp=s.target_bed_temp,
         chamber_temp=s.chamber_temp,
         target_chamber_temp=getattr(s, "target_chamber_temp", 0.0) or 0.0,
+        door_open=getattr(s, "door_open", None),
         print_name=s.print_name,
         job_id=s.job_id,
         design_id=s.design_id,

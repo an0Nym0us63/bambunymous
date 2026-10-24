@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from
 import { stageLabel, stageIsPause } from "../utils/printStage";
 import { createPortal } from "react-dom";
 import { usePrinter } from "../store/printer";
-import { Wifi, WifiOff, Clock, Pause, Layers, Thermometer, Wind, Droplets, Sun, Moon, LayoutGrid, Printer, Disc3, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
+import { Wifi, WifiOff, DoorOpen, DoorClosed, Clock, Pause, Layers, Thermometer, Wind, Droplets, Sun, Moon, LayoutGrid, Printer, Disc3, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
 import { useAuth } from "../store/auth";
 import { useFriend } from "../store/friend";
 import { create } from "zustand";
@@ -1288,6 +1288,9 @@ function PrinterHead({ status, temps = true, state = true }) {
       style={{ ...chip, color: hot(status.bed_temp, "#dc2626") }}><IcoBed/>{Math.round(status.bed_temp || 0)}°</span>}
     {on && status.chamber_temp > 0 && <span data-pk="" title={`Chambre : ${Math.round(status.chamber_temp)}°`}
       style={{ ...chip, color: hot(status.chamber_temp, "#ca8a04") }}><IcoChamber/>{Math.round(status.chamber_temp)}°</span>}
+    {/* la porte : seulement quand elle est ouverte (fermee, c'est l'ordinaire) */}
+    {status?.connected && status.door_open === true && <span data-pk="" data-tip="La porte de l'imprimante est ouverte"
+      style={{ ...chip, padding: "2px 6px", color: "#d97706", background: "rgba(245,158,11,0.14)" }}><DoorOpen size={13}/></span>}
   </>;
 }
 // sur une ligne : la vignette (un clic l'ouvre en grand), le nom, puis selon l'etat :
@@ -1448,6 +1451,9 @@ function PrinterPopup({ status, img, name, onClose }) {
                   opacity: 0.18, marginLeft: 6, verticalAlign: "middle", cursor: "default", userSelect: "none" }}>{e}</span>)}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: s.color }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}
+              {status?.connected && status.door_open != null && <span style={{ display: "inline-flex", alignItems: "center", gap: 3,
+                color: status.door_open ? "#d97706" : "var(--muted)", fontWeight: status.door_open ? 800 : 600 }}>
+                · {status.door_open ? <DoorOpen size={12}/> : <DoorClosed size={12}/>}porte {status.door_open ? "ouverte" : "fermée"}</span>}
               {status?.fw_version && <span style={{ color: "var(--muted)", fontWeight: 600 }}>· micrologiciel {status.fw_version}</span>}</div>
           </div>
           <button onClick={onClose} aria-label="Fermer" style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid var(--border)",

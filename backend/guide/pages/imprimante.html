@@ -10,7 +10,7 @@
     <h3>Toute la colonne : la carte détaillée</h3>
     <p>C'est la présentation par défaut (toute la colonne, hauteur « selon le contenu », 2 ou 3 rangées).</p>
     <ul>
-      <li><strong>En-tête du bloc</strong> : à droite du titre, les températures en pictogrammes (buse active, plateau, chambre ; le doigt ou la souris dessus donne la consigne).</li>
+      <li><strong>En-tête du bloc</strong> : à droite du titre, les températures en pictogrammes (buse active, plateau, chambre ; le doigt ou la souris dessus donne la consigne), et une porte orange quand celle de l'imprimante est ouverte (si l'imprimante le dit).</li>
       <li><strong>Première ligne</strong> : un point d'état (qui pulse pendant une impression), le nom de l'impression, puis éventuellement un triangle rouge (un filament détecté par l'imprimante est introuvable dans ta base, voir <a href="#imprimante-ams-associer">Associer une bobine</a>), un triangle orange (alertes de la machine) et l'icône Wi-Fi (verte = connectée).</li>
       <li><strong>Deuxième ligne</strong> : la vignette du plateau, l'<strong>étape</strong> en cours (« Chauffe de la buse », « Nivellement du plateau »…) ou l'état (« En cours », « En pause », « Terminé », « Erreur », « En veille », « Préparation »), la barre de progression, le temps restant (« 🕒 1h 15min »), les couches (« 120/300 »), l'heure de fin (« 📅 14:35 », avec +1 si c'est demain) et le pourcentage en grand.</li>
     </ul>
@@ -43,7 +43,7 @@
       <figcaption>La fenêtre « Imprimante », en haut et en bas.</figcaption>
     </figure>
     <ul>
-      <li><strong>En-tête</strong> : l'état en couleur (« En cours », « En pause », l'étape, « Terminée », « Échouée », « Au repos », « Injoignable ») et la version du micrologiciel.</li>
+      <li><strong>En-tête</strong> : l'état en couleur (« En cours », « En pause », l'étape, « Terminée », « Échouée », « Au repos », « Injoignable »), « porte ouverte » ou « porte fermée » si l'imprimante le dit, et la version du micrologiciel.</li>
       <li><strong>Carte principale</strong> : la vignette (touche-la pour l'agrandir), le nom (« Rien en cours » sinon), « encore 1h 15min · fin 18:58 », un anneau d'avancement et une barre.</li>
       <li><strong>Trois cases</strong> : <span class="ui">Reste</span>, <span class="ui">Fin</span>, <span class="ui">Couche</span> (avec une barre des couches).</li>
       <li>Chaque section a son titre en couleur, et à droite un mot de résumé (l'emplacement qui imprime, la buse sur la tête, le nombre d'alertes…).</li>

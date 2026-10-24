@@ -19,13 +19,14 @@ SAVE_S = 120
 GAP_S = 600                  # plus de 10 min sans releve (appli arretee) : la suite est inconnue
 DRY_MAX, DRY_SAMPLES = 30, 240   # humidite des AMS sous 30 % ; une journee compte avec 1 h de releves
 OVEN_C = 45
+DOOR_N, DOOR_S = 3, 60       # trois ouvertures de la porte en 60 s
 LIVE = ("RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING")
 W: dict = {}
 
 
 def fresh() -> dict:
     return {"last": None, "online_since": None, "online_best_h": 0.0, "job": None, "max_layers": 0, "mille": None,
-            "clean": 0, "swaps_total": 0, "swaps_max": 0, "hms": [], "oven": None, "marathon": None, "rainbow": None,
+            "clean": 0, "swaps_total": 0, "swaps_max": 0, "hms": [], "oven": None, "door": None, "marathon": None, "rainbow": None,
             "dry_days": 0, "day": None, "day_ok": True, "day_n": 0,
             "duel": 0, "band": 0, "duel_on": False, "band_on": False, "same_taste": None, "friends_at": None, "taste_at": None}
 
@@ -101,6 +102,12 @@ def step(s, now: datetime, w: dict, local_day: str) -> bool:
                 w["marathon"] = _iso(now)
         w["job"] = None
         ev = True
+    # la porte : trois ouvertures en moins d'une minute
+    if not w.get("door"):
+        t = sorted(getattr(s, "door_opens", None) or [])
+        if any(t[i + DOOR_N - 1] - t[i] <= DOOR_S for i in range(len(t) - DOOR_N + 1)):
+            w["door"] = _iso(now)
+            ev = True
     # la chambre
     if (s.chamber_temp or 0) > OVEN_C and not w.get("oven"):
         w["oven"] = _iso(now)
@@ -170,7 +177,7 @@ async def values() -> dict:
             "swaps_total": int(w.get("swaps_total") or 0), "dry_days_ams": int(w.get("dry_days") or 0),
             "duels": int(w.get("duel") or 0), "band_prints": int(w.get("band") or 0),
             "mille_feuille": 1 if w.get("mille") else 0, "doctor": 1 if len(w.get("hms") or []) >= 10 else 0,
-            "oven": 1 if w.get("oven") else 0, "marathon_online": 1 if w.get("marathon") else 0,
+            "oven": 1 if w.get("oven") else 0, "door_dance": 1 if w.get("door") else 0, "marathon_online": 1 if w.get("marathon") else 0,
             "rainbow_ams": 1 if w.get("rainbow") else 0, "same_taste": 1 if w.get("same_taste") else 0}
 
 

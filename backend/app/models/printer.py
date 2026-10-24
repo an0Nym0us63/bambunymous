@@ -136,6 +136,11 @@ class PrinterState:
     chamber_temp: float = 0.0
     target_chamber_temp: float = 0.0
 
+    # Porte (24/10/2026) : ouverte ou non (None tant que l'imprimante ne l'a pas dit), et
+    # l'heure (time.time) des dernieres ouvertures
+    door_open: Optional[bool] = None
+    door_opens: list = field(default_factory=list)
+
     # Vitesse
     speed_level: int = 1
     speed_mag: int = 100
