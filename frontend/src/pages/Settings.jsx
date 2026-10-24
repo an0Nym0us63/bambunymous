@@ -1129,7 +1129,8 @@ function SourceBackfillSection() {
             {run ? "⏳ En cours" : `Dernier passage${st.finished ? ` · ${hm(st.finished)}` : ""}`}
             <span style={{ marginLeft:"auto", color:"var(--muted)" }}>{st.done} / {st.total}</span></div>
           {run && st.paused_until && <div style={{ fontSize:12, fontWeight:700, color:"#d97706" }}>
-            ☕ MakerWorld demande une pause : reprise vers {hm(st.paused_until)}, toute seule.</div>}
+            ☕ MakerWorld demande une pause : reprise vers {hm(st.paused_until)}, toute seule. Pour aller plus vite, résous le
+            captcha une fois sur makerworld.com depuis le même réseau.</div>}
           {run && !st.paused_until && st.current && <div style={{ fontSize:12, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{txt(st.current)}</div>}
           <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
             {chip(st.ok, `récupéré${st.ok > 1 ? "s" : ""} (${mo(st.bytes)})`, "#16a34a")}

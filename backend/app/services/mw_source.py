@@ -23,10 +23,12 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-PAUSE_S = 8                      # entre deux telechargements du rattrapage (plus un hasard de 0 a 6 s)
+PAUSE_S = 45                     # entre deux telechargements du rattrapage (plus un hasard de 0 a 45 s)
 # MakerWorld finit par demander « es-tu un robot ? » (HTTP 418) quand on enchaine : le rattrapage se met
-# alors en pause, de plus en plus longue, et reprend seul le meme modele (24/10/2026, bloque vers 50 fichiers)
-BACKOFF_S = (300, 900, 1800, 3600)
+# alors en pause, de plus en plus longue, et reprend seul le meme modele (24/10/2026, bloque vers 50 fichiers
+# a 8-14 s d'ecart). Le blocage semble tenir a l'adresse ou au compte (captcha aussi dans le navigateur) :
+# des pauses courtes ne servaient a rien, d'ou un rythme lent et des pauses longues.
+BACKOFF_S = (1800, 7200, 21600)
 _LOCK = threading.Lock()
 _BUSY: set = set()               # instances en cours de telechargement
 JOB: dict = {}                   # le rattrapage en cours (aussi sur disque : backfill.json)
@@ -279,7 +281,7 @@ async def backfill() -> None:
                                 JOB["ok"] += 1
                                 JOB["bytes"] += p.stat().st_size
                                 _job_save()
-                                if not await nap(PAUSE_S + random.uniform(0, 6)):
+                                if not await nap(PAUSE_S + random.uniform(0, PAUSE_S)):
                                     JOB["stopped"] = "Arrêté"
                             break
                         except ExactError as e:
@@ -297,7 +299,8 @@ async def backfill() -> None:
                             JOB["failed"] += 1
                             JOB["errors"] = (JOB["errors"] + [f"{name or did} : {e}"])[-5:]
                             if rate_limited(e):
-                                JOB["stopped"] = "MakerWorld bloque encore après une heure de pause : relance plus tard"
+                                JOB["stopped"] = ("MakerWorld bloque encore après plusieurs heures de pause. Résous le captcha une fois sur "
+                                                  "makerworld.com (même réseau, même compte), puis relance.")
                             elif "Jeton" in str(e) or "non connecté" in str(e):
                                 JOB["stopped"] = str(e)
                             break
