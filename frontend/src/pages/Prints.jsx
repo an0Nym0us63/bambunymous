@@ -1691,7 +1691,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
 
 
 function GroupTile({ groupId, name, prints, latestDate, number_of_items, duration_seconds, cover_print_id, onSelectPrint, onDelete, onUngroup,
-                    selectMode, selected, onToggleSelect, onLongPress }) {
+                    selectMode, selected, onToggleSelect, onLongPress, row = false }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   // Appui long : passe en selection avec ce groupe coche (meme geste que sur
   // une carte de print) ; en selection, un appui coche / decoche.
@@ -1738,61 +1738,76 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
   const aggCfg = inProgress ? STATUS_CFG.IN_PROGRESS : null;
   const AggIcon = aggCfg?.icon;
 
+  const [gDay, gHour] = whenFr(utcDate(latestDate));
+  const gCheck = selectMode && <div style={{ position:"absolute", top:6, right:6, width:22, height:22, borderRadius:"50%", zIndex:2,
+    display:"flex", alignItems:"center", justifyContent:"center", border: selected ? "none" : "1.5px solid rgba(255,255,255,0.85)",
+    background: selected ? "#3b82f6" : "rgba(0,0,0,0.4)" }}>{selected && <Check size={13} color="white" strokeWidth={3}/>}</div>;
+  const gFrame = { position:"relative", cursor:"pointer", userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none", touchAction:"manipulation",
+    outline: selected ? "2px solid #3b82f6" : "none", outlineOffset: 2 };
   return (
     <>
-      <div className="card" onClick={handleClick} {...press}
-        style={{ overflow:"hidden", display:"flex", flexDirection:"column",
-          position:"relative", padding:0, cursor:"pointer",
-          outline: selected ? "2px solid #3b82f6" : "none",
-          userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none", touchAction:"manipulation" }}>
-        <div style={{ position:"relative", paddingTop:"75%",
-          background:"var(--surface2)", overflow:"hidden" }}>
+      {row ? (
+        // en rangee : les vignettes en pile, le nom, combien et quand ; a droite la duree
+        <div onClick={handleClick} {...press} style={{ ...gFrame, display:"flex", alignItems:"center", gap:11, padding:7, borderRadius:16,
+          border:"1px solid color-mix(in srgb, #A78BFA 30%, var(--border))",
+          background:"linear-gradient(90deg, color-mix(in srgb, #A78BFA 12%, transparent), transparent 60%), var(--surface2)" }}>
+          <span style={{ position:"relative", display:"flex", flexShrink:0, width:60, height:60 }}>
+            {mosaicUrls.slice(0, 3).map((u, i) => <img key={u} src={u} alt="" draggable={false} style={{ position:"absolute", left: i * 9, top: i * 4,
+              width:46, height:46, borderRadius:12, objectFit:"cover", background:"var(--surface)", border:"2px solid var(--surface2)", zIndex: 3 - i,
+              boxShadow:"0 4px 10px rgba(0,0,0,.2)" }} onError={e => { e.currentTarget.style.visibility="hidden"; }}/>)}
+            {gCheck}
+          </span>
+          <span style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
+            <span style={{ fontSize:13.5, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>📁 {name}</span>
+            <span style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+              {prints.length} print{prints.length > 1 ? "s" : ""}{number_of_items > 1 ? ` · ×${number_of_items}` : ""} · {gDay} {gHour.split(" · ")[0]}</span>
+            <span style={{ display:"flex", gap:6, alignItems:"center", fontSize:10.5, fontWeight:800 }}>
+              {aggCfg && <span style={{ color: aggCfg.color }}>● {aggCfg.label}</span>}
+              {nToRate > 0 && <span style={{ color:"#d97706" }}>⭐ {nToRate > 1 ? `${nToRate} à évaluer` : "à évaluer"}</span>}</span>
+          </span>
+          <span style={{ fontSize:13, fontWeight:900, color:"var(--text)", flexShrink:0 }}>{duration_seconds > 0 ? durFr(duration_seconds) : ""}</span>
+        </div>
+      ) : (
+      <div onClick={handleClick} {...press} style={{ ...gFrame, overflow:"hidden", display:"flex", flexDirection:"column", borderRadius:18,
+        border:"1px solid color-mix(in srgb, #A78BFA 30%, var(--border))", background:"var(--surface2)", boxShadow:"0 8px 22px -16px rgba(124,58,237,.6)" }}>
+        <div style={{ position:"relative", paddingTop:"78%", background:"var(--surface)", overflow:"hidden" }}>
           <div style={{ position:"absolute", inset:0 }}>
             <GroupMosaic photos={mosaicUrls} title={name}/>
           </div>
-          <div style={{ position:"absolute", inset:0, background:"rgba(124,58,237,0.08)" }}/>
-          <span style={{ position:"absolute", top:6, left:6,
-            background:"rgba(124,58,237,0.85)", color:"white",
-            fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20 }}>
+          <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, rgba(124,58,237,0.10), transparent 40%)" }}/>
+          <span style={{ position:"absolute", top:7, left:7, background:"linear-gradient(135deg, #8B5CF6, #A78BFA)", color:"white",
+            fontSize:10, fontWeight:900, padding:"2px 9px", borderRadius:20, boxShadow:"0 4px 12px rgba(124,58,237,.45)" }}>
             📁 {prints.length} print{prints.length>1?"s":""}
           </span>
-          {selectMode && (
-            <div style={{ position:"absolute", top:6, right:6, width:22, height:22, borderRadius:"50%",
-              display:"flex", alignItems:"center", justifyContent:"center", zIndex:2,
-              border: selected ? "none" : "1.5px solid rgba(255,255,255,0.8)",
-              background: selected ? "#3b82f6" : "rgba(0,0,0,0.4)" }}>
-              {selected && <Check size={13} color="white" strokeWidth={3}/>}
-            </div>
-          )}
+          {gCheck}
           {!selectMode && number_of_items > 1 && (
-            <span style={{ position:"absolute", top:6, right:6,
-              background:"rgba(59,130,246,0.85)", color:"white",
-              fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:20 }}>
-              ×{number_of_items}
-            </span>
+            <span style={{ position:"absolute", top:7, right:7, background:"rgba(59,130,246,0.92)", color:"white",
+              fontSize:10, fontWeight:900, padding:"2px 8px", borderRadius:20 }}>×{number_of_items}</span>
           )}
           {nToRate > 0 && !selectMode && (
-            <span title={`${nToRate} modèle${nToRate > 1 ? "s" : ""} à évaluer`} style={{ position:"absolute", bottom:6, right:6,
-              background:"rgba(245,158,11,0.92)", color:"white", fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:20 }}>
+            <span data-tip={`${nToRate} modèle${nToRate > 1 ? "s" : ""} à évaluer`} style={{ position:"absolute", bottom:7, right:7,
+              background:"linear-gradient(135deg, #F59E0B, #FBBF24)", color:"white", fontSize:10, fontWeight:900, padding:"2px 8px", borderRadius:20,
+              boxShadow:"0 3px 10px rgba(245,158,11,.5)" }}>
               ⭐ {nToRate > 1 ? `${nToRate} à évaluer` : "À évaluer"}</span>
           )}
           {aggCfg && (
-            <span style={{ position:"absolute", bottom:6, left:6, display:"inline-flex",
+            <span style={{ position:"absolute", bottom:7, left:7, display:"inline-flex",
               alignItems:"center", gap:4, background:aggCfg.bg, color:"white",
-              fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20 }}>
-              <AggIcon size={9}/> {aggCfg.label}
+              fontSize:10, fontWeight:900, padding:"2px 8px", borderRadius:20 }}>
+              <AggIcon size={10}/> {aggCfg.label}
             </span>
           )}
         </div>
-        <div style={{ padding:"8px 10px" }}>
-          <p style={{ fontWeight:700, fontSize:12, color:"#a78bfa", margin:"0 0 2px",
+        <div style={{ padding:"8px 10px 9px" }}>
+          <p style={{ fontWeight:800, fontSize:12.5, color:"#8B5CF6", margin:"0 0 3px",
             overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</p>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDate(latestDate)}</span>
-            {duration_seconds > 0 && <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDur(duration_seconds)}</span>}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }}>
+            <span data-tip={fmtDate(latestDate)} style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{gDay} {gHour.split(" · ")[0]}</span>
+            {duration_seconds > 0 && <span style={{ fontSize:10.5, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap" }}>{durFr(duration_seconds)}</span>}
           </div>
         </div>
       </div>
+      )}
 
       {sheetOpen && (
         <GroupBottomSheet
@@ -1862,7 +1877,7 @@ function QuantityEditor({ id, type, value, onChange }) {
   );
 }
 
-function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onToggleSelect, onLongPress }) {
+function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onToggleSelect, onLongPress, row = false }) {
   const statusCfg = STATUS_CFG[p.status] || { bg:"rgba(0,0,0,0.5)", color:"white", label: p.status || "?" };
   const visiting = useFriend((s) => s.friend);
   const toRate = useToRateSet(!visiting && !!p.design_id);
@@ -1885,81 +1900,72 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
   }), { disabled: selectMode, onTouch: onLongPress ? () => onLongPress(p.id) : null });
   const handleClick = guard(() => { if (selectMode) onToggleSelect(p.id); else onClick(); });
 
+  const [stL, stC, stI] = V2_STATUS[p.status] || [statusCfg.label, "#94a3b8", "•"];
+  const [day, hour] = whenFr(utcDate(p.print_date));
+  const dur = p.duration_seconds || p.estimated_seconds;
+  const rateMe = p.status === "SUCCESS" && p.design_id && toRate.has(String(p.design_id));
+  const check = selectMode && <div style={{ position:"absolute", top:6, left:6, width:22, height:22, borderRadius:7, zIndex:2,
+    border: selected ? "none" : "1.5px solid rgba(255,255,255,0.85)", background: selected ? "#3b82f6" : "rgba(0,0,0,0.4)",
+    display:"flex", alignItems:"center", justifyContent:"center" }}>{selected && <Check size={13} color="white" strokeWidth={3}/>}</div>;
+  const dots = p.filament_usage?.length > 0 && <span style={{ display:"flex", gap:3 }}>{p.filament_usage.slice(0, 6).map((f,i) => (
+    <ColorDot key={i} hex={f.color_hex} colors={f.filament_colors_array} multicolor={f.filament_multicolor_type} size={row ? 11 : 12} ring="none"
+      style={{ boxShadow:"0 0 0 1.5px rgba(255,255,255,0.85), 0 1px 3px rgba(0,0,0,0.3)" }}/>))}</span>;
+  const frame = { position:"relative", cursor:"pointer", userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none", touchAction:"manipulation",
+    outline: selected ? "2px solid #3b82f6" : "none", outlineOffset: 2 };
   return (<>
-    <div className="card" onClick={handleClick} {...press}
-      style={{ overflow:"hidden", display:"flex",
-      flexDirection:"column", position:"relative", padding:0, cursor:"pointer",
-      outline: selected ? "2px solid #3b82f6" : "none",
-      userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none", touchAction:"manipulation" }}>
-
-      {/* Vignette pleine largeur ratio 4/3 */}
-      <div style={{ position:"relative", paddingTop:"75%",
-        background:"var(--surface2)", overflow:"hidden" }}>
-        <img src={apiUrl("/prints/" + p.id + "/image")} alt="" draggable={false}
-          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover",
-            WebkitTouchCallout:"none", WebkitUserDrag:"none" }}
-          onError={e => { e.currentTarget.style.display="none"; }}/>
-        {selectMode && (
-          <div style={{ position:"absolute", top:6, left:6, width:20, height:20, borderRadius:6,
-            border: selected ? "none" : "1.5px solid rgba(255,255,255,0.8)",
-            background: selected ? "#3b82f6" : "rgba(0,0,0,0.4)",
-            display:"flex", alignItems:"center", justifyContent:"center" }}>
-            {selected && <Check size={13} color="white" strokeWidth={3}/>}
-          </div>
-        )}
-        {/* Badge quantité */}
-        {p.number_of_items > 1 && (
-          <span style={{ position:"absolute", top:6, right:6,
-            background:"rgba(59,130,246,0.85)", color:"white",
-            fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:20,
-            boxShadow:"0 1px 4px rgba(0,0,0,0.4)" }}>
-            ×{p.number_of_items}
-          </span>
-        )}
-        {/* Badge statut */}
-        {p.status !== "SUCCESS" && (
-          <span style={{ position:"absolute", top:6, left:6,
-            background: statusCfg.bg, color:"white",
-            fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20,
-            boxShadow:"0 1px 4px rgba(0,0,0,0.4)", letterSpacing:"0.03em",
-            visibility: selectMode ? "hidden" : "visible" }}>
-            {statusCfg.label}
-          </span>
-        )}
-        {/* Modele MakerWorld imprime mais pas encore evalue */}
-        {p.status === "SUCCESS" && p.design_id && toRate.has(String(p.design_id)) && (
-          <span title="À évaluer sur MakerWorld" style={{ position:"absolute", bottom:6, right:6, fontSize:11,
-            background:"rgba(0,0,0,0.55)", borderRadius:20, padding:"1px 6px", lineHeight:1.5 }}>⭐</span>
-        )}
-        {/* Pastilles filament */}
-        {p.filament_usage?.length > 0 && (
-          <div style={{ position:"absolute", bottom:6, left:6, display:"flex", gap:3 }}>
-            {p.filament_usage.map((f,i) => (
-              <ColorDot key={i} hex={f.color_hex} colors={f.filament_colors_array}
-                multicolor={f.filament_multicolor_type} size={12} ring="none"
-                style={{ boxShadow:"0 0 0 1.5px rgba(255,255,255,0.8), 0 1px 3px rgba(0,0,0,0.3)" }}/>
-            ))}
-          </div>
-        )}
+    {row ? (
+      // en rangee : vignette (etat, ×N, ⭐), nom, etat et date, filaments ; a droite la duree et le poids
+      <div onClick={handleClick} {...press} style={{ ...frame, display:"flex", alignItems:"center", gap:11, padding:7, borderRadius:16,
+        border:"1px solid var(--border)", background:`linear-gradient(90deg, color-mix(in srgb, ${stC} 8%, transparent), transparent 60%), var(--surface2)` }}>
+        <span style={{ position:"relative", flexShrink:0, width:60, height:60 }}>
+          <img src={apiUrl("/prints/" + p.id + "/image")} alt="" draggable={false} style={{ width:60, height:60, borderRadius:13, objectFit:"cover",
+            background:"var(--surface)", display:"block", WebkitTouchCallout:"none" }} onError={e => { e.currentTarget.style.visibility="hidden"; }}/>
+          {check}
+          <span style={{ position:"absolute", right:-3, bottom:-3, width:15, height:15, borderRadius:"50%", background:stC, border:"2px solid var(--sheet-bg)" }}/>
+          {p.number_of_items > 1 && <span style={{ position:"absolute", left:-4, top:-4, fontSize:9.5, fontWeight:900, color:"#fff", background:"#3b82f6", borderRadius:8,
+            padding:"0 5px", lineHeight:"15px", border:"1.5px solid var(--sheet-bg)", visibility: selectMode ? "hidden" : "visible" }}>×{p.number_of_items}</span>}
+        </span>
+        <span style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
+          <span style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.file_name || "Sans nom"}</span>
+          <span style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+            <span style={{ color:stC }}>{stI} {stL}</span> · {day} {hour}</span>
+          <span style={{ display:"flex", alignItems:"center", gap:6 }}>{dots}
+            {rateMe && <span data-tip="À évaluer sur MakerWorld" style={{ fontSize:10.5, fontWeight:800, color:"#d97706" }}>⭐ à évaluer</span>}</span>
+        </span>
+        <span style={{ textAlign:"right", flexShrink:0, display:"flex", flexDirection:"column", gap:2 }}>
+          <span style={{ fontSize:13, fontWeight:900, color:"var(--text)" }}>{dur > 0 ? durFr(dur) : "—"}</span>
+          {p.total_weight_g > 0 && <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)" }}>{gFr(p.total_weight_g)}</span>}
+        </span>
       </div>
-
-      {/* Infos minimales */}
-      <div style={{ padding:"8px 10px" }}>
-        <p style={{ fontWeight:700, fontSize:12, color:"var(--text)", margin:"0 0 2px",
-          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+    ) : (
+    <div onClick={handleClick} {...press} style={{ ...frame, overflow:"hidden", display:"flex", flexDirection:"column", borderRadius:18,
+      border:"1px solid var(--border)", background:"var(--surface2)", boxShadow:"0 8px 22px -16px rgba(0,0,0,.45)" }}>
+      {/* la vignette, l'etat en pastille, ×N, ⭐ a evaluer, les filaments */}
+      <div style={{ position:"relative", paddingTop:"78%", background:`radial-gradient(70% 70% at 50% 40%, ${stC}1f, transparent 70%), var(--surface)`, overflow:"hidden" }}>
+        <img src={apiUrl("/prints/" + p.id + "/image")} alt="" draggable={false}
+          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", WebkitTouchCallout:"none", WebkitUserDrag:"none" }}
+          onError={e => { e.currentTarget.style.display="none"; }}/>
+        {check}
+        {p.number_of_items > 1 && <span style={{ position:"absolute", top:7, right:7, background:"rgba(59,130,246,0.92)", color:"white", fontSize:10, fontWeight:900,
+          padding:"2px 8px", borderRadius:20, boxShadow:"0 2px 6px rgba(0,0,0,0.35)" }}>×{p.number_of_items}</span>}
+        {p.status !== "SUCCESS" && <span style={{ position:"absolute", top:7, left:7, background:stC, color:"white", fontSize:10, fontWeight:900,
+          padding:"2px 9px", borderRadius:20, boxShadow:`0 4px 12px ${stC}66`, visibility: selectMode ? "hidden" : "visible" }}>{stI} {stL}</span>}
+        {rateMe && <span data-tip="À évaluer sur MakerWorld" style={{ position:"absolute", bottom:7, right:7, fontSize:11, fontWeight:900, color:"#fff",
+          background:"linear-gradient(135deg, #F59E0B, #FBBF24)", borderRadius:20, padding:"1px 7px", boxShadow:"0 3px 10px rgba(245,158,11,.5)" }}>⭐</span>}
+        {dots && <span style={{ position:"absolute", bottom:7, left:7 }}>{dots}</span>}
+      </div>
+      <div style={{ padding:"8px 10px 9px" }}>
+        <p style={{ fontWeight:800, fontSize:12.5, color:"var(--text)", margin:"0 0 3px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
           {p.file_name || "Sans nom"}
         </p>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDate(p.print_date)}</span>
-          {/* Repli sur estimated_seconds, comme la fiche : sans ca, un print dont
-              la duree REELLE n'a pas ete captee (coupure MQTT, import) mais qui a
-              une estimation 3MF n'affichait rien sur la tuile alors que sa fiche,
-              elle, montrait la duree. */}
-          {(p.duration_seconds || p.estimated_seconds) > 0 &&
-            <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDur(p.duration_seconds || p.estimated_seconds)}</span>}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }}>
+          <span data-tip={fmtDate(p.print_date)} style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{day} {hour.split(" · ")[0]}</span>
+          {/* Repli sur estimated_seconds, comme la fiche */}
+          {dur > 0 && <span style={{ fontSize:10.5, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap" }}>{durFr(dur)}</span>}
         </div>
       </div>
     </div>
+    )}
     {mw && <MakerWorldModelSheet designId={String(p.design_id)} onClose={() => setMw(false)}/>}
     {full?.mode === "edit" && <PrintEditSheet p={full.p} onClose={() => setFull(null)}
       onSaved={() => { setFull(null); onChanged?.(); }}/>}
@@ -2478,6 +2484,9 @@ export default function Prints() {
   const [filSearch, setFilSearch] = useState("");
   const [sortF, setSortF]     = useState("recent");
   const [viewMode, setViewMode] = useUrlTab("tab", "list", ["list", "gallery", "makerworld", "queue"]);
+  // la liste en grille de cartes, ou en rangees compactes (choix retenu sur l'appareil)
+  const [rows, setRows0] = useState(() => { try { return localStorage.getItem("bn-prints-rows") === "1"; } catch { return false; } });
+  const setRows = v => { setRows0(v); try { localStorage.setItem("bn-prints-rows", v ? "1" : "0"); } catch { /* indisponible */ } };
   useTrackDetail(`Historique · ${ {list:"Liste", gallery:"Galerie", makerworld:"MakerWorld", queue:"À faire"}[viewMode] || viewMode }`);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -2721,16 +2730,17 @@ export default function Prints() {
       <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Impressions</h1>
 
       {/* Tabs Liste / Galerie / MakerWorld */}
-      <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
-        {[["list","Liste"],["gallery","Galerie"],["makerworld","MakerWorld"],["queue","À faire"]].map(([id,label])=>(
+      <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:16, padding:4, border:"1px solid var(--border)" }}>
+        {[["list","Liste","☰","#3B82F6"],["gallery","Galerie","🖼️","#EC4899"],["makerworld","MakerWorld","🌐","#06B6D4"],["queue","À faire","✅","#22C55E"]].map(([id,label,ic,c])=>(
           // comme les Stats : largeur selon le texte, qui retrecit avec l'ecran
           <button key={id} onClick={()=>setViewMode(id)} style={{
-            flex:"1 1 auto", minWidth:0, padding:"8px 3px", borderRadius:8, fontWeight:600, cursor:"pointer",
-            fontSize:"clamp(10px, 3.1vw, 12px)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
-            background: viewMode===id ? "#3b82f6" : "transparent",
-            color: viewMode===id ? "white" : "var(--muted)",
+            flex:"1 1 auto", minWidth:0, padding:"8px 4px", borderRadius:12, fontWeight:800, cursor:"pointer",
+            fontSize:"clamp(10.5px, 3.1vw, 12.5px)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+            display:"flex", alignItems:"center", justifyContent:"center", gap:5,
+            background: viewMode===id ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` : "transparent",
+            color: viewMode===id ? "white" : "var(--muted)", boxShadow: viewMode===id ? `0 6px 16px -6px ${c}` : "none",
             border:"none", transition:"all 0.15s",
-          }}>{label}</button>
+          }}><span style={{ fontSize:"clamp(11px, 3.2vw, 13px)", filter: viewMode===id ? "none" : "grayscale(.5)" }}>{ic}</span>{label}</button>
         ))}
       </div>
 
@@ -2746,70 +2756,101 @@ export default function Prints() {
       {kpis && viewMode==="list" && (
         // Une seule ligne : les pastilles se partagent la largeur, et les grands
         // nombres s'arrondissent (3938 h plutot que 3938h 30min).
-        <div style={{ display:"flex", gap:6 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4, minmax(0, 1fr))", gap:6 }}>
           {[
-            [`${kpis.count}`, "prints", "#3b82f6"],
-            kpis.duration > 0 ? [kpis.duration >= 100 * 3600 ? `${Math.round(kpis.duration / 3600)} h` : fmtDur(kpis.duration), null, "#8b5cf6"] : null,
-            kpis.weight_g > 0 ? [`${(kpis.weight_g/1000).toFixed(kpis.weight_g >= 10000 ? 1 : 2).replace(".", ",")} kg`, null, "#f59e0b"] : null,
-            kpis.cost > 0 ? [`${moneyVal(kpis.cost, kpis.cost >= 100 ? 0 : 2).replace(".", ",")} €`, null, "#22c55e"] : null,
-          ].filter(Boolean).map(([val, label, color])=>(
-            <div key={val} style={{ flex:"1 1 auto", minWidth:0, display:"flex", alignItems:"center", justifyContent:"center",
-              gap:4, padding:"4px 8px", borderRadius:20, background:`${color}18`, border:`1px solid ${color}30`, whiteSpace:"nowrap" }}>
-              <span style={{ fontSize:"clamp(11px, 3.2vw, 12.5px)", fontWeight:700, color, fontVariantNumeric:"tabular-nums",
-                overflow:"hidden", textOverflow:"ellipsis" }}>{val}</span>
-              {label && <span style={{ fontSize:"clamp(10px, 2.9vw, 11px)", color:"var(--muted)" }}>{label}</span>}
+            ["🖨️ Prints", `${kpis.count}`, "#3B82F6", "#60A5FA"],
+            ["⏱ Durée", kpis.duration > 0 ? (kpis.duration >= 100 * 3600 ? `${Math.round(kpis.duration / 3600)} h` : fmtDur(kpis.duration)) : "—", "#8B5CF6", "#C084FC"],
+            ["⚖ Poids", kpis.weight_g > 0 ? `${(kpis.weight_g/1000).toFixed(kpis.weight_g >= 10000 ? 1 : 2).replace(".", ",")} kg` : "—", "#F59E0B", "#FBBF24"],
+            ["💶 Coût", kpis.cost > 0 ? `${moneyVal(kpis.cost, kpis.cost >= 100 ? 0 : 2).replace(".", ",")} €` : "—", "#16A34A", "#4ADE80"],
+          ].map(([label, val, c1, c2])=>(
+            <div key={label} style={{ minWidth:0, padding:"7px 8px", borderRadius:14, border:`1px solid color-mix(in srgb, ${c1} 22%, var(--border))`,
+              background:`radial-gradient(90% 70% at 100% 0%, ${c1}22, transparent 70%), var(--surface2)`, boxShadow:`0 6px 18px -12px ${c1}` }}>
+              <div style={{ fontSize:9.5, fontWeight:800, letterSpacing:".05em", textTransform:"uppercase", color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden" }}>{label}</div>
+              <div style={{ fontSize:"clamp(13px, 3.9vw, 16px)", fontWeight:900, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", fontVariantNumeric:"tabular-nums",
+                ...v2grad(c1, c2) }}>{val}</div>
             </div>
           ))}
         </div>
       )}
 
       {/* Recherche + Filtres + .3mf */}
-      {viewMode!=="makerworld" && viewMode!=="queue" && <div style={{ display:"flex", gap:8 }}>
-        <div style={{ position:"relative", flex:1 }}>
-          <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un print…"
-            style={{ width:"100%", paddingLeft:36, padding:"8px 10px 8px 36px", boxSizing:"border-box",
-              background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:10,
-              fontSize:12, color:"var(--text)", outline:"none" }}/>
-        </div>
-        <button onClick={()=>setFilterOpen(true)}
-          style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px",
-            background: (statusF||sortF!=="recent"||dateFrom||dateTo) ? "#3b82f6" : "var(--surface2)",
-            color: (statusF||sortF!=="recent"||dateFrom||dateTo) ? "white" : "var(--text)",
-            border:"1px solid var(--border)", borderRadius:10, fontSize:12, cursor:"pointer", flexShrink:0 }}>
-          <SlidersHorizontal size={14}/>
-          {[statusF, sortF!=="recent", materialF, filaTypeF, filamentIdF, colorF, dateFrom||dateTo].filter(Boolean).length > 0 ? `Filtres (${[statusF, sortF!=="recent", materialF, filaTypeF, filamentIdF, colorF, dateFrom||dateTo].filter(Boolean).length})` : "Filtres"}
-        </button>
-        {viewMode==="list" && (
-          <AdminOnly><button onClick={()=>selectMode?exitSelectMode():setSelectMode(true)}
-            title={selectMode?"Annuler sélection":"Sélectionner"}
-            style={{ width:36, height:36, borderRadius:10, border:"1px solid var(--border)",
-              background:selectMode?"rgba(59,130,246,0.1)":"var(--surface2)",
-              color:selectMode?"#3b82f6":"var(--muted)", cursor:"pointer",
-              display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-            <Check size={14}/>
-          </button></AdminOnly>
-        )}
-        <AdminOnly><label title="Importer .3mf"
-          style={{ width:36, height:36, borderRadius:10, border:"1px solid var(--border)",
-            background:"var(--surface2)", color:"var(--muted)", cursor:"pointer",
-            display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-          <Upload size={14}/>
-          <input type="file" accept=".3mf" onChange={handleImport} style={{ display:"none" }}/>
-        </label></AdminOnly>
-
-      </div>}
+      {viewMode!=="makerworld" && viewMode!=="queue" && (() => {
+        // les filtres actifs : une etiquette chacun, ✕ pour l'enlever
+        const fil = (Array.isArray(allFilaments) ? allFilaments : []).find(f => String(f.id) === filamentIdF);
+        const bucket = (Array.isArray(colorBuckets) ? colorBuckets : []).find(b => b.slug === colorF);
+        const dFr = d => d ? new Date(d + "T00:00").toLocaleDateString("fr-FR", { day:"numeric", month:"short" }) : "…";
+        const SORTS = { oldest:"Plus ancien", cost:"Coût ↓", weight:"Poids ↓", duration:"Durée ↓" };
+        const chips = [
+          (dateFrom || dateTo) && ["📅", `${dFr(dateFrom)} → ${dFr(dateTo)}`, () => { setDateFrom(""); setDateTo(""); }],
+          statusF && ["●", STATUS_CFG[statusF]?.label || statusF, () => setStatusF("")],
+          sortF !== "recent" && ["↕", SORTS[sortF] || sortF, () => setSortF("recent")],
+          materialF && ["🧪", materialF, () => setMaterialF("")],
+          filaTypeF && ["🏷️", filaTypeF, () => setFilaTypeF("")],
+          colorF && ["🎨", bucket?.label || colorF, () => setColorF("")],
+          filamentIdF && ["🧵", fil ? (fil.translated_name || fil.name) : `#${filamentIdF}`, () => setFilamentIdF("")],
+        ].filter(Boolean);
+        const round = on => ({ width:40, height:40, borderRadius:14, border:"1px solid var(--border)", flexShrink:0, cursor:"pointer",
+          display:"flex", alignItems:"center", justifyContent:"center", background: on ? "rgba(59,130,246,0.14)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--muted)" });
+        return <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+            <div style={{ position:"relative", flex:1, minWidth:0 }}>
+              <Search size={15} style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un print…"
+                style={{ width:"100%", height:40, padding:"0 34px 0 38px", boxSizing:"border-box",
+                  background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:20,
+                  fontSize:13, color:"var(--text)", outline:"none" }}/>
+              {search && <button onClick={() => setSearch("")} aria-label="Effacer la recherche" style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)",
+                width:24, height:24, borderRadius:"50%", border:"none", background:"var(--surface)", color:"var(--muted)", cursor:"pointer", fontSize:12 }}>✕</button>}
+            </div>
+            <button onClick={()=>setFilterOpen(true)} aria-label="Filtres et tri" data-tip="Filtres et tri" style={{ ...round(chips.length > 0), position:"relative" }}>
+              <SlidersHorizontal size={16}/>
+              {chips.length > 0 && <span style={{ position:"absolute", top:-5, right:-5, minWidth:18, height:18, padding:"0 4px", borderRadius:9, fontSize:10.5,
+                fontWeight:900, color:"#fff", background:"#3b82f6", display:"flex", alignItems:"center", justifyContent:"center", border:"2px solid var(--bg)" }}>{chips.length}</span>}
+            </button>
+            {viewMode==="list" && <button onClick={() => setRows(!rows)} aria-label={rows ? "Afficher en grille" : "Afficher en rangées"}
+              data-tip={rows ? "En grille" : "En rangées"} style={round(false)}>{rows ? "▦" : "☰"}</button>}
+            {viewMode==="list" && (
+              <AdminOnly><button onClick={()=>selectMode?exitSelectMode():setSelectMode(true)}
+                aria-label={selectMode?"Annuler la sélection":"Sélectionner"} data-tip={selectMode?"Annuler la sélection":"Sélectionner"} style={round(selectMode)}>
+                <Check size={16}/>
+              </button></AdminOnly>
+            )}
+            <AdminOnly><label data-tip="Importer un .3mf" style={round(false)}>
+              <Upload size={16}/>
+              <input type="file" accept=".3mf" onChange={handleImport} style={{ display:"none" }}/>
+            </label></AdminOnly>
+          </div>
+          {chips.length > 0 && <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+            {chips.map(([ic, l, off]) => <span key={l} style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 6px 4px 10px", borderRadius:20,
+              fontSize:12, fontWeight:800, color:"#3b82f6", background:"rgba(59,130,246,0.12)", border:"1px solid rgba(59,130,246,0.25)" }}>
+              <span>{ic}</span>{l}
+              <button onClick={off} aria-label={`Retirer ${l}`} style={{ width:18, height:18, borderRadius:"50%", border:"none", background:"rgba(59,130,246,0.2)",
+                color:"#3b82f6", cursor:"pointer", fontSize:10, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button></span>)}
+            {chips.length > 1 && <button onClick={()=>{ setStatusF(""); setSortF("recent"); setMaterialF(""); setFilaTypeF(""); setFilamentIdF(""); setColorF(""); setDateFrom(""); setDateTo(""); setFilSearch(""); }}
+              style={{ fontSize:12, fontWeight:800, color:"var(--muted)", background:"none", border:"none", cursor:"pointer" }}>Tout effacer</button>}
+          </div>}
+        </div>;
+      })()}
 
       {filterOpen && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:200, display:"flex", alignItems:"flex-end" }}
+        <div style={{ position:"fixed", inset:0, background:"rgba(2,6,23,0.55)", backdropFilter:"blur(6px)", zIndex:200, display:"flex", alignItems:"flex-end", justifyContent:"center" }}
           onClick={()=>setFilterOpen(false)}>
           <div onClick={e=>e.stopPropagation()} className="sheet-inner"
-            style={{ width:"100%", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-              padding:"0 16px 32px", overflowY:"auto", maxHeight:"75dvh", position:"relative" }}>
-            <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"12px auto 8px" }}/>
-            <button onClick={()=>setFilterOpen(false)} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
-              <p style={{ fontWeight:700, fontSize:15, color:"var(--text)", margin:0 }}>Filtres & tri</p>
+            style={{ width:"100%", maxWidth:640, background:"var(--sheet-bg)", borderRadius:"26px 26px 0 0", border:"1px solid var(--border)",
+              padding:"0 16px 32px", overflowY:"auto", maxHeight:"80dvh", position:"relative", animation:"bn-sheet-up .3s cubic-bezier(.2,.8,.2,1)" }}>
+            <div style={{ margin:"0 -16px 16px", padding:"10px 16px 14px", position:"sticky", top:0, zIndex:3, overflow:"hidden",
+              background:"linear-gradient(135deg, color-mix(in srgb, #3B82F6 22%, var(--sheet-bg)), var(--sheet-bg) 70%)" }}>
+              <div style={{ width:42, height:4, borderRadius:4, background:"var(--border)", margin:"0 auto 10px" }}/>
+              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                <span style={{ width:40, height:40, borderRadius:13, display:"flex", alignItems:"center", justifyContent:"center", color:"#fff",
+                  background:"linear-gradient(135deg, #3B82F6, #60A5FA)", boxShadow:"0 8px 20px #3B82F655", flexShrink:0 }}><SlidersHorizontal size={19}/></span>
+                <span style={{ flex:1, fontSize:18, fontWeight:900, color:"var(--text)" }}>Filtres & tri</span>
+                <button onClick={()=>setFilterOpen(false)} aria-label="Fermer" style={{ width:34, height:34, borderRadius:11, background:"var(--surface)", border:"1px solid var(--border)",
+                  cursor:"pointer", color:"var(--text2)", fontSize:15 }}>✕</button>
+              </div>
+            </div>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12, minHeight:4 }}>
+              <span/>
               {(statusF||sortF!=="recent"||materialF||filaTypeF||filamentIdF||colorF||dateFrom||dateTo) && (
                 <button onClick={()=>{ setStatusF(""); setSortF("recent"); setMaterialF(""); setFilaTypeF(""); setFilamentIdF(""); setColorF(""); setDateFrom(""); setDateTo(""); setFilSearch(""); }}
                   style={{ fontSize:11, color:"#60a5fa", background:"none", border:"none", cursor:"pointer" }}>
@@ -3002,8 +3043,8 @@ export default function Prints() {
         // Grille flat si filtre actif
         if (groupF) {
           return (
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(160px, 1fr))", gap:10 }}>
-              {prints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete} onChanged={() => load()} onLongPress={id=>{ setSelectMode(true); setSelectedIds(new Set([id])); }}/>)}
+            <div style={rows ? { display:"flex", flexDirection:"column", gap:8 } : { display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(160px, 1fr))", gap:10 }}>
+              {prints.map(p => <PrintCard key={p.id} p={p} row={rows} onClick={()=>setSelected(p)} onDelete={onDelete} onChanged={() => load()} onLongPress={id=>{ setSelectMode(true); setSelectedIds(new Set([id])); }}/>)}
             </div>
           );
         }
@@ -3064,9 +3105,9 @@ export default function Prints() {
         // Grille responsive : 2 cols mobile, 3-4 cols desktop
         const GRID = "repeat(auto-fill, minmax(160px, 1fr))";
         return (
-          <div style={{ display:"grid", gridTemplateColumns:GRID, gap:10 }}>
+          <div style={rows ? { display:"flex", flexDirection:"column", gap:8 } : { display:"grid", gridTemplateColumns:GRID, gap:10 }}>
             {items.map((item, idx) => item.type === "print" ? (
-              <PrintCard key={item.p.id} p={item.p}
+              <PrintCard key={item.p.id} p={item.p} row={rows}
                 onClick={()=>setSelected(item.p)}
                 onDelete={onDelete}
                 onChanged={() => load()}
@@ -3075,7 +3116,7 @@ export default function Prints() {
                 onToggleSelect={toggleSelect}
                 onLongPress={id => { setSelectMode(true); setSelectedIds(new Set([id])); }}/>
             ) : (
-              <GroupTile key={item.groupId} groupId={item.groupId} name={item.name}
+              <GroupTile key={item.groupId} groupId={item.groupId} name={item.name} row={rows}
                 selectMode={selectMode}
                 selected={selectedGroups.some(g => g.groupId === item.groupId)}
                 onToggleSelect={() => toggleGroup(item)}
@@ -3124,10 +3165,11 @@ export default function Prints() {
            actions se partagent la seconde en parts egales -- cibles larges au
            doigt, et aucune largeur a deviner. */
         <div style={{ position:"fixed", bottom:"calc(76px + env(safe-area-inset-bottom,0px))",
-          left:12, right:12, zIndex:500,
-          background:"var(--sheet-bg)", border:"1px solid var(--border)", borderRadius:14,
-          padding:10, display:"flex", flexDirection:"column", gap:8,
-          boxShadow:"0 4px 24px rgba(0,0,0,0.35)" }}>
+          left:12, right:12, zIndex:500, maxWidth:620, margin:"0 auto",
+          background:"color-mix(in srgb, var(--sheet-bg) 92%, transparent)", backdropFilter:"blur(10px)",
+          border:"1px solid color-mix(in srgb, #3B82F6 30%, var(--border))", borderRadius:20,
+          padding:12, display:"flex", flexDirection:"column", gap:8,
+          boxShadow:"0 14px 40px rgba(0,0,0,0.35)" }}>
 
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <span style={{ fontSize:12.5, color:"var(--text)", fontWeight:700,

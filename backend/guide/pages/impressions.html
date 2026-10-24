@@ -3,7 +3,7 @@
 
 <section id="impressions-onglets">
   <h2>Les quatre onglets</h2>
-  <p>En haut de la page, une barre d'onglets :</p>
+  <p>En haut de la page, une barre d'onglets, chacun avec son pictogramme (☰ Liste, 🖼️ Galerie, 🌐 MakerWorld, ✅ À faire) ; l'onglet ouvert est en couleur :</p>
   <dl class="opts">
     <dt><span class="ui">Liste</span></dt><dd>L'historique complet, avec compteurs, recherche, filtres et groupes. C'est l'onglet ouvert par défaut.</dd>
     <dt><span class="ui">Galerie</span></dt><dd>Seulement les prints et groupes qui ont des photos, en grandes tuiles, avec un mode comparaison.</dd>
@@ -21,19 +21,20 @@
 
   <section id="impressions-compteurs">
     <h3>Les compteurs</h3>
-    <p>Quatre pastilles résument <b>tout l'historique affiché</b> (elles suivent la recherche et les filtres) :</p>
+    <p>Quatre cases résument <b>tout l'historique affiché</b> (elles suivent la recherche et les filtres) :</p>
     <dl class="opts">
-      <dt>« 90 prints » (bleu)</dt><dd>Le nombre de prints.</dd>
-      <dt>Durée (violet)</dt><dd>Le temps d'impression cumulé, en heures et minutes, arrondi à l'heure au-delà de 100 h (« 222 h »).</dd>
-      <dt>Poids (orange)</dt><dd>Le filament consommé (« 8,40 kg »).</dd>
-      <dt>Coût (vert)</dt><dd>Filament + électricité (« 197 € »).</dd>
+      <dt>🖨️ Prints (bleu)</dt><dd>Le nombre de prints.</dd>
+      <dt>⏱ Durée (violet)</dt><dd>Le temps d'impression cumulé, en heures et minutes, arrondi à l'heure au-delà de 100 h (« 222 h »).</dd>
+      <dt>⚖ Poids (orange)</dt><dd>Le filament consommé (« 8,40 kg »).</dd>
+      <dt>💶 Coût (vert)</dt><dd>Filament + électricité (« 197 € »).</dd>
     </dl>
-    <p>Les prints encore en cours ne sont pas comptés. Une pastille à zéro est masquée.</p>
+    <p>Les prints encore en cours ne sont pas comptés. Une case à zéro affiche « — ».</p>
   </section>
 
   <section id="impressions-recherche">
     <h3>Rechercher</h3>
-    <p>Tape dans <span class="ui">Rechercher un print…</span> : la liste se met à jour une fraction de seconde après ta dernière frappe. Chaque mot doit se retrouver quelque part, et la recherche fouille large :</p>
+    <p>À côté du champ de recherche, quatre boutons ronds : <span class="ui">Filtres</span> (avec le nombre de critères actifs), <span class="ui">☰ / ▦</span> l'affichage en rangées ou en grille, <span class="ui">✓</span> la sélection <span class="admin">admin</span> et <span class="ui">Importer un .3mf</span> <span class="admin">admin</span>.</p>
+    <p>Tape dans <span class="ui">Rechercher un print…</span> (le <span class="ui">✕</span> l'efface) : la liste se met à jour une fraction de seconde après ta dernière frappe. Chaque mot doit se retrouver quelque part, et la recherche fouille large :</p>
     <ul>
       <li>le nom affiché, le nom d'origine du fichier, le <b>nom de recherche en français</b> (voir <a href="#impressions-fiche">la fiche</a>) ;</li>
       <li>les filaments utilisés (nom, marque, matériau, type) ;</li>
@@ -46,7 +47,7 @@
 
   <section id="impressions-filtres">
     <h3>Filtres et tri</h3>
-    <p>Le bouton <span class="ui">Filtres</span> ouvre le panneau <b>Filtres &amp; tri</b>. Quand des critères sont actifs, il devient <span class="ui">Filtres (2)</span> et passe en bleu.</p>
+    <p>Le bouton <span class="ui">Filtres</span> ouvre le panneau <b>Filtres &amp; tri</b>. Quand des critères sont actifs, il passe en bleu avec leur nombre, et chacun s'affiche sous la recherche en <b>étiquette</b> (« 📅 1 oct. → 24 oct. », « ● Échoué », « ↕ Coût ↓ », « 🧪 PLA », « 🎨 Rouge », « 🧵 PLA Basic Rouge »…) : son <span class="ui">✕</span> retire ce critère, <span class="ui">Tout effacer</span> les retire tous.</p>
     <figure class="phone"><img src="img/impressions-filtres.webp" alt="Panneau Filtres et tri : période, statut, tri, matériau, type de filament, filament exact"><figcaption>Le panneau Filtres &amp; tri.</figcaption></figure>
     <dl class="opts">
       <dt>Période</dt><dd><span class="ui">Tout</span> (par défaut) ou deux dates <b>Début</b> et <b>Fin</b> (la date de fin est incluse).</dd>
@@ -62,15 +63,16 @@
 
   <section id="impressions-cartes">
     <h3>Lire une carte</h3>
-    <p>Chaque print est une carte :</p>
+    <p>Chaque print est une carte (en grille) ou une rangée (affichage <span class="ui">☰</span>, retenu sur l'appareil) :</p>
     <ul>
       <li>la <b>vignette</b> du plateau tirée du fichier ;</li>
       <li>en haut à gauche, un <b>badge de statut</b>, seulement si le print n'est pas réussi : <b>En cours</b>, <b>Partiel</b>, <b>À refaire</b>, <b>Échoué</b>, <b>Annulé</b> ;</li>
       <li>en haut à droite, <b>×3</b> si le print a produit plusieurs pièces ;</li>
       <li>en bas à gauche, les <b>pastilles de couleur</b> des filaments utilisés ;</li>
       <li>en bas à droite, une <b>⭐</b> si le modèle MakerWorld est imprimé avec succès mais <a href="#impressions-a-evaluer">pas encore évalué</a> ;</li>
-      <li>dessous : le nom, la date et l'heure, la durée (réelle si elle est connue, sinon estimée).</li>
+      <li>dessous : le nom, le jour et l'heure (« Hier 17:00 » ; la date complète au survol), la durée (réelle si elle est connue, sinon estimée).</li>
     </ul>
+    <p>En <b>rangée</b> : la vignette avec sa pastille d'état (et ×3), le nom, l'état, le jour, l'heure et la date (« ✓ Réussie · Hier 17:00 · 23/10 »), les pastilles des filaments et « ⭐ à évaluer » ; à droite la durée et le poids. Un groupe y montre ses vignettes en pile, son nom en violet, « 3 prints · Hier 17:00 », « En cours » ou « ⭐ à évaluer », et sa durée totale.</p>
     <p>Touche une carte pour ouvrir <a href="#impressions-fiche">la fiche du print</a>.</p>
     <p>Un <b>groupe</b> occupe une seule tuile, placée à la date de son print le plus récent : une mosaïque des vignettes de ses prints sous un voile violet, le badge <b>📁 12 prints</b>, son nom en violet et sa durée totale. Elle affiche <b>⭐ À évaluer</b> si des modèles du groupe attendent une évaluation, et <b>En cours</b> si un de ses prints est en train d'imprimer.</p>
     <div class="note"><p><b>La mosaïque d'un groupe</b> : une photo prend toute la tuile, deux se partagent la largeur, trois mettent la photo principale à gauche et deux petites à droite, quatre et plus forment une grille 2×2. Au-delà de quatre photos, une case change de temps en temps (sauf si ton téléphone demande de réduire les animations).</p></div>
