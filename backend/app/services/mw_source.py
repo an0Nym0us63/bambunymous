@@ -94,26 +94,24 @@ BUDGET_KEY = "MW_SOURCE_DAILY_BUDGET"
 BUDGET_DEFAULT = 50
 
 
-def _log_path() -> Path:
-    return _dir() / "downloads.json"
-
-
 def _downloads() -> list:
-    """Heures des telechargements du rattrapage dans les dernieres 24 h."""
-    try:
-        v = json.loads(_log_path().read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return []
+    """Heures des 3MF d'origine recuperes dans les dernieres 24 h, lues sur les fichiers eux-memes : le premier
+    rattrapage (avant ce compte) et les 3MF pris au lancement des impressions comptent aussi, comme pour la
+    limite de MakerWorld."""
     now = time.time()
-    return sorted(t for t in v if isinstance(t, (int, float)) and now - t < DAILY_S)
+    out = []
+    for f in _dir().glob("*.3mf"):
+        try:
+            t = f.stat().st_mtime
+        except OSError:
+            continue
+        if now - t < DAILY_S:
+            out.append(t)
+    return sorted(out)
 
 
 def _note_download() -> None:
-    v = _downloads() + [time.time()]
-    try:
-        _log_path().write_text(json.dumps(v), encoding="utf-8")
-    except OSError:
-        pass
+    """Rien a noter : le fichier ecrit fait foi (voir _downloads)."""
 
 
 async def budget() -> int:
