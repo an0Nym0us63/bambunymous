@@ -199,7 +199,8 @@ class MQTTManager:
             logger.info("MQTT: imprimante non configurée")
             return
         self._stop_event.clear()
-        self._thread = threading.Thread(target=self._run_loop, daemon=True)
+        self._gen = getattr(self, "_gen", 0) + 1
+        self._thread = threading.Thread(target=self._run_loop, args=(self._gen,), daemon=True)
         self._thread.start()
         logger.info(f"MQTT: démarrage vers {self._ip}")
 
@@ -214,17 +215,23 @@ class MQTTManager:
             try: self._client.disconnect()
             except: pass
         self._stop_event.clear()
-        self._thread = threading.Thread(target=self._run_loop, daemon=True)
+        # un nouveau fil ; l'ancien, sorti de loop_forever par la deconnexion, voit qu'il n'est plus
+        # le dernier et s'arrete (24/10/2026 : il se reconnectait 15 s plus tard, deux clients
+        # traitaient chaque message et les AMS apparaissaient en double)
+        self._gen = getattr(self, "_gen", 0) + 1
+        self._thread = threading.Thread(target=self._run_loop, args=(self._gen,), daemon=True)
         self._thread.start()
 
-    def _run_loop(self):
-        while not self._stop_event.is_set():
-            try: self._connect_once()
+    def _run_loop(self, gen=None):
+        while not self._stop_event.is_set() and (gen is None or gen == getattr(self, "_gen", gen)):
+            try: self._connect_once(gen)
             except Exception as e:
                 logger.warning(f"MQTT erreur: {e}, retry 15s")
             self._stop_event.wait(15)
 
-    def _connect_once(self):
+    def _connect_once(self, gen=None):
+        if gen is not None and gen != getattr(self, "_gen", gen):
+            return
         c = mqtt.Client()
         c.username_pw_set("bblp", self._code)
         ctx = ssl.create_default_context()
@@ -255,6 +262,11 @@ class MQTTManager:
         logger.warning(f"MQTT déconnecté rc={rc}")
 
     def _on_message(self, c, u, msg):
+        if c is not self._client:
+            # un client remplace (reconnexion) : ses derniers messages ne comptent plus
+            try: c.disconnect()
+            except Exception: pass
+            return
         try:
             data = json.loads(msg.payload.decode())
             if "print" in data:
@@ -589,7 +601,9 @@ class MQTTManager:
                 state.active_tray_id = new_tray
             # Si tray_now==255 (transition) ou 254 (externe) : on garde la dernière valeur connue
             # plutôt que de tout effacer, pour éviter un clignotement de la surbrillance.
-            state.ams_list = []
+            # la liste se construit a part et remplace l'ancienne d'un coup : une lecture en cours
+            # de route ne voit jamais une liste a moitie remplie, et un AMS n'y figure qu'une fois
+            _new_ams = []
             _units = list(ams_data["ams"])
             _ext = _external_unit(p)
             if _ext:
@@ -780,7 +794,7 @@ class MQTTManager:
                             _mth.Thread(target=_match_spool, daemon=True).start()
 
                     ams.trays.append(t)
-                state.ams_list.append(ams)
+                _new_ams = [a for a in _new_ams if a.id != ams.id] + [ams]
 
                 # ── Séchage : à la TRANSITION "pas séchage -> séchage" de cet AMS,
                 # on date les bobines qui y sont (last_dried_at). On ne persiste
@@ -809,6 +823,8 @@ class MQTTManager:
                                     daemon=True).start()
                 elif not _is_drying and _was_drying:
                     _DRYING_AMS.discard(ams.id)
+
+            state.ams_list = _new_ams
 
             # Retrait AMS : supprimer du cache les trays qui ne sont plus présents
             # → sera mis en Tiroir au prochain tick via spool_location

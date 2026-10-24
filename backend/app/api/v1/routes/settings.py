@@ -165,9 +165,11 @@ async def update_settings(
                     value = str(float(v or 0))
                 except ValueError:
                     raise HTTPException(400, "Tarif électrique invalide (ex. 0,20)")
-            await set_setting(db, field, value)
-            if field in ("PRINTER_IP", "PRINTER_ID"):
+            # l'adresse ou l'identifiant changes seulement : enregistrer la page sans y toucher ne
+            # relance pas la connexion a l'imprimante
+            if field in ("PRINTER_IP", "PRINTER_ID") and str(await get_setting(db, field) or "") != str(value or ""):
                 printer_changed = True
+            await set_setting(db, field, value)
             if field == "COST_BY_HOUR":
                 elec_changed = True
 

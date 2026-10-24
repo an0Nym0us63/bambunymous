@@ -241,3 +241,7 @@ body.ach-room-on main.page-content {
   .wide-list > .wide-span, .wide-2 > .wide-span { grid-column:1 / -1; }
   .kpi-grid { grid-template-columns:repeat(auto-fit, minmax(var(--kpi-min, 140px), 1fr)); }
 }
+
+/* la ligne sous le titre d'une rangee de tuile en liste : des morceaux en ligne, coupes par « … » */
+.bn-rowsub > * + * { margin-left: 5px; }
+.bn-rowsub > * { vertical-align: middle; }

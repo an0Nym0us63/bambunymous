@@ -237,21 +237,6 @@ function Hero({ visual, value, unit, delta, sub, color = "var(--text)", reserve 
 }
 // une liste de rangees qui occupe la case : longue, la premiere en grand puis ce qui tient ;
 // courte, toutes grandissent
-function fitList(list, row, W, H) {
-  const per = Math.floor((H + 6) / 40);
-  const each = Math.floor((H - 6 * (list.length - 1)) / Math.max(1, list.length));
-  // etroite et haute : des cartes (la vignette en grand, le titre dessous)
-  if (W < 215 && each >= 110) return <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-    {list.slice(0, Math.max(1, Math.floor((H + 6) / 116))).map(x => row(x, Math.min(each, W + 40), true))}</div>;
-  if (list.length <= per) {
-    const size = Math.max(30, Math.min(W < 215 ? 64 : 76, Math.floor((H - 6 * (list.length - 1)) / list.length)));
-    return <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{list.map(x => row(x, size))}</div>;
-  }
-  const first = H >= 120 ? 52 : Math.min(44, H);
-  const rest = fitRows(H - first - 8, 34, 6);
-  return <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-    {row(list[0], first)}{H - first >= 40 && list.slice(1, 1 + rest).map(x => row(x, 34))}</div>;
-}
 // une rangee d'element de liste : vignette, titre, sous-titre, a droite une valeur
 function Item({ img, dot, title, sub, right, size = 36, onClick, color, card = false, corner }) {
   if (card) return (
@@ -896,14 +881,9 @@ const QSTATE = {
 };
 const qState = m => QSTATE[m.status] || QSTATE.unknown;
 const canGo = m => m.status === "ams" || m.status === "partial";
-const queueSub = (m, o) => { const [l, c, ic] = qState(m);
-  const r = m.plates?.length > 1 ? plateRound(m.plates.map(p => p.printed)) : null;
-  return <><span style={{ color: c, fontWeight: 800 }}>{ic} {m.printing ? `en cours${m.progress != null ? ` · ${m.progress} %` : ""}` : l}</span>
-    {r && (r.faits || r.serie > 1) ? <span style={{ fontWeight: 800, color: r.complete ? "#16a34a" : "var(--text2)" }}> · {r.label.replace(" faits", "")}</span> : ""}
-    {m.seconds ? ` · ${fmtDur(m.seconds)}` : ""}{o.weight && m.weight_g ? ` · ${fmtG(m.weight_g)}` : ""}</>; };
 // les filaments d'un modele : une pastille par couleur, cerclee selon ce qu'on a (vert AMS, orange stock, rouge rien)
-const FilaDots = ({ list, size = 14 }) => <span style={{ display: "inline-flex", gap: 3, flexWrap: "wrap" }}>
-  {(list || []).map((f, i) => <span key={i} title={`${f.type} ${Math.round(f.g)} g → ${f.chosen ? f.chosen.name + (f.chosen.in_ams ? " (AMS)" : "") : "rien en stock"}`}
+const FilaDots = ({ list, size = 14 }) => <span style={{ display: "inline-flex", gap: 3, flexWrap: "wrap", flexShrink: 0 }}>
+  {(list || []).map((f, i) => <span key={i} data-tip={`${f.type} ${Math.round(f.g)} g → ${f.chosen ? f.chosen.name + (f.chosen.in_ams ? " (AMS)" : "") : "rien en stock"}`}
     style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, background: hexCss(f.chosen?.color || f.color),
       border: `2px solid ${!f.chosen ? "#ef4444" : f.chosen.enough_ams ? "#22c55e" : f.chosen.enough_stock ? "#f59e0b" : "#ef4444"}` }}/>)}</span>;
 // la fenetre de « À faire » : les modeles en deux sections, triees au choix (la priorite a chaque ouverture)
@@ -923,84 +903,210 @@ function NextSorted({ models, card }) {
     {list.some(m => !canGo(m)) && <><H2>À préparer</H2>{grid(list.filter(m => !canGo(m)))}</>}
   </>;
 }
+// ── Les deux tuiles en liste (24/10/2026) : « À faire » et « Dernières impressions » ──
+// En tete, la carte « heros » (ce qui tourne, sinon le premier) ; dessous, des rangees fines, un liseré
+// de couleur a gauche pour l'etat, une colonne a droite (duree, poids) quand la largeur le permet.
+// Selon la place : basse, le heros seul ; etroite et haute, le heros en vignette pleine largeur ;
+// haute, autant de rangees que la tuile en tient. Toucher une rangee ouvre sa fiche, le reste de la
+// tuile ouvre la fenetre.
+const ROW_H = 38;
+const Thumb = ({ img, size, radius, color = "#64748B", children }) => <span style={{ position: "relative", flexShrink: 0, width: size, height: size }}>
+  {img ? <img data-pk="" src={img} alt="" loading="lazy" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
+    style={{ width: size, height: size, borderRadius: radius ?? Math.round(size / 4), objectFit: "cover", background: "var(--surface2)", display: "block" }}/>
+    : <span data-pk="" style={{ width: size, height: size, borderRadius: radius ?? Math.round(size / 4), display: "block",
+      background: `linear-gradient(135deg, ${color}33, ${color}12)` }}/>}
+  {children}</span>;
+// la barre d'avancement d'une impression en cours
+const Progress = ({ pct, color = "#3b82f6", h = 6 }) => <span style={{ display: "block", height: h, borderRadius: h, background: "var(--surface2)", overflow: "hidden", flexShrink: 0 }}>
+  <span data-pk="" style={{ display: "block", height: "100%", width: `${Math.max(2, Math.min(100, pct || 0))}%`, borderRadius: h,
+    background: `linear-gradient(90deg, ${color}, color-mix(in srgb, ${color} 55%, #ffffff))`, transition: "width .6s" }}/></span>;
+// une petite etiquette d'etat
+const Pill = ({ c, solid, children }) => <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10.5, fontWeight: 900,
+  padding: "1px 7px", borderRadius: 9, whiteSpace: "nowrap", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", boxSizing: "border-box", color: solid ? "#fff" : c, background: solid ? c : `color-mix(in srgb, ${c} 14%, transparent)` }}>{children}</span>;
+// la colonne de droite : une valeur forte, une plus petite dessous
+const RightCol = ({ a, b }) => <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0, gap: 1, paddingLeft: 4 }}>
+  {a && <span data-pk="" style={{ fontSize: 12, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{a}</span>}
+  {b && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>{b}</span>}</span>;
+// une rangee : le liseré d'etat, la vignette (et ce qu'on y pose), le titre, une ligne dessous, la colonne de droite
+function ListRow({ edge, img, thumb = true, badge, title, sub, right, h = ROW_H, onOpen, tip }) {
+  const t = h - 8;
+  return <div data-tip={tip} onClick={onOpen ? e => { e.stopPropagation(); onOpen(); } : undefined}
+    style={{ display: "flex", alignItems: "center", gap: 8, height: h, minWidth: 0, flexShrink: 0, borderRadius: 11, padding: "0 8px 0 4px", position: "relative",
+      cursor: onOpen ? "pointer" : undefined, overflow: "hidden", background: "color-mix(in srgb, var(--surface2) 55%, transparent)" }}>
+    <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 6, bottom: 6, width: 3, borderRadius: 3, background: edge }}/>
+    {thumb ? <span style={{ marginLeft: 4 }}><Thumb img={img} size={t} color={edge}>{badge}</Thumb></span> : <span style={{ width: 2 }}/>}
+    <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+      <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.25 }}><W text={title}/></span>
+      {sub && <span className="bn-rowsub" style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        display: "block", minWidth: 0, lineHeight: "14px" }}>{sub}</span>}
+    </span>
+    {right}
+  </div>;
+}
+// le heros : la vignette en grand (a gauche, ou en haut si la tuile est etroite et haute), le titre,
+// l'etat, et l'avancement s'il imprime
+function ListHero({ img, color, title, chips, meta, pct, foot, h, stacked, onOpen, badge }) {
+  // ce qui tient dans la hauteur : titre (1 ou 2 lignes), etiquettes, barre, ligne d'infos, plateaux
+  const room = stacked ? 99 : h - 12;
+  const two = stacked || room >= 92, showMeta = !!meta && room >= (pct != null ? 66 : 54), showFoot = !!foot && room >= 92;
+  const body = <>
+    <span style={{ fontSize: stacked || h >= 70 ? 13.5 : 12.5, fontWeight: 900, color: "var(--text)", lineHeight: 1.25, ...(two ? clamp(2)
+      : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }) }}><W text={title}/></span>
+    {chips && <span style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center", minWidth: 0, maxHeight: 18, overflow: "hidden" }}>{chips}</span>}
+    {pct != null && <Progress pct={pct} color={color}/>}
+    {showMeta && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{meta}</span>}
+    {showFoot && foot}
+  </>;
+  const frame = { borderRadius: 14, minWidth: 0, flexShrink: 0, cursor: onOpen ? "pointer" : undefined, position: "relative", overflow: "hidden", height: h,
+    boxSizing: "border-box", background: `linear-gradient(135deg, color-mix(in srgb, ${color} 16%, transparent), transparent 70%), var(--surface2)`,
+    border: `1px solid color-mix(in srgb, ${color} 30%, transparent)` };
+  const open = onOpen ? e => { e.stopPropagation(); onOpen(); } : undefined;
+  if (stacked) {
+    const ih = Math.max(56, h - 78 - (pct != null ? 10 : 0) - (foot ? 18 : 0));
+    return <div onClick={open} style={{ ...frame, display: "flex", flexDirection: "column" }}>
+      <span style={{ position: "relative", height: ih, flexShrink: 0, display: "block" }}>
+        {img ? <img data-pk="" src={img} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
+          : <span style={{ display: "block", height: "100%", background: `linear-gradient(135deg, ${color}40, ${color}10)` }}/>}
+        {badge && <span style={{ position: "absolute", inset: 8 }}>{badge}</span>}</span>
+      <span style={{ padding: "6px 8px 7px", display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: 1, justifyContent: "center" }}>{body}</span>
+    </div>;
+  }
+  const ts = Math.max(30, Math.min(h - 12, 96));
+  return <div onClick={open} style={{ ...frame, display: "flex", alignItems: "center", gap: 10, padding: 6 }}>
+    <Thumb img={img} size={ts} radius={11} color={color}>{badge}</Thumb>
+    <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: h >= 74 ? 4 : 3, justifyContent: "center", overflow: "hidden", maxHeight: "100%" }}>{body}</span>
+  </div>;
+}
+// la place : la hauteur du heros, s'il est en vignette pleine largeur, combien de rangees tiennent dessous
+function listPlan(W, H, n, extra = 0) {
+  const narrow = W < 215;
+  if (n <= 1 || H < 100) return { heroH: Math.min(H, n <= 1 ? 120 : H), stacked: narrow && n <= 1 && H >= 150, rows: 0 };
+  const stacked = narrow && H >= 230;
+  let heroH = stacked ? Math.min(176, Math.round(H * 0.5)) : H >= 200 ? 78 : 62;
+  let rows = Math.min(n - 1, fitRows(H - extra - heroH - 6, ROW_H, 6));
+  if (H - extra - heroH - 6 < ROW_H) rows = 0;
+  // peu de choses a montrer : le heros prend la place qui reste (sans devenir une affiche)
+  const left = H - extra - heroH - 6 - rows * (ROW_H + 6) + 6;
+  if (rows === n - 1 && left > 0) heroH = Math.min(stacked ? 200 : 104, heroH + left);
+  return { heroH, stacked, rows };
+}
+
+// « À faire » : l'etat de chaque modele, d'apres la page « À faire »
+const Q_EDGE = { ams: "#22c55e", partial: "#86efac", stock: "#f59e0b", short: "#ef4444" };
+const qEdge = m => m.printing ? "#3b82f6" : Q_EDGE[m.status] || "#94a3b8";
+// les plateaux retenus en petits carres : fait, en cours, faisable maintenant, a faire
+function PlateDots({ plates, size = 15 }) {
+  if (!(plates?.length > 1)) return null;
+  const r = plateRound(plates.map(p => p.printed));
+  return <span style={{ display: "flex", alignItems: "center", gap: 3, minWidth: 0, overflow: "hidden", flexShrink: 0 }}>
+    {plates.map(p => { const done = plateDoneInRound(p.printed, r);
+      return <span key={p.index} data-pk="" data-tip={`Plateau ${p.index}${p.printing ? " : en cours" : done ? " : fait" : p.ready ? " : faisable maintenant" : ""}`}
+        style={{ minWidth: size, height: size, padding: "0 2px", borderRadius: 4, fontSize: size * 0.62, fontWeight: 900, display: "inline-flex", alignItems: "center",
+          justifyContent: "center", boxSizing: "border-box", flexShrink: 0,
+          color: p.printing || (p.ready && !done) ? "#fff" : done ? "#16a34a" : "var(--muted)",
+          background: p.printing ? "#3b82f6" : done ? "rgba(34,197,94,0.16)" : p.ready ? "#22c55e" : "var(--surface)",
+          border: `1px solid ${p.printing ? "#3b82f6" : done || p.ready ? "#22c55e" : "var(--border)"}` }}>{p.printing ? "⏳" : done ? "✓" : p.index}</span>; })}
+  </span>;
+}
+const plateShort = m => { const r = m.plates?.length > 1 ? plateRound(m.plates.map(p => p.printed)) : null;
+  return r && (r.faits || r.serie > 1) ? r.label.replace(" faits", "") : null; };
 function Next({ q, o, sz }) {
   const [sheet, setSheet] = useState(null);
-  const narrow = useRef(false);   // etroite : le bouton « fiche » passe en coin de la vignette
   const all = q?.models || [];
   const models = all.filter(m => !o.ready || canGo(m));
   const t = q?.totals || {};
   const ready = t.ams ?? all.filter(m => m.status === "ams").length;
   const part = t.partial ?? all.filter(m => m.status === "partial").length;
+  const stock = t.stock ?? all.filter(m => m.status === "stock").length;
+  const short = t.short ?? all.filter(m => m.status === "short").length;
+  const busy = all.filter(m => m.printing).length;
   const open = m => setSheet({ design_id: m.design_id, title: m.title, title_fr: m.title_fr, cover_url: m.cover_url });
-  // le petit bouton « fiche » : ouvre le modele sans passer par la fenetre
-  const go = (m, s = 26) => <button type="button" aria-label="Ouvrir la fiche" title="Ouvrir la fiche du modèle"
-    onClick={e => { e.stopPropagation(); open(m); }} style={{ width: s, height: s, borderRadius: s / 3.2, border: "1px solid var(--border)", flexShrink: 0,
-      background: "var(--surface)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
-    <ArrowUpRight size={s >= 26 ? 14 : 12}/></button>;
-  const row = (m, size, card) => <Item key={m.design_id} img={o.thumbs || card ? (m.cover_url ? mwImg(m.cover_url, 320) : null) : undefined} size={size} card={card}
-    dot={canGo(m) ? "#22c55e" : null} title={m.title_fr || m.title} sub={queueSub(m, o)}
-    right={card || (!narrow.current && size >= 30) ? go(m) : null} corner={!card && narrow.current && o.thumbs ? go(m, 20) : null}/>;
-  // en grand : une carte par modele, tout ce que la page dit de lui
-  const card = m => { const [l, c, ic] = qState(m);
-    return <div key={m.design_id} onClick={() => open(m)} style={{ display: "flex", gap: 12, padding: 10, borderRadius: 16, cursor: "pointer", minWidth: 0,
-      background: `linear-gradient(135deg, ${canGo(m) ? "rgba(34,197,94,0.12)" : "transparent"}, transparent 60%), var(--surface2)`,
-      border: `1px solid ${m.printing ? "#3b82f6" : canGo(m) ? "rgba(34,197,94,0.35)" : "var(--border)"}` }}>
-      {m.cover_url ? <img src={mwImg(m.cover_url, 240)} alt="" style={{ width: 72, height: 72, borderRadius: 12, objectFit: "cover", flexShrink: 0 }}/>
-        : <span style={{ width: 72, height: 72, borderRadius: 12, background: "var(--surface)", flexShrink: 0 }}/>}
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)", ...clamp(2) }}>{m.title_fr || m.title || `Modèle ${m.design_id}`}</div>
-        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: m.printing ? "#fff" : c, padding: "1px 8px", borderRadius: 10,
-            background: m.printing ? "#3b82f6" : `${c === "var(--muted)" ? "#94a3b8" : c}1f` }}>
-            {m.printing ? `🖨️ en cours${m.progress != null ? ` · ${m.progress} %` : ""}` : `${ic} ${l}`}</span>
-          {m.planned && <span style={{ fontSize: 11, fontWeight: 800, color: "#16a34a" }}>📌 retenu</span>}
-          {(m.qty || 1) > 1 && <span style={{ fontSize: 11, fontWeight: 800, color: "var(--text2)" }}>×{m.qty}</span>}
-          {m.printed > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>déjà imprimé {m.printed}×</span>}
-        </div>
-        <div style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {[m.profile?.title, m.profile && m.profile.plates_total > 1 && `${m.profile.plates}/${m.profile.plates_total} plateaux`, m.seconds && fmtDur(m.seconds),
-            m.weight_g && fmtG(m.weight_g), m.cost != null && fmtEur(m.cost)].filter(Boolean).join(" · ")}</div>
-        {/* les plateaux retenus : combien sont faits, et un carre par plateau (vert faisable, coche fait, orange en cours) */}
-        {m.plates?.length > 1 && (r => <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11.5, fontWeight: 800, color: r.complete ? "#16a34a" : "var(--text2)", marginRight: 3 }}>Plateaux {r.label}</span>
-          {m.plates.map(p => { const done = plateDoneInRound(p.printed, r);
-            return <span key={p.index} title={`Plateau ${p.index} : ${p.printed > 0 ? `imprimé ${p.printed}×` : "jamais imprimé"}${done ? " (fait pour cette série)" : ""}${p.ready ? " · faisable maintenant" : ""}`}
-            style={{ minWidth: 16, height: 16, padding: "0 3px", borderRadius: 5, fontSize: 9.5, fontWeight: 900, display: "inline-flex", alignItems: "center", justifyContent: "center",
-              color: p.printing || p.ready ? "#fff" : done ? "#16a34a" : "var(--muted)",
-              background: p.printing ? "#f59e0b" : p.ready ? (done ? "rgba(34,197,94,0.55)" : "#22c55e") : "var(--surface)",
-              border: `1px solid ${p.printing ? "#f59e0b" : p.ready || done ? "#22c55e" : "var(--border)"}` }}>{done ? "✓" : p.index}</span>; })}
-        </div>)(plateRound(m.plates.map(p => p.printed)))}
-        {m.ready_now?.plates > 0 && <div style={{ fontSize: 11.5, fontWeight: 800, color: "#16a34a" }}>
-          ▶ faisable maintenant : {m.ready_now.plates} plateau{m.ready_now.plates > 1 ? "x" : ""}
-          {m.ready_now.seconds ? ` · ${fmtDur(m.ready_now.seconds)}` : ""}{m.ready_now.weight_g ? ` · ${fmtG(m.ready_now.weight_g)}` : ""}</div>}
-        <FilaDots list={m.filaments}/>
-      </div>
-      <ChevronRight size={16} style={{ color: "var(--muted)", alignSelf: "center", flexShrink: 0 }}/>
-    </div>; };
+  // en tete : ce qui tourne, sinon le premier imprimable, sinon le premier
+  const hero = models.find(m => m.printing) || models.find(canGo) || models[0];
+  const rest = models.filter(m => m !== hero);
+  const name = m => m.title_fr || m.title || `Modèle ${m.design_id}`;
+  const chips = m => { const [l, c, ic] = qState(m);
+    return <>{m.printing ? <Pill c="#3b82f6" solid>🖨️ en cours</Pill> : <Pill c={c === "var(--muted)" ? "#94a3b8" : c}>{ic} {l}</Pill>}
+      {m.planned && <Pill c="#16a34a">📌 retenu</Pill>}{(m.qty || 1) > 1 && <Pill c="#64748B">×{m.qty}</Pill>}</>; };
+  const meta = m => m.printing ? [m.progress != null && `${m.progress} %`, plateShort(m) && `plateaux ${plateShort(m)}`].filter(Boolean).join(" · ")
+    : [m.ready_now?.plates > 0 && m.status === "partial" && `▶ ${m.ready_now.plates} plateau${m.ready_now.plates > 1 ? "x" : ""} prêt${m.ready_now.plates > 1 ? "s" : ""}`,
+      m.seconds && fmtDur(m.seconds), o.weight && m.weight_g && fmtG(m.weight_g)].filter(Boolean).join(" · ");
+  const row = (m, W) => { const wide = W >= 250, ps = plateShort(m);
+    return <ListRow key={m.design_id} edge={qEdge(m)} thumb={o.thumbs} img={m.cover_url ? mwImg(m.cover_url, 120) : null} title={name(m)} onOpen={() => open(m)}
+      tip={`${name(m)}\n${m.printing ? "en cours" : qState(m)[0]}${ps ? ` · plateaux ${ps}` : ""}`}
+      badge={(m.qty || 1) > 1 ? <span style={{ position: "absolute", right: -3, bottom: -3, fontSize: 9, fontWeight: 900, color: "#fff", background: "#334155",
+        borderRadius: 6, padding: "0 4px", lineHeight: "13px", border: "1.5px solid var(--surface)" }}>×{m.qty}</span> : null}
+      sub={<><FilaDots list={m.filaments} size={9}/>{ps && <span style={{ color: "var(--text2)" }}>{ps}</span>}
+        {!wide && m.seconds ? <span>{fmtDur(m.seconds)}</span> : null}</>}
+      right={wide ? <RightCol a={m.seconds ? fmtDur(m.seconds) : null} b={o.weight && m.weight_g ? fmtG(m.weight_g) : null}/> : null}/>; };
+  // la ligne des comptes, au-dessus de la liste
+  const counts = W => { const nar = W < 400;
+    const it = [[busy, "#3b82f6", "🖨️", "en cours"], [ready, "#16a34a", "●", ready > 1 ? "prêts" : "prêt"], [part, "#22c55e", "◐", "en partie"],
+      [stock, "#d97706", "○", "à charger"], [short, "#dc2626", "✕", "manque"]].filter(x => x[0]);
+    return <div style={{ display: "flex", gap: nar ? 8 : 10, alignItems: "center", height: 16, flexShrink: 0, overflow: "hidden", whiteSpace: "nowrap", fontSize: 11, fontWeight: 800 }}>
+      <span style={{ color: "var(--text)" }}><b data-pk="" style={{ fontSize: 12.5, fontWeight: 900 }}>{all.length}</b>{nar ? "" : " à faire"}</span>
+      {it.map(([n, c, ic, l]) => <span key={l} data-tip={`${n} ${l}`} style={{ color: c }}>{ic} {n}{nar ? "" : ` ${l}`}</span>)}</div>; };
   return (
     <Tile icon={<ListChecks size={15}/>} color="#22C55E" label="À faire" to="/prints?tab=queue"
       mini={sz.h === 0.5} summary={q ? <>{ready + part}<span style={{ fontSize: 12, color: "var(--muted)" }}>/ {all.length} prêts</span></> : "…"}
-      badge={all.length ? <span title="prêts avec l'AMS / dans la liste" style={{ fontSize: 11, fontWeight: 800, color: ready + part ? "#16a34a" : "var(--muted)" }}>
+      badge={all.length ? <span data-tip="prêts avec l'AMS / dans la liste" style={{ fontSize: 11, fontWeight: 800, color: ready + part ? "#16a34a" : "var(--muted)" }}>
         {ready + part}/{all.length}</span> : null}
       zoom={models.length ? <>
         <Stats items={[["Modèles", all.length], ["Prêts (AMS)", ready, "#16a34a"], part ? ["En partie", part, "#16a34a"] : null,
-          t.stock ? ["À charger", t.stock, "#d97706"] : null, t.short ? ["Manque", t.short, "#dc2626"] : null,
+          stock ? ["À charger", stock, "#d97706"] : null, short ? ["Manque", short, "#dc2626"] : null,
           ["Durée", fmtH(t.seconds ?? all.reduce((a, m) => a + (m.seconds || 0), 0))], ["Poids", fmtG(t.weight_g ?? all.reduce((a, m) => a + (m.weight_g || 0), 0))],
           t.cost ? ["Coût", fmtEur(t.cost)] : null]}/>
-        <NextSorted models={models} card={card}/>
+        <NextSorted models={models} card={m => <NextCard key={m.design_id} m={m} onOpen={() => open(m)}/>}/>
       </> : null}>
-      {({ W, H }) => { narrow.current = W < 215; return <>
-        {!models.length ? <Empty>{q === undefined ? "…" : o.ready ? "Rien de prêt dans l'AMS" : "Rien dans « À faire »"}</Empty>
-          : o.scroll ? <Scroller>{models.map((m, i) => row(m, i ? 34 : Math.min(52, H)))}</Scroller> : fitList(models, row, W, H)}
-        {/* la fiche s'ouvre par-dessus ; ses clics et ses touches ne remontent pas jusqu'a la tuile */}
-        {sheet && <span onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
-          <MakerWorldModelSheet designId={sheet.design_id} preview={sheet} onClose={() => setSheet(null)}/></span>}
-      </>; }}
+      {({ W, H }) => {
+        if (!models.length) return <Empty>{q === undefined ? "…" : o.ready ? "Rien de prêt dans l'AMS" : "Rien dans « À faire »"}</Empty>;
+        const head = H >= 150 ? 22 : 0;
+        const pl = o.scroll ? { heroH: Math.min(78, Math.max(56, H * 0.35)), stacked: false, rows: rest.length } : listPlan(W, H - head, models.length);
+        const foot = !pl.stacked && W >= 215 && hero.plates?.length > 1 ? <PlateDots plates={hero.plates}/> : null;
+        return <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+          {head > 0 && counts(W)}
+          <ListHero img={hero.cover_url ? mwImg(hero.cover_url, 320) : null} color={qEdge(hero)} title={name(hero)} h={pl.heroH} stacked={pl.stacked}
+            chips={chips(hero)} pct={hero.printing ? hero.progress ?? 0 : null} meta={meta(hero)} foot={foot} onOpen={() => open(hero)}/>
+          {pl.rows > 0 && (o.scroll ? <Scroller>{rest.map(m => row(m, W))}</Scroller> : rest.slice(0, pl.rows).map(m => row(m, W)))}
+          {/* la fiche s'ouvre par-dessus ; ses clics et ses touches ne remontent pas jusqu'a la tuile */}
+          {sheet && <span onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+            <MakerWorldModelSheet designId={sheet.design_id} preview={sheet} onClose={() => setSheet(null)}/></span>}
+        </div>;
+      }}
     </Tile>
   );
 }
-// le rappel « pas encore de photo » : seulement quand la tuile a la largeur
-const PhotoHint = () => useBox().W >= 215 ? <Chip color="#0EA5E9" title="Pas encore de photo"><Camera size={12}/></Chip> : null;
+// dans la fenetre : une carte par modele, tout ce que la page dit de lui
+function NextCard({ m, onOpen }) {
+  const [l, c, ic] = qState(m), col = qEdge(m);
+  return <div onClick={e => { e.stopPropagation(); onOpen(); }} style={{ display: "flex", gap: 12, padding: 10, borderRadius: 16, cursor: "pointer", minWidth: 0, position: "relative",
+    overflow: "hidden", background: `linear-gradient(135deg, color-mix(in srgb, ${col} 14%, transparent), transparent 60%), var(--surface2)`,
+    border: `1px solid color-mix(in srgb, ${col} 35%, transparent)` }}>
+    <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 3, borderRadius: 3, background: col }}/>
+    <Thumb img={m.cover_url ? mwImg(m.cover_url, 240) : null} size={76} radius={12} color={col}/>
+    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 900, color: "var(--text)", ...clamp(2) }}>{m.title_fr || m.title || `Modèle ${m.design_id}`}</div>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+        {m.printing ? <Pill c="#3b82f6" solid>🖨️ en cours{m.progress != null ? ` · ${m.progress} %` : ""}</Pill> : <Pill c={c === "var(--muted)" ? "#94a3b8" : c}>{ic} {l}</Pill>}
+        {m.planned && <Pill c="#16a34a">📌 retenu</Pill>}
+        {(m.qty || 1) > 1 && <Pill c="#64748B">×{m.qty}</Pill>}
+        {m.printed > 0 && <Pill c="#94a3b8">déjà imprimé {m.printed}×</Pill>}
+      </div>
+      {m.printing && <Progress pct={m.progress ?? 0}/>}
+      <div style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {[m.profile?.title, m.seconds && fmtDur(m.seconds), m.weight_g && fmtG(m.weight_g), m.cost != null && fmtEur(m.cost)].filter(Boolean).join(" · ")}</div>
+      {m.plates?.length > 1 && <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+        <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap" }}>Plateaux {plateRound(m.plates.map(p => p.printed))?.label}</span>
+        <PlateDots plates={m.plates} size={16}/></div>}
+      {m.ready_now?.plates > 0 && !m.printing && m.status === "partial" && <div style={{ fontSize: 11.5, fontWeight: 800, color: "#16a34a" }}>
+        ▶ faisable maintenant : {m.ready_now.plates} plateau{m.ready_now.plates > 1 ? "x" : ""}
+        {m.ready_now.seconds ? ` · ${fmtDur(m.ready_now.seconds)}` : ""}{m.ready_now.weight_g ? ` · ${fmtG(m.ready_now.weight_g)}` : ""}</div>}
+      <FilaDots list={m.filaments}/>
+    </div>
+    <ChevronRight size={16} style={{ color: "var(--muted)", alignSelf: "center", flexShrink: 0 }}/>
+  </div>;
+}
 // les dernieres impressions : la derniere en grand, puis la liste
 const okOf = x => x.status === "SUCCESS" || x.status === "PARTIAL";
 // a-t-elle une photo : la sienne (prise a la main, ou choisie), ou celle de son groupe
@@ -1030,39 +1136,89 @@ function groupCards(prints) {
       snapshots: x.members.flatMap(m => m.snapshots || []), cover_photo: x.members.find(m => m.cover_photo)?.cover_photo || null };
   });
 }
+// le jour d'une impression : « Aujourd'hui », « Hier », le jour de la semaine, puis la date
+const dayKey = d => d ? ymd(d) : "";
+const printDay = d => { if (!d) return "Plus tôt";
+  const a = new Date(d.getFullYear(), d.getMonth(), d.getDate()), n0 = new Date(), b = new Date(n0.getFullYear(), n0.getMonth(), n0.getDate());
+  const n = Math.round((b - a) / 86400000);
+  const s = n <= 0 ? "Aujourd'hui" : n === 1 ? "Hier" : n < 7 ? d.toLocaleDateString("fr-FR", { weekday: "long" }) : d.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+  return s.charAt(0).toUpperCase() + s.slice(1); };
+const DayHead = ({ children }) => <div style={{ display: "flex", alignItems: "center", gap: 6, height: 14, flexShrink: 0, fontSize: 10, fontWeight: 900,
+  letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)" }}>{children}<span style={{ flex: 1, height: 1, background: "var(--border)" }}/></div>;
+const lastEdge = x => x.live ? "#3b82f6" : x.partial ? "#f59e0b" : okOf(x) ? "#22c55e" : "#ef4444";
+const lastState = x => x.live ? ["en cours", "#3b82f6", "🖨️"] : x.partial ? ["en partie", "#f59e0b", "◐"] : okOf(x) ? ["réussie", "#16a34a", "✓"] : ["échouée", "#dc2626", "✕"];
 function Last({ p, o, sz, st, lp }) {
   const nav = useNavigate();
-  const narrowL = useRef(false);   // etroite : le bouton « fiche » passe en coin de la vignette
   const live = isLive(st) && lp ? { ...lp, live: true } : null;
   const list = [...(live ? [live] : []), ...groupCards(p)];
   if (!list.length) return null;
-  const sub = x => x.live ? <span style={{ color: "#3b82f6", fontWeight: 800 }}>● en cours · {Math.round(st?.progress || 0)} %{st?.remaining_minutes ? ` · fin à ${finAt(st.remaining_minutes)}` : ""}</span>
-    : [x.members && `${x.members.length} impressions`, o.when && x.print_date && ago(x.print_date), x.duration_seconds && fmtDur(x.duration_seconds), x.total_weight_g && fmtG(x.total_weight_g),
-    o.cost && x.total_cost && fmtEur(x.total_cost)].filter(Boolean).join(" · ");
-  // un clic sur la tuile ouvre la fenetre ; le petit bouton de chaque impression ouvre sa fiche
-  const go = (x, s = 26) => <button type="button" aria-label="Ouvrir la fiche" title="Ouvrir la fiche de l'impression"
-    onClick={e => { e.stopPropagation(); nav(x.members ? `/prints?group=${x.group_id}` : `/prints?id=${x.id}`); }} style={{ width: s, height: s, borderRadius: s / 3.2, border: "1px solid var(--border)",
-      flexShrink: 0, background: "var(--surface)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
-    <ArrowUpRight size={s >= 26 ? 14 : 12}/></button>;
-  const row = (x, size, card, inZoom) => <Item key={x.id} img={printImg(x.id)} dot={x.live ? "#3b82f6" : x.partial ? "#f59e0b" : okOf(x) ? "#22c55e" : "#ef4444"} size={size} card={card}
-    title={x.file_name || x.translated_name || `Impression #${x.id}`} sub={sub(x)} onClick={inZoom ? () => nav(x.members ? `/prints?group=${x.group_id}` : `/prints?id=${x.id}`) : undefined}
-    right={<>{o.photo && !x.live && !hasPhoto(x) && (size >= 44 || card) && <PhotoHint/>}{!inZoom && (card || (!narrowL.current && size >= 30)) && go(x)}</>}
-    corner={!inZoom && !card && narrowL.current ? go(x, 20) : null}/>;
+  const fiche = x => nav(x.members ? `/prints?group=${x.group_id}` : `/prints?id=${x.id}`);
+  const name = x => x.file_name || x.translated_name || `Impression #${x.id}`;
+  const when = x => x.print_date ? utc(x.print_date) : null;
+  const hm = d => d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  // sur la vignette : la pastille d'etat, « ×5 » pour un groupe, l'appareil photo s'il manque la photo
+  const marks = (x, big) => <>
+    <span style={{ position: "absolute", right: -3, bottom: -3, width: big ? 14 : 11, height: big ? 14 : 11, borderRadius: "50%", background: lastEdge(x),
+      border: "2px solid var(--surface)", boxSizing: "border-box" }}/>
+    {x.members && <span style={{ position: "absolute", left: -3, top: -3, fontSize: 9, fontWeight: 900, color: "#fff", background: "#0EA5E9", borderRadius: 6,
+      padding: "0 4px", lineHeight: "13px", border: "1.5px solid var(--surface)" }}>×{x.members.length}</span>}
+    {o.photo && !x.live && !hasPhoto(x) && <span data-tip="Pas encore de photo" style={{ position: "absolute", right: -3, top: -3, width: 15, height: 15, borderRadius: "50%",
+      background: "var(--surface)", color: "#0EA5E9", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 1px var(--border)" }}><Camera size={9}/></span>}
+  </>;
+  const row = (x, W, days) => { const wide = W >= 250, d = when(x), [l, c] = lastState(x);
+    return <ListRow key={`${x.id}${x.live ? "l" : ""}`} edge={lastEdge(x)} img={printImg(x.id)} title={name(x)} onOpen={() => fiche(x)} badge={marks(x)}
+      tip={`${name(x)}\n${l}${x.members ? ` · ${x.members.length} impressions` : ""}${d ? ` · ${d.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}` : ""}`}
+      sub={<><span style={{ color: c }}>{l}</span>{d && (o.when || days) && <span>{days ? hm(d) : ago(d)}</span>}
+        {!wide && x.duration_seconds ? <span>{fmtDur(x.duration_seconds)}</span> : null}</>}
+      right={wide ? <RightCol a={x.duration_seconds ? fmtDur(x.duration_seconds) : null}
+        b={[x.total_weight_g && fmtG(x.total_weight_g), o.cost && x.total_cost && fmtEur(x.total_cost)].filter(Boolean).join(" · ") || null}/> : null}/>; };
+  // les rangees, avec le jour en intercalaire quand il change (le heros compte pour le premier jour)
+  const rows = (items, W, H, prev, days) => { const out = []; let used = 0, last = prev;
+    for (const x of items) {
+      const k = dayKey(when(x)), sep = days && k !== last;
+      const need = ROW_H + 6 + (sep ? 20 : 0);
+      if (H != null && used + need > H + 6) break;
+      if (sep) out.push(<DayHead key={`d${k}${x.id}`}>{printDay(when(x))}</DayHead>);
+      out.push(row(x, W, days)); used += need; last = k;
+    }
+    return out; };
+  const heroOf = (x, h, stacked, W) => { const [l, c, ic] = lastState(x), d = when(x);
+    return <ListHero img={printImg(x.id)} color={lastEdge(x)} title={name(x)} h={h} stacked={stacked} onOpen={() => fiche(x)} badge={marks(x, true)}
+      chips={<><Pill c={c} solid={x.live}>{ic} {l}{x.live ? ` · ${Math.round(st?.progress || 0)} %` : ""}</Pill>
+        {x.members && <Pill c="#0EA5E9">{x.members.length} impressions</Pill>}</>}
+      pct={x.live ? st?.progress || 0 : null}
+      meta={x.live ? [st?.remaining_minutes ? `fin à ${finAt(st.remaining_minutes)}` : null, st?.total_layers ? `couche ${st.layer}/${st.total_layers}` : null].filter(Boolean).join(" · ")
+        : [d && ago(d), x.duration_seconds && fmtDur(x.duration_seconds), W >= 215 && x.total_weight_g && fmtG(x.total_weight_g), o.cost && x.total_cost && fmtEur(x.total_cost)].filter(Boolean).join(" · ")}/>; };
+  const done = list.filter(x => !x.live);
   return (
     <Tile icon={<History size={15}/>} color="#0EA5E9" label="Dernières impressions" to="/prints"
       mini={sz.h === 0.5} summary={<span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis" }}>
-        <span style={{ color: okOf(list[0]) ? "#22c55e" : "#ef4444" }}>● </span>{list[0].file_name || list[0].translated_name}</span>}
-      zoom={<>
-        {(done => <Stats items={[["Réussies", `${done.filter(okOf).length} / ${done.length}`, "#16a34a"], ["Durée", fmtH(done.reduce((t, x) => t + (x.duration_seconds || 0), 0))],
-          ["Poids", fmtG(done.reduce((t, x) => t + (x.total_weight_g || 0), 0))]]}/>)(list.filter(x => !x.live))}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{list.map(x => row(x, 56, false, true))}</div></>}>
+        <span style={{ color: lastEdge(list[0]) }}>● </span>{name(list[0])}</span>}
+      badge={<span data-tip="réussies parmi les dernières" style={{ fontSize: 11, fontWeight: 800, color: "#16a34a" }}>✓ {done.filter(okOf).length}/{done.length}</span>}
+      zoom={<LastZoom list={list} done={done} heroOf={heroOf} rows={rows}/>}>
       {({ W, H }) => {
-        narrowL.current = W < 215;
-        if (o.scroll) return <Scroller>{list.map((x, i) => row(x, i ? 34 : Math.min(52, H)))}</Scroller>;
-        return fitList(list, row, W, H);
+        const [hero, ...rest] = list;
+        const days = W >= 215 && H >= 200;
+        const pl = o.scroll ? { heroH: Math.min(78, Math.max(56, H * 0.35)), stacked: false, rows: rest.length } : listPlan(W, H, list.length, days ? 20 : 0);
+        return <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+          {heroOf(hero, pl.heroH, pl.stacked, W)}
+          {pl.rows > 0 && (o.scroll ? <Scroller>{rows(rest, W, null, dayKey(when(hero)), days)}</Scroller>
+            : rows(rest, W, H - pl.heroH - 6, dayKey(when(hero)), days))}
+        </div>;
       }}
     </Tile>
   );
+}
+// la fenetre : les chiffres, ce qui tourne en grand, puis tout, jour par jour
+function LastZoom({ list, done, heroOf, rows }) {
+  const { W } = useBox();
+  const [hero, ...rest] = list;
+  return <>
+    <Stats items={[["Réussies", `${done.filter(okOf).length} / ${done.length}`, "#16a34a"], ["Durée", fmtH(done.reduce((t, x) => t + (x.duration_seconds || 0), 0))],
+      ["Poids", fmtG(done.reduce((t, x) => t + (x.total_weight_g || 0), 0))], ["Coût", fmtEur(done.reduce((t, x) => t + (x.total_cost || 0), 0))]]}/>
+    {heroOf(hero, 96, false, W)}
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{rows(rest, W, null, "", true)}</div>
+  </>;
 }
 // le stock : le total, et les bobines les plus basses (pastilles ou liste) qui remplissent la place
 const spoolPct = x => x.filament_weight_g ? (x.remaining_weight_g || 0) / x.filament_weight_g : null;
