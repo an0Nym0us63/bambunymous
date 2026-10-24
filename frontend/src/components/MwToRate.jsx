@@ -99,7 +99,7 @@ export function RateButton({ did, style, label = "⭐ Évaluer" }) {
 }
 // Fiche d'un groupe : ses modeles imprimes pas encore evalues, et une seule
 // evaluation pour tous ceux que MakerWorld attend.
-export function GroupToRate({ designs, name, enabled = true }) {
+export function GroupToRate({ designs, name, enabled = true, label = null, anchor = null }) {
   const d = useToRate(enabled);
   const [open, setOpen] = useState(false);
   const ids = new Set((designs || []).map(String));
@@ -111,11 +111,13 @@ export function GroupToRate({ designs, name, enabled = true }) {
   const btn = { padding: "5px 11px", borderRadius: 10, fontSize: 11.5, fontWeight: 700, background: "#f59e0b", color: "white",
     border: "1px solid #f59e0b", textDecoration: "none" };
   return (
-    <div style={{ margin: "0 16px 12px", padding: 10, borderRadius: 12, border: "1px solid rgba(245,158,11,0.4)",
-      background: "rgba(245,158,11,0.08)", display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: "#f59e0b" }}>
-          ⭐ {items.length} modèle{items.length > 1 ? "s" : ""} à évaluer dans ce groupe</span>
+    <div id={anchor || undefined} style={{ padding: "11px 12px", borderRadius: 18, border: "1px solid rgba(245,158,11,0.45)", scrollMarginTop: 60,
+      background: "radial-gradient(90% 80% at 100% 0%, rgba(245,158,11,0.22), transparent 70%), var(--surface2)", display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ width: 32, height: 32, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0,
+          background: "linear-gradient(135deg, #F59E0B, #FBBF24)", boxShadow: "0 6px 16px rgba(245,158,11,.35)" }}>⭐</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 900, color: "#d97706" }}>
+          {label || `${items.length} modèle${items.length > 1 ? "s" : ""} à évaluer dans ce groupe`}</span>
         {ready.length > 1 && <button onClick={() => setOpen(true)} style={{ ...btn, cursor: "pointer" }}>⭐ Tout évaluer ({ready.length})</button>}
       </div>
       {items.map(x => (

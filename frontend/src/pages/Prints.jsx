@@ -566,7 +566,7 @@ function RateStatusLine({ designId }) {
   }[st.state];
   return txt ? <div style={{ fontSize:11, fontWeight:700, color: st.state === "rated" && st.noscore ? "#d97706" : "var(--muted)", padding:"0 10px 8px" }}>{txt}</div> : null;
 }
-function MakerWorldCard({ designId, note, prints = [] }) {
+function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) {
   const [open, setOpen] = useState(false);       // replie a chaque ouverture : le resume suffit
   const mineOf = useMine([designId]);            // chez un copain : l'ai-je deja ?
   const visiting = useFriend((s) => s.friend);
@@ -629,8 +629,9 @@ function MakerWorldCard({ designId, note, prints = [] }) {
       <a href={url} onClick={e => { e.preventDefault(); setSheet(designId); }} onPointerDown={() => prefetchModel(designId)}
         style={{ display:"flex", gap:10, padding:"0 12px 10px", textDecoration:"none", color:"var(--text)", cursor:"pointer" }}>
         <div style={{ minWidth:0, flex:1 }}>
-          <div style={{ fontSize:13, fontWeight:700, lineHeight:1.3, overflow:"hidden",
-            display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{mw.title}</div>
+          {/* le titre entier seulement s'il est coupe dans le resume */}
+          {mw.title?.length > 34 && <div style={{ fontSize:13, fontWeight:700, lineHeight:1.3, overflow:"hidden",
+            display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{mw.title}</div>}
           {mw.title_fr && mw.title_fr !== mw.title && (
             <div style={{ fontSize:11, color:"var(--muted)", marginTop:1, overflow:"hidden",
               textOverflow:"ellipsis", whiteSpace:"nowrap" }} title="Titre traduit (recherche)">{mw.title_fr}</div>
@@ -661,7 +662,7 @@ function MakerWorldCard({ designId, note, prints = [] }) {
       )}
       {note && <div style={{ fontSize:10.5, color:"var(--muted)", padding:"0 10px 8px" }}>{note}</div>}
       {mineOf && <div style={{ padding:"0 10px 8px" }}><MineBadge m={mineOf(designId)}/></div>}
-      {toRate.has(String(designId)) && (
+      {toRate.has(String(designId)) && !rateElsewhere && (
         <div style={{ display:"flex", alignItems:"center", gap:8, padding:"0 10px 10px", flexWrap:"wrap" }}>
           <span style={{ fontSize:11, fontWeight:700, color:"#f59e0b" }}>⭐ Pas encore évalué</span>
           <RateButton did={designId} style={{ fontSize:11.5, fontWeight:700, padding:"4px 10px", borderRadius:10, background:"#f59e0b",
@@ -1045,6 +1046,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
     else setP(pProp);
   }, [pProp.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const isAdmin = useIsAdmin();
+  const visiting = useFriend(s => s.friend);
+  const toRateSet = useToRateSet(!visiting && !!pProp.design_id);
   const groupe = ungrouped ? null : p.group_name;
   const [editNb, setEditNb] = useState(false);
   const [spoolPicker, setSpoolPicker] = useState(null);
@@ -1204,8 +1207,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           </div>
         </div>)}
     </div>);
+  const canRate = !!p.design_id && (p.status === "SUCCESS" || p.status === "PARTIAL") && toRateSet.has(String(p.design_id));
   const sections = (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {canRate && <GroupToRate designs={[p.design_id]} name={p.file_name} enabled={!visiting} label="Modèle à évaluer sur MakerWorld" anchor={`rate-p${p.id}`}/>}
       <SnapshotGallery snaps={[]} printId={p.id} userPhotos={userPhotos}
         onDelete={() => {}} onUpload={async f => { await uploadPhoto(f); }}
         onDeleteUpload={async filename => { await client.delete(`/prints/${p.id}/upload/${filename}`); loadUserPhotos(); }}
@@ -1214,7 +1219,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
       {/* les filaments ont deja leur titre repliable (et « Restituer ») */}
       {fils.length > 0 && <FilamentsV2 filaments={fils} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker}
         onRestore={() => setShowDeleteConfirm("restore")} onUnmap={setUnmapping}/>}
-      {p.design_id && <MakerWorldCard designId={p.design_id} prints={[p]}/>}
+      {p.design_id && <MakerWorldCard designId={p.design_id} prints={[p]} rateElsewhere/>}
       {p.status_note && <div style={{ position: "relative", padding: "12px 14px 12px 18px", borderRadius: 16, overflow: "hidden",
         background: "linear-gradient(135deg, color-mix(in srgb, #A855F7 12%, transparent), transparent 70%), var(--surface2)", border: "1px solid var(--border)" }}>
         <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 4, borderRadius: 4, background: "linear-gradient(#A855F7, #EC4899)" }}/>
@@ -1233,6 +1238,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             <div style={{ position: "sticky", top: 0, zIndex: 10, height: 0 }}>
               {!wide && <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", width: 38, height: 4, borderRadius: 2, background: "rgba(148,163,184,.6)" }}/>}
               <div style={{ position: "absolute", top: 10, right: 12, display: "flex", gap: 8 }}>
+                {canRate && <RateStar id={`rate-p${p.id}`}/>}
                 {isAdmin && <button onClick={more} aria-label="Plus d'actions" style={v2Round}>⋯</button>}
                 <button onClick={onClose} aria-label="Fermer" style={v2Round}>✕</button>
               </div>
@@ -1290,6 +1296,12 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           else { setShowDeleteConfirm(false); reload(); onChanged?.(); }
         }}/>}
     </>);
+}
+// l'etoile de la barre du haut : un modele attend une evaluation ; la toucher mene au bandeau
+function RateStar({ id }) {
+  return <button onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })} aria-label="À évaluer sur MakerWorld"
+    data-tip="À évaluer sur MakerWorld" style={{ ...v2Round, border: "none", background: "linear-gradient(135deg, #F59E0B, #FBBF24)", color: "#fff",
+      boxShadow: "0 6px 16px rgba(245,158,11,.45)", animation: "bn-float 3s ease-in-out infinite" }}>⭐</button>;
 }
 const v2Round = { width: 34, height: 34, borderRadius: "50%", border: "1px solid var(--border)", background: "color-mix(in srgb, var(--sheet-bg) 80%, transparent)",
   backdropFilter: "blur(6px)", color: "var(--text2)", cursor: "pointer", fontSize: 15, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" };
@@ -1406,6 +1418,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   const [editGroup, setEditGroup] = useState(false);
   const [costOpen, setCostOpen] = useState(false);     // replie a chaque ouverture
   const [grid, setGrid] = useState(false);              // les impressions en rangees, ou en grille
+  const [listOpen, setListOpen] = useState(false);      // les impressions : repliees a chaque ouverture
+  const groupToRate = useToRateSet(!groupVisiting);
   const wide = typeof window !== "undefined" && window.innerWidth >= 900;
   const loadPrints = () => client.get("/prints", { params: { group_id: groupId, limit: 200 } }).then(r => {
     const d = r.data; setPrints(Array.isArray(d) ? d : Array.isArray(d?.prints) ? d.prints : []); }).catch(() => {});
@@ -1587,27 +1601,50 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
         </div>
       </div>); };
   const printsBlock = (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "11px 12px", borderRadius: 18, border: "1px solid var(--border)",
+      background: "linear-gradient(160deg, color-mix(in srgb, #A78BFA 9%, transparent), transparent 60%), var(--surface2)" }}>
+      <div onClick={() => setListOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
         <span style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>🖨️ Impressions</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{prints.length}</span>
-        <span style={{ marginLeft: "auto", display: "flex", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)" }}>
+        <span style={{ marginLeft: "auto" }}/>
+        {listOpen && <span onClick={e => e.stopPropagation()} style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)" }}>
           {[[false, "☰", "En rangées"], [true, "▦", "En grille"]].map(([g, ic, tip]) => <button key={tip} onClick={() => setGrid(g)} data-tip={tip}
-            style={{ width: 34, height: 28, border: "none", cursor: "pointer", fontSize: 13, background: grid === g ? "#A78BFA" : "var(--surface2)",
+            style={{ width: 34, height: 28, border: "none", cursor: "pointer", fontSize: 13, background: grid === g ? "#A78BFA" : "var(--surface)",
               color: grid === g ? "#fff" : "var(--muted)" }}>{ic}</button>)}
-        </span>
+        </span>}
+        <span style={{ fontSize: 11, color: "var(--muted)", transform: listOpen ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▶</span>
       </div>
-      {grid ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>{prints.map(card)}</div>
-        : <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{prints.map(row)}</div>}
+      {/* replie : les vignettes en pile, les etats, la premiere et la derniere date */}
+      {!listOpen && prints.length > 0 && (() => { const ds = prints.map(x => utcDate(x.print_date)).filter(Boolean).sort((a, b) => a - b);
+        return <div onClick={() => setListOpen(true)} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+          <span style={{ display: "flex", flexShrink: 0 }}>{prints.slice(0, 6).map((x, i) => (
+            <span key={x.id} style={{ position: "relative", width: 44, height: 44, marginLeft: i ? -14 : 0, borderRadius: 12, overflow: "hidden",
+              border: "2px solid var(--surface2)", background: "var(--surface)", boxShadow: "0 4px 10px rgba(0,0,0,.18)", zIndex: 10 - i }}>
+              <img src={apiUrl("/prints/" + x.id + "/image")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
+              <span style={{ position: "absolute", right: 2, bottom: 2, width: 9, height: 9, borderRadius: "50%", background: (V2_STATUS[x.status] || [0, "#94a3b8"])[1],
+                border: "1.5px solid var(--surface2)" }}/></span>))}
+            {prints.length > 6 && <span style={{ width: 44, height: 44, marginLeft: -14, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center",
+              background: "#A78BFA", color: "#fff", fontSize: 12, fontWeight: 900, border: "2px solid var(--surface2)" }}>+{prints.length - 6}</span>}</span>
+          <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: 11.5, fontWeight: 800 }}>
+              {Object.entries(counts).map(([st, n]) => { const [l, c, ic] = V2_STATUS[st] || [st, "#94a3b8", "•"];
+                return <span key={st} style={{ color: c }}>{ic} {n} {l.toLowerCase()}{n > 1 && /e$/.test(l) ? "s" : ""}</span>; })}</span>
+            {ds.length > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {ds.length > 1 ? `du ${ds[0].toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} au ${ds[ds.length - 1].toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`
+                : ds[0].toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>}
+          </span>
+        </div>; })()}
+      {listOpen && (grid ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>{prints.map(card)}</div>
+        : <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{prints.map(row)}</div>)}
     </div>);
   const sections = (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <GroupPhotosV2 groupId={groupId} onUpdated={onUpdated}/>
-      <GroupToRate name={title} enabled={!groupVisiting}
+      <GroupToRate name={title} enabled={!groupVisiting} anchor={`rate-g${groupId}`}
         designs={prints.filter(x => x.status === "SUCCESS" || x.status === "PARTIAL").map(x => String(x.design_id || "").trim()).filter(Boolean)}/>
       {printsBlock}
       {filaments.length > 0 && <FilamentsV2 filaments={filaments} onSpoolClick={setSelSpool} onUnmap={setUnmapping}/>}
-      {designs.map(([d, n]) => <MakerWorldCard key={d} designId={d} prints={prints.filter(x => String(x.design_id || "").trim() === d)}
+      {designs.map(([d, n]) => <MakerWorldCard key={d} designId={d} rateElsewhere prints={prints.filter(x => String(x.design_id || "").trim() === d)}
         note={designs.length > 1 || n < prints.length ? `${n} print${n > 1 ? "s" : ""} sur ${prints.length} de ce modèle` : null}/>)}
     </div>);
   return (
@@ -1620,6 +1657,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
             <div style={{ position: "sticky", top: 0, zIndex: 10, height: 0 }}>
               {!wide && <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", width: 38, height: 4, borderRadius: 2, background: "rgba(148,163,184,.6)" }}/>}
               <div style={{ position: "absolute", top: 10, right: 12, display: "flex", gap: 8 }}>
+                {prints.some(x => (x.status === "SUCCESS" || x.status === "PARTIAL") && x.design_id && groupToRate.has(String(x.design_id)))
+                  && <RateStar id={`rate-g${groupId}`}/>}
                 {isAdmin && <button onClick={more} aria-label="Plus d'actions" style={v2Round}>⋯</button>}
                 <button onClick={onClose} aria-label="Fermer" style={v2Round}>✕</button>
               </div>
