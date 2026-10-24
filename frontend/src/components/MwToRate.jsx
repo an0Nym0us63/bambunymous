@@ -66,15 +66,15 @@ export function forgetToRate() { _p = null; _t = 0; }  // relire au prochain aff
 
 // Bouton « Évaluer » pour un modele : formulaire dans l'appli quand MakerWorld
 // attend l'evaluation (on connait sa fiche), sinon lien vers MakerWorld.
-export function RateButton({ did, style, label = "⭐ Évaluer" }) {
+export function RateButton({ did, style, label = "⭐ Évaluer", doneLabel = "✓ Évalué", ext = " ↗" }) {
   const d = useToRate(true);
   const [open, setOpen] = useState(false);
   const [gone, setGone] = useState(false);
   const x0 = (d?.items || []).find(i => String(i.design_id) === String(did));
   const can = useCanMwHome();
   const x = can ? x0 : x0 && { ...x0, rating_id: null };
-  if (gone) return <span style={{ ...style, background: "none", color: "#22c55e", borderColor: "transparent" }}>✓ Évalué</span>;
-  if (!x?.rating_id) return <a href={x?.url || rateUrl(did)} target="_blank" rel="noopener noreferrer" style={style}>{label} ↗</a>;
+  if (gone) return <span style={{ ...style, background: "none", color: "#22c55e", borderColor: "transparent" }}>{doneLabel}</span>;
+  if (!x?.rating_id) return <a href={x?.url || rateUrl(did)} target="_blank" rel="noopener noreferrer" style={style}>{label}{ext}</a>;
   return (<>
     <button onClick={() => setOpen(true)} style={{ ...style, cursor: "pointer" }}>{label}</button>
     {open && createPortal(

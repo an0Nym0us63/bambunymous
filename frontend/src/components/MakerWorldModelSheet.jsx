@@ -17,7 +17,7 @@ import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf, platePicksOf, pl
 import PlateRecolor from "./PlateRecolor";
 import Lightbox from "./Lightbox";
 import { openCreator } from "./MwCreatorPage";
-import { useToRateSet, GroupToRate } from "./MwToRate";
+import { useToRateSet, GroupToRate, RateButton } from "./MwToRate";
 import { showAlert, showConfirm } from "../utils/dialog";
 
 // Prechargement : la fiche est demandee des qu'on touche une tuile ; a
@@ -112,7 +112,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const doBoost = async () => {
     const n = boost?.available;
     if (!await showConfirm(`Booster « ${m?.title_fr || m?.title || "ce modèle"} » ? Ça utilise un de tes boosts`
-      + (n != null ? ` (il t'en reste ${n}).` : "."), { confirmLabel: "⚡ Booster" })) return;
+      + (n != null ? ` (il t'en reste ${n}).` : "."), { confirmLabel: "🚀 Booster" })) return;
     setBoostBusy(true);
     try {
       const { data } = await client.post(`/makerworld/model/${id}/boost`);
@@ -251,20 +251,20 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
         onClick: () => { onSearch(m); onClose(); } },
       (like && canHome || boost && canHome || canHome) && "-",
       like && canHome && { icon: like.liked ? "❤" : "♡", label: like.liked ? "Aimé · retirer le j'aime" : "J'aime", tone: "#EF4444", disabled: likeBusy, onClick: toggleLike },
-      boost && canHome && (boost.can || boost.done) && { icon: "⚡", tone: "#F59E0B", disabled: boostBusy || boost.done,
+      boost && canHome && (boost.can || boost.done) && { icon: "🚀", tone: "#6366F1", disabled: boostBusy || boost.done,
         label: boost.done ? "Boosté" : boost.boosted ? "Booster encore" : "Booster",
         hint: [boost.available != null && `${boost.available} boost(s) disponible(s)`,
           boost.creator_max != null && `${boost.creator ?? 0}/${boost.creator_max} donnés à ce créateur cette année`].filter(Boolean).join(" · ") || null,
         onClick: doBoost },
-      boost && canHome && !boost.can && !boost.done && boost.reason && { icon: "⚡", label: "Booster", hint: boost.reason, tone: "#94A3B8", disabled: true },
-      canHome && { icon: "☆", label: "Ranger dans mes collections…", tone: "#F59E0B", onClick: () => setPick(true) },
+      boost && canHome && !boost.can && !boost.done && boost.reason && { icon: "🚀", label: "Booster", hint: boost.reason, tone: "#94A3B8", disabled: true },
+      canHome && { icon: "🔖", label: "Ranger dans mes collections…", tone: "#14B8A6", onClick: () => setPick(true) },
       !friend && isAdmin && "-",
       !friend && isAdmin && { icon: "🔗", label: "Associer à un print", hint: "Choisir les impressions de ce modèle dans l'historique", tone: "#8B5CF6",
         onClick: () => { startAssign(tile()); onClose(); } },
     ],
   });
   const stats = ok ? [["❤", m.like_count, "J'aime", "#EF4444", "#F87171"], ["⬇", m.download_count, "Téléch.", "#3B82F6", "#60A5FA"],
-    ["🖨", m.print_count, "Impr.", "#8B5CF6", "#C084FC"], ["⭐", m.collection_count, "Collec.", "#F59E0B", "#FBBF24"],
+    ["🖨", m.print_count, "Impr.", "#8B5CF6", "#C084FC"], ["🔖", m.collection_count, "Collec.", "#14B8A6", "#2DD4BF"],
     ["💬", m.comment_count, "Avis", "#06B6D4", "#67E8F9"]].filter(([, n]) => n != null) : [];
 
   return createPortal(
@@ -694,27 +694,41 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
         </div>
         {/* les actions, toujours a portee du pouce */}
         {ok && (
-          <div style={{ flexShrink:0, display:"flex", gap:8, padding:"10px 14px calc(10px + env(safe-area-inset-bottom, 0px))",
+          <div style={{ flexShrink:0, display:"flex", gap:6, padding:"10px 12px calc(10px + env(safe-area-inset-bottom, 0px))",
             borderTop:"1px solid var(--border)", background:"color-mix(in srgb, var(--sheet-bg) 94%, transparent)", backdropFilter:"blur(8px)" }}>
+            {/* telephone : Handy ; ordinateur : Studio (la place permet le mot) */}
             {kp && IS_MOBILE ? (
-              <a href={handyUrl(id, kp)} target="_blank" rel="noopener noreferrer" data-tip={kpTip} style={{ ...fBtn, ...primary, flex:1 }}>📱 Ouvrir dans Handy</a>
+              <a href={handyUrl(id, kp)} target="_blank" rel="noopener noreferrer" aria-label="Ouvrir dans Handy" data-tip={`Ouvrir dans Handy · ${kpTip}`}
+                style={{ ...fBtn, ...primary, flex:1, fontSize:19, padding:"8px 10px" }}>📱</a>
             ) : kp && canHome ? (
-              <button onClick={() => openStudio(kp)} disabled={studioBusy === kp.instance_id} data-tip={kpTip} style={{ ...fBtn, ...primary, flex:1 }}>
-                {studioBusy === kp.instance_id ? "…" : "🖥️ Ouvrir dans Studio"}</button>
+              <button onClick={() => openStudio(kp)} disabled={studioBusy === kp.instance_id} data-tip={`Ouvrir dans Bambu Studio · ${kpTip}`} style={{ ...fBtn, ...primary, flex:1 }}>
+                {studioBusy === kp.instance_id ? "…" : "🖥️ Studio"}</button>
             ) : (
-              <a href={mwUrl} target="_blank" rel="noopener noreferrer" style={{ ...fBtn, flex:1, color:"#06B6D4", borderColor:"rgba(6,182,212,0.4)",
-                background:"rgba(6,182,212,0.1)" }}>🌐 MakerWorld ↗</a>
+              <a href={mwUrl} target="_blank" rel="noopener noreferrer" aria-label="Ouvrir sur MakerWorld" data-tip="Ouvrir sur MakerWorld" style={{ ...fBtn, flex:1, color:"#06B6D4",
+                borderColor:"rgba(6,182,212,0.4)", background:"rgba(6,182,212,0.1)" }}>🌐 ↗</a>
             )}
             {like && canHome && (
               <button onClick={toggleLike} disabled={likeBusy} aria-label={like.liked ? "Aimé" : "J'aime"} data-tip={like.liked ? "Aimé · retirer le j'aime" : "J'aime"}
-                style={{ ...fBtn, width:48, flex:"0 0 auto", ...(like.liked ? { color:"#ef4444", background:"rgba(239,68,68,0.12)", borderColor:"rgba(239,68,68,0.4)" } : null) }}>
+                style={{ ...sq, color:"#ef4444", ...(like.liked ? { background:"rgba(239,68,68,0.14)", borderColor:"rgba(239,68,68,0.45)" } : null) }}>
                 {like.liked ? "❤" : "♡"}</button>
             )}
+            {canHome && (() => {
+              // boost : actif s'il reste de quoi booster ce modele, sinon grise avec la raison
+              const live = boost && boost.can && !boost.done;
+              const tip = !boost ? "Booster : indisponible" : boost.done ? "Boosté" : !boost.can ? (boost.reason || "Booster : indisponible")
+                : [boost.boosted ? "Booster encore" : "Booster", boost.available != null && `${boost.available} disponible(s)`].filter(Boolean).join(" · ");
+              return <button onClick={live ? doBoost : undefined} disabled={!live || boostBusy} aria-label="Booster" data-tip={tip}
+                style={{ ...sq, ...(live ? { background:"rgba(99,102,241,0.14)", borderColor:"rgba(99,102,241,0.45)" } : off) }}>🚀</button>;
+            })()}
+            {!friend && (rateHere
+              ? <RateButton did={id} label="⭐" ext="" doneLabel="✓" style={{ ...sq, display:"flex", alignItems:"center", justifyContent:"center", textDecoration:"none",
+                  color:"#fff", border:"none", background:"linear-gradient(135deg, #F59E0B, #FBBF24)", boxShadow:"0 8px 18px -10px #F59E0B" }}/>
+              : <button disabled aria-label="Évaluer" data-tip={m.printed > 0 ? "Déjà évalué" : "À évaluer une fois imprimé"} style={{ ...sq, ...off }}>⭐</button>)}
             {canHome && (
               <button onClick={() => setPick(true)} aria-label="Ranger dans mes collections" data-tip="Ranger dans mes collections"
-                style={{ ...fBtn, width:48, flex:"0 0 auto", color:"#F59E0B" }}>☆</button>
+                style={{ ...sq, background:"rgba(20,184,166,0.12)", borderColor:"rgba(20,184,166,0.4)" }}>🔖</button>
             )}
-            <button onClick={menu} aria-label="Plus d'actions" style={{ ...fBtn, width:48, flex:"0 0 auto" }}>⋯</button>
+            <button onClick={menu} aria-label="Plus d'actions" style={sq}>⋯</button>
           </div>
         )}
       </div>
@@ -827,6 +841,8 @@ const roundTop = { width:34, height:34, borderRadius:"50%", border:"1px solid va
   backdropFilter:"blur(6px)", color:"var(--text2)", cursor:"pointer", fontSize:15, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center" };
 const fBtn = { padding:"11px 12px", borderRadius:12, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", fontSize:13.5,
   fontWeight:800, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6, textDecoration:"none", boxSizing:"border-box" };
+const sq = { ...fBtn, width:44, flex:"0 0 auto", padding:"8px 0", fontSize:17, textAlign:"center" };
+const off = { opacity:.4, filter:"grayscale(1)", cursor:"default" };
 const primary = { border:"none", color:"#fff", background:"linear-gradient(135deg, #22C55E, #16A34A)", boxShadow:"0 8px 18px -10px #22C55E" };
 const grad = (a, b) => ({ backgroundImage:`linear-gradient(135deg, ${a}, ${b})`, WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" });
 const textBtn = { marginTop:6, fontSize:12, fontWeight:600, color:"#3b82f6", background:"none", border:"none",

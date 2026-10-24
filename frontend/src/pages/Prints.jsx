@@ -600,7 +600,7 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
     </a>
   );
   const stats = [["❤", mw.like_count, "j'aime"], ["⬇", mw.download_count, "téléchargements"],
-    ["🖨", mw.print_count, "impressions"], ["⭐", mw.collection_count, "mises en collection"]]
+    ["🖨", mw.print_count, "impressions"], ["🔖", mw.collection_count, "mises en collection"]]
     .filter(([, n]) => n != null);
   const rated = !toRate.has(String(designId));
   return (
@@ -674,7 +674,7 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
       <AdminOnly home mw>
         <button onClick={() => setPick(true)} style={{ display:"block", width:"100%", padding:"7px", border:"none",
           borderTop:"1px solid var(--border)", background:"none", color:"#3b82f6", fontSize:11.5, fontWeight:600,
-          cursor:"pointer" }}>☆ Ranger dans mes collections</button>
+          cursor:"pointer" }}>🔖 Ranger dans mes collections</button>
       </AdminOnly>
       {pick && <MakerWorldCollectionsPicker designId={designId} title={mw.title} onClose={() => setPick(false)}/>}
       {nShared > 0 && (<>
@@ -1731,7 +1731,9 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
     const ids = prints.map(pr => pr.id).filter(Boolean);
     const i = cover_print_id ? ids.indexOf(cover_print_id) : -1;
     const ordered = i > 0 ? [ids[i], ...ids.slice(0, i), ...ids.slice(i + 1)] : ids;
-    return ordered.map(id => apiUrl(`/prints/${id}/image`));
+    const byId = Object.fromEntries(prints.map(pr => [pr.id, pr]));
+    // chaque case garde la teinte de son print, comme une vignette seule
+    return ordered.map(id => ({ url: apiUrl(`/prints/${id}/image`), tint: printTint(byId[id]) }));
   }, [prints, cover_print_id]);
 
   // Seul "en cours" est remonte sur la carte du groupe : un echec ou un partiel
@@ -1756,7 +1758,7 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
           border:"1px solid color-mix(in srgb, #A78BFA 30%, var(--border))",
           background:"linear-gradient(90deg, color-mix(in srgb, #A78BFA 12%, transparent), transparent 60%), var(--surface2)" }}>
           <span style={{ position:"relative", display:"flex", flexShrink:0, width:60, height:60 }}>
-            {mosaicUrls.slice(0, 3).map((u, i) => <img key={u} src={u} alt="" draggable={false} style={{ position:"absolute", left: i * 9, top: i * 4,
+            {mosaicUrls.slice(0, 3).map(({ url: u }, i) => <img key={u} src={u} alt="" draggable={false} style={{ position:"absolute", left: i * 9, top: i * 4,
               width:46, height:46, borderRadius:12, objectFit:"cover", background:"var(--surface)", border:"2px solid var(--surface2)", zIndex: 3 - i,
               boxShadow:"0 4px 10px rgba(0,0,0,.2)" }} onError={e => { e.currentTarget.style.visibility="hidden"; }}/>)}
             {gCheck}
@@ -1881,6 +1883,16 @@ function QuantityEditor({ id, type, value, onChange }) {
   );
 }
 
+// La teinte d'une vignette : le premier filament franc (pas blanc ni tres clair), sinon le lavande des groupes.
+function printTint(p) {
+  for (const f of p?.filament_usage || []) {
+    const m = /^#?([0-9a-f]{6})/i.exec(f.color_hex || ""); if (!m) continue;
+    const n = parseInt(m[1], 16);
+    if ((0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 < 0.8) return `#${m[1]}`;
+  }
+  return "#A78BFA";
+}
+
 function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onToggleSelect, onLongPress, row = false }) {
   const statusCfg = STATUS_CFG[p.status] || { bg:"rgba(0,0,0,0.5)", color:"white", label: p.status || "?" };
   const visiting = useFriend((s) => s.friend);
@@ -1905,15 +1917,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
   const handleClick = guard(() => { if (selectMode) onToggleSelect(p.id); else onClick(); });
 
   const [stL, stC, stI] = V2_STATUS[p.status] || [statusCfg.label, "#94a3b8", "•"];
-  // la teinte de la vignette : le premier filament franc (pas blanc ni tres clair), sinon le lavande des groupes
-  const tint = (() => {
-    for (const f of p.filament_usage || []) {
-      const m = /^#?([0-9a-f]{6})/i.exec(f.color_hex || ""); if (!m) continue;
-      const n = parseInt(m[1], 16);
-      if ((0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 < 0.8) return `#${m[1]}`;
-    }
-    return "#A78BFA";
-  })();
+  const tint = printTint(p);
   const [day, hour] = whenFr(utcDate(p.print_date));
   const dur = p.duration_seconds || p.estimated_seconds;
   const rateMe = p.status === "SUCCESS" && p.design_id && toRate.has(String(p.design_id));

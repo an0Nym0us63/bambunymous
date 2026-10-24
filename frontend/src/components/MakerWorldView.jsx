@@ -290,7 +290,7 @@ export default function MakerWorldView({ onSearch }) {
       x.url && { icon: "🌐", label: "Voir sur MakerWorld", tone: "#06B6D4", onClick: () => window.open(x.url, "_blank", "noopener") },
       x.printed > 0 && onSearch && { icon: "🖨️", label: "Voir mes impressions", hint: printedLabel(x), tone: "#22C55E", onClick: () => onSearch(x) },
       "-",
-      (status?.connected || friend) && isHomeAdmin && { icon: "☆", label: "Ranger dans mes collections…", tone: "#F59E0B", onClick: () => setPickFor(x) },
+      (status?.connected || friend) && isHomeAdmin && { icon: "🔖", label: "Ranger dans mes collections…", tone: "#14B8A6", onClick: () => setPickFor(x) },
       isAdmin && !friend && { icon: "🔗", label: "Associer à un print", hint: "Choisir les impressions de ce modèle", tone: "#8B5CF6",
         onClick: () => startAssign({ design_id: x.design_id, title: x.title, title_fr: x.title_fr, cover_url: x.cover_url }) },
     ],
@@ -529,13 +529,13 @@ export default function MakerWorldView({ onSearch }) {
                         {x.added?.by && <span data-tip={`Ajouté à la collection par ${x.added.by}${x.added.at ? ` le ${new Date(x.added.at + "Z").toLocaleDateString("fr-FR")}` : ""}`}
                           style={{ ...glass, left:6, bottom:6, maxWidth:"calc(100% - 12px)", overflow:"hidden", textOverflow:"ellipsis" }}>＋ {x.added.by}</span>}
                       </a>
-                      {/* ranger dans mes collections : l'etoile, sur la vignette */}
+                      {/* ranger dans mes collections : le signet, sur la vignette */}
                       {(status?.connected || friend) && (
                         <AdminOnly home mw>
                           <button onClick={() => setPickFor(x)} data-tip="Ranger dans mes collections" aria-label="Ranger dans mes collections"
                             style={{ position:"absolute", top:6, right:6, width:30, height:30, borderRadius:"50%", border:"1px solid rgba(255,255,255,.25)",
-                              background:"rgba(15,23,42,0.55)", backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)", color:"#FBBF24",
-                              cursor:"pointer", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>☆</button>
+                              background:"rgba(15,23,42,0.55)", backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)", color:"#2DD4BF",
+                              cursor:"pointer", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>🔖</button>
                         </AdminOnly>
                       )}
                     </div>

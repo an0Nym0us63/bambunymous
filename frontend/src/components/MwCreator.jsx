@@ -232,7 +232,7 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
       {view === "models" && type !== "points" && period !== "all" && data.account && (
         <div style={{ fontSize:12, color:"var(--text2)", margin:"-4px 0 0", display:"flex", gap:10, flexWrap:"wrap" }}>
           <span style={{ color:"var(--muted)" }}>Tout le compte, {PERIODS.find(x => x[0] === period)?.[1]} :</span>
-          {[["downloads", "⬇️"], ["prints", "🖨️"], ["boosts", "⚡"], ["likes", "❤"]].map(([k, ic]) => (
+          {[["downloads", "⬇️"], ["prints", "🖨️"], ["boosts", "🚀"], ["likes", "❤"]].map(([k, ic]) => (
             <span key={k} style={{ fontWeight: k === type ? 800 : 600, color: k === type ? "#22c55e" : "inherit" }}>
               {ic} {data.account[k] > 0 ? "+" : ""}{fmt(data.account[k])}</span>
           ))}
@@ -265,7 +265,7 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
                 <span style={{ display:"block", fontSize:12.5, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                   {m.title_fr || m.title}{m.exclusive ? <span style={{ fontSize:10, color:"#a78bfa", fontWeight:800 }}> · exclusif</span> : null}</span>
                 <span style={{ display:"block", fontSize:11, color:"var(--muted)", marginTop:2 }}>
-                  ⬇️ {fmt(m.downloads)} · 🖨️ {fmt(m.prints)} · ⚡ {fmt(m.boosts)} · ❤ {fmt(m.likes)}</span>
+                  ⬇️ {fmt(m.downloads)} · 🖨️ {fmt(m.prints)} · 🚀 {fmt(m.boosts)} · ❤ {fmt(m.likes)}</span>
                 {order !== "value" && Date.parse(m.created || "") > 0 && <span style={{ display:"block", fontSize:10.5, color:"var(--muted)", marginTop:1 }}>
                   publié le {new Date(m.created).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}</span>}
               </span>
@@ -277,7 +277,7 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
                 {/* d'ou viennent les points : versements du modele, du profil, boosts recus */}
                 {type === "points" && val(m) > 0 && m.period?.points_split && (
                   <span style={{ display:"block", fontSize:9.5, color:"var(--muted)", marginTop:2, whiteSpace:"nowrap" }}>
-                    {[["model", "modèle"], ["profile", "profil"], ["boost", "⚡ boosts"]]
+                    {[["model", "modèle"], ["profile", "profil"], ["boost", "🚀 boosts"]]
                       .filter(([k]) => m.period.points_split[k] > 0)
                       .map(([k, l]) => `${l} ${pts(m.period.points_split[k])}`).join(" · ")}</span>
                 )}

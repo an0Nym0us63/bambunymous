@@ -55,10 +55,10 @@ export default function MakerWorldCollectionsPicker({ designId, title, item, onC
         width:"100%", maxWidth:480, maxHeight:"80dvh", display:"flex", flexDirection:"column",
         paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
         {/* en-tete : l'etoile, le modele, combien de collections le contiennent */}
-        <div style={{ padding:"16px 16px 12px", borderBottom:"1px solid var(--border)", background:"linear-gradient(135deg, rgba(245,158,11,0.22), transparent 70%)" }}>
+        <div style={{ padding:"16px 16px 12px", borderBottom:"1px solid var(--border)", background:"linear-gradient(135deg, rgba(20,184,166,0.22), transparent 70%)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <span style={{ width:38, height:38, borderRadius:12, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:19,
-              background:"linear-gradient(135deg, #F59E0B, #FBBF24)", color:"#fff", boxShadow:"0 6px 16px -6px #F59E0B" }}>☆</span>
+              background:"linear-gradient(135deg, #14B8A6, #2DD4BF)", color:"#fff", boxShadow:"0 6px 16px -6px #14B8A6" }}>🔖</span>
             <span style={{ flex:1, minWidth:0 }}>
               <span style={{ display:"block", fontSize:16, fontWeight:900, color:"var(--text)" }}>Ranger dans mes collections</span>
               {title && <span style={{ display:"block", fontSize:12, fontWeight:700, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis",

@@ -78,7 +78,7 @@ export function CreatorPageHost() {
             {c && (
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 11.5, color: "var(--muted)", marginBottom: 10 }}>
                 <span>⬇ {fmt(c.downloads)} téléchargements</span><span>🖨️ {fmt(c.prints)} impressions</span>
-                <span>❤ {fmt(c.likes)} j'aime</span>{c.boosts != null && <span>⚡ {fmt(c.boosts)} boosts</span>}
+                <span>❤ {fmt(c.likes)} j'aime</span>{c.boosts != null && <span>🚀 {fmt(c.boosts)} boosts</span>}
                 {c.contest_wins > 0 && <span>🏆 {c.contest_wins} concours gagnés</span>}
               </div>
             )}

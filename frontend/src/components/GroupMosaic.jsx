@@ -30,6 +30,8 @@ const layoutFor = (n) => {
 
 export default function GroupMosaic({ photos = [], title = "", cover = null }) {
   const urls = photos.map(p => (typeof p === "string" ? p : p?.url)).filter(Boolean);
+  // teinte facultative de chaque photo (fond estompe, comme une vignette seule)
+  const tintOf = Object.fromEntries(photos.filter(p => p?.tint).map(p => [p.url, p.tint]));
 
   // La couverture d'abord, le reste ensuite : l'ordre de la mosaique decoule
   // de la photo choisie, sans la dupliquer.
@@ -83,7 +85,8 @@ export default function GroupMosaic({ photos = [], title = "", cover = null }) {
       {shown.map((u, i) => (
         <div key={i} style={{ overflow:"hidden", position:"relative",
           gridArea: areas ? ["a","b","c"][i] : undefined,
-          background:"var(--surface2)" }}>
+          background: tintOf[u] ? `radial-gradient(75% 70% at 50% 45%, ${tintOf[u]}2e, transparent 75%), linear-gradient(180deg, ${tintOf[u]}1a, transparent 55%), var(--surface2)`
+            : "var(--surface2)" }}>
           <img src={u} alt="" loading="lazy"
             style={{ width:"100%", height:"100%", objectFit:"cover", display:"block",
               transition:"opacity 0.4s" }}

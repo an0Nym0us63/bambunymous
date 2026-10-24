@@ -123,7 +123,7 @@ export function FriendsCard() {
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px", lineHeight:1.5 }}>
         Parcours le BambuNymous d'un ami (historique, collections MakerWorld…) en lecture seule, avec les droits du
         compte qu'il t'a créé chez lui. Il te donne une <b>invitation copain</b> (dans ses Paramètres → Comptes) ; colle-la ici.
-        Chez lui, ☆ range toujours dans <b>tes</b> collections, et l'appli te dit si tu as déjà le modèle.
+        Chez lui, 🔖 range toujours dans <b>tes</b> collections, et l'appli te dit si tu as déjà le modèle.
       </p>
       {list === null ? <p style={{ fontSize:12, color:"var(--muted)" }}>…</p> : list.map(f => (
         <Pressable key={f.id} menu={() => ({ title: f.name, subtitle: f.url, items: [
