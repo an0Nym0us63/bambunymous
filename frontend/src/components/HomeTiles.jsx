@@ -1779,23 +1779,65 @@ function ToRate({ r, o, sz }) {
   return (
     <Tile icon={<Star size={15}/>} color="#F97316" label="À évaluer" to="/prints?tab=makerworld"
       mini={sz.h === 0.5} summary={<span style={{ color: items.length ? "#ea580c" : "var(--text)" }}>{items.length}</span>}
-      zoom={items.length ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 }}>
-        {items.map(x => <div key={x.design_id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {x.cover_url && <img src={mwImg(x.cover_url, 300)} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 12 }}/>}
-          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text)", ...clamp(2) }}>{x.title || `Modèle ${x.design_id}`}</span></div>)}</div> : null}>
+      zoom={items.length ? <>
+        <Stats items={[["À évaluer", items.length, "#ea580c"], r.stats && ["Déjà évalués", r.stats.rated, "#16a34a"],
+          ["Impressions concernées", items.reduce((t, x) => t + (x.printed || 0), 0), "#3B82F6"]].filter(Boolean)}/>
+        <Muted>Une évaluation par modèle imprimé : MakerWorld en attend une pour chaque profil que tu as imprimé.</Muted>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+        {items.map(x => <div key={x.design_id} style={{ display: "flex", flexDirection: "column", gap: 5, padding: 8, borderRadius: 16, minWidth: 0,
+          background: "linear-gradient(160deg, rgba(249,115,22,0.10), transparent 55%), var(--surface2)", border: "1px solid var(--border)" }}>
+          <span style={{ position: "relative" }}>
+            {x.cover_url ? <img src={mwImg(x.cover_url, 300)} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 12, display: "block" }}/>
+              : <span style={{ display: "block", width: "100%", aspectRatio: "1", borderRadius: 12, background: "var(--surface)" }}/>}
+            <span style={{ position: "absolute", left: 6, bottom: 6, fontSize: 11, fontWeight: 900, color: "#fff", padding: "2px 8px", borderRadius: 9,
+              background: "linear-gradient(135deg, #EA580C, #F59E0B)" }}>★ à noter</span></span>
+          <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text)", ...clamp(2) }}>{x.title_fr || x.title || `Modèle ${x.design_id}`}</span>
+          {x.creator_name && <Muted size={11} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>par {x.creator_name}</Muted>}
+          <span style={{ fontSize: 11, fontWeight: 800, color: "#ea580c" }}>imprimé{x.printed > 1 ? ` ${x.printed} fois` : ""}{x.last_date ? ` · ${ago(x.last_date)}` : ""}</span>
+        </div>)}</div></> : null}>
       {({ W, H }) => {
         if (!items.length) return <>{head}<Empty>Tout est évalué</Empty></>;
         const rest = H - 34;
         if (!o.thumbs || rest < 24) return head;
-        const lg = fitGrid(items.length, W, rest, { gap: 8, max: 120, extra: 17 });
-        const titled = lg.size >= 76;
-        let g = titled ? lg : fitGrid(items.length, W, rest, { gap: 6, max: 110 });
-        if (g.size < 28) { const f = fillGrid(W, rest, 28, 6); g = { cols: f.cols, size: Math.min(f.size, Math.max(22, rest - 2)), n: f.n }; }
-        return <>{head}<div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${g.size}px)`, gap: titled ? 8 : 6, alignContent: "center",
-          justifyContent: "space-evenly", marginTop: 4 }}>
-          {items.slice(0, g.n || items.length).map(x => titled ? <div key={x.design_id} style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-            {thumb(x, g.size)}<span style={{ fontSize: 11, fontWeight: 700, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-              lineHeight: "14px" }}>{x.title_fr || x.title}</span></div> : thumb(x, g.size))}</div></>;
+        // un ou deux modeles et de la place : leur carte (grande image, titre, createur, quand, a noter)
+        if (items.length <= 2 && rest >= 70) {
+          const each = Math.floor((rest - 8 * (items.length - 1)) / items.length);
+          const narrow = W < 230;
+          const card = x => { const s2 = narrow ? Math.max(40, Math.min(W - 8, each - 54, 150)) : Math.min(each, W * 0.45, 150), when = x.last_date ? ago(x.last_date) : null;
+            return <div key={x.design_id} data-tip={x.title_fr || x.title || ""} style={{ display: "flex", flexDirection: narrow ? "column" : "row",
+              alignItems: "center", justifyContent: "center", gap: narrow ? 6 : 10, minWidth: 0, height: each, textAlign: narrow ? "center" : "left" }}>
+              <span style={{ position: "relative", flexShrink: 0 }}>{thumb(x, s2)}
+                <span style={{ position: "absolute", left: 4, bottom: 4, fontSize: 10.5, fontWeight: 900, color: "#fff", padding: "1px 6px", borderRadius: 8,
+                  background: "linear-gradient(135deg, #EA580C, #F59E0B)", boxShadow: "0 2px 6px rgba(234,88,12,0.45)" }}>★ à noter</span></span>
+              <span style={{ flex: narrow ? "0 0 auto" : 1, minWidth: 0, maxWidth: "100%", display: "flex", flexDirection: "column", gap: 3 }}>
+                <span style={{ fontSize: narrow ? 12.5 : 13.5, fontWeight: 800, color: "var(--text)", lineHeight: 1.25, ...clamp(narrow ? 2 : each >= 90 ? 3 : 2) }}>{x.title_fr || x.title || `Modèle ${x.design_id}`}</span>
+                {x.creator_name && each >= 64 && <Muted size={11.5} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>par {x.creator_name}</Muted>}
+                {each >= 80 && !(narrow && each < 200) && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#ea580c" }}>
+                  imprimé{x.printed > 1 ? ` ${x.printed} fois` : ""}{when ? ` · ${when}` : ""}</span>}
+              </span></div>; };
+          return <>{head}<div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8, marginTop: 4, minHeight: 0 }}>
+            {items.map(card)}</div></>;
+        }
+        const best = mosaic(items.length, W, rest - 4, 6);
+        const cap = best.c * best.r - (best.big ? 3 : 0);
+        const list = items.slice(0, cap);
+        return <>{head}<div style={{ flex: 1, display: "grid", gap: 6, marginTop: 4, gridTemplateColumns: `repeat(${best.c}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${best.r}, minmax(0, 1fr))`, minHeight: 0 }}>
+          {list.map((x, k) => { const big = best.big && k === 0, cell = big ? best.cell * 2 : best.cell;
+            return <div key={x.design_id} data-tip={`${x.title_fr || x.title || ""}${x.creator_name ? `
+par ${x.creator_name}` : ""}`} style={{ position: "relative", minWidth: 0,
+              minHeight: 0, overflow: "hidden", borderRadius: 12, background: "linear-gradient(135deg, rgba(249,115,22,0.12), var(--surface2))",
+              gridColumn: big ? "span 2" : undefined, gridRow: big ? "span 2" : undefined, boxShadow: "inset 0 0 0 1px var(--border)" }}>
+              {x.cover_url && <img data-pk="" src={mwImg(x.cover_url, Math.round(cell * 2))} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
+                objectFit: "cover", display: "block" }}/>}
+              {cell >= 90 && <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "14px 8px 5px", fontSize: big ? 12.5 : 10.5, fontWeight: 800,
+                color: "#fff", background: "linear-gradient(to top, rgba(0,0,0,0.65), transparent)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {x.title_fr || x.title}</span>}
+              <span style={{ position: "absolute", top: 5, left: 5, fontSize: cell >= 60 ? 10 : 9, fontWeight: 900, color: "#fff", padding: "0 5px", borderRadius: 7,
+                background: "linear-gradient(135deg, #EA580C, #F59E0B)" }}>★</span>
+            </div>; })}
+          {items.length > cap && <span style={{ position: "absolute", right: 14, bottom: 12, fontSize: 11, fontWeight: 900, color: "#fff", padding: "1px 7px",
+            borderRadius: 9, background: "rgba(0,0,0,0.55)" }}>+{items.length - cap}</span>}</div></>;
       }}
     </Tile>
   );
@@ -2320,8 +2362,13 @@ function Sales({ v, o, sz }) {
   const sold = v.total_sold ?? v.sold;
   const sub = [`${sold} vendu${sold > 1 ? "s" : ""}`, o.revenue && `${Math.round(v.revenue || 0)} €`,
     o.margin && `marge ${Math.round(v.margin || 0)} €${v.margin_pct ? ` (${Math.round(v.margin_pct)} %)` : ""}`].filter(Boolean).join(" · ");
-  const hero = <Hero visual={o.ring ? s => <Ring value={share} size={s} color={SALE_C} cap="vendus">{sold}</Ring> : null} value={v.available} unit="à vendre" sub={sub}
-    accent={["#DB2777", "#F472B6"]}/>;
+  const heroOf = W => <Hero visual={o.ring ? s => <Ring value={share} size={s} color={SALE_C} cap="vendus">{sold}</Ring> : null} value={v.available} unit="à vendre"
+    sub={W >= 260 ? sub : null} accent={["#DB2777", "#F472B6"]}/>;
+  const hero = heroOf(600);
+  // etroite : les chiffres en pastilles plutot qu'une phrase coupee
+  const chips = <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+    {[[`${sold} vendu${sold > 1 ? "s" : ""}`, SALE_C], o.revenue && [fmtEur(v.revenue), "#16a34a"], o.margin && [`marge ${fmtEur(v.margin)}`, "#8B5CF6"]].filter(Boolean)
+      .map(([t, c]) => <span key={t} style={{ fontSize: 11, fontWeight: 800, color: c, padding: "2px 8px", borderRadius: 10, background: `${c}1c`, whiteSpace: "nowrap" }}>{t}</span>)}</div>;
   const tm = v.this_month;
   const monthLine = tm && <div data-pk="" style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
     {new Date().toLocaleDateString("fr-FR", { month: "long" })} : {tm.count ? <><b style={{ color: SALE_C }}>{tm.count} vente{tm.count > 1 ? "s" : ""}</b> · {fmtEur(tm.revenue)} · marge {fmtEur(tm.margin)}</> : "aucune vente pour l'instant"}</div>;
@@ -2340,7 +2387,8 @@ function Sales({ v, o, sz }) {
         const showMonth = o.month !== false && tm && H >= 110;
         const ch = o.chart !== false && months.some(x => x.revenue) ? Math.min(140, H - 120 - (showMonth ? 22 : 0) - (H >= 260 ? statsH(items.length, W) + 8 : 0)) : 0;
         return <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, minHeight: 0 }}>
-          <BoxCtx.Provider value={{ W, H: Math.min(H - (showMonth ? 22 : 0) - (ch >= 30 ? ch + 8 : 0) - (H >= 260 ? statsH(items.length, W) + 8 : 0), 96) }}>{hero}</BoxCtx.Provider>
+          <BoxCtx.Provider value={{ W, H: Math.min(H - (showMonth ? 22 : 0) - (ch >= 30 ? ch + 8 : 0) - (H >= 260 ? statsH(items.length, W) + 8 : 0) - (W < 260 ? 30 : 0), 96) }}>{heroOf(W)}</BoxCtx.Provider>
+          {W < 260 && chips}
           {showMonth && monthLine}
           {ch >= 30 && <div style={{ marginTop: "auto" }}>{chart(ch)}</div>}
           {H >= 260 && items.length > 0 && <Stats items={items}/>}
@@ -2455,6 +2503,20 @@ function Feed({ f, o, sz }) {
   );
 }
 // la galerie : des vignettes qui remplissent exactement la case
+// une mosaique qui remplit une case : la grille (colonnes x rangees) aux cases les plus grandes et les plus
+// carrees ; avec de la place, la premiere en grand (2 x 2)
+function mosaic(n, W, H, gap = 6) {
+  let best = null;
+  for (let c = 1; c <= n; c++) for (const big of [false, true]) {
+    const r0 = Math.ceil((n + (big ? 3 : 0)) / c);
+    if (big && (c < 3 || r0 < 2)) continue;
+    const cw = (W - gap * (c - 1)) / c, ch = (H - gap * (r0 - 1)) / r0;
+    if (cw < 34 || ch < 34) continue;
+    const ar = cw / ch, score = Math.min(cw, ch) * (ar > 1.6 || ar < 0.65 ? 0.55 : 1) * (big ? 1.08 : 1);
+    if (!best || score > best.score) best = { c, r: r0, big, score, cell: Math.min(cw, ch) };
+  }
+  return best || { c: Math.max(1, Math.floor((W + gap) / 40)), r: 1, big: false, cell: 34 };
+}
 function Gallery({ g, o, sz }) {
   const nav = useNavigate();
   const all = (g || []).filter(p => !o.okOnly || okOf(p));
@@ -2479,20 +2541,28 @@ function Gallery({ g, o, sz }) {
           <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {p.file_name || p.translated_name}</span></div>)}</div>}>
       {({ W, H }) => {
-        const n = Math.min(all.length, o.count || 8);
-        const fg = fitGrid(n, W, H, { gap: 6 });
-        // trop de place en hauteur : la derniere en grand, les autres en grille dessous
-        const used = fg.rows * fg.size + 6 * (fg.rows - 1);
-        if (n > 1 && H - used >= 90) {
-          const rg = fitGrid(n - 1, W, Math.round(H * 0.42), { gap: 6 });
-          const heroH = H - (rg.rows * rg.size + 6 * (rg.rows - 1)) - 6;
-          return <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-            {img(all[0], 0, { width: "100%", height: heroH, borderRadius: 12 })}
-            <div style={{ display: "grid", gridTemplateColumns: `repeat(${rg.cols}, ${rg.size}px)`, gap: 6, justifyContent: "space-between" }}>
-              {all.slice(1, n).map(p => img(p, rg.size))}</div></div>;
-        }
-        return <div style={{ display: "grid", gridTemplateColumns: `repeat(${fg.cols}, ${fg.size}px)`, gap: 6, justifyContent: "center", alignContent: "center", flex: 1 }}>
-          {all.slice(0, n).map(p => img(p, fg.size))}</div>;
+        // une mosaique qui remplit toute la tuile : la grille (colonnes x rangees) dont les cases sont les plus
+        // grandes et les plus carrees ; avec de la place, la derniere impression en grand (2 x 2)
+        const n = Math.min(all.length, o.count || 8), gap = 6;
+        const best = mosaic(n, W, H, gap);
+        const cap = best.c * best.r - (best.big ? 3 : 0);
+        const list = all.slice(0, Math.min(n, cap));
+        const tile = (p, k) => { const ok = okOf(p), big = best.big && k === 0, name = p.file_name || p.translated_name || "";
+          const showName = (big ? best.cell * 2 : best.cell) >= 96;
+          return <div key={p.id} data-tip={`${name}${p.print_date ? `\n${utc(p.print_date).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}` : ""}${ok ? "" : "\nratée"}`}
+            onClick={e => { e.stopPropagation(); nav(`/prints?id=${p.id}`); }}
+            style={{ position: "relative", minWidth: 0, minHeight: 0, overflow: "hidden", cursor: "pointer", borderRadius: o.round ? "50%" : 12,
+              background: "linear-gradient(135deg, rgba(20,184,166,0.10), var(--surface2))", gridColumn: big ? "span 2" : undefined, gridRow: big ? "span 2" : undefined,
+              boxShadow: ok ? "inset 0 0 0 1px var(--border)" : "inset 0 0 0 2px rgba(239,68,68,0.6)" }}>
+            <img data-pk="" src={printImg(p.id)} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
+            {showName && !o.round && <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "14px 8px 5px", fontSize: big ? 12.5 : 10.5, fontWeight: 800,
+              color: "#fff", background: "linear-gradient(to top, rgba(0,0,0,0.65), transparent)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>}
+            {!o.round && <span style={{ position: "absolute", top: 6, right: 6, width: 9, height: 9, borderRadius: "50%", background: ok ? "#22c55e" : "#ef4444",
+              boxShadow: "0 0 0 2px rgba(255,255,255,0.85)" }}/>}
+          </div>; };
+        return <div style={{ flex: 1, display: "grid", gap, gridTemplateColumns: `repeat(${best.c}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${best.r}, minmax(0, 1fr))`, minHeight: 0 }}>{list.map(tile)}</div>;
       }}
     </Tile>
   );
@@ -3462,7 +3532,8 @@ function Streak({ o, sz }) {
   };
   const active = (days || []).filter(x => x.count > 0).length;
   const hero = <Hero fill={false} value={days ? n : "…"} unit={`jour${n > 1 ? "s" : ""} d'affilée`} sub={days && `record sur 30 jours : ${best} · ${active} jours actifs`}
-    color={n ? "#ea580c" : "var(--text)"} delta={n > 0 && n >= best ? <span style={{ fontSize: 11.5, fontWeight: 800, color: "#ea580c" }}>🔥 record en cours</span> : null}/>;
+    color={n ? "#ea580c" : "var(--text)"} accent={n ? ["#EA580C", "#F59E0B"] : null}
+    delta={n > 0 && n >= best ? <span style={{ fontSize: 11.5, fontWeight: 800, color: "#ea580c" }}>🔥 record en cours</span> : null}/>;
   return (
     <Tile icon={<CalendarCheck size={15}/>} color="#F97316" label="Série" zoom={<>{hero}
       {days && <Stats items={[["Série en cours", `${n} j`, "#ea580c"], ["Record (30 j)", `${best} j`], ["Jours actifs", `${active} / 30`],
@@ -3480,7 +3551,7 @@ function Streak({ o, sz }) {
           return <div style={{ flex: 1, display: "flex", flexDirection: wide ? "row" : "column", alignItems: wide ? "center" : "flex-start",
             justifyContent: wide ? "space-between" : "center", gap: wide ? 10 : 6 }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-              <span data-pk="" style={{ fontSize: 26, fontWeight: 900, color: n ? "#ea580c" : "var(--text)", lineHeight: 1 }}>{n}</span>
+              <span data-pk="" style={{ fontSize: 26, fontWeight: 900, color: n ? "#ea580c" : "var(--text)", lineHeight: 1, ...(n ? gradText("#EA580C", "#F59E0B") : {}) }}>{n}</span>
               <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", whiteSpace: "nowrap" }}>jour{n > 1 ? "s" : ""} d'affilée</span></div>
             {row}</div>;
         }
