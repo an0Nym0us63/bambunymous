@@ -224,29 +224,39 @@ export default function Achievements({ embedded = false }) {
         </button>
       )}
 
-      {/* Derniers succes */}
-      {data.recent.length > 0 && (
-        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          <div style={sectionTitle}>Derniers succès</div>
-          <div className="no-scrollbar" style={{ display:"flex", gap:8, overflowX:"auto", padding:"2px 0" }}>
-            {data.recent.map(r => {
-              const it = byId[r.id]; if (!it) return null;
-              const t = it.tiers[r.tier];
-              return (
-                <button key={r.id + r.tier} onClick={() => setDetail(r.id)}
-                  className="card" style={{ flexShrink:0, display:"flex", alignItems:"center", gap:10, padding:"8px 12px 8px 8px",
-                    cursor:"pointer", textAlign:"left", ...feltCard(t.color || "#8B5CF6") }}>
-                  <Medal tier={t} emoji={it.emoji} size={40}/>
-                  <span style={{ display:"flex", flexDirection:"column", minWidth:0 }}>
-                    <span style={{ fontSize:13, fontWeight:700, color:"var(--text)", whiteSpace:"nowrap" }}>{it.name}</span>
-                    <span style={{ fontSize:11, color:"var(--muted)", whiteSpace:"nowrap" }}>{t.label} · {dateFr(r.at)}</span>
-                  </span>
-                </button>
-              );
-            })}
+      {/* Derniers succes ; un compte de la famille voit d'abord les siens (ses secrets a lui), puis ceux de la maison */}
+      {(() => {
+        const strip = (title, list) => list.length > 0 && (
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            <div style={sectionTitle}>{title}</div>
+            <div className="no-scrollbar" style={{ display:"flex", gap:8, overflowX:"auto", padding:"2px 0" }}>
+              {list.map(r => {
+                const it = byId[r.id]; if (!it) return null;
+                const t = it.tiers[r.tier];
+                return (
+                  <button key={r.id + r.tier} onClick={() => setDetail(r.id)}
+                    className="card" style={{ flexShrink:0, display:"flex", alignItems:"center", gap:10, padding:"8px 12px 8px 8px",
+                      cursor:"pointer", textAlign:"left", ...feltCard(t.color || "#8B5CF6") }}>
+                    <Medal tier={t} emoji={it.emoji} size={40}/>
+                    <span style={{ display:"flex", flexDirection:"column", minWidth:0 }}>
+                      <span style={{ fontSize:13, fontWeight:700, color:"var(--text)", whiteSpace:"nowrap" }}>{it.name}</span>
+                      <span style={{ fontSize:11, color:"var(--muted)", whiteSpace:"nowrap" }}>{t.label} · {dateFr(r.at)}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+        const mineRecent = data.family && !atFriend ? data.items
+          .filter(x => x.family_all && x.level >= 0 && x.tiers[0]?.at)
+          .map(x => ({ id: x.id, tier: 0, at: x.tiers[0].at }))
+          .sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 12) : [];
+        return <>
+          {strip("Mes derniers secrets", mineRecent)}
+          {strip(mineRecent.length ? `Derniers succès de la maison` : "Derniers succès", data.recent)}
+        </>;
+      })()}
 
       {/* Sections : sur PC, en colonnes ; celle qu'on ouvre prend toute la ligne. */}
       <div className="wide-list" style={{ "--wl-gap":"14px", "--wl-min":"440px" }}>
