@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useLocation } from "react-router-dom";
 import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Check, GripVertical, Columns, Monitor, Smartphone, Settings2, X, Palette, Copy, Heading, Trash2, Pencil, Send } from "lucide-react";
 import client from "../api/client";
 import { currentFriend, useFriend } from "../store/friend";
@@ -169,7 +170,10 @@ function layoutFor(lay, n) {
 
 // Les ecrans du telephone (23/10/2026) : la disposition a une colonne en porte jusqu'a quatre, cote a
 // cote, qu'on fait glisser au doigt ; apres le dernier revient le premier. Chacun a un nom bref.
-const MAX_PAGES = 4, PAGE_NAME_MAX = 16, PAGE_KEY = "bnHomePage";
+const MAX_PAGES = 4, PAGE_NAME_MAX = 16;
+// ce qui defile : le cadre de la page de l'appli (main.page-content), sinon le document
+const pageScroller = () => { const m = document.querySelector("main.page-content");
+  return m && m.scrollHeight > m.clientHeight + 1 ? m : document.scrollingElement || document.documentElement; };
 const pageName = (lay, i) => (lay.pageNames?.[i] || "").trim() || `Écran ${i + 1}`;
 // qui prend le geste : un champ ou un curseur, toujours ; un element qui defile de cote, seulement s'il
 // peut encore aller dans ce sens (un debordement de quelques pixels, ou un rang deja au bout, laisse
@@ -582,8 +586,16 @@ export default function HomeGrid({ status, blocks, top = null }) {
   const [ec, setEc] = useState(null);                // en personnalisation : la disposition reglee (nombre de colonnes)
   const saved = useRef(null);
   const [inh, setInh] = useState(null);             // disposition reprise du compte principal (son nom)
-  // l'ecran du telephone qu'on regarde (garde sur l'appareil) et son nom, montre un instant a chaque changement
-  const [page, setPageState] = useState(() => { try { return Math.max(0, parseInt(localStorage.getItem(PAGE_KEY)) || 0); } catch { return 0; } });
+  // l'ecran du telephone qu'on regarde, et son nom, montre un instant a chaque changement. Chaque arrivee sur
+  // l'accueil (onglet, retour, relance) repart du premier ecran, en haut (24/10/2026 ; avant, le dernier ecran vu)
+  const [page, setPageState] = useState(0);
+  const loc = useLocation();
+  useEffect(() => {
+    setPageState(0);
+    // le cadre de la page reste le meme d'une page a l'autre : il gardait le defilement de la precedente
+    document.querySelector("main.page-content")?.scrollTo({ top: 0 });
+    window.scrollTo({ top: 0 });
+  }, [loc.key]);
   const [flash, setFlash] = useState(null);
   const [renaming, setRenaming] = useState(false);
   const [sendFor, setSendFor] = useState(null);      // la tuile dont le choix « envoyer vers un ecran » est ouvert
@@ -684,12 +696,13 @@ export default function HomeGrid({ status, blocks, top = null }) {
   const flashT = useRef(null);
   const goPage = (i, quiet = false) => {
     setPageState(i);
-    try { localStorage.setItem(PAGE_KEY, String(i)); } catch { /* indisponible */ }
     setSel(null); setPick(null); setRenaming(false);
     if (!quiet && nPages > 1) { setFlash(i); clearTimeout(flashT.current); flashT.current = setTimeout(() => setFlash(null), 1300); }
-    // l'ecran d'arrivee se lit depuis son haut, si on etait descendu plus bas
-    const top = box.current ? box.current.getBoundingClientRect().top + window.scrollY - 70 : 0;
-    if (window.scrollY > top) window.scrollTo({ top: Math.max(0, top) });
+    // l'ecran d'arrivee se lit depuis son haut, si on etait descendu plus bas (ce qui defile : le cadre de la page)
+    const sc = pageScroller();
+    const y = sc === document.scrollingElement ? window.scrollY : sc.scrollTop;
+    const top = box.current ? box.current.getBoundingClientRect().top - (sc === document.scrollingElement ? 0 : sc.getBoundingClientRect().top) + y - 70 : 0;
+    if (y > top) sc.scrollTo({ top: Math.max(0, top) });
   };
   const setNames = f => setLay(l => { const names = [...Array(nPages).keys()].map(i => l.pageNames?.[i] || ""); return { ...l, pageNames: f(names) }; });
   const addPage = () => { if (nPages >= MAX_PAGES) return; setCols([...cols.map(c => [...c]), []]); setNames(x => [...x, ""]); goPage(nPages, true); setRenaming(true); };
