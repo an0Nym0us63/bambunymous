@@ -156,7 +156,8 @@ export function ToRateTile({ data, onClick, card }) {
   const n = data?.items?.length || 0;
   const covers = (data?.items || []).flatMap(x => x.photos?.length ? [x.photos[0]] : x.cover_url ? [x.cover_url] : []).slice(0, 4);
   return (
-    <button onClick={onClick} style={{ ...card, cursor: "pointer", padding: 0, textAlign: "left", color: "var(--text)" }}>
+    <button onClick={onClick} style={{ ...card, cursor: "pointer", padding: 0, textAlign: "left", color: "var(--text)", position: "relative",
+      border: "1.5px solid rgba(245,158,11,0.6)", boxShadow: "0 10px 24px -14px #F59E0B" }}>
       {/* Carre fixe, 2x2 cases fixes : une photo en portrait ne doit pas etirer la tuile. */}
       <div style={{ position: "relative", aspectRatio: "1", background: "var(--surface)", overflow: "hidden" }}>
         <div style={{ position: "absolute", inset: 0, display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr" }}>
@@ -164,12 +165,15 @@ export function ToRateTile({ data, onClick, card }) {
             ? <img key={i} src={u} alt="" style={{ width: "100%", height: "100%", minHeight: 0, objectFit: "cover", display: "block" }}/>
             : <MwImg key={i} src={u} w={160} style={{ width: "100%", height: "100%", minHeight: 0, objectFit: "cover", display: "block" }}/>)}
         </div>
-        <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34,
-          textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>⭐</span>
-      </div>
-      <div style={{ padding: "7px 8px 8px" }}>
-        <div style={{ fontSize: 12.5, fontWeight: 700 }}>À évaluer</div>
-        <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{n} modèle{n > 1 ? "s" : ""} imprimé{n > 1 ? "s" : ""}</div>
+        {/* le nom pose sur la mosaique, comme les collections ; l'etoile au milieu */}
+        <span aria-hidden="true" style={{ position: "absolute", inset: 0, background: "linear-gradient(rgba(245,158,11,0.18), transparent 40%, rgba(2,6,23,0.85))" }}/>
+        <span style={{ position: "absolute", left: "50%", top: "42%", transform: "translate(-50%, -50%)", width: 54, height: 54, borderRadius: "50%",
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, background: "linear-gradient(135deg, #F59E0B, #FBBF24)",
+          boxShadow: "0 8px 22px rgba(245,158,11,.55)" }}>⭐</span>
+        <span style={{ position: "absolute", left: 10, right: 10, bottom: 9, display: "flex", flexDirection: "column", gap: 1 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 900, color: "#fff", textShadow: "0 1px 6px rgba(0,0,0,.5)" }}>À évaluer</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.8)" }}>{n} modèle{n > 1 ? "s" : ""} imprimé{n > 1 ? "s" : ""}</span>
+        </span>
       </div>
     </button>
   );

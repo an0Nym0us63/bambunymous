@@ -94,15 +94,15 @@
 
 <section id="makerworld-vue">
   <h2>L'onglet MakerWorld</h2>
-  <p>Ouvre <b>Impressions</b> puis l'onglet <span class="ui">MakerWorld</span> (à côté de <span class="ui">Liste</span>, <span class="ui">Galerie</span> et <span class="ui">À faire</span>). Une rangée de pilules donne les sous-onglets : <span class="ui">Collections</span> (par défaut), <span class="ui">J'aime</span>, <span class="ui">Suivis</span>, <span class="ui">Découvrir</span> et <span class="ui">Créateur</span> (visible seulement quand un compte est lié).</p>
+  <p>Ouvre <b>Impressions</b> puis l'onglet <span class="ui">MakerWorld</span> (à côté de <span class="ui">Liste</span>, <span class="ui">Galerie</span> et <span class="ui">À faire</span>). Une barre donne les sous-onglets, l'ouvert en couleur avec son pictogramme : <span class="ui">Collections</span> (par défaut), <span class="ui">J'aime</span>, <span class="ui">Suivis</span>, <span class="ui">Découvrir</span> et <span class="ui">Créateur</span> (visible seulement quand un compte est lié).</p>
   <figure class="phone"><img src="img/makerworld-collections.webp" alt="Onglet MakerWorld, sous-onglet Collections : tuile À évaluer puis les collections en mosaïque"><figcaption>Le sous-onglet <span class="ui">Collections</span>, avec la tuile <span class="ui">À évaluer</span> en tête.</figcaption></figure>
 
   <section id="makerworld-vue-barre">
     <h3>La barre d'actions</h3>
     <dl class="opts">
       <dt>⟳</dt><dd>« Interroger MakerWorld maintenant » : relit la liste sans passer par le cache. Visible quand un compte est lié, et dans Découvrir.</dd>
-      <dt>＋</dt><dd>« Nouvelle collection » (onglet Collections, droit MakerWorld) : voir <a href="#makerworld-collections-gerer">Gérer les collections</a>.</dd>
-      <dt>Filtre <span class="ui">Tous (N)</span></dt><dd>Sur les listes de modèles : <span class="ui">Tous</span>, <span class="ui">Déjà imprimés</span> ou <span class="ui">Jamais imprimés</span>, avec le nombre de chaque. Pratique pour repérer ce qui reste à imprimer dans une collection.</dd>
+      <dt><span class="ui">＋ Collection</span></dt><dd>« Nouvelle collection » (onglet Collections, droit MakerWorld) : voir <a href="#makerworld-collections-gerer">Gérer les collections</a>.</dd>
+      <dt>Filtre <span class="ui">Tous · ✓ Imprimés · Jamais</span></dt><dd>Sur les listes de modèles, à droite : tous les modèles, ceux déjà imprimés ou ceux jamais imprimés, avec le nombre de chaque. Pratique pour repérer ce qui reste à imprimer dans une collection.</dd>
     </dl>
     <p>Les listes se chargent avec un squelette de tuiles grisées, puis se complètent en défilant (défilement infini, ou bouton <span class="ui">Plus de modèles (n / total)</span>). Ce qui a déjà été vu reste en mémoire le temps de la session : revenir sur un onglet est instantané, la mise à jour se fait en fond. Si quelques fiches manquent encore, la ligne « N modèles en cours de lecture… » l'indique et la liste se recharge seule quelques secondes plus tard.</p>
     <p>Si MakerWorld répond mal, un message orange l'indique : « MakerWorld ne répond pas comme prévu : … ». Rien d'autre n'est touché.</p>
@@ -111,10 +111,9 @@
   <section id="makerworld-tuile">
     <h3>La tuile d'un modèle</h3>
     <ul>
-      <li><b>Couverture</b> carrée, avec le ruban <span class="ui">✓ IMPRIMÉ</span> (et bordure verte) ou <span class="ui">EN COURS</span>.</li>
-      <li><b>Titre</b>, puis « par <i>créateur</i> » : touche le nom (souligné en pointillé) pour ouvrir <a href="#makerworld-page-createur">la page du créateur</a>. Dans Suivis, la date de publication suit (« aujourd'hui », « hier », « il y a 3 j »…).</li>
+      <li><b>Couverture</b> carrée, avec le ruban <span class="ui">✓ IMPRIMÉ</span> (et une carte teintée de vert) ou <span class="ui">⏳ EN COURS</span>. En haut à droite, l'étoile <span class="ui">☆</span> range le modèle dans tes collections (droit MakerWorld) — voir <a href="#makerworld-ranger">Ranger dans mes collections</a>.</li>
+      <li><b>Titre</b>, puis « par <i>créateur</i> » : touche le nom (en couleur) pour ouvrir <a href="#makerworld-page-createur">la page du créateur</a>. Dans Suivis, la date de publication suit (« aujourd'hui », « hier », « il y a 3 j »…).</li>
       <li><b>En bas</b> : <span class="ui">✓ Imprimé</span>, <span class="ui">✓ Imprimé · 5 impressions</span> ou <span class="ui">✓ Imprimé · 3 plateaux · 5 impressions</span> (touche-le pour voir ces impressions dans la Liste de l'historique) ; ou « ⏳ en cours d'impression » ; ou « jamais imprimé ».</li>
-      <li><span class="ui">☆ Collections</span> : range le modèle dans tes collections (droit MakerWorld) — voir <a href="#makerworld-ranger">Ranger dans mes collections</a>.</li>
     </ul>
     <p>Touche la tuile pour ouvrir <a href="#makerworld-fiche">la fiche du modèle</a>. Un <b>appui long</b> (ou un clic droit sur ordinateur) ouvre un menu :</p>
     <figure class="phone"><img src="img/makerworld-menu-modele.webp" alt="Menu d'appui long d'une tuile de modèle"><figcaption>Le menu d'une tuile (ici en administrateur).</figcaption></figure>
@@ -130,12 +129,12 @@
 
 <section id="makerworld-collections">
   <h2>Collections</h2>
-  <p>Le sous-onglet par défaut montre tes collections MakerWorld en grille : une mosaïque des quatre premières couvertures, le nom et le nombre de modèles. État vide : « Aucune collection. »</p>
+  <p>Le sous-onglet par défaut montre tes collections MakerWorld en grille : une mosaïque des quatre premières couvertures, avec le nom et le nombre de modèles posés dessus. État vide : « Aucune collection. »</p>
   <p>En tête de grille, la tuile <span class="ui">⭐ À évaluer</span> (« N modèles imprimés ») apparaît quand tu as imprimé des modèles MakerWorld que tu n'as pas encore évalués. Elle ouvre l'écran décrit dans <a href="#impressions-a-evaluer">À évaluer</a>.</p>
 
   <section id="makerworld-collection-ouverte">
     <h3>Ouvrir une collection</h3>
-    <p>Touche une collection : ses modèles s'affichent en tuiles. Une ligne « ‹ <i>nom</i> » reste collée en haut pendant le défilement ; <span class="ui">‹</span>, le geste Retour du téléphone ou le bouton Retour du navigateur referment la collection (sans quitter la page).</p>
+    <p>Touche une collection : ses modèles s'affichent en tuiles. Une barre « ‹ 📁 <i>nom</i> », avec le nombre de modèles et combien sont déjà imprimés, reste collée en haut pendant le défilement ; <span class="ui">‹</span>, le geste Retour du téléphone ou le bouton Retour du navigateur referment la collection (sans quitter la page).</p>
     <p>Sur la couverture d'un modèle rangé dans la collection <b>depuis BambuNymous</b>, une petite étiquette <span class="ui">＋ <i>nom</i></span> dit quel compte l'y a ajouté (la date au survol). Un modèle rangé depuis le site ou l'appli MakerWorld, ou avant cette fonction, n'en a pas. Le retirer de la collection efface l'étiquette ; s'il était déjà dedans, le re-ranger ne change pas son auteur.</p>
     <figure class="phone"><img src="img/makerworld-collection-ouverte.webp" alt="Collection À imprimer ouverte : tuiles de modèles avec rubans IMPRIMÉ et EN COURS"><figcaption>Une collection ouverte : ✎ pour renommer, 🗑 pour supprimer, le filtre à droite.</figcaption></figure>
   </section>
@@ -144,7 +143,7 @@
     <h3>Créer, renommer, supprimer une collection</h3>
     <p>Ces gestes demandent le droit MakerWorld et agissent <b>sur MakerWorld</b>.</p>
     <ul>
-      <li><b>Créer</b> : touche <span class="ui">＋</span>, tape un nom (60 caractères au plus) dans « Nom de la nouvelle collection », puis <span class="ui">Créer</span> (ou Entrée ; ✕ ou Échap pour annuler).</li>
+      <li><b>Créer</b> : touche <span class="ui">＋ Collection</span>, tape un nom (60 caractères au plus) dans « Nom de la nouvelle collection », puis <span class="ui">Créer</span> (ou Entrée ; ✕ ou Échap pour annuler).</li>
       <li><b>Renommer</b> : dans une collection ouverte, touche <span class="ui">✎</span> ; ou appui long sur la collection → <span class="ui">✎ Renommer</span>. Tape le nouveau nom puis <span class="ui">Renommer</span>.</li>
       <li><b>Supprimer</b> : dans une collection ouverte, touche <span class="ui">🗑</span> ; ou appui long → <span class="ui">🗑 Supprimer…</span>. L'appli demande « Supprimer la collection « X » sur MakerWorld ? Les modèles, eux, restent. » ; confirme avec <span class="ui">Supprimer</span>.</li>
     </ul>
@@ -153,7 +152,7 @@
 
   <section id="makerworld-ranger">
     <h3>Ranger un modèle dans mes collections</h3>
-    <p>Touche <span class="ui">☆ Collections</span> sur une tuile ou dans une fiche. La fenêtre « Ranger dans mes collections » liste tes collections avec une case à cocher et leur effectif ; celles qui contiennent déjà le modèle sont cochées.</p>
+    <p>Touche l'étoile <span class="ui">☆</span> sur une tuile, ou <span class="ui">☆ Collections</span> dans une fiche. La fenêtre « Ranger dans mes collections » liste tes collections avec une case à cocher et leur effectif ; celles qui contiennent déjà le modèle sont cochées.</p>
     <figure class="phone"><img src="img/makerworld-ranger.webp" alt="Fenêtre Ranger dans mes collections avec les cases à cocher"><figcaption>Coche ou décoche, puis <span class="ui">Enregistrer</span>.</figcaption></figure>
     <ol>
       <li>Coche les collections où le modèle doit être, décoche celles d'où il doit sortir. Au-delà de 8 collections, un champ <span class="ui">Chercher une collection…</span> aide à trouver.</li>
@@ -234,7 +233,7 @@
       <li><b>POINTS GAGNÉS</b> (pleine largeur) : le total gagné depuis toujours, et les gains sur <b>7 j</b>, <b>30 j</b> et <b>1 an</b>.</li>
       <li><b>TÉLÉCHARGEMENTS</b>, <b>IMPRESSIONS</b>, <b>BOOSTS REÇUS</b>, <b>J'AIME</b> : le total de ton compte, et la progression sur 7 j, 30 j et 1 an. Un « ≥ » signale que l'appli n'a pas de relevés sur toute la période (le chiffre réel est au moins celui-là) ; « — » qu'il est inconnu.</li>
     </ul>
-    <p>Sous la carte, deux pilules : <span class="ui">Mes modèles (N)</span> et <span class="ui">Historique des points</span>.</p>
+    <p>Sous la carte, une bascule à deux positions : <span class="ui">🧩 Mes modèles (N)</span> et <span class="ui">🪙 Historique des points</span>.</p>
     <div class="note"><p>Les graphiques jour par jour (points, gains, compteurs) sont dans la tuile <a href="#tuiles-mw">MakerWorld de l'accueil</a>, en grand format.</p></div>
   </section>
 
@@ -244,7 +243,7 @@
     <dl class="opts">
       <dt>Type</dt><dd><span class="ui">Points</span> (par défaut), <span class="ui">Téléchargements</span>, <span class="ui">Impressions</span>, <span class="ui">Boosts</span>, <span class="ui">J'aime</span>.</dd>
       <dt>Période</dt><dd><span class="ui">7 jours</span>, <span class="ui">30 jours</span> (par défaut), <span class="ui">90 jours</span>, <span class="ui">1 an</span>, <span class="ui">Depuis le début</span>.</dd>
-      <dt>Tri</dt><dd><span class="ui">Les meilleurs</span> (par défaut, selon le type et la période), <span class="ui">Plus récents</span> ou <span class="ui">Plus anciens</span> : par date de publication, rappelée sous chaque modèle (« publié le 20 oct. 2026 »). Le chiffre à droite suit toujours le type et la période.</dd>
+      <dt>Tri</dt><dd><span class="ui">Meilleurs</span> (par défaut, selon le type et la période), <span class="ui">Plus récents</span> ou <span class="ui">Plus anciens</span> : par date de publication, rappelée sous chaque modèle (« publié le 20 oct. 2026 »). Le chiffre à droite suit toujours le type et la période.</dd>
     </dl>
     <figure class="phone"><img src="img/makerworld-createur-modeles.webp" alt="Liste Mes modèles classée par points sur 30 jours, avec la provenance des points"><figcaption>Le classement par points sur 30 jours, avec la provenance (modèle, profil, boosts).</figcaption></figure>
     <p>Chaque ligne montre la couverture, le titre (« · exclusif » le cas échéant), les compteurs « ⬇️ téléchargements · 🖨️ impressions · ⚡ boosts · ❤ j'aime », et à droite le gain sur la période. En mode Points, une ligne précise d'où viennent les points : <b>modèle</b>, <b>profil</b> (profils d'impression publiés) et <b>⚡ boosts</b>. Touche une ligne pour ouvrir la fiche du modèle.</p>
@@ -264,7 +263,7 @@
 
   <section id="makerworld-createur-points">
     <h3>Historique des points</h3>
-    <p>La pilule <span class="ui">Historique des points</span> liste tes versements de points, regroupés par jour (« lun. 20 oct. ») avec le total du jour en vert (ou en rouge s'il est négatif). Chaque ligne indique l'origine (<b>Modèle</b>, <b>Profil</b>, <b>Boost</b>…), le titre du modèle (et du profil), une mention <b>excl.</b> pour un bonus de points exclusifs, et le nombre de points. Touche une ligne pour ouvrir la fiche du modèle ; <span class="ui">Plus anciens (n / total)</span> charge la suite.</p>
+    <p><span class="ui">🪙 Historique des points</span> liste tes versements de points, regroupés par jour (« lun. 20 oct. ») avec le total du jour en vert (ou en rouge s'il est négatif). Chaque ligne indique l'origine (<b>Modèle</b>, <b>Profil</b>, <b>Boost</b>…), le titre du modèle (et du profil), une mention <b>excl.</b> pour un bonus de points exclusifs, et le nombre de points. Touche une ligne pour ouvrir la fiche du modèle ; <span class="ui">Plus anciens (n / total)</span> charge la suite.</p>
     <figure class="phone"><img src="img/makerworld-createur-points.webp" alt="Historique des points regroupé par jour"><figcaption>Les points reçus, jour par jour.</figcaption></figure>
   </section>
 </section>

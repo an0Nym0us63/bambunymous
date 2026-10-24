@@ -14,6 +14,9 @@ const ST = {
 };
 const FILTERS = [["open", "En cours"], ["judging", "Délibération"], ["ended", "Terminés"], ["all", "Tous"]];
 const MEDAL = { 1: "🥇", 2: "🥈", 3: "🥉" };
+const pill = (on, c = "#EAB308") => ({ padding: "6px 12px", borderRadius: 20, fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
+  color: on ? "#fff" : "var(--text2)", border: on ? "1px solid transparent" : "1px solid var(--border)",
+  background: on ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` : "var(--surface2)", boxShadow: on ? `0 6px 14px -8px ${c}` : "none" });
 // Dates de MakerWorld en UTC (une fin « 22/11 23:59 UTC » tombe le 23 a Paris).
 const day = d => d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", timeZone: "UTC" }) : "";
 const left = d => {
@@ -53,15 +56,13 @@ export default function MwContests({ onOpen, reload = 0 }) {
   if (err && !list?.length) return <p style={{ ...msg, color: "#f59e0b" }}>{err}</p>;
   if (!list) return <p style={msg}>Lecture des concours…</p>;
   const shown = list.filter(c => filter === "all" || c.status === filter);
-  const pill = on => ({ padding: "4px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: 600, cursor: "pointer",
-    background: on ? "rgba(59,130,246,0.15)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--text2)",
-    border: on ? "1px solid #3b82f6" : "1px solid var(--border)" });
+
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {FILTERS.map(([k, l]) => (
-          <button key={k} onClick={() => setFilter(k)} style={pill(filter === k)}>
+          <button key={k} onClick={() => setFilter(k)} style={pill(filter === k, (ST[k] || ["", "#EAB308"])[1].startsWith("#94") ? "#64748B" : (ST[k] || ["", "#EAB308"])[1])}>
             {l} ({k === "all" ? list.length : list.filter(c => c.status === k).length})</button>
         ))}
       </div>
@@ -95,12 +96,13 @@ function Contest({ c, onOpen }) {
   }, []);
   const designs = c.designs.slice(0, cols * 2);
   return (
-    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+    <div style={{ padding: 0, overflow: "hidden", borderRadius: 20, border: `1px solid color-mix(in srgb, ${color} 30%, var(--border))`,
+      background: `linear-gradient(160deg, ${color}14, transparent 45%), var(--surface2)`, boxShadow: `0 12px 28px -18px ${color}` }}>
       {c.cover && <MwImg src={c.cover} w={720} style={{ width: "100%", aspectRatio: "16 / 6", objectFit: "cover", display: "block" }}/>}
       <div style={{ padding: "10px 12px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 10.5, fontWeight: 800, color: "white", background: color, borderRadius: 20, padding: "1px 8px" }}>{label}</span>
+            <span style={{ fontSize: 10.5, fontWeight: 900, color: "white", background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, #ffffff))`, borderRadius: 20, padding: "2px 9px" }}>{label}</span>
             <span style={{ fontSize: 11, color: "var(--muted)" }}>{when}</span>
           </div>
           <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)", marginTop: 4, lineHeight: 1.3 }}>{c.name}</div>
@@ -112,8 +114,7 @@ function Contest({ c, onOpen }) {
 
         {c.rewards?.length > 0 && (
           <div>
-            <button onClick={() => setRewards(v => !v)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
-              fontSize: 12, fontWeight: 700, color: "#3b82f6" }}>🎁 Récompenses {rewards ? "▴" : "▾"}</button>
+            <button onClick={() => setRewards(v => !v)} style={{ ...pill(rewards, "#EC4899"), padding: "5px 11px" }}>🎁 Récompenses {rewards ? "▴" : "▾"}</button>
             {rewards && (
               <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
                 {c.rewards.map((r, i) => (
@@ -134,7 +135,7 @@ function Contest({ c, onOpen }) {
             <div ref={box} style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 6 }}>
               {designs.map(x => (
                 <button key={x.design_id} onClick={() => onOpen(x)} title={x.title_fr || x.title}
-                  style={{ padding: 0, border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", cursor: "pointer",
+                  style={{ padding: 0, border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", cursor: "pointer",
                     background: "var(--surface2)", textAlign: "left", color: "var(--text)", position: "relative" }}>
                   {x.cover_url ? <MwImg src={x.cover_url} w={200} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }}/>
                     : <div style={{ width: "100%", aspectRatio: "1" }}/>}
@@ -147,8 +148,7 @@ function Contest({ c, onOpen }) {
               ))}
             </div>
             {(c.entries || 0) > 0 && (
-              <button onClick={() => setAll(true)} style={{ marginTop: 8, background: "none", border: "none", padding: 0, cursor: "pointer",
-                fontSize: 12, fontWeight: 700, color: "#3b82f6" }}>Voir les {c.entries} modèles du concours ›</button>
+              <button onClick={() => setAll(true)} style={{ ...pill(true, "#EAB308"), marginTop: 8 }}>Voir les {c.entries} modèles du concours ›</button>
             )}
           </div>
         )}
@@ -181,15 +181,14 @@ function ContestEntries({ c, onOpen, onClose }) {
     } catch { /* on garde l'affiche */ }
     setMore(false);
   };
-  const pill = on => ({ padding: "4px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: 600, cursor: "pointer",
-    background: on ? "rgba(59,130,246,0.15)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--text2)",
-    border: on ? "1px solid #3b82f6" : "1px solid var(--border)" });
+
   return (
     <div data-no-pull="" onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 4100, background: "rgba(0,0,0,0.6)",
       display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
       <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ width: "100%", maxWidth: 820, height: "92vh",
-        borderRadius: "18px 18px 0 0", border: "1px solid var(--border)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px 10px", borderBottom: "1px solid var(--border)" }}>
+        borderRadius: "22px 22px 0 0", border: "1px solid var(--border)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px 12px", borderBottom: "1px solid var(--border)",
+          background: "linear-gradient(135deg, rgba(234,179,8,0.20), transparent 70%)" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14.5, fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               🏆 {c.name}</div>
@@ -200,15 +199,15 @@ function ContestEntries({ c, onOpen, onClose }) {
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
           <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-            <button onClick={() => setOrder("hot")} style={pill(order === "hot")}>🔥 Populaires</button>
-            <button onClick={() => setOrder("new")} style={pill(order === "new")}>🆕 Récents</button>
+            <button onClick={() => setOrder("hot")} style={pill(order === "hot", "#F97316")}>🔥 Populaires</button>
+            <button onClick={() => setOrder("new")} style={pill(order === "new", "#3B82F6")}>🆕 Récents</button>
           </div>
           {!data ? <p style={{ textAlign: "center", color: "var(--muted)", fontSize: 13, padding: 24 }}>Lecture des modèles…</p>
             : data.error && !data.items.length ? <p style={{ textAlign: "center", color: "#f59e0b", fontSize: 13, padding: 24 }}>{data.error}</p> : (<>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: 8 }}>
               {data.items.map(x => (
                 <button key={x.design_id} onClick={() => onOpen(x)}
-                  style={{ padding: 0, border: x.printed > 0 ? "1.5px solid #22c55e" : "1px solid var(--border)", borderRadius: 10,
+                  style={{ padding: 0, border: x.printed > 0 ? "1.5px solid #22c55e" : "1px solid var(--border)", borderRadius: 16,
                     overflow: "hidden", cursor: "pointer", background: "var(--surface2)", textAlign: "left", color: "var(--text)", position: "relative" }}>
                   {x.cover_url ? <MwImg src={x.cover_url} w={260} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }}/>
                     : <div style={{ width: "100%", aspectRatio: "1" }}/>}

@@ -141,9 +141,10 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12, paddingBottom:16 }}>
-      <div className="card" style={{ padding:"14px 16px" }}>
+      <div style={{ padding:"14px 16px", borderRadius:22, border:"1px solid color-mix(in srgb, #F59E0B 25%, var(--border))",
+        background:"radial-gradient(90% 60% at 100% 0%, rgba(245,158,11,0.16), transparent 70%), radial-gradient(70% 50% at 0% 0%, rgba(34,197,94,0.12), transparent 70%), var(--surface2)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          {p.avatar && <MwImg src={p.avatar} w={96} eager style={{ width:46, height:46, borderRadius:"50%", flexShrink:0 }}/>}
+          {p.avatar && <MwImg src={p.avatar} w={96} eager style={{ width:50, height:50, borderRadius:"50%", flexShrink:0, boxShadow:"0 0 0 2px #22C55E, 0 8px 18px -8px #22C55E" }}/>}
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ fontSize:15, fontWeight:800, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis",
               whiteSpace:"nowrap" }}>{p.name}</div>
@@ -151,7 +152,7 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
               @{p.handle}{p.level ? <> · <b style={{ color:"var(--text2)", fontWeight:700 }}>niveau {p.level}</b></> : null}</div>
           </div>
           <div style={{ textAlign:"right" }}>
-            <div style={{ fontSize:22, fontWeight:900, color:"#f59e0b", lineHeight:1 }}>🪙 {pts(p.points.total)}</div>
+            <div style={{ fontSize:24, fontWeight:900, lineHeight:1 }}>🪙 <span style={grad("#F59E0B", "#FBBF24")}>{pts(p.points.total)}</span></div>
             <div style={{ fontSize:10.5, color:"var(--muted)", marginTop:3 }}>
               {pts(p.points.regular)} normaux · {pts(p.points.exclusive)} exclusifs</div>
           </div>
@@ -183,8 +184,8 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
                 <span style={{ fontSize:10, fontWeight:700, color:"var(--muted)", textTransform:"uppercase",
                   letterSpacing:"0.03em", lineHeight:1.2, minWidth:0, overflowWrap:"anywhere" }}>{l}</span>
               </div>
-              <div style={{ fontSize:22, fontWeight:900, color:"var(--text)", margin:"7px 0 8px",
-                letterSpacing:"-0.02em", lineHeight:1 }}>{v}</div>
+              <div style={{ fontSize:22, fontWeight:900, margin:"7px 0 8px", letterSpacing:"-0.02em", lineHeight:1.1,
+                ...grad(c, `color-mix(in srgb, ${c} 55%, #ffffff)`) }}>{v}</div>
               {sub && (
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:3 }}>
                   {sub.map(([k, n, x]) => (
@@ -202,12 +203,17 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
         </div>
       </div>
 
-      <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
-        {[["models", `Mes modèles (${data.models.length})`], ["points", "Historique des points"]].map(([k, l]) => (
-          <button key={k} onClick={() => setView(k)} style={pill(view === k)}>{l}</button>
-        ))}
+      <div style={{ display:"flex", gap:6, flexDirection:"column" }}>
+        <div style={{ display:"flex", gap:3, padding:3, borderRadius:16, background:"var(--surface2)", border:"1px solid var(--border)" }}>
+          {[["models", `Mes modèles (${data.models.length})`, "🧩", "#22C55E"], ["points", "Historique des points", "🪙", "#F59E0B"]].map(([k, l, ic, c]) => (
+            <button key={k} onClick={() => setView(k)} style={{ flex:1, minWidth:0, padding:"8px 6px", borderRadius:12, border:"none", cursor:"pointer",
+              fontSize:12.5, fontWeight:800, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+              background: view === k ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` : "transparent",
+              color: view === k ? "#fff" : "var(--muted)", boxShadow: view === k ? `0 6px 14px -6px ${c}` : "none" }}>{ic} {l}</button>
+          ))}
+        </div>
         {view === "models" && (
-          <span style={{ marginLeft:"auto", display:"flex", gap:6 }}>
+          <span style={{ display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:6 }}>
             <select value={type} onChange={e => setType(e.target.value)} aria-label="Type" style={sel}>
               {TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
@@ -215,7 +221,7 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
               {PERIODS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
             <select value={order} onChange={e => setOrder(e.target.value)} aria-label="Tri" style={sel}>
-              <option value="value">Les meilleurs</option>
+              <option value="value">Meilleurs</option>
               <option value="new">Plus récents</option>
               <option value="old">Plus anciens</option>
             </select>
@@ -250,10 +256,11 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
           {models.map(m => (
             <button key={m.design_id} onClick={() => onOpen?.({ design_id: m.design_id, title: m.title, title_fr: m.title_fr, cover_url: m.cover_url })}
               onPointerDown={() => prefetchModel(m.design_id)}
-              style={{ display:"flex", alignItems:"center", gap:10, padding:8, borderRadius:12, cursor:"pointer", textAlign:"left",
-                background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)" }}>
-              {m.cover_url ? <MwImg src={m.cover_url} w={110} style={{ width:52, height:52, borderRadius:8, objectFit:"cover", flexShrink:0 }}/>
-                : <span style={{ width:52, height:52, borderRadius:8, background:"var(--surface)", flexShrink:0 }}/>}
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 10px", borderRadius:16, cursor:"pointer", textAlign:"left",
+                background: val(m) ? "linear-gradient(135deg, rgba(34,197,94,0.10), transparent 55%), var(--surface2)" : "var(--surface2)",
+                border:"1px solid var(--border)", color:"var(--text)" }}>
+              {m.cover_url ? <MwImg src={m.cover_url} w={110} style={{ width:54, height:54, borderRadius:12, objectFit:"cover", flexShrink:0 }}/>
+                : <span style={{ width:54, height:54, borderRadius:12, background:"var(--surface)", flexShrink:0 }}/>}
               <span style={{ flex:1, minWidth:0 }}>
                 <span style={{ display:"block", fontSize:12.5, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                   {m.title_fr || m.title}{m.exclusive ? <span style={{ fontSize:10, color:"#a78bfa", fontWeight:800 }}> · exclusif</span> : null}</span>
@@ -263,7 +270,7 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
                   publié le {new Date(m.created).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}</span>}
               </span>
               <span style={{ textAlign:"right", flexShrink:0 }}>
-                <span style={{ display:"block", fontSize:13, fontWeight:800, color: val(m) ? "#22c55e" : "var(--muted)" }}>
+                <span style={{ display:"block", fontSize:14, fontWeight:900, ...(val(m) ? grad("#16A34A", "#4ADE80") : { color:"var(--muted)" }) }}>
                   {val(m) ? `${period === "all" ? "" : "+"}${type === "points" ? pts(val(m)) : fmt(val(m))}` : "0"}</span>
                 <span style={{ display:"block", fontSize:9.5, color: partial ? "#f59e0b" : "var(--muted)" }}>
                   {typeShort} {partial && since ? `depuis le ${since}` : SHORT[period]}</span>
@@ -281,7 +288,8 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
       ) : !hist ? <p style={msg}>…</p> : (
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           {days.map(d => (
-            <div key={d.day} className="card" style={{ padding:"10px 12px" }}>
+            <div key={d.day} style={{ padding:"10px 12px", borderRadius:16, border:"1px solid var(--border)",
+              background: d.sum >= 0 ? "linear-gradient(135deg, rgba(34,197,94,0.08), transparent 60%), var(--surface2)" : "var(--surface2)" }}>
               <div style={{ display:"flex", alignItems:"center", marginBottom:6 }}>
                 <span style={{ flex:1, fontSize:12, fontWeight:800, color:"var(--text2)" }}>
                   {new Date(d.day + "T12:00:00").toLocaleDateString("fr-FR", { weekday:"short", day:"numeric", month:"short" })}</span>
@@ -370,9 +378,10 @@ export const CONSOLE_SCRIPT = `(async () => {
   document.body.appendChild(a); a.click(); a.remove();
   console.log("Fini : mw-historique.json est téléchargé, importe-le dans BambuNymous.");
 })();`;
-const sel = { fontSize:12, padding:"4px 8px", borderRadius:8, background:"var(--surface2)",
-  border:"1px solid var(--border)", color:"var(--text2)" };
+const sel = { fontSize:12.5, fontWeight:800, height:36, padding:"0 8px", borderRadius:18, background:"var(--surface2)", minWidth:0,
+  border:"1px solid var(--border)", color:"var(--text)" };
+const grad = (a, b) => ({ backgroundImage:`linear-gradient(135deg, ${a}, ${b})`, WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" });
 const msg = { fontSize:13, color:"var(--muted)", padding:"20px 4px", margin:0, lineHeight:1.5 };
-const pill = on => ({ padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer",
+const pill = on => ({ padding:"6px 12px", borderRadius:20, fontSize:12, fontWeight:800, cursor:"pointer",
   background: on ? "rgba(59,130,246,0.15)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--text2)",
   border: on ? "1px solid #3b82f6" : "1px solid var(--border)" });
