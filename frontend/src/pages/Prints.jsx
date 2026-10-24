@@ -1229,7 +1229,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
     </div>);
   return (
     <>
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: wide ? "center" : "flex-end",
+      <div data-no-pull="" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: wide ? "center" : "flex-end",
         justifyContent: "center", padding: wide ? 20 : 0 }} onClick={onClose}>
         <div onClick={e => e.stopPropagation()} className="sheet-inner" style={{ background: "var(--sheet-bg)", borderRadius: wide ? 24 : "22px 22px 0 0",
           width: "100%", maxWidth: wide ? 980 : 640, maxHeight: wide ? "90dvh" : "94dvh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -1649,7 +1649,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     </div>);
   return (
     <>
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: wide ? "center" : "flex-end",
+      <div data-no-pull="" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: wide ? "center" : "flex-end",
         justifyContent: "center", padding: wide ? 20 : 0 }} onClick={onClose}>
         <div onClick={e => e.stopPropagation()} className="sheet-inner" style={{ background: "var(--sheet-bg)", borderRadius: wide ? 24 : "22px 22px 0 0",
           width: "100%", maxWidth: wide ? 980 : 640, maxHeight: wide ? "90dvh" : "94dvh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -2102,9 +2102,8 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
             </div>
           )}
         </div>
-        {/* touchAction pan-x : cette bande ne repond qu'au glissement
-            horizontal, le composant vertical du geste n'est plus consomme ici
-            et ne declenche donc plus le tirer-pour-rafraichir. */}
+        {/* pan-x pan-y : le glisse vertical fait defiler la fiche ; la fiche porte data-no-pull, le
+            tirer-pour-rafraichir ne se declenche donc pas depuis cette bande. */}
         <div ref={scrollRef} style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6,
           scrollbarWidth:"none", touchAction:"pan-x pan-y", overscrollBehaviorX:"contain" }}>
           {items.map((item, i) => {
