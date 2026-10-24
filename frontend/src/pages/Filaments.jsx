@@ -125,47 +125,73 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect })
   };
 
   const Label = ({ children }) => (
-    <label style={{ display:"block", fontSize:11, color:"var(--muted)", marginBottom:4, textTransform:"uppercase", letterSpacing:"0.05em" }}>{children}</label>
+    <label style={{ display:"block", fontSize:12, fontWeight:800, color:"var(--muted)", marginBottom:5 }}>{children}</label>
   );
+  const field = { width:"100%", boxSizing:"border-box", height:42, padding:"0 12px", borderRadius:12, fontSize:14, fontWeight:700,
+    background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text)", outline:"none" };
+  const selColors = selected ? parseColorsList(selected.color, selected.colors_array) : null;
+  const selMain = selected ? (paleHex(selected.color) ? "#94a3b8" : (hexToCss(selected.color) || "#3B82F6")) : "#3B82F6";
+  const full = selected?.filament_weight_g || 1000;
 
   return (
-    <div onClick={onClose}
-      style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ width:"100%", maxWidth:420, padding:20, display:"flex", flexDirection:"column", gap:14 }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <h2 style={{ fontWeight:700, fontSize:15, color:"var(--text)" }}>Nouvelle bobine</h2>
-          <button onClick={onClose} style={{ color:"var(--muted)", background:"none", border:"none", cursor:"pointer" }}><X size={18}/></button>
+    <FSheet onClose={onClose} z={1100}
+      bottom={<>
+        <button onClick={onClose} style={{ ...fBtn, flex:1, color:"var(--muted)" }}>Annuler</button>
+        <button onClick={handleSave} disabled={saving||!form.filament_id}
+          style={{ ...fBtn, flex:2, border:"none", color:"#fff", opacity: saving||!form.filament_id ? 0.5 : 1,
+            background:"linear-gradient(135deg, #22C55E, #16A34A)", boxShadow:"0 8px 18px -10px #22C55E" }}>
+          {saving ? <RefreshCw size={14} style={{animation:"spin 1s linear infinite"}}/> : <Save size={14}/>}
+          Enregistrer la bobine
+        </button>
+      </>}>
+      {/* en-tete : la bobine qui va naitre, a la couleur du filament choisi */}
+      <div style={{ padding:"44px 16px 16px", display:"flex", alignItems:"center", gap:14,
+        background:`radial-gradient(circle at 15% 50%, ${selMain}50, transparent 60%), linear-gradient(135deg, ${selMain}22, transparent 70%), var(--surface2)` }}>
+        <span style={{ display:"inline-flex", flexShrink:0, filter:`drop-shadow(0 6px 14px ${selMain}66)` }}>
+          {selected ? <SpoolSVG colors={selColors} size={74} type={selected.multicolor_type}/>
+            : <span style={{ width:74, height:74, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:30,
+                border:"2px dashed var(--border)", color:"var(--muted)" }}>＋</span>}</span>
+        <div style={{ minWidth:0, flex:1 }}>
+          <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#22C55E" }}>＋ Nouvelle bobine</div>
+          <div style={{ fontSize:19, fontWeight:900, color:"var(--text)", lineHeight:1.2 }}>
+            {selected ? (selected.translated_name || selected.name) : "Choisis le filament"}</div>
+          {selected && <div style={{ fontSize:12.5, fontWeight:700, color:"var(--text2)" }}>
+            {[selected.manufacturer, selected.fila_type || selected.material].filter(Boolean).join(" · ")}</div>}
         </div>
+      </div>
 
-        <div>
-          <Label>Filament *</Label>
-
+      <div style={{ padding:"12px 14px 18px", display:"flex", flexDirection:"column", gap:12 }}>
+        <FCard t="Filament *" i="🎨" c="#8B5CF6" aside={selected && <button onClick={() => { setForm(f => ({...f, filament_id:""})); setQ(""); }}
+          style={{ padding:"4px 10px", borderRadius:20, fontSize:11.5, fontWeight:800, cursor:"pointer", border:"1px solid var(--border)",
+            background:"var(--surface)", color:"var(--text2)" }}>Changer</button>}>
           {/* Un <select> natif avec des centaines de references, en vrac et sans
               couleur, etait inutilisable : liste cherchable, groupee par matiere,
               avec la pastille. */}
           {selected ? (
-            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 10px",
-              borderRadius:8, background:"rgba(59,130,246,0.10)",
-              border:"1px solid rgba(59,130,246,0.25)" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", marginTop:4,
+              borderRadius:12, background:"rgba(139,92,246,0.12)", border:"1px solid rgba(139,92,246,0.3)" }}>
               <ColorDot color={selected.color} colorsArray={selected.colors_array}
-                multicolorType={selected.multicolor_type} size={16}/>
-              <span style={{ flex:1, minWidth:0, fontSize:12, color:"var(--text)", fontWeight:600,
+                multicolorType={selected.multicolor_type} size={20}/>
+              <span style={{ flex:1, minWidth:0, fontSize:13, color:"var(--text)", fontWeight:800,
                 overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                 {selected.translated_name || selected.name}
-                <span style={{ color:"var(--muted)", fontWeight:400 }}>
+                <span style={{ color:"var(--muted)", fontWeight:600 }}>
                   {" · "}{[selected.manufacturer, selected.fila_type || selected.material].filter(Boolean).join(" · ")}
                 </span>
               </span>
-              <button onClick={() => { setForm(f => ({...f, filament_id:""})); setQ(""); }}
+              <button onClick={() => { setForm(f => ({...f, filament_id:""})); setQ(""); }} aria-label="Changer de filament"
                 style={{ background:"none", border:"none", cursor:"pointer",
                   color:"var(--muted)", fontSize:14 }}>✕</button>
             </div>
           ) : (<>
-            <input value={q} onChange={e => setQ(e.target.value)} autoFocus
-              placeholder="Rechercher : nom, marque, matière, teinte…"
-              style={{ ...inp, marginBottom:6 }} onFocus={inpFocus} onBlur={inpBlur}/>
-            <div style={{ maxHeight:200, overflowY:"auto", display:"flex",
-              flexDirection:"column", gap:2 }}>
+            <div style={{ position:"relative", margin:"4px 0 8px" }}>
+              <Search size={15} style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
+              <input value={q} onChange={e => setQ(e.target.value)} autoFocus
+                placeholder="Rechercher : nom, marque, matière, teinte…"
+                style={{ ...field, height:40, borderRadius:20, padding:"0 14px 0 38px", fontWeight:600, fontSize:13 }}/>
+            </div>
+            <div style={{ maxHeight:240, overflowY:"auto", display:"flex",
+              flexDirection:"column", gap:3 }}>
               {(() => {
                 const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
                 const list = filaments.filter(f => {
@@ -175,7 +201,7 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect })
                   return words.every(w => hay.includes(w));
                 });
                 if (!list.length) return (
-                  <p style={{ fontSize:11, color:"var(--muted)", padding:8, margin:0 }}>
+                  <p style={{ fontSize:12, fontWeight:700, color:"var(--muted)", padding:8, margin:0 }}>
                     Aucun filament ne correspond.
                   </p>
                 );
@@ -183,24 +209,24 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect })
                 list.forEach(f => { (byMat[f.material || "Autre"] ||= []).push(f); });
                 return Object.keys(byMat).sort().map(mat => (
                   <div key={mat}>
-                    <p style={{ fontSize:9, fontWeight:700, color:"var(--muted)",
-                      textTransform:"uppercase", letterSpacing:"0.06em", margin:"6px 0 3px",
-                      position:"sticky", top:0, background:"var(--sheet-bg)", padding:"2px 0" }}>
+                    <p style={{ fontSize:10, fontWeight:900, color:"#8B5CF6",
+                      textTransform:"uppercase", letterSpacing:"0.06em", margin:"6px 0 4px",
+                      position:"sticky", top:0, background:"var(--surface2)", padding:"2px 0", zIndex:1 }}>
                       {mat} <span style={{ opacity:0.6 }}>({byMat[mat].length})</span>
                     </p>
                     {byMat[mat]
                       .sort((a,b) => (a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||""))
                       .map(f => (
                       <button key={f.id} onClick={() => setForm(fm => ({...fm, filament_id:String(f.id)}))}
-                        style={{ display:"flex", alignItems:"center", gap:8, width:"100%",
-                          padding:"6px 8px", borderRadius:8, border:"none", cursor:"pointer",
-                          textAlign:"left", marginBottom:2, background:"var(--surface2)" }}>
+                        style={{ display:"flex", alignItems:"center", gap:9, width:"100%",
+                          padding:"8px 10px", borderRadius:12, border:"1px solid var(--border)", cursor:"pointer",
+                          textAlign:"left", marginBottom:3, background:"var(--surface)" }}>
                         <ColorDot color={f.color} colorsArray={f.colors_array}
-                          multicolorType={f.multicolor_type} size={14}/>
-                        <span style={{ flex:1, minWidth:0, fontSize:11, color:"var(--text)",
+                          multicolorType={f.multicolor_type} size={18}/>
+                        <span style={{ flex:1, minWidth:0, fontSize:12.5, fontWeight:800, color:"var(--text)",
                           overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                           {f.translated_name || f.name}
-                          <span style={{ color:"var(--muted)" }}>
+                          <span style={{ color:"var(--muted)", fontWeight:600 }}>
                             {" · "}{[f.manufacturer, f.fila_type].filter(Boolean).join(" · ")}
                           </span>
                         </span>
@@ -211,40 +237,44 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect })
               })()}
             </div>
           </>)}
-        </div>
+        </FCard>
 
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-          {[["Reste (g)","remaining_weight_g","number","1000"],["Prix (€)","price_override","number",""]].map(([l,n,t,p])=>(
-            <div key={n}>
-              <Label>{l}</Label>
-              <input type={t} value={form[n]||""} placeholder={p}
-                onChange={e=>setForm(f=>({...f,[n]:e.target.value}))}
-                style={inp} onFocus={inpFocus} onBlur={inpBlur} />
-            </div>
-          ))}
-        </div>
+        <FCard t="Quantité et prix" i="⚖" c="#F59E0B">
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:4 }}>
+            {[["Reste (g)","remaining_weight_g","number",String(full)],["Prix (€)","price_override","number",selected?.price != null ? String(selected.price) : ""]].map(([l,n,t,p])=>(
+              <div key={n}>
+                <Label>{l}</Label>
+                <input type={t} inputMode="decimal" value={form[n]||""} placeholder={p}
+                  onChange={e=>setForm(f=>({...f,[n]:e.target.value}))} style={field}/>
+              </div>
+            ))}
+          </div>
+          {/* raccourcis : une bobine neuve, ou entamee */}
+          <div style={{ display:"flex", gap:5, marginTop:8 }}>
+            {[[1, "Pleine"], [0.75, "¾"], [0.5, "½"], [0.25, "¼"]].map(([k, l]) => {
+              const v = String(Math.round(full * k)), on = form.remaining_weight_g === v;
+              return <button key={l} onClick={() => setForm(f => ({ ...f, remaining_weight_g: v }))} style={{ flex:1, padding:"6px 0", borderRadius:10,
+                fontSize:12, fontWeight:800, cursor:"pointer", border: on ? "1px solid transparent" : "1px solid var(--border)",
+                background: on ? "linear-gradient(135deg, #F59E0B, #FBBF24)" : "var(--surface)", color: on ? "#fff" : "var(--text2)" }}>{l}</button>;
+            })}
+          </div>
+          <p style={{ fontSize:11.5, fontWeight:600, color:"var(--muted)", margin:"8px 0 0" }}>Vides, ils valent une bobine pleine au prix du filament.</p>
+        </FCard>
 
         {/* location n'est PAS editable : geree automatiquement (Tiroir / AMS xxx)
             par le worker spool_location selon la presence en AMS. */}
-        {[["Tag NFC","tag_number","text","UUID"],["Commentaire","comment","text",""]].map(([l,n,t,p])=>(
-          <div key={n}>
-            <Label>{l}</Label>
-            <input type={t} value={form[n]||""} placeholder={p}
-              onChange={e=>setForm(f=>({...f,[n]:e.target.value}))}
-              style={inp} onFocus={inpFocus} onBlur={inpBlur} />
-          </div>
-        ))}
-
-        <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:4 }}>
-          <button onClick={onClose} style={{ padding:"8px 16px", fontSize:13, color:"var(--muted)", background:"none", border:"1px solid var(--border)", borderRadius:8, cursor:"pointer" }}>Annuler</button>
-          <button onClick={handleSave} disabled={saving||!form.filament_id}
-            style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 16px", fontSize:13, background:"#3b82f6", color:"white", border:"none", borderRadius:8, cursor:"pointer", opacity:saving||!form.filament_id?0.5:1 }}>
-            {saving ? <RefreshCw size={13} style={{animation:"spin 1s linear infinite"}}/> : <Save size={13}/>}
-            Enregistrer
-          </button>
-        </div>
+        <FCard t="Le reste (facultatif)" i="🏷️" c="#06B6D4">
+          {[["Tag NFC","tag_number","text","UUID"],["Commentaire","comment","text",""]].map(([l,n,t,p])=>(
+            <div key={n} style={{ marginTop:6 }}>
+              <Label>{l}</Label>
+              <input type={t} value={form[n]||""} placeholder={p}
+                onChange={e=>setForm(f=>({...f,[n]:e.target.value}))}
+                style={{ ...field, fontFamily: n === "tag_number" ? "JetBrains Mono,monospace" : "inherit" }}/>
+            </div>
+          ))}
+        </FCard>
       </div>
-    </div>
+    </FSheet>
   );
 }
 
@@ -2055,33 +2085,41 @@ function FilamentPrintsSheet({ f, onClose }) {
   const STATUS = { FINISHED:["Terminé","#22c55e"], FAILED:["Échoué","#ef4444"],
     CANCELLED:["Annulé","#94a3b8"], IN_PROGRESS:["En cours","#3b82f6"] };
   const fmtDate = d => d ? new Date(d).toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"2-digit" }) : "";
+  const fMain = paleHex(f.color) ? "#94a3b8" : (hexToCss(f.color) || "#EC4899");
+  const tileSt = c => ({ padding:0, overflow:"hidden", cursor:"pointer", borderRadius:16, border:`1px solid color-mix(in srgb, ${c} 25%, var(--border))`,
+    background:`linear-gradient(160deg, ${c}12, transparent 50%), var(--surface)`, boxShadow:"0 8px 20px -14px rgba(0,0,0,.6)" });
+  const glassChip = { position:"absolute", background:"rgba(15,23,42,0.6)", color:"white", fontSize:10, fontWeight:800, padding:"2px 7px", borderRadius:20,
+    backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)" };
 
   return createPortal(
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:990, background:"rgba(0,0,0,0.7)",
+    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:990, background:"rgba(0,0,0,0.7)",
       display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
       <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:760, maxHeight:"88vh",
-        display:"flex", flexDirection:"column", background:"var(--sheet-bg)", borderRadius:16, overflow:"hidden" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px",
-          borderBottom:"1px solid var(--border)" }}>
-          <div style={{ width:34, height:34, borderRadius:8, flexShrink:0,
-            boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.2)", ...colorBg(colorsList, f.multicolor_type) }}/>
+        display:"flex", flexDirection:"column", background:"var(--sheet-bg)", borderRadius:22, overflow:"hidden" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12, padding:"14px 16px",
+          borderBottom:"1px solid var(--border)", background:`radial-gradient(circle at 10% 50%, ${fMain}45, transparent 60%), var(--surface2)` }}>
+          <span style={{ display:"inline-flex", flexShrink:0, filter:`drop-shadow(0 4px 10px ${fMain}66)` }}>
+            <SpoolSVG colors={colorsList} size={46} type={f.multicolor_type}/></span>
           <div style={{ flex:1, minWidth:0 }}>
-            <p style={{ margin:0, fontSize:14, fontWeight:700, color:"var(--text)",
+            <p style={{ margin:0, fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#EC4899" }}>🖨️ Imprimé avec</p>
+            <p style={{ margin:0, fontSize:16, fontWeight:900, color:"var(--text)",
               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.translated_name || f.name}</p>
-            <p style={{ margin:0, fontSize:11, color:"var(--muted)" }}>
+            <p style={{ margin:0, fontSize:12, fontWeight:600, color:"var(--muted)" }}>
               {[f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}
               {prints ? ` — ${prints.length} impression${prints.length > 1 ? "s" : ""}` : ""}<Hide at="filament-prints" size={9}/>
             </p>
           </div>
-          <button onClick={onClose} aria-label="Fermer" style={{ background:"none", border:"none",
-            color:"var(--muted)", cursor:"pointer", padding:4 }}><X size={18}/></button>
+          <button onClick={onClose} aria-label="Fermer" style={{ width:34, height:34, borderRadius:"50%", border:"1px solid var(--border)", flexShrink:0,
+            background:"var(--surface)", color:"var(--text2)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}><X size={16}/></button>
         </div>
         {nShared > 0 && (
-          <div style={{ display:"flex", gap:4, margin:"10px 12px 0", background:"var(--surface2)", borderRadius:12, padding:4,
+          <div style={{ display:"flex", gap:3, margin:"10px 12px 0", background:"var(--surface2)", borderRadius:16, padding:3,
             border:"1px solid var(--border)" }}>
-            {[["mine", `Mes impressions${prints ? ` (${prints.length})` : ""}`], ["friends", `👀 Chez les copains (${nShared})`]].map(([k, l]) => (
-              <button key={k} onClick={() => setTab(k)} style={{ flex:1, padding:"7px 8px", borderRadius:8, fontSize:12, fontWeight:700,
-                cursor:"pointer", border:"none", background: tab === k ? "#3b82f6" : "transparent", color: tab === k ? "white" : "var(--muted)" }}>{l}</button>
+            {[["mine", `🖨️ Mes impressions${prints ? ` (${prints.length})` : ""}`, "#EC4899"], ["friends", `👀 Chez les copains (${nShared})`, "#8B5CF6"]].map(([k, l, c]) => (
+              <button key={k} onClick={() => setTab(k)} style={{ flex:1, padding:"8px 8px", borderRadius:12, fontSize:12.5, fontWeight:800,
+                cursor:"pointer", border:"none", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+                background: tab === k ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` : "transparent",
+                color: tab === k ? "white" : "var(--muted)", boxShadow: tab === k ? `0 6px 14px -6px ${c}` : "none" }}>{l}</button>
             ))}
           </div>
         )}
@@ -2090,9 +2128,7 @@ function FilamentPrintsSheet({ f, onClose }) {
           {err && <p style={{ color:"#ef4444", fontSize:13 }}>⚠ {err}</p>}
           {!prints && !err && <p style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:24 }}>Chargement…</p>}
           {prints && !prints.length && (
-            <p style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:24 }}>
-              Aucune impression n'a encore utilisé une bobine de ce filament.
-            </p>
+            <EmptyCard icon="🖨️" text="Aucune impression n'a encore utilisé une bobine de ce filament."/>
           )}
           {prints && prints.length > 0 && (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
@@ -2100,26 +2136,24 @@ function FilamentPrintsSheet({ f, onClose }) {
                 if (t.kind === "group") {
                   const cover = t.photos[0] || t.image;
                   return (
-                    <div key={t.key} className="card-sm" style={{ padding:0, overflow:"hidden", cursor:"pointer" }}
+                    <div key={t.key} className="card-sm" style={tileSt("#8B5CF6")}
                       onClick={() => setGroupOpen(t.g)}>
                       <div style={{ position:"relative", aspectRatio:"1", background:"var(--surface2)" }}>
                         <img src={cover} alt="" loading="lazy" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}
                           onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
-                        <span style={{ position:"absolute", top:6, left:6, fontSize:9, fontWeight:700, padding:"2px 6px",
-                          borderRadius:20, color:"white", background:"#8b5cf6" }}>
-                          Groupe · {t.members.length} prints
+                        <span style={{ position:"absolute", top:6, left:6, fontSize:9.5, fontWeight:900, padding:"2px 8px",
+                          borderRadius:20, color:"white", background:"linear-gradient(135deg, #8B5CF6, #A855F7)" }}>
+                          📁 Groupe · {t.members.length} prints
                         </span>
                         {t.photos.length > 0 && (
-                          <span title="Photos du groupe" style={{ position:"absolute", top:6, right:6,
-                            background:"rgba(0,0,0,0.6)", color:"white", fontSize:9, fontWeight:700,
-                            padding:"2px 6px", borderRadius:20 }}>{t.photos.length} 📷</span>
+                          <span data-tip="Photos du groupe" style={{ ...glassChip, top:6, right:6 }}>📷 {t.photos.length}</span>
                         )}
                       </div>
-                      <div style={{ padding:"6px 8px 8px" }}>
-                        <p title={t.g.name} style={{ margin:0, fontSize:11, fontWeight:600, color:"var(--text)",
+                      <div style={{ padding:"7px 9px 9px" }}>
+                        <p title={t.g.name} style={{ margin:0, fontSize:12, fontWeight:800, color:"var(--text)",
                           overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.g.name}</p>
-                        <p style={{ margin:"2px 0 0", fontSize:10, color:"var(--muted)" }}>
-                          {fmtDate(t.date)} · {t.grams} g
+                        <p style={{ margin:"2px 0 0", fontSize:10.5, fontWeight:700, color:"var(--muted)" }}>
+                          {fmtDate(t.date)} · <span style={{ color:"#F59E0B" }}>{t.grams} g</span>
                         </p>
                       </div>
                     </div>
@@ -2129,29 +2163,27 @@ function FilamentPrintsSheet({ f, onClose }) {
                 const [stLabel, stColor] = STATUS[p.status] || [p.status, "#94a3b8"];
                 const cover = p.photos[0] || p.image;
                 return (
-                  <div key={p.id} className="card-sm" style={{ padding:0, overflow:"hidden", cursor:"pointer" }}
+                  <div key={p.id} className="card-sm" style={tileSt(stColor)}
                     onClick={() => openDetail(p.id)}>
                     <div style={{ position:"relative", aspectRatio:"1", background:"var(--surface2)" }}>
                       <img src={cover} alt="" loading="lazy" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}
                         onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
                       {p.photos.length > 0 && (
-                        <span title={p.photo_source === "group"
+                        <span data-tip={p.photo_source === "group"
                             ? "Pas de photo pour cette impression : photos de son groupe"
                             : "Photos prises de cette impression"}
-                          style={{ position:"absolute", top:6, right:6,
-                          background:"rgba(0,0,0,0.6)", color:"white", fontSize:9, fontWeight:700,
-                          padding:"2px 6px", borderRadius:20 }}>
-                          {p.photos.length} 📷{p.photo_source === "group" ? " groupe" : ""}
+                          style={{ ...glassChip, top:6, right:6 }}>
+                          📷 {p.photos.length}{p.photo_source === "group" ? " groupe" : ""}
                         </span>
                       )}
-                      <span style={{ position:"absolute", top:6, left:6, fontSize:9, fontWeight:700, padding:"2px 6px",
-                        borderRadius:20, color:"white", background:stColor }}>{stLabel}</span>
+                      <span style={{ position:"absolute", top:6, left:6, fontSize:9.5, fontWeight:900, padding:"2px 8px",
+                        borderRadius:20, color:"white", background:`linear-gradient(135deg, ${stColor}, color-mix(in srgb, ${stColor} 70%, #ffffff))` }}>{stLabel}</span>
                     </div>
-                    <div style={{ padding:"6px 8px 8px" }}>
-                      <p title={p.name} style={{ margin:0, fontSize:11, fontWeight:600, color:"var(--text)",
+                    <div style={{ padding:"7px 9px 9px" }}>
+                      <p title={p.name} style={{ margin:0, fontSize:12, fontWeight:800, color:"var(--text)",
                         overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</p>
-                      <p style={{ margin:"2px 0 0", fontSize:10, color:"var(--muted)" }}>
-                        {fmtDate(p.print_date)} · {p.grams} g{p.group_name ? ` · ${p.group_name}` : ""}
+                      <p style={{ margin:"2px 0 0", fontSize:10.5, fontWeight:700, color:"var(--muted)" }}>
+                        {fmtDate(p.print_date)} · <span style={{ color:"#F59E0B" }}>{p.grams} g</span>{p.group_name ? ` · ${p.group_name}` : ""}
                       </p>
                     </div>
                   </div>
@@ -2318,7 +2350,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
   });
   const iStyle = { width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
     borderRadius:8, padding:"8px 10px", fontSize:13, color:"var(--text)", outline:"none", boxSizing:"border-box" };
-  const lStyle = { fontSize:11, color:"var(--muted)", margin:"0 0 4px", display:"block" };
+  const lStyle = { fontSize:12, fontWeight:800, color:"var(--muted)", margin:"0 0 5px", display:"block" };
 
   // Parse colors_input → color + colors_array + multicolor_type
   const parseColorsInput = (raw, currentType) => {
@@ -2430,208 +2462,192 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
 
   const types = selectedFamily ? (typesByFamily[selectedFamily] || []) : Object.values(typesByFamily).flat();
 
-  return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:1200,
-      display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e=>e.stopPropagation()} className="sheet-inner" className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-        width:"100%", maxWidth:540, maxHeight:"92dvh", overflowY:"auto",
-        paddingBottom:"env(safe-area-inset-bottom,16px)", display:"flex", flexDirection:"column" }}>
-        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 4px" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-        </div>
-        <div style={{ padding:"12px 20px 24px" }}>
-          <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 16px" }}>
-            Nouveau filament
-          </h3>
+  // l'apercu : la bobine aux couleurs saisies
+  const heroCols = liveColors.length ? liveColors : null;
+  const heroMain = liveColors.length && !paleHex(liveColors[0]) ? liveColors[0] : "#8B5CF6";
+  const field = { ...iStyle, height:42, padding:"0 12px", borderRadius:12, background:"var(--surface)", fontWeight:700, fontSize:14 };
+  const F = (label, k, ph = "", extra = {}) => (
+    <div style={{ marginTop:8 }}>
+      <label style={lStyle}>{label}</label>
+      <input style={{ ...field, ...extra }} value={form[k] || ""} placeholder={ph}
+        onChange={e => setForm(f => ({...f, [k]: e.target.value}))}/>
+    </div>);
 
+  return (
+    <FSheet onClose={onClose} z={1200}
+      bottom={mode === "free" ? <>
+        {!prefill && (
+          <button onClick={() => { setMode("choose"); setCatalogEntry(null); }} style={{ ...fBtn, flex:1, color:"var(--muted)" }}>← Retour</button>
+        )}
+        <button onClick={save} disabled={saving}
+          style={{ ...fBtn, flex:2, border:"none", color:"#fff", background: saving ? "var(--border)" : "linear-gradient(135deg, #8B5CF6, #6366F1)",
+            boxShadow:"0 8px 18px -10px #8B5CF6" }}>
+          {saving ? "Création…" : "✓ Créer le filament"}
+        </button>
+      </> : mode === "catalog" ? <button onClick={() => setMode("choose")} style={{ ...fBtn, flex:1, color:"var(--muted)" }}>← Retour</button> : null}>
+      {/* en-tete : la bobine aux couleurs saisies, le nom au fur et a mesure */}
+      <div style={{ padding:"44px 16px 16px", display:"flex", alignItems:"center", gap:14,
+        background:`radial-gradient(circle at 15% 50%, ${heroMain}50, transparent 60%), linear-gradient(135deg, ${heroMain}22, transparent 70%), var(--surface2)` }}>
+        <span style={{ display:"inline-flex", flexShrink:0, filter:`drop-shadow(0 6px 14px ${heroMain}66)` }}>
+          {heroCols ? <SpoolSVG colors={heroCols} size={74} type={liveColors.length > 1 ? (form.multicolor_type !== "monochrome" ? form.multicolor_type : "coaxial") : undefined}/>
+            : <span style={{ width:74, height:74, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:30,
+                border:"2px dashed var(--border)", color:"var(--muted)" }}>🎨</span>}</span>
+        <div style={{ minWidth:0, flex:1 }}>
+          <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#8B5CF6" }}>＋ Nouveau filament</div>
+          <div style={{ fontSize:19, fontWeight:900, color:"var(--text)", lineHeight:1.2, overflowWrap:"anywhere" }}>
+            {mode === "free" ? (form.translated_name || form.name || "Sans nom") : mode === "catalog" ? "Catalogue Bambu" : "D'où vient-il ?"}</div>
+          {mode === "free" && (form.manufacturer || form.fila_type) && <div style={{ fontSize:12.5, fontWeight:700, color:"var(--text2)" }}>
+            {[form.manufacturer, form.fila_type].filter(Boolean).join(" · ")}</div>}
+        </div>
+      </div>
+
+      <div style={{ padding:"12px 14px 18px", display:"flex", flexDirection:"column", gap:12 }}>
           {mode === "choose" && (
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              <button onClick={() => setMode("catalog")}
-                style={{ padding:"14px 16px", borderRadius:12, border:"1px solid var(--border)",
-                  background:"var(--surface2)", cursor:"pointer", textAlign:"left" }}>
-                <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 4px" }}>
-                  📦 Importer depuis le catalogue Bambu
-                </p>
-                <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
-                  Type → Couleur → Préremplissage automatique (nom officiel, hex, profil…)
-                </p>
-              </button>
-              <button onClick={() => setMode("free")}
-                style={{ padding:"14px 16px", borderRadius:12, border:"1px solid var(--border)",
-                  background:"var(--surface2)", cursor:"pointer", textAlign:"left" }}>
-                <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 4px" }}>
-                  ✏️ Saisie libre
-                </p>
-                <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
-                  Remplir manuellement tous les champs
-                </p>
-              </button>
+              {[["catalog", "📦", "Importer depuis le catalogue Bambu", "Type → Couleur → Préremplissage automatique (nom officiel, hex, profil…)", "#22C55E"],
+                ["free", "✏️", "Saisie libre", "Remplir manuellement tous les champs", "#8B5CF6"]].map(([m, ic, t, d, c]) => (
+                <button key={m} onClick={() => setMode(m)}
+                  style={{ display:"flex", alignItems:"center", gap:12, padding:"14px 14px", borderRadius:18, cursor:"pointer", textAlign:"left",
+                    border:`1px solid ${c}55`, background:`linear-gradient(135deg, ${c}1f, transparent 60%), var(--surface2)`, boxShadow:`0 10px 22px -16px ${c}` }}>
+                  <span style={{ width:44, height:44, borderRadius:14, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22,
+                    background:`linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` }}>{ic}</span>
+                  <span style={{ flex:1, minWidth:0 }}>
+                    <span style={{ display:"block", fontSize:14.5, fontWeight:900, color:"var(--text)" }}>{t}</span>
+                    <span style={{ display:"block", fontSize:12, fontWeight:600, color:"var(--muted)", marginTop:2 }}>{d}</span>
+                  </span>
+                  <span style={{ color:c, fontWeight:900 }}>›</span>
+                </button>
+              ))}
             </div>
           )}
 
           {mode === "catalog" && (
-            <div>
-              <div style={{ display:"flex", gap:6, marginBottom:12, flexWrap:"wrap" }}>
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                 <Select value={selectedFamily} onChange={e => { setSelectedFamily(e.target.value); setSelectedType(""); }}
-                  style={{ ...iStyle, flex:1, minWidth:120 }}
+                  style={{ ...field, flex:1, minWidth:120 }}
                   options={[{ value:"", label:"Toutes familles" },
                             ...families.map(f => ({ value:f, label:f }))]}/>
                 <Select value={selectedType} onChange={e => setSelectedType(e.target.value)}
-                  style={{ ...iStyle, flex:1, minWidth:140 }}
+                  style={{ ...field, flex:1, minWidth:140 }}
                   options={[{ value:"", label:"Tous types" },
                             ...types.map(t => ({ value:t, label:t }))]}/>
               </div>
-              <input value={catalogQ} onChange={e => setCatalogQ(e.target.value)}
-                placeholder="Rechercher une couleur (Jade White, Orange…)"
-                style={{ ...iStyle, marginBottom:10 }}/>
-              <div style={{ maxHeight:300, overflowY:"auto" }}>
-                {catalogLoading && <p style={{ color:"var(--muted)", fontSize:12 }}>Recherche…</p>}
+              <div style={{ position:"relative" }}>
+                <Search size={15} style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
+                <input value={catalogQ} onChange={e => setCatalogQ(e.target.value)}
+                  placeholder="Rechercher une couleur (Jade White, Orange…)"
+                  style={{ ...field, height:40, borderRadius:20, padding:"0 14px 0 38px", fontWeight:600, fontSize:13 }}/>
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                {catalogLoading && <p style={{ color:"var(--muted)", fontSize:12.5, fontWeight:700 }}>Recherche…</p>}
                 {!catalogLoading && catalogEntries.length === 0 &&
-                  <p style={{ color:"var(--muted)", fontSize:12 }}>
+                  <p style={{ color:"var(--muted)", fontSize:12.5, fontWeight:700 }}>
                     {families.length === 0 ? "Catalogue non disponible (démarrage en cours…)" : "Aucun résultat"}
                   </p>}
                 {catalogEntries.map((e,i) => (
                   <button key={i} onClick={() => pickFromCatalog(e)}
                     style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
-                      borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
-                      marginBottom:6, cursor:"pointer", textAlign:"left" }}>
-                    {colorSwatch(e, 30)}
+                      borderRadius:14, border:"1px solid var(--border)", background:`linear-gradient(135deg, #${e.color_hex || "888888"}22, transparent 55%), var(--surface2)`,
+                      cursor:"pointer", textAlign:"left" }}>
+                    <span style={{ borderRadius:9, boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.25)", display:"inline-flex" }}>{colorSwatch(e, 34)}</span>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:1 }}>
-                        <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0,
+                        <p style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", margin:0,
                           overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{e.name}</p>
                         {e.color_type_fr && e.color_type_fr !== "monochrome" && (
-                          <span style={{ fontSize:9, padding:"1px 5px", borderRadius:4, flexShrink:0,
+                          <span style={{ fontSize:9, padding:"1px 6px", borderRadius:20, flexShrink:0,
                             background: e.color_type_fr==="gradient" ? "rgba(139,92,246,0.15)" : "rgba(59,130,246,0.15)",
                             color: e.color_type_fr==="gradient" ? "#8b5cf6" : "#3b82f6",
-                            fontWeight:700, textTransform:"uppercase" }}>
+                            fontWeight:800, textTransform:"uppercase" }}>
                             {e.color_type_fr}
                           </span>
                         )}
                       </div>
-                      <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
+                      <p style={{ fontSize:11, fontWeight:600, color:"var(--muted)", margin:0 }}>
                         {e.fila_type} · <span style={{ fontFamily:"monospace" }}>{e.fila_color_code}</span>
                       </p>
                     </div>
-                    <span style={{ fontSize:10, color:"#3b82f6", fontWeight:700, flexShrink:0 }}>→</span>
+                    <span style={{ fontSize:14, color:"#22C55E", fontWeight:900, flexShrink:0 }}>›</span>
                   </button>
                 ))}
               </div>
-              <button onClick={() => setMode("choose")}
-                style={{ marginTop:10, padding:"7px 12px", borderRadius:8, fontSize:11,
-                  background:"none", border:"1px solid var(--border)", color:"var(--muted)", cursor:"pointer" }}>
-                ← Retour
-              </button>
             </div>
           )}
 
           {mode === "free" && (
             <>
               {catalogEntry && (
-                <div style={{ marginBottom:14, padding:"8px 12px", borderRadius:10,
-                  background:"rgba(59,130,246,0.06)", border:"1px solid rgba(59,130,246,0.2)",
-                  fontSize:11, color:"#60a5fa" }}>
+                <div style={{ padding:"9px 12px", borderRadius:14, fontSize:12, fontWeight:800, color:"#16a34a",
+                  background:"rgba(34,197,94,0.10)", border:"1px solid rgba(34,197,94,0.3)" }}>
                   📦 Pré-rempli depuis le catalogue Bambu · {catalogEntry.fila_type} · {catalogEntry.color_code}
                 </div>
               )}
-              <div style={{ marginBottom:10 }}>
-                <label style={lStyle}>Nom de la couleur * (anglais / officiel)</label>
-                <input style={iStyle} value={form.name} autoFocus placeholder="ex: Jade White"
-                  onChange={e => setForm(f => ({...f, name: e.target.value}))}/>
-              </div>
-              <div style={{ marginBottom:10 }}>
-                <label style={lStyle}>Nom traduit (français)</label>
-                <input style={iStyle} value={form.translated_name || ""}
-                  placeholder="ex: Blanc Jade"
-                  onChange={e => setForm(f => ({...f, translated_name: e.target.value}))}/>
-              </div>
-              <div style={{ marginBottom:10 }}>
-                <label style={lStyle}>Marque</label>
-                <input style={iStyle} value={form.manufacturer}
-                  onChange={e => setForm(f => ({...f, manufacturer: e.target.value}))}/>
-              </div>
-              <div style={{ marginBottom:10 }}>
-                <label style={lStyle}>Sous-type filament (ex: PLA Basic, PLA Matte…)</label>
-                <input style={iStyle} value={form.fila_type || ""}
-                  placeholder="ex: PLA Basic"
-                  onChange={e => setForm(f => ({...f, fila_type: e.target.value}))}/>
-              </div>
-              <div style={{ marginBottom:10 }}>
-                <label style={lStyle}>Couleur(s) — hex séparées par virgule si multi</label>
-                <input style={iStyle} value={form.colors_input || ""}
-                  placeholder="ex: 0047bb  ou  0047bb, bb22a3"
-                  onChange={e => setForm(f => ({...f, colors_input: e.target.value}))}/>
-                {liveColors.length > 0 && (
-                  <div style={{ display:"flex", gap:4, marginTop:6, alignItems:"center" }}>
-                    {liveColors.map((c,i) => (
-                      <div key={i} style={{ width:24, height:24, borderRadius:5,
-                        overflow:"hidden", border:"1px solid var(--border)", ...colorBg([c]) }}/>
-                    ))}
-                    {liveColors.length === 1
-                      ? <span style={{ fontSize:10, color:"var(--muted)", marginLeft:4 }}>Monochrome</span>
-                      : <span style={{ fontSize:10, color:"#3b82f6", marginLeft:4, fontWeight:600 }}>
-                          {liveColors.length} couleurs → {form.multicolor_type !== "monochrome" ? form.multicolor_type : "coaxial"}
-                        </span>
-                    }
+              <FCard t="Identité" i="🏷️" c="#8B5CF6">
+                <div style={{ marginTop:4 }}>
+                  <label style={lStyle}>Nom de la couleur * (anglais / officiel)</label>
+                  <input style={field} value={form.name} autoFocus placeholder="ex: Jade White"
+                    onChange={e => setForm(f => ({...f, name: e.target.value}))}/>
+                </div>
+                {F("Nom traduit (français)", "translated_name", "ex: Blanc Jade")}
+                {F("Marque", "manufacturer")}
+                {F("Sous-type filament (ex: PLA Basic, PLA Matte…)", "fila_type", "ex: PLA Basic")}
+              </FCard>
+              <FCard t="Couleur" i="🎨" c="#EC4899">
+                <div style={{ marginTop:4 }}>
+                  <label style={lStyle}>Couleur(s) — hex séparées par virgule si multi</label>
+                  <input style={{ ...field, fontFamily:"JetBrains Mono,monospace" }} value={form.colors_input || ""}
+                    placeholder="ex: 0047bb  ou  0047bb, bb22a3"
+                    onChange={e => setForm(f => ({...f, colors_input: e.target.value}))}/>
+                  {liveColors.length > 0 && (
+                    <div style={{ display:"flex", gap:5, marginTop:8, alignItems:"center" }}>
+                      {liveColors.map((c,i) => (
+                        <div key={i} style={{ width:28, height:28, borderRadius:8,
+                          overflow:"hidden", boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.25)", ...colorBg([c]) }}/>
+                      ))}
+                      {liveColors.length === 1
+                        ? <span style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", marginLeft:4 }}>Monochrome</span>
+                        : <span style={{ fontSize:11.5, color:"#EC4899", marginLeft:4, fontWeight:800 }}>
+                            {liveColors.length} couleurs → {form.multicolor_type !== "monochrome" ? form.multicolor_type : "coaxial"}
+                          </span>
+                      }
+                    </div>
+                  )}
+                </div>
+                {liveColors.length > 1 && (
+                  <div style={{ marginTop:8 }}>
+                    <label style={lStyle}>Type multicolore</label>
+                    <Select style={field} value={form.multicolor_type === "monochrome" ? "coaxial" : form.multicolor_type}
+                      onChange={e => setForm(f => ({...f, multicolor_type: e.target.value}))}
+                      options={[{ value:"gradient", label:"Gradient (dégradé)" },
+                                { value:"coaxial",  label:"Coaxial (segments)" }]}/>
                   </div>
                 )}
-              </div>
-              {liveColors.length > 1 && (
-                <div style={{ marginBottom:10 }}>
-                  <label style={lStyle}>Type multicolore</label>
-                  <Select style={iStyle} value={form.multicolor_type === "monochrome" ? "coaxial" : form.multicolor_type}
-                    onChange={e => setForm(f => ({...f, multicolor_type: e.target.value}))}
-                    options={[{ value:"gradient", label:"Gradient (dégradé)" },
-                              { value:"coaxial",  label:"Coaxial (segments)" }]}/>
+              </FCard>
+              <FCard t="Côté Bambu et poids" i="⚖" c="#0EA5E9">
+                {F("Profile ID Bambu (ex: GFA00)", "profile_id", "", { fontFamily:"JetBrains Mono,monospace" })}
+                {F("Code couleur Bambu (ex: 10600)", "fila_color_code", "", { fontFamily:"JetBrains Mono,monospace" })}
+                <div style={{ marginTop:8 }}>
+                  <label style={lStyle}>Poids total (g)</label>
+                  <input style={field} type="number" value={form.weight}
+                    onChange={e => setForm(f => ({...f, weight: e.target.value}))}/>
                 </div>
-              )}
-              <div style={{ marginBottom:10 }}>
-                <label style={lStyle}>Profile ID Bambu (ex: GFA00)</label>
-                <input style={iStyle} value={form.profile_id}
-                  onChange={e => setForm(f => ({...f, profile_id: e.target.value}))}/>
-              </div>
-              <div style={{ marginBottom:10 }}>
-                <label style={lStyle}>Code couleur Bambu (ex: 10600)</label>
-                <input style={iStyle} value={form.fila_color_code || ""}
-                  onChange={e => setForm(f => ({...f, fila_color_code: e.target.value}))}/>
-              </div>
-              <div style={{ marginBottom:16 }}>
-                <label style={lStyle}>Poids total (g)</label>
-                <input style={iStyle} type="number" value={form.weight}
-                  onChange={e => setForm(f => ({...f, weight: e.target.value}))}/>
-              </div>
+              </FCard>
               {duplicate && (
-                <div style={{ marginBottom:12, padding:"10px 14px", borderRadius:10,
-                  background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.35)" }}>
-                  <p style={{ fontSize:12, color:"#f59e0b", fontWeight:700, margin:"0 0 4px" }}>
+                <div style={{ padding:"10px 14px", borderRadius:14,
+                  background:"rgba(245,158,11,0.10)", border:"1px solid rgba(245,158,11,0.4)" }}>
+                  <p style={{ fontSize:12.5, color:"#d97706", fontWeight:900, margin:"0 0 4px" }}>
                     ⚠ Filament identique déjà en base
                   </p>
-                  <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
+                  <p style={{ fontSize:12, fontWeight:600, color:"var(--muted)", margin:0 }}>
                     {duplicate.message || `Filament #${duplicate.id} « ${duplicate.name} »`}
                   </p>
                 </div>
               )}
-              <div style={{ display:"flex", gap:8 }}>
-                {!prefill && (
-                  <button onClick={() => { setMode("choose"); setCatalogEntry(null); }}
-                    style={{ flex:1, padding:"10px", borderRadius:10, fontSize:13,
-                      background:"var(--surface2)", border:"1px solid var(--border)",
-                      color:"var(--muted)", cursor:"pointer" }}>← Retour</button>
-                )}
-                <button onClick={save} disabled={saving}
-                  style={{ flex:2, padding:"10px", borderRadius:10, fontSize:13, fontWeight:700,
-                    background: saving ? "var(--border)" : "#3b82f6",
-                    color:"white", border:"none", cursor: saving ? "default" : "pointer" }}>
-                  {saving ? "Création…" : "Créer le filament"}
-                </button>
-              </div>
             </>
           )}
-        </div>
       </div>
-    </div>
+    </FSheet>
   );
 }
 

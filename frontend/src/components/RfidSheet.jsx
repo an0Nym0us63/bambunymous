@@ -72,25 +72,28 @@ export default function RfidSheet({ scanId, onClose, onCreated }) {
     cat?.colors?.length > 1 ? cat.colors.map(c => "#" + c.slice(0, 6)).join(",") : null,
   );
 
-  const inp = { width:"100%", boxSizing:"border-box", padding:"9px 12px", borderRadius:8,
+  const inp = { width:"100%", boxSizing:"border-box", padding:"10px 12px", borderRadius:12,
     border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)",
     fontSize:14, outline:"none", fontFamily:"JetBrains Mono, monospace" };
   const lbl = { display:"block", fontSize:11, color:"var(--muted)", marginBottom:4 };
 
   return createPortal(
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4000,
+    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4000,
       background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"flex-end",
       justifyContent:"center" }}>
       <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:520,
         maxHeight:"92vh", overflowY:"auto", background:"var(--sheet-bg)",
-        borderRadius:"20px 20px 0 0", padding:"20px 16px 28px" }}>
+        borderRadius:"22px 22px 0 0", padding:"0 16px 28px" }}>
 
-        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
-          <p style={{ margin:0, flex:1, fontSize:15, fontWeight:800, color:"var(--text)" }}>
-            📡 Bobine inconnue
+        <div style={{ display:"flex", alignItems:"center", gap:10, margin:"0 -16px 14px", padding:"16px 16px 12px",
+          background:"linear-gradient(135deg, rgba(249,115,22,0.22), transparent 70%)" }}>
+          <span style={{ width:38, height:38, borderRadius:12, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:18, background:"linear-gradient(135deg, #F97316, #FBBF24)" }}>📡</span>
+          <p style={{ margin:0, flex:1, fontSize:16, fontWeight:900, color:"var(--text)" }}>
+            Bobine inconnue
           </p>
-          <button onClick={onClose} style={{ background:"none", border:"none",
-            color:"var(--muted)", fontSize:18, cursor:"pointer" }}>✕</button>
+          <button onClick={onClose} aria-label="Fermer" style={{ width:34, height:34, borderRadius:"50%", border:"1px solid var(--border)", flexShrink:0,
+            background:"var(--surface2)", color:"var(--text2)", fontSize:15, cursor:"pointer" }}>✕</button>
         </div>
 
         {err && (
@@ -103,15 +106,16 @@ export default function RfidSheet({ scanId, onClose, onCreated }) {
         ) : (<>
           {/* Identité de la bobine */}
           <div style={{ display:"flex", alignItems:"center", gap:12, padding:"12px",
-            borderRadius:12, background:"var(--surface2)", marginBottom:14 }}>
-            <div style={{ width:44, height:44, borderRadius:10, flexShrink:0,
-              position:"relative", overflow:"hidden",
-              boxShadow:"inset 0 0 0 1px rgba(128,128,128,0.3)" }}>
+            borderRadius:16, background:"var(--surface2)", border:"1px solid var(--border)", marginBottom:14 }}>
+            <div style={{ width:48, height:48, borderRadius:12, flexShrink:0,
+              position:"relative", overflow:"hidden", boxShadow:"0 2px 6px rgba(0,0,0,0.2)" }}>
               <div style={{ position:"absolute", inset:0,
                 ...colorBg(cols, cat?.multicolor_type) }}/>
+              {/* le liseré par-dessus la couleur : un filament blanc reste visible */}
+              <div style={{ position:"absolute", inset:0, borderRadius:12, boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.25)" }}/>
             </div>
             <div style={{ minWidth:0, flex:1 }}>
-              <p style={{ margin:0, fontSize:14, fontWeight:700, color:"var(--text)" }}>
+              <p style={{ margin:0, fontSize:15, fontWeight:900, color:"var(--text)" }}>
                 {cat?.name || scan?.fila_type || "Filament inconnu"}
               </p>
               <p style={{ margin:"2px 0 0", fontSize:11, color:"var(--muted)" }}>
@@ -214,7 +218,8 @@ export default function RfidSheet({ scanId, onClose, onCreated }) {
           <button onClick={create} disabled={busy}
             style={{ width:"100%", marginTop:18, padding:"13px", borderRadius:12,
               border:"none", cursor: busy ? "default" : "pointer",
-              background:"#3b82f6", color:"white", fontSize:14, fontWeight:800 }}>
+              background:"linear-gradient(135deg, #3B82F6, #6366F1)", color:"white", fontSize:14, fontWeight:800,
+              boxShadow:"0 8px 18px -10px #3B82F6" }}>
             {busy ? "Enregistrement…"
               : !fil ? "Créer le filament et la bobine"
               : mode === "map" ? `Compléter la bobine #${mapSpoolId ?? ""}`

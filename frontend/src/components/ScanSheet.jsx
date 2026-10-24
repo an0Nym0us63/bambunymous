@@ -138,19 +138,22 @@ export default function ScanSheet({ onDetect, onClose }) {
   };
 
   return createPortal(
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9999,
+    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9999,
       background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center",
       justifyContent:"center", padding:16 }}>
       <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:420,
-        background:"var(--sheet-bg)", borderRadius:16, overflow:"hidden" }}>
+        background:"var(--sheet-bg)", borderRadius:22, overflow:"hidden" }}>
 
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-          padding:"12px 16px" }}>
-          <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:0 }}>
-            Scanner un échantillon
-          </p>
-          <button onClick={onClose} style={{ background:"none", border:"none",
-            color:"var(--muted)", fontSize:18, cursor:"pointer" }}>✕</button>
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 16px",
+          background:"linear-gradient(135deg, rgba(59,130,246,0.22), transparent 70%)" }}>
+          <span style={{ width:38, height:38, borderRadius:12, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:18, color:"#fff", background:"linear-gradient(135deg, #3B82F6, #6366F1)" }}>⌗</span>
+          <span style={{ flex:1, minWidth:0 }}>
+            <span style={{ display:"block", fontSize:16, fontWeight:900, color:"var(--text)" }}>Scanner un échantillon</span>
+            <span style={{ display:"block", fontSize:12, fontWeight:600, color:"var(--muted)" }}>Le QR collé sur la plaquette du nuancier</span>
+          </span>
+          <button onClick={onClose} aria-label="Fermer" style={{ width:34, height:34, borderRadius:"50%", border:"1px solid var(--border)", flexShrink:0,
+            background:"var(--surface2)", color:"var(--text2)", fontSize:15, cursor:"pointer" }}>✕</button>
         </div>
 
         {!error && (
@@ -158,7 +161,7 @@ export default function ScanSheet({ onDetect, onClose }) {
             <video ref={videoRef} playsInline muted
               style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
             <div style={{ position:"absolute", top:"25%", left:"25%", width:"50%", height:"50%",
-              border:"2px solid #3b82f6", borderRadius:10,
+              border:"3px solid #60a5fa", borderRadius:16,
               boxShadow:"0 0 0 9999px rgba(0,0,0,0.4)" }}/>
             <p style={{ position:"absolute", bottom:8, left:0, right:0, textAlign:"center",
               margin:0, fontSize:11, color:"white", textShadow:"0 1px 3px #000" }}>
@@ -173,9 +176,9 @@ export default function ScanSheet({ onDetect, onClose }) {
               <div style={{ display:"flex", gap:6, overflowX:"auto" }}>
                 {cams.map((d, i) => (
                   <button key={d.deviceId} onClick={() => switchRef.current?.(d.deviceId)}
-                    style={{ flexShrink:0, padding:"5px 12px", borderRadius:16, border:"none",
-                      cursor:"pointer", fontSize:11, fontWeight:600,
-                      background: camId === d.deviceId ? "#3b82f6" : "var(--surface2)",
+                    style={{ flexShrink:0, padding:"6px 12px", borderRadius:16, border:"none",
+                      cursor:"pointer", fontSize:12, fontWeight:800,
+                      background: camId === d.deviceId ? "linear-gradient(135deg, #3B82F6, #6366F1)" : "var(--surface2)",
                       color: camId === d.deviceId ? "white" : "var(--muted)" }}>
                     {d.label || `Objectif ${i + 1}`}
                   </button>
@@ -199,23 +202,24 @@ export default function ScanSheet({ onDetect, onClose }) {
         <canvas ref={canvasRef} style={{ display:"none" }}/>
 
         {error && (
-          <p style={{ margin:0, padding:"12px 16px", fontSize:12, color:"#ef4444" }}>⚠ {error}</p>
+          <p style={{ margin:"12px 16px 0", padding:"10px 12px", fontSize:12.5, fontWeight:700, color:"#ef4444", borderRadius:14,
+            background:"rgba(239,68,68,0.10)", border:"1px solid rgba(239,68,68,0.3)" }}>⚠ {error}</p>
         )}
 
         <div style={{ padding:"12px 16px" }}>
-          <label style={{ fontSize:11, color:"var(--muted)", display:"block", marginBottom:4 }}>
+          <label style={{ fontSize:12, fontWeight:800, color:"var(--muted)", display:"block", marginBottom:6 }}>
             …ou saisis l'ID imprimé sous le QR
           </label>
           <div style={{ display:"flex", gap:8 }}>
             <input value={manual} inputMode="numeric" placeholder="106"
               onChange={e => setManual(e.target.value)}
               onKeyDown={e => e.key === "Enter" && submitManual()}
-              style={{ flex:1, background:"var(--surface2)", border:"1px solid var(--border)",
-                borderRadius:8, padding:"9px 12px", fontSize:14, color:"var(--text)",
+              style={{ flex:1, minWidth:0, background:"var(--surface2)", border:"1px solid var(--border)",
+                borderRadius:12, padding:"0 14px", height:42, fontSize:15, fontWeight:800, color:"var(--text)",
                 outline:"none", fontFamily:"JetBrains Mono,monospace" }}/>
             <button onClick={submitManual}
-              style={{ padding:"9px 16px", borderRadius:8, border:"none", cursor:"pointer",
-                background:"#3b82f6", color:"white", fontSize:13, fontWeight:700 }}>
+              style={{ padding:"0 18px", height:42, borderRadius:12, border:"none", cursor:"pointer",
+                background:"linear-gradient(135deg, #3B82F6, #6366F1)", color:"white", fontSize:13.5, fontWeight:800 }}>
               Ouvrir
             </button>
           </div>

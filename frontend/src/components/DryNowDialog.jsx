@@ -62,14 +62,14 @@ export default function DryNowDialog({ spoolId, spoolName, onClose, onDone }) {
     const on = where === key;
     return (
       <button key={key || "ailleurs"} onClick={() => setWhere(key)}
-        style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", marginBottom:6,
-          borderRadius:10, cursor:"pointer", textAlign:"left", color:"var(--text)",
-          background: on ? "rgba(245,158,11,0.12)" : "var(--surface2)",
+        style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"11px 12px", marginBottom:6,
+          borderRadius:14, cursor:"pointer", textAlign:"left", color:"var(--text)",
+          background: on ? "linear-gradient(135deg, rgba(245,158,11,0.16), transparent 70%), var(--surface2)" : "var(--surface2)",
           border: on ? "1.5px solid #f59e0b" : "1px solid var(--border)" }}>
         <span style={{ width:14, height:14, borderRadius:"50%", flexShrink:0,
           border: on ? "4px solid #f59e0b" : "1.5px solid var(--muted)" }}/>
         <span style={{ flex:1, minWidth:0 }}>
-          <span style={{ fontSize:13, fontWeight:600 }}>{label}</span>
+          <span style={{ fontSize:13.5, fontWeight:800 }}>{label}</span>
           {sub && <span style={{ display:"block", fontSize:10.5, color:"var(--muted)" }}>{sub}</span>}
         </span>
       </button>
@@ -77,18 +77,22 @@ export default function DryNowDialog({ spoolId, spoolName, onClose, onDone }) {
   };
 
   return createPortal(
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4500, background:"rgba(0,0,0,0.6)",
+    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4500, background:"rgba(0,0,0,0.6)",
       display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-        width:"100%", maxWidth:460, maxHeight:"85dvh", overflowY:"auto", padding:"16px 18px",
+      <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"22px 22px 0 0",
+        width:"100%", maxWidth:460, maxHeight:"85dvh", overflowY:"auto", padding:"0 16px",
         paddingBottom:"calc(16px + env(safe-area-inset-bottom,0px))" }}>
-        <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 4px",
-          display:"flex", alignItems:"center", gap:8 }}>
-          <Sun size={16} color="#f59e0b"/> Séchée aujourd'hui
-        </h3>
-        <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px" }}>
-          {spoolName ? `${spoolName} · ` : ""}Où sèche-t-elle ?
-        </p>
+        {/* en-tete : le soleil, la bobine */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, margin:"0 -16px 12px", padding:"16px 16px 12px",
+          background:"linear-gradient(135deg, rgba(245,158,11,0.24), transparent 70%)" }}>
+          <span style={{ width:38, height:38, borderRadius:12, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
+            background:"linear-gradient(135deg, #F59E0B, #FBBF24)", boxShadow:"0 6px 16px -6px #F59E0B" }}><Sun size={19} color="#fff"/></span>
+          <span style={{ minWidth:0 }}>
+            <span style={{ display:"block", fontSize:16, fontWeight:900, color:"var(--text)" }}>Séchée aujourd'hui</span>
+            <span style={{ display:"block", fontSize:12, fontWeight:700, color:"var(--muted)" }}>
+              {spoolName ? `${spoolName} · ` : ""}Où sèche-t-elle ?</span>
+          </span>
+        </div>
         {opt("", "Ailleurs", "four, dessiccateur… — la date suffit")}
         {units.length > 0 && (<>
           <p style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", textTransform:"uppercase",
@@ -98,7 +102,7 @@ export default function DryNowDialog({ spoolId, spoolName, onClose, onDone }) {
             gridTemplateColumns: cols.map(c => `minmax(0, ${columnWeight(c)}fr)`).join(" ") }}>
             {cols.flatMap((col, ci) => col.map((a, ri) => a && (
               <div key={a.id} style={{ gridColumn: ci + 1, gridRow: ri + 1, minWidth:0,
-                padding:"8px 6px 9px", borderRadius:12, background:"var(--surface2)",
+                padding:"8px 6px 9px", borderRadius:14, background:"var(--surface2)",
                 border:"1px solid var(--border)" }}>
                 <div style={{ fontSize:10.5, fontWeight:800, color:"var(--muted)", textAlign:"center",
                   letterSpacing:0.5, marginBottom:6 }}>{amsName(a.id)}</div>
@@ -150,9 +154,10 @@ export default function DryNowDialog({ spoolId, spoolName, onClose, onDone }) {
         <div style={{ display:"flex", gap:8, marginTop:12 }}>
           <button onClick={onClose} style={{ flex:1, padding:10, borderRadius:12, border:"1px solid var(--border)",
             background:"var(--surface2)", color:"var(--text)", fontSize:13, fontWeight:700, cursor:"pointer" }}>Annuler</button>
-          <button onClick={confirm} disabled={busy} style={{ flex:2, padding:10, borderRadius:12, border:"none",
-            background:"#f59e0b", color:"white", fontSize:13, fontWeight:700, cursor:"pointer", opacity: busy ? 0.6 : 1 }}>
-            {busy ? "…" : "Séchée"}
+          <button onClick={confirm} disabled={busy} style={{ flex:2, padding:11, borderRadius:12, border:"none",
+            background:"linear-gradient(135deg, #F59E0B, #F97316)", color:"white", fontSize:13.5, fontWeight:800, cursor:"pointer", opacity: busy ? 0.6 : 1,
+            boxShadow:"0 8px 18px -10px #F59E0B" }}>
+            {busy ? "…" : "☀ Séchée"}
           </button>
         </div>
       </div>

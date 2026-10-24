@@ -109,18 +109,18 @@
     <h3>Ajouter une bobine</h3>
     <p><span class="admin">admin</span> Trois chemins mènent à la fenêtre <span class="ui">Nouvelle bobine</span> :</p>
     <ul>
-      <li>le bouton bleu <span class="ui">+ Bobine</span> de l'onglet <span class="ui">Stock</span> ;</li>
+      <li>le bouton <span class="ui">+ Bobine</span> de l'onglet <span class="ui">Stock</span>, à droite de la recherche ;</li>
       <li><span class="ui">+ Bobine</span> dans la fiche d'un filament, ou <span class="ui">＋ Ajouter une bobine de ce filament</span> dans le menu d'une bobine (le filament est alors déjà choisi) ;</li>
       <li><span class="ui">Ajouter une bobine…</span> dans le menu rapide d'une bobine ou d'un filament.</li>
     </ul>
-    <figure class="phone"><img src="img/filaments-nouvelle-bobine.webp" alt="Fenêtre Nouvelle bobine"><figcaption>Choisis le filament, puis complète le reste si tu veux.</figcaption></figure>
+    <figure class="phone"><img src="img/filaments-nouvelle-bobine.webp" alt="Fenêtre Nouvelle bobine"><figcaption>En tête, la bobine prend la couleur du filament choisi ; puis trois cartes.</figcaption></figure>
     <ol>
-      <li><b>FILAMENT *</b> (obligatoire) : tape quelques lettres dans <span class="ui">Rechercher : nom, marque, matière, teinte…</span>. La liste est groupée par matière (« PLA (12) ») ; touche la bonne ligne. Si le filament est déjà choisi, il s'affiche en pastille bleue avec un ✕ pour en changer. Si ta couleur n'existe pas encore, crée d'abord le filament (voir <a href="#filaments-nouveau-filament">Créer un filament</a>).</li>
-      <li><b>RESTE (G)</b> : le poids de filament restant. Laisse vide pour une bobine neuve : elle sera considérée pleine.</li>
-      <li><b>PRIX (€)</b> : ce que tu as payé cette bobine. Vide, l'appli utilise le prix catalogue du filament pour calculer le coût des impressions.</li>
-      <li><b>TAG NFC</b> : l'identifiant de la puce de la bobine (bobines Bambu Lab). Inutile de le recopier : un scan avec l'appli Android ou l'AMS le renseigne tout seul.</li>
-      <li><b>COMMENTAIRE</b> : ce que tu veux (lot, magasin, « déjà ouverte »…).</li>
-      <li>Touche <span class="ui">Enregistrer</span> (grisé tant qu'aucun filament n'est choisi).</li>
+      <li><b>Filament *</b> (obligatoire) : tape quelques lettres dans <span class="ui">Rechercher : nom, marque, matière, teinte…</span>. La liste est groupée par matière (« PLA (12) ») ; touche la bonne ligne. Le filament choisi s'affiche en pastille violette, et l'en-tête montre sa bobine ; <span class="ui">Changer</span> (ou le ✕) pour en prendre un autre. Si ta couleur n'existe pas encore, crée d'abord le filament (voir <a href="#filaments-nouveau-filament">Créer un filament</a>).</li>
+      <li>Carte <b>Quantité et prix</b> — <b>Reste (g)</b> : le poids de filament restant. Laisse vide pour une bobine neuve : elle sera considérée pleine. Les raccourcis <span class="ui">Pleine</span>, <span class="ui">¾</span>, <span class="ui">½</span>, <span class="ui">¼</span> remplissent le champ d'après le poids d'une bobine neuve de ce filament.</li>
+      <li><b>Prix (€)</b> : ce que tu as payé cette bobine. Vide, l'appli utilise le prix catalogue du filament pour calculer le coût des impressions.</li>
+      <li>Carte <b>Le reste (facultatif)</b> — <b>Tag NFC</b> : l'identifiant de la puce de la bobine (bobines Bambu Lab). Inutile de le recopier : un scan avec l'appli Android ou l'AMS le renseigne tout seul.</li>
+      <li><b>Commentaire</b> : ce que tu veux (lot, magasin, « déjà ouverte »…).</li>
+      <li>Touche <span class="ui">Enregistrer la bobine</span>, en bas (grisé tant qu'aucun filament n'est choisi).</li>
     </ol>
     <p>La nouvelle bobine arrive dans « Tiroir ». Elle est notée <b>séchée aujourd'hui</b> : une bobine neuve sort de son sachet sous vide. Si tu saisis un tag NFC et que ce filament était « À commander », il ne l'est plus.</p>
     <div class="tip"><p>Pour une bobine Bambu Lab, le plus simple est de la poser dans l'AMS ou de la scanner avec l'appli Android : l'appli crée le filament et la bobine pour toi (voir <a href="#filaments-correspondances">AMS ↔ bobines</a> et <a href="#filaments-nfc">NFC / RFID</a>).</p></div>
@@ -273,7 +273,7 @@
 
   <section id="filaments-nouveau-filament">
     <h3>Créer un filament</h3>
-    <p><span class="admin">admin</span> Dans l'onglet <span class="ui">Filaments</span>, touche <span class="ui">+ Filament</span>. La fenêtre <span class="ui">Nouveau filament</span> propose deux chemins.</p>
+    <p><span class="admin">admin</span> Dans l'onglet <span class="ui">Filaments</span>, touche <span class="ui">+ Filament</span>. La fenêtre <span class="ui">Nouveau filament</span> (« D'où vient-il ? ») propose deux chemins, en deux grandes cartes. En tête, la bobine prend les couleurs saisies au fur et à mesure, avec le nom.</p>
     <figure class="phone"><img src="img/filaments-nouveau-filament.webp" alt="Nouveau filament : choix entre catalogue Bambu et saisie libre"><figcaption>Catalogue Bambu ou saisie libre.</figcaption></figure>
     <h4>Depuis le catalogue Bambu</h4>
     <p>Pour un filament Bambu Lab, c'est le plus sûr : tous les codes sont justes, donc l'AMS le reconnaîtra.</p>
@@ -282,7 +282,7 @@
       <li>Choisis éventuellement une famille (<span class="ui">Toutes familles</span>) puis un type (<span class="ui">Tous types</span>) ; la liste des types suit la famille.</li>
       <li>Cherche la couleur dans <span class="ui">Rechercher une couleur (Jade White, Orange…)</span> : nom anglais, nom français ou code couleur.</li>
       <li>Touche la bonne ligne (pastille de couleur, nom officiel, badge <span class="ui">GRADIENT</span> ou <span class="ui">COAXIAL</span> pour un multicolore, sous-type et code).</li>
-      <li>Le formulaire s'ouvre pré-rempli, avec le bandeau « 📦 Pré-rempli depuis le catalogue Bambu ». Vérifie, puis touche <span class="ui">Créer le filament</span>.</li>
+      <li>Le formulaire s'ouvre pré-rempli, avec le bandeau vert « 📦 Pré-rempli depuis le catalogue Bambu ». Vérifie, puis touche <span class="ui">✓ Créer le filament</span> en bas. <span class="ui">← Retour</span> revient au choix.</li>
     </ol>
     <figure class="pair">
       <img src="img/filaments-catalogue-bambu.webp" alt="Recherche dans le catalogue Bambu">
@@ -291,7 +291,7 @@
     </figure>
     <p>Le catalogue est le nuancier officiel de Bambu Lab, téléchargé par le serveur au démarrage puis vérifié chaque jour. Juste après un démarrage, il peut afficher « Catalogue non disponible (démarrage en cours…) » : réessaie un peu plus tard.</p>
     <h4>Saisie libre</h4>
-    <p>Pour toute autre marque : <span class="ui">✏️ Saisie libre</span>, puis remplis <b>Nom de la couleur *</b>, <b>Nom traduit</b>, <b>Marque</b>, <b>Sous-type filament</b>, <b>Couleur(s)</b> (+ <b>Type multicolore</b>), <b>Profile ID Bambu</b>, <b>Code couleur Bambu</b> et <b>Poids total (g)</b>. Touche <span class="ui">Créer le filament</span>.</p>
+    <p>Pour toute autre marque : <span class="ui">✏️ Saisie libre</span>, puis remplis les trois cartes : <b>Identité</b> (<b>Nom de la couleur *</b>, <b>Nom traduit</b>, <b>Marque</b>, <b>Sous-type filament</b>), <b>Couleur</b> (<b>Couleur(s)</b>, avec l'aperçu, et <b>Type multicolore</b>) et <b>Côté Bambu et poids</b> (<b>Profile ID Bambu</b>, <b>Code couleur Bambu</b>, <b>Poids total (g)</b>). Touche <span class="ui">✓ Créer le filament</span>.</p>
     <p>Le prix, le support vide, l'échantillon et le commentaire se renseignent ensuite avec <span class="ui">✏️ Éditer</span>.</p>
     <div class="note"><p>Si un filament avec le même profil et la même couleur existe déjà, l'appli refuse le doublon : « ⚠ Filament identique déjà en base » avec le numéro et le nom de celui qui existe.</p></div>
   </section>
@@ -325,10 +325,10 @@
       <figcaption>Une carte par filament ; en la touchant, toutes les impressions faites avec.</figcaption>
     </figure>
     <ul>
-      <li>En-tête : couleur, nom, « Marque · Sous-type — N impressions ».</li>
-      <li>Chaque vignette : ta photo de l'impression si tu en as pris une, sinon celle du groupe, sinon l'image du plateau ; un badge de statut (réussie, échouée, annulée, en cours), le nombre de photos « 2 📷 », le nom et « date · grammes ».</li>
-      <li>Plusieurs impressions d'un même groupe tiennent dans une seule vignette « Groupe · 3 prints ».</li>
-      <li>Si des copains ont partagé des impressions faites avec ce filament, deux onglets apparaissent : <span class="ui">Mes impressions</span> et <span class="ui">👀 Chez les copains</span>.</li>
+      <li>En-tête : la bobine à la couleur du filament, « 🖨️ Imprimé avec », le nom, « Marque · Sous-type — N impressions ».</li>
+      <li>Chaque vignette : ta photo de l'impression si tu en as pris une, sinon celle du groupe, sinon l'image du plateau ; un badge de statut (réussie, échouée, annulée, en cours), le nombre de photos « 📷 2 », le nom et « date · grammes ».</li>
+      <li>Plusieurs impressions d'un même groupe tiennent dans une seule vignette « 📁 Groupe · 3 prints ».</li>
+      <li>Si des copains ont partagé des impressions faites avec ce filament, deux onglets apparaissent : <span class="ui">🖨️ Mes impressions</span> et <span class="ui">👀 Chez les copains</span>.</li>
       <li>Touche une vignette pour ouvrir la <a href="#impressions-fiche">fiche de l'impression</a> (ou du groupe).</li>
     </ul>
     <p>Un appui long sur une carte passe en <b>Nuancier</b> avec ce filament déjà sélectionné pour une comparaison.</p>
@@ -430,7 +430,7 @@
       <li>Ouvre sa fiche et touche le <b>soleil</b> de la ligne <b>Dernier séchage</b> (ou le badge <span class="ui">Séchage nécessaire</span>).</li>
       <li>La fenêtre <span class="ui">☀ Séchée aujourd'hui</span> demande « Où sèche-t-elle ? ».</li>
       <li>Laisse <span class="ui">Ailleurs</span> (« four, dessiccateur… — la date suffit »), ou touche un <b>emplacement vide</b> d'un AMS dans la grille « OU POSÉE DANS UN AMS » (les emplacements occupés sont grisés ; le choix se borde d'orange avec un soleil).</li>
-      <li>Touche <span class="ui">Séchée</span>.</li>
+      <li>Touche <span class="ui">☀ Séchée</span>.</li>
     </ol>
     <figure class="phone"><img src="img/filaments-sechee-aujourdhui.webp" alt="Fenêtre Séchée aujourd'hui"><figcaption>Ici aucun emplacement d'AMS n'est libre : seule l'option « Ailleurs » est proposée.</figcaption></figure>
     <p>La date du jour est enregistrée. Si tu as choisi un emplacement, la bobine y est « posée » : l'accueil la montre en couleur atténuée et hachurée avec un soleil (« ☀ Nom ») tant que l'emplacement reste vide, et quand cet AMS lance un séchage, la bobine est datée elle aussi. Dès qu'un filament est inséré à cet endroit, la pose est oubliée. Une bobine n'est posée qu'à un seul endroit ; la fiche de l'emplacement a un bouton <span class="ui">Retirer de l'emplacement</span>.</p>
