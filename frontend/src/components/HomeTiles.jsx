@@ -1795,9 +1795,11 @@ function ToRate({ r, o, sz }) {
   const thumb = (x, s) => x.cover_url ? <img key={x.design_id} data-pk="" src={mwImg(x.cover_url, s * 2)} alt="" title={x.title}
     style={{ width: s, height: s, borderRadius: Math.round(s / 4), objectFit: "cover", display: "block" }}/>
     : <span key={x.design_id} style={{ width: s, height: s, borderRadius: Math.round(s / 4), background: "var(--surface2)", display: "block" }}/>;
-  const head = <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+  // etroite : « 3 à evaluer », sur une ligne
+  const headOf = W => <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0, whiteSpace: "nowrap" }}>
     <span data-pk="" style={{ fontSize: 24, fontWeight: 900, color: items.length ? "#ea580c" : "var(--text)", lineHeight: 1.05, ...(items.length ? gradText("#EA580C", "#F59E0B") : {}) }}>{items.length}</span>
-    <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>modèle{items.length > 1 ? "s" : ""} à évaluer</span></div>;
+    <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis" }}>{W < 230 ? "à évaluer" : `modèle${items.length > 1 ? "s" : ""} à évaluer`}</span></div>;
+  const head = headOf(400);
   return (
     <Tile icon={<Star size={15}/>} color="#F97316" label="À évaluer" to="/prints?tab=makerworld"
       mini={sz.h === 0.5} summary={<span style={{ color: items.length ? "#ea580c" : "var(--text)" }}>{items.length}</span>}
@@ -1818,9 +1820,29 @@ function ToRate({ r, o, sz }) {
           <span style={{ fontSize: 11, fontWeight: 800, color: "#ea580c" }}>imprimé{x.printed > 1 ? ` ${x.printed} fois` : ""}{x.last_date ? ` · ${ago(x.last_date)}` : ""}</span>
         </div>)}</div></> : null}>
       {({ W, H }) => {
-        if (!items.length) return <>{head}<Empty>Tout est évalué</Empty></>;
+        if (!items.length) return <>{headOf(W)}<Empty>Tout est évalué</Empty></>;
         const rest = H - 34;
-        if (!o.thumbs || rest < 24) return head;
+        // basse (une rangee) : la vignette sur toute la hauteur a gauche ; le compte, le titre et la date a droite
+        if (o.thumbs && items.length <= 2 && rest < 70 && H >= 44) {
+          const x = items[0], s2 = Math.min(H - 2, 72);
+          return <div data-tip={`${x.title_fr || x.title || ""}${x.creator_name ? `
+par ${x.creator_name}` : ""}`}
+            style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <span style={{ position: "relative", flexShrink: 0 }}>{thumb(x, s2)}
+              <span style={{ position: "absolute", top: 3, left: 3, fontSize: 9.5, fontWeight: 900, color: "#fff", padding: "0 5px", borderRadius: 6,
+                background: "linear-gradient(135deg, #EA580C, #F59E0B)" }}>★</span>
+              {items.length > 1 && <span style={{ position: "absolute", right: -4, bottom: -4, fontSize: 10, fontWeight: 900, color: "#fff", padding: "0 5px",
+                borderRadius: 8, background: "#ea580c", boxShadow: "0 0 0 2px var(--surface)" }}>+1</span>}</span>
+            <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+              {W - s2 - 10 < 120 ? <div style={{ display: "flex", alignItems: "baseline", gap: 5, whiteSpace: "nowrap" }}>
+                <span data-pk="" style={{ fontSize: 24, fontWeight: 900, lineHeight: 1.05, ...gradText("#EA580C", "#F59E0B") }}>{items.length}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>à noter</span></div> : headOf(W)}
+              {W >= 200 && <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text)", lineHeight: 1.25, ...clamp(1) }}>{x.title_fr || x.title || `Modèle ${x.design_id}`}</span>}
+              {W >= 260 && x.last_date && <span style={{ fontSize: 10.5, fontWeight: 800, color: "#ea580c", whiteSpace: "nowrap" }}>imprimé {ago(x.last_date)}</span>}
+            </span>
+          </div>;
+        }
+        if (!o.thumbs || rest < 24) return headOf(W);
         // un ou deux modeles et de la place : leur carte (grande image, titre, createur, quand, a noter)
         if (items.length <= 2 && rest >= 70) {
           const each = Math.floor((rest - 8 * (items.length - 1)) / items.length);
@@ -1837,14 +1859,13 @@ function ToRate({ r, o, sz }) {
                 {each >= 80 && !(narrow && each < 200) && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#ea580c" }}>
                   imprimé{x.printed > 1 ? ` ${x.printed} fois` : ""}{when ? ` · ${when}` : ""}</span>}
               </span></div>; };
-          return <>{head}<div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8, marginTop: 4, minHeight: 0 }}>
+          return <>{headOf(W)}<div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8, marginTop: 4, minHeight: 0 }}>
             {items.map(card)}</div></>;
         }
         const best = mosaic(items.length, W, rest - 4, 6);
         const cap = best.c * best.r - (best.big ? 3 : 0);
         const list = items.slice(0, cap);
-        return <>{head}<div style={{ flex: 1, display: "grid", gap: 6, marginTop: 4, gridTemplateColumns: `repeat(${best.c}, minmax(0, 1fr))`,
-          gridTemplateRows: `repeat(${best.r}, minmax(0, 1fr))`, minHeight: 0 }}>
+        return <>{headOf(W)}<div style={{ flex: 1, display: "grid", gap: 6, marginTop: 4, ...mosaicGrid(best), minHeight: 0 }}>
           {list.map((x, k) => { const big = best.big && k === 0, cell = big ? best.cell * 2 : best.cell;
             return <div key={x.design_id} data-tip={`${x.title_fr || x.title || ""}${x.creator_name ? `
 par ${x.creator_name}` : ""}`} style={{ position: "relative", minWidth: 0,
@@ -2577,9 +2598,17 @@ function mosaic(n, W, H, gap = 6) {
     const cw = (W - gap * (c - 1)) / c, ch = (H - gap * (r0 - 1)) / r0;
     if (cw < 34 || ch < 34) continue;
     const ar = cw / ch, score = Math.min(cw, ch) * (ar > 1.6 || ar < 0.65 ? 0.55 : 1) * (big ? 1.08 : 1);
-    if (!best || score > best.score) best = { c, r: r0, big, score, cell: Math.min(cw, ch) };
+    if (!best || score > best.score) best = { c, r: r0, big, score, cell: Math.min(cw, ch), cw, ch };
   }
-  return best || { c: Math.max(1, Math.floor((W + gap) / 40)), r: 1, big: false, cell: 34 };
+  return best || { c: Math.max(1, Math.floor((W + gap) / 40)), r: 1, big: false, cell: 34, cw: 34, ch: 34 };
+}
+// la grille d'une mosaique : des cases qui remplissent, sauf si elles deviendraient trop plates ou trop hautes
+// (une seule image dans une tuile large et basse : un bandeau recadre) ; alors carrees, au centre
+function mosaicGrid(m) {
+  const wide = m.cw / m.ch > 1.35, tall = m.ch / m.cw > 1.35;
+  return { gridTemplateColumns: wide ? `repeat(${m.c}, ${Math.floor(m.ch)}px)` : `repeat(${m.c}, minmax(0, 1fr))`,
+    gridTemplateRows: tall ? `repeat(${m.r}, ${Math.floor(m.cw)}px)` : `repeat(${m.r}, minmax(0, 1fr))`,
+    justifyContent: wide ? "center" : undefined, alignContent: tall ? "center" : undefined };
 }
 // la fenetre de la galerie : les chiffres, un filtre (toutes, reussies, ratees), puis chaque impression en carte
 function GalleryZoom({ all, nav }) {
@@ -2653,8 +2682,7 @@ function Gallery({ g, o, sz }) {
             {!o.round && <span style={{ position: "absolute", top: 6, right: 6, width: 9, height: 9, borderRadius: "50%", background: ok ? "#22c55e" : "#ef4444",
               boxShadow: "0 0 0 2px rgba(255,255,255,0.85)" }}/>}
           </div>; };
-        return <div style={{ flex: 1, display: "grid", gap, gridTemplateColumns: `repeat(${best.c}, minmax(0, 1fr))`,
-          gridTemplateRows: `repeat(${best.r}, minmax(0, 1fr))`, minHeight: 0 }}>{list.map(tile)}</div>;
+        return <div style={{ flex: 1, display: "grid", gap, ...mosaicGrid(best), minHeight: 0 }}>{list.map(tile)}</div>;
       }}
     </Tile>
   );
