@@ -5326,6 +5326,14 @@ async def secrets_by_account(usernames: list) -> list:
     """Pour l'administrateur : combien de secrets chaque compte a trouves lui-meme, lesquels et quand."""
     d = await _eggs_by()
     house = await eggs_found()
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        try:
+            lps = json.loads(await get_setting(db, KEY + "_LOUPES", "") or "{}")
+        except ValueError:
+            lps = {}
+    lps = lps if isinstance(lps, dict) else {}
     out = []
     for u in usernames:
         mine = d.get(u) or {}
@@ -5334,7 +5342,13 @@ async def secrets_by_account(usernames: list) -> list:
                          **({"desc": EGGS[k][2]} if k in house else {}),
                          "sub": SUB_OF.get(f"egg_{k}")} for k, at in mine.items() if k in EGGS),
                        key=lambda x: str(x["at"] or ""), reverse=True)
-        out.append({"username": u, "count": len(items), "last": items[0]["at"] if items else None, "items": items})
+        # ses loupes : ce qu'il en reste, et sur quels secrets (pour l'administrateur)
+        lp = lps.get(u) if isinstance(lps.get(u), dict) else {}
+        used = sorted(({"id": aid, "emoji": BY_ID[aid]["emoji"], "name": BY_ID[aid]["name"], "at": at,
+                        "found": aid[4:] in mine} for aid, at in (lp.get("used") or {}).items() if aid in BY_ID),
+                      key=lambda x: str(x["at"] or ""), reverse=True)
+        out.append({"username": u, "count": len(items), "last": items[0]["at"] if items else None, "items": items,
+                    "loupes": {"left": lp.get("n"), "used": used}})
     return out
 
 
@@ -5373,7 +5387,7 @@ async def set_family(secrets=None, wheel=None) -> dict:
     return d
 
 
-def family_view(v: dict, mine: dict, house: str) -> dict:
+def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> dict:
     """La page vue par un compte de la famille : ses secrets a lui (entiers), ceux de la maison
     qu'il n'a pas encore « a portee » (titre, medaille, categorie ; ni descriptif, ni histoire)."""
     medals = dict(v["medals"])
@@ -5399,14 +5413,95 @@ def family_view(v: dict, mine: dict, house: str) -> dict:
         elif it["level"] >= 0:
             medals[t0["id"]] = max(0, medals.get(t0["id"], 0) - 1)
             score -= t0["score"]
-            items.append({**base, "level": -1, "reveal": max(it.get("reveal") or 0, FREE_FROM_FRIENDS), "hint": None,
+            lit = aid in ((loupes or {}).get("used") or {})        # indice debloque a la loupe
+            items.append({**base, "level": -1, "reveal": max(it.get("reveal") or 0, FREE_FROM_FRIENDS + (1 if lit else 0)),
+                          "hint": hint_of(a) if lit else None, "loupe": bool(lit),
                           "masked": True, "desc": "Descriptif caché", "lore": None, "house": house,
                           "tiers": [{**it["tiers"][0], "at": None}]})
         else:
             items.append(it)
     found = sum(1 for aid in FAMILY_IDS if aid[4:] in mine)
     return {**v, "items": items, "medals": medals, "score": score,
-            "family": {"house": house, "found": found, "total": len(FAMILY_IDS)}}
+            "family": {"house": house, "found": found, "total": len(FAMILY_IDS),
+                       "loupes": (loupes or {}).get("n", 0), "loupes_day": LOUPES_DAY, "loupes_max": LOUPES_MAX}}
+
+
+# Les loupes de la famille (24/10/2026) : sans cles ni tickets, un compte de la famille revele l'indice d'un
+# secret que la maison a deja trouve. Deux par jour, gardees jusqu'a trois.
+LOUPES_DAY, LOUPES_MAX = 2, 3
+
+
+async def loupes(username: str) -> dict:
+    """{"n": loupes en main, "day": dernier jour credite, "used": {secret: date}} ; credite le jour venu."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    today = _today_paris().isoformat()
+    async with AsyncSessionLocal() as db:
+        try:
+            d = json.loads(await get_setting(db, KEY + "_LOUPES", "") or "{}")
+        except ValueError:
+            d = {}
+        d = d if isinstance(d, dict) else {}
+        me = d.get(username) if isinstance(d.get(username), dict) else None
+        if me is None:
+            me = {"n": LOUPES_DAY, "day": today, "used": {}}
+        elif me.get("day") != today:
+            me = {**me, "n": min(LOUPES_MAX, int(me.get("n") or 0) + LOUPES_DAY), "day": today}
+        else:
+            return me
+        d[username] = me
+        await set_setting(db, KEY + "_LOUPES", json.dumps(d))
+    return me
+
+
+async def use_loupe(username: str, aid: str) -> dict:
+    """Une loupe sur un secret que la maison a et que ce compte n'a pas encore : son indice."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    if aid not in FAMILY_IDS:
+        raise ValueError("Pas de loupe pour ce secret")
+    if aid[4:] in ((await _eggs_by()).get(username) or {}):
+        raise ValueError("Tu l'as déjà")
+    if aid[4:] not in await eggs_found():
+        raise ValueError("La maison ne l'a pas encore : pas d'indice à montrer")
+    me = await loupes(username)
+    if aid in (me.get("used") or {}):
+        return {"ok": True, "hint": hint_of(BY_ID[aid]), "loupes": me.get("n", 0)}
+    if int(me.get("n") or 0) <= 0:
+        raise ValueError("Plus de loupe aujourd'hui : deux de plus demain")
+    me = {**me, "n": int(me["n"]) - 1, "used": {**(me.get("used") or {}), aid: datetime.utcnow().isoformat()}}
+    async with AsyncSessionLocal() as db:
+        try:
+            d = json.loads(await get_setting(db, KEY + "_LOUPES", "") or "{}")
+        except ValueError:
+            d = {}
+        d = d if isinstance(d, dict) else {}
+        d[username] = me
+        await set_setting(db, KEY + "_LOUPES", json.dumps(d))
+    return {"ok": True, "hint": hint_of(BY_ID[aid]), "loupes": me["n"]}
+
+
+def family_finds_view(v: dict, by: dict, family_names: list) -> dict:
+    """Chez le compte principal : ce que la famille a trouve et la maison pas encore, « a portee » comme un
+    secret de copain (son initiale, et categorie, vignette et titre offerts)."""
+    have = {}
+    for u in family_names:
+        for k in (by.get(u) or {}):
+            aid = f"egg_{k}"
+            if aid in FAMILY_IDS:
+                have.setdefault(aid, []).append(u)
+    if not have:
+        return v
+    items = []
+    for it in v["items"]:
+        names = have.get(it["id"])
+        if names and it["level"] < 0:
+            a = BY_ID[it["id"]]
+            rv = max(it.get("reveal") or 0, FREE_FROM_FRIENDS)
+            it = {**it, "reveal": rv, "emoji": a["emoji"], "name": a["name"], "sub": a.get("sub") or SUB_OF.get(it["id"]),
+                  "family_has": names, "gift_from": sorted(set((it.get("gift_from") or []) + names))}
+        items.append(it)
+    return {**v, "items": items}
 
 
 async def eggs_found() -> dict:

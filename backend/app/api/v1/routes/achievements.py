@@ -262,6 +262,18 @@ async def achievements_egg(name: str, acc=Depends(require_own_account)):
     return r
 
 
+@router.post("/loupe/{aid}")
+async def achievements_loupe(aid: str, acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
+    """Un compte de la famille revele l'indice d'un secret que la maison a deja (deux loupes par jour)."""
+    from ....services import achievements as A
+    if not (await _me(acc[0], db))["family"]:
+        raise HTTPException(403, "Les loupes sont pour les comptes de la famille")
+    try:
+        return await A.use_loupe(acc[0], aid)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/wheel/spin")
 async def achievements_spin(_: str = Depends(require_wheel)):
     """Un tour de roue : tire le lot cote serveur et l'applique."""
@@ -361,8 +373,12 @@ async def achievements_view(request: Request, fresh: bool = False, token: str = 
             mine = (await A._eggs_by()).get(username) or {}
             if role != ROLE_ADMIN:               # la roue permise : son tresor reste visible
                 v = {**A.mask_secrets(v), "keys": v["keys"] if me["wheel"] else None}
-            v = A.family_view(v, mine, me["house"] or "La maison")
+            v = A.family_view(v, mine, me["house"] or "La maison", await A.loupes(username))
             v["family"]["subs"] = list(A.FAMILY_SUBS)
+        elif me["main"]:                          # le principal : les trouvailles de la famille, « a portee »
+            fam = await A.family()
+            if fam["secrets"]:
+                v = A.family_finds_view(v, await A._eggs_by(), [x for x in fam["secrets"] if x != username])
         v = {**v, "me": me}
         if role == ROLE_ADMIN or me["family"]:
             return _json(v)

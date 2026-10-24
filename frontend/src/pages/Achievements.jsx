@@ -71,6 +71,12 @@ export default function Achievements({ embedded = false }) {
   };
   // cles et tickets : le compte principal seul ; la roue : lui, ou un compte a qui il l'a permise
   const canSpend = isAdmin && !atFriend && !!data?.keys && data?.me?.main !== false;
+  // famille : une loupe sur un secret que la maison a deja (son indice)
+  const loupe = async aid => {
+    setKeyErr(null);
+    try { await client.post(`/achievements/loupe/${aid}`); await load(); }
+    catch (e) { setKeyErr(e.response?.data?.detail || e.message); }
+  };
   const canSpin = !atFriend && !!data?.keys?.wheel && (canSpend || !!data?.me?.wheel);
   // ticket de palier : passer un succes a son palier suivant
   const [ceremony, setCeremony] = useState(null);
@@ -104,6 +110,8 @@ export default function Achievements({ embedded = false }) {
     else for (const p of pod?.people || []) if (!p.me && p.status === "ok") add(p.uniques, p.name);
     // compte de la famille : ce que la maison a deja trouve et lui pas encore
     if (!atFriend) for (const it of data?.items || []) if (it.house && it.level < 0 && !(out[it.id] || []).includes(it.house)) add([it.id], it.house);
+    // compte principal : ce que la famille a trouve et la maison pas encore
+    if (!atFriend) for (const it of data?.items || []) if (it.level < 0) for (const n of it.family_has || []) if (!(out[it.id] || []).includes(n)) add([it.id], n);
     return out;
   }, [pod, mine, atFriend, data]);
   // En visite : parmi ses medailles uniques, celles que j'ai aussi (ou pas)
@@ -296,7 +304,9 @@ export default function Achievements({ embedded = false }) {
                 {c.id === "secret" && (near > 0 || common + toFind > 0 || data.family) && (
                   <div style={{ display:"flex", flexDirection:"column", gap:4, padding:"8px 10px", borderRadius:10, fontSize:11.5,
                     lineHeight:1.45, color:"var(--text2)", background:"rgba(245,158,11,0.08)", border:"1px dashed rgba(245,158,11,0.5)" }}>
-                    {data.family && <span><b style={{ color:"#EC4899" }}>🥚 Tes trouvailles : {data.family.found} / {data.family.total}</b>.
+                    {data.family && <span><b style={{ color:"#EC4899" }}>🥚 Tes trouvailles : {data.family.found} / {data.family.total}</b>
+                      {" · "}<b style={{ color:"#0EA5E9" }}>🔍 {data.family.loupes} loupe{data.family.loupes > 1 ? "s" : ""}</b> pour révéler l'indice d'un secret
+                      que {data.family.house} a déjà ({data.family.loupes_day} de plus chaque jour, {data.family.loupes_max} au plus).
                       Easter eggs, cachettes, Android, farces, fêtes et pages cachées : ici, ce sont les tiennes. Le reste des succès est celui
                       de la maison.</span>}
                     {near > 0 && !atFriend && <span><b style={{ color:"#F59E0B" }}>👀 À portée</b> : pas encore à toi, mais {data.family
@@ -428,7 +438,8 @@ export default function Achievements({ embedded = false }) {
             <Track label={`Succès · ${byId[detail].name}`}/>
             <Card it={byId[detail]} sheet others={ringBy[detail]} shared={shared(byId[detail])} rivals={rivalsOf(byId[detail])}
               tickets={canSpend ? data.keys?.wheel?.tickets || 0 : 0} onTicket={() => useTicket(detail)}
-              keys={canSpend ? data.keys : null} onSpend={() => spend(detail)} keyErr={keyErr}/>
+              keys={canSpend ? data.keys : null} onSpend={() => spend(detail)} keyErr={keyErr}
+              loupes={data.family ? data.family.loupes : null} onLoupe={() => loupe(detail)}/>
           </div>
         </div>, document.body
       )}
@@ -764,7 +775,7 @@ function OddsSheet({ odds, admin, uniq, onClose }) {
               <div style={{ fontSize:11, color:"var(--muted)" }}>Dernière ouverture comptée : {oddsWhen(a.last)}</div>
               {/* ses propres trouvailles (pas le principal : les siennes sont celles de la maison) */}
               {!a.main && secrets?.[a.username] && (sc => (
-                <button type="button" onClick={() => sc.count && setOpenU(a.username)} disabled={!sc.count}
+                <button type="button" onClick={() => (sc.count || sc.loupes?.used?.length) && setOpenU(a.username)} disabled={!sc.count && !sc.loupes?.used?.length}
                   style={{ marginTop:4, padding:0, border:"none", background:"none", cursor: sc.count ? "pointer" : "default", fontSize:12, fontWeight:800,
                     color:"#EC4899", textAlign:"left" }}>
                   🥚 {sc.count} secret{sc.count > 1 ? "s" : ""} trouvé{sc.count > 1 ? "s" : ""} lui-même{sc.count ? " ›" : ""}</button>
@@ -805,6 +816,20 @@ function AccountSecrets({ acc, subs, uniq, onClose }) {
           <button onClick={onClose} aria-label="Fermer" style={{ width:32, height:32, borderRadius:10, border:"1px solid var(--border)",
             background:"var(--surface2)", color:"var(--text2)", cursor:"pointer", flexShrink:0 }}>✕</button>
         </div>
+        {/* ses loupes : combien il lui en reste, et sur quels secrets (deja trouve ensuite, ou pas encore) */}
+        {(acc.loupes?.used?.length > 0 || acc.loupes?.left != null) && (
+          <div style={{ display:"flex", flexDirection:"column", gap:6, padding:"9px 11px", borderRadius:12,
+            background:"linear-gradient(135deg, rgba(14,165,233,0.12), transparent 60%), var(--surface2)", border:"1px solid rgba(14,165,233,0.3)" }}>
+            <div style={{ fontSize:12.5, fontWeight:800, color:"var(--text)" }}>🔍 Loupes
+              <span style={{ fontWeight:700, color:"var(--muted)" }}> · {acc.loupes.used.length} utilisée{acc.loupes.used.length > 1 ? "s" : ""}
+                {acc.loupes.left != null ? ` · ${acc.loupes.left} en main` : ""}</span></div>
+            {acc.loupes.used.length > 0 && <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+              {acc.loupes.used.map(x => <span key={x.id} title={`${x.name}\nloupe ${oddsWhen(x.at)}${x.found ? "\ntrouvé ensuite" : "\npas encore trouvé"}`}
+                style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11.5, fontWeight:700, padding:"2px 8px", borderRadius:12,
+                  background:"var(--surface)", color:"var(--text2)", border:`1px solid ${x.found ? "rgba(34,197,94,0.5)" : "var(--border)"}` }}>
+                {x.emoji} {x.name}{x.found && <b style={{ color:"#16a34a" }}>✓</b>}</span>)}</div>}
+          </div>
+        )}
         {groups.map(g => {
           const col = SUB_COLOR[g.id] || "#A855F7", isOpen = open.has(g.id), n = g.items.length;
           const sel = g.items.find(x => x.id === pick);
@@ -1462,7 +1487,7 @@ const progress = it => {
   return span > 0 ? Math.max(0, Math.min(1, (it.value - (it.prev || 0)) / span)) : 0;
 };
 
-function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr, rivals, tickets = 0, onTicket }) {
+function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr, rivals, tickets = 0, onTicket, loupes = null, onLoupe }) {
   const [sure, setSure] = useState(false);       // ticket : un second toucher pour confirmer
   const ref = useRef(null);
   const [open, setOpen] = useState(sheet);
@@ -1553,6 +1578,14 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
       {/* secret pas encore gagne : ce que les cles ont revele, et la suite */}
       {sheet && unique && !got && it.hint && (
         <p style={{ margin:0, fontSize:12.5, color:"var(--text2)", fontStyle:"italic" }}>💡 Indice : {it.hint}</p>
+      )}
+      {/* famille : une loupe revele l'indice d'un secret que la maison a deja */}
+      {sheet && unique && !got && it.house && !it.hint && loupes != null && (
+        <button type="button" onClick={onLoupe} disabled={!loupes}
+          style={{ alignSelf:"flex-start", display:"inline-flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:20, border:"none",
+            cursor: loupes ? "pointer" : "default", fontWeight:800, fontSize:12.5, color:"#fff", opacity: loupes ? 1 : 0.55,
+            background:"linear-gradient(135deg, #0EA5E9, #6366F1)" }}>
+          🔍 {loupes ? `Révéler l'indice (il te reste ${loupes} loupe${loupes > 1 ? "s" : ""})` : "Plus de loupe aujourd'hui : deux de plus demain"}</button>
       )}
       {sheet && unique && !got && it.gift_from?.length > 0 && (
         <p style={{ margin:0, fontSize:12.5, fontWeight:700, color:"#8B5CF6" }}>
@@ -1786,6 +1819,9 @@ function Rules({ data, onClose }) {
         <P>Un compte de la <b>famille</b> (case cochée par l'administrateur) cherche les easter eggs, cachettes, secrets Android,
           farces, fêtes et pages cachées pour lui-même : il voit ses trouvailles en entier, et celles de la maison comme chez un
           copain (catégorie, médaille et titre, « untel l'a déjà »). Le reste des succès est celui de la maison.</P>
+        <P>Chaque compte de la famille a des <b>loupes</b> : deux de plus chaque jour, trois au plus. Une loupe révèle l'indice d'un
+          secret que le compte principal a déjà trouvé. Dans l'autre sens, ce que la famille trouve et que le principal n'a pas encore
+          apparaît chez lui « à portée », avec l'initiale de celui qui l'a, et ses trois premières étapes offertes.</P>
       </div>
     </div>
   );
