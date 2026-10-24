@@ -5564,7 +5564,9 @@ def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> 
                 medals[t0["id"]] = medals.get(t0["id"], 0) + 1
                 score += t0["score"]
             at = mine[k] or it["tiers"][0].get("at")
+            # scoop : trouve avant la maison (le compte principal ne l'a pas encore)
             items.append({**base, "level": 0, "reveal": len(REVEALS), "hint": None, "masked": False,
+                          "scoop": it["level"] < 0, "scoop_house": house if it["level"] < 0 else None,
                           "desc": describe(a, a["tiers"][0]), "lore": a.get("lore"),
                           "tiers": [{**it["tiers"][0], "at": at}]})
         elif it["level"] >= 0:
@@ -5580,6 +5582,7 @@ def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> 
     found = sum(1 for aid in FAMILY_IDS if aid[4:] in mine)
     return {**v, "items": items, "medals": medals, "score": score,
             "family": {"house": house, "found": found, "total": len(FAMILY_IDS),
+                       "scoops": sum(1 for x in items if x.get("scoop")),
                        "loupes": (loupes or {}).get("n", 0), "loupes_day": LOUPES_DAY, "loupes_max": LOUPES_MAX,
                        "loupes_used": len((loupes or {}).get("used") or {})}}
 

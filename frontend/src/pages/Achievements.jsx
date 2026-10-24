@@ -340,6 +340,8 @@ export default function Achievements({ embedded = false }) {
                     {near > 0 && !atFriend && <span><b style={{ color:"#F59E0B" }}>👀 À portée</b> : pas encore à toi, mais {data.family
                       ? "quelqu'un de la maison ou un copain" : "un copain"} l'a déjà
                       débloqué (son initiale est sur la médaille). Rien n'est dévoilé : à toi de trouver comment.</span>}
+                    {data.family?.scoops > 0 && !atFriend && <span><b style={{ color:"#EC4899" }}>✨ avant {data.family.house}</b> : tu l'as trouvé
+                      et {data.family.house} pas encore ({data.family.scoops} en tout).</span>}
                     {near > 0 && atFriend && <span><b style={{ color:"#F59E0B" }}>« toi »</b> : tu l'as déjà, lui pas encore.</span>}
                     {common + toFind > 0 && <span><b style={{ color:"#22c55e" }}>✓ toi aussi</b> / <b style={{ color:"#ef4444" }}>pas toi</b> :
                       ses médailles comparées aux tiennes.</span>}
@@ -396,6 +398,9 @@ export default function Achievements({ embedded = false }) {
                             {data.family?.subs?.includes(sb.id) && <span title="Dans ce tiroir, ce sont tes trouvailles à toi"
                               style={{ marginLeft:6, fontSize:10.5, fontWeight:900, padding:"1px 7px", borderRadius:20, background:"#EC4899", color:"#fff",
                                 verticalAlign:"middle", whiteSpace:"nowrap", display:"inline-block" }}>à toi</span>}
+                            {(n => n > 0 && <span data-tip={`${n} trouvé${n > 1 ? "s" : ""} avant ${data.family?.house || "la maison"}`}
+                              style={{ marginLeft:5, fontSize:10.5, fontWeight:900, padding:"1px 7px", borderRadius:20, color:"#fff", verticalAlign:"middle",
+                              whiteSpace:"nowrap", display:"inline-block", background:"linear-gradient(135deg, #EC4899, #F59E0B)" }}>✨ {n}</span>)(sb.items.filter(x => x.scoop).length)}
                             {spentIn(sb.items).keys > 0 && <span title="Clés dépensées dans ce tiroir"
                               style={{ marginLeft:6, fontSize:11, fontWeight:800, color:"#F59E0B" }}>🔑 {spentIn(sb.items).keys}</span>}
                             {c.id === "secret" && <span style={{ display:"flex", marginTop:3 }}><Hand of={`s_${sb.id}`} size={18}/></span>}</span>
@@ -477,10 +482,17 @@ function Tile({ it, onOpen, others, shared, rivals }) {
     <button onClick={onOpen} title={near ? `${it.name} · ${others.join(", ")} l'${others.length > 1 ? "ont" : "a"}` : it.name}
       style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:5,
       padding:"10px 4px 8px", borderRadius:12, cursor:"pointer", minWidth:0, position:"relative",
-      background: got ? `${top.color}14` : near ? "rgba(245,158,11,0.08)" : "transparent",
-      border:`1px ${near ? "dashed" : "solid"} ${got ? top.color + "55" : near ? "#F59E0B" : "var(--border)"}` }}>
+      background: it.scoop ? `linear-gradient(160deg, rgba(236,72,153,0.16), ${top.color}14 60%)` : got ? `${top.color}14` : near ? "rgba(245,158,11,0.08)" : "transparent",
+      border:`1px ${near ? "dashed" : "solid"} ${it.scoop ? "#EC4899" : got ? top.color + "55" : near ? "#F59E0B" : "var(--border)"}` }}>
       <span style={{ borderRadius:"50%", padding:2, boxShadow: near ? "0 0 0 2px #F59E0B, 0 0 12px rgba(245,158,11,0.55)" : "none" }}>
         <Medal tier={top} emoji={it.emoji} size={46} locked={!got}/></span>
+      {/* compte de la famille : trouve avant la maison */}
+      {it.scoop && (
+        <span style={{ position:"absolute", top:-9, left:"50%", transform:"translateX(-50%)", maxWidth:"calc(100% + 6px)", overflow:"hidden", textOverflow:"ellipsis",
+          fontSize:9.5, fontWeight:900, padding:"2px 6px", borderRadius:20, whiteSpace:"nowrap", zIndex:1,
+          color:"#fff", background:"linear-gradient(135deg, #EC4899, #F59E0B)", border:"1.5px solid var(--sheet-bg)",
+          boxShadow:"0 0 10px rgba(236,72,153,0.55)" }}>✨ avant {it.scoop_house || "la maison"}</span>
+      )}
       {/* en visite : sa medaille, l'ai-je aussi ? */}
       {shared !== undefined && (
         <span style={{ position:"absolute", top:4, right:4, fontSize:9.5, fontWeight:800, padding:"2px 6px", borderRadius:20,
@@ -1621,6 +1633,11 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
           {sheet && got && <SecretPlace it={it}/>}
         </div>
       </div>
+      {it.scoop && (
+        <p style={{ margin:0, fontSize:12.5, fontWeight:800, lineHeight:1.45, background:"linear-gradient(90deg, #EC4899, #F59E0B)",
+          WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}>
+          ✨ Trouvé avant {it.scoop_house || "la maison"} : {it.scoop_house || "la maison"} ne l'a pas encore !</p>
+      )}
       {shared !== undefined && (
         <p style={{ margin:0, fontSize:12.5, fontWeight:700, color: shared ? "#22c55e" : "#ef4444" }}>
           {shared ? "✓ Toi aussi, tu l'as." : "Tu ne l'as pas encore : à toi de le trouver !"}</p>
