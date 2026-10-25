@@ -4,8 +4,10 @@ import { pushApi } from "../components/PushBridge";
 
 // Une mise a jour en attente (25/10/2026) : BambuNymous (nouveautes sur master, pour l'admin, qui
 // met l'image a jour) ou l'appli Android (plus recente que celle installee, dans l'appli seulement).
-// Une seule lecture partagee, gardee 30 min, relue au retour sur l'onglet : la pastille de Parametres.
-const KEEP_MS = 30 * 60 * 1000;
+// Une seule lecture partagee, la pastille de Parametres. Relue toutes les 5 min tant que la page est
+// visible, au retour sur l'onglet, et tout de suite quand Parametres verifie la version (25/10/2026 :
+// gardee 30 min, elle ne bougeait qu'avec un F5).
+const KEEP_MS = 5 * 60 * 1000;
 let last = null, at = 0, p = null, who = null;
 const subs = new Set();
 
@@ -47,11 +49,15 @@ export function useUpdates(admin) {
     refresh(!!admin).then(f);
     const wake = () => { if (!document.hidden) refresh(!!admin); };
     document.addEventListener("visibilitychange", wake);
-    return () => { alive = false; subs.delete(f); document.removeEventListener("visibilitychange", wake); };
+    const iv = setInterval(wake, KEEP_MS);
+    return () => { alive = false; subs.delete(f); clearInterval(iv); document.removeEventListener("visibilitychange", wake); };
   }, [admin]);
   const server = d?.server || 0, android = !!d?.android;
   return { server, android, any: server > 0 || android };
 }
+
+// relire tout de suite (Parametres vient de verifier la version, une mise a jour vient de se faire)
+export function refreshUpdates() { return refresh(!!who, true); }
 
 // le texte de l'infobulle
 export function updatesTip(u) {

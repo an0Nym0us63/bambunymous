@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 REPO = os.getenv("BAMBUNYMOUS_REPO", "an0Nym0us63/bambunymous")
 BRANCH = "master"
 _CACHE = {"t": 0.0, "v": None}
-TTL = 3600
+TTL = 900                    # 15 min : la pastille de Parametres suit sans F5 (GitHub : 60 requetes / h sans jeton)
 
 
 def _compare(local: str) -> dict:

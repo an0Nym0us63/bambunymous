@@ -24,6 +24,7 @@ import AndroidApp from "../components/AndroidApp";
 import StorageSheet from "../components/StorageSheet";
 import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
+import { refreshUpdates } from "../utils/updates";
 import { egg, tapper, useEggFound } from "../eggs";
 
 const inp = {
@@ -2068,7 +2069,7 @@ function VersionLine({ version }) {
   const devTap = React.useMemo(() => tapper(5, 3000, () => egg("developer")), []);
   const [open, setOpen] = React.useState(false);
   const microFound = useEggFound("micro_benchy");   // le petit bateau, une fois trouve, s'en va
-  React.useEffect(() => { client.get("/version/check").then(({ data }) => setChk(data)).catch(() => {}); }, []);
+  React.useEffect(() => { client.get("/version/check").then(({ data }) => { setChk(data); refreshUpdates(); }).catch(() => {}); }, []);
   const n = chk?.behind || 0;
   return (
     <div style={{ textAlign:"center", marginTop:8, position:"relative" }}>
