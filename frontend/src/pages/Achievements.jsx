@@ -1221,8 +1221,13 @@ function Showcase({ data, tier, onTier, onOpen, onClose, mine, owner }) {
               <div style={{ position:"relative", borderRadius:14, padding:"12px 8px 16px",
                 background:`linear-gradient(180deg, ${rgba(t.color, 0.10)}, ${rgba(t.color, 0.03)} 70%, ${rgba(t.color, 0.16)})`,
                 border:`1px solid ${rgba(t.color, 0.28)}`, boxShadow:"inset 0 1px 0 rgba(255,255,255,0.25)" }}>
+                {/* par blocs de 48 (2, 3, 4, 6 ou 8 par rangee : les rangees restent pleines) ; un bloc loin de
+                    l'ecran laisse sa place vide, sinon les medailles deja vues s'accumulaient et la vitrine ramait */}
+                <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                {Array.from({ length: Math.ceil(visible.length / 48) }, (_, k) => visible.slice(k * 48, k * 48 + 48)).map((chunk, k) => (
+                <LazyBlock key={k} root={boxRef}>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(78px, 1fr))", gap:"12px 6px" }}>
-                  {visible.map(({ it, at, have, x }) => (
+                  {chunk.map(({ it, at, have, x }) => (
                     <button key={it.id} onClick={() => onOpen(it.id)}
                       title={`${it.name} · ${dateFr(at)}${have === true ? " · tu l'as aussi" : have === false ? " · tu ne l'as pas encore" : ""}`}
                       style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, minWidth:0, background:"none",
@@ -1249,6 +1254,8 @@ function Showcase({ data, tier, onTier, onOpen, onClose, mine, owner }) {
                     </button>
                   ))}
                 </div>
+                </LazyBlock>))}
+                </div>
                 <span aria-hidden="true" style={{ position:"absolute", left:8, right:8, bottom:5, height:4, borderRadius:4,
                   background:`linear-gradient(90deg, transparent, ${rgba(t.color, 0.55)}, transparent)`,
                   boxShadow:`0 2px 10px ${rgba(t.color, 0.45)}` }}/>
@@ -1262,6 +1269,24 @@ function Showcase({ data, tier, onTier, onOpen, onClose, mine, owner }) {
       </div>
     </div>
   );
+}
+
+// Un morceau de liste qui ne vit que pres de l'ecran : loin, il ne laisse qu'une place vide
+// de sa hauteur (mesuree juste avant de partir), et revient en approchant.
+function LazyBlock({ root, children }) {
+  const ref = useRef(null), h = useRef(0);
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") return undefined;
+    const io = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting && el.firstChild) h.current = el.offsetHeight;
+      setOn(e.isIntersecting);
+    }, { root: root?.current || null, rootMargin: "800px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [root]);
+  return <div ref={ref} style={on ? undefined : { height: h.current }}>{on ? children : null}</div>;
 }
 
 // Ce que tu as (cles, tickets) a gauche, la machine a sous a droite : la
