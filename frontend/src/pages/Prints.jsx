@@ -2542,8 +2542,11 @@ export default function Prints() {
     }).catch(()=>{});
   }, [needFilterOpts]);
 
+  // une liste qui se recharge (filtre, groupe cree…) : la suite au defilement attend qu'elle soit la
+  const reloadingRef = useRef(false);
   const load = useCallback(async () => {
     const gen = ++loadGen.current;
+    reloadingRef.current = true;
     setLoading(true);
     setError(null);
     setOffset(0);
@@ -2569,15 +2572,19 @@ export default function Prints() {
       if (gen !== loadGen.current) return;
       setError(e.response?.data?.detail || e.message || "Erreur");
     }
+    if (gen === loadGen.current) reloadingRef.current = false;
     setLoading(false);
   }, [searchQ, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, sortF]);
 
   const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore || loadingMoreRef.current) return;
+    if (loadingMore || !hasMore || loadingMoreRef.current || reloadingRef.current) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
-      let acc = printsRef.current.slice();
+      // la liste d'ou l'on part : si un rechargement la remplace entre-temps (groupe cree, filtre…),
+      // cette suite est perimee et ne doit pas la reecrire (les prints groupes revenaient seuls)
+      const base = printsRef.current;
+      let acc = base.slice();
       let curOffset = offset;
       let more = true;
       const startCount = countDisplayItems(acc);
@@ -2612,7 +2619,7 @@ export default function Prints() {
         curOffset = data.next_offset ?? next + LIMIT;
         more = data.has_more ?? false;
       }
-      if (acc) {
+      if (acc && printsRef.current === base && gen === loadGen.current) {
         setPrints(acc);
         setOffset(curOffset);
         setHasMore(more);
