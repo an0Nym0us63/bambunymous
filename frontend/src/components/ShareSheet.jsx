@@ -16,8 +16,8 @@ const LAST_DEST = "bn-share-dests";
 // a l'heure locale, pas a celle du conteneur.
 const TZ = new Date().getTimezoneOffset();
 
-const KIND_NAME = { group: "groupe", design: "modèle MakerWorld", print: "impression" };
-const KIND_THIS = { group: "Ce groupe", design: "Ce modèle", print: "Cette impression" };
+const KIND_NAME = { group: "groupe", design: "modèle MakerWorld", creator: "créateur MakerWorld", print: "impression" };
+const KIND_THIS = { group: "Ce groupe", design: "Ce modèle", creator: "Ce créateur", print: "Cette impression" };
 // une vignette : nos fichiers passent par l'API, la couverture d'un modele vient de MakerWorld
 const srcOf = u => /^https?:/.test(u) ? mwImg(u, 256) : apiUrl(u.slice(7));
 
@@ -150,7 +150,7 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
                   return m.video
                     ? <video key={m.id} src={srcOf(m.url)} muted playsInline preload="metadata" onClick={() => toggle(m.id)} style={st}/>
                     : <img key={m.id} src={srcOf(m.url)} alt="" referrerPolicy="no-referrer" onClick={() => toggle(m.id)} style={st}
-                        data-tip={m.id === "mwcover" ? "La couverture du modèle sur MakerWorld" : undefined}/>;
+                        data-tip={m.id === "mwcover" ? "La couverture du modèle sur MakerWorld" : m.id === "mwavatar" ? "Son avatar" : m.id.startsWith("mw") ? "Un de ses modèles" : undefined}/>;
                 })}
               </div>
             )}

@@ -6,6 +6,9 @@ import client from "../api/client";
 import MwImg from "./MwImg";
 import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
 import { FSheet, FTile, fChip, fBtn } from "./FicheKit";
+import ShareSheet from "./ShareSheet";
+import { useIsAdmin } from "../store/auth";
+import { useFriend } from "../store/friend";
 
 // Page d'un createur MakerWorld : son profil et TOUS ses modeles. S'ouvre de
 // partout (« par … » d'une fiche ou d'une tuile, createurs suivis) ; une seule
@@ -26,6 +29,9 @@ export function CreatorPageHost() {
   const [more, setMore] = useState(false);
   const [model, setModel] = useState(null);
   const [pf, setPf] = useState("all");             // tous, deja imprimes chez moi, jamais
+  const [sharing, setSharing] = useState(false);   // la page partagee sur Telegram, comme un modele
+  const isAdmin = useIsAdmin();
+  const friend = useFriend(s => s.friend);
 
   useEffect(() => {
     if (!creator) { setData(null); return; }
@@ -59,9 +65,12 @@ export function CreatorPageHost() {
   const items = (data?.items || []).filter(x => pf === "printed" ? x.printed > 0 : pf === "new" ? !(x.printed > 0) : true);
   const nPrinted = (data?.items || []).filter(x => x.printed > 0).length;
   return (<>
-    <FSheet onClose={close} z={4100} bottom={c?.url ? <a href={c.url} target="_blank" rel="noopener noreferrer"
+    <FSheet onClose={close} z={4100} bottom={c?.url ? <>
+      {isAdmin && !friend && <button onClick={() => setSharing(true)} data-tip="Partager sur Telegram"
+        style={{ ...fBtn, flex: "0 0 auto", color: "#229ED9", borderColor: "rgba(34,158,217,0.4)", background: "rgba(34,158,217,0.1)" }}>📣 Partager</button>}
+      <a href={c.url} target="_blank" rel="noopener noreferrer"
       style={{ ...fBtn, flex: 1, textDecoration: "none", color: "#fff", border: "none",
-        background: `linear-gradient(135deg, ${C}, #3B82F6)`, boxShadow: `0 8px 18px -10px ${C}` }}>🌐 Voir sur MakerWorld ↗</a> : null}>
+        background: `linear-gradient(135deg, ${C}, #3B82F6)`, boxShadow: `0 8px 18px -10px ${C}` }}>🌐 Voir sur MakerWorld ↗</a></> : null}>
       {/* le createur en vedette : son avatar, son nom, ses abonnes */}
       <div style={{ padding: "52px 18px 16px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap",
         background: `radial-gradient(circle at 15% 40%, ${C}50, transparent 60%), linear-gradient(135deg, ${C}22, transparent 70%), var(--surface2)` }}>
@@ -137,6 +146,7 @@ export function CreatorPageHost() {
       </div>
     </FSheet>
     {model && <MakerWorldModelSheet designId={model.design_id} preview={model} onClose={() => setModel(null)}/>}
+    {sharing && <ShareSheet kind="creator" id={creator.uid} z={4300} onClose={() => setSharing(false)}/>}
   </>);
 }
 

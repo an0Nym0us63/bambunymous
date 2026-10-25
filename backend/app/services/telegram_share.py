@@ -492,6 +492,8 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
 
     if kind == "design":
         return await _build_design(obj_id, chosen)
+    if kind == "creator":
+        return await _build_creator(obj_id, chosen)
     async with AsyncSessionLocal() as db:
         if kind == "print":
             p = await db.get(Print, obj_id, options=[selectinload(Print.filament_usage),
@@ -658,11 +660,40 @@ async def _build_design(design_id, chosen=None) -> dict:
     if chosen is not None:
         ids = [i for i in dict.fromkeys(chosen) if i in by_id or (i == "mwcover" and cover)][:ALBUM_MAX]
     return {"title": title, "stats": stats, "filaments": [], "links": [_makerworld(did)], "live": None, "camera": False,
-            "media": [by_id[i] for i in ids if i != "mwcover"], "cover": cover if "mwcover" in ids else None,
-            "cover_first": bool(ids) and ids[0] == "mwcover",
+            "media": [by_id[i] for i in ids if i != "mwcover"], "remote": [cover] if "mwcover" in ids else [],
             "pool": ([{"id": "mwcover", "url": cover, "video": False}] if cover else [])
                     + [{"id": i, "url": _media_url(i), "video": f.suffix.lower() in (".mp4", ".mov", ".webm", ".m4v")} for i, f in by_id.items()],
             "default_ids": default_ids}
+
+
+async def _build_creator(uid, chosen=None) -> dict:
+    """La page d'un createur MakerWorld (25/10/2026) : son nom, ses compteurs, combien de ses modeles
+    j'ai imprimes, et le lien. Images proposees (toutes sur MakerWorld, telechargees a l'envoi) : son
+    avatar et les couvertures de ses modeles ; d'office aucune (Telegram montre la carte du lien)."""
+    from .makerworld import creator_page
+    res = await creator_page(str(uid))
+    c = res.get("creator") if isinstance(res, dict) else None
+    if not c:
+        raise ShareError((res or {}).get("error") or "Créateur introuvable")
+    items = res.get("items") or []
+    stats = []
+    if c.get("handle"):
+        stats.append(f"@{c['handle']}")
+    for e, k, lab in (("👥", "fans", "abonnés"), ("🧩", "designs", "modèles"), ("❤️", "likes", None), ("⬇️", "downloads", None),
+                      ("🖨", "prints", None), ("🏆", "contest_wins", "concours gagnés")):
+        if c.get(k):
+            stats.append(f"{e} {_num(c[k])}" + (f" {lab}" if lab else ""))
+    mine = sum(1 for x in items if (x.get("printed") or 0) > 0)
+    if mine:
+        stats.append(f"✅ {mine} de ses modèles imprimés chez moi" if mine > 1 else "✅ un de ses modèles imprimé chez moi")
+    pics = ([("mwavatar", c["avatar"])] if c.get("avatar") else []) + \
+           [(f"mw{x['design_id']}", x["cover_url"]) for x in items if x.get("cover_url") and x.get("design_id")][:ALBUM_MAX * 2]
+    urls = dict(pics)
+    ids = [i for i in dict.fromkeys(chosen or []) if i in urls][:ALBUM_MAX]
+    link = c.get("url") or f"https://makerworld.com/fr/@{c.get('handle') or uid}"
+    return {"title": c.get("name") or "Créateur MakerWorld", "stats": stats, "filaments": [], "links": [link], "live": None,
+            "camera": False, "media": [], "remote": [urls[i] for i in ids],
+            "pool": [{"id": i, "url": u, "video": False} for i, u in pics], "default_ids": []}
 
 
 def _download_cover(url: str, dest: Path) -> Optional[Path]:
@@ -791,10 +822,12 @@ async def send(kind: str, obj_id: int, destination_ids, message: str = "",
     results = []
     with tempfile.TemporaryDirectory() as tmp:
         files = await asyncio.to_thread(prepare_media, share["media"], Path(tmp))
-        if share.get("cover"):
-            cov = await asyncio.to_thread(_download_cover, share["cover"], Path(tmp) / "makerworld.jpg")
+        # les images de MakerWorld (couverture, avatar, modeles d'un createur) : en tete, dans l'ordre choisi
+        for k, url in reversed(list(enumerate(share.get("remote") or []))):
+            cov = await asyncio.to_thread(_download_cover, url, Path(tmp) / f"makerworld-{k}.jpg")
             if cov:
-                files.insert(0 if share.get("cover_first") else len(files), (cov, False))
+                files.insert(0, (cov, False))
+        files = files[:ALBUM_MAX]
         if share["live"] and share.get("camera", True):
             jpg = await _camera_jpeg()
             if jpg:
