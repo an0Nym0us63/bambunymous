@@ -1757,16 +1757,18 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
   const side = W >= 470;
   // les temperatures : chaque buse (D et G quand il y en a deux), le plateau, la chambre, avec leur consigne
   const nozzles = [...(status?.nozzles || [])].sort((a, b) => b.id - a.id);   // gauche (1) puis droite (0)
-  const tempItem = (Icon, label, v, t, hot, size) => (
-    <span data-pk="" title={label} style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: size, fontWeight: 800, whiteSpace: "nowrap",
+  // etroit (telephone) : la consigne ne s'affiche plus, elle reste au survol / au toucher (25/10/2026) ; la ligne
+  // debordait et la lumiere sortait de la tuile
+  const tempItem = (Icon, label, v, t, hot, size, target = true) => (
+    <span data-pk="" data-tip={`${label} : ${Math.round(v || 0)}°${t > 0 ? ` (consigne ${Math.round(t)}°)` : ""}`} style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: size, fontWeight: 800, whiteSpace: "nowrap",
       color: (v || 0) > 40 ? hot : "var(--muted)" }}><Icon/>
       {label && nozzles.length > 1 && label.startsWith("Buse") && <span style={{ fontSize: size - 2, fontWeight: 900 }}>{label.slice(-1)}</span>}
-      {Math.round(v || 0)}°{t > 0 && <sup style={{ fontSize: "0.72em", color: "var(--muted)", fontWeight: 700, lineHeight: 0, marginLeft: 1 }}>/{Math.round(t)}°</sup>}</span>
+      {Math.round(v || 0)}°{target && t > 0 && <sup style={{ fontSize: "0.72em", color: "var(--muted)", fontWeight: 700, lineHeight: 0, marginLeft: 1 }}>/{Math.round(t)}°</sup>}</span>
   );
-  const temps = (size, gap) => <span style={{ display: "inline-flex", gap, flexShrink: 0, alignItems: "center" }}>
-    {nozzles.map(n => <React.Fragment key={n.id}>{tempItem(IcoNozzle, nozzles.length > 1 ? `Buse ${n.id === 1 ? "G" : "D"}` : "Buse", n.temp, n.target, "#ea580c", size)}</React.Fragment>)}
-    {tempItem(IcoBed, "Plateau", status?.bed_temp, status?.target_bed_temp, "#dc2626", size)}
-    {status?.chamber_temp > 0 && tempItem(IcoChamber, "Chambre", status.chamber_temp, status.target_chamber_temp, "#ca8a04", size)}
+  const temps = (size, gap, target = true) => <span style={{ display: "inline-flex", gap, rowGap: 3, flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", minWidth: 0 }}>
+    {nozzles.map(n => <React.Fragment key={n.id}>{tempItem(IcoNozzle, nozzles.length > 1 ? `Buse ${n.id === 1 ? "G" : "D"}` : "Buse", n.temp, n.target, "#ea580c", size, target)}</React.Fragment>)}
+    {tempItem(IcoBed, "Plateau", status?.bed_temp, status?.target_bed_temp, "#dc2626", size, target)}
+    {status?.chamber_temp > 0 && tempItem(IcoChamber, "Chambre", status.chamber_temp, status.target_chamber_temp, "#ca8a04", size, target)}
     {status?.connected && <PrinterFlags status={status} size={size + 1}/>}
   </span>;
   // la ligne du bas (toute la largeur) : la couche et les temperatures, quand il n'y a pas de colonne a droite
@@ -1820,9 +1822,9 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
         )}
       </div>
       {bottom && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, whiteSpace: "nowrap", flexShrink: 0 }}>
           {live && showLayer && status.total_layers > 0 && fact(() => <Layers size={11}/>, `${status.layer}/${status.total_layers}`, undefined, W < 340 ? 10.5 : 11.5)}
-          {status?.connected && <span style={{ marginLeft: "auto" }}>{temps(W < 340 ? 10.5 : 11.5, W < 340 ? 5 : 9)}</span>}
+          {status?.connected && <span style={{ marginLeft: "auto", minWidth: 0, display: "flex" }}>{temps(W < 340 ? 10.5 : 11.5, W < 340 ? 5 : 9, W >= 440)}</span>}
         </div>
       )}
       {big && img && <span onClick={e => e.stopPropagation()}><Lightbox images={[img]} index={0} onClose={() => setBig(false)}/></span>}
