@@ -23,6 +23,12 @@ function fmtPrice(v) {
   return v != null ? `${Number(v).toFixed(2)} €` : "—";
 }
 
+// Dans les tuiles du haut (quatre sur une ligne de telephone) : sans centimes a partir de 100 €, pour que tout tienne
+function fmtKpi(v) {
+  if (isMoneyHidden()) return MONEY_MASK;
+  return Math.abs(v || 0) >= 100 ? `${Math.round(v)} €` : fmtPrice(v || 0);
+}
+
 // ── Accessory Card ────────────────────────────────────────────────────────
 
 // ── Fiche accessoire ──────────────────────────────────────────────────────
@@ -1802,7 +1808,7 @@ export default function Objects() {
   const accKpis = React.useMemo(() => [
     { label:"articles", value:String(accessories.length), accent:"#14B8A6" },
     { label:"unités", value:String(accessories.reduce((a, x) => a + (x.quantity || 0), 0)), accent:"#06B6D4" },
-    { label:"valeur", value: fmtPrice(accessories.reduce((a, x) => a + (x.quantity || 0) * (x.unit_price || 0), 0)), accent:"#22c55e" },
+    { label:"valeur", value: fmtKpi(accessories.reduce((a, x) => a + (x.quantity || 0) * (x.unit_price || 0), 0)), accent:"#22c55e" },
     { label:"rupture", value:String(accessories.filter(x => !(x.quantity > 0)).length),
       accent: accessories.some(x => !(x.quantity > 0)) ? "#ef4444" : "#94a3b8" },
   ], [accessories]);
@@ -1849,9 +1855,9 @@ export default function Objects() {
     const av = objects.filter(o => objStatus(o) === "available"), sold = objects.filter(o => objStatus(o) === "sold");
     const rev = sold.reduce((a, o) => a + (o.sold_price || 0), 0), cost = sold.reduce((a, o) => a + (o.cost_total || 0), 0);
     return [{ label:"à vendre", value:String(av.length), accent:"#3b82f6" },
-      { label:"espéré", value: fmtPrice(av.reduce((a, o) => a + (o.desired_price || 0), 0)), accent:"#8B5CF6" },
-      { label:"encaissé", value: fmtPrice(rev), accent:"#22c55e" },
-      { label:"marge", value: isMoneyHidden() ? MONEY_MASK : `${rev - cost >= 0 ? "+" : ""}${fmtPrice(rev - cost)}`, accent: rev - cost >= 0 ? "#16a34a" : "#ef4444" }];
+      { label:"espéré", value: fmtKpi(av.reduce((a, o) => a + (o.desired_price || 0), 0)), accent:"#8B5CF6" },
+      { label:"encaissé", value: fmtKpi(rev), accent:"#22c55e" },
+      { label:"marge", value: isMoneyHidden() ? MONEY_MASK : `${rev - cost >= 0 ? "+" : ""}${fmtKpi(rev - cost)}`, accent: rev - cost >= 0 ? "#16a34a" : "#ef4444" }];
   }, [objects]);
 
   return (
