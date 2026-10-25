@@ -70,29 +70,31 @@ export default function MwAssignPicker() {
     <div onClick={clear} style={{ position:"fixed", inset:0, zIndex:4500, background:"rgba(0,0,0,0.55)", display:"flex",
       alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:560, height:"min(720px, 90dvh)", display:"flex",
-        flexDirection:"column", background:"var(--sheet-bg, var(--surface))", borderRadius:"16px 16px 0 0",
+        flexDirection:"column", background:"var(--sheet-bg, var(--surface))", borderRadius:"22px 22px 0 0",
         boxShadow:"0 -8px 30px rgba(0,0,0,.35)", overflow:"hidden" }}>
         {/* le modele a associer */}
-        <div style={{ padding:"14px 14px 10px", display:"flex", flexDirection:"column", gap:10, borderBottom:"1px solid var(--border)" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+        <div style={{ padding:"16px 14px 12px", display:"flex", flexDirection:"column", gap:10, borderBottom:"1px solid var(--border)",
+          background:"radial-gradient(circle at 12% 30%, rgba(139,92,246,0.35), transparent 60%), linear-gradient(135deg, rgba(139,92,246,0.14), transparent 70%), var(--surface2)" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
             {item.cover_url
-              ? <img src={mwImg(item.cover_url, 44)} alt="" style={{ width:40, height:40, borderRadius:8, objectFit:"cover", flexShrink:0 }}/>
-              : <span style={{ width:40, height:40, borderRadius:8, background:"var(--surface2)", flexShrink:0 }}/>}
+              ? <img src={mwImg(item.cover_url, 120)} alt="" style={{ width:56, height:56, borderRadius:14, objectFit:"cover", flexShrink:0,
+                  boxShadow:"0 8px 18px -8px rgba(0,0,0,.5)" }}/>
+              : <span style={{ width:56, height:56, borderRadius:14, background:"var(--surface)", flexShrink:0 }}/>}
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:11, color:"var(--muted)", fontWeight:700 }}>🔗 Associer ce modèle à des impressions</div>
-              <div style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis",
+              <div style={{ fontSize:11.5, color:"#8B5CF6", fontWeight:900, letterSpacing:".04em", textTransform:"uppercase" }}>🔗 Associer à des impressions</div>
+              <div style={{ fontSize:17, fontWeight:900, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis",
                 whiteSpace:"nowrap" }}>{title}</div>
             </div>
-            <button type="button" onClick={clear} aria-label="Fermer" style={{ background:"none", border:"none", fontSize:20,
-              color:"var(--muted)", cursor:"pointer", lineHeight:1 }}>✕</button>
+            <button type="button" onClick={clear} aria-label="Fermer" style={{ width:34, height:34, borderRadius:"50%", border:"1px solid var(--border)",
+              background:"var(--surface)", fontSize:15, color:"var(--text2)", cursor:"pointer", flexShrink:0 }}>✕</button>
           </div>
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Chercher une impression (nom, fichier, filament…)"
             autoComplete="off" spellCheck={false}
-            style={{ width:"100%", boxSizing:"border-box", padding:"9px 12px", borderRadius:10, fontSize:13,
-              background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)", outline:"none" }}/>
+            style={{ width:"100%", boxSizing:"border-box", height:40, padding:"0 14px", borderRadius:20, fontSize:13.5,
+              background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text)", outline:"none" }}/>
           <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, color:"var(--text2)", cursor:"pointer" }}>
             <input type="checkbox" checked={unlinked} onChange={e => setUnlinked(e.target.checked)}
-              style={{ width:16, height:16, accentColor:"#3b82f6" }}/>
+              style={{ width:17, height:17, accentColor:"#8B5CF6" }}/>
             Seulement les impressions sans modèle MakerWorld
           </label>
         </div>
@@ -107,13 +109,13 @@ export default function MwAssignPicker() {
               return (
                 <button key={r.id} type="button" onClick={() => toggle(r.id)} style={{ width:"100%", display:"flex", alignItems:"center",
                   gap:10, padding:"8px 12px", border:"none", borderBottom:"1px solid var(--border)", textAlign:"left", cursor:"pointer",
-                  background: on ? "rgba(59,130,246,0.10)" : "none", color:"var(--text)" }}>
-                  <span style={{ width:20, height:20, borderRadius:6, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
-                    border: on ? "none" : "1.5px solid var(--muted)", background: on ? "#3b82f6" : "none", color:"#fff", fontSize:12,
+                  background: on ? "linear-gradient(90deg, rgba(139,92,246,0.16), transparent 70%)" : "none", color:"var(--text)" }}>
+                  <span style={{ width:22, height:22, borderRadius:7, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
+                    border: on ? "none" : "1.5px solid var(--muted)", background: on ? "linear-gradient(135deg, #8B5CF6, #A78BFA)" : "none", color:"#fff", fontSize:12,
                     fontWeight:900 }}>{on ? "✓" : ""}</span>
                   <Thumb id={r.id}/>
                   <span style={{ flex:1, minWidth:0 }}>
-                    <span style={{ display:"block", fontSize:12.5, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis",
+                    <span style={{ display:"block", fontSize:13.5, fontWeight:800, overflow:"hidden", textOverflow:"ellipsis",
                       whiteSpace:"nowrap" }}>{r.name}</span>
                     <span style={{ display:"block", fontSize:11, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis",
                       whiteSpace:"nowrap" }}>{fmtDate(r.date)}{r.group ? ` · 🗂️ ${r.group}` : ""}</span>
@@ -126,7 +128,7 @@ export default function MwAssignPicker() {
             })}
           {next != null && rows?.length > 0 && (
             <button type="button" onClick={() => load(next)} style={{ width:"100%", padding:12, border:"none", background:"none",
-              color:"#3b82f6", fontWeight:700, fontSize:12.5, cursor:"pointer" }}>Afficher plus</button>
+              color:"#8B5CF6", fontWeight:800, fontSize:13, cursor:"pointer" }}>⬇ Afficher plus</button>
           )}
         </div>
         <div style={{ padding:"10px 14px calc(10px + env(safe-area-inset-bottom,0px))", borderTop:"1px solid var(--border)",
@@ -136,11 +138,12 @@ export default function MwAssignPicker() {
             {[...sel].some(id => rows?.find(r => r.id === id && r.design_id && String(r.design_id) !== String(item.design_id)))
               && <span style={{ display:"block", color:"#d97706" }}>Certaines ont déjà un autre modèle : il sera remplacé.</span>}
           </span>
-          <button type="button" onClick={clear} style={{ padding:"8px 12px", borderRadius:9, border:"1px solid var(--border)",
-            background:"var(--surface)", color:"var(--text2)", cursor:"pointer", fontWeight:700 }}>Annuler</button>
-          <button type="button" onClick={apply} disabled={busy || !sel.size} style={{ padding:"8px 14px", borderRadius:9, border:"none",
-            fontWeight:800, color:"#fff", background: sel.size ? "#3b82f6" : "var(--border)", cursor: sel.size ? "pointer" : "default" }}>
-            {busy ? "…" : "Associer"}</button>
+          <button type="button" onClick={clear} style={{ padding:"10px 14px", borderRadius:12, border:"1px solid var(--border)",
+            background:"var(--surface2)", color:"var(--text)", cursor:"pointer", fontWeight:800 }}>Annuler</button>
+          <button type="button" onClick={apply} disabled={busy || !sel.size} style={{ padding:"10px 16px", borderRadius:12, border:"none",
+            fontWeight:800, color:"#fff", background: sel.size ? "linear-gradient(135deg, #8B5CF6, #6366F1)" : "var(--border)",
+            boxShadow: sel.size ? "0 8px 18px -10px #8B5CF6" : "none", cursor: sel.size ? "pointer" : "default" }}>
+            {busy ? "…" : sel.size ? `✓ Associer (${sel.size})` : "Associer"}</button>
         </div>
       </div>
     </div>, document.body);
