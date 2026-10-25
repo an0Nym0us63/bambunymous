@@ -286,13 +286,21 @@ export default function Layout() {
 
         {/* Bottom nav mobile */}
         <nav className="show-mobile" style={S.bottomNav}>
-          {nav.map(({ to, icon: Icon, label }) => (
+          {/* la page ouverte : son icone dans une pastille de sa couleur, son nom dans cette couleur */}
+          {nav.map(({ to, icon: Icon, label, c }) => (
             <NavLink key={to} to={to} end={to === "/"} style={({ isActive }) => ({
-              flex:1, display:"flex", flexDirection:"column", alignItems:"center",
-              padding:"12px 0 2px", gap:3, fontSize:10, textDecoration:"none",
-              color: isActive ? "#3b82f6" : "var(--muted)", transition:"color 0.15s",
+              flex:1, minWidth:0, display:"flex", flexDirection:"column", alignItems:"center",
+              padding:"8px 0 2px", gap:3, fontSize:10.5, textDecoration:"none", fontWeight: isActive ? 800 : 600,
+              color: isActive ? c : "var(--muted)", transition:"color 0.15s",
             })}>
-              <Icon size={19} /><span>{label}</span>
+              {({ isActive }) => (<>
+                <span style={{ width:48, height:30, borderRadius:15, display:"flex", alignItems:"center", justifyContent:"center",
+                  transition:"background .2s, box-shadow .2s",
+                  background: isActive ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 65%, #ffffff))` : "transparent",
+                  boxShadow: isActive ? `0 6px 14px -6px ${c}` : "none", color: isActive ? "#fff" : "inherit" }}>
+                  <Icon size={19}/></span>
+                <span style={{ maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{label}</span>
+              </>)}
             </NavLink>
           ))}
           <span style={{ position:"absolute", top:1, left:"50%", transform:"translateX(-50%)" }}><Hide at="nav" size={9}/></span>
