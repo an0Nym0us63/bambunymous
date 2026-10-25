@@ -164,7 +164,7 @@ export default function NotificationsSettings() {
       ))}
     </div>
     {/* Sur PC, les cartes du canal se rangent sur deux colonnes. */}
-    <div className="wide-2">
+    <div className="wide-flow">
     {chTab === "ntfy" && channelCard("ntfy", "ntfy", <>
         Les notifications partent sur tes sujets ntfy (serveur public ntfy.sh ou le tien). Abonne-toi aux mêmes sujets
         dans l'appli ntfy du téléphone. Plusieurs sujets : chaque section choisit le sien plus bas. L'icône d'un sujet

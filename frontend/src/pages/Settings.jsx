@@ -1901,8 +1901,8 @@ export default function Settings() {
       </div>
 
       {/* ── Affichage ─────────────────────────────────────────────── */}
-      {/* Sur PC, les cartes de chaque onglet se rangent sur deux colonnes (.wide-2). */}
-      {tab === "display" && (<div className="wide-2">
+      {/* Sur PC, les cartes de chaque onglet se rangent en colonnes qui se remplissent (.wide-flow). */}
+      {tab === "display" && (<div className="wide-flow">
       <div className="card" style={card}>
         <div style={cardTitle}>Apparence</div>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
@@ -1925,7 +1925,7 @@ export default function Settings() {
 
       {/* ── Filaments ─────────────────────────────────────────────── */}
       {tab === "filament" && (
-      <AdminOnly><div className="wide-2">
+      <AdminOnly><div className="wide-flow">
         <DryRulesCard card={card} cardTitle={cardTitle}/>
         <SpoolTaresCard card={card} cardTitle={cardTitle}/>
         <LabelsCard card={card} cardTitle={cardTitle}/>
@@ -1935,7 +1935,7 @@ export default function Settings() {
 
       {/* ── Imprimante ────────────────────────────────────────────── */}
       {tab === "printer" && (
-      <AdminOnly><div className="wide-2">
+      <AdminOnly><div className="wide-flow">
       <form onSubmit={handleSave} style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
         {/* Imprimante */}
@@ -1990,7 +1990,7 @@ export default function Settings() {
       )}
 
       {/* ── Comptes : moi, la securite, les utilisateurs, leur activite ── */}
-      {tab === "accounts" && (<div className="wide-2">
+      {tab === "accounts" && (<div className="wide-flow">
       <MyAccountSection/>
       <TwoFactorCard/>
       <UsersSection/>
@@ -1999,7 +1999,7 @@ export default function Settings() {
       </div>)}
 
       {/* ── Connexions : MakerWorld et les BambuNymous des copains ──────── */}
-      {tab === "links" && (<div className="wide-2">
+      {tab === "links" && (<div className="wide-flow">
       <AdminOnly><MakerWorldSettings/></AdminOnly>
       <AdminOnly home mw><RateTemplatesSettings/></AdminOnly>
       <FriendsCard/>
@@ -2007,7 +2007,7 @@ export default function Settings() {
 
       {/* ── Outils (maintenance) ──────────────────────────────────── */}
       {tab === "tools" && (
-      <AdminOnly><div className="wide-2">
+      <AdminOnly><div className="wide-flow">
         <StorageSection/>
         <SourceBackfillSection/>
         <EnrichFromCatalogSection/>

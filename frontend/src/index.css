@@ -229,6 +229,10 @@ body.ach-room-on main.page-content {
 .wide-2 { display:flex; flex-direction:column; gap:16px; min-width:0; }
 .wide-2 > * { min-width:0; }
 .wide-2 > :only-child { grid-column:1 / -1; }
+/* Cartes de hauteurs inegales (Parametres, 25/10/2026) : des colonnes qui se remplissent l'une apres
+   l'autre, chaque carte sous la precedente, sans les trous d'une grille alignee par rangee. */
+.wide-flow { display:flex; flex-direction:column; gap:16px; min-width:0; }
+.wide-flow > * { min-width:0; }
 /* Cartes de chiffres : sur PC les cartes s'etirent pour remplir la ligne
    (auto-fit) au lieu de laisser des pistes vides a droite. */
 .kpi-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(var(--kpi-min, 140px), 1fr)); gap:10px; }
@@ -239,6 +243,9 @@ body.ach-room-on main.page-content {
   .wide-2 { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); align-items:start; }
   .wide-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(var(--wl-min, 420px), 1fr)); align-items:start; }
   .wide-list > .wide-span, .wide-2 > .wide-span { grid-column:1 / -1; }
+  .wide-flow { display:block; columns:520px 3; column-gap:16px; }
+  .wide-flow > * { break-inside:avoid; margin:0 0 16px; }
+  .wide-flow > .wide-span { column-span:all; }
   .kpi-grid { grid-template-columns:repeat(auto-fit, minmax(var(--kpi-min, 140px), 1fr)); }
 }
 
