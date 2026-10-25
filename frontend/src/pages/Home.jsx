@@ -2,9 +2,8 @@ import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from
 import { stageLabel, stageIsPause } from "../utils/printStage";
 import { createPortal } from "react-dom";
 import { usePrinter } from "../store/printer";
-import { Wifi, WifiOff, DoorOpen, DoorClosed, Lightbulb, LightbulbOff, Clock, Pause, Layers, Thermometer, Wind, Droplets, Sun, Moon, LayoutGrid, Printer, Disc3, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
+import { Wifi, WifiOff, DoorOpen, DoorClosed, Lightbulb, LightbulbOff, Clock, Pause, Layers, Thermometer, Wind, Droplets, Sun, Moon, Printer, Disc3, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
 import { useAuth } from "../store/auth";
-import { useFriend } from "../store/friend";
 import { create } from "zustand";
 import client, { apiUrl, apiThumb } from "../api/client";
 import HomeGrid from "../components/HomeGrid";
@@ -1877,9 +1876,6 @@ const TIPS = [
 ];
 function Greeting({ status, o = {} }) {
   const username = useAuth(s => s.username) || "";
-  const visiting = useFriend(s => s.friend);         // chez un copain : son accueil, pas de personnalisation
-  // le bouton de personnalisation peut se masquer (Reglages > Affichage), choix de cet appareil
-  const editBtn = (() => { try { return localStorage.getItem("bn-home-edit-btn") !== "0"; } catch { return true; } })();
   const [name, setName] = useState(null);
   const [x, setX] = useState({});                    // ce que montrent les pastilles en option
   const st = String(status?.status || "").toUpperCase();
@@ -1901,6 +1897,11 @@ function Greeting({ status, o = {} }) {
   const h = new Date().getHours();
   const mood = opt("mood", "time");
   const sky = mood !== "time" && MOODS[mood] ? MOODS[mood] : h < 5 ? SKY[3] : [...SKY].reverse().find(v => h >= v.from);
+  // habillage (25/10/2026) : « carte », une tuile comme les autres teintee aux couleurs du moment (par
+  // defaut), ou « bandeau », le grand degrade plein d'avant
+  const tile = opt("skin", "tile") === "tile";
+  // en carte, les couleurs servent au texte : la nuit et le carbone, trop sombres, s'eclaircissent
+  const ink = !tile ? sky : sky === SKY[3] ? { ...sky, a: "#6366F1", b: "#8B5CF6" } : mood === "carbon" ? { ...sky, a: "#64748B", b: "#64748B" } : sky;
   const night = h >= 18 || h < 5;
   const size = opt("size", "normal");
   const first = username ? username.charAt(0).toUpperCase() + username.slice(1) : "";
@@ -1918,7 +1919,13 @@ function Greeting({ status, o = {} }) {
   const nf = (x.friends?.printing || []).length;
   const spins = x.ach?.keys?.wheel?.spins || 0;
   const ps = opt("pStyle", "glass");
-  const pill = { display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 999, fontSize: 12.5,
+  const pill = tile ? { display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 999, fontSize: 12.5,
+    fontWeight: 800, color: ink.b, background: `${ink.b}14`, border: `1px solid ${ink.b}33`, whiteSpace: "nowrap",
+    // en carte : teintee ; pleine : le degrade, texte blanc ; contour : un trait ; texte : ni fond ni trait
+    ...(ps === "solid" ? { background: `linear-gradient(120deg, ${ink.a}, ${ink.b})`, color: "#fff", border: "1px solid transparent" } : {}),
+    ...(ps === "outline" ? { background: "transparent", border: `1.5px solid ${ink.b}` } : {}),
+    ...(ps === "plain" ? { background: "transparent", border: "none", padding: "2px 2px" } : {}) }
+  : { display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 999, fontSize: 12.5,
     fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.28)",
     backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", whiteSpace: "nowrap",
     // pleine : blanche, le texte a la couleur du bandeau ; contour : un simple trait ; texte : ni fond ni trait
@@ -1926,19 +1933,22 @@ function Greeting({ status, o = {} }) {
     ...(ps === "outline" ? { background: "transparent", border: "1.5px solid rgba(255,255,255,0.7)", backdropFilter: "none", WebkitBackdropFilter: "none" } : {}),
     ...(ps === "plain" ? { background: "transparent", border: "none", padding: "2px 2px", fontWeight: 800, backdropFilter: "none", WebkitBackdropFilter: "none",
       textShadow: "0 1px 2px rgba(0,0,0,0.25)" } : {}) };
+  // la barre d'avancement : coloree sur fond clair (pastille pleine du bandeau, ou carte), blanche sinon
+  const onLight = tile ? ps !== "solid" : ps === "solid";
   // une pastille : masquee (false), en entier (true), ou l'icone seule, avec le nombre quand elle en porte un
   const shown = (k, d) => { const m = opt(k, d); return m === false || m == null ? null : m === "icon" ? "icon" : "full"; };
   const P = (k, d, cond, icon, full, short, title) => { const m = shown(k, d);
     return m && cond ? <span data-pk="" style={m === "icon" ? { ...pill, gap: 5, ...(ps === "plain" ? {} : { padding: "7px 10px" }) } : pill}
       title={m === "icon" ? title : undefined} aria-label={m === "icon" ? title : undefined}>{icon}{m === "icon" ? short : full}</span> : null; };
-  const barIcon = <span style={{ width: 46, height: 6, borderRadius: 6, background: ps === "solid" ? `${sky.b}33` : "rgba(255,255,255,0.3)", overflow: "hidden" }}>
-    <span style={{ display: "block", height: "100%", width: `${Math.round(status?.progress || 0)}%`, background: ps === "solid" ? sky.b : "#fff" }}/></span>;
+  const barIcon = <span style={{ width: 46, height: 6, borderRadius: 6, background: onLight ? `${ink.b}33` : "rgba(255,255,255,0.3)", overflow: "hidden" }}>
+    <span style={{ display: "block", height: "100%", width: `${Math.round(status?.progress || 0)}%`, background: onLight ? ink.b : "#fff" }}/></span>;
   const mini = size === "mini";
   return (
     <div data-hues={[sky.a, sky.b, sky.c].join(",")} className={`card home-hello${size === "compact" ? " hh-compact" : ""}${mini ? " hh-mini" : ""}`} style={{ position: "relative",
-      overflow: "hidden", border: "none", color: "#fff", background: `linear-gradient(120deg, ${sky.a}, ${sky.b})`,
-      backgroundSize: opt("anim", false) ? "200% 200%" : undefined, animation: opt("anim", false) ? "hh-drift 14s ease-in-out infinite" : undefined,
-      boxShadow: `0 14px 34px -18px ${sky.b}` }}>
+      overflow: "hidden", ...(tile ? { border: `1px solid ${ink.b}40`, color: "var(--text)",
+        background: `linear-gradient(120deg, ${ink.a}30, ${ink.b}18 55%, transparent 90%), var(--surface)`, boxShadow: `0 12px 30px -22px ${ink.b}` }
+      : { border: "none", color: "#fff", background: `linear-gradient(120deg, ${sky.a}, ${sky.b})`, boxShadow: `0 14px 34px -18px ${sky.b}` }),
+      backgroundSize: opt("anim", false) ? "200% 200%" : undefined, animation: opt("anim", false) ? "hh-drift 14s ease-in-out infinite" : undefined }}>
       <style>{`
         @keyframes hh-drift { 0%, 100% { background-position: 0% 50% } 50% { background-position: 100% 50% } }
         .home-hello { padding:18px 20px; }
@@ -1950,32 +1960,36 @@ function Greeting({ status, o = {} }) {
           .hh-title { font-size:20px; } .hh-icon { width:38px !important; height:38px !important; border-radius:12px !important; }
           .hh-date { font-size:10.5px !important; } .hh-line { font-size:12.5px !important; margin-top:3px !important; }
           .hh-pills { width:100%; gap:6px !important; } .hh-pills > * { font-size:11.5px; padding:5px 9px !important; }
-          .hh-edit { position:absolute; top:-2px; right:-4px; }
         }
       `}</style>
       {/* le decor : un astre et sa lueur, des points tres discrets */}
       {opt("decor", true) && <>
         <span aria-hidden="true" style={{ position: "absolute", right: -40, top: -60, width: 220, height: 220, borderRadius: "50%",
-          background: `radial-gradient(circle at 40% 40%, ${sky.c}, transparent 65%)`, opacity: 0.55, pointerEvents: "none" }}/>
-        <span aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity: 0.25,
-          background: "radial-gradient(rgba(255,255,255,0.5) 1px, transparent 1.5px) 0 0 / 18px 18px",
+          background: `radial-gradient(circle at 40% 40%, ${tile ? ink.a : sky.c}, transparent 65%)`, opacity: tile ? 0.22 : 0.55, pointerEvents: "none" }}/>
+        <span aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity: tile ? 0.35 : 0.25,
+          background: `radial-gradient(${tile ? `${ink.b}66` : "rgba(255,255,255,0.5)"} 1px, transparent 1.5px) 0 0 / 18px 18px`,
           WebkitMaskImage: "linear-gradient(90deg, transparent 30%, #000)", maskImage: "linear-gradient(90deg, transparent 30%, #000)" }}/>
       </>}
       <div style={{ position: "relative", display: "flex", alignItems: "center", gap: mini ? "6px 12px" : "10px 16px", flexWrap: "wrap" }}>
         {opt("icon", true) && <span data-pk="" data-egg="astronome" data-egg-n="7" aria-hidden="true" className="hh-icon" style={{ borderRadius: 16, flexShrink: 0, display: "flex",
-          alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.3)" }}>
+          alignItems: "center", justifyContent: "center", ...(tile ? { background: `linear-gradient(135deg, ${ink.a}, ${ink.b})`, color: "#fff",
+            boxShadow: `0 8px 18px -10px ${ink.b}` } : { background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.3)" }) }}>
           {night ? <Moon size={mini ? 17 : 24}/> : <Sun size={mini ? 17 : 24}/>}</span>}
         <div style={{ flex: "1 1 220px", minWidth: 0 }}>
           {opt("date", true) && !mini && <div className="hh-date" style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".12em",
-            textTransform: "uppercase", opacity: 0.85 }}><Words text={date}/></div>}
+            textTransform: "uppercase", ...(tile ? { color: ink.b } : { opacity: 0.85 }) }}><Words text={date}/></div>}
           <div className="hh-title" style={{ fontWeight: 900, lineHeight: 1.1, marginTop: mini ? 0 : 2, letterSpacing: "-.01em" }}>
-            <Words text={`${hello}${opt("name", true) && first ? " " + first : ""}`}/>
-            {mini && opt("line", true) && line && <span style={{ fontSize: 12.5, fontWeight: 600, opacity: 0.9, marginLeft: 10 }}><Words text={line}/></span>}</div>
-          {!mini && opt("line", true) && line && <div className="hh-line" style={{ fontSize: 13.5, marginTop: 5, opacity: 0.92 }}><Words text={line}/></div>}
-          {!mini && opt("message", "") && <div style={{ fontSize: 13, marginTop: 4, fontStyle: "italic", opacity: 0.95 }}>
+            {/* en carte, le bonjour aux couleurs du moment */}
+            <span style={tile ? { background: `linear-gradient(120deg, ${ink.a}, ${ink.b})`, WebkitBackgroundClip: "text", backgroundClip: "text",
+              color: "transparent" } : undefined}><Words text={`${hello}${opt("name", true) && first ? " " + first : ""}`}/></span>
+            {mini && opt("line", true) && line && <span style={{ fontSize: 12.5, fontWeight: 600, marginLeft: 10, ...(tile ? { color: "var(--text2)" } : { opacity: 0.9 }) }}>
+              <Words text={line}/></span>}</div>
+          {!mini && opt("line", true) && line && <div className="hh-line" style={{ fontSize: 13.5, marginTop: 5, ...(tile ? { color: "var(--text2)" } : { opacity: 0.92 }) }}>
+            <Words text={line}/></div>}
+          {!mini && opt("message", "") && <div style={{ fontSize: 13, marginTop: 4, fontStyle: "italic", ...(tile ? { color: ink.b } : { opacity: 0.95 }) }}>
             <Words text={opt("message", "")}/></div>}
           {!mini && opt("tip", false) && <div style={{ fontSize: 12, marginTop: 6, padding: "6px 10px", borderRadius: 10,
-            background: "rgba(255,255,255,0.14)", lineHeight: 1.4 }}>💡 <Words text={tip}/></div>}
+            background: tile ? `${ink.b}12` : "rgba(255,255,255,0.14)", color: tile ? "var(--text2)" : undefined, lineHeight: 1.4 }}>💡 <Words text={tip}/></div>}
         </div>
         <div className="hh-pills" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           {P("pProgress", true, live, barIcon, `${Math.round(status?.progress || 0)} %`, null, `Avancement : ${Math.round(status?.progress || 0)} %`)}
@@ -1986,8 +2000,6 @@ function Greeting({ status, o = {} }) {
             nf ? `${nf} copain${nf > 1 ? "s" : ""} imprime${nf > 1 ? "nt" : ""}` : "Copains au repos")}
           {P("pGrade", false, grade?.name, "🎓", grade?.name, null, grade?.name && `Grade : ${grade.name}`)}
           {P("pWheel", false, spins > 0, "🎰", `${spins} tour${spins > 1 ? "s" : ""} de roue`, spins, `${spins} tour${spins > 1 ? "s" : ""} de roue`)}
-          {!visiting && editBtn && <button className="hh-edit" onClick={() => window.dispatchEvent(new Event("bn-home-edit"))} aria-label="Personnaliser l'accueil"
-            title="Personnaliser l'accueil" style={{ ...pill, cursor: "pointer", padding: ps === "plain" ? "2px 2px" : "7px 9px" }}><LayoutGrid size={15}/></button>}
         </div>
       </div>
     </div>
@@ -1998,6 +2010,8 @@ function Greeting({ status, o = {} }) {
 const PILL_MODES = [[true, "affichée"], ["icon", "icône seule"], [false, "masquée"]];
 const GREETING_OPTIONS = [
   { group: "Allure", key: "show", label: "Afficher le bandeau", hint: "Masqué, il ne reste qu'en personnalisation, pour pouvoir le remettre.", def: true },
+  { group: "Allure", key: "skin", label: "Habillage", hint: "« carte » : une tuile comme les autres, teintée aux couleurs de l'ambiance ; « bandeau » : le grand dégradé plein.",
+    def: "tile", choices: [["tile", "carte"], ["band", "bandeau"]] },
   { group: "Allure", key: "mood", label: "Ambiance", hint: "Les couleurs du bandeau : selon le moment de la journée, ou une teinte fixe.", def: "time",
     choices: [["time", "selon l'heure"], ["ocean", "océan"], ["aurora", "aurore"], ["sunset", "couchant"], ["forest", "forêt"], ["grape", "raisin"], ["carbon", "carbone"]] },
   { group: "Allure", key: "size", label: "Taille", hint: "« mini » tient sur une ligne.", def: "normal", choices: [["normal", "normale"], ["compact", "compacte"], ["mini", "mini"]] },

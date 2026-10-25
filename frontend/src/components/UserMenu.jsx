@@ -1,7 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
-import { LogOut, Trophy, BookOpen, Bell } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { LogOut, Trophy, BookOpen, Bell, LayoutGrid } from "lucide-react";
 import { useAuth, ROLE_LABEL, ROLE_ADMIN } from "../store/auth";
 import client from "../api/client";
 import { FriendPicker, useFriendsPrinting } from "./Friends";
@@ -110,6 +110,8 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
   const visiting = useFriend((st) => st.friend);
   const unseen = useUnseenNotifs(!visiting);
   const showNotif = notifBadge && !visiting && unseen > 0;
+  // sur l'accueil (le sien, pas chez un copain) : sa personnalisation (25/10/2026, plus de bouton dans le bandeau)
+  const onHome = useLocation().pathname === "/" && !visiting;
   return (
     <>
       <button ref={btnRef} onClick={toggle} aria-label="Compte"
@@ -166,6 +168,12 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
               <Bell size={16} color="#3B82F6"/> Notifications
               {unseen > 0 && <span style={{ marginLeft:"auto", minWidth:18, height:18, padding:"0 6px", borderRadius:9, boxSizing:"border-box",
                 background:"#ef4444", color:"#fff", fontSize:10.5, fontWeight:800, lineHeight:"18px", textAlign:"center" }}>{unseen > 99 ? "99+" : unseen}</span>}
+            </button>}
+            {onHome && <button onClick={() => { setRect(null); window.dispatchEvent(new Event("bn-home-edit")); }}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
+                padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid var(--border)",
+                cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:600, textAlign:"left" }}>
+              <LayoutGrid size={16} color="#8B5CF6"/> Personnaliser l'accueil
             </button>}
             <FriendPicker onDone={() => setRect(null)}/>
             <button onClick={() => { setRect(null); navigate("/stats?tab=achievements"); }}

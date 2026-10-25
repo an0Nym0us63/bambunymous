@@ -21,8 +21,8 @@
 
 <section id="accueil-bandeau">
   <h2>Le bandeau d'accueil</h2>
-  <p>La carte colorée tout en haut. Elle te salue et dit en une phrase où en est l'imprimante.</p>
-  <figure class="phone"><img src="img/accueil-bandeau-soir.webp" alt="Bandeau du soir, violet et rose, avec la lune, « Bonsoir Camille » et les pastilles d'avancement, d'heure de fin et d'impressions du jour"><figcaption>Le soir, le bandeau passe au violet et la lune remplace le soleil.</figcaption></figure>
+  <p>La carte tout en haut, teintée aux couleurs du moment (ou de l'ambiance choisie) : le bonjour en dégradé, l'icône dans une pastille pleine, les pastilles teintées. Elle te salue et dit en une phrase où en est l'imprimante. L'habillage <span class="ui">bandeau</span> (dans ses réglages) la remet en grand dégradé plein, texte blanc.</p>
+  <figure class="phone"><img src="img/accueil-bandeau-soir.webp" alt="Bandeau du soir en carte teintée violet et rose, avec la lune, « Bonsoir Camille » en dégradé et les pastilles d'avancement, d'heure de fin et d'impressions du jour"><figcaption>Le soir, le bandeau se teinte de violet et de rose, et la lune remplace le soleil.</figcaption></figure>
 
   <section id="accueil-bandeau-contenu">
     <h3>Ce qu'il affiche</h3>
@@ -55,12 +55,12 @@
       <dt>Tours de roue disponibles</dt><dd>« 🎰 3 tours de roue ».</dd>
     </dl>
     <p>Les pastilles liées à l'impression (avancement, heure de fin) disparaissent quand rien n'imprime.</p>
-    <p>Chaque pastille peut aussi s'afficher en <strong>icône seule</strong> : le pictogramme, avec le nombre quand elle en porte un (« 🕒 14:35 », « 3 » à côté de l'icône des impressions du jour, « 👥 2 », « 🎰 3 ») ; l'avancement garde sa seule barre, la prochaine impression et le grade leur seul emoji, le détail au survol. Et toutes ensemble prennent l'un des quatre <strong>styles</strong> : <span class="ui">verre</span> (par défaut, translucide), <span class="ui">pleines</span> (blanches, le texte aux couleurs du bandeau), <span class="ui">contour</span> (un simple trait blanc) ou <span class="ui">texte seul</span> (ni fond ni trait).</p>
+    <p>Chaque pastille peut aussi s'afficher en <strong>icône seule</strong> : le pictogramme, avec le nombre quand elle en porte un (« 🕒 14:35 », « 3 » à côté de l'icône des impressions du jour, « 👥 2 », « 🎰 3 ») ; l'avancement garde sa seule barre, la prochaine impression et le grade leur seul emoji, le détail au survol. Et toutes ensemble prennent l'un des quatre <strong>styles</strong> : <span class="ui">verre</span> (par défaut : teintées en habillage carte, translucides en bandeau), <span class="ui">pleines</span> (le dégradé et le texte blanc en carte ; blanches, le texte aux couleurs du bandeau, en bandeau), <span class="ui">contour</span> (un simple trait) ou <span class="ui">texte seul</span> (ni fond ni trait).</p>
   </section>
 
   <section id="accueil-bandeau-bouton">
-    <h3>Le bouton « Personnaliser l'accueil »</h3>
-    <p>Le petit bouton carré à quatre cases (en haut à droite sur téléphone, au bout des pastilles sur ordinateur) ouvre le <a href="#accueil-personnaliser">mode personnalisation</a>. Il n'apparaît pas chez un copain. Si tu ne veux plus le voir sur un appareil, tu peux le masquer dans <span class="ui">Paramètres</span> → onglet <span class="ui">🎨 Affichage</span>, carte « Accueil », interrupteur <span class="ui">Bouton « Personnaliser » dans le bandeau</span> (voir <a href="#parametres">Les paramètres</a>). La personnalisation reste alors accessible par le bouton <span class="ui">Personnaliser l'accueil</span> de cette même carte.</p>
+    <h3>Ouvrir la personnalisation</h3>
+    <p>Sur l'accueil, touche ta pastille de compte (l'initiale, en haut à droite sur téléphone, en bas du menu sur ordinateur) : son menu porte <span class="ui">Personnaliser l'accueil</span>, qui ouvre le <a href="#accueil-personnaliser">mode personnalisation</a>. Cette entrée n'apparaît que sur l'accueil, et pas chez un copain. Le bouton <span class="ui">Personnaliser l'accueil</span> de <span class="ui">Paramètres</span> → <span class="ui">🎨 Affichage</span>, carte « Accueil », y mène aussi.</p>
   </section>
 
   <section id="accueil-bandeau-reglages">
@@ -71,6 +71,7 @@
     <h4>Allure</h4>
     <dl class="opts">
       <dt>Afficher le bandeau</dt><dd>activé par défaut. Désactivé, le bandeau disparaît de l'accueil (sur l'appareil réglé) ; en mode personnalisation il reste une ligne « Bandeau d'accueil masqué sur le téléphone » (ou « sur l'ordinateur ») avec son bouton de réglages, pour pouvoir le remettre.</dd>
+      <dt>Habillage</dt><dd><span class="ui">carte</span> (par défaut) : une tuile comme les autres, teintée aux couleurs de l'ambiance ; <span class="ui">bandeau</span> : le grand dégradé plein, texte blanc.</dd>
       <dt>Ambiance</dt><dd><span class="ui">selon l'heure</span> (par défaut), ou une teinte fixe : <span class="ui">océan</span>, <span class="ui">aurore</span>, <span class="ui">couchant</span>, <span class="ui">forêt</span>, <span class="ui">raisin</span>, <span class="ui">carbone</span>.</dd>
       <dt>Taille</dt><dd><span class="ui">normale</span> (par défaut), <span class="ui">compacte</span>, ou <span class="ui">mini</span> : tout tient sur une ligne (pas de date, la ligne d'état à côté du bonjour, ni message ni astuce).</dd>
       <dt>Décor</dt><dd>la lueur de l'astre et le semis de points. Activé par défaut.</dd>
@@ -130,7 +131,7 @@
   <h2>Personnaliser l'accueil</h2>
   <p>Tout se règle depuis le <strong>mode personnalisation</strong>, sur l'accueil lui-même : tu vois le résultat au fur et à mesure.</p>
   <ol>
-    <li>Touche le bouton à quatre cases du bandeau (<span class="ui">Personnaliser l'accueil</span>), ou, s'il est masqué, le bouton <span class="ui">Personnaliser l'accueil</span> de <span class="ui">Paramètres</span> → <span class="ui">🎨 Affichage</span>.</li>
+    <li>Sur l'accueil, ouvre le menu de ta pastille de compte et touche <span class="ui">Personnaliser l'accueil</span> (ou le bouton du même nom dans <span class="ui">Paramètres</span> → <span class="ui">🎨 Affichage</span>).</li>
     <li>Le panneau <span class="ui">Personnaliser l'accueil</span> apparaît sous le bandeau, et chaque tuile est entourée de pointillés bleus avec son nom en étiquette.</li>
     <li>Fais tes changements : ils s'appliquent aussitôt à l'écran.</li>
     <li>Touche <span class="ui">Terminé</span> : la disposition est enregistrée (message « Disposition enregistrée »). Si tu n'as rien changé, rien n'est enregistré.</li>
