@@ -309,6 +309,9 @@ class MQTTManager:
                 if _door:
                     import time as _dt
                     state.door_opens = (list(state.door_opens) + [_dt.time()])[-10:]
+                    # et ce qu'il faisait dedans a ce moment (succes : plateau chaud, chambre brulante)
+                    state.door_events = (list(state.door_events) + [{"t": _dt.time(), "bed": state.bed_temp,
+                                                                      "ch": state.chamber_temp}])[-10:]
             state.door_open = _door
             changed = True
         if _top is not None and _top != state.top_open:

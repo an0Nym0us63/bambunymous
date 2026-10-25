@@ -9,6 +9,7 @@ compte a partir de la mise en route. Les succes le lisent au present (`values`).
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,10 @@ GAP_S = 600                  # plus de 10 min sans releve (appli arretee) : la s
 DRY_MAX, DRY_SAMPLES = 30, 240   # humidite des AMS sous 30 % ; une journee compte avec 1 h de releves
 OVEN_C = 45
 DOOR_N, DOOR_S = 3, 60       # trois ouvertures de la porte en 60 s (seuil confirme le 25/10/2026)
+# La porte apres une fin d'impression reussie (25/10/2026) : ouverte en moins d'une minute, ou
+# encore fermee 6 h apres. Chaque impression ne compte qu'une fois (la premiere ouverture tranche).
+IMPATIENT_S, PATIENT_S = 60, 6 * 3600
+FURNACE_C = 50               # porte ouverte, chambre au-dessus de 50 °C
 LIVE = ("RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING")
 W: dict = {}
 
@@ -28,6 +33,7 @@ def fresh() -> dict:
     return {"last": None, "online_since": None, "online_best_h": 0.0, "job": None, "max_layers": 0, "mille": None,
             "clean": 0, "swaps_total": 0, "swaps_max": 0, "hms": [], "oven": None, "door": None, "marathon": None, "rainbow": None,
             "dry_days": 0, "day": None, "day_ok": True, "day_n": 0,
+            "door_seen": 0, "furnace": None, "door_bed_max": 0, "impatient": 0, "patient": 0, "fin_at": None, "fin_done": True,
             "duel": 0, "band": 0, "duel_on": False, "band_on": False, "same_taste": None, "friends_at": None, "taste_at": None}
 
 
@@ -76,6 +82,7 @@ def step(s, now: datetime, w: dict, local_day: str) -> bool:
         key = str(s.job_id or s.print_name or "?")
         if not job or job.get("key") != key:
             job = w["job"] = {"key": key, "start": _iso(now), "swaps": 0, "tray": None, "alert": False, "off": False, "layers": 0}
+            w["fin_done"] = True             # une nouvelle impression : la precedente ne compte plus pour la porte
         if gap or not s.connected:
             job["off"] = True
         if st == "RUNNING":
@@ -91,6 +98,8 @@ def step(s, now: datetime, w: dict, local_day: str) -> bool:
         job["layers"] = max(job.get("layers") or 0, int(s.total_layers or 0))
     elif job:
         if st == "FINISH":                           # reussie
+            # la porte va-t-elle s'ouvrir vite, ou rester fermee ? (deja ouverte : rien a compter)
+            w["fin_at"], w["fin_done"] = time.time(), getattr(s, "door_open", None) is not False
             n = max(job.get("layers") or 0, int(s.total_layers or 0))
             w["max_layers"] = max(w.get("max_layers") or 0, n)
             if n == 1000 and not w.get("mille"):
@@ -107,6 +116,33 @@ def step(s, now: datetime, w: dict, local_day: str) -> bool:
         t = sorted(getattr(s, "door_opens", None) or [])
         if any(t[i + DOOR_N - 1] - t[i] <= DOOR_S for i in range(len(t) - DOOR_N + 1)):
             w["door"] = _iso(now)
+            ev = True
+    # chaque ouverture de porte : ce qu'il faisait dedans, et ou en etait la derniere impression
+    if getattr(s, "door_open", None) is not None:
+        for e in sorted((e for e in (getattr(s, "door_events", None) or []) if (e.get("t") or 0) > (w.get("door_seen") or 0)),
+                        key=lambda e: e["t"]):
+            w["door_seen"] = e["t"]
+            if (e.get("ch") or 0) > FURNACE_C and not w.get("furnace"):
+                w["furnace"] = _iso(now)
+                ev = True
+            b = int(round(e.get("bed") or 0))
+            if b > (w.get("door_bed_max") or 0):
+                w["door_bed_max"] = b
+                ev = True
+            fin = w.get("fin_at")
+            if fin and not w.get("fin_done") and e["t"] >= fin:
+                d = e["t"] - fin
+                if d <= IMPATIENT_S:
+                    w["impatient"] = (w.get("impatient") or 0) + 1
+                elif d >= PATIENT_S:
+                    w["patient"] = (w.get("patient") or 0) + 1
+                w["fin_done"] = True
+                ev = True
+        # 6 h apres la fin, toujours fermee : patient (sans attendre qu'elle s'ouvre)
+        fin = w.get("fin_at")
+        if fin and not w.get("fin_done") and time.time() - fin >= PATIENT_S and s.door_open is False:
+            w["patient"] = (w.get("patient") or 0) + 1
+            w["fin_done"] = True
             ev = True
     # la chambre
     if (s.chamber_temp or 0) > OVEN_C and not w.get("oven"):
@@ -178,7 +214,9 @@ async def values() -> dict:
             "duels": int(w.get("duel") or 0), "band_prints": int(w.get("band") or 0),
             "mille_feuille": 1 if w.get("mille") else 0, "doctor": 1 if len(w.get("hms") or []) >= 10 else 0,
             "oven": 1 if w.get("oven") else 0, "door_dance": 1 if w.get("door") else 0, "marathon_online": 1 if w.get("marathon") else 0,
-            "rainbow_ams": 1 if w.get("rainbow") else 0, "same_taste": 1 if w.get("same_taste") else 0}
+            "rainbow_ams": 1 if w.get("rainbow") else 0, "same_taste": 1 if w.get("same_taste") else 0,
+            "door_impatient": int(w.get("impatient") or 0), "door_patient": int(w.get("patient") or 0),
+            "door_hot_bed": int(w.get("door_bed_max") or 0), "furnace_door": 1 if w.get("furnace") else 0}
 
 
 async def _friends(now: datetime) -> None:

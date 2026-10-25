@@ -140,6 +140,7 @@ class PrinterState:
     # l'heure (time.time) des dernieres ouvertures
     door_open: Optional[bool] = None
     door_opens: list = field(default_factory=list)
+    door_events: list = field(default_factory=list)   # ouvertures : {t, bed, ch} (les dix dernieres)
     top_open: Optional[bool] = None     # capot du haut (H2) : bit 0x01000000 de « stat »
     light_on: Optional[bool] = None     # eclairage de la chambre (lights_report)
 
