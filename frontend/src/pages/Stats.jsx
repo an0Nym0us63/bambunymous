@@ -668,7 +668,8 @@ function Donut({ data, title, palette }) {
           <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(148,163,184,.35)" strokeWidth={1}/>
           <circle cx={cx} cy={cy} r={26} fill="var(--surface2)"/>
         </svg>
-        <div style={{ flex: 1, minWidth: 140, display: "flex", flexDirection: "column", gap: 5 }}>
+        {/* la legende reste pres de l'anneau : sur une carte large, les pourcentages ne partent plus au bout */}
+        <div style={{ flex: 1, minWidth: 140, maxWidth: 340, display: "flex", flexDirection: "column", gap: 5 }}>
           {slices.map((s, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <div style={{ width: 11, height: 11, borderRadius: "50%", background: s.color, flexShrink: 0, boxShadow: "inset 0 0 0 1px rgba(148,163,184,.5)" }}/>

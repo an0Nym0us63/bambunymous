@@ -2021,13 +2021,13 @@ export default function Settings() {
       )}
 
       {/* ── Appli Android (telechargement, reglages de l'appli) ──────── */}
-      {tab === "android" && <AndroidApp card={card} cardTitle={cardTitle}/>}
+      {tab === "android" && <div className="wide-flow"><AndroidApp card={card} cardTitle={cardTitle}/></div>}
 
       {/* ── Partage (Telegram) ─────────────────────────────────────── */}
       {tab === "share" && (
-      <AdminOnly>
+      <AdminOnly><div className="wide-flow">
         <TelegramSettings card={card} cardTitle={cardTitle}/>
-      </AdminOnly>
+      </div></AdminOnly>
       )}
 
       {/* ── Notifications ─────────────────────────────────────────── */}

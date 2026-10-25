@@ -1327,7 +1327,7 @@ function GroupEditSheet({ groupId, name, onClose, onSaved }) {
   };
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:2000,
-      display:"flex", alignItems:"flex-end" }} onClick={onClose}>
+      display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} className="sheet-inner"
         style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
           maxWidth:640, padding:"0 16px 24px", paddingBottom:"env(safe-area-inset-bottom,24px)" }}>
