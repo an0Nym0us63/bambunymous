@@ -2575,21 +2575,23 @@ export default function Prints() {
   useEffect(() => { loadKpis(); }, [loadKpis]);
 
   // Charger la palette de teintes (n'affiche que celles réellement utilisées)
+  // Les options des filtres (teintes, filaments : jusqu'a 2 000 lignes) : lues seulement quand
+  // le panneau s'ouvre ou qu'un de ces filtres est pose, plus a chaque ouverture de la page.
+  const needFilterOpts = filterOpen || !!filamentIdF || !!colorF || !!materialF || !!filaTypeF;
+  const filterOptsLoaded = useRef(false);
   useEffect(() => {
+    if (!needFilterOpts || filterOptsLoaded.current) return;
+    filterOptsLoaded.current = true;
     client.get("/filaments/color-buckets")
       .then(r => setColorBuckets((r.data||[]).filter(b => b.count > 0)))
       .catch(()=>{});
-  }, []);
-
-  // Charger les options de filtres filament
-  useEffect(() => {
     client.get("/filaments/filaments", { params:{ limit:2000, archived_too:true } }).then(r=>{
       const fils = r.data || [];
       setAllFilaments(fils);
       setAllMaterials([...new Set(fils.map(f=>f.material).filter(Boolean))].sort());
       setAllFilaTypes([...new Set(fils.map(f=>f.fila_type).filter(Boolean))].sort());
     }).catch(()=>{});
-  }, []);
+  }, [needFilterOpts]);
 
   const load = useCallback(async () => {
     const gen = ++loadGen.current;
