@@ -1137,6 +1137,28 @@ function Showcase({ data, tier, onTier, onOpen, onClose, mine, owner }) {
   const nYes = all.filter(Boolean).length, nNo = all.length - nYes;
   const shown = shelves.filter(s => (tier == null || s.t.id === tier) && s.items.length);
   const total = data.items.reduce((n, it) => n + it.tiers.filter(x => x.at).length, 0);   // jamais filtre
+  // Des milliers de medailles, chacune animee : on n'en pose qu'un lot, puis la suite en
+  // approchant du bas de la vitrine (les comptes des etageres, eux, restent complets).
+  const STEP = 90;
+  const [limit, setLimit] = useState(STEP);
+  const boxRef = useRef(null), moreRef = useRef(null);
+  useEffect(() => { setLimit(STEP); if (boxRef.current) boxRef.current.scrollTop = 0; }, [tier, own]);
+  const totalShown = shown.reduce((n, s) => n + s.items.length, 0);
+  useEffect(() => {
+    const el = moreRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return undefined;
+    const io = new IntersectionObserver(es => { if (es[0].isIntersecting) setLimit(l => l + STEP * 2); },
+      { root: boxRef.current, rootMargin: "500px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [limit, totalShown]);
+  let budget = limit;
+  const paged = [];
+  for (const sh of shown) {
+    if (budget <= 0) break;
+    paged.push({ ...sh, visible: sh.items.slice(0, budget) });
+    budget -= sh.items.length;
+  }
   const chip = (on, c) => ({ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 10px 4px 5px", borderRadius:20,
     fontSize:11.5, fontWeight:800, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0,
     border:`1px solid ${on ? c : "var(--border)"}`, color: on ? "var(--text)" : "var(--text2)",
@@ -1185,9 +1207,9 @@ function Showcase({ data, tier, onTier, onOpen, onClose, mine, owner }) {
             ))}
           </div>
         </div>
-        <div style={{ overflowY:"auto", padding:"6px 14px 18px", display:"flex", flexDirection:"column", gap:18 }}>
+        <div ref={boxRef} style={{ overflowY:"auto", padding:"6px 14px 18px", display:"flex", flexDirection:"column", gap:18 }}>
           {!shown.length && <p style={{ ...msg, textAlign:"center" }}>Aucune médaille de ce type pour l'instant.</p>}
-          {shown.map(({ t, items }) => (
+          {paged.map(({ t, items, visible }) => (
             <div key={t.id} style={{ display:"flex", flexDirection:"column", gap:6 }}>
               <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 2px 0" }}>
                 <Medal tier={t} emoji="" size={22}/>
@@ -1200,7 +1222,7 @@ function Showcase({ data, tier, onTier, onOpen, onClose, mine, owner }) {
                 background:`linear-gradient(180deg, ${rgba(t.color, 0.10)}, ${rgba(t.color, 0.03)} 70%, ${rgba(t.color, 0.16)})`,
                 border:`1px solid ${rgba(t.color, 0.28)}`, boxShadow:"inset 0 1px 0 rgba(255,255,255,0.25)" }}>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(78px, 1fr))", gap:"12px 6px" }}>
-                  {items.map(({ it, at, have, x }) => (
+                  {visible.map(({ it, at, have, x }) => (
                     <button key={it.id} onClick={() => onOpen(it.id)}
                       title={`${it.name} · ${dateFr(at)}${have === true ? " · tu l'as aussi" : have === false ? " · tu ne l'as pas encore" : ""}`}
                       style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, minWidth:0, background:"none",
@@ -1233,6 +1255,9 @@ function Showcase({ data, tier, onTier, onOpen, onClose, mine, owner }) {
               </div>
             </div>
           ))}
+          {/* la suite, posee en approchant du bas */}
+          {limit < totalShown && <div ref={moreRef} style={{ textAlign:"center", fontSize:11.5, fontWeight:700, color:"var(--muted)", padding:"4px 0 8px" }}>
+            {totalShown - limit} médaille{totalShown - limit > 1 ? "s" : ""} de plus…</div>}
         </div>
       </div>
     </div>
