@@ -376,8 +376,6 @@ function Frame({ def, children, extra, item, summary, badge = null }) {
     {badge && <div style={{ position: "absolute", top: -7, right: 22, zIndex: 4 }}>{badge}</div>}
     <div className="card hg-frame" style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6, position: "relative",
       overflow: "hidden", height: "100%", boxSizing: "border-box", minWidth: 0 }}>
-      <span aria-hidden="true" style={{ position: "absolute", right: -24, top: -24, width: 80, height: 80, borderRadius: "50%",
-        background: `${color}22`, pointerEvents: "none" }}/>
       <div className="frame-head" style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
         <span data-pk="" className="frame-label" style={{ width: 22, height: 22, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center",
           background: `${color}22`, color, flexShrink: 0 }}>{icon}</span>

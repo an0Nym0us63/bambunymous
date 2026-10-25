@@ -132,8 +132,6 @@ function Tile({ icon, color, label, to, zoom, onClick, badge, children, mini = f
       onKeyDown={e => { if (act && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); act(); } }}
       style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6, minWidth: 0, cursor: act ? "pointer" : "default",
         position: "relative", overflow: "hidden", height: "100%", boxSizing: "border-box" }}>
-      <span aria-hidden="true" style={{ position: "absolute", right: -24, top: -24, width: 80, height: 80, borderRadius: "50%",
-        background: `${color}22`, pointerEvents: "none" }}/>
       <div className="tile-head" style={{ display: "flex", alignItems: "center", gap: 8, position: "relative", minWidth: 0 }}>
         <span data-pk="" style={{ width: 22, height: 22, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center",
           background: `${color}22`, color, flexShrink: 0 }}>{icon}</span>
