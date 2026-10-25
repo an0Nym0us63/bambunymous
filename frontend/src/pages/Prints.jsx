@@ -2301,6 +2301,12 @@ function FriendsGalleryView({ search, data }) {
     )}
     <GalleryCompare
       items={items}
+      // « Fiche » (25/10/2026) : chez le copain, en lecture seule, sur la fiche de cette impression ou de ce groupe
+      onItemClick={async it => {
+        let f = { id: it.friend_id, name: it.friend_name };
+        try { const { data: d } = await client.get("/friends"); f = (d.friends || []).find(x => String(x.id) === String(it.friend_id)) || f; } catch { /* le nom suffit */ }
+        useFriend.getState().visitAt(f, it.kind === "group" ? `/prints?group=${it.id}` : `/prints?id=${it.id}`);
+      }}
       getId={it => `${it.friend_id}-${it.kind}-${it.id}`}
       getCoverImage={it => it.photos?.[0]?.url || null}
       getPhotos={it => it.photos || []}

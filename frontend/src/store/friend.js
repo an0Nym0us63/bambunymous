@@ -24,6 +24,11 @@ export const useFriend = create(
         const q = keep.toString();
         window.location.assign((window.location.pathname || "/") + (q ? `?${q}` : ""));
       },
+      // chez un copain, directement sur une page de chez lui (la fiche d'une impression de sa galerie…)
+      visitAt: (f, path) => {
+        set({ friend: f ? { id: f.id, name: f.name, role: f.role } : null });
+        window.location.assign(path || "/");
+      },
     }),
     { name: "friend-store" }
   )
