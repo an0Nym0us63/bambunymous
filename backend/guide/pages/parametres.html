@@ -329,15 +329,15 @@
   <p>Le bouton <span class="ui">📋 Journal</span> des Paramètres ouvre le journal technique du serveur : utile pour comprendre un problème (imprimante injoignable, notification qui ne part pas…).</p>
   <figure><img src="img/parametres-journal.webp" alt="Page Journal avec la barre de filtres et des lignes INFO, WARNING, ERROR"><figcaption>Le journal du serveur.</figcaption></figure>
   <dl class="opts">
-    <dt>En-tête</dt><dd>Le nombre d'entrées affichées, la taille du fichier et ce qui a été lu ; un voyant vert « Live » quand le direct est actif.</dd>
+    <dt>En-tête</dt><dd>En pastilles : le nombre d'entrées, la taille du fichier et ce qui a été lu ; « ⛔ N erreurs » et « ⚠ N alertes » parmi les lignes affichées ; un voyant vert « En direct » quand le direct est actif.</dd>
     <dt>Actualiser</dt><dd>Relit le journal.</dd>
-    <dt>Live / Stop</dt><dd>Relit le journal toutes les 3 secondes, jusqu'à <span class="ui">Stop</span>.</dd>
-    <dt>Vider</dt><dd>Vide le fichier <b>immédiatement, sans confirmation</b>.</dd>
+    <dt>En direct / Arrêter</dt><dd>Relit le journal toutes les 3 secondes, jusqu'à <span class="ui">Arrêter</span>.</dd>
+    <dt>Vider</dt><dd>Vide le fichier, après confirmation (« Vider le journal ? »).</dd>
     <dt>Rechercher dans tout le fichier…</dt><dd>Cherche dans les messages et les noms de module (majuscules indifférentes), en remontant le fichier. Le terme trouvé est surligné en orange.</dd>
     <dt>DEBUG, INFO, WARNING, ERROR</dt><dd>Le niveau minimum affiché (INFO par défaut).</dd>
     <dt>⚠ partielle</dt><dd>La recherche s'est arrêtée avant le début du fichier : utilise <span class="ui">↑ Lire plus loin dans le journal</span>.</dd>
-    <dt>Auto-scroll</dt><dd>Coché par défaut : la vue reste en bas, sur les dernières lignes.</dd>
+    <dt>Suivre la fin</dt><dd>Coché par défaut : la vue reste en bas, sur les dernières lignes.</dd>
   </dl>
-  <p>Chaque ligne : heure, niveau en couleur (DEBUG gris, INFO bleu, WARNING orange, ERROR rouge), module et message. Les avertissements ont un fond orange pâle, les erreurs un fond rouge pâle. La page charge les 500 dernières entrées ; <span class="ui">↑ Lire plus loin dans le journal</span> remonte plus loin.</p>
+  <p>Chaque ligne : heure, niveau en pastille de couleur (DEBUG gris, INFO bleu, WARNING orange, ERROR rouge), module et message (sur téléphone, le message passe sous l'heure). Les avertissements ont un fond orange pâle, les erreurs un fond rouge pâle. La page charge les 500 dernières entrées ; <span class="ui">↑ Lire plus loin dans le journal</span> remonte plus loin.</p>
   <div class="note"><p>Le fichier se purge tout seul : au-delà de 40 Mo, il est ramené à ses 10 derniers Mo (vérifié chaque heure).</p></div>
 </section>
