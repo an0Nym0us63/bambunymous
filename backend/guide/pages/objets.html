@@ -237,26 +237,27 @@
       <li>Touche <span class="ui">+ Accessoire</span> à côté de la recherche.</li>
       <li>Donne un <b>Nom</b> (unique), le <b>Stock initial</b> (0 par défaut).</li>
       <li>Choisis comment saisir le prix : <span class="ui">Prix / unité</span> (par défaut) ou <span class="ui">Coût total</span> pour tout le lot ; dans ce cas l'appli calcule « Soit X € / unité ».</li>
-      <li>Touche <span class="ui">Créer</span>. La fiche du nouvel accessoire s'ouvre : tu peux y ajouter sa photo et son regroupement.</li>
+      <li>L'en-tête reprend le nom au fur et à mesure, avec le stock et le prix par unité. Touche <span class="ui">✓ Créer</span> en bas. La fiche du nouvel accessoire s'ouvre : tu peux y ajouter sa photo et son regroupement.</li>
     </ol>
     <figure class="phone"><img src="img/objets-accessoire-nouveau.webp" alt="Feuille Nouvel accessoire"><figcaption>La feuille « Nouvel accessoire ».</figcaption></figure>
     <p>Si la création échoue (« Création impossible (nom déjà utilisé ?) »), un accessoire porte déjà ce nom.</p>
   </section>
   <section id="objets-accessoires-fiche">
     <h3>La fiche d'un accessoire</h3>
-    <figure class="phone"><img src="img/objets-accessoire-fiche.webp" alt="Fiche de l'accessoire Ampoule LED E14"><figcaption>Stock, prix unitaire, valeur, et les objets qui l'utilisent.</figcaption></figure>
+    <figure class="phone"><img src="img/objets-accessoire-fiche.webp" alt="Fiche de l'accessoire Ampoule LED E14"><figcaption>Le stock en grand, les tuiles, le regroupement et les objets qui l'utilisent.</figcaption></figure>
     <dl class="opts">
-      <dt>En-tête</dt><dd>Photo, nom, badge « Stock : N » et, s'il est monté sur des objets, « Utilisé × U ».</dd>
+      <dt>En-tête</dt><dd>La photo sur la couleur de son regroupement, ses pastilles (le regroupement, et « 🎁 utilisé × U » s'il est monté sur des objets), son nom, puis le stock en grand : en vert, en orange quand il passe sous 5 (« stock bas »), « Rupture » en rouge à zéro.</dd>
       <dt>Ajouter / Changer la photo</dt><dd><span class="admin">admin</span> Une seule photo par accessoire ; la nouvelle remplace l'ancienne.</dd>
-      <dt>Regroupement</dt><dd><span class="admin">admin</span> Se modifie directement : tape pour filtrer, choisis, ou <span class="ui">+ Créer « nom »</span>. Le ✕ retire du regroupement. Un regroupement qui n'a plus aucun accessoire disparaît tout seul.</dd>
-      <dt>Stock, Prix unitaire, Valeur</dt><dd>La valeur vaut stock × prix unitaire.</dd>
-      <dt>Utilisé dans N objets</dt><dd>Les objets équipés et la quantité montée. Toucher une ligne ouvre l'objet.</dd>
-      <dt>Boutons</dt><dd><span class="admin">admin</span> <span class="ui">✏️ Modifier</span> (nom, stock, prix unitaire), <span class="ui">Stock</span> (voir ci-dessous), <span class="ui">🗑</span> (un second appui, « Confirmer ? », supprime). Un accessoire monté sur des objets ne peut pas être supprimé.</dd>
+      <dt>Les tuiles</dt><dd><b>📦 Stock</b>, <b>🏷️ Prix / u</b> (le prix moyen), <b>💶 Valeur</b> (stock × prix unitaire) et <b>🎁 Utilisé</b> (combien sont montés, et sur combien d'objets).</dd>
+      <dt>🗂️ Regroupement</dt><dd><span class="admin">admin</span> Se modifie directement : tape pour filtrer, choisis, ou <span class="ui">+ Créer « nom »</span>. Le ✕ retire du regroupement. Un regroupement qui n'a plus aucun accessoire disparaît tout seul.</dd>
+      <dt>🎁 Utilisé dans N objets</dt><dd>Les objets équipés (vignette, nom) et la quantité montée. Toucher une ligne ouvre l'objet.</dd>
+      <dt>🕓 Son histoire</dt><dd>Une carte repliée : la date de création et celle de la dernière modification.</dd>
+      <dt>Les boutons du bas</dt><dd><span class="admin">admin</span> <span class="ui">📦 Stock</span> (voir ci-dessous), <span class="ui">✏️ Modifier</span> (nom, stock, prix unitaire, puis <span class="ui">✓ Enregistrer</span>), <span class="ui">🗑</span> (un second appui, « Confirmer ? », supprime). Un accessoire monté sur des objets ne peut pas être supprimé.</dd>
     </dl>
   </section>
   <section id="objets-accessoires-stock">
     <h3>Gérer le stock <span class="admin">admin</span></h3>
-    <p>Le bouton <span class="ui">Stock</span> de la fiche propose trois modes :</p>
+    <p>Le bouton <span class="ui">📦 Stock</span> de la fiche ouvre la carte <b>Le stock</b>, avec trois modes en pastilles ; le bouton du bas prend la couleur du mode choisi :</p>
     <figure class="phone"><img src="img/objets-accessoire-stock.webp" alt="Mode Ajouter du stock d'un accessoire"><figcaption>Réception d'un lot : quantité reçue et coût du lot.</figcaption></figure>
     <dl class="opts">
       <dt>Ajouter</dt><dd>Pour une réception. Saisis la <b>Quantité reçue</b> et, au choix, le <span class="ui">Coût du lot</span> (par défaut) ou le <span class="ui">Prix / unité</span>. Le prix unitaire devient une <b>moyenne pondérée</b> de l'ancien stock et du nouveau lot ; l'aperçu affiche « Nouveau stock : N · prix moyen X €/u ». Laisse le coût vide pour ajouter du stock sans changer le prix. Bouton <span class="ui">Ajouter au stock</span>.</dd>

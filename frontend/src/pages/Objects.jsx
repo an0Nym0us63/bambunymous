@@ -49,6 +49,8 @@ export function AccessorySheet({ accId, onClose, onChanged }) {
   const fileRef = React.useRef(null);
   const [imgV, setImgV] = React.useState(0);          // cache-buster photo
   const [viewObj, setViewObj] = React.useState(null); // fiche objet ouverte sur place
+  const [histOpen, setHistOpen] = React.useState(false);
+  const isAdmin = useIsAdmin();
   const openObj = async (id) => {
     try { const r = await client.get(`/objects/objects/${id}`); setViewObj(r.data); } catch {}
   };
@@ -131,10 +133,7 @@ export function AccessorySheet({ accId, onClose, onChanged }) {
     }
   };
 
-  const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
-    padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" };
-  const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-    letterSpacing:"0.05em", marginBottom:4, display:"block" };
+  const inp = fInp, lbl = fLbl;
 
   // Prix moyen estime apres reappro (meme calcul que le backend).
   const newAvg = (() => {
@@ -148,240 +147,191 @@ export function AccessorySheet({ accId, onClose, onChanged }) {
     return ((d.quantity * d.unit_price) + tp) / (d.quantity + q);
   })();
 
+  const q = d?.quantity || 0;
+  const tone = q === 0 ? "#ef4444" : q < LOW_STOCK ? "#f59e0b" : "#22c55e";
+  const c = sectionColor((d?.category || "").trim() || null);
+  const stockBlocked = busy || (stockMode === "set" ? setValue === "" : !restock.qty);
+  const STOCK_OPS = { add:["➕", "Ajouter", "#22c55e"], remove:["➖", "Retirer", "#f59e0b"], set:["🎯", "Définir", "#3b82f6"] };
+  const bottom = !d ? null
+    : mode === "edit" ? <>
+        <button onClick={() => { setMode("view"); load(); }} style={{ ...fBtn, flex:1 }}>Annuler</button>
+        <button onClick={save} disabled={busy} style={{ ...fBtn, flex:2, border:"none", color:"#fff", opacity: busy ? .6 : 1,
+          background:"linear-gradient(135deg, #3B82F6, #6366F1)", boxShadow:"0 8px 18px -10px #3B82F6" }}>{busy ? "Enregistrement…" : "✓ Enregistrer"}</button></>
+    : mode === "restock" ? <>
+        <button onClick={() => { setMode("view"); setStockMode("add"); }} style={{ ...fBtn, flex:1 }}>Annuler</button>
+        <button onClick={doRestock} disabled={stockBlocked} style={{ ...fBtn, flex:2, border:"none", color:"#fff", opacity: stockBlocked ? .6 : 1,
+          background:`linear-gradient(135deg, ${STOCK_OPS[stockMode][2]}, color-mix(in srgb, ${STOCK_OPS[stockMode][2]} 65%, #ffffff))` }}>
+          {stockMode === "remove" ? "Retirer" : stockMode === "set" ? "Définir" : "Ajouter au stock"}</button></>
+    : isAdmin ? <>
+        <button onClick={() => { setStockMode("add"); setSetValue(String(d.quantity)); setMode("restock"); }} style={{ ...fBtn, flex:2, border:"none", color:"#fff",
+          background:"linear-gradient(135deg, #14B8A6, #22C55E)", boxShadow:"0 8px 18px -10px #14B8A6" }}>📦 Stock</button>
+        <button onClick={() => setMode("edit")} style={{ ...fBtn, flex:2 }}>✏️ Modifier</button>
+        <button onClick={() => confirmDel ? remove() : setConfirmDel(true)} disabled={busy} aria-label="Supprimer l'accessoire"
+          data-tip={confirmDel ? "Toucher encore pour supprimer" : "Supprimer l'accessoire"}
+          style={{ ...fBtn, flex: confirmDel ? 2 : "0 0 auto", width: confirmDel ? undefined : 48, color: confirmDel ? "#fff" : "#ef4444",
+            border: confirmDel ? "none" : "1px solid rgba(239,68,68,0.35)",
+            background: confirmDel ? "linear-gradient(135deg, #EF4444, #F97316)" : "rgba(239,68,68,0.08)" }}>{confirmDel ? "Confirmer ?" : "🗑"}</button></>
+    : null;
+
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:340,
-      background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"flex-end" }}>
-      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
-        style={{ width:"100%", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-          padding:"16px 16px 32px", maxHeight:"88vh", overflowY:"auto" }}>
-
-        {!d ? <p style={{ color:"var(--muted)", fontSize:13, padding:20, textAlign:"center" }}>Chargement…</p> : (<>
-
-          {/* En-tete : photo + nom */}
-          <div style={{ display:"flex", gap:14, alignItems:"flex-start", marginBottom:16 }}>
-            <div style={{ width:88, height:88, borderRadius:12, flexShrink:0, overflow:"hidden",
-              background:"var(--surface2)", border:"1px solid var(--border)", padding:6,
-              display:"flex", alignItems:"center", justifyContent:"center", boxSizing:"border-box" }}>
-              {d.has_image
-                ? <img src={apiUrl(`/objects/accessories/${accId}/image?v=${imgV}`)} alt=""
-                    style={{ maxWidth:"100%", maxHeight:"100%", objectFit:"contain" }}/>
-                : <Package size={30} style={{ color:"var(--muted)" }}/>}
+    <FSheet onClose={onClose} z={340} bottom={bottom}>
+      {!d ? <p style={{ color:"var(--muted)", fontSize:13, padding:"60px 20px", textAlign:"center" }}>Chargement…</p> : (<>
+        {/* l'accessoire en vedette : sa photo sur la couleur de son regroupement */}
+        <div style={{ position:"relative", overflow:"hidden", padding:"52px 18px 18px", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap",
+          background:`radial-gradient(circle at 18% 45%, color-mix(in srgb, ${c} 40%, transparent), transparent 60%), linear-gradient(135deg, color-mix(in srgb, ${c} 16%, transparent), transparent 70%), var(--surface2)` }}>
+          <div style={{ width:116, height:116, borderRadius:22, flexShrink:0, overflow:"hidden", padding:10, boxSizing:"border-box",
+            display:"flex", alignItems:"center", justifyContent:"center", background:"var(--surface)", border:"1px solid rgba(255,255,255,.12)",
+            boxShadow:`0 12px 28px -12px ${c}` }}>
+            {d.has_image
+              ? <img src={apiUrl(`/objects/accessories/${accId}/image?v=${imgV}`)} alt="" style={{ maxWidth:"100%", maxHeight:"100%", objectFit:"contain" }}/>
+              : <Package size={46} style={{ color:c, opacity:.8 }}/>}
+          </div>
+          <div style={{ flex:"1 1 190px", minWidth:0, display:"flex", flexDirection:"column", gap:6 }}>
+            <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+              {d.category && fChip(`🔩 ${d.category}`, c)}
+              {d.used_in_objects > 0 && fChip(`🎁 utilisé × ${d.used_quantity}`, "#8B5CF6")}
             </div>
-            <div style={{ flex:1, minWidth:0 }}>
-              <p style={{ fontSize:17, fontWeight:800, color:"var(--text)", margin:0,
-                wordBreak:"break-word" }}>{d.name}</p>
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:8 }}>
-                <span style={{ fontSize:10, fontWeight:700, padding:"3px 9px", borderRadius:20,
-                  background: d.quantity > 0 ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
-                  color: d.quantity > 0 ? "#22c55e" : "#ef4444" }}>
-                  Stock : {d.quantity}
-                </span>
-                {d.used_in_objects > 0 && (
-                  <span style={{ fontSize:10, fontWeight:700, padding:"3px 9px", borderRadius:20,
-                    background:"rgba(139,92,246,0.12)", color:"#a78bfa" }}>
-                    Utilisé × {d.used_quantity}
-                  </span>
+            <div style={{ fontSize:23, fontWeight:900, color:"var(--text)", lineHeight:1.12, overflowWrap:"anywhere" }}>{d.name}</div>
+            <div style={{ display:"flex", alignItems:"baseline", gap:8, flexWrap:"wrap" }}>
+              <span style={{ fontSize:28, fontWeight:900, lineHeight:1.2, ...fGrad(tone, `color-mix(in srgb, ${tone} 60%, #ffffff)`) }}>{q === 0 ? "Rupture" : q}</span>
+              {q > 0 && <span style={{ fontSize:13, fontWeight:800, color:"var(--muted)" }}>en stock{q < LOW_STOCK ? " · stock bas" : ""}</span>}
+            </div>
+            <AdminOnly><button onClick={()=>fileRef.current?.click()} disabled={busy}
+              style={{ alignSelf:"flex-start", display:"inline-flex", alignItems:"center", gap:6, padding:"5px 11px", borderRadius:20, fontSize:11.5,
+                fontWeight:800, cursor:"pointer", border:"1px solid var(--border)", background:"var(--surface)", color:"var(--text2)" }}>
+              <ImageIcon size={13}/> {d.has_image ? "Changer la photo" : "Ajouter une photo"}
+            </button></AdminOnly>
+            <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
+              onChange={e => { upload(e.target.files?.[0]); e.target.value=""; }}/>
+          </div>
+        </div>
+
+        <div style={{ padding:"14px 14px 18px", display:"flex", flexDirection:"column", gap:12 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))", gap:8 }}>
+            <FTile label="📦 Stock" value={String(q)} sub={q === 0 ? "rupture" : q < LOW_STOCK ? "stock bas" : "unités"} c1={tone} c2={`color-mix(in srgb, ${tone} 60%, #ffffff)`}/>
+            <FTile label="🏷️ Prix / u" value={fmtPrice(d.unit_price)} sub="prix moyen" c1="#F59E0B" c2="#FBBF24"/>
+            <FTile label="💶 Valeur" value={fmtPrice(d.stock_value)} sub="du stock" c1="#22c55e" c2="#4ade80"/>
+            <FTile label="🎁 Utilisé" value={String(d.used_quantity || 0)} sub={`dans ${d.used_in_objects || 0} objet${d.used_in_objects > 1 ? "s" : ""}`} c1="#8B5CF6" c2="#C084FC"/>
+          </div>
+
+          {/* Mode edition */}
+          {mode === "edit" && (
+            <FCard t="Modifier" i="✏️" c="#3B82F6">
+              <div style={{ display:"flex", flexDirection:"column", gap:12, marginTop:6 }}>
+                <div><label style={lbl}>Nom</label>
+                  <input style={inp} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <div style={{ flex:1 }}><label style={lbl}>Stock</label>
+                    <input style={inp} type="number" value={form.quantity}
+                      onChange={e=>setForm(f=>({...f,quantity:e.target.value}))}/></div>
+                  <div style={{ flex:1 }}><label style={lbl}>Prix unitaire (€)</label>
+                    <input style={inp} type="number" step="0.01" value={form.unit_price}
+                      onChange={e=>setForm(f=>({...f,unit_price:e.target.value}))}/></div>
+                </div>
+              </div>
+            </FCard>
+          )}
+
+          {/* Gestion du stock : ajouter, retirer, ou definir une valeur */}
+          {mode === "restock" && (
+            <FCard t="Le stock" i="📦" c={STOCK_OPS[stockMode][2]}>
+              <div style={{ display:"flex", flexDirection:"column", gap:12, marginTop:6 }}>
+                {/* Choix de l'operation. Retirer sert aux pertes et casses ;
+                    definir corrige un inventaire. Ni l'un ni l'autre ne touche
+                    au prix unitaire -- seul l'ajout d'un lot le recalcule. */}
+                <Seg value={stockMode} onChange={setStockMode} opts={Object.entries(STOCK_OPS).map(([m, [ic, l, col]]) => [m, `${ic} ${l}`, col])}/>
+
+                {stockMode === "set" ? (
+                  <>
+                    <div><label style={lbl}>Nouveau stock</label>
+                      <input style={inp} type="number" min={0} value={setValue} autoFocus
+                        onChange={e=>setSetValue(e.target.value)}/></div>
+                    <p style={fNote}>
+                      Correction d'inventaire. Le prix unitaire ({fmtPrice(d.unit_price)}) reste inchangé.
+                    </p>
+                  </>
+                ) : stockMode === "remove" ? (
+                  <>
+                    <div><label style={lbl}>Quantité retirée</label>
+                      <input style={inp} type="number" min={1} max={d.quantity} value={restock.qty} autoFocus
+                        onChange={e=>setRestock(r=>({...r,qty:e.target.value}))}/></div>
+                    <p style={fNote}>
+                      Perte, casse ou utilisé ailleurs. Reste {Math.max(0, d.quantity - parseInt(restock.qty||"0",10))} en stock · prix inchangé.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div><label style={lbl}>Quantité reçue</label>
+                      <input style={inp} type="number" min={1} value={restock.qty} autoFocus
+                        onChange={e=>setRestock(r=>({...r,qty:e.target.value}))}/></div>
+                    <div>
+                      <Seg value={priceMode} onChange={setPriceMode} opts={[["total", "Coût du lot", "#3B82F6"], ["unit", "Prix / unité", "#3B82F6"]]}/>
+                      <div style={{ height:6 }}/>
+                      {priceMode === "total" ? (
+                        <input style={inp} type="number" step="0.01" placeholder="€ pour tout le lot"
+                          value={restock.total_price}
+                          onChange={e=>setRestock(r=>({...r,total_price:e.target.value}))}/>
+                      ) : (
+                        <input style={inp} type="number" step="0.01" placeholder="€ par unité"
+                          value={unitInput} onChange={e=>setUnitInput(e.target.value)}/>
+                      )}
+                    </div>
+                    <p style={fNote}>
+                      {newAvg != null
+                        ? `Nouveau stock : ${d.quantity + parseInt(restock.qty||"0",10)} · prix moyen ${fmtPrice(newAvg)}/u`
+                        : "Laisser le coût vide pour ajouter du stock sans changer le prix unitaire."}
+                    </p>
+                  </>
                 )}
               </div>
-              <AdminOnly><button onClick={()=>fileRef.current?.click()} disabled={busy}
-                style={{ marginTop:8, display:"inline-flex", alignItems:"center", gap:5,
-                  padding:"4px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
-                  border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)" }}>
-                <ImageIcon size={12}/> {d.has_image ? "Changer la photo" : "Ajouter une photo"}
-              </button></AdminOnly>
-              <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
-                onChange={e => { upload(e.target.files?.[0]); e.target.value=""; }}/>
-            </div>
-          </div>
+            </FCard>
+          )}
 
           {/* Regroupement modifiable sans passer en mode edition : c'est un
               rangement, pas une caracteristique de l'accessoire, et l'imposer
               derriere "Modifier" rendait le simple deplacement laborieux. */}
           <AdminOnly>
-            <div style={{ marginBottom:14 }}>
-              <label style={lbl}>Regroupement</label>
-              <CategoryPicker value={d.category || null}
-                onChange={async (v) => {
-                  try {
-                    await client.patch(`/objects/accessories/${accId}`, { category: v });
-                    await load(); onChanged?.();
-                  } catch(e) { showAlert(e.response?.data?.detail || e.message); }
-                }}/>
-            </div>
+            <FCard t="Regroupement" i="🗂️" c={c}>
+              <div style={{ marginTop:6 }}>
+                <CategoryPicker value={d.category || null}
+                  onChange={async (v) => {
+                    try {
+                      await client.patch(`/objects/accessories/${accId}`, { category: v });
+                      await load(); onChanged?.();
+                    } catch(e) { showAlert(e.response?.data?.detail || e.message); }
+                  }}/>
+              </div>
+            </FCard>
           </AdminOnly>
-
-          {/* KPIs */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:16 }}>
-            {[["Stock", String(d.quantity)],
-              ["Prix unitaire", fmtPrice(d.unit_price)],
-              ["Valeur", fmtPrice(d.stock_value)]].map(([k,v]) => (
-              <div key={k} style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 10px" }}>
-                <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>{k}</p>
-                <p style={{ fontSize:14, fontWeight:800, color:"var(--text)", margin:0,
-                  fontFamily:"monospace" }}>{v}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Mode edition */}
-          {mode === "edit" && (
-            <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:16 }}>
-              <div><label style={lbl}>Nom</label>
-                <input style={inp} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
-              <div style={{ display:"flex", gap:8 }}>
-                <div style={{ flex:1 }}><label style={lbl}>Stock</label>
-                  <input style={inp} type="number" value={form.quantity}
-                    onChange={e=>setForm(f=>({...f,quantity:e.target.value}))}/></div>
-                <div style={{ flex:1 }}><label style={lbl}>Prix unitaire (€)</label>
-                  <input style={inp} type="number" step="0.01" value={form.unit_price}
-                    onChange={e=>setForm(f=>({...f,unit_price:e.target.value}))}/></div>
-              </div>
-              <div style={{ display:"flex", gap:8 }}>
-                <button onClick={()=>{ setMode("view"); load(); }}
-                  style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
-                    background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Annuler</button>
-                <button onClick={save} disabled={busy}
-                  style={{ flex:2, padding:"10px", borderRadius:10, border:"none", background:"#3b82f6",
-                    color:"white", fontSize:13, fontWeight:700, cursor:"pointer", opacity:busy?0.6:1 }}>
-                  {busy ? "Enregistrement…" : "Enregistrer"}</button>
-              </div>
-            </div>
-          )}
-
-          {/* Gestion du stock : ajouter, retirer, ou definir une valeur */}
-          {mode === "restock" && (
-            <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:16 }}>
-              {/* Choix de l'operation. Retirer sert aux pertes et casses ;
-                  definir corrige un inventaire. Ni l'un ni l'autre ne touche
-                  au prix unitaire -- seul l'ajout d'un lot le recalcule. */}
-              <div style={{ display:"flex", gap:6 }}>
-                {[["add","Ajouter"],["remove","Retirer"],["set","Définir"]].map(([m,l])=>(
-                  <button key={m} onClick={()=>setStockMode(m)}
-                    style={{ flex:1, padding:"7px", borderRadius:8, fontSize:12, fontWeight:600,
-                      cursor:"pointer", border:"1px solid "+(stockMode===m?"#22c55e":"var(--border)"),
-                      background: stockMode===m?"rgba(34,197,94,0.15)":"transparent",
-                      color: stockMode===m?"#22c55e":"var(--muted)" }}>{l}</button>
-                ))}
-              </div>
-
-              {stockMode === "set" ? (
-                <>
-                  <div><label style={lbl}>Nouveau stock</label>
-                    <input style={inp} type="number" min={0} value={setValue} autoFocus
-                      onChange={e=>setSetValue(e.target.value)}/></div>
-                  <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
-                    Correction d'inventaire. Le prix unitaire ({fmtPrice(d.unit_price)}) reste inchangé.
-                  </p>
-                </>
-              ) : stockMode === "remove" ? (
-                <>
-                  <div><label style={lbl}>Quantité retirée</label>
-                    <input style={inp} type="number" min={1} max={d.quantity} value={restock.qty} autoFocus
-                      onChange={e=>setRestock(r=>({...r,qty:e.target.value}))}/></div>
-                  <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
-                    Perte, casse ou utilisé ailleurs. Reste {Math.max(0, d.quantity - parseInt(restock.qty||"0",10))} en stock · prix inchangé.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div><label style={lbl}>Quantité reçue</label>
-                    <input style={inp} type="number" min={1} value={restock.qty} autoFocus
-                      onChange={e=>setRestock(r=>({...r,qty:e.target.value}))}/></div>
-                  <div>
-                    <div style={{ display:"flex", gap:6, marginBottom:6 }}>
-                      {[["total","Coût du lot"],["unit","Prix / unité"]].map(([m,l])=>(
-                        <button key={m} onClick={()=>setPriceMode(m)}
-                          style={{ flex:1, padding:"6px", borderRadius:8, fontSize:11, fontWeight:600,
-                            cursor:"pointer", border:"1px solid "+(priceMode===m?"#3b82f6":"var(--border)"),
-                            background: priceMode===m?"rgba(59,130,246,0.15)":"transparent",
-                            color: priceMode===m?"#60a5fa":"var(--muted)" }}>{l}</button>
-                      ))}
-                    </div>
-                    {priceMode === "total" ? (
-                      <input style={inp} type="number" step="0.01" placeholder="€ pour tout le lot"
-                        value={restock.total_price}
-                        onChange={e=>setRestock(r=>({...r,total_price:e.target.value}))}/>
-                    ) : (
-                      <input style={inp} type="number" step="0.01" placeholder="€ par unité"
-                        value={unitInput} onChange={e=>setUnitInput(e.target.value)}/>
-                    )}
-                  </div>
-                  <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
-                    {newAvg != null
-                      ? `Nouveau stock : ${d.quantity + parseInt(restock.qty||"0",10)} · prix moyen ${fmtPrice(newAvg)}/u`
-                      : "Laisser le coût vide pour ajouter du stock sans changer le prix unitaire."}
-                  </p>
-                </>
-              )}
-
-              <div style={{ display:"flex", gap:8 }}>
-                <button onClick={()=>{ setMode("view"); setStockMode("add"); }}
-                  style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
-                    background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Annuler</button>
-                <button onClick={doRestock}
-                  disabled={busy || (stockMode==="set" ? setValue==="" : !restock.qty)}
-                  style={{ flex:2, padding:"10px", borderRadius:10, border:"none",
-                    background: stockMode==="remove" ? "#f59e0b" : stockMode==="set" ? "#3b82f6" : "#22c55e",
-                    color:"white", fontSize:13, fontWeight:700, cursor:"pointer",
-                    opacity:(busy || (stockMode==="set"?setValue==="":!restock.qty))?0.6:1 }}>
-                  {stockMode==="remove" ? "Retirer" : stockMode==="set" ? "Définir" : "Ajouter au stock"}
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Objets qui utilisent l'accessoire */}
           {(d.objects || []).length > 0 && (
-            <div style={{ marginBottom:16 }}>
-              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-                letterSpacing:"0.06em", margin:"0 0 8px" }}>
-                Utilisé dans {d.used_in_objects} objet{d.used_in_objects>1?"s":""}
-              </p>
+            <FCard t={`Utilisé dans ${d.used_in_objects} objet${d.used_in_objects>1?"s":""}`} i="🎁" c="#8B5CF6">
               {d.objects.slice(0,20).map(o => (
                 <div key={o.id} onClick={() => openObj(o.id)}
-                  style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", cursor:"pointer",
-                  background:"var(--surface2)", borderRadius:8, marginBottom:5,
-                  border:"1px solid var(--border)" }}>
-                  <div style={{ width:28, height:28, borderRadius:6, overflow:"hidden", flexShrink:0,
-                    background:"var(--bg)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                    <img src={apiUrl(`/objects/objects/${o.id}/image`)} alt=""
-                      style={{ width:"100%", height:"100%", objectFit:"cover" }}
-                      onError={e=>e.currentTarget.style.display="none"}/>
-                  </div>
-                  <span style={{ fontSize:12, flex:1, overflow:"hidden", textOverflow:"ellipsis",
+                  style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", cursor:"pointer", borderTop:"1px dashed var(--border)" }}>
+                  <ObjThumb id={o.id} size={34}/>
+                  <span style={{ fontSize:13.5, fontWeight:800, flex:1, minWidth:0, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis",
                     whiteSpace:"nowrap" }}>{o.name}</span>
-                  <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>×{o.quantity}</span>
+                  <span style={{ fontSize:12, fontWeight:800, color:"var(--muted)" }}>×{o.quantity}</span>
                 </div>
               ))}
-              {viewObj && (
-                <ObjectSheet obj={viewObj} onClose={() => setViewObj(null)}
-                  onUpdated={(u) => { if (u) setViewObj(u); load(); }}/>
-              )}
-            </div>
+            </FCard>
           )}
 
-          {/* Actions */}
-          {mode === "view" && (
-            <AdminOnly><div style={{ display:"flex", gap:8 }}>
-              <button onClick={()=>setMode("edit")}
-                style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
-                  background:"var(--surface2)", color:"var(--text)", fontSize:12, fontWeight:700,
-                  cursor:"pointer" }}>✏️ Modifier</button>
-              <button onClick={()=>{ setStockMode("add"); setSetValue(String(d.quantity)); setMode("restock"); }}
-                style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid rgba(34,197,94,0.3)",
-                  background:"rgba(34,197,94,0.06)", color:"#22c55e", fontSize:12, fontWeight:700,
-                  cursor:"pointer" }}>Stock</button>
-              <button onClick={()=> confirmDel ? remove() : setConfirmDel(true)} disabled={busy}
-                style={{ padding:"10px 14px", borderRadius:10, border:"1px solid rgba(239,68,68,0.3)",
-                  background: confirmDel ? "#ef4444" : "rgba(239,68,68,0.06)",
-                  color: confirmDel ? "white" : "#ef4444", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-                {confirmDel ? "Confirmer ?" : "🗑"}
-              </button>
-            </div></AdminOnly>
-          )}
-        </>)}
-      </div>
-    </div>
+          {(d.created_at || d.updated_at) && <FCard t="Son histoire" i="🕓" c="#64748B" fold open={histOpen} onToggle={() => setHistOpen(o => !o)}
+            summary={<p style={{ margin:"4px 0 0", fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>
+              {d.created_at ? `Créé le ${dayFr(String(d.created_at).slice(0, 10))}` : ""}</p>}>
+            <FRow l="Créé le" v={d.created_at ? dayFr(String(d.created_at).slice(0, 10)) : null}/>
+            <FRow l="Dernière modification" v={d.updated_at ? dayFr(String(d.updated_at).slice(0, 10)) : null}/>
+          </FCard>}
+        </div>
+        {viewObj && (
+          <ObjectSheet obj={viewObj} onClose={() => setViewObj(null)}
+            onUpdated={(u) => { if (u) setViewObj(u); load(); }}/>
+        )}
+      </>)}
+    </FSheet>
   );
 }
 
@@ -391,8 +341,7 @@ function AccessoryCreateSheet({ onClose, onCreated }) {
   const [form, setForm] = React.useState({ name:"", quantity:"0", unit_price:"0", total_price:"" });
   const [priceMode, setPriceMode] = React.useState("unit");  // unit | total
   const [busy, setBusy] = React.useState(false);
-  const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
-    padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" };
+  const inp = fInp;
 
   const qty = parseInt(form.quantity || "0", 10);
   // Prix unitaire effectif : saisi tel quel, ou deduit du total reparti sur la
@@ -400,8 +349,7 @@ function AccessoryCreateSheet({ onClose, onCreated }) {
   const effUnit = priceMode === "total"
     ? (qty > 0 ? parseFloat(form.total_price || "0") / qty : 0)
     : parseFloat(form.unit_price || "0");
-  const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-    letterSpacing:"0.05em", marginBottom:4, display:"block" };
+  const lbl = fLbl;
 
   const create = async () => {
     if (!form.name.trim()) return;
@@ -421,14 +369,21 @@ function AccessoryCreateSheet({ onClose, onCreated }) {
     }
   };
 
+  const off = busy || !form.name.trim();
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:340,
-      background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"flex-end" }}>
-      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
-        style={{ width:"100%", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-          padding:"16px 16px 32px", maxHeight:"80vh", overflowY:"auto" }}>
-        <p style={{ fontWeight:700, fontSize:15, margin:"0 0 16px" }}>Nouvel accessoire</p>
-        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+    <FSheet onClose={onClose} z={340} bottom={<>
+      <button onClick={onClose} style={{ ...fBtn, flex:1 }}>Annuler</button>
+      <button onClick={create} disabled={off} style={{ ...fBtn, flex:2, border:"none", color:"#fff", opacity: off ? .6 : 1,
+        cursor: off ? "not-allowed" : "pointer", background:"linear-gradient(135deg, #14B8A6, #2DD4BF)", boxShadow:"0 8px 18px -10px #14B8A6" }}>
+        {busy ? "Création…" : "✓ Créer"}</button></>}>
+      <div style={{ padding:"52px 18px 16px", background:"radial-gradient(circle at 15% 40%, rgba(20,184,166,0.35), transparent 60%), var(--surface2)" }}>
+        <div style={{ fontSize:12, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#0d9488" }}>🔩 Nouvel accessoire</div>
+        <div style={{ fontSize:22, fontWeight:900, color: form.name.trim() ? "var(--text)" : "var(--muted)", lineHeight:1.15, overflowWrap:"anywhere" }}>
+          {form.name.trim() || "Son nom ?"}</div>
+        <div style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>
+          {qty > 0 ? `${qty} en stock · ${fmtPrice(effUnit)} / u` : "Aucun stock pour l'instant"}</div>
+      </div>
+      <div style={{ padding:"14px 16px 18px", display:"flex", flexDirection:"column", gap:12 }}>
           <div><label style={lbl}>Nom</label>
             <input style={inp} autoFocus value={form.name} placeholder="Ex : Aimant 10×3"
               onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
@@ -436,15 +391,8 @@ function AccessoryCreateSheet({ onClose, onCreated }) {
             <input style={inp} type="number" value={form.quantity}
               onChange={e=>setForm(f=>({...f,quantity:e.target.value}))}/></div>
           <div>
-            <div style={{ display:"flex", gap:6, marginBottom:6 }}>
-              {[["unit","Prix / unité"],["total","Coût total"]].map(([m,l])=>(
-                <button key={m} onClick={()=>setPriceMode(m)}
-                  style={{ flex:1, padding:"6px", borderRadius:8, fontSize:11, fontWeight:600,
-                    cursor:"pointer", border:"1px solid "+(priceMode===m?"#3b82f6":"var(--border)"),
-                    background: priceMode===m?"rgba(59,130,246,0.15)":"transparent",
-                    color: priceMode===m?"#60a5fa":"var(--muted)" }}>{l}</button>
-              ))}
-            </div>
+            <Seg value={priceMode} onChange={setPriceMode} opts={[["unit", "Prix / unité", "#14B8A6"], ["total", "Coût total", "#14B8A6"]]}/>
+            <div style={{ height:6 }}/>
             {priceMode === "unit" ? (
               <input style={inp} type="number" step="0.01" placeholder="€ par unité"
                 value={form.unit_price}
@@ -455,26 +403,14 @@ function AccessoryCreateSheet({ onClose, onCreated }) {
                 onChange={e=>setForm(f=>({...f,total_price:e.target.value}))}/>
             )}
           </div>
-          <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
+          <p style={fNote}>
             {priceMode === "total" && qty > 0
               ? `Soit ${fmtPrice(effUnit)} / unité. `
               : ""}
             La photo pourra être ajoutée depuis la fiche, juste après la création.
           </p>
-        </div>
-        <div style={{ display:"flex", gap:8, marginTop:20 }}>
-          <button onClick={onClose}
-            style={{ flex:1, padding:"11px", borderRadius:10, border:"1px solid var(--border)",
-              background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Annuler</button>
-          <button onClick={create} disabled={busy || !form.name.trim()}
-            style={{ flex:2, padding:"11px", borderRadius:10, border:"none", background:"#3b82f6",
-              color:"white", fontSize:13, fontWeight:700,
-              cursor:(busy||!form.name.trim())?"not-allowed":"pointer",
-              opacity:(busy||!form.name.trim())?0.6:1 }}>
-            {busy ? "Création…" : "Créer"}</button>
-        </div>
       </div>
-    </div>
+    </FSheet>
   );
 }
 
@@ -506,46 +442,29 @@ function BulkCategorySheet({ ids, onClose, onDone }) {
   };
 
   return (
-    <div onClick={onClose}
-      style={{ position:"fixed", inset:0, zIndex:6000, background:"rgba(0,0,0,0.55)",
-        display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e=>e.stopPropagation()} className="sheet-panel"
-        style={{ width:"100%", maxWidth:520, borderTopLeftRadius:20,
-          borderTopRightRadius:20,
-          padding:"18px 18px max(env(safe-area-inset-bottom,20px),20px)" }}>
-        <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)",
-          margin:"0 auto 14px" }}/>
-        <h3 style={{ margin:"0 0 4px", fontSize:16, fontWeight:800, color:"var(--text)" }}>
-          Regrouper {ids.length} accessoire{ids.length>1?"s":""}
-        </h3>
-        <p style={{ margin:"0 0 14px", fontSize:12, color:"var(--muted)" }}>
-          Choisis un regroupement existant, ou crée-en un.
-        </p>
+    <FSheet onClose={onClose} z={6000} bottom={<>
+      <button onClick={onClose} style={{ ...fBtn, flex:1 }}>Annuler</button>
+      <button onClick={apply} disabled={busy} style={{ ...fBtn, flex:2, border:"none", color:"#fff", opacity: busy ? .6 : 1,
+        background:"linear-gradient(135deg, #14B8A6, #2DD4BF)", boxShadow:"0 8px 18px -10px #14B8A6" }}>{busy ? "Application…" : "✓ Appliquer"}</button></>}>
+      <div style={{ padding:"52px 18px 16px", background:"radial-gradient(circle at 15% 40%, rgba(20,184,166,0.3), transparent 60%), var(--surface2)" }}>
+        <div style={{ fontSize:12, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#0d9488" }}>🗂️ Regrouper</div>
+        <div style={{ fontSize:21, fontWeight:900, color:"var(--text)", lineHeight:1.15 }}>{ids.length} accessoire{ids.length>1?"s":""}</div>
+        <div style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>Choisis un regroupement existant, ou crée-en un.</div>
+      </div>
+      <div style={{ padding:"14px 16px 18px" }}>
         <CategoryPicker value={cat} onChange={setCat}/>
         {/* Bouton distinct plutot qu'un champ laisse vide : sortir du
             regroupement est une action a part entiere, pas une absence de
             choix, et rien ne l'aurait signale autrement. */}
         <button onClick={() => setCat(null)}
-          style={{ marginTop:8, padding:"7px 12px", borderRadius:8, fontSize:11.5,
-            fontWeight:600, cursor:"pointer", border:"1px solid var(--border)",
+          style={{ marginTop:10, padding:"7px 13px", borderRadius:20, fontSize:12,
+            fontWeight:800, cursor:"pointer", border:"1px solid " + (cat === null ? "rgba(239,68,68,0.4)" : "var(--border)"),
             background: cat === null ? "rgba(239,68,68,0.12)" : "transparent",
             color: cat === null ? "#ef4444" : "var(--muted)" }}>
           {cat === null ? "✓ " : ""}Retirer de tout regroupement
         </button>
-        <div style={{ display:"flex", gap:8, marginTop:18 }}>
-          <button onClick={onClose}
-            style={{ flex:1, padding:"11px", borderRadius:11, fontSize:13, fontWeight:600,
-              border:"1px solid var(--border)", background:"transparent",
-              color:"var(--text)", cursor:"pointer" }}>Annuler</button>
-          <button onClick={apply} disabled={busy}
-            style={{ flex:2, padding:"11px", borderRadius:11, fontSize:13, fontWeight:800,
-              border:"none", background:"#3b82f6", color:"white", cursor:"pointer",
-              opacity: busy?0.6:1 }}>
-            {busy ? "Application…" : "Appliquer"}
-          </button>
-        </div>
       </div>
-    </div>
+    </FSheet>
   );
 }
 
@@ -653,6 +572,29 @@ function QuickSell({ obj, onClose, onDone }) {
       </div>
     </FSheet>
   );
+}
+
+// Les champs des feuilles de la page
+const fInp = { background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"10px 12px", fontSize:14,
+  fontWeight:700, color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" };
+const fLbl = { fontSize:12, fontWeight:800, color:"var(--muted)", marginBottom:5, display:"block" };
+const fNote = { fontSize:12, fontWeight:600, color:"var(--muted)", margin:0, lineHeight:1.4 };
+// un choix a quelques options, en pastilles (l'active dans sa couleur)
+function Seg({ value, onChange, opts }) {
+  return <div style={{ display:"flex", gap:4, padding:3, borderRadius:14, background:"var(--surface)", border:"1px solid var(--border)" }}>
+    {opts.map(([v, l, col]) => { const on = value === v;
+      return <button key={v} type="button" onClick={() => onChange(v)} style={{ flex:1, padding:"7px 6px", borderRadius:11, fontSize:12.5, fontWeight:800,
+        cursor:"pointer", border:"none", whiteSpace:"nowrap", color: on ? "#fff" : "var(--muted)",
+        background: on ? `linear-gradient(135deg, ${col}, color-mix(in srgb, ${col} 65%, #ffffff))` : "transparent",
+        boxShadow: on ? `0 4px 12px -6px ${col}` : "none" }}>{l}</button>; })}
+  </div>;
+}
+// la vignette d'un objet : sa photo, sinon un paquet cadeau
+function ObjThumb({ id, size = 34 }) {
+  const [ok, setOk] = useState(true);
+  return <span style={{ width:size, height:size, borderRadius:10, overflow:"hidden", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
+    background:"radial-gradient(circle, rgba(139,92,246,0.25), transparent 75%), var(--surface)", border:"1px solid var(--border)", fontSize:size * 0.45 }}>
+    {ok ? <img src={apiUrl(`/objects/objects/${id}/image`)} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={() => setOk(false)}/> : "🎁"}</span>;
 }
 
 // Les petits morceaux communs aux cartes de la page
@@ -1414,8 +1356,14 @@ function hueFromName(name) {
   }
   return Math.round((((h >>> 0) % 1000) * 137.508) % 360);
 }
+// en hexadecimal (meme teinte que hsl(h 62% 56%)) : la page y colle une transparence (« #rrggbb1f »)
+const hslHex = (h, s, l) => {
+  const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  const f = n => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)))).toString(16).padStart(2, "0");
+  return `#${f(0)}${f(8)}${f(4)}`;
+};
 const sectionColor = (name) =>
-  name ? `hsl(${hueFromName(name)} 62% 56%)` : "#94a3b8";
+  name ? hslHex(hueFromName(name), 0.62, 0.56) : "#94a3b8";
 
 function AccessorySection({ sec, open, onToggle, children }) {
   return <FoldSection color={sectionColor(sec.name)} icon={sec.name ? "🔩" : "📦"} title={sec.name || "Sans regroupement"} muted={!sec.name}
