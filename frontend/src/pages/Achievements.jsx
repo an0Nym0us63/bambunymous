@@ -271,32 +271,34 @@ export default function Achievements({ embedded = false }) {
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
             <div style={sectionTitle}>{title}</div>
             <div className="no-scrollbar" style={{ display:"flex", gap:8, overflowX:"auto", padding:"2px 0" }}>
+              {/* des cartes debout (medaille, nom, palier et date) : quatre tiennent sur un telephone */}
               {list.map(r => {
                 const it = byId[r.id]; if (!it) return null;
                 const t = it.tiers[r.tier];
                 return (
-                  <button key={r.id + r.tier} onClick={() => setDetail(r.id)}
-                    className="card" style={{ flexShrink:0, display:"flex", alignItems:"center", gap:10, padding:"8px 12px 8px 8px",
-                      cursor:"pointer", textAlign:"left", ...feltCard(t.color || "#8B5CF6") }}>
+                  <button key={r.id + r.tier} onClick={() => setDetail(r.id)} data-tip={`${it.name} · ${t.label} · ${dateFr(r.at)}`}
+                    className="card" style={{ ...recentCard, ...feltCard(t.color || "#8B5CF6") }}>
                     <Medal tier={t} emoji={it.emoji} size={40}/>
-                    <span style={{ display:"flex", flexDirection:"column", minWidth:0 }}>
-                      <span style={{ fontSize:13, fontWeight:700, color:"var(--text)", whiteSpace:"nowrap" }}>{it.name}</span>
-                      <span style={{ fontSize:11, color:"var(--muted)", whiteSpace:"nowrap" }}>{t.label} · {dateFr(r.at)}</span>
-                    </span>
+                    <span style={{ fontSize:11.5, fontWeight:800, color:"var(--text)", lineHeight:1.2, textAlign:"center", maxWidth:"100%",
+                      overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", minHeight:"2.4em" }}>{it.name}</span>
+                    {/* le palier : sa pastille de couleur (un texte noir ou bleu nuit ne se lirait pas sur fond sombre) */}
+                    <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:800, color:"var(--text2)", whiteSpace:"nowrap",
+                      maxWidth:"100%", overflow:"hidden" }}>
+                      <span style={{ width:7, height:7, borderRadius:"50%", flexShrink:0, background: t.color || "#8B5CF6",
+                        boxShadow:"0 0 0 1px rgba(255,255,255,.35)" }}/>
+                      <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{t.label}</span></span>
+                    <span style={{ fontSize:10, color:"var(--muted)", whiteSpace:"nowrap" }}>{dateShort(r.at)}</span>
                   </button>
                 );
               })}
               {/* au bout du defilement : tout voir, du plus recent au plus ancien */}
               {full.length > list.length && (
                 <button onClick={() => setAllOf({ title, list: full })} className="card"
-                  style={{ flexShrink:0, display:"flex", alignItems:"center", gap:8, padding:"8px 14px", cursor:"pointer", textAlign:"left",
-                    ...feltCard("#3B82F6", "#8B5CF6") }}>
+                  style={{ ...recentCard, justifyContent:"center", ...feltCard("#3B82F6", "#8B5CF6") }}>
                   <span style={{ width:40, height:40, borderRadius:"50%", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
                     fontSize:13, fontWeight:900, color:"#fff", background:"linear-gradient(135deg, #3B82F6, #8B5CF6)" }}>+{full.length - list.length}</span>
-                  <span style={{ display:"flex", flexDirection:"column" }}>
-                    <span style={{ fontSize:13, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap" }}>Voir tout ›</span>
-                    <span style={{ fontSize:11, color:"var(--muted)", whiteSpace:"nowrap" }}>{full.length} obtenus</span>
-                  </span>
+                  <span style={{ fontSize:11.5, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap" }}>Voir tout ›</span>
+                  <span style={{ fontSize:10, color:"var(--muted)", whiteSpace:"nowrap" }}>{full.length} obtenus</span>
                 </button>
               )}
             </div>
@@ -2130,6 +2132,12 @@ function PalsUnique({ rivals }) {
   );
 }
 
+// une carte des derniers succes / paliers : debout, quatre de front sur un telephone
+const recentCard = { flex:"0 0 clamp(80px, calc((100% - 24px) / 4), 132px)", display:"flex", flexDirection:"column", alignItems:"center",
+  gap:3, padding:"9px 6px 8px", cursor:"pointer", textAlign:"center", minWidth:0, boxSizing:"border-box" };
+// « 25 oct. » (l'annee seulement si ce n'est pas celle-ci)
+const dateShort = d => { const x = new Date(d); if (isNaN(x)) return "";
+  return x.toLocaleDateString("fr-FR", { day:"numeric", month:"short", ...(x.getFullYear() !== new Date().getFullYear() ? { year:"2-digit" } : {}) }); };
 const sectionTitle = { fontSize:11, fontWeight:800, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", padding:"0 4px" };
 
 // le grade d'une section, dans son en-tete : l'ecusson et le titre grave dans son metal
