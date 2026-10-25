@@ -47,7 +47,7 @@ function readStream(url, onFrame, onEnd) {
 }
 
 // Un clic ouvre la camera en grand (Echap ou un clic pour fermer).
-export default function LiveCamera({ mode = "auto", style, maxHeight, expandable = true, fit = "cover" }) {
+export default function LiveCamera({ mode = "auto", style, maxHeight, expandable = true, fit = "cover", natural = false }) {
   const [big, setBig] = useState(false);
   useEffect(() => {
     if (!big) return undefined;
@@ -120,21 +120,44 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
   return (
     <div style={{ position: "relative", cursor: expandable ? "zoom-in" : undefined, ...style }}
       onClick={expandable ? e => { e.stopPropagation(); setBig(true); } : undefined}>
-      <img ref={img} data-pk="" alt="Caméra de l'imprimante" style={{ width: "100%", display: broken ? "none" : "block", aspectRatio: style?.height ? undefined : "16/9", height: style?.height,
-        objectFit: fit, background: "#111", maxHeight, borderRadius: "inherit" }}/>
+      {/* natural (en grand) : l'image a ses vraies proportions, sans bandes noires autour */}
+      <img ref={img} data-pk="" alt="Caméra de l'imprimante" style={natural
+        ? { display: broken ? "none" : "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: "74vh", borderRadius: "inherit" }
+        : { width: "100%", display: broken ? "none" : "block", aspectRatio: style?.height ? undefined : "16/9", height: style?.height,
+          objectFit: fit, background: "#111", maxHeight, borderRadius: "inherit" }}/>
       {broken && <div style={{ padding: "26px 12px", textAlign: "center", fontSize: 12.5, color: "var(--muted)", background: "var(--surface2)",
         borderRadius: "inherit" }}>Caméra injoignable pour l'instant</div>}
       {/* un voyant discret quand c'est le flux continu ; rien pour les captures */}
       {live === "stream" && !broken && <span title="En direct" style={{ position: "absolute", left: 8, top: 8, width: 6, height: 6, borderRadius: "50%",
         background: "#ef4444", boxShadow: "0 0 0 2px rgba(0,0,0,0.25)", opacity: 0.85, animation: "livePulse 2s infinite" }}/>}
+      {/* en grand : un en-tete (camera, en direct ou captures, fermer), l'image a ses proportions sur un fond sombre */}
       {big && createPortal(
-        <div onClick={e => { e.stopPropagation(); setBig(false); }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.88)",
-          display: "flex", alignItems: "center", justifyContent: "center", padding: 16, cursor: "zoom-out" }}>
-          <button aria-label="Fermer" onClick={() => setBig(false)} style={{ position: "absolute", right: 14, top: 14, width: 38, height: 38, borderRadius: "50%",
-            border: "none", background: "rgba(255,255,255,0.14)", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <X size={20}/></button>
-          <LiveCamera mode={mode} expandable={false} fit="contain"
-            style={{ width: "min(100%, calc(92vh * 16 / 9))", borderRadius: 12, overflow: "hidden" }}/>
+        <div data-no-pull="" onClick={e => { e.stopPropagation(); setBig(false); }} style={{ position: "fixed", inset: 0, zIndex: 6000,
+          background: "radial-gradient(120% 80% at 50% 35%, rgba(30,41,59,0.92), rgba(2,6,23,0.98))", backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)", display: "flex", flexDirection: "column", cursor: "zoom-out", animation: "bn-fade .18s ease-out" }}>
+          <div onClick={e => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "default",
+            padding: "calc(12px + env(safe-area-inset-top,0px)) 14px 10px" }}>
+            <span style={{ width: 40, height: 40, borderRadius: 13, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19,
+              background: "linear-gradient(135deg, #3B82F6, #6366F1)", boxShadow: "0 8px 20px -8px #3B82F6" }}>📷</span>
+            <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+              <span style={{ color: "#fff", fontSize: 16, fontWeight: 900 }}>Caméra</span>
+              <span style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 9px", borderRadius: 20,
+                fontSize: 11, fontWeight: 900, letterSpacing: ".04em", color: "#fff",
+                background: live === "stream" ? "rgba(239,68,68,0.28)" : "rgba(255,255,255,0.14)",
+                border: `1px solid ${live === "stream" ? "rgba(239,68,68,0.55)" : "rgba(255,255,255,0.22)"}` }}>
+                {live === "stream" && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#ef4444", animation: "livePulse 2s infinite" }}/>}
+                {live === "stream" ? "EN DIRECT" : "CAPTURES"}</span>
+            </span>
+            <button aria-label="Fermer" onClick={() => setBig(false)} style={{ width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
+              border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.12)", backdropFilter: "blur(10px)", color: "#fff",
+              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <X size={19}/></button>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "6px 14px calc(18px + env(safe-area-inset-bottom,0px))" }}>
+            <LiveCamera mode={mode} expandable={false} natural
+              style={{ borderRadius: 18, overflow: "hidden", maxWidth: "min(100%, 1400px)", boxShadow: "0 24px 60px rgba(0,0,0,0.6)", cursor: "default" }}/>
+          </div>
         </div>, document.body)}
     </div>
   );

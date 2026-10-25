@@ -2197,48 +2197,8 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
       <Row title="Milestones" items={milestoneItems} startIdx={photoItems.length}/>
       {/* Hors de la fiche (portail) : dans le panneau qui defile, la visionneuse
           restait coincee a l'interieur au lieu de couvrir l'ecran. */}
-      {lightbox && createPortal(
-        <div data-no-pull="" onClick={() => setLightbox(null)}
-          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:6000,
-            display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-          {/* Titre */}
-          <p style={{ color:"rgba(255,255,255,0.7)", fontSize:12, margin:"0 0 10px",
-            fontWeight:600 }}>{lightbox.label}</p>
-          {/* Image + flèches */}
-          <div style={{ position:"relative", display:"flex", alignItems:"center", gap:12 }}
-            onClick={e => e.stopPropagation()}>
-            {flatItems.length > 1 && (
-              <button onClick={()=>moveLb(-1)}
-                style={{ background:"rgba(255,255,255,0.12)", border:"none", borderRadius:"50%",
-                  width:36, height:36, cursor:"pointer", color:"white", fontSize:20,
-                  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                ‹
-              </button>
-            )}
-            {isVideoUrl(lightbox.url) ? (
-              <video src={lightbox.url} controls autoPlay playsInline
-                style={{ maxWidth:"80vw", maxHeight:"80vh", borderRadius:12 }}/>
-            ) : (
-              <img src={lightbox.url} alt={lightbox.label}
-                style={{ maxWidth:"80vw", maxHeight:"80vh", borderRadius:12, objectFit:"contain" }}/>
-            )}
-            {flatItems.length > 1 && (
-              <button onClick={()=>moveLb(1)}
-                style={{ background:"rgba(255,255,255,0.12)", border:"none", borderRadius:"50%",
-                  width:36, height:36, cursor:"pointer", color:"white", fontSize:20,
-                  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                ›
-              </button>
-            )}
-          </div>
-          {/* Indicateur */}
-          {flatItems.length > 1 && (
-            <p style={{ color:"rgba(255,255,255,0.4)", fontSize:11, margin:"10px 0 0" }}>
-              {lbIdx + 1} / {flatItems.length}
-            </p>
-          )}
-        </div>, document.body
-      )}
+      {lightbox && lbIdx >= 0 && <Lightbox images={flatItems.map(i => ({ url: i.url, label: i.label }))} index={lbIdx}
+        onClose={() => setLightbox(null)}/>}
     {photoToDelete && <PhotoDeleteConfirm
       label={photoToDelete.label||photoToDelete.name}
       onCancel={()=>setPhotoToDelete(null)}

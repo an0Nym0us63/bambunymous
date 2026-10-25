@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { apiThumb } from "../api/client";
 import { X, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import AdminOnly from "./AdminOnly";
+import Lightbox from "./Lightbox";
 import { showAlert, showConfirm } from "../utils/dialog";
 const isVideoUrl = (u) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u || "");
 
@@ -310,115 +311,38 @@ export default function GalleryCompare({
         </div>
       )}
 
-      {/* Carrousel plein écran — photos du print/groupe/filament cliqué, vignettes en bas */}
-      {carousel && (() => {
-        const photos = normPhotos(carousel.item);
-        const current = photos[carousel.index];
-        if (!current) return null;
-        return (
-          <div onClick={() => setCarousel(null)} style={{ position:"fixed", inset:0, zIndex:2000,
-            background:"rgba(0,0,0,0.92)", display:"flex", flexDirection:"column" }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 16px" }}>
-              <div style={{ minWidth:0 }}>
-                <p style={{ color:"white", fontSize:15, fontWeight:800, margin:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getTitle(carousel.item)}</p>
-                <span style={{ display:"inline-block", marginTop:3, color:"#fff", fontSize:11, fontWeight:800, padding:"1px 8px", borderRadius:20,
-                  background:"rgba(255,255,255,0.14)" }}>
-                  {carousel.index + 1} / {photos.length}{current.label ? ` · ${current.label}` : ""}
-                </span>
-              </div>
-              <button onClick={e => { e.stopPropagation(); setCarousel(null); }}
-                style={{ background:"rgba(255,255,255,0.14)", border:"1px solid rgba(255,255,255,0.2)", borderRadius:"50%",
-                  width:36, height:36, color:"white", cursor:"pointer",
-                  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <X size={16}/>
-              </button>
-            </div>
-
-            <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", position:"relative", minHeight:0 }}
-              onClick={e => e.stopPropagation()}>
-              {photos.length > 1 && (
-                <button onClick={() => move(-1)}
-                  style={{ position:"absolute", left:8, background:"rgba(255,255,255,0.14)", border:"1px solid rgba(255,255,255,0.2)",
-                    borderRadius:"50%", width:40, height:40, backdropFilter:"blur(6px)", color:"white", cursor:"pointer",
-                    display:"flex", alignItems:"center", justifyContent:"center", zIndex:1 }}>
-                  <ChevronLeft size={18}/>
-                </button>
-              )}
-              {isVideoUrl(current.url) ? (
-                <video src={current.url} controls autoPlay playsInline
-                  style={{ maxWidth:"88vw", maxHeight:"100%", borderRadius:16 }}/>
-              ) : (
-                <img src={current.url} alt={current.label}
-                  style={{ maxWidth:"88vw", maxHeight:"100%", objectFit:"contain", borderRadius:16 }}/>
-              )}
-              {photos.length > 1 && (
-                <button onClick={() => move(1)}
-                  style={{ position:"absolute", right:8, background:"rgba(255,255,255,0.14)", border:"1px solid rgba(255,255,255,0.2)",
-                    borderRadius:"50%", width:40, height:40, backdropFilter:"blur(6px)", color:"white", cursor:"pointer",
-                    display:"flex", alignItems:"center", justifyContent:"center", zIndex:1 }}>
-                  <ChevronRight size={18}/>
-                </button>
-              )}
-            </div>
-
-            {/* Bouton Fiche + actions photo */}
-            <div onClick={e=>e.stopPropagation()} style={{ display:"flex", justifyContent:"center",
-              gap:8, padding:"8px 16px 4px" }}>
-              {onItemClick && (
-                <button onClick={e=>{e.stopPropagation(); setCarousel(null); onItemClick(carousel.item);}}
-                  style={{ padding:"9px 22px", borderRadius:20, background:"linear-gradient(135deg, #3B82F6, #6366F1)", color:"white",
-                    border:"none", cursor:"pointer", fontSize:13, fontWeight:800, boxShadow:"0 8px 18px -8px #3B82F6" }}>
-                  📄 Fiche
-                </button>
-              )}
-              {/* Actions photo : elles etaient cablees en dur sur
-                  /api/v1/filaments/{id}/photo/... et s'affichaient des que
-                  onItemClick etait fourni -- y compris dans la galerie des PRINTS,
-                  ou supprimer une photo supprimait celle du FILAMENT portant le
-                  meme id. Elles sont desormais fournies par l'appelant, donc
-                  absentes la ou elles n'ont pas de sens. */}
-              {current.url && onDeletePhoto && (() => {
-                const filename = current.url.split("/").pop();
-                return (<AdminOnly>
-                  <button onClick={async e => { e.stopPropagation();
-                    if (!(await showConfirm("Supprimer cette photo ?", { danger: true, confirmLabel: "Supprimer" }))) return;
-                    await onDeletePhoto(carousel.item, filename);
-                    setCarousel(null); onPhotosChanged?.(); }}
-                    style={{ padding:"9px 16px", borderRadius:20, background:"rgba(239,68,68,0.18)",
-                      color:"#fca5a5", border:"1px solid rgba(239,68,68,0.4)", cursor:"pointer", fontSize:13, fontWeight:800 }}>
-                    🗑 Supprimer
-                  </button>
-                  {onSetPrimaryPhoto && carousel.index !== 0 && (
-                    <button onClick={async e => { e.stopPropagation();
-                      await onSetPrimaryPhoto(carousel.item, filename);
-                      setCarousel(null); onPhotosChanged?.(); }}
-                      style={{ padding:"9px 16px", borderRadius:20, background:"rgba(34,197,94,0.18)",
-                        color:"#86efac", border:"1px solid rgba(34,197,94,0.4)", cursor:"pointer", fontSize:13, fontWeight:800 }}>
-                      ⭐ Principale
-                    </button>
-                  )}
-                </AdminOnly>);
-              })()}
-            </div>
-
-            {/* Vignettes en bas */}
-            {photos.length > 1 && (
-              <div onClick={e => e.stopPropagation()}
-                style={{ display:"flex", gap:6, overflowX:"auto", padding:"4px 16px calc(10px + env(safe-area-inset-bottom,0px))" }}>
-                {photos.map((p, i) => {
-                  const st = { width:52, height:52, objectFit:"cover", borderRadius:12, flexShrink:0, cursor:"pointer",
-                    border: i===carousel.index ? "2px solid #60a5fa" : "2px solid transparent", opacity: i===carousel.index ? 1 : 0.55,
-                    boxShadow: i===carousel.index ? "0 0 0 3px rgba(96,165,250,0.3)" : "none" };
-                  return isVideoUrl(p.url)
-                    ? <video key={i} src={p.url} muted loop autoPlay playsInline preload="metadata"
-                        onClick={() => setCarousel(c => ({ ...c, index:i }))} style={st}/>
-                    : <img key={i} src={apiThumb(p.url, 128)} alt={p.label} onClick={() => setCarousel(c => ({ ...c, index:i }))} style={st}/>;
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })()}
+      {/* Carrousel plein écran — photos du print/groupe/filament cliqué : la visionneuse commune,
+          avec ici « Fiche » et, pour l'admin, supprimer / mettre en principale */}
+      {carousel && normPhotos(carousel.item).length > 0 && (
+        <Lightbox index={carousel.index} title={getTitle(carousel.item)}
+          // une legende parlante seulement : pas « manual » ni « Photo-01.webp »
+          images={normPhotos(carousel.item).map(p => ({ ...p, label: /^(manual|auto|snapshot.*)$|\.(webp|jpe?g|png|gif|mp4|mov|webm|m4v)$/i.test(p.label || "") ? "" : p.label }))}
+          onIndex={i => setCarousel(c => c && c.index !== i ? { ...c, index: i } : c)}
+          onClose={() => setCarousel(null)}
+          actions={(i, close) => {
+            const cur = normPhotos(carousel.item)[i];
+            const filename = cur?.url ? cur.url.split("/").pop() : null;
+            const pill = (bg, c, bd) => ({ padding:"10px 18px", borderRadius:22, cursor:"pointer", fontSize:13.5, fontWeight:900, color:c,
+              background:bg, border: bd ? `1px solid ${bd}` : "none", backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)" });
+            return <>
+              {onItemClick && <button onClick={() => { close(); onItemClick(carousel.item); }}
+                style={{ ...pill("linear-gradient(135deg, #3B82F6, #6366F1)", "#fff"), boxShadow:"0 10px 22px -8px #3B82F6" }}>📄 Fiche</button>}
+              {/* Actions photo : fournies par l'appelant (elles etaient cablees en dur sur les photos
+                  d'un FILAMENT, y compris dans la galerie des prints), absentes la ou elles n'ont pas de sens. */}
+              {filename && onDeletePhoto && <AdminOnly>
+                <button onClick={async () => {
+                  if (!(await showConfirm("Supprimer cette photo ?", { danger: true, confirmLabel: "Supprimer" }))) return;
+                  await onDeletePhoto(carousel.item, filename);
+                  close(); onPhotosChanged?.(); }}
+                  style={pill("rgba(239,68,68,0.22)", "#fecaca", "rgba(239,68,68,0.45)")}>🗑 Supprimer</button>
+                {onSetPrimaryPhoto && i !== 0 && <button onClick={async () => {
+                  await onSetPrimaryPhoto(carousel.item, filename);
+                  close(); onPhotosChanged?.(); }}
+                  style={pill("rgba(34,197,94,0.22)", "#bbf7d0", "rgba(34,197,94,0.45)")}>⭐ Principale</button>}
+              </AdminOnly>}
+            </>;
+          }}/>
+      )}
     </div>
   );
 }

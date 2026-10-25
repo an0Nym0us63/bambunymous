@@ -371,7 +371,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                 </div>);
             })()}
 
-            {zoom && <Lightbox images={zoom.images} index={zoom.index} onClose={() => setZoom(null)}/>}
+            {zoom && <Lightbox images={zoom.images} index={zoom.index} title={m.title_fr || m.title} onClose={() => setZoom(null)}/>}
             {pick && <MakerWorldCollectionsPicker designId={id} title={m.title} item={tile()} onClose={() => setPick(false)}/>}
 
             {m.categories?.length > 0 && (
