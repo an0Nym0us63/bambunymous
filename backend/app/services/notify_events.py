@@ -669,6 +669,35 @@ async def spool_loaded(ams_id: int, slot: int):
                 swatch=await _spool_swatch(t.spool_id if known else None, t))
 
 
+def _stage_runout(st) -> bool:
+    """L'imprimante s'est mise en pause : plus de filament (etape 6, bobine externe surtout)."""
+    try:
+        return int(getattr(st, "print_stage", 0) or 0) == 6
+    except (TypeError, ValueError):
+        return False
+
+
+async def spool_runout(ams_id: int, slot: int, before):
+    """La bobine qui imprimait est vide : laquelle, l'impression, et ce qui se passe ensuite."""
+    cfg = await _cfg_for("spool_runout")
+    if not cfg:
+        return
+    st = _state()
+    sid, text = before or (None, "")
+    lines = [x.replace("🧵 ", "") for x in (await _spool_lines([sid]) if sid else [])] or ([text] if text else [])
+    name = (getattr(st, "print_name", "") or "").strip()
+    pct = int(round(getattr(st, "progress", 0) or 0))
+    if name or pct:
+        lines.append("📄 " + " · ".join(x for x in (name, f"📶 {pct} %" if pct else "") if x))
+    now = (st.active_ams_id, st.active_tray_id)
+    if str(st.status or "").upper() in ("PAUSE", "PAUSED") or _stage_runout(st):
+        lines.append("⏸️ l'impression attend une nouvelle bobine")
+    elif now != (ams_id, slot) and now[0] is not None and now[0] >= 0 and now[1] is not None and now[1] >= 0:
+        lines.append(f"🔁 l'AMS continue avec {_where(now[0], now[1])}")
+    await _send(cfg, "spool_runout", f"🪫 Bobine vide en pleine impression · {_where(ams_id, slot)}", "\n".join(lines),
+                link="/", priority=4, swatch=await _spool_swatch(sid))
+
+
 async def spool_removed(ams_id: int, slot: int, before):
     cfg = await _cfg_for("spool_removed")
     if not cfg:
@@ -885,7 +914,9 @@ _W = {"init": False, "status": "", "hms": set(), "hms_sent": set(), "dry": {}, "
       "dry_left": {}, "dry_cfg": {}, "near_sent": set(), "near_above": set(),
       # ajouts du 20/10/2026
       "conn": False, "down_at": 0.0, "off_sent": False, "pause_at": 0.0, "prog": {}, "speed": {},
-      "bed_armed": False, "bed_job": "", "fw": "", "humid": {}, "trays": {}, "tray_desc": {}}
+      "bed_armed": False, "bed_job": "", "fw": "", "humid": {}, "trays": {}, "tray_desc": {},
+      # bobine vide en pleine impression (26/10/2026) : l'emplacement qui imprime, et ce qui a deja ete dit
+      "act": None, "runout": set()}
 
 
 def _hms_key(e) -> str:
@@ -1124,6 +1155,27 @@ def _watch_more(st, cfg, status: str, prev: str, baseline: bool = False) -> None
             _W["humid"][a.id] = False
             _cancel(f"humid:{a.id}")
 
+    # Bobine vide en pleine impression (26/10/2026) : l'emplacement qui imprime se vide (l'AMS bascule
+    # ensuite sur une bobine de secours, ou l'impression attend), ou une pause « fin de filament »
+    live = status in ("RUNNING", "PAUSE", "PAUSED", "PREPARE")
+    act = (st.active_ams_id, st.active_tray_id)
+    prev_act = _W["act"]
+    if live and act[0] is not None and act[0] >= 0 and act[1] is not None and act[1] >= 0:
+        _W["act"] = act
+    elif not live:
+        _W["act"], _W["runout"] = None, set()
+
+    def _runout(key):
+        if baseline or not on("spool_runout") or (job, key) in _W["runout"]:
+            return
+        _W["runout"].add((job, key))
+        before = _W["tray_desc"].get(key)
+        _settle(f"runout:{key[0]}:{key[1]}", STABLE_EMPTY,
+                lambda aid=key[0], sl=key[1]: (lambda x: x is None or _tray_empty(x))(_tray_now(aid, sl)) or _stage_runout(_state()),
+                lambda aid=key[0], sl=key[1], before=before: _spawn(spool_runout, aid, sl, before))
+    if live and _stage_runout(st) and (prev_act or _W["act"]):
+        _runout(prev_act or _W["act"])
+
     # Bobines posees ou retirees, emplacement par emplacement
     for a in (st.ams_list or []):
         for t in a.trays:
@@ -1135,6 +1187,8 @@ def _watch_more(st, cfg, status: str, prev: str, baseline: bool = False) -> None
             _W["trays"][key] = empty
             if was is None or baseline or was == empty:
                 continue
+            if empty and live and key in (prev_act, _W["act"]):
+                _runout(key)
             k = f"tray:{a.id}:{t.id}"
             if not empty:
                 # changement de filament (succes) : note en memoire, une fois stable

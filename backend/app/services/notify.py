@@ -159,6 +159,13 @@ EVENTS = {
         "sample": {"title": "🪫 Bobine bientôt vide", "priority": 3, "link": "/filaments",
                    "message": "🧵 Vert — PLA Basic · Bambu Lab · bobine #42\nReste 120 g (12 %)\n📦 1 autre(s) bobine(s) en stock"},
     },
+    "spool_runout": {
+        "section": "spools", "label": "Bobine vide en pleine impression",
+        "description": "L'emplacement qui imprime se vide (ou l'imprimante se met en pause, fin de filament) : l'AMS bascule sur une autre bobine, ou l'impression attend.",
+        "options": [],
+        "sample": {"title": "🪫 Bobine vide en pleine impression · AMS-A 3", "priority": 4, "link": "/",
+                   "message": "🧵 Vert — PLA Basic · Bambu Lab · bobine #42\n📄 Kit de semis auto-arrosant · 📶 64 %\n🔁 l'AMS continue avec AMS-B 1"},
+    },
     "stock_low": {
         "section": "spools", "label": "Fin de stock",
         "description": "La dernière bobine d'un filament passe sous 25 % : il est temps de racheter.",
@@ -507,7 +514,7 @@ _ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_en
           "print_paused", "print_resumed", "print_speed",
           "printer_hms", "printer_offline", "bed_cooled", "printer_firmware",
           "dry_started", "dry_done", "dry_needed_loaded", "dry_forgotten",
-          "spool_loaded", "spool_removed", "ams_humidity", "spool_low", "spool_short", "stock_low", "fil_to_order",
+          "spool_loaded", "spool_removed", "ams_humidity", "spool_runout", "spool_low", "spool_short", "stock_low", "fil_to_order",
           "printer_idle", "weekly_summary", "mw_queue_ready", "app_update", "app_started"]
 EVENTS = {**{k: EVENTS[k] for k in _ORDER if k in EVENTS}, **{k: v for k, v in EVENTS.items() if k not in _ORDER}}
 
