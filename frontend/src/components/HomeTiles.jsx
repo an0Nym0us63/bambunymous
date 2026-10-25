@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { createContext, useContext, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { importRetry } from "../utils/importRetry";
 import AllAlertsModal from "./AllAlertsModal";
 import { Hide } from "./Cachettes";
@@ -10,7 +10,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets, Coins, Star, Users, Trophy,
          Dices, ChevronRight, Camera, Video, Thermometer, CalendarDays, ShoppingBag, Rss, Images, Zap, Medal as MedalIcon,
-         BellRing, Split, Fan, Wrench, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck } from "lucide-react";
+         BellRing, Split, Fan, Wrench, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck, Maximize2 } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
 import { mwImg } from "./MwImg";
 import LiveCamera from "./LiveCamera";
@@ -109,7 +109,8 @@ function Tile({ icon, color, label, to, zoom, onClick, badge, children, mini = f
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
   const [ref, box] = useMeasure();
-  const act = onClick || (zoom ? () => setOpen(true) : to ? () => nav(to) : null);
+  const openBig = useCallback(() => setOpen(true), []);
+  const act = onClick || (zoom ? openBig : to ? () => nav(to) : null);
   const big = open && <Zoom icon={icon} color={color} label={label} to={to} onClose={() => setOpen(false)}>{zoom}</Zoom>;
   if (mini) return (
     <div className="card" role={act ? "button" : undefined} tabIndex={act ? 0 : undefined} onClick={act}
@@ -139,7 +140,11 @@ function Tile({ icon, color, label, to, zoom, onClick, badge, children, mini = f
           whiteSpace: "nowrap", minWidth: 0 }}><W text={label}/></span>
         <Hide at={`tile:${label}`}/>
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-          {badge}{!zoom && act && <ChevronRight size={14} style={{ color: "var(--muted)" }}/>}</span>
+          {badge}{!zoom && act && <ChevronRight size={14} style={{ color: "var(--muted)" }}/>}
+          {/* la tuile s'ouvre en grand en touchant son fond ; ses elements, eux, ouvrent leur fiche : le bouton le dit */}
+          {zoom && act === openBig && <span data-pk="" data-tip="Ouvrir en grand" aria-hidden="true" style={{ width: 22, height: 22, borderRadius: 7, flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center", color, background: `${color}1a`, border: `1px solid ${color}33`, boxSizing: "border-box" }}>
+            <Maximize2 size={11} strokeWidth={2.5}/></span>}</span>
       </div>
       <div ref={ref} style={{ position: "relative", minWidth: 0, flex: 1, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         {box.W > 0 && <BoxCtx.Provider value={box}>{kids(children, box)}</BoxCtx.Provider>}
@@ -945,6 +950,14 @@ function ListRow({ edge, img, thumb = true, badge, title, sub, right, h = ROW_H,
     {right}
   </div>;
 }
+// la ligne des comptes, au-dessus de la liste (« À faire » et « Dernières impressions », meme dessin) :
+// le total, puis chaque etat present, avec son mot quand la largeur le permet
+function ListCounts({ W, n, label, items }) {
+  const nar = W < 400;
+  return <div style={{ display: "flex", gap: nar ? 8 : 10, alignItems: "center", height: 16, flexShrink: 0, overflow: "hidden", whiteSpace: "nowrap", fontSize: 11, fontWeight: 800 }}>
+    <span style={{ color: "var(--text)" }}><b data-pk="" style={{ fontSize: 12.5, fontWeight: 900 }}>{n}</b>{nar ? "" : ` ${label}`}</span>
+    {items.filter(x => x[0]).map(([k, c, ic, l]) => <span key={l} data-tip={`${k} ${l}`} style={{ color: c }}>{ic} {k}{nar ? "" : ` ${l}`}</span>)}</div>;
+}
 // le heros : la vignette en grand (a gauche, ou en haut si la tuile est etroite et haute), le titre,
 // l'etat, et l'avancement s'il imprime
 function ListHero({ img, color, title, chips, meta, pct, foot, h, stacked, onOpen, badge }) {
@@ -1051,12 +1064,8 @@ function Next({ q, o, sz }) {
         {!wide && m.seconds ? <span>{fmtDur(m.seconds)}</span> : null}</>}
       right={wide ? <RightCol a={m.seconds ? fmtDur(m.seconds) : null} b={o.weight && m.weight_g ? fmtG(m.weight_g) : null}/> : null}/>; };
   // la ligne des comptes, au-dessus de la liste
-  const counts = W => { const nar = W < 400;
-    const it = [[busy, "#3b82f6", "🖨️", "en cours"], [ready, "#16a34a", "●", ready > 1 ? "prêts" : "prêt"], [part, "#22c55e", "◐", "en partie"],
-      [stock, "#d97706", "○", "à charger"], [short, "#dc2626", "✕", "manque"]].filter(x => x[0]);
-    return <div style={{ display: "flex", gap: nar ? 8 : 10, alignItems: "center", height: 16, flexShrink: 0, overflow: "hidden", whiteSpace: "nowrap", fontSize: 11, fontWeight: 800 }}>
-      <span style={{ color: "var(--text)" }}><b data-pk="" style={{ fontSize: 12.5, fontWeight: 900 }}>{all.length}</b>{nar ? "" : " à faire"}</span>
-      {it.map(([n, c, ic, l]) => <span key={l} data-tip={`${n} ${l}`} style={{ color: c }}>{ic} {n}{nar ? "" : ` ${l}`}</span>)}</div>; };
+  const counts = W => <ListCounts W={W} n={all.length} label="à faire" items={[[busy, "#3b82f6", "🖨️", "en cours"],
+    [ready, "#16a34a", "●", ready > 1 ? "prêts" : "prêt"], [part, "#22c55e", "◐", "en partie"], [stock, "#d97706", "○", "à charger"], [short, "#dc2626", "✕", "manque"]]}/>;
   return (
     <Tile icon={<ListChecks size={15}/>} color="#22C55E" label="À faire" to="/prints?tab=queue"
       mini={sz.h === 0.5} summary={q ? <>{ready + part}<span style={{ fontSize: 12, color: "var(--muted)" }}>/ {all.length} prêts</span></> : "…"}
@@ -1211,6 +1220,11 @@ function Last({ p, o, sz, st, lp }) {
       meta={x.live ? [st?.remaining_minutes ? `fin à ${finAt(st.remaining_minutes)}` : null, st?.total_layers ? `couche ${st.layer}/${st.total_layers}` : null].filter(Boolean).join(" · ")
         : [d && ago(d), x.duration_seconds && fmtDur(x.duration_seconds), W >= 215 && x.total_weight_g && fmtG(x.total_weight_g), o.cost && x.total_cost && fmtEur(x.total_cost)].filter(Boolean).join(" · ")}/>; };
   const done = list.filter(x => !x.live);
+  // la ligne des comptes, comme « À faire » : les dernieres, et leur etat
+  const nOf = l => done.filter(x => lastState(x)[0] === l).length;
+  const counts = W => { const ok = nOf("réussie"), part = nOf("en partie"), ko = nOf("échouée");
+    return <ListCounts W={W} n={done.length} label={done.length > 1 ? "dernières" : "dernière"} items={[[live ? 1 : 0, "#3b82f6", "🖨️", "en cours"],
+      [ok, "#16a34a", "✓", ok > 1 ? "réussies" : "réussie"], [part, "#d97706", "◐", "en partie"], [ko, "#dc2626", "✕", ko > 1 ? "échouées" : "échouée"]]}/>; };
   return (
     <Tile icon={<History size={15}/>} color="#0EA5E9" label="Dernières impressions" to="/prints"
       mini={sz.h === 0.5} summary={<span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -1219,17 +1233,20 @@ function Last({ p, o, sz, st, lp }) {
       zoom={<LastZoom list={list} done={done} heroOf={heroOf} rows={rows}/>}>
       {({ W, H }) => {
         const [hero, ...rest] = list;
+        // la ligne des comptes, quand la tuile a la place (comme « À faire »)
+        const head = H >= 150 ? 22 : 0, Hb = H - head;
         // les intercalaires de jour seulement s'ils ne coutent aucune rangee (sinon « hier 09:44 » sur chacune)
         const first = dayKey(when(hero));
-        const pD = W >= 215 ? listPlan(W, H, list.length, fitDays(rest, first, true)) : null;
-        const p0 = listPlan(W, H, list.length, fitDays(rest, first, false));
+        const pD = W >= 215 ? listPlan(W, Hb, list.length, fitDays(rest, first, true)) : null;
+        const p0 = listPlan(W, Hb, list.length, fitDays(rest, first, false));
         const days = !!pD && pD.rows >= p0.rows && pD.rows > 0;
-        const pl = o.scroll ? { heroH: Math.min(78, Math.max(56, H * 0.35)), stacked: false, rows: rest.length, rh: ROW_H } : days ? pD : p0;
+        const pl = o.scroll ? { heroH: Math.min(78, Math.max(56, Hb * 0.35)), stacked: false, rows: rest.length, rh: ROW_H } : days ? pD : p0;
         return <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 6 }}>
           {open && <PrintSheets open={open} setOpen={setOpen}/>}
+          {head > 0 && counts(W)}
           {heroOf(hero, pl.heroH, pl.stacked, W)}
           {pl.rows > 0 && (o.scroll ? <Scroller>{rows(rest, W, null, first, days)}</Scroller>
-            : rows(rest, W, H - pl.heroH - 6, first, days, pl.rh))}
+            : rows(rest, W, Hb - pl.heroH - 6, first, days, pl.rh))}
         </div>;
       }}
     </Tile>

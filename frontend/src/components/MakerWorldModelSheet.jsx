@@ -320,20 +320,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
             </div>) : (<>
             {/* Galerie : glisser de cote, toucher pour agrandir ; le defilement de la fiche reste libre */}
             {m.pictures?.length > 0 ? (
-              <div style={{ display:"flex", gap:8, overflowX:"auto", scrollSnapType:"x mandatory", margin:"0 -16px 14px",
-                padding:"52px 16px 4px", touchAction:"pan-x pan-y",
-                background:"radial-gradient(70% 60% at 50% 0%, rgba(6,182,212,0.18), transparent 70%)" }}>
-                {m.pictures.map((u, i) => (
-                  <a key={i} href={u} onClick={e => { e.preventDefault(); setZoom({ images: m.pictures, index: i }); }}
-                    style={{ position:"relative", flexShrink:0, width:"78%", maxWidth:360, scrollSnapAlign:"center", cursor:"zoom-in" }}>
-                    <MwImg src={u} w={360} eager={i < 2} animate
-                      style={{ width:"100%", aspectRatio:"1", objectFit:"cover", borderRadius:18, display:"block",
-                        background:"var(--surface2)", boxShadow:"0 12px 28px -14px rgba(0,0,0,.6)" }}/>
-                    {m.pictures.length > 1 && <span style={{ position:"absolute", right:8, bottom:8, padding:"2px 8px", borderRadius:20, fontSize:10.5,
-                      fontWeight:800, color:"#fff", background:"rgba(15,23,42,0.6)", backdropFilter:"blur(6px)" }}>{i + 1} / {m.pictures.length}</span>}
-                  </a>
-                ))}
-              </div>
+              <PicStrip pictures={m.pictures} onOpen={i => setZoom({ images: m.pictures, index: i })}/>
             ) : <div style={{ height:52 }}/>}
 
             {/* titre, createur */}
@@ -767,6 +754,58 @@ const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platfor
   && !(navigator.maxTouchPoints > 1);
 
 // Telephone ou tablette (iPad compris, qui se dit « Mac ») : pas de Bambu Studio.
+// La galerie de la fiche : une bande qui glisse de cote. Au doigt, chaque image se cale au centre ;
+// a la souris, on la tire (sans declencher l'agrandissement), et deux fleches avancent d'une image.
+// Avant : des liens <a> que la souris « attrapait » (glisser-deposer du lien au lieu de defiler),
+// et un calage strict qui ramenait la bande en arriere au pave tactile : elle semblait bloquee.
+function PicStrip({ pictures, onOpen }) {
+  const ref = useRef(null);
+  const drag = useRef(null);
+  const [edge, setEdge] = useState({ l: false, r: pictures.length > 1 });
+  // pas un ecran tactile (souris, pave tactile) : fleches, glisser a la souris, calage souple
+  const fine = typeof window !== "undefined" && !window.matchMedia?.("(pointer: coarse)").matches;
+  const look = () => { const el = ref.current; if (!el) return;
+    setEdge({ l: el.scrollLeft > 4, r: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 }); };
+  useEffect(() => { look(); }, [pictures.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const step = d => { const el = ref.current; if (!el) return;
+    const w = el.firstElementChild?.getBoundingClientRect().width || el.clientWidth * 0.78;
+    el.scrollBy({ left: d * (w + 8), behavior: "smooth" }); };
+  const down = e => { if (e.pointerType !== "mouse" || e.button !== 0) return;
+    drag.current = { x: e.clientX, left: ref.current.scrollLeft, moved: false }; };
+  const move = e => { const d = drag.current; if (!d) return;
+    const dx = e.clientX - d.x;
+    if (Math.abs(dx) > 4) d.moved = true;
+    if (d.moved) ref.current.scrollLeft = d.left - dx; };
+  const up = () => { const d = drag.current; drag.current = null;
+    if (d?.moved) { ref.current.dataset.dragged = "1"; setTimeout(() => { if (ref.current) delete ref.current.dataset.dragged; }, 0); } };
+  const arrow = (d, show) => fine && pictures.length > 1 && show && <button type="button" aria-label={d < 0 ? "Image précédente" : "Image suivante"}
+    onClick={e => { e.stopPropagation(); step(d); }}
+    style={{ position:"absolute", top:"calc(50% + 24px)", [d < 0 ? "left" : "right"]:8, transform:"translateY(-50%)", width:34, height:34, borderRadius:"50%",
+      border:"1px solid rgba(255,255,255,.35)", background:"rgba(15,23,42,0.55)", backdropFilter:"blur(6px)", color:"#fff", fontSize:18, fontWeight:900,
+      cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2 }}>{d < 0 ? "‹" : "›"}</button>;
+  return (
+    <div style={{ position:"relative", margin:"0 -16px 14px" }}>
+      <div ref={ref} onScroll={look} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerLeave={up}
+        style={{ display:"flex", gap:8, overflowX:"auto", scrollSnapType: fine ? "x proximity" : "x mandatory", overscrollBehaviorX:"contain",
+          padding:"52px 16px 4px", touchAction:"pan-x pan-y", cursor: fine && pictures.length > 1 ? "grab" : undefined,
+          background:"radial-gradient(70% 60% at 50% 0%, rgba(6,182,212,0.18), transparent 70%)" }}>
+        {pictures.map((u, i) => (
+          <div key={i} role="button" tabIndex={0} draggable={false}
+            onClick={() => { if (!ref.current?.dataset.dragged) onOpen(i); }}
+            onKeyDown={e => { if (e.key === "Enter") onOpen(i); }}
+            style={{ position:"relative", flexShrink:0, width:"78%", maxWidth:360, scrollSnapAlign:"center", cursor:"zoom-in" }}>
+            <MwImg src={u} w={360} eager={i < 2} animate draggable={false}
+              style={{ width:"100%", aspectRatio:"1", objectFit:"cover", borderRadius:18, display:"block", userSelect:"none",
+                background:"var(--surface2)", boxShadow:"0 12px 28px -14px rgba(0,0,0,.6)" }}/>
+            {pictures.length > 1 && <span style={{ position:"absolute", right:8, bottom:8, padding:"2px 8px", borderRadius:20, fontSize:10.5,
+              fontWeight:800, color:"#fff", background:"rgba(15,23,42,0.6)", backdropFilter:"blur(6px)" }}>{i + 1} / {pictures.length}</span>}
+          </div>
+        ))}
+      </div>
+      {arrow(-1, edge.l)}{arrow(1, edge.r)}
+    </div>
+  );
+}
 const IS_MOBILE = typeof navigator !== "undefined" && (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
   || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
 
