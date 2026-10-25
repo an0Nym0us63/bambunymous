@@ -66,7 +66,6 @@ def step(s, now: datetime, w: dict, local_day: str) -> bool:
     quelque chose merite d'etre sauve tout de suite (une impression finie…)."""
     ev = False
     last = _ts(w.get("last"))
-    gap = bool(last) and (now - last).total_seconds() > GAP_S
     w["last"] = _iso(now)
     # connexion : heures d'affilee ; une imprimante injoignable plus de 15 min, ou l'appli arretee plus d'1 h, remet a zero
     hole = bool(last) and (now - last).total_seconds() > APP_GRACE_S
@@ -101,7 +100,10 @@ def step(s, now: datetime, w: dict, local_day: str) -> bool:
         if not job or job.get("key") != key:
             job = w["job"] = {"key": key, "start": _iso(now), "swaps": 0, "tray": None, "alert": False, "off": False, "layers": 0}
             w["fin_done"] = True             # une nouvelle impression : la precedente ne compte plus pour la porte
-        if gap or not s.connected:
+        # une vraie coupure seulement (memes regles que la serie « en ligne ») : l'appli relancee pendant
+        # l'impression (liaison pas encore faite au demarrage, mise a jour) ne la gache plus (25/10/2026)
+        off = _ts(w.get("offline_since"))
+        if hole or (off and (now - off).total_seconds() > ONLINE_GRACE_S):
             job["off"] = True
         if st == "RUNNING":
             tr = [s.active_ams_id, s.active_tray_id]
