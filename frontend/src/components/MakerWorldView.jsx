@@ -569,11 +569,13 @@ export default function MakerWorldView({ onSearch }) {
                           plein et compte quand le modele est deja dans mes collections */}
                       {(() => {
                         const me = myOf?.(x.design_id);
-                        const n = me?.colls || 0;
+                        const n = me?.colls || mineOf?.(x.design_id)?.collections?.length || 0;
                         return <span style={{ position:"absolute", top:6, right:6, display:"flex", gap:5, alignItems:"center" }}>
                           {me?.liked && tab !== "likes" && <span data-tip="Tu l'aimes" style={{ ...chipGlass, color:"#ef4444" }}>
                             <Heart size={15} strokeWidth={2.4} fill="#ef4444"/></span>}
-                          {(status?.connected || friend) && (
+                          {/* le signet dit seulement « deja dans mes collections » (chez moi comme chez un copain) ;
+                              ranger passe par l'appui long, le clic droit ou la fiche */}
+                          {n > 0 && (
                             <AdminOnly home mw>
                               <button onClick={() => setPickFor(x)} aria-label="Ranger dans mes collections"
                                 data-tip={n ? `Dans ${n} de tes collections · ranger…` : "Ranger dans mes collections"}
