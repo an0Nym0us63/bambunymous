@@ -253,6 +253,12 @@ body.ach-room-on main.page-content {
   .wide-flow { display:block; columns:520px 3; column-gap:16px; }
   .fold-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(380px, 1fr)); align-items:start; }
   .fold-grid > .fold-open { grid-column:1 / -1; }
+  /* « A faire » : le tri a sa largeur, les modes a cote ; Parametres > Imprimante : les cartes cote a cote */
+  .queue-tools { flex-direction:row !important; align-items:center; }
+  .queue-tools > label { flex:0 0 260px; }
+  .queue-tools > div { flex:1; }
+  .printer-form { display:grid !important; grid-template-columns:minmax(0, 2fr) minmax(0, 1fr); align-items:start; }
+  .printer-form > button { grid-column:1 / -1; justify-self:start; min-width:260px; }
   .wide-flow > * { break-inside:avoid; margin:0 0 16px; }
   .wide-flow > .wide-span { column-span:all; }
   .kpi-grid { grid-template-columns:repeat(auto-fit, minmax(var(--kpi-min, 140px), 1fr)); }

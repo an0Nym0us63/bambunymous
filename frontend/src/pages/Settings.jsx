@@ -1936,8 +1936,8 @@ export default function Settings() {
 
       {/* ── Imprimante ────────────────────────────────────────────── */}
       {tab === "printer" && (
-      <AdminOnly><div className="wide-flow">
-      <form onSubmit={handleSave} style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      <AdminOnly><div>
+      <form onSubmit={handleSave} className="printer-form" style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
         {/* Imprimante */}
         <div className="card" style={card}>

@@ -347,8 +347,8 @@ export default function MwQueue() {
         )}
 
         {tab === "models" && (<>
-        {/* tri et modes : compter jusqu'ici, choisir, reorganiser */}
-        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+        {/* tri et modes : compter jusqu'ici, choisir, reorganiser (sur grand ecran, sur une ligne) */}
+        <div className="queue-tools" style={{ display:"flex", flexDirection:"column", gap:6 }}>
           {sorting && <span style={{ fontSize:12, fontWeight:700, color:"var(--muted)" }}>Ordre de priorité : ⤒ en haut, ↑ ↓, ⤓ en bas.</span>}
           {!sorting && !cutting && (
             <label style={{ position:"relative", display:"flex", alignItems:"center", minWidth:0 }}>
