@@ -17,7 +17,7 @@ import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf, platePicksOf, pl
 import PlateRecolor from "./PlateRecolor";
 import Lightbox from "./Lightbox";
 import { openCreator } from "./MwCreatorPage";
-import { useToRateSet, GroupToRate, RateButton } from "./MwToRate";
+import { useToRateSet, RateButton } from "./MwToRate";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { toast } from "../store/toast";
 import { Heart } from "lucide-react";
@@ -290,9 +290,11 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
           <div style={{ position:"sticky", top:0, zIndex:10, height:0 }}>
             {!WIDE && <div style={{ position:"absolute", top:8, left:"50%", transform:"translateX(-50%)", width:38, height:4, borderRadius:2, background:"rgba(148,163,184,.6)" }}/>}
             <div style={{ position:"absolute", top:10, right:12, display:"flex", gap:8 }}>
-              {rateHere && <button onClick={() => document.getElementById(`rate-m${id}`)?.scrollIntoView({ behavior:"smooth", block:"start" })}
-                aria-label="À évaluer sur MakerWorld" data-tip="À évaluer sur MakerWorld" style={{ ...roundTop, border:"none",
-                  background:"linear-gradient(135deg, #F59E0B, #FBBF24)", color:"#fff", boxShadow:"0 6px 16px rgba(245,158,11,.45)" }}>⭐</button>}
+              {/* a evaluer : le signal, qui ouvre l'evaluation (comme l'etoile de la barre du bas) */}
+              {rateHere && !friend && <span data-tip="À évaluer sur MakerWorld" style={{ display:"flex" }}>
+                <RateButton did={id} label="⭐" ext="" doneLabel="✓" style={{ ...roundTop, display:"flex", alignItems:"center", justifyContent:"center",
+                  textDecoration:"none", border:"none", background:"linear-gradient(135deg, #F59E0B, #FBBF24)", color:"#fff",
+                  boxShadow:"0 6px 16px rgba(245,158,11,.45)" }}/></span>}
               <button onClick={menu} aria-label="Plus d'actions" style={roundTop}>⋯</button>
               <button onClick={onClose} aria-label="Fermer" style={roundTop}>✕</button>
             </div>
@@ -381,10 +383,6 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                   )}
                 </div>);
             })()}
-
-            {/* a evaluer : le bandeau, comme dans la fiche d'une impression (l'etoile du haut y mene) */}
-            {rateHere && <div style={{ marginBottom:12 }}>
-              <GroupToRate designs={[id]} name={m.title} enabled={!friend} label="Modèle à évaluer sur MakerWorld" anchor={`rate-m${id}`}/></div>}
 
             {zoom && <Lightbox images={zoom.images} index={zoom.index} onClose={() => setZoom(null)}/>}
             {pick && <MakerWorldCollectionsPicker designId={id} title={m.title} item={tile()} onClose={() => setPick(false)}/>}
