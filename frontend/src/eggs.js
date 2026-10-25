@@ -162,7 +162,11 @@ function nextCheer() {
   const show = cheers.shift();
   if (!show) { cheering = false; return; }
   cheering = true;
-  show(() => setTimeout(nextCheer, 250));
+  // une carte qui ne rend jamais la main (erreur, minuteur gele) ne bloque plus toute la file (25/10/2026)
+  let next = false;
+  const go = () => { if (next) return; next = true; clearTimeout(guard); setTimeout(nextCheer, 250); };
+  const guard = setTimeout(go, 12000);
+  try { show(go); } catch { go(); }
 }
 function queued(show) {
   cheers.push(show);

@@ -10,6 +10,9 @@ import { deviceId } from "../utils/device";
 // Un palier n'est acquitte aupres du serveur qu'une fois sa carte AFFICHEE, ecran visible (25/10/2026) :
 // ce qui attendait dans la file quand on a quitte l'appli revient a la prochaine ouverture.
 const EVERY = 60000, MAX = 4;
+// une demande qui ne revient pas (telephone en veille, reseau perdu) ne bloque plus les suivantes (25/10/2026) :
+// sans delai, « busy » restait leve et plus rien ne s'annoncait jusqu'au rechargement de la page
+const WAIT = 15000;
 const inLine = new Set();      // en file ou deja montres dans cette page : pas deux fois
 const ack = keys => keys.length && client.post("/achievements/news/ack", { dev: deviceId(), keys }).catch(() => {});
 const settle = keys => vu => { if (vu) ack(keys); else keys.forEach(k => inLine.delete(k)); };
@@ -22,7 +25,7 @@ export default function AchNews() {
     const ask = () => {
       if (busy || document.hidden || currentFriend()) return;
       busy = true;
-      client.get("/achievements/news", { params: { dev: deviceId(), ack: 1 } }).then(({ data }) => {
+      client.get("/achievements/news", { params: { dev: deviceId(), ack: 1 }, timeout: WAIT }).then(({ data }) => {
         const news = (data?.news || []).filter(n => n.key && !inLine.has(n.key));
         news.forEach(n => inLine.add(n.key));
         news.slice(0, MAX).forEach(n => cheer({

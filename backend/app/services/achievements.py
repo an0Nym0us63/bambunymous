@@ -5408,6 +5408,8 @@ async def tier_news(username: str, dev: str = "", acks: bool = False) -> list:
             if not acks:
                 seen[username] = seen[key]
             await set_setting(db, KEY + "_NEWS", json.dumps(seen))
+    if out:
+        logger.info(f"[SUCCES] annonces pour {username}|{dev or '-'} : {', '.join(x['key'] for x in out[:12])}")
     return out[:12]
 
 
@@ -5429,6 +5431,7 @@ async def tier_news_ack(username: str, dev: str, keys: list) -> None:
         for k in {key, username}:
             seen[k] = sorted(set(seen.get(k) or []) | set(keys))
         await set_setting(db, KEY + "_NEWS", json.dumps(seen))
+    logger.info(f"[SUCCES] annonces affichees sur {username}|{dev or '-'} : {', '.join(keys)}")
 
 
 async def card_fx_seen(username: str, dev: str = "") -> None:
