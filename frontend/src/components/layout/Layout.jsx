@@ -231,8 +231,9 @@ export default function Layout() {
             du menu, mais il indique aussi qui est connecte et sous quel role. */}
         <div style={{ margin:"0 10px", padding: mini ? "10px 0 0" : "10px 4px 0", borderTop:"1px solid var(--border)" }}>
           <div style={{ display:"flex", flexDirection: mini ? "column" : "row", alignItems:"center", gap: mini ? 10 : 6 }}>
-            <div style={{ flex: mini ? "none" : 1, minWidth:0 }}><UserMenu placement="top" showName={!mini} size={30}/></div>
-            {!friend && <NotifBell size={18}/>}
+            <div style={{ flex: mini ? "none" : 1, minWidth:0 }}><UserMenu placement="top" showName={!mini} size={30} notifBadge={mini}/></div>
+            {/* repliee : pas de cloche, l'avatar porte le nombre de notifications (et le menu du profil y mene) */}
+            {!friend && !mini && <NotifBell size={18}/>}
           </div>
         </div>
       </aside>

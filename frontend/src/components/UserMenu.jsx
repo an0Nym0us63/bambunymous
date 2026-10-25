@@ -1,10 +1,12 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Trophy, BookOpen } from "lucide-react";
+import { LogOut, Trophy, BookOpen, Bell } from "lucide-react";
 import { useAuth, ROLE_LABEL, ROLE_ADMIN } from "../store/auth";
 import client from "../api/client";
 import { FriendPicker, useFriendsPrinting } from "./Friends";
+import { useFriend } from "../store/friend";
+import { useUnseenNotifs } from "./NotifBell";
 
 // Violet du scrim natif de la coquille Android : le meme, pour que la pastille
 // se lise comme une continuite de l'application et non comme un accent de plus.
@@ -25,7 +27,7 @@ const AVATAR_BG = "#4f46e5";
  * porte un backdrop-filter, qui fait de lui un bloc conteneur pour ses
  * descendants fixed -- le menu serait reste prisonnier de la barre.
  */
-export default function UserMenu({ placement = "bottom", showName = false, size = 30 }) {
+export default function UserMenu({ placement = "bottom", showName = false, size = 30, notifBadge = false }) {
   const username = useAuth((s) => s.username);
   const role     = useAuth((s) => s.role);
   const logout   = useAuth((s) => s.logout);
@@ -104,10 +106,15 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
     : null;
 
   const busy = useFriendsPrinting();          // copains qui impriment en ce moment
+  // menu replie (ordinateur) : plus de cloche a cote, l'avatar porte le nombre de notifications non vues
+  const visiting = useFriend((st) => st.friend);
+  const unseen = useUnseenNotifs(!visiting);
+  const showNotif = notifBadge && !visiting && unseen > 0;
   return (
     <>
       <button ref={btnRef} onClick={toggle} aria-label="Compte"
-        title={busy ? `${busy} copain${busy > 1 ? "s" : ""} en train d'imprimer` : undefined}
+        data-tip={[busy ? `${busy} copain${busy > 1 ? "s" : ""} en train d'imprimer` : null,
+          showNotif ? `${unseen} notification${unseen > 1 ? "s" : ""} non vue${unseen > 1 ? "s" : ""}` : null].filter(Boolean).join(" · ") || undefined}
         style={{ display:"flex", alignItems:"center", gap:9, flexShrink:0,
           background:"none", border:"none", padding:0, cursor:"pointer" }}>
         <span style={{ width:size, height:size, borderRadius:"50%", flexShrink:0,
@@ -121,6 +128,11 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
               height: busy > 1 ? 15 : 10, padding: busy > 1 ? "0 3px" : 0, borderRadius:8, background:"#22c55e",
               color:"white", fontSize:9, fontWeight:800, lineHeight:"15px", textAlign:"center", boxSizing:"border-box",
               boxShadow:"0 0 0 2px var(--surface)" }}>{busy > 1 ? busy : ""}</span>
+          )}
+          {showNotif && (
+            <span style={{ position:"absolute", bottom:-4, right:-5, width:17, height:17, borderRadius:"50%", boxSizing:"border-box",
+              background:"linear-gradient(135deg, #EF4444, #F97316)", color:"white", display:"flex", alignItems:"center", justifyContent:"center",
+              boxShadow:"0 0 0 2px var(--surface)" }}><Bell size={10} strokeWidth={2.6}/></span>
           )}
         </span>
         {showName && (
@@ -146,6 +158,15 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
               </p>
               <p style={{ margin:"2px 0 0", fontSize:11, color:"var(--muted)" }}>{roleLabel}</p>
             </div>
+            {/* les notifications, avec leur nombre (la cloche n'est pas toujours a cote) */}
+            {!visiting && <button onClick={() => { setRect(null); navigate("/notifications"); }}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
+                padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid var(--border)",
+                cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:600, textAlign:"left" }}>
+              <Bell size={16} color="#3B82F6"/> Notifications
+              {unseen > 0 && <span style={{ marginLeft:"auto", minWidth:18, height:18, padding:"0 6px", borderRadius:9, boxSizing:"border-box",
+                background:"#ef4444", color:"#fff", fontSize:10.5, fontWeight:800, lineHeight:"18px", textAlign:"center" }}>{unseen > 99 ? "99+" : unseen}</span>}
+            </button>}
             <FriendPicker onDone={() => setRect(null)}/>
             <button onClick={() => { setRect(null); navigate("/stats?tab=achievements"); }}
               style={{ width:"100%", display:"flex", alignItems:"center", gap:10,

@@ -9,12 +9,12 @@ import { bellRung } from "../eggs";
 // l'onglet, et quand la page Notifications les marque vues.
 export const notifSeenEvent = "bambu-notif-seen";
 
-export default function NotifBell({ size = 20 }) {
+// Le nombre de notifications pas encore vues (la cloche, et l'avatar quand le menu est replie).
+export function useUnseenNotifs(enabled = true) {
   const [n, setN] = useState(0);
-  const navigate = useNavigate();
   const { pathname } = useLocation();
-
   useEffect(() => {
+    if (!enabled) { setN(0); return undefined; }
     let alive = true;
     const load = () => client.get("/notify/me/unseen").then(({ data }) => { if (alive) setN(data.unseen || 0); }).catch(() => {});
     load();
@@ -26,8 +26,14 @@ export default function NotifBell({ size = 20 }) {
     window.addEventListener("bambu-notif-reload", load);       // lues sur le telephone
     return () => { alive = false; clearInterval(t); document.removeEventListener("visibilitychange", vis);
       window.removeEventListener(notifSeenEvent, seen); window.removeEventListener("bambu-notif-reload", load); };
-  }, [pathname]);
+  }, [pathname, enabled]);
+  return n;
+}
 
+export default function NotifBell({ size = 20 }) {
+  const n = useUnseenNotifs();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
   const active = pathname === "/notifications";
   return (
     <button onClick={() => { bellRung(); navigate("/notifications"); }} aria-label={n ? `${n} notification${n > 1 ? "s" : ""} non vue${n > 1 ? "s" : ""}` : "Notifications"}
