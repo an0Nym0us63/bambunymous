@@ -1317,7 +1317,8 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
           type={s.filament_multicolor_type}/></span>
         {more > 0 && <span data-tip={`${more} autre${more > 1 ? "s" : ""} bobine${more > 1 ? "s" : ""} de ce filament en stock`
           + (s.sibling_weight_g ? ` (${fmtStock(s.sibling_weight_g)})` : "")}
-          style={{ position:"absolute", right:"calc(50% - 54px)", bottom:2, fontSize:10.5, fontWeight:900, color:"var(--text2)" }}>+{more}</span>}
+          style={{ position:"absolute", right:"calc(50% - 56px)", bottom:2, fontSize:9.5, fontWeight:700, color:"var(--muted)", opacity:.85,
+            padding:"0 5px", borderRadius:8, background:"color-mix(in srgb, var(--muted) 12%, transparent)" }}>+{more}</span>}
       </div>
 
       <div style={{ padding:"2px 9px 10px", display:"flex", flexDirection:"column", gap:5 }}>
