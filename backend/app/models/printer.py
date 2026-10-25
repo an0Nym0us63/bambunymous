@@ -141,6 +141,7 @@ class PrinterState:
     door_open: Optional[bool] = None
     door_opens: list = field(default_factory=list)
     top_open: Optional[bool] = None     # capot du haut (H2) : bit 0x01000000 de « stat »
+    light_on: Optional[bool] = None     # eclairage de la chambre (lights_report)
 
     # Vitesse
     speed_level: int = 1

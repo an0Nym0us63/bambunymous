@@ -317,6 +317,16 @@ class MQTTManager:
             state.top_open = _top
             changed = True
 
+        # ── Lumiere de la chambre : « lights_report », allumee si un de ses eclairages l'est
+        _lr = p.get("lights_report")
+        if isinstance(_lr, list):
+            _ch = [x for x in _lr if isinstance(x, dict) and str(x.get("node", "")).startswith("chamber_light")]
+            if _ch:
+                _on = any(str(x.get("mode", "")).lower() == "on" for x in _ch)
+                if _on != state.light_on:
+                    state.light_on = _on
+                    changed = True
+
         # ── Statut ──────────────────────────────────────────────────────
         if "gcode_state" in p:
             if state.status != p["gcode_state"]:

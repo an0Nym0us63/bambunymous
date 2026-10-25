@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from
 import { stageLabel, stageIsPause } from "../utils/printStage";
 import { createPortal } from "react-dom";
 import { usePrinter } from "../store/printer";
-import { Wifi, WifiOff, DoorOpen, DoorClosed, Clock, Pause, Layers, Thermometer, Wind, Droplets, Sun, Moon, LayoutGrid, Printer, Disc3, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
+import { Wifi, WifiOff, DoorOpen, DoorClosed, Lightbulb, LightbulbOff, Clock, Pause, Layers, Thermometer, Wind, Droplets, Sun, Moon, LayoutGrid, Printer, Disc3, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
 import { useAuth } from "../store/auth";
 import { useFriend } from "../store/friend";
 import { create } from "zustand";
@@ -1292,6 +1292,19 @@ function PrinterHead({ status, temps = true, state = true }) {
     {status?.connected && (status.door_open === true || status.top_open === true) && <span data-pk=""
       data-tip={[status.door_open === true && "La porte est ouverte", status.top_open === true && "Le capot du haut est ouvert"].filter(Boolean).join(" · ")}
       style={{ ...chip, padding: "2px 6px", color: "#d97706", background: "rgba(245,158,11,0.14)" }}><DoorOpen size={13}/></span>}
+    {status?.connected && status.light_on === true && <span data-pk="" data-tip="La lumière de la chambre est allumée"
+      style={{ ...chip, padding: "2px 6px", color: "#ca8a04", background: "rgba(234,179,8,0.16)" }}><Lightbulb size={13}/></span>}
+  </>;
+}
+// a la suite des temperatures de la tuile : la porte ou le capot ouverts (seulement ouverts), et la lumiere
+function PrinterFlags({ status, size = 13 }) {
+  const open = [status.door_open === true && "La porte est ouverte", status.top_open === true && "Le capot du haut est ouvert"].filter(Boolean);
+  return <>
+    {open.length > 0 && <span data-pk="" data-tip={open.join(" · ")} style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: size - 1,
+      fontWeight: 800, color: "#d97706", whiteSpace: "nowrap" }}><DoorOpen size={size}/></span>}
+    {status.light_on != null && <span data-pk="" data-tip={status.light_on ? "Lumière allumée" : "Lumière éteinte"}
+      style={{ display: "inline-flex", alignItems: "center", color: status.light_on ? "#eab308" : "var(--muted)" }}>
+      {status.light_on ? <Lightbulb size={size}/> : <LightbulbOff size={size}/>}</span>}
   </>;
 }
 // sur une ligne : la vignette (un clic l'ouvre en grand), le nom, puis selon l'etat :
@@ -1456,6 +1469,9 @@ function PrinterPopup({ status, img, name, onClose }) {
                 color: status.door_open ? "#d97706" : "var(--muted)", fontWeight: status.door_open ? 800 : 600 }}>
                 · {status.door_open ? <DoorOpen size={12}/> : <DoorClosed size={12}/>}porte {status.door_open ? "ouverte" : "fermée"}</span>}
               {status?.connected && status.top_open === true && <span style={{ color: "#d97706", fontWeight: 800 }}>· capot ouvert</span>}
+              {status?.connected && status.light_on != null && <span style={{ display: "inline-flex", alignItems: "center", gap: 3,
+                color: status.light_on ? "#ca8a04" : "var(--muted)", fontWeight: status.light_on ? 800 : 600 }}>
+                · {status.light_on ? <Lightbulb size={12}/> : <LightbulbOff size={12}/>}lumière {status.light_on ? "allumée" : "éteinte"}</span>}
               {status?.fw_version && <span style={{ color: "var(--muted)", fontWeight: 600 }}>· micrologiciel {status.fw_version}</span>}</div>
           </div>
           <button onClick={onClose} aria-label="Fermer" style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid var(--border)",
@@ -1611,6 +1627,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
     {nozzles.map(n => <React.Fragment key={n.id}>{tempItem(IcoNozzle, nozzles.length > 1 ? `Buse ${n.id === 1 ? "G" : "D"}` : "Buse", n.temp, n.target, "#ea580c", size)}</React.Fragment>)}
     {tempItem(IcoBed, "Plateau", status?.bed_temp, status?.target_bed_temp, "#dc2626", size)}
     {status?.chamber_temp > 0 && tempItem(IcoChamber, "Chambre", status.chamber_temp, status.target_chamber_temp, "#ca8a04", size)}
+    {status?.connected && <PrinterFlags status={status} size={size + 1}/>}
   </span>;
   // la ligne du bas (toute la largeur) : la couche et les temperatures, quand il n'y a pas de colonne a droite
   // la ligne du bas reste hors impression : les temperatures (le plateau qui refroidit…)
