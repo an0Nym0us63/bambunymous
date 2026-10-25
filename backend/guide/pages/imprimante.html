@@ -43,7 +43,7 @@
       <figcaption>La fenêtre « Imprimante », en haut et en bas.</figcaption>
     </figure>
     <ul>
-      <li><strong>En-tête</strong> : l'état en couleur (« En cours », « En pause », l'étape, « Terminée », « Échouée », « Au repos », « Injoignable »), « porte ouverte » ou « porte fermée » si l'imprimante le dit, « capot ouvert » quand elle signale le capot du haut ouvert, « lumière allumée » ou « éteinte », et la version du micrologiciel.</li>
+      <li><strong>En-tête</strong> : le titre et la croix, puis, dessous, une rangée de pastilles qui passe à la ligne si besoin : l'état en couleur (« En cours », « En pause », l'étape, « Terminée », « Échouée », « Au repos », « Injoignable »), <span class="ui">⚠ 2 alertes HMS ›</span> s'il y en a (le toucher ouvre leur liste), « porte ouverte » ou « porte fermée » si l'imprimante le dit, « capot ouvert » quand elle signale le capot du haut ouvert, « lumière allumée » ou « éteinte », et la version du micrologiciel. Une pastille est teintée quand elle signale quelque chose, grise sinon.</li>
       <li><strong>Carte principale</strong> : la vignette (touche-la pour l'agrandir), le nom (« Rien en cours » sinon), « encore 1h 15min · fin 18:58 », un anneau d'avancement et une barre.</li>
       <li><strong>Trois cases</strong> : <span class="ui">Reste</span>, <span class="ui">Fin</span>, <span class="ui">Couche</span> (avec une barre des couches).</li>
       <li>Chaque section a son titre en couleur, et à droite un mot de résumé (l'emplacement qui imprime, la buse sur la tête, le nombre d'alertes…).</li>
@@ -52,18 +52,18 @@
       <li><strong>Filament en cours</strong> : la bobine dessinée, son nom, sa matière et son poids restant, avec l'emplacement (« · A3 »).</li>
       <li><strong>RACK VORTEK</strong> (si ta machine en a un) : la vue complète du rack, comme dans la fenêtre de la tuile : l'état du rack, la tête d'outil et les six buses (couleur, numéro, diamètre et type, « sur la tête », point orange en cas d'anomalie). Touche une buse pour afficher sa fiche dessous. Voir <a href="#imprimante-vortek">Le rack Vortek</a>.</li>
       <li><strong>AIGUILLAGE</strong> (si installé) : le schéma en rails, comme la tuile <a href="#imprimante-aiguillage">Aiguillage</a> : les entrées A et B (bobine engagée, AMS branchés), le corps de l'aiguillage, et les buses <span class="ui">Gauche</span> et <span class="ui">Droite</span> avec leur température ; chaque rail porte la couleur de son filament, celui qui imprime est vert, lumineux et animé.</li>
-      <li><strong>ALERTES DE LA MACHINE</strong> : les alertes HMS, voir ci-dessous.</li>
+      <li><strong>Alertes de la machine</strong> : juste sous les cases Reste, Fin et Couche, un bandeau « 2 alertes de la machine · sérieux » avec le libellé de la plus grave ; <span class="ui">Détail ›</span> ouvre leur liste (voir ci-dessous).</li>
     </ul>
   </section>
 
   <section id="imprimante-hms">
     <h3>Les alertes de la machine (HMS)</h3>
-    <p>Quand l'imprimante signale un problème (système « HMS » de Bambu Lab), un triangle orange apparaît dans le bloc et un encadré « 2 alertes imprimante » s'ajoute à la fenêtre <span class="ui">Imprimante</span>. Sa couleur suit l'alerte la plus grave. Pour chaque alerte :</p>
+    <p>Quand l'imprimante signale un problème (système « HMS » de Bambu Lab), un triangle ⚠ apparaît sur la tuile de l'accueil (avec leur nombre), une pastille dans l'en-tête de la fenêtre <span class="ui">Imprimante</span> et un bandeau sous ses temps. Leur couleur suit l'alerte la plus grave. La pastille ou le bandeau ouvrent la fenêtre <span class="ui">Alertes de la machine</span> : le compte par gravité en tête, puis, pour chaque alerte :</p>
     <ul>
       <li>la gravité : <span class="ui">FATAL</span> (rouge), <span class="ui">SÉRIEUX</span> (orange), <span class="ui">COURANT</span> (ambre), <span class="ui">INFO</span> (bleu) ;</li>
       <li>le code (ex. « 0300_0100_0003_0007 ») ;</li>
-      <li>le libellé en français, ou « Code non répertorié — appuyez pour ouvrir le wiki » ;</li>
-      <li>un lien ↗ vers la page du wiki Bambu Lab qui explique le code et la marche à suivre.</li>
+      <li>le libellé en français, ou « Alerte sans libellé connu : la page du wiki l'explique » ;</li>
+      <li><span class="ui">Que faire ? Le wiki Bambu ↗</span> : toucher l'alerte ouvre la page du wiki Bambu Lab qui explique le code et la marche à suivre.</li>
     </ul>
     <p>Les alertes disparaissent d'elles-mêmes quand l'imprimante ne les signale plus. À ne pas confondre avec les <a href="#imprimante-attention">points d'attention</a>, qui concernent ton stock et tes fiches.</p>
   </section>

@@ -1292,6 +1292,11 @@ function PrinterHead({ status, temps = true, state = true }) {
     {status?.connected && (status.door_open === true || status.top_open === true) && <span data-pk=""
       data-tip={[status.door_open === true && "La porte est ouverte", status.top_open === true && "Le capot du haut est ouvert"].filter(Boolean).join(" · ")}
       style={{ ...chip, padding: "2px 6px", color: "#d97706", background: "rgba(245,158,11,0.14)" }}><DoorOpen size={13}/></span>}
+    {/* des alertes de la machine : le triangle a la couleur de la plus grave */}
+    {status?.hms_decoded?.length > 0 && <span data-pk="" data-tip={`${status.hms_decoded.length} alerte${status.hms_decoded.length > 1 ? "s" : ""} de la machine : ${status.hms_decoded[0].label || status.hms_decoded[0].code}`}
+      style={{ ...chip, padding: "2px 7px", color: (HMS_SEV[status.hms_decoded[0].severity] || HMS_SEV.info).color,
+        background: `color-mix(in srgb, ${(HMS_SEV[status.hms_decoded[0].severity] || HMS_SEV.info).color} 16%, transparent)` }}>
+      <AlertTriangle size={13}/>{status.hms_decoded.length > 1 ? status.hms_decoded.length : ""}</span>}
     {status?.connected && status.light_on === true && <span data-pk="" data-tip="La lumière de la chambre est allumée"
       style={{ ...chip, padding: "2px 6px", color: "#ca8a04", background: "rgba(234,179,8,0.16)" }}><Lightbulb size={13}/></span>}
   </>;
@@ -1299,7 +1304,11 @@ function PrinterHead({ status, temps = true, state = true }) {
 // a la suite des temperatures de la tuile : la porte ou le capot ouverts (seulement ouverts), et la lumiere
 function PrinterFlags({ status, size = 13 }) {
   const open = [status.door_open === true && "La porte est ouverte", status.top_open === true && "Le capot du haut est ouvert"].filter(Boolean);
+  const hms = status.hms_decoded || [], hc = (HMS_SEV[hms[0]?.severity] || HMS_SEV.info).color;
   return <>
+    {hms.length > 0 && <span data-pk="" data-tip={`${hms.length} alerte${hms.length > 1 ? "s" : ""} de la machine : ${hms[0].label || hms[0].code}`}
+      style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: size - 1, fontWeight: 900, color: hc, whiteSpace: "nowrap" }}>
+      <AlertTriangle size={size}/>{hms.length > 1 ? hms.length : ""}</span>}
     {open.length > 0 && <span data-pk="" data-tip={open.join(" · ")} style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: size - 1,
       fontWeight: 800, color: "#d97706", whiteSpace: "nowrap" }}><DoorOpen size={size}/></span>}
     {status.light_on != null && <span data-pk="" data-tip={status.light_on ? "Lumière allumée" : "Lumière éteinte"}
@@ -1437,6 +1446,15 @@ function PrinterPopup({ status, img, name, onClose }) {
   const amsRows = amsList.length ? grilleAccueil(amsList, lireDisposition(order))[0]?.length || 1 : 0;
   const rack = status?.hotend_rack;
   const hasRack = (rack?.hotends || []).some(h => !h.empty && h.filament_id);
+  // les alertes de la machine (HMS), la plus grave d'abord
+  const hms = status?.hms_decoded || [];
+  const worst = HMS_SEV[hms[0]?.severity] || HMS_SEV.info;
+  const [hmsOpen, setHmsOpen] = useState(false);
+  // une pastille d'etat de l'en-tete : teintee quand elle signale quelque chose, grise sinon
+  const chipSt = (c, on) => ({ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap",
+    fontSize: 11.5, fontWeight: on ? 800 : 700, color: c && on ? c : "var(--muted)",
+    background: c && on ? `color-mix(in srgb, ${c} 14%, transparent)` : "var(--surface2)", border: `1px solid ${c && on ? `color-mix(in srgb, ${c} 35%, transparent)` : "var(--border)"}` });
+  const chip = (c, on, body) => <span style={chipSt(c, on)}>{body}</span>;
   // un titre de section : sa pastille de couleur, son nom, un filet, et a droite un mot de resume
   const section = (t, Icon, c, extra) => <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: -4 }}>
     <span style={{ width: 24, height: 24, borderRadius: 8, display: "inline-flex", alignItems: "center", justifyContent: "center", background: `${c}22`, color: c }}><Icon size={14}/></span>
@@ -1452,7 +1470,7 @@ function PrinterPopup({ status, img, name, onClose }) {
           <span style={{ width: 36, height: 36, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center",
             background: `${s.color}22`, color: s.color }}><Printer size={18}/></span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 900, color: "var(--text)" }}>Imprimante
+            <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>Imprimante
               {/* la nuit, un hibou veille sur l'imprimante (presque invisible) */}
               {!found.has("owl") && (h => h >= 22 || h < 5)(new Date().getHours()) && <span data-egg="owl" aria-hidden="true" style={{ fontSize: 9, opacity: 0.18,
                 marginLeft: 6, verticalAlign: "middle", cursor: "default", userSelect: "none" }}>🦉</span>}
@@ -1463,19 +1481,23 @@ function PrinterPopup({ status, img, name, onClose }) {
                 ["c_sloth", "🦥", live && status?.remaining_minutes > 720],
                 ["c_pause", "🧘", paused]].filter(x => x[2] && !found.has(x[0])).map(([k, e]) => <span key={k} data-egg={k} aria-hidden="true" style={{ fontSize: 9,
                   opacity: 0.18, marginLeft: 6, verticalAlign: "middle", cursor: "default", userSelect: "none" }}>{e}</span>)}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: s.color }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}
-              {status?.connected && status.door_open != null && <span style={{ display: "inline-flex", alignItems: "center", gap: 3,
-                color: status.door_open ? "#d97706" : "var(--muted)", fontWeight: status.door_open ? 800 : 600 }}>
-                · {status.door_open ? <DoorOpen size={12}/> : <DoorClosed size={12}/>}porte {status.door_open ? "ouverte" : "fermée"}</span>}
-              {status?.connected && status.top_open === true && <span style={{ color: "#d97706", fontWeight: 800 }}>· capot ouvert</span>}
-              {status?.connected && status.light_on != null && <span style={{ display: "inline-flex", alignItems: "center", gap: 3,
-                color: status.light_on ? "#ca8a04" : "var(--muted)", fontWeight: status.light_on ? 800 : 600 }}>
-                · {status.light_on ? <Lightbulb size={12}/> : <LightbulbOff size={12}/>}lumière {status.light_on ? "allumée" : "éteinte"}</span>}
-              {status?.fw_version && <span style={{ color: "var(--muted)", fontWeight: 600 }}>· micrologiciel {status.fw_version}</span>}</div>
           </div>
-          <button onClick={onClose} aria-label="Fermer" style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid var(--border)",
+          <button onClick={onClose} aria-label="Fermer" style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid var(--border)", flexShrink: 0,
             background: "var(--surface2)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+        </div>
+        {/* les etats du moment, en pastilles sous le titre : toute la largeur, elles passent a la ligne (la croix ne
+            cache plus rien, et un capot ouvert ou une alerte de plus ne font plus deborder) */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: -8 }}>
+          {chip(s.color, true, <><span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</>)}
+          {hms.length > 0 && <button onClick={() => setHmsOpen(true)} data-tip="Voir les alertes de la machine"
+            style={{ ...chipSt(worst.color, true), cursor: "pointer", fontFamily: "inherit", fontWeight: 900, lineHeight: "inherit" }}>
+            <AlertTriangle size={12}/>{hms.length} alerte{hms.length > 1 ? "s" : ""} HMS ›</button>}
+          {status?.connected && status.door_open != null && chip(status.door_open ? "#d97706" : null, status.door_open,
+            <>{status.door_open ? <DoorOpen size={12}/> : <DoorClosed size={12}/>}porte {status.door_open ? "ouverte" : "fermée"}</>)}
+          {status?.connected && status.top_open === true && chip("#d97706", true, <><DoorOpen size={12}/>capot ouvert</>)}
+          {status?.connected && status.light_on != null && chip(status.light_on ? "#ca8a04" : null, status.light_on,
+            <>{status.light_on ? <Lightbulb size={12}/> : <LightbulbOff size={12}/>}lumière {status.light_on ? "allumée" : "éteinte"}</>)}
+          {status?.fw_version && chip(null, false, <>micrologiciel {status.fw_version}</>)}
         </div>
 
         <div style={{ position: "relative", borderRadius: 20, overflow: "hidden", padding: 14, display: "flex", flexDirection: "column", gap: 12,
@@ -1523,6 +1545,22 @@ function PrinterPopup({ status, img, name, onClose }) {
             </div>))}
         </div>}
 
+        {/* les alertes de la machine : la plus grave, et le compte ; un clic, la liste detaillee */}
+        {hms.length > 0 && <button onClick={() => setHmsOpen(true)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 12px",
+          borderRadius: 16, cursor: "pointer", textAlign: "left", font: "inherit", color: "inherit", width: "100%", boxSizing: "border-box",
+          background: `linear-gradient(135deg, color-mix(in srgb, ${worst.color} 16%, transparent), transparent 70%), var(--surface2)`,
+          border: `1px solid color-mix(in srgb, ${worst.color} 40%, transparent)` }}>
+          <span style={{ width: 38, height: 38, borderRadius: 12, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff",
+            background: `linear-gradient(135deg, ${worst.color}, color-mix(in srgb, ${worst.color} 65%, #ffffff))`, boxShadow: `0 6px 14px -6px ${worst.color}` }}>
+            <AlertTriangle size={19}/></span>
+          <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 900, color: worst.color }}>{hms.length} alerte{hms.length > 1 ? "s" : ""} de la machine · {worst.label.toLowerCase()}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {hms[0].label || hms[0].code}</span>
+          </span>
+          <span style={{ fontSize: 12, fontWeight: 900, color: worst.color, whiteSpace: "nowrap" }}>Détail ›</span>
+        </button>}
+
         {status?.connected && <>
           {section("Températures", Thermometer, "#f97316")}
           <TempStrip status={status}/>
@@ -1565,19 +1603,51 @@ function PrinterPopup({ status, img, name, onClose }) {
           <div style={{ display: "flex", justifyContent: "center" }}><div style={{ width: "100%", maxWidth: 520 }}><SwitchArt m={switchModel(status)} W="100%" H="auto"/></div></div>
         </>}
 
-        {status?.hms_decoded?.length > 0 && <>
-          {section("Alertes de la machine", AlertTriangle, "#ef4444", status.hms_decoded.length)}
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {status.hms_decoded.map((h, i) => { const sc = HMS_SEV[h.severity] || HMS_SEV.info; return (
-              <a key={i} href={h.wiki} target="_blank" rel="noreferrer" style={{ display: "flex", gap: 10, alignItems: "flex-start", textDecoration: "none",
-                padding: "9px 11px", borderRadius: 12, background: `${sc.color}12`, border: `1px solid ${sc.color}44` }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: sc.color, marginTop: 5, flexShrink: 0 }}/>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--text)", lineHeight: 1.4 }}>
-                  <b style={{ color: sc.color, fontSize: 10.5, textTransform: "uppercase", marginRight: 6 }}>{sc.label}</b>{h.label || h.code}</span>
-                <ExternalLink size={13} style={{ color: "var(--muted)", flexShrink: 0, marginTop: 2 }}/></a>); })}
-          </div>
-        </>}
+        {hmsOpen && hms.length > 0 && <HmsSheet list={hms} onClose={() => setHmsOpen(false)}/>}
         {big && img && <span onClick={e => e.stopPropagation()}><Lightbox images={[img]} index={0} onClose={() => setBig(false)}/></span>}
+      </div>
+    </div>, document.body);
+}
+// Les alertes de la machine (HMS) en detail : gravite, libelle, code, et la page du wiki Bambu
+function HmsSheet({ list, onClose }) {
+  const worst = HMS_SEV[list[0]?.severity] || HMS_SEV.info;
+  const n = sev => list.filter(h => h.severity === sev).length;
+  return createPortal(
+    <div data-no-pull="" onClick={e => { e.stopPropagation(); onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 1100, padding: 14,
+      background: "rgba(2,6,23,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "default" }}>
+      <div onClick={e => e.stopPropagation()} className="card" style={{ width: "min(520px, 100%)", maxHeight: "86vh", overflow: "hidden", padding: 0,
+        display: "flex", flexDirection: "column", background: "var(--sheet-bg)", boxShadow: "0 30px 80px rgba(0,0,0,0.45)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 16px 14px",
+          background: `radial-gradient(circle at 12% 40%, color-mix(in srgb, ${worst.color} 30%, transparent), transparent 60%), var(--surface2)` }}>
+          <span style={{ width: 44, height: 44, borderRadius: 14, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff",
+            background: `linear-gradient(135deg, ${worst.color}, color-mix(in srgb, ${worst.color} 65%, #ffffff))`, boxShadow: `0 8px 18px -8px ${worst.color}` }}>
+            <AlertTriangle size={22}/></span>
+          <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 17, fontWeight: 900, color: "var(--text)" }}>Alertes de la machine</span>
+            <span style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+              {["fatal", "serious", "common", "info"].filter(n).map(sev => <span key={sev} style={{ fontSize: 11, fontWeight: 900, padding: "1px 8px", borderRadius: 20,
+                color: HMS_SEV[sev].color, background: `color-mix(in srgb, ${HMS_SEV[sev].color} 14%, transparent)` }}>{n(sev)} {HMS_SEV[sev].label.toLowerCase()}</span>)}</span>
+          </span>
+          <button onClick={onClose} aria-label="Fermer" style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid var(--border)", flexShrink: 0,
+            background: "var(--surface)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+        </div>
+        <div style={{ overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+          {list.map((h, i) => { const sc = HMS_SEV[h.severity] || HMS_SEV.info; return (
+            <a key={i} href={h.wiki} target="_blank" rel="noreferrer" style={{ display: "flex", gap: 11, alignItems: "flex-start", textDecoration: "none",
+              padding: "11px 12px", borderRadius: 14, background: `linear-gradient(135deg, ${sc.color}14, transparent 70%), var(--surface2)`,
+              border: `1px solid ${sc.color}44` }}>
+              <span style={{ width: 4, alignSelf: "stretch", borderRadius: 4, background: sc.color, flexShrink: 0 }}/>
+              <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".04em", color: "#fff", padding: "1px 8px",
+                    borderRadius: 20, background: sc.color }}>{sc.label}</span>
+                  <code style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>{h.code}</code></span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", lineHeight: 1.4 }}>{h.label || "Alerte sans libellé connu : la page du wiki l'explique"}</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, fontWeight: 800, color: "#3B82F6" }}>
+                  Que faire ? Le wiki Bambu <ExternalLink size={11}/></span>
+              </span>
+            </a>); })}
+        </div>
       </div>
     </div>, document.body);
 }
