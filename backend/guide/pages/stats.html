@@ -3,24 +3,24 @@
 
 <section id="stats-organisation">
   <h2>Organisation de la page</h2>
-  <p>La page a cinq onglets, qui tiennent sur une ligne même sur un petit téléphone :</p>
+  <p>La page a cinq onglets, chacun sa couleur et son icône. Ils tiennent sur une ligne même sur un petit téléphone : l'onglet actif montre son nom, les autres seulement leur icône.</p>
   <dl class="opts">
-    <dt>Prints</dt><dd>Tes impressions : volume, réussite, temps, coûts, habitudes, évolution et classements. Onglet par défaut. Voir <a href="#stats-prints">Onglet Prints</a>.</dd>
-    <dt>Filaments</dt><dd>Ton stock de bobines et ta consommation. Voir <a href="#stats-filaments">Onglet Filaments</a>.</dd>
-    <dt>Séchage</dt><dd>L'état de séchage de tes bobines. Voir <a href="#stats-sechage">Onglet Séchage</a>.</dd>
-    <dt>Objets</dt><dd>Ton inventaire d'objets, tes ventes, tes marges et tes accessoires. Voir <a href="#stats-objets">Onglet Objets</a>.</dd>
-    <dt>Succès</dt><dd>Tes succès et la roue. Ils sont décrits dans le chapitre <a href="#succes">Succès</a>.</dd>
+    <dt>🖨️ Prints</dt><dd>Tes impressions : volume, réussite, temps, coûts, habitudes, évolution et classements. Onglet par défaut. Voir <a href="#stats-prints">Onglet Prints</a>.</dd>
+    <dt>🧵 Filaments</dt><dd>Ton stock de bobines et ta consommation. Voir <a href="#stats-filaments">Onglet Filaments</a>.</dd>
+    <dt>💧 Séchage</dt><dd>L'état de séchage de tes bobines. Voir <a href="#stats-sechage">Onglet Séchage</a>.</dd>
+    <dt>🎁 Objets</dt><dd>Ton inventaire d'objets, tes ventes, tes marges et tes accessoires. Voir <a href="#stats-objets">Onglet Objets</a>.</dd>
+    <dt>🏆 Succès</dt><dd>Tes succès et la roue. Ils sont décrits dans le chapitre <a href="#succes">Succès</a>.</dd>
   </dl>
   <p>L'onglet choisi s'inscrit dans l'adresse de la page (<code>/stats?tab=filaments</code>, <code>?tab=drying</code>, <code>?tab=objects</code>, <code>?tab=achievements</code>) : tu peux mettre un onglet en favori.</p>
   <figure class="phone"><img src="img/stats-telephone.webp" alt="Page Statistiques sur téléphone, onglet Prints"><figcaption>Sur téléphone, le bouton de période (« Tout ») est dans l'en-tête, à côté du titre.</figcaption></figure>
-  <p>Les chiffres sont présentés en <b>cartes</b> (un libellé, une valeur, parfois une précision en dessous) et en graphiques (barres, anneaux). Les durées s'écrivent « 3h 12min », les poids « 1.23 kg » ou « 97.4 g », les montants « 12.34 € ». Un tiret « — » signifie qu'il n'y a pas de valeur.</p>
-  <p>Certaines sections portent un petit badge <span class="ui">GLOBAL</span> : elles ne dépendent pas de la période choisie (le survol du badge le rappelle).</p>
+  <p>Chaque onglet (sauf Succès) s'ouvre sur un <b>en-tête</b> : le chiffre qui compte en grand, quelques pastilles, et un anneau de taux (la réussite des impressions, les bobines à jour de séchage, les objets vendus). Viennent ensuite les sections, chacune avec son icône. Les chiffres sont présentés en <b>cartes</b> teintées de leur couleur (un libellé, une valeur, parfois une précision en dessous) et en graphiques (barres, anneaux). Les durées s'écrivent « 3h 12min », les poids « 1.23 kg » ou « 97.4 g », les montants « 12.34 € ». Un tiret « — » signifie qu'il n'y a pas de valeur.</p>
+  <p>Certaines sections portent une pastille <span class="ui">🌐 toutes périodes</span> : elles ne dépendent pas de la période choisie.</p>
   <div class="note"><p>Pour un compte en <b>lecture seule</b> (sans prix), tous les montants sont remplacés par « — », la courbe « Coût » de l'évolution disparaît, et le classement « Les plus chers » n'est pas affiché. Un compte « Lecture seule + prix » voit tout.</p></div>
 </section>
 
 <section id="stats-periode">
   <h2>Choisir la période</h2>
-  <p>Le bouton avec l'entonnoir affiche la période courante (<span class="ui">Tout</span> par défaut). Sur ordinateur il est à droite du titre « Statistiques » ; sur téléphone, dans l'en-tête en haut de l'écran. Touche-le pour ouvrir la feuille <span class="ui">Période</span>.</p>
+  <p>Le bouton avec l'entonnoir affiche la période courante (<span class="ui">Tout</span> par défaut). Sur ordinateur il est à droite du titre « Statistiques » ; sur téléphone, dans l'en-tête en haut de l'écran. Il se remplit de bleu quand une autre période que « Tout » est choisie. Touche-le pour ouvrir la feuille <span class="ui">📅 Période</span>.</p>
   <figure class="phone"><img src="img/stats-periode.webp" alt="Feuille Période avec dix préréglages et une plage personnalisée"><figcaption>Dix périodes toutes faites, ou une plage de dates libre.</figcaption></figure>
   <dl class="opts">
     <dt>Tout</dt><dd>Toute ton histoire.</dd>
@@ -28,7 +28,7 @@
     <dt>Ce mois / Cette année</dt><dd>Depuis le 1er du mois / le 1er janvier.</dd>
     <dt>Mois dernier / Année dernière</dt><dd>Le mois civil / l'année civile précédents en entier.</dd>
     <dt>7 jours, 30 jours, 90 jours, 12 mois</dt><dd>Fenêtres glissantes jusqu'à aujourd'hui.</dd>
-    <dt>Plage personnalisée</dt><dd>Choisis une date de <b>Début</b> et/ou de <b>Fin</b>, puis <span class="ui">Appliquer la plage</span>. Les deux jours sont inclus en entier. Le bouton affiche alors « 2026-09-01 → 2026-09-30 », « Depuis 2026-09-01 » ou « Jusqu'au 2026-09-30 ». Deux dates vides reviennent à « Tout ».</dd>
+    <dt>Plage personnalisée</dt><dd>Choisis une date de <b>Début</b> et/ou de <b>Fin</b>, puis <span class="ui">✓ Appliquer la plage</span> en bas. Les deux jours sont inclus en entier. Le bouton affiche alors « 2026-09-01 → 2026-09-30 », « Depuis 2026-09-01 » ou « Jusqu'au 2026-09-30 ». Deux dates vides reviennent à « Tout ».</dd>
   </dl>
   <p>La période choisie est en bleu. Le ✕ ferme la feuille.</p>
   <h4>Ce que la période change</h4>
@@ -95,9 +95,9 @@
 
 <section id="stats-filaments">
   <h2>Onglet Filaments</h2>
-  <figure><img src="img/stats-filaments-stock.webp" alt="Stock actuel et consommation sur la période"><figcaption>Le stock du moment (GLOBAL) et la consommation de la période.</figcaption></figure>
+  <figure><img src="img/stats-filaments-stock.webp" alt="Stock actuel et consommation sur la période"><figcaption>Le stock du moment (toutes périodes) et la consommation de la période.</figcaption></figure>
   <section id="stats-filaments-stock">
-    <h3>Stock actuel <span class="ui">GLOBAL</span></h3>
+    <h3>Stock actuel <span class="ui">🌐 toutes périodes</span></h3>
     <dl class="opts">
       <dt>Références</dt><dd>Nombre de filaments dans ton catalogue.</dd>
       <dt>Bobines actives</dt><dd>Bobines non archivées.</dd>
@@ -158,9 +158,9 @@
 <section id="stats-objets">
   <h2>Onglet Objets</h2>
   <p>Le tableau de bord de tes <a href="#objets">objets</a> et de tes ventes. Sans aucun objet : « Aucun objet pour le moment. »</p>
-  <figure><img src="img/stats-objets-haut.webp" alt="Onglet Objets : inventaire, par état, origine, ventes et ratios"><figcaption>Inventaire (GLOBAL), ventes et ratios.</figcaption></figure>
+  <figure><img src="img/stats-objets-haut.webp" alt="Onglet Objets : inventaire, par état, origine, ventes et ratios"><figcaption>Inventaire (toutes périodes), ventes et ratios.</figcaption></figure>
   <section id="stats-objets-inventaire">
-    <h3>Inventaire <span class="ui">GLOBAL</span></h3>
+    <h3>Inventaire <span class="ui">🌐 toutes périodes</span></h3>
     <dl class="opts">
       <dt>Objets</dt><dd>Nombre total d'objets.</dd>
       <dt>À vendre, Vendus</dt><dd>Nombre d'objets dans chaque état (les ventes de toujours).</dd>
@@ -186,7 +186,7 @@
     <h3>Meilleures marges et accessoires</h3>
     <figure><img src="img/stats-objets-marges.webp" alt="Meilleures marges en valeur et en pourcentage, indicateurs des accessoires"><figcaption>Les objets qui rapportent le plus, puis l'état du stock d'accessoires.</figcaption></figure>
     <p><b>Meilleures marges</b> : deux top 5, <b>En valeur</b> (marge en euros) et <b>En pourcentage</b> (marge rapportée au coût, pour les objets dont le coût est connu). Touche un nom pour ouvrir l'objet.</p>
-    <p><b>Accessoires</b> (<span class="ui">GLOBAL</span>, affiché si tu as des accessoires) :</p>
+    <p><b>Accessoires</b> (<span class="ui">🌐 toutes périodes</span>, affiché si tu as des accessoires) :</p>
     <dl class="opts">
       <dt>Références</dt><dd>Nombre d'accessoires ; en dessous, les unités en stock.</dd>
       <dt>Valeur du stock</dt><dd>Ce que vaut ton étagère, et le nombre d'unités.</dd>

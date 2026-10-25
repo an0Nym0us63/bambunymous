@@ -12,6 +12,7 @@ import { PrintDetail, GroupBottomSheet } from "./Prints";
 import { ObjectSheet, AccessorySheet } from "./Objects";
 import { FilamentSheetFromSpool } from "./Filaments";
 import Achievements from "./Achievements";
+import { FSheet, fBtn, fGrad } from "../components/FicheKit";
 
 const fmtH = s => {
   const t = Math.round(s || 0);
@@ -57,10 +58,15 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
   );
   const marginColor = stats.margin >= 0 ? "#22c55e" : "#ef4444";
   const acc = stats.accessories;
+  const sold = stats.total_sold ?? stats.sold ?? 0;
   return (
     <>
+      <StatHero color="#22C55E" icon="💶" label="Ventes encaissées" value={isMoneyHidden() ? MONEY_MASK : `${(stats.revenue || 0).toFixed(2)} €`}
+        ring={stats.total ? (sold / stats.total) * 100 : null} ringLabel="vendus"
+        chips={[`🎁 ${sold} vendu${sold > 1 ? "s" : ""} sur ${stats.total}`, !isMoneyHidden() && stats.margin != null && `📈 ${stats.margin >= 0 ? "+" : ""}${(stats.margin || 0).toFixed(2)} € de marge`,
+          stats.available ? `🏷️ ${stats.available} à vendre` : null]}/>
       <Section title="Inventaire" isGlobal>
-        <div className="kpi-grid">
+        <div className="kpi-grid st-kpis">
           {/* Memes couleurs que les sections de la page Objets : un etat garde
               son code visuel d'un ecran a l'autre. */}
           <KpiCard icon={ShoppingBag} label="Objets" value={stats.total} color="#64748b"/>
@@ -99,8 +105,8 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
               }))}/>
           )}
           {(stats.by_parent || []).some(d => d.value > 0) && (
-            <div className="card" style={{ padding:"14px 16px" }}>
-              <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:"0 0 8px" }}>Origine</p>
+            <div style={{ ...statCard("#8B5CF6"), padding:"14px 14px" }}>
+              <p style={cardTitle}>Origine</p>
               {stats.by_parent.filter(d => d.value > 0).map(d => (
                 <Bar key={d.name} label={d.name} value={d.value}
                   max={Math.max(...stats.by_parent.map(x => x.value), 1)}
@@ -114,7 +120,7 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
       {/* PC : ventes et ratios cote a cote. */}
       <div className="wide-2" style={{ gap:20 }}>
       <Section title="Ventes">
-        <div className="kpi-grid">
+        <div className="kpi-grid st-kpis">
           <KpiCard icon={Euro} label="Chiffre d'affaires" value={fmtEur(stats.revenue)} color="#22c55e"/>
           <KpiCard icon={Euro} label="Coût des vendus" value={fmtEur(stats.cost_sold)} color="#ef4444"/>
           <KpiCard icon={TrendingUp} label="Marge" value={fmtEur(stats.margin)} color={marginColor}
@@ -123,7 +129,7 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
       </Section>
 
       <Section title="Ratios">
-        <div className="kpi-grid">
+        <div className="kpi-grid st-kpis">
           {/* Rapporte aux objets DESTINES A LA VENTE, pas au total. Un cadeau
               ou un objet garde pour soi n'a jamais ete propose : le compter
               comme une vente ratee ecrasait le taux -- 9 sur 174 affichait 5%,
@@ -152,8 +158,8 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
               etroites pour se lire), cote a cote sur PC ou la place ne manque pas. */}
           <div className="wide-2" style={{ gap:12 }}>
             {(stats.top_margin || []).length > 0 && (
-              <div className="card" style={{ padding:"14px 16px" }}>
-                <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:"0 0 10px" }}>
+              <div style={{ ...statCard("#22c55e"), padding:"14px 14px" }}>
+                <p style={cardTitle}>
                   En valeur
                 </p>
                 {stats.top_margin.map(o => {
@@ -172,8 +178,8 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
                 rentables proportionnellement, la ou la marge absolue favorise
                 mecaniquement les gros objets chers. */}
             {(stats.top_margin_pct || []).length > 0 && (
-              <div className="card" style={{ padding:"14px 16px" }}>
-                <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:"0 0 10px" }}>
+              <div style={{ ...statCard("#22c55e"), padding:"14px 14px" }}>
+                <p style={cardTitle}>
                   En pourcentage
                 </p>
                 {stats.top_margin_pct.map(o => {
@@ -194,7 +200,7 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
 
       {acc && acc.count > 0 && (
         <Section title="Accessoires" isGlobal>
-          <div className="kpi-grid" style={{ "--kpi-min":"150px", marginBottom:12 }}>
+          <div className="kpi-grid st-kpis" style={{ "--kpi-min":"150px", marginBottom:12 }}>
             <KpiCard icon={Package} label="Références" value={acc.count} color="#3b82f6"
               sub={`${acc.stock_units} en stock`}/>
             {/* Stock et engage separes : depuis que lier un accessoire le sort
@@ -215,8 +221,8 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
           <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
             {/* Ou l'argent dort : utile avant de recommander. */}
             {(acc.top_value || []).length > 0 && (
-              <div className="card" style={{ padding:"14px 16px" }}>
-                <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:"0 0 10px" }}>
+              <div style={{ ...statCard("#22c55e"), padding:"14px 14px" }}>
+                <p style={cardTitle}>
                   Stock le plus immobilisant
                 </p>
                 {acc.top_value.map(a => (
@@ -229,8 +235,8 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
             )}
             {/* Les plus employes : ceux a ne jamais laisser tomber a zero. */}
             {(acc.top_used || []).length > 0 && (
-              <div className="card" style={{ padding:"14px 16px" }}>
-                <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:"0 0 10px" }}>
+              <div style={{ ...statCard("#22c55e"), padding:"14px 14px" }}>
+                <p style={cardTitle}>
                   Les plus utilisés
                 </p>
                 {acc.top_used.map(a => (
@@ -266,23 +272,23 @@ function DryingStats() {
 
   const Row = ({ s, late }) => (
     <div onClick={() => setOpen(s)} role="button" tabIndex={0}
-      style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 6px", cursor:"pointer",
-        borderBottom:"1px solid var(--border)" }}>
+      style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 4px", cursor:"pointer",
+        borderBottom:"1px dashed var(--border)" }}>
       <Dot hex={s.color} colors={s.colors_array} multicolor={s.multicolor_type} size={14}/>
       <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:12.5, fontWeight:600, color:"var(--text)", overflow:"hidden",
+        <div style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", overflow:"hidden",
           textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</div>
-        <div style={{ fontSize:10.5, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+        <div style={{ fontSize:11.5, fontWeight:600, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
           {[s.brand, s.fila_type, `#${s.id}`, s.location].filter(Boolean).join(" · ")}
         </div>
       </div>
       <div style={{ textAlign:"right", flexShrink:0 }}>
-        <div style={{ fontSize:12, fontWeight:700, fontFamily:"JetBrains Mono,monospace",
+        <div style={{ fontSize:12.5, fontWeight:900,
           color: late ? "#0EA5E9" : "#f59e0b" }}>
           {s.age_days == null ? "jamais séchée"
             : late ? `+${fmtMonths(-s.remaining_days)} de retard` : `dans ${fmtMonths(s.remaining_days)}`}
         </div>
-        <div style={{ fontSize:10, color:"var(--muted)" }}>
+        <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)" }}>
           {s.age_days != null ? `séchée il y a ${fmtMonths(s.age_days)} · ` : ""}délai {fmtMonths(s.limit_days)}
         </div>
       </div>
@@ -296,7 +302,11 @@ function DryingStats() {
   const AGE_HEX = ["#7dd3fc", "#38bdf8", "#0ea5e9", "#0369a1", "#1e3a8a", "#ef4444"];
 
   return (<>
-    <div className="kpi-grid" style={{ "--kpi-min":"150px" }}>
+    <StatHero color="#06B6D4" icon="💧" label="À sécher maintenant" value={`${k.to_dry} bobine${k.to_dry > 1 ? "s" : ""}`}
+      ring={k.active ? (k.ok / k.active) * 100 : null} ringLabel="à jour"
+      chips={[k.to_dry_in_ams ? `🎛 ${k.to_dry_in_ams} dans l'AMS` : null, k.soon ? `⏳ ${k.soon} bientôt` : null,
+        d.to_dry_weight_g ? `⚖ ${fmtKgs(d.to_dry_weight_g)} concernés` : null]}/>
+    <div className="kpi-grid st-kpis" style={{ "--kpi-min":"150px" }}>
       <KpiCard icon={Droplets} label="À sécher" value={k.to_dry} color="#0EA5E9"
         sub={k.to_dry_in_ams ? `dont ${k.to_dry_in_ams} dans l'AMS` : `sur ${k.active} bobines`}/>
       <KpiCard icon={AlertTriangle} label="Jamais séchées" value={k.never} color="#ef4444"/>
@@ -337,7 +347,7 @@ function DryingStats() {
     {(d.to_dry.length > 0 || d.soon.length > 0) && <div style={{ display:"flex", flexDirection:"column", gap:20, minWidth:0 }}>
     {d.to_dry.length > 0 && (
       <Section title={`À sécher maintenant (${d.to_dry.length})`}>
-        <div className="card" style={scroll}>
+        <div style={{ ...statCard("#0EA5E9"), ...scroll }}>
           {d.to_dry.map(s => <Row key={s.id} s={s} late/>)}
         </div>
       </Section>
@@ -345,7 +355,7 @@ function DryingStats() {
 
     {d.soon.length > 0 && (
       <Section title={`Bientôt — dans les ${d.soon_days} jours (${d.soon.length})`}>
-        <div className="card" style={scroll}>
+        <div style={{ ...statCard("#f59e0b"), ...scroll }}>
           {d.soon.map(s => <Row key={s.id} s={s}/>)}
         </div>
       </Section>
@@ -353,7 +363,7 @@ function DryingStats() {
     </div>}
 
     <Section title="Par famille">
-      <div className="card" style={{ ...scroll, padding:"8px 12px" }}>
+      <div style={{ ...statCard("#22c55e"), ...scroll, padding:"8px 12px" }}>
         {d.families.map(f => (
           <Bar key={f.family} stacked label={f.family} value={f.count} max={maxF}
             color={f.to_dry ? "#0EA5E9" : "#22c55e"}
@@ -370,38 +380,82 @@ function DryingStats() {
 
 function GlobalBadge() {
   return (
-    <span title="Indépendant du filtre de période"
-      style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase",
-        color: "var(--muted)", background: "var(--surface2)", border: "1px solid var(--border)",
-        borderRadius: 5, padding: "1px 5px", lineHeight: 1.5 }}>global</span>
+    <span data-tip="Indépendant du filtre de période"
+      style={{ fontSize: 10, fontWeight: 800, color: "var(--muted)", background: "var(--surface2)", border: "1px solid var(--border)",
+        borderRadius: 20, padding: "1px 8px", lineHeight: 1.6 }}>🌐 toutes périodes</span>
   );
 }
 
-function Section({ title, children, isGlobal }) {
+// L'icone de chaque titre de section (pas de parametre a passer partout : le titre suffit)
+const SECTION_ICON = {
+  "Impressions": "🖨️", "Moyennes par impression": "➗", "Habitudes d'impression": "🕰️", "Perdu sur les échecs": "💥",
+  "Évolution dans le temps": "📈", "Classements": "🏆", "Stock actuel": "📦", "Consommé sur la période": "🧵",
+  "Répartition de la consommation": "🎨",
+  "Inventaire": "🎁", "Ventes": "💶", "Ratios": "➗", "Meilleures marges": "🏅", "Accessoires": "🔩", "Par famille": "🧪",
+};
+function Section({ title, children, isGlobal, icon }) {
+  const ic = icon || SECTION_ICON[title];
   return (
     <section>
-      <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase",
-        letterSpacing: "0.08em", margin: "0 0 12px", display: "flex", alignItems: "center", gap: 8 }}>
-        {title}{isGlobal && <GlobalBadge/>}
-      </p>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 10px", flexWrap: "wrap" }}>
+        {ic && <span style={{ fontSize: 17 }}>{ic}</span>}
+        <span style={{ fontSize: 16, fontWeight: 900, color: "var(--text)" }}>{title}</span>
+        {isGlobal && <GlobalBadge/>}
+      </div>
       {children}
     </section>
   );
 }
 
+// Une carte de graphique ou de liste : teintee de sa couleur, coins ronds
+const statCard = (c = "#3b82f6", extra = {}) => ({ borderRadius: 18, border: `1px solid color-mix(in srgb, ${c} 26%, var(--border))`,
+  background: `radial-gradient(90% 70% at 100% 0%, ${c}1c, transparent 70%), var(--surface2)`, boxShadow: `0 8px 22px -18px ${c}`,
+  minWidth: 0, ...extra });
+const cardTitle = { fontSize: 14, fontWeight: 900, color: "var(--text)", margin: "0 0 12px" };
+
 function KpiCard({ icon: Icon, label, value, sub, color = "#3b82f6" }) {
   return (
-    <div className="card" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 5 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ width: 28, height: 28, borderRadius: 8, background: `${color}20`,
-          display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Icon size={14} style={{ color }}/>
-        </div>
-        <span style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</span>
+    <div style={{ ...statCard(color), padding: "11px 12px", display: "flex", flexDirection: "column", gap: 3 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+        <span style={{ width: 24, height: 24, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+          background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 60%, #ffffff))`, boxShadow: `0 4px 10px -5px ${color}` }}>
+          <Icon size={13} style={{ color: "#fff" }}/>
+        </span>
+        <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em",
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
       </div>
-      <p style={{ fontSize: 20, fontWeight: 800, fontFamily: "JetBrains Mono,monospace",
-        color: "var(--text)", margin: 0, lineHeight: 1 }}>{value ?? "—"}</p>
-      {sub && <p style={{ fontSize: 10, color: "var(--muted)", margin: 0 }}>{sub}</p>}
+      <p style={{ fontSize: "clamp(17px, 5vw, 21px)", fontWeight: 900, margin: "2px 0 0", lineHeight: 1.2, whiteSpace: "nowrap",
+        overflow: "hidden", textOverflow: "ellipsis", ...fGrad(color, `color-mix(in srgb, ${color} 55%, #ffffff)`) }}>{value ?? "—"}</p>
+      {sub && <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</p>}
+    </div>
+  );
+}
+
+// L'en-tete d'un onglet : le chiffre qui compte en grand, un anneau (taux), et quelques pastilles
+function StatHero({ color, icon, value, label, ring = null, ringLabel = "", chips = [] }) {
+  const R = 30, C = 2 * Math.PI * R;
+  return (
+    <div style={{ ...statCard(color), padding: "16px 16px", display: "flex", alignItems: "center", gap: 14,
+      background: `radial-gradient(circle at 12% 30%, ${color}40, transparent 60%), linear-gradient(135deg, ${color}1f, transparent 70%), var(--surface2)` }}>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color }}>{icon} {label}</span>
+        <span style={{ fontSize: "clamp(30px, 10vw, 40px)", fontWeight: 900, lineHeight: 1.1, ...fGrad(color, `color-mix(in srgb, ${color} 55%, #ffffff)`) }}>{value}</span>
+        {chips.filter(Boolean).length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 2 }}>
+          {chips.filter(Boolean).map((c, i) => <span key={i} style={{ fontSize: 11.5, fontWeight: 800, padding: "3px 9px", borderRadius: 20,
+            color: "var(--text2)", background: "color-mix(in srgb, var(--surface) 70%, transparent)", border: "1px solid var(--border)", whiteSpace: "nowrap" }}>{c}</span>)}
+        </div>}
+      </div>
+      {ring != null && <div style={{ position: "relative", width: 84, height: 84, flexShrink: 0 }}>
+        <svg width={84} height={84} viewBox="0 0 84 84" style={{ transform: "rotate(-90deg)" }}>
+          <circle cx={42} cy={42} r={R} fill="none" stroke="var(--border)" strokeWidth={9}/>
+          <circle cx={42} cy={42} r={R} fill="none" stroke="#22c55e" strokeWidth={9} strokeLinecap="round"
+            strokeDasharray={`${C * Math.min(1, ring / 100)} ${C}`}/>
+        </svg>
+        <span style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+          <b style={{ fontSize: 16, fontWeight: 900, color: "#16a34a" }}>{Math.round(ring)}%</b>
+          <span style={{ fontSize: 9.5, fontWeight: 800, color: "var(--muted)" }}>{ringLabel}</span>
+        </span>
+      </div>}
     </div>
   );
 }
@@ -423,17 +477,17 @@ function Bar({ label, value, max, color = "#3b82f6", sublabel, dot, stacked, onC
   // qu'on ne la voyait presque plus.
   if (stacked) {
     return (
-      <div {...handlers} style={{ padding: "8px 6px", borderBottom: "1px solid var(--border)", ...rowExtra }}>
+      <div {...handlers} style={{ padding: "8px 6px", borderBottom: "1px dashed var(--border)", ...rowExtra }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline",
           gap: 8, marginBottom: 6 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", minWidth: 0,
+          <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", minWidth: 0,
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
             display: "flex", alignItems: "center", gap: 6 }}>{dot}{label}</span>
-          <span style={{ fontSize: 11, fontFamily: "JetBrains Mono,monospace", color: "var(--muted)",
+          <span style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text2)",
             flexShrink: 0, whiteSpace: "nowrap" }}>{sublabel}</span>
         </div>
         <div style={{ height: 8, background: "var(--surface2)", borderRadius: 4, overflow: "hidden" }}>
-          <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 4,
+          <div style={{ width: `${pct}%`, height: "100%", background: `linear-gradient(90deg, ${color}, color-mix(in srgb, ${color} 60%, #ffffff))`, borderRadius: 4,
             transition: "width 0.5s ease" }}/>
         </div>
       </div>
@@ -441,17 +495,17 @@ function Bar({ label, value, max, color = "#3b82f6", sublabel, dot, stacked, onC
   }
   return (
     <div {...handlers} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 6px",
-      borderBottom: "1px solid var(--border)", ...rowExtra }}>
-      <div style={{ width: 130, fontSize: 11, color: "var(--text)", fontWeight: 600, flexShrink: 0,
+      borderBottom: "1px dashed var(--border)", ...rowExtra }}>
+      <div style={{ width: 130, fontSize: 12.5, color: "var(--text)", fontWeight: 800, flexShrink: 0,
         display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
         {dot}
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
       </div>
       <div style={{ flex: 1, height: 8, background: "var(--surface2)", borderRadius: 4, overflow: "hidden" }}>
-        <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 4,
+        <div style={{ width: `${pct}%`, height: "100%", background: `linear-gradient(90deg, ${color}, color-mix(in srgb, ${color} 60%, #ffffff))`, borderRadius: 4,
           transition: "width 0.5s ease" }}/>
       </div>
-      <span style={{ fontSize: 11, fontFamily: "JetBrains Mono,monospace", color: "var(--muted)",
+      <span style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text2)",
         minWidth: 64, textAlign: "right", flexShrink: 0 }}>{sublabel}</span>
     </div>
   );
@@ -496,7 +550,7 @@ function TimeChart({ data, bucket = "month" }) {
     : fmtH(v * 3600);
 
   return (
-    <div className="card" style={{ padding: "16px 16px 10px" }}>
+    <div style={{ ...statCard(colors[tab]), padding: "14px 14px 10px" }}>
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
         {[["count", "Impressions"], ["cost", "Coût"], ["weight", "Filament"], ["duration", "Durée"]]
           // Le graphe laisserait deviner les montants malgre le masquage des
@@ -504,8 +558,10 @@ function TimeChart({ data, bucket = "month" }) {
           .filter(([id]) => !(id === "cost" && isMoneyHidden()))
           .map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
-            style={{ padding: "4px 10px", borderRadius: 20, fontSize: 10, fontWeight: 600, cursor: "pointer", border: "none",
-              background: tab === id ? colors[id] : "var(--surface2)", color: tab === id ? "white" : "var(--muted)" }}>
+            style={{ padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 800, cursor: "pointer",
+              border: tab === id ? "none" : "1px solid var(--border)",
+              background: tab === id ? `linear-gradient(135deg, ${colors[id]}, color-mix(in srgb, ${colors[id]} 60%, #ffffff))` : "var(--surface)",
+              color: tab === id ? "white" : "var(--muted)", boxShadow: tab === id ? `0 4px 12px -6px ${colors[id]}` : "none" }}>
             {label}
           </button>
         ))}
@@ -534,7 +590,7 @@ function TimeChart({ data, bucket = "month" }) {
               <div style={{ flex: 1, width: "100%", display: "flex", alignItems: "flex-end",
                 minHeight: 0 }}>
                 <div style={{ width: "100%", height: `${Math.max(3, (v / max) * 100)}%`,
-                  background: colors[tab], borderRadius: "3px 3px 0 0", minHeight: v > 0 ? 3 : 0,
+                  background: `linear-gradient(180deg, color-mix(in srgb, ${colors[tab]} 60%, #ffffff), ${colors[tab]})`, borderRadius: "5px 5px 0 0", minHeight: v > 0 ? 3 : 0,
                   position: "relative", overflow: "hidden", transition: "height 0.4s ease" }}>
                   {(() => { let acc = 0; return segs.map((s, si) => {
                     const h = (s.v / cnt) * 100; const bottom = acc; acc += h;
@@ -543,7 +599,7 @@ function TimeChart({ data, bucket = "month" }) {
                   }); })()}
                 </div>
               </div>
-              <span style={{ fontSize: 7, color: "var(--muted)", transform: "rotate(-45deg)",
+              <span style={{ fontSize: 8.5, fontWeight: 700, color: "var(--muted)", transform: "rotate(-45deg)",
                 transformOrigin: "top center", whiteSpace: "nowrap", marginTop: 8, flexShrink: 0 }}>
                 {fmtBucketLabel(k, bucket)}
               </span>
@@ -553,7 +609,7 @@ function TimeChart({ data, bucket = "month" }) {
       </div>
       {tab === "count" && (
         <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", flexWrap: "wrap",
-          fontSize: 9, color: "var(--muted)", margin: "10px 0 0" }}>
+          fontSize: 11, fontWeight: 700, color: "var(--muted)", margin: "10px 0 0" }}>
           {[["#ef4444", "échecs"], ["#8b5cf6", "à refaire"], ["#f59e0b", "partiel"]].map(([c, l]) => (
             <span key={l} style={{ display: "inline-flex", alignItems: "center" }}>
               <span style={{ display: "inline-block", width: 8, height: 8, background: c,
@@ -601,22 +657,24 @@ function Donut({ data, title, palette }) {
   const single = items.length === 1;
 
   return (
-    <div className="card" style={{ padding: 16 }}>
-      <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", margin: "0 0 12px" }}>{title}</p>
-      <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+    <div style={{ ...statCard(slices[0]?.color && !/^#f[0-9a-f]{5}$/i.test(slices[0].color) ? slices[0].color : "#8B5CF6"), padding: 14 }}>
+      <p style={cardTitle}>{title}</p>
+      <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
         <svg width={120} height={120} viewBox="0 0 120 120">
           {single
             ? <circle cx={cx} cy={cy} r={r} fill={slices[0].color}/>
-            : slices.map((s, i) => <path key={i} d={s.path} fill={s.color} stroke="var(--bg)" strokeWidth={1.5}/>)}
-          <circle cx={cx} cy={cy} r={22} fill="var(--bg)"/>
+            : slices.map((s, i) => <path key={i} d={s.path} fill={s.color} stroke="var(--surface2)" strokeWidth={2}/>)}
+          {/* un liseré : une part blanche reste visible */}
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(148,163,184,.35)" strokeWidth={1}/>
+          <circle cx={cx} cy={cy} r={26} fill="var(--surface2)"/>
         </svg>
         <div style={{ flex: 1, minWidth: 140, display: "flex", flexDirection: "column", gap: 5 }}>
           {slices.map((s, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: s.color, flexShrink: 0 }}/>
-              <span style={{ fontSize: 11, color: "var(--text)", flex: 1,
+              <div style={{ width: 11, height: 11, borderRadius: "50%", background: s.color, flexShrink: 0, boxShadow: "inset 0 0 0 1px rgba(148,163,184,.5)" }}/>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text)", flex: 1,
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
-              <span style={{ fontSize: 10, color: "var(--muted)", fontFamily: "monospace" }}>{s.pct}%</span>
+              <span style={{ fontSize: 12, fontWeight: 900, color: "var(--muted)" }}>{s.pct}%</span>
             </div>
           ))}
         </div>
@@ -631,8 +689,8 @@ function MiniBarChart({ data, title, color = "#3b82f6", labelKey = "name", suffi
   const total = data.reduce((a, d) => a + d.value, 0);
   if (!total) return null;
   return (
-    <div className="card" style={{ padding: "14px 16px" }}>
-      <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", margin: "0 0 12px" }}>{title}</p>
+    <div style={{ ...statCard(color), padding: "14px 14px" }}>
+      <p style={cardTitle}>{title}</p>
       <div style={{ display: "flex", gap: 3, alignItems: "stretch", height: 96 }}>
         {data.map((d, i) => {
           const lab = labelKey === "hour" ? String(d.hour).padStart(2, "0") : d[labelKey];
@@ -641,10 +699,10 @@ function MiniBarChart({ data, title, color = "#3b82f6", labelKey = "name", suffi
               style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", minWidth: 0 }}>
               <div style={{ flex: 1, width: "100%", display: "flex", alignItems: "flex-end", minHeight: 0 }}>
                 <div style={{ width: "100%", height: `${Math.max(2, (d.value / max) * 100)}%`,
-                  background: color, borderRadius: "3px 3px 0 0",
-                  opacity: d.value === max ? 1 : 0.55, transition: "height 0.4s ease" }}/>
+                  background: `linear-gradient(180deg, color-mix(in srgb, ${color} 60%, #ffffff), ${color})`, borderRadius: "4px 4px 0 0",
+                  opacity: d.value === max ? 1 : 0.5, transition: "height 0.4s ease" }}/>
               </div>
-              <span style={{ fontSize: 8, color: "var(--muted)", marginTop: 5,
+              <span style={{ fontSize: 9, fontWeight: 700, color: d.value === max ? color : "var(--muted)", marginTop: 5,
                 whiteSpace: "nowrap", overflow: "hidden" }}>{lab}</span>
             </div>
           );
@@ -663,17 +721,17 @@ function TopList({ title, prints, groups, valueKey, valueLabel, barColor = "#3b8
   const MEDAL = ["🥇", "🥈", "🥉"];
 
   return (
-    <div className="card" style={{ padding: "14px 16px" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", margin: 0 }}>{title}</p>
-        <div style={{ display: "flex", gap: 2, background: "var(--surface2)", borderRadius: 20, padding: 2 }}>
+    <div style={{ ...statCard(barColor), padding: "14px 14px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8 }}>
+        <p style={{ ...cardTitle, margin: 0 }}>{title}</p>
+        <div style={{ display: "flex", gap: 2, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 20, padding: 2 }}>
           {[["prints", "Prints"], ["groups", "Groupes"]].map(([id, label]) => {
             const disabled = id === "groups" && !hasGroups;
             return (
               <button key={id} disabled={disabled} onClick={() => !disabled && setMode(id)}
-                style={{ padding: "3px 10px", borderRadius: 18, fontSize: 10, fontWeight: 600,
+                style={{ padding: "4px 11px", borderRadius: 18, fontSize: 11.5, fontWeight: 800,
                   cursor: disabled ? "default" : "pointer", border: "none",
-                  background: mode === id ? "#3b82f6" : "transparent",
+                  background: mode === id ? `linear-gradient(135deg, ${barColor}, color-mix(in srgb, ${barColor} 60%, #ffffff))` : "transparent",
                   color: mode === id ? "white" : "var(--muted)", opacity: disabled ? 0.4 : 1 }}>
                 {label}
               </button>
@@ -687,24 +745,44 @@ function TopList({ title, prints, groups, valueKey, valueLabel, barColor = "#3b8
             onClick={() => onItemClick?.(item, mode)}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
               <span style={{ fontSize: 12, flexShrink: 0, width: 16 }}>{MEDAL[i] || `${i + 1}`}</span>
-              <span style={{ fontSize: 11, color: "var(--text)", fontWeight: 600, flex: 1,
+              <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 800, flex: 1,
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {mode === "groups" && item.nb > 1 &&
                   <span style={{ fontSize: 9, color: "var(--muted)", marginRight: 4 }}>×{item.nb}</span>}
                 {item.name}
               </span>
-              <span style={{ fontSize: 11, fontFamily: "JetBrains Mono,monospace",
-                color: barColor, fontWeight: 700, flexShrink: 0 }}>
+              <span style={{ fontSize: 13, color: barColor, fontWeight: 900, flexShrink: 0 }}>
                 {valueLabel(item)}
               </span>
             </div>
-            <div style={{ height: 4, background: "var(--surface2)", borderRadius: 2, overflow: "hidden" }}>
+            <div style={{ height: 6, background: "color-mix(in srgb, var(--surface) 70%, transparent)", borderRadius: 3, overflow: "hidden" }}>
               <div style={{ width: `${Math.max(2, (Number(item[valueKey]) || 0) / max * 100)}%`, height: "100%",
                 borderRadius: 2, background: i === 0 ? "#f59e0b" : i === 1 ? "#94a3b8" : i === 2 ? "#cd7f32" : barColor }}/>
             </div>
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Les onglets de la page : cinq, chacun sa couleur ; sur petit ecran, les inactifs n'ont que leur icone
+function StatTabs({ tabs, tab, setTab }) {
+  return (
+    <div style={{ display: "flex", gap: 4, background: "var(--surface2)", borderRadius: 16, padding: 4, border: "1px solid var(--border)" }}>
+      {tabs.map(t => {
+        const on = tab === t.id;
+        return (
+          <button key={t.id} onClick={() => setTab(t.id)} aria-label={t.label} data-tip={t.label}
+            style={{ flex: on ? "1 1 auto" : "1 1 0", minWidth: 0, padding: "8px 6px", borderRadius: 12, fontWeight: 800, cursor: "pointer",
+              fontSize: "clamp(11px, 3.3vw, 13px)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", border: "none",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 5, transition: "all 0.15s",
+              background: on ? `linear-gradient(135deg, ${t.c}, color-mix(in srgb, ${t.c} 70%, #ffffff))` : "transparent",
+              color: on ? "white" : "var(--muted)", boxShadow: on ? `0 6px 16px -6px ${t.c}` : "none" }}>
+            <span style={{ fontSize: 15, filter: on ? "none" : "grayscale(.4)" }}>{t.ic}</span>
+            <span className={on ? "" : "st-tab-l"}>{t.label}</span></button>);
+      })}
+      <style>{`@media (max-width: 520px) { .st-tab-l { display: none; } }`}</style>
     </div>
   );
 }
@@ -748,47 +826,40 @@ function PeriodFilterSheet({ value, onApply, onClose }) {
     const label = from && to ? `${from} → ${to}` : from ? `Depuis ${from}` : `Jusqu'au ${to}`;
     onApply({ from: from || null, to: to || null, label });
   };
-  const inputStyle = { width: "100%", marginTop: 4, padding: "8px 10px", borderRadius: 8,
-    border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 13 };
+  const inputStyle = { width: "100%", marginTop: 5, padding: "10px 12px", borderRadius: 12, boxSizing: "border-box",
+    border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 14, fontWeight: 700 };
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
-      zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div className="sheet-panel" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 560,
-        borderRadius: "16px 16px 0 0", padding: 16, maxHeight: "85vh",
-        overflowY: "auto", paddingBottom: "calc(16px + env(safe-area-inset-bottom,0px))" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--text)" }}>Période</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--muted)",
-            fontSize: 24, cursor: "pointer", lineHeight: 1 }}>×</button>
-        </div>
+    <FSheet onClose={onClose} z={1000} bottom={<button onClick={applyCustom} style={{ ...fBtn, flex: 1, border: "none", color: "#fff",
+      background: "linear-gradient(135deg, #3B82F6, #6366F1)", boxShadow: "0 8px 18px -10px #3B82F6" }}>✓ Appliquer la plage</button>}>
+      <div style={{ padding: "52px 18px 14px", background: "radial-gradient(circle at 15% 40%, rgba(59,130,246,0.32), transparent 60%), var(--surface2)" }}>
+        <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#3b82f6" }}>📅 Période</div>
+        <div style={{ fontSize: 22, fontWeight: 900, color: "var(--text)", lineHeight: 1.15 }}>{value.label}</div>
+      </div>
+      <div style={{ padding: "14px 16px 18px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 8, marginBottom: 18 }}>
           {PRESETS.map(([k, lbl]) => {
             const active = value.label === lbl;
             return (
-              <button key={k} onClick={() => onApply(presetRange(k))} style={{ padding: "10px 12px",
-                borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)",
-                background: active ? "#3b82f6" : "var(--surface2)", color: active ? "#fff" : "var(--text)" }}>
+              <button key={k} onClick={() => onApply(presetRange(k))} style={{ padding: "11px 12px",
+                borderRadius: 14, fontSize: 13.5, fontWeight: 800, cursor: "pointer", border: active ? "none" : "1px solid var(--border)",
+                background: active ? "linear-gradient(135deg, #3B82F6, #6366F1)" : "var(--surface)", color: active ? "#fff" : "var(--text)",
+                boxShadow: active ? "0 6px 14px -8px #3B82F6" : "none" }}>
                 {lbl}
               </button>
             );
           })}
         </div>
-        <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", margin: "0 0 8px",
-          textTransform: "uppercase", letterSpacing: 0.4 }}>Plage personnalisée</p>
-        <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-          <label style={{ flex: 1, fontSize: 11, color: "var(--muted)" }}>Début
+        <p style={{ fontSize: 13, fontWeight: 900, color: "var(--text)", margin: "0 0 8px" }}>Plage personnalisée</p>
+        <div style={{ display: "flex", gap: 10 }}>
+          <label style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 800, color: "var(--muted)" }}>Début
             <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} style={inputStyle}/>
           </label>
-          <label style={{ flex: 1, fontSize: 11, color: "var(--muted)" }}>Fin
+          <label style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 800, color: "var(--muted)" }}>Fin
             <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} style={inputStyle}/>
           </label>
         </div>
-        <button onClick={applyCustom} style={{ width: "100%", padding: 12, borderRadius: 10, border: "none",
-          background: "#3b82f6", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-          Appliquer la plage
-        </button>
       </div>
-    </div>
+    </FSheet>
   );
 }
 
@@ -857,9 +928,11 @@ export default function Stats() {
 
   const filterBtn = () => (
     <button onClick={() => setFilterOpen(true)}
-      style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 20,
-        border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)",
-        fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+      style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 20,
+        border: period.from || period.to ? "none" : "1px solid var(--border)",
+        background: period.from || period.to ? "linear-gradient(135deg, #3B82F6, #6366F1)" : "var(--surface2)",
+        color: period.from || period.to ? "#fff" : "var(--text)",
+        fontSize: 12.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>
       <Filter size={14}/> {period.label}
     </button>
   );
@@ -900,28 +973,18 @@ export default function Stats() {
     </div>
   );
 
-  const tabs = [["prints","Prints"],["filaments","Filaments"],["drying","Séchage"],["objects","Objets"],["achievements","Succès"]];
+  const tabs = [{ id:"prints", label:"Prints", ic:"🖨️", c:"#3B82F6" }, { id:"filaments", label:"Filaments", ic:"🧵", c:"#F97316" },
+    { id:"drying", label:"Séchage", ic:"💧", c:"#06B6D4" }, { id:"objects", label:"Objets", ic:"🎁", c:"#8B5CF6" },
+    { id:"achievements", label:"Succès", ic:"🏆", c:"#F59E0B" }];
 
   return (
     <div className="page-wide" style={{ gap: 20 }}>
       {header}
 
-      {/* Onglets */}
-      <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12,
-        padding:4, border:"1px solid var(--border)" }}>
-        {tabs.map(([id,label]) => (
-          // largeur selon le texte, et texte qui retrecit avec l'ecran :
-          // les cinq onglets tiennent sur une ligne, meme sur un petit telephone
-          <button key={id} onClick={()=>setTab(id)} style={{
-            flex:"1 1 auto", minWidth:0, padding:"8px 3px", borderRadius:8, fontWeight:600, cursor:"pointer",
-            fontSize:"clamp(10px, 3.1vw, 12px)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
-            background: tab===id ? "#3b82f6" : "transparent",
-            color: tab===id ? "white" : "var(--muted)",
-            border:"none", transition:"all 0.15s" }}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* Onglets : chacun sa couleur ; l'icone seule sur les inactifs quand la place manque */}
+      <StatTabs tabs={tabs} tab={tab} setTab={setTab}/>
+      <style>{`@media (max-width: 600px) { .st-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+        .st-kpis > :last-child:nth-child(odd) { grid-column: 1 / -1; } }`}</style>
 
       {objDetail && (
         <ObjectSheet obj={objDetail} onClose={() => setObjDetail(null)}
@@ -953,8 +1016,11 @@ export default function Stats() {
           Aucune impression terminée sur cette période.
         </p>
       ) : (<>
+      <StatHero color="#3B82F6" icon="🖨️" label={`Impressions · ${period.label.toLowerCase()}`} value={data.total_prints}
+        ring={data.success_rate} ringLabel="réussite"
+        chips={[`⏱ ${fmtH(data.total_hours * 3600)}`, `⚖ ${fmtKg(data.total_weight_g)}`, !isMoneyHidden() && `💶 ${fmtEur(data.total_cost)}`]}/>
       <Section title="Impressions">
-        <div className="kpi-grid">
+        <div className="kpi-grid st-kpis">
           <KpiCard icon={Layers} label="Terminées" value={data.total_prints} color="#3b82f6"
             sub={`${data.failed_prints} échec${data.failed_prints > 1 ? "s" : ""}`}/>
           <KpiCard icon={CheckCircle2} label="Taux de réussite" value={`${data.success_rate} %`} color="#22c55e"
@@ -969,7 +1035,7 @@ export default function Stats() {
       </Section>
 
       <Section title="Moyennes par impression">
-        <div className="kpi-grid">
+        <div className="kpi-grid st-kpis">
           <KpiCard icon={Euro} label="Coût moyen" value={fmtEur(data.avg_cost)} color="#ef4444"/>
           <KpiCard icon={Clock} label="Durée moyenne" value={fmtH(data.avg_duration_h * 3600)} color="#f59e0b"/>
           <KpiCard icon={Weight} label="Poids moyen" value={`${data.avg_weight_g} g`} color="#8b5cf6"/>
@@ -987,7 +1053,7 @@ export default function Stats() {
       {/* Habitudes : quand imprimes-tu ? */}
       {(data.by_weekday || data.by_hour) && (
         <Section title="Habitudes d'impression">
-          <div className="kpi-grid" style={{ marginBottom: 12 }}>
+          <div className="kpi-grid st-kpis" style={{ marginBottom: 12 }}>
             {data.peak_hour != null && (
               <KpiCard icon={Clock} label="Heure de pointe"
                 value={`${String(data.peak_hour).padStart(2,"0")}h`} color="#f59e0b"/>
@@ -1019,7 +1085,7 @@ export default function Stats() {
 
       {data.failed_prints > 0 && (
         <Section title="Perdu sur les échecs">
-          <div className="kpi-grid">
+          <div className="kpi-grid st-kpis">
             <KpiCard icon={AlertTriangle} label="Échecs" value={data.failed_prints} color="#ef4444"/>
             <KpiCard icon={Weight} label="Filament" value={fmtKg(data.failed_weight_g)} color="#ef4444"/>
             <KpiCard icon={Euro} label="Coût" value={fmtEur(data.failed_cost)} color="#ef4444"/>
@@ -1060,9 +1126,12 @@ export default function Stats() {
       </>))}
 
       {tab === "filaments" && (<>
+      <StatHero color="#F97316" icon="🧵" label={`Consommé · ${period.label.toLowerCase()}`} value={fmtKg(data.total_weight_g)}
+        chips={[!isMoneyHidden() && `💶 ${fmtEur(data.total_cost)}`, (data.materials || []).length > 0 && `🧪 ${data.materials.length} matériau${data.materials.length > 1 ? "x" : ""}`,
+          data.stock?.spools > 0 && `📦 ${data.stock.spools} bobines en stock`]}/>
       {/* KPIs stock en tete */}
       <Section title="Stock actuel" isGlobal>
-        <div className="kpi-grid">
+        <div className="kpi-grid st-kpis">
           <KpiCard icon={Package} label="Références" value={data.stock?.references} color="#3b82f6"/>
           <KpiCard icon={Package} label="Bobines actives" value={data.stock?.spools} color="#22c55e"/>
           <KpiCard icon={Weight} label="Poids en stock" value={fmtKg(data.stock?.weight_g)} color="#f59e0b"/>
@@ -1083,7 +1152,7 @@ export default function Stats() {
 
       {/* Consommation sur la periode */}
       <Section title="Consommé sur la période">
-        <div className="kpi-grid">
+        <div className="kpi-grid st-kpis">
           <KpiCard icon={Weight} label="Filament utilisé" value={fmtKg(data.total_weight_g)} color="#8b5cf6"/>
           <KpiCard icon={Euro} label="Coût filament" value={fmtEur(data.total_cost)} color="#ef4444"/>
           {data.total_weight_g > 0 && (
@@ -1103,8 +1172,8 @@ export default function Stats() {
             {colorData.length > 0 && <Donut data={colorData} title="Par teinte" palette/>}
 
             {typeData.length > 0 && (
-              <div className="card" style={{ padding: "14px 16px" }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", margin: "0 0 8px" }}>Par type</p>
+              <div style={{ ...statCard("#06b6d4"), padding: "14px 14px" }}>
+                <p style={cardTitle}>Par type</p>
                 {typeData.map(t => (
                   <Bar key={t.name} label={t.name} value={t.value} max={typeData[0].value}
                     sublabel={fmtKg(t.value)} color="#06b6d4"/>
@@ -1113,8 +1182,8 @@ export default function Stats() {
             )}
 
             {brandData.length > 0 && (
-              <div className="card" style={{ padding: "14px 16px" }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", margin: "0 0 8px" }}>Par marque</p>
+              <div style={{ ...statCard("#8b5cf6"), padding: "14px 14px" }}>
+                <p style={cardTitle}>Par marque</p>
                 {brandData.map(b => (
                   <Bar key={b.name} label={b.name} value={b.value} max={brandData[0].value}
                     sublabel={fmtKg(b.value)} color="#8b5cf6"/>
@@ -1123,8 +1192,8 @@ export default function Stats() {
             )}
 
             {(data.top_filaments || []).length > 0 && (
-              <div className="card" style={{ padding: "14px 16px" }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", margin: "0 0 8px" }}>
+              <div style={{ ...statCard("#3b82f6"), padding: "14px 14px" }}>
+                <p style={cardTitle}>
                   Filaments les plus utilisés
                 </p>
                 {data.top_filaments.map(f => (
