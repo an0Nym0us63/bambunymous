@@ -128,11 +128,11 @@ export default function PriceReview({ onClose }) {
 
   const chip = (id, label, n) => (
     <button key={id} onClick={() => setFilter(id)}
-      style={{ padding:"6px 12px", borderRadius:20, fontSize:11.5, fontWeight:700,
+      style={{ padding:"6px 13px", borderRadius:20, fontSize:12.5, fontWeight:800,
         cursor:"pointer", whiteSpace:"nowrap",
-        border:"1px solid " + (filter===id ? "#3b82f6" : "var(--border)"),
-        background: filter===id ? "rgba(59,130,246,0.15)" : "transparent",
-        color: filter===id ? "#60a5fa" : "var(--muted)" }}>
+        border: filter===id ? "none" : "1px solid var(--border)",
+        background: filter===id ? "linear-gradient(135deg, #F59E0B, #F97316)" : "var(--surface)",
+        color: filter===id ? "#fff" : "var(--muted)" }}>
       {label}{n != null && <span style={{ opacity:0.6, marginLeft:5 }}>{n}</span>}
     </button>
   );
@@ -140,21 +140,24 @@ export default function PriceReview({ onClose }) {
   return (
     <div style={{ position:"fixed", inset:0, zIndex:9000, background:"var(--bg)",
       display:"flex", flexDirection:"column" }}>
-      <div style={{ padding:"14px 16px 10px", borderBottom:"1px solid var(--border)",
-        display:"flex", flexDirection:"column", gap:10 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <h2 style={{ flex:1, margin:0, fontSize:16, fontWeight:800, color:"var(--text)" }}>
+      <div style={{ padding:"calc(14px + env(safe-area-inset-top, 0px)) 16px 12px", borderBottom:"1px solid var(--border)",
+        display:"flex", flexDirection:"column", gap:10,
+        background:"radial-gradient(circle at 10% 20%, #F59E0B44, transparent 60%), linear-gradient(135deg, #F59E0B1c, transparent 70%), var(--surface2)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <span style={{ width:42, height:42, borderRadius:14, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20,
+            background:"linear-gradient(135deg, #F59E0B, #FBBF24)", boxShadow:"0 8px 18px -8px #F59E0B" }}>💶</span>
+          <h2 style={{ flex:1, margin:0, fontSize:19, fontWeight:900, color:"var(--text)" }}>
             Révision des prix
           </h2>
-          <button onClick={onClose}
-            style={{ border:"1px solid var(--border)", background:"none", color:"var(--muted)",
-              borderRadius:8, padding:"6px 12px", fontSize:12, cursor:"pointer" }}>Fermer</button>
+          <button onClick={onClose} aria-label="Fermer"
+            style={{ border:"1px solid var(--border)", background:"var(--surface)", color:"var(--text2)", fontWeight:800,
+              borderRadius:20, padding:"7px 14px", fontSize:12.5, cursor:"pointer" }}>✕ Fermer</button>
         </div>
         <input value={q} onChange={e => setQ(e.target.value)}
           placeholder="Filtrer : nom, marque, sous-type…"
-          style={{ width:"100%", boxSizing:"border-box", padding:"8px 12px", borderRadius:8,
-            border:"1px solid var(--border)", background:"var(--surface2)",
-            color:"var(--text)", fontSize:13, outline:"none" }}/>
+          style={{ width:"100%", boxSizing:"border-box", height:40, padding:"0 14px", borderRadius:20,
+            border:"1px solid var(--border)", background:"var(--surface)",
+            color:"var(--text)", fontSize:13.5, outline:"none" }}/>
         <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:2 }}>
           {chip("all", "Tout", rows?.length)}
           {chip("missing", "Sans prix", counts.missing)}
@@ -175,15 +178,16 @@ export default function PriceReview({ onClose }) {
           const isOpen = !!open[f.id];
           const nSp = f.spools.length;
           return (
-            <div key={f.id} className="card" style={{ marginBottom:8, padding:0,
-              overflow:"hidden" }}>
+            <div key={f.id} style={{ marginBottom:8, padding:0, overflow:"hidden", borderRadius:16,
+              border:`1px solid ${fl.noCat || fl.noSpool ? "rgba(245,158,11,0.45)" : "var(--border)"}`,
+              background: fl.noCat || fl.noSpool ? "linear-gradient(135deg, rgba(245,158,11,0.10), transparent 60%), var(--surface2)" : "var(--surface2)" }}>
               <div onClick={() => setOpen(o => ({ ...o, [f.id]: !o[f.id] }))}
                 style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
                   cursor: nSp ? "pointer" : "default" }}>
-                <span style={{ width:10, height:28, borderRadius:3, flexShrink:0,
+                <span style={{ width:30, height:30, borderRadius:"50%", flexShrink:0, boxShadow:"inset 0 0 0 1px rgba(148,163,184,.5)",
                   ...colorBg(colors, f.multicolor_type) }}/>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ margin:0, fontSize:13, fontWeight:700, color:"var(--text)",
+                  <p style={{ margin:0, fontSize:13.5, fontWeight:800, color:"var(--text)",
                     overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {f.name}
                   </p>
@@ -204,7 +208,7 @@ export default function PriceReview({ onClose }) {
               </div>
 
               {isOpen && nSp > 0 && (
-                <div style={{ borderTop:"1px solid var(--border)", background:"var(--surface2)" }}>
+                <div style={{ borderTop:"1px solid var(--border)", background:"var(--surface)" }}>
                   {f.spools.map(sp => {
                     const ecart = !missing(sp.price) && !missing(f.price) && f.price > 0
                       ? (sp.price - f.price) / f.price : null;

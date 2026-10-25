@@ -1414,17 +1414,20 @@ function CategoriesModal({ onClose }) {
       justifyContent:"center", padding:16 }}>
       <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:480,
         maxHeight:"86vh", display:"flex", flexDirection:"column",
-        background:"var(--sheet-bg)", borderRadius:16, overflow:"hidden" }}>
+        background:"var(--sheet-bg)", borderRadius:22, overflow:"hidden", boxShadow:"0 30px 80px rgba(0,0,0,0.45)" }}>
 
-        <div style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
-          <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:0, flex:1 }}>
+        <div style={{ padding:"16px 16px 12px", display:"flex", alignItems:"center", gap:12,
+          background:"radial-gradient(circle at 12% 30%, #EC489955, transparent 60%), linear-gradient(135deg, #EC489922, transparent 70%), var(--surface2)" }}>
+          <span style={{ width:42, height:42, borderRadius:14, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20,
+            background:"linear-gradient(135deg, #EC4899, #F472B6)", boxShadow:"0 8px 18px -8px #EC4899" }}>🗂️</span>
+          <p style={{ fontSize:17, fontWeight:900, color:"var(--text)", margin:0, flex:1 }}>
             Catégories de l'accueil
           </p>
-          <button type="button" onClick={onClose}
-            style={{ background:"none", border:"none", color:"var(--muted)",
-              fontSize:18, cursor:"pointer" }}>✕</button>
+          <button type="button" onClick={onClose} aria-label="Fermer"
+            style={{ width:34, height:34, borderRadius:"50%", border:"1px solid var(--border)", background:"var(--surface)",
+              color:"var(--text2)", fontSize:15, cursor:"pointer", flexShrink:0 }}>✕</button>
         </div>
-        <p style={{ margin:0, padding:"0 16px 10px", fontSize:11, color:"var(--muted)" }}>
+        <p style={{ margin:0, padding:"10px 16px 10px", fontSize:12, fontWeight:600, color:"var(--muted)", lineHeight:1.45 }}>
           Fais glisser la poignée (ou utilise les flèches) pour réordonner. L'œil
           masque une catégorie de l'accueil — elle reste consultable dans la liste
           des alertes.
@@ -1490,18 +1493,19 @@ function CategoriesModal({ onClose }) {
           ))}
         </div>
 
-        <div style={{ padding:"12px 16px", display:"flex", gap:8 }}>
+        <div style={{ padding:"12px 16px", display:"flex", gap:8, borderTop:"1px solid var(--border)" }}>
           <button type="button" onClick={onClose}
-            style={{ flex:1, padding:"9px", borderRadius:8, border:"1px solid var(--border)",
-              background:"none", color:"var(--muted)", fontSize:12, cursor:"pointer" }}>
+            style={{ flex:1, padding:"11px", borderRadius:12, border:"1px solid var(--border)",
+              background:"var(--surface2)", color:"var(--text)", fontSize:13.5, fontWeight:800, cursor:"pointer" }}>
             Annuler
           </button>
           <button type="button" onClick={save} disabled={!dirty || busy}
-            style={{ flex:2, padding:"9px", borderRadius:8, border:"none",
-              background: dirty ? "#3b82f6" : "var(--border)",
-              color: dirty ? "white" : "var(--muted)", fontSize:12, fontWeight:700,
+            style={{ flex:2, padding:"11px", borderRadius:12, border:"none",
+              background: dirty ? "linear-gradient(135deg, #EC4899, #8B5CF6)" : "var(--border)",
+              boxShadow: dirty ? "0 8px 18px -10px #EC4899" : "none",
+              color: dirty ? "white" : "var(--muted)", fontSize:13.5, fontWeight:800,
               cursor: dirty ? "pointer" : "default" }}>
-            {busy ? "…" : "Enregistrer"}
+            {busy ? "…" : "✓ Enregistrer"}
           </button>
         </div>
       </div>
@@ -1652,11 +1656,14 @@ function LabelsCard({ card, cardTitle }) {
           justifyContent:"center", padding:16 }}>
           <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:520,
             maxHeight:"84vh", display:"flex", flexDirection:"column",
-            background:"var(--sheet-bg)", borderRadius:16, overflow:"hidden" }}>
+            background:"var(--sheet-bg)", borderRadius:22, overflow:"hidden", boxShadow:"0 30px 80px rgba(0,0,0,0.45)" }}>
 
-            <div style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
-              <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:0, flex:1 }}>
-                Étiquettes — {sel.size} / {fils.length}
+            <div style={{ padding:"16px 16px 12px", display:"flex", alignItems:"center", gap:10, flexWrap:"wrap",
+              background:"radial-gradient(circle at 12% 30%, #F9731655, transparent 60%), linear-gradient(135deg, #F9731622, transparent 70%), var(--surface2)" }}>
+              <span style={{ width:42, height:42, borderRadius:14, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20,
+                background:"linear-gradient(135deg, #F97316, #FBBF24)", boxShadow:"0 8px 18px -8px #F97316" }}>🏷️</span>
+              <p style={{ fontSize:17, fontWeight:900, color:"var(--text)", margin:0, flex:1, whiteSpace:"nowrap" }}>
+                Étiquettes <span style={{ fontSize:13, fontWeight:800, color:"#F97316" }}>{sel.size} / {fils.length}</span>
               </p>
               <button type="button" onClick={() => setSel(new Set(fils.map(f => f.id)))}
                 style={{ ...btn("var(--surface2)"), color:"var(--muted)" }}>Tout cocher</button>
@@ -1664,11 +1671,11 @@ function LabelsCard({ card, cardTitle }) {
                 style={{ ...btn("var(--surface2)"), color:"var(--muted)" }}>Tout décocher</button>
             </div>
 
-            <div style={{ padding:"0 16px 8px" }}>
+            <div style={{ padding:"10px 16px 8px" }}>
               <input value={q} onChange={e => setQ(e.target.value)} placeholder="Filtrer : nom, marque, matière, teinte…"
-                style={{ width:"100%", boxSizing:"border-box", padding:"8px 12px", borderRadius:8,
+                style={{ width:"100%", boxSizing:"border-box", height:40, padding:"0 14px", borderRadius:20,
                   border:"1px solid var(--border)", background:"var(--surface2)",
-                  color:"var(--text)", fontSize:13, outline:"none" }}/>
+                  color:"var(--text)", fontSize:13.5, outline:"none" }}/>
             </div>
 
             <div style={{ flex:1, overflowY:"auto", padding:"0 8px" }}>
