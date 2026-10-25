@@ -1796,7 +1796,7 @@ export default function Objects() {
       units: items.reduce((a, x) => a + (x.quantity || 0), 0),
       value: items.reduce((a, x) => a + (x.quantity || 0) * (x.unit_price || 0), 0),
       out: items.filter(x => (x.quantity || 0) === 0).length,
-      thumbs: items.filter(x => x.has_image).map(x => apiUrl(`/objects/accessories/${x.id}/image`)),
+      thumbs: items.filter(x => x.has_image).sort((x, y) => y.id - x.id).map(x => apiUrl(`/objects/accessories/${x.id}/image`)),
     }));
   }, [accessories]);
   const accKpis = React.useMemo(() => [
@@ -1838,7 +1838,10 @@ export default function Objects() {
     const cost = objs.reduce((a, o) => a + (o.cost_total || 0), 0);
     const revenue = objs.reduce((a, o) => a + (o.sold_price || 0), 0);
     const desired = objs.reduce((a, o) => a + (o.desired_price || 0), 0);
-    const thumbs = objs.map(o => apiUrl(`/objects/objects/${o.id}/image`));
+    // l'apercu montre les plus recents : les derniers vendus (date de vente), sinon les derniers crees
+    const recent = [...objs].sort((x, y) => st === "sold" && (x.sold_date || y.sold_date)
+      ? String(y.sold_date || "").localeCompare(String(x.sold_date || "")) || (y.id - x.id) : (y.id - x.id));
+    const thumbs = recent.map(o => apiUrl(`/objects/objects/${o.id}/image`));
     return { st, items, count: objs.length, cost, revenue, desired, thumbs };
   }).filter(Boolean);
   // les chiffres de l'onglet Objets : ce qui attend une vente, ce qu'on en espere, ce qu'on a encaisse et gagne
