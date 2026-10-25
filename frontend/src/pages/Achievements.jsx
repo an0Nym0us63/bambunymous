@@ -743,7 +743,9 @@ function ScoreRing({ score, max, tiers, size = 138 }) {
           {shown.toLocaleString("fr-FR")}</span>
         <span style={{ fontSize:Math.max(10, 11 * k), color:"var(--muted)", marginTop:2 }}>points</span>
         <span style={{ marginTop:4, fontSize:Math.max(10, 11 * k), fontWeight:900, padding:"1px 8px", borderRadius:20, color:"#fff",
-          background:t.color }}>{Math.round(v * 100)} %</span>
+          background:t.color, fontVariantNumeric:"tabular-nums" }}>
+          {/* deux decimales : avec des milliers de points, le pourcentage bougeait rarement (25/10/2026) */}
+          {(v * 100).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</span>
       </div>
     </div>
   );
