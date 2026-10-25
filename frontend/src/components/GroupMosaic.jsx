@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { apiThumb } from "../api/client";
 
 /**
  * Vignette d'un groupe : mosaique de ses photos plutot qu'une seule.
@@ -87,7 +88,7 @@ export default function GroupMosaic({ photos = [], title = "", cover = null }) {
           gridArea: areas ? ["a","b","c"][i] : undefined,
           background: tintOf[u] ? `radial-gradient(75% 70% at 50% 45%, ${tintOf[u]}2e, transparent 75%), linear-gradient(180deg, ${tintOf[u]}1a, transparent 55%), var(--surface2)`
             : "var(--surface2)" }}>
-          <img src={u} alt="" loading="lazy"
+          <img src={apiThumb(u, 384)} alt="" loading="lazy" decoding="async"
             style={{ width:"100%", height:"100%", objectFit:"cover", display:"block",
               transition:"opacity 0.4s" }}
             onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>

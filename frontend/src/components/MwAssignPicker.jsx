@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import client, { apiUrl } from "../api/client";
+import client, { apiUrl, apiThumb } from "../api/client";
 import { useMwAssign } from "../store/mwAssign";
 import { toast } from "../store/toast";
 import { mwImg } from "./MwImg";
@@ -16,7 +16,7 @@ const fmtDate = iso => {
 function Thumb({ id }) {
   const [ok, setOk] = useState(true);
   return ok
-    ? <img src={apiUrl(`/prints/${id}/image`)} alt="" loading="lazy" onError={() => setOk(false)}
+    ? <img src={apiThumb(apiUrl(`/prints/${id}/image`), 128)} alt="" loading="lazy" onError={() => setOk(false)}
         style={{ width:44, height:44, borderRadius:8, objectFit:"cover", flexShrink:0, background:"var(--surface2)" }}/>
     : <span style={{ width:44, height:44, borderRadius:8, flexShrink:0, background:"var(--surface2)", display:"flex",
         alignItems:"center", justifyContent:"center", fontSize:18 }}>🖨️</span>;

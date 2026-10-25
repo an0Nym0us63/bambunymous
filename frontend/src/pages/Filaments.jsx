@@ -11,7 +11,7 @@ import DryNowDialog from "../components/DryNowDialog";
 import TarePicker, { useSpoolTares, tareForBrand } from "../components/TarePicker";
 import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette, Tag, Sun } from "lucide-react";
-import client, { apiUrl } from "../api/client";
+import client, { apiUrl, apiThumb } from "../api/client";
 import { useFriend } from "../store/friend";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
@@ -1065,7 +1065,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
               return <button key={i} onClick={() => openDetail(u.print_id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:14,
                 border:"1px solid var(--border)", cursor:"pointer", textAlign:"left", font:"inherit", color:"inherit",
                 background:`linear-gradient(135deg, ${main}14, transparent 55%), var(--surface2)` }}>
-                <img src={apiUrl(`/prints/${u.print_id}/image`)} alt="" style={{ width:46, height:46, objectFit:"cover", borderRadius:10, flexShrink:0, background:"var(--surface)" }}
+                <img src={apiThumb(apiUrl(`/prints/${u.print_id}/image`), 128)} alt="" loading="lazy" decoding="async" style={{ width:46, height:46, objectFit:"cover", borderRadius:10, flexShrink:0, background:"var(--surface)" }}
                   onError={e => e.currentTarget.style.visibility = "hidden"}/>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:13, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{u.file_name || "Print #" + u.print_id}</div>

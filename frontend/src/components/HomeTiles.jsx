@@ -11,7 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets, Coins, Star, Users, Trophy,
          Dices, ChevronRight, Camera, Video, Thermometer, CalendarDays, ShoppingBag, Rss, Images, Zap, Medal as MedalIcon,
          BellRing, Split, Fan, Wrench, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck } from "lucide-react";
-import client, { apiUrl } from "../api/client";
+import client, { apiUrl, apiThumb } from "../api/client";
 import { mwImg } from "./MwImg";
 import LiveCamera from "./LiveCamera";
 import { Medal, gradeOf, GradeEmblem, CARD_ORDER } from "./medals";
@@ -43,7 +43,8 @@ const ago = iso => {
 };
 const noEmoji = t => String(t || "").replace(/^\p{Extended_Pictographic}️?\s*/u, "");
 const utc = iso => { const s = String(iso || "").trim().replace(" ", "T"); return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s}Z`); };
-const printImg = id => apiUrl(`/prints/${id}/image`);
+// la vignette d'une impression, a la taille de la tuile (le serveur la reduit)
+const printImg = (id, w = 256) => apiThumb(apiUrl(`/prints/${id}/image`), w);
 // la couleur d'un emplacement d'AMS, comme la tuile AMS : celle de la bobine associee d'abord, puis celle de l'AMS
 const trayCol = t => { const c = t && !t.empty && (t.spool_info?.color || t.spool_info?.filament_color || t.color); return c ? hexCss(c) : null; };
 const LIVE = ["RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING"];
@@ -1203,7 +1204,7 @@ function Last({ p, o, sz, st, lp }) {
     }
     return out; };
   const heroOf = (x, h, stacked, W) => { const [l, c, ic] = lastState(x), d = when(x);
-    return <ListHero img={printImg(x.id)} color={lastEdge(x)} title={name(x)} h={h} stacked={stacked} onOpen={() => fiche(x)} badge={marks(x, true)}
+    return <ListHero img={printImg(x.id, 512)} color={lastEdge(x)} title={name(x)} h={h} stacked={stacked} onOpen={() => fiche(x)} badge={marks(x, true)}
       chips={<><Pill c={c} solid={x.live}>{ic} {l}{x.live ? ` · ${Math.round(st?.progress || 0)} %` : ""}</Pill>
         {x.members && <Pill c="#0EA5E9">{x.members.length} impressions</Pill>}</>}
       pct={x.live ? st?.progress || 0 : null}
@@ -2657,7 +2658,7 @@ function SalesZoom({ v, hero }) {
   const tot = split.reduce((t, x) => t + x.value, 0) || 1;
   const objRow = (x, right, sub) => <div key={x.id} onClick={e => { e.stopPropagation(); nav(`/objects?id=${x.id}`); }} style={{ display: "flex", alignItems: "center", gap: 10,
     padding: 6, borderRadius: 11, background: "var(--surface2)", cursor: "pointer", minWidth: 0 }}>
-    <img src={apiUrl(`/objects/objects/${x.id}/image`)} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
+    <img src={apiThumb(apiUrl(`/objects/objects/${x.id}/image`), 256)} alt="" loading="lazy" decoding="async" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
       style={{ width: 40, height: 40, borderRadius: 9, objectFit: "cover", flexShrink: 0, background: "var(--surface)" }}/>
     <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</div>
       {sub && <Muted size={11.5}>{sub}</Muted>}</div>{right}</div>;

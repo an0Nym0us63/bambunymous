@@ -23,6 +23,13 @@ export function apiUrl(path) {
   return `/api/v1/friends/${f.id}/p${path}${path.includes("?") ? "&" : "?"}_t=${encodeURIComponent(t)}`;
 }
 
+/** La vignette d'une image de l'API (le serveur la redimensionne, en WebP) : pour les
+ *  listes, tuiles et mosaiques. Les visionneuses plein ecran gardent l'original. */
+export function apiThumb(url, w = 256) {
+  if (!url || typeof url !== "string" || !url.startsWith("/api/v1/") || /\.(mp4|webm|mov|m4v|gif)(\?|$)/i.test(url)) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}w=${w}`;
+}
+
 const client = axios.create({ baseURL: "/api/v1" });
 
 // Inject token + page courante

@@ -6,7 +6,7 @@ import { Wifi, WifiOff, DoorOpen, DoorClosed, Lightbulb, LightbulbOff, Clock, Pa
 import { useAuth } from "../store/auth";
 import { useFriend } from "../store/friend";
 import { create } from "zustand";
-import client, { apiUrl } from "../api/client";
+import client, { apiUrl, apiThumb } from "../api/client";
 import HomeGrid from "../components/HomeGrid";
 import { gradeOf } from "../components/medals";
 import { egg, useEggsFound } from "../eggs";
@@ -212,7 +212,7 @@ function StatusBanner({ status, friend = null, switcher = null }) {
           <div style={{ width:72, height:72, borderRadius:10, overflow:"hidden", flexShrink:0,
             background:"var(--surface2)" }}>
             {printInfo && (friend || printInfo.plate_image) && (
-              <img key={`${friend?.id || "me"}-${printInfo.id}${imgV(printInfo)}`} src={img(`/prints/${printInfo.id}/image${imgV(printInfo)}`)} alt=""
+              <img key={`${friend?.id || "me"}-${printInfo.id}${imgV(printInfo)}`} src={apiThumb(img(`/prints/${printInfo.id}/image${imgV(printInfo)}`), 192)} alt=""
                 style={{ width:"100%", height:"100%", objectFit:"cover" }}
                 onError={e => e.currentTarget.style.display="none"}/>
             )}
@@ -1352,7 +1352,7 @@ function PrinterLine({ status }) {
         overflow: "hidden", minWidth: 0, cursor: "pointer" }}>
       <span data-pk="" onClick={img ? e => { e.stopPropagation(); setBig(true); } : undefined} style={{ cursor: img ? "zoom-in" : undefined, width: 36, height: 36, borderRadius: 9, overflow: "hidden", flexShrink: 0, background: "var(--surface2)",
         display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
-        {img ? <img key={img} src={img} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
+        {img ? <img key={img} src={apiThumb(img, 192)} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/> : <Printer size={17}/>}</span>
       <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden",
         textOverflow: "ellipsis" }}>{info?.file_name || status?.print_name || info?.translated_name || "Imprimante"}</span>
@@ -1639,7 +1639,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
         <div onClick={img ? e => { e.stopPropagation(); setBig(true); } : undefined} style={{ height: "100%", aspectRatio: "1", maxHeight: 120, borderRadius: 14,
           overflow: "hidden", flexShrink: 0, background: "var(--surface2)", cursor: img ? "zoom-in" : "default", display: "flex", alignItems: "center",
           justifyContent: "center", color: "var(--muted)" }}>
-          {img ? <img key={img} src={img} alt="" onError={e => { e.currentTarget.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
+          {img ? <img key={img} src={apiThumb(img, 256)} alt="" onError={e => { e.currentTarget.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
             : <Printer size={26}/>}
         </div>
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1705,7 +1705,7 @@ function PrinterCompact({ status, size = "big", showFin = true, showLayer = true
     <div onClick={info ? e => { e.stopPropagation(); setBig(true); } : undefined}
       style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "var(--surface2)", flexShrink: 0, cursor: info ? "zoom-in" : undefined,
       ...(small ? { width: 42, height: 42, borderRadius: 10 } : { width: "100%", aspectRatio: size === "mid" ? "16 / 9" : "4 / 3" }) }}>
-      {info && <img key={imgV(info)} data-pk="" src={apiUrl(`/prints/${info.id}/image${imgV(info)}`)} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
+      {info && <img key={imgV(info)} data-pk="" src={apiThumb(apiUrl(`/prints/${info.id}/image${imgV(info)}`), small ? 128 : 512)} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
         style={{ width: "100%", height: "100%", objectFit: small ? "cover" : "contain", display: "block" }}/>}
       {live && !small && <span data-pk="" style={{ position: "absolute", right: 8, top: 8, fontSize: 17, fontWeight: 900, color: "#fff",
         padding: "2px 9px", borderRadius: 10, background: `${s.color}dd`, boxShadow: "0 4px 12px rgba(0,0,0,0.25)" }}>{pct}%</span>}

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { apiThumb } from "../api/client";
 import { X, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import AdminOnly from "./AdminOnly";
 import { showAlert, showConfirm } from "../utils/dialog";
@@ -170,7 +171,7 @@ export default function GalleryCompare({
                   </div>
                 </>
               ) : renderCover ? renderCover(item) : img ? (
-                <img src={img} alt={getTitle(item)} style={{ width:"100%", height:"100%", objectFit:"cover" }}
+                <img src={apiThumb(img, 384)} alt={getTitle(item)} loading="lazy" decoding="async" style={{ width:"100%", height:"100%", objectFit:"cover" }}
                   onError={e => { e.currentTarget.style.display="none"; }}/>
               ) : (
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100%",
@@ -235,7 +236,7 @@ export default function GalleryCompare({
             {selectedList.map(item => (
               <div key={getId(item)} style={{ position:"relative", flexShrink:0, width:36, height:36, borderRadius:10, overflow:"hidden" }}>
                 {renderCover ? renderCover(item) :
-                  <img src={getCoverImage ? getCoverImage(item) : null} alt="" style={{ width:32, height:32, objectFit:"cover" }}/>}
+                  <img src={apiThumb(getCoverImage ? getCoverImage(item) : null, 96)} alt="" style={{ width:32, height:32, objectFit:"cover" }}/>}
                 <button onClick={() => toggle(item)}
                   style={{ position:"absolute", top:-4, right:-4, width:14, height:14, borderRadius:"50%",
                     background:"#ef4444", border:"none", color:"white", fontSize:9, cursor:"pointer",
@@ -287,7 +288,7 @@ export default function GalleryCompare({
                     style={{ width:"100%", aspectRatio:"1", borderRadius:12, overflow:"hidden",
                       cursor: normPhotos(item).length ? "pointer" : "default", marginBottom:8, background:"var(--surface2)" }}>
                     {renderCover ? renderCover(item) : (
-                      <img src={getCoverImage ? getCoverImage(item) : null} alt={getTitle(item)}
+                      <img src={apiThumb(getCoverImage ? getCoverImage(item) : null, 384)} alt={getTitle(item)}
                         style={{ width:"100%", height:"100%", objectFit:"cover" }}
                         onError={e => { e.currentTarget.style.display="none"; }}/>
                     )}
@@ -411,7 +412,7 @@ export default function GalleryCompare({
                   return isVideoUrl(p.url)
                     ? <video key={i} src={p.url} muted loop autoPlay playsInline preload="metadata"
                         onClick={() => setCarousel(c => ({ ...c, index:i }))} style={st}/>
-                    : <img key={i} src={p.url} alt={p.label} onClick={() => setCarousel(c => ({ ...c, index:i }))} style={st}/>;
+                    : <img key={i} src={apiThumb(p.url, 128)} alt={p.label} onClick={() => setCarousel(c => ({ ...c, index:i }))} style={st}/>;
                 })}
               </div>
             )}

@@ -4,7 +4,7 @@ import Cachettes from "../components/Cachettes";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import SpoolSVG from "../components/SpoolSVG";
 import { SlidersHorizontal } from "lucide-react";
-import client, { apiUrl } from "../api/client";
+import client, { apiUrl, apiThumb } from "../api/client";
 import { notifSeenEvent } from "../components/NotifBell";
 
 // Historique de MES notifications (15 jours) : celles que j'ai choisies, avec
@@ -28,7 +28,7 @@ const dayLabel = d => {
 const thumbOf = it => {
   if (it.image) return it.image;
   const m = /^\/prints\?id=(\d+)/.exec(it.link || "");
-  return m ? apiUrl(`/prints/${m[1]}/image`) : null;
+  return m ? apiThumb(apiUrl(`/prints/${m[1]}/image`), 128) : null;
 };
 
 export default function Notifications() {

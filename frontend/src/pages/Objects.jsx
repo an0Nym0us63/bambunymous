@@ -3,7 +3,7 @@ import HiddenMark from "../components/HiddenMark";
 import Cachettes, { Hide } from "../components/Cachettes";
 import { useUrlTab } from "../utils/useUrlTab";
 import { Search, Package, ShoppingBag, ExternalLink, Image as ImageIcon, Plus } from "lucide-react";
-import client, { apiUrl } from "../api/client";
+import client, { apiUrl, apiThumb } from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import CategoryPicker from "../components/CategoryPicker";
 import Select from "../components/Select";
@@ -189,7 +189,7 @@ export function AccessorySheet({ accId, onClose, onChanged }) {
             display:"flex", alignItems:"center", justifyContent:"center", background:"var(--surface)", border:"1px solid rgba(255,255,255,.12)",
             boxShadow:`0 12px 28px -12px ${c}` }}>
             {d.has_image
-              ? <img src={apiUrl(`/objects/accessories/${accId}/image?v=${imgV}`)} alt="" style={{ maxWidth:"100%", maxHeight:"100%", objectFit:"contain" }}/>
+              ? <img src={apiThumb(apiUrl(`/objects/accessories/${accId}/image?v=${imgV}`), 256)} alt="" style={{ maxWidth:"100%", maxHeight:"100%", objectFit:"contain" }}/>
               : <Package size={46} style={{ color:c, opacity:.8 }}/>}
           </div>
           <div style={{ flex:"1 1 190px", minWidth:0, display:"flex", flexDirection:"column", gap:6 }}>
@@ -502,7 +502,7 @@ function AccessoryCard({ acc, onClick, onLongPress, selectMode, selected }) {
       <div style={{ position:"relative", aspectRatio:"1 / 0.78", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden",
         padding:10, boxSizing:"border-box", background:`radial-gradient(70% 70% at 50% 45%, color-mix(in srgb, ${c} 22%, transparent), transparent 75%), var(--surface)` }}>
         {acc.has_image && imgOk
-          ? <img src={apiUrl(`/objects/accessories/${acc.id}/image`)} alt={acc.name}
+          ? <img src={apiThumb(apiUrl(`/objects/accessories/${acc.id}/image`), 384)} alt={acc.name} loading="lazy" decoding="async"
               // contain : l'image entiere est visible, plus de rognage.
               style={{ maxWidth:"100%", maxHeight:"100%", objectFit:"contain" }}
               onError={() => setImgOk(false)}/>
@@ -527,7 +527,7 @@ function AccThumb({ id, size = 34 }) {
   const [ok, setOk] = useState(true);
   return <span style={{ width:size, height:size, borderRadius:10, overflow:"hidden", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
     background:"radial-gradient(circle, rgba(20,184,166,0.25), transparent 75%), var(--surface)", border:"1px solid var(--border)" }}>
-    {ok ? <img src={apiUrl(`/objects/accessories/${id}/image`)} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={() => setOk(false)}/>
+    {ok ? <img src={apiThumb(apiUrl(`/objects/accessories/${id}/image`), 128)} alt="" loading="lazy" decoding="async" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={() => setOk(false)}/>
       : <Package size={size * 0.5} style={{ color:"#14B8A6" }}/>}</span>;
 }
 
@@ -600,7 +600,7 @@ function ObjThumb({ id, size = 34 }) {
   const [ok, setOk] = useState(true);
   return <span style={{ width:size, height:size, borderRadius:10, overflow:"hidden", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
     background:"radial-gradient(circle, rgba(139,92,246,0.25), transparent 75%), var(--surface)", border:"1px solid var(--border)", fontSize:size * 0.45 }}>
-    {ok ? <img src={apiUrl(`/objects/objects/${id}/image`)} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={() => setOk(false)}/> : "🎁"}</span>;
+    {ok ? <img src={apiThumb(apiUrl(`/objects/objects/${id}/image`), 128)} alt="" loading="lazy" decoding="async" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={() => setOk(false)}/> : "🎁"}</span>;
 }
 
 // Les petits morceaux communs aux cartes de la page
@@ -1012,7 +1012,7 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
         background:`radial-gradient(circle at 18% 45%, ${c}55, transparent 60%), linear-gradient(135deg, ${c}26, transparent 70%), var(--surface2)` }}>
         <div style={{ width:124, height:124, borderRadius:22, overflow:"hidden", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
           background:`radial-gradient(circle, ${c}33, transparent 70%), var(--surface)`, boxShadow:`0 12px 28px -12px ${c}`, border:"1px solid rgba(255,255,255,.12)" }}>
-          {imgOk ? <img src={apiUrl(`/objects/objects/${obj.id}/image`)} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }}
+          {imgOk ? <img src={apiThumb(apiUrl(`/objects/objects/${obj.id}/image`), 256)} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }}
               onError={() => setImgOk(false)}/>
             : <span style={{ fontSize:52, opacity:.6 }}>{cfg.icon}</span>}
         </div>
@@ -1441,7 +1441,7 @@ function ObjectCard({ obj, onClick, onLongPress, selectMode, selected, onToggleS
       {selectMode && <SelDot on={selected}/>}
       <div style={{ position:"relative", aspectRatio:"1 / 0.85", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden",
         background:`radial-gradient(75% 70% at 50% 45%, color-mix(in srgb, ${c} 20%, transparent), transparent 75%), var(--surface)` }}>
-        {imgOk ? <img src={apiUrl(`/objects/objects/${obj.id}/image`)} alt=""
+        {imgOk ? <img src={apiThumb(apiUrl(`/objects/objects/${obj.id}/image`), 384)} alt="" loading="lazy" decoding="async"
             style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={() => setImgOk(false)}/>
           : <span style={{ fontSize:40, opacity:.55 }}>{cfg.icon}</span>}
         <span style={{ ...pill, position:"absolute", top:7, left:7, color:"#fff",
@@ -1802,7 +1802,7 @@ export default function Objects() {
       units: items.reduce((a, x) => a + (x.quantity || 0), 0),
       value: items.reduce((a, x) => a + (x.quantity || 0) * (x.unit_price || 0), 0),
       out: items.filter(x => (x.quantity || 0) === 0).length,
-      thumbs: items.filter(x => x.has_image).sort((x, y) => y.id - x.id).map(x => apiUrl(`/objects/accessories/${x.id}/image`)),
+      thumbs: items.filter(x => x.has_image).sort((x, y) => y.id - x.id).map(x => apiThumb(apiUrl(`/objects/accessories/${x.id}/image`), 128)),
     }));
   }, [accessories]);
   const accKpis = React.useMemo(() => [
@@ -1847,7 +1847,7 @@ export default function Objects() {
     // l'apercu montre les plus recents : les derniers vendus (date de vente), sinon les derniers crees
     const recent = [...objs].sort((x, y) => st === "sold" && (x.sold_date || y.sold_date)
       ? String(y.sold_date || "").localeCompare(String(x.sold_date || "")) || (y.id - x.id) : (y.id - x.id));
-    const thumbs = recent.map(o => apiUrl(`/objects/objects/${o.id}/image`));
+    const thumbs = recent.map(o => apiThumb(apiUrl(`/objects/objects/${o.id}/image`), 128));
     return { st, items, count: objs.length, cost, revenue, desired, thumbs };
   }).filter(Boolean);
   // les chiffres de l'onglet Objets : ce qui attend une vente, ce qu'on en espere, ce qu'on a encaisse et gagne
