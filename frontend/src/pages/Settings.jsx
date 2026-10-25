@@ -27,13 +27,12 @@ import { useTrackDetail } from "../utils/track";
 import { egg, tapper, useEggFound } from "../eggs";
 
 const inp = {
-  width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
-  borderRadius:10, padding:"8px 12px", fontSize:14, color:"var(--text)",
+  width:"100%", background:"var(--surface)", border:"1px solid var(--border)",
+  borderRadius:12, padding:"10px 12px", fontSize:14, fontWeight:600, color:"var(--text)",
   outline:"none", transition:"border-color 0.15s", boxSizing:"border-box",
 };
 const lbl = {
-  display:"block", fontSize:11, color:"var(--muted)", marginBottom:6,
-  textTransform:"uppercase", letterSpacing:"0.05em",
+  display:"block", fontSize:12, fontWeight:800, color:"var(--muted)", marginBottom:6,
 };
 
 // Le backend renvoie des datetime UTC *naifs* ("2026-07-18 21:24:33.123456").
@@ -99,8 +98,7 @@ function HomeDisplayCard() {
   );
 }
 const cardTitle = {
-  fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase",
-  letterSpacing:"0.08em", marginBottom:16, display:"flex", alignItems:"center", gap:6,
+  fontSize:15.5, fontWeight:900, color:"var(--text)", marginBottom:12, display:"flex", alignItems:"center", gap:8,
 };
 
 // La disposition des AMS se regle dans la tuile AMS de l'accueil (son engrenage).
@@ -1759,15 +1757,15 @@ function LabelsCard({ card, cardTitle }) {
 // Un onglet par sujet : l'imprimante, les filaments, l'affichage, les comptes
 // (et services connectes), les notifications, puis les outils de maintenance.
 const SET_TABS = [
-  { id:"printer",  label:"🖨️ Imprimante", admin:true  },
-  { id:"filament", label:"🧵 Filaments",  admin:true  },
-  { id:"display",  label:"🎨 Affichage",  admin:false },
-  { id:"accounts", label:"👤 Comptes",    admin:false },
-  { id:"links",    label:"🔗 Connexions", admin:true  },   // MakerWorld, Telegram, messages types : administrateur
-  { id:"notify",   label:"🔔 Notifs",     admin:false },
-  { id:"share",    label:"📤 Partage",    admin:true  },
-  { id:"android",  label:"📱 Appli Android", admin:false },
-  { id:"tools",    label:"🛠️ Outils",     admin:true  },
+  { id:"printer",  label:"🖨️ Imprimante", admin:true,  c:"#3B82F6" },
+  { id:"filament", label:"🧵 Filaments",  admin:true,  c:"#F97316" },
+  { id:"display",  label:"🎨 Affichage",  admin:false, c:"#EC4899" },
+  { id:"accounts", label:"👤 Comptes",    admin:false, c:"#8B5CF6" },
+  { id:"links",    label:"🔗 Connexions", admin:true,  c:"#06B6D4" },   // MakerWorld, Telegram, messages types : administrateur
+  { id:"notify",   label:"🔔 Notifs",     admin:false, c:"#F59E0B" },
+  { id:"share",    label:"📤 Partage",    admin:true,  c:"#0EA5E9" },
+  { id:"android",  label:"📱 Appli Android", admin:false, c:"#22C55E" },
+  { id:"tools",    label:"🛠️ Outils",     admin:true,  c:"#64748B" },
 ];
 
 export default function Settings() {
@@ -1866,55 +1864,52 @@ export default function Settings() {
     </div>
   );
 
+  const tc = (SET_TABS.find(t => t.id === tab) || SET_TABS[0]).c;
+  const pill = { padding:"6px 13px", borderRadius:20, border:"1px solid var(--border)", background:"var(--surface2)", cursor:"pointer",
+    display:"flex", alignItems:"center", gap:6, color:"var(--text2)", fontSize:12.5, fontWeight:800, textDecoration:"none" };
   return (
-    <div className="page-wide" style={{ "--page-max":"640px" }}>
+    <div className="page-wide set-page" style={{ "--page-max":"640px", "--set-c": tc }}>
+      {/* Toutes les cartes de la page (y compris celles des reglages fournis par d'autres composants) prennent
+          la couleur de l'onglet ; les boutons principaux bleus passent en degrade. */}
+      <style>{SET_CSS}</style>
       {/* Mobile : le bouton part dans le header (une ligne de gagnee).
           Desktop : le header mobile n'existe pas, on le garde dans le flux. */}
       <HeaderAction>
         {/* le guide d'utilisation (une page de l'appli) */}
-        <a href="/guide" onClick={e => { e.preventDefault(); navigate("/guide"); }} aria-label="Guide d'utilisation" title="Guide d'utilisation"
-          style={{ padding:"5px 10px", borderRadius:20, border:"1px solid var(--border)",
-            background:"var(--surface2)", display:"flex", alignItems:"center",
-            color:"var(--muted)", fontSize:12, textDecoration:"none" }}>
+        <a href="/guide" onClick={e => { e.preventDefault(); navigate("/guide"); }} aria-label="Guide d'utilisation" data-tip="Guide d'utilisation"
+          style={{ ...pill, padding:"5px 10px" }}>
           📖
         </a>
-        <AdminOnly><button onClick={() => navigate("/logs")} aria-label="Journal"
-          style={{ padding:"5px 12px", borderRadius:20, border:"1px solid var(--border)",
-            background:"var(--surface2)", cursor:"pointer", display:"flex",
-            alignItems:"center", gap:5, color:"var(--muted)", fontSize:12 }}>
+        <AdminOnly><button onClick={() => navigate("/logs")} aria-label="Journal" style={{ ...pill, padding:"5px 12px" }}>
           📋 Journal
         </button></AdminOnly>
       </HeaderAction>
 
       <div className="hidden-mobile" style={{ display:"none", alignItems:"center", justifyContent:"flex-end" }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0, marginRight:"auto" }}>Paramètres</h1>
-        <a href="/guide" onClick={e => { e.preventDefault(); navigate("/guide"); }} style={{ padding:"6px 14px", borderRadius:20, border:"1px solid var(--border)",
-          background:"var(--surface2)", display:"flex", alignItems:"center", gap:6, marginRight:8,
-          color:"var(--muted)", fontSize:12, textDecoration:"none" }}>
+        <a href="/guide" onClick={e => { e.preventDefault(); navigate("/guide"); }} style={{ ...pill, marginRight:8 }}>
           📖 Guide d'utilisation
         </a>
-        <AdminOnly><button onClick={() => navigate("/logs")}
-          style={{ padding:"6px 14px", borderRadius:20, border:"1px solid var(--border)",
-            background:"var(--surface2)", cursor:"pointer", display:"flex", alignItems:"center", gap:6,
-            color:"var(--muted)", fontSize:12 }}>
+        <AdminOnly><button onClick={() => navigate("/logs")} style={pill}>
           📋 Journal
         </button></AdminOnly>
       </div>
 
       {/* Meme composant visuel que Filaments / Historique / Objets. */}
       {/* Six onglets : une ligne sur ordinateur, deux lignes de trois sur telephone. */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(100px, 1fr))", gap:4,
-        background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
-        {tabs.map(t => (
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(118px, 1fr))", gap:4,
+        background:"var(--surface2)", borderRadius:16, padding:4, border:"1px solid var(--border)" }}>
+        {tabs.map(t => { const on = tab === t.id;
+          return (
           <button key={t.id} onClick={()=>setTab(t.id)} style={{
-            minWidth:0, padding:"8px 4px", borderRadius:8, fontSize:12, fontWeight:600,
+            minWidth:0, padding:"9px 4px", borderRadius:12, fontSize:12.5, fontWeight:800,
             whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
             cursor:"pointer", border:"none", transition:"all 0.15s",
-            background: tab===t.id ? "#3b82f6" : "transparent",
-            color: tab===t.id ? "white" : "var(--muted)" }}>
+            background: on ? `linear-gradient(135deg, ${t.c}, color-mix(in srgb, ${t.c} 70%, #ffffff))` : "transparent",
+            boxShadow: on ? `0 6px 16px -6px ${t.c}` : "none",
+            color: on ? "white" : "var(--muted)" }}>
             {t.label}
-          </button>
-        ))}
+          </button>); })}
       </div>
 
       {/* ── Affichage ─────────────────────────────────────────────── */}
@@ -1922,14 +1917,15 @@ export default function Settings() {
       {tab === "display" && (<div className="wide-2">
       <div className="card" style={card}>
         <div style={cardTitle}>Apparence</div>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <span style={{ fontSize:14, color:"var(--text2)" }}>Thème</span>
-          <button type="button" onClick={toggle}
-            style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px",
-            borderRadius:20, border:"1px solid var(--border)", background:"var(--surface2)",
-            color:"var(--text)", fontSize:13, cursor:"pointer" }}>
-            {theme === "dark" ? <><Moon size={14}/> Sombre</> : <><Sun size={14}/> Clair</>}
-          </button>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+          <span style={{ fontSize:14, fontWeight:700, color:"var(--text2)" }}>Thème</span>
+          <div role="radiogroup" aria-label="Thème" style={{ display:"flex", gap:3, padding:3, borderRadius:14, background:"var(--surface)", border:"1px solid var(--border)" }}>
+            {[["light", <Sun size={14}/>, "Clair", "#F59E0B"], ["dark", <Moon size={14}/>, "Sombre", "#6366F1"]].map(([v, ic, l, c]) => { const on = (theme === "dark") === (v === "dark");
+              return <button key={v} type="button" role="radio" aria-checked={on} onClick={() => { if (!on) toggle(); }}
+                style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 13px", borderRadius:11, border:"none", cursor:"pointer",
+                  fontSize:13, fontWeight:800, color: on ? "#fff" : "var(--muted)",
+                  background: on ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 65%, #ffffff))` : "transparent" }}>{ic} {l}</button>; })}
+          </div>
         </div>
       </div>
       <HomeDisplayCard/>
@@ -1994,12 +1990,10 @@ export default function Settings() {
 
 
         <button type="submit" disabled={saving}
-          style={{ display:"inline-flex", alignItems:"center", gap:8,
-            background:"#3b82f6", color:"white", border:"none",
-            padding:"10px 20px", borderRadius:12, fontSize:14, fontWeight:500,
-            cursor:saving?"not-allowed":"pointer", opacity:saving?0.6:1 }}
-          onMouseEnter={e => { if(!saving) e.currentTarget.style.background="#2563eb"; }}
-          onMouseLeave={e => e.currentTarget.style.background="#3b82f6"}>
+          style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", gap:8,
+            background:"linear-gradient(135deg, #3B82F6, #6366F1)", color:"white", border:"none",
+            padding:"12px 20px", borderRadius:14, fontSize:14.5, fontWeight:800, boxShadow:"0 8px 18px -10px #3B82F6",
+            cursor:saving?"not-allowed":"pointer", opacity:saving?0.6:1 }}>
           {saving ? <RefreshCw size={15} style={{ animation:"spin 1s linear infinite" }} /> : <Save size={15} />}
           {saved ? "Sauvegardé ✓" : "Sauvegarder"}
         </button>
@@ -2065,6 +2059,20 @@ export default function Settings() {
   );
 }
 
+// L'habillage commun des cartes de la page : la couleur de l'onglet (--set-c) teinte chaque carte, une carte
+// dans une carte reste sobre ; les champs s'arrondissent ; un bouton principal bleu (ecrit en dur dans les
+// reglages des autres composants) prend le degrade des autres pages.
+const SET_CSS = `
+.set-page .card { border-radius: 20px !important; border: 1px solid color-mix(in srgb, var(--set-c) 24%, var(--border)) !important;
+  background: radial-gradient(90% 60% at 100% 0%, color-mix(in srgb, var(--set-c) 13%, transparent), transparent 70%), var(--surface2) !important;
+  box-shadow: 0 10px 24px -20px var(--set-c); }
+.set-page .card .card { background: var(--surface) !important; box-shadow: none; border-color: var(--border) !important; border-radius: 16px !important; }
+.set-page input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), .set-page select, .set-page textarea { border-radius: 12px; }
+.set-page button[style*="background: rgb(59, 130, 246)"], .set-page button[style*="background: rgb(59,130,246)"] {
+  background: linear-gradient(135deg, #3B82F6, #6366F1) !important; border-color: transparent !important; box-shadow: 0 8px 18px -10px #3B82F6;
+  border-radius: 12px !important; font-weight: 800 !important; }
+`;
+
 // Version en service, comparee a master sur GitHub : « a jour », ou les
 // nouveautes en attente (depliables).
 function VersionLine({ version }) {
@@ -2079,7 +2087,8 @@ function VersionLine({ version }) {
       {/* un tout petit bateau, presque invisible, au bout de la page */}
       {!microFound && <span data-egg="micro_benchy" aria-hidden="true" style={{ position:"absolute", right:4, bottom:-2, fontSize:9, opacity:.16, cursor:"default", userSelect:"none" }}>⛵</span>}
       <Cachettes spot="settings" side="left"/>
-      <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace", margin:0 }}>
+      <p style={{ display:"inline-block", fontSize:11.5, fontWeight:700, color:"var(--muted)", fontFamily:"monospace", margin:0, padding:"5px 12px",
+        borderRadius:20, background:"var(--surface2)", border:"1px solid var(--border)" }}>
         <span onClick={devTap} style={{ cursor:"default", userSelect:"none" }}>v{version.commit?.slice(0,8) || "dev"}</span> · {version.build_date?.slice(0,10) || "?"}
         {chk && !chk.dev && !chk.error && (n
           ? <> · <button onClick={() => setOpen(o => !o)} style={{ background:"none", border:"none", padding:0, cursor:"pointer",
