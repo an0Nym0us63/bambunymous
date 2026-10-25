@@ -245,6 +245,19 @@ class PrinterStatusOut(BaseModel):
     print_error: int
     fw_version: str
     fila_switch: dict = {}
+    printer_model: str = ""
+
+
+# le modele de l'imprimante (choisi, deduit du numero de serie ou de l'historique), relu toutes les 5 min
+_MODEL = {"at": 0.0, "v": ""}
+
+
+async def _model() -> str:
+    import time as _t
+    if _t.time() - _MODEL["at"] > 300:
+        from ....services.makerworld import my_printer
+        _MODEL["v"], _MODEL["at"] = await my_printer(), _t.time()
+    return _MODEL["v"]
 
 
 def _spool_info(spool_id, spools_map):
@@ -442,6 +455,7 @@ async def printer_status(_: str = Depends(get_current_user)):
         print_error=s.print_error,
         fw_version=s.fw_version,
         fila_switch=getattr(s, "fila_switch", {}) or {},
+        printer_model=await _model(),
     )
 
 

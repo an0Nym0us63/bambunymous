@@ -1454,7 +1454,7 @@ function PrinterPopup({ status, img, name, onClose }) {
   const chipSt = (c, on) => ({ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap",
     fontSize: 11.5, fontWeight: on ? 800 : 700, color: c && on ? c : "var(--muted)",
     background: c && on ? `color-mix(in srgb, ${c} 14%, transparent)` : "var(--surface2)", border: `1px solid ${c && on ? `color-mix(in srgb, ${c} 35%, transparent)` : "var(--border)"}` });
-  const chip = (c, on, body) => <span style={chipSt(c, on)}>{body}</span>;
+  const chip = (c, on, body, tip = null) => <span data-tip={tip || undefined} style={chipSt(c, on)}>{body}</span>;
   // un titre de section : sa pastille de couleur, son nom, un filet, et a droite un mot de resume
   const section = (t, Icon, c, extra) => <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: -4 }}>
     <span style={{ width: 24, height: 24, borderRadius: 8, display: "inline-flex", alignItems: "center", justifyContent: "center", background: `${c}22`, color: c }}><Icon size={14}/></span>
@@ -1493,11 +1493,14 @@ function PrinterPopup({ status, img, name, onClose }) {
             style={{ ...chipSt(worst.color, true), cursor: "pointer", fontFamily: "inherit", fontWeight: 900, lineHeight: "inherit" }}>
             <AlertTriangle size={12}/>{hms.length} alerte{hms.length > 1 ? "s" : ""} HMS ›</button>}
           {status?.connected && status.door_open != null && chip(status.door_open ? "#d97706" : null, status.door_open,
-            <>{status.door_open ? <DoorOpen size={12}/> : <DoorClosed size={12}/>}porte {status.door_open ? "ouverte" : "fermée"}</>)}
-          {status?.connected && status.top_open === true && chip("#d97706", true, <><DoorOpen size={12}/>capot ouvert</>)}
+            <>{status.door_open ? <DoorOpen size={12}/> : <DoorClosed size={12}/>}{status.door_open ? "Porte ouverte" : ""}</>,
+            status.door_open ? null : "Porte fermée")}
+          {status?.connected && status.top_open === true && chip("#d97706", true, <><DoorOpen size={12}/>Capot ouvert</>)}
           {status?.connected && status.light_on != null && chip(status.light_on ? "#ca8a04" : null, status.light_on,
-            <>{status.light_on ? <Lightbulb size={12}/> : <LightbulbOff size={12}/>}lumière {status.light_on ? "allumée" : "éteinte"}</>)}
-          {status?.fw_version && chip(null, false, <>micrologiciel {status.fw_version}</>)}
+            <>{status.light_on ? <Lightbulb size={12}/> : <LightbulbOff size={12}/>}</>,
+            status.light_on ? "Lumière allumée" : "Lumière éteinte")}
+          {status?.printer_model && chip(null, false, <><Printer size={12}/>{status.printer_model}</>)}
+          {status?.fw_version && chip(null, false, <>Micrologiciel {status.fw_version}</>)}
         </div>
 
         <div style={{ position: "relative", borderRadius: 20, overflow: "hidden", padding: 14, display: "flex", flexDirection: "column", gap: 12,
