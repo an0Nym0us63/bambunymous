@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { FriendChip } from "../Friends";
 import { useFriend } from "../../store/friend";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
-import { Home, Settings, Package, History, ShoppingBag, BarChart2 } from "lucide-react";
+import { Home, Settings, Package, History, ShoppingBag, BarChart2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import UserMenu from "../UserMenu";
 import NotifBell from "../NotifBell";
 import ShareProgress from "../ShareProgress";
@@ -19,13 +19,14 @@ import AchNews from "../AchNews";
 import { Hide } from "../Cachettes";
 import { MwLinkHost } from "../MwCreatorPage";
 
+// chaque page a sa couleur (celle de ses onglets) : la barre laterale la reprend
 const nav = [
-  { to: "/",          icon: Home,       label: "Accueil"    },
-  { to: "/prints",    icon: History,    label: "Impressions" },
-  { to: "/filaments", icon: Package,    label: "Filaments"  },
-  { to: "/objects",   icon: ShoppingBag,label: "Objets"     },
-  { to: "/stats",     icon: BarChart2,  label: "Stats"      },
-  { to: "/settings",  icon: Settings,   label: "Paramètres" },
+  { to: "/",          icon: Home,       label: "Accueil",     c: "#3B82F6" },
+  { to: "/prints",    icon: History,    label: "Impressions", c: "#06B6D4" },
+  { to: "/filaments", icon: Package,    label: "Filaments",   c: "#F97316" },
+  { to: "/objects",   icon: ShoppingBag,label: "Objets",      c: "#8B5CF6" },
+  { to: "/stats",     icon: BarChart2,  label: "Stats",       c: "#22C55E" },
+  { to: "/settings",  icon: Settings,   label: "Paramètres",  c: "#64748B" },
 ];
 
 // Titre affiche dans le header mobile : evite de redonder le <h1> de chaque page.
@@ -45,10 +46,11 @@ const S = {
   // correctif de hauteur iOS (voir index.css). Avec 100dvh, ce conteneur
   // recalculait sa propre hauteur trop courte et annulait le correctif.
   app:     { display:"flex", height:"100%", overflow:"hidden", background:"var(--bg)" },
-  aside:   { display:"flex", flexDirection:"column", width:208, background:"var(--sidebar)", borderRight:"1px solid var(--border)", padding:"20px 0", flexShrink:0 },
-  logo:    { display:"flex", alignItems:"center", gap:10, padding:"0 16px", marginBottom:32 },
+  aside:   { display:"flex", flexDirection:"column", width:212, background:"var(--sidebar)", borderRight:"1px solid var(--border)", padding:"18px 0 14px", flexShrink:0,
+    transition:"width .2s ease", overflow:"hidden" },
+  logo:    { display:"flex", alignItems:"center", gap:10, padding:"0 16px", marginBottom:24 },
   logoBox: { width:28, height:28, borderRadius:8, overflow:"hidden" },
-  nav:     { flex:1, padding:"0 8px", display:"flex", flexDirection:"column", gap:2 },
+  nav:     { flex:1, padding:"0 10px", display:"flex", flexDirection:"column", gap:4 },
   main:    { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" },
   page:    { flex:1, overflowY:"auto", padding:16, paddingTop:"calc(16px + var(--sat, env(safe-area-inset-top, 0px)))", background:"var(--bg)" },
   // Mobile
@@ -78,19 +80,36 @@ const S = {
     paddingBottom:"calc(env(safe-area-inset-bottom, 0px) * 0.5)" },
 };
 
-function NavItem({ to, icon: Icon, label }) {
+// Une entree du menu : l'icone dans une pastille de la couleur de la page ; la page ouverte, en degrade.
+// Repliee : l'icone seule, le nom en infobulle.
+function NavItem({ to, icon: Icon, label, c, mini }) {
   return (
-    <NavLink to={to} end={to === "/"} style={({ isActive }) => ({
-      display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
-      borderRadius:12, fontSize:14, textDecoration:"none", transition:"all 0.15s",
-      background: isActive ? "rgba(59,130,246,0.12)" : "transparent",
-      color: isActive ? "#3b82f6" : "var(--text2)",
-      fontWeight: isActive ? 600 : 400,
-    })}>
-      <Icon size={17} />
-      <span>{label}</span>
+    <NavLink to={to} end={to === "/"} className="bn-nav" data-tip={mini ? label : undefined} aria-label={label}
+      style={({ isActive }) => ({
+        "--c": c, display:"flex", alignItems:"center", gap:11, padding: mini ? "7px" : "7px 10px 7px 7px",
+        justifyContent: mini ? "center" : "flex-start", borderRadius:14, fontSize:14, textDecoration:"none", transition:"background .15s, box-shadow .15s",
+        background: isActive ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 65%, #ffffff))` : "transparent",
+        boxShadow: isActive ? `0 8px 18px -10px ${c}` : "none",
+        color: isActive ? "#fff" : "var(--text2)", fontWeight: isActive ? 800 : 600, whiteSpace:"nowrap",
+      })}>
+      {({ isActive }) => (<>
+        <span style={{ width:32, height:32, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
+          background: isActive ? "rgba(255,255,255,0.22)" : `color-mix(in srgb, ${c} 16%, transparent)`, color: isActive ? "#fff" : c }}>
+          <Icon size={17}/></span>
+        {!mini && <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{label}</span>}
+      </>)}
     </NavLink>
   );
+}
+
+// La barre laterale repliee ou non (retenu sur ce navigateur) ; sur un ecran etroit, repliee par defaut.
+function useSideMini() {
+  const [mini, setMini] = React.useState(() => {
+    try { const v = localStorage.getItem("bn-side-mini"); if (v != null) return v === "1"; } catch { /* indisponible */ }
+    return typeof window !== "undefined" && window.innerWidth < 1100;
+  });
+  const flip = () => setMini(m => { try { localStorage.setItem("bn-side-mini", m ? "0" : "1"); } catch { /* indisponible */ } return !m; });
+  return [mini, flip];
 }
 
 export default function Layout() {
@@ -98,6 +117,8 @@ export default function Layout() {
   const { pathname } = useLocation();
   const title = TITLES[pathname] ?? null;
   const friend = useFriend((st) => st.friend);   // chez un copain
+  const visitHome = useFriend((st) => st.visit);
+  const [mini, flipMini] = useSideMini();
   const headerRef = React.useRef(null);
   // gestes caches (voir eggs.js) ; le logo, lui, a le tournis facile
   React.useEffect(() => { installEggs(); }, []);
@@ -174,26 +195,43 @@ export default function Layout() {
   return (
     <div style={S.app}>
       {/* Sidebar desktop */}
-      <aside className="hidden-mobile" style={S.aside}>
-        <div style={{...S.logo, cursor:"pointer"}} onClick={() => { logoTap(); navigate("/"); }}>
-          <img src="/icon-192.png" {...logoHold} draggable={false} style={{ width:28, height:28, borderRadius:7, flexShrink:0, animation:logoAnim }} alt=""/>
-          <span style={{ fontWeight:700, fontSize:13, background:"linear-gradient(90deg,#3b82f6,#06b6d4)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
+      <aside className="hidden-mobile" style={{ ...S.aside, width: mini ? 72 : 212 }}>
+        <style>{`.bn-nav:hover { background: color-mix(in srgb, var(--c) 10%, transparent); }
+          .bn-nav[aria-current="page"]:hover { background: linear-gradient(135deg, var(--c), color-mix(in srgb, var(--c) 65%, #ffffff)); }`}</style>
+        <div style={{ ...S.logo, padding: mini ? "0" : "0 16px", justifyContent: mini ? "center" : "flex-start", cursor:"pointer" }}
+          onClick={() => { logoTap(); navigate("/"); }}>
+          <img src="/icon-192.png" {...logoHold} draggable={false} style={{ width:32, height:32, borderRadius:9, flexShrink:0, animation:logoAnim,
+            boxShadow:"0 6px 14px -6px #6366F1" }} alt=""/>
+          {!mini && <span style={{ fontWeight:900, fontSize:15, background:"linear-gradient(90deg,#6366F1,#EC4899)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent",
+            whiteSpace:"nowrap" }}>
             BambuNymous
-          </span>
+          </span>}
           <Hide at="header"/>
         </div>
         {/* Chez un copain : rappel discret, retour en un geste. */}
-        {friend && <div style={{ padding:"0 12px 8px" }}><FriendChip block/></div>}
+        {friend && (mini
+          ? <div style={{ display:"flex", justifyContent:"center", paddingBottom:8 }}>
+              <button onClick={() => visitHome(null)} data-tip={`Chez ${friend.name} · revenir chez moi`} aria-label="Revenir chez moi"
+                style={{ width:40, height:40, borderRadius:12, border:"1px solid rgba(249,115,22,0.45)", background:"rgba(249,115,22,0.12)",
+                  cursor:"pointer", fontSize:17 }}>👀</button></div>
+          : <div style={{ padding:"0 12px 8px" }}><FriendChip block/></div>)}
         {/* Suivi d'un partage Telegram en arriere-plan (ShareProgress, par portail). */}
-        <div id="sidebar-status" style={{ display:"flex", flexDirection:"column", gap:6, padding:"0 12px" }}/>
+        <div id="sidebar-status" style={{ display:"flex", flexDirection:"column", gap:6, padding: mini ? "0 6px" : "0 12px", overflow:"hidden" }}/>
         <nav style={S.nav}>
-          {nav.map(n => <NavItem key={n.to} {...n} />)}
+          {nav.map(n => <NavItem key={n.to} {...n} mini={mini}/>)}
         </nav>
+        {/* Replier / deplier la barre */}
+        <div style={{ padding:"0 10px 8px", display:"flex", justifyContent: mini ? "center" : "flex-end" }}>
+          <button onClick={flipMini} aria-label={mini ? "Déplier le menu" : "Replier le menu"} data-tip={mini ? "Déplier le menu" : "Replier le menu"}
+            style={{ width:36, height:36, borderRadius:12, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--muted)",
+              cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            {mini ? <PanelLeftOpen size={17}/> : <PanelLeftClose size={17}/>}</button>
+        </div>
         {/* Le compte remplace le bouton de deconnexion nu : meme place, en bas
             du menu, mais il indique aussi qui est connecte et sous quel role. */}
-        <div style={{ margin:"0 8px", padding:"10px 12px", borderTop:"1px solid var(--border)" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-            <div style={{ flex:1, minWidth:0 }}><UserMenu placement="top" showName size={28}/></div>
+        <div style={{ margin:"0 10px", padding: mini ? "10px 0 0" : "10px 4px 0", borderTop:"1px solid var(--border)" }}>
+          <div style={{ display:"flex", flexDirection: mini ? "column" : "row", alignItems:"center", gap: mini ? 10 : 6 }}>
+            <div style={{ flex: mini ? "none" : 1, minWidth:0 }}><UserMenu placement="top" showName={!mini} size={30}/></div>
             {!friend && <NotifBell size={18}/>}
           </div>
         </div>
