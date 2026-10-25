@@ -4,7 +4,7 @@ import { Droplets, Sun, Thermometer, Timer, Clock, Package, Palette } from "luci
 import client from "../api/client";
 import { colorBg, opaqueColors } from "../utils/colors";
 import { createPortal } from "react-dom";
-import { FilamentSheetFromSpool } from "../pages/Filaments";
+import { FilamentSheetFromSpool } from "./LazySheets";
 import SpoolSVG from "./SpoolSVG";
 import { EXT_AMS_ID, amsName, slotLabel, isExternal, trayPct } from "../utils/ams";
 import AdminOnly from "./AdminOnly";

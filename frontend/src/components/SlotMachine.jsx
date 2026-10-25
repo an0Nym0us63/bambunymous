@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import client from "../api/client";
-import { TicketStub } from "../pages/Achievements";
+import { TicketStub } from "./medals";
 
 // Roue de la fortune, facon machine a sous : le lot est tire par le serveur,
 // la page ne fait que jouer l'animation jusqu'a lui. Trois rouleaux qui

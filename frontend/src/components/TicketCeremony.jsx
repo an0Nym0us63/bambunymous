@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Medal, TicketStub } from "../pages/Achievements";
+import { Medal, TicketStub } from "./medals";
 
 // Ceremonie d'un palier passe avec des tickets : les tickets sont poinçonnes
 // un a un, puis la medaille du nouveau palier monte en tournant, dans son halo,

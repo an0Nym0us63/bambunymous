@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Medal } from "../pages/Achievements";
+import { Medal } from "./medals";
 import { muted, setMuted, unlock, sBoom, sCard, sRoll, sTick, sWhoosh } from "./cardSounds";
 
 // La fete d'une carte : elle se retourne au centre, et tout autour un effet qui

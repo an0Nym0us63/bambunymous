@@ -8,7 +8,7 @@ import { useFriend } from "../store/friend";
 import { create } from "zustand";
 import client, { apiUrl } from "../api/client";
 import HomeGrid from "../components/HomeGrid";
-import { gradeOf } from "./Achievements";
+import { gradeOf } from "../components/medals";
 import { egg, useEggsFound } from "../eggs";
 import Cachettes from "../components/Cachettes";
 import LiveCamera from "../components/LiveCamera";
@@ -2008,10 +2008,13 @@ export default function Home() {
 
   useEffect(() => {
     startPolling(3000);
-    fetchSpoolLookup();
-    const spoolInterval = setInterval(fetchSpoolLookup, 5000);
+    // les bobines (nom, reste) : relues quand une bobine change dans l'AMS (effet ci-dessous),
+    // et une fois par minute pour le poids restant ; plus toutes les 5 s
+    const spoolInterval = setInterval(() => { if (!document.hidden) fetchSpoolLookup(); }, 60000);
     return () => { stopPolling(); clearInterval(spoolInterval); };
   }, []);
+  const traySig = (status?.ams_list || []).map(a => `${a.id}:${(a.trays || []).map(t => `${t.tag_uid || ""}${t.uuid || ""}${t.spool_id || ""}${t.color || ""}`).join(",")}`).join("|");
+  useEffect(() => { fetchSpoolLookup(); }, [traySig, fetchSpoolLookup]);
 
   // hauteur choisie : la place du corps de la tuile (sous son titre), pour condenser l'AMS
   const fitOf = item => typeof item?.h === "number" ? item.h * 128 - 30 - (item.o?._title === false ? 0 : 28) : null;

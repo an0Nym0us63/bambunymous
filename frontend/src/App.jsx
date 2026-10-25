@@ -3,14 +3,40 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./store/auth";
 import Layout from "./components/layout/Layout";
 import Login from "./pages/Login";
-import Home from "./pages/Home";
-import Settings from "./pages/Settings";
-import Logs from "./pages/Logs";
-import Stats from "./pages/Stats";
-import Notifications from "./pages/Notifications";
-import Objects from "./pages/Objects";
-import Filaments from "./pages/Filaments";
-import Prints from "./pages/Prints";
+import { importRetry } from "./utils/importRetry";
+// Les pages : chargees a la demande (le premier affichage n'attend plus toute l'appli),
+// puis prechargees en fond une fois l'appli au calme : changer de page reste instantane.
+const PAGES = {
+  home: () => import("./pages/Home"),
+  prints: () => import("./pages/Prints"),
+  filaments: () => import("./pages/Filaments"),
+  objects: () => import("./pages/Objects"),
+  stats: () => import("./pages/Stats"),
+  settings: () => import("./pages/Settings"),
+  notifications: () => import("./pages/Notifications"),
+  logs: () => import("./pages/Logs"),
+};
+const page = k => React.lazy(() => importRetry(PAGES[k]));
+const Home = page("home");
+const Settings = page("settings");
+const Logs = page("logs");
+const Stats = page("stats");
+const Notifications = page("notifications");
+const Objects = page("objects");
+const Filaments = page("filaments");
+const Prints = page("prints");
+function usePrefetchPages(on) {
+  React.useEffect(() => {
+    if (!on) return undefined;
+    let t = null, idle = null;
+    const go = () => Object.values(PAGES).forEach(f => f().catch(() => {}));
+    t = setTimeout(() => {
+      if ("requestIdleCallback" in window) idle = window.requestIdleCallback(go, { timeout: 4000 });
+      else go();
+    }, 2500);
+    return () => { clearTimeout(t); if (idle && "cancelIdleCallback" in window) window.cancelIdleCallback(idle); };
+  }, [on]);
+}
 // le guide d'utilisation : charge a la demande
 const Guide = React.lazy(() => import("./pages/Guide"));
 // le banc d'essai des tuiles : seulement en developpement
@@ -97,6 +123,7 @@ function PrivateRoute({ children }) {
 }
 
 export default function App() {
+  usePrefetchPages(useAuth(s => s.isAuthenticated));
   return (
     <>
     <Routes>

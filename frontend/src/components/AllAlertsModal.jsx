@@ -5,8 +5,7 @@ import client from "../api/client";
 import Select from "./Select";
 import AdminOnly from "./AdminOnly";
 import { colorBg, parseColorsList } from "../utils/colors";
-import { FilamentSheet, FilamentSheetFromSpool } from "../pages/Filaments";
-import { PrintDetail } from "../pages/Prints";
+import { FilamentSheet, FilamentSheetFromSpool, PrintDetail } from "./LazySheets";
 import { showAlert, showConfirm } from "../utils/dialog";
 
 /**

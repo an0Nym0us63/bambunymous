@@ -272,7 +272,9 @@ export default function Layout() {
           <UserMenu placement="bottom"/>
         </header>
 
-        <main className="page-content" style={S.page}><Outlet /></main>
+        <main className="page-content" style={S.page}>
+          {/* une page chargee a la demande : la place reste tenue pendant les quelques ms */}
+          <React.Suspense fallback={<div style={{ minHeight: "70vh" }}/>}><Outlet /></React.Suspense></main>
         <PrankHost/>
         <CardFx/>
         <AchNews/>

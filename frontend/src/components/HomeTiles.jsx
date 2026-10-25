@@ -14,7 +14,7 @@ import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets
 import client, { apiUrl } from "../api/client";
 import { mwImg } from "./MwImg";
 import LiveCamera from "./LiveCamera";
-import { Medal, gradeOf, GradeEmblem, CARD_ORDER } from "../pages/Achievements";
+import { Medal, gradeOf, GradeEmblem, CARD_ORDER } from "./medals";
 import { DryCard } from "./AMSSection";
 import SpoolSVG from "./SpoolSVG";
 import { switchRoutes, slotLabel, grilleAccueil, lireDisposition, trayPct } from "../utils/ams";

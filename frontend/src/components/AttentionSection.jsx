@@ -6,8 +6,7 @@ import { Pressable } from "./ContextMenu";
 import AllAlertsModal from "./AllAlertsModal";
 import { ChevronDown, ChevronRight, List } from "lucide-react";
 import { colorBg, parseColorsList } from "../utils/colors";
-import { FilamentSheet, FilamentSheetFromSpool } from "../pages/Filaments";
-import { PrintDetail } from "../pages/Prints";
+import { FilamentSheet, FilamentSheetFromSpool, PrintDetail } from "./LazySheets";
 
 /**
  * Visuel de l'alerte : la VIGNETTE pour une impression (une pastille de couleur
