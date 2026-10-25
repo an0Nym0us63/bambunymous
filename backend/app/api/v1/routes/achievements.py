@@ -130,7 +130,6 @@ async def achievements_secrets_by_account(acc=Depends(require_own_account), db: 
                      for i, e, n, ids in A.SECRET_SUBS if i in A.FAMILY_SUBS]}
 
 
-@router.get("/news")
 def _dev(dev: str) -> str:
     """L'appareil qui demande (identifiant tire au hasard par la page) : ce qu'un appareil a
     annonce ne l'est plus pour lui seul, les autres l'annoncent encore (avant, le premier
