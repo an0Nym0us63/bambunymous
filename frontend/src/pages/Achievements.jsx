@@ -940,6 +940,16 @@ function OddsSheet({ odds, admin, uniq, onClose }) {
 function AccountSecrets({ acc, subs, uniq, onClose }) {
   const [open, setOpen] = useState(() => new Set());
   const [pick, setPick] = useState(null);           // la medaille touchee : son detail sous la grille
+  // deux vues (25/10/2026) : par tiroir, ou les plus recentes d'abord avec date et heure, chargees au defilement
+  const [view, setView] = useState("subs");
+  const [shown, setShown] = useState(30);
+  const box = useRef(null), more = useRef(null);
+  useEffect(() => {
+    if (view !== "recent" || !more.current || typeof IntersectionObserver === "undefined") return undefined;
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) setShown(n => n + 30); }, { root: box.current, rootMargin: "200px" });
+    io.observe(more.current);
+    return () => io.disconnect();
+  }, [view, shown]);
   useEffect(() => { const k = e => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
     window.addEventListener("keydown", k, true); return () => window.removeEventListener("keydown", k, true); }, [onClose]);
   const groups = subs.map(sb => ({ ...sb, items: acc.items.filter(x => x.sub === sb.id) }));
@@ -948,7 +958,7 @@ function AccountSecrets({ acc, subs, uniq, onClose }) {
   return (
     <div onClick={e => { e.stopPropagation(); onClose(); }} style={{ position:"fixed", inset:0, zIndex:4010, background:"rgba(2,6,23,0.55)",
       display:"flex", alignItems:"center", justifyContent:"center", padding:14 }}>
-      <div onClick={e => e.stopPropagation()} className="card" style={{ width:"min(520px, 100%)", maxHeight:"86vh", overflowY:"auto", padding:16,
+      <div ref={box} onClick={e => e.stopPropagation()} className="card" style={{ width:"min(520px, 100%)", maxHeight:"86vh", overflowY:"auto", padding:16,
         display:"flex", flexDirection:"column", gap:10, background:"var(--sheet-bg)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <Avatar name={acc.username} size={30}/>
@@ -977,7 +987,29 @@ function AccountSecrets({ acc, subs, uniq, onClose }) {
                 {x.emoji} {x.name}{x.found && <b style={{ color:"#16a34a" }}>✓</b>}</span>)}</div>}
           </div>
         )}
-        {groups.map(g => {
+        <div role="tablist" style={{ display:"flex", gap:4, padding:3, borderRadius:12, background:"var(--surface2)", border:"1px solid var(--border)" }}>
+          {[["subs", "🗂️ Par tiroir"], ["recent", "🕒 Les plus récents"]].map(([k, l]) => (
+            <button key={k} role="tab" aria-selected={view === k} onClick={() => { setView(k); setShown(30); }}
+              style={{ flex:1, padding:"7px 10px", borderRadius:9, border:"none", cursor:"pointer", fontSize:12.5, fontWeight:800,
+                color: view === k ? "#fff" : "var(--text2)", background: view === k ? "linear-gradient(135deg,#8B5CF6,#EC4899)" : "transparent" }}>{l}</button>))}
+        </div>
+        {view === "recent" && <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+          {acc.items.slice(0, shown).map(x => { const sb = subs.find(s => s.id === x.sub), col = SUB_COLOR[x.sub] || "#A855F7"; return (
+            <div key={x.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 10px", borderRadius:12,
+              background:`linear-gradient(90deg, ${rgba(col, 0.1)}, transparent 70%), var(--surface2)`, border:`1px solid ${rgba(col, 0.25)}` }}>
+              {uniq ? <Medal tier={uniq} emoji={x.emoji} size={30}/> : <span style={{ fontSize:22 }}>{x.emoji}</span>}
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:800, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{x.name}</div>
+                <div style={{ fontSize:11, fontWeight:700, color:col }}>{sb ? `${sb.emoji} ${sb.name}` : ""}</div>
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:2, flexShrink:0 }}>
+                <span style={{ fontSize:11.5, fontWeight:800, color:"var(--text2)", whiteSpace:"nowrap" }}>{oddsWhen(x.at)}</span>
+                <span style={{ fontSize:10.5, fontWeight:800, color: x.house ? "#16a34a" : "#ef4444" }}>{x.house ? "✓ toi aussi" : "✕ pas toi"}</span>
+              </div>
+            </div>); })}
+          {shown < acc.items.length && <div ref={more} style={{ textAlign:"center", fontSize:11.5, color:"var(--muted)", padding:6 }}>…</div>}
+        </div>}
+        {view === "subs" && groups.map(g => {
           const col = SUB_COLOR[g.id] || "#A855F7", isOpen = open.has(g.id), n = g.items.length;
           const sel = g.items.find(x => x.id === pick);
           return (
