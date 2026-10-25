@@ -342,18 +342,22 @@ export function PlateColors({ items, plate, scope, canEdit, onNavigate }) {
         <div onClick={e => { e.stopPropagation(); setOpen(false); }} style={{ position:"fixed", inset:0, zIndex:4300,
           background:"rgba(0,0,0,0.55)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
           <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:520, maxHeight:"85dvh", overflowY:"auto",
-            background:"var(--sheet-bg, var(--surface))", borderRadius:"16px 16px 0 0", padding:"14px 14px calc(14px + env(safe-area-inset-bottom,0px))",
+            background:"var(--sheet-bg, var(--surface))", borderRadius:"22px 22px 0 0", padding:"0 14px calc(14px + env(safe-area-inset-bottom,0px))",
             boxShadow:"0 -8px 30px rgba(0,0,0,.35)", display:"flex", flexDirection:"column", gap:8 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <span style={{ flex:1, fontSize:14, fontWeight:800, color:"var(--text)" }}>
-                🎨 Couleurs du plateau {plate.index}{plate.name ? ` · ${plate.name}` : ""}</span>
-              <button type="button" onClick={() => setOpen(false)} aria-label="Fermer" style={{ background:"none", border:"none",
-                fontSize:20, color:"var(--muted)", cursor:"pointer", lineHeight:1 }}>✕</button>
+            <div style={{ display:"flex", alignItems:"center", gap:10, margin:"0 -14px 4px", padding:"16px 14px 12px",
+              background:"radial-gradient(circle at 12% 30%, rgba(236,72,153,0.32), transparent 60%), var(--surface2)" }}>
+              <span style={{ width:40, height:40, borderRadius:13, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:19,
+                background:"linear-gradient(135deg, #EC4899, #8B5CF6)", boxShadow:"0 6px 14px -6px #EC4899" }}>🎨</span>
+              <span style={{ flex:1, minWidth:0 }}>
+                <span style={{ display:"block", fontSize:16, fontWeight:900, color:"var(--text)" }}>Couleurs du plateau {plate.index}</span>
+                <span style={{ display:"block", fontSize:12, fontWeight:700, color:"var(--muted)" }}>{plate.name ? `${plate.name} · ` : ""}ce choix ne vaut que pour ce plateau</span>
+              </span>
+              <button type="button" onClick={() => setOpen(false)} aria-label="Fermer" style={{ width:34, height:34, borderRadius:"50%",
+                border:"1px solid var(--border)", background:"var(--surface)", fontSize:15, color:"var(--text2)", cursor:"pointer", flexShrink:0 }}>✕</button>
             </div>
-            <div style={{ fontSize:11.5, color:"var(--muted)", lineHeight:1.4 }}>Ce choix ne vaut que pour ce plateau.</div>
             {rows.map((r, k) => r.x && (
               <button key={k} type="button" onClick={() => setPickRow(k)} style={{ display:"flex", alignItems:"center", gap:8,
-                padding:"10px 12px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)", cursor:"pointer",
+                padding:"11px 12px", borderRadius:14, border:"1px solid var(--border)", background:"var(--surface2)", cursor:"pointer",
                 textAlign:"left", color:"var(--text)" }}>
                 <Swatch color={r.f.color} size={16}/>
                 <span style={{ fontSize:12, fontWeight:700 }}>{r.f.type} · {Math.round(num(r.f.g))} g</span>
@@ -361,7 +365,8 @@ export function PlateColors({ items, plate, scope, canEdit, onNavigate }) {
                 {r.c && <Swatch f={r.c} size={16}/>}
                 <span style={{ flex:1, minWidth:0, fontSize:12, fontWeight:600, color: r.own ? "#3b82f6" : "var(--text2)",
                   overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.c?.name || "—"}{r.own ? "" : " (profil)"}</span>
-                <span style={{ fontSize:11, color:"#3b82f6", fontWeight:700 }}>changer ▸</span>
+                <span style={{ fontSize:11.5, color:"#fff", fontWeight:800, padding:"3px 9px", borderRadius:20,
+                  background:"linear-gradient(135deg, #3B82F6, #6366F1)", flexShrink:0 }}>changer ▸</span>
               </button>
             ))}
           </div>
@@ -397,13 +402,16 @@ export function FilamentPicker({ x, g, chosen, title, onPick, onReset, resetLabe
     <div onClick={e => { e.stopPropagation(); onClose(); }} style={{ position:"fixed", inset:0, zIndex:4400,
       background:"rgba(0,0,0,0.55)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:540, height:"min(640px, 88dvh)", display:"flex",
-        flexDirection:"column", background:"var(--sheet-bg, var(--surface))", borderRadius:"16px 16px 0 0",
+        flexDirection:"column", background:"var(--sheet-bg, var(--surface))", borderRadius:"22px 22px 0 0",
         boxShadow:"0 -8px 30px rgba(0,0,0,.35)", overflow:"hidden" }}>
-        <div style={{ padding:"14px 14px 8px", display:"flex", flexDirection:"column", gap:8, borderBottom:"1px solid var(--border)" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <span style={{ flex:1, fontSize:14, fontWeight:800, color:"var(--text)" }}>{title || "Choisir un filament"}</span>
-            <button type="button" onClick={onClose} aria-label="Fermer" style={{ background:"none", border:"none", fontSize:20,
-              color:"var(--muted)", cursor:"pointer", lineHeight:1 }}>✕</button>
+        <div style={{ padding:"16px 14px 10px", display:"flex", flexDirection:"column", gap:9, borderBottom:"1px solid var(--border)",
+          background:"radial-gradient(circle at 12% 30%, rgba(249,115,22,0.30), transparent 60%), var(--surface2)" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ width:38, height:38, borderRadius:12, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18,
+              background:"linear-gradient(135deg, #F97316, #FBBF24)", boxShadow:"0 6px 14px -6px #F97316" }}>🧵</span>
+            <span style={{ flex:1, minWidth:0, fontSize:15, fontWeight:900, color:"var(--text)", lineHeight:1.25 }}>{title || "Choisir un filament"}</span>
+            <button type="button" onClick={onClose} aria-label="Fermer" style={{ width:34, height:34, borderRadius:"50%", border:"1px solid var(--border)",
+              background:"var(--surface)", fontSize:15, color:"var(--text2)", cursor:"pointer", flexShrink:0 }}>✕</button>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:12, color:"var(--text2)", flexWrap:"wrap" }}>
             <Swatch color={x.color} size={16} title={x.color}/>
@@ -411,15 +419,15 @@ export function FilamentPicker({ x, g, chosen, title, onPick, onReset, resetLabe
             <span style={{ color:"var(--muted)" }}>→</span>
             {chosen ? <><Swatch f={chosen} size={16}/><span style={{ fontWeight:700 }}>{chosen.name}</span></>
               : <span style={{ color:"#ef4444" }}>aucun</span>}
-            {onReset && <button type="button" onClick={onReset} style={{ marginLeft:"auto", fontSize:11, fontWeight:800, color:"#3b82f6",
-              background:"none", border:"1px solid #3b82f6", borderRadius:12, padding:"2px 9px", cursor:"pointer" }}>{resetLabel || "Annuler ce choix"}</button>}
+            {onReset && <button type="button" onClick={onReset} style={{ marginLeft:"auto", fontSize:11.5, fontWeight:800, color:"#3b82f6",
+              background:"var(--surface)", border:"1px solid rgba(59,130,246,0.45)", borderRadius:20, padding:"3px 10px", cursor:"pointer" }}>{resetLabel || "Annuler ce choix"}</button>}
           </div>
           <div role="tablist" style={{ display:"flex", gap:4, overflowX:"auto" }}>
             {tabs.map(([id, label, n]) => (
               <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-                style={{ flexShrink:0, padding:"6px 11px", borderRadius:20, cursor:"pointer", fontSize:12, fontWeight:800,
-                  border: tab === id ? "1px solid #3b82f6" : "1px solid var(--border)",
-                  background: tab === id ? "#3b82f6" : "var(--surface2)", color: tab === id ? "#fff" : "var(--text2)" }}>
+                style={{ flexShrink:0, padding:"6px 12px", borderRadius:20, cursor:"pointer", fontSize:12.5, fontWeight:800,
+                  border: tab === id ? "none" : "1px solid var(--border)", boxShadow: tab === id ? "0 6px 14px -8px #F97316" : "none",
+                  background: tab === id ? "linear-gradient(135deg, #F97316, #F59E0B)" : "var(--surface)", color: tab === id ? "#fff" : "var(--text2)" }}>
                 {label}{n != null ? <span style={{ opacity:.75, fontWeight:700 }}> {n}</span> : null}</button>
             ))}
           </div>
@@ -460,7 +468,7 @@ function StockSearch({ x, g, chosen, onPick, onGo, open }) {
       <div style={{ padding:"7px 10px 5px" }}>
         <input value={q} onChange={e => setQ(e.target.value)} autoFocus autoComplete="off" spellCheck={false}
           placeholder="Nom, marque, matière, couleur…"
-          style={{ width:"100%", boxSizing:"border-box", padding:"7px 10px", borderRadius:8, fontSize:12.5,
+          style={{ width:"100%", boxSizing:"border-box", height:38, padding:"0 14px", borderRadius:20, fontSize:13.5,
             background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)", outline:"none" }}/>
       </div>
       {res === null ? <div style={{ padding:"4px 12px 8px", fontSize:11, color:"var(--muted)" }}>…</div>
@@ -480,20 +488,20 @@ function MatchRow({ mt, g, on, onPick, onGo }) {
   const after = Math.round(mt.remaining_g - (g || 0));
   return (
     <div style={{ display:"flex", alignItems:"center", borderTop:"1px solid var(--border)",
-      background: on ? "rgba(59,130,246,0.08)" : "none" }}>
+      background: on ? "linear-gradient(90deg, rgba(59,130,246,0.16), transparent 75%)" : "none" }}>
       <button onClick={onPick}
-        style={{ flex:1, minWidth:0, display:"flex", alignItems:"center", gap:8, padding:"6px 4px 6px 12px", background:"none",
+        style={{ flex:1, minWidth:0, display:"flex", alignItems:"center", gap:9, padding:"9px 4px 9px 12px", background:"none",
           border:"none", cursor:"pointer", color:"var(--text)", textAlign:"left" }}>
-        <span style={{ width:14, height:14, borderRadius:"50%", flexShrink:0, boxSizing:"border-box",
-          border: on ? "4px solid #3b82f6" : "1.5px solid var(--muted)" }}/>
-        <Swatch f={mt} size={18}/>
+        <span style={{ width:16, height:16, borderRadius:"50%", flexShrink:0, boxSizing:"border-box",
+          border: on ? "5px solid #3b82f6" : "1.5px solid var(--muted)" }}/>
+        <Swatch f={mt} size={24}/>
         <span style={{ flex:1, minWidth:0 }}>
-          <span style={{ display:"block", fontSize:11.5, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+          <span style={{ display:"block", fontSize:13, fontWeight:800, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {mt.name}</span>
           {mt.same_finish != null && <RefBadge mt={mt}/>}
           {mt.other_material && <span style={{ display:"block", fontSize:9.5, fontWeight:800, color:"#f59e0b", lineHeight:1.3 }}>
             ⚠ autre matière : {mt.material}</span>}
-          <span style={{ display:"block", fontSize:10.5, color:"var(--muted)" }}>
+          <span style={{ display:"block", fontSize:11.5, fontWeight:600, color:"var(--muted)" }}>
             {[detailOf(mt), `${mt.remaining_g} g (${mt.spools} bobine${mt.spools > 1 ? "s" : ""})`].filter(Boolean).join(" · ")}
             {g > 0 ? <b style={{ color: after < 0 ? "#f59e0b" : "var(--text2)" }}> · {after < 0 ? `manque ${-after} g` : `reste ${after} g`}</b> : null}
             {spoolsNeeded(mt, g) > 1 ? <span style={{ color:"#3b82f6" }}> · {spoolsNeeded(mt, g)} bobines à entamer</span> : null}
@@ -501,7 +509,8 @@ function MatchRow({ mt, g, on, onPick, onGo }) {
           </span>
         </span>
         <span style={{ textAlign:"right", flexShrink:0 }}>
-          <span style={{ display:"block", fontSize:10, fontWeight:800, color: levelColor(mt) }}>{levelText(mt)}</span>
+          <span style={{ display:"inline-block", fontSize:10.5, fontWeight:900, color: levelColor(mt), padding:"1px 7px", borderRadius:20,
+            background:`color-mix(in srgb, ${levelColor(mt)} 14%, transparent)` }}>{levelText(mt)}</span>
           {mt.delta_e != null && <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}
             title="Écart de couleur perçu (ΔE 2000) : sous 2,5 l'œil ne voit pas la différence">ΔE {String(mt.delta_e).replace(".", ",")}</span>}
         </span>

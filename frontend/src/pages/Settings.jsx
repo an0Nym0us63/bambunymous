@@ -202,11 +202,7 @@ function MyAccountSection() {
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg]   = React.useState(null);
 
-  const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
-    padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" };
-  const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-    letterSpacing:"0.05em", marginBottom:4, display:"block" };
-
+  // les champs et libelles communs de la page (inp, lbl)
   const submit = async () => {
     setMsg(null);
     if (f.next.length < 4)      return setMsg({ err:true, t:"Mot de passe trop court (4 caractères minimum)" });

@@ -33,9 +33,9 @@ export default function CategoryPicker({ value, onChange }) {
 
   const pick = (name) => { onChange(name); setQ(name); setOpen(false); };
 
-  const inp = { width:"100%", boxSizing:"border-box", padding:"9px 12px", borderRadius:9,
-    border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)",
-    fontSize:13, outline:"none" };
+  const inp = { width:"100%", boxSizing:"border-box", padding:"10px 14px", borderRadius:20,
+    border:"1px solid var(--border)", background:"var(--surface)", color:"var(--text)",
+    fontSize:14, fontWeight:600, outline:"none" };
 
   return (
     <div style={{ position:"relative" }}>
@@ -46,8 +46,8 @@ export default function CategoryPicker({ value, onChange }) {
         {(q || value) && (
           <button onClick={() => { onChange(null); setQ(""); setOpen(false); }}
             title="Retirer du regroupement"
-            style={{ flexShrink:0, width:38, borderRadius:9, cursor:"pointer",
-              border:"1px solid var(--border)", background:"var(--surface2)",
+            style={{ flexShrink:0, width:40, borderRadius:"50%", cursor:"pointer",
+              border:"1px solid var(--border)", background:"var(--surface)",
               color:"var(--muted)", fontSize:13 }}>✕</button>
         )}
       </div>
@@ -59,14 +59,15 @@ export default function CategoryPicker({ value, onChange }) {
           <div onClick={() => setOpen(false)}
             style={{ position:"fixed", inset:0, zIndex:10 }}/>
           <div style={{ position:"absolute", top:"100%", left:0, right:0, zIndex:11,
-            marginTop:4, maxHeight:220, overflowY:"auto", borderRadius:10,
+            marginTop:6, maxHeight:240, overflowY:"auto", borderRadius:16, padding:4,
             border:"1px solid var(--border)", background:"var(--sheet-bg)",
-            boxShadow:"0 6px 24px rgba(0,0,0,0.3)" }}>
+            boxShadow:"0 14px 34px rgba(0,0,0,0.35)" }}>
             {canCreate && (
               <button onClick={() => pick(q.trim())}
                 style={{ display:"flex", alignItems:"center", gap:8, width:"100%",
-                  padding:"11px 13px", border:"none", background:"none", cursor:"pointer",
-                  textAlign:"left", color:"#22c55e", fontSize:13, fontWeight:700 }}>
+                  padding:"11px 13px", border:"none", borderRadius:12, cursor:"pointer",
+                  background:"linear-gradient(135deg, rgba(34,197,94,0.16), transparent 70%)",
+                  textAlign:"left", color:"#16a34a", fontSize:13.5, fontWeight:800 }}>
                 + Créer « {q.trim()} »
               </button>
             )}
@@ -79,13 +80,14 @@ export default function CategoryPicker({ value, onChange }) {
             {shown.map(c => (
               <button key={c.name} onClick={() => pick(c.name)}
                 style={{ display:"flex", alignItems:"center", gap:8, width:"100%",
-                  padding:"10px 13px", border:"none", cursor:"pointer", textAlign:"left",
-                  background: c.name === value ? "rgba(59,130,246,0.12)" : "none",
-                  color: c.name === value ? "#3b82f6" : "var(--text)", fontSize:13,
-                  fontWeight: c.name === value ? 700 : 500 }}>
+                  padding:"10px 13px", border:"none", borderRadius:12, cursor:"pointer", textAlign:"left",
+                  background: c.name === value ? "linear-gradient(135deg, #3B82F6, #6366F1)" : "none",
+                  color: c.name === value ? "#fff" : "var(--text)", fontSize:13.5,
+                  fontWeight: c.name === value ? 800 : 600 }}>
                 <span style={{ flex:1, minWidth:0, overflow:"hidden",
                   textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.name}</span>
-                <span style={{ fontSize:10.5, color:"var(--muted)" }}>{c.count}</span>
+                <span style={{ fontSize:11, fontWeight:800, padding:"1px 8px", borderRadius:20,
+                  color: c.name === value ? "#fff" : "var(--muted)", background: c.name === value ? "rgba(255,255,255,.2)" : "var(--surface2)" }}>{c.count}</span>
               </button>
             ))}
             {!shown.length && !canCreate && (

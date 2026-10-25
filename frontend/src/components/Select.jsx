@@ -60,21 +60,22 @@ export default function Select({ value, onChange, options = [], style = {},
             display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
           <div onClick={e => e.stopPropagation()}
             style={{ width:"100%", maxWidth:520, background:"var(--sheet-bg)",
-              borderRadius:"20px 20px 0 0", maxHeight:"70dvh", overflowY:"auto",
-              padding:"14px 0 max(env(safe-area-inset-bottom,16px),16px)" }}>
-            <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)",
+              borderRadius:"22px 22px 0 0", maxHeight:"70dvh", overflowY:"auto",
+              padding:"12px 10px max(env(safe-area-inset-bottom,16px),16px)" }}>
+            <div style={{ width:38, height:4, borderRadius:2, background:"rgba(148,163,184,.6)",
               margin:"0 auto 12px" }}/>
+            {title && <p style={{ fontSize:15, fontWeight:900, color:"var(--text)", margin:"0 10px 8px" }}>{title}</p>}
             {options.map(o => {
               const sel = String(o.value) === String(value);
               return (
                 <button key={String(o.value)} type="button" onClick={() => pick(o.value)}
                   style={{ display:"flex", alignItems:"center", gap:10, width:"100%",
-                    padding:"13px 20px", border:"none", background: sel
-                      ? "rgba(59,130,246,0.12)" : "transparent",
-                    color: sel ? "#3b82f6" : "var(--text)",
-                    fontSize:14, fontWeight: sel ? 700 : 500, cursor:"pointer",
+                    padding:"12px 14px", border:"none", borderRadius:14, marginBottom:2, background: sel
+                      ? "linear-gradient(135deg, #3B82F6, #6366F1)" : "transparent",
+                    color: sel ? "#fff" : "var(--text)", boxShadow: sel ? "0 6px 14px -8px #3B82F6" : "none",
+                    fontSize:14.5, fontWeight: sel ? 800 : 600, cursor:"pointer",
                     textAlign:"left" }}>
-                  <span style={{ width:14, flexShrink:0 }}>{sel ? "✓" : ""}</span>
+                  <span style={{ width:16, flexShrink:0, fontWeight:900 }}>{sel ? "✓" : ""}</span>
                   <span style={{ flex:1, overflow:"hidden", textOverflow:"ellipsis",
                     whiteSpace:"nowrap" }}>{o.label}</span>
                 </button>
