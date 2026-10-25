@@ -45,8 +45,9 @@ export default function Lightbox({ images, index = 0, onClose, title = null, act
   // la vignette en cours reste en vue dans la bande
   useEffect(() => {
     onIndex?.(cur);
-    const t = strip.current?.children[cur];
-    t?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "center" });
+    // la bande seule (scrollIntoView faisait aussi glisser toute la visionneuse : decalee sur la derniere image)
+    const bar = strip.current, t = bar?.children[cur];
+    if (bar && t) bar.scrollTo({ left: t.offsetLeft - (bar.clientWidth - t.offsetWidth) / 2, behavior: "smooth" });
   }, [cur]); // eslint-disable-line react-hooks/exhaustive-deps
   const onScroll = e => {
     const i = Math.round(e.currentTarget.scrollLeft / e.currentTarget.clientWidth);
