@@ -34,6 +34,7 @@ const thumbOf = it => {
 export default function Notifications() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
+  const [wide, setWide] = useState(() => new Set());   // les notifications depliees (« Voir plus »)
   const [more, setMore] = useState(false);
   const [counts, setCounts] = useState(null);     // par categorie, tels qu'a l'ouverture (points des nouvelles)
   const navigate = useNavigate();
@@ -107,6 +108,9 @@ export default function Notifications() {
             padding:"0 4px" }}>{g.k}</div>
           {g.items.map(it => {
             const thumb = thumbOf(it);
+            // un texte long ou un titre coupe : « Voir plus » le deplie (25/10/2026)
+            const full = wide.has(it.id);
+            const long = (it.message || "").length > 200 || (it.message || "").split("\n").length > 5 || (it.title || "").length > 42;
             return (
               // Meme mise en page que la notification de l'appli Android :
               // en-tete (masque violet · BambuNymous · section · heure), titre,
@@ -130,11 +134,15 @@ export default function Notifications() {
                 <div style={{ display:"flex", gap:12, marginTop:7, paddingLeft:30 }}>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontSize:14, fontWeight:700, color:"var(--text)", overflow:"hidden",
-                      textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{it.title}</div>
+                      ...(full ? { overflowWrap:"anywhere" } : { textOverflow:"ellipsis", whiteSpace:"nowrap" }) }}>{it.title}</div>
                     {it.message && (
-                      <div style={{ fontSize:12.5, color:"var(--text2)", marginTop:3, whiteSpace:"pre-line", lineHeight:1.45,
-                        display:"-webkit-box", WebkitLineClamp:5, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{it.message}</div>
+                      <div style={{ fontSize:12.5, color:"var(--text2)", marginTop:3, whiteSpace:"pre-line", lineHeight:1.45, overflowWrap:"anywhere",
+                        ...(full ? {} : { display:"-webkit-box", WebkitLineClamp:5, WebkitBoxOrient:"vertical", overflow:"hidden" }) }}>{it.message}</div>
                     )}
+                    {long && <button onClick={e => { e.stopPropagation(); setWide(w => { const n = new Set(w); n.has(it.id) ? n.delete(it.id) : n.add(it.id); return n; }); }}
+                      style={{ marginTop:5, padding:"2px 10px", borderRadius:20, border:"1px solid rgba(79,70,229,0.3)", cursor:"pointer",
+                        background:"rgba(79,70,229,0.08)", color:"#6366f1", fontSize:11.5, fontWeight:800, fontFamily:"inherit" }}>
+                      {full ? "Voir moins ▴" : "Voir plus ▾"}</button>}
                   </div>
                   <BigIcon thumb={thumb} it={it}/>
                 </div>
