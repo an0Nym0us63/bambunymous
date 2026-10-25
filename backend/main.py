@@ -526,6 +526,34 @@ class TextGZip(_GZ):
 
 app.add_middleware(TextGZip, minimum_size=1024, compresslevel=5)
 
+# Images de l'API : vignettes ?w= et cache du navigateur (304) ; pose apres le gzip,
+# donc devant lui (les images n'y passent pas de toute facon).
+from app.core.images import ImageCacheMiddleware
+app.add_middleware(ImageCacheMiddleware)
+
+
+# Les scripts et styles du build portent leur empreinte dans leur nom (index-AbC123.js) :
+# un nom ne change jamais de contenu, ils se gardent un an. Sans en-tete, le navigateur
+# revalidait chaque fichier a chaque ouverture.
+class _ImmutableAssets:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or not scope.get("path", "").startswith("/assets/"):
+            await self.app(scope, receive, send)
+            return
+
+        async def _send(message):
+            if message["type"] == "http.response.start" and message.get("status") == 200:
+                message = {**message, "headers": [(k, v) for k, v in message.get("headers", []) if k.lower() != b"cache-control"]
+                           + [(b"cache-control", b"public, max-age=31536000, immutable")]}
+            await send(message)
+        await self.app(scope, receive, _send)
+
+
+app.add_middleware(_ImmutableAssets)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

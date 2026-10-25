@@ -19,7 +19,7 @@ SAVE_S = 120
 GAP_S = 600                  # plus de 10 min sans releve (appli arretee) : la suite est inconnue
 DRY_MAX, DRY_SAMPLES = 30, 240   # humidite des AMS sous 30 % ; une journee compte avec 1 h de releves
 OVEN_C = 45
-DOOR_N, DOOR_S = 3, 60       # trois ouvertures de la porte en 60 s
+DOOR_N, DOOR_S = 3, 60       # trois ouvertures de la porte en 60 s (seuil confirme le 25/10/2026)
 LIVE = ("RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING")
 W: dict = {}
 
