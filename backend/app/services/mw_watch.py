@@ -191,10 +191,9 @@ async def check_collections() -> int:
                     lines.append(f"👤 {x['creator_name']}")
                 lines.append(f"🖨️ déjà imprimé {printed} fois" if printed else "🖨️ jamais imprimé")
                 lines.append(f"📁 « {c['title']} »" + (f" · {c['count']} modèles" if c.get("count") else ""))
+                # ajoute depuis BambuNymous : qui, des le titre (une derniere ligne est coupee dans la liste)
                 who = (marks.get(str(x["design_id"])) or {}).get("by")
-                if who:
-                    lines.append(f"🙋 ajouté depuis BambuNymous par {who}")
-                await N.notify("mw_coll_added", f"➕ Ajouté à « {c['title']} »", "\n".join(lines),
+                await N.notify("mw_coll_added", f"➕ Ajouté à « {c['title']} »" + (f" par {who}" if who else ""), "\n".join(lines),
                                click=N.mw_model_link(cfg, x["design_id"]), attach=_cover(x.get("cover_url")), priority=2,
                                actions=[("Voir sur MakerWorld", url)] + acts_app)
                 sent += 1
