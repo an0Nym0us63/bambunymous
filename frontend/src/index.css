@@ -237,6 +237,9 @@ body.ach-room-on main.page-content {
    l'autre, chaque carte sous la precedente, sans les trous d'une grille alignee par rangee. */
 .wide-flow { display:flex; flex-direction:column; gap:16px; min-width:0; }
 .wide-flow > * { min-width:0; }
+/* Sections repliables (Objets, Accessoires…) : en liste ; sur grand ecran, plusieurs par rangee (le resume et
+   les vignettes restent pres du titre), et celle qu'on deplie prend toute la largeur (25/10/2026). */
+.fold-grid { display:flex; flex-direction:column; gap:10px; min-width:0; }
 /* Cartes de chiffres : sur PC les cartes s'etirent pour remplir la ligne
    (auto-fit) au lieu de laisser des pistes vides a droite. */
 .kpi-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(var(--kpi-min, 140px), 1fr)); gap:10px; }
@@ -248,6 +251,8 @@ body.ach-room-on main.page-content {
   .wide-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(var(--wl-min, 420px), 1fr)); align-items:start; }
   .wide-list > .wide-span, .wide-2 > .wide-span { grid-column:1 / -1; }
   .wide-flow { display:block; columns:520px 3; column-gap:16px; }
+  .fold-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(380px, 1fr)); align-items:start; }
+  .fold-grid > .fold-open { grid-column:1 / -1; }
   .wide-flow > * { break-inside:avoid; margin:0 0 16px; }
   .wide-flow > .wide-span { column-span:all; }
   .kpi-grid { grid-template-columns:repeat(auto-fit, minmax(var(--kpi-min, 140px), 1fr)); }

@@ -1271,7 +1271,7 @@ function FoldSection({ color, icon, title, muted = false, count, sub, alert = nu
     if (open && ref.current) ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [open]);
   return (
-    <div ref={ref} style={{ borderRadius:20, overflow:"hidden", border:`1px solid color-mix(in srgb, ${color} 32%, var(--border))`,
+    <div ref={ref} className={open ? "fold-open" : undefined} style={{ borderRadius:20, overflow:"hidden", border:`1px solid color-mix(in srgb, ${color} 32%, var(--border))`,
       background:`radial-gradient(90% 120% at 0% 0%, color-mix(in srgb, ${color} 16%, transparent), transparent 60%), var(--surface2)`,
       boxShadow: open ? `0 10px 26px -18px ${color}` : "none",
       scrollMarginTop:"calc(64px + var(--sat, env(safe-area-inset-top, 0px)))" }}>
@@ -1886,7 +1886,7 @@ export default function Objects() {
       : tab === "objects" ? (
         gridItems.length === 0
           ? <EmptyCard icon="🎁" text={q ? "Aucun objet ne correspond" : "Aucun objet : crée-en un depuis la fiche d'une impression"}/>
-          : <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          : <div className="fold-grid">
               {sections.map(sec => (
                 /* Toutes fermees au depart : l'en-tete porte deja le compte et
                    le montant, donc la page se lit d'un coup d'oeil et on ne
@@ -1913,7 +1913,7 @@ export default function Objects() {
       ) : (
         accessories.length === 0
           ? <EmptyCard icon="🔩" text={q ? "Aucun accessoire ne correspond" : "Aucun accessoire : ajoute le premier avec « + Accessoire »"}/>
-          : <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          : <div className="fold-grid">
               {accSections.map(sec => (
                 <AccessorySection key={sec.name || "_none"} sec={sec}
                   open={openAccSections[sec.name || "_none"] ?? false}
