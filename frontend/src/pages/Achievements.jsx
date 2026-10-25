@@ -177,7 +177,8 @@ export default function Achievements({ embedded = false }) {
   if (err) return <p style={msg}>{err}</p>;
   if (!data) return <p style={msg}>…</p>;
 
-  const toggle = c => setOpenCats(s => { const n = new Set(s); n.has(c) ? n.delete(c) : n.add(c); return n; });
+  // une section a la fois : son detail s'ouvre dans une fenetre
+  const toggle = c => setOpenCats(s => s.has(c) ? new Set() : new Set([c]));
   const closeDetail = () => {
     setDetail(null);
     if (focus) { const n = new URLSearchParams(sp); n.delete("a"); setSp(n, { replace:true }); }
@@ -320,8 +321,9 @@ export default function Achievements({ embedded = false }) {
         </>;
       })()}
 
-      {/* Sections : sur PC, en colonnes ; celle qu'on ouvre prend toute la ligne. */}
-      <div className="wide-list" style={{ "--wl-gap":"14px", "--wl-min":"440px" }}>
+      {/* Sections : sur PC, en colonnes, toutes de la meme hauteur ; le detail d'une section s'ouvre
+          dans une fenetre (avant, il s'ouvrait sur place et prenait toute la ligne : grille decousue). */}
+      <div className="wide-list" style={{ "--wl-gap":"14px", "--wl-min":"440px", alignItems:"stretch" }}>
       {data.categories.map(c => {
         const items = data.items.filter(x => x.cat === c.id)
           .sort((a, b) => (b.level - a.level) || (progress(b) - progress(a)));
@@ -340,9 +342,9 @@ export default function Achievements({ embedded = false }) {
         const common = items.filter(x => shared(x) === true).length;
         const toFind = items.filter(x => shared(x) === false).length;
         return (
-          <div key={c.id} className={open ? "card wide-span" : "card"} style={{ padding:0, overflow:"hidden", ...feltCard(CAT_COLOR[c.id] || "#8B5CF6") }}>
-            <button onClick={() => toggle(c.id)} aria-expanded={open}
-              style={{ width:"100%", display:"flex", flexDirection:"column", gap:8, padding:"14px 16px", background:"none",
+          <div key={c.id} className="card" style={{ padding:0, overflow:"hidden", display:"flex", flexDirection:"column", ...feltCard(CAT_COLOR[c.id] || "#8B5CF6") }}>
+            <button onClick={() => toggle(c.id)} aria-expanded={open} aria-haspopup="dialog"
+              style={{ width:"100%", flex:1, display:"flex", flexDirection:"column", gap:8, padding:"14px 16px", background:"none",
                 border:"none", cursor:"pointer", textAlign:"left", color:"var(--text)" }}>
               <div style={{ display:"flex", alignItems:"center", gap:12, width:"100%" }}>
                 <Chip emoji={c.emoji} color={CAT_COLOR[c.id] || "#8B5CF6"}/>
@@ -378,9 +380,10 @@ export default function Achievements({ embedded = false }) {
                     whiteSpace:"nowrap", background:"var(--surface2)", color:"var(--text2)" }}>
                     {["🥇", "🥈", "🥉"][myRank - 1] || "🏅"} {myRank}ᵉ/{ranked.length}</span>
                 )}
-                <span style={{ fontSize:11, color:"var(--muted)", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>
+                <span style={{ fontSize:11.5, fontWeight:800, whiteSpace:"nowrap", color: CAT_COLOR[c.id] || "#8B5CF6" }}>Détail ›</span>
               </div>
-              <Bar value={sum.max ? sum.score / sum.max : 0} tiers={data.tiers}/>
+              {/* la barre et les medailles en bas : d'une carte a l'autre, elles s'alignent */}
+              <div style={{ marginTop:"auto" }}><Bar value={sum.max ? sum.score / sum.max : 0} tiers={data.tiers}/></div>
               <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
                 {data.tiers.filter(t => sum.medals[t.id]).map(t => (
                   <span key={t.id} style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:12, fontWeight:800 }}>
@@ -390,8 +393,17 @@ export default function Achievements({ embedded = false }) {
                 {c.id !== "cards" && c.id !== "secret" && <span style={{ marginLeft:"auto" }}><Hand of={`c_${c.id}`}/></span>}
               </div>
             </button>
-            {open && (
-              <div style={{ padding:"0 16px 16px", display:"flex", flexDirection:"column", gap:14 }}>
+            {open && <Zoom icon={<span style={{ fontSize:20 }}>{c.emoji}</span>} color={CAT_COLOR[c.id] || "#8B5CF6"} label={c.name} onClose={() => toggle(c.id)}>
+              <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+                {/* en tete de la fenetre : le resume de la section */}
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"4px 10px", fontSize:12.5, fontWeight:700, color:"var(--text2)" }}>
+                    <GradeBadge g={gradeOf(c.id, sum.max ? sum.score / sum.max : 0)}/>
+                    <span>{got}/{items.length} succès · {sum.score} pts</span>
+                    {near > 0 && <span style={{ color:"#F59E0B" }}>👀 {near} à portée</span>}
+                    {myRank > 0 && <span>{["🥇", "🥈", "🥉"][myRank - 1] || "🏅"} {myRank}ᵉ/{ranked.length}</span>}</div>
+                  <Bar value={sum.max ? sum.score / sum.max : 0} tiers={data.tiers}/>
+                </div>
                 {withFriends && (
                   <div style={{ display:"flex", flexDirection:"column", gap:10, padding:"12px", borderRadius:12,
                     ...feltCard(CAT_COLOR[c.id] || "#8B5CF6", "#F5B700"),
@@ -499,7 +511,7 @@ export default function Achievements({ embedded = false }) {
                   </div>
                 ))}
               </div>
-            )}
+            </Zoom>}
           </div>
         );
       })}
