@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import { showConfirm, showAlert } from "../utils/dialog";
@@ -63,6 +63,8 @@ function useTemplates() {
 setOnRateFailed(() => { forgetToRate(); readToRate(); });
 
 export function forgetToRate() { _p = null; _t = 0; }  // relire au prochain affichage
+// une evaluation qui s'ouvre : la liste (et ses photos) se relit, une photo deposee juste avant y est (25/10/2026)
+function freshToRate() { if (Date.now() - _t > 3000) { forgetToRate(); readToRate(); } }
 // une photo vient d'etre ajoutee ou retiree : la liste (et ses photos a joindre) se relit tout de suite
 if (typeof window !== "undefined") window.addEventListener(PHOTOS_CHANGED, () => { if (_last) { forgetToRate(); readToRate(); } });
 
@@ -78,7 +80,7 @@ export function RateButton({ did, style, label = "⭐ Évaluer", doneLabel = "�
   if (gone) return <span style={{ ...style, background: "none", color: "#22c55e", borderColor: "transparent" }}>{doneLabel}</span>;
   if (!x?.rating_id) return <a href={x?.url || rateUrl(did)} target="_blank" rel="noopener noreferrer" style={style}>{label}{ext}</a>;
   return (<>
-    <button onClick={() => setOpen(true)} style={{ ...style, cursor: "pointer" }}>{label}</button>
+    <button onClick={() => { freshToRate(); setOpen(true); }} style={{ ...style, cursor: "pointer" }}>{label}</button>
     {open && createPortal(
       <div data-no-pull="" onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 4300, background: "rgba(0,0,0,0.6)",
         display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -143,7 +145,7 @@ export function GroupToRate({ designs, name, enabled = true, label = null, ancho
           background: "linear-gradient(135deg, #F59E0B, #FBBF24)", boxShadow: "0 6px 16px rgba(245,158,11,.35)" }}>⭐</span>
         <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 900, color: "#d97706" }}>
           {label || `${items.length} modèle${items.length > 1 ? "s" : ""} à évaluer dans ce groupe`}</span>
-        {ready.length > 1 && <button onClick={() => setOpen(true)} style={{ ...btn, cursor: "pointer" }}>⭐ Tout évaluer ({ready.length})</button>}
+        {ready.length > 1 && <button onClick={() => { freshToRate(); setOpen(true); }} style={{ ...btn, cursor: "pointer" }}>⭐ Tout évaluer ({ready.length})</button>}
       </div>
       {items.map(x => (
         <div key={x.design_id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -226,6 +228,15 @@ function RateForm({ x, targets, onDone }) {
   const [score, setScore] = useState(5);
   const [text, setText] = useState("");
   const [picked, setPicked] = useState(() => new Set((x.photos || []).slice(0, 8)));
+  // une photo qui arrive pendant que le formulaire est ouvert (liste relue) : cochee, dans la limite de 8
+  const seenPh = useRef(new Set(x.photos || []));
+  const phKey = (x.photos || []).join("|");
+  useEffect(() => {
+    const fresh = (x.photos || []).filter(u => !seenPh.current.has(u));
+    if (!fresh.length) return;
+    fresh.forEach(u => seenPh.current.add(u));
+    setPicked(cur => { const n = new Set(cur); for (const u of fresh) { if (n.size >= 8) break; n.add(u); } return n; });
+  }, [phKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   // Message tout fait (5 etoiles) : famille choisie, tirage au hasard ; tant
