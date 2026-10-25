@@ -22,6 +22,7 @@ import MwQueue from "../components/MwQueue";
 import { mwImg } from "../components/MwImg";
 import { toast } from "../store/toast";
 import ShareSheet from "../components/ShareSheet";
+import { FSheet, fBtn, lighten } from "../components/FicheKit";
 import { useIsAdmin } from "../store/auth";
 import { useTrackDetail } from "../utils/track";
 import GalleryCompare from "../components/GalleryCompare";
@@ -280,84 +281,85 @@ function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
   const allSame = OPTS.find(o => mapped.every(f=>(fracs[f.id]??0)===o));
   const totalAdded = mapped.reduce((s,f)=>s+(f.grams_used||0)*(fracs[f.id]??0),0);
 
+  // la couleur de la fenetre : verte pour rendre du poids, rouge pour supprimer
+  const C = restoreOnly ? "#22C55E" : "#EF4444";
+  const pct = o => o === 0 ? "Non" : o === 1 ? "100 %" : `${o * 100} %`;
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:3000,
-      display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onCancel}>
-      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
-        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
-          maxWidth:640, maxHeight:"85dvh", overflowY:"auto", padding:"0 16px 24px",
-          paddingBottom:"env(safe-area-inset-bottom,24px)" }}>
-        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 8px" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+    <FSheet onClose={onCancel} z={3000} bottom={<>
+      <button onClick={onCancel} style={{ ...fBtn, flex:1 }}>Annuler</button>
+      <button onClick={()=>onConfirm(fracs)} style={{ ...fBtn, flex:2, border:"none", color:"#fff", fontWeight:900,
+        background:`linear-gradient(135deg, ${C}, ${lighten(C)})`, boxShadow:`0 8px 18px -10px ${C}` }}>
+        {restoreOnly ? `✓ Restituer${totalAdded > 0 ? ` ${totalAdded.toFixed(1).replace(".", ",")} g` : ""}` : "🗑 Supprimer"}</button></>}>
+      {/* l'en-tete : ce qu'on fait, et a quelle impression */}
+      <div style={{ padding:"52px 18px 16px", display:"flex", alignItems:"center", gap:14,
+        background:`radial-gradient(circle at 15% 40%, ${C}40, transparent 60%), var(--surface2)` }}>
+        <span style={{ width:54, height:54, borderRadius:17, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:26,
+          background:`linear-gradient(135deg, ${C}, ${lighten(C)})`, boxShadow:`0 8px 20px -8px ${C}` }}>{restoreOnly ? "⚖️" : "🗑️"}</span>
+        <div style={{ minWidth:0, display:"flex", flexDirection:"column", gap:3 }}>
+          <span style={{ fontSize:12, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:C }}>
+            {restoreOnly ? "Rendre aux bobines" : "Supprimer l'impression"}</span>
+          <span style={{ fontSize:19, fontWeight:900, color:"var(--text)", lineHeight:1.2 }}>
+            {restoreOnly ? "Restituer les grammes" : "Supprimer ce print ?"}</span>
+          <span style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            {p.file_name || "Sans nom"}</span>
         </div>
-        <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 4px" }}>
-          {restoreOnly ? "⚖ Restituer les grammes" : "🗑 Supprimer ce print ?"}
-        </h3>
-        <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>{p.file_name || "Sans nom"}</p>
-        {mapped.length > 0 && (<>
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10 }}>
-            <span style={{ fontSize:11, color:"var(--muted)", flex:1 }}>Tous :</span>
+      </div>
+      <div style={{ padding:"14px 16px 18px", display:"flex", flexDirection:"column", gap:12 }}>
+        {mapped.length > 0 ? (<>
+          {!restoreOnly && <p style={{ margin:0, fontSize:12.5, fontWeight:600, color:"var(--muted)" }}>
+            Et le filament consommé : le rendre aux bobines ?</p>}
+          {/* d'un geste, la meme part pour toutes les bobines */}
+          <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+            <span style={{ fontSize:12, fontWeight:800, color:"var(--text2)", marginRight:"auto" }}>Pour toutes</span>
             {OPTS.map(o=>(
-              <button key={o} onClick={()=>setAll(o)} style={{ padding:"4px 10px", borderRadius:20,
-                border:"none", cursor:"pointer", fontWeight:600, fontSize:11,
-                background:allSame===o?"#22c55e":"var(--surface2)",
-                color:allSame===o?"white":"var(--muted)" }}>
-                {o===0?"Non":o===1?"100%":`${o*100}%`}
-              </button>
+              <button key={o} onClick={()=>setAll(o)} style={pill(allSame===o)}>{pct(o)}</button>
             ))}
           </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:14 }}>
-            {mapped.map(f=>(
-              <div key={f.id} style={{ background:"var(--surface2)", borderRadius:10,
-                padding:"10px 12px", border:"1px solid var(--border)" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-                  <ColorDot hex={f.color_hex} colors={f.filament_colors_array}
-                    multicolor={f.filament_multicolor_type} size={16}/>
-                  <span style={{ fontSize:12, fontWeight:600, color:"var(--text)", flex:1 }}>
-                    {f.filament_translated_name||f.filament_fila_type||f.filament_type||"Filament"}
-                  </span>
-                  <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>{f.grams_used?.toFixed(1)}g</span>
-                </div>
-                <div style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center" }}>
-                  {OPTS.map(o=>(
-                    <button key={o} onClick={()=>setOne(f,o)} style={{ padding:"4px 9px",
-                      borderRadius:20, border:"none", cursor:"pointer", fontWeight:600, fontSize:11,
-                      background:(fracs[f.id]??0)===o?"#22c55e":"var(--bg)",
-                      color:(fracs[f.id]??0)===o?"white":"var(--muted)" }}>
-                      {o===0?"Non":o===1?"100%":`${o*100}%`}
-                    </button>
-                  ))}
-                  {/* Saisie precise en grammes : pilote la fraction (bornee a la
-                      quantite consommee). Les boutons rapides mettent a jour ce champ. */}
-                  <span style={{ fontSize:10, color:"var(--muted)", marginLeft:2 }}>ou</span>
-                  <input type="text" inputMode="decimal"
+          {mapped.map(f=>{ const on = (fracs[f.id]??0) > 0;
+            return (
+            <div key={f.id} style={{ borderRadius:16, padding:"11px 12px", display:"flex", flexDirection:"column", gap:9,
+              border:`1px solid ${on ? "rgba(34,197,94,0.35)" : "var(--border)"}`,
+              background: on ? "linear-gradient(135deg, rgba(34,197,94,0.10), transparent 60%), var(--surface2)" : "var(--surface2)" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+                <ColorDot hex={f.color_hex} colors={f.filament_colors_array} multicolor={f.filament_multicolor_type} size={20}/>
+                <span style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column" }}>
+                  <span style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {f.filament_translated_name||f.filament_fila_type||f.filament_type||"Filament"}</span>
+                  <span style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)" }}>bobine #{f.spool_id} · {gFmt(f.grams_used).replace(".", ",")} g utilisés</span>
+                </span>
+                {on && <span style={{ fontSize:12.5, fontWeight:900, color:"#16a34a", whiteSpace:"nowrap" }}>
+                  +{((f.grams_used||0)*(fracs[f.id]??0)).toFixed(1).replace(".", ",")} g</span>}
+              </div>
+              <div style={{ display:"flex", gap:5, flexWrap:"wrap", alignItems:"center" }}>
+                {OPTS.map(o=>(
+                  <button key={o} onClick={()=>setOne(f,o)} style={pill((fracs[f.id]??0)===o)}>{pct(o)}</button>
+                ))}
+                {/* Saisie precise en grammes : pilote la fraction (bornee a la
+                    quantite consommee). Les boutons rapides mettent a jour ce champ. */}
+                <span style={{ display:"inline-flex", alignItems:"center", gap:5, marginLeft:"auto" }}>
+                  <input type="text" inputMode="decimal" aria-label="Grammes à restituer"
                     value={gtxt[f.id] ?? ""}
                     onChange={e=>setGrams(f, e.target.value)}
                     onBlur={()=>setGtxt(prev=>({...prev,[f.id]:gFmt(f.grams_used*(fracs[f.id]??0))}))}
                     onFocus={e=>e.target.select()}
-                    style={{ width:58, padding:"3px 6px", borderRadius:6, border:"1px solid var(--border)",
-                      background:"var(--bg)", color:"var(--text)", fontSize:11, fontFamily:"monospace", textAlign:"right" }}/>
-                  <span style={{ fontSize:10, color:"var(--muted)" }}>g</span>
-                </div>
+                    style={{ width:64, height:30, padding:"0 10px", borderRadius:20, border:"1px solid var(--border)", boxSizing:"border-box",
+                      background:"var(--surface)", color:"var(--text)", fontSize:12.5, fontWeight:800, textAlign:"right" }}/>
+                  <span style={{ fontSize:12, fontWeight:800, color:"var(--muted)" }}>g</span>
+                </span>
               </div>
-            ))}
-          </div>
-          {totalAdded>0 && <p style={{ fontSize:12, color:"#22c55e", fontWeight:700, textAlign:"center", margin:"0 0 14px" }}>Total : +{totalAdded.toFixed(1)}g restitués</p>}
-        </>)}
-        <div style={{ display:"flex", gap:8 }}>
-          <button onClick={onCancel} style={{ flex:1, padding:"11px", borderRadius:12,
-            border:"1px solid var(--border)", background:"var(--surface2)",
-            color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Annuler</button>
-          <button onClick={()=>onConfirm(fracs)} style={{ flex:2, padding:"11px", borderRadius:12,
-            border:"none", background:restoreOnly?"#22c55e":"#ef4444", color:"white",
-            fontSize:13, fontWeight:700, cursor:"pointer" }}>
-            {restoreOnly?"✓ Restituer":"Supprimer"}
-          </button>
-        </div>
+            </div>); })}
+          {totalAdded>0 && <div style={{ textAlign:"center", fontSize:13, fontWeight:900, color:"#16a34a", padding:"8px 10px", borderRadius:14,
+            background:"rgba(34,197,94,0.12)", border:"1px solid rgba(34,197,94,0.3)" }}>+{totalAdded.toFixed(1).replace(".", ",")} g rendus aux bobines</div>}
+        </>) : <p style={{ margin:0, fontSize:12.5, fontWeight:600, color:"var(--muted)" }}>
+          {restoreOnly ? "Aucune bobine associée : rien à restituer." : "Aucune bobine associée : aucun poids à rendre."}</p>}
       </div>
-    </div>
+    </FSheet>
   );
 }
+// une pastille de choix (part a restituer)
+const pill = on => ({ padding:"5px 11px", borderRadius:20, cursor:"pointer", fontWeight:800, fontSize:12, whiteSpace:"nowrap",
+  border: on ? "none" : "1px solid var(--border)", color: on ? "#fff" : "var(--text2)",
+  background: on ? "linear-gradient(135deg, #22C55E, #4ADE80)" : "var(--surface)", boxShadow: on ? "0 6px 14px -8px #22C55E" : "none" });
 
 function UnmapFilamentConfirm({ f, printId, onClose, onDone }) {
   const [fraction, setFraction] = useState(1.0);
@@ -376,46 +378,35 @@ function UnmapFilamentConfirm({ f, printId, onClose, onDone }) {
     onDone?.();
   };
 
+  const g = (f.grams_used||0)*fraction;
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:4000,
-      display:"flex", alignItems:"center", justifyContent:"center", padding:20 }} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:16,
-        width:"100%", maxWidth:380, padding:20, border:"1px solid var(--border)" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-          <ColorDot hex={f.color_hex} colors={f.filament_colors_array}
-            multicolor={f.filament_multicolor_type} size={20}/>
-          <p style={{ fontSize:14, fontWeight:800, color:"var(--text)", margin:0 }}>
-            {f.filament_translated_name||f.filament_fila_type||"Filament"}
-          </p>
-        </div>
-        <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
-          Démapper ce filament de la bobine #{f.spool_id}. Restituer les grammes ?
-        </p>
-        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:14 }}>
-          <span style={{ fontSize:11, color:"var(--muted)", flex:1 }}>Restituer {f.grams_used?.toFixed(1)}g :</span>
-          {OPTS.map(o=>(
-            <button key={o} onClick={()=>setFraction(o)}
-              style={{ padding:"4px 9px", borderRadius:20, border:"none", cursor:"pointer",
-                fontWeight:600, fontSize:11,
-                background:fraction===o?"#22c55e":"var(--surface2)",
-                color:fraction===o?"white":"var(--muted)" }}>
-              {o===0?"Non":o===1?"100%":`${o*100}%`}
-            </button>
-          ))}
-        </div>
-        {fraction>0 && <p style={{ fontSize:11, color:"#22c55e", margin:"0 0 14px" }}>
-          +{((f.grams_used||0)*fraction).toFixed(1)}g restitués à la bobine
-        </p>}
-        <div style={{ display:"flex", gap:8 }}>
-          <button onClick={onClose} style={{ flex:1, padding:"10px", borderRadius:10,
-            border:"1px solid var(--border)", background:"var(--surface2)",
-            color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Annuler</button>
-          <button onClick={confirm} style={{ flex:2, padding:"10px", borderRadius:10,
-            border:"none", background:"#ef4444", color:"white",
-            fontSize:13, fontWeight:700, cursor:"pointer" }}>Démapper</button>
+    <FSheet onClose={onClose} z={4000} bottom={<>
+      <button onClick={onClose} style={{ ...fBtn, flex:1 }}>Annuler</button>
+      <button onClick={confirm} style={{ ...fBtn, flex:2, border:"none", color:"#fff", fontWeight:900,
+        background:"linear-gradient(135deg, #EF4444, #F87171)", boxShadow:"0 8px 18px -10px #EF4444" }}>⛓ Dissocier</button></>}>
+      <div style={{ padding:"52px 18px 16px", display:"flex", alignItems:"center", gap:14,
+        background:"radial-gradient(circle at 15% 40%, rgba(239,68,68,0.28), transparent 60%), var(--surface2)" }}>
+        <span style={{ width:54, height:54, borderRadius:17, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
+          background:"var(--surface)", boxShadow:"0 8px 20px -10px rgba(0,0,0,.5)" }}>
+          <ColorDot hex={f.color_hex} colors={f.filament_colors_array} multicolor={f.filament_multicolor_type} size={30}/></span>
+        <div style={{ minWidth:0, display:"flex", flexDirection:"column", gap:3 }}>
+          <span style={{ fontSize:12, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#EF4444" }}>⛓ Dissocier la bobine</span>
+          <span style={{ fontSize:19, fontWeight:900, color:"var(--text)", lineHeight:1.2 }}>
+            {f.filament_translated_name||f.filament_fila_type||"Filament"}</span>
+          <span style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>bobine #{f.spool_id} · {(f.grams_used||0).toFixed(1).replace(".", ",")} g utilisés</span>
         </div>
       </div>
-    </div>
+      <div style={{ padding:"14px 16px 18px", display:"flex", flexDirection:"column", gap:12 }}>
+        <p style={{ margin:0, fontSize:12.5, fontWeight:600, color:"var(--muted)" }}>Le filament ne sera plus lié à cette bobine. Lui rendre les grammes ?</p>
+        <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+          {OPTS.map(o=>(
+            <button key={o} onClick={()=>setFraction(o)} style={pill(fraction===o)}>{o===0?"Non":o===1?"100 %":`${o*100} %`}</button>
+          ))}
+        </div>
+        {fraction>0 && <div style={{ textAlign:"center", fontSize:13, fontWeight:900, color:"#16a34a", padding:"8px 10px", borderRadius:14,
+          background:"rgba(34,197,94,0.12)", border:"1px solid rgba(34,197,94,0.3)" }}>+{g.toFixed(1).replace(".", ",")} g rendus à la bobine</div>}
+      </div>
+    </FSheet>
   );
 }
 
@@ -970,10 +961,11 @@ function FilamentsV2({ filaments, onSpoolClick, onSpoolPick, onRestore, onUnmap 
       <div onClick={toggle} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
         <span style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>🧵 Filaments</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{filaments.length} · {gFr(total)}</span>
-        <span style={{ marginLeft: "auto" }}/>
+        {/* a gauche, pres du titre : colle a la fleche, on le touchait en voulant replier */}
         {isAdmin && onRestore && filaments.some(f => f.spool_id) && <button onClick={e => { e.stopPropagation(); onRestore(); }} data-tip="Rendre aux bobines une part du poids"
           style={{ fontSize: 11.5, fontWeight: 800, padding: "3px 10px", borderRadius: 20, cursor: "pointer", background: "rgba(34,197,94,0.14)",
-            color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)" }}>⚖ Restituer</button>}
+            color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)", marginLeft: 2 }}>⚖ Restituer</button>}
+        <span style={{ marginLeft: "auto" }}/>
         {/* les bobines manquantes se voient meme replie */}
         {!open0 && onSpoolPick && filaments.some(f => !f.spool_id) && <span style={{ fontSize: 11, fontWeight: 800, color: "#d97706" }}>▸ {filaments.filter(f => !f.spool_id).length} à associer</span>}
         <span style={{ fontSize: 11, color: "var(--muted)", transform: open0 ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▶</span>
