@@ -5,8 +5,9 @@ import { Send } from "lucide-react";
 import client, { apiUrl, PHOTOS_CHANGED } from "../api/client";
 import { useShares } from "../store/shares";
 import { FSheet, FCard, fBtn } from "./FicheKit";
+import { mwImg } from "./MwImg";
 
-// Partage Telegram d'une impression ou d'un groupe : choix de la destination,
+// Partage Telegram d'une impression, d'un groupe ou d'un modele MakerWorld (kind « design », 25/10/2026) : choix de la destination,
 // message facultatif, et APERCU exact de ce qui partira (la legende vient du
 // serveur, la meme qu'a l'envoi). Rien ne part sans le bouton « Envoyer ».
 // Derniere selection de destinations (liste d'ids), pratique d'un partage a l'autre.
@@ -15,14 +16,19 @@ const LAST_DEST = "bn-share-dests";
 // a l'heure locale, pas a celle du conteneur.
 const TZ = new Date().getTimezoneOffset();
 
-export default function ShareSheet({ kind, id, onClose }) {
+const KIND_NAME = { group: "groupe", design: "modèle MakerWorld", print: "impression" };
+const KIND_THIS = { group: "Ce groupe", design: "Ce modèle", print: "Cette impression" };
+// une vignette : nos fichiers passent par l'API, la couverture d'un modele vient de MakerWorld
+const srcOf = u => /^https?:/.test(u) ? mwImg(u, 256) : apiUrl(u.slice(7));
+
+export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
   const [preview, setPreview] = useState(null);
   const [message, setMessage] = useState("");
   const [sel, setSel] = useState(null);         // ids coches (null tant que non initialise)
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
   const [pick, setPick] = useState(null);       // medias joints (ids), comme pour les evaluations
-  useTrackDetail(`Partage Telegram · ${kind === "group" ? "groupe" : "impression"} #${id}`);
+  useTrackDetail(`Partage Telegram · ${KIND_NAME[kind] || kind} #${id}`);
   const timer = useRef(null);
 
   const load = (msg) => client.get(`/share/${kind}/${id}/preview`, { params: { message: msg, tz: TZ } })
@@ -69,7 +75,7 @@ export default function ShareSheet({ kind, id, onClose }) {
   const T = "#229ED9";
   const canSend = dests.length > 0 && !preview?.error;
   return createPortal(
-    <FSheet onClose={onClose} z={1500} bottom={<>
+    <FSheet onClose={onClose} z={z} bottom={<>
       <button onClick={onClose} style={{ ...fBtn, flex: 1 }}>{done ? "Fermer" : "Annuler"}</button>
       {canSend && <button onClick={send} disabled={busy || !sel?.length || !!done}
         style={{ ...fBtn, flex: 2, border: "none", color: busy && !done ? "var(--muted)" : "#fff",
@@ -86,7 +92,7 @@ export default function ShareSheet({ kind, id, onClose }) {
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: T }}>Partager sur Telegram</div>
             <div style={{ fontSize: 20, fontWeight: 900, color: "var(--text)", lineHeight: 1.2, overflowWrap: "anywhere" }}>
-              {preview?.title || (kind === "group" ? "Ce groupe" : "Cette impression")}</div>
+              {preview?.title || KIND_THIS[kind] || "Ce partage"}</div>
           </div>
         </div>
       </div>
@@ -142,8 +148,9 @@ export default function ShareSheet({ kind, id, onClose }) {
                   const on = pick?.includes(m.id);
                   const st = { ...thumb, border: on ? `2.5px solid ${T}` : "2px solid transparent", opacity: on ? 1 : 0.4 };
                   return m.video
-                    ? <video key={m.id} src={apiUrl(m.url.slice(7))} muted playsInline preload="metadata" onClick={() => toggle(m.id)} style={st}/>
-                    : <img key={m.id} src={apiUrl(m.url.slice(7))} alt="" onClick={() => toggle(m.id)} style={st}/>;
+                    ? <video key={m.id} src={srcOf(m.url)} muted playsInline preload="metadata" onClick={() => toggle(m.id)} style={st}/>
+                    : <img key={m.id} src={srcOf(m.url)} alt="" referrerPolicy="no-referrer" onClick={() => toggle(m.id)} style={st}
+                        data-tip={m.id === "mwcover" ? "La couverture du modèle sur MakerWorld" : undefined}/>;
                 })}
               </div>
             )}

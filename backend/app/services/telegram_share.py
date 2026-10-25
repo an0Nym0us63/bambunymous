@@ -490,6 +490,8 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
     from ..models.print_history import Print, Group
     from ..models.filament import Spool, Filament
 
+    if kind == "design":
+        return await _build_design(obj_id, chosen)
     async with AsyncSessionLocal() as db:
         if kind == "print":
             p = await db.get(Print, obj_id, options=[selectinload(Print.filament_usage),
@@ -611,6 +613,75 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
             "default_ids": default_ids}
 
 
+def _num(n) -> str:
+    """1234 -> « 1,2 k » ; les compteurs de MakerWorld."""
+    n = int(n or 0)
+    return f"{n / 1000:.1f} k".replace(".", ",").replace(",0 k", " k") if n >= 1000 else str(n)
+
+
+async def _build_design(design_id, chosen=None) -> dict:
+    """Un modele MakerWorld (25/10/2026) : son titre, son createur, ses compteurs, ce que j'en ai imprime
+    et le lien. Medias proposes : sa couverture (telechargee a l'envoi) et mes photos de ses impressions ;
+    d'office, mes photos s'il y en a, sinon rien (Telegram montre alors la carte du lien, avec l'image)."""
+    from sqlalchemy import select
+    from ..models.print_history import Print, Group, MakerWorldDesign as MW
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        raise ShareError("Modèle introuvable")
+    async with AsyncSessionLocal() as db:
+        m = await db.get(MW, did)
+        prints = (await db.execute(select(Print).where(Print.design_id == did, Print.status.in_(("SUCCESS", "PARTIAL")))
+                                   .order_by(Print.print_date.desc()))).scalars().all()
+        gids = list(dict.fromkeys(p.group_id for p in prints if p.group_id))
+        groups = {g.id: g for g in (await db.execute(select(Group).where(Group.id.in_(gids)))).scalars().all()} if gids else {}
+    pool = []
+    for p in prints:
+        pool += _photos_of_dir(DATA_DIR / "prints" / str(p.id), p.cover_photo)
+    for gid in gids:
+        g = groups.get(gid)
+        pool += _photos_of_dir(DATA_DIR / "groups" / str(gid), g.cover_photo if g else None)
+    pool = list(dict.fromkeys(pool))
+    title = ((m.title_fr or m.title) if m else None) or f"Modèle {did}"
+    stats = []
+    if m and m.creator_name:
+        stats.append(f"👤 {m.creator_name}")
+    if m:
+        for e, n in (("❤️", m.like_count), ("⬇️", m.download_count), ("🖨", m.print_count)):
+            if n:
+                stats.append(f"{e} {_num(n)}")
+    if prints:
+        stats.append(f"✅ imprimé {len(prints)} fois chez moi" if len(prints) > 1 else "✅ imprimé chez moi")
+    by_id = {_media_id(f): f for f in pool}
+    cover = m.cover_url if m and m.cover_url else None
+    default_ids = [_media_id(f) for f in pool][:ALBUM_MAX]
+    ids = default_ids
+    if chosen is not None:
+        ids = [i for i in dict.fromkeys(chosen) if i in by_id or (i == "mwcover" and cover)][:ALBUM_MAX]
+    return {"title": title, "stats": stats, "filaments": [], "links": [_makerworld(did)], "live": None, "camera": False,
+            "media": [by_id[i] for i in ids if i != "mwcover"], "cover": cover if "mwcover" in ids else None,
+            "cover_first": bool(ids) and ids[0] == "mwcover",
+            "pool": ([{"id": "mwcover", "url": cover, "video": False}] if cover else [])
+                    + [{"id": i, "url": _media_url(i), "video": f.suffix.lower() in (".mp4", ".mov", ".webm", ".m4v")} for i, f in by_id.items()],
+            "default_ids": default_ids}
+
+
+def _download_cover(url: str, dest: Path) -> Optional[Path]:
+    """La couverture du modele, en JPEG (MakerWorld sert souvent du WebP)."""
+    import io
+    import urllib.request
+    from PIL import Image
+    try:
+        req = urllib.request.Request(url.split("?")[0], headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            raw = r.read(15 * 1024 * 1024)
+        with Image.open(io.BytesIO(raw)) as im:
+            im.convert("RGB").save(dest, quality=90)
+        return dest
+    except Exception as e:
+        logger.info(f"[TG] couverture MakerWorld illisible : {e}")
+        return None
+
+
 def render_caption(share: dict, message: str = "") -> str:
     """Legende HTML (mode d'analyse Telegram), coupee sous 1024 caracteres."""
     parts = [f"<b>{html.escape(share['title'])}</b>"]
@@ -720,6 +791,10 @@ async def send(kind: str, obj_id: int, destination_ids, message: str = "",
     results = []
     with tempfile.TemporaryDirectory() as tmp:
         files = await asyncio.to_thread(prepare_media, share["media"], Path(tmp))
+        if share.get("cover"):
+            cov = await asyncio.to_thread(_download_cover, share["cover"], Path(tmp) / "makerworld.jpg")
+            if cov:
+                files.insert(0 if share.get("cover_first") else len(files), (cov, False))
         if share["live"] and share.get("camera", True):
             jpg = await _camera_jpeg()
             if jpg:

@@ -21,6 +21,7 @@ import { useToRateSet, RateButton } from "./MwToRate";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { toast } from "../store/toast";
 import { Heart } from "lucide-react";
+import ShareSheet from "./ShareSheet";
 
 // Prechargement : la fiche est demandee des qu'on touche une tuile ; a
 // l'ouverture, la reponse est souvent deja la.
@@ -58,6 +59,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [com, setCom] = useState(null);            // { items, total }
   const [comBusy, setComBusy] = useState(false);
   const [pick, setPick] = useState(false);
+  const [sharing, setSharing] = useState(false);     // le partage Telegram du modele
   const [sim, setSim] = useState(null);
   const [zoom, setZoom] = useState(null);          // galerie plein ecran { images, index }
   const [exactBusy, setExactBusy] = useState(null);
@@ -271,6 +273,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
           boost.creator_max != null && `${boost.creator ?? 0}/${boost.creator_max} donnés à ce créateur cette année`].filter(Boolean).join(" · ") || null,
         onClick: doBoost },
       canHome && { icon: "🔖", label: "Ranger dans mes collections…", tone: "#14B8A6", onClick: () => setPick(true) },
+      // comme le partage d'une impression : destinations, mot, photos, apercu exact
+      !friend && isAdmin && { icon: "📣", label: "Partager", hint: "Telegram", tone: "#229ED9", onClick: () => setSharing(true) },
       !friend && isAdmin && "-",
       !friend && isAdmin && { icon: "🔗", label: "Associer à un print", hint: "Choisir les impressions de ce modèle dans l'historique", tone: "#8B5CF6",
         onClick: () => { startAssign(tile()); onClose(); } },
@@ -372,6 +376,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
             })()}
 
             {zoom && <Lightbox images={zoom.images} index={zoom.index} title={m.title_fr || m.title} onClose={() => setZoom(null)}/>}
+            {sharing && <span onClick={e => e.stopPropagation()}><ShareSheet kind="design" id={id} z={4400} onClose={() => setSharing(false)}/></span>}
             {pick && <MakerWorldCollectionsPicker designId={id} title={m.title} item={tile()} onClose={() => setPick(false)}/>}
 
             {m.categories?.length > 0 && (
