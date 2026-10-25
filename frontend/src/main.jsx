@@ -6,6 +6,7 @@ import "./index.css";
 import { installPullRefreshGuard } from "./utils/pullRefreshGuard";
 import { installIosPullRefresh } from "./utils/iosPullRefresh";
 import { installDesktopHScroll } from "./utils/desktopHScroll";
+import { installChunkReload } from "./utils/importRetry";
 
 // Coquille Android : les rangees horizontales n'arment plus le tirer-pour-rafraichir.
 installPullRefreshGuard();
@@ -13,6 +14,9 @@ installPullRefreshGuard();
 // d'accueil, on en fournit un (sans toucher au defilement). Le banc d'essai
 // peut le forcer avec ?ptr=1.
 installIosPullRefresh(new URLSearchParams(window.location.search).get("ptr") === "1");
+
+// L'appli restee ouverte pendant une mise a jour : un morceau introuvable recharge la page (une fois)
+installChunkReload();
 
 // A la souris : molette et glisser pour les rangees qui defilent de cote.
 installDesktopHScroll();

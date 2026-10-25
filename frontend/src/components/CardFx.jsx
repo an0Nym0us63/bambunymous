@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { importRetry } from "../utils/importRetry";
 import client from "../api/client";
 import { useFriend } from "../store/friend";
 import { deviceId } from "../utils/device";
@@ -8,7 +9,7 @@ import { deviceId } from "../utils/device";
 // grand, avec un effet a la mesure de la plus haute. Redemande aussi au retour
 // sur l'appli et de temps en temps (l'appli Android reste ouverte des jours) ;
 // suivi par appareil : un autre appareil ne la « mange » plus.
-const Show = lazy(() => import("./CardFxShow"));
+const Show = lazy(() => importRetry(() => import("./CardFxShow")));
 const EVERY = 120000;
 
 export default function CardFx() {

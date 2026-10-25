@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { importRetry } from "../utils/importRetry";
 import AllAlertsModal from "./AllAlertsModal";
 import { Hide } from "./Cachettes";
 import { useFriend } from "../store/friend";
@@ -1235,8 +1236,8 @@ function Last({ p, o, sz, st, lp }) {
 }
 // la fiche d'une impression ou d'un groupe (chargees a la demande : la page Impressions est lourde), montee
 // dans la page (pas dans la tuile) ; ses clics ne remontent pas jusqu'a la tuile
-const LazyPrintDetail = React.lazy(() => import("../pages/Prints").then(m => ({ default: m.PrintDetail })));
-const LazyGroupSheet = React.lazy(() => import("../pages/Prints").then(m => ({ default: m.GroupBottomSheet })));
+const LazyPrintDetail = React.lazy(() => importRetry(() => import("../pages/Prints")).then(m => ({ default: m.PrintDetail })));
+const LazyGroupSheet = React.lazy(() => importRetry(() => import("../pages/Prints")).then(m => ({ default: m.GroupBottomSheet })));
 function PrintSheets({ open, setOpen }) {
   const close = () => setOpen(null);
   return createPortal(<div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>

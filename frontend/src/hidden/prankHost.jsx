@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { importRetry } from "../utils/importRetry";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { create } from "zustand";
 import { egg, whisper } from "../eggs";
@@ -68,7 +69,7 @@ const load = slug => (slug === MAISON.slug ? import("./pranks7") : FETE_SLUGS_MO
   : PRANK_SLUGS_5.includes(slug) ? import("./pranks5") : PRANK_SLUGS_3.includes(slug) ? import("./pranks3")
   : PRANK_SLUGS_2.includes(slug) ? import("./pranks2") : import("./pranks"));
 function effectOf(slug) {
-  if (!Pranks[slug]) Pranks[slug] = lazy(() => load(slug).then(m => ({ default: m.PRANKS[slug]?.Effect || (() => null) })));
+  if (!Pranks[slug]) Pranks[slug] = lazy(() => importRetry(() => load(slug)).then(m => ({ default: m.PRANKS[slug]?.Effect || (() => null) })));
   return Pranks[slug];
 }
 

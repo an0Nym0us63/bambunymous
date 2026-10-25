@@ -1,4 +1,5 @@
 import React, { Suspense, lazy } from "react";
+import { importRetry } from "../utils/importRetry";
 
 // Pages cachees : adresse -> lot (charge a la demande, rien dans l'appli tant
 // qu'on ne tombe pas dessus). Une adresse inconnue reste « page introuvable ».
@@ -37,7 +38,7 @@ export const HIDDEN_SLUGS = [...Object.keys(GROUP_OF), "anonymous", "teapot"];
 
 function pageFor(slug) {
   if (!CACHE[slug]) {
-    CACHE[slug] = lazy(() => LOADERS[GROUP_OF[slug]]().then(m => ({ default: m.PAGES[slug] || (() => null) })));
+    CACHE[slug] = lazy(() => importRetry(LOADERS[GROUP_OF[slug]]).then(m => ({ default: m.PAGES[slug] || (() => null) })));
   }
   return CACHE[slug];
 }
