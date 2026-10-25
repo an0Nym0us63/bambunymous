@@ -29,6 +29,13 @@ const CHAPTERS = [
   ["succes", "Succès"],
   ["parametres", "Paramètres"],
 ];
+// chaque chapitre : son icone et sa couleur (celles de sa page dans l'appli) ; la feuille de style les reprend
+const CH_LOOK = {
+  "premiers-pas": ["👋", "#6366F1"], accueil: ["🏠", "#3B82F6"], tuiles: ["🧩", "#06B6D4"], imprimante: ["🖨️", "#0EA5E9"],
+  impressions: ["🕓", "#3B82F6"], filaments: ["🧵", "#F97316"], objets: ["🎁", "#8B5CF6"], stats: ["📊", "#22C55E"],
+  makerworld: ["🌐", "#06B6D4"], notifications: ["🔔", "#F59E0B"], copains: ["👥", "#14B8A6"], succes: ["🏆", "#EAB308"],
+  parametres: ["⚙️", "#64748B"],
+};
 // une partie compte comme lue quand on y est reste ce temps, page visible et lecteur actif
 const READ_AFTER = 8, IDLE_AFTER = 90000, FLUSH_EVERY = 30000;
 
@@ -66,7 +73,7 @@ export default function Guide() {
       .then(r => r.data).catch(() => `<h1>${t}</h1><p>Chapitre introuvable.</p>`)))
       .then(parts => {
         if (dead) return;
-        setHtml(parts.map((h, i) => `<article class="chapter" id="${CHAPTERS[i][0]}">${
+        setHtml(parts.map((h, i) => `<article class="chapter" id="${CHAPTERS[i][0]}" style="--ch:${(CH_LOOK[CHAPTERS[i][0]] || [])[1] || "#3B82F6"}" data-ic="${(CH_LOOK[CHAPTERS[i][0]] || [])[0] || "📘"}">${
           h.replace(/(<img\b[^>]*?\ssrc=")img\/([a-z0-9-]+\.(?:webp|png|jpg))"/g, `$1/api/v1/guide/img/$2?_t=${tok}"`)}</article>`).join(""));
       });
     return () => { dead = true; };
@@ -123,6 +130,13 @@ export default function Guide() {
     });
     setTree(t);
     index.current = idx;
+    // l'icone du chapitre devant son titre (apres le sommaire et l'index : elle n'entre pas dans leurs textes)
+    root.querySelectorAll("article.chapter").forEach(ch => {
+      const h1 = ch.querySelector("h1");
+      if (!h1 || h1.querySelector(".gd-ic")) return;
+      const ic = document.createElement("span"); ic.className = "gd-ic"; ic.setAttribute("aria-hidden", "true"); ic.textContent = ch.dataset.ic || "📘";
+      h1.prepend(ic);
+    });
   }, [html]);
   useEffect(() => {
     if (!tree.length) return;
@@ -220,7 +234,9 @@ export default function Guide() {
   const node = (it, lvl) => <li key={it.id} className={open.has(it.id) ? "open" : ""}>
     <div className="row">
       <button type="button" className={`tog${it.kids.length ? "" : " leaf"}`} aria-label="Déplier" onClick={() => toggle(it.id)}><ChevronRight size={14}/></button>
-      <a href={`#${it.id}`} className={`${cur === it.id ? "cur" : ""}${lvl === 0 ? " top" : ""}`} onClick={e => { e.preventDefault(); pick(it.id); }}>{it.text}</a>
+      <a href={`#${it.id}`} className={`${cur === it.id ? "cur" : ""}${lvl === 0 ? " top" : ""}`} onClick={e => { e.preventDefault(); pick(it.id); }}
+        style={lvl === 0 && CH_LOOK[it.id] ? { "--ch": CH_LOOK[it.id][1] } : undefined}>
+        {lvl === 0 && CH_LOOK[it.id] && <span className="ic">{CH_LOOK[it.id][0]}</span>}{it.text}</a>
     </div>
     {it.kids.length > 0 && <ul>{it.kids.map(k => node(k, lvl + 1))}</ul>}
   </li>;

@@ -105,3 +105,42 @@
   .bn-guide dl.opts dd { border-top: 0; padding-top: 0; }
   .bn-guide figure.phone img, .bn-guide figure.small img { max-width: 100%; }
 }
+
+/* ── Habillage du 25/10/2026 : chaque chapitre a sa couleur (--ch) et son icone (data-ic) ── */
+.bn-guide .gd-bar { background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.bn-guide .gd-title svg { color: #6366F1; }
+.bn-guide .gd-search { border-radius: 22px; padding: 0 14px; height: 42px; }
+.bn-guide .gd-menu { border-radius: 14px; }
+.bn-guide .chapter { --ch: #3B82F6; border-bottom: 0; }
+/* le titre du chapitre : un en-tete teinte, son icone */
+.bn-guide .chapter > h1 { display: flex; align-items: center; gap: 14px; padding: 18px 18px; border-radius: 22px; margin: 8px 0 16px;
+  border: 1px solid color-mix(in srgb, var(--ch) 30%, var(--border));
+  background: radial-gradient(circle at 10% 30%, color-mix(in srgb, var(--ch) 32%, transparent), transparent 60%),
+    linear-gradient(135deg, color-mix(in srgb, var(--ch) 16%, transparent), transparent 70%), var(--surface2);
+  box-shadow: 0 14px 30px -24px var(--ch); }
+.bn-guide .chapter > h1 .gd-ic { width: 52px; height: 52px; flex: none; border-radius: 16px; display: grid; place-items: center; font-size: 28px;
+  background: linear-gradient(135deg, var(--ch), color-mix(in srgb, var(--ch) 60%, #ffffff)); box-shadow: 0 8px 18px -8px var(--ch); }
+/* les intertitres : la couleur du chapitre */
+.bn-guide .chapter h2 { padding-left: 14px; border-left: 5px solid var(--ch); border-radius: 2px; }
+.bn-guide .chapter h3 { display: flex; align-items: center; gap: 8px; }
+.bn-guide .chapter h3::before { content: ""; width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--ch); }
+.bn-guide .chapter a:not(.anchor) { color: color-mix(in srgb, var(--ch) 75%, var(--text)); font-weight: 650; }
+.bn-guide dl.opts { border-radius: 16px; border-color: color-mix(in srgb, var(--ch, #3B82F6) 24%, var(--border)); }
+.bn-guide dl.opts dt { background: color-mix(in srgb, var(--ch, #3B82F6) 9%, var(--surface2)); font-weight: 800; }
+.bn-guide table { border-radius: 16px; border: 1px solid color-mix(in srgb, var(--ch, #3B82F6) 24%, var(--border)); }
+.bn-guide th { background: color-mix(in srgb, var(--ch, #3B82F6) 10%, var(--surface2)); }
+.bn-guide .note, .bn-guide .tip, .bn-guide .warn { border-radius: 16px; border-left-width: 5px; }
+.bn-guide .note { background: color-mix(in srgb, var(--gd-accent) 8%, var(--surface)); }
+.bn-guide .tip { background: color-mix(in srgb, var(--gd-ok) 8%, var(--surface)); }
+.bn-guide .warn { background: color-mix(in srgb, var(--gd-warn) 9%, var(--surface)); }
+.bn-guide .ui { border-radius: 8px; background: color-mix(in srgb, var(--ch, #3B82F6) 8%, var(--surface2)); }
+.bn-guide figure img { border-radius: 18px; box-shadow: 0 14px 30px -22px rgba(0,0,0,.7); }
+.bn-guide .toc-cards a { border-radius: 18px; transition: transform .15s; }
+.bn-guide .toc-cards a:hover { transform: translateY(-2px); }
+.bn-guide .gd-results .hit { border-radius: 16px; }
+/* le sommaire : l'icone du chapitre, la partie en cours dans sa couleur */
+.bn-guide .gd-tree a .ic { margin-right: 7px; }
+.bn-guide .gd-tree a.top { --ch: #3B82F6; }
+.bn-guide .gd-tree a.cur { background: color-mix(in srgb, var(--gd-accent) 16%, transparent); }
+.bn-guide .gd-tree a.top.cur { background: linear-gradient(135deg, var(--ch), color-mix(in srgb, var(--ch) 65%, #ffffff)); color: #fff; }
+.bn-guide .gd-tools button { border-radius: 12px; font-weight: 700; }
