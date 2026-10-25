@@ -6214,6 +6214,7 @@ async def _tick(notify: bool = True) -> list:
     ok_n = await _ok_since((st.get("keys") or {}).get("since"))
     gains = _earn_keys(st, ev, new, ok_n)
     gains += _gift_keys(st)
+    gains += _refund_family_gifts(st, await _family_finds())
     _keys_peak(st["keys"])
     spins, w_tickets = _wheel_weekly(st)
     retro = _secret_rewards_retro(st, new)
@@ -6391,14 +6392,79 @@ def _gift_from(st: dict, aid: str) -> list:
     return [names.get(fid, "un copain") for fid, ids in (st.get("friend_uniques") or {}).items() if aid in ids]
 
 
-def _reveal_level(st: dict, aid: str) -> int:
+def _reveal_level(st: dict, aid: str, fam=None) -> int:
     """Etape atteinte sur un secret : ce que j'ai paye, ou les 3 premieres
-    offertes si un copain l'a deja gagne."""
+    offertes si un copain l'a deja gagne -- ou un compte de la famille (fam :
+    _family_finds), comme l'affiche la page du compte principal."""
     paid = int(((st.get("keys") or {}).get("spent") or {}).get(aid, 0))
     friends = st.get("friend_uniques") or {}
-    if any(aid in ids for ids in friends.values()):
+    if any(aid in ids for ids in friends.values()) or (fam and aid in fam):
         return max(paid, FREE_FROM_FRIENDS)
     return paid
+
+
+def _naive(t):
+    """Une date comparable aux autres (sans fuseau), ou None."""
+    try:
+        d = datetime.fromisoformat(str(t).replace("Z", "+00:00")) if t else None
+    except ValueError:
+        return None
+    return d.replace(tzinfo=None) if d and d.tzinfo else d
+
+
+async def _family_finds() -> dict:
+    """{secret: date de la 1re trouvaille, ou None} : ce que les comptes de la famille ont trouve.
+    Chez le compte principal, leurs trois premieres etapes sont offertes, comme un secret de copain
+    (25/10/2026 : la page les disait offertes, mais la depense de cles les faisait encore payer)."""
+    fam = await family()
+    if not fam["secrets"]:
+        return {}
+    by = await _eggs_by()
+    out = {}
+    for u in fam["secrets"]:
+        for k, at in (by.get(u) or {}).items():
+            aid = f"egg_{k}"
+            if aid not in FAMILY_IDS:
+                continue
+            d = _naive(at)
+            if aid not in out:
+                out[aid] = d
+            elif out[aid] is not None and (d is None or d < out[aid]):
+                out[aid] = d
+    return out
+
+
+FREE_STEPS = {r[1] for r in REVEALS[:FREE_FROM_FRIENDS]}
+
+
+def _refund_family_gifts(st: dict, fam: dict) -> list:
+    """Rend les cles payees pour une etape que la famille offrait deja (categorie, vignette, titre
+    d'un secret qu'elle avait trouve). Une etape payee avant sa trouvaille reste payee. Une fois chacune."""
+    k = st.get("keys")
+    if not isinstance(k, dict) or not fam:
+        return []
+    n = 0
+    for aid, use in (k.get("uses") or {}).items():
+        if aid not in fam or (st.get("unlocked") or {}).get(aid):
+            continue
+        found = fam[aid]
+        for step in use.get("steps") or []:
+            if step.get("refunded") or step.get("step") not in FREE_STEPS:
+                continue
+            at = _naive(step.get("at"))
+            if found and at and at < found:
+                continue
+            step["refunded"] = True
+            c = int(step.get("keys") or 0)
+            use["keys"] = max(0, int(use.get("keys") or 0) - c)
+            n += c
+    if not n:
+        return []
+    k["balance"] = k.get("balance", 0) + n
+    k["spent_total"] = max(0, k.get("spent_total", 0) - n)
+    why = "Étapes déjà offertes par la famille, remboursées"
+    k["log"] = ([{"at": datetime.utcnow().isoformat(), "n": n, "why": why}] + (k.get("log") or []))[:KEY_LOG_MAX]
+    return [(n, why)]
 
 
 async def spend_key(aid: str) -> dict:
@@ -6418,7 +6484,9 @@ async def _spend_key(aid: str) -> dict:
     k = _keys_init(st)                         # reprise eventuelle des etapes deja payees
     if (st.get("unlocked") or {}).get(aid):
         raise ValueError("Ce secret est déjà gagné : tout est dévoilé")
-    lvl = _reveal_level(st, aid)
+    fam = await _family_finds()
+    _refund_family_gifts(st, fam)
+    lvl = _reveal_level(st, aid, fam)
     if lvl >= len(REVEALS):
         raise ValueError("Tout est déjà révélé")
     cost = REVEALS[lvl][2]
@@ -6451,7 +6519,7 @@ async def _spend_key(aid: str) -> dict:
 #    copain a gagnes, ceux deja entames) ; 2) avec le reste, on avance les
 #    suivants une etape apres l'autre ; 3) les descriptifs seulement quand tous
 #    les indices sont pris. Ordre stable : l'apercu et la depense sont identiques.
-def _auto_plan(st: dict, budget: int) -> list:
+def _auto_plan(st: dict, budget: int, fam=None) -> list:
     import zlib
     hint_lvl = next(i for i, r in enumerate(REVEALS) if r[0] == "hint") + 1
     # ni les farces tirees au hasard (elles ne se gagnent que si elles tombent par surprise : un indice
@@ -6462,7 +6530,7 @@ def _auto_plan(st: dict, budget: int) -> list:
     todo = [a["id"] for a in CATALOG if len(a["tiers"]) == 1 and a.get("hidden") and not a.get("set") and not a.get("only_won")
             and a["id"][4:] not in PRANK_EGGS and (android or a["id"][4:] not in ANDROID_EGGS) and not won.get(a["id"])]
     dated = lambda aid: SUB_OF.get(aid) in ("calendar", "fetes") or aid[4:] in DATED_CACHETTES      # noqa: E731
-    lvl = {aid: _reveal_level(st, aid) for aid in todo}
+    lvl = {aid: _reveal_level(st, aid, fam) for aid in todo}
     to_hint = lambda aid: sum(REVEALS[i][2] for i in range(lvl[aid], hint_lvl))
     order = sorted((aid for aid in todo if lvl[aid] < hint_lvl),
                    key=lambda aid: (not dated(aid), to_hint(aid), -lvl[aid], zlib.crc32(aid.encode())))
@@ -6503,8 +6571,11 @@ async def spend_keys_auto(n: int, dry: bool = False) -> dict:
         if not isinstance(k, dict):
             raise ValueError("Les clés arrivent au prochain calcul des succès (dans 15 minutes au plus)")
         k = _keys_init(st)
+        fam = await _family_finds()
+        if not dry:
+            _refund_family_gifts(st, fam)
         n = max(0, min(int(n or 0), k["balance"]))
-        plan = _auto_plan(st, n)
+        plan = _auto_plan(st, n, fam)
         out = _plan_summary(plan, n)
         out["balance"] = k["balance"]
         if dry or not plan:
@@ -6734,6 +6805,7 @@ async def spin(rng=None) -> dict:
         k, w = _keys_init(st), _wheel_init(st)
         if w["spins"] <= 0:
             raise ValueError("Plus de tour de roue : le prochain arrive lundi")
+        fam = await _family_finds()             # les etapes que la famille offre deja ne se tirent pas
         pid, label, n, _pct = _draw(rng)
         now = datetime.utcnow().isoformat()
         w["spins"] -= 1
@@ -6755,10 +6827,10 @@ async def spin(rng=None) -> dict:
             # la prochaine etape d'un secret pris au hasard, offerte
             import random
             todo = [a["id"] for a in CATALOG if len(a["tiers"]) == 1 and a.get("hidden") and not a.get("set") and not a.get("only_won")
-                    and not (st.get("unlocked") or {}).get(a["id"]) and _reveal_level(st, a["id"]) < len(REVEALS)]
+                    and not (st.get("unlocked") or {}).get(a["id"]) and _reveal_level(st, a["id"], fam) < len(REVEALS)]
             if todo:
                 aid = (rng or random.SystemRandom()).choice(todo)
-                lvl = _reveal_level(st, aid)
+                lvl = _reveal_level(st, aid, fam)
                 k.setdefault("spent", {})[aid] = lvl + 1
                 k["log"] = ([{"at": now, "n": 0, "why": f"Roue : {REVEALS[lvl][1]} d'un secret offert"}]
                             + (k.get("log") or []))[:KEY_LOG_MAX]
