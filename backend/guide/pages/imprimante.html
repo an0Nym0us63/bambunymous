@@ -123,18 +123,16 @@
   <section id="imprimante-ams-fiche">
     <h3>La fiche d'un emplacement</h3>
     <p>Un panneau monte du bas avec tout ce que l'imprimante et ta base savent de cet emplacement.</p>
-    <figure class="phone"><img src="img/imprimante-emplacement.webp" alt="Fiche de l'emplacement A3 : Blanc de jade, AMS-A · Slot 3, Restant estimé 91 % · 906 g, Données imprimante, Bobine #3, Filament"><figcaption>La fiche d'un emplacement reconnu.</figcaption></figure>
+    <figure class="phone"><img src="img/imprimante-emplacement.webp" alt="Fiche de l'emplacement A3 : la bobine Blanc de jade en vedette, 906 g et 91 %, cartes Bobine, Filament et Données imprimante"><figcaption>La fiche d'un emplacement reconnu.</figcaption></figure>
     <ul>
-      <li><strong>En-tête</strong> : un grand carré à la couleur du filament, le nom de la bobine (« Slot vide » sinon), « AMS-A · Slot 3 · {code Bambu} », et l'identifiant RFID s'il y en a un.</li>
-      <li><strong>Restant estimé</strong> : pourcentage et poids, avec une barre (rouge sous 20 %, orange sous 40 %, verte au-delà).</li>
-      <li><strong>Encadré de détection</strong> (si le filament n'est pas reconnu par sa puce RFID) : « Auto », « Introuvable », « Manuel » ou « Attribuée à la main », avec le bouton <span class="ui">Attribuer</span> ou <span class="ui">Mapper / Créer</span> <span class="admin">admin</span> (voir ci-dessous).</li>
-      <li><strong>DONNÉES IMPRIMANTE (TEMPS RÉEL)</strong> : <span class="ui">Type</span>, <span class="ui">Couleur</span> (code hexadécimal), <span class="ui">Profile ID</span>, <span class="ui">Tag UID</span>, <span class="ui">Restant selon l'AMS</span>, <span class="ui">UUID tray (RFID)</span>.</li>
-      <li><strong>BOBINE #n</strong> : le bouton paquet <span class="ui">Ouvrir la fiche de la bobine</span> mène à sa fiche complète (voir <a href="#filaments-bobines">Les bobines</a>) ; dessous, ce que ta base sait d'elle : emplacement, poids restant, stock total du filament, prix d'achat, tag NFC, dates de première et dernière utilisation, dernier séchage (« · à sécher » en bleu s'il est temps), commentaire…</li>
-      <li><strong>FILAMENT</strong> : nom, nom anglais, marque, matière, sous-type, échantillon, profil, multicolore, poids de la bobine, poids du support, prix catalogue.</li>
-      <li>Sans bobine associée : « Aucune bobine mappée — matching en attente ».</li>
-      <li><strong>🌡 SÉCHAGE</strong> : le réglage de séchage que Bambu associe à ce filament (« 55°C · 8h »).</li>
+      <li><strong>En-tête</strong> : la bobine dessinée à la couleur du filament, sur un fond de sa couleur ; les pastilles « 🎛 AMS-A · emplacement 3 », la détection (« Auto », « Introuvable », « Manuel » ou « Attribuée à la main ») si le filament n'est pas reconnu par sa puce RFID, et « 💧 à sécher » s'il est temps ; le nom de la bobine, « marque · sous-type », puis le restant en grand (le poids et le pourcentage) avec sa barre (rouge sous 20 %, orange sous 40 %, verte au-delà).</li>
+      <li><strong>🧵 Bobine #n</strong> : ce que ta base sait d'elle : emplacement, poids restant, stock total du filament, prix d'achat, tag NFC, dates de première et dernière utilisation, dernier séchage (« · à sécher » en bleu s'il est temps), commentaire… Sans bobine associée : « Aucune bobine mappée — matching en attente ».</li>
+      <li><strong>🎨 Filament #n</strong>, repliée (touche son titre) : nom, nom anglais, marque, matière, sous-type, échantillon, profil, multicolore, poids de la bobine, poids du support, prix catalogue.</li>
+      <li><strong>🌡 Séchage</strong> : le réglage de séchage que Bambu associe à ce filament (« 55°C · 8h »).</li>
+      <li><strong>📡 Données imprimante</strong>, repliée : <span class="ui">Type</span>, <span class="ui">Couleur</span> (code hexadécimal), <span class="ui">Profile ID</span>, <span class="ui">Tag UID</span>, <span class="ui">Restant selon l'AMS</span>, <span class="ui">UUID tray (RFID)</span>.</li>
+      <li><strong>En bas</strong> : <span class="ui">Fiche de la bobine</span> mène à sa fiche complète (voir <a href="#filaments-bobines">Les bobines</a>), et <span class="ui">🔗 Attribuer</span> ou <span class="ui">🔗 Mapper / Créer</span> <span class="admin">admin</span> quand le filament n'est pas reconnu par sa puce (voir ci-dessous).</li>
     </ul>
-    <p>Pour un <strong>emplacement vide</strong> : « Slot vide », ou « Emplacement vide — bobine posée pour séchage » avec le nom de la bobine posée et le bouton <span class="ui">Retirer de l'emplacement</span> <span class="admin">admin</span>.</p>
+    <p>Pour un <strong>emplacement vide</strong> : « Rien dans cet emplacement. », ou une carte « ☀ Posée pour séchage » avec la bobine posée et le bouton <span class="ui">Retirer de l'emplacement</span> <span class="admin">admin</span>.</p>
   </section>
 
   <section id="imprimante-ams-associer">
@@ -142,7 +140,7 @@
     <p>Quand l'AMS contient un filament que l'appli ne relie à aucune bobine de ta base (pas de puce RFID, ou référence inconnue), la fiche de l'emplacement l'indique (« Introuvable », triangle rouge dans le bloc Imprimante) et propose de corriger. Le principe de la reconnaissance est expliqué dans <a href="#filaments-correspondances">Les correspondances</a>.</p>
     <figure class="phone"><img src="img/imprimante-emplacement-introuvable.webp" alt="Fiche de l'emplacement A1 : PLA, encadré rouge Introuvable avec le bouton Mapper / Créer, Aucune bobine mappée — matching en attente"><figcaption>Un emplacement dont le filament est introuvable dans la base.</figcaption></figure>
     <ol>
-      <li>Ouvre la fiche de l'emplacement et touche <span class="ui">Mapper / Créer</span> (ou <span class="ui">Attribuer</span> si une bobine y est déjà liée) <span class="admin">admin</span>.</li>
+      <li>Ouvre la fiche de l'emplacement et touche <span class="ui">🔗 Mapper / Créer</span> en bas (ou <span class="ui">🔗 Attribuer</span> si une bobine y est déjà liée) <span class="admin">admin</span>.</li>
       <li>La fenêtre <span class="ui">Associer une bobine à cet emplacement</span> s'ouvre, avec en sous-titre ce que l'imprimante voit (matière, couleur, profil).</li>
       <li><strong>Choisir une bobine existante</strong> : l'appli propose les bobines de ta base qui correspondent (couleur, nom, marque · matière · poids). Touche <span class="ui">Associer →</span> sur la bonne.</li>
       <li>Ou <strong>Créer</strong> : si le catalogue Bambu connaît la référence, choisis <span class="ui">📦 Depuis le catalogue</span> puis <span class="ui">Importer depuis le catalogue</span> ; sinon <span class="ui">✏️ Création libre</span> : renseigne <span class="ui">Nom de la couleur</span>, <span class="ui">Matière (PLA, PETG, ABS…)</span>, <span class="ui">Marque</span> et <span class="ui">Poids total (g)</span> (1000 par défaut), puis <span class="ui">Créer le filament et la bobine</span>.</li>

@@ -9,6 +9,7 @@ import SpoolSVG from "./SpoolSVG";
 import { EXT_AMS_ID, amsName, slotLabel, isExternal, trayPct } from "../utils/ams";
 import AdminOnly from "./AdminOnly";
 import { showAlert } from "../utils/dialog";
+import { FSheet, FCard, FRow, fChip, fBtn, fGrad } from "./FicheKit";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 // Convertit un hex 6 ou 8 chars (avec ou sans #) en valeur CSS utilisable.
@@ -704,67 +705,66 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
   const isEmpty = tray.empty || !tray.filament_type;
   const [mapOpen, setMapOpen] = React.useState(false);
 
-  const Row = ({ label, value, mono, accent }) => (value == null || value === "") ? null : (
-    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
-      padding:"7px 0", borderBottom:"1px solid var(--border)" }}>
-      <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>{label}</span>
-      <span style={{ fontSize:13, fontWeight:600, color: accent || "var(--text)",
-        fontFamily: mono ? "JetBrains Mono,monospace" : "inherit",
-        textAlign:"right", marginLeft:12 }}>{value}</span>
-    </div>
-  );
+  const Row = ({ label, value, mono, accent }) => <FRow l={label} v={value} vc={accent} mono={mono}/>;
+  const [foldOpen, setFoldOpen] = React.useState({});      // cartes repliees a l'ouverture
+  const fold = k => ({ fold: true, open: !!foldOpen[k], onToggle: () => setFoldOpen(o => ({ ...o, [k]: !o[k] })) });
+  // la couleur de l'emplacement, pour l'en-tete (une couleur tres claire garde un gris pour la teinte)
+  const cols = isEmpty ? (tray.drying_spool ? parseColors({}, tray.drying_spool) : null) : parseColors(tray, info);
+  const main = (cols && cols[0]) || "#94a3b8";
+  const tint = /^#?f[0-9a-f]f[0-9a-f]f[0-9a-f]/i.test(String(main)) || /^#?(ff|fe|fd|fc|fb|fa)(ff|fe|fd|fc|fb|fa)/i.test(String(main)) ? "#94a3b8" : main;
+  const gauge = pct < 20 ? "#ef4444" : pct < 40 ? "#f59e0b" : "#22c55e";
+  const name = isEmpty ? (tray.drying_spool ? (tray.drying_spool.translated_name || tray.drying_spool.name) : "Emplacement vide")
+    : (info?.translated_name || info?.name || tray.filament_type || "Slot vide");
 
   return (
     <>
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)",
-      zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e=>e.stopPropagation()}
-        className="sheet-inner" className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-          width:"100%", maxWidth:540, maxHeight:"88dvh", overflowY:"auto",
-          paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
-        {/* Handle */}
-        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-        </div>
-        <div style={{ padding:"16px 20px 24px" }}>
-          {/* En-tête */}
-          <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:20 }}>
-            <div style={{ width:60, height:60, borderRadius:14, flexShrink:0, overflow:"hidden", position:"relative",
-              boxShadow:"0 2px 12px rgba(0,0,0,0.25), inset 0 0 0 2px var(--border)",
-              ...(isEmpty && tray.drying_spool
-                ? { ...colorBg(parseColors({}, tray.drying_spool), multicolorType({}, tray.drying_spool)), opacity:0.85 }
-                : isEmpty ? { backgroundColor:"var(--border)" }
-                : colorBg(parseColors(tray, info), multicolorType(tray, info))) }}>
-              {/* Bobine posee pour sechage : ses couleurs, hachurees (non inseree). */}
-              {isEmpty && tray.drying_spool && <HatchOverlay radius={14}/>}
-            </div>
-            <div style={{ flex:1, minWidth:0 }}>
-              <p style={{ fontSize:19, fontWeight:800, color:"var(--text)", margin:0,
-                letterSpacing:"-0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                {info?.translated_name || info?.name || tray.filament_type || "Slot vide"}
-              </p>
-              <p style={{ fontSize:12, color:"var(--muted)", margin:"4px 0 0" }}>
-                {amsLabel} · Slot {slotNo ?? tray.id + 1}
-                {tray.tray_id_name ? ` · ${tray.tray_id_name}` : ""}
-              </p>
-              {tray.uuid && tray.uuid !== "00000000" && (
-                <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0", fontFamily:"monospace" }}>
-                  UUID: {tray.uuid}
-                </p>
-              )}
-            </div>
+    <FSheet onClose={onClose} z={1000} bottom={!isEmpty && (tray.spool_id || (match && tray.match_mode !== "rfid")) ? <>
+      {tray.spool_id && <button onClick={() => setSpoolSheet({ spoolId: tray.spool_id, filamentId: info?.filament_id, hex: info?.color || tray.color })}
+        style={{ ...fBtn, flex: 1, border: "none", color: "#fff", background: "linear-gradient(135deg, #3B82F6, #6366F1)",
+          boxShadow: "0 8px 18px -10px #3B82F6" }}><Package size={15}/> Fiche de la bobine</button>}
+      {/* Tout ce qui n'est pas du RFID peut se tromper : une detection « auto » fausse se corrige ici, et le
+          choix est retenu pour l'emplacement tant que le meme filament y reste. */}
+      {tray.match_mode && tray.match_mode !== "rfid" && <AdminOnly><button onClick={() => setMapOpen(true)}
+        style={{ ...fBtn, flex: 1, minWidth: 0 }}>🔗 {tray.spool_id ? "Attribuer" : "Mapper / Créer"}</button></AdminOnly>}
+    </> : null}>
+      {/* la bobine de l'emplacement en vedette */}
+      <div style={{ position:"relative", overflow:"hidden", padding:"52px 18px 18px", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap",
+        background:`radial-gradient(circle at 18% 45%, ${tint}55, transparent 60%), linear-gradient(135deg, ${tint}26, transparent 70%), var(--surface2)` }}>
+        <span style={{ position:"relative", display:"inline-flex", flexShrink:0, filter:`drop-shadow(0 8px 18px ${tint}66)`, opacity: isEmpty && !tray.drying_spool ? .35 : 1 }}>
+          <SpoolSVG colors={cols || ["#94a3b8"]} size={104} type={isEmpty ? multicolorType({}, tray.drying_spool) : multicolorType(tray, info)}/>
+          {/* Bobine posee pour sechage : hachuree (non inseree). */}
+          {isEmpty && tray.drying_spool && <HatchOverlay radius={52}/>}
+        </span>
+        <div style={{ flex:"1 1 190px", minWidth:0, display:"flex", flexDirection:"column", gap:6 }}>
+          <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+            {fChip(`🎛 ${amsLabel} · emplacement ${slotNo ?? tray.id + 1}`, "#3B82F6")}
+            {match && <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 9px", borderRadius:20, fontSize:11, fontWeight:800,
+              color:match.color, background:`${match.color}1f`, border:`1px solid ${match.color}33` }}><MatchIcon mode={tray.match_mode} size={11}/>{match.text}</span>}
+            {info?.needs_drying && fChip("💧 à sécher", DRY_COLOR)}
           </div>
+          <div style={{ fontSize:23, fontWeight:900, color:"var(--text)", lineHeight:1.12, overflowWrap:"anywhere" }}>{name}</div>
+          {!isEmpty && (info?.brand || info?.fila_type || tray.filament_type) && <div style={{ fontSize:13, fontWeight:700, color:"var(--muted)" }}>
+            {[info?.brand, info?.fila_type || tray.filament_type].filter(Boolean).join(" · ")}</div>}
+          {!isEmpty && pct > 0 && <div style={{ display:"flex", flexDirection:"column", gap:5, marginTop:2 }}>
+            <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
+              <span style={{ fontSize:26, fontWeight:900, lineHeight:1.2, ...fGrad(gauge, `color-mix(in srgb, ${gauge} 60%, #ffffff)`) }}>
+                {info?.remaining_weight_g ? `${info.remaining_weight_g.toFixed(0)} g` : `${pct} %`}</span>
+              {info?.remaining_weight_g ? <span style={{ fontSize:12.5, fontWeight:900, color:"#fff", padding:"2px 8px", borderRadius:20, background:gauge }}>{pct} %</span> : null}
+            </div>
+            <div style={{ height:8, borderRadius:5, background:"color-mix(in srgb, var(--border) 80%, transparent)", overflow:"hidden" }}>
+              <div style={{ height:"100%", width:`${pct}%`, borderRadius:5, transition:"width 0.5s",
+                background:`linear-gradient(90deg, ${gauge}, color-mix(in srgb, ${gauge} 60%, #ffffff))` }}/>
+            </div>
+          </div>}
+        </div>
+      </div>
 
+      <div style={{ padding:"14px 14px 18px", display:"flex", flexDirection:"column", gap:12 }}>
           {isEmpty ? (
             tray.drying_spool ? (
-              <div style={{ textAlign:"center", padding:"18px 0" }}>
-                <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 4px" }}>Emplacement vide — bobine posée pour séchage</p>
-                <p style={{ fontSize:15, fontWeight:700, color:"#f59e0b", margin:"0 0 2px" }}>
-                  ☀ {tray.drying_spool.translated_name || tray.drying_spool.name}</p>
-                <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 12px" }}>
-                  {[tray.drying_spool.brand, tray.drying_spool.fila_type || tray.drying_spool.material, `#${tray.drying_spool.id}`,
+              <FCard t="Posée pour séchage" i="☀" c="#F59E0B">
+                <p style={{ fontSize:13, color:"var(--text)", margin:"4px 0 10px", lineHeight:1.45 }}>
+                  Emplacement vide — {[tray.drying_spool.brand, tray.drying_spool.fila_type || tray.drying_spool.material, `#${tray.drying_spool.id}`,
                     tray.drying_spool.remaining_weight_g != null ? `${Math.round(tray.drying_spool.remaining_weight_g)} g restants` : null,
                   ].filter(Boolean).join(" · ")}
                 </p>
@@ -772,99 +772,31 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
                     try { await client.delete(`/printer/ams/${amsId}/${tray.id}/drying`); onClose(); }
                     catch (e) { showAlert(e.response?.data?.detail || e.message); }
                   }}
-                  style={{ padding:"7px 14px", borderRadius:10, fontSize:12, fontWeight:700, cursor:"pointer",
-                    background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)" }}>
+                  style={{ ...fBtn, alignSelf:"flex-start", padding:"8px 14px", fontSize:13 }}>
                   Retirer de l'emplacement
                 </button></AdminOnly>
-              </div>
+              </FCard>
             ) : (
-              <p style={{ color:"var(--muted)", fontSize:14, textAlign:"center", padding:"24px 0" }}>Slot vide</p>
+              <p style={{ color:"var(--muted)", fontSize:14, fontWeight:700, textAlign:"center", padding:"18px 0" }}>Rien dans cet emplacement.</p>
             )
           ) : (<>
-            {/* Jauge restant */}
-            {pct > 0 && (
-              <div style={{ marginBottom:20 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-                  <span style={{ fontSize:12, color:"var(--muted)" }}>Restant estimé</span>
-                  <span style={{ fontSize:14, fontWeight:700, fontFamily:"monospace",
-                    color: pct<20?"#ef4444":pct<40?"#f59e0b":"#22c55e" }}>
-                    {pct}%{info?.remaining_weight_g ? ` · ${info.remaining_weight_g.toFixed(0)}g` : ""}
-                  </span>
-                </div>
-                <div style={{ height:10, borderRadius:5, background:"var(--border)", overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:`${pct}%`, borderRadius:5, transition:"width 0.5s",
-                    background: pct<20?"#ef4444":pct<40?"#f59e0b":"#22c55e" }}/>
-                </div>
-              </div>
+            {info?.found_mode && info.found_mode !== tray.match_mode && (
+              <p style={{ fontSize:12, color:"var(--muted)", margin:0 }}>Détection en base : {info.found_mode}</p>
             )}
 
-            {/* Badge détection */}
-            {match && (
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:16,
-                padding:"9px 12px", borderRadius:10, background:`${match.color}14`,
-                border:`1px solid ${match.color}35` }}>
-                <MatchIcon mode={tray.match_mode} size={14}/>
-                <span style={{ fontSize:12, color:match.color, fontWeight:600 }}>
-                  {match.text}
-                  {info?.found_mode && info.found_mode !== tray.match_mode && (
-                    <span style={{ color:"var(--muted)", fontWeight:400, marginLeft:4 }}>
-                      (DB: {info.found_mode})
-                    </span>
-                  )}
-                </span>
-                {/* Tout ce qui n'est pas du RFID peut se tromper : une detection
-                    « auto » fausse se corrige ici, et le choix est retenu pour
-                    l'emplacement tant que le meme filament y reste. */}
-                {tray.match_mode && tray.match_mode !== "rfid" && (
-                  <AdminOnly><button onClick={() => setMapOpen(true)}
-                    style={{ marginLeft:"auto", padding:"5px 10px", borderRadius:8, fontSize:11,
-                      fontWeight:700, background:"#3b82f6", color:"white", border:"none", cursor:"pointer" }}>
-                    {tray.spool_id ? "Attribuer" : "Mapper / Créer"}
-                  </button></AdminOnly>
-                )}
-              </div>
-            )}
-
-            {/* ── Section MQTT (données temps réel imprimante) ── */}
-            <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-              letterSpacing:"0.08em", margin:"0 0 4px" }}>Données imprimante (temps réel)</p>
-            <Row label="Type"          value={tray.filament_type}/>
-            <Row label="Couleur"       value={(() => { const arr = (info?.colors_array||tray?.colors_array||"").split(",").filter(Boolean); return arr.length > 1 ? arr.map(hexDisplay).filter(Boolean).join(" / ") : color; })()} mono/>
-            <Row label="Profile ID"    value={tray.tray_info_idx || tray.tray_id_name}/>
-            <Row label="Tag UID"       value={tray.tag_uid && !tray.tag_uid.match(/^0+$/) ? tray.tag_uid : null} mono/>
-            <Row label="Restant selon l'AMS" value={tray.remain != null && tray.remain >= 0 ? `${tray.remain}%` : null}/>
-            <Row label="UUID tray (RFID)" value={tray.uuid && !tray.uuid.match(/^0+$/) ? tray.uuid : null} mono/>
-
-            {/* ── Section DB (bobine liée) ── */}
-            <div style={{ display:"flex", alignItems:"center", gap:8, margin:"16px 0 4px" }}>
-              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-                letterSpacing:"0.08em", margin:0 }}>
-                Bobine{tray.spool_id ? ` #${tray.spool_id}` : " liée en base"}
-              </p>
-              {tray.spool_id && (
-                <button
-                  onClick={() => setSpoolSheet({ spoolId: tray.spool_id, filamentId: info?.filament_id, hex: info?.color || tray.color })}
-                  title="Ouvrir la fiche de la bobine"
-                  style={{ display:"inline-flex", alignItems:"center", justifyContent:"center",
-                    width:22, height:22, borderRadius:6, cursor:"pointer",
-                    background:"var(--surface2)", border:"1px solid var(--border)",
-                    color:"var(--accent, #6366f1)", padding:0, flexShrink:0 }}>
-                  <Package size={13}/>
-                </button>
-              )}
-            </div>
+            {/* ── la bobine liee en base ── */}
+            <FCard t={`Bobine${tray.spool_id ? ` #${tray.spool_id}` : " liée en base"}`} i="🧵" c="#F97316">
             {info ? (<>
               {/* Meme decoupage, memes libelles et meme ordre que la fiche
                   bobine : les deux ecrans decrivent le meme objet, ils doivent
                   se lire pareil. Ici les valeurs ne sont pas editables, c'est
-                  la seule difference -- le bouton en haut ouvre la vraie fiche
+                  la seule difference -- le bouton en bas ouvre la vraie fiche
                   pour cela. */}
               <Row label="Emplacement"     value={info.location}/>
               <Row label="Poids restant"   value={info.remaining_weight_g != null ? `${Math.round(info.remaining_weight_g)} g` : null}/>
               <Row label="Stock du filament" value={info.filament_stock_g != null ? `${fmtStock(info.filament_stock_g)} (toutes bobines)` : null}/>
               <Row label="Prix d'achat"    value={info.price_override ? `${Number(info.price_override).toFixed(2)} €` : null}/>
               <Row label="Tag NFC"         value={info.tag_number} mono/>
-              <Row label="Tray AMS"        value={info.ams_tray}/>
               <Row label="Première util."  value={info.first_used_at?.slice(0,10)}/>
               <Row label="Dernière util."  value={info.last_used_at?.slice(0,10)}/>
               <Row label="Dernier séchage" value={info.needs_drying
@@ -872,11 +804,18 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
                 : info.last_dried_at?.slice(0,10)} accent={info.needs_drying ? DRY_COLOR : undefined}/>
               <Row label="Commentaire"     value={info.comment}/>
               <Row label="ID externe"      value={info.external_spool_id} mono/>
-
-              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-                letterSpacing:"0.08em", margin:"14px 0 4px" }}>
-                Filament{info.filament_id ? ` #${info.filament_id}` : ""}
+            </>) : (
+              <p style={{ fontSize:12.5, color:"#f59e0b", fontWeight:700, margin:"4px 0 2px" }}>
+                {tray.spool_id
+                  ? `Bobine #${tray.spool_id} — données non chargées`
+                  : "Aucune bobine mappée — matching en attente"}
               </p>
+            )}
+            </FCard>
+
+            {info && <FCard t={`Filament${info.filament_id ? ` #${info.filament_id}` : ""}`} i="🎨" c="#8B5CF6" {...fold("fil")}
+              summary={<p style={{ margin:"4px 0 0", fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>
+                {[info.brand, info.material, info.fila_type].filter(Boolean).join(" · ") || "—"}</p>}>
               <Row label="Nom"             value={info.translated_name || info.name}/>
               {info.translated_name && info.name !== info.translated_name &&
                 <Row label="Nom EN"        value={info.name}/>}
@@ -890,37 +829,30 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
               <Row label="Poids bobine"    value={info.initial_weight_g ? `${info.initial_weight_g} g` : null}/>
               <Row label="Poids support"   value={info.spool_weight_g ? `${info.spool_weight_g} g` : null}/>
               <Row label="Prix catalogue"  value={info.price ? `${Number(info.price).toFixed(2)} €` : null}/>
-            </>) : (
-              <p style={{ fontSize:12, color:"#f59e0b", fontStyle:"italic", padding:"4px 0" }}>
-                {tray.spool_id
-                  ? `Bobine #${tray.spool_id} — données non chargées`
-                  : "Aucune bobine mappée — matching en attente"}
-              </p>
-            )}
+            </FCard>}
 
             {/* Séchage depuis AMS + données catalogue */}
             {(tray.drying_temp > 0 || tray.spool_info?.filament_material) && (
-              <div style={{ marginTop:14, padding:"10px 14px", borderRadius:10,
-                background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.25)" }}>
-                <p style={{ fontSize:11, color:"#f59e0b", fontWeight:700, margin:"0 0 4px",
-                  textTransform:"uppercase", letterSpacing:"0.05em" }}>🌡 Séchage</p>
-                {tray.drying_temp > 0 && (
-                  <p style={{ fontSize:12, color:"var(--text)", margin:0 }}>
-                    {tray.drying_temp}°C · {tray.drying_time}h
-                  </p>
-                )}
-                {tray.spool_info?.filament_material && (
-                  <p style={{ fontSize:11, color:"var(--muted)", margin:"4px 0 0" }}>
-                    Matériau : {tray.spool_info.filament_material}
-                    {tray.spool_info.filament_type && ` — ${tray.spool_info.filament_type}`}
-                  </p>
-                )}
-              </div>
+              <FCard t="Séchage" i="🌡" c="#F59E0B">
+                {tray.drying_temp > 0 && <Row label="Réglage" value={`${tray.drying_temp}°C · ${tray.drying_time}h`}/>}
+                {tray.spool_info?.filament_material && <Row label="Matériau" value={`${tray.spool_info.filament_material}${tray.spool_info.filament_type ? ` — ${tray.spool_info.filament_type}` : ""}`}/>}
+              </FCard>
             )}
+
+            {/* ── ce que dit l'imprimante (temps reel), replie ── */}
+            <FCard t="Données imprimante" i="📡" c="#06B6D4" {...fold("mqtt")}
+              summary={<p style={{ margin:"4px 0 0", fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>
+                {[tray.filament_type, tray.remain != null && tray.remain >= 0 ? `${tray.remain} % selon l'AMS` : null].filter(Boolean).join(" · ") || "temps réel"}</p>}>
+              <Row label="Type"          value={tray.filament_type}/>
+              <Row label="Couleur"       value={(() => { const arr = (info?.colors_array||tray?.colors_array||"").split(",").filter(Boolean); return arr.length > 1 ? arr.map(hexDisplay).filter(Boolean).join(" / ") : color; })()} mono/>
+              <Row label="Profile ID"    value={tray.tray_info_idx || tray.tray_id_name}/>
+              <Row label="Tag UID"       value={tray.tag_uid && !tray.tag_uid.match(/^0+$/) ? tray.tag_uid : null} mono/>
+              <Row label="Restant selon l'AMS" value={tray.remain != null && tray.remain >= 0 ? `${tray.remain}%` : null}/>
+              <Row label="UUID tray (RFID)" value={tray.uuid && !tray.uuid.match(/^0+$/) ? tray.uuid : null} mono/>
+            </FCard>
           </>)}
-        </div>
       </div>
-    </div>
+    </FSheet>
     {mapOpen && (
       <MapTraySheet tray={tray} amsId={amsId} onClose={() => setMapOpen(false)} onMapped={() => { setMapOpen(false); onClose(); }}/>
     )}
