@@ -18,6 +18,10 @@ KEY = "ACHIEVEMENTS_WATCH"
 STEP_S = 15
 SAVE_S = 120
 GAP_S = 600                  # plus de 10 min sans releve (appli arretee) : la suite est inconnue
+# La serie « en ligne » (25/10/2026) : une coupure courte ne la casse pas. Au demarrage, la liaison
+# MQTT met quelques secondes a se faire (le premier releve la voyait hors ligne : chaque relance de
+# l'appli remettait le compteur a zero), et la liaison se refait parfois toute seule.
+ONLINE_GRACE_S = 15 * 60
 DRY_MAX, DRY_SAMPLES = 30, 240   # humidite des AMS sous 30 % ; une journee compte avec 1 h de releves
 OVEN_C = 45
 DOOR_N, DOOR_S = 3, 60       # trois ouvertures de la porte en 60 s (seuil confirme le 25/10/2026)
@@ -61,14 +65,17 @@ def step(s, now: datetime, w: dict, local_day: str) -> bool:
     last = _ts(w.get("last"))
     gap = bool(last) and (now - last).total_seconds() > GAP_S
     w["last"] = _iso(now)
-    # connexion : heures d'affilee ; une coupure de l'appli remet le compteur a zero
+    # connexion : heures d'affilee ; seule une coupure de plus de 15 min (imprimante ou appli) remet a zero
+    hole = bool(last) and (now - last).total_seconds() > ONLINE_GRACE_S
     if s.connected:
-        if not w.get("online_since") or gap:
+        off = _ts(w.get("offline_since"))
+        if not w.get("online_since") or hole or (off and (now - off).total_seconds() > ONLINE_GRACE_S):
             w["online_since"] = _iso(now)
+        w["offline_since"] = None
         h = (now - _ts(w["online_since"])).total_seconds() / 3600
         w["online_best_h"] = max(w.get("online_best_h") or 0, round(h, 2))
-    else:
-        w["online_since"] = None
+    elif not w.get("offline_since"):
+        w["offline_since"] = _iso(now)
     # alertes rencontrees (codes differents)
     for e in s.hms_errors or []:
         c = str(e.get("code") or e.get("ecode") or "").strip()
