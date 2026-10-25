@@ -10,7 +10,7 @@ import MakerWorldView from "../components/MakerWorldView";
 import MakerWorldCollectionsPicker from "../components/MakerWorldCollectionsPicker";
 import MakerWorldModelSheet, { prefetchModel } from "../components/MakerWorldModelSheet";
 import { openCreator } from "../components/MwCreatorPage";
-import { useToRateSet, RateButton, GroupToRate } from "../components/MwToRate";
+import { useToRateSet, RateButton, RateStar as RateStarBtn } from "../components/MwToRate";
 import { useFriend } from "../store/friend";
 import MwImg from "../components/MwImg";
 import client, { apiUrl, apiThumb } from "../api/client";
@@ -1210,7 +1210,6 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const canRate = !!p.design_id && (p.status === "SUCCESS" || p.status === "PARTIAL") && toRateSet.has(String(p.design_id));
   const sections = (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {canRate && <GroupToRate designs={[p.design_id]} name={p.file_name} enabled={!visiting} label="Modèle à évaluer sur MakerWorld" anchor={`rate-p${p.id}`}/>}
       <SnapshotGallery snaps={[]} printId={p.id} userPhotos={userPhotos}
         onDelete={() => {}} onUpload={async f => { await uploadPhoto(f); }}
         onDeleteUpload={async filename => { await client.delete(`/prints/${p.id}/upload/${filename}`); loadUserPhotos(); }}
@@ -1238,7 +1237,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             <div style={{ position: "sticky", top: 0, zIndex: 10, height: 0 }}>
               {!wide && <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", width: 38, height: 4, borderRadius: 2, background: "rgba(148,163,184,.6)" }}/>}
               <div style={{ position: "absolute", top: 10, right: 12, display: "flex", gap: 8 }}>
-                {canRate && <RateStar id={`rate-p${p.id}`}/>}
+                {canRate && <RateStar designs={[p.design_id]} name={p.file_name} enabled={!visiting}/>}
                 {isAdmin && <button onClick={more} aria-label="Plus d'actions" style={v2Round}>⋯</button>}
                 <button onClick={onClose} aria-label="Fermer" style={v2Round}>✕</button>
               </div>
@@ -1297,11 +1296,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         }}/>}
     </>);
 }
-// l'etoile de la barre du haut : un modele attend une evaluation ; la toucher mene au bandeau
-function RateStar({ id }) {
-  return <button onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })} aria-label="À évaluer sur MakerWorld"
-    data-tip="À évaluer sur MakerWorld" style={{ ...v2Round, border: "none", background: "linear-gradient(135deg, #F59E0B, #FBBF24)", color: "#fff",
-      boxShadow: "0 6px 16px rgba(245,158,11,.45)", animation: "bn-float 3s ease-in-out infinite" }}>⭐</button>;
+// l'etoile de la barre du haut : un modele attend une evaluation ; la toucher l'ouvre (plus de bandeau au milieu)
+function RateStar(props) {
+  return <RateStarBtn {...props} style={{ ...v2Round, border: "none", background: "linear-gradient(135deg, #F59E0B, #FBBF24)", color: "#fff",
+    boxShadow: "0 6px 16px rgba(245,158,11,.45)", animation: "bn-float 3s ease-in-out infinite" }}/>;
 }
 const v2Round = { width: 34, height: 34, borderRadius: "50%", border: "1px solid var(--border)", background: "color-mix(in srgb, var(--sheet-bg) 80%, transparent)",
   backdropFilter: "blur(6px)", color: "var(--text2)", cursor: "pointer", fontSize: 15, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" };
@@ -1644,8 +1642,6 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   const sections = (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <GroupPhotosV2 groupId={groupId} onUpdated={onUpdated}/>
-      <GroupToRate name={title} enabled={!groupVisiting} anchor={`rate-g${groupId}`}
-        designs={prints.filter(x => x.status === "SUCCESS" || x.status === "PARTIAL").map(x => String(x.design_id || "").trim()).filter(Boolean)}/>
       {printsBlock}
       {filaments.length > 0 && <FilamentsV2 filaments={filaments} onSpoolClick={setSelSpool} onUnmap={setUnmapping}/>}
       {designs.map(([d, n]) => <MakerWorldCard key={d} designId={d} rateElsewhere prints={prints.filter(x => String(x.design_id || "").trim() === d)}
@@ -1662,7 +1658,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
               {!wide && <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", width: 38, height: 4, borderRadius: 2, background: "rgba(148,163,184,.6)" }}/>}
               <div style={{ position: "absolute", top: 10, right: 12, display: "flex", gap: 8 }}>
                 {prints.some(x => (x.status === "SUCCESS" || x.status === "PARTIAL") && x.design_id && groupToRate.has(String(x.design_id)))
-                  && <RateStar id={`rate-g${groupId}`}/>}
+                  && <RateStar name={title} enabled={!groupVisiting}
+                    designs={prints.filter(x => x.status === "SUCCESS" || x.status === "PARTIAL").map(x => String(x.design_id || "").trim()).filter(Boolean)}/>}
                 {isAdmin && <button onClick={more} aria-label="Plus d'actions" style={v2Round}>⋯</button>}
                 <button onClick={onClose} aria-label="Fermer" style={v2Round}>✕</button>
               </div>

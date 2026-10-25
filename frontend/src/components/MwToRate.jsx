@@ -3,7 +3,7 @@ import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import { showConfirm, showAlert } from "../utils/dialog";
 import { useCanMwHome } from "../store/auth";
-import client from "../api/client";
+import client, { PHOTOS_CHANGED } from "../api/client";
 import { useShares, setOnRateFailed } from "../store/shares";
 import MwImg from "./MwImg";
 import Lightbox from "./Lightbox";
@@ -63,6 +63,8 @@ function useTemplates() {
 setOnRateFailed(() => { forgetToRate(); readToRate(); });
 
 export function forgetToRate() { _p = null; _t = 0; }  // relire au prochain affichage
+// une photo vient d'etre ajoutee ou retiree : la liste (et ses photos a joindre) se relit tout de suite
+if (typeof window !== "undefined") window.addEventListener(PHOTOS_CHANGED, () => { if (_last) { forgetToRate(); readToRate(); } });
 
 // Bouton « Évaluer » pour un modele : formulaire dans l'appli quand MakerWorld
 // attend l'evaluation (on connait sa fiche), sinon lien vers MakerWorld.
@@ -97,6 +99,29 @@ export function RateButton({ did, style, label = "⭐ Évaluer", doneLabel = "�
     )}
   </>);
 }
+// L'etoile du haut d'une fiche (impression, groupe) : un seul modele a evaluer -> son evaluation
+// tout de suite ; plusieurs -> une petite fenetre avec chacun (et « Tout évaluer »).
+export function RateStar({ designs, name, enabled = true, style }) {
+  const d = useToRate(enabled);
+  const [open, setOpen] = useState(false);
+  const ids = new Set((designs || []).map(String));
+  const items = (d?.items || []).filter(x => ids.has(String(x.design_id)));
+  if (!items.length) return null;
+  const st = { ...style, display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" };
+  if (items.length === 1) return <span data-tip="À évaluer sur MakerWorld" style={{ display: "flex" }}>
+    <RateButton did={items[0].design_id} label="⭐" ext="" doneLabel="✓" style={st}/></span>;
+  return <>
+    <button type="button" onClick={() => setOpen(true)} aria-label="À évaluer sur MakerWorld" data-tip={`${items.length} modèles à évaluer sur MakerWorld`} style={st}>⭐</button>
+    {open && createPortal(
+      <div data-no-pull="" onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 4250, background: "rgba(0,0,0,0.6)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+        <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto", borderRadius: 20,
+          background: "var(--sheet-bg, var(--surface))", boxShadow: "0 20px 50px rgba(0,0,0,.45)" }}>
+          <GroupToRate designs={designs} name={name} enabled={enabled}/></div>
+      </div>, document.body)}
+  </>;
+}
+
 // Fiche d'un groupe : ses modeles imprimes pas encore evalues, et une seule
 // evaluation pour tous ceux que MakerWorld attend.
 export function GroupToRate({ designs, name, enabled = true, label = null, anchor = null }) {

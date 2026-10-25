@@ -12,6 +12,7 @@ import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets
          Dices, ChevronRight, Camera, Video, Thermometer, CalendarDays, ShoppingBag, Rss, Images, Zap, Medal as MedalIcon,
          BellRing, Split, Fan, Wrench, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck, Maximize2 } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
+import { RateButton } from "./MwToRate";
 import { mwImg } from "./MwImg";
 import LiveCamera from "./LiveCamera";
 import { Medal, gradeOf, GradeEmblem, CARD_ORDER } from "./medals";
@@ -2024,8 +2025,12 @@ function ToRate({ r, o, sz }) {
           ["Impressions concernées", items.reduce((t, x) => t + (x.printed || 0), 0), "#3B82F6"]].filter(Boolean)}/>
         <Muted>Une évaluation par modèle imprimé : MakerWorld en attend une pour chaque profil que tu as imprimé.</Muted>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
-        {items.map(x => <div key={x.design_id} style={{ display: "flex", flexDirection: "column", gap: 5, padding: 8, borderRadius: 16, minWidth: 0,
-          background: "linear-gradient(160deg, rgba(249,115,22,0.10), transparent 55%), var(--surface2)", border: "1px solid var(--border)" }}>
+        {/* chaque carte ouvre son evaluation (dans l'appli si MakerWorld l'attend, sinon sur MakerWorld) */}
+        {items.map(x => <RateButton key={x.design_id} did={x.design_id} ext="" doneLabel={<span style={{ fontSize: 13, fontWeight: 900 }}>✓ Évalué</span>}
+          style={{ display: "flex", flexDirection: "column", gap: 5, padding: 8, borderRadius: 16, minWidth: 0, textAlign: "left", textDecoration: "none",
+            font: "inherit", color: "inherit", cursor: "pointer", alignItems: "stretch", boxSizing: "border-box", width: "100%",
+            background: "linear-gradient(160deg, rgba(249,115,22,0.10), transparent 55%), var(--surface2)", border: "1px solid var(--border)" }}
+          label={<>
           <span style={{ position: "relative" }}>
             {x.cover_url ? <img src={mwImg(x.cover_url, 300)} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 12, display: "block" }}/>
               : <span style={{ display: "block", width: "100%", aspectRatio: "1", borderRadius: 12, background: "var(--surface)" }}/>}
@@ -2034,7 +2039,9 @@ function ToRate({ r, o, sz }) {
           <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text)", ...clamp(2) }}>{x.title_fr || x.title || `Modèle ${x.design_id}`}</span>
           {x.creator_name && <Muted size={11} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>par {x.creator_name}</Muted>}
           <span style={{ fontSize: 11, fontWeight: 800, color: "#ea580c" }}>imprimé{x.printed > 1 ? ` ${x.printed} fois` : ""}{x.last_date ? ` · ${ago(x.last_date)}` : ""}</span>
-        </div>)}</div></> : null}>
+          <span style={{ marginTop: "auto", alignSelf: "flex-start", fontSize: 12, fontWeight: 900, color: "#fff", padding: "4px 11px", borderRadius: 20,
+            background: "linear-gradient(135deg, #EA580C, #F59E0B)", boxShadow: "0 4px 12px -6px #EA580C" }}>⭐ Évaluer</span>
+        </>}/>)}</div></> : null}>
       {({ W, H }) => {
         if (!items.length) return <>{headOf(W)}<Empty>Tout est évalué</Empty></>;
         const rest = H - 34;

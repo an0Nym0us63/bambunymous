@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import { Send } from "lucide-react";
-import client, { apiUrl } from "../api/client";
+import client, { apiUrl, PHOTOS_CHANGED } from "../api/client";
 import { useShares } from "../store/shares";
 import { FSheet, FCard, fBtn } from "./FicheKit";
 
@@ -39,6 +39,12 @@ export default function ShareSheet({ kind, id, onClose }) {
     })
     .catch(e => setPreview({ error: e.response?.data?.detail || e.message, destinations: [] }));
   useEffect(() => { load(""); }, [kind, id]);
+  // une photo ajoutee pendant que la fenetre est ouverte : elle rejoint les medias proposes
+  useEffect(() => {
+    const again = () => load(message);
+    window.addEventListener(PHOTOS_CHANGED, again);
+    return () => window.removeEventListener(PHOTOS_CHANGED, again);
+  }, [kind, id, message]); // eslint-disable-line react-hooks/exhaustive-deps
   // L'apercu suit le message, sans requete a chaque touche.
   useEffect(() => {
     clearTimeout(timer.current);

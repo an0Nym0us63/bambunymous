@@ -90,4 +90,14 @@ client.interceptors.response.use(
   }
 );
 
+// Une photo d'impression ou de groupe ajoutee, retiree ou mise en avant : on le dit a toute
+// l'appli (les photos a joindre a une evaluation, l'apercu d'un partage ouvert se relisent).
+export const PHOTOS_CHANGED = "bn-photos-changed";
+client.interceptors.response.use(r => {
+  const m = (r.config?.method || "get").toLowerCase(), u = r.config?.url || "";
+  if (m !== "get" && /^\/?prints\/(groups\/)?\d+\/(photos?|upload)/.test(u.replace(/^\/api\/v1/, "")))
+    window.dispatchEvent(new CustomEvent(PHOTOS_CHANGED));
+  return r;
+});
+
 export default client;
