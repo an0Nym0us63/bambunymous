@@ -12,7 +12,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import select, desc, func, or_, update
+from sqlalchemy import select, desc, func, or_, and_, update
 from sqlalchemy.orm import selectinload
 
 from .auth import get_current_user, require_admin
@@ -100,6 +100,7 @@ def _print_to_out(p: Print) -> dict:
     d["group_name"] = p.group.name if p.group else None
     d["group_cover_print_id"] = p.group.cover_print_id if p.group else None
     d["group_number_of_items"] = p.group.number_of_items if p.group else 1
+    d["group_stats_excluded"] = bool(p.group.stats_excluded) if p.group else False
     # des photos au niveau du groupe (choisie, ou deposees dans son dossier) : l'accueil ne relance pas
     # « pas encore de photo » pour une impression dont le groupe en a deja
     d["group_cover_photo"] = p.group.cover_photo if p.group else None
@@ -735,8 +736,8 @@ async def merge_group(group_id: int, body: dict = Body({}), _: str = Depends(get
 @router.patch("/groups/{group_id}")
 async def patch_group(group_id: int, body: dict = Body({}), _: str = Depends(get_current_user)):
     """Met à jour les champs éditables d'un groupe (name, number_of_items)."""
-    allowed = {"name", "number_of_items", "cover_print_id"}
-    updates = {k: v for k, v in body.items() if k in allowed}
+    allowed = {"name", "number_of_items", "cover_print_id", "stats_excluded"}
+    updates = {k: (1 if v else 0) if k == "stats_excluded" else v for k, v in body.items() if k in allowed}
     if not updates:
         raise HTTPException(400, "Aucun champ valide")
     async with AsyncSessionLocal() as db:
@@ -810,6 +811,13 @@ async def prints_stats(
         def W(*extra):
             return [done, *period, *extra]
 
+        # Hors classements (25/10/2026) : une impression marquee, ou toutes celles d'un groupe marque
+        # (echantillons, supports de bobine regroupes…), ne figure plus dans les tops ; elle reste
+        # comptee dans les totaux (le filament a bien ete consomme).
+        _ex_groups = select(Group.id).where(func.coalesce(Group.stats_excluded, 0) == 1)
+        RANKED = and_(func.coalesce(Print.stats_excluded, 0) == 0,
+                      or_(Print.group_id.is_(None), Print.group_id.not_in(_ex_groups)))
+
         # ── KPIs (le filament d'un print raté est consommé : on le compte)
         total   = (await db.execute(select(func.count(Print.id)).where(*W()))).scalar() or 0
         success = (await db.execute(select(func.count(Print.id)).where(*W(ok)))).scalar() or 0
@@ -841,18 +849,18 @@ async def prints_stats(
         top_dur = (await db.execute(
             select(Print.id, Print.file_name, Print.original_name, Print.translated_name,
                    DUR.label("dur_s"), Print.total_cost, Print.total_weight_g, Print.print_date)
-            .where(*W(ok)).order_by(DUR.desc()).limit(10)
+            .where(*W(ok), RANKED).order_by(DUR.desc()).limit(10)
         )).all()
         top_cost = (await db.execute(
             select(Print.id, Print.file_name, Print.original_name, Print.translated_name,
                    DUR.label("dur_s"), Print.total_cost, Print.total_weight_g, Print.print_date)
-            .where(*W(ok), Print.total_cost > 0)
+            .where(*W(ok), RANKED, Print.total_cost > 0)
             .order_by(desc(Print.total_cost)).limit(10)
         )).all()
         top_weight = (await db.execute(
             select(Print.id, Print.file_name, Print.original_name, Print.translated_name,
                    DUR.label("dur_s"), Print.total_cost, Print.total_weight_g, Print.print_date)
-            .where(*W(ok), Print.total_weight_g > 0)
+            .where(*W(ok), RANKED, Print.total_weight_g > 0)
             .order_by(desc(Print.total_weight_g)).limit(10)
         )).all()
 
@@ -866,7 +874,7 @@ async def prints_stats(
                    DUR.label("dur_s"), Print.total_cost, Print.total_weight_g, Print.print_date,
                    NCOL.label("n_colors"))
             .join(FilamentUsage, FilamentUsage.print_id == Print.id)
-            .where(*W(ok), *_used)
+            .where(*W(ok), RANKED, *_used)
             .group_by(Print.id).having(NCOL > 1)
             .order_by(desc(NCOL), desc(Print.total_weight_g)).limit(10)
         )).all()
@@ -875,7 +883,7 @@ async def prints_stats(
             select(Group.id, Group.name, func.count(func.distinct(Print.id)).label("nb"), NCOL.label("n_colors"))
             .join(Print, Print.group_id == Group.id)
             .join(FilamentUsage, FilamentUsage.print_id == Print.id)
-            .where(*W(ok), *_used)
+            .where(*W(ok), RANKED, *_used)
             .group_by(Group.id).having(NCOL > 1)
             .order_by(desc(NCOL)).limit(10))).all()]
 
@@ -888,7 +896,7 @@ async def prints_stats(
                        func.sum(func.coalesce(Print.total_cost, 0)).label("cost"),
                        func.sum(func.coalesce(Print.total_weight_g, 0)).label("weight_g"))
                 .join(Print, Print.group_id == Group.id)
-                .where(*W(ok))
+                .where(*W(ok), RANKED)
                 .group_by(Group.id)
                 .order_by(desc(order_col)).limit(10)
             )).all()
@@ -1537,7 +1545,9 @@ async def update_print(print_id: int, body: dict, _: str = Depends(get_current_u
     allowed = {"file_name","status","status_note","number_of_items",
                 "sold_units","sold_price_total","margin","notes",
                 "design_id","duration_seconds","print_date",
-                "translated_name"}
+                "translated_name", "stats_excluded"}
+    if "stats_excluded" in body:
+        body = {**body, "stats_excluded": 1 if body["stats_excluded"] else 0}
     # Les cinq statuts de Spoolnymous, plus CANCELLED. Valide explicitement :
     # le champ etait accepte comme chaine libre, une faute de frappe cote client
     # inscrivait donc un statut inconnu, invisible dans les filtres.

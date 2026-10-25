@@ -80,6 +80,8 @@ async def _migrate():
         ("users",     "mw_write",             "INTEGER DEFAULT 0"),
         ("users",     "secrets_visible",      "INTEGER DEFAULT 0"),
         ("groups",    "cover_photo",          "TEXT"),
+        ("groups",    "stats_excluded",       "INTEGER DEFAULT 0"),
+        ("prints",    "stats_excluded",       "INTEGER DEFAULT 0"),
         ("prints",    "translated_name",      "TEXT"),
         ("prints",    "translated_by",        "TEXT"),
         ("filaments", "translated_name",      "TEXT"),

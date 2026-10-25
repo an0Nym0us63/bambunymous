@@ -1077,6 +1077,12 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
     catch (err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
   };
   const reload = () => client.get("/prints/" + p.id).then(r => { setP(r.data); setRefreshKey(k => k + 1); }).catch(() => {});
+  // hors des classements de la page Stats (echantillons, supports…) ; le groupe peut l'imposer a toutes ses impressions
+  const toggleRanked = async () => {
+    const v = !p.stats_excluded;
+    try { await client.patch(`/prints/${p.id}`, { stats_excluded: v }); setP(prev => ({ ...prev, stats_excluded: v ? 1 : 0 })); onChanged?.(); }
+    catch (err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
+  };
   const costFil = p.total_cost_filament || 0, costNormal = p.total_cost_filament_normal || 0, costElec = p.electric_cost || 0;
   const totalBobine = costFil + costElec, totalNormal = costNormal + costElec;
   const [stL, stC, stI] = V2_STATUS[p.status] || [p.status || "—", "#94a3b8", "•"];
@@ -1092,6 +1098,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         onClick: () => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine }) }
         : objQ ? { icon: "📦", label: "Objets : tous créés", hint: `${objQ.used} / ${objQ.total}`, tone: "#22C55E", onClick: () => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine }) } : null,
       groupe && { icon: "⛓", label: "Retirer du groupe", hint: groupe, tone: "#A78BFA", onClick: handleUngroup },
+      isAdmin && (p.group_stats_excluded
+        ? { icon: "📊", label: "Hors classements des stats", hint: "Imposé par son groupe", tone: "#64748B", disabled: true }
+        : { icon: "📊", label: p.stats_excluded ? "Remettre dans les classements des stats" : "Retirer des classements des stats",
+            hint: p.stats_excluded ? "Il compte de nouveau dans les tops" : "Les totaux le comptent toujours", tone: "#64748B", onClick: toggleRanked }),
       (p.source_3mf || p.model_3mf || (p.design_id && p.mw_profile_id)) && "-",
       p.source_3mf && { icon: "⤓", label: "Télécharger le 3MF d'origine", hint: "MakerWorld · à retrancher", tone: "#F97316", onClick: () => download3mf(p.id, "source") },
       !p.source_3mf && p.design_id && p.mw_profile_id && { icon: "⇣", label: "Récupérer le 3MF d'origine", hint: "depuis MakerWorld", tone: "#F97316",
@@ -1136,6 +1146,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             color: "#a78bfa", background: "rgba(167,139,250,0.16)" }}>📁 {groupe}
             <AdminOnly><button onClick={handleUngroup} aria-label="Retirer du groupe" data-tip="Retirer du groupe" style={{ background: "none", border: "none",
               color: "#a78bfa", cursor: "pointer", padding: 0, display: "flex" }}><X size={12}/></button></AdminOnly></span>}
+          {(p.stats_excluded || p.group_stats_excluded) ? <span data-tip={p.group_stats_excluded ? "Son groupe est hors des classements de la page Stats (les totaux le comptent)"
+            : "Hors des classements de la page Stats (les totaux le comptent)"} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 9px",
+            borderRadius: 20, fontSize: 11.5, fontWeight: 800, color: "#64748b", background: "color-mix(in srgb, #64748b 14%, transparent)" }}>📊 hors classements</span> : null}
           {/* le nom de recherche (ne remplace jamais le titre) */}
           {editFr ? null : <AdminOnly>
             <button onClick={() => { setFrVal(p.translated_name || ""); setEditFr(true); }}
@@ -1451,6 +1464,18 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     try { await client.delete("/prints/groups/" + groupId); onUngroup?.(); onClose(); }
     catch (err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
   };
+  // hors des classements de la page Stats : tout le groupe (echantillons regroupes…), ou une impression a la fois
+  const groupRankedOff = prints.some(x => x.group_stats_excluded);
+  const toggleGroupRanked = async () => {
+    const v = !groupRankedOff;
+    try { await client.patch("/prints/groups/" + groupId, { stats_excluded: v }); setPrints(ps => ps.map(x => ({ ...x, group_stats_excluded: v }))); onUpdated?.(); }
+    catch (err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
+  };
+  const togglePrintRanked = async x => {
+    const v = !x.stats_excluded;
+    try { await client.patch("/prints/" + x.id, { stats_excluded: v }); setPrints(ps => ps.map(y => y.id === x.id ? { ...y, stats_excluded: v ? 1 : 0 } : y)); onUpdated?.(); }
+    catch (err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
+  };
   const setCoverPrint = async x => { try { await client.patch("/prints/groups/" + groupId, { cover_print_id: x.id }); setCoverPrintId(x.id); onUpdated?.(); } catch { /* rien */ } };
   const removeFromGroup = async x => {
     if (!(await showConfirm(`Retirer "${x.file_name || "ce print"}" du groupe ?`))) return;
@@ -1464,6 +1489,9 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       objQ && { icon: "📦", label: objQ.remaining > 0 ? "Créer des objets" : "Objets : tous créés", hint: `${objQ.used} / ${objQ.total} déjà créés`, tone: "#22C55E",
         onClick: () => setObjCreate(true) },
       { icon: "📤", label: "Dégrouper", hint: "Les impressions restent", tone: "#A78BFA", onClick: handleUngroup },
+      isAdmin && { icon: "📊", label: groupRankedOff ? "Remettre le groupe dans les classements" : "Retirer le groupe des classements des stats",
+        hint: groupRankedOff ? "Ses impressions comptent de nouveau dans les tops" : "Toutes ses impressions ; les totaux les comptent toujours",
+        tone: "#64748B", onClick: toggleGroupRanked },
       "-",
       { icon: "🗑", label: "Supprimer…", hint: "Le groupe et ses impressions", danger: true, onClick: handleDelete },
     ],
@@ -1474,6 +1502,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       { icon: "📄", label: "Ouvrir la fiche", tone: "#3B82F6", onClick: () => setSelectedPrint(x) },
       isAdmin && { icon: "★", label: coverPrintId === x.id ? "Vignette du groupe" : "En faire la vignette du groupe", tone: "#F59E0B",
         disabled: coverPrintId === x.id, onClick: () => setCoverPrint(x) },
+      isAdmin && !groupRankedOff && { icon: "📊", label: x.stats_excluded ? "Remettre dans les classements des stats" : "Retirer des classements des stats",
+        hint: "Cette impression seulement", tone: "#64748B", onClick: () => togglePrintRanked(x) },
       isAdmin && "-",
       isAdmin && { icon: "⛓", label: "Retirer du groupe", danger: true, onClick: () => removeFromGroup(x) },
     ],
@@ -1512,6 +1542,10 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
           <span style={{ display: "inline-flex", alignItems: "center", padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 900, color: "#fff",
             background: "linear-gradient(135deg, #A78BFA, #C4B5FD)", boxShadow: "0 4px 14px #A78BFA55" }}>{prints.length} impression{prints.length > 1 ? "s" : ""}</span>
+          {(groupRankedOff || prints.some(x => x.stats_excluded)) && <span data-tip={groupRankedOff ? "Tout le groupe est hors des classements de la page Stats (les totaux le comptent)"
+            : "Ces impressions sont hors des classements de la page Stats (les totaux les comptent)"} style={{ display: "inline-flex", alignItems: "center", gap: 3,
+            padding: "2px 9px", borderRadius: 20, fontSize: 11.5, fontWeight: 800, color: "#64748b", background: "color-mix(in srgb, #64748b 14%, transparent)" }}>
+            📊 {groupRankedOff ? "hors classements" : `${prints.filter(x => x.stats_excluded).length} hors classements`}</span>}
           {Object.entries(counts).map(([st, n]) => { const [l, c, ic] = V2_STATUS[st] || [st, "#94a3b8", "•"];
             return <span key={st} style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 9px", borderRadius: 20, fontSize: 11.5, fontWeight: 800,
               color: c, background: `color-mix(in srgb, ${c} 14%, transparent)` }}>{ic} {n} {l.toLowerCase()}{n > 1 && /e$/.test(l) ? "s" : ""}</span>; })}

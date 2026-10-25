@@ -71,6 +71,8 @@ class Print(Base):
     paused_since        = Column(DateTime, nullable=True)
 
     group_id            = Column(Integer, ForeignKey("groups.id", ondelete="SET NULL"), nullable=True)
+    # hors des classements de la page Stats (echantillons, supports de bobine…), compte dans les totaux
+    stats_excluded      = Column(Integer, default=0)
 
     created_at          = Column(DateTime, default=datetime.utcnow)
     updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -165,6 +167,7 @@ class Group(Base):
     number_of_items  = Column(Integer, default=1)
     cover_print_id   = Column(Integer, nullable=True)  # print de référence pour la vignette
     cover_photo      = Column(String(256), nullable=True)  # nom de fichier de la photo choisie comme vignette de galerie
+    stats_excluded   = Column(Integer, default=0)          # toutes ses impressions hors des classements des stats
     created_at   = Column(DateTime, default=datetime.utcnow)
 
     prints = relationship("Print", back_populates="group")
