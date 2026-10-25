@@ -286,16 +286,19 @@ class MQTTManager:
     def _process_print(self, p: dict):
         changed = False
 
-        # ── Porte (24/10/2026) : « stat » (hexa, series H2/P2/X2) bit 0x00800000, sinon le bit 23 de
+        # ── Porte (24/10/2026) : « stat » (hexa, series H2/P2/X2) bit 0x00800000, le capot du haut le bit
+        # 0x01000000 (essai reel sur H2C le 25/10/2026), sinon le bit 23 de
         # home_flag sur les X1 seulement (numero de serie 00M / 03W), comme l'integration Home Assistant
         # ha-bambulab. Chaque ouverture est datee (les dix dernieres) et notee au journal.
-        _door = None
+        _door = _top = None
         # le champ brut : chaque changement au journal, pour trouver les autres capteurs (capot du haut)
         if p.get("stat") not in (None, "") and p.get("stat") != getattr(state, "_stat_raw", None):
             logger.info(f"[DOOR] stat brut {getattr(state, '_stat_raw', None)} -> {p.get('stat')}")
             state._stat_raw = p.get("stat")
         if p.get("stat") not in (None, ""):
-            try: _door = bool(int(str(p["stat"]), 16) & 0x00800000)
+            try:
+                _st = int(str(p["stat"]), 16)
+                _door, _top = bool(_st & 0x00800000), bool(_st & 0x01000000)
             except ValueError: pass
         elif p.get("home_flag") is not None and str(state.serial or "")[:3] in ("00M", "03W"):
             try: _door = bool((int(p["home_flag"]) >> 23) & 1)
@@ -307,6 +310,11 @@ class MQTTManager:
                     import time as _dt
                     state.door_opens = (list(state.door_opens) + [_dt.time()])[-10:]
             state.door_open = _door
+            changed = True
+        if _top is not None and _top != state.top_open:
+            if state.top_open is not None:
+                logger.info(f"[DOOR] capot {'ouvert' if _top else 'ferme'}")
+            state.top_open = _top
             changed = True
 
         # ── Statut ──────────────────────────────────────────────────────

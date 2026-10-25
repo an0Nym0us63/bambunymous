@@ -140,6 +140,7 @@ class PrinterState:
     # l'heure (time.time) des dernieres ouvertures
     door_open: Optional[bool] = None
     door_opens: list = field(default_factory=list)
+    top_open: Optional[bool] = None     # capot du haut (H2) : bit 0x01000000 de « stat »
 
     # Vitesse
     speed_level: int = 1

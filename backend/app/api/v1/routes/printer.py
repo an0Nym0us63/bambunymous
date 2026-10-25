@@ -30,6 +30,12 @@ def _door(s):
     return True if d is None and _hms_has(s, 0x03009600) else d
 
 
+def _top(s):
+    """Le capot du haut : pareil, « stat » d'abord, sinon son alerte."""
+    d = getattr(s, "top_open", None)
+    return (_hms_has(s, 0x03009700) or None) if d is None else d
+
+
 def _catalog_lookup(fila_id: str, color_hex: str, cols: list = None) -> Optional[str]:
     """Lookup nom FR dans le catalogue Bambu local.
     cols = champ MQTT 'cols' du tray. Si len(cols) > 1 → multicolore, sinon mono.
@@ -218,7 +224,7 @@ class PrinterStatusOut(BaseModel):
     chamber_temp: float
     target_chamber_temp: float = 0.0
     door_open: Optional[bool] = None      # None : l'imprimante ne le dit pas
-    top_open: Optional[bool] = None       # capot du haut (H2) : seulement par ses alertes HMS
+    top_open: Optional[bool] = None       # capot du haut (H2) : « stat », sinon ses alertes HMS
     print_name: str
     job_id: str
     design_id: str
@@ -357,7 +363,7 @@ async def printer_status(_: str = Depends(get_current_user)):
         chamber_temp=s.chamber_temp,
         target_chamber_temp=getattr(s, "target_chamber_temp", 0.0) or 0.0,
         door_open=_door(s),
-        top_open=_hms_has(s, 0x03009700) or None,
+        top_open=_top(s),
         print_name=s.print_name,
         job_id=s.job_id,
         design_id=s.design_id,
