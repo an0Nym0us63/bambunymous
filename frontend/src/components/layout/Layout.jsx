@@ -18,6 +18,8 @@ import CardFx from "../CardFx";
 import AchNews from "../AchNews";
 import { Hide } from "../Cachettes";
 import { MwLinkHost } from "../MwCreatorPage";
+import { useIsAdmin } from "../../store/auth";
+import { useUpdates, updatesTip } from "../../utils/updates";
 
 // chaque page a sa couleur (celle de ses onglets) : la barre laterale la reprend
 const nav = [
@@ -82,9 +84,12 @@ const S = {
 
 // Une entree du menu : l'icone dans une pastille de la couleur de la page ; la page ouverte, en degrade.
 // Repliee : l'icone seule, le nom en infobulle.
-function NavItem({ to, icon: Icon, label, c, mini }) {
+// une mise a jour en attente : une petite pastille ambre au coin de l'icone de Parametres
+const UpdDot = ({ tip, size = 10, style }) => <span data-tip={tip} aria-label={tip} style={{ position:"absolute", top:-3, right:-3, width:size, height:size,
+  borderRadius:"50%", background:"linear-gradient(135deg, #F59E0B, #F97316)", boxShadow:"0 0 0 2px var(--sidebar, var(--surface))", ...style }}/>;
+function NavItem({ to, icon: Icon, label, c, mini, upd }) {
   return (
-    <NavLink to={to} end={to === "/"} className="bn-nav" data-tip={mini ? label : undefined} aria-label={label}
+    <NavLink to={to} end={to === "/"} className="bn-nav" data-tip={mini ? (upd ? `${label} · ${upd}` : label) : (upd || undefined)} aria-label={label}
       style={({ isActive }) => ({
         "--c": c, display:"flex", alignItems:"center", gap:11, padding: mini ? "7px" : "7px 10px 7px 7px",
         justifyContent: mini ? "center" : "flex-start", borderRadius:14, fontSize:14, textDecoration:"none", transition:"background .15s, box-shadow .15s",
@@ -93,9 +98,9 @@ function NavItem({ to, icon: Icon, label, c, mini }) {
         color: isActive ? "#fff" : "var(--text2)", fontWeight: isActive ? 800 : 600, whiteSpace:"nowrap",
       })}>
       {({ isActive }) => (<>
-        <span style={{ width:32, height:32, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
+        <span style={{ width:32, height:32, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", position:"relative",
           background: isActive ? "rgba(255,255,255,0.22)" : `color-mix(in srgb, ${c} 16%, transparent)`, color: isActive ? "#fff" : c }}>
-          <Icon size={17}/></span>
+          <Icon size={17}/>{upd && <UpdDot/>}</span>
         {!mini && <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{label}</span>}
       </>)}
     </NavLink>
@@ -119,6 +124,8 @@ export default function Layout() {
   const friend = useFriend((st) => st.friend);   // chez un copain
   const visitHome = useFriend((st) => st.visit);
   const [mini, flipMini] = useSideMini();
+  // une mise a jour de BambuNymous (pour l'admin) ou de l'appli Android : une pastille sur Parametres
+  const upd = useUpdates(useIsAdmin());
   const headerRef = React.useRef(null);
   // gestes caches (voir eggs.js) ; le logo, lui, a le tournis facile
   React.useEffect(() => { installEggs(); }, []);
@@ -218,7 +225,7 @@ export default function Layout() {
         {/* Suivi d'un partage Telegram en arriere-plan (ShareProgress, par portail). */}
         <div id="sidebar-status" style={{ display:"flex", flexDirection:"column", gap:6, padding: mini ? "0 6px" : "0 12px", overflow:"hidden" }}/>
         <nav style={S.nav}>
-          {nav.map(n => <NavItem key={n.to} {...n} mini={mini}/>)}
+          {nav.map(n => <NavItem key={n.to} {...n} mini={mini} upd={n.to === "/settings" && upd.any ? updatesTip(upd) : null}/>)}
         </nav>
         {/* Replier / deplier la barre */}
         <div style={{ padding:"0 10px 8px", display:"flex", justifyContent: mini ? "center" : "flex-end" }}>
@@ -300,8 +307,9 @@ export default function Layout() {
                 <span style={{ width:48, height:30, borderRadius:15, display:"flex", alignItems:"center", justifyContent:"center",
                   transition:"background .2s, box-shadow .2s",
                   background: isActive ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 65%, #ffffff))` : "transparent",
-                  boxShadow: isActive ? `0 6px 14px -6px ${c}` : "none", color: isActive ? "#fff" : "inherit" }}>
-                  <Icon size={19}/></span>
+                  boxShadow: isActive ? `0 6px 14px -6px ${c}` : "none", color: isActive ? "#fff" : "inherit", position:"relative" }}>
+                  <Icon size={19}/>
+                  {to === "/settings" && upd.any && <UpdDot tip={updatesTip(upd)} style={{ top:1, right:9, boxShadow:"0 0 0 2px var(--surface)" }}/>}</span>
                 <span style={{ maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{label}</span>
               </>)}
             </NavLink>
