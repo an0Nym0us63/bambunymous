@@ -99,15 +99,16 @@
 <section id="objets-fiche">
   <h2>La fiche d'un objet</h2>
   <p>Elle s'ouvre en touchant une tuile. On y lit tout ce que l'objet a coûté et rapporté.</p>
-  <figure class="phone"><img src="img/objets-fiche.webp" alt="Fiche de l'objet Lampe lune, vendue 35 €, avec un accessoire"><figcaption>Fiche d'un objet vendu : coûts, prix désiré, prix de vente et marge, accessoire lié.</figcaption></figure>
+  <figure class="phone"><img src="img/objets-fiche.webp" alt="Fiche de l'objet Lithophanie chat, vendue 32 €, avec deux accessoires"><figcaption>Fiche d'un objet vendu : prix de vente et marge en tête, tuiles de coûts, accessoires montés.</figcaption></figure>
   <dl class="opts">
-    <dt>En-tête</dt><dd>Photo, nom, badge « Vendu X € » si l'objet est vendu, badge d'état.</dd>
-    <dt>↗ Voir l'impression</dt><dd>Ouvre par-dessus la fiche de l'impression d'origine (ou <span class="ui">Voir le groupe</span> pour un groupe d'impressions).</dd>
-    <dt>Groupe</dt><dd>Si l'objet fait partie d'un groupe d'objets : son nom et <span class="ui">Retirer du groupe</span>.</dd>
-    <dt>Coûts</dt><dd><b>Fabrication</b> (avec, entre parenthèses, ce qu'elle aurait coûté au prix catalogue du filament), <b>Accessoires</b> (en violet), <b>Total</b>, <b>Prix désiré</b> s'il y en a un, et <b>Vendu</b> en vert : prix de vente suivi de la marge en pourcentage.</dd>
-    <dt>Accessoires</dt><dd>Les accessoires montés sur l'objet : nom, quantité « ×1 », coût, et ✕ pour le retirer. Toucher une ligne ouvre la fiche de l'accessoire. Vide : « Aucun accessoire ».</dd>
-    <dt>Commentaire</dt><dd>En italique, s'il y en a un.</dd>
-    <dt>Boutons</dt><dd><span class="ui">✏️ Modifier</span> et <span class="ui">🗑 Supprimer</span> <span class="admin">admin</span>, ✕ pour fermer.</dd>
+    <dt>En-tête</dt><dd>La photo de l'objet sur un fond de la couleur de son état, ses pastilles (état, groupe d'objets, date de vente), son nom, puis en grand le prix qui compte : le prix de vente et la marge pour un objet vendu, sinon le prix visé.</dd>
+    <dt>↗ Voir l'impression</dt><dd>Ouvre par-dessus la fiche de l'impression d'origine (ou <span class="ui">Voir le groupe d'impressions</span>).</dd>
+    <dt>Les tuiles</dt><dd><b>💰 Coût</b> (le coût réel, et entre parenthèses ce qu'il aurait été au prix normal du filament), <b>🖨️ Fabrication</b>, <b>🔩 Accessoires</b> (et combien de pièces), puis <b>✅ Vendu</b> (le prix et la marge en pourcentage) ou <b>🎯 Prix visé</b> (et la marge espérée).</dd>
+    <dt>💬 Commentaire</dt><dd>Une carte, s'il y en a un.</dd>
+    <dt>🔩 Accessoires</dt><dd>Les accessoires montés sur l'objet : vignette, nom, quantité « ×1 », coût, et ✕ pour le retirer <span class="admin">admin</span>. Toucher une ligne ouvre la fiche de l'accessoire. <span class="ui">+ Ajouter</span> en monte un autre. Vide : « Aucun accessoire monté. »</dd>
+    <dt>📁 Groupe</dt><dd>Si l'objet fait partie d'un groupe d'objets : son nom et <span class="ui">Retirer du groupe</span>.</dd>
+    <dt>🧾 Le détail des coûts</dt><dd>Une carte repliée (touche son titre) : fabrication (et au prix normal), accessoires, total réel (au prix normal), prix désiré, vente avec le pourcentage au-dessus du coût, date de vente.</dd>
+    <dt>Les boutons du bas</dt><dd><span class="ui">💶 Vendre</span> pour un objet à vendre <span class="admin">admin</span> (voir <a href="#objets-vendre">Vendre un objet</a>), sinon <span class="ui">🖨️ L'impression</span> ; <span class="ui">✏️ Modifier</span> <span class="admin">admin</span> ; et <span class="ui">⋯</span>, qui reprend tout : voir l'impression, modifier, vendre, ajouter un accessoire, <span class="ui">🗑 Supprimer l'objet…</span>. ✕ en haut ferme la fiche.</dd>
   </dl>
   <section id="objets-marges">
     <h3>Comment se calculent coûts et marges</h3>
@@ -134,11 +135,14 @@
 
 <section id="objets-vendre">
   <h2>Vendre un objet</h2>
+  <p>Le plus court : dans la fiche d'un objet à vendre, touche <span class="ui">💶 Vendre</span> <span class="admin">admin</span>.</p>
   <ol>
-    <li>Ouvre la fiche de l'objet et touche <span class="ui">✏️ Modifier</span>.</li>
-    <li>Dans la partie <span class="ui">Vente</span>, saisis le <b>prix de vente</b>. La date est facultative : sans date, la vente est datée d'aujourd'hui.</li>
-    <li>Touche <span class="ui">Enregistrer</span>.</li>
+    <li>Le <b>prix de vente</b> est pré-rempli avec le prix visé : garde-le ou corrige-le.</li>
+    <li>La <b>date de la vente</b> est celle d'aujourd'hui ; change-la si la vente date d'un autre jour.</li>
+    <li>La marge s'affiche en direct (« +X € de marge · N % », ou en rouge « vendu à perte »). Touche <span class="ui">✓ Marquer vendu</span>.</li>
   </ol>
+  <figure class="phone"><img src="img/objets-vendre.webp" alt="Feuille Vendre : prix de vente, date, marge calculée"><figcaption>La vente rapide : prix, date, et la marge calculée avant de valider.</figcaption></figure>
+  <p>On peut aussi vendre depuis <span class="ui">✏️ Modifier</span> : dans la partie <span class="ui">Vente</span>, saisis le prix de vente (la date est facultative : sans date, la vente est datée d'aujourd'hui), puis <span class="ui">Enregistrer</span>.</p>
   <p>L'objet passe dans la section <b>Vendu</b>, son prix apparaît sur la tuile et la marge est calculée dans la fiche. La date de vente sert aux <a href="#stats-objets">statistiques de ventes</a> par période.</p>
   <figure class="phone"><img src="img/objets-annuler-vente.webp" alt="Feuille Modifier l'objet d'un objet vendu avec le bouton Annuler la vente"><figcaption>Un objet vendu : prix et date de vente remplis, bouton rouge pour annuler la vente.</figcaption></figure>
   <p>Pour <b>annuler une vente</b> : dans la même feuille, touche <span class="ui">Annuler la vente (remettre disponible)</span>. Le prix et la date sont effacés et l'objet revient À vendre. Choisir un autre état pour un objet vendu efface aussi sa vente (la feuille le rappelle : « Objet vendu. Efface le prix de vente pour le remettre en circulation. »).</p>
@@ -160,7 +164,7 @@
 
 <section id="objets-supprimer">
   <h2>Supprimer un objet <span class="admin">admin</span></h2>
-  <p>Dans la fiche, touche <span class="ui">🗑 Supprimer</span>. Une confirmation « Supprimer « nom » ? » s'ouvre.</p>
+  <p>Dans la fiche, touche <span class="ui">⋯</span> puis <span class="ui">🗑 Supprimer l'objet…</span>. Une confirmation « Supprimer « nom » ? » s'ouvre.</p>
   <ul>
     <li>Sans accessoire : « Cette action est définitive. »</li>
     <li>Avec accessoires : tu choisis ce qui retourne en stock. Chaque accessoire est coché par défaut, avec la quantité à restituer (de 0 à la quantité montée, « sur N »). Ce qui n'est pas coché part avec l'objet. <span class="ui">Tout décocher</span> / <span class="ui">Tout cocher</span> agit sur toutes les lignes.</li>

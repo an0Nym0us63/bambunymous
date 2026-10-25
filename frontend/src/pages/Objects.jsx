@@ -14,7 +14,8 @@ import { useTrackDetail } from "../utils/track";
 import { useKeyboardInset } from "../utils/keyboard";
 import { useLongPress, openMenu } from "../components/ContextMenu";
 import GroupMosaic from "../components/GroupMosaic";
-import { KpiBar, SearchRow, EmptyCard, PageTabs, fGrad } from "../components/FicheKit";
+import { KpiBar, SearchRow, EmptyCard, PageTabs, fGrad, FSheet, FTile, FCard, FRow, fChip, fBtn, dayFr } from "../components/FicheKit";
+import { useIsAdmin } from "../store/auth";
 
 // Les montants sont masques pour les comptes en lecture seule.
 function fmtPrice(v) {
@@ -596,6 +597,64 @@ function AccessoryCard({ acc, onClick, onLongPress, selectMode, selected }) {
   );
 }
 
+// La vignette d'un accessoire : sa photo, sinon un paquet
+function AccThumb({ id, size = 34 }) {
+  const [ok, setOk] = useState(true);
+  return <span style={{ width:size, height:size, borderRadius:10, overflow:"hidden", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
+    background:"radial-gradient(circle, rgba(20,184,166,0.25), transparent 75%), var(--surface)", border:"1px solid var(--border)" }}>
+    {ok ? <img src={apiUrl(`/objects/accessories/${id}/image`)} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={() => setOk(false)}/>
+      : <Package size={size * 0.5} style={{ color:"#14B8A6" }}/>}</span>;
+}
+
+// Vente rapide (25/10/2026) : le prix (le prix vise propose) et la date (aujourd'hui), deux gestes depuis la fiche.
+// La feuille Modifier garde tout le reste (annuler une vente, changer d'etat).
+function QuickSell({ obj, onClose, onDone }) {
+  useTrackDetail("Objets · Vendre");
+  const today = new Date().toISOString().slice(0, 10);
+  const [price, setPrice] = useState(obj.desired_price > 0 ? String(obj.desired_price) : "");
+  const [date, setDate] = useState(today);
+  const [busy, setBusy] = useState(false);
+  const p = parseFloat(String(price).replace(",", "."));
+  const ok = p > 0;
+  const margin = ok ? p - (obj.cost_total || 0) : null;
+  const sell = async () => {
+    if (!ok || busy) return;
+    setBusy(true);
+    try { await client.patch(`/objects/objects/${obj.id}`, { sold_price: p, sold_date: date || today }); onDone(); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); setBusy(false); }
+  };
+  const inp = { width:"100%", boxSizing:"border-box", padding:"12px 14px", borderRadius:14, border:"1px solid var(--border)", background:"var(--surface)",
+    color:"var(--text)", fontSize:16, fontWeight:800, outline:"none" };
+  return (
+    <FSheet onClose={onClose} z={330} bottom={<>
+      <button onClick={onClose} style={{ ...fBtn, flex:1 }}>Annuler</button>
+      <button onClick={sell} disabled={!ok || busy} style={{ ...fBtn, flex:2, border:"none", color:"#fff", opacity: ok ? 1 : .5,
+        background:"linear-gradient(135deg, #22C55E, #16A34A)", boxShadow:"0 8px 18px -10px #22C55E" }}>{busy ? "…" : "✓ Marquer vendu"}</button>
+    </>}>
+      <div style={{ padding:"52px 18px 14px", background:"radial-gradient(circle at 15% 40%, rgba(34,197,94,0.35), transparent 60%), var(--surface2)" }}>
+        <div style={{ fontSize:12, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#16a34a" }}>💶 Vendre</div>
+        <div style={{ fontSize:22, fontWeight:900, color:"var(--text)", lineHeight:1.15 }}>{obj.translated_name || obj.name}</div>
+        <div style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>Coût {costLine(obj)}</div>
+      </div>
+      <div style={{ padding:"14px 16px 18px", display:"flex", flexDirection:"column", gap:12 }}>
+        <label style={{ display:"flex", flexDirection:"column", gap:6 }}>
+          <span style={{ fontSize:12.5, fontWeight:800, color:"var(--muted)" }}>Prix de vente (€)</span>
+          <input autoFocus inputMode="decimal" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" style={inp}/>
+        </label>
+        <label style={{ display:"flex", flexDirection:"column", gap:6 }}>
+          <span style={{ fontSize:12.5, fontWeight:800, color:"var(--muted)" }}>Date de la vente</span>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inp, fontSize:15, fontWeight:700 }}/>
+        </label>
+        {margin != null && !isMoneyHidden() && <div style={{ padding:"10px 12px", borderRadius:14, fontSize:13.5, fontWeight:900,
+          color: margin >= 0 ? "#16a34a" : "#ef4444", background: margin >= 0 ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.1)",
+          border:`1px solid ${margin >= 0 ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}` }}>
+          {margin >= 0 ? `+${fmtPrice(margin)} de marge` : `${fmtPrice(margin)} : vendu à perte`}
+          {obj.cost_total > 0 && <span style={{ fontWeight:700, opacity:.8 }}> · {((p / obj.cost_total - 1) * 100).toFixed(0)} %</span>}</div>}
+      </div>
+    </FSheet>
+  );
+}
+
 // Les petits morceaux communs aux cartes de la page
 const LOW_STOCK = 5;
 const pill = { fontSize:10, fontWeight:900, padding:"2px 8px", borderRadius:20, whiteSpace:"nowrap", boxShadow:"0 3px 10px rgba(0,0,0,.25)" };
@@ -901,18 +960,12 @@ function ObjectGroupControl({ obj, onChanged }) {
     setBusy(false);
   };
   return (
-    <div style={{ marginBottom:14 }}>
-      <label style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-        letterSpacing:"0.05em", marginBottom:6, display:"block" }}>Groupe</label>
-      <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-        <span style={{ padding:"6px 12px", borderRadius:8, background:"rgba(59,130,246,0.12)",
-          color:"#60a5fa", fontSize:12, fontWeight:700 }}>{obj.group_name || "Groupe"}</span>
-        <button disabled={busy} onClick={remove}
-          style={{ padding:"6px 10px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
-            border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)",
-            opacity: busy ? 0.6 : 1 }}>Retirer du groupe</button>
-      </div>
-    </div>
+    <FCard t="Groupe" i="📁" c="#8B5CF6" aside={<button disabled={busy} onClick={remove}
+      style={{ padding:"4px 11px", borderRadius:20, fontSize:12, fontWeight:800, cursor:"pointer", border:"1px solid var(--border)",
+        background:"var(--surface)", color:"var(--text2)", opacity: busy ? 0.6 : 1 }}>Retirer du groupe</button>}>
+      <span style={{ marginTop:4, alignSelf:"flex-start", padding:"5px 12px", borderRadius:20, fontSize:13, fontWeight:900, color:"#fff",
+        background:"linear-gradient(135deg, #8B5CF6, #A78BFA)" }}>📁 {obj.group_name || "Groupe"}</span>
+    </FCard>
   );
 }
 
@@ -1003,165 +1056,128 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
     }
   };
 
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:200, display:"flex", alignItems:"flex-end" }}
-      onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
-        style={{ width:"100%", maxHeight:"90vh", overflowY:"auto", background:"var(--sheet-bg)",
-          borderRadius:"20px 20px 0 0", padding:"0 16px 24px", position:"relative" }}>
+  const st = objStatus(obj), cfg = OBJ_STATUS[st], c = cfg.color;
+  const [imgOk, setImgOk] = React.useState(true);
+  const [costOpen, setCostOpen] = React.useState(false);     // detail des couts, replie a l'ouverture
+  const [selling, setSelling] = React.useState(false);       // vente rapide
+  const isAdmin = useIsAdmin();
+  const normalFab = obj.normal_cost_unit || obj.cost_fabrication || 0;
+  const normalTot = normalFab + (obj.cost_accessory || 0);
+  const diff = v => Math.abs(v - (obj.cost_total || 0)) >= 0.01;
+  const margin = isSold ? obj.sold_price - (obj.cost_total || 0) : null;
+  const parentLabel = obj.parent_type === "print" ? "Voir l'impression" : "Voir le groupe d'impressions";
+  const hasParent = (obj.parent_type === "print" || obj.parent_type === "group") && obj.parent_id;
+  const menu = e => openMenu(e, {
+    title: obj.translated_name || obj.name, subtitle: cfg.label, color: c,
+    items: [
+      hasParent && { icon: "🖨️", label: parentLabel, onClick: openParent },
+      isAdmin && "-",
+      isAdmin && { icon: "✏️", label: "Modifier", hint: "Nom, commentaire, état, prix, vente", onClick: () => setEditing(true) },
+      isAdmin && st === "available" && { icon: "💶", label: "Vendre…", tone: "#22c55e", onClick: () => setSelling(true) },
+      isAdmin && { icon: "🔩", label: "Ajouter un accessoire", tone: "#14B8A6", onClick: openAddAcc },
+      isAdmin && "-",
+      isAdmin && { icon: "🗑", label: "Supprimer l'objet…", tone: "#ef4444", onClick: askDelete },
+    ],
+  });
 
-        {/* Handle + ✕ */}
-        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 8px" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
-          <button onClick={onClose} style={{ position:"absolute", top:10, right:12, width:28, height:28,
-            borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer",
-            color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+  return (<>
+    <FSheet onClose={onClose} z={200} bottom={<>
+      {isAdmin && st === "available"
+        ? <button onClick={() => setSelling(true)} style={{ ...fBtn, flex:1, border:"none", color:"#fff",
+            background:"linear-gradient(135deg, #22C55E, #16A34A)", boxShadow:"0 8px 18px -10px #22C55E" }}>💶 Vendre</button>
+        : hasParent && <button onClick={openParent} style={{ ...fBtn, flex:1, color:"#3b82f6", borderColor:"rgba(59,130,246,0.4)",
+            background:"rgba(59,130,246,0.1)" }}>🖨️ {obj.parent_type === "print" ? "L'impression" : "Le groupe"}</button>}
+      <AdminOnly><button onClick={() => setEditing(true)} style={{ ...fBtn, flex:1 }}>✏️ Modifier</button></AdminOnly>
+      <button onClick={menu} aria-label="Plus d'actions" style={{ ...fBtn, width:48, flex:"0 0 auto" }}>⋯</button>
+    </>}>
+      {/* l'objet en vedette : sa photo sur un fond de la couleur de son etat */}
+      <div style={{ position:"relative", overflow:"hidden", padding:"52px 18px 18px", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap",
+        background:`radial-gradient(circle at 18% 45%, ${c}55, transparent 60%), linear-gradient(135deg, ${c}26, transparent 70%), var(--surface2)` }}>
+        <div style={{ width:124, height:124, borderRadius:22, overflow:"hidden", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
+          background:`radial-gradient(circle, ${c}33, transparent 70%), var(--surface)`, boxShadow:`0 12px 28px -12px ${c}`, border:"1px solid rgba(255,255,255,.12)" }}>
+          {imgOk ? <img src={apiUrl(`/objects/objects/${obj.id}/image`)} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }}
+              onError={() => setImgOk(false)}/>
+            : <span style={{ fontSize:52, opacity:.6 }}>{cfg.icon}</span>}
         </div>
-
-        {/* Header */}
-        <div style={{ display:"flex", gap:12, marginBottom:14 }}>
-          <img src={apiUrl(`/objects/objects/${obj.id}/image`)} alt=""
-            style={{ width:72, height:72, borderRadius:10, objectFit:"cover", flexShrink:0, background:"var(--surface2)" }}
-            onError={e=>e.currentTarget.style.display="none"}/>
-          <div>
-            <h2 style={{ fontSize:16, fontWeight:800, color:"var(--text)", margin:"0 0 4px" }}>
-              {obj.translated_name || obj.name}
-            </h2>
-            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              {isSold && <span style={{ fontSize:10, background:"rgba(34,197,94,0.12)", color:"#22c55e", padding:"2px 8px", borderRadius:20, fontWeight:700 }}>Vendu {fmtPrice(obj.sold_price)}</span>}
-              {/* Un seul badge, celui de l'etat reel : deux etiquettes
-                  potentiellement contradictoires ne renseignaient pas. */}
-              {(() => { const c = OBJ_STATUS[objStatus(obj)]; return (
-                <span style={{ fontSize:10, background:c.color+"1f", color:c.color,
-                  padding:"2px 8px", borderRadius:20, fontWeight:700 }}>{c.label}</span>
-              ); })()}
-            </div>
-            {(obj.parent_type === "print" || obj.parent_type === "group") && obj.parent_id && (
-              <button onClick={openParent}
-                style={{ marginTop:8, display:"inline-flex", alignItems:"center", gap:6,
-                  padding:"5px 10px", borderRadius:8, cursor:"pointer", fontSize:11, fontWeight:600,
-                  border:"1px solid var(--border)", background:"var(--surface2)", color:"#60a5fa" }}>
-                <ExternalLink size={13}/>
-                {obj.parent_type === "print" ? "Voir l'impression" : "Voir le groupe"}
-              </button>
-            )}
+        <div style={{ flex:"1 1 190px", minWidth:0, display:"flex", flexDirection:"column", gap:6 }}>
+          <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+            {/* Un seul badge, celui de l'etat reel : deux etiquettes potentiellement contradictoires ne renseignaient pas. */}
+            {fChip(`${cfg.icon} ${cfg.label}`, c)}
+            {obj.group_id && fChip(`📁 ${obj.group_name || "Groupe"}`, "#8B5CF6")}
+            {isSold && obj.sold_date && fChip(`📅 ${dayFr(String(obj.sold_date).slice(0, 10))}`, "#22c55e")}
           </div>
-        </div>
-
-        <ObjectGroupControl obj={obj} onChanged={onUpdated}/>
-
-        {/* Coûts — meme presentation que la fiche print/groupe */}
-        <div style={{ background:"linear-gradient(135deg,rgba(59,130,246,0.06),rgba(139,92,246,0.06))",
-          border:"1px solid rgba(59,130,246,0.15)", borderRadius:14, padding:"14px 16px", marginBottom:14 }}>
-          <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-            letterSpacing:"0.06em", margin:"0 0 10px" }}>Coûts</p>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-            {/* Fabrication (avec le prix normal catalogue entre parentheses) */}
-            <div style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 10px" }}>
-              <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>Fabrication</p>
-              <p style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:0, fontFamily:"monospace" }}>
-                {fmtPrice(obj.cost_fabrication)}
-              </p>
-              <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0" }}>
-                ({fmtPrice(obj.normal_cost_unit || obj.cost_fabrication)} au prix normal)
-              </p>
-            </div>
-            {/* Accessoires */}
-            <div style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 10px" }}>
-              <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>Accessoires</p>
-              <p style={{ fontSize:15, fontWeight:800, color:"#a78bfa", margin:0, fontFamily:"monospace" }}>
-                {fmtPrice(obj.cost_accessory)}
-              </p>
-            </div>
-          </div>
-          {/* Total */}
-          <div style={{ marginTop:8, padding:"10px 12px", borderRadius:10,
-            background:"rgba(59,130,246,0.1)", border:"1px solid rgba(59,130,246,0.2)" }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <span style={{ fontSize:10, color:"#60a5fa", fontWeight:700,
-                textTransform:"uppercase", letterSpacing:"0.06em" }}>Total</span>
-              <div style={{ textAlign:"right" }}>
-                <span style={{ fontSize:20, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
-                  {fmtPrice(obj.cost_total)}
-                </span>
-                {/* Total au prix normal (catalogue) + accessoires, toujours affiche
-                    comme sur la fiche print. Repli sur le cout de fabrication si le
-                    cout normal n'est pas renseigne. */}
-                <span style={{ fontSize:11, color:"var(--muted)", marginLeft:8 }}>
-                  ({fmtPrice((obj.normal_cost_unit || obj.cost_fabrication || 0) + (obj.cost_accessory || 0))})
-                </span>
-              </div>
-            </div>
-            {obj.desired_price > 0 && (
-              <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                <span style={{ fontSize:10, color:"var(--muted)" }}>Prix désiré</span>
-                <span style={{ fontSize:13, fontWeight:700, color:"var(--text)", fontFamily:"monospace" }}>
-                  {fmtPrice(obj.desired_price)}
-                </span>
-              </div>
-            )}
-            {isSold && (
-              <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                <span style={{ fontSize:10, color:"#22c55e" }}>Vendu</span>
-                <span style={{ fontSize:14, fontWeight:700, color:"#22c55e", fontFamily:"monospace" }}>
-                  {fmtPrice(obj.sold_price)}
-                  {obj.sold_price > 0 && obj.cost_total > 0 &&
-                    <span style={{ fontSize:10, marginLeft:6 }}>({((obj.sold_price/obj.cost_total-1)*100).toFixed(0)}%)</span>}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Accessoires associés */}
-        <div style={{ marginBottom:14 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-            <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:0 }}>Accessoires</p>
-            <AdminOnly><button onClick={openAddAcc}
-              style={{ fontSize:11, padding:"2px 10px", borderRadius:20, border:"1px solid var(--border)",
-                background:"var(--surface2)", color:"var(--text)", cursor:"pointer" }}>+ Ajouter</button></AdminOnly>
-          </div>
-          {accessories.length === 0 && <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>Aucun accessoire</p>}
-          {accessories.map(a => (
-            <div key={a.accessory_id} onClick={() => setViewAcc(a.accessory_id)}
-              style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", cursor:"pointer",
-              background:"var(--surface2)", borderRadius:8, marginBottom:5, border:"1px solid var(--border)" }}>
-              <div style={{ width:28, height:28, borderRadius:6, overflow:"hidden", flexShrink:0,
-                background:"var(--bg)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <img src={apiUrl(`/objects/accessories/${a.accessory_id}/image`)} alt=""
-                  style={{ width:"100%", height:"100%", objectFit:"cover" }}
-                  onError={e=>e.currentTarget.style.display="none"}/>
-              </div>
-              <span style={{ fontSize:12, flex:1 }}>{a.name}</span>
-              <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>×{a.qty}</span>
-              <span style={{ fontSize:11, color:"var(--text)", fontFamily:"monospace" }}>{fmtPrice(a.unit_price * a.qty)}</span>
-              <button onClick={(e)=>{ e.stopPropagation(); unlinkAcc(a.accessory_id); }}
-                style={{ width:18, height:18, borderRadius:"50%", background:"rgba(239,68,68,0.1)",
-                  border:"none", cursor:"pointer", color:"#ef4444", fontSize:12 }}>✕</button>
-            </div>
-          ))}
-        </div>
-
-        {/* Commentaire */}
-        {obj.comment && <p style={{ fontSize:12, color:"var(--muted)", marginBottom:14, fontStyle:"italic" }}>{obj.comment}</p>}
-
-        {/* Actions */}
-        <div style={{ display:"flex", gap:8 }}>
-          <AdminOnly><button onClick={()=>setEditing(true)}
-            style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
-              background:"var(--surface2)", color:"var(--text)", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-            ✏️ Modifier
-          </button></AdminOnly>
-          <AdminOnly><button onClick={askDelete}
-            style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid rgba(239,68,68,0.3)",
-              background:"rgba(239,68,68,0.06)", color:"#ef4444", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-            🗑 Supprimer
-          </button></AdminOnly>
-          <button onClick={onClose}
-            style={{ flex:2, padding:"10px", borderRadius:10, border:"none",
-              background:"#3b82f6", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>✕</button>
+          <div style={{ fontSize:24, fontWeight:900, color:"var(--text)", lineHeight:1.12, overflowWrap:"anywhere" }}>{obj.translated_name || obj.name}</div>
+          {obj.translated_name && obj.translated_name !== obj.name && <div style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>{obj.name}</div>}
+          {/* le prix qui compte pour cet etat, en grand */}
+          {isSold ? <div style={{ display:"flex", alignItems:"baseline", gap:8, flexWrap:"wrap" }}>
+              <span style={{ fontSize:28, fontWeight:900, lineHeight:1.2, ...fGrad("#16a34a", "#4ade80") }}>{fmtPrice(obj.sold_price)}</span>
+              {margin != null && !isMoneyHidden() && <span style={{ fontSize:13, fontWeight:900, color: margin >= 0 ? "#16a34a" : "#ef4444" }}>
+                {margin >= 0 ? "+" : ""}{fmtPrice(margin)} de marge</span>}</div>
+            : obj.desired_price > 0 ? <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
+              <span style={{ fontSize:28, fontWeight:900, lineHeight:1.2, ...fGrad(c, `color-mix(in srgb, ${c} 60%, #ffffff)`) }}>{fmtPrice(obj.desired_price)}</span>
+              <span style={{ fontSize:12.5, fontWeight:800, color:"var(--muted)" }}>prix visé</span></div>
+            : null}
+          {hasParent && <button onClick={openParent} style={{ alignSelf:"flex-start", display:"inline-flex", alignItems:"center", gap:6, padding:"5px 11px",
+            borderRadius:20, cursor:"pointer", fontSize:11.5, fontWeight:800, border:"1px solid rgba(59,130,246,0.35)",
+            background:"rgba(59,130,246,0.12)", color:"#3b82f6" }}><ExternalLink size={13}/>{parentLabel}</button>}
         </div>
       </div>
+
+      <div style={{ padding:"14px 14px 18px", display:"flex", flexDirection:"column", gap:12 }}>
+        {/* les chiffres : cout reel (normal), part des accessoires, prix vise ou vendu */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))", gap:8 }}>
+          <FTile label="💰 Coût" value={fmtPrice(obj.cost_total)} sub={diff(normalTot) ? `(${fmtPrice(normalTot)} au normal)` : "réel"} c1="#3b82f6" c2="#60a5fa"
+            tip="Coût de revient réel ; entre parenthèses, au prix normal du filament"/>
+          <FTile label="🖨️ Fabrication" value={fmtPrice(obj.cost_fabrication)} sub={diff(normalFab + (obj.cost_accessory || 0)) ? `(${fmtPrice(normalFab)})` : "filament et énergie"}
+            c1="#8B5CF6" c2="#C084FC"/>
+          <FTile label="🔩 Accessoires" value={fmtPrice(obj.cost_accessory)} sub={`${accessories.length} pièce${accessories.length > 1 ? "s" : ""}`} c1="#14B8A6" c2="#2DD4BF"/>
+          {isSold
+            ? <FTile label="✅ Vendu" value={fmtPrice(obj.sold_price)}
+                sub={obj.cost_total > 0 ? `${obj.sold_price >= obj.cost_total ? "+" : ""}${((obj.sold_price / obj.cost_total - 1) * 100).toFixed(0)} %` : null} c1="#22c55e" c2="#4ade80"/>
+            : <FTile label="🎯 Prix visé" value={obj.desired_price > 0 ? fmtPrice(obj.desired_price) : "—"}
+                sub={obj.desired_price > 0 && obj.cost_total > 0 && !isMoneyHidden() ? `+${fmtPrice(obj.desired_price - obj.cost_total)} espérés` : "pas de prix"} c1="#F59E0B" c2="#FBBF24"/>}
+        </div>
+
+        {obj.comment && <FCard t="Commentaire" i="💬" c="#64748B">
+          <p style={{ margin:"4px 0 2px", fontSize:13.5, lineHeight:1.45, color:"var(--text)", whiteSpace:"pre-wrap" }}>{obj.comment}</p></FCard>}
+
+        {/* Accessoires montes : toucher l'un ouvre sa fiche */}
+        <FCard t="Accessoires" i="🔩" c="#14B8A6" aside={<AdminOnly><button onClick={openAddAcc} style={{ padding:"4px 11px", borderRadius:20, fontSize:12,
+          fontWeight:800, cursor:"pointer", border:"1px solid rgba(20,184,166,0.4)", background:"rgba(20,184,166,0.12)", color:"#0d9488" }}>+ Ajouter</button></AdminOnly>}>
+          {accessories.length === 0 && <p style={{ fontSize:12.5, color:"var(--muted)", margin:"4px 0 2px" }}>Aucun accessoire monté.</p>}
+          {accessories.map(a => (
+            <div key={a.accessory_id} onClick={() => setViewAcc(a.accessory_id)}
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", cursor:"pointer", borderTop:"1px dashed var(--border)" }}>
+              <AccThumb id={a.accessory_id} size={34}/>
+              <span style={{ flex:1, minWidth:0, fontSize:13.5, fontWeight:800, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.name}</span>
+              <span style={{ fontSize:12, fontWeight:800, color:"var(--muted)" }}>×{a.qty}</span>
+              <span style={{ fontSize:13, fontWeight:900, color:"var(--text)" }}>{fmtPrice(a.unit_price * a.qty)}</span>
+              <AdminOnly><button onClick={(e)=>{ e.stopPropagation(); unlinkAcc(a.accessory_id); }} aria-label="Retirer cet accessoire" data-tip="Retirer (rendu au stock)"
+                style={{ width:26, height:26, borderRadius:"50%", background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.25)",
+                  cursor:"pointer", color:"#ef4444", fontSize:12, flexShrink:0 }}>✕</button></AdminOnly>
+            </div>
+          ))}
+        </FCard>
+
+        {obj.group_id && <ObjectGroupControl obj={obj} onChanged={onUpdated}/>}
+
+        {/* Le detail des couts, replie (le total est deja en tuile) */}
+        <FCard t="Le détail des coûts" i="🧾" c="#3B82F6" fold open={costOpen} onToggle={() => setCostOpen(o => !o)}
+          summary={<p style={{ margin:"4px 0 0", fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>
+            {fmtPrice(obj.cost_total)}{diff(normalTot) ? ` (${fmtPrice(normalTot)})` : ""} · fabrication et accessoires</p>}>
+          <FRow l="Fabrication" v={fmtPrice(obj.cost_fabrication)} d={`${fmtPrice(normalFab)} au prix normal`}/>
+          <FRow l="Accessoires" v={fmtPrice(obj.cost_accessory)} vc="#0d9488"/>
+          <FRow l="Total" v={`${fmtPrice(obj.cost_total)} (${fmtPrice(normalTot)})`} d="réel (au prix normal)"/>
+          {obj.desired_price > 0 && <FRow l="Prix désiré" v={fmtPrice(obj.desired_price)} vc="#d97706"/>}
+          {isSold && <FRow l="Vendu" vc="#16a34a" v={fmtPrice(obj.sold_price)}
+            d={obj.cost_total > 0 ? `${((obj.sold_price / obj.cost_total - 1) * 100).toFixed(0)} % au-dessus du coût` : null}/>}
+          {isSold && obj.sold_date && <FRow l="Date de vente" v={dayFr(String(obj.sold_date).slice(0, 10))}/>}
+        </FCard>
+      </div>
+    </FSheet>
+
+    {selling && <QuickSell obj={obj} onClose={() => setSelling(false)}
+      onDone={async () => { setSelling(false); try { const r = await client.get(`/objects/objects/${obj.id}`); onUpdated?.(r.data); } catch { onUpdated?.(); } }}/>}
 
       {/* Picker accessoire — recherche filtrée, vignette, quantité bornee au stock */}
       {addingAcc && (
@@ -1197,14 +1213,14 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
       )}
 
       {confirmDel && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:300,
+        <div data-no-pull="" style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:300,
           display:"flex", alignItems:"flex-end", justifyContent:"center" }}
           onClick={()=>!deleting && setConfirmDel(false)}>
           <div onClick={e=>e.stopPropagation()} className="sheet-panel"
             style={{ width:"100%", maxWidth:520, borderTopLeftRadius:20, borderTopRightRadius:20,
               padding:"20px 20px 24px", maxHeight:"80vh", overflowY:"auto" }}>
-            <h3 style={{ margin:"0 0 4px", fontSize:16, fontWeight:700, color:"var(--text)" }}>
-              Supprimer « {obj.name} » ?
+            <h3 style={{ margin:"0 0 4px", fontSize:17, fontWeight:900, color:"var(--text)" }}>
+              🗑 Supprimer « {obj.name} » ?
             </h3>
             <p style={{ margin:"0 0 16px", fontSize:12.5, color:"var(--muted)" }}>
               {accessories.length
@@ -1275,16 +1291,16 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
                 Annuler
               </button>
               <button onClick={doDelete} disabled={deleting}
-                style={{ flex:1, padding:"11px", borderRadius:12, fontSize:13, fontWeight:700,
-                  cursor:"pointer", border:"none", background:"#ef4444", color:"white" }}>
+                style={{ flex:1, padding:"11px", borderRadius:12, fontSize:13, fontWeight:800,
+                  cursor:"pointer", border:"none", background:"linear-gradient(135deg, #EF4444, #F97316)", color:"white",
+                  boxShadow:"0 8px 18px -10px #EF4444" }}>
                 {deleting ? "Suppression…" : "Supprimer"}
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
-  );
+  </>);
 }
 
 // Un etat = un libelle et une couleur, definis une seule fois et partages par
