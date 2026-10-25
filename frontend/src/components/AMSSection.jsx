@@ -1000,83 +1000,64 @@ function MapTraySheet({ tray, amsId, onClose, onMapped }) {
     } finally { setSaving(false); }
   };
 
-  const inputStyle = { width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
-    borderRadius:8, padding:"8px 10px", fontSize:13, color:"var(--text)", outline:"none",
+  const inputStyle = { width:"100%", background:"var(--surface)", border:"1px solid var(--border)",
+    borderRadius:12, padding:"10px 12px", fontSize:14, fontWeight:600, color:"var(--text)", outline:"none",
     boxSizing:"border-box" };
-  const labelStyle = { fontSize:11, color:"var(--muted)", margin:"0 0 4px", display:"block" };
+  const labelStyle = { fontSize:12, fontWeight:800, color:"var(--muted)", margin:"0 0 5px", display:"block" };
 
+  const M = "#3B82F6";
+  const trayCols = parseColors(tray, null) || ["#94a3b8"];
   if (result) return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:1100,
-      display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e=>e.stopPropagation()} className="sheet-inner" className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-        width:"100%", maxWidth:540, paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
-        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 4px" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-        </div>
-        <div style={{ padding:"16px 20px 24px" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
-            <div style={{ width:36, height:36, borderRadius:"50%", background:"rgba(34,197,94,0.12)",
-              border:"1px solid rgba(34,197,94,0.4)", display:"flex", alignItems:"center",
-              justifyContent:"center", fontSize:18, flexShrink:0 }}>✓</div>
-            <div>
-              <p style={{ fontSize:16, fontWeight:800, color:"var(--text)", margin:0 }}>
-                {result.action === "assigned" ? "Bobine attribuée" : result.action === "mapped" ? "Filament mappé" : "Bobine créée"}
-              </p>
-              <p style={{ fontSize:12, color:"var(--muted)", margin:0 }}>{result.filament_name}</p>
-            </div>
-          </div>
-          <div style={{ background:"var(--surface2)", borderRadius:10, padding:"10px 14px", marginBottom:18 }}>
-            {(result.changes || []).map((c, i) => (
-              <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:8, padding:"5px 0",
-                borderTop: i>0 ? "1px solid var(--border)" : "none" }}>
-                <span style={{ color:"#22c55e", fontSize:12, flexShrink:0, marginTop:1 }}>→</span>
-                <span style={{ fontSize:12, color:"var(--text)" }}>{c}</span>
-              </div>
-            ))}
-          </div>
-          <button onClick={onMapped}
-            style={{ width:"100%", padding:"11px", borderRadius:10, background:"#3b82f6",
-              color:"white", border:"none", fontSize:13, fontWeight:700, cursor:"pointer" }}>
-            ✕</button>
+    <FSheet onClose={onClose} z={1100} bottom={<button onClick={onMapped} style={{ ...fBtn, flex: 1, border: "none", color: "#fff",
+      background: "linear-gradient(135deg, #22C55E, #16A34A)", boxShadow: "0 8px 18px -10px #22C55E" }}>✓ Terminé</button>}>
+      <div style={{ padding: "52px 18px 16px", display: "flex", alignItems: "center", gap: 14,
+        background: "radial-gradient(circle at 15% 40%, rgba(34,197,94,0.4), transparent 60%), var(--surface2)" }}>
+        <span style={{ width: 48, height: 48, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 24, color: "#fff", background: "linear-gradient(135deg, #22C55E, #16A34A)", boxShadow: "0 8px 18px -8px #22C55E" }}>✓</span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 20, fontWeight: 900, color: "var(--text)" }}>
+            {result.action === "assigned" ? "Bobine attribuée" : result.action === "mapped" ? "Filament mappé" : "Bobine créée"}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)" }}>{result.filament_name}</div>
         </div>
       </div>
-    </div>
+      <div style={{ padding: "14px 14px 18px" }}>
+        <FCard t="Ce qui a changé" i="🔄" c="#22C55E">
+          {(result.changes || []).map((c, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "7px 0", borderTop: "1px dashed var(--border)" }}>
+              <span style={{ color: "#22c55e", fontSize: 13, fontWeight: 900, flexShrink: 0 }}>→</span>
+              <span style={{ fontSize: 13, color: "var(--text)" }}>{c}</span>
+            </div>
+          ))}
+        </FCard>
+      </div>
+    </FSheet>
   );
 
+  const segBtn = on => ({ flex: 1, padding: "8px 8px", borderRadius: 11, fontSize: 12.5, fontWeight: 800, border: "none", cursor: "pointer", whiteSpace: "nowrap",
+    background: on ? `linear-gradient(135deg, ${M}, #6366F1)` : "transparent", color: on ? "white" : "var(--muted)" });
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:1100,
-      display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e=>e.stopPropagation()} className="sheet-inner" className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-        width:"100%", maxWidth:540, maxHeight:"88dvh", overflowY:"auto",
-        paddingBottom:"env(safe-area-inset-bottom,16px)", display:"flex", flexDirection:"column" }}>
-        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 4px" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-        </div>
-        <div style={{ padding:"12px 20px 20px" }}>
-          <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 4px" }}>
-            {tray.spool_id ? "Attribuer une bobine à cet emplacement" : "Associer une bobine à cet emplacement"}
-          </h3>
-          <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 14px" }}>
+    <FSheet onClose={onClose} z={1100}>
+      <div style={{ padding: "52px 18px 16px", display: "flex", alignItems: "center", gap: 14,
+        background: `radial-gradient(circle at 15% 40%, ${M}44, transparent 60%), var(--surface2)` }}>
+        <span style={{ display: "inline-flex", flexShrink: 0, filter: `drop-shadow(0 6px 14px ${M}55)` }}><SpoolSVG colors={trayCols} size={62}/></span>
+        <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: M }}>🔗 Emplacement</span>
+          <span style={{ fontSize: 19, fontWeight: 900, color: "var(--text)", lineHeight: 1.2 }}>
+            {tray.spool_id ? "Attribuer une bobine à cet emplacement" : "Associer une bobine à cet emplacement"}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>
             {tray.filament_type || "Type inconnu"}
             {tray.color ? ` · ${hexDisplay(tray.color) || ('#'+tray.color)}` : ""}
             {tray.tray_info_idx ? ` · ${tray.tray_info_idx}` : ""}
             {tray.uuid && !/^0+$/.test(tray.uuid) ? ` · 🔖 ${tray.uuid.slice(0,8)}…` : ""}
-          </p>
-
+          </span>
+        </div>
+      </div>
+        <div style={{ padding:"14px 16px 20px" }}>
           {/* Bascule pour tous : une bobine tierce aussi peut deja exister. */}
           {(
-            <div style={{ display:"flex", gap:6, marginBottom:16 }}>
-              {[["suggest","Choisir une bobine existante"],["create","Créer"]].map(([id,label]) => (
-                <button key={id} onClick={() => setMode(id)} style={{
-                  padding:"6px 12px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer",
-                  background: mode===id ? "#3b82f6" : "var(--surface2)",
-                  color: mode===id ? "white" : "var(--muted)",
-                  border:"1px solid var(--border)", whiteSpace:"nowrap",
-                }}>{label}</button>
+            <div style={{ display:"flex", gap:3, padding:3, marginBottom:14, borderRadius:14, background:"var(--surface)", border:"1px solid var(--border)" }}>
+              {[["suggest","🧵 Bobine existante"],["create","➕ Créer"]].map(([id,label]) => (
+                <button key={id} onClick={() => setMode(id)} style={segBtn(mode === id)}>{label}</button>
               ))}
             </div>
           )}
@@ -1101,11 +1082,10 @@ function MapTraySheet({ tray, amsId, onClose, onMapped }) {
                     disabled={saving}
                     onClick={() => link(s.id)}
                     style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
-                      borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
+                      borderRadius:14, border:"1px solid var(--border)", background:"var(--surface2)",
                       marginBottom:8, cursor: saving ? "default" : "pointer",
                       opacity: saving ? 0.6 : 1, textAlign:"left" }}>
-                    <div style={{ width:32, height:32, borderRadius:8, flexShrink:0,
-                      backgroundColor: s.filament_color ? `#${s.filament_color}` : "var(--border)" }}/>
+                    <span style={{ display:"inline-flex", flexShrink:0 }}><SpoolSVG colors={[s.filament_color ? `#${s.filament_color}` : "#94a3b8"]} size={36}/></span>
                     <div style={{ flex:1, minWidth:0 }}>
                       <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0,
                         overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.filament_translated_name || s.filament_name}</p>
@@ -1114,7 +1094,8 @@ function MapTraySheet({ tray, amsId, onClose, onMapped }) {
                         {s.remaining_weight_g ? ` · ${Math.round(s.remaining_weight_g)}g` : ""}
                       </p>
                     </div>
-                    <span style={{ fontSize:10, color:"#3b82f6", fontWeight:700, flexShrink:0 }}>
+                    <span style={{ fontSize:12, color:"#fff", fontWeight:800, flexShrink:0, padding:"5px 11px", borderRadius:20,
+                      background:"linear-gradient(135deg, #3B82F6, #6366F1)" }}>
                       {saving ? "…" : "Associer →"}
                     </span>
                   </button>
@@ -1126,14 +1107,11 @@ function MapTraySheet({ tray, amsId, onClose, onMapped }) {
                 explicite entre l'import (fiche complete) et la creation libre. */}
             {catalogInfo && (
               <div style={{ marginBottom:12 }}>
-                <div style={{ display:"flex", gap:2, background:"var(--surface2)",
-                  borderRadius:10, padding:3, marginBottom:8 }}>
+                <div style={{ display:"flex", gap:3, background:"var(--surface)", border:"1px solid var(--border)",
+                  borderRadius:14, padding:3, marginBottom:8 }}>
                   {[["catalog","📦 Depuis le catalogue"],["free","✏️ Création libre"]].map(([id,label]) => (
                     <button key={id} onClick={() => setSource(id)}
-                      style={{ flex:1, padding:"7px 8px", borderRadius:8, fontSize:11, fontWeight:700,
-                        border:"none", cursor:"pointer",
-                        background: source===id ? "#3b82f6" : "transparent",
-                        color: source===id ? "white" : "var(--muted)" }}>
+                      style={segBtn(source === id)}>
                       {label}
                     </button>
                   ))}
@@ -1182,18 +1160,16 @@ function MapTraySheet({ tray, amsId, onClose, onMapped }) {
                 onChange={e => setForm(f => ({...f, weight: e.target.value}))}/>
             </div>
             <button onClick={create} disabled={saving}
-              style={{ width:"100%", padding:"11px", borderRadius:10,
-                background: saving ? "var(--border)" : "#3b82f6",
-                color:"white", border:"none", fontSize:13, fontWeight:700,
-                cursor: saving ? "default" : "pointer" }}>
+              style={{ ...fBtn, width:"100%", border:"none",
+                background: saving ? "var(--border)" : "linear-gradient(135deg, #3B82F6, #6366F1)", boxShadow: saving ? "none" : "0 8px 18px -10px #3B82F6",
+                color:"white", cursor: saving ? "default" : "pointer" }}>
               {saving ? "Création…"
                 : useCatalog ? "Importer depuis le catalogue"
                 : "Créer le filament et la bobine"}
             </button>
           </>)}
         </div>
-      </div>
-    </div>
+    </FSheet>
   );
 }
 
