@@ -22,6 +22,9 @@ GAP_S = 600                  # plus de 10 min sans releve (appli arretee) : la s
 # MQTT met quelques secondes a se faire (le premier releve la voyait hors ligne : chaque relance de
 # l'appli remettait le compteur a zero), et la liaison se refait parfois toute seule.
 ONLINE_GRACE_S = 15 * 60
+# l'appli arretee (mise a jour de l'image, redemarrage du serveur) : on ne sait rien de l'imprimante pendant ce
+# temps ; jusqu'a 1 h, la serie continue si l'imprimante est la au retour (25/10/2026, chaque mise a jour la cassait)
+APP_GRACE_S = 60 * 60
 DRY_MAX, DRY_SAMPLES = 30, 240   # humidite des AMS sous 30 % ; une journee compte avec 1 h de releves
 OVEN_C = 45
 DOOR_N, DOOR_S = 3, 60       # trois ouvertures de la porte en 60 s (seuil confirme le 25/10/2026)
@@ -65,11 +68,19 @@ def step(s, now: datetime, w: dict, local_day: str) -> bool:
     last = _ts(w.get("last"))
     gap = bool(last) and (now - last).total_seconds() > GAP_S
     w["last"] = _iso(now)
-    # connexion : heures d'affilee ; seule une coupure de plus de 15 min (imprimante ou appli) remet a zero
-    hole = bool(last) and (now - last).total_seconds() > ONLINE_GRACE_S
+    # connexion : heures d'affilee ; une imprimante injoignable plus de 15 min, ou l'appli arretee plus d'1 h, remet a zero
+    hole = bool(last) and (now - last).total_seconds() > APP_GRACE_S
+    if last and (now - last).total_seconds() > 120:
+        w["offline_since"] = None        # l'appli etait arretee : une coupure notee a son arret ne dit rien de l'imprimante
     if s.connected:
         off = _ts(w.get("offline_since"))
-        if not w.get("online_since") or hole or (off and (now - off).total_seconds() > ONLINE_GRACE_S):
+        down = off and (now - off).total_seconds() > ONLINE_GRACE_S
+        if not w.get("online_since") or hole or down:
+            if w.get("online_since"):
+                lost = (now - _ts(w["online_since"])).total_seconds() / 3600
+                why = (f"appli arretee {round((now - last).total_seconds() / 60)} min" if hole
+                       else f"imprimante injoignable {round((now - off).total_seconds() / 60)} min")
+                logger.info(f"[SUCCES] serie « en ligne » remise a zero ({why}) apres {lost:.1f} h")
             w["online_since"] = _iso(now)
         w["offline_since"] = None
         h = (now - _ts(w["online_since"])).total_seconds() / 3600
