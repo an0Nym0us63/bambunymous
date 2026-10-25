@@ -2050,7 +2050,7 @@ function Greeting({ status, o = {} }) {
             textTransform: "uppercase", ...(tile ? { color: ink.b } : { opacity: 0.85 }) }}><Words text={date}/></div>}
           <div className="hh-title" style={{ fontWeight: 900, lineHeight: 1.1, marginTop: mini ? 0 : 2, letterSpacing: "-.01em" }}>
             {/* en carte, le bonjour aux couleurs du moment */}
-            <span style={tile ? { background: `linear-gradient(120deg, ${ink.a}, ${ink.b})`, WebkitBackgroundClip: "text", backgroundClip: "text",
+            <span style={tile ? { backgroundImage: `linear-gradient(120deg, ${ink.a}, ${ink.b})`, WebkitBackgroundClip: "text", backgroundClip: "text",
               color: "transparent" } : undefined}><Words text={`${hello}${opt("name", true) && first ? " " + first : ""}`}/></span>
             {mini && opt("line", true) && line && <span style={{ fontSize: 12.5, fontWeight: 600, marginLeft: 10, ...(tile ? { color: "var(--text2)" } : { opacity: 0.9 }) }}>
               <Words text={line}/></span>}</div>
