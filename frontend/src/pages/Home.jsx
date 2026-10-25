@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from
 import { stageLabel, stageIsPause } from "../utils/printStage";
 import { createPortal } from "react-dom";
 import { usePrinter } from "../store/printer";
-import { Wifi, WifiOff, DoorOpen, DoorClosed, Lightbulb, LightbulbOff, Clock, Pause, Layers, Thermometer, Wind, Droplets, Sun, Moon, Printer, Disc3, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
+import { Wifi, WifiOff, DoorOpen, DoorClosed, Lightbulb, LightbulbOff, Clock, Pause, Layers, Thermometer, Wind, Droplets, Sun, Moon, Printer, Disc3, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight, Info, Download, Flame, Camera, Cpu, Box, ChevronDown } from "lucide-react";
 import { useAuth } from "../store/auth";
 import { create } from "zustand";
 import client, { apiUrl, apiThumb } from "../api/client";
@@ -1449,6 +1449,7 @@ function PrinterPopup({ status, img, name, onClose }) {
   const hms = status?.hms_decoded || [];
   const worst = HMS_SEV[hms[0]?.severity] || HMS_SEV.info;
   const [hmsOpen, setHmsOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   // une pastille d'etat de l'en-tete : teintee quand elle signale quelque chose, grise sinon
   const chipSt = (c, on) => ({ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap",
     fontSize: 11.5, fontWeight: on ? 800 : 700, color: c && on ? c : "var(--muted)",
@@ -1500,6 +1501,8 @@ function PrinterPopup({ status, img, name, onClose }) {
             status.light_on ? "Lumière allumée" : "Lumière éteinte")}
           {status?.printer_model && chip(null, false, <><Printer size={12}/>{status.printer_model}</>)}
           {status?.fw_version && chip(null, false, <>Micrologiciel {status.fw_version}</>)}
+          <button onClick={() => setMoreOpen(true)} data-tip="Tout ce que l'imprimante envoie"
+            style={{ ...chipSt("#8b5cf6", true), cursor: "pointer", fontFamily: "inherit", lineHeight: "inherit" }}><Info size={12}/>Plus d'infos ›</button>
         </div>
 
         <div style={{ position: "relative", borderRadius: 20, overflow: "hidden", padding: 14, display: "flex", flexDirection: "column", gap: 12,
@@ -1606,11 +1609,76 @@ function PrinterPopup({ status, img, name, onClose }) {
         </>}
 
         {hmsOpen && hms.length > 0 && <HmsSheet list={hms} onClose={() => setHmsOpen(false)}/>}
+        {moreOpen && <DetailsSheet onClose={() => setMoreOpen(false)}/>}
         {big && img && <span onClick={e => e.stopPropagation()}><Lightbox images={[img]} index={0} onClose={() => setBig(false)}/></span>}
       </div>
     </div>, document.body);
 }
 // Les alertes de la machine (HMS) en detail : gravite, libelle, code, et la page du wiki Bambu
+// « Plus d'infos » (25/10/2026) : tout ce que l'imprimante envoie, range par themes (le serveur
+// decode, voir services/printer_details.py), relu toutes les 5 s ; puis tous les champs bruts, masques.
+const DETAIL_ICONS = { wifi: [Wifi, "#3B82F6"], download: [Download, "#22C55E"], layers: [Layers, "#8B5CF6"], wind: [Wind, "#06B6D4"],
+  flame: [Flame, "#F97316"], camera: [Camera, "#EC4899"], cpu: [Cpu, "#64748B"], disc: [Disc3, "#A855F7"], box: [Box, "#F59E0B"] };
+function DetailsSheet({ onClose }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState(false);
+  const [raw, setRaw] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const load = () => client.get("/printer/details").then(r => { if (alive) { setD(r.data); setErr(false); } }).catch(() => alive && setErr(true));
+    load();
+    const t = setInterval(() => { if (!document.hidden) load(); }, 5000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+  return createPortal(
+    <div data-no-pull="" onClick={e => { e.stopPropagation(); onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 1100, padding: 14,
+      background: "rgba(2,6,23,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "default" }}>
+      <div onClick={e => e.stopPropagation()} className="card" style={{ width: "min(620px, 100%)", maxHeight: "88vh", overflow: "hidden", padding: 0,
+        display: "flex", flexDirection: "column", background: "var(--sheet-bg)", boxShadow: "0 30px 80px rgba(0,0,0,0.45)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 16px 14px",
+          background: "radial-gradient(circle at 12% 40%, color-mix(in srgb, #8b5cf6 30%, transparent), transparent 60%), var(--surface2)" }}>
+          <span style={{ width: 44, height: 44, borderRadius: 14, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff",
+            background: "linear-gradient(135deg, #8b5cf6, #c4b5fd)", boxShadow: "0 8px 18px -8px #8b5cf6" }}><Info size={22}/></span>
+          <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 17, fontWeight: 900, color: "var(--text)" }}>Plus d'infos</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>Tout ce que l'imprimante envoie, mis à jour en direct</span>
+          </span>
+          <button onClick={onClose} aria-label="Fermer" style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid var(--border)", flexShrink: 0,
+            background: "var(--surface)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+        </div>
+        <div style={{ overflowY: "auto", padding: 14, columnWidth: 260, columnGap: 10 }}>
+          {!d && !err && <span style={{ fontSize: 13, color: "var(--muted)", padding: 8 }}>Lecture…</span>}
+          {err && !d && <span style={{ fontSize: 13, color: "#ef4444", padding: 8 }}>Impossible de lire l'imprimante pour l'instant.</span>}
+          {d && d.groups.length === 0 && <span style={{ fontSize: 13, color: "var(--muted)", padding: 8 }}>L'imprimante n'a encore rien envoyé.</span>}
+          {d?.groups.map(g => { const [Icon, c] = DETAIL_ICONS[g.icon] || [Info, "#8b5cf6"]; return (
+            <div key={g.id} style={{ borderRadius: 14, padding: "10px 12px", border: `1px solid ${c}33`,
+              background: `linear-gradient(135deg, ${c}14, transparent 65%), var(--surface2)`, display: "flex", flexDirection: "column", gap: 6,
+              breakInside: "avoid", marginBottom: 10 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 24, height: 24, borderRadius: 8, display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  background: `${c}22`, color: c }}><Icon size={14}/></span>
+                <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: c }}>{g.title}</span>
+              </span>
+              {g.rows.map((r, i) => (
+                <span key={i} data-tip={r.hint || undefined} style={{ display: "flex", alignItems: "baseline", gap: 10, fontSize: 12.5,
+                  borderTop: i ? "1px dashed var(--border)" : "none", paddingTop: i ? 5 : 0 }}>
+                  <span style={{ flex: 1, minWidth: 0, color: "var(--text2)", fontWeight: 600 }}>{r.label}</span>
+                  <span style={{ color: "var(--text)", fontWeight: 800, textAlign: "right", overflowWrap: "anywhere" }}>{r.value}</span>
+                </span>))}
+            </div>); })}
+          {d && <div style={{ columnSpan: "all", borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface2)", overflow: "hidden" }}>
+            <button onClick={() => setRaw(v => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 12px",
+              background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--text2)", fontSize: 12.5, fontWeight: 800 }}>
+              <ChevronDown size={14} style={{ transform: raw ? "none" : "rotate(-90deg)", transition: "transform .2s" }}/>
+              Tous les champs reçus ({d.keys})<span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>numéros de série et adresses masqués</span></button>
+            {raw && <pre style={{ margin: 0, padding: "0 12px 12px", fontSize: 11, lineHeight: 1.45, color: "var(--text2)", whiteSpace: "pre-wrap",
+              overflowWrap: "anywhere", maxHeight: 360, overflowY: "auto" }}>{JSON.stringify(d.raw, null, 2)}</pre>}
+          </div>}
+        </div>
+      </div>
+    </div>, document.body);
+}
+
 function HmsSheet({ list, onClose }) {
   const worst = HMS_SEV[list[0]?.severity] || HMS_SEV.info;
   const n = sev => list.filter(h => h.severity === sev).length;

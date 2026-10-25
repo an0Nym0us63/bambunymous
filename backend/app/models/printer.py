@@ -168,3 +168,6 @@ class PrinterState:
 
     # Infos
     fw_version: str = ""
+    # tout le statut recu, fusionne (« Plus d'infos »), et les modules (versions) de get_version
+    raw: dict = field(default_factory=dict)
+    modules: list = field(default_factory=list)

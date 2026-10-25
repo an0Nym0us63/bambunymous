@@ -325,6 +325,13 @@ def _tray_spool_info(t, spools_map, stock_map=None):
     return si
 
 
+@router.get("/details")
+async def printer_details(_: str = Depends(get_current_user)):
+    """Tout ce que l'imprimante envoie, range par themes (fenetre « Plus d'infos »)."""
+    from ....services.printer_details import build
+    return build(get_state())
+
+
 @router.get("/status", response_model=PrinterStatusOut)
 async def printer_status(_: str = Depends(get_current_user)):
     from sqlalchemy import select as _sel

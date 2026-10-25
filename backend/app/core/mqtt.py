@@ -254,6 +254,9 @@ class MQTTManager:
         c.subscribe(f"device/{self._printer_id}/report")
         c.publish(f"device/{self._printer_id}/request",
                   json.dumps({"pushing": {"sequence_id": "0", "command": "pushall"}}))
+        # les modules et leurs versions (Plus d infos), une fois par connexion
+        c.publish(f"device/{self._printer_id}/request",
+                  json.dumps({"info": {"sequence_id": "0", "command": "get_version"}}))
 
     def _on_disconnect(self, c, u, rc):
         self._connected = False
@@ -278,6 +281,8 @@ class MQTTManager:
             logger.error(f"MQTT message error: {_e}\n{_tb.format_exc()}")
 
     def _process_info(self, info: dict):
+        if isinstance(info.get("module"), list) and info["module"]:
+            state.modules = [m for m in info["module"] if isinstance(m, dict)]
         for m in info.get("module", []):
             if m.get("name") == "ota":
                 if m.get("sn"): state.serial = m["sn"]
@@ -285,6 +290,10 @@ class MQTTManager:
 
     def _process_print(self, p: dict):
         changed = False
+        # tout le statut, garde (« Plus d'infos ») : les messages ne portent souvent que ce qui change
+        if p.get("command") in (None, "push_status"):
+            from ..services.printer_details import merge as _merge
+            state.raw = _merge(state.raw, p)
 
         # ── Porte (24/10/2026) : « stat » (hexa, series H2/P2/X2) bit 0x00800000, le capot du haut le bit
         # 0x01000000 (essai reel sur H2C le 25/10/2026), sinon le bit 23 de
