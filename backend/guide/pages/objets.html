@@ -127,10 +127,10 @@
   <dl class="opts">
     <dt>Nom</dt><dd>Le nom affiché de l'objet.</dd>
     <dt>Commentaire</dt><dd>Texte libre (acheteur, couleur, défaut…).</dd>
-    <dt>État</dt><dd>Quatre boutons : <span class="ui">À vendre</span>, <span class="ui">Perso</span>, <span class="ui">Offert</span>, <span class="ui">Indisponible</span>. L'état actif porte un ✓. « Vendu » n'est pas un bouton : on vend en saisissant un prix (ci-dessous).</dd>
+    <dt>État</dt><dd>Quatre boutons, chacun avec son icône : <span class="ui">🏷️ À vendre</span>, <span class="ui">🏠 Perso</span>, <span class="ui">🎁 Offert</span>, <span class="ui">⛔ Indisponible</span>. L'état actif est rempli de sa couleur, et l'en-tête de la feuille prend cette couleur. « Vendu » n'est pas un bouton : on vend en saisissant un prix (carte <b>💶 Vente</b>, ci-dessous).</dd>
     <dt>Prix désiré (€)</dt><dd>Le prix que tu espères en tirer. Il s'affiche en vert sur la tuile et alimente les « € espérés ». Vider le champ efface le prix.</dd>
   </dl>
-  <p>Touche <span class="ui">Enregistrer</span> pour valider, <span class="ui">Annuler</span> pour abandonner.</p>
+  <p>Touche <span class="ui">✓ Enregistrer</span> en bas pour valider, <span class="ui">Annuler</span> pour abandonner.</p>
 </section>
 
 <section id="objets-vendre">
@@ -142,7 +142,7 @@
     <li>La marge s'affiche en direct (« +X € de marge · N % », ou en rouge « vendu à perte »). Touche <span class="ui">✓ Marquer vendu</span>.</li>
   </ol>
   <figure class="phone"><img src="img/objets-vendre.webp" alt="Feuille Vendre : prix de vente, date, marge calculée"><figcaption>La vente rapide : prix, date, et la marge calculée avant de valider.</figcaption></figure>
-  <p>On peut aussi vendre depuis <span class="ui">✏️ Modifier</span> : dans la partie <span class="ui">Vente</span>, saisis le prix de vente (la date est facultative : sans date, la vente est datée d'aujourd'hui), puis <span class="ui">Enregistrer</span>.</p>
+  <p>On peut aussi vendre depuis <span class="ui">✏️ Modifier</span> : dans la carte <span class="ui">💶 Vente</span>, saisis le prix de vente (la date est facultative : sans date, la vente est datée d'aujourd'hui), puis <span class="ui">✓ Enregistrer</span>.</p>
   <p>L'objet passe dans la section <b>Vendu</b>, son prix apparaît sur la tuile et la marge est calculée dans la fiche. La date de vente sert aux <a href="#stats-objets">statistiques de ventes</a> par période.</p>
   <figure class="phone"><img src="img/objets-annuler-vente.webp" alt="Feuille Modifier l'objet d'un objet vendu avec le bouton Annuler la vente"><figcaption>Un objet vendu : prix et date de vente remplis, bouton rouge pour annuler la vente.</figcaption></figure>
   <p>Pour <b>annuler une vente</b> : dans la même feuille, touche <span class="ui">Annuler la vente (remettre disponible)</span>. Le prix et la date sont effacés et l'objet revient À vendre. Choisir un autre état pour un objet vendu efface aussi sa vente (la feuille le rappelle : « Objet vendu. Efface le prix de vente pour le remettre en circulation. »).</p>
@@ -154,9 +154,9 @@
   <p>Un porte-clés a besoin d'un anneau, une lampe d'une ampoule. Lier un accessoire à un objet ajoute son coût à celui de l'objet et <b>le retire de ton stock</b>.</p>
   <ol>
     <li>Dans la fiche de l'objet, bloc Accessoires, touche <span class="ui">+ Ajouter</span>.</li>
-    <li>Choisis l'accessoire dans la liste (champ <span class="ui">Rechercher un accessoire…</span>). Chaque ligne montre « Stock : N · X €/u ».</li>
-    <li>Règle la <b>Quantité</b> avec − et + (elle ne peut pas dépasser le stock disponible). L'aperçu indique ce qu'il restera en stock et le coût ajouté.</li>
-    <li>Touche <span class="ui">Ajouter</span>.</li>
+    <li>Choisis l'accessoire dans la liste (champ <span class="ui">Rechercher un accessoire…</span>). Chaque ligne montre sa vignette et « N en stock · X €/u » (en orange sous 5, « rupture » en rouge) ; celle choisie est cerclée et l'en-tête prend son nom.</li>
+    <li>Dans la carte <b>Quantité</b>, règle-la avec − et + (elle ne peut pas dépasser le stock disponible). L'aperçu indique ce qu'il restera en stock et le coût ajouté.</li>
+    <li>Touche <span class="ui">✓ Ajouter</span> en bas.</li>
   </ol>
   <figure class="phone"><img src="img/objets-ajouter-accessoire.webp" alt="Feuille Ajouter un accessoire, Sachet kraft choisi, quantité 1"><figcaption>« Après ajout, il restera 49 en stock · coût 0.15 €. »</figcaption></figure>
   <p>Ajouter de nouveau le même accessoire additionne les quantités. Le ✕ d'une ligne retire l'accessoire de l'objet : la quantité <b>revient en stock</b> et le coût de l'objet est recalculé.</p>
@@ -183,7 +183,7 @@
   </section>
   <section id="objets-groupes-fiche">
     <h3>La fiche du groupe</h3>
-    <p>Touche la tuile pour l'ouvrir : nom, « N objets · coût » (et « · K vendus »), puis la grille des objets. Touche un objet pour ouvrir sa fiche.</p>
+    <p>Touche la tuile pour l'ouvrir : en tête, la mosaïque de ses objets sur fond lavande, ses pastilles (nombre d'objets, état de la section, « K vendus »), son nom, « Coût X € » (et ce qui a été encaissé), et son prix souhaité en grand. Puis la grille des objets : touche un objet pour ouvrir sa fiche.</p>
     <p>Si tu l'as ouverte depuis une section et que le groupe a d'autres objets ailleurs, le bouton <span class="ui">Voir tout le groupe (N)</span> les montre tous ; <span class="ui">Voir seulement : état (n)</span> revient au filtre.</p>
     <figure class="pair">
       <img src="img/objets-groupe-fiche.webp" alt="Fiche du groupe Porte-clés tortue">
@@ -193,12 +193,12 @@
   </section>
   <section id="objets-groupes-actions">
     <h3>Agir sur tout le groupe <span class="admin">admin</span></h3>
-    <p>Le panneau <span class="ui">Actions sur tout le groupe (N)</span> (▼ pour le déplier) applique un changement à tous les objets d'un coup :</p>
+    <p>La carte <span class="ui">⚡ Actions sur tout le groupe (N)</span>, repliée à l'ouverture (touche son titre pour la déplier), applique un changement à tous les objets d'un coup :</p>
     <dl class="opts">
       <dt>Statut de tous les objets</dt><dd><span class="ui">À vendre</span>, <span class="ui">Offert</span>, <span class="ui">Perso</span>, <span class="ui">Indisponible</span>. « Vendu » reste objet par objet (chacun son prix).</dd>
       <dt>Prix désiré de tous les objets</dt><dd>Saisis un prix puis <span class="ui">Appliquer</span>. Champ vide + Appliquer = efface le prix désiré.</dd>
-      <dt>Ajouter un accessoire à tout le groupe</dt><dd><span class="ui">+ Choisir un accessoire</span>. La quantité choisie est posée sur <b>chaque</b> objet : le stock baisse de quantité × nombre d'objets. Si le stock ne suffit pas, l'appli indique le maximum possible par objet.</dd>
-      <dt>Accessoires du groupe</dt><dd>Chaque accessoire monté, avec son total (« 3 sur 3 objets ») et <span class="ui">Retirer</span>, qui le rend au stock pour tous les objets.</dd>
+      <dt>Ajouter un accessoire à tout le groupe</dt><dd><span class="ui">🔩 Choisir un accessoire</span>. La quantité choisie est posée sur <b>chaque</b> objet : le stock baisse de quantité × nombre d'objets. Si le stock ne suffit pas, l'appli indique le maximum possible par objet.</dd>
+      <dt>Accessoires du groupe</dt><dd>Chaque accessoire monté, avec sa vignette, son total (« 3 sur 3 objets ») et <span class="ui">Retirer</span>, qui le rend au stock pour tous les objets.</dd>
     </dl>
   </section>
   <section id="objets-groupes-selection">

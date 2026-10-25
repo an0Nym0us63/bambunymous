@@ -641,10 +641,8 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
   const set = (k,v) => setForm(f => ({ ...f, [k]: v }));
   const wasSold = obj.sold_price != null && obj.sold_price > 0;
 
-  const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
-    padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" };
-  const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-    letterSpacing:"0.05em", marginBottom:4, display:"block" };
+  const inp = fInp, lbl = fLbl;
+  const cur = OBJ_STATUS[form.status] || OBJ_STATUS.available;
 
   const save = async (extra={}) => {
     setSaving(true);
@@ -674,15 +672,18 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
   };
 
   return (
-    <div style={{ position:"fixed", inset:0, zIndex:320, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"flex-end" }}
-      onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
-        style={{ width:"100%", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-          padding:"16px 16px 32px", maxHeight: kb > 0 ? `calc(92vh - ${kb}px)` : "85vh",
-          marginBottom: kb, overflowY:"auto", transition:"margin-bottom 0.15s ease" }}>
-        <p style={{ fontWeight:700, fontSize:15, margin:"0 0 16px" }}>Modifier l'objet <Hide at="object-edit"/></p>
+    <FSheet onClose={onClose} z={320} bottom={<>
+      <button onClick={onClose} style={{ ...fBtn, flex:1 }}>Annuler</button>
+      <button onClick={()=>save()} disabled={saving} style={{ ...fBtn, flex:2, border:"none", color:"#fff", opacity: saving ? .6 : 1,
+        background:"linear-gradient(135deg, #3B82F6, #6366F1)", boxShadow:"0 8px 18px -10px #3B82F6" }}>{saving ? "Enregistrement…" : "✓ Enregistrer"}</button></>}>
+      <div style={{ padding:"52px 18px 16px",
+        background:`radial-gradient(circle at 15% 40%, ${cur.color}55, transparent 60%), var(--surface2)` }}>
+        <div style={{ fontSize:12, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:cur.color }}>✏️ Modifier l'objet <Hide at="object-edit"/></div>
+        <div style={{ fontSize:22, fontWeight:900, color:"var(--text)", lineHeight:1.15, overflowWrap:"anywhere" }}>{form.translated_name || obj.name}</div>
+        <div style={{ marginTop:6 }}>{fChip(`${cur.icon} ${cur.label}`, cur.color)}</div>
+      </div>
 
-        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+        <div style={{ display:"flex", flexDirection:"column", gap:14, padding:"14px 16px 18px", paddingBottom: 18 + kb }}>
           <div>
             <label style={lbl}>Nom</label>
             <input style={inp} value={form.translated_name} onChange={e=>set("translated_name",e.target.value)}/>
@@ -690,7 +691,7 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
 
           <div>
             <label style={lbl}>Commentaire</label>
-            <textarea style={{ ...inp, minHeight:60, resize:"vertical", fontFamily:"inherit" }}
+            <textarea style={{ ...inp, minHeight:64, resize:"vertical", fontFamily:"inherit", fontWeight:600 }}
               value={form.comment} onChange={e=>set("comment",e.target.value)}/>
           </div>
 
@@ -701,23 +702,24 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
               date, ce n'est pas une simple etiquette. */}
           <div>
             <label style={lbl}>État</label>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:6 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:8 }}>
               {["available","personal","gifted","unavailable"].map(k => {
                 const c = OBJ_STATUS[k], on = form.status === k;
                 return (
                   <button key={k} onClick={()=>set("status",k)}
-                    style={{ padding:"10px 8px", borderRadius:10, cursor:"pointer",
-                      fontSize:12, fontWeight:700,
-                      border:"1px solid " + (on ? c.color : "var(--border)"),
-                      background: on ? c.color+"22" : "var(--surface2)",
-                      color: on ? c.color : "var(--muted)" }}>
-                    {on ? "✓ " : ""}{c.label}
+                    style={{ padding:"11px 8px", borderRadius:14, cursor:"pointer", fontSize:13, fontWeight:800,
+                      display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                      border: on ? "none" : "1px solid var(--border)",
+                      background: on ? `linear-gradient(135deg, ${c.color}, color-mix(in srgb, ${c.color} 65%, #ffffff))` : "var(--surface)",
+                      boxShadow: on ? `0 6px 14px -8px ${c.color}` : "none",
+                      color: on ? "#fff" : "var(--text2)" }}>
+                    <span>{c.icon}</span>{c.label}
                   </button>
                 );
               })}
             </div>
             {form.status === "sold" && (
-              <p style={{ fontSize:11, color:"var(--muted)", margin:"8px 0 0" }}>
+              <p style={{ ...fNote, marginTop:8 }}>
                 Objet vendu. Efface le prix de vente pour le remettre en circulation.
               </p>
             )}
@@ -730,41 +732,24 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
           </div>
 
           {/* Vente */}
-          <div style={{ borderTop:"1px solid var(--border)", paddingTop:12 }}>
-            <label style={lbl}>Vente</label>
-            <div style={{ display:"flex", gap:8 }}>
-              <input style={{ ...inp, flex:1 }} type="number" step="0.01" value={form.sold_price}
+          <FCard t="Vente" i="💶" c="#22C55E">
+            <div style={{ display:"flex", gap:8, marginTop:6 }}>
+              <input style={{ ...inp, flex:1, minWidth:0 }} type="number" step="0.01" value={form.sold_price}
                 onChange={e=>set("sold_price",e.target.value)} placeholder="Prix de vente"/>
-              <input style={{ ...inp, flex:1 }} type="date" value={form.sold_date}
+              <input style={{ ...inp, flex:1, minWidth:0 }} type="date" value={form.sold_date}
                 onChange={e=>set("sold_date",e.target.value)}/>
             </div>
             {wasSold && (
               <button onClick={()=>save({ unsell:true })} disabled={saving}
-                style={{ marginTop:8, width:"100%", padding:"9px", borderRadius:8, cursor:"pointer",
-                  fontSize:12, fontWeight:700, border:"1px solid rgba(239,68,68,0.3)",
-                  background:"rgba(239,68,68,0.06)", color:"#ef4444" }}>
+                style={{ marginTop:10, width:"100%", padding:"10px", borderRadius:12, cursor:"pointer",
+                  fontSize:13, fontWeight:800, border:"1px solid rgba(239,68,68,0.35)",
+                  background:"rgba(239,68,68,0.08)", color:"#ef4444" }}>
                 Annuler la vente (remettre disponible)
               </button>
             )}
-          </div>
+          </FCard>
         </div>
-
-        {/* Actions */}
-        <div style={{ display:"flex", gap:8, marginTop:20 }}>
-          <button onClick={onClose}
-            style={{ flex:1, padding:"11px", borderRadius:10, border:"1px solid var(--border)",
-              background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>
-            Annuler
-          </button>
-          <button onClick={()=>save()} disabled={saving}
-            style={{ flex:2, padding:"11px", borderRadius:10, border:"none",
-              background:"#3b82f6", color:"white", fontSize:13, fontWeight:700, cursor:"pointer",
-              opacity: saving?0.6:1 }}>
-            {saving ? "Enregistrement…" : "Enregistrer"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </FSheet>
   );
 }
 
@@ -793,47 +778,49 @@ function AccessoryPicker({ accessories, onClose, onConfirm, multiplier = 1 }) {
     onConfirm(sel.id, qn);
   };
 
+  const blocked = !sel || tooMuch || qn < 1;
+  const stepB = (label, on, off) => <button onClick={on} disabled={off} style={{ width:40, height:40, borderRadius:12, border:"1px solid var(--border)",
+    background:"var(--surface)", color:"var(--text)", cursor:"pointer", fontSize:18, fontWeight:900, opacity: off ? .4 : 1 }}>{label}</button>;
   return (
-    <div style={{ position:"fixed", inset:0, zIndex:300, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"flex-end" }}
-      onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
-        style={{ width:"100%", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-          padding:"16px 16px 32px", maxHeight: kb > 0 ? `calc(92vh - ${kb}px)` : "80vh",
-          marginBottom: kb, overflowY:"auto", transition:"margin-bottom 0.15s ease" }}>
-        <p style={{ fontWeight:700, fontSize:14, margin:"0 0 12px" }}>Ajouter un accessoire</p>
-
+    <FSheet onClose={onClose} z={300} bottom={<>
+      <button onClick={onClose} style={{ ...fBtn, flex:1 }}>Annuler</button>
+      <button onClick={confirm} disabled={blocked} style={{ ...fBtn, flex:2, border:"none", color:"#fff", opacity: blocked ? .5 : 1,
+        cursor: blocked ? "not-allowed" : "pointer", background:"linear-gradient(135deg, #14B8A6, #2DD4BF)", boxShadow:"0 8px 18px -10px #14B8A6" }}>
+        {sel ? `✓ Ajouter ${qn > 1 ? `×${qn}` : ""}` : "Choisis un accessoire"}</button></>}>
+      <div style={{ padding:"52px 18px 14px", background:"radial-gradient(circle at 15% 40%, rgba(20,184,166,0.32), transparent 60%), var(--surface2)" }}>
+        <div style={{ fontSize:12, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#0d9488" }}>🔩 Ajouter un accessoire</div>
+        <div style={{ fontSize:21, fontWeight:900, color: sel ? "var(--text)" : "var(--muted)", lineHeight:1.15, overflowWrap:"anywhere" }}>
+          {sel ? sel.name : "Lequel ?"}</div>
+        {mult > 1 && <div style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>Pour chacun des {mult} objets du groupe</div>}
+      </div>
+      <div style={{ padding:"12px 16px 16px", paddingBottom: 16 + kb, display:"flex", flexDirection:"column", gap:10 }}>
         {/* Recherche */}
-        <div style={{ position:"relative", marginBottom:10 }}>
-          <Search size={14} style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", color:"var(--muted)" }}/>
+        <div style={{ position:"relative" }}>
+          <Search size={15} style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:"var(--muted)" }}/>
           <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher un accessoire…"
-            style={{ width:"100%", padding:"9px 10px 9px 32px", background:"var(--surface2)",
-              border:"1px solid var(--border)", borderRadius:8, color:"var(--text)", fontSize:13, boxSizing:"border-box" }}/>
+            style={{ width:"100%", height:40, padding:"0 12px 0 38px", background:"var(--surface)",
+              border:"1px solid var(--border)", borderRadius:20, color:"var(--text)", fontSize:13.5, boxSizing:"border-box", outline:"none" }}/>
         </div>
 
         {/* Résultats filtrés avec vignette */}
-        <div style={{ maxHeight:"32vh", overflowY:"auto", marginBottom:12 }}>
-          {filtered.length === 0 && <p style={{ color:"var(--muted)", fontSize:12 }}>Aucun accessoire</p>}
+        <div style={{ maxHeight:"34vh", overflowY:"auto", display:"flex", flexDirection:"column", gap:6 }}>
+          {filtered.length === 0 && <p style={{ ...fNote, textAlign:"center", padding:"10px 0" }}>Aucun accessoire</p>}
           {filtered.map(a => {
             const active = sel?.id === a.id;
+            const st = a.quantity || 0, t = st === 0 ? "#ef4444" : st < LOW_STOCK ? "#f59e0b" : "#22c55e";
             return (
               <button key={a.id} onClick={()=>{ setSel(a); setQty(1); }}
-                style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"8px 10px", marginBottom:6,
-                  textAlign:"left", cursor:"pointer", borderRadius:8,
-                  background: active ? "rgba(59,130,246,0.12)" : "var(--surface2)",
-                  border: active ? "1px solid #3b82f6" : "1px solid var(--border)" }}>
-                <div style={{ width:36, height:36, borderRadius:6, overflow:"hidden", flexShrink:0,
-                  background:"var(--bg)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <img src={apiUrl(`/objects/accessories/${a.id}/image`)} alt=""
-                    style={{ width:"100%", height:"100%", objectFit:"cover" }}
-                    onError={e=>e.currentTarget.style.display="none"}/>
-                </div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ fontSize:13, fontWeight:600, color:"var(--text)", margin:0,
-                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.name}</p>
-                  <p style={{ fontSize:11, color:"var(--muted)", margin:"2px 0 0" }}>
-                    Stock : {a.quantity} · {fmtPrice(a.unit_price)}/u
-                  </p>
-                </div>
+                style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"8px 10px", textAlign:"left", cursor:"pointer",
+                  borderRadius:14, font:"inherit", color:"inherit",
+                  background: active ? "linear-gradient(135deg, rgba(20,184,166,0.2), transparent 70%), var(--surface)" : "var(--surface)",
+                  border: active ? "1.5px solid #14B8A6" : "1px solid var(--border)" }}>
+                <AccThumb id={a.id} size={38}/>
+                <span style={{ flex:1, minWidth:0 }}>
+                  <span style={{ display:"block", fontSize:13.5, fontWeight:800, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.name}</span>
+                  <span style={{ display:"block", fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:1 }}>
+                    <b style={{ color:t }}>{st === 0 ? "rupture" : `${st} en stock`}</b> · {fmtPrice(a.unit_price)}/u</span>
+                </span>
+                {active && <span style={{ color:"#14B8A6", fontWeight:900 }}>✓</span>}
               </button>
             );
           })}
@@ -841,45 +828,27 @@ function AccessoryPicker({ accessories, onClose, onConfirm, multiplier = 1 }) {
 
         {/* Quantité + estimation (visible une fois un accessoire choisi) */}
         {sel && (
-          <div style={{ borderTop:"1px solid var(--border)", paddingTop:12 }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-              <span style={{ fontSize:13, fontWeight:600 }}>{sel.name}</span>
-              <span style={{ fontSize:11, color:"var(--muted)" }}>Stock dispo : {stock}</span>
-            </div>
-            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-              <span style={{ fontSize:12, color:"var(--muted)" }}>{mult > 1 ? "Quantité / objet" : "Quantité"}</span>
-              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                <button onClick={()=>setQty(Math.max(1, qn-1))}
-                  style={{ width:28, height:28, borderRadius:6, border:"1px solid var(--border)",
-                    background:"var(--surface2)", color:"var(--text)", cursor:"pointer", fontSize:16 }}>−</button>
-                <input type="number" min={1} max={maxQty} value={qty}
-                  onChange={e=>{ let v=Math.max(1, Number(e.target.value||1)); if(v>maxQty) v=maxQty; setQty(v); }}
-                  style={{ width:56, textAlign:"center", padding:"6px", background:"var(--surface2)",
-                    border:"1px solid var(--border)", borderRadius:6, color:"var(--text)", fontSize:13 }}/>
-                <button onClick={()=>setQty(Math.min(maxQty, qn+1))}
-                  style={{ width:28, height:28, borderRadius:6, border:"1px solid var(--border)",
-                    background:"var(--surface2)", color:"var(--text)", cursor:"pointer", fontSize:16 }}>+</button>
-              </div>
+          <FCard t={mult > 1 ? "Quantité par objet" : "Quantité"} i="🔢" c="#14B8A6"
+            aside={<span style={{ fontSize:11.5, fontWeight:800, color:"var(--muted)" }}>stock dispo : {stock}</span>}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:6 }}>
+              {stepB("−", ()=>setQty(Math.max(1, qn-1)), qn <= 1)}
+              <input type="number" min={1} max={maxQty} value={qty}
+                onChange={e=>{ let v=Math.max(1, Number(e.target.value||1)); if(v>maxQty) v=maxQty; setQty(v); }}
+                style={{ ...fInp, flex:1, height:40, textAlign:"center", fontSize:18, fontWeight:900, color:"#0d9488" }}/>
+              {stepB("+", ()=>setQty(Math.min(maxQty, qn+1)), qn >= maxQty)}
             </div>
             {/* Estimation du restant */}
-            <p style={{ fontSize:11, color: tooMuch ? "#ef4444" : "var(--muted)", margin:"0 0 12px" }}>
+            <p style={{ ...fNote, marginTop:8, color: tooMuch ? "#ef4444" : "var(--muted)" }}>
               {tooMuch
                 ? `Stock insuffisant : maximum ${maxQty} par objet (${stock} en stock).`
                 : mult > 1
                   ? `${qn} × ${mult} objets = ${total} retiré(s) · reste ${remaining} · coût ${fmtPrice((sel.unit_price||0)*total)}.`
                   : `Après ajout, il restera ${remaining} en stock · coût ${fmtPrice((sel.unit_price||0)*qn)}.`}
             </p>
-            <button onClick={confirm} disabled={tooMuch || qn<1}
-              style={{ width:"100%", padding:"11px", borderRadius:10, border:"none", fontSize:13, fontWeight:700,
-                cursor: (tooMuch||qn<1) ? "not-allowed" : "pointer",
-                background: (tooMuch||qn<1) ? "var(--surface2)" : "#3b82f6",
-                color: (tooMuch||qn<1) ? "var(--muted)" : "white" }}>
-              Ajouter {qn > 1 ? `×${qn}` : ""}
-            </button>
-          </div>
+          </FCard>
         )}
       </div>
-    </div>
+    </FSheet>
   );
 }
 
@@ -1394,58 +1363,45 @@ function ObjectGroupPickerSheet({ title, onClose, onPick }) {
     catch (e) { showAlert(e.response?.data?.detail || e.message); setBusy(false); }
   };
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:6000, background:"rgba(0,0,0,0.6)",
-      display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e => e.stopPropagation()} className="sheet-panel"
-        style={{ width:"100%", maxWidth:480, borderRadius:"20px 20px 0 0",
-          maxHeight: kb > 0 ? `calc(92vh - ${kb}px)` : "85vh", marginBottom: kb,
-          transition:"margin-bottom 0.15s ease",
-          display:"flex", flexDirection:"column", paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
-        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0", position:"relative" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
-          <button onClick={onClose} style={{ position:"absolute", top:6, right:12, width:28, height:28,
-            borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer",
-            color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-        </div>
-        <div style={{ padding:"14px 18px 10px" }}>
-          <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 10px" }}>{title}</h3>
-          <input value={q} onChange={e => setQ(e.target.value)} autoFocus
-            placeholder="Rechercher ou créer un groupe…"
-            style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
-              borderRadius:8, padding:"9px 12px", fontSize:13, color:"var(--text)", outline:"none" }}/>
-        </div>
-        <div style={{ overflowY:"auto", padding:"0 18px 16px", flex:1 }}>
-          {needle && (
-            <button disabled={busy} onClick={() => pick({ group_name: q.trim() })}
-              style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
-                marginBottom: exact ? 4 : 8, borderRadius:10, background:"rgba(59,130,246,0.12)",
-                border:"1px solid rgba(59,130,246,0.35)", color:"#3b82f6", fontSize:13, fontWeight:700,
-                cursor:"pointer", textAlign:"left", opacity: busy ? 0.6 : 1 }}>
-              <Plus size={15}/> Créer un nouveau groupe « {q.trim()} »
-            </button>
-          )}
-          {exact && (
-            <p style={{ margin:"0 0 10px", fontSize:11, color:"var(--muted)", padding:"0 2px" }}>
-              Un groupe porte déjà ce nom — tu peux le rejoindre ci-dessous.
-            </p>
-          )}
-          {filtered.length === 0 && !needle && (
-            <p style={{ textAlign:"center", color:"var(--muted)", fontSize:12, padding:"20px 0" }}>
-              Aucun groupe — tape un nom pour en créer un.
-            </p>
-          )}
-          {filtered.map(g => (
-            <button key={g.id} disabled={busy} onClick={() => pick({ group_id: g.id })}
-              style={{ width:"100%", padding:"10px 14px", textAlign:"left", background:"var(--surface2)",
-                border:"1px solid var(--border)", borderRadius:8, cursor:"pointer", color:"var(--text)",
-                fontSize:13, marginBottom:6, display:"flex", alignItems:"center", gap:10, opacity: busy ? 0.6 : 1 }}>
-              <span style={{ fontSize:15, flexShrink:0 }}>📁</span>
-              <span style={{ flex:1, minWidth:0, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{g.name}</span>
-            </button>
-          ))}
-        </div>
+    <FSheet onClose={onClose} z={6000}>
+      <div style={{ padding:"52px 18px 14px", background:"radial-gradient(circle at 15% 40%, rgba(139,92,246,0.32), transparent 60%), var(--surface2)" }}>
+        <div style={{ fontSize:12, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#8B5CF6" }}>📁 Groupe d'objets</div>
+        <div style={{ fontSize:20, fontWeight:900, color:"var(--text)", lineHeight:1.2 }}>{title}</div>
       </div>
-    </div>
+      <div style={{ padding:"12px 16px 18px", paddingBottom: 18 + kb, display:"flex", flexDirection:"column", gap:8 }}>
+        <input value={q} onChange={e => setQ(e.target.value)} autoFocus
+          placeholder="Rechercher ou créer un groupe…"
+          style={{ ...fInp, borderRadius:20, height:42 }}/>
+        {needle && (
+          <button disabled={busy} onClick={() => pick({ group_name: q.trim() })}
+            style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"11px 12px", borderRadius:14, border:"none",
+              background:"linear-gradient(135deg, #8B5CF6, #A78BFA)", color:"#fff", fontSize:13.5, fontWeight:800,
+              cursor:"pointer", textAlign:"left", opacity: busy ? 0.6 : 1, boxShadow:"0 8px 18px -10px #8B5CF6" }}>
+            <Plus size={16}/> Créer un nouveau groupe « {q.trim()} »
+          </button>
+        )}
+        {exact && (
+          <p style={{ ...fNote, padding:"0 2px" }}>
+            Un groupe porte déjà ce nom — tu peux le rejoindre ci-dessous.
+          </p>
+        )}
+        {filtered.length === 0 && !needle && (
+          <p style={{ ...fNote, textAlign:"center", padding:"16px 0" }}>
+            Aucun groupe — tape un nom pour en créer un.
+          </p>
+        )}
+        {filtered.map(g => (
+          <button key={g.id} disabled={busy} onClick={() => pick({ group_id: g.id })}
+            style={{ width:"100%", padding:"11px 14px", textAlign:"left", background:"linear-gradient(135deg, rgba(139,92,246,0.12), transparent 70%), var(--surface)",
+              border:"1px solid color-mix(in srgb, #8B5CF6 30%, var(--border))", borderRadius:14, cursor:"pointer", color:"var(--text)",
+              fontSize:13.5, display:"flex", alignItems:"center", gap:10, opacity: busy ? 0.6 : 1 }}>
+            <span style={{ fontSize:16, flexShrink:0 }}>📁</span>
+            <span style={{ flex:1, minWidth:0, fontWeight:800, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{g.name}</span>
+            {g.desired_price > 0 && <span style={{ fontSize:12, fontWeight:800, color:"var(--muted)" }}>{fmtPrice(g.desired_price)}</span>}
+          </button>
+        ))}
+      </div>
+    </FSheet>
   );
 }
 
@@ -1543,36 +1499,28 @@ function GroupBulkPanel({ group, memberCount, onChanged }) {
     const r = await client.delete(`${base}/accessories/${aid}`); reloadAccs(); return r;
   }, (r) => `${r.data.restocked} unité(s) rendue(s) au stock.`);
 
-  const chip = (active) => ({ padding:"6px 10px", borderRadius:8, fontSize:12, fontWeight:600,
-    cursor: busy ? "default" : "pointer", border:"1px solid var(--border)",
-    background: active ? "#3b82f6" : "var(--surface2)", color: active ? "#fff" : "var(--text)", opacity: busy ? 0.6 : 1 });
-  const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
-    padding:"8px 10px", fontSize:13, color:"var(--text)", outline:"none" };
-  const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", margin:"0 0 6px" };
+  const chip = (active) => ({ padding:"8px 12px", borderRadius:12, fontSize:12.5, fontWeight:800,
+    cursor: busy ? "default" : "pointer", border: active ? "none" : "1px solid var(--border)",
+    background: active ? "linear-gradient(135deg, #8B5CF6, #A78BFA)" : "var(--surface)", color: active ? "#fff" : "var(--text2)", opacity: busy ? 0.6 : 1 });
+  const lbl = { ...fLbl, margin:"0 0 6px" };
 
-  const STATUSES = [["available","À vendre"],["gifted","Offert"],["personal","Perso"],["unavailable","Indisponible"]];
+  const STATUSES = ["available","gifted","personal","unavailable"];
 
   return (
-    <div style={{ border:"1px solid var(--border)", borderRadius:12, marginBottom:14, overflow:"hidden" }}>
-      <button onClick={() => setOpen(o => !o)} style={{ width:"100%", display:"flex", alignItems:"center",
-        justifyContent:"space-between", padding:"11px 14px", background:"var(--surface2)", border:"none",
-        cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:700 }}>
-        <span>Actions sur tout le groupe ({memberCount})</span>
-        <span style={{ color:"var(--muted)" }}>{open ? "▲" : "▼"}</span>
-      </button>
-      {open && (
-        <div style={{ padding:"14px", display:"flex", flexDirection:"column", gap:16 }}>
-          {msg && <p style={{ fontSize:12, color: msg.startsWith("⚠") ? "#ef4444" : "#22c55e", margin:0 }}>{msg}</p>}
+    <FCard t={`Actions sur tout le groupe (${memberCount})`} i="⚡" c="#8B5CF6" fold open={open} onToggle={() => setOpen(o => !o)}
+      summary={<p style={{ margin:"4px 0 0", fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>État, prix désiré et accessoires de tous les objets</p>}>
+        <div style={{ paddingTop:8, display:"flex", flexDirection:"column", gap:16 }}>
+          {msg && <p style={{ fontSize:12.5, fontWeight:800, color: msg.startsWith("⚠") ? "#ef4444" : "#16a34a", margin:0 }}>{msg}</p>}
 
           {/* Statut */}
           <div>
             <p style={lbl}>Statut de tous les objets</p>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              {STATUSES.map(([st, label]) => (
-                <button key={st} disabled={busy} onClick={() => applyStatus(st)} style={chip(false)}>{label}</button>
-              ))}
+              {STATUSES.map(st => { const c = OBJ_STATUS[st];
+                return <button key={st} disabled={busy} onClick={() => applyStatus(st)}
+                  style={{ ...chip(false), color:c.color, borderColor:`color-mix(in srgb, ${c.color} 40%, var(--border))` }}>{c.icon} {c.label}</button>; })}
             </div>
-            <p style={{ fontSize:10, color:"var(--muted)", margin:"6px 0 0" }}>« Vendu » reste objet par objet (chacun son prix).</p>
+            <p style={{ ...fNote, marginTop:6 }}>« Vendu » reste objet par objet (chacun son prix).</p>
           </div>
 
           {/* Prix desire */}
@@ -1580,7 +1528,7 @@ function GroupBulkPanel({ group, memberCount, onChanged }) {
             <p style={lbl}>Prix désiré de tous les objets</p>
             <div style={{ display:"flex", gap:8 }}>
               <input type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)}
-                placeholder="Vider pour effacer" style={{ ...inp, flex:1 }}/>
+                placeholder="Vider pour effacer" style={{ ...fInp, flex:1, minWidth:0 }}/>
               <button disabled={busy} onClick={applyPrice} style={chip(true)}>Appliquer</button>
             </div>
           </div>
@@ -1589,8 +1537,8 @@ function GroupBulkPanel({ group, memberCount, onChanged }) {
           <div>
             <p style={lbl}>Ajouter un accessoire à tout le groupe</p>
             <button disabled={busy} onClick={() => setPickAcc(true)}
-              style={{ ...chip(true), opacity: busy ? 0.6 : 1 }}>+ Choisir un accessoire</button>
-            <p style={{ fontSize:10, color:"var(--muted)", margin:"6px 0 0" }}>
+              style={{ ...chip(false), color:"#0d9488", borderColor:"rgba(20,184,166,0.4)" }}>🔩 Choisir un accessoire</button>
+            <p style={{ ...fNote, marginTop:6 }}>
               La quantité choisie est appliquée à chacun des {memberCount} objets (stock déduit × {memberCount}).
             </p>
             {pickAcc && (
@@ -1606,21 +1554,21 @@ function GroupBulkPanel({ group, memberCount, onChanged }) {
               <p style={lbl}>Accessoires du groupe</p>
               <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                 {groupAccs.map(a => (
-                  <div key={a.accessory_id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                    gap:8, background:"var(--surface2)", borderRadius:8, padding:"8px 10px" }}>
-                    <span style={{ fontSize:12, color:"var(--text)", minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                      {a.name} <span style={{ color:"var(--muted)" }}>· {a.total_qty} sur {a.objects} objet{a.objects > 1 ? "s" : ""}</span>
+                  <div key={a.accessory_id} style={{ display:"flex", alignItems:"center", gap:10,
+                    background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"8px 10px" }}>
+                    <AccThumb id={a.accessory_id} size={30}/>
+                    <span style={{ flex:1, fontSize:13, fontWeight:800, color:"var(--text)", minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {a.name} <span style={{ color:"var(--muted)", fontWeight:700 }}>· {a.total_qty} sur {a.objects} objet{a.objects > 1 ? "s" : ""}</span>
                     </span>
                     <button disabled={busy} onClick={() => removeAcc(a.accessory_id)}
-                      style={{ ...chip(false), flexShrink:0, color:"#ef4444" }}>Retirer</button>
+                      style={{ ...chip(false), flexShrink:0, padding:"5px 10px", color:"#ef4444", borderColor:"rgba(239,68,68,0.35)" }}>Retirer</button>
                   </div>
                 ))}
               </div>
             </div>
           )}
         </div>
-      )}
-    </div>
+    </FCard>
   );
 }
 
@@ -1638,48 +1586,50 @@ function ObjectGroupSheet({ group, objects, allObjects, sectionStatus, onClose, 
 
   const totalCost = shown.reduce((s,o) => s+(o.cost_total||0), 0);
   const soldCount = shown.filter(o => o.sold_price > 0).length;
+  const shownSold = shown.filter(o => o.sold_price > 0);
+  const revenue = shownSold.reduce((a, o) => a + (o.sold_price || 0), 0);
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:200, display:"flex", alignItems:"flex-end" }}
-      onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} className="sheet-inner" style={{ width:"100%", maxHeight:"88vh", overflowY:"auto", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", padding:"20px 16px" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
-            <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"8px auto 0", flex:1 }}/>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+    <FSheet onClose={onClose} z={200}>
+      {/* le groupe en vedette : la mosaique de ses objets sur un fond lavande */}
+      <div style={{ position:"relative", overflow:"hidden", padding:"52px 18px 18px", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap",
+        background:"radial-gradient(circle at 18% 45%, rgba(139,92,246,0.4), transparent 60%), linear-gradient(135deg, rgba(167,139,250,0.18), transparent 70%), var(--surface2)" }}>
+        <div style={{ width:124, height:124, borderRadius:22, overflow:"hidden", flexShrink:0, background:"var(--surface)",
+          boxShadow:"0 12px 28px -12px #8B5CF6", border:"1px solid rgba(255,255,255,.12)" }}>
+          <GroupMosaic photos={shown.map(o => ({ url: apiUrl(`/objects/objects/${o.id}/image`), tint:"#A78BFA" }))} title={group.name}/>
+        </div>
+        <div style={{ flex:"1 1 190px", minWidth:0, display:"flex", flexDirection:"column", gap:6 }}>
+          <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+            {fChip(`📁 ${shown.length} objet${shown.length!==1?"s":""}`, "#8B5CF6")}
+            {cfg && !showAll && fChip(`${cfg.icon} ${cfg.label}`, cfg.color)}
+            {soldCount > 0 && fChip(`✅ ${soldCount} vendu${soldCount>1?"s":""}`, "#22c55e")}
           </div>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
-          <div>
-            <p style={{ fontWeight:800, fontSize:16, color:"#a78bfa", margin:"0 0 4px" }}>{group.name}</p>
-            <p style={{ fontSize:12, color:"var(--muted)", margin:0 }}>
-              {shown.length} objet{shown.length!==1?"s":""} · {fmtPrice(totalCost)}
-              {soldCount > 0 && ` · ${soldCount} vendu${soldCount>1?"s":""}`}
-            </p>
-            {canToggle && (
-              <button onClick={()=>setShowAll(v=>!v)}
-                style={{ marginTop:8, padding:"5px 11px", borderRadius:20, fontSize:11,
-                  fontWeight:700, cursor:"pointer",
-                  border:"1px solid " + (showAll ? "var(--border)" : (cfg?.color || "var(--border)")),
-                  background: showAll ? "transparent" : (cfg ? cfg.color+"1f" : "transparent"),
-                  color: showAll ? "var(--muted)" : (cfg?.color || "var(--muted)") }}>
-                {showAll
-                  ? `Voir seulement : ${cfg.label.toLowerCase()} (${objects.length})`
-                  : `Voir tout le groupe (${full.length})`}
-              </button>
-            )}
-          </div>
-          {group.desired_price > 0 && (
-            <span style={{ fontSize:12, fontFamily:"monospace", color:"#22c55e",
-              background:"rgba(34,197,94,0.1)", padding:"4px 10px", borderRadius:20 }}>
-              Prix souhaité : {fmtPrice(group.desired_price)}
-            </span>
+          <div style={{ fontSize:24, fontWeight:900, lineHeight:1.15, overflowWrap:"anywhere", ...fGrad("#8B5CF6", "#C084FC") }}>{group.name}</div>
+          <div style={{ fontSize:13, fontWeight:800, color:"var(--muted)" }}>
+            Coût {fmtPrice(totalCost)}{revenue > 0 ? ` · ${fmtPrice(revenue)} encaissés` : ""}</div>
+          {group.desired_price > 0 && <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
+            <span style={{ fontSize:24, fontWeight:900, lineHeight:1.2, ...fGrad("#16a34a", "#4ade80") }}>{fmtPrice(group.desired_price)}</span>
+            <span style={{ fontSize:12.5, fontWeight:800, color:"var(--muted)" }}>prix souhaité</span></div>}
+          {canToggle && (
+            <button onClick={()=>setShowAll(v=>!v)}
+              style={{ alignSelf:"flex-start", padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:800, cursor:"pointer",
+                border:"1px solid " + (showAll ? "var(--border)" : (cfg?.color || "var(--border)")),
+                background: showAll ? "var(--surface)" : (cfg ? cfg.color+"1f" : "transparent"),
+                color: showAll ? "var(--muted)" : (cfg?.color || "var(--muted)") }}>
+              {showAll
+                ? `Voir seulement : ${cfg.label.toLowerCase()} (${objects.length})`
+                : `Voir tout le groupe (${full.length})`}
+            </button>
           )}
         </div>
-        <GroupBulkPanel group={group} memberCount={full.length} onChanged={onChanged}/>
+      </div>
+      <div style={{ padding:"14px 14px 18px", display:"flex", flexDirection:"column", gap:12 }}>
+        <AdminOnly><GroupBulkPanel group={group} memberCount={full.length} onChanged={onChanged}/></AdminOnly>
 
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))", gap:8 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
           {shown.map(o => <ObjectCard key={o.id} obj={o} onClick={() => { onClose(); onSelectObj(o); }}/>)}
         </div>
       </div>
-    </div>
+    </FSheet>
   );
 }
 
