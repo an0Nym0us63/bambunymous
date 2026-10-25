@@ -107,7 +107,7 @@ export function KpiBar({ kpis, icons = {} }) {
 }
 
 // Recherche en pilule, filtres en bouton rond (le nombre de filtres en pastille), ajout en degrade.
-export function SearchRow({ q, setQ, placeholder, active = 0, onFilter, addLabel = null, onAdd = null }) {
+export function SearchRow({ q, setQ, placeholder, active = 0, onFilter, addLabel = null, onAdd = null, filterTip = "Filtres et tri" }) {
   return (
     <div style={{ display:"flex", gap:6, alignItems:"center" }}>
       <div style={{ position:"relative", flex:1, minWidth:0 }}>
@@ -118,14 +118,14 @@ export function SearchRow({ q, setQ, placeholder, active = 0, onFilter, addLabel
         {q && <button onClick={() => setQ("")} aria-label="Effacer la recherche" style={{ position:"absolute", right:6, top:"50%", transform:"translateY(-50%)",
           width:28, height:28, borderRadius:"50%", border:"none", background:"var(--surface)", color:"var(--muted)", cursor:"pointer" }}>✕</button>}
       </div>
-      <button onClick={onFilter} aria-label="Filtres et tri" data-tip="Filtres et tri" style={{ position:"relative", width:40, height:40, borderRadius:14, flexShrink:0,
+      {onFilter && <button onClick={onFilter} aria-label={filterTip} data-tip={filterTip} style={{ position:"relative", width:40, height:40, borderRadius:14, flexShrink:0,
         cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", border:"1px solid var(--border)",
         background: active ? "rgba(59,130,246,0.14)" : "var(--surface2)", color: active ? "#3b82f6" : "var(--muted)" }}>
         <SlidersHorizontal size={16}/>
         {active > 0 && <span style={{ position:"absolute", top:-5, right:-5, minWidth:18, height:18, padding:"0 5px", borderRadius:9, boxSizing:"border-box",
           fontSize:10.5, fontWeight:900, color:"#fff", background:"linear-gradient(135deg, #3B82F6, #6366F1)", display:"flex", alignItems:"center",
           justifyContent:"center", boxShadow:"0 0 0 2px var(--bg)" }}>{active}</span>}
-      </button>
+      </button>}
       {addLabel && onAdd && (
         <AdminOnly><button onClick={onAdd} style={{ height:40, padding:"0 14px", borderRadius:14, border:"none", flexShrink:0, cursor:"pointer",
           display:"flex", alignItems:"center", gap:5, fontSize:13, fontWeight:800, color:"#fff",

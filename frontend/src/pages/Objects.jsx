@@ -13,6 +13,8 @@ import { PrintDetail, GroupBottomSheet } from "./Prints";
 import { useTrackDetail } from "../utils/track";
 import { useKeyboardInset } from "../utils/keyboard";
 import { useLongPress, openMenu } from "../components/ContextMenu";
+import GroupMosaic from "../components/GroupMosaic";
+import { KpiBar, SearchRow, EmptyCard, PageTabs, fGrad } from "../components/FicheKit";
 
 // Les montants sont masques pour les comptes en lecture seule.
 function fmtPrice(v) {
@@ -555,52 +557,62 @@ function AccessoryCard({ acc, onClick, onLongPress, selectMode, selected }) {
       onLongPress && { icon: "☑", label: "Sélectionner", hint: "Pour changer la catégorie de plusieurs", onClick: onLongPress },
     ],
   }), { disabled: selectMode });
-
+  const [imgOk, setImgOk] = useState(true);
+  const q = acc.quantity || 0;
+  // l'etat du stock se lit avant le chiffre : rupture en rouge sur toute la carte, stock bas en orange
+  const tone = q === 0 ? "#ef4444" : q < LOW_STOCK ? "#f59e0b" : "#22c55e";
+  const c = sectionColor((acc.category || "").trim() || null);
   return (
     <div className="card" {...press}
       onClick={guard(() => onClick && onClick())}
       style={{ WebkitTouchCallout:"none", userSelect:"none", padding:0, overflow:"hidden", cursor: onClick ? "pointer" : "default",
-        position:"relative",
-        // Rupture signalee sur la CARTE ENTIERE et pas seulement par le chiffre
-        // du stock : dans une grille qu'on parcourt, un 0 en rouge se lit trop
-        // tard. Le liseré et le fond se voient avant qu'on lise quoi que ce soit.
-        border: (acc.quantity || 0) === 0 ? "1px solid rgba(239,68,68,0.55)" : undefined,
-        background: (acc.quantity || 0) === 0 ? "rgba(239,68,68,0.07)" : undefined,
-        outline: selected ? "2px solid #3b82f6" : "none",
-        outlineOffset:-2 }}>
-      {selectMode && (
-        <span style={{ position:"absolute", top:6, right:6, zIndex:2,
-          width:22, height:22, borderRadius:"50%", display:"flex",
-          alignItems:"center", justifyContent:"center", fontSize:12,
-          border:"2px solid " + (selected ? "#3b82f6" : "rgba(255,255,255,0.7)"),
-          background: selected ? "#3b82f6" : "rgba(0,0,0,0.35)",
-          color:"white", fontWeight:800 }}>
-          {selected ? "✓" : ""}
-        </span>
-      )}
-      <div style={{ height:120, background:"var(--surface2)", display:"flex",
-        alignItems:"center", justifyContent:"center", overflow:"hidden", padding:8,
-        boxSizing:"border-box" }}>
-        {acc.has_image
+        position:"relative", borderRadius:18, display:"flex", flexDirection:"column",
+        border:`1px solid ${q === 0 ? "rgba(239,68,68,0.55)" : `color-mix(in srgb, ${c} 30%, var(--border))`}`,
+        background: q === 0 ? "linear-gradient(170deg, rgba(239,68,68,0.12), transparent 55%), var(--surface2)"
+          : `linear-gradient(170deg, color-mix(in srgb, ${c} 10%, transparent), transparent 55%), var(--surface2)`,
+        boxShadow:`0 8px 22px -16px ${q === 0 ? "#ef4444" : c}`,
+        outline: selected ? "2px solid #3b82f6" : "none", outlineOffset:-2 }}>
+      {selectMode && <SelDot on={selected}/>}
+      <div style={{ position:"relative", aspectRatio:"1 / 0.78", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden",
+        padding:10, boxSizing:"border-box", background:`radial-gradient(70% 70% at 50% 45%, color-mix(in srgb, ${c} 22%, transparent), transparent 75%), var(--surface)` }}>
+        {acc.has_image && imgOk
           ? <img src={apiUrl(`/objects/accessories/${acc.id}/image`)} alt={acc.name}
               // contain : l'image entiere est visible, plus de rognage.
               style={{ maxWidth:"100%", maxHeight:"100%", objectFit:"contain" }}
-              onError={e => e.currentTarget.style.display="none"}/>
-          : <Package size={36} style={{ color:"var(--muted)" }}/>}
+              onError={() => setImgOk(false)}/>
+          : <Package size={40} style={{ color:c, opacity:.75 }}/>}
+        <span style={{ ...pill, position:"absolute", top:7, left:7, color:"#fff",
+          background:`linear-gradient(135deg, ${tone}, color-mix(in srgb, ${tone} 65%, #ffffff))` }}>
+          {q === 0 ? "Rupture" : `${q} en stock`}</span>
       </div>
-      <div style={{ padding:"10px 12px" }}>
-        <p style={{ fontWeight:700, fontSize:13, color:"var(--text)", margin:"0 0 4px",
-          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{acc.name}</p>
-        <div style={{ display:"flex", justifyContent:"space-between" }}>
-          <span style={{ fontSize:11, color:"var(--muted)" }}>
-            Stock : <b style={{ color: acc.quantity > 0 ? "#22c55e" : "#ef4444" }}>{acc.quantity}</b>
-          </span>
-          <span style={{ fontSize:11, fontFamily:"monospace" }}>{fmtPrice(acc.unit_price)}/u</span>
-        </div>
+      <div style={{ padding:"8px 10px 10px", display:"flex", flexDirection:"column", gap:3 }}>
+        <p style={{ ...cardName }}>{acc.name}</p>
+        <span style={{ display:"flex", justifyContent:"space-between", gap:6, fontSize:11, fontWeight:700, color:"var(--muted)" }}>
+          <span>{fmtPrice(acc.unit_price)} / u</span>
+          {q > 0 && <span style={{ fontWeight:800, color:"var(--text2)" }}>{fmtPrice(q * (acc.unit_price || 0))}</span>}
+        </span>
       </div>
     </div>
   );
 }
+
+// Les petits morceaux communs aux cartes de la page
+const LOW_STOCK = 5;
+const pill = { fontSize:10, fontWeight:900, padding:"2px 8px", borderRadius:20, whiteSpace:"nowrap", boxShadow:"0 3px 10px rgba(0,0,0,.25)" };
+const glassPill = { ...pill, color:"#fff", background:"rgba(15,23,42,0.6)", backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)",
+  border:"1px solid rgba(255,255,255,.2)" };
+const cardName = { fontWeight:800, fontSize:13, lineHeight:1.25, color:"var(--text)", margin:0, overflow:"hidden",
+  display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" };
+function SelDot({ on }) {
+  return <span style={{ position:"absolute", top:7, right:7, zIndex:3, width:24, height:24, borderRadius:"50%", display:"flex", alignItems:"center",
+    justifyContent:"center", fontSize:12, border:"2px solid " + (on ? "#3b82f6" : "rgba(255,255,255,0.8)"),
+    background: on ? "linear-gradient(135deg, #3B82F6, #6366F1)" : "rgba(0,0,0,0.35)", color:"white", fontWeight:900 }}>{on ? "✓" : ""}</span>;
+}
+// le cout d'un objet, reel puis au prix normal du filament entre parentheses quand il differe
+const costLine = o => {
+  const real = o.cost_total || 0, normal = (o.normal_cost_unit ?? o.cost_fabrication ?? 0) + (o.cost_accessory || 0);
+  return Math.abs(normal - real) >= 0.01 ? `${fmtPrice(real)} (${fmtPrice(normal)})` : fmtPrice(real);
+};
 
 // ── Object Detail Sheet ───────────────────────────────────────────────────
 
@@ -1282,11 +1294,11 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
 export const OBJ_STATUS = {
   // "short" sert aux comptes ("3 vendus") ; certains libelles sont invariables
   // en nombre, d'ou le drapeau plutot qu'un s ajoute aveuglement.
-  available:   { label:"À vendre",     short:"à vendre",     plural:false, color:"#3b82f6", dim:false },
-  sold:        { label:"Vendu",        short:"vendu",        plural:true,  color:"#22c55e", dim:true  },
-  gifted:      { label:"Offert",       short:"offert",       plural:true,  color:"#f59e0b", dim:true  },
-  personal:    { label:"Perso",        short:"perso",        plural:false, color:"#a855f7", dim:true  },
-  unavailable: { label:"Indisponible", short:"indisponible", plural:true,  color:"#94a3b8", dim:true  },
+  available:   { label:"À vendre",     short:"à vendre",     plural:false, color:"#3b82f6", dim:false, icon:"🏷️" },
+  sold:        { label:"Vendu",        short:"vendu",        plural:true,  color:"#22c55e", dim:true,  icon:"✅" },
+  gifted:      { label:"Offert",       short:"offert",       plural:true,  color:"#f59e0b", dim:true,  icon:"🎁" },
+  personal:    { label:"Perso",        short:"perso",        plural:false, color:"#a855f7", dim:true,  icon:"🏠" },
+  unavailable: { label:"Indisponible", short:"indisponible", plural:true,  color:"#94a3b8", dim:true,  icon:"⛔" },
 };
 // Repli pour les objets anterieurs a la colonne status, si la reprise n'a pas
 // encore tourne : on rededuit plutot que d'afficher un etat vide.
@@ -1306,6 +1318,18 @@ export const objStatus = (o) =>
  */
 function StatusSection({ sec, open, onToggle, children }) {
   const cfg = OBJ_STATUS[sec.st];
+  const resume =
+    sec.st === "sold"      ? `${fmtPrice(sec.revenue)} encaissés`
+    : sec.st === "available" ? (sec.desired > 0 ? `${fmtPrice(sec.desired)} espérés`
+                                                : `${fmtPrice(sec.cost)} de production`)
+    : `${fmtPrice(sec.cost)} de production`;
+  return <FoldSection color={cfg.color} icon={cfg.icon} title={cfg.label} count={sec.count}
+    sub={`${sec.count} objet${sec.count>1?"s":""} · ${resume}`} thumbs={sec.thumbs} open={open} onToggle={onToggle}>{children}</FoldSection>;
+}
+
+// Une section repliable de la page (etats d'objets, regroupements d'accessoires) : une carte teintee de sa couleur,
+// son icone, son resume et, repliee, un apercu de ce qu'elle contient.
+function FoldSection({ color, icon, title, muted = false, count, sub, alert = null, thumbs = [], open, onToggle, children }) {
   const ref = React.useRef(null);
   // Accordeon : a l'ouverture, ramener le haut de la section sous le header fixe.
   // Sinon, quand une grande section au-dessus vient de se replier, on reste
@@ -1313,40 +1337,32 @@ function StatusSection({ sec, open, onToggle, children }) {
   React.useEffect(() => {
     if (open && ref.current) ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [open]);
-  const resume =
-    sec.st === "sold"      ? `${fmtPrice(sec.revenue)} encaissés`
-    : sec.st === "available" ? (sec.desired > 0 ? `${fmtPrice(sec.desired)} espérés`
-                                                : `${fmtPrice(sec.cost)} de production`)
-    : `${fmtPrice(sec.cost)} de production`;
-
   return (
-    <div ref={ref} className="card" style={{ padding:0, overflow:"hidden",
+    <div ref={ref} style={{ borderRadius:20, overflow:"hidden", border:`1px solid color-mix(in srgb, ${color} 32%, var(--border))`,
+      background:`radial-gradient(90% 120% at 0% 0%, color-mix(in srgb, ${color} 16%, transparent), transparent 60%), var(--surface2)`,
+      boxShadow: open ? `0 10px 26px -18px ${color}` : "none",
       scrollMarginTop:"calc(64px + var(--sat, env(safe-area-inset-top, 0px)))" }}>
       <button onClick={onToggle}
-        style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
-          padding:"11px 14px", border:"none", background:"none", cursor:"pointer",
-          textAlign:"left" }}>
-        <span style={{ width:4, height:26, borderRadius:2, background:cfg.color,
-          flexShrink:0 }}/>
-        <span style={{ flex:1, minWidth:0 }}>
-          <span style={{ display:"block", fontSize:13.5, fontWeight:800,
-            color:"var(--text)" }}>{cfg.label}</span>
-          <span style={{ display:"block", fontSize:10.5, color:"var(--muted)",
-            marginTop:1, overflow:"hidden", textOverflow:"ellipsis",
-            whiteSpace:"nowrap" }}>
-            {sec.count} objet{sec.count>1?"s":""} · {resume}
-          </span>
+        style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:"12px 14px", border:"none", background:"none",
+          cursor:"pointer", textAlign:"left", color:"inherit", font:"inherit" }}>
+        <span style={{ width:40, height:40, borderRadius:13, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:19,
+          background:`linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 60%, #ffffff))`, boxShadow:`0 6px 14px -6px ${color}` }}>{icon}</span>
+        <span style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
+          <span style={{ fontSize:15, fontWeight:900, color: muted ? "var(--muted)" : "var(--text)" }}>{title}</span>
+          <span style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            {sub}{alert && <span style={{ color:"#ef4444", fontWeight:800 }}>{" · "}{alert}</span>}</span>
         </span>
-        <span style={{ fontSize:11, fontWeight:800, padding:"3px 9px", borderRadius:20,
-          background:cfg.color+"1f", color:cfg.color, flexShrink:0,
-          fontFamily:"'JetBrains Mono',ui-monospace,monospace" }}>{sec.count}</span>
-        <span style={{ color:"var(--muted)", fontSize:11, flexShrink:0 }}>
-          {open ? "▾" : "▸"}</span>
+        {/* repliee : les premieres vignettes, pour savoir ce qu'il y a dedans sans ouvrir */}
+        {!open && thumbs.length > 0 && <span aria-hidden="true" style={{ display:"flex", flexShrink:0 }}>
+          {thumbs.slice(0, 3).map((u, i) => <img key={u} src={u} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
+            style={{ width:30, height:30, borderRadius:9, objectFit:"cover", marginLeft: i ? -10 : 0, border:"2px solid var(--surface2)",
+              background:"var(--surface)", boxShadow:"0 2px 6px rgba(0,0,0,.25)" }}/>)}</span>}
+        <span style={{ fontSize:12, fontWeight:900, minWidth:26, textAlign:"center", padding:"3px 9px", borderRadius:20, flexShrink:0, color:"#fff",
+          background:`linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 65%, #ffffff))` }}>{count}</span>
+        <span style={{ color:"var(--muted)", fontSize:11, flexShrink:0, transform: open ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>
       </button>
       {open && (
-        <div style={{ borderTop:"1px solid var(--border)", padding:10,
-          display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",
-          gap:10 }}>
+        <div style={{ padding:"2px 10px 12px", display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
           {children}
         </div>
       )}
@@ -1386,51 +1402,9 @@ const sectionColor = (name) =>
   name ? `hsl(${hueFromName(name)} 62% 56%)` : "#94a3b8";
 
 function AccessorySection({ sec, open, onToggle, children }) {
-  const color = sectionColor(sec.name);
-  const ref = React.useRef(null);
-  React.useEffect(() => {
-    if (open && ref.current) ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [open]);
-  return (
-    <div ref={ref} className="card" style={{ padding:0, overflow:"hidden",
-      scrollMarginTop:"calc(64px + var(--sat, env(safe-area-inset-top, 0px)))" }}>
-      <button onClick={onToggle}
-        style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
-          padding:"11px 14px", border:"none", background:"none", cursor:"pointer",
-          textAlign:"left" }}>
-        <span style={{ width:4, height:26, borderRadius:2, background:color,
-          flexShrink:0 }}/>
-        <span style={{ flex:1, minWidth:0 }}>
-          <span style={{ display:"block", fontSize:13.5, fontWeight:800,
-            color: sec.name ? "var(--text)" : "var(--muted)" }}>
-            {sec.name || "Sans regroupement"}
-          </span>
-          <span style={{ display:"block", fontSize:10.5, color:"var(--muted)",
-            marginTop:1, overflow:"hidden", textOverflow:"ellipsis",
-            whiteSpace:"nowrap" }}>
-            {sec.units} unité{sec.units>1?"s":""} · {fmtPrice(sec.value)}
-            {sec.out > 0 && (
-              <span style={{ color:"#ef4444", fontWeight:700 }}>
-                {" · "}{sec.out} en rupture
-              </span>
-            )}
-          </span>
-        </span>
-        <span style={{ fontSize:11, fontWeight:800, padding:"3px 9px", borderRadius:20,
-          background:color+"1f", color, flexShrink:0,
-          fontFamily:"'JetBrains Mono',ui-monospace,monospace" }}>{sec.count}</span>
-        <span style={{ color:"var(--muted)", fontSize:11, flexShrink:0 }}>
-          {open ? "▾" : "▸"}</span>
-      </button>
-      {open && (
-        <div style={{ borderTop:"1px solid var(--border)", padding:10,
-          display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",
-          gap:10 }}>
-          {children}
-        </div>
-      )}
-    </div>
-  );
+  return <FoldSection color={sectionColor(sec.name)} icon={sec.name ? "🔩" : "📦"} title={sec.name || "Sans regroupement"} muted={!sec.name}
+    count={sec.count} sub={`${sec.units} unité${sec.units>1?"s":""} · ${fmtPrice(sec.value)}`}
+    alert={sec.out > 0 ? `${sec.out} en rupture` : null} thumbs={sec.thumbs} open={open} onToggle={onToggle}>{children}</FoldSection>;
 }
 
 // Ajoute une SELECTION d'objets a un groupe (existant ou nouveau).
@@ -1526,46 +1500,36 @@ function ObjectCard({ obj, onClick, onLongPress, selectMode, selected, onToggleS
     if (selectMode) { onToggleSelect && onToggleSelect(obj.id); return; }
     onClick && onClick();
   });
+  const [imgOk, setImgOk] = useState(true);
+  const c = cfg.color;
+  // le prix qui compte pour cet etat : encaisse si vendu, vise sinon
+  const price = st === "sold" ? obj.sold_price : obj.desired_price;
+  const margin = st === "sold" && obj.sold_price > 0 ? obj.sold_price - (obj.cost_total || 0) : null;
+  const nAcc = (obj.accessories || []).length;
   return (
     <div className="card" onClick={handleClick} {...press}
       style={{ WebkitTouchCallout:"none", userSelect:"none", padding:0, overflow:"hidden", cursor:"pointer", position:"relative",
-        outline: selected ? "2px solid #3b82f6" : "none", outlineOffset:-2 }}>
-      {selectMode && (
-        <span style={{ position:"absolute", top:6, right:6, zIndex:3, width:22, height:22,
-          borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12,
-          border:"2px solid " + (selected ? "#3b82f6" : "rgba(255,255,255,0.7)"),
-          background: selected ? "#3b82f6" : "rgba(0,0,0,0.35)", color:"white", fontWeight:800 }}>
-          {selected ? "\u2713" : ""}
-        </span>
-      )}
-      <div style={{ position:"relative", height:130, background:"var(--surface2)",
-        display:"flex", alignItems:"center", justifyContent:"center" }}>
-        <img src={apiUrl(`/objects/objects/${obj.id}/image`)} alt=""
-          style={{ width:"100%", height:"100%", objectFit:"cover" }}
-          onError={e => e.currentTarget.style.display="none"}/>
-        <span style={{ position:"absolute", top:6, left:6,
-          background:cfg.color, color:"white", opacity:0.92,
-          fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20 }}>
-          {cfg.label}
-        </span>
-        {st === "sold" && obj.sold_price > 0 && (
-          <span style={{ position:"absolute", top:6, right:6,
-            background:"rgba(0,0,0,0.6)", color:"white",
-            fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:20,
-            fontFamily:"'JetBrains Mono',ui-monospace,monospace" }}>
-            {fmtPrice(obj.sold_price)}
-          </span>
-        )}
+        borderRadius:18, display:"flex", flexDirection:"column", border:`1px solid color-mix(in srgb, ${c} 30%, var(--border))`,
+        background:`linear-gradient(170deg, color-mix(in srgb, ${c} 9%, transparent), transparent 55%), var(--surface2)`,
+        boxShadow:`0 8px 22px -16px ${c}`, outline: selected ? "2px solid #3b82f6" : "none", outlineOffset:-2 }}>
+      {selectMode && <SelDot on={selected}/>}
+      <div style={{ position:"relative", aspectRatio:"1 / 0.85", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden",
+        background:`radial-gradient(75% 70% at 50% 45%, color-mix(in srgb, ${c} 20%, transparent), transparent 75%), var(--surface)` }}>
+        {imgOk ? <img src={apiUrl(`/objects/objects/${obj.id}/image`)} alt=""
+            style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={() => setImgOk(false)}/>
+          : <span style={{ fontSize:40, opacity:.55 }}>{cfg.icon}</span>}
+        <span style={{ ...pill, position:"absolute", top:7, left:7, color:"#fff",
+          background:`linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 65%, #ffffff))` }}>{cfg.label}</span>
+        {price > 0 && !selectMode && <span style={{ ...glassPill, position:"absolute", top:7, right:7,
+          fontFamily:"'JetBrains Mono',ui-monospace,monospace" }}>{fmtPrice(price)}</span>}
+        {nAcc > 0 && <span data-tip={`${nAcc} accessoire${nAcc > 1 ? "s" : ""}`} style={{ ...glassPill, position:"absolute", bottom:7, left:7 }}>🔩 {nAcc}</span>}
       </div>
-      <div style={{ padding:"8px 10px" }}>
-        <p style={{ fontWeight:700, fontSize:12, color:"var(--text)", margin:"0 0 3px",
-          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-          {obj.translated_name || obj.name}
-        </p>
-        <div style={{ display:"flex", gap:6, justifyContent:"space-between" }}>
-          <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtPrice(obj.cost_total)}</span>
-          {obj.desired_price > 0 && <span style={{ fontSize:10, color:"#22c55e", fontFamily:"monospace" }}>{fmtPrice(obj.desired_price)}</span>}
-        </div>
+      <div style={{ padding:"8px 10px 10px", display:"flex", flexDirection:"column", gap:3 }}>
+        <p style={cardName}>{obj.translated_name || obj.name}</p>
+        <span data-tip="Coût de revient : réel (au prix normal du filament)" style={{ fontSize:11, fontWeight:700, color:"var(--muted)",
+          whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Coût {costLine(obj)}</span>
+        {margin != null && !isMoneyHidden() && <span style={{ fontSize:11.5, fontWeight:900, ...fGrad(margin >= 0 ? "#16a34a" : "#ef4444", margin >= 0 ? "#4ade80" : "#f87171") }}>
+          {margin >= 0 ? "+" : ""}{fmtPrice(margin)} de marge</span>}
       </div>
     </div>
   );
@@ -1759,36 +1723,36 @@ function ObjectGroupSheet({ group, objects, allObjects, sectionStatus, onClose, 
 function ObjectGroupTile({ group, objects, sectionStatus, totalCount, onChanged }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);
-  const cover = objects[0];
   // Dans une section d'etat, la tuile ne montre QUE les objets concernes : le
   // compte affiche est donc celui de la section, pas celui du groupe entier.
   const cfg = sectionStatus ? OBJ_STATUS[sectionStatus] : null;
   const partial = totalCount != null && totalCount > objects.length;
+  const cost = objects.reduce((a, o) => a + (o.cost_total || 0), 0);
   return (<>
     <div className="card" onClick={() => setOpen(true)}
-      style={{ padding:0, overflow:"hidden", cursor:"pointer", position:"relative" }}>
-      <div style={{ position:"relative", height:130, background:"var(--surface2)",
-        display:"flex", alignItems:"center", justifyContent:"center" }}>
-        {cover && <img src={apiUrl(`/objects/objects/${cover.id}/image`)} alt=""
-          style={{ width:"100%", height:"100%", objectFit:"cover" }}
-          onError={e => e.currentTarget.style.display="none"}/>}
-        <div style={{ position:"absolute", inset:0, background:"rgba(167,139,250,0.12)" }}/>
-        <span style={{ position:"absolute", top:6, left:6, background:"rgba(167,139,250,0.85)",
-          color:"white", fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20 }}>
+      style={{ padding:0, overflow:"hidden", cursor:"pointer", position:"relative", borderRadius:18, display:"flex", flexDirection:"column",
+        border:"1px solid color-mix(in srgb, #A78BFA 35%, var(--border))",
+        background:"linear-gradient(170deg, rgba(167,139,250,0.14), transparent 55%), var(--surface2)", boxShadow:"0 8px 22px -14px rgba(124,58,237,.7)" }}>
+      <div style={{ position:"relative", aspectRatio:"1 / 0.85", overflow:"hidden", background:"var(--surface)" }}>
+        <div style={{ position:"absolute", inset:0 }}>
+          <GroupMosaic photos={objects.map(o => ({ url: apiUrl(`/objects/objects/${o.id}/image`), tint: "#A78BFA" }))} title={group.name}/>
+        </div>
+        <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, rgba(124,58,237,0.12), transparent 45%)", pointerEvents:"none" }}/>
+        <span style={{ ...pill, position:"absolute", top:7, left:7, color:"#fff", background:"linear-gradient(135deg, #8B5CF6, #A78BFA)" }}>
           {/* "3 / 7" quand le groupe deborde de la section : on voit d'un coup
               qu'il en existe d'autres ailleurs, sans avoir a l'ouvrir. */}
           📁 {objects.length}{partial ? ` / ${totalCount}` : ""}
         </span>
-        {cfg && <span style={{ position:"absolute", top:6, right:6,
-          background:cfg.color, opacity:0.92, color:"white",
-          fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:20 }}>
+        {group.desired_price > 0 && <span style={{ ...glassPill, position:"absolute", top:7, right:7,
+          fontFamily:"'JetBrains Mono',ui-monospace,monospace" }}>{fmtPrice(group.desired_price)}</span>}
+        {cfg && <span style={{ ...pill, position:"absolute", bottom:7, left:7, color:"#fff",
+          background:`linear-gradient(135deg, ${cfg.color}, color-mix(in srgb, ${cfg.color} 65%, #ffffff))` }}>
           {objects.length} {cfg.short}{cfg.plural && objects.length > 1 ? "s" : ""}
         </span>}
       </div>
-      <div style={{ padding:"8px 10px" }}>
-        <p style={{ fontWeight:700, fontSize:12, color:"#a78bfa", margin:"0 0 2px",
-          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{group.name}</p>
-        {group.desired_price > 0 && <p style={{ fontSize:10, color:"#22c55e", margin:0, fontFamily:"monospace" }}>{fmtPrice(group.desired_price)}</p>}
+      <div style={{ padding:"8px 10px 10px", display:"flex", flexDirection:"column", gap:3 }}>
+        <p style={{ ...cardName, ...fGrad("#8B5CF6", "#C084FC") }}>📁 {group.name}</p>
+        <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)" }}>Coût {fmtPrice(cost)}</span>
       </div>
     </div>
     {open && <ObjectGroupSheet group={group} objects={objects}
@@ -1800,6 +1764,7 @@ function ObjectGroupTile({ group, objects, sectionStatus, totalCount, onChanged 
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────
+const KPI_ICONS = { "à vendre":"🏷️", espéré:"🎯", encaissé:"💶", marge:"📈", articles:"🔩", unités:"📦", valeur:"💶", rupture:"⚠" };
 export default function Objects() {
   const [tab, setTab] = useUrlTab("tab", "objects", ["objects", "accessories"]);
   useTrackDetail(`Objets · ${tab === "accessories" ? "Accessoires" : "Objets"}`);
@@ -1917,8 +1882,16 @@ export default function Objects() {
       units: items.reduce((a, x) => a + (x.quantity || 0), 0),
       value: items.reduce((a, x) => a + (x.quantity || 0) * (x.unit_price || 0), 0),
       out: items.filter(x => (x.quantity || 0) === 0).length,
+      thumbs: items.filter(x => x.has_image).map(x => apiUrl(`/objects/accessories/${x.id}/image`)),
     }));
   }, [accessories]);
+  const accKpis = React.useMemo(() => [
+    { label:"articles", value:String(accessories.length), accent:"#14B8A6" },
+    { label:"unités", value:String(accessories.reduce((a, x) => a + (x.quantity || 0), 0)), accent:"#06B6D4" },
+    { label:"valeur", value: fmtPrice(accessories.reduce((a, x) => a + (x.quantity || 0) * (x.unit_price || 0), 0)), accent:"#22c55e" },
+    { label:"rupture", value:String(accessories.filter(x => !(x.quantity > 0)).length),
+      accent: accessories.some(x => !(x.quantity > 0)) ? "#ef4444" : "#94a3b8" },
+  ], [accessories]);
 
   const gridItems = [
     ...Object.entries(grouped).map(([gid, g]) => ({ kind:"group", group_id:Number(gid), group:g, objects:g.items })),
@@ -1951,8 +1924,18 @@ export default function Objects() {
     const cost = objs.reduce((a, o) => a + (o.cost_total || 0), 0);
     const revenue = objs.reduce((a, o) => a + (o.sold_price || 0), 0);
     const desired = objs.reduce((a, o) => a + (o.desired_price || 0), 0);
-    return { st, items, count: objs.length, cost, revenue, desired };
+    const thumbs = objs.map(o => apiUrl(`/objects/objects/${o.id}/image`));
+    return { st, items, count: objs.length, cost, revenue, desired, thumbs };
   }).filter(Boolean);
+  // les chiffres de l'onglet Objets : ce qui attend une vente, ce qu'on en espere, ce qu'on a encaisse et gagne
+  const objKpis = React.useMemo(() => {
+    const av = objects.filter(o => objStatus(o) === "available"), sold = objects.filter(o => objStatus(o) === "sold");
+    const rev = sold.reduce((a, o) => a + (o.sold_price || 0), 0), cost = sold.reduce((a, o) => a + (o.cost_total || 0), 0);
+    return [{ label:"à vendre", value:String(av.length), accent:"#3b82f6" },
+      { label:"espéré", value: fmtPrice(av.reduce((a, o) => a + (o.desired_price || 0), 0)), accent:"#8B5CF6" },
+      { label:"encaissé", value: fmtPrice(rev), accent:"#22c55e" },
+      { label:"marge", value: isMoneyHidden() ? MONEY_MASK : `${rev - cost >= 0 ? "+" : ""}${fmtPrice(rev - cost)}`, accent: rev - cost >= 0 ? "#16a34a" : "#ef4444" }];
+  }, [objects]);
 
   return (
     <div className="page-wide" style={{ "--page-max":"900px", gap:12 }}>
@@ -1960,57 +1943,26 @@ export default function Objects() {
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Objets & Accessoires</h1>
       </div>
 
-      {/* Onglets Objets / Accessoires — meme composant visuel que Filaments/Historique. */}
-      <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12,
-        padding:4, border:"1px solid var(--border)" }}>
-        {[["objects","Objets"],["accessories","Accessoires"]].map(([id,label]) => (
-          <button key={id} onClick={() => { setTab(id); setQ(""); }} style={{
-            flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
-            background: tab===id ? "#3b82f6" : "transparent",
-            color: tab===id ? "white" : "var(--muted)",
-            border:"none", transition:"all 0.15s",
-          }}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* Onglets Objets / Accessoires — chacun sa couleur, comme Filaments et Impressions. */}
+      <PageTabs tab={tab} setTab={id => { setTab(id); setQ(""); }}
+        tabs={[{ id:"objects", label:"Objets", ic:"🎁", c:"#8B5CF6" }, { id:"accessories", label:"Accessoires", ic:"🔩", c:"#14B8A6" }]}/>
 
-      <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-        <div style={{ position:"relative", flex:1, minWidth:160 }}>
-          <Search size={13} style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", color:"var(--muted)" }}/>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher…"
-            style={{ width:"100%", paddingLeft:32, padding:"7px 10px 7px 32px",
-              background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
-              fontSize:12, color:"var(--text)", outline:"none", boxSizing:"border-box" }}/>
-        </div>
-        {/* Tri des objets, a cote de la recherche comme sur la page Filaments.
-            Il s'applique DANS chaque section : l'ordre des etats reste celui
-            qu'on a voulu, seul le contenu de chacune se reordonne. */}
-        {tab === "objects" && (
-          <Select value={objSort} onChange={e => setObjSort(e.target.value)}
-            options={OBJ_SORTS.map(([v, l]) => ({ value: v, label: l }))}
-            style={{ flexShrink:0, minWidth:132, padding:"7px 10px", borderRadius:8,
-              border:"1px solid var(--border)", background:"var(--surface2)",
-              color:"var(--text)", fontSize:12, outline:"none" }}/>
-        )}
-        {/* A cote de la recherche et non dans la ligne de titre : c'est la
-            place qu'occupe le bouton d'ajout sur la page Filaments, et une
-            action de contenu se range avec les outils du contenu, pas avec
-            l'en-tete de la page. */}
-        {tab === "accessories" && (
-          <AdminOnly><button onClick={()=>setCreatingAcc(true)}
-            style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px",
-              background:"#3b82f6", color:"white", border:"none", borderRadius:8,
-              fontSize:13, cursor:"pointer", flexShrink:0 }}>
-            <Plus size={14}/> Accessoire
-          </button></AdminOnly>
-        )}
-      </div>
+      {/* Les chiffres de l'onglet, en tuiles */}
+      {tab === "objects" ? <KpiBar kpis={objKpis} icons={KPI_ICONS}/> : <KpiBar kpis={accKpis} icons={KPI_ICONS}/>}
+
+      {/* Recherche en pilule ; le tri des objets dans le bouton rond (il s'applique DANS chaque section : l'ordre
+          des etats reste celui qu'on a voulu). L'ajout d'un accessoire se range avec les outils du contenu. */}
+      <SearchRow q={q} setQ={setQ} placeholder={tab === "objects" ? "Rechercher un objet…" : "Rechercher un accessoire…"}
+        active={tab === "objects" && objSort !== "name" ? 1 : 0} filterTip="Trier"
+        onFilter={tab === "objects" ? (e => openMenu(e, { title:"Trier les objets", subtitle:"dans chaque section", color:"#8B5CF6",
+          items: OBJ_SORTS.map(([v, l]) => ({ icon: objSort === v ? "✓" : "↕", label: l, tone: objSort === v ? "#8B5CF6" : undefined,
+            onClick: () => setObjSort(v) })) })) : null}
+        addLabel={tab === "accessories" ? "Accessoire" : null} onAdd={() => setCreatingAcc(true)}/>
 
       {loading ? <p style={{ textAlign:"center", color:"var(--muted)", padding:40 }}>Chargement…</p>
       : tab === "objects" ? (
         gridItems.length === 0
-          ? <p style={{ textAlign:"center", color:"var(--muted)", padding:40 }}>Aucun objet</p>
+          ? <EmptyCard icon="🎁" text={q ? "Aucun objet ne correspond" : "Aucun objet : crée-en un depuis la fiche d'une impression"}/>
           : <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
               {sections.map(sec => (
                 /* Toutes fermees au depart : l'en-tete porte deja le compte et
@@ -2037,7 +1989,7 @@ export default function Objects() {
             </div>
       ) : (
         accessories.length === 0
-          ? <p style={{ textAlign:"center", color:"var(--muted)", padding:40 }}>Aucun accessoire</p>
+          ? <EmptyCard icon="🔩" text={q ? "Aucun accessoire ne correspond" : "Aucun accessoire : ajoute le premier avec « + Accessoire »"}/>
           : <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
               {accSections.map(sec => (
                 <AccessorySection key={sec.name || "_none"} sec={sec}
@@ -2082,8 +2034,8 @@ export default function Objects() {
                 border:"1px solid var(--border)", color:"var(--muted)", cursor:"pointer" }}>Annuler</button>
           </div>
           <button onClick={()=>setBulkGroup(true)}
-            style={{ width:"100%", padding:"10px", borderRadius:10, border:"none", background:"#3b82f6",
-              color:"white", fontSize:12.5, fontWeight:700, cursor:"pointer" }}>
+            style={{ width:"100%", padding:"11px", borderRadius:12, border:"none", background:"linear-gradient(135deg, #8B5CF6, #A78BFA)",
+              color:"white", fontSize:13, fontWeight:800, cursor:"pointer", boxShadow:"0 8px 18px -10px #8B5CF6" }}>
             Ajouter ces {objSelCount} objet{objSelCount>1?"s":""} à un groupe
           </button>
         </div>
@@ -2121,9 +2073,9 @@ export default function Objects() {
                 color:"var(--muted)", cursor:"pointer" }}>Annuler</button>
           </div>
           <button onClick={()=>setBulkCat(true)}
-            style={{ width:"100%", padding:"10px", borderRadius:10, border:"none",
-              background:"#3b82f6", color:"white", fontSize:12.5, fontWeight:700,
-              cursor:"pointer" }}>
+            style={{ width:"100%", padding:"11px", borderRadius:12, border:"none",
+              background:"linear-gradient(135deg, #14B8A6, #2DD4BF)", color:"white", fontSize:13, fontWeight:800,
+              cursor:"pointer", boxShadow:"0 8px 18px -10px #14B8A6" }}>
             Regrouper ces {selCount} accessoire{selCount>1?"s":""}
           </button>
         </div>

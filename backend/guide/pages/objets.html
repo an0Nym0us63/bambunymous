@@ -55,6 +55,7 @@
 
 <section id="objets-liste">
   <h2>La liste des objets</h2>
+  <p>En haut de la page, deux onglets en couleur : <span class="ui">🎁 Objets</span> (violet) et <span class="ui">🔩 Accessoires</span> (sarcelle). Sous les onglets, quatre tuiles de chiffres : <b>🏷️ À vendre</b> (le nombre d'objets en vente), <b>🎯 Espéré</b> (la somme de leurs prix désirés), <b>💶 Encaissé</b> (la somme des ventes) et <b>📈 Marge</b> (ce que les ventes ont rapporté, moins ce que les objets vendus ont coûté).</p>
   <p>L'onglet <span class="ui">Objets</span> range tes objets en sections repliables, toujours dans le même ordre : À vendre, Vendu, Offert, Perso, Indisponible. Une section vide n'est pas affichée.</p>
   <figure class="pair">
     <img src="img/objets-sections.webp" alt="Sections À vendre, Vendu, Offert, Perso fermées">
@@ -63,7 +64,7 @@
   </figure>
   <section id="objets-liste-sections">
     <h3>Les en-têtes de section</h3>
-    <p>Chaque en-tête montre un liseré de couleur, le nom de l'état, une pastille avec le nombre d'objets et une ligne de résumé « N objets · montant » :</p>
+    <p>Chaque section est une carte teintée de la couleur de son état. Son en-tête montre l'icône de l'état (🏷️ À vendre, ✅ Vendu, 🎁 Offert, 🏠 Perso, ⛔ Indisponible), son nom, une ligne de résumé « N objets · montant », un aperçu des premières photos quand la section est fermée, et une pastille avec le nombre d'objets :</p>
     <dl class="opts">
       <dt>Vendu</dt><dd>« X € encaissés » : la somme des prix de vente.</dd>
       <dt>À vendre</dt><dd>« X € espérés » : la somme des prix désirés (ou « X € de production » si aucun prix désiré n'est saisi).</dd>
@@ -73,7 +74,7 @@
   </section>
   <section id="objets-liste-tuiles">
     <h3>Les tuiles</h3>
-    <p>Une tuile montre la photo de l'objet, son badge d'état en haut à gauche, son nom, son coût total à gauche et son prix désiré en vert à droite (s'il y en a un). Pour un objet vendu, le prix de vente s'affiche en haut à droite sur la photo.</p>
+    <p>Une tuile montre la photo de l'objet (sur un fond teinté de la couleur de son état ; sans photo, l'icône de l'état), son badge d'état en haut à gauche et, en haut à droite, son prix : le prix de vente pour un objet vendu, sinon le prix désiré. En bas à gauche de la photo, <span class="ui">🔩 N</span> indique combien d'accessoires lui sont montés. Sous la photo : son nom, puis « Coût X € (Y €) », le coût réel et, entre parenthèses, ce qu'il aurait coûté au prix normal du filament (seulement s'il diffère). Un objet vendu ajoute sa marge en vert (« +X € de marge »), ou en rouge s'il a été vendu à perte.</p>
     <figure class="phone"><img src="img/objets-section-vendu.webp" alt="Section Vendu avec prix de vente sur les tuiles et une tuile de groupe"><figcaption>Section « Vendu » : prix de vente en haut à droite ; la tuile violette « 📁 1 / 3 » est un groupe dont un objet sur trois est vendu.</figcaption></figure>
     <p>Les tuiles <b>violettes</b> marquées <span class="ui">📁</span> sont des <a href="#objets-groupes">groupes d'objets</a>.</p>
     <p>Toucher une tuile ouvre la <a href="#objets-fiche">fiche de l'objet</a>. Un <b>appui long</b> (téléphone) ou un <b>clic droit</b> (ordinateur) ouvre un petit menu : <span class="ui">📄 Ouvrir</span> et <span class="ui">☑ Sélectionner</span> (« Pour ajouter plusieurs objets à un groupe »).</p>
@@ -84,14 +85,14 @@
   </section>
   <section id="objets-liste-recherche">
     <h3>Rechercher et trier</h3>
-    <p>Le champ <span class="ui">Rechercher…</span> filtre les objets par leur nom d'origine (celui donné à la création). Le menu à côté trie les objets <b>à l'intérieur de chaque section</b> :</p>
+    <p>Le champ <span class="ui">Rechercher un objet…</span> filtre les objets par leur nom d'origine (celui donné à la création) ; ✕ l'efface. Le bouton rond à côté (<span class="ui">Trier</span>) ouvre un menu qui trie les objets <b>à l'intérieur de chaque section</b> ; une pastille « 1 » sur le bouton rappelle qu'un autre tri que le nom est actif :</p>
     <dl class="opts">
       <dt>Nom (A→Z)</dt><dd>Par défaut. Ordre alphabétique (« Pièce 2 » avant « Pièce 10 »).</dd>
       <dt>Plus récents</dt><dd>Les derniers créés d'abord.</dd>
       <dt>Coût décroissant</dt><dd>Les plus coûteux à fabriquer d'abord.</dd>
       <dt>Valeur décroissante</dt><dd>Selon le prix de vente, sinon le prix désiré.</dd>
     </dl>
-    <p>Les états vides : « Chargement… » pendant la lecture, « Aucun objet » s'il n'y a rien (ou rien qui corresponde à la recherche).</p>
+    <p>Les états vides : « Chargement… » pendant la lecture, « Aucun objet : crée-en un depuis la fiche d'une impression » s'il n'y a rien, « Aucun objet ne correspond » si la recherche ne trouve rien.</p>
   </section>
 </section>
 
@@ -173,7 +174,7 @@
   <p>Un groupe d'objets réunit des objets qui vont ensemble : un lot de porte-clés, un jeu d'échecs, une série vendue en marché. On le crée soit à la création (mode <span class="ui">Regroupés</span>), soit après coup par sélection.</p>
   <section id="objets-groupes-tuile">
     <h3>La tuile de groupe</h3>
-    <p>Un groupe s'affiche comme une tuile violette : photo du premier objet, badge <span class="ui">📁 N</span> (nombre d'objets), badge coloré de l'état (« 2 à vendre », « 1 vendu »…), nom du groupe en violet et prix désiré en vert.</p>
+    <p>Un groupe s'affiche comme une tuile violette : une mosaïque des photos de ses objets (jusqu'à quatre), le badge <span class="ui">📁 N</span> (nombre d'objets) en haut à gauche, le prix désiré du groupe en haut à droite, le badge coloré de l'état (« 2 à vendre », « 1 vendu »…) en bas, puis le nom du groupe en violet et son coût.</p>
     <p>Un groupe apparaît dans <b>chaque section</b> où il a des objets, avec seulement ceux de cet état. Le badge passe alors à « 📁 2 / 3 » : 2 objets ici, 3 dans le groupe entier.</p>
   </section>
   <section id="objets-groupes-fiche">
@@ -221,9 +222,10 @@
   <section id="objets-accessoires-liste">
     <h3>Regroupements et tuiles</h3>
     <p>Les accessoires sont rangés en sections par <b>regroupement</b> (une catégorie libre que tu choisis), par ordre alphabétique ; ceux qui n'en ont pas sont en dernier sous « Sans regroupement ». Comme pour les objets, toutes les sections sont fermées au départ et s'ouvrent en accordéon.</p>
-    <p>L'en-tête indique « N unités · X € » (valeur du stock) et, en rouge, « · K en rupture » si des accessoires sont à zéro. La tuile montre la photo (ou une icône de paquet), le nom, « Stock : N » (vert, ou rouge à zéro) et le prix « X €/u ». Un accessoire en rupture a toute sa tuile teintée de rouge.</p>
+    <p>En haut de l'onglet, quatre tuiles : <b>🔩 Articles</b> (le nombre d'accessoires), <b>📦 Unités</b> (tout le stock), <b>💶 Valeur</b> (ce que vaut le stock) et <b>⚠ Rupture</b> (combien sont à zéro, en rouge s'il y en a).</p>
+    <p>Chaque regroupement est une carte de sa couleur (toujours la même pour un même nom). L'en-tête indique « N unités · X € » (valeur du stock) et, en rouge, « · K en rupture » si des accessoires sont à zéro. La tuile montre la photo (ou une icône de paquet), une pastille de stock en haut à gauche (« N en stock » en vert, en orange sous 5, « Rupture » en rouge), le nom, le prix « X € / u » et la valeur de ce qui reste. Un accessoire en rupture a toute sa tuile teintée de rouge.</p>
     <p>Pour changer le regroupement de plusieurs accessoires : appui long (ou clic droit) sur une tuile, <span class="ui">☑ Sélectionner</span>, touche les autres, puis <span class="ui">Regrouper ces N accessoires</span>. Choisis un regroupement existant, crée-en un, ou touche <span class="ui">Retirer de tout regroupement</span>, puis <span class="ui">Appliquer</span>.</p>
-    <p>Le champ <span class="ui">Rechercher…</span> filtre par nom. Liste vide : « Aucun accessoire ».</p>
+    <p>Le champ <span class="ui">Rechercher un accessoire…</span> filtre par nom. Liste vide : « Aucun accessoire : ajoute le premier avec « + Accessoire » », ou « Aucun accessoire ne correspond » pour une recherche.</p>
   </section>
   <section id="objets-accessoires-nouveau">
     <h3>Ajouter un accessoire <span class="admin">admin</span></h3>
