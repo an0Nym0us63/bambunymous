@@ -523,8 +523,26 @@ def _plate_detail(d) -> list:
                     "seconds": i.get("prediction") if isinstance(i.get("prediction"), (int, float)) else None,
                     "settings": {k: ps.get(k) for k in ("layerHeight", "wallLoops", "sparseInfillDensity") if ps.get(k) is not None},
                     "print_count": i.get("printCount") if isinstance(i.get("printCount"), int) else None,
+                    "cover": _inst_pics(i)[0] if _inst_pics(i) else None, "pictures": _inst_pics(i),
                     "filaments": pfils, "plates": plates})
     return out
+
+
+def _inst_pics(i) -> list:
+    """Les illustrations propres a un profil (25/10/2026) : sa couverture puis ses images, sans doublon.
+    MakerWorld les range selon les versions sous « pictures » ou « instancePictures » (objets {url})
+    ou dans son extension."""
+    urls = []
+    def add(x):
+        u = x.get("url") if isinstance(x, dict) else x
+        if isinstance(u, str) and u.startswith("http") and u not in urls:
+            urls.append(u)
+    add(i.get("cover"))
+    ext = i.get("extention") if isinstance(i.get("extention"), dict) else {}
+    for src in (i.get("pictures"), i.get("instancePictures"), ext.get("pictures"), ext.get("instancePictures")):
+        for x in (src if isinstance(src, list) else []):
+            add(x)
+    return urls[:20]
 
 
 def _pnorm(s) -> str:
@@ -652,7 +670,8 @@ async def _fetch_base(did: str) -> dict:
 # Une fiche gardee avant l'ajout d'un champ (ici creator_uid, pour la page du
 # createur) est relue : sinon le champ manquerait jusqu'a l'expiration du cache.
 def _current(base) -> bool:
-    return isinstance(base, dict) and "creator_uid" in base
+    # les illustrations des profils (25/10/2026) : une fiche gardee d'avant se relit
+    return isinstance(base, dict) and "creator_uid" in base and all(isinstance(p, dict) and "pictures" in p for p in base.get("profiles") or [])
 
 
 async def _base(did: str, stale_ok: bool = False) -> dict:

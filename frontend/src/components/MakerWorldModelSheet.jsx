@@ -375,7 +375,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                 </div>);
             })()}
 
-            {zoom && <Lightbox images={zoom.images} index={zoom.index} title={m.title_fr || m.title} onClose={() => setZoom(null)}/>}
+            {zoom && <Lightbox images={zoom.images} index={zoom.index} title={zoom.title || m.title_fr || m.title} onClose={() => setZoom(null)}/>}
             {sharing && <span onClick={e => e.stopPropagation()}><ShareSheet kind="design" id={id} z={4400} onClose={() => setSharing(false)}/></span>}
             {pick && <MakerWorldCollectionsPicker designId={id} title={m.title} item={tile()} onClose={() => setPick(false)}/>}
 
@@ -426,7 +426,11 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                         : isOpen ? "linear-gradient(160deg, rgba(6,182,212,0.10), transparent 45%), var(--surface2)" : "var(--surface2)" }}>
                       <button onClick={() => setOpen(isOpen ? null : p.instance_id)}
                         style={{ width:"100%", textAlign:"left", padding:"11px 12px", background:"none", border:"none",
-                          cursor:"pointer", color:"var(--text)" }}>
+                          cursor:"pointer", color:"var(--text)", display:"flex", gap:10, alignItems:"flex-start" }}>
+                        {/* l'image du profil en vignette (ses illustrations : depliees, en bande) */}
+                        {p.cover && <MwImg src={p.cover} w={120} style={{ width:52, height:52, borderRadius:12, objectFit:"cover", flexShrink:0,
+                          background:"var(--surface)", border:"1px solid var(--border)" }}/>}
+                        <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                           <span style={{ flex:1, fontSize:13.5, fontWeight:800 }} data-tip={p.title_original || undefined}>
                             {p.title || "Profil"}{p.default ? " ★" : ""}</span>
@@ -454,7 +458,10 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                         {!isOpen && stockSummary(m.stock?.[p.instance_id]) && (
                           <div style={{ fontSize:11, color:"var(--text2)", marginTop:2 }}>{stockSummary(m.stock[p.instance_id])}</div>
                         )}
+                        </div>
                       </button>
+                      {isOpen && p.pictures?.length > 1 && <div style={{ padding:"0 10px 8px" }}>
+                        <PicStrip small pictures={p.pictures} onOpen={i => setZoom({ images: p.pictures, index: i, title: p.title })}/></div>}
                       {isOpen && p.summary && <ProfileSummary p={p}/>}
                       {/* Imprimer CE profil : Handy (telephone, page open-app de MakerWorld)
                           ou Bambu Studio (ordinateur, lien du 3MF de ce profil). */}
@@ -763,7 +770,8 @@ const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platfor
 // a la souris, on la tire (sans declencher l'agrandissement), et deux fleches avancent d'une image.
 // Avant : des liens <a> que la souris « attrapait » (glisser-deposer du lien au lieu de defiler),
 // et un calage strict qui ramenait la bande en arriere au pave tactile : elle semblait bloquee.
-function PicStrip({ pictures, onOpen }) {
+// small : la bande d'un profil (vignettes de 110 px, sans le halo ni la marge du haut de la fiche)
+function PicStrip({ pictures, onOpen, small = false }) {
   const ref = useRef(null);
   const drag = useRef(null);
   const [edge, setEdge] = useState({ l: false, r: pictures.length > 1 });
@@ -785,22 +793,22 @@ function PicStrip({ pictures, onOpen }) {
     if (d?.moved) { ref.current.dataset.dragged = "1"; setTimeout(() => { if (ref.current) delete ref.current.dataset.dragged; }, 0); } };
   const arrow = (d, show) => fine && pictures.length > 1 && show && <button type="button" aria-label={d < 0 ? "Image précédente" : "Image suivante"}
     onClick={e => { e.stopPropagation(); step(d); }}
-    style={{ position:"absolute", top:"calc(50% + 24px)", [d < 0 ? "left" : "right"]:8, transform:"translateY(-50%)", width:34, height:34, borderRadius:"50%",
+    style={{ position:"absolute", top: small ? "50%" : "calc(50% + 24px)", [d < 0 ? "left" : "right"]:8, transform:"translateY(-50%)", width:34, height:34, borderRadius:"50%",
       border:"1px solid rgba(255,255,255,.35)", background:"rgba(15,23,42,0.55)", backdropFilter:"blur(6px)", color:"#fff", fontSize:18, fontWeight:900,
       cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2 }}>{d < 0 ? "‹" : "›"}</button>;
   return (
     <div style={{ position:"relative", margin:"0 -16px 14px" }}>
       <div ref={ref} onScroll={look} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerLeave={up}
         style={{ display:"flex", gap:8, overflowX:"auto", scrollSnapType: fine ? "x proximity" : "x mandatory", overscrollBehaviorX:"contain",
-          padding:"52px 16px 4px", touchAction:"pan-x pan-y", cursor: fine && pictures.length > 1 ? "grab" : undefined,
-          background:"radial-gradient(70% 60% at 50% 0%, rgba(6,182,212,0.18), transparent 70%)" }}>
+          padding: small ? "2px 0 4px" : "52px 16px 4px", touchAction:"pan-x pan-y", cursor: fine && pictures.length > 1 ? "grab" : undefined,
+          background: small ? "none" : "radial-gradient(70% 60% at 50% 0%, rgba(6,182,212,0.18), transparent 70%)" }}>
         {pictures.map((u, i) => (
           <div key={i} role="button" tabIndex={0} draggable={false}
             onClick={() => { if (!ref.current?.dataset.dragged) onOpen(i); }}
             onKeyDown={e => { if (e.key === "Enter") onOpen(i); }}
-            style={{ position:"relative", flexShrink:0, width:"78%", maxWidth:360, scrollSnapAlign:"center", cursor:"zoom-in" }}>
-            <MwImg src={u} w={360} eager={i < 2} animate draggable={false}
-              style={{ width:"100%", aspectRatio:"1", objectFit:"cover", borderRadius:18, display:"block", userSelect:"none",
+            style={{ position:"relative", flexShrink:0, width: small ? 110 : "78%", maxWidth:360, scrollSnapAlign: small ? "start" : "center", cursor:"zoom-in" }}>
+            <MwImg src={u} w={small ? 240 : 360} eager={i < 2} animate draggable={false}
+              style={{ width:"100%", aspectRatio:"1", objectFit:"cover", borderRadius: small ? 12 : 18, display:"block", userSelect:"none",
                 background:"var(--surface2)", boxShadow:"0 12px 28px -14px rgba(0,0,0,.6)" }}/>
             {pictures.length > 1 && <span style={{ position:"absolute", right:8, bottom:8, padding:"2px 8px", borderRadius:20, fontSize:10.5,
               fontWeight:800, color:"#fff", background:"rgba(15,23,42,0.6)", backdropFilter:"blur(6px)" }}>{i + 1} / {pictures.length}</span>}
