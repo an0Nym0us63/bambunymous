@@ -10,6 +10,7 @@ Seuls comptent les filaments ayant une bobine active non vide.
 """
 import math
 import re
+from functools import lru_cache
 
 LEVELS = [(2.5, "identique"), (6, "très proche"), (12, "proche"), (20, "approchant")]
 
@@ -34,13 +35,23 @@ def _lab(rgb):
     return 116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)
 
 
+@lru_cache(maxsize=4096)
+def _lab_of(h):
+    """La couleur hexa en Lab (None si illisible), calculee une fois par couleur."""
+    rgb = _rgb(h)
+    return _lab(rgb) if rgb else None
+
+
+# Les memes couleurs reviennent sans cesse (le stock face a chaque profil) : chaque ecart n'est calcule
+# qu'une fois (27/10/2026 ; 160 ms d'un bloc avant, pour la page « À imprimer »).
+@lru_cache(maxsize=65536)
 def delta_e(h1, h2):
     """CIEDE2000 entre deux couleurs hexa (None si l'une est illisible)."""
-    a, b = _rgb(h1), _rgb(h2)
-    if not a or not b:
+    la, lb = _lab_of(h1), _lab_of(h2)
+    if not la or not lb:
         return None
-    L1, a1, b1 = _lab(a)
-    L2, a2, b2 = _lab(b)
+    L1, a1, b1 = la
+    L2, a2, b2 = lb
     C1, C2 = math.hypot(a1, b1), math.hypot(a2, b2)
     Cm = (C1 + C2) / 2
     G = 0.5 * (1 - math.sqrt(Cm ** 7 / (Cm ** 7 + 25 ** 7)))

@@ -215,23 +215,45 @@ async def _match(items: list[dict]) -> None:
                                  .where(Print.print_date >= lo, Print.print_date <= hi))).all()
     if not rows:
         return
+    _pair(items, rows)
+
+
+def _pair(items: list[dict], rows: list) -> None:
+    """Le rapprochement, par recherche dans des listes triees (27/10/2026) : chaque timelapse parcourait toutes
+    les impressions de la periode, deux fois (pres d'un million de calculs de dates, 0,9 s d'un bloc qui figeait
+    le serveur). Meme resultat, a l'egalite pres : la premiere impression lue gagne, comme avant."""
+    from bisect import bisect_left, bisect_right
+    ends = sorted(((r.print_date + _td(seconds=(r.duration_seconds or r.estimated_seconds or 0)), i, r)
+                   for i, r in enumerate(rows) if r.print_date and (r.duration_seconds or r.estimated_seconds)),
+                  key=lambda x: (x[0], x[1]))
+    end_keys = [e[0] for e in ends]
+    win = _td(seconds=20 * 60)
     votes: dict = {}
     for it in items:
         end = it.get("end")
         if not end or not it.get("start"):
             continue
-        for r in rows:
-            dur = r.duration_seconds or r.estimated_seconds or 0
-            if r.print_date and dur and abs(((r.print_date + _td(seconds=dur)) - end).total_seconds()) <= 20 * 60:
-                off = round((it["start"] - r.print_date).total_seconds() / 900) * 900
-                votes[off] = votes.get(off, 0) + 1
+        for _e, _i, r in ends[bisect_left(end_keys, end - win):bisect_right(end_keys, end + win)]:
+            off = round((it["start"] - r.print_date).total_seconds() / 900) * 900
+            votes[off] = votes.get(off, 0) + 1
     off = max(votes.items(), key=lambda kv: kv[1])[0] if votes and max(votes.values()) >= 2 else 0
+    starts = sorted(((r.print_date, i, r) for i, r in enumerate(rows) if r.print_date), key=lambda x: (x[0], x[1]))
+    start_keys = [x[0] for x in starts]
     for it in items:
         if not it.get("start"):
             continue
         t = it["start"] - _td(seconds=off)
         it["at"] = t                              # le depart en temps universel (l'heure du nom, recalee)
-        best = min(rows, key=lambda r: abs((r.print_date - t).total_seconds()) if r.print_date else 1e12)
+        if not starts:
+            continue
+        # la plus proche : de part et d'autre de t ; a ecart egal, celle lue en premier (comme le min d'avant)
+        k = bisect_left(start_keys, t)
+        near = [starts[j] for j in (k - 1, k) if 0 <= j < len(starts)]
+        lo_d = min(abs((x[0] - t).total_seconds()) for x in near)
+        # toutes les impressions a cet ecart (memes dates comprises) : la premiere lue
+        cand = [x for x in starts[bisect_left(start_keys, t - _td(seconds=lo_d)):bisect_right(start_keys, t + _td(seconds=lo_d))]
+                if abs((x[0] - t).total_seconds()) == lo_d]
+        best = min(cand, key=lambda x: x[1])[2]
         if best.print_date and abs((best.print_date - t).total_seconds()) <= 8 * 60:
             it["print"] = {"id": best.id, "name": best.translated_name or best.file_name or f"Impression #{best.id}",
                            "status": best.status,
