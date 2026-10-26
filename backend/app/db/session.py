@@ -15,7 +15,8 @@ engine = create_async_engine(
         "check_same_thread": False,
         "timeout": 30,           # attendre 30s si DB locked
     },
-    pool_pre_ping=True,
+    # pas de « SELECT 1 » avant chaque emprunt de connexion : un fichier local ne se coupe pas comme un serveur
+    pool_pre_ping=False,
     # Un vrai pool (26/10/2026) : pour un fichier SQLite, SQLAlchemy 2.0 n'en met aucun (NullPool), et chaque requete
     # rouvrait la base, rejouait ses PRAGMA et repartait d'un cache vide. Les connexions sont desormais gardees
     # (cache chaud) ; une page lance une quinzaine d'appels a la fois, assez pour qu'aucun n'attende la sienne.
