@@ -130,9 +130,9 @@ function useHomeReady(slug, onHome) {
   return ready === slug;
 }
 
-// La surprise (farce ou fete) a declarer « vue » au serveur : seulement une fois REELLEMENT affichee (26/10/2026).
-// Declaree au lancement, une farce interrompue (on quitte l'accueil avant qu'elle ne parte) remettait le compteur
-// a 0 sans rien montrer ; non declaree, le tirage gagnant reste en attente et revient a l'ouverture suivante.
+// La surprise (farce ou fete) a declarer « vue » au serveur : seulement une fois ALLEE JUSQU'AU BOUT (26/10/2026).
+// Declaree au lancement, une farce interrompue (on quitte l'accueil avant ou pendant) remettait le compteur a 0 ;
+// non declaree, le tirage gagnant reste en attente et revient a l'ouverture suivante, jusqu'a ce qu'elle soit finie.
 let toAck = null;      // { slug, body }
 
 /** Monte la farce en cours par-dessus l'accueil (dans la mise en page). */
@@ -197,25 +197,24 @@ export function PrankHost() {
   useEffect(() => { doneRef.current = false; }, [slug]);
   // celle de la maison ne se laisse pas semer : quitter l'accueil ne l'arrete pas
   const ready = useHomeReady(slug, pathname === "/" || slug === MAISON.slug);
-  const showing = !!slug && (pathname === "/" || slug === MAISON.slug) && ready;
-  useEffect(() => {
-    if (showing && toAck && toAck.slug === slug) {
-      const b = toAck.body;
-      toAck = null;
-      client.post("/achievements/surprise/shown", b).catch(() => {});
-    }
-    if (!slug) toAck = null;                 // arretee avant d'avoir ete vue : rien n'est declare
-  }, [showing, slug]);
+  useEffect(() => { if (!slug) toAck = null; }, [slug]);   // arretee avant la fin : rien n'est declare
   if (!slug || (pathname !== "/" && slug !== MAISON.slug) || !ready) return null;
   const Effect = effectOf(slug);
   const done = () => {
     if (doneRef.current) return;
     doneRef.current = true;
+    // le secret : APRES la declaration ci-dessous (c'est elle qui le rend gagnable cote serveur)
+    const claim = () => egg(slug === MAISON.slug ? MAISON.egg : "p_" + slug.replace(/-/g, "_"), true);
+    // finie : maintenant seulement, le compteur repart a 0 (et le secret de la farce devient gagnable)
+    if (toAck && toAck.slug === slug) {
+      const b = toAck.body;
+      toAck = null;
+      client.post("/achievements/surprise/shown", b).catch(() => {}).finally(claim);
+    } else claim();
     if (slug === MAISON.slug) {
       try { localStorage.setItem(MAISON.seenKey, "1"); } catch { /* rien */ }
       client.post(`/achievements/prank/${MAISON.slug}/vu`).catch(() => {});
     }
-    egg(slug === MAISON.slug ? MAISON.egg : "p_" + slug.replace(/-/g, "_"), true);
     setTimeout(() => { if (usePrank.getState().slug === slug) stop(); }, 1500);
   };
   return <Suspense fallback={null}><Effect key={slug} done={done}/></Suspense>;
