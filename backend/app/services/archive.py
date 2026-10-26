@@ -1,9 +1,11 @@
 """La sauvegarde vers un dossier monte (NAS) et le vidage du local (26/10/2026).
 
-Le conteneur monte un dossier du NAS sur /nas (compose.yaml). La sauvegarde y range, en nommage
-humain, une arborescence par modele puis par impression :
+Le conteneur monte un dossier du NAS sur /nas (compose.yaml). La sauvegarde y range deux dossiers :
+« Impressions » (une arborescence humaine par modele puis par impression, dans son groupe s'il y en a un)
+et « Système » (copies de la base, et le reste des donnees : photos des filaments, objets, accessoires,
+bibliotheque des 3MF MakerWorld, catalogue Bambu).
 
-    Balancing bird/
+    Impressions/Balancing bird/
         2026-10-25 18h30/
             Fiche.txt              (date, duree, poids, filaments, lien MakerWorld)
             Plateau.png
@@ -12,8 +14,10 @@ humain, une arborescence par modele puis par impression :
             Vidéos/     Vidéo 01.mp4…
             Timelapse/  Timelapse.mp4
             Couches/    Couche 1.jpg, Couche 2.jpg, 50 %.jpg, 99 %.jpg, Fin.jpg, Échec.jpg
-    _Groupes/<nom du groupe>/…     (photos des groupes)
-    _Base/bambunymous-2026-10-26 03h00.db   (les 14 dernieres)
+    Impressions/Groupe - <nom>/Photos du groupe/, puis ses impressions (modele / date)
+    Impressions/_Supprimés/…       (ce qui a disparu de l'appli, jamais efface)
+    Système/Base de données/bambunymous-2026-10-26 03h00.db   (les 14 dernieres)
+    Système/Photos des filaments/, Objets/, Accessoires/, 3MF MakerWorld/, Catalogue Bambu/
 
 Seul ce qui est nouveau ou a change de taille est copie. Un index (/data/cache/archive_index.json) garde,
 pour chaque fichier du dossier de donnees, sa copie sur le NAS : le vidage du local (videos, timelapses,
@@ -39,6 +43,13 @@ DEFAULT_ROOT = os.getenv("NAS_DIR", "/nas")
 DB_KEEP = 14
 _STATE = {"running": None, "progress": None}           # « backup » / « purge » en cours, et ou il en est
 _INDEX = {"v": None}
+
+PR = "Impressions"                          # les impressions, en nommage humain
+SYS = "Système"                             # la base et le reste des donnees
+SUBS = {"Couches", "Photos", "Vidéos", "Timelapse", "3MF"}
+# le reste des donnees, recopie tel quel dans « Système »
+SYSTEM_DIRS = [("filaments", "Photos des filaments"), ("objects", "Objets"), ("accessories", "Accessoires"),
+               ("mw_3mf", "3MF MakerWorld"), ("bambu_catalog", "Catalogue Bambu")]
 
 LAYERS = {"layer1": "Couche 1", "layer2": "Couche 2", "pct50": "50 %", "pct99": "99 %", "pct100": "Fin", "fail": "Échec"}
 
@@ -329,6 +340,57 @@ def _retarget(idx: dict, old: str, new: str) -> None:
             e["to"] = new.rstrip("/") + "/" + e["to"][len(pre):]
 
 
+def _dir_of(to: str) -> str:
+    """Le dossier d'une impression (ou d'un groupe) d'apres le chemin d'un de ses fichiers."""
+    parts = to.split("/")
+    return "/".join(parts[:-2] if len(parts) > 2 and parts[-2] in SUBS else parts[:-1])
+
+
+def _migrate_layout(root: Path, idx: dict, rep: dict) -> None:
+    """Les sauvegardes d'avant (tout a la racine) : rangees sous « Impressions », la base sous « Système »."""
+    if idx.get("@layout") == 2:
+        return
+    for e in list(root.iterdir()) if root.is_dir() else []:
+        if e.name in (PR, SYS, MARK) or e.name.startswith("."):
+            continue
+        target = f"{SYS}/Base de données" if e.name == "_Base" else f"{PR}/{e.name}"
+        try:
+            _move(root, e.name, target)
+            rep["moved"] += 1
+        except OSError as ex:
+            rep["errors"] += 1
+            logger.warning(f"[ARCHIVE] rangement de {e.name} : {ex}")
+    for k, e in idx.items():
+        if isinstance(e, dict) and isinstance(e.get("to"), str) and not e["to"].startswith((PR + "/", SYS + "/")):
+            e["to"] = f"{PR}/{e['to']}"
+    dirs = idx.get("@dirs") or {}
+    for k, v in list(dirs.items()):
+        if isinstance(v, str) and not v.startswith(PR + "/"):
+            dirs[k] = f"{PR}/{v}"
+    idx["@layout"] = 2
+
+
+def _system_sync(root: Path, rep: dict) -> None:
+    """Le reste des donnees, recopie tel quel (seul le nouveau ou le change) dans « Système »."""
+    for src_name, label in SYSTEM_DIRS:
+        src = DATA_DIR / src_name
+        if not src.is_dir():
+            continue
+        for dirpath, _dirs, files in os.walk(src):
+            rel = Path(dirpath).relative_to(src)
+            for f in files:
+                if f.endswith((".part", ".tmp")):
+                    continue
+                try:
+                    if _copy(Path(dirpath) / f, root / SYS / label / rel / f):
+                        rep["copied"] += 1
+                        rep["bytes"] += (Path(dirpath) / f).stat().st_size
+                    else:
+                        rep["skipped"] += 1
+                except OSError:
+                    rep["errors"] += 1
+
+
 def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> dict:
     """La sauvegarde, en delta : copie le nouveau, et DEPLACE sur le NAS ce dont la place a change (impression
     entree ou sortie d'un groupe, groupe renomme, nom traduit…), fichiers deja vides du local compris.
@@ -337,6 +399,7 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
     idx = _index()
     dirs = idx.setdefault("@dirs", {})           # « print:12 » / « group:3 » -> son dossier sur le NAS
     rep = {"copied": 0, "skipped": 0, "moved": 0, "bytes": 0, "errors": 0, "prints": 0}
+    _migrate_layout(root, idx, rep)
     gby = {g.id: g for g in groups}
     taken: dict = {}
 
@@ -347,7 +410,7 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
         when = _local(p.print_date) if p.print_date else datetime(1970, 1, 1)
         stamp = when.strftime("%Y-%m-%d %Hh%M") + (" (échouée)" if p.status == "FAILED" else "")
         g = gby.get(p.group_id) if p.group_id else None
-        rel_dir = f"{_group_dir(g)}/{model}/{stamp}" if g else f"{model}/{stamp}"
+        rel_dir = f"{PR}/{_group_dir(g)}/{model}/{stamp}" if g else f"{PR}/{model}/{stamp}"
         if taken.get(rel_dir, p.id) != p.id:
             rel_dir += f" #{p.id}"
         taken[rel_dir] = p.id
@@ -360,7 +423,7 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
         if not old:
             # sauvegarde d'avant les groupes : son dossier se deduit de ses fichiers indexes (modele/date)
             olds = [e["to"] for k, e in idx.items() if k.startswith(f"prints/{p.id}/") and isinstance(e, dict) and e.get("to")]
-            old = "/".join(olds[0].split("/")[:2]) if olds else None
+            old = _dir_of(olds[0]) if olds else None
         if old and old != rel_dir and (root / old).exists():
             try:
                 if _move(root, old, rel_dir):
@@ -435,11 +498,11 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
 
     # 3) les photos des groupes, dans leur dossier de groupe (deplacees si le groupe est renomme)
     for g in groups:
-        gdir = f"{_group_dir(g)}/Photos du groupe"
+        gdir = f"{PR}/{_group_dir(g)}/Photos du groupe"
         old = dirs.get(f"group:{g.id}")
         if not old:                                      # d'avant : « _Groupes/<nom> »
             olds = [e["to"] for k, e in idx.items() if k.startswith(f"groups/{g.id}/") and isinstance(e, dict) and e.get("to")]
-            old = "/".join(olds[0].split("/")[:2]) if olds else None
+            old = _dir_of(olds[0]) if olds else None
         if old and old != gdir and (root / old).exists():
             try:
                 _move(root, old, gdir)
@@ -471,9 +534,9 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
         gone = (kind == "print" and n.isdigit() and int(n) not in all_ids) or (kind == "group" and n.isdigit() and int(n) not in live_groups)
         if not gone:
             continue
-        if old.startswith("_Supprimés/"):
+        if old.startswith(f"{PR}/_Supprimés/"):
             continue
-        new = f"_Supprimés/{old}"
+        new = f"{PR}/_Supprimés/{old[len(PR) + 1:] if old.startswith(PR + '/') else old}"
         try:
             if (root / old).exists():
                 _move(root, old, new)
@@ -482,6 +545,9 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
             dirs[key] = new
         except OSError:
             rep["errors"] += 1
+    # 5) le reste des donnees, dans « Système »
+    prog.update(what="photos des filaments, objets, accessoires, 3MF MakerWorld…")
+    _system_sync(root, rep)
     _index_save()
     return rep
 
@@ -493,7 +559,7 @@ def _db_backup_sync(root: Path) -> str | None:
     path = url.split(":///", 1)[1] if ":///" in url else str(DATA_DIR / "bambunymous.db")
     if not Path(path).is_file():
         return None
-    out = root / "_Base"
+    out = root / SYS / "Base de données"
     out.mkdir(parents=True, exist_ok=True)
     dest = out / f"bambunymous-{_local(datetime.utcnow()).strftime('%Y-%m-%d %Hh%M')}.db"
     src = sqlite3.connect(path)

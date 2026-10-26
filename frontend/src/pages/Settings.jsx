@@ -138,8 +138,9 @@ function ArchiveSection() {
     <div className="card" style={card}>
       <p style={cardTitle}>Sauvegarde et NAS</p>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"-8px 0 12px", lineHeight:1.5 }}>
-        Copie la base et les fichiers de chaque impression dans le dossier du NAS monté sur le conteneur, rangés par modèle puis par date
-        (3MF, Photos, Vidéos, Timelapse, Couches, avec une fiche). Seuls les fichiers nouveaux sont copiés.</p>
+        Copie dans le dossier du NAS monté sur le conteneur : « Impressions », les fichiers de chaque impression rangés par modèle puis par date
+        (3MF, Photos, Vidéos, Timelapse, Couches, avec une fiche), et « Système », la base (14 dernières copies), les photos des filaments,
+        objets, accessoires, 3MF MakerWorld et catalogue Bambu. Seuls les fichiers nouveaux sont copiés.</p>
       {err && <p style={{ color:"#ef4444", fontSize:12.5 }}>{err}</p>}
       {s && <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         <div style={{ ...box, borderColor: ok ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)" }}>
