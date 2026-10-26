@@ -284,8 +284,16 @@ def _cache_put(key, val):
     return val
 
 
-def _cache_clear():
+def _cache_clear(patch=None):
+    """Une ecriture : les listes en cache sont relues. L'index « chez moi » est corrige sur place quand on
+    sait ce qui a change (patch(idx), 26/10/2026) : le reconstruire prenait plus de 10 s."""
     _LIST_CACHE.clear()
+    if patch is not None and _MINE[1] is not None:
+        try:
+            patch(_MINE[1])
+            return
+        except Exception:
+            pass
     _MINE[:] = [0.0, None]
 
 
@@ -297,28 +305,51 @@ MINE_TTL = 1800
 MINE_MAX = 600            # modeles lus au plus par liste
 
 
+_MINE_RUN = {"task": None}
+
+
 async def _mine_index() -> dict:
-    import time
-    if _MINE[1] is not None and time.time() - _MINE[0] < MINE_TTL:
+    """L'index « chez moi » (26/10/2026) : servi tout de suite s'il existe, meme un peu ancien (refait alors en
+    fond) ; un seul calcul a la fois ; le prechargement horaire le refait aussi. Les ecritures le corrigent sur
+    place (_cache_clear). Il faisait attendre chaque ouverture plus de 10 s."""
+    import asyncio, time
+    if _MINE[1] is not None:
+        if time.time() - _MINE[0] >= MINE_TTL:
+            _mine_refresh()
         return _MINE[1]
+    return await asyncio.shield(_mine_refresh())
+
+
+def _mine_refresh(fresh: bool = False):
+    import asyncio
+    t = _MINE_RUN["task"]
+    if t is None or t.done():
+        t = _MINE_RUN["task"] = asyncio.ensure_future(_mine_build(fresh))
+    return t
+
+
+async def _mine_build(fresh: bool = False) -> dict:
+    """Toutes mes collections et mes j'aime, lus en parallele (5 a la fois)."""
+    import asyncio, time
     idx = {"colls": {}, "likes": set()}
     if await token():
-        for c in (await collections())["collections"]:
+        sem = asyncio.Semaphore(5)
+
+        async def walk(path, put):
             off = 0
             while off < MINE_MAX:
-                p = await _page(COLLECTION_DESIGNS.format(cid=c["id"]), off, 50)
-                for x in p["items"]:
-                    idx["colls"].setdefault(x["design_id"], []).append(c["title"])
+                async with sem:
+                    p = await _page(path, off, 50, fresh)
+                put(p["items"])
                 if len(p["items"]) < 50 or (p["total"] is not None and off + 50 >= p["total"]):
                     break
                 off += 50
-        off = 0
-        while off < MINE_MAX:
-            p = await _page(LISTS["likes"], off, 50)
-            idx["likes"].update(x["design_id"] for x in p["items"])
-            if len(p["items"]) < 50 or (p["total"] is not None and off + 50 >= p["total"]):
-                break
-            off += 50
+
+        def into_coll(title):
+            return lambda items: [idx["colls"].setdefault(x["design_id"], []).append(title) for x in items]
+        cols = (await collections())["collections"]
+        await asyncio.gather(*(walk(COLLECTION_DESIGNS.format(cid=c["id"]), into_coll(c["title"])) for c in cols),
+                             walk(LISTS["likes"], lambda items: idx["likes"].update(x["design_id"] for x in items)))
     _MINE[:] = [time.time(), idx]
     return idx
 
@@ -530,7 +561,11 @@ async def set_design_collections(design_id: str, ids: list) -> dict:
         raise AccountError("Collection inconnue")
     await asyncio.to_thread(_send, "PUT", MEMBERSHIP,
                             {"designId": int(did), "favoritesIds": [int(i) for i in ids]}, tok)
-    _cache_clear()
+    titles = {c["id"]: c["title"] for c in (await collections())["collections"]}
+
+    def patch(idx):
+        idx["colls"][did] = [titles[i] for i in ids if i in titles]
+    _cache_clear(patch)
     from .mw_watch import own
     for i in ids:
         own("add", i, did)
@@ -547,7 +582,7 @@ async def create_collection(title: str) -> dict:
     d = await asyncio.to_thread(_send, "POST", "/design-service/my/favorites",
                                 {"title": title, "status": 1, "description": "", "cover": "",
                                  "tags": [], "setAsDefault": False}, tok)
-    _cache_clear()
+    _cache_clear(lambda idx: None)              # une collection vide : rien ne change dans l'index
     from .mw_watch import own
     own("create", title)
     logger.info(f"[MW] collection creee : {title}")
@@ -572,8 +607,15 @@ async def rename_collection(cid: str, title: str) -> dict:
             "cover": cur.get("cover") if isinstance(cur.get("cover"), str) else "",
             "tags": cur.get("tags") if isinstance(cur.get("tags"), list) else [],
             "setAsDefault": bool(cur.get("isDefault"))}
+    old = cur.get("title") if isinstance(cur.get("title"), str) else None
     await asyncio.to_thread(_send, "PUT", f"/design-service/my/favorites/{cid}", body, tok)
-    _cache_clear()
+
+    def patch(idx):
+        if old is None:
+            raise ValueError("ancien nom inconnu")
+        for k, v in idx["colls"].items():
+            idx["colls"][k] = [title if x == old else x for x in v]
+    _cache_clear(patch)
     from .mw_watch import own
     own("rename", cid)
     logger.info(f"[MW] collection {cid} renommee : {title}")
@@ -610,8 +652,8 @@ async def set_like(design_id: str, liked: bool) -> dict:
     tok = await _tok()
     await asyncio.to_thread(_send, "POST" if liked else "DELETE", f"/design-service/design/{did}/like",
                             {"id": int(did)}, tok)
-    _cache_clear()
     after = await like_state(did)
+    _cache_clear(lambda idx: idx["likes"].add(did) if after.get("liked") else idx["likes"].discard(did))
     logger.info(f"[MW] modele {did} : j'aime {'pose' if liked else 'retire'} ({after['liked']})")
     return after
 
@@ -728,10 +770,16 @@ async def delete_collection(cid: str) -> dict:
     if not cid.isdigit():
         raise AccountError("Collection inconnue")
     tok = await _tok()
-    if cid not in {c["id"] for c in (await collections())["collections"]}:
+    cols = {c["id"]: c["title"] for c in (await collections())["collections"]}
+    if cid not in cols:
         raise AccountError("Collection inconnue")
     await asyncio.to_thread(_send, "DELETE", f"/design-service/my/favorites/{cid}", {"id": int(cid)}, tok)
-    _cache_clear()
+
+    def patch(idx):
+        gone = cols[cid]
+        for k, v in list(idx["colls"].items()):
+            idx["colls"][k] = [x for x in v if x != gone]
+    _cache_clear(patch)
     from .mw_watch import own
     own("delete", cid)
     logger.info(f"[MW] collection {cid} supprimee")
@@ -1057,6 +1105,10 @@ async def warm_all() -> dict:
         creators = await following(fresh=True)
         jobs += [run(_published(c, 10, fresh=True)) for c in creators]
         await asyncio.gather(*jobs)
+        try:
+            await _mine_refresh(fresh=True)        # l'index « chez moi » : pret pour la page
+        except Exception:
+            logger.exception("[MW] index chez moi")
         try:
             await check_new_models(creators)
         except Exception:
