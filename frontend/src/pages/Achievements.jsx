@@ -900,8 +900,8 @@ function OddsSheet({ odds, admin, uniq, onClose }) {
           <span style={{ fontSize:24 }}>🎲</span>
           <div style={{ flex:1 }}>
             <div style={{ fontSize:16, fontWeight:900, color:"var(--text)" }}>Les surprises, compte par compte</div>
-            <div style={{ fontSize:11.5, color:"var(--muted)", lineHeight:1.4 }}>Chance d'une surprise à la prochaine ouverture de l'appli. Elle monte à chaque
-              ouverture sans surprise (une ouverture compte au plus toutes les {odds.gap_min} min) et repart de zéro quand une surprise s'affiche.</div>
+            <div style={{ fontSize:11.5, color:"var(--muted)", lineHeight:1.4 }}>Chance d'une surprise au prochain passage sur l'accueil (ouverture de l'appli ou retour à l'accueil). Elle monte à chaque
+              passage sans surprise (un passage compte au plus toutes les {odds.gap_min} min) et repart de zéro quand une surprise est vue jusqu'au bout.</div>
           </div>
           <button onClick={onClose} aria-label="Fermer" style={{ width:32, height:32, borderRadius:10, border:"1px solid var(--border)",
             background:"var(--surface2)", color:"var(--text2)", cursor:"pointer", flexShrink:0 }}>✕</button>

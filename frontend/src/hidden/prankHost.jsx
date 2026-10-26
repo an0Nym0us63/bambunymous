@@ -81,7 +81,10 @@ function effectOf(slug) {
 // Puis 70 % une farce / 30 % une page cachee, et dans le lot choisi 70 % une
 // pas encore trouvee / 30 % une deja trouvee (s'il y en a). Jamais chez un copain. Le secret suit la
 // regle des comptes (enregistre, ou « non comptabilise »).
-let rolled = false;                             // une fois par lancement (module recharge = nouveau lancement)
+// Chaque arrivee sur l'accueil compte (26/10/2026 ; avant : seulement la premiere de chaque lancement). Le serveur
+// ne compte une ouverture que 5 min apres la precedente ; ici, on ne lui demande pas plus d'une fois par minute.
+let lastRoll = 0;
+const ROLL_EVERY_MS = 60000;
 
 // Le passage secret du menu de profil reste cache jusqu'a la premiere surprise.
 // Ouvert par compte (cote serveur) : il apparait sur tous ses appareils.
@@ -143,10 +146,10 @@ export function PrankHost() {
   const { pathname } = useLocation();
   const visiting = useFriend(s => s.friend);
   const nav = useNavigate();
-  // premiere arrivee sur l'accueil de ce lancement : la surprise, peut-etre
+  // chaque arrivee sur l'accueil : la surprise, peut-etre (le serveur espace les ouvertures comptees de 5 min)
   useEffect(() => {
-    if (pathname !== "/" || rolled || visiting || usePrank.getState().slug) return;
-    rolled = true;
+    if (pathname !== "/" || visiting || usePrank.getState().slug || Date.now() - lastRoll < ROLL_EVERY_MS) return;
+    lastRoll = Date.now();
     // l'accueil a le temps de s'afficher ; si on l'a deja quitte, pas de surprise ailleurs
     // ni sous l'ecran de demarrage (logo) : on attend qu'il soit parti
     let tries = 0;
