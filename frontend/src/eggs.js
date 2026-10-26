@@ -243,7 +243,7 @@ export function installEggs() {
   window.__bnEggs = true;
   ensureStyle();
   const K = ["arrowup", "arrowup", "arrowdown", "arrowdown", "arrowleft", "arrowright", "arrowleft", "arrowright", "b", "a"];
-  let ki = 0, word = "", held = 0;
+  let ki = 0, word = "", held = 0, lastField = "";
   const capsTap = tapper(12, 8000, () => eggFx("caps_lock"));
   window.addEventListener("keydown", e => {
     const k = (e.key || "").toLowerCase();
@@ -290,6 +290,12 @@ export function installEggs() {
   window.addEventListener("input", e => {
     if ((e.target?.tagName || "") !== "INPUT") return;
     const v = (e.target.value || "").trim().toLowerCase();
+    // au telephone, on ne tape qu'avec le curseur dans un champ (et le clavier n'envoie pas ses touches) : un mot
+    // seul dans un champ texte compte aussi (jamais dans un mot de passe), une fois par saisie (26/10/2026)
+    if (e.target.type !== "password" && v !== lastField) {
+      lastField = v;
+      for (const [w, name] of WORDS) if (v === w) eggFx(name);
+    }
     if (v === "42") egg("answer");
     if (v === "easter egg" || v === "easteregg") egg("seeker");
     if (v === "1337") egg("leet_input");
