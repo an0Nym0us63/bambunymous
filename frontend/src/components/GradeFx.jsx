@@ -8,11 +8,14 @@ import { deviceId } from "../utils/device";
 // grand, une fois par appareil, comme la fete des cartes. Demande a l'ouverture, au retour sur l'appli et
 // toutes les deux minutes ; la fete des cartes passe d'abord (window.__bnCardFx).
 const Show = lazy(() => importRetry(() => import("./GradeFxShow")));
+// les titres des sections (Imprimeur II…) : une carte plus discrete, apres le grade general s'il y en a un
+const SectionShow = lazy(() => importRetry(() => import("./SectionFxShow")));
 const EVERY = 120000;
 
 export default function GradeFx() {
   const visiting = useFriend(s => s.friend);
   const [g, setG] = useState(null);
+  const [step, setStep] = useState("grade");        // le grade general, puis les sections
   const showing = useRef(false);
   useEffect(() => {
     if (visiting) return undefined;
@@ -27,6 +30,7 @@ export default function GradeFx() {
         const go = () => {
           if ((document.getElementById("splash") || window.__bnCardFx) && tries++ < 400) { setTimeout(go, 400); return; }
           window.__bnGradeFx = true;
+          setStep(data.grade.to != null ? "grade" : "sections");
           setG(data.grade);
         };
         setTimeout(go, 1200);
@@ -39,12 +43,16 @@ export default function GradeFx() {
     return () => { clearInterval(iv); document.removeEventListener("visibilitychange", vis); };
   }, [visiting]);
   if (!g) return null;
+  const secs = g.sections || [];
   const close = () => {
-    const lvl = g.to;
+    if (step === "grade" && secs.length) { setStep("sections"); return; }
     setG(null);
     showing.current = false;
     window.__bnGradeFx = false;
-    client.post("/achievements/grade-fx/seen", null, { params: { dev: deviceId(), level: lvl } }).catch(() => {});
+    client.post("/achievements/grade-fx/seen", { sections: Object.fromEntries(secs.map(s => [s.cat, s.to])) },
+      { params: { dev: deviceId(), level: g.to ?? -2 } }).catch(() => {});
   };
-  return <Suspense fallback={null}><Show from={g.from} to={g.to} score={g.score} scoreMax={g.score_max} onClose={close}/></Suspense>;
+  return <Suspense fallback={null}>{step === "grade"
+    ? <Show from={g.from} to={g.to} score={g.score} scoreMax={g.score_max} onClose={close}/>
+    : <SectionShow sections={secs} onClose={close}/>}</Suspense>;
 }

@@ -208,10 +208,13 @@ async def achievements_grade_fx(dev: str = "", acc=Depends(require_own_account),
 
 
 @router.post("/grade-fx/seen")
-async def achievements_grade_fx_seen(dev: str = "", level: int = -1, acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
+async def achievements_grade_fx_seen(dev: str = "", level: int = -1, body: dict = Body(default=None),
+                                     acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
+    """Fete vue : le grade general (level) et les titres des sections (body.sections : {section: niveau})."""
     from ....services import achievements as A
     if (await _me(acc[0], db))["main"]:
-        await A.grade_fx_seen(acc[0], _dev(dev), level)
+        secs = (body or {}).get("sections") if isinstance(body, dict) else None
+        await A.grade_fx_seen(acc[0], _dev(dev), level, secs if isinstance(secs, dict) else None)
     return {"ok": True}
 
 

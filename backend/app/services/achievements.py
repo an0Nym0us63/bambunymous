@@ -5333,32 +5333,49 @@ def grade_level(v: float) -> int:
 
 
 async def grade_fx(username: str, dev: str = "") -> dict | None:
-    """Le niveau de grade atteint depuis la derniere fete de CET appareil (un appareil nouveau part du
-    plus haut deja fete sur le compte) : {from, to, score, score_max}, ou None."""
+    """Ce qui est a feter depuis la derniere fete de CET appareil (un appareil nouveau part du plus haut
+    deja fete sur le compte) : le grade general {from, to, score, score_max} et, plus discret, les titres
+    des sections (Imprimeur II, Coloriste I…) gagnes : {sections: [{cat, label, emoji, from, to}]}, ou None.
+    Les memes niveaux pour les deux : -1, puis 0 (premier titre, I) a 14. Retenus sous « compte », « compte|appareil »
+    et, pour une section, « …#section »."""
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting, set_setting
     v = await view()
     mx = v.get("score_max") or 0
     lvl = grade_level((v.get("score") or 0) / mx) if mx else -1
+    cats = summary(v).get("cats") or {}
+    now = {"": lvl}
+    for c, _e, _l in CATEGORIES:
+        cs = cats.get(c) or {}
+        now[c] = grade_level((cs.get("score") or 0) / cs["max"]) if cs.get("max") else -1
     key = f"{username}|{dev}" if dev else username
+    k_of = lambda base, c: base if not c else f"{base}#{c}"
+    changed = False
     async with AsyncSessionLocal() as db:
         try:
             seen = json.loads(await get_setting(db, KEY + "_GRADEFX", "{}") or "{}")
         except ValueError:
             seen = {}
-        if username not in seen:                 # premiere fois : on note l'existant, rien a feter
-            seen[username] = lvl
+        for c, l in now.items():
+            if k_of(username, c) not in seen:    # premiere fois : on note l'existant, rien a feter
+                seen[k_of(username, c)] = l
+                changed = True
+            if k_of(key, c) not in seen:         # appareil nouveau : il part du plus haut deja fete
+                seen[k_of(key, c)] = seen[k_of(username, c)]
+                changed = True
+        if changed:
             await set_setting(db, KEY + "_GRADEFX", json.dumps(seen))
-            return None
-        if key not in seen:
-            seen[key] = seen[username]
-            await set_setting(db, KEY + "_GRADEFX", json.dumps(seen))
+    out = {}
     if lvl > seen[key]:
-        return {"from": seen[key], "to": lvl, "score": v.get("score") or 0, "score_max": mx}
-    return None
+        out.update({"from": seen[key], "to": lvl, "score": v.get("score") or 0, "score_max": mx})
+    secs = [{"cat": c, "label": lab, "emoji": e, "from": seen[k_of(key, c)], "to": now[c]}
+            for c, e, lab in CATEGORIES if now[c] > seen[k_of(key, c)]]
+    if secs:
+        out["sections"] = secs
+    return out or None
 
 
-async def grade_fx_seen(username: str, dev: str, lvl: int) -> None:
+async def grade_fx_seen(username: str, dev: str, lvl: int, sections: dict | None = None) -> None:
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting, set_setting
     async with AsyncSessionLocal() as db:
@@ -5366,10 +5383,15 @@ async def grade_fx_seen(username: str, dev: str, lvl: int) -> None:
             seen = json.loads(await get_setting(db, KEY + "_GRADEFX", "{}") or "{}")
         except ValueError:
             seen = {}
-        for k in {username, f"{username}|{dev}" if dev else username}:
-            seen[k] = max(int(seen.get(k, -1)), int(lvl))
+        bases = {username, f"{username}|{dev}" if dev else username}
+        for k in bases:
+            if lvl is not None and int(lvl) >= -1:
+                seen[k] = max(int(seen.get(k, -1)), int(lvl))
+            for c, l in (sections or {}).items():
+                if c in {x[0] for x in CATEGORIES}:
+                    seen[f"{k}#{c}"] = max(int(seen.get(f"{k}#{c}", -1)), int(l))
         await set_setting(db, KEY + "_GRADEFX", json.dumps(seen))
-    logger.info(f"[SUCCES] grade fete sur {username}|{dev or '-'} : niveau {lvl}")
+    logger.info(f"[SUCCES] grade fete sur {username}|{dev or '-'} : niveau {lvl}, sections {sections or {}}")
 
 
 async def card_fx(username: str, dev: str = "") -> list:
