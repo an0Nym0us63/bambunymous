@@ -785,7 +785,10 @@ function Replies({ c, creatorUid, onZoom }) {
     setOpen(v);
     if (v && !all && c.replies > (c.reply_preview || []).length) {
       setBusy(true);
-      client.get(`/makerworld/comment/${c.kind}/${c.id}/replies`).then(({ data }) => setAll(data.items || [])).catch(() => {}).finally(() => setBusy(false));
+      // une lecture vide ou incomplete (MakerWorld muet) ne remplace pas ce qui est deja affiche
+      client.get(`/makerworld/comment/${c.kind}/${c.id}/replies`)
+        .then(({ data }) => { const got = data?.items || []; if (got.length >= (c.reply_preview || []).length && got.length) setAll(got); })
+        .catch(() => {}).finally(() => setBusy(false));
     }
   };
   const P = "#EC4899";

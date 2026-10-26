@@ -796,12 +796,23 @@ async def comment_replies(kind: str, cid: str) -> dict:
     cid = str(cid or "").strip()
     if not cid.isdigit() or kind not in ("comment", "rating"):
         return {"items": [], "total": 0}
-    code, d = await asyncio.to_thread(_get_json, f"/comment-service/{kind}/{cid}/reply?offset=0&limit=100")
-    if not isinstance(d, dict):
-        return {"items": [], "total": 0, "error": f"MakerWorld ne répond pas (HTTP {code})"}
-    raw = d.get("replies") if isinstance(d.get("replies"), list) else d.get("hits") if isinstance(d.get("hits"), list) else []
-    items = [r for r in (_reply(x) for x in raw) if r]
-    return {"items": items, "total": d.get("total") if isinstance(d.get("total"), int) else len(items)}
+    # par paquets de 50 : au-dela, MakerWorld refuse les reponses a un commentaire (« wrong number range »)
+    items, total, off = [], None, 0
+    for _ in range(10):
+        code, d = await asyncio.to_thread(_get_json, f"/comment-service/{kind}/{cid}/reply?offset={off}&limit=50")
+        if not isinstance(d, dict):
+            if not items:
+                return {"items": [], "total": 0, "error": f"MakerWorld ne répond pas (HTTP {code})"}
+            break
+        raw = d.get("replies") if isinstance(d.get("replies"), list) else d.get("hits") if isinstance(d.get("hits"), list) else []
+        if total is None:
+            c = d.get("comment") if isinstance(d.get("comment"), dict) else {}
+            total = d.get("total") if isinstance(d.get("total"), int) else c.get("replyCount") if isinstance(c.get("replyCount"), int) else None
+        items += [r for r in (_reply(x) for x in raw) if r and r["id"] not in {i["id"] for i in items}]
+        off += 50
+        if len(raw) < 50 or (total is not None and len(items) >= total):
+            break
+    return {"items": items, "total": total if total is not None else len(items)}
 
 
 async def model_comments(design_id: str, offset: int = 0) -> dict:
