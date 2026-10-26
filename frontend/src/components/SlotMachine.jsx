@@ -8,10 +8,11 @@ import { TicketStub } from "./medals";
 // la page ne fait que jouer l'animation jusqu'a lui. Trois rouleaux qui
 // defilent et s'arretent l'un apres l'autre ; trois symboles pareils = gagne.
 // un symbole bien distinct par lot (🗝️ se confondait avec 🔑 sur certains ecrans)
-const SYM = { key1: "🔑", key3: "🍀", key5: "💎", jackpot: "💰", replay: "🔁", hint: "🔍", ticket: "🎟️" };
+// (la roue d'un compte de la famille : des loupes a la place du coup de pouce, 26/10/2026)
+const SYM = { key1: "🔑", key3: "🍀", key5: "💎", jackpot: "💰", replay: "🔁", hint: "🔍", ticket: "🎟️", loupe1: "🔎", loupe2: "🕵️" };
 const FILLER = ["🔑", "🍀", "💎", "💰", "🔁", "🔍", "🎟️", "🍒", "⭐", "🍋", "🔔"];
-const LEGEND = [["🔑", "1 clé"], ["🍀", "3 clés"], ["💎", "5 clés"], ["💰", "10 clés"], ["🎟️", "ticket de palier"],
-  ["🔁", "rejoue"], ["🔍", "coup de pouce"]];
+const LEGEND = [["key1", "🔑", "1 clé"], ["key3", "🍀", "3 clés"], ["key5", "💎", "5 clés"], ["jackpot", "💰", "10 clés"], ["ticket", "🎟️", "ticket de palier"],
+  ["replay", "🔁", "rejoue"], ["hint", "🔍", "coup de pouce"], ["loupe1", "🔎", "1 loupe"], ["loupe2", "🕵️", "2 loupes"]];
 const H = 76;                      // hauteur d'une case
 const LEN = 28;                    // cases par rouleau avant l'arret
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -169,9 +170,10 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
                 <div style={{ fontSize: big ? 22 : 18, fontWeight:900, color: win ? "#fde047" : "rgba(255,255,255,.85)" }}>
                   {res.prize === "none" ? "Pas cette fois…" : res.prize === "replay" ? "🔁 Tour rejoué !"
                     : res.prize === "ticket" ? "🎟️ Ticket de palier !"
-                    : res.prize === "hint" ? "🔍 Coup de pouce !" : `🎉 ${res.label} !`}</div>
+                    : res.prize === "hint" ? "🔍 Coup de pouce !" : res.loupes ? `${SYM[res.prize] || "🔎"} ${res.label} !` : `🎉 ${res.label} !`}</div>
                 <div style={{ fontSize:12, color:"rgba(255,255,255,.75)", marginTop:2 }}>
-                  {res.prize === "hint" && res.secret ? `${res.secret.step.charAt(0).toUpperCase() + res.secret.step.slice(1)} d'un secret, offert`
+                  {res.loupes ? `Tu as maintenant ${res.loupes_now ?? res.loupes} loupe${(res.loupes_now ?? res.loupes) > 1 ? "s" : ""}`
+                    : res.prize === "hint" && res.secret ? `${res.secret.step.charAt(0).toUpperCase() + res.secret.step.slice(1)} d'un secret, offert`
                     : res.keys ? `Tu as maintenant ${res.balance + (bonus || []).reduce((a, b) => a + b.n, 0)} clé${res.balance > 1 ? "s" : ""}`
                     : res.prize === "replay" ? "Le tour t'est rendu"
                     : res.prize === "ticket" ? "Ouvre un succès à paliers pour l'utiliser" : "Retente ta chance"}</div>
@@ -190,7 +192,7 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
           <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"center", gap:"2px 10px", marginTop:6,
             fontSize:10.5, color:"rgba(255,255,255,.75)" }}>
             <span style={{ fontWeight:700 }}>3 pareils :</span>
-            {LEGEND.map(([e, l]) => <span key={e}>{e} {l}</span>)}
+            {LEGEND.filter(([id]) => !wheel?.prizes || wheel.prizes.some(p => p.id === id)).map(([id, e, l]) => <span key={id}>{e} {l}</span>)}
           </div>
           {/* le bouton */}
           <button onClick={spin} disabled={phase === "spinning" || spins <= 0}

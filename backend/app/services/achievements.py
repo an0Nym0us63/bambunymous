@@ -5848,12 +5848,31 @@ async def loupes(username: str) -> dict:
         if me is None:
             me = {"n": LOUPES_DAY, "day": today, "used": {}}
         elif me.get("day") != today:
-            me = {**me, "n": min(LOUPES_MAX, int(me.get("n") or 0) + LOUPES_DAY), "day": today}
+            # le versement du jour ne fait jamais redescendre (des loupes gagnees a la roue depassent le plafond)
+            n0 = int(me.get("n") or 0)
+            me = {**me, "n": max(n0, min(LOUPES_MAX, n0 + LOUPES_DAY)), "day": today}
         else:
             return me
         d[username] = me
         await set_setting(db, KEY + "_LOUPES", json.dumps(d))
     return me
+
+
+async def add_loupes(username: str, n: int) -> int:
+    """Des loupes en plus (gagnees a la roue), au-dela du plafond s'il le faut. Rend le nombre en main."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    me = await loupes(username)
+    me = {**me, "n": int(me.get("n") or 0) + max(0, int(n))}
+    async with AsyncSessionLocal() as db:
+        try:
+            d = json.loads(await get_setting(db, KEY + "_LOUPES", "") or "{}")
+        except ValueError:
+            d = {}
+        d = d if isinstance(d, dict) else {}
+        d[username] = me
+        await set_setting(db, KEY + "_LOUPES", json.dumps(d))
+    return me["n"]
 
 
 async def use_loupe(username: str, aid: str, what: str = "hint") -> dict:
@@ -6827,7 +6846,16 @@ TICKETS_WEEKLY = 1
 PRIZES = [("none", "Pas cette fois", 0, 44.2), ("key1", "1 clé", 1, 26.0), ("ticket", "Ticket de palier", 0, 10.0),
           ("replay", "Tour rejoué", 0, 7.0), ("hint", "Coup de pouce", 0, 6.0), ("key3", "3 clés", 3, 4.0),
           ("key5", "5 clés", 5, 1.8), ("jackpot", "Jackpot : 10 clés", 10, 1.0)]  # 1 % depuis le 26/10/2026 (0,2 % avant)
+# Un compte de la famille qui tourne la roue (26/10/2026) : des loupes pour lui. « Coup de pouce » (une etape d'un
+# secret de la maison, sans interet pour lui) devient 2 loupes, et 1 loupe prend 10 points a « Pas cette fois ».
+# Les cles, tickets et tours vont toujours a la maison.
+FAMILY_PRIZES = [("none", "Pas cette fois", 0, 34.2), ("key1", "1 clé", 1, 26.0), ("ticket", "Ticket de palier", 0, 10.0),
+                 ("loupe1", "1 loupe", 0, 10.0), ("replay", "Tour rejoué", 0, 7.0), ("loupe2", "2 loupes", 0, 6.0),
+                 ("key3", "3 clés", 3, 4.0), ("key5", "5 clés", 5, 1.8), ("jackpot", "Jackpot : 10 clés", 10, 1.0)]
+PRIZE_LOUPES = {"loupe1": 1, "loupe2": 2}
 PRIZE_HELP = {
+    "loupe1": "Une loupe pour toi, en plus de celles du jour (même au-delà de trois).",
+    "loupe2": "Deux loupes pour toi, en plus de celles du jour (même au-delà de trois).",
     "none": "Rien cette fois : retente ta chance.",
     "key1": "Une clé, tout de suite.",
     "replay": "Le tour t'est rendu : tu rejoues.",
@@ -6999,19 +7027,25 @@ async def _notify_spins(n: int, total: int, from_secrets: int = 0, tickets: int 
                    click=N.app_link(cfg, "/stats?tab=achievements"), priority=2)
 
 
-def _draw(rng=None) -> tuple:
+def _draw(rng=None, table=None) -> tuple:
     import random
+    table = table or PRIZES
     r = (rng or random.SystemRandom()).uniform(0, 100)
     acc = 0.0
-    for p in PRIZES:
+    for p in table:
         acc += p[3]
         if r < acc:
             return p
-    return PRIZES[0]
+    return table[0]
 
 
-async def spin(rng=None) -> dict:
-    """Un tour de roue : le lot, applique tout de suite."""
+def prizes_view(table=None) -> list:
+    return [{"id": i, "label": l, "keys": n, "pct": p, "help": PRIZE_HELP.get(i, "")} for i, l, n, p in (table or PRIZES)]
+
+
+async def spin(rng=None, family_user: str | None = None) -> dict:
+    """Un tour de roue : le lot, applique tout de suite. Tourne par un compte de la famille (family_user) : sa
+    roue a des loupes (FAMILY_PRIZES), qui vont a lui ; le reste va a la maison."""
     async with _lock():
         st = await _state_get()
         if st is None or not isinstance(st.get("keys"), dict):
@@ -7020,7 +7054,7 @@ async def spin(rng=None) -> dict:
         if w["spins"] <= 0:
             raise ValueError("Plus de tour de roue : le prochain arrive lundi")
         fam = await _family_finds()             # les etapes que la famille offre deja ne se tirent pas
-        pid, label, n, _pct = _draw(rng)
+        pid, label, n, _pct = _draw(rng, FAMILY_PRIZES if family_user else None)
         now = datetime.utcnow().isoformat()
         w["spins"] -= 1
         w["played"] = w.get("played", 0) + 1
@@ -7056,6 +7090,8 @@ async def spin(rng=None) -> dict:
                 w["keys"] = w.get("keys", 0) + 1
                 out["keys"] = 1
                 out["label"] = "1 clé (plus rien à révéler)"
+        if pid in PRIZE_LOUPES:
+            out["loupes"] = PRIZE_LOUPES[pid]
         won = pid not in ("none", "replay")
         w["lose"] = 0 if won else w.get("lose", 0) + (pid == "none")
         w["win"] = w.get("win", 0) + 1 if won else (w.get("win", 0) if pid == "replay" else 0)
@@ -7069,6 +7105,8 @@ async def spin(rng=None) -> dict:
             flags.setdefault("win_streak", now)
         await _state_put(st)
         _CACHE["v"] = None
+    if out.get("loupes") and family_user:
+        out["loupes_now"] = await add_loupes(family_user, out["loupes"])
     _bg_tick()
     return {**out, "spins": w["spins"], "balance": k["balance"], "at": now}
 
@@ -7110,7 +7148,7 @@ def wheel_view(st: dict) -> dict | None:
             "prints_per_spin": PRINTS_PER_SPIN, "prints_per_ticket": PRINTS_PER_TICKET,
             "to_spin_prints": PRINTS_PER_SPIN - (max(0, w.get("prints_seen", 0) - w.get("prints_base", 0)) % PRINTS_PER_SPIN),
             "to_ticket_prints": PRINTS_PER_TICKET - (max(0, w.get("prints_seen", 0) - w.get("prints_base", 0)) % PRINTS_PER_TICKET),
-            "prizes": [{"id": i, "label": l, "keys": n, "pct": p, "help": PRIZE_HELP.get(i, "")} for i, l, n, p in PRIZES]}
+            "prizes": prizes_view()}
 
 
 _MONTHS = "janvier février mars avril mai juin juillet août septembre octobre novembre décembre".split()
