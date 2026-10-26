@@ -81,11 +81,23 @@ const chipGlass = { width:30, height:30, borderRadius:"50%", border:"1px solid r
 
 // Les tranches de la frise des suivis deja demandees (anticipation) : une meme tranche n'est lue qu'une fois.
 const FOLLOW_AHEAD = new Map();
+// Une tranche dont des createurs sont encore en lecture (« partial ») se redemande jusqu'a etre complete.
+const wait = ms => new Promise(r => setTimeout(r, ms));
+async function followWindow(picked, before, days, fp = {}, onPartial = null) {
+  let d;
+  for (let k = 0; k < 40; k++) {
+    d = (await client.get("/makerworld/following/timeline", { params: { uids: picked.join(","), days, ...(before ? { before } : {}), ...(k ? {} : fp) },
+      timeout: 120000 })).data;
+    if (!d.partial) break;
+    onPartial?.(d);
+    await wait(1500);
+  }
+  return { ...d, before };
+}
 function prefetchFollow(picked, before, days) {
   const k = `${picked.join(",")}|${before}|${days}`;
   if (!FOLLOW_AHEAD.has(k)) {
-    const p = client.get("/makerworld/following/timeline", { params: { uids: picked.join(","), before, days }, timeout: 120000 })
-      .then(({ data }) => ({ ...data, before }));
+    const p = followWindow(picked, before, days);
     p.catch(() => FOLLOW_AHEAD.delete(k));
     FOLLOW_AHEAD.set(k, p);
     if (FOLLOW_AHEAD.size > 40) FOLLOW_AHEAD.delete(FOLLOW_AHEAD.keys().next().value);
@@ -210,9 +222,14 @@ export default function MakerWorldView({ onSearch }) {
             if (!alive) return;
             setCreators(list);
           }
-          const { data: d } = await client.get("/makerworld/following/timeline",
-            { params: { uids: picked.join(","), days: 7, ...fp }, timeout: 120000 });
+          // les 7 derniers jours : ce que le serveur a deja s'affiche tout de suite, le reste se complete
+          const d = await followWindow(picked, "", 7, fp, part => {
+            if (!alive) return;
+            setProgress({ done: part.creators - part.partial, total: part.creators });
+            if (!cached && (part.items || []).length) setData({ items: part.items, has_more: part.has_more, next_before: part.next_before, days: 7, start: part.start });
+          });
           if (!alive) return;
+          setProgress(null);
           let first = { items: d.items || [], has_more: d.has_more, next_before: d.next_before, days: 7, start: d.start };
           // une semaine calme : on remonte de soi-meme jusqu'a trouver des modeles (6 tranches au plus)
           for (let k = 0; k < 6 && alive && !first.items.length && first.has_more; k++) {
@@ -462,7 +479,7 @@ export default function MakerWorldView({ onSearch }) {
               )}
               {progress && progress.done < progress.total && (
                 <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:11.5, fontWeight:700, color:"#8B5CF6" }}>
-                  <span className="mw-spin" style={{ width:11, height:11 }}/>Chargement {progress.done} / {progress.total} créateurs…</span>
+                  <span className="mw-spin" style={{ width:11, height:11 }}/>Lecture des créateurs : {progress.done} / {progress.total}</span>
               )}
             </div>
           )}

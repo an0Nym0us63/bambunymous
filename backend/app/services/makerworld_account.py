@@ -836,19 +836,69 @@ PUBLISHED_PAGE = "/design-service/published/{uid}/design?offset={offset}&limit=2
 _DEEP = {}                 # uid -> {"t": instant, "items": [...] (du plus recent au plus ancien), "done": bool}
 _DEEP_TTL = 7200
 _DEEP_BG = set()
+_DEEP_RUN = {}             # uid -> tache de lecture en cours (une seule a la fois par createur)
+_DEEP_DISK = {"loaded": False, "dirty": False, "saving": False}
+TIME_BUDGET = 2.5          # la frise repond au bout de 2,5 s avec ce qu'elle a ; la suite se lit en fond
+
+
+def _deep_path():
+    from pathlib import Path
+    from ..core.config import settings
+    return Path(settings.DATA_DIR) / "cache" / "mw_following.json"
+
+
+def _deep_load() -> None:
+    """Au premier usage : ce qu'on avait lu avant le dernier redemarrage (une mise a jour ne repart plus de zero)."""
+    if _DEEP_DISK["loaded"]:
+        return
+    _DEEP_DISK["loaded"] = True
+    try:
+        raw = json.loads(_deep_path().read_text(encoding="utf-8"))
+        for uid, d in (raw or {}).items():
+            if isinstance(d, dict) and isinstance(d.get("items"), list):
+                _DEEP.setdefault(uid, {"t": float(d.get("t") or 0), "items": d["items"], "done": bool(d.get("done"))})
+    except Exception:
+        pass
+
+
+async def _deep_save() -> None:
+    import asyncio
+    if _DEEP_DISK["saving"]:
+        _DEEP_DISK["dirty"] = True
+        return
+    _DEEP_DISK["saving"] = True
+    try:
+        await asyncio.sleep(5)                 # regroupe les ecritures
+        _DEEP_DISK["dirty"] = False
+        data = json.dumps({u: {"t": d["t"], "items": d["items"][:200], "done": d["done"]} for u, d in _DEEP.items()}, ensure_ascii=False)
+        p = _deep_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".tmp")
+        await asyncio.to_thread(tmp.write_text, data, "utf-8")
+        await asyncio.to_thread(tmp.replace, p)
+    except Exception:
+        logger.exception("[MW] frise des suivis non gardee")
+    finally:
+        _DEEP_DISK["saving"] = False
+    if _DEEP_DISK["dirty"]:
+        await _deep_save()
 
 
 def _deep_seed(c: dict) -> dict:
-    """Ce qu'on sait deja d'un createur : sa liste profonde, sinon ses 10 derniers (prechargement)."""
+    """Ce qu'on sait deja d'un createur : sa liste profonde, sinon ses 10 derniers (prechargement).
+    Une liste un peu vieille sert quand meme (elle se relit en fond) : mieux vaut afficher tout de suite."""
     import time
+    _deep_load()
     d = _DEEP.get(c["uid"])
     if d and time.time() - d["t"] < _DEEP_TTL:
         return d
     hit = _PUB_CACHE.get((c["uid"], 10))
     if hit and time.time() - hit[0] < _PUB_TTL:
         d = {"t": hit[0], "items": list(hit[1]), "done": len(hit[1]) < 10}
+    elif d:                                    # vieille liste (disque) : gardee, mais a relire depuis le debut
+        d = {"t": 0.0, "items": d["items"], "done": d["done"], "stale": True}
     else:
-        d = {"t": time.time(), "items": [], "done": False}
+        d = {"t": time.time(), "items": [], "done": False, "stale": True}
     _DEEP[c["uid"]] = d
     return d
 
@@ -857,7 +907,18 @@ async def _deep_reach(c: dict, start: str, pages: int = 6) -> dict:
     """Relit le createur plus loin (20 par page) jusqu'a depasser `start` (date ISO) ou tout avoir."""
     import asyncio
     from .makerworld import _get_json
+    import time
     d = _deep_seed(c)
+    if d.get("stale"):
+        # relu depuis le debut (les nouveautes), en gardant ce qu'on avait de plus ancien
+        code, j = await asyncio.to_thread(_get_json, PUBLISHED_PAGE.format(uid=c["uid"], offset=0))
+        if code == 200:
+            got = [x for x in (_pub_hit(h, c) for h in _items(j)) if x]
+            seen = {x["design_id"] for x in got}
+            old = [x for x in d["items"] if x["design_id"] not in seen]
+            d = _DEEP[c["uid"]] = {"t": time.time(), "items": sorted(got + old, key=lambda x: x.get("published") or "", reverse=True),
+                                   "done": len(got) < 20 and not old}
+            _DEEP_DISK["dirty"] = True
     n = 0
     while not d["done"] and n < pages and (not d["items"] or (d["items"][-1].get("published") or "") >= start):
         code, j = await asyncio.to_thread(_get_json, PUBLISHED_PAGE.format(uid=c["uid"], offset=len(d["items"])))
@@ -868,6 +929,8 @@ async def _deep_reach(c: dict, start: str, pages: int = 6) -> dict:
         d["items"] += [x for x in got if x["design_id"] not in seen]
         d["items"].sort(key=lambda x: x.get("published") or "", reverse=True)
         d["done"] = len(got) < 20
+        d["t"] = d.get("t") or time.time()
+        _DEEP_DISK["dirty"] = True
         n += 1
     return d
 
@@ -894,7 +957,22 @@ async def timeline(uids: str = "", before: str = "", days: int = 7, fresh: bool 
                 return await _deep_reach(c, start)
             except Exception:
                 return _deep_seed(c)
-    deeps = await asyncio.gather(*(one(c) for c in pick))
+
+    # chaque createur a sa lecture (partagee si elle est deja en cours) ; on attend au plus TIME_BUDGET,
+    # les autres continuent en fond et la page redemande (« partial »)
+    tasks = {}
+    for c in pick:
+        t = _DEEP_RUN.get(c["uid"])
+        if t is None or t.done():
+            t = asyncio.get_running_loop().create_task(one(c))
+            _DEEP_RUN[c["uid"]] = t
+        tasks[c["uid"]] = t
+    if tasks:
+        await asyncio.wait(list(tasks.values()), timeout=TIME_BUDGET)
+    deeps = [tasks[c["uid"]].result() if tasks[c["uid"]].done() and not tasks[c["uid"]].exception() else _deep_seed(c) for c in pick]
+    waiting = sum(1 for t in tasks.values() if not t.done())
+    if _DEEP_DISK["dirty"]:
+        asyncio.get_running_loop().create_task(_deep_save())
     items = [x for d in deeps for x in d["items"] if start <= (x.get("published") or "")[:19] < end[:19]]
     items.sort(key=lambda x: x.get("published") or "", reverse=True)
     has_more = any(not d["done"] or any((x.get("published") or "")[:19] < start for x in d["items"]) for d in deeps)
@@ -915,7 +993,7 @@ async def timeline(uids: str = "", before: str = "", days: int = 7, fresh: bool 
         t = asyncio.get_running_loop().create_task(ahead())
         t.add_done_callback(lambda _t: _DEEP_BG.discard(key))
     return {"items": res["items"], "pending": res.get("pending", 0), "start": start, "end": end,
-            "next_before": start, "has_more": has_more, "creators": len(pick)}
+            "next_before": start, "has_more": has_more, "creators": len(pick), "partial": waiting}
 
 
 # ── Prechargement en arriere-plan ──────────────────────────────────────────
