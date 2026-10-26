@@ -5309,8 +5309,10 @@ async def surprise_shown(username: str, farce: str | None = None, now=None) -> N
                 seen = seen if isinstance(seen, dict) else {}
                 seen[username] = int(seen.get(username) or 0) + 1
                 await set_setting(db, KEY + "_SURPRISE_SEEN", json.dumps(seen))
-            d[username] = 0
-            await set_setting(db, KEY + "_SURPRISE", json.dumps(d))
+                # le compteur ne repart a 0 que pour une surprise vraiment tiree (26/10/2026) : un « vu » sans
+                # tirage en attente (deja declare, ou venu d'ailleurs) ne fait plus perdre la chance accumulee
+                d[username] = 0
+                await set_setting(db, KEY + "_SURPRISE", json.dumps(d))
             await set_setting(db, KEY + "_SURPRISE_PENDING", json.dumps(pending))
             egg = "p_" + str(farce or "").replace("-", "_")
             if had and egg in PRANK_EGGS:

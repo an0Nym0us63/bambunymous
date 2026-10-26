@@ -130,6 +130,11 @@ function useHomeReady(slug, onHome) {
   return ready === slug;
 }
 
+// La surprise (farce ou fete) a declarer « vue » au serveur : seulement une fois REELLEMENT affichee (26/10/2026).
+// Declaree au lancement, une farce interrompue (on quitte l'accueil avant qu'elle ne parte) remettait le compteur
+// a 0 sans rien montrer ; non declaree, le tirage gagnant reste en attente et revient a l'ouverture suivante.
+let toAck = null;      // { slug, body }
+
 /** Monte la farce en cours par-dessus l'accueil (dans la mise en page). */
 export function PrankHost() {
   const slug = usePrank(s => s.slug);
@@ -154,13 +159,14 @@ export function PrankHost() {
         // ce que la farce peut afficher : signe de l'annee lunaire, annees depuis la premiere impression
         window.__bnZodiac = data.zodiac || undefined;
         window.__bnAnniv = data.years || undefined;
+        toAck = { slug: data.fete, body: { fete: data.fete } };
         start(data.fete);
-        client.post("/achievements/surprise/shown", { fete: data.fete }).catch(() => {});
       } else {
         const [kind, slug] = pickSurprise(data.found || []);
-        // le serveur retient la farce tombee : c'est la seule facon d'en gagner le secret
-        client.post("/achievements/surprise/shown", kind === "farce" ? { farce: slug } : {}).catch(() => {});
-        if (kind === "farce") start(slug); else nav("/" + slug);
+        // le serveur retient la farce tombee : c'est la seule facon d'en gagner le secret. Une farce est declaree
+        // quand elle s'affiche (plus bas) ; une page cachee s'ouvre tout de suite : declaree tout de suite.
+        if (kind === "farce") { toAck = { slug, body: { farce: slug } }; start(slug); }
+        else { client.post("/achievements/surprise/shown", {}).catch(() => {}); nav("/" + slug); }
       }
       openPassage();
     };
@@ -191,6 +197,15 @@ export function PrankHost() {
   useEffect(() => { doneRef.current = false; }, [slug]);
   // celle de la maison ne se laisse pas semer : quitter l'accueil ne l'arrete pas
   const ready = useHomeReady(slug, pathname === "/" || slug === MAISON.slug);
+  const showing = !!slug && (pathname === "/" || slug === MAISON.slug) && ready;
+  useEffect(() => {
+    if (showing && toAck && toAck.slug === slug) {
+      const b = toAck.body;
+      toAck = null;
+      client.post("/achievements/surprise/shown", b).catch(() => {});
+    }
+    if (!slug) toAck = null;                 // arretee avant d'avoir ete vue : rien n'est declare
+  }, [showing, slug]);
   if (!slug || (pathname !== "/" && slug !== MAISON.slug) || !ready) return null;
   const Effect = effectOf(slug);
   const done = () => {
