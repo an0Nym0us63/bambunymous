@@ -82,6 +82,9 @@ async def lifespan(app: FastAPI):
                 _lg.setLevel(logging.DEBUG)
             _lg.propagate = True
     logger.info(f"BambuNymous starting — version {VERSION}")
+    # la boucle principale : ses sessions passent par le pool de connexions (les autres boucles, non)
+    from app.db.session import bind_main_loop
+    bind_main_loop()
     await init_db()
     # Delais de sechage (defaut + regles par famille / sous-famille) en memoire :
     # la fiche bobine et l'AMS les lisent sans requete.

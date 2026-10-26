@@ -1,5 +1,7 @@
+import asyncio
+
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import AsyncAdaptedQueuePool, NullPool
 from sqlalchemy.orm import DeclarativeBase
 from ..core.config import settings
 
@@ -8,8 +10,7 @@ class Base(DeclarativeBase):
     pass
 
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
+_ENGINE_ARGS = dict(
     echo=settings.DEBUG,
     connect_args={
         "check_same_thread": False,
@@ -17,13 +18,23 @@ engine = create_async_engine(
     },
     # pas de « SELECT 1 » avant chaque emprunt de connexion : un fichier local ne se coupe pas comme un serveur
     pool_pre_ping=False,
-    # PAS de pool partage (27/10/2026) : le fil MQTT et plusieurs routes (imports, filaments, impressions, reglages)
-    # font tourner LEUR PROPRE boucle asyncio et y ouvrent des sessions. Un pool (AsyncAdaptedQueuePool) est lie a
-    # une seule boucle : essaye le 26/10, il a casse au demarrage (« Queue … is bound to a different event loop »,
-    # 77 appels en attente de connexion). Une connexion neuve par session, donc, comme avant ; pour garder un pool,
-    # il faudrait d'abord que tout passe par la boucle principale.
-    poolclass=NullPool,
 )
+
+# Deux moteurs (27/10/2026). Le fil MQTT et plusieurs routes (imports, filaments, impressions, reglages) font
+# tourner LEUR PROPRE boucle asyncio et y ouvrent des sessions ; un pool (AsyncAdaptedQueuePool) est lie a une
+# seule boucle (essaye seul le 26/10 : « Queue … is bound to a different event loop » au demarrage). Donc :
+# - « engine » : une connexion neuve par session (NullPool), sur n'importe quelle boucle ;
+# - « _pooled » : les connexions gardees ouvertes (cache chaud, PRAGMA poses une fois), reserve a la boucle
+#   principale, celle qui sert les pages. Douze gardees ; au-dela, des connexions en plus (jamais d'attente).
+engine = create_async_engine(settings.DATABASE_URL, poolclass=NullPool, **_ENGINE_ARGS)
+_pooled = create_async_engine(settings.DATABASE_URL, poolclass=AsyncAdaptedQueuePool, pool_size=12,
+                              max_overflow=500, **_ENGINE_ARGS)
+_MAIN = {"loop": None}
+
+
+def bind_main_loop() -> None:
+    """La boucle principale (au demarrage du serveur) : ses sessions passent par le pool."""
+    _MAIN["loop"] = asyncio.get_running_loop()
 
 
 # Les reglages de SQLite valent par connexion (26/10/2026) : poses une seule fois au demarrage, ils ne
@@ -32,7 +43,6 @@ engine = create_async_engine(
 from sqlalchemy import event as _event
 
 
-@_event.listens_for(engine.sync_engine, "connect")
 def _sqlite_pragmas(dbapi_conn, _rec):
     if not str(settings.DATABASE_URL).startswith("sqlite"):
         return
@@ -50,12 +60,10 @@ def _sqlite_pragmas(dbapi_conn, _rec):
 import time as _time
 
 
-@_event.listens_for(engine.sync_engine, "before_cursor_execute")
 def _sql_t0(conn, cursor, statement, params, context, executemany):
     conn.info.setdefault("_perf_t0", []).append(_time.perf_counter())
 
 
-@_event.listens_for(engine.sync_engine, "after_cursor_execute")
 def _sql_t1(conn, cursor, statement, params, context, executemany):
     try:
         t0 = conn.info["_perf_t0"].pop()
@@ -65,7 +73,22 @@ def _sql_t1(conn, cursor, statement, params, context, executemany):
         pass
 
 
-AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+for _e in (engine, _pooled):
+    _event.listen(_e.sync_engine, "connect", _sqlite_pragmas)
+    _event.listen(_e.sync_engine, "before_cursor_execute", _sql_t0)
+    _event.listen(_e.sync_engine, "after_cursor_execute", _sql_t1)
+
+_MAKER_POOLED = async_sessionmaker(_pooled, expire_on_commit=False)
+_MAKER_ANY = async_sessionmaker(engine, expire_on_commit=False)
+
+
+def AsyncSessionLocal(**kw) -> AsyncSession:
+    """Une session : par le pool sur la boucle principale, une connexion neuve sur toute autre boucle."""
+    try:
+        lp = asyncio.get_running_loop()
+    except RuntimeError:
+        lp = None
+    return (_MAKER_POOLED if lp is not None and lp is _MAIN["loop"] else _MAKER_ANY)(**kw)
 
 
 async def get_db():
