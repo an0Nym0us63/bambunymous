@@ -853,6 +853,21 @@ const PLACE_OF = id => id === "egg_anonymous" ? ["/anonymous", "page"] : id === 
 const oddsPct = p => (p * 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
 const oddsWhen = s => { if (!s) return "jamais"; const d = new Date(/Z|[+-]\d\d:\d\d$/.test(s) ? s : s + "Z");
   return `${d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} à ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`; };
+// le temps depuis la derniere ouverture comptee, et quand la suivante pourra compter (au plus une toutes les gap min)
+const oddsDate = s => new Date(/Z|[+-]\d\d:\d\d$/.test(s) ? s : s + "Z");
+export const oddsAgo = s => {
+  if (!s) return "jamais";
+  const m = Math.max(0, Math.round((Date.now() - oddsDate(s)) / 60000));
+  if (m < 1) return "à l'instant";
+  if (m < 60) return `il y a ${m} min`;
+  if (m < 1440) return `il y a ${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+  return `il y a ${Math.floor(m / 1440)} j`;
+};
+export const oddsReady = (s, gap) => {
+  if (!s) return "prête";
+  const left = Math.ceil(((gap || 15) * 60000 - (Date.now() - oddsDate(s))) / 60000);
+  return left > 0 ? `compte à nouveau dans ${left} min` : "la prochaine compte";
+};
 // la surprise de chaque compte : chance a la prochaine ouverture, ouvertures sans, surprises recues
 // la prochaine surprise du compte principal ; un clic : tous les comptes (de quoi voir si, chez quelqu'un, elle ne tombe jamais)
 function OddsBanner({ odds, onOpen }) {
@@ -873,7 +888,7 @@ function OddsBanner({ odds, onOpen }) {
         <span style={{ fontSize:12, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
           {m.pending ? "Une surprise t'attend" : "Prochaine surprise"}</span>
         <span style={{ fontSize:10.5, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-          {m.n} ouverture{m.n > 1 ? "s" : ""} sans · {m.shown} reçue{m.shown > 1 ? "s" : ""}</span>
+          {m.n} ouverture{m.n > 1 ? "s" : ""} sans · {m.shown} reçue{m.shown > 1 ? "s" : ""} · dernière comptée {oddsAgo(m.last)}</span>
       </span>
       <span style={{ fontSize:11, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap" }}>Comptes ›</span>
     </button>
@@ -923,7 +938,8 @@ function OddsSheet({ odds, admin, uniq, onClose }) {
               <div style={{ fontSize:12, color:"var(--text2)", lineHeight:1.45 }}>
                 {a.pending ? "Une surprise est tirée : elle tombe à la prochaine ouverture" : `${a.n} ouverture${a.n > 1 ? "s" : ""} sans surprise`}
                 {" · "}<b>{a.shown}</b> surprise{a.shown > 1 ? "s" : ""} reçue{a.shown > 1 ? "s" : ""}</div>
-              <div style={{ fontSize:11, color:"var(--muted)" }}>Dernière ouverture comptée : {oddsWhen(a.last)}</div>
+              <div style={{ fontSize:11, color:"var(--muted)" }}>Dernière ouverture comptée : {oddsWhen(a.last)}
+                {a.last && <> · <b style={{ color:"var(--text2)" }}>{oddsAgo(a.last)}</b> · {oddsReady(a.last, odds.gap_min)}</>}</div>
               {/* ses propres trouvailles (pas le principal : les siennes sont celles de la maison) */}
               {!a.main && secrets?.[a.username] && (sc => (
                 <button type="button" onClick={() => (sc.count || sc.loupes?.used?.length) && setOpenU(a.username)} disabled={!sc.count && !sc.loupes?.used?.length}

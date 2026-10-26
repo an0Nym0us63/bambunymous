@@ -118,6 +118,9 @@ function Nudge() {
   };
   React.useEffect(() => { load().catch(e => setMsg(e.response?.data?.detail || e.message)); }, []);
   const fmt = p => `${(Math.round(p * 1000) / 10).toString().replace(".", ",")} %`;
+  // depuis la derniere ouverture comptee
+  const ago = l => { if (!l) return "jamais comptée"; const m = Math.max(0, Math.round((Date.now() - new Date(/Z|[+-]\d\d:\d\d$/.test(l) ? l : l + "Z")) / 60000));
+    return m < 60 ? `il y a ${m} min` : m < 1440 ? `il y a ${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` : `il y a ${Math.floor(m / 1440)} j`; };
   const go = async e => {
     e.preventDefault();
     if (!who || pct === "") { setMsg("Compte et pourcentage requis"); return; }
@@ -139,7 +142,8 @@ function Nudge() {
           <button type="button" key={r.username} onClick={() => { setWho(r.username); setMsg(""); }} style={{ ...field, display:"flex", alignItems:"center",
             gap:8, cursor:"pointer", textAlign:"left", border:`1.5px solid ${who === r.username ? "#3b82f6" : "var(--border)"}` }}>
             <span style={{ flex:1, fontWeight:800 }}>{r.username}</span>
-            <span style={{ fontFamily:"monospace", fontSize:13, color:"var(--muted)" }}>{r.pending ? "en attente" : fmt(r.next)} · {r.n}</span>
+            <span style={{ fontFamily:"monospace", fontSize:13, color:"var(--muted)", textAlign:"right" }}>{r.pending ? "en attente" : fmt(r.next)} · {r.n}
+              <span style={{ display:"block", fontSize:11 }}>{ago(r.last)}</span></span>
           </button>))}
       </div>}
       <input type="text" inputMode="decimal" value={pct} onChange={e => { setPct(e.target.value); setMsg(""); }} placeholder="Chance à la prochaine ouverture (%)"
