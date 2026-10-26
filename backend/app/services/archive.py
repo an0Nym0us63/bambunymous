@@ -1,11 +1,11 @@
 """La sauvegarde vers un dossier monte (NAS) et le vidage du local (26/10/2026).
 
 Le conteneur monte un dossier du NAS sur /nas (compose.yaml). La sauvegarde y range deux dossiers :
-« Impressions » (une arborescence humaine par modele puis par impression, dans son groupe s'il y en a un)
+« Impressions » (« Groupes », un dossier par groupe, et « Impressions seules » ; puis par modele et par impression)
 et « Système » (copies de la base, et le reste des donnees : photos des filaments, objets, accessoires,
 bibliotheque des 3MF MakerWorld, catalogue Bambu).
 
-    Impressions/Balancing bird/
+    Impressions/Impressions seules/Balancing bird/
         2026-10-25 18h30/
             Fiche.txt              (date, duree, poids, filaments, lien MakerWorld)
             Plateau.png
@@ -14,8 +14,8 @@ bibliotheque des 3MF MakerWorld, catalogue Bambu).
             Vidéos/     Vidéo 01.mp4…
             Timelapse/  Timelapse.mp4
             Couches/    Couche 1.jpg, Couche 2.jpg, 50 %.jpg, 99 %.jpg, Fin.jpg, Échec.jpg
-    Impressions/Groupe - <nom>/Photos du groupe/, puis ses impressions (modele / date)
-    Impressions/_Supprimés/…       (ce qui a disparu de l'appli, jamais efface)
+    Impressions/Groupes/<nom>/Fiche du groupe.txt, Photos du groupe/, puis ses impressions (modele / date)
+    Impressions/_Supprimés/…       (impression, groupe, photo, video… supprimes dans l'appli, jamais effaces)
     Système/Base de données/bambunymous-2026-10-26 03h00.db   (les 14 dernieres)
     Système/Photos des filaments/, Objets/, Accessoires/, 3MF MakerWorld/, Catalogue Bambu/
 
@@ -47,6 +47,11 @@ _INDEX = {"v": None}
 PR = "Impressions"                          # les impressions, en nommage humain
 SYS = "Système"                             # la base et le reste des donnees
 SUBS = {"Couches", "Photos", "Vidéos", "Timelapse", "3MF"}
+GRP = f"{PR}/Groupes"                       # un dossier par groupe : sa fiche, ses photos, ses impressions
+SOLO = f"{PR}/Impressions seules"           # les impressions hors groupe
+DEL = f"{PR}/_Supprimés"                    # ce qui a disparu de l'appli (jamais efface du NAS)
+PH = "Photos du groupe"
+STATUS = {"SUCCESS": "réussie", "FAILED": "échouée", "PARTIAL": "partielle", "TO_REDO": "à refaire"}
 # le reste des donnees, recopie tel quel dans « Système »
 SYSTEM_DIRS = [("filaments", "Photos des filaments"), ("objects", "Objets"), ("accessories", "Accessoires"),
                ("mw_3mf", "3MF MakerWorld"), ("bambu_catalog", "Catalogue Bambu")]
@@ -244,7 +249,7 @@ def _copy(src: Path, dst: Path) -> bool:
 def _fiche(p, model: str, when: datetime, fil: list, mw_url: str | None) -> str:
     dur = p.duration_seconds or p.estimated_seconds or 0
     lines = [model, "", f"Impression du {when.strftime('%d/%m/%Y à %Hh%M')}",
-             f"Statut : {({'SUCCESS': 'réussie', 'FAILED': 'échouée', 'PARTIAL': 'partielle', 'TO_REDO': 'à refaire'}).get(p.status, p.status or '?')}"]
+             f"Statut : {STATUS.get(p.status, p.status or '?')}"]
     if dur:
         lines.append(f"Durée : {int(dur // 3600)} h {int(dur % 3600 // 60):02d}")
     if p.total_weight_g:
@@ -293,8 +298,51 @@ def _model_of(p, mws) -> str:
     return _two(p.translated_name, p.original_name or p.file_name or f"Impression {p.id}")
 
 
-def _group_dir(g) -> str:
-    return f"Groupe - {clean(g.name or f'Groupe {g.id}')}"
+def _fiche_group(g, members: list) -> str:
+    """La fiche d'un groupe : ses chiffres, et la liste de ses impressions (date, modele, statut)."""
+    dur = sum((p.duration_seconds or p.estimated_seconds or 0) for p, _m, _w in members)
+    weight = sum((p.total_weight_g or 0) for p, _m, _w in members)
+    lines = [g.name or f"Groupe {g.id}", "", f"Groupe de {len(members)} impression{'s' if len(members) > 1 else ''}"]
+    if (g.number_of_items or 1) > 1:
+        lines.append(f"Pièces : {g.number_of_items}")
+    if dur:
+        lines.append(f"Durée totale : {int(dur // 3600)} h {int(dur % 3600 // 60):02d}")
+    if weight:
+        lines.append(f"Poids total : {round(weight)} g")
+    dates = [w for _p, _m, w in members if w.year > 1970]
+    if dates:
+        a, b = min(dates).strftime("%d/%m/%Y"), max(dates).strftime("%d/%m/%Y")
+        lines.append(f"Imprimé le {a}" if a == b else f"Imprimé du {a} au {b}")
+    if members:
+        lines += ["", "Impressions :"] + [f"  - {w.strftime('%d/%m/%Y %Hh%M')} — {m} ({STATUS.get(p.status, p.status or '?')})"
+                                          for p, m, w in sorted(members, key=lambda x: x[2])]
+    return "\n".join(lines) + "\n"
+
+
+def _write_if_changed(fp: Path, txt: str) -> bool:
+    if fp.is_file() and fp.read_text(encoding="utf-8", errors="ignore") == txt:
+        return False
+    fp.parent.mkdir(parents=True, exist_ok=True)
+    fp.write_text(txt, encoding="utf-8")
+    return True
+
+
+def _deleted(to: str) -> str:
+    """Ou va, dans « _Supprimés », ce qui etait a cet emplacement (meme arborescence)."""
+    return f"{DEL}/{to[len(PR) + 1:] if to.startswith(PR + '/') else to}"
+
+
+def _set_aside(root: Path, idx: dict, key: str, rep: dict) -> None:
+    """Un fichier supprime dans l'appli (photo, video…) : sa copie part dans « _Supprimés », l'index l'oublie."""
+    e = idx.pop(key, None)
+    to = e.get("to") if isinstance(e, dict) else None
+    if to and (root / to).exists():
+        try:
+            _move(root, to, _deleted(to))
+            rep["set_aside"] += 1
+        except OSError as ex:
+            rep["errors"] += 1
+            logger.warning(f"[ARCHIVE] mise de cote de {to} : {ex}")
 
 
 def _move(root: Path, old: str, new: str) -> bool:
@@ -392,28 +440,36 @@ def _system_sync(root: Path, rep: dict) -> None:
 
 
 def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> dict:
-    """La sauvegarde, en delta : copie le nouveau, et DEPLACE sur le NAS ce dont la place a change (impression
-    entree ou sortie d'un groupe, groupe renomme, nom traduit…), fichiers deja vides du local compris.
-    Ce qui a disparu de l'appli (impression, groupe) part dans « _Supprimés », jamais efface."""
+    """La sauvegarde, en delta. Copie le nouveau et le change ; DEPLACE sur le NAS ce dont la place a change
+    (impression entree ou sortie d'un groupe, groupe renomme, nom traduit…), fichiers deja vides du local compris.
+    Ce qui a disparu de l'appli (impression, groupe, photo, video…) part dans « _Supprimés », jamais efface."""
     from .mw_source import print_file as source_3mf
     idx = _index()
-    dirs = idx.setdefault("@dirs", {})           # « print:12 » / « group:3 » -> son dossier sur le NAS
-    rep = {"copied": 0, "skipped": 0, "moved": 0, "bytes": 0, "errors": 0, "prints": 0}
+    rep = {"copied": 0, "skipped": 0, "moved": 0, "set_aside": 0, "bytes": 0, "errors": 0, "prints": 0}
     _migrate_layout(root, idx, rep)
-    gby = {g.id: g for g in groups}
-    taken: dict = {}
+    dirs = idx.setdefault("@dirs", {})           # « print:12 » / « grp:3 » -> son dossier sur le NAS
+    # si les donnees locales ne sont pas la (volume absent), on ne deduit aucune suppression
+    local_ok = (DATA_DIR / "prints").is_dir() and any((DATA_DIR / "prints").iterdir())
 
-    # l'emplacement de chaque impression (dans son groupe s'il y en a un)
-    plan = {}
+    # le dossier de chaque groupe (deux groupes du meme nom : son numero en plus)
+    gdirs, seen = {}, set()
+    for g in sorted(groups, key=lambda g: g.id):
+        d = f"{GRP}/{clean(g.name or f'Groupe {g.id}')}"
+        if d.lower() in seen:
+            d += f" #{g.id}"
+        seen.add(d.lower())
+        gdirs[g.id] = d
+
+    # l'emplacement de chaque impression : dans son groupe, sinon parmi les impressions seules
+    plan, taken = {}, {}
     for p in prints:
         model = _model_of(p, mws)
         when = _local(p.print_date) if p.print_date else datetime(1970, 1, 1)
         stamp = when.strftime("%Y-%m-%d %Hh%M") + (" (échouée)" if p.status == "FAILED" else "")
-        g = gby.get(p.group_id) if p.group_id else None
-        rel_dir = f"{PR}/{_group_dir(g)}/{model}/{stamp}" if g else f"{PR}/{model}/{stamp}"
-        if taken.get(rel_dir, p.id) != p.id:
+        rel_dir = f"{gdirs.get(p.group_id, SOLO)}/{model}/{stamp}"
+        if taken.get(rel_dir.lower(), p.id) != p.id:
             rel_dir += f" #{p.id}"
-        taken[rel_dir] = p.id
+        taken[rel_dir.lower()] = p.id
         plan[p.id] = (rel_dir, model, when)
 
     # 1) les dossiers dont la place a change : deplaces d'un bloc (avec ce qui n'est plus qu'au NAS)
@@ -421,7 +477,7 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
         rel_dir = plan[p.id][0]
         old = dirs.get(f"print:{p.id}")
         if not old:
-            # sauvegarde d'avant les groupes : son dossier se deduit de ses fichiers indexes (modele/date)
+            # sauvegarde d'avant : son dossier se deduit de ses fichiers indexes
             olds = [e["to"] for k, e in idx.items() if k.startswith(f"prints/{p.id}/") and isinstance(e, dict) and e.get("to")]
             old = _dir_of(olds[0]) if olds else None
         if old and old != rel_dir and (root / old).exists():
@@ -435,7 +491,8 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
                 continue
         dirs[f"print:{p.id}"] = rel_dir
 
-    # 2) chaque impression : ses fichiers (copies, ou deplaces si leur nom a change), le 3MF d'origine, la fiche
+    # 2) chaque impression : ses fichiers (copies, deplaces si leur nom a change, mis de cote si supprimes),
+    #    le 3MF d'origine, la fiche
     for i, p in enumerate(prints):
         prog.update(done=i, total=len(prints), what=f"impression {i + 1} / {len(prints)}")
         rel_dir, model, when = plan[p.id]
@@ -443,8 +500,13 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
         wrote = False
         try:
             local = {f.name: f for f in d.iterdir() if f.is_file()} if d.is_dir() else {}
-            names = set(local) | {k.split("/", 2)[2] for k, e in idx.items()
-                                  if k.startswith(f"prints/{p.id}/") and isinstance(e, dict) and e.get("purged")}
+            mine = {k: e for k, e in idx.items() if k.startswith(f"prints/{p.id}/") and isinstance(e, dict)}
+            # supprime dans l'appli (ni en local, ni vide expres du local) : sa copie part dans « _Supprimés »
+            if local_ok and d.is_dir():
+                for k, e in mine.items():
+                    if not e.get("purged") and k.split("/", 2)[2] not in local:
+                        _set_aside(root, idx, k, rep)
+            names = set(local) | {k.split("/", 2)[2] for k, e in mine.items() if e.get("purged")}
             for name in sorted(names):
                 h = human_name(name, model)
                 if not h:
@@ -467,9 +529,9 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
                     e.update(to=to, root=str(root))
             # le 3MF d'origine MakerWorld (partage par les impressions du meme modele)
             src = source_3mf(p.design_id, p.mw_profile_id, p.mw_plates) if p.design_id else None
+            prev = idx.get(f"src:{p.id}")
             if src and Path(src).is_file():
                 to = f"{rel_dir}/3MF/{model} - origine MakerWorld.3mf"
-                prev = idx.get(f"src:{p.id}")
                 if isinstance(prev, dict) and prev.get("to") != to and (root / prev["to"]).exists():
                     _move(root, prev["to"], to)
                 if _copy(Path(src), root / to):
@@ -477,16 +539,15 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
                     rep["bytes"] += Path(src).stat().st_size
                     wrote = True
                 idx[f"src:{p.id}"] = {"to": to, "root": str(root)}
+            elif isinstance(prev, dict) and not p.design_id:     # plus lie a un modele MakerWorld
+                _set_aside(root, idx, f"src:{p.id}", rep)
             # la fiche (reecrite si elle a change)
             fil = [f"{u.filament_type or 'Filament'} {u.color_hex or ''} — {round(u.grams_used or 0)} g".replace("  ", " ")
                    for u in (p.filament_usage or []) if (u.grams_used or 0) > 0]
             mw = f"https://makerworld.com/fr/models/{p.design_id}" if p.design_id else None
-            g = gby.get(p.group_id) if p.group_id else None
+            g = next((x for x in groups if x.id == p.group_id), None) if p.group_id else None
             txt = _fiche(p, model, when, fil, mw) + (f"\nGroupe : {g.name}\n" if g else "")
-            fp = root / rel_dir / "Fiche.txt"
-            if not fp.is_file() or fp.read_text(encoding="utf-8", errors="ignore") != txt:
-                fp.parent.mkdir(parents=True, exist_ok=True)
-                fp.write_text(txt, encoding="utf-8")
+            if _write_if_changed(root / rel_dir / "Fiche.txt", txt):
                 wrote = True
             if wrote:
                 rep["prints"] += 1
@@ -496,47 +557,63 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
         if i % 50 == 0:
             _index_save()
 
-    # 3) les photos des groupes, dans leur dossier de groupe (deplacees si le groupe est renomme)
+    # 3) chaque groupe : son dossier (deplace s'il est renomme), sa fiche, ses photos
     for g in groups:
-        gdir = f"{PR}/{_group_dir(g)}/Photos du groupe"
-        old = dirs.get(f"group:{g.id}")
-        if not old:                                      # d'avant : « _Groupes/<nom> »
-            olds = [e["to"] for k, e in idx.items() if k.startswith(f"groups/{g.id}/") and isinstance(e, dict) and e.get("to")]
-            old = _dir_of(olds[0]) if olds else None
-        if old and old != gdir and (root / old).exists():
+        groot = gdirs[g.id]
+        gph = f"{groot}/{PH}"
+        old = dirs.get(f"grp:{g.id}")
+        pair = (old, groot) if old else None
+        if not pair:
+            # d'avant : « group:<id> » pointait sur ses photos (« …/Groupe - X/Photos du groupe », ou « _Groupes/X »)
+            legacy = dirs.pop(f"group:{g.id}", None)
+            if not legacy:
+                olds = [e["to"] for k, e in idx.items() if k.startswith(f"groups/{g.id}/") and isinstance(e, dict) and e.get("to")]
+                legacy = _dir_of(olds[0]) if olds else None
+            if legacy:
+                pair = (legacy[:-len(PH) - 1], groot) if legacy.endswith("/" + PH) else (legacy, gph)
+        if pair and pair[0] != pair[1] and (root / pair[0]).exists():
             try:
-                _move(root, old, gdir)
-                _retarget(idx, old, gdir)
+                _move(root, pair[0], pair[1])
+                _retarget(idx, pair[0], pair[1])
                 rep["moved"] += 1
             except OSError:
                 rep["errors"] += 1
-        dirs[f"group:{g.id}"] = gdir
+        dirs[f"grp:{g.id}"] = groot
+        try:
+            members = [(p, plan[p.id][1], plan[p.id][2]) for p in prints if p.group_id == g.id]
+            _write_if_changed(root / groot / "Fiche du groupe.txt", _fiche_group(g, members))
+        except Exception as e:
+            rep["errors"] += 1
+            logger.warning(f"[ARCHIVE] fiche du groupe {g.id} : {e}")
         gd = DATA_DIR / "groups" / str(g.id)
-        if not gd.is_dir():
-            continue
-        for f in gd.iterdir():
-            if f.is_file():
-                to = f"{gdir}/{f.name}"
-                try:
-                    if _copy(f, root / to):
-                        rep["copied"] += 1
-                        rep["bytes"] += f.stat().st_size
-                    else:
-                        rep["skipped"] += 1
-                    idx[f"groups/{g.id}/{f.name}"] = {"to": to, "root": str(root), "size": f.stat().st_size, "at": int(time.time())}
-                except Exception:
-                    rep["errors"] += 1
+        local = {f.name: f for f in gd.iterdir() if f.is_file()} if gd.is_dir() else {}
+        if local_ok:
+            for k in [k for k, e in idx.items() if k.startswith(f"groups/{g.id}/") and isinstance(e, dict)
+                      and k.split("/", 2)[2] not in local]:
+                _set_aside(root, idx, k, rep)
+        for f in local.values():
+            to = f"{gph}/{f.name}"
+            try:
+                if _copy(f, root / to):
+                    rep["copied"] += 1
+                    rep["bytes"] += f.stat().st_size
+                else:
+                    rep["skipped"] += 1
+                idx[f"groups/{g.id}/{f.name}"] = {"to": to, "root": str(root), "size": f.stat().st_size, "at": int(time.time())}
+            except Exception:
+                rep["errors"] += 1
 
-    # 4) ce qui a disparu de l'appli : mis de cote dans « _Supprimés » (rien n'est efface du NAS)
+    # 4) ce qui a disparu de l'appli : mis de cote dans « _Supprimés » (rien n'est efface du NAS) ;
+    #    les impressions d'abord, puis les groupes (qui n'emportent alors que leur fiche et leurs photos)
     live_groups = {g.id for g in groups}
-    for key, old in list(dirs.items()):
+    for key, old in sorted(dirs.items(), key=lambda kv: not kv[0].startswith("print:")):
         kind, _, n = key.partition(":")
-        gone = (kind == "print" and n.isdigit() and int(n) not in all_ids) or (kind == "group" and n.isdigit() and int(n) not in live_groups)
-        if not gone:
+        if not n.isdigit() or not isinstance(old, str):
             continue
-        if old.startswith(f"{PR}/_Supprimés/"):
+        gone = (kind == "print" and int(n) not in all_ids) or (kind in ("grp", "group") and int(n) not in live_groups)
+        if not gone or old.startswith(DEL + "/"):
             continue
-        new = f"{PR}/_Supprimés/{old[len(PR) + 1:] if old.startswith(PR + '/') else old}"
+        new = _deleted(old)
         try:
             if (root / old).exists():
                 _move(root, old, new)
@@ -549,6 +626,7 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
     prog.update(what="photos des filaments, objets, accessoires, 3MF MakerWorld…")
     _system_sync(root, rep)
     _index_save()
+    _nas_changed()
     return rep
 
 
@@ -607,6 +685,12 @@ async def backup(trigger: str = "manuel") -> dict:
 
 
 # ── Le vidage du local ──────────────────────────────────────────────────────────────────────────────
+def _nas_changed() -> None:
+    """Le releve du NAS (espace de stockage) est a refaire."""
+    from . import storage
+    storage._NAS_CACHE["v"] = None
+
+
 def _purgeable(name: str) -> bool:
     low = name.lower()
     return (low.startswith("snapshot-") or low.endswith(".3mf")
@@ -641,6 +725,7 @@ def _purge_sync(old_ids: set, prog: dict) -> dict:
             rep["files"] += 1
             rep["bytes"] += n
     _index_save()
+    _nas_changed()
     return rep
 
 

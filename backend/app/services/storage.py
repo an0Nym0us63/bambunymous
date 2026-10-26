@@ -100,3 +100,80 @@ async def usage(fresh: bool = False) -> dict:
     v["at"] = time.time()
     _CACHE.update(at=time.time(), v=v)
     return v
+
+
+# ── Le NAS (26/10/2026) : ce que la sauvegarde y range, par les memes sortes, d'apres ses dossiers ──
+NAS_CACHE_S = 600                                      # un partage reseau se parcourt lentement : 10 min
+_NAS_CACHE: dict = {"at": 0.0, "v": None}
+NAS_CATS = CATS[:-2] + [("fiches", "Fiches des impressions et des groupes", "#0EA5E9"),
+                        ("deleted", "Mis de côté (_Supprimés)", "#A1A1AA"), ("other", "Autres", "#64748B")]
+SYS_SUBS = {"Base de données": "db", "Photos des filaments": "filaments", "Objets": "objects",
+            "Accessoires": "accessories", "Catalogue Bambu": "catalog"}
+
+
+def _nas_cat(parts: tuple, name: str) -> str:
+    """La sorte d'un fichier du NAS d'apres son chemin (Impressions/…, Système/…) et son nom."""
+    ext = os.path.splitext(name)[1].lower()
+    top = parts[0] if len(parts) > 1 else ""
+    if top == "Système" and len(parts) > 2:
+        if parts[1] == "3MF MakerWorld":
+            return "mw_tmf" if ext == ".3mf" else "catalog"
+        return SYS_SUBS.get(parts[1], "other")
+    if top == "Impressions":
+        if len(parts) > 2 and parts[1] == "_Supprimés":
+            return "deleted"
+        if "Photos du groupe" in parts:
+            return "groups"
+        if ext in VID:
+            return "videos"
+        folder = parts[-2] if len(parts) > 1 else ""
+        if folder == "Couches":
+            return "auto"
+        if folder == "Photos":
+            return "print_photos"
+        if ext == ".3mf":
+            return "mw_tmf" if "origine MakerWorld" in name else "tmf"
+        if name.startswith("Plateau"):
+            return "plates"
+        if ext == ".txt":
+            return "fiches"
+    return "other"
+
+
+def _nas_scan(root: Path) -> dict:
+    sums = {k: [0, 0] for k, _l, _c in NAS_CATS}
+    for dirpath, _dirs, files in os.walk(root):
+        rel = Path(dirpath).relative_to(root).parts
+        for f in files:
+            if f.startswith(".bambunymous") or f.endswith(".part"):
+                continue
+            try:
+                n = (Path(dirpath) / f).stat().st_size
+            except OSError:
+                continue
+            k = _nas_cat(rel + (f,), f)
+            sums[k][0] += n
+            sums[k][1] += 1
+    return {"total": sum(v[0] for v in sums.values()), "files": sum(v[1] for v in sums.values()),
+            "cats": [{"key": k, "label": l, "color": c, "bytes": sums[k][0], "files": sums[k][1]} for k, l, c in NAS_CATS]}
+
+
+async def nas_usage(fresh: bool = False) -> dict:
+    """Le releve du NAS : sa place, ce que la sauvegarde y range par sorte, et ce qui n'est plus que la-bas
+    (vide du local). Rien de lu si le partage n'est pas pret."""
+    import asyncio
+    from . import archive as AR
+    if not fresh and _NAS_CACHE["v"] is not None and time.time() - _NAS_CACHE["at"] < NAS_CACHE_S:
+        return _NAS_CACHE["v"]
+    root = (await AR.settings_get())["dir"]
+    chk = await asyncio.to_thread(AR._check_root, root)
+    if not chk.get("ok"):
+        return {"ok": False, "dir": root, "why": chk.get("why")}
+    v = await asyncio.to_thread(_nas_scan, Path(root))
+    dk = chk.get("disk")
+    v["disk"] = {"total": dk["total"], "free": dk["free"], "used": dk["total"] - dk["free"]} if dk else None
+    only = [e for k, e in AR._index().items() if isinstance(e, dict) and e.get("purged")]
+    v.update(ok=True, dir=root, at=time.time(), only_nas={"bytes": sum(e.get("size") or 0 for e in only), "files": len(only)},
+             last_backup=(await AR.settings_get()).get("last_backup"))
+    _NAS_CACHE.update(at=time.time(), v=v)
+    return v

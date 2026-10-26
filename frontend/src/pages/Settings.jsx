@@ -138,9 +138,10 @@ function ArchiveSection() {
     <div className="card" style={card}>
       <p style={cardTitle}>Sauvegarde et NAS</p>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"-8px 0 12px", lineHeight:1.5 }}>
-        Copie dans le dossier du NAS monté sur le conteneur : « Impressions », les fichiers de chaque impression rangés par modèle puis par date
-        (3MF, Photos, Vidéos, Timelapse, Couches, avec une fiche), et « Système », la base (14 dernières copies), les photos des filaments,
-        objets, accessoires, 3MF MakerWorld et catalogue Bambu. Seuls les fichiers nouveaux sont copiés.</p>
+        Copie dans le dossier du NAS monté sur le conteneur : « Impressions », avec « Groupes » (un dossier par groupe : sa fiche, ses photos,
+        ses impressions) et « Impressions seules », rangées par modèle puis par date (3MF, Photos, Vidéos, Timelapse, Couches, avec une fiche) ;
+        et « Système », la base (14 dernières copies), les photos des filaments, objets, accessoires, 3MF MakerWorld et catalogue Bambu.
+        Seul le nouveau est copié ; ce qui change de place ou de nom est déplacé, ce qui est supprimé dans l'appli part dans « _Supprimés ».</p>
       {err && <p style={{ color:"#ef4444", fontSize:12.5 }}>{err}</p>}
       {s && <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         <div style={{ ...box, borderColor: ok ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)" }}>
@@ -155,7 +156,7 @@ function ArchiveSection() {
             {s.running === "backup" ? `Sauvegarde… ${s.progress?.what || ""}` : "Sauvegarder maintenant"}</button>
         </div>
         {b && <div style={box}>Dernière sauvegarde ({b.trigger}) : {when(b.at)} · {b.error ? <b style={{ color:"#ef4444" }}>{b.error}</b>
-          : <>{b.copied} fichier{b.copied > 1 ? "s" : ""} copié{b.copied > 1 ? "s" : ""} ({go(b.bytes)}), {b.skipped} déjà là, {b.moved ? `${b.moved} déplacé${b.moved > 1 ? "s" : ""}, ` : ""}{b.prints} impression{b.prints > 1 ? "s" : ""} mise{b.prints > 1 ? "s" : ""} à jour{b.errors ? `, ${b.errors} erreur${b.errors > 1 ? "s" : ""}` : ""}{b.db ? " · base copiée" : ""} · {b.seconds} s</>}</div>}
+          : <>{b.copied} fichier{b.copied > 1 ? "s" : ""} copié{b.copied > 1 ? "s" : ""} ({go(b.bytes)}), {b.skipped} déjà là, {b.moved ? `${b.moved} déplacé${b.moved > 1 ? "s" : ""}, ` : ""}{b.set_aside ? `${b.set_aside} mis de côté (supprimé${b.set_aside > 1 ? "s" : ""} dans l'appli), ` : ""}{b.prints} impression{b.prints > 1 ? "s" : ""} mise{b.prints > 1 ? "s" : ""} à jour{b.errors ? `, ${b.errors} erreur${b.errors > 1 ? "s" : ""}` : ""}{b.db ? " · base copiée" : ""} · {b.seconds} s</>}</div>}
         <div style={row}><span>Sauvegarder chaque nuit à</span>
           <span style={{ display:"flex", alignItems:"center", gap:8 }}>
             <select value={s.hour} onChange={e => put({ hour: Number(e.target.value) })} style={{ padding:"4px 8px", borderRadius:8, border:"1px solid var(--border)",
@@ -1181,6 +1182,7 @@ function StorageSection() {
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
         Ce que l'appli garde sur le serveur, par sorte : photos automatiques et ajoutées, vignettes, 3MF, vidéos, photos de
         groupes, d'objets et d'accessoires, base de données… avec la place du disque et les impressions les plus lourdes.
+        L'onglet NAS fait de même pour ce que la sauvegarde y range.
       </p>
       <button onClick={() => setOpen(true)} style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer",
         border:"none", background:"#6366F1", color:"white" }}>💾 Voir l'espace de stockage</button>

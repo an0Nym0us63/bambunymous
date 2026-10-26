@@ -365,6 +365,13 @@ async def storage_usage(fresh: bool = False, db: AsyncSession = Depends(get_db),
 
 
 
+@router.get("/storage/nas")
+async def storage_nas(fresh: bool = False, _: str = Depends(require_admin)):
+    """L'espace de stockage, cote NAS : ce que la sauvegarde y range, par sorte, et la place du partage."""
+    from ....services import storage as S
+    return await S.nas_usage(fresh)
+
+
 # ── Sauvegarde vers le NAS et vidage du local (26/10/2026) ──
 @router.get("/archive")
 async def archive_status(_: str = Depends(require_admin)):

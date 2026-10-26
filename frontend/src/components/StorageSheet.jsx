@@ -5,7 +5,8 @@ import { HardDrive, RefreshCw, X } from "lucide-react";
 import client from "../api/client";
 
 // L'espace de stockage (24/10/2026) : ce que l'appli garde dans son dossier de donnees, par sorte, en
-// anneau et en liste, la place du disque, et les impressions qui en prennent le plus.
+// anneau et en liste, la place du disque, et les impressions qui en prennent le plus. Onglet NAS (26/10/2026) :
+// la meme lecture de ce que la sauvegarde y range, et la place du partage.
 const C = "#6366F1";
 export const fmtBytes = n => {
   const u = ["o", "Ko", "Mo", "Go", "To"];
@@ -48,15 +49,21 @@ export default function StorageSheet({ onClose }) {
   const [err, setErr] = useState(null);
   const [hi, setHi] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState("local");
+  const [nas, setNas] = useState(null);
   const narrow = typeof window !== "undefined" && window.innerWidth < 560;
-  const load = fresh => { setBusy(true); client.get("/settings/storage", { params: fresh ? { fresh: true } : {} })
-    .then(r => { setV(r.data); setErr(null); }).catch(e => setErr(e.response?.data?.detail || e.message)).finally(() => setBusy(false)); };
-  useEffect(() => { load(false); }, []);
+  const load = (fresh, which = tab) => { setBusy(true); client.get(which === "nas" ? "/settings/storage/nas" : "/settings/storage", { params: fresh ? { fresh: true } : {} })
+    .then(r => { (which === "nas" ? setNas : setV)(r.data); setErr(null); }).catch(e => setErr(e.response?.data?.detail || e.message)).finally(() => setBusy(false)); };
+  useEffect(() => { load(false, "local"); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const pickTab = t => { setTab(t); setHi(null); if (t === "nas" && !nas) load(false, "nas"); };
+  const cur = tab === "nas" ? (nas?.ok ? nas : null) : v;
   useEffect(() => { const k = e => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const cats = (v?.cats || []).filter(c => c.bytes > 0).sort((a, b) => b.bytes - a.bytes);
+  const cats = (cur?.cats || []).filter(c => c.bytes > 0).sort((a, b) => b.bytes - a.bytes);
   const max = Math.max(1, ...cats.map(c => c.bytes));
-  const d = v?.disk;
+  const d = cur?.disk;
+  const seg = on => ({ flex: 1, padding: "7px 10px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800,
+    color: on ? "#fff" : "var(--text2)", background: on ? `linear-gradient(135deg, ${C}, #A855F7)` : "transparent", transition: "background .15s" });
   return createPortal(
     <div data-no-pull="" onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 950, padding: narrow ? 0 : 14, background: "rgba(2,6,23,0.55)",
       backdropFilter: "blur(6px)", display: "flex", alignItems: narrow ? "flex-end" : "center", justifyContent: "center", animation: "bn-fade .2s ease-out" }}>
@@ -73,7 +80,7 @@ export default function StorageSheet({ onClose }) {
               background: `linear-gradient(135deg, ${C}, ${C}bb)`, color: "#fff", boxShadow: `0 8px 20px ${C}55` }}><HardDrive size={22}/></span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: "block", fontSize: 19, fontWeight: 900, color: "var(--text)" }}>Espace de stockage</span>
-              {v && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{v.files.toLocaleString("fr-FR")} fichiers · relevé à {new Date(v.at * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>}
+              {cur && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{cur.files.toLocaleString("fr-FR")} fichiers · relevé à {new Date(cur.at * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>}
             </span>
             <button onClick={() => load(true)} disabled={busy} aria-label="Relire" data-tip="Relire maintenant"
               style={{ width: 36, height: 36, borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)",
@@ -85,12 +92,24 @@ export default function StorageSheet({ onClose }) {
         </div>
         <div className="bn-zoom-body" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: narrow ? "14px 16px 22px" : "16px 18px 20px",
           display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* le serveur (dossier de donnees de l'appli) ou le NAS (ce que la sauvegarde y range) */}
+          <div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 13, background: "var(--surface2)", flexShrink: 0 }}>
+            <button onClick={() => pickTab("local")} style={seg(tab === "local")}>💻 Local</button>
+            <button onClick={() => pickTab("nas")} style={seg(tab === "nas")}>🗄️ NAS</button>
+          </div>
           {err && <div style={{ color: "#ef4444", fontWeight: 700, fontSize: 13 }}>{err}</div>}
-          {!v && !err && <div style={{ padding: 40, textAlign: "center", color: "var(--muted)", fontWeight: 700 }}>⏳ On fait le tour des fichiers…</div>}
-          {v && <>
+          {tab === "nas" && nas && !nas.ok && <div className="card-sm" style={{ padding: "12px 14px", fontSize: 12.5, color: "var(--text2)", lineHeight: 1.5 }}>
+            <b style={{ color: "#ef4444" }}>✕ NAS indisponible</b> · <code>{nas.dir}</code><div>{nas.why}</div></div>}
+          {!cur && !err && !(tab === "nas" && nas) && <div style={{ padding: 40, textAlign: "center", color: "var(--muted)", fontWeight: 700 }}>
+            {tab === "nas" ? "⏳ On fait le tour du NAS (un partage réseau, ça peut prendre un moment)…" : "⏳ On fait le tour des fichiers…"}</div>}
+          {cur && <>
+            {tab === "nas" && <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>
+              <code>{cur.dir}</code>{cur.last_backup?.at && <> · dernière sauvegarde {new Date(cur.last_backup.at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</>}
+              {cur.only_nas?.files > 0 && <div><b style={{ color: "var(--text2)" }}>{fmtBytes(cur.only_nas.bytes)}</b> ({cur.only_nas.files.toLocaleString("fr-FR")} fichier{cur.only_nas.files > 1 ? "s" : ""}) vidé{cur.only_nas.files > 1 ? "s" : ""} du local : ils ne sont plus que sur le NAS.</div>}
+            </div>}
             {/* l'anneau et la liste, cote a cote sur un grand ecran */}
             <div style={{ display: "flex", flexDirection: narrow ? "column" : "row", alignItems: narrow ? "center" : "flex-start", gap: narrow ? 10 : 22 }}>
-              <span style={narrow ? undefined : { position: "sticky", top: 0, flexShrink: 0 }}><Donut cats={cats} total={v.total} hi={hi} setHi={setHi} size={narrow ? 200 : 220}/></span>
+              <span style={narrow ? undefined : { position: "sticky", top: 0, flexShrink: 0 }}><Donut cats={cats} total={cur.total} hi={hi} setHi={setHi} size={narrow ? 200 : 220}/></span>
               <div style={{ flex: 1, minWidth: 0, width: "100%", display: "flex", flexDirection: "column", gap: 7 }}>
                 {cats.map(c => (
                   <div key={c.key} onMouseEnter={() => setHi(c.key)} onMouseLeave={() => setHi(null)} onClick={() => setHi(h => h === c.key ? null : c.key)}
@@ -106,7 +125,7 @@ export default function StorageSheet({ onClose }) {
                       <span style={{ flex: 1, height: 5, borderRadius: 5, background: "var(--surface2)", overflow: "hidden" }}>
                         <span style={{ display: "block", height: "100%", width: `${Math.max(1.5, 100 * c.bytes / max)}%`, background: c.color, borderRadius: 5 }}/></span>
                       <span style={{ width: 92, textAlign: "right", fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>
-                        {pctFr(c.bytes, v.total)} % · {c.files} fich.</span>
+                        {pctFr(c.bytes, cur.total)} % · {c.files} fich.</span>
                     </div>
                     {/* les 3MF : combien d'impressions ils couvrent */}
                     {c.covers && <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", paddingLeft: 18 }}>
@@ -119,21 +138,21 @@ export default function StorageSheet({ onClose }) {
             {/* le disque : l'appli, le reste du disque, la place libre */}
             {d && <div className="card-sm" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text2)" }}>Le disque</span>
+                <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text2)" }}>{tab === "nas" ? "Le partage du NAS" : "Le disque"}</span>
                 <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{fmtBytes(d.free)} libres sur {fmtBytes(d.total)}</span>
               </div>
               <div style={{ display: "flex", height: 12, borderRadius: 8, overflow: "hidden", background: "var(--surface2)" }}>
-                <span data-tip={`L'appli : ${fmtBytes(v.total)}`} style={{ width: `${pct(v.total, d.total)}%`, minWidth: v.total ? 3 : 0, background: `linear-gradient(90deg, ${C}, #A855F7)` }}/>
-                <span data-tip={`Le reste du disque : ${fmtBytes(Math.max(0, d.used - v.total))}`} style={{ width: `${pct(Math.max(0, d.used - v.total), d.total)}%`, background: "#94A3B8" }}/>
+                <span data-tip={`${tab === "nas" ? "Les sauvegardes" : "L'appli"} : ${fmtBytes(cur.total)}`} style={{ width: `${pct(cur.total, d.total)}%`, minWidth: cur.total ? 3 : 0, background: `linear-gradient(90deg, ${C}, #A855F7)` }}/>
+                <span data-tip={`Le reste : ${fmtBytes(Math.max(0, d.used - cur.total))}`} style={{ width: `${pct(Math.max(0, d.used - cur.total), d.total)}%`, background: "#94A3B8" }}/>
               </div>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
-                <span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 3, background: C, marginRight: 5 }}/>Bambunymous {fmtBytes(v.total)}</span>
-                <span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 3, background: "#94A3B8", marginRight: 5 }}/>Le reste {fmtBytes(Math.max(0, d.used - v.total))}</span>
+                <span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 3, background: C, marginRight: 5 }}/>{tab === "nas" ? "Sauvegardes" : "Bambunymous"} {fmtBytes(cur.total)}</span>
+                <span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 3, background: "#94A3B8", marginRight: 5 }}/>Le reste {fmtBytes(Math.max(0, d.used - cur.total))}</span>
                 <span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 3, background: "var(--surface2)", border: "1px solid var(--border)", marginRight: 5 }}/>Libre {fmtBytes(d.free)} ({pctFr(d.free, d.total)} %)</span>
               </div>
             </div>}
             {/* les impressions qui prennent le plus de place (photos, 3MF, vignette) */}
-            {v.top_prints?.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {tab === "local" && v.top_prints?.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text2)" }}>Les impressions les plus lourdes</span>
               {v.top_prints.map((x, i) => (
                 <button key={x.id} onClick={() => { onClose(); nav(`/prints?id=${x.id}`); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px",
@@ -145,7 +164,7 @@ export default function StorageSheet({ onClose }) {
                   <span style={{ fontSize: 12, fontWeight: 900, color: "var(--text2)", whiteSpace: "nowrap" }}>{fmtBytes(x.bytes)}</span>
                 </button>))}
             </div>}
-            {v.other_dirs?.length > 0 && cats.some(c => c.key === "other") && <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
+            {tab === "local" && v.other_dirs?.length > 0 && cats.some(c => c.key === "other") && <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
               « Autres » : {v.other_dirs.map(o => `${o.dir} (${fmtBytes(o.bytes)})`).join(", ")}</div>}
           </>}
         </div>
