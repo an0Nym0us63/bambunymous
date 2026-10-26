@@ -1358,8 +1358,12 @@ function GroupEditSheet({ groupId, name, onClose, onSaved }) {
 }
 
 // les photos du groupe (nouvelle fiche) : une bande qui defile ; ⭐ la vignette, 🗑 en deux temps, visionneuse
-function GroupPhotosV2({ groupId, onUpdated }) {
+function GroupPhotosV2({ groupId, onUpdated, prints = [] }) {
   const [photos, setPhotos] = useState([]);
+  const [tab, setTab] = useState("souv");
+  const [tech, setTech] = useState(null);        // par impression : { p, tl, snaps }, lu a la premiere ouverture de l'onglet
+  const [tlb, setTlb] = useState(-1);
+  const [allTech, setAllTech] = useState(false);   // les 4 premieres impressions, puis « Voir les autres »
   const [cover, setCover] = useState(null);
   const [armed, setArmed] = useState(null);
   const [lb, setLb] = useState(-1);
@@ -1370,15 +1374,55 @@ function GroupPhotosV2({ groupId, onUpdated }) {
   const setCoverPhoto = async name => { try { await client.post(`/prints/groups/${groupId}/photo/${name}/cover`); setCover(name); onUpdated?.(); } catch (e) { showAlert(e.response?.data?.detail || e.message); } };
   const del = async name => { try { await client.delete(`/prints/groups/${groupId}/photo/${name}`); setArmed(null); load(); } catch (e) { showAlert(e.response?.data?.detail || e.message); } };
   const imgs = photos.filter(x => !isVideoUrl(x.url));
+  // Technique : pour chaque impression du groupe, son timelapse et ses captures des couches
+  const pkey = prints.map(x => x.id).join(",");
+  useEffect(() => { setTech(null); }, [pkey]);
+  useEffect(() => {
+    if (tab !== "tech" || tech || !prints.length) return;
+    let alive = true;
+    const order = [...prints].sort((a, b) => String(a.print_date || "").localeCompare(String(b.print_date || "")));
+    Promise.all(order.map(p => Promise.all([
+      client.get(`/prints/${p.id}/photos`).then(r => r.data || []).catch(() => []),
+      client.get(`/prints/${p.id}/snapshots`).then(r => r.data?.files || []).catch(() => []),
+    ]).then(([ph, sn]) => ({ p, tl: (Array.isArray(ph) ? ph : []).find(x => x.filename === TL_NAME),
+      snaps: sn.filter(f => /^snapshot-/.test(f.name || "")).sort((a, b) => snapRank(a.name) - snapRank(b.name))
+        .map(f => ({ url: f.url, label: SNAP_NAMES[snapKey(f.name)] || snapKey(f.name) })) }))))
+      .then(rows => { if (alive) setTech(rows.filter(r => r.tl || r.snaps.length)); });
+    return () => { alive = false; };
+  }, [tab, tech, pkey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const techFlat = (tech || []).flatMap(r => [...(r.tl ? [{ url: r.tl.url, label: `Timelapse · ${r.p.translated_name || r.p.file_name || ""}` }] : []),
+    ...r.snaps.map(s => ({ url: s.url, label: `${s.label} · ${r.p.translated_name || r.p.file_name || ""}` }))]);
+  const techN = tech ? techFlat.length : "…";
+  const when = d => d ? new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "";
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div className="card-sm" style={{ display: "flex", flexDirection: "column", gap: 4, padding: "10px 12px" }}>
       {lb >= 0 && <Lightbox images={imgs.map(x => x.url)} index={lb} onClose={() => setLb(-1)}/>}
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>📷 Photos</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{photos.length}</span>
-        <PhotoAddButton onPick={f => upload(f)}/>
-      </div>
-      {photos.length > 0 && <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, touchAction: "pan-x pan-y", overscrollBehaviorX: "contain" }}>
+      {tlb >= 0 && <Lightbox images={techFlat} index={tlb} onClose={() => setTlb(-1)}/>}
+      <MediaTabs tab={tab} setTab={setTab} souv={photos.length} tech={techN}
+        right={tab === "souv" ? <PhotoAddButton onPick={f => upload(f)}/> : null}/>
+      {tab === "tech" && (!tech ? <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 6px" }}>⏳ Lecture des impressions du groupe…</p>
+        : !tech.length ? <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 6px" }}>Ni timelapse ni capture des couches pour ses impressions.</p>
+        : <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {(allTech ? tech : tech.slice(0, 4)).map(r => { const base = techFlat.findIndex(x => x.url === (r.tl?.url || r.snaps[0]?.url));
+            return (
+              <div key={r.p.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {r.p.translated_name || r.p.file_name || `Impression ${r.p.id}`} <span style={{ color: "var(--muted)", fontWeight: 700 }}>· {when(r.p.print_date)}</span></span>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, alignItems: "center", touchAction: "pan-x pan-y", overscrollBehaviorX: "contain" }}>
+                  {r.tl && <TimelapseTile small url={r.tl.url} onOpen={() => setTlb(base)}/>}
+                  {r.snaps.map((s, i) => (
+                    <div key={s.url} onClick={() => setTlb(base + (r.tl ? 1 : 0) + i)} style={{ position: "relative", flexShrink: 0, cursor: "zoom-in" }}>
+                      <img src={s.url} alt={s.label} style={{ height: 84, width: "auto", borderRadius: 8, display: "block", boxShadow: "0 0 0 1px var(--border)" }}/>
+                      <span style={{ position: "absolute", bottom: 4, left: 4, background: "rgba(0,0,0,0.65)", color: "white", fontSize: 9, fontWeight: 700,
+                        padding: "2px 6px", borderRadius: 4, pointerEvents: "none" }}>{s.label}</span>
+                    </div>))}
+                </div>
+              </div>); })}
+          {!allTech && tech.length > 4 && <button onClick={() => setAllTech(true)} style={{ ...fBtn, alignSelf: "flex-start", fontSize: 12.5, padding: "6px 12px" }}>
+            Voir les {tech.length - 4} autres impressions</button>}
+        </div>)}
+      {tab === "souv" && !photos.length && <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 6px" }}>Aucune photo du groupe : ajoute la première avec ＋.</p>}
+      {tab === "souv" && photos.length > 0 && <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, touchAction: "pan-x pan-y", overscrollBehaviorX: "contain" }}>
         {photos.map((ph, i) => { const isCover = cover === ph.name, arm = armed === ph.name;
           return (
             <div key={i} style={{ position: "relative", flexShrink: 0, borderRadius: 14, overflow: "hidden",
@@ -1667,7 +1711,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     </div>);
   const sections = (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <GroupPhotosV2 groupId={groupId} onUpdated={onUpdated}/>
+      <GroupPhotosV2 groupId={groupId} onUpdated={onUpdated} prints={prints}/>
       {printsBlock}
       {filaments.length > 0 && <FilamentsV2 filaments={filaments} onSpoolClick={setSelSpool} onUnmap={setUnmapping}/>}
       {designs.map(([d, n]) => <MakerWorldCard key={d} designId={d} rateElsewhere prints={prints.filter(x => String(x.design_id || "").trim() === d)}
@@ -2042,12 +2086,53 @@ function PhotoDeleteConfirm({ label, onCancel, onConfirm }) {
 
 const isVideoUrl = (u) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u || "");
 
+// Les medias d'une fiche (26/10/2026) : deux onglets, « Souvenirs » (mes photos et videos) et « Technique »
+// (le timelapse, les captures des couches dans l'ordre de l'impression). Une seule bande visible a la fois.
+const TL_NAME = "Video-Timelapse.mp4";
+const SNAP_ORDER = ["layer1", "layer2", "pct50", "pct99", "pct100", "fail"];
+const SNAP_NAMES = { layer1: "Couche 1", layer2: "Couche 2", pct50: "50 %", pct99: "99 %", pct100: "Fin", fail: "Échec" };
+const snapKey = name => (name || "").replace(/^snapshot-/, "").replace(/\.[^.]+$/, "");
+const snapRank = name => { const i = SNAP_ORDER.indexOf(snapKey(name)); return i < 0 ? 99 : i; };
+function MediaTabs({ tab, setTab, souv, tech, right }) {
+  const b = (k, label, n, c) => {
+    const on = tab === k;
+    return <button onClick={() => setTab(k)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "7px 10px",
+      borderRadius: 10, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, transition: "background .15s",
+      color: on ? "#fff" : n ? "var(--text2)" : "var(--muted)", opacity: on || n ? 1 : .6,
+      background: on ? `linear-gradient(135deg, ${c}, ${lighten(c)})` : "transparent", boxShadow: on ? `0 6px 14px -8px ${c}` : "none" }}>
+      {label}<span style={{ fontSize: 11, fontWeight: 900, padding: "0 6px", borderRadius: 8, background: on ? "rgba(255,255,255,.25)" : "var(--surface)" }}>{n}</span></button>;
+  };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+      <div style={{ flex: 1, display: "flex", gap: 4, padding: 3, borderRadius: 13, background: "var(--surface2)" }}>
+        {b("souv", "📸 Souvenirs", souv, "#EC4899")}{b("tech", "🛠 Technique", tech, "#3B82F6")}</div>
+      {right}
+    </div>);
+}
+// le timelapse : une tuile large, lancee a la demande (rien ne se lit tant qu'on ne touche pas)
+function TimelapseTile({ url, label = "Timelapse", sub, onOpen, small }) {
+  return (
+    <div onClick={onOpen} data-tip="Lire le timelapse" style={{ position: "relative", flexShrink: 0, cursor: "pointer", borderRadius: 12, overflow: "hidden",
+      width: small ? 150 : "min(100%, 300px)", aspectRatio: "16 / 9", background: "linear-gradient(135deg, #1e293b, #0f172a)", boxShadow: "0 0 0 1px var(--border)" }}>
+      <video src={`${url}#t=1`} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", pointerEvents: "none" }}/>
+      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <span style={{ width: small ? 34 : 44, height: small ? 34 : 44, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+          background: "linear-gradient(135deg, #3B82F6, #8B5CF6)", color: "#fff", fontSize: small ? 13 : 16, boxShadow: "0 6px 16px rgba(0,0,0,.35)" }}>▶</span></span>
+      <span style={{ position: "absolute", left: 6, bottom: 6, right: 6, display: "flex", flexDirection: "column", gap: 1, pointerEvents: "none" }}>
+        <span style={{ alignSelf: "flex-start", fontSize: 10.5, fontWeight: 800, color: "#fff", padding: "2px 7px", borderRadius: 6, background: "rgba(0,0,0,.6)" }}>🎬 {label}</span>
+        {sub && <span style={{ alignSelf: "flex-start", fontSize: 10, fontWeight: 700, color: "#e2e8f0", padding: "1px 6px", borderRadius: 6, background: "rgba(0,0,0,.5)",
+          maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</span>}
+      </span>
+    </div>);
+}
+
 function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], onDeleteUpload,
                            onCountChange, coverPhoto, onCoverChange }) {
   const [lightbox, setLightbox] = useState(null);
   const [diskFiles, setDiskFiles] = useState([]);
   const [photoToDelete, setPhotoToDelete] = useState(null);
   const [deletedNames, setDeletedNames] = useState(new Set());
+  const [tab, setTab] = useState(null);
   const isAdmin = useIsAdmin();
 
   // Plus d'appui long : sur une bande qui defile horizontalement, le scroll
@@ -2110,16 +2195,18 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
   const allItems = [...baseItems, ...extraPhotos].filter(i => !deletedNames.has(i.name));
   useEffect(()=>{ onCountChange?.(allItems.length); }, [allItems.length]);
 
-  // Photos = fichiers manuels (pas un snapshot milestone connu) ; Milestones = snapshots auto pct/layer
-  // Photos = non-snap + manual snaps (uploaded)
-  const photoItems     = allItems.filter(i => !i.snap || i.snap?.trigger === "manual");
-  // Milestones triés: 100% → 99% → 50% → Couche2 → Couche1
-  const MILE_ORDER = { "pct100":1, "pct99":2, "pct50":3, "layer2":4, "layer1":5 };
-  const milestoneItems = allItems.filter(i => i.snap && i.snap?.trigger !== "manual").sort((a,b)=>{
-    const oa = MILE_ORDER[a.snap?.trigger] ?? 9;
-    const ob = MILE_ORDER[b.snap?.trigger] ?? 9;
-    return oa - ob;
-  });
+  // Souvenirs : mes photos, puis mes videos (en boucle) ; Technique : le timelapse, puis les captures des
+  // couches dans l'ordre de l'impression (Couche 1 -> 50 % -> Fin)
+  const isSnapName = n => /^snapshot-/.test(n || "");
+  const vids = (userPhotos || []).filter(x => isVideoUrl(x.url) && x.filename !== TL_NAME && !deletedNames.has(x.filename))
+    .map(x => ({ url: x.url, name: x.filename, label: "Vidéo" }));
+  const photoItems = [...allItems.filter(i => !isSnapName(i.name)), ...vids];
+  const milestoneItems = allItems.filter(i => isSnapName(i.name))
+    .map(i => ({ ...i, label: SNAP_NAMES[snapKey(i.name)] || i.label }))
+    .sort((a, b) => snapRank(a.name) - snapRank(b.name));
+  const tl = (userPhotos || []).find(x => x.filename === TL_NAME && !deletedNames.has(x.filename));
+  const techItems = [...(tl ? [{ url: tl.url, name: tl.filename, label: "Timelapse" }] : []), ...milestoneItems];
+  const cur = tab || (photoItems.length || !techItems.length ? "souv" : "tech");
 
   const Row = ({ title, items, startIdx = 0, onAdd, onDeleteItem, canCover = false }) => {
     const scrollRef = React.useRef(null);
@@ -2217,7 +2304,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
     );
   };
 
-  const flatItems = [...photoItems, ...milestoneItems];  // Photos → 100% → 99% → 50% → Couche2 → Couche1
+  const flatItems = cur === "souv" ? photoItems : techItems;   // la visionneuse reste dans l'onglet ouvert
   const lbIdx = lightbox ? flatItems.findIndex(i => i.url === lightbox.url) : -1;
   const moveLb = (dir) => {
     const ni = (lbIdx + dir + flatItems.length) % flatItems.length;
@@ -2226,9 +2313,18 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
 
   return (
     <>
-      <Row title="Photos" items={photoItems} startIdx={0} canCover
-        onAdd={async(f)=>{ await onUpload?.(f); reloadDiskFiles(); }} onDeleteItem={onDeleteUpload}/>
-      <Row title="Milestones" items={milestoneItems} startIdx={photoItems.length}/>
+      <div className="card-sm" style={{ padding: "10px 12px 4px" }}>
+        <MediaTabs tab={cur} setTab={setTab} souv={photoItems.length} tech={techItems.length}/>
+        {cur === "souv"
+          ? <Row title="Photos et vidéos" items={photoItems} startIdx={0} canCover
+              onAdd={async(f)=>{ await onUpload?.(f); reloadDiskFiles(); }} onDeleteItem={onDeleteUpload}/>
+          : <>
+            {tl && <div style={{ marginBottom: 12 }}><TimelapseTile url={tl.url} onOpen={() => setLightbox(techItems[0])}/></div>}
+            <Row title="Captures des couches" items={milestoneItems} startIdx={tl ? 1 : 0}/>
+            {!techItems.length && <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>
+              Ni timelapse ni capture des couches pour cette impression.</p>}
+          </>}
+      </div>
       {/* Hors de la fiche (portail) : dans le panneau qui defile, la visionneuse
           restait coincee a l'interieur au lieu de couvrir l'ecran. */}
       {lightbox && lbIdx >= 0 && <Lightbox images={flatItems.map(i => ({ url: i.url, label: i.label }))} index={lbIdx}
