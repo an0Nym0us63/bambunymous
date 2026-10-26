@@ -250,7 +250,8 @@ def _fiche(p, model: str, when: datetime, fil: list, mw_url: str | None) -> str:
 
 
 async def _prints_meta():
-    """Chaque impression : son modele (nom humain), sa date locale, ses filaments, son lien MakerWorld."""
+    """Les impressions finies (avec leurs filaments), les fiches MakerWorld, les groupes, et les numeros de TOUTES
+    les impressions (une en cours n'est pas « supprimee »)."""
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
     from ..db.session import AsyncSessionLocal
@@ -258,60 +259,167 @@ async def _prints_meta():
     async with AsyncSessionLocal() as db:
         prints = (await db.execute(select(Print).options(selectinload(Print.filament_usage))
                                    .where(Print.status != "IN_PROGRESS").order_by(Print.print_date))).scalars().all()
+        all_ids = set((await db.execute(select(Print.id))).scalars().all())
         dids = list({str(p.design_id) for p in prints if p.design_id})
         mws = {m.design_id: m for m in (await db.execute(select(MW).where(MW.design_id.in_(dids)))).scalars().all()} if dids else {}
         groups = (await db.execute(select(Group))).scalars().all()
-    return prints, mws, groups
+    return prints, mws, groups, all_ids
+
+
+def _two(fr, orig, maxlen=120) -> str:
+    """Le nom traduit d'abord, l'original entre parentheses (les recherches trouvent l'un ou l'autre)."""
+    a = clean(fr, maxlen) if fr and str(fr).strip() else ""
+    b = clean(orig, maxlen) if orig and str(orig).strip() else ""
+    if a and b and a.lower() != b.lower():
+        return clean(f"{a} ({b})", maxlen + 40)
+    return a or b or "Sans nom"
 
 
 def _model_of(p, mws) -> str:
     m = mws.get(str(p.design_id)) if p.design_id else None
-    return clean((m.title_fr or m.title) if m and (m.title_fr or m.title) else (p.translated_name or p.file_name or f"Impression {p.id}"))
+    if m and (m.title_fr or m.title):
+        return _two(m.title_fr, m.title)
+    return _two(p.translated_name, p.original_name or p.file_name or f"Impression {p.id}")
 
 
-def _backup_sync(root: Path, prints, mws, groups, prog: dict) -> dict:
+def _group_dir(g) -> str:
+    return f"Groupe - {clean(g.name or f'Groupe {g.id}')}"
+
+
+def _move(root: Path, old: str, new: str) -> bool:
+    """Deplace un dossier (ou un fichier) du NAS ; fusionne si la destination existe deja."""
+    src, dst = root / old, root / new
+    if old == new or not src.exists():
+        return False
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if not dst.exists():
+        os.replace(src, dst)
+    elif src.is_dir():
+        for dirpath, _dirs, files in os.walk(src, topdown=False):
+            rel = Path(dirpath).relative_to(src)
+            for f in files:
+                t = dst / rel / f
+                t.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(Path(dirpath) / f, t)
+            try:
+                Path(dirpath).rmdir()
+            except OSError:
+                pass
+    else:
+        os.replace(src, dst)
+    _prune_empty(root, src.parent)
+    return True
+
+
+def _prune_empty(root: Path, d: Path) -> None:
+    """Retire les dossiers laisses vides, en remontant jusqu'a la racine du NAS."""
+    try:
+        while d != root and root in d.parents and d.is_dir() and not any(d.iterdir()):
+            d.rmdir()
+            d = d.parent
+    except OSError:
+        pass
+
+
+def _retarget(idx: dict, old: str, new: str) -> None:
+    """Les fichiers indexes sous l'ancien dossier pointent maintenant sous le nouveau."""
+    pre = old.rstrip("/") + "/"
+    for k, e in idx.items():
+        if isinstance(e, dict) and isinstance(e.get("to"), str) and e["to"].startswith(pre):
+            e["to"] = new.rstrip("/") + "/" + e["to"][len(pre):]
+
+
+def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> dict:
+    """La sauvegarde, en delta : copie le nouveau, et DEPLACE sur le NAS ce dont la place a change (impression
+    entree ou sortie d'un groupe, groupe renomme, nom traduit…), fichiers deja vides du local compris.
+    Ce qui a disparu de l'appli (impression, groupe) part dans « _Supprimés », jamais efface."""
     from .mw_source import print_file as source_3mf
     idx = _index()
-    rep = {"copied": 0, "skipped": 0, "bytes": 0, "errors": 0, "prints": 0}
+    dirs = idx.setdefault("@dirs", {})           # « print:12 » / « group:3 » -> son dossier sur le NAS
+    rep = {"copied": 0, "skipped": 0, "moved": 0, "bytes": 0, "errors": 0, "prints": 0}
+    gby = {g.id: g for g in groups}
     taken: dict = {}
-    for i, p in enumerate(prints):
-        prog.update(done=i, total=len(prints), what=f"impression {i + 1} / {len(prints)}")
+
+    # l'emplacement de chaque impression (dans son groupe s'il y en a un)
+    plan = {}
+    for p in prints:
         model = _model_of(p, mws)
         when = _local(p.print_date) if p.print_date else datetime(1970, 1, 1)
         stamp = when.strftime("%Y-%m-%d %Hh%M") + (" (échouée)" if p.status == "FAILED" else "")
-        rel_dir = f"{model}/{stamp}"
+        g = gby.get(p.group_id) if p.group_id else None
+        rel_dir = f"{_group_dir(g)}/{model}/{stamp}" if g else f"{model}/{stamp}"
         if taken.get(rel_dir, p.id) != p.id:
             rel_dir += f" #{p.id}"
         taken[rel_dir] = p.id
+        plan[p.id] = (rel_dir, model, when)
+
+    # 1) les dossiers dont la place a change : deplaces d'un bloc (avec ce qui n'est plus qu'au NAS)
+    for p in prints:
+        rel_dir = plan[p.id][0]
+        old = dirs.get(f"print:{p.id}")
+        if not old:
+            # sauvegarde d'avant les groupes : son dossier se deduit de ses fichiers indexes (modele/date)
+            olds = [e["to"] for k, e in idx.items() if k.startswith(f"prints/{p.id}/") and isinstance(e, dict) and e.get("to")]
+            old = "/".join(olds[0].split("/")[:2]) if olds else None
+        if old and old != rel_dir and (root / old).exists():
+            try:
+                if _move(root, old, rel_dir):
+                    _retarget(idx, old, rel_dir)
+                    rep["moved"] += 1
+            except OSError as e:
+                rep["errors"] += 1
+                logger.warning(f"[ARCHIVE] deplacement {old} -> {rel_dir} : {e}")
+                continue
+        dirs[f"print:{p.id}"] = rel_dir
+
+    # 2) chaque impression : ses fichiers (copies, ou deplaces si leur nom a change), le 3MF d'origine, la fiche
+    for i, p in enumerate(prints):
+        prog.update(done=i, total=len(prints), what=f"impression {i + 1} / {len(prints)}")
+        rel_dir, model, when = plan[p.id]
         d = DATA_DIR / "prints" / str(p.id)
         wrote = False
         try:
-            files = [f for f in d.iterdir() if f.is_file()] if d.is_dir() else []
-            for f in files:
-                h = human_name(f.name, model)
+            local = {f.name: f for f in d.iterdir() if f.is_file()} if d.is_dir() else {}
+            names = set(local) | {k.split("/", 2)[2] for k, e in idx.items()
+                                  if k.startswith(f"prints/{p.id}/") and isinstance(e, dict) and e.get("purged")}
+            for name in sorted(names):
+                h = human_name(name, model)
                 if not h:
                     continue
-                rel = f"prints/{p.id}/{f.name}"
-                to = f"{rel_dir}/{h}"
-                if _copy(f, root / to):
-                    rep["copied"] += 1
-                    rep["bytes"] += f.stat().st_size
-                    wrote = True
-                else:
-                    rep["skipped"] += 1
-                idx[rel] = {"to": to, "root": str(root), "size": f.stat().st_size, "at": int(time.time()),
-                            **({"purged": True} if idx.get(rel, {}).get("purged") else {})}
+                rel, to = f"prints/{p.id}/{name}", f"{rel_dir}/{h}"
+                e = idx.get(rel) if isinstance(idx.get(rel), dict) else None
+                if e and e.get("to") and e["to"] != to and (root / e["to"]).exists():
+                    _move(root, e["to"], to)                     # meme fichier, nouveau nom (modele renomme)
+                    rep["moved"] += 1
+                f = local.get(name)
+                if f is not None:
+                    if _copy(f, root / to):
+                        rep["copied"] += 1
+                        rep["bytes"] += f.stat().st_size
+                        wrote = True
+                    else:
+                        rep["skipped"] += 1
+                    idx[rel] = {"to": to, "root": str(root), "size": f.stat().st_size, "at": int(time.time())}
+                elif e:                                         # vide du local : il ne vit plus qu'au NAS
+                    e.update(to=to, root=str(root))
             # le 3MF d'origine MakerWorld (partage par les impressions du meme modele)
             src = source_3mf(p.design_id, p.mw_profile_id, p.mw_plates) if p.design_id else None
             if src and Path(src).is_file():
-                if _copy(Path(src), root / rel_dir / "3MF" / f"{model} - origine MakerWorld.3mf"):
+                to = f"{rel_dir}/3MF/{model} - origine MakerWorld.3mf"
+                prev = idx.get(f"src:{p.id}")
+                if isinstance(prev, dict) and prev.get("to") != to and (root / prev["to"]).exists():
+                    _move(root, prev["to"], to)
+                if _copy(Path(src), root / to):
                     rep["copied"] += 1
                     rep["bytes"] += Path(src).stat().st_size
+                    wrote = True
+                idx[f"src:{p.id}"] = {"to": to, "root": str(root)}
             # la fiche (reecrite si elle a change)
             fil = [f"{u.filament_type or 'Filament'} {u.color_hex or ''} — {round(u.grams_used or 0)} g".replace("  ", " ")
                    for u in (p.filament_usage or []) if (u.grams_used or 0) > 0]
             mw = f"https://makerworld.com/fr/models/{p.design_id}" if p.design_id else None
-            txt = _fiche(p, model, when, fil, mw)
+            g = gby.get(p.group_id) if p.group_id else None
+            txt = _fiche(p, model, when, fil, mw) + (f"\nGroupe : {g.name}\n" if g else "")
             fp = root / rel_dir / "Fiche.txt"
             if not fp.is_file() or fp.read_text(encoding="utf-8", errors="ignore") != txt:
                 fp.parent.mkdir(parents=True, exist_ok=True)
@@ -324,21 +432,56 @@ def _backup_sync(root: Path, prints, mws, groups, prog: dict) -> dict:
             logger.warning(f"[ARCHIVE] impression {p.id} : {e}")
         if i % 50 == 0:
             _index_save()
-    # les photos des groupes
+
+    # 3) les photos des groupes, dans leur dossier de groupe (deplacees si le groupe est renomme)
     for g in groups:
+        gdir = f"{_group_dir(g)}/Photos du groupe"
+        old = dirs.get(f"group:{g.id}")
+        if not old:                                      # d'avant : « _Groupes/<nom> »
+            olds = [e["to"] for k, e in idx.items() if k.startswith(f"groups/{g.id}/") and isinstance(e, dict) and e.get("to")]
+            old = "/".join(olds[0].split("/")[:2]) if olds else None
+        if old and old != gdir and (root / old).exists():
+            try:
+                _move(root, old, gdir)
+                _retarget(idx, old, gdir)
+                rep["moved"] += 1
+            except OSError:
+                rep["errors"] += 1
+        dirs[f"group:{g.id}"] = gdir
         gd = DATA_DIR / "groups" / str(g.id)
         if not gd.is_dir():
             continue
         for f in gd.iterdir():
             if f.is_file():
-                to = f"_Groupes/{clean(g.name or f'Groupe {g.id}')}/{f.name}"
+                to = f"{gdir}/{f.name}"
                 try:
                     if _copy(f, root / to):
                         rep["copied"] += 1
                         rep["bytes"] += f.stat().st_size
+                    else:
+                        rep["skipped"] += 1
                     idx[f"groups/{g.id}/{f.name}"] = {"to": to, "root": str(root), "size": f.stat().st_size, "at": int(time.time())}
                 except Exception:
                     rep["errors"] += 1
+
+    # 4) ce qui a disparu de l'appli : mis de cote dans « _Supprimés » (rien n'est efface du NAS)
+    live_groups = {g.id for g in groups}
+    for key, old in list(dirs.items()):
+        kind, _, n = key.partition(":")
+        gone = (kind == "print" and n.isdigit() and int(n) not in all_ids) or (kind == "group" and n.isdigit() and int(n) not in live_groups)
+        if not gone:
+            continue
+        if old.startswith("_Supprimés/"):
+            continue
+        new = f"_Supprimés/{old}"
+        try:
+            if (root / old).exists():
+                _move(root, old, new)
+                _retarget(idx, old, new)
+                rep["moved"] += 1
+            dirs[key] = new
+        except OSError:
+            rep["errors"] += 1
     _index_save()
     return rep
 
@@ -380,12 +523,12 @@ async def backup(trigger: str = "manuel") -> dict:
     _STATE["running"], _STATE["progress"] = "backup", {"done": 0, "total": 0, "what": "lecture des impressions"}
     t0 = time.time()
     try:
-        prints, mws, groups = await _prints_meta()
+        prints, mws, groups, all_ids = await _prints_meta()
         root = Path(s["dir"])
         if not (root / MARK).exists():
             (root / MARK).write_text("Dossier des sauvegardes de BambuNymous : ne pas supprimer ce fichier.\n", encoding="utf-8")
         db_name = await asyncio.to_thread(_db_backup_sync, root)
-        rep = await asyncio.to_thread(_backup_sync, root, prints, mws, groups, _STATE["progress"])
+        rep = await asyncio.to_thread(_backup_sync, root, prints, mws, groups, all_ids, _STATE["progress"])
         rep.update(at=datetime.utcnow().isoformat() + "Z", trigger=trigger, seconds=round(time.time() - t0), db=db_name)
     except Exception as e:
         logger.exception("[ARCHIVE] sauvegarde")

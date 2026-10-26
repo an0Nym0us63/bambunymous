@@ -154,7 +154,7 @@ function ArchiveSection() {
             {s.running === "backup" ? `Sauvegarde… ${s.progress?.what || ""}` : "Sauvegarder maintenant"}</button>
         </div>
         {b && <div style={box}>Dernière sauvegarde ({b.trigger}) : {when(b.at)} · {b.error ? <b style={{ color:"#ef4444" }}>{b.error}</b>
-          : <>{b.copied} fichier{b.copied > 1 ? "s" : ""} copié{b.copied > 1 ? "s" : ""} ({go(b.bytes)}), {b.skipped} déjà là, {b.prints} impression{b.prints > 1 ? "s" : ""} mise{b.prints > 1 ? "s" : ""} à jour{b.errors ? `, ${b.errors} erreur${b.errors > 1 ? "s" : ""}` : ""}{b.db ? " · base copiée" : ""} · {b.seconds} s</>}</div>}
+          : <>{b.copied} fichier{b.copied > 1 ? "s" : ""} copié{b.copied > 1 ? "s" : ""} ({go(b.bytes)}), {b.skipped} déjà là, {b.moved ? `${b.moved} déplacé${b.moved > 1 ? "s" : ""}, ` : ""}{b.prints} impression{b.prints > 1 ? "s" : ""} mise{b.prints > 1 ? "s" : ""} à jour{b.errors ? `, ${b.errors} erreur${b.errors > 1 ? "s" : ""}` : ""}{b.db ? " · base copiée" : ""} · {b.seconds} s</>}</div>}
         <div style={row}><span>Sauvegarder chaque nuit à</span>
           <span style={{ display:"flex", alignItems:"center", gap:8 }}>
             <select value={s.hour} onChange={e => put({ hour: Number(e.target.value) })} style={{ padding:"4px 8px", borderRadius:8, border:"1px solid var(--border)",
