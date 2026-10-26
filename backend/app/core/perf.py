@@ -12,7 +12,18 @@ from collections import deque
 
 _STATS: dict = {}            # « GET /prints/{n} » -> {"n", "sum", "max", "recent": deque des derniers delais (ms)}
 _SINCE = {"t": time.time()}
-_COLD = {"on": True}             # au demarrage : le premier appel de chaque route est mis a part (pas apres une remise a zero)
+# Le demarrage est mis a part (26/10/2026) : pendant WARMUP_S apres le lancement, les taches de demarrage (sauvegarde,
+# MakerWorld, succes, photos) tournent et les caches sont vides. Tout appel tombe dans cette fenetre est compte a part,
+# pas seulement le premier de chaque route : grade-fx repondait en 66 ms au premier appel, puis 15 s au suivant,
+# arrive pendant le calcul des succes. Apres une remise a zero, plus de fenetre : tout compte.
+WARMUP_S = 180
+_COLD = {"on": True, "until": time.time() + WARMUP_S}
+
+
+def warming() -> bool:
+    if _COLD["on"] and time.time() >= _COLD["until"]:
+        _COLD["on"] = False
+    return _COLD["on"]
 _ID = re.compile(r"/(\d+|[0-9a-f]{12,}|[0-9a-f-]{32,36})(?=/|$)", re.I)
 
 
@@ -29,12 +40,12 @@ def record(key: str, ms: float) -> None:
     if s is None:
         if len(_STATS) > 600:            # des adresses inattendues ne font pas grossir la memoire sans fin
             return
-        # le premier appel d'une route apres un redemarrage (caches vides, calculs a froid) est garde a part :
-        # il ne compte ni dans la mediane, ni dans le 95e centile, ni dans le pire (26/10/2026)
-        _STATS[key] = {"n": 0, "sum": 0.0, "max": 0.0, "recent": deque(maxlen=200), "cold": ms if _COLD["on"] else None}
-        if _COLD["on"]:
-            return
-        s = _STATS[key]
+        s = _STATS[key] = {"n": 0, "sum": 0.0, "max": 0.0, "recent": deque(maxlen=200), "cold": None, "cold_n": 0}
+    if warming():
+        # pendant le demarrage : ni dans la mediane, ni dans le 95e centile, ni dans le pire
+        s["cold_n"] += 1
+        s["cold"] = max(s["cold"] or 0.0, ms)
+        return
     s["n"] += 1
     s["sum"] += ms
     s["max"] = max(s["max"], ms)
@@ -54,10 +65,11 @@ def snapshot(limit: int = 60) -> dict:
         rec = list(s["recent"])
         rows.append({"route": k, "count": s["n"], "avg": round(s["sum"] / s["n"], 1) if s["n"] else 0,
                      "p50": round(_pct(rec, .5), 1), "p95": round(_pct(rec, .95), 1), "max": round(s["max"], 1),
-                     "cold": round(s["cold"], 1) if s.get("cold") is not None else None})
+                     "cold": round(s["cold"], 1) if s.get("cold") is not None else None, "cold_n": s.get("cold_n", 0)})
     rows.sort(key=lambda r: -r["p95"])
     total = sum(s["n"] for s in _STATS.values())
-    return {"since": _SINCE["t"], "requests": total, "routes": rows[:limit], "loop": _loop_view()}
+    return {"since": _SINCE["t"], "requests": total, "routes": rows[:limit], "loop": _loop_view(),
+            "warmup_s": WARMUP_S, "warming": warming(), "warm_requests": sum(s.get("cold_n", 0) for s in _STATS.values())}
 
 
 # ── Les blocages de la boucle (26/10/2026) ───────────────────────────────────────────────────────────────
@@ -68,6 +80,7 @@ def snapshot(limit: int = 60) -> dict:
 STALL_MS = 150
 _LOOP = {"beat": 0.0, "ident": None, "lags": deque(maxlen=600)}
 _STALLS: dict = {}               # « fichier:ligne fonction » -> {"n", "total", "max", "stack", "last"}
+_STALLS_BOOT: dict = {}          # les memes, pendant le demarrage (gardes a part : utile de savoir ce qu'il coute)
 _APP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -104,9 +117,10 @@ def _guard() -> None:
         elif caught is not None and _LOOP["beat"] != caught[1]:
             (key, stack), start = caught
             ms = (_LOOP["beat"] - start) * 1000 - 50
-            s = _STALLS.get(key)
-            if s is None and len(_STALLS) < 200:
-                s = _STALLS[key] = {"n": 0, "total": 0.0, "max": 0.0, "stack": stack, "last": 0.0}
+            book = _STALLS_BOOT if warming() else _STALLS
+            s = book.get(key)
+            if s is None and len(book) < 200:
+                s = book[key] = {"n": 0, "total": 0.0, "max": 0.0, "stack": stack, "last": 0.0}
             if s is not None:
                 s["n"] += 1
                 s["total"] += ms
@@ -123,19 +137,24 @@ async def loop_watch() -> None:
         t = time.perf_counter()
         _LOOP["beat"] = t
         await asyncio.sleep(0.05)
-        _LOOP["lags"].append((time.perf_counter() - t) * 1000 - 50)
+        if not warming():
+            _LOOP["lags"].append((time.perf_counter() - t) * 1000 - 50)
 
 
 def _loop_view() -> dict:
     lags = list(_LOOP["lags"])
-    stalls = sorted(({"where": k, "count": s["n"], "total": round(s["total"]), "max": round(s["max"]),
-                      "stack": s["stack"], "last": s["last"]} for k, s in _STALLS.items()), key=lambda r: -r["total"])
+    def view(book):
+        return sorted(({"where": k, "count": s["n"], "total": round(s["total"]), "max": round(s["max"]),
+                        "stack": s["stack"], "last": s["last"]} for k, s in book.items()), key=lambda r: -r["total"])
+    stalls = view(_STALLS)
     return {"lag_p50": round(_pct(lags, .5), 1), "lag_p95": round(_pct(lags, .95), 1),
-            "lag_max": round(max(lags), 1) if lags else 0, "stall_ms": STALL_MS, "stalls": stalls[:15]}
+            "lag_max": round(max(lags), 1) if lags else 0, "stall_ms": STALL_MS, "stalls": stalls[:15],
+            "boot_stalls": view(_STALLS_BOOT)[:10]}
 
 
 def reset() -> None:
     _STALLS.clear()
+    _STALLS_BOOT.clear()
     _LOOP["lags"].clear()
     _STATS.clear()
     _SINCE["t"] = time.time()

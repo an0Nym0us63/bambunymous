@@ -82,6 +82,18 @@ function LoopView({ loop }) {
         </div>}
       </div>))}
     {!loop.stalls.length && <p style={{ fontSize: 13, color: "#16a34a", fontWeight: 700, textAlign: "center", padding: 16 }}>Aucun blocage relevé depuis la remise à zéro.</p>}
+    {/* ceux du demarrage, a part : ils ne comptent pas, mais on veut savoir ce qu'il coute */}
+    {loop.boot_stalls?.length > 0 && <details style={{ padding: "8px 12px", borderRadius: 14, background: "var(--surface2)" }}>
+      <summary style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text2)", cursor: "pointer" }}>
+        Pendant le démarrage ({loop.boot_stalls.length}) · {perfMs(loop.boot_stalls.reduce((t, s) => t + s.total, 0))} au total</summary>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+        {loop.boot_stalls.map(s => (
+          <div key={s.where} style={{ display: "flex", gap: 8, alignItems: "baseline", minWidth: 0, fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+            <code style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text2)" }}>{s.where}</code>
+            <span style={{ whiteSpace: "nowrap" }}>{s.count}× · {perfMs(s.total)}</span>
+          </div>))}
+      </div>
+    </details>}
   </>);
 }
 
@@ -107,6 +119,8 @@ export default function PerfSheet({ data, onClose, onReset, onReload }) {
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: C }}>Vitesse du serveur</div>
             <div style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)" }}>depuis {since} · {data?.requests?.toLocaleString("fr-FR")} appels</div>
+            {data?.warm_requests > 0 && <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+              {data.warming ? "démarrage en cours : " : ""}{data.warm_requests.toLocaleString("fr-FR")} appels des {Math.round((data.warmup_s || 180) / 60)} premières minutes mis à part</div>}
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 8, marginTop: 14 }}>
@@ -151,8 +165,8 @@ export default function PerfSheet({ data, onClose, onReset, onReload }) {
                 <span>médiane <b style={{ color: perfTone(r.p50, r.route) }}>{perfMs(r.p50)}</b></span>
                 <span>pire <b style={{ color: perfTone(r.max, r.route) }}>{perfMs(r.max)}</b></span>
                 <span>attendu <b style={{ color: "var(--text2)" }}>&lt; {perfMs(bg.ok)}</b>{bg.why ? ` (${bg.why})` : ""}</span>
-                {r.cold != null && <span data-tip="Le premier appel après le démarrage du serveur (caches vides) : mis à part, il ne compte pas dans les chiffres">
-                  1er appel après démarrage <b style={{ color: "var(--text2)" }}>{perfMs(r.cold)}</b> (ignoré)</span>}
+                {r.cold != null && <span data-tip="Les appels des premières minutes après le démarrage du serveur (caches vides, tâches de démarrage) : mis à part, ils ne comptent pas dans les chiffres">
+                  au démarrage {r.cold_n > 1 ? `${r.cold_n} appels, pire ` : ""}<b style={{ color: "var(--text2)" }}>{perfMs(r.cold)}</b> (ignoré{r.cold_n > 1 ? "s" : ""})</span>}
                 <span>{r.count} appel{r.count > 1 ? "s" : ""}</span>
                 <code style={{ marginLeft: "auto", fontSize: 10.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{lb.method} {lb.path}</code>
               </div>
