@@ -81,6 +81,57 @@ function Rewind() {
   );
 }
 
+// La chance de surprise d'un compte de la maison, reglee a la main (26/10/2026) : le compte principal et le meme
+// secret que les tours en plus. Le compteur est pose pour que la prochaine ouverture ait cette chance, puis monte.
+function Nudge() {
+  const [rows, setRows] = React.useState(null);
+  const [who, setWho] = React.useState("");
+  const [pct, setPct] = React.useState("");
+  const [pw, setPw] = React.useState("");
+  const [msg, setMsg] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const load = async () => {
+    const { default: client } = await import("./api/client");
+    const { data } = await client.get("/achievements/surprise/odds");
+    setRows(data.accounts || []);
+    setWho(w => w || (data.accounts || []).find(a => !a.main)?.username || (data.accounts || [])[0]?.username || "");
+  };
+  React.useEffect(() => { load().catch(e => setMsg(e.response?.data?.detail || e.message)); }, []);
+  const fmt = p => `${(Math.round(p * 1000) / 10).toString().replace(".", ",")} %`;
+  const go = async e => {
+    e.preventDefault();
+    if (!who || pct === "") { setMsg("Compte et pourcentage requis"); return; }
+    if (!pw) { setMsg("Mot de passe requis"); return; }
+    setBusy(true); setMsg("");
+    try {
+      const { default: client } = await import("./api/client");
+      const { data } = await client.post("/achievements/surprise/set", { username: who, pct: Number(String(pct).replace(",", ".")), secret: pw });
+      setMsg(`${who} · prochaine ${fmt(data.next)}${data.pending ? " · une surprise l'attend déjà" : ""}`); setPw(""); setPct("");
+      await load();
+    } catch (err) { setMsg(err.response?.data?.detail || err.message); }
+    setBusy(false);
+  };
+  const field = { padding:"10px 12px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", fontSize:14 };
+  return (
+    <form onSubmit={go} style={{ maxWidth:340, margin:"60px auto", padding:"0 16px", display:"flex", flexDirection:"column", gap:10 }}>
+      {rows && <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+        {rows.map(r => (
+          <button type="button" key={r.username} onClick={() => { setWho(r.username); setMsg(""); }} style={{ ...field, display:"flex", alignItems:"center",
+            gap:8, cursor:"pointer", textAlign:"left", border:`1.5px solid ${who === r.username ? "#3b82f6" : "var(--border)"}` }}>
+            <span style={{ flex:1, fontWeight:800 }}>{r.username}</span>
+            <span style={{ fontFamily:"monospace", fontSize:13, color:"var(--muted)" }}>{r.pending ? "en attente" : fmt(r.next)} · {r.n}</span>
+          </button>))}
+      </div>}
+      <input type="text" inputMode="decimal" value={pct} onChange={e => { setPct(e.target.value); setMsg(""); }} placeholder="Chance à la prochaine ouverture (%)"
+        aria-label="Pourcentage" style={field}/>
+      <input type="password" value={pw} onChange={e => { setPw(e.target.value); setMsg(""); }} placeholder="Mot de passe" autoComplete="off" style={field}/>
+      <button type="submit" disabled={busy} style={{ padding:"10px 0", borderRadius:10, border:"none", background:"#3b82f6",
+        color:"#fff", fontWeight:700, cursor:"pointer" }}>{busy ? "…" : "Valider"}</button>
+      {msg && <p style={{ margin:0, textAlign:"center", color:"var(--muted)", fontFamily:"monospace", fontSize:13 }}>{msg}</p>}
+    </form>
+  );
+}
+
 // Adresse inconnue : une page cachee si elle existe (chargee a la demande), sinon « introuvable »
 function LostOrHidden() {
   const slug = (useLocation().pathname || "/").replace(/^\/+|\/+$/g, "").toLowerCase();
@@ -149,6 +200,7 @@ export default function App() {
         <Route path="achievements" element={<AchievementsRedirect />} />
         <Route path="anonymous" element={<Anonymous />} />
         <Route path="rembobiner" element={<Rewind />} />
+        <Route path="coup-de-pouce" element={<Nudge />} />
         <Route path="teapot" element={<Teapot />} />
         <Route path="guide" element={<React.Suspense fallback={null}><Guide /></React.Suspense>} />
         {/* l'ancienne adresse du guide (fichiers statiques, ouverts a tous jusqu'au 23/10/2026) */}

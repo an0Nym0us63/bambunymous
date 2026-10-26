@@ -355,10 +355,8 @@ async def achievements_spin(_: str = Depends(require_wheel)):
         raise HTTPException(400, str(e))
 
 
-@router.post("/wheel/extra")
-async def achievements_wheel_extra(body: dict, username: str = Depends(require_main),
-                                   db: AsyncSession = Depends(get_db)):
-    # administrateur, ET un secret : le token RFID suivi du mot de passe du compte
+async def _check_secret(body: dict, username: str, db) -> None:
+    """Le compte principal, ET un secret : le token RFID suivi du mot de passe du compte."""
     import asyncio
     import hmac
     from ....core.security import verify_password
@@ -366,10 +364,36 @@ async def achievements_wheel_extra(body: dict, username: str = Depends(require_m
     secret = str((body or {}).get("secret") or "")
     token = (await get_setting(db, "RFID_TOKEN", "") or "").strip()
     user = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
-    ok = bool(token) and len(secret) > len(token) and hmac.compare_digest(secret[:len(token)], token)         and user is not None and verify_password(secret[len(token):], user.password_hash)
+    ok = bool(token) and len(secret) > len(token) and hmac.compare_digest(secret[:len(token)], token) \
+        and user is not None and verify_password(secret[len(token):], user.password_hash)
     if not ok:
         await asyncio.sleep(1.5)
         raise HTTPException(403, "Refusé")
+
+
+@router.post("/surprise/set")
+async def achievements_surprise_set(body: dict, username: str = Depends(require_main), db: AsyncSession = Depends(get_db)):
+    """Regle a la main la chance de surprise d'un compte de la maison (meme secret que les tours en plus)."""
+    await _check_secret(body, username, db)
+    from ....services import achievements as A
+    who = str((body or {}).get("username") or "").strip()
+    u = (await db.execute(select(User).where(User.username == who, User.active.is_(True),
+                                              User.friend_key_hash.is_(None)))).scalar_one_or_none()
+    if not u:
+        raise HTTPException(404, "Compte inconnu")
+    try:
+        pct = float((body or {}).get("pct"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Pourcentage invalide")
+    if not 0 <= pct <= 100:
+        raise HTTPException(400, "Entre 0 et 100")
+    return await A.set_surprise_chance(who, pct)
+
+
+@router.post("/wheel/extra")
+async def achievements_wheel_extra(body: dict, username: str = Depends(require_main),
+                                   db: AsyncSession = Depends(get_db)):
+    await _check_secret(body, username, db)
     from ....services import achievements as A
     try:
         return await A.add_spins((body or {}).get("n") or 5)

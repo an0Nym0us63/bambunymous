@@ -5016,6 +5016,32 @@ def surprise_p(n: int) -> float:
     return 0.005 * n if n <= 20 else min(1.0, 0.10 + 0.01 * (n - 20))
 
 
+def surprise_n_for(pct: float) -> int:
+    """Le compteur qui donne cette chance a la PROCHAINE ouverture (l'inverse de surprise_p, a son pas :
+    0,5 % jusqu'a 10 %, puis 1 %)."""
+    p = max(0.0, min(100.0, float(pct))) / 100
+    if p <= 0:
+        return 0
+    n = round(p / 0.005) if p <= 0.10 else 20 + round((p - 0.10) / 0.01)
+    return max(0, min(110, n - 1))
+
+
+async def set_surprise_chance(username: str, pct: float) -> dict:
+    """Regle a la main la chance de surprise d'un compte (26/10/2026) : son compteur est pose pour que la
+    prochaine ouverture ait cette chance, puis il continue de monter normalement. Le tirage en attente, s'il y
+    en a un, reste en attente."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    n = surprise_n_for(pct)
+    async with _SURPRISE_LOCK:
+        async with AsyncSessionLocal() as db:
+            d = await _surprise_counts(db)
+            d[username] = n
+            await set_setting(db, KEY + "_SURPRISE", json.dumps(d))
+    logger.info(f"[SUCCES] chance de surprise de {username} reglee a la main : {pct} % (compteur {n})")
+    return (await surprise_odds([username]))[0]
+
+
 # Fetes : le jour J, la farce de la fete sort A COUP SUR a la premiere ouverture
 # de l'appli (une fois par compte et par fete), sans toucher au compteur ci-dessus.
 FETE_SLUGS = ["anniversaire", "nouvel-an", "galette", "chandeleur", "saint-valentin", "mardi-gras", "poisson-avril", "paques", "muguet",
