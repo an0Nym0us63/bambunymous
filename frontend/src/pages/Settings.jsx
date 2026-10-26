@@ -103,6 +103,85 @@ function AMSOrderSection() {
   );
 }
 
+// Sauvegarde vers le NAS et vidage du local (26/10/2026) : le dossier monte sur /nas, une sauvegarde a la
+// demande ou chaque nuit (arborescence humaine : modele / date / 3MF, Photos, Videos, Timelapse, Couches), et
+// le vidage des fichiers lourds (videos, timelapses, 3MF, captures des couches) au-dela de N jours, deja sur le NAS.
+function ArchiveSection() {
+  const [s, setS] = useState(null);
+  const [err, setErr] = useState(null);
+  const load = () => client.get("/settings/archive").then(r => { setS(r.data); setErr(null); }).catch(e => setErr(e.response?.data?.detail || e.message));
+  useEffect(() => { load(); }, []);
+  // pendant une sauvegarde ou un vidage : l'avancement, relu toutes les 2 s
+  useEffect(() => {
+    if (!s?.running) return undefined;
+    const t = setInterval(load, 2000);
+    return () => clearInterval(t);
+  }, [s?.running]); // eslint-disable-line react-hooks/exhaustive-deps
+  const put = async body => { try { const { data } = await client.put("/settings/archive", body); setS(data); } catch (e) { showAlert(e.response?.data?.detail || e.message); } };
+  const run = async (what, body) => {
+    try { await client.post(`/settings/archive/${what}`, body || {}); setTimeout(load, 400); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
+  const go = (n) => n >= 1073741824 ? `${(n / 1073741824).toFixed(1).replace(".", ",")} Go` : n >= 1048576 ? `${(n / 1048576).toFixed(1).replace(".", ",")} Mo` : `${Math.round((n || 0) / 1024)} Ko`;
+  const when = iso => iso ? new Date(iso).toLocaleString("fr-FR", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }) : "";
+  const sw = (on, flip) => <button type="button" onClick={flip} role="switch" aria-checked={on}
+    style={{ width:46, height:26, borderRadius:20, border:"none", cursor:"pointer", position:"relative", flexShrink:0,
+      background: on ? "#3b82f6" : "var(--border)", transition:"background .2s" }}>
+    <span style={{ position:"absolute", top:3, left: on ? 23 : 3, width:20, height:20, borderRadius:"50%", background:"#fff",
+      transition:"left .2s", boxShadow:"0 1px 3px rgba(0,0,0,0.3)" }}/></button>;
+  const btn = (bg, dis) => ({ display:"flex", alignItems:"center", gap:8, padding:"9px 16px", background: dis ? "var(--border)" : bg, border:"none",
+    borderRadius:10, color:"white", fontSize:13, fontWeight:700, cursor: dis ? "not-allowed" : "pointer" });
+  const row = { display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, fontSize:13.5, color:"var(--text2)" };
+  const box = { padding:"8px 12px", borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)", fontSize:12, color:"var(--text2)", lineHeight:1.5 };
+  const b = s?.last_backup, p = s?.last_purge, ok = s?.check?.ok;
+  return (
+    <div className="card" style={card}>
+      <p style={cardTitle}>Sauvegarde et NAS</p>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"-8px 0 12px", lineHeight:1.5 }}>
+        Copie la base et les fichiers de chaque impression dans le dossier du NAS monté sur le conteneur, rangés par modèle puis par date
+        (3MF, Photos, Vidéos, Timelapse, Couches, avec une fiche). Seuls les fichiers nouveaux sont copiés.</p>
+      {err && <p style={{ color:"#ef4444", fontSize:12.5 }}>{err}</p>}
+      {s && <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        <div style={{ ...box, borderColor: ok ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)" }}>
+          <b style={{ color: ok ? "#16a34a" : "#ef4444" }}>{ok ? "✓ Dossier prêt" : "✕ Dossier indisponible"}</b> · <code>{s.dir}</code>
+          {ok && s.check.disk && <> · {go(s.check.disk.free)} libres sur {go(s.check.disk.total)}</>}
+          {ok && s.check.same_disk && <div style={{ color:"#d97706", fontWeight:700 }}>⚠ Ce dossier est sur le même disque que l'appli : le NAS n'est sans doute pas monté.</div>}
+          {!ok && <div>{s.check.why}</div>}
+        </div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <button onClick={() => run("backup")} disabled={!ok || !!s.running} style={btn("#3b82f6", !ok || !!s.running)}>
+            {s.running === "backup" ? <RefreshCw size={14} style={{ animation:"spin 1s linear infinite" }}/> : "💾"}
+            {s.running === "backup" ? `Sauvegarde… ${s.progress?.what || ""}` : "Sauvegarder maintenant"}</button>
+        </div>
+        {b && <div style={box}>Dernière sauvegarde ({b.trigger}) : {when(b.at)} · {b.error ? <b style={{ color:"#ef4444" }}>{b.error}</b>
+          : <>{b.copied} fichier{b.copied > 1 ? "s" : ""} copié{b.copied > 1 ? "s" : ""} ({go(b.bytes)}), {b.skipped} déjà là, {b.prints} impression{b.prints > 1 ? "s" : ""} mise{b.prints > 1 ? "s" : ""} à jour{b.errors ? `, ${b.errors} erreur${b.errors > 1 ? "s" : ""}` : ""}{b.db ? " · base copiée" : ""} · {b.seconds} s</>}</div>}
+        <div style={row}><span>Sauvegarder chaque nuit à</span>
+          <span style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <select value={s.hour} onChange={e => put({ hour: Number(e.target.value) })} style={{ padding:"4px 8px", borderRadius:8, border:"1px solid var(--border)",
+              background:"var(--surface2)", color:"var(--text)" }}>{Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{h} h</option>)}</select>
+            {sw(s.nightly, () => put({ nightly: !s.nightly }))}</span></div>
+        <div style={{ borderTop:"1px solid var(--border)", paddingTop:10, display:"flex", flexDirection:"column", gap:10 }}>
+          <p style={{ fontSize:12, color:"var(--muted)", margin:0, lineHeight:1.5 }}>
+            Vider le local : retire de l'appli les vidéos, timelapses, 3MF et captures des couches des impressions plus anciennes que
+            le délai, <b>seulement s'ils sont déjà sur le NAS</b>. Ils restent visibles : l'appli les relit sur le NAS.</p>
+          <div style={row}><span>Plus anciennes que</span>
+            <select value={s.purge_days} onChange={e => put({ purge_days: Number(e.target.value) })} style={{ padding:"4px 8px", borderRadius:8,
+              border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)" }}>
+              {[7, 14, 30, 60, 90, 180, 365].map(d => <option key={d} value={d}>{d} jours</option>)}</select></div>
+          <div style={row}><span>Vider aussi chaque nuit, après la sauvegarde</span>{sw(s.purge_auto, () => put({ purge_auto: !s.purge_auto }))}</div>
+          <button onClick={async () => { if (await showConfirm(`Vider du local les fichiers lourds des impressions de plus de ${s.purge_days} jours déjà sauvegardés sur le NAS ?`,
+            { confirmLabel: "Vider" })) run("purge", { days: s.purge_days }); }} disabled={!ok || !!s.running}
+            style={{ ...btn("#f97316", !ok || !!s.running), alignSelf:"flex-start" }}>
+            {s.running === "purge" ? <RefreshCw size={14} style={{ animation:"spin 1s linear infinite" }}/> : "🧹"}
+            {s.running === "purge" ? `Vidage… ${s.progress?.what || ""}` : "Vider le local maintenant"}</button>
+          {p && <div style={box}>Dernier vidage ({p.trigger}) : {when(p.at)} · {p.error ? <b style={{ color:"#ef4444" }}>{p.error}</b>
+            : <>{p.files} fichier{p.files > 1 ? "s" : ""} retiré{p.files > 1 ? "s" : ""} ({go(p.bytes)}){p.kept_not_archived ? `, ${p.kept_not_archived} gardé${p.kept_not_archived > 1 ? "s" : ""} (pas encore sur le NAS)` : ""}</>}</div>}
+        </div>
+      </div>}
+    </div>
+  );
+}
+
 // La carte SD de l'imprimante (26/10/2026) : une sonde, en lecture seule. Elle liste la racine et le dossier
 // des timelapses, pour savoir si l'imprimante les ouvre avant de construire leur lecture dans l'appli.
 function SdProbeSection() {
@@ -2059,6 +2138,7 @@ export default function Settings() {
       {tab === "tools" && (
       <AdminOnly><div className="wide-flow">
         <StorageSection/>
+        <ArchiveSection/>
         <SdProbeSection/>
         <SourceBackfillSection/>
         <EnrichFromCatalogSection/>

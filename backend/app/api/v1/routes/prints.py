@@ -1626,12 +1626,13 @@ async def set_print_cover_photo(print_id: int, filename: str,
 
 @router.get("/{print_id}/photos")
 async def list_print_photos(print_id: int, _: str = Depends(get_current_user)):
+    from ....services.archive import archived_names
     d = DATA_DIR / "prints" / str(print_id)
-    if not d.exists(): return []
-    return [{"filename": f.name, "url": f"/api/v1/prints/{print_id}/file/{f.name}"}
-            for f in sorted(d.iterdir())
-            if (f.name.startswith("Photo-") and f.suffix.lower() in (".jpg",".jpeg",".png",".webp"))
-            or (f.name.startswith("Video-") and f.suffix.lower() in (".mp4",".webm",".mov",".m4v"))]
+    # ce qui est en local, et ce qui n'est plus que sur le NAS (vide du local)
+    names = sorted(({f.name for f in d.iterdir()} if d.exists() else set()) | set(archived_names(f"prints/{print_id}")))
+    return [{"filename": n, "url": f"/api/v1/prints/{print_id}/file/{n}"} for n in names
+            if (n.startswith("Photo-") and os.path.splitext(n)[1].lower() in (".jpg",".jpeg",".png",".webp"))
+            or (n.startswith("Video-") and os.path.splitext(n)[1].lower() in (".mp4",".webm",".mov",".m4v"))]
 
 @router.post("/{print_id}/photos/upload")
 async def upload_print_photo(
@@ -1761,10 +1762,11 @@ async def delete_print_upload(print_id: int, filename: str, _: str = Depends(get
 async def print_file(print_id: int, filename: str):
     """Sert n'importe quel fichier du dossier d'un print."""
     import mimetypes
+    from ....services.archive import local_or_archive
     if ".." in filename or "/" in filename:
         raise HTTPException(400)
-    path = DATA_DIR / "prints" / str(print_id) / filename
-    if not path.exists(): raise HTTPException(404)
+    path = local_or_archive(f"prints/{print_id}/{filename}")       # vide du local : relu sur le NAS
+    if not path: raise HTTPException(404)
     mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
     return FileResponse(str(path), media_type=mime)
 
@@ -1773,20 +1775,20 @@ async def print_file(print_id: int, filename: str):
 async def print_snapshots_list(print_id: int):
     """Liste toutes les images du dossier d'un print (snapshots + vignettes importées)."""
     import mimetypes
+    from ....services.archive import archived_names
     print_dir = DATA_DIR / "prints" / str(print_id)
-    if not print_dir.exists():
-        return {"files": []}
-    files = []
-    for f in sorted(print_dir.iterdir()):
-        if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp") and f.name != "plate.png":
-            files.append({"name": f.name, "url": f"/api/v1/prints/{print_id}/file/{f.name}"})
+    names = set(f.name for f in print_dir.iterdir()) if print_dir.exists() else set()
+    names |= set(archived_names(f"prints/{print_id}"))          # captures videes du local : sur le NAS
+    files = [{"name": n, "url": f"/api/v1/prints/{print_id}/file/{n}"} for n in sorted(names)
+             if os.path.splitext(n)[1].lower() in (".png", ".jpg", ".jpeg", ".webp") and n != "plate.png"]
     return {"files": files}
 
 
 @router.get("/{print_id}/snapshot/{trigger}")
 async def print_snapshot(print_id: int, trigger: str):
-    path = DATA_DIR / "prints" / str(print_id) / f"snapshot-{trigger}.jpg"
-    if not path.exists(): raise HTTPException(404)
+    from ....services.archive import local_or_archive
+    path = local_or_archive(f"prints/{print_id}/snapshot-{trigger}.jpg")
+    if not path: raise HTTPException(404)
     return FileResponse(path, media_type="image/jpeg")
 
 
@@ -2220,7 +2222,8 @@ async def print_3mf(print_id: int, kind: str = Query("sliced", pattern="^(sliced
         f = print_file(p.design_id, p.mw_profile_id, p.mw_plates)
         suffix = " (MakerWorld)"
     else:
-        f = DATA_DIR / p.model_3mf if p.model_3mf else None
+        from ....services.archive import local_or_archive
+        f = local_or_archive(p.model_3mf) if p.model_3mf else None     # vide du local : relu sur le NAS
         suffix = " (tranché)"
     if not f or not f.is_file():
         raise HTTPException(404, "Pas de 3MF pour cette impression")

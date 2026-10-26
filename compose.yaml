@@ -7,6 +7,9 @@ services:
       - "7914:8000"
     volumes:
       - bambunymous_data:/data
+      # Sauvegarde vers le NAS (Parametres > Outils > Sauvegarde et NAS) : le dossier du NAS, monte sur /nas.
+      # Remplace ./nas par le chemin du partage sur l'hote (ex. /mnt/nas/bambunymous).
+      - ${NAS_PATH:-./nas}:/nas
     environment:
       - DATA_DIR=/data
       - DATABASE_URL=sqlite+aiosqlite:////data/bambunymous.db

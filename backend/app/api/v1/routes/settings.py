@@ -362,3 +362,45 @@ async def storage_usage(fresh: bool = False, db: AsyncSession = Depends(get_db),
     return {**v, "cats": [{**c, "covers": covers.get(c["key"])} for c in v["cats"]],
             "top_prints": [{**x, "name": names.get(x["id"], (f"Impression #{x['id']}", None))[0],
                             "date": names.get(x["id"], (None, None))[1]} for x in v["top_prints"]]}
+
+
+
+# ── Sauvegarde vers le NAS et vidage du local (26/10/2026) ──
+@router.get("/archive")
+async def archive_status(_: str = Depends(require_admin)):
+    from ....services import archive as AR
+    return await AR.status()
+
+
+@router.put("/archive")
+async def archive_settings(body: dict, _: str = Depends(require_admin)):
+    from ....services import archive as AR
+    return await AR.settings_set(body or {})
+
+
+@router.post("/archive/backup")
+async def archive_backup(_: str = Depends(require_admin)):
+    """Lance la sauvegarde en fond ; la page suit l'avancement par GET /archive."""
+    import asyncio
+    from ....services import archive as AR
+    if AR._STATE["running"]:
+        raise HTTPException(409, "Une sauvegarde ou un vidage est déjà en cours.")
+    t = asyncio.get_running_loop().create_task(AR.backup("manuel"))
+    _ARCHIVE_TASKS.add(t)
+    t.add_done_callback(_ARCHIVE_TASKS.discard)
+    return {"started": True}
+
+
+@router.post("/archive/purge")
+async def archive_purge(body: dict = None, _: str = Depends(require_admin)):
+    import asyncio
+    from ....services import archive as AR
+    if AR._STATE["running"]:
+        raise HTTPException(409, "Une sauvegarde ou un vidage est déjà en cours.")
+    t = asyncio.get_running_loop().create_task(AR.purge((body or {}).get("days"), "manuel"))
+    _ARCHIVE_TASKS.add(t)
+    t.add_done_callback(_ARCHIVE_TASKS.discard)
+    return {"started": True}
+
+
+_ARCHIVE_TASKS: set = set()
