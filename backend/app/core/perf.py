@@ -42,6 +42,43 @@ def route_key(method: str, path: str) -> str:
 _REQ: contextvars.ContextVar = contextvars.ContextVar("perf_req", default=None)
 
 
+# Ou passe le temps « base » (27/10/2026) : une requete d'1 ms seule en prenait 300 dans la foule. Chaque appel a
+# la base est decoupe en trois : l'attente dans la file du fil de la connexion, SQLite lui-meme (sur ce fil), et le
+# retour de la reponse a la boucle principale (qui attend que celle-ci soit libre).
+def install_db_probe() -> None:
+    try:
+        import aiosqlite.core as _ac
+    except Exception:
+        return
+    if getattr(_ac.Connection._execute, "_perf", False):
+        return
+    orig = _ac.Connection._execute
+
+    async def _execute(self, fn, *args, **kwargs):
+        r = _REQ.get()
+        if r is None:
+            return await orig(self, fn, *args, **kwargs)
+        box = {}
+        t_q = time.perf_counter()
+
+        def timed():
+            t0 = time.perf_counter()
+            box["wait"] = t0 - t_q
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                box["end"] = time.perf_counter()
+                box["run"] = box["end"] - t0
+        out = await orig(self, timed)
+        if "end" in box:
+            r["db_wait"] = r.get("db_wait", 0.0) + box["wait"] * 1000
+            r["db_run"] = r.get("db_run", 0.0) + box["run"] * 1000
+            r["db_back"] = r.get("db_back", 0.0) + (time.perf_counter() - box["end"]) * 1000
+        return out
+    _execute._perf = True
+    _ac.Connection._execute = _execute
+
+
 def sql_done(ms: float, sql: str) -> None:
     r = _REQ.get()
     if r is None:
@@ -69,6 +106,8 @@ def record(key: str, ms: float, req: dict = None) -> None:
     s["max"] = max(s["max"], ms)
     s["recent"].append(ms)
     if req is not None:
+        for k in ("db_wait", "db_run", "db_back"):
+            s[k] = s.get(k, 0.0) + req.get(k, 0.0)
         s["db"] += req["db"]
         s["q"] += req["q"]
         if req["top"][0] > s["top"][0]:
@@ -90,7 +129,8 @@ def snapshot(limit: int = 60) -> dict:
                      "p50": round(_pct(rec, .5), 1), "p95": round(_pct(rec, .95), 1), "max": round(s["max"], 1),
                      "cold": round(s["cold"], 1) if s.get("cold") is not None else None, "cold_n": s.get("cold_n", 0),
                      "db_avg": round(s["db"] / s["n"], 1) if s["n"] else 0, "q_avg": round(s["q"] / s["n"], 1) if s["n"] else 0,
-                     "top_ms": round(s["top"][0], 1), "top_sql": s["top"][1]})
+                     "top_ms": round(s["top"][0], 1), "top_sql": s["top"][1],
+                     **({k: round(s.get(k, 0.0) / s["n"], 1) for k in ("db_wait", "db_run", "db_back")} if s["n"] else {})})
     rows.sort(key=lambda r: -r["p95"])
     total = sum(s["n"] for s in _STATS.values())
     return {"since": _SINCE["t"], "requests": total, "routes": rows[:limit], "loop": _loop_view(),
@@ -103,7 +143,7 @@ def snapshot(limit: int = 60) -> dict:
 # 50 ms ; un fil de garde a cote, s'il ne le voit plus battre depuis STALL_MS, releve ou en est la boucle (la pile
 # du fil principal, cote code de l'appli) : on sait QUELLE ligne bloque, et combien de temps au total.
 STALL_MS = 150
-_LOOP = {"beat": 0.0, "ident": None, "lags": deque(maxlen=600)}
+_LOOP = {"beat": 0.0, "ident": None, "lags": deque(maxlen=600), "cpu": deque(maxlen=300)}   # cpu : % par seconde, 5 min
 _STALLS: dict = {}               # « fichier:ligne fonction » -> {"n", "total", "max", "stack", "last"}
 _STALLS_BOOT: dict = {}          # les memes, pendant le demarrage (gardes a part : utile de savoir ce qu'il coute)
 _APP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -158,9 +198,16 @@ async def loop_watch() -> None:
     """Le battement de coeur de la boucle (a lancer une fois au demarrage)."""
     _LOOP["ident"] = threading.get_ident()
     threading.Thread(target=_guard, name="perf-guard", daemon=True).start()
+    last = (time.perf_counter(), time.process_time())
     while True:
         t = time.perf_counter()
         _LOOP["beat"] = t
+        # le processeur pris par le serveur (tous ses fils), chaque seconde : 100 % = un coeur entier
+        if t - last[0] >= 1.0:
+            pt = time.process_time()
+            if not warming():
+                _LOOP["cpu"].append(100 * (pt - last[1]) / (t - last[0]))
+            last = (t, pt)
         await asyncio.sleep(0.05)
         if not warming():
             _LOOP["lags"].append((time.perf_counter() - t) * 1000 - 50)
@@ -172,7 +219,10 @@ def _loop_view() -> dict:
         return sorted(({"where": k, "count": s["n"], "total": round(s["total"]), "max": round(s["max"]),
                         "stack": s["stack"], "last": s["last"]} for k, s in book.items()), key=lambda r: -r["total"])
     stalls = view(_STALLS)
-    return {"lag_p50": round(_pct(lags, .5), 1), "lag_p95": round(_pct(lags, .95), 1),
+    cpu = list(_LOOP["cpu"])
+    return {"cpu_avg": round(sum(cpu) / len(cpu)) if cpu else None, "cpu_max": round(max(cpu)) if cpu else None,
+            "threads": threading.active_count(), "cores": os.cpu_count(),
+            "lag_p50": round(_pct(lags, .5), 1), "lag_p95": round(_pct(lags, .95), 1),
             "lag_max": round(max(lags), 1) if lags else 0, "stall_ms": STALL_MS, "stalls": stalls[:15],
             "boot_stalls": view(_STALLS_BOOT)[:10]}
 
@@ -181,6 +231,7 @@ def reset() -> None:
     _STALLS.clear()
     _STALLS_BOOT.clear()
     _LOOP["lags"].clear()
+    _LOOP["cpu"].clear()
     _STATS.clear()
     _SINCE["t"] = time.time()
     _COLD["on"] = False              # apres une remise a zero, tout compte (les caches sont deja chauds)

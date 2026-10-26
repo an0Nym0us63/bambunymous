@@ -73,6 +73,10 @@ def _sql_t1(conn, cursor, statement, params, context, executemany):
         pass
 
 
+# le temps « base » decoupe (file du fil, SQLite, retour a la boucle) : voir core/perf.py
+from ..core.perf import install_db_probe as _probe
+_probe()
+
 for _e in (engine, _pooled):
     _event.listen(_e.sync_engine, "connect", _sqlite_pragmas)
     _event.listen(_e.sync_engine, "before_cursor_execute", _sql_t0)

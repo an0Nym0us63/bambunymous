@@ -67,6 +67,9 @@ function LoopView({ loop }) {
           <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>{l}</div>
         </div>))}
     </div>
+    {loop.cpu_avg != null && <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>
+      processeur <b style={{ color: tone(loop.cpu_avg * 5) }}>{loop.cpu_avg} %</b> en moyenne · pire seconde <b style={{ color: tone(loop.cpu_max * 5) }}>{loop.cpu_max} %</b>
+      {" "}(100 % = un cœur entier{loop.cores ? `, ${loop.cores} cœurs` : ""}) · {loop.threads} fils</div>}
     <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.4 }}>
       Le serveur traite tout sur une seule file. Quand un calcul la fige plus de {perfMs(loop.stall_ms)}, toutes les pages en cours attendent :
       voici où il en était, du plus coûteux au moins coûteux.</p>
@@ -247,6 +250,9 @@ export default function PerfSheet({ data, onClose, onReset, onReload }) {
                   base <b style={{ color: r.avg && r.db_avg / r.avg > 0.5 ? "#ef4444" : "var(--text2)" }}>{perfMs(r.db_avg)}</b>
                   {r.avg ? ` (${Math.round(Math.min(1, r.db_avg / r.avg) * 100)} %)` : ""} · <b style={{ color: r.q_avg > 30 ? "#ef4444" : "var(--text2)" }}>
                   {String(r.q_avg).replace(".", ",")}</b> requête{r.q_avg >= 2 ? "s" : ""}</span>}
+                {/* ou passe ce temps : la file du fil de la connexion, SQLite lui-meme, le retour a la boucle */}
+                {r.db_avg >= 20 && r.db_run != null && <span data-tip="Le temps « base » découpé : l'attente dans la file de la connexion, SQLite lui-même, puis le retour de la réponse au serveur (qui attend qu'il soit libre)">
+                  dont file <b style={{ color: "var(--text2)" }}>{perfMs(r.db_wait)}</b> · SQLite <b style={{ color: "var(--text2)" }}>{perfMs(r.db_run)}</b> · retour <b style={{ color: "var(--text2)" }}>{perfMs(r.db_back)}</b></span>}
                 {r.top_ms >= 50 && r.top_sql && <code data-tip={r.top_sql} style={{ flexBasis: "100%", fontSize: 10.5, color: "var(--muted)", overflow: "hidden",
                   textOverflow: "ellipsis", whiteSpace: "nowrap" }}>plus lente {perfMs(r.top_ms)} : {r.top_sql}</code>}
                 <code style={{ marginLeft: "auto", fontSize: 10.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{lb.method} {lb.path}</code>
