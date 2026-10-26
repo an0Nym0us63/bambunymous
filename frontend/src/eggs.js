@@ -159,9 +159,11 @@ function celebrate(e, name = "", uncounted = false, kind = null, onGone = null) 
 const cheers = [];
 let cheering = false;
 function nextCheer() {
-  const show = cheers.shift();
-  if (!show) { cheering = false; return; }
+  if (!cheers.length) { cheering = false; return; }
   cheering = true;
+  // la fete des cartes ou des grades est a l'ecran : les annonces attendent leur tour (26/10/2026)
+  if (window.__bnCardFx || window.__bnGradeFx) { setTimeout(nextCheer, 800); return; }
+  const show = cheers.shift();
   // une carte qui ne rend jamais la main (erreur, minuteur gele) ne bloque plus toute la file (25/10/2026)
   let next = false;
   const go = () => { if (next) return; next = true; clearTimeout(guard); setTimeout(nextCheer, 250); };

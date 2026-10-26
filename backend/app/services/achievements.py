@@ -5311,6 +5311,67 @@ async def egg_lock(username: str, name: str, consume: bool = False, now=None) ->
 CARD_LOG_MAX = 30
 
 
+# ── La fete des grades (26/10/2026) : chaque echelon gagne du grade general (Curieux I, II, III,
+# Bidouilleur I…), et plus encore un nouveau grade, s'annonce en grand, comme les cartes. Memes seuils
+# que l'appli (medals.jsx : GRADE_AT, trois echelons par grade). On fete une seule fois chaque niveau :
+# le plus haut deja fete est retenu (le score peut baisser quand de nouveaux succes arrivent au catalogue).
+GRADE_AT = [0.05, 0.2, 0.4, 0.65, 0.9]
+
+
+def grade_level(v: float) -> int:
+    """Le niveau du grade general : -1 (aucun), puis 0 (Curieux I) a 14 (Legende du fablab III)."""
+    i = -1
+    for j, x in enumerate(GRADE_AT):
+        if v >= x:
+            i = j
+    if i < 0:
+        return -1
+    lo, hi = GRADE_AT[i], (GRADE_AT[i + 1] if i + 1 < len(GRADE_AT) else 1.0)
+    step = (hi - lo) / 3
+    sub = max(0, min(2, int((v - lo) / step + 1e-9)))
+    return i * 3 + sub
+
+
+async def grade_fx(username: str, dev: str = "") -> dict | None:
+    """Le niveau de grade atteint depuis la derniere fete de CET appareil (un appareil nouveau part du
+    plus haut deja fete sur le compte) : {from, to, score, score_max}, ou None."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    v = await view()
+    mx = v.get("score_max") or 0
+    lvl = grade_level((v.get("score") or 0) / mx) if mx else -1
+    key = f"{username}|{dev}" if dev else username
+    async with AsyncSessionLocal() as db:
+        try:
+            seen = json.loads(await get_setting(db, KEY + "_GRADEFX", "{}") or "{}")
+        except ValueError:
+            seen = {}
+        if username not in seen:                 # premiere fois : on note l'existant, rien a feter
+            seen[username] = lvl
+            await set_setting(db, KEY + "_GRADEFX", json.dumps(seen))
+            return None
+        if key not in seen:
+            seen[key] = seen[username]
+            await set_setting(db, KEY + "_GRADEFX", json.dumps(seen))
+    if lvl > seen[key]:
+        return {"from": seen[key], "to": lvl, "score": v.get("score") or 0, "score_max": mx}
+    return None
+
+
+async def grade_fx_seen(username: str, dev: str, lvl: int) -> None:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    async with AsyncSessionLocal() as db:
+        try:
+            seen = json.loads(await get_setting(db, KEY + "_GRADEFX", "{}") or "{}")
+        except ValueError:
+            seen = {}
+        for k in {username, f"{username}|{dev}" if dev else username}:
+            seen[k] = max(int(seen.get(k, -1)), int(lvl))
+        await set_setting(db, KEY + "_GRADEFX", json.dumps(seen))
+    logger.info(f"[SUCCES] grade fete sur {username}|{dev or '-'} : niveau {lvl}")
+
+
 async def card_fx(username: str, dev: str = "") -> list:
     """Les cartes gagnees depuis la derniere fete de CET appareil (un appareil nouveau part de
     la derniere fete du compte, sur n'importe quel appareil)."""

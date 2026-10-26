@@ -105,3 +105,18 @@ export const sCard = safe((lvl, small = false) => {
   else if (lvl < 7) { coins(t, 10 + (lvl - 3) * 6, 1.4); [76, 79, 84].forEach(n => bell(midi(n), t + 0.1, 0.13)); }
   else { fanfare(t, true); coins(t + 0.3, 40, 2.5); }
 });
+// la fete des grades (26/10/2026) : un echelon, une montee de clochettes ; un nouveau grade, le roulement,
+// le coup, la grande fanfare et la pluie de pieces (la legende : plus long encore)
+export const sGrade = safe((promo, legend = false) => {
+  const t = now();
+  if (!promo) {
+    [72, 76, 79, 84, 88].forEach((n, i) => bell(midi(n), t + i * 0.08, 0.16));
+    coins(t + 0.35, 8, 0.7);
+    return;
+  }
+  for (let x = 0; x < 0.9; x += 0.045) noise(t + x, 0.05, { vol: 0.03 + 0.12 * (x / 0.9), hp: 700 });
+  tone(140, t + 0.9, 0.6, { vol: 0.35, to: 38 }); noise(t + 0.9, 0.5, { vol: 0.12, lp: 900 });
+  fanfare(t + 1.0, true);
+  coins(t + 1.3, legend ? 60 : 30, legend ? 3 : 2);
+  if (legend) [84, 88, 91, 96].forEach((n, i) => bell(midi(n), t + 2.2 + i * 0.12, 0.14));
+});

@@ -231,6 +231,7 @@ export function GradeEmblem({ i, size = 22, locked = false }) {
           {["#ef4444", "#f59e0b", "#eab308", "#22c55e", "#06b6d4", "#6366f1", "#d946ef"].map((c, k) =>
             <stop key={c} offset={k / 6} stopColor={c}/>)}
         </linearGradient>}
+        {top && <clipPath id={id + "c"}><path d="M20 2 L37 8 V22 C37 33 29 40 20 44 C11 40 3 33 3 22 V8 Z"/></clipPath>}
       </defs>
       <path d="M20 2 L37 8 V22 C37 33 29 40 20 44 C11 40 3 33 3 22 V8 Z" fill={`url(#${id})`}
         stroke={top ? `url(#${id}r)` : m.b} strokeWidth={top ? 2.6 : 1.6}/>
@@ -240,8 +241,9 @@ export function GradeEmblem({ i, size = 22, locked = false }) {
       <path d="M18.6 25 H21.4 L20 28.5 Z" fill="#fff" fillOpacity=".92"/>
       {/* les echelons */}
       {[0, 1, 2, 3, 4].map(k => <circle key={k} cx={12 + k * 4} cy="34" r="1.5" fill="#fff" fillOpacity={k <= i ? 0.95 : 0.3}/>)}
-      {top && !locked && <rect x="-20" y="0" width="14" height="46" fill="#fff" opacity=".45" transform="skewX(-20)"
-        style={{ animation:"bn-grade-sweep 3.2s ease-in-out infinite" }}/>}
+      {/* le reflet qui traverse l'ecusson, decoupe a sa forme (il debordait, visible en grand) */}
+      {top && !locked && <g clipPath={`url(#${id}c)`}><rect x="-20" y="0" width="14" height="46" fill="#fff" opacity=".45" transform="skewX(-20)"
+        style={{ animation:"bn-grade-sweep 3.2s ease-in-out infinite" }}/></g>}
     </svg>
   );
 }

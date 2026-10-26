@@ -198,6 +198,23 @@ async def achievements_card_fx(dev: str = "", acc=Depends(require_own_account), 
     return {"cards": await A.card_fx(acc[0], _dev(dev))}
 
 
+@router.get("/grade-fx")
+async def achievements_grade_fx(dev: str = "", acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
+    """Le niveau de grade atteint depuis la derniere fete de cet appareil (compte principal)."""
+    from ....services import achievements as A
+    if not (await _me(acc[0], db))["main"]:
+        return {"grade": None}
+    return {"grade": await A.grade_fx(acc[0], _dev(dev))}
+
+
+@router.post("/grade-fx/seen")
+async def achievements_grade_fx_seen(dev: str = "", level: int = -1, acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
+    from ....services import achievements as A
+    if (await _me(acc[0], db))["main"]:
+        await A.grade_fx_seen(acc[0], _dev(dev), level)
+    return {"ok": True}
+
+
 @router.post("/card-fx/seen")
 async def achievements_card_fx_seen(dev: str = "", acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
     from ....services import achievements as A

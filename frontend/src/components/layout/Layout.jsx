@@ -15,6 +15,7 @@ import NoAutofill from "../NoAutofill";
 import { PrankHost } from "../../hidden/prankHost";
 import MwAssignPicker from "../MwAssignPicker";
 import CardFx from "../CardFx";
+import GradeFx from "../GradeFx";
 import AchNews from "../AchNews";
 import { Hide } from "../Cachettes";
 import { MwLinkHost } from "../MwCreatorPage";
@@ -284,6 +285,7 @@ export default function Layout() {
           <React.Suspense fallback={<div style={{ minHeight: "70vh" }}/>}><Outlet /></React.Suspense></main>
         <PrankHost/>
         <CardFx/>
+        <GradeFx/>
         <AchNews/>
         <MwLinkHost/>
         <MwAssignPicker/>
