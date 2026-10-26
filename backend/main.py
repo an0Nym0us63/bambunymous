@@ -146,6 +146,9 @@ async def lifespan(app: FastAPI):
         t.add_done_callback(_BG_TASKS.discard)
         return t
     _bg(_rate_resume())
+    # la boucle surveillee : ce qui la fige est releve (Parametres > Vitesse du serveur)
+    from app.core.perf import loop_watch as _loop_watch
+    _bg(_loop_watch())
     # 3MF d'origine MakerWorld : un rattrapage qui tournait a l'arret reprend tout seul
     from app.services.mw_source import resume_after_restart as _src_resume
     _bg(_src_resume())

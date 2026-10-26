@@ -52,11 +52,45 @@ export function perfLabel(route) {
 }
 const pos = v => Math.max(0, Math.min(100, (Math.log10(Math.max(10, v)) - 1) / (Math.log10(30000) - 1) * 100));
 
+// Les blocages de la boucle (26/10/2026) : le serveur ne fait qu'une chose a la fois ; quand un calcul le fige,
+// toutes les requetes en cours attendent. On montre le retard de la boucle et les lignes de code qui l'ont figee.
+function LoopView({ loop }) {
+  const ago = t => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "à l'instant" : m < 60 ? `il y a ${m} min` : `il y a ${Math.round(m / 60)} h`; };
+  const tone = v => v >= 500 ? "#ef4444" : v >= 100 ? "#f59e0b" : "#16a34a";
+  return (<>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 8 }}>
+      {[[loop.lag_p50, "retard habituel"], [loop.lag_p95, "retard à 95 %"], [loop.lag_max, "pire retard"]].map(([v, l]) => (
+        <div key={l} style={{ padding: "8px 10px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
+          <div style={{ fontSize: 17, fontWeight: 900, color: tone(v), lineHeight: 1.1 }}>{perfMs(v)}</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>{l}</div>
+        </div>))}
+    </div>
+    <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.4 }}>
+      Le serveur traite tout sur une seule file. Quand un calcul la fige plus de {perfMs(loop.stall_ms)}, toutes les pages en cours attendent :
+      voici où il en était, du plus coûteux au moins coûteux.</p>
+    {loop.stalls.map(s => (
+      <div key={s.where} style={{ padding: "10px 12px", borderRadius: 14, background: "var(--surface)", border: `1px solid ${tone(s.max)}55`, display: "flex", flexDirection: "column", gap: 5 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+          <code style={{ fontSize: 12, fontWeight: 800, color: "var(--text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.where}</code>
+          <span style={{ fontSize: 15, fontWeight: 900, color: tone(s.max), whiteSpace: "nowrap" }}>{perfMs(s.total)}</span>
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+          <span>{s.count} fois</span><span>pire <b style={{ color: tone(s.max) }}>{perfMs(s.max)}</b></span><span>{ago(s.last)}</span>
+        </div>
+        {s.stack.length > 1 && <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          {s.stack.slice(1).map((l, i) => <code key={i} style={{ fontSize: 10.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>↳ {l}</code>)}
+        </div>}
+      </div>))}
+    {!loop.stalls.length && <p style={{ fontSize: 13, color: "#16a34a", fontWeight: 700, textAlign: "center", padding: 16 }}>Aucun blocage relevé depuis la remise à zéro.</p>}
+  </>);
+}
+
 export default function PerfSheet({ data, onClose, onReset, onReload }) {
   const [only, setOnly] = useState("slow");
   const all = perfSort((data?.routes || []).filter(r => r.count > 0));
   const slow = all.filter(perfSlow);
   const list = only === "slow" && slow.length ? slow : all;
+  const loop = data?.loop, stalls = loop?.stalls || [];
   const since = data ? new Date(data.since * 1000).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
   const C = "#0EA5E9";
   const seg = on => ({ flex: 1, padding: "7px 10px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800,
@@ -88,7 +122,9 @@ export default function PerfSheet({ data, onClose, onReset, onReload }) {
         <div style={{ display: "flex", gap: 4, padding: 3, borderRadius: 13, background: "var(--surface2)" }}>
           <button onClick={() => setOnly("slow")} style={seg(only === "slow")}>Lentes ({slow.length})</button>
           <button onClick={() => setOnly("all")} style={seg(only === "all")}>Toutes ({all.length})</button>
+          {loop && <button onClick={() => setOnly("loop")} style={seg(only === "loop")}>Blocages ({stalls.length})</button>}
         </div>
+        {only === "loop" && loop ? <LoopView loop={loop}/> : <>
         {/* la regle de l'echelle */}
         <div style={{ position: "relative", height: 14, margin: "0 2px", fontSize: 10, fontWeight: 700, color: "var(--muted)" }}>
           {[[10, "10 ms"], [100, "100 ms"], [1000, "1 s"], [10000, "10 s"]].map(([v, l]) => (
@@ -122,6 +158,7 @@ export default function PerfSheet({ data, onClose, onReset, onReload }) {
               </div>
             </div>); })}
         {!list.length && <p style={{ fontSize: 13, color: "var(--muted)", textAlign: "center", padding: 16 }}>Rien de mesuré pour l'instant.</p>}
+        </>}
       </div>
     </FSheet>,
     document.body);
