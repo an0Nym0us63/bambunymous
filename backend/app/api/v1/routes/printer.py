@@ -332,6 +332,55 @@ async def printer_sd_probe(_: str = Depends(require_admin)):
     return await probe()
 
 
+# ── Les timelapses de la carte SD (26/10/2026) ──
+def _sd(e):
+    raise HTTPException(503, str(e))
+
+
+@router.get("/sd/timelapses")
+async def printer_sd_timelapses(fresh: bool = False, _: str = Depends(get_current_user)):
+    from ....services import sd_card as SD
+    try:
+        return await SD.timelapses(fresh)
+    except SD.SdError as e:
+        _sd(e)
+
+
+@router.get("/sd/timelapse/thumb/{name}")
+async def printer_sd_thumb(name: str):
+    """La vignette (ouverte comme les autres images de l'appli : une balise img n'envoie pas de jeton)."""
+    from fastapi.responses import FileResponse
+    from ....services import sd_card as SD
+    try:
+        f = await SD.thumb(name.rsplit(".", 1)[0] + ".mp4" if name.endswith(".jpg") else name)
+    except SD.SdError as e:
+        _sd(e)
+    return FileResponse(f, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
+
+
+@router.get("/sd/timelapse/video/{name}")
+async def printer_sd_video(name: str):
+    """La video, copiee sur le serveur a la premiere lecture ; avance et retour (Range) par FileResponse."""
+    from fastapi.responses import FileResponse
+    from ....services import sd_card as SD
+    try:
+        f = await SD.video(name)
+    except SD.SdError as e:
+        _sd(e)
+    return FileResponse(f, media_type="video/mp4" if name.endswith(".mp4") else "video/x-msvideo",
+                        headers={"Cache-Control": "private, max-age=86400"})
+
+
+@router.delete("/sd/timelapse/{name}")
+async def printer_sd_delete(name: str, _: str = Depends(require_admin)):
+    from ....services import sd_card as SD
+    try:
+        await SD.delete(name)
+    except SD.SdError as e:
+        _sd(e)
+    return {"ok": True}
+
+
 @router.get("/details")
 async def printer_details(_: str = Depends(get_current_user)):
     """Tout ce que l'imprimante envoie, range par themes (fenetre « Plus d'infos »)."""

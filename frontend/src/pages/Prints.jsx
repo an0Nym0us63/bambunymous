@@ -11,7 +11,7 @@ import MakerWorldCollectionsPicker from "../components/MakerWorldCollectionsPick
 import MakerWorldModelSheet, { prefetchModel } from "../components/MakerWorldModelSheet";
 import { openCreator } from "../components/MwCreatorPage";
 import { useToRateSet, RateButton, RateStar as RateStarBtn } from "../components/MwToRate";
-import { useFriend } from "../store/friend";
+import { useFriend, currentFriend } from "../store/friend";
 import MwImg from "../components/MwImg";
 import client, { apiUrl, apiThumb } from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
@@ -2269,10 +2269,12 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
   const nMine = mine ? [...(mine.prints || []).map(p => p.title || p.file_name), ...(mine.groups || []).map(g => g.name)]
     .filter(t => !q || (t || "").toLowerCase().includes(q)).length : null;
   return (<>
-    {hasFriends && (
+    {!currentFriend() && (
       <div style={{ display:"flex", gap:3, background:"var(--surface2)", borderRadius:16, padding:3,
         border:"1px solid var(--border)", marginBottom:10 }}>
-        {[["mine", `🖼️ Ma galerie${nMine != null ? ` (${nMine})` : ""}`, "#EC4899"], ["friends", `👀 Chez les copains${nFr != null ? ` (${nFr})` : ""}`, "#8B5CF6"]].map(([k, l, c]) => (
+        {[["mine", `🖼️ Ma galerie${nMine != null ? ` (${nMine})` : ""}`, "#EC4899"],
+          hasFriends && ["friends", `👀 Chez les copains${nFr != null ? ` (${nFr})` : ""}`, "#8B5CF6"],
+          ["sd", "🎞️ Timelapses", "#F97316"]].filter(Boolean).map(([k, l, c]) => (
           <button key={k} onClick={() => setWho(k)} style={{ flex:1, padding:"8px 8px", borderRadius:12, fontSize:12.5,
             fontWeight:800, cursor:"pointer", border:"none", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
             background: who === k ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` : "transparent",
@@ -2280,7 +2282,80 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
         ))}
       </div>
     )}
-    {who === "friends" && hasFriends ? <FriendsGalleryView search={search} data={fdata}/> : <MyGalleryView search={search} sortF={sortF} data={mine} loading={mineLoading}/>}
+    {who === "sd" && !currentFriend() ? <TimelapsesView search={search}/>
+      : who === "friends" && hasFriends ? <FriendsGalleryView search={search} data={fdata}/> : <MyGalleryView search={search} sortF={sortF} data={mine} loading={mineLoading}/>}
+  </>);
+}
+
+// Les timelapses de la carte SD de l'imprimante (26/10/2026) : les vignettes de la plus recente a la plus
+// ancienne, l'impression retrouvee pour chacune, la video dans la visionneuse (copiee sur le serveur a la
+// premiere lecture), puis « Fiche », « Telecharger » et, pour l'admin, « Supprimer » de la carte.
+function TimelapsesView({ search }) {
+  const isAdmin = useIsAdmin();
+  const [data, setData] = useState(null);
+  const [shown, setShown] = useState(48);
+  const [open, setOpen] = useState(null);           // index dans la liste filtree
+  const [sheet, setSheet] = useState(null);         // la fiche de l'impression
+  const more = useRef(null);
+  const load = fresh => client.get("/printer/sd/timelapses", { params: fresh ? { fresh: 1 } : {}, timeout: 120000 })
+    .then(r => setData(r.data)).catch(e => setData({ error: e.response?.data?.detail || e.message }));
+  useEffect(() => { load(false); }, []);
+  const q = (search || "").trim().toLowerCase();
+  const all = (data?.items || []).filter(it => !q || `${it.name} ${it.print?.name || ""}`.toLowerCase().includes(q));
+  useEffect(() => {
+    if (!more.current || typeof IntersectionObserver === "undefined") return undefined;
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) setShown(n => n + 48); }, { rootMargin: "400px" });
+    io.observe(more.current);
+    return () => io.disconnect();
+  }, [shown, all.length]);
+  if (!data) return <p style={{ textAlign:"center", color:"var(--muted)", padding:"40px 0" }}>Lecture de la carte de l'imprimante…</p>;
+  if (data.error) return <p style={{ textAlign:"center", color:"#ef4444", padding:"40px 0" }}>⚠ {data.error}</p>;
+  const when = iso => { try { const d = new Date(iso); return `${d.toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })} · ${d.toLocaleTimeString("fr-FR", { hour:"2-digit", minute:"2-digit" })}`; } catch { return ""; } };
+  const mo = n => n >= 1048576 ? `${(n / 1048576).toFixed(1).replace(".", ",")} Mo` : `${Math.max(1, Math.round(n / 1024))} Ko`;
+  const vid = it => apiUrl(`/printer/sd/timelapse/video/${it.name}`);
+  const thumb = it => apiUrl(`/printer/sd/timelapse/thumb/${it.name.replace(/\.(mp4|avi)$/, ".jpg")}`);
+  const openSheet = async it => { try { const { data: p } = await client.get(`/prints/${it.print.id}`); setSheet(p); } catch { /* introuvable */ } };
+  const remove = async (it, close) => {
+    if (!(await showConfirm(`Supprimer ce timelapse de la carte de l'imprimante ?`, { danger: true, confirmLabel: "Supprimer" }))) return;
+    try { await client.delete(`/printer/sd/timelapse/${it.name}`); close(); setData(d => ({ ...d, items: d.items.filter(x => x.name !== it.name), total: d.total - 1 })); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
+  const pill = (bg, c) => ({ padding:"10px 18px", borderRadius:22, cursor:"pointer", fontSize:13.5, fontWeight:900, color:c, background:bg, border:"none",
+    backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)", textDecoration:"none" });
+  return (<>
+    <p style={{ fontSize:11.5, color:"var(--muted)", margin:"0 0 10px", display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+      <span>{all.length} timelapse{all.length > 1 ? "s" : ""} sur la carte · {mo(data.bytes || 0)}</span>
+      <button onClick={() => { setData(null); load(true); }} style={{ padding:"2px 10px", borderRadius:20, border:"1px solid var(--border)",
+        background:"var(--surface2)", color:"var(--text2)", fontSize:11, fontWeight:800, cursor:"pointer" }}>↻ Relire la carte</button></p>
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:10 }}>
+      {all.slice(0, shown).map((it, i) => (
+        <button key={it.name} onClick={() => setOpen(i)} style={{ textAlign:"left", padding:0, borderRadius:14, overflow:"hidden", cursor:"pointer",
+          border:"1px solid var(--border)", background:"var(--surface2)", color:"inherit", font:"inherit", display:"flex", flexDirection:"column" }}>
+          <span style={{ position:"relative", aspectRatio:"16 / 9", background:"#0f172a", display:"block" }}>
+            {it.thumb && <img src={thumb(it)} alt="" loading="lazy" decoding="async" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}
+              onError={e => { e.currentTarget.style.display = "none"; }}/>}
+            <span style={{ position:"absolute", left:6, bottom:6, padding:"1px 7px", borderRadius:10, fontSize:10, fontWeight:900, color:"#fff",
+              background:"rgba(15,23,42,0.65)" }}>▶ {mo(it.size)}</span>
+          </span>
+          <span style={{ padding:"7px 9px", display:"flex", flexDirection:"column", gap:2, minWidth:0 }}>
+            <span style={{ fontSize:12.5, fontWeight:800, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {it.print?.name || "Impression non retrouvée"}</span>
+            <span style={{ fontSize:10.5, color:"var(--muted)" }}>{when(it.at || it.start)}</span>
+          </span>
+        </button>
+      ))}
+    </div>
+    {shown < all.length && <div ref={more} style={{ textAlign:"center", color:"var(--muted)", padding:12 }}>…</div>}
+    {open != null && all[open] && (
+      <Lightbox images={all.map(it => ({ url: vid(it), label: it.print?.name || when(it.at || it.start) }))} index={open}
+        title="Timelapse" onIndex={i => setOpen(i)} onClose={() => setOpen(null)}
+        actions={(i, close) => { const it = all[i]; return <>
+          {it.print && <button onClick={() => { close(); openSheet(it); }} style={{ ...pill("linear-gradient(135deg, #3B82F6, #6366F1)", "#fff") }}>📄 Fiche</button>}
+          <a href={vid(it)} download={it.name} style={{ ...pill("rgba(255,255,255,0.14)", "#fff") }}>⤓ Télécharger</a>
+          {isAdmin && <button onClick={() => remove(it, close)} style={{ ...pill("rgba(239,68,68,0.85)", "#fff") }}>🗑 Supprimer</button>}
+        </>; }}/>
+    )}
+    {sheet && <PrintDetail p={sheet} onClose={() => setSheet(null)} onDelete={() => setSheet(null)} onChanged={() => {}}/>}
   </>);
 }
 
