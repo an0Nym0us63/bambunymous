@@ -2408,6 +2408,25 @@ function TimelapsesView({ search, onCount }) {
     return norm(`${it.name} ${it.print?.name || "impression non retrouvee"} ${it.print?.other || ""} ${d ? d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) + " " + d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) + " " + d.toLocaleDateString("fr-FR") : ""}`); };
   const all = (data?.items || []).filter(it => !words.length || words.every(w => hay(it).includes(w)));
   useEffect(() => { if (data?.items) onCount?.(all.length); }, [data, all.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  // le rattrapage : les timelapses retrouves qui ne sont pas encore dans la fiche de leur impression
+  const [att, setAtt] = useState(null);
+  const todo = (data?.items || []).filter(it => it.print && !it.attached);
+  useEffect(() => { client.get("/printer/sd/timelapses/attach").then(r => setAtt(r.data)).catch(() => {}); }, []);
+  useEffect(() => {
+    if (!att?.running) return undefined;
+    const t = setInterval(() => client.get("/printer/sd/timelapses/attach").then(r => {
+      setAtt(r.data);
+      if (!r.data.running) load(false);                 // fini : la liste dit ce qui est maintenant dans les fiches
+    }).catch(() => {}), 2000);
+    return () => clearInterval(t);
+  }, [att?.running]); // eslint-disable-line react-hooks/exhaustive-deps
+  const attach = async () => {
+    const mb = Math.round(todo.reduce((n, it) => n + (it.size || 0), 0) / 1048576);
+    if (!(await showConfirm(`Copier ${todo.length} timelapse${todo.length > 1 ? "s" : ""} (${mb} Mo) dans la fiche de leur impression ? Ils restent aussi sur l'imprimante.`,
+      { confirmLabel: "Copier" }))) return;
+    try { const { data: a } = await client.post("/printer/sd/timelapses/attach"); setAtt(a); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
   useEffect(() => {
     if (!more.current || typeof IntersectionObserver === "undefined") return undefined;
     const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) setShown(n => n + 48); }, { rootMargin: "400px" });
@@ -2434,6 +2453,23 @@ function TimelapsesView({ search, onCount }) {
         : <>{all.length} timelapse{all.length > 1 ? "s" : ""} sur l'imprimante · {mo(data.bytes || 0)}</>}</span>
       <button onClick={() => { setData(null); load(true); }} style={{ padding:"2px 10px", borderRadius:20, border:"1px solid var(--border)",
         background:"var(--surface2)", color:"var(--text2)", fontSize:11, fontWeight:800, cursor:"pointer" }}>↻ Relire</button></p>
+    {isAdmin && (att?.running || todo.length > 0) && (
+      <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", padding:"10px 12px", borderRadius:14, marginBottom:10,
+        background:"linear-gradient(135deg, rgba(249,115,22,0.14), transparent 70%), var(--surface2)", border:"1px solid rgba(249,115,22,0.35)" }}>
+        {att?.running ? <>
+          <span style={{ fontSize:12.5, fontWeight:800, color:"var(--text)", flex:1, minWidth:180 }}>
+            📥 Copie dans les fiches… {att.done} / {att.total}{att.current ? <span style={{ color:"var(--muted)", fontWeight:700 }}> · {att.current}</span> : null}</span>
+          <span style={{ flexBasis:"100%", height:6, borderRadius:4, background:"var(--surface)", overflow:"hidden" }}>
+            <span style={{ display:"block", height:"100%", width:`${att.total ? 100 * att.done / att.total : 0}%`, background:"linear-gradient(90deg, #F97316, #FBBF24)", transition:"width .4s" }}/></span>
+        </> : <>
+          <span style={{ fontSize:12.5, fontWeight:700, color:"var(--text2)", flex:1, minWidth:180 }}>
+            <b>{todo.length}</b> timelapse{todo.length > 1 ? "s" : ""} retrouvé{todo.length > 1 ? "s" : ""} ne {todo.length > 1 ? "sont" : "est"} pas encore dans la fiche de {todo.length > 1 ? "leur" : "son"} impression.</span>
+          <button onClick={attach} style={{ padding:"7px 14px", borderRadius:10, border:"none", cursor:"pointer", fontSize:12.5, fontWeight:800, color:"#fff",
+            background:"linear-gradient(135deg, #F97316, #FB923C)" }}>📥 Les copier</button>
+        </>}
+      </div>)}
+    {!att?.running && att?.finished_at && att.total > 0 && Date.now() / 1000 - att.finished_at < 120 && (
+      <p style={{ fontSize:12, color:"#16a34a", fontWeight:800, margin:"0 0 10px" }}>✓ {att.total - att.errors} timelapse{att.total - att.errors > 1 ? "s" : ""} copié{att.total - att.errors > 1 ? "s" : ""} dans les fiches{att.errors ? ` · ${att.errors} en échec` : ""}</p>)}
     {!all.length && words.length > 0 && <p style={{ textAlign:"center", color:"var(--muted)", padding:"30px 0" }}>Aucun timelapse ne correspond.</p>}
     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:10 }}>
       {all.slice(0, shown).map((it, i) => (
@@ -2444,6 +2480,8 @@ function TimelapsesView({ search, onCount }) {
               onError={e => { e.currentTarget.style.display = "none"; }}/>}
             <span style={{ position:"absolute", left:6, bottom:6, padding:"1px 7px", borderRadius:10, fontSize:10, fontWeight:900, color:"#fff",
               background:"rgba(15,23,42,0.65)" }}>▶ {mo(it.size)}</span>
+            {it.attached && <span data-tip="Déjà copié dans la fiche de l'impression" style={{ position:"absolute", right:6, top:6, padding:"1px 7px", borderRadius:10,
+              fontSize:10, fontWeight:900, color:"#fff", background:"linear-gradient(135deg, #16a34a, #22c55e)" }}>📎 dans sa fiche</span>}
           </span>
           <span style={{ padding:"7px 9px", display:"flex", flexDirection:"column", gap:2, minWidth:0 }}>
             <span style={{ fontSize:12.5, fontWeight:800, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>

@@ -346,6 +346,28 @@ async def printer_sd_timelapses(fresh: bool = False, _: str = Depends(get_curren
         _sd(e)
 
 
+# le rattrapage : les timelapses deja sur l'imprimante, copies dans la fiche de leur impression passee
+_ATTACH_TASKS: set = set()
+
+
+@router.post("/sd/timelapses/attach")
+async def printer_sd_attach(_: str = Depends(require_admin)):
+    import asyncio
+    from ....services import sd_card as SD
+    if not SD.ATTACH["running"]:
+        t = asyncio.get_running_loop().create_task(SD.attach_all())
+        _ATTACH_TASKS.add(t)
+        t.add_done_callback(_ATTACH_TASKS.discard)
+        await asyncio.sleep(0.3)
+    return dict(SD.ATTACH)
+
+
+@router.get("/sd/timelapses/attach")
+async def printer_sd_attach_status(_: str = Depends(get_current_user)):
+    from ....services import sd_card as SD
+    return dict(SD.ATTACH)
+
+
 @router.get("/sd/timelapse/thumb/{name}")
 async def printer_sd_thumb(name: str, request: Request):
     """La vignette (ouverte comme les autres images de l'appli : une balise img n'envoie pas de jeton)."""

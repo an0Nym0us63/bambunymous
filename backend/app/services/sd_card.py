@@ -239,10 +239,31 @@ async def _match(items: list[dict]) -> None:
                            "other": " ".join(x for x in (best.original_name, best.file_name) if x)}
 
 
+def _attached(pid) -> bool:
+    """Le timelapse de cette impression est-il deja dans sa fiche (en local, ou sur le NAS s'il a ete vide) ?"""
+    from ..core.config import settings
+    if (_Path(settings.DATA_DIR) / "prints" / str(pid) / AUTO_NAME).exists():
+        return True
+    try:
+        from .archive import local_or_archive
+        return local_or_archive(f"prints/{pid}/{AUTO_NAME}") is not None
+    except Exception:
+        return False
+
+
+def _with_attached(out: dict) -> dict:
+    """Chaque timelapse retrouve dit s'il est deja dans sa fiche (relu a chaque demande, pas garde en cache)."""
+    return {**out, "items": [{**it, "attached": _attached(it["print"]["id"])} if it.get("print") else it for it in out["items"]]}
+
+
 async def timelapses(fresh: bool = False) -> dict:
     """Les timelapses de la carte, du plus recent au plus ancien, avec leur impression quand on la retrouve."""
     if not fresh and _LIST_CACHE["v"] and _time.time() - _LIST_CACHE["t"] < 60:
-        return _LIST_CACHE["v"]
+        return await asyncio.to_thread(_with_attached, _LIST_CACHE["v"])
+    return await asyncio.to_thread(_with_attached, await _timelapses_read())
+
+
+async def _timelapses_read() -> dict:
     ip, code = await _creds()
     try:
         vids = parse_list(await asyncio.wait_for(asyncio.to_thread(_list_sync, ip, code, "/timelapse"), timeout=60))
@@ -455,6 +476,47 @@ async def auto_fetch_once() -> int:
             logger.info(f"[SD] timelapse de l'impression {pid} : {_why(e)}")
     _auto_save(st)
     return n
+
+
+# ── Rattrapage (26/10/2026) : les timelapses deja sur l'imprimante, rattaches a leur impression passee ──
+ATTACH: dict = {"running": False, "done": 0, "total": 0, "bytes": 0, "errors": 0, "current": None, "finished_at": None}
+
+
+async def attach_all() -> dict:
+    """Copie dans leur fiche tous les timelapses retrouves qui n'y sont pas encore (un a la fois). Rend l'etat."""
+    from ..core.config import settings
+    if ATTACH["running"]:
+        return dict(ATTACH)
+    lst = await timelapses(fresh=True)
+    todo = [it for it in lst["items"] if it.get("print") and not it.get("attached")]
+    ATTACH.update(running=True, done=0, total=len(todo), bytes=0, errors=0, current=None, finished_at=None)
+    try:
+        ip, code = await _creds()
+        st = _auto_state()
+        for it in todo:
+            pid = it["print"]["id"]
+            ATTACH["current"] = it["print"]["name"]
+            if _attached(pid):                         # copie entre-temps (le passage automatique)
+                ATTACH["done"] += 1
+                continue
+            d = _Path(settings.DATA_DIR) / "prints" / str(pid)
+            d.mkdir(parents=True, exist_ok=True)
+            try:
+                async with _sem("video"):
+                    await asyncio.to_thread(_download_sync, ip, code, f"/timelapse/{it['name']}", d / AUTO_NAME)
+                st[str(pid)] = "done"
+                ATTACH["bytes"] += it.get("size") or 0
+                logger.info(f"[SD] rattrapage : timelapse de l'impression {pid} recupere ({it['name']})")
+            except Exception as e:
+                ATTACH["errors"] += 1
+                logger.info(f"[SD] rattrapage : impression {pid} : {_why(e)}")
+            ATTACH["done"] += 1
+            if ATTACH["done"] % 10 == 0:
+                _auto_save(st)
+        _auto_save(st)
+    finally:
+        ATTACH.update(running=False, current=None, finished_at=_time.time())
+    return dict(ATTACH)
 
 
 async def auto_loop() -> None:
