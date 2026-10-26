@@ -37,6 +37,24 @@ def _sqlite_pragmas(dbapi_conn, _rec):
         cur.close()
 
 
+# chaque requete SQL chronometree pour la carte « Vitesse du serveur » : le temps en base de chaque route
+import time as _time
+
+
+@_event.listens_for(engine.sync_engine, "before_cursor_execute")
+def _sql_t0(conn, cursor, statement, params, context, executemany):
+    conn.info.setdefault("_perf_t0", []).append(_time.perf_counter())
+
+
+@_event.listens_for(engine.sync_engine, "after_cursor_execute")
+def _sql_t1(conn, cursor, statement, params, context, executemany):
+    try:
+        t0 = conn.info["_perf_t0"].pop()
+        from ..core.perf import sql_done
+        sql_done((_time.perf_counter() - t0) * 1000, statement)
+    except Exception:
+        pass
+
 
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 

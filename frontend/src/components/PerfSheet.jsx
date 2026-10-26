@@ -168,6 +168,13 @@ export default function PerfSheet({ data, onClose, onReset, onReload }) {
                 {r.cold != null && <span data-tip="Les appels des premières minutes après le démarrage du serveur (caches vides, tâches de démarrage) : mis à part, ils ne comptent pas dans les chiffres">
                   au démarrage {r.cold_n > 1 ? `${r.cold_n} appels, pire ` : ""}<b style={{ color: "var(--text2)" }}>{perfMs(r.cold)}</b> (ignoré{r.cold_n > 1 ? "s" : ""})</span>}
                 <span>{r.count} appel{r.count > 1 ? "s" : ""}</span>
+                {/* la part de la base : lente par ses requetes, ou par leur nombre */}
+                {r.q_avg > 0 && <span data-tip="Temps moyen passé à attendre la base de données, par appel, et nombre moyen de requêtes">
+                  base <b style={{ color: r.avg && r.db_avg / r.avg > 0.5 ? "#ef4444" : "var(--text2)" }}>{perfMs(r.db_avg)}</b>
+                  {r.avg ? ` (${Math.round(Math.min(1, r.db_avg / r.avg) * 100)} %)` : ""} · <b style={{ color: r.q_avg > 30 ? "#ef4444" : "var(--text2)" }}>
+                  {String(r.q_avg).replace(".", ",")}</b> requête{r.q_avg >= 2 ? "s" : ""}</span>}
+                {r.top_ms >= 50 && r.top_sql && <code data-tip={r.top_sql} style={{ flexBasis: "100%", fontSize: 10.5, color: "var(--muted)", overflow: "hidden",
+                  textOverflow: "ellipsis", whiteSpace: "nowrap" }}>plus lente {perfMs(r.top_ms)} : {r.top_sql}</code>}
                 <code style={{ marginLeft: "auto", fontSize: 10.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{lb.method} {lb.path}</code>
               </div>
             </div>); })}

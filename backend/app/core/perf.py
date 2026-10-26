@@ -3,6 +3,7 @@ requete et le debut de la reponse (le premier octet : un flux, la camera ou un e
 temps qu'il met a demarrer, pas pour sa duree). En memoire seulement, remis a zero au redemarrage.
 Sert la carte « Vitesse du serveur » des parametres : on optimise ce qui est lent pour de vrai."""
 import asyncio
+import contextvars
 import os
 import re
 import sys
@@ -35,12 +36,29 @@ def route_key(method: str, path: str) -> str:
     return f"{method} {p}"
 
 
-def record(key: str, ms: float) -> None:
+# La part de la base (26/10/2026) : la boucle n'etant pas bloquee, une route lente attend quelque chose. Chaque
+# requete SQL est chronometree (crochets poses dans db/session.py) et comptee pour la requete HTTP en cours :
+# on voit si une route est lente par sa base, et par combien de requetes (une par ligne = a regrouper).
+_REQ: contextvars.ContextVar = contextvars.ContextVar("perf_req", default=None)
+
+
+def sql_done(ms: float, sql: str) -> None:
+    r = _REQ.get()
+    if r is None:
+        return
+    r["db"] += ms
+    r["q"] += 1
+    if ms > r["top"][0]:
+        r["top"] = (ms, " ".join(str(sql).split())[:220])
+
+
+def record(key: str, ms: float, req: dict = None) -> None:
     s = _STATS.get(key)
     if s is None:
         if len(_STATS) > 600:            # des adresses inattendues ne font pas grossir la memoire sans fin
             return
-        s = _STATS[key] = {"n": 0, "sum": 0.0, "max": 0.0, "recent": deque(maxlen=200), "cold": None, "cold_n": 0}
+        s = _STATS[key] = {"n": 0, "sum": 0.0, "max": 0.0, "recent": deque(maxlen=200), "cold": None, "cold_n": 0,
+                           "db": 0.0, "q": 0, "top": (0.0, "")}
     if warming():
         # pendant le demarrage : ni dans la mediane, ni dans le 95e centile, ni dans le pire
         s["cold_n"] += 1
@@ -50,6 +68,11 @@ def record(key: str, ms: float) -> None:
     s["sum"] += ms
     s["max"] = max(s["max"], ms)
     s["recent"].append(ms)
+    if req is not None:
+        s["db"] += req["db"]
+        s["q"] += req["q"]
+        if req["top"][0] > s["top"][0]:
+            s["top"] = req["top"]
 
 
 def _pct(vals, q):
@@ -65,7 +88,9 @@ def snapshot(limit: int = 60) -> dict:
         rec = list(s["recent"])
         rows.append({"route": k, "count": s["n"], "avg": round(s["sum"] / s["n"], 1) if s["n"] else 0,
                      "p50": round(_pct(rec, .5), 1), "p95": round(_pct(rec, .95), 1), "max": round(s["max"], 1),
-                     "cold": round(s["cold"], 1) if s.get("cold") is not None else None, "cold_n": s.get("cold_n", 0)})
+                     "cold": round(s["cold"], 1) if s.get("cold") is not None else None, "cold_n": s.get("cold_n", 0),
+                     "db_avg": round(s["db"] / s["n"], 1) if s["n"] else 0, "q_avg": round(s["q"] / s["n"], 1) if s["n"] else 0,
+                     "top_ms": round(s["top"][0], 1), "top_sql": s["top"][1]})
     rows.sort(key=lambda r: -r["p95"])
     total = sum(s["n"] for s in _STATS.values())
     return {"since": _SINCE["t"], "requests": total, "routes": rows[:limit], "loop": _loop_view(),
@@ -172,12 +197,14 @@ class PerfMiddleware:
             return await self.app(scope, receive, send)
         t0 = time.perf_counter()
         done = {"v": False}
+        req = {"db": 0.0, "q": 0, "top": (0.0, "")}
+        _REQ.set(req)
 
         async def _send(message):
             if not done["v"] and message["type"] == "http.response.start":
                 done["v"] = True
                 try:
-                    record(route_key(scope.get("method", "GET"), scope["path"]), (time.perf_counter() - t0) * 1000)
+                    record(route_key(scope.get("method", "GET"), scope["path"]), (time.perf_counter() - t0) * 1000, req)
                 except Exception:
                     pass
             await send(message)
