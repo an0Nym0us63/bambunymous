@@ -5011,19 +5011,23 @@ async def open_passage(username: str) -> bool:
 # cote serveur (le meme sur le navigateur, la PWA et l'appli Android). n = ouvertures
 # depuis la derniere surprise de ce compte ; il repart a 0 quand elle s'affiche vraiment
 # (un tirage gagnant mais l'accueil deja quitte ne compte pas).
-# Crescendo : 0,5 % x n jusqu'a 10 % (n = 20), puis +1 % a chaque ouverture.
+# Crescendo : 0,3 % x n jusqu'a 9,9 % (n = 33), puis 10 % et +1 % a chaque ouverture (27/10/2026 ; 0,5 % x n
+# jusqu'a n = 20 avant) : une surprise toutes les 22 ouvertures comptees en moyenne, contre 17.
+SURPRISE_STEP, SURPRISE_RAMP = 0.003, 33
+
+
 def surprise_p(n: int) -> float:
-    return 0.005 * n if n <= 20 else min(1.0, 0.10 + 0.01 * (n - 20))
+    return SURPRISE_STEP * n if n <= SURPRISE_RAMP else min(1.0, 0.10 + 0.01 * (n - SURPRISE_RAMP - 1))
 
 
 def surprise_n_for(pct: float) -> int:
     """Le compteur qui donne cette chance a la PROCHAINE ouverture (l'inverse de surprise_p, a son pas :
-    0,5 % jusqu'a 10 %, puis 1 %)."""
+    0,3 % jusqu'a 9,9 %, puis 1 %)."""
     p = max(0.0, min(100.0, float(pct))) / 100
     if p <= 0:
         return 0
-    n = round(p / 0.005) if p <= 0.10 else 20 + round((p - 0.10) / 0.01)
-    return max(0, min(110, n - 1))
+    n = round(p / SURPRISE_STEP) if p < 0.10 else SURPRISE_RAMP + 1 + round((p - 0.10) / 0.01)
+    return max(0, min(130, n - 1))
 
 
 async def set_surprise_chance(username: str, pct: float) -> dict:
@@ -5241,9 +5245,9 @@ async def _surprise_counts(db) -> dict:
     return d if isinstance(d, dict) else {}
 
 
-# deux ouvertures plus proches : la seconde ne compte pas. 15 min depuis que chaque retour sur l'accueil compte
-# (26/10/2026 ; 5 min avant) : on compte des moments passes dans l'appli, pas des allers-retours.
-SURPRISE_GAP = timedelta(minutes=15)
+# deux ouvertures plus proches : la seconde ne compte pas. 30 min (27/10/2026 ; 15 min le 26/10, quand chaque retour
+# sur l'accueil s'est mis a compter, 5 min avant) : on compte des moments passes dans l'appli, pas des allers-retours.
+SURPRISE_GAP = timedelta(minutes=30)
 _SURPRISE_LOCK = asyncio.Lock()       # deux ouvertures au meme instant : l'une apres l'autre
 
 
