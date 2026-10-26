@@ -53,7 +53,8 @@ function Rewind() {
   const [pw, setPw] = React.useState("");
   const [msg, setMsg] = React.useState("");
   const [busy, setBusy] = React.useState(false);
-  const n = new URLSearchParams(window.location.search).get("n") || 5;
+  // le nombre de tours : un champ, prerempli par ?n= (5 sinon)
+  const [n, setN] = React.useState(() => new URLSearchParams(window.location.search).get("n") || "5");
   const go = async e => {
     e.preventDefault();
     if (!pw) { setMsg("Mot de passe requis"); return; }
@@ -67,6 +68,9 @@ function Rewind() {
   };
   return (
     <form onSubmit={go} style={{ maxWidth:320, margin:"60px auto", padding:"0 16px", display:"flex", flexDirection:"column", gap:10 }}>
+      <input type="number" min="1" value={n} onChange={e => { setN(e.target.value); setMsg(""); }} placeholder="Nombre de tours"
+        aria-label="Nombre de tours" style={{ padding:"10px 12px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
+          color:"var(--text)", fontSize:14 }}/>
       <input type="password" value={pw} onChange={e => { setPw(e.target.value); setMsg(""); }} placeholder="Mot de passe"
         autoComplete="off" style={{ padding:"10px 12px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
           color:"var(--text)", fontSize:14 }}/>
