@@ -21,6 +21,7 @@ import RateTemplatesSettings from "../components/RateTemplatesSettings";
 import NotificationsSettings from "../components/NotificationsSettings";
 import MyAppNotifications from "../components/MyAppNotifications";
 import AndroidApp from "../components/AndroidApp";
+import PerfSheet, { perfLabel, perfMs, perfTone } from "../components/PerfSheet";
 import StorageSheet from "../components/StorageSheet";
 import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
@@ -1178,51 +1179,36 @@ function RecalculateSection() {
 // octet) depuis le demarrage, les plus lentes d'abord. Sert a optimiser ce qui est lent pour de vrai.
 function PerfSection() {
   const [d, setD] = useState(null);
-  const [all, setAll] = useState(false);
+  const [open, setOpen] = useState(false);
   const load = () => client.get("/settings/perf").then(r => setD(r.data)).catch(() => {});
   useEffect(() => { load(); }, []);
   const reset = () => client.post("/settings/perf/reset").then(r => setD(r.data)).catch(e => showAlert(e.response?.data?.detail || e.message));
-  const ms = v => v >= 1000 ? `${(v / 1000).toFixed(1).replace(".", ",")} s` : `${Math.round(v)} ms`;
-  const tone = v => v >= 1000 ? "#ef4444" : v >= 300 ? "#f59e0b" : "#16a34a";
   const rows = (d?.routes || []).filter(r => r.count > 0);
-  const shown = all ? rows : rows.slice(0, 12);
+  const slow = rows.filter(r => r.p95 >= 300).length, bad = rows.filter(r => r.p95 >= 1000).length;
   const since = d ? new Date(d.since * 1000).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
-  const slow = rows.filter(r => r.p95 >= 300).length;
-  // au telephone : la route sur sa ligne (c'est elle qu'on lit), les chiffres dessous
-  const narrow = typeof window !== "undefined" && window.innerWidth < 560;
-  const cols = narrow ? "repeat(4, minmax(0,1fr))" : "minmax(0,1fr) 46px 58px 58px 58px";
   return (
     <div className="card" style={card}>
       <p style={cardTitle}>Vitesse du serveur</p>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"-8px 0 12px", lineHeight:1.5 }}>
-        Le temps que met le serveur à répondre, route par route, depuis {since || "le démarrage"} : la médiane, le 95ᵉ centile
-        (95 % des appels sont plus rapides) et le pire. Les plus lentes d'abord : c'est par elles qu'il faut commencer.</p>
-      {d && <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", marginBottom:10, fontSize:12.5, color:"var(--text2)" }}>
-        <b>{d.requests.toLocaleString("fr-FR")}</b> appels · <b>{rows.length}</b> routes
-        {slow > 0 && <span style={{ color:"#f59e0b", fontWeight:800 }}>· {slow} au-dessus de 300 ms</span>}
-        <span style={{ marginLeft:"auto", display:"flex", gap:6 }}>
-          <button onClick={load} style={{ padding:"5px 10px", borderRadius:9, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text2)", fontSize:12, fontWeight:700, cursor:"pointer" }}>↻ Relire</button>
-          <button onClick={reset} style={{ padding:"5px 10px", borderRadius:9, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text2)", fontSize:12, fontWeight:700, cursor:"pointer" }}>Remettre à zéro</button>
-        </span></div>}
-      {shown.length > 0 && <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-        <div style={{ display:"grid", gridTemplateColumns:cols, gap:6, fontSize:10.5, fontWeight:800, color:"var(--muted)",
-          textTransform:"uppercase", letterSpacing:".04em", padding:"0 8px" }}>
-          {!narrow && <span>Route</span>}<span style={{ textAlign:"right" }}>Appels</span><span style={{ textAlign:"right" }}>Médiane</span>
-          <span style={{ textAlign:"right" }}>95 %</span><span style={{ textAlign:"right" }}>Pire</span></div>
-        {shown.map(r => (
-          <div key={r.route} style={{ display:"grid", gridTemplateColumns:cols, gap:narrow ? "2px 6px" : 6, alignItems:"center", padding:"6px 8px",
-            borderRadius:9, background:"var(--surface2)", fontSize:12 }}>
-            <code data-tip={r.route} style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:narrow ? "normal" : "nowrap", wordBreak:"break-all",
-              color:"var(--text2)", fontSize:11.5, gridColumn: narrow ? "1 / -1" : undefined }}>{r.route}</code>
-            <span style={{ textAlign:"right", color:"var(--muted)", fontWeight:700 }}>{r.count}</span>
-            <span style={{ textAlign:"right", fontWeight:800, color:tone(r.p50) }}>{ms(r.p50)}</span>
-            <span style={{ textAlign:"right", fontWeight:800, color:tone(r.p95) }}>{ms(r.p95)}</span>
-            <span style={{ textAlign:"right", fontWeight:700, color:tone(r.max) }}>{ms(r.max)}</span>
-          </div>))}
-        {!all && rows.length > 12 && <button onClick={() => setAll(true)} style={{ alignSelf:"flex-start", marginTop:4, padding:"5px 10px", borderRadius:9,
-          border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text2)", fontSize:12, fontWeight:700, cursor:"pointer" }}>Voir les {rows.length - 12} autres</button>}
-      </div>}
-      {d && !rows.length && <p style={{ fontSize:12.5, color:"var(--muted)", margin:0 }}>Rien de mesuré pour l'instant.</p>}
+        Le temps que met le serveur à répondre, route par route, depuis {since || "le démarrage"}. Les plus lentes d'abord :
+        c'est par elles qu'il faut commencer.</p>
+      {d && <>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
+          {[[d.requests.toLocaleString("fr-FR"), "appels", "var(--text)"], [slow, "lentes (> 300 ms)", slow ? "#f59e0b" : "#16a34a"],
+            [bad, "très lentes (> 1 s)", bad ? "#ef4444" : "#16a34a"]].map(([n, l, c]) => (
+            <span key={l} style={{ flex:"1 1 90px", padding:"7px 10px", borderRadius:12, background:"var(--surface2)" }}>
+              <b style={{ display:"block", fontSize:18, fontWeight:900, color:c, lineHeight:1.1 }}>{n}</b>
+              <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)" }}>{l}</span></span>))}
+        </div>
+        {rows.slice(0, 3).map(r => { const lb = perfLabel(r.route);
+          return <div key={r.route} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", borderRadius:10, background:"var(--surface2)", marginBottom:4, fontSize:12.5 }}>
+            <span style={{ width:8, height:8, borderRadius:"50%", flexShrink:0, background:perfTone(r.p95) }}/>
+            <span style={{ flex:1, minWidth:0, fontWeight:700, color:"var(--text2)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{lb.title}</span>
+            <b style={{ color:perfTone(r.p95) }}>{perfMs(r.p95)}</b></div>; })}
+        <button onClick={() => { load(); setOpen(true); }} style={{ marginTop:8, padding:"8px 16px", borderRadius:10, border:"none", cursor:"pointer",
+          fontSize:13, fontWeight:700, color:"#fff", background:"linear-gradient(135deg, #0EA5E9, #6366F1)" }}>⚡ Voir le détail</button>
+      </>}
+      {open && <PerfSheet data={d} onClose={() => setOpen(false)} onReload={load} onReset={reset}/>}
     </div>
   );
 }
