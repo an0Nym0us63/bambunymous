@@ -359,15 +359,16 @@ async def printer_sd_thumb(name: str):
 
 
 @router.get("/sd/timelapse/video/{name}")
-async def printer_sd_video(name: str):
-    """La video, copiee sur le serveur a la premiere lecture ; avance et retour (Range) par FileResponse."""
+async def printer_sd_video(name: str, h264: bool = False):
+    """La video, copiee sur le serveur a la premiere lecture ; avance et retour (Range) par FileResponse.
+    ?h264=1 : une version convertie, quand le navigateur ne lit pas celle de l'imprimante."""
     from fastapi.responses import FileResponse
     from ....services import sd_card as SD
     try:
-        f = await SD.video(name)
+        f = await (SD.video_h264(name) if h264 else SD.video(name))
     except SD.SdError as e:
         _sd(e)
-    return FileResponse(f, media_type="video/mp4" if name.endswith(".mp4") else "video/x-msvideo",
+    return FileResponse(f, media_type="video/mp4" if (h264 or name.endswith(".mp4")) else "video/x-msvideo",
                         headers={"Cache-Control": "private, max-age=86400"})
 
 

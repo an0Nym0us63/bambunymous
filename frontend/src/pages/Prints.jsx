@@ -2347,7 +2347,8 @@ function TimelapsesView({ search }) {
     </div>
     {shown < all.length && <div ref={more} style={{ textAlign:"center", color:"var(--muted)", padding:12 }}>…</div>}
     {open != null && all[open] && (
-      <Lightbox images={all.map(it => ({ url: vid(it), label: it.print?.name || when(it.at || it.start) }))} index={open}
+      <Lightbox images={all.map(it => ({ url: vid(it), label: it.print?.name || when(it.at || it.start),
+          poster: it.thumb ? thumb(it) : null, fallback: `${vid(it)}?h264=1` }))} index={open}
         title="Timelapse" onIndex={i => setOpen(i)} onClose={() => setOpen(null)}
         actions={(i, close) => { const it = all[i]; return <>
           {it.print && <button onClick={() => { close(); openSheet(it); }} style={{ ...pill("linear-gradient(135deg, #3B82F6, #6366F1)", "#fff") }}>📄 Fiche</button>}

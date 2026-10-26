@@ -297,6 +297,36 @@ async def video(name: str) -> _Path:
     return await _fetch("video", name, f"/timelapse/{name}")
 
 
+def _h264_sync(src: _Path, dest: _Path) -> None:
+    """Une version que tout navigateur lit : H.264, son retire, l'index en tete (lecture immediate)."""
+    import subprocess
+    tmp = dest.with_suffix(".part.mp4")
+    try:
+        subprocess.run(["ffmpeg", "-y", "-i", str(src), "-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
+                        "-pix_fmt", "yuv420p", "-an", "-movflags", "+faststart",
+                        "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", str(tmp)], check=True, capture_output=True, timeout=900)
+        tmp.replace(dest)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+async def video_h264(name: str) -> _Path:
+    """La video convertie (si le navigateur ne lit pas celle de l'imprimante), gardee comme l'originale."""
+    src = await video(name)
+    dest = _cache_dir("video") / (name.rsplit(".", 1)[0] + ".h264.mp4")
+    if dest.exists() and dest.stat().st_size > 0:
+        return dest
+    lock = _LOCKS.setdefault(f"h264:{name}", asyncio.Lock())
+    async with lock:
+        if not (dest.exists() and dest.stat().st_size > 0):
+            try:
+                await asyncio.to_thread(_h264_sync, src, dest)
+            except Exception as e:
+                logger.warning(f"[SD] conversion de {name} : {e}")
+                raise SdError("Conversion de la vidéo impossible")
+    return dest
+
+
 async def delete(name: str) -> None:
     if not NAME_RE.match(name):
         raise SdError("Nom inconnu")
@@ -310,6 +340,6 @@ async def delete(name: str) -> None:
         await asyncio.to_thread(_delete_sync, ip, code, [f"/timelapse/thumbnail/{base}.jpg"])
     except Exception:
         pass                                     # pas de vignette : rien a retirer
-    for f in (_cache_dir("video") / name, _cache_dir("thumb") / f"{base}.jpg"):
+    for f in (_cache_dir("video") / name, _cache_dir("video") / f"{base}.h264.mp4", _cache_dir("thumb") / f"{base}.jpg"):
         f.unlink(missing_ok=True)
     _LIST_CACHE.update(t=0.0, v=None)

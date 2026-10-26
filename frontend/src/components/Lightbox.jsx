@@ -8,13 +8,16 @@ import { apiThumb } from "../api/client";
 // MakerWorld, copains, accueil. On fait defiler en grand (glisser sur telephone, fleches ou
 // clavier sur ordinateur) ; derriere, l'image en cours floutee ; en haut le titre et « 2 / 5 ·
 // legende » ; en bas les vignettes et, selon l'endroit, des boutons (actions).
-// images : des adresses, ou des { url, label } ; actions(i, fermer) : les boutons du bas.
+// images : des adresses, ou des { url, label, poster, fallback } ; actions(i, fermer) : les boutons du bas.
+// Une video ne se charge que quand elle est affichee (les voisines montrent leur image « poster ») ; si le
+// navigateur ne sait pas la lire, « fallback » (une version convertie) prend le relais (26/10/2026).
 // data-no-pull : le tirer-pour-rafraichir de la coquille Android reste coupe pendant ce temps.
 export default function Lightbox({ images, index = 0, onClose, title = null, actions = null, onIndex = null }) {
   const items = (images || []).map(x => typeof x === "string" ? { url: x, label: "" } : x);
   const box = useRef(null);
   const strip = useRef(null);
   const [cur, setCur] = useState(Math.min(index, Math.max(0, items.length - 1)));
+  const [vstate, setVstate] = useState({});        // url -> "loading" | "ok" | "fallback" | "error"
   const curRef = useRef(cur);
   curRef.current = cur;
 
@@ -99,10 +102,27 @@ export default function Lightbox({ images, index = 0, onClose, title = null, act
             <div key={i} style={{ flex: "0 0 100%", height: "100%", scrollSnapAlign: "center", display: "flex",
               alignItems: "center", justifyContent: "center", padding: "6px 14px", boxSizing: "border-box" }}>
               {Math.abs(i - cur) <= 2 && (
-                isVideo(it.url) ? (
-                  <video src={it.url} autoPlay muted loop playsInline controls onClick={e => e.stopPropagation()}
-                    style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 18, boxShadow: "0 24px 60px rgba(0,0,0,0.6)" }}/>
-                ) : (
+                isVideo(it.url) ? (i !== cur ? (it.poster ? <img src={it.poster} alt="" draggable={false} style={{ maxWidth: "100%", maxHeight: "100%",
+                    objectFit: "contain", borderRadius: 18, opacity: 0.6 }}/> : null) : (() => {
+                  const vs = vstate[it.url];
+                  // une seule tentative de chaque : l'originale, puis la convertie ; ensuite on s'arrete (sans boucle)
+                  const src = vs === "error" ? undefined : vs === "fallback" && it.fallback ? it.fallback : it.url;
+                  return <span onClick={e => e.stopPropagation()} style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
+                    width: "100%", height: "100%" }}>
+                    <video key={src} src={src} poster={it.poster || undefined} autoPlay muted loop playsInline controls preload="auto"
+                      onLoadedData={() => setVstate(v => ({ ...v, [it.url]: vs === "fallback" ? "fallback" : "ok" }))}
+                      onError={() => setVstate(v => v[it.url] === "error" ? v
+                        : ({ ...v, [it.url]: it.fallback && v[it.url] !== "fallback" ? "fallback" : "error" }))}
+                      style={{ maxWidth: "100%", maxHeight: "100%", width: vs === "ok" || vs === "fallback" ? undefined : "min(100%, 960px)",
+                        objectFit: "contain", borderRadius: 18, boxShadow: "0 24px 60px rgba(0,0,0,0.6)", background: "#000" }}/>
+                    {vs !== "ok" && vs !== "error" && !(vs === "fallback" && false) && (
+                      <span style={{ ...glass, cursor: "default", position: "absolute", padding: "8px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 800,
+                        pointerEvents: "none", display: vs === "fallback" ? "flex" : undefined }}>
+                        {vs === "fallback" ? "Conversion de la vidéo…" : "Chargement de la vidéo…"}</span>)}
+                    {vs === "error" && <span style={{ ...glass, cursor: "default", position: "absolute", padding: "8px 14px", borderRadius: 20, fontSize: 12.5,
+                      fontWeight: 800, background: "rgba(239,68,68,0.8)" }}>Vidéo illisible</span>}
+                  </span>;
+                })()) : (
                   <img src={src(it.url)} alt={it.label || ""} referrerPolicy="no-referrer" decoding="async" draggable={false}
                     onClick={e => e.stopPropagation()}
                     onError={e => { if (e.currentTarget.src !== it.url) e.currentTarget.src = it.url; }}
@@ -130,8 +150,11 @@ export default function Lightbox({ images, index = 0, onClose, title = null, act
             const st = { width: on ? 58 : 50, height: on ? 58 : 50, objectFit: "cover", borderRadius: 13, flexShrink: 0, cursor: "pointer", display: "block",
               border: on ? "2px solid #fff" : "2px solid rgba(255,255,255,0.15)", opacity: on ? 1 : 0.55, transition: "all .18s", boxSizing: "border-box",
               boxShadow: on ? "0 8px 20px -6px rgba(0,0,0,0.8), 0 0 0 3px rgba(255,255,255,0.15)" : "none", background: "rgba(255,255,255,0.08)" };
+            // une video en vignette : son image si on l'a, sinon un pictogramme (jamais la video elle-meme : une
+            // galerie de timelapses en chargeait des centaines d'un coup)
             return isVideo(it.url)
-              ? <video key={i} src={it.url} muted playsInline preload="metadata" onClick={() => jump(i)} style={st}/>
+              ? (it.poster ? <img key={i} src={it.poster} alt={it.label || ""} loading="lazy" draggable={false} onClick={() => jump(i)} style={st}/>
+                : <span key={i} onClick={() => jump(i)} style={{ ...st, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 18 }}>▶</span>)
               : <img key={i} src={small(it.url, 128)} alt={it.label || ""} referrerPolicy="no-referrer" loading="lazy" draggable={false}
                   onClick={() => jump(i)} style={st}/>;
           })}
