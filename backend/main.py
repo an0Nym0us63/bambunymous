@@ -338,6 +338,35 @@ async def track_activity(request, call_next):
     path = request.url.path
     if not path.startswith("/api/"):
         return response
+    # La reponse part tout de suite : le suivi (lecture du compte, ecritures) se fait en fond (26/10/2026).
+    # Avant, chaque requete attendait une lecture en base avant d'etre rendue, et une page en lance 10 a 20.
+    try:
+        req_view = {"path": path, "method": request.method, "status": response.status_code,
+                    "headers": {k: request.headers.get(k) for k in ("authorization", "x-app-active", "x-app-page", "x-app-detail")},
+                    "query_username": request.query_params.get("username"),
+                    "login_username": getattr(request.state, "login_username", None)}
+        _track_spawn(req_view)
+    except Exception:
+        pass
+    return response
+
+
+_TRACK_TASKS: set = set()
+_SEEN_AT: dict = {}          # compte -> derniere ecriture de last_seen (en memoire : pas de lecture en base a chaque requete)
+_FK_USER: dict = {}          # empreinte d'une cle copain -> (compte, instant)
+
+
+def _track_spawn(rv: dict) -> None:
+    import asyncio
+    t = asyncio.get_running_loop().create_task(_track(rv))
+    _TRACK_TASKS.add(t)
+    t.add_done_callback(_TRACK_TASKS.discard)
+
+
+async def _track(rv: dict) -> None:
+    """Le suivi d'activite d'une requete deja rendue (voir track_activity)."""
+    path, response_status = rv["path"], rv["status"]
+    hdr = rv["headers"]
     try:
         from datetime import datetime, timedelta
         from sqlalchemy import select, update
@@ -347,32 +376,37 @@ async def track_activity(request, call_next):
         from app.models.activity import ActivityLog
 
         username = None
-        auth = request.headers.get("authorization") or ""
+        auth = hdr.get("authorization") or ""
         bearer = auth.split(" ", 1)[1].strip() if auth.lower().startswith("bearer ") else ""
         if bearer.startswith("fk_"):
             # Visite d'un copain (cle d'invitation) : le compte auquel elle est
-            # liee, pour son journal et sa derniere visite.
-            import hashlib
-            from sqlalchemy import select as _sel
-            from app.db.session import AsyncSessionLocal as _ASL
-            from app.models.user import User as _U
-            async with _ASL() as _db:
-                username = (await _db.execute(_sel(_U.username).where(
-                    _U.friend_key_hash == hashlib.sha256(bearer.encode()).hexdigest()))).scalar_one_or_none()
+            # liee, pour son journal et sa derniere visite (retenu 10 min).
+            import hashlib, time as _time
+            hk = hashlib.sha256(bearer.encode()).hexdigest()
+            hit = _FK_USER.get(hk)
+            if hit and _time.monotonic() - hit[1] < 600:
+                username = hit[0]
+            else:
+                from sqlalchemy import select as _sel
+                from app.db.session import AsyncSessionLocal as _ASL
+                from app.models.user import User as _U
+                async with _ASL() as _db:
+                    username = (await _db.execute(_sel(_U.username).where(
+                        _U.friend_key_hash == hk))).scalar_one_or_none()
+                _FK_USER[hk] = (username, _time.monotonic())
         elif bearer:
             payload = decode_token_payload(bearer)
             if payload:
                 username = payload.get("sub")
-        is_login = path.endswith("/auth/login") and response.status_code < 400
+        is_login = path.endswith("/auth/login") and response_status < 400
         if is_login and not username:
             # Au login le client n'a pas encore de jeton : on prend l'identifiant
             # transmis dans le formulaire.
-            username = (request.query_params.get("username")
-                        or getattr(request.state, "login_username", None))
+            username = rv["query_username"] or rv["login_username"]
         if not username:
-            return response
+            return
 
-        is_action = request.method in ("POST", "PATCH", "PUT", "DELETE")
+        is_action = rv["method"] in ("POST", "PATCH", "PUT", "DELETE")
         now = datetime.utcnow()
 
         # Presence reelle : l'onglet est au premier plan ET l'utilisateur y a
@@ -381,7 +415,7 @@ async def track_activity(request, call_next):
         # ouverte en arriere-plan -- "vu il y a 1 min" pour quelqu'un parti la
         # veille. Une ecriture vaut toujours interaction : ca evite que
         # last_seen se fige si un client n'envoie pas encore l'en-tete.
-        present = is_action or request.headers.get("x-app-active") == "1"
+        present = is_action or hdr.get("x-app-active") == "1"
 
         # Visite et detail : uniquement au changement, ou apres une longue
         # inactivite sur la meme vue -- sinon une session ouverte des heures
@@ -396,11 +430,15 @@ async def track_activity(request, call_next):
                 return True
             return False
 
-        ok = response.status_code < 400
-        page   = _page_key(request.headers.get("x-app-page")) if ok else None
-        detail = _detail_key(request.headers.get("x-app-detail")) if ok else None
+        ok = response_status < 400
+        page   = _page_key(hdr.get("x-app-page")) if ok else None
+        detail = _detail_key(hdr.get("x-app-detail")) if ok else None
         is_visit  = _changed(_LAST_PAGE, page)
         is_detail = _changed(_LAST_DETAIL, detail)
+        # rien a ecrire (le cas de presque toutes les requetes) : pas meme une lecture en base
+        seen_due = present and (now - _SEEN_AT.get(username, datetime.min)) > timedelta(minutes=1)
+        if not (seen_due or (is_action and ok) or is_visit or is_detail):
+            return
         async with AsyncSessionLocal() as db:
             u = (await db.execute(
                 select(User).where(User.username == username)
@@ -410,11 +448,13 @@ async def track_activity(request, call_next):
                 await db.execute(
                     update(User).where(User.id == u.id).values(last_seen=now))
                 await db.commit()
-            if is_action and response.status_code < 400:
+            if u and present:
+                _SEEN_AT[username] = now if (u.last_seen is None or (now - u.last_seen) > timedelta(minutes=1)) else u.last_seen
+            if is_action and response_status < 400:
                 db.add(ActivityLog(
-                    username=username, method=request.method, path=path,
-                    status=response.status_code, kind="action",
-                    label=_activity_label(request.method, path), created_at=now))
+                    username=username, method=rv["method"], path=path,
+                    status=response_status, kind="action",
+                    label=_activity_label(rv["method"], path), created_at=now))
                 await db.commit()
             else:
                 # Une requete peut porter les deux a la fois : arriver sur une
@@ -426,18 +466,17 @@ async def track_activity(request, call_next):
                 if is_visit:
                     db.add(ActivityLog(
                         username=username, method="VUE", path=page,
-                        status=response.status_code, kind="visite",
+                        status=response_status, kind="visite",
                         label=_PAGE_LABELS[page], created_at=now))
                 if is_detail:
                     db.add(ActivityLog(
                         username=username, method="DETAIL", path=page or "",
-                        status=response.status_code, kind="detail",
+                        status=response_status, kind="detail",
                         label=detail, created_at=now))
                 if is_visit or is_detail:
                     await db.commit()
     except Exception:
         pass   # le suivi ne doit jamais casser une requete
-    return response
 
 
 @app.middleware("http")
@@ -565,6 +604,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# la vitesse du serveur, mesuree route par route (pose en dernier : au plus pres de la requete recue)
+from app.core.perf import PerfMiddleware
+app.add_middleware(PerfMiddleware)
 
 # Pas de limite de taille pour les uploads (fichiers ZIP plusieurs Go)
 from starlette.middleware.base import BaseHTTPMiddleware

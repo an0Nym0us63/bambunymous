@@ -411,3 +411,18 @@ async def archive_purge(body: dict = None, _: str = Depends(require_admin)):
 
 
 _ARCHIVE_TASKS: set = set()
+
+
+
+# ── La vitesse du serveur (26/10/2026) : delai de reponse de chaque route, depuis le demarrage ──
+@router.get("/perf")
+async def perf_status(_: str = Depends(require_admin)):
+    from ....core import perf
+    return perf.snapshot()
+
+
+@router.post("/perf/reset")
+async def perf_reset(_: str = Depends(require_admin)):
+    from ....core import perf
+    perf.reset()
+    return perf.snapshot()

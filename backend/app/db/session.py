@@ -18,6 +18,25 @@ engine = create_async_engine(
 )
 
 
+# Les reglages de SQLite valent par connexion (26/10/2026) : poses une seule fois au demarrage, ils ne
+# touchaient que la premiere ; les autres ecrivaient en mode « synchronous=FULL » (une synchronisation
+# disque a chaque validation) et avec un petit cache. Chaque connexion les recoit desormais.
+from sqlalchemy import event as _event
+
+
+@_event.listens_for(engine.sync_engine, "connect")
+def _sqlite_pragmas(dbapi_conn, _rec):
+    if not str(settings.DATABASE_URL).startswith("sqlite"):
+        return
+    cur = dbapi_conn.cursor()
+    try:
+        for p in ("journal_mode=WAL", "synchronous=NORMAL", "busy_timeout=30000",
+                  "cache_size=-32000", "temp_store=MEMORY", "mmap_size=134217728"):
+            cur.execute(f"PRAGMA {p}")
+    finally:
+        cur.close()
+
+
 
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
