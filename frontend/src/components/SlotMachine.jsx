@@ -9,10 +9,12 @@ import { TicketStub } from "./medals";
 // defilent et s'arretent l'un apres l'autre ; trois symboles pareils = gagne.
 // un symbole bien distinct par lot (🗝️ se confondait avec 🔑 sur certains ecrans)
 // (la roue d'un compte de la famille : des loupes a la place du coup de pouce, 26/10/2026)
-const SYM = { key1: "🔑", key3: "🍀", key5: "💎", jackpot: "💰", replay: "🔁", hint: "🔍", ticket: "🎟️", loupe1: "🔎", loupe2: "🕵️" };
+const SYM = { key1: "🔑", key3: "🍀", key5: "💎", jackpot: "💰", replay: "🔁", hint: "🔍", ticket: "🎟️",
+  loupe1: "🔎", loupe3: "🔦", loupe5: "🔭", loupe10: "💫", fhint: "💡", spins2: "🎡" };
 const FILLER = ["🔑", "🍀", "💎", "💰", "🔁", "🔍", "🎟️", "🍒", "⭐", "🍋", "🔔"];
 const LEGEND = [["key1", "🔑", "1 clé"], ["key3", "🍀", "3 clés"], ["key5", "💎", "5 clés"], ["jackpot", "💰", "10 clés"], ["ticket", "🎟️", "ticket de palier"],
-  ["replay", "🔁", "rejoue"], ["hint", "🔍", "coup de pouce"], ["loupe1", "🔎", "1 loupe"], ["loupe2", "🕵️", "2 loupes"]];
+  ["replay", "🔁", "rejoue"], ["hint", "🔍", "coup de pouce"], ["loupe1", "🔎", "1 loupe"], ["loupe3", "🔦", "3 loupes"],
+  ["loupe5", "🔭", "5 loupes"], ["loupe10", "💫", "10 loupes"], ["fhint", "💡", "un indice"], ["spins2", "🎡", "2 tours"]];
 const H = 76;                      // hauteur d'une case
 const LEN = 28;                    // cases par rouleau avant l'arret
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -131,16 +133,18 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
                 </div>
               ))}
               <div style={{ marginTop:6, fontSize:11, color:"rgba(255,255,255,.65)" }}>
-                {wheel?.weekly || 3} tours offerts chaque lundi, 1 toutes les {wheel?.prints_per_spin || 8} impressions
+                {wheel?.family ? <>Ta roue à toi : {wheel.per_day || 2} tours offerts chaque jour (un jour manqué ne se rattrape pas)
+                  et 1 par secret que tu trouves. Ses loupes s'ajoutent à celle du jour, même au-delà du plafond.</>
+                : <>{wheel?.weekly || 3} tours offerts chaque lundi, 1 toutes les {wheel?.prints_per_spin || 8} impressions
                 réussies et 1 par secret gagné ; un ticket de palier toutes les {wheel?.prints_per_ticket || 5} impressions
                 réussies et tous les {wheel?.secrets_per_ticket || 5} secrets. Gagner des paliers ou un secret pendant un tour rapporte aussi
-                ses clés, affichées en bonus.</div>
+                ses clés, affichées en bonus.</>}</div>
             </div>
           )}
           <div style={{ textAlign:"center", fontWeight:900, fontSize:20, color:"#fde047", letterSpacing:".04em",
             textShadow:"0 2px 0 #7c2d12, 0 0 12px rgba(253,224,71,.6)" }}>🎰 ROUE DE LA FORTUNE</div>
           <div style={{ textAlign:"center", fontSize:11.5, color:"rgba(255,255,255,.8)", marginTop:2 }}>
-            {spins} tour{spins > 1 ? "s" : ""} · prochain lundi</div>
+            {spins} tour{spins > 1 ? "s" : ""} · {wheel?.family ? `${wheel.per_day || 2} de plus demain` : "prochain lundi"}</div>
           {/* les rouleaux */}
           <div style={{ display:"flex", gap:8, margin:"14px 0 12px", padding:8, borderRadius:14,
             background:"#1c1917", boxShadow:"inset 0 4px 12px rgba(0,0,0,.8)" }}>
@@ -170,9 +174,12 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
                 <div style={{ fontSize: big ? 22 : 18, fontWeight:900, color: win ? "#fde047" : "rgba(255,255,255,.85)" }}>
                   {res.prize === "none" ? "Pas cette fois…" : res.prize === "replay" ? "🔁 Tour rejoué !"
                     : res.prize === "ticket" ? "🎟️ Ticket de palier !"
-                    : res.prize === "hint" ? "🔍 Coup de pouce !" : res.loupes ? `${SYM[res.prize] || "🔎"} ${res.label} !` : `🎉 ${res.label} !`}</div>
+                    : res.prize === "hint" ? "🔍 Coup de pouce !" : res.prize === "fhint" ? "💡 Un indice offert !"
+                    : res.prize === "spins2" ? "🎡 2 tours de plus !" : res.loupes ? `${SYM[res.prize] || "🔎"} ${res.label} !` : `🎉 ${res.label} !`}</div>
                 <div style={{ fontSize:12, color:"rgba(255,255,255,.75)", marginTop:2 }}>
-                  {res.loupes ? `Tu as maintenant ${res.loupes_now ?? res.loupes} loupe${(res.loupes_now ?? res.loupes) > 1 ? "s" : ""}`
+                  {res.prize === "fhint" && res.secret ? `« ${res.secret.name} » : ${res.secret.hint}`
+                    : res.prize === "spins2" ? `Tu as maintenant ${res.spins} tour${res.spins > 1 ? "s" : ""}`
+                    : res.loupes ? `Tu as maintenant ${res.loupes_now ?? res.loupes} loupe${(res.loupes_now ?? res.loupes) > 1 ? "s" : ""}`
                     : res.prize === "hint" && res.secret ? `${res.secret.step.charAt(0).toUpperCase() + res.secret.step.slice(1)} d'un secret, offert`
                     : res.keys ? `Tu as maintenant ${res.balance + (bonus || []).reduce((a, b) => a + b.n, 0)} clé${res.balance > 1 ? "s" : ""}`
                     : res.prize === "replay" ? "Le tour t'est rendu"
@@ -200,7 +207,7 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
               fontSize:16, fontWeight:900, letterSpacing:".05em", color:"#7c2d12",
               background: spins > 0 && phase !== "spinning" ? "linear-gradient(180deg, #fde047, #f59e0b)" : "#a8a29e",
               boxShadow: spins > 0 ? "0 4px 0 #b45309" : "none" }}>
-            {phase === "spinning" ? "…" : spins > 0 ? "TOURNER" : "Plus de tour : rendez-vous lundi"}</button>
+            {phase === "spinning" ? "…" : spins > 0 ? "TOURNER" : wheel?.family ? "Plus de tour : rendez-vous demain" : "Plus de tour : rendez-vous lundi"}</button>
           {/* la fente a ticket : il en sort un quand on en gagne */}
           <div style={{ margin:"12px auto 0", width:150, position:"relative" }}>
             <div style={{ height:8, borderRadius:4, background:"#1c1917", boxShadow:"inset 0 2px 4px rgba(0,0,0,.9)",

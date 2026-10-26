@@ -347,12 +347,17 @@ async def achievements_loupe(aid: str, what: str = "hint", acc=Depends(require_o
 
 
 @router.post("/wheel/spin")
-async def achievements_spin(username: str = Depends(require_wheel), db: AsyncSession = Depends(get_db)):
-    """Un tour de roue : tire le lot cote serveur et l'applique (un compte de la famille : sa roue a des loupes)."""
+async def achievements_spin(acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
+    """Un tour de roue : tire le lot cote serveur et l'applique. Un compte de la famille tourne SA roue (ses tours,
+    des loupes) ; sinon la roue de la maison, pour le principal ou un compte a qui il l'a permise."""
     from ....services import achievements as A
-    fam = (await _me(username, db))["family"]
+    me = await _me(acc[0], db)
     try:
-        return await A.spin(family_user=username if fam else None)
+        if me["family"]:
+            return await A.family_spin(acc[0])
+        if not me["wheel"]:
+            raise HTTPException(403, "La roue n'est pas ouverte à ce compte")
+        return await A.spin()
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -392,11 +397,28 @@ async def achievements_surprise_set(body: dict, username: str = Depends(require_
     return await A.set_surprise_chance(who, pct)
 
 
+@router.get("/wheel/accounts")
+async def achievements_wheel_accounts(username: str = Depends(require_main)):
+    """Les roues a qui donner des tours : la maison, et chaque compte de la famille (ses tours a lui)."""
+    from ....services import achievements as A
+    st = await A._state_get() or {}
+    out = [{"username": username, "main": True, "spins": (st.get("wheel") or {}).get("spins", 0)}]
+    for u in (await A.family())["secrets"]:
+        if u != username:
+            out.append({"username": u, "main": False, "spins": (await A.famwheel(u)).get("spins", 0)})
+    return {"accounts": out}
+
+
 @router.post("/wheel/extra")
 async def achievements_wheel_extra(body: dict, username: str = Depends(require_main),
                                    db: AsyncSession = Depends(get_db)):
     await _check_secret(body, username, db)
     from ....services import achievements as A
+    to = str((body or {}).get("to") or "").strip()
+    if to and to != username:                  # un compte de la famille : ses tours a lui
+        if to not in (await A.family())["secrets"]:
+            raise HTTPException(404, "Ce compte n'a pas sa roue")
+        return await A.add_family_spins(to, (body or {}).get("n") or 5)
     try:
         return await A.add_spins((body or {}).get("n") or 5)
     except ValueError as e:
@@ -482,9 +504,8 @@ async def achievements_view(request: Request, fresh: bool = False, token: str = 
         if me["family"]:                          # un compte de la famille : ses secrets a lui
             mine = (await A._eggs_by()).get(username) or {}
             v = A.family_view(v, mine, me["house"] or "La maison", await A.loupes(username))
-            # sa roue : des loupes a gagner
-            if isinstance(v.get("keys"), dict) and isinstance(v["keys"].get("wheel"), dict):
-                v["keys"] = {**v["keys"], "wheel": {**v["keys"]["wheel"], "prizes": A.prizes_view(A.FAMILY_PRIZES)}}
+            # sa roue a lui : ses tours, des loupes a gagner (rien du tresor de la maison)
+            v["keys"] = {"wheel": A.famwheel_view(await A.famwheel(username))}
             v["family"]["subs"] = list(A.FAMILY_SUBS)
             # toute la famille sur chaque secret : la maison, puis les autres membres
             fam = await A.family()

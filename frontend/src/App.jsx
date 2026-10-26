@@ -55,19 +55,39 @@ function Rewind() {
   const [busy, setBusy] = React.useState(false);
   // le nombre de tours : un champ, prerempli par ?n= (5 sinon)
   const [n, setN] = React.useState(() => new URLSearchParams(window.location.search).get("n") || "5");
+  // a qui : la roue de la maison, ou celle d'un compte de la famille (ses tours a lui, 26/10/2026)
+  const [accs, setAccs] = React.useState(null);
+  const [to, setTo] = React.useState("");
+  const loadAccs = async () => {
+    const { default: client } = await import("./api/client");
+    const { data } = await client.get("/achievements/wheel/accounts");
+    setAccs(data.accounts || []);
+    setTo(t => t || (data.accounts || [])[0]?.username || "");
+  };
+  React.useEffect(() => { loadAccs().catch(() => setAccs([])); }, []);
   const go = async e => {
     e.preventDefault();
     if (!pw) { setMsg("Mot de passe requis"); return; }
     setBusy(true); setMsg("");
     try {
       const { default: client } = await import("./api/client");
-      const { data } = await client.post("/achievements/wheel/extra", { n: Number(n), secret: pw });
-      setMsg(`+${data.added} · ${data.spins}`); setPw("");
+      const { data } = await client.post("/achievements/wheel/extra", { n: Number(n), secret: pw, to: to || undefined });
+      setMsg(`${to ? `${to} · ` : ""}+${data.added} · ${data.spins}`); setPw("");
+      loadAccs().catch(() => {});
     } catch (err) { setMsg(err.response?.data?.detail || err.message); }
     setBusy(false);
   };
   return (
     <form onSubmit={go} style={{ maxWidth:320, margin:"60px auto", padding:"0 16px", display:"flex", flexDirection:"column", gap:10 }}>
+      {accs?.length > 1 && <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+        {accs.map(a => (
+          <button type="button" key={a.username} onClick={() => { setTo(a.username); setMsg(""); }} style={{ padding:"10px 12px", borderRadius:10,
+            border:`1.5px solid ${to === a.username ? "#3b82f6" : "var(--border)"}`, background:"var(--surface2)", color:"var(--text)", fontSize:14,
+            display:"flex", alignItems:"center", gap:8, cursor:"pointer", textAlign:"left" }}>
+            <span style={{ flex:1, fontWeight:800 }}>{a.main ? `${a.username} (la maison)` : a.username}</span>
+            <span style={{ fontFamily:"monospace", fontSize:13, color:"var(--muted)" }}>{a.spins} tour{a.spins > 1 ? "s" : ""}</span>
+          </button>))}
+      </div>}
       <input type="number" min="1" value={n} onChange={e => { setN(e.target.value); setMsg(""); }} placeholder="Nombre de tours"
         aria-label="Nombre de tours" style={{ padding:"10px 12px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
           color:"var(--text)", fontSize:14 }}/>

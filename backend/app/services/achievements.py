@@ -5829,7 +5829,7 @@ def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> 
 # Les loupes de la famille (24/10/2026) : sans cles ni tickets, un compte de la famille revele l'indice d'un
 # secret que la maison a deja trouve. Deux par jour, gardees jusqu'a trois. Une loupe pour l'indice ; puis,
 # l'indice en main, trois loupes pour le descriptif (26/10/2026).
-LOUPES_DAY, LOUPES_MAX = 2, 3
+LOUPES_DAY, LOUPES_MAX = 1, 5            # (2 et 3 avant le 26/10/2026)
 LOUPES_DESC = 3
 
 
@@ -5856,6 +5856,117 @@ async def loupes(username: str) -> dict:
         d[username] = me
         await set_setting(db, KEY + "_LOUPES", json.dumps(d))
     return me
+
+
+_FAMW_LOCK = asyncio.Lock()
+
+
+async def famwheel(username: str) -> dict:
+    """La roue d'un compte de la famille : {spins, day, secrets, played}. Credite le jour venu (2 tours, un jour
+    manque ne se rattrape pas) et chaque secret trouve depuis (1 tour), sans rien retrouver en arriere la premiere fois."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    today = _today_paris().isoformat()
+    found = len((await _eggs_by()).get(username) or {})
+    async with AsyncSessionLocal() as db:
+        try:
+            d = json.loads(await get_setting(db, KEY + "_FAMWHEEL", "") or "{}")
+        except ValueError:
+            d = {}
+        d = d if isinstance(d, dict) else {}
+        me = d.get(username) if isinstance(d.get(username), dict) else None
+        old = json.dumps(me, sort_keys=True)
+        if me is None:
+            me = {"spins": FAM_SPINS_START, "day": today, "secrets": found, "played": 0}
+        if me.get("day") != today:
+            me = {**me, "spins": int(me.get("spins") or 0) + FAM_SPINS_DAY, "day": today}
+        if found > int(me.get("secrets") or 0):
+            me = {**me, "spins": int(me.get("spins") or 0) + found - int(me.get("secrets") or 0), "secrets": found}
+        if json.dumps(me, sort_keys=True) != old:
+            d[username] = me
+            await set_setting(db, KEY + "_FAMWHEEL", json.dumps(d))
+    return me
+
+
+async def _famwheel_put(username: str, me: dict) -> None:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    async with AsyncSessionLocal() as db:
+        try:
+            d = json.loads(await get_setting(db, KEY + "_FAMWHEEL", "") or "{}")
+        except ValueError:
+            d = {}
+        d = d if isinstance(d, dict) else {}
+        d[username] = me
+        await set_setting(db, KEY + "_FAMWHEEL", json.dumps(d))
+
+
+def famwheel_view(me: dict) -> dict:
+    tomorrow = (_today_paris() + timedelta(days=1)).isoformat()
+    return {"spins": int(me.get("spins") or 0), "played": int(me.get("played") or 0), "next": tomorrow, "family": True,
+            "per_day": FAM_SPINS_DAY, "per_secret": 1, "prizes": prizes_view(FAMILY_PRIZES)}
+
+
+async def family_spin(username: str, rng=None) -> dict:
+    """Un tour de la roue d'un compte de la famille : le lot, pour lui."""
+    import random
+    async with _FAMW_LOCK:
+        me = await famwheel(username)
+        if int(me.get("spins") or 0) <= 0:
+            raise ValueError(f"Plus de tour : {FAM_SPINS_DAY} de plus demain, et 1 par secret trouvé")
+        pid, label, _n, _pct = _draw(rng, FAMILY_PRIZES)
+        me = {**me, "spins": int(me["spins"]) - 1, "played": int(me.get("played") or 0) + 1}
+        out = {"prize": pid, "label": label, "keys": 0}
+        if pid == "replay":
+            me["spins"] += 1
+        if pid == "spins2":
+            me["spins"] += 2
+        await _famwheel_put(username, me)
+    if pid == "fhint":
+        # l'indice d'un secret que la maison a et lui pas, pas encore revele : offert, sans loupe
+        lp = await loupes(username)
+        mine = set((await _eggs_by()).get(username) or {})
+        house = set(await eggs_found())
+        todo = [aid for aid in sorted(FAMILY_IDS) if aid[4:] in house and aid[4:] not in mine and aid not in (lp.get("used") or {})]
+        if todo:
+            aid = (rng or random.SystemRandom()).choice(todo)
+            await _loupe_mark(username, aid)
+            out["secret"] = {"id": aid, "name": BY_ID[aid]["name"], "hint": hint_of(BY_ID[aid])}
+        else:
+            out.update(prize="loupe1", label="1 loupe (plus d'indice à révéler)")
+            out["loupes"] = 1
+            out["loupes_now"] = await add_loupes(username, 1)
+    if pid in PRIZE_LOUPES:
+        out["loupes"] = PRIZE_LOUPES[pid]
+        out["loupes_now"] = await add_loupes(username, PRIZE_LOUPES[pid])
+    logger.info(f"[SUCCES] roue de {username} : {out['label']}")
+    return {**out, "spins": me["spins"], "balance": 0, "at": datetime.utcnow().isoformat()}
+
+
+async def _loupe_mark(username: str, aid: str) -> None:
+    """Un indice revele sans depenser de loupe (offert par la roue)."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    me = await loupes(username)
+    me = {**me, "used": {**(me.get("used") or {}), aid: datetime.utcnow().isoformat()}}
+    async with AsyncSessionLocal() as db:
+        try:
+            d = json.loads(await get_setting(db, KEY + "_LOUPES", "") or "{}")
+        except ValueError:
+            d = {}
+        d = d if isinstance(d, dict) else {}
+        d[username] = me
+        await set_setting(db, KEY + "_LOUPES", json.dumps(d))
+
+
+async def add_family_spins(username: str, n: int) -> dict:
+    """Des tours de roue en plus pour un compte de la famille (l'administrateur)."""
+    n = max(1, min(int(n or 1), 100))
+    async with _FAMW_LOCK:
+        me = await famwheel(username)
+        me = {**me, "spins": int(me.get("spins") or 0) + n}
+        await _famwheel_put(username, me)
+    return {"added": n, "spins": me["spins"], "to": username}
 
 
 async def add_loupes(username: str, n: int) -> int:
@@ -5908,7 +6019,7 @@ async def use_loupe(username: str, aid: str, what: str = "hint") -> dict:
     if aid in (me.get("used") or {}):
         return {"ok": True, "hint": hint_of(BY_ID[aid]), "loupes": me.get("n", 0)}
     if int(me.get("n") or 0) <= 0:
-        raise ValueError("Plus de loupe aujourd'hui : deux de plus demain")
+        raise ValueError("Plus de loupe aujourd'hui : une de plus demain, et la roue en donne")
     me = {**me, "n": int(me["n"]) - 1, "used": {**(me.get("used") or {}), aid: datetime.utcnow().isoformat()}}
     async with AsyncSessionLocal() as db:
         try:
@@ -6846,16 +6957,21 @@ TICKETS_WEEKLY = 1
 PRIZES = [("none", "Pas cette fois", 0, 44.2), ("key1", "1 clé", 1, 26.0), ("ticket", "Ticket de palier", 0, 10.0),
           ("replay", "Tour rejoué", 0, 7.0), ("hint", "Coup de pouce", 0, 6.0), ("key3", "3 clés", 3, 4.0),
           ("key5", "5 clés", 5, 1.8), ("jackpot", "Jackpot : 10 clés", 10, 1.0)]  # 1 % depuis le 26/10/2026 (0,2 % avant)
-# Un compte de la famille qui tourne la roue (26/10/2026) : des loupes pour lui. « Coup de pouce » (une etape d'un
-# secret de la maison, sans interet pour lui) devient 2 loupes, et 1 loupe prend 10 points a « Pas cette fois ».
-# Les cles, tickets et tours vont toujours a la maison.
-FAMILY_PRIZES = [("none", "Pas cette fois", 0, 34.2), ("key1", "1 clé", 1, 26.0), ("ticket", "Ticket de palier", 0, 10.0),
-                 ("loupe1", "1 loupe", 0, 10.0), ("replay", "Tour rejoué", 0, 7.0), ("loupe2", "2 loupes", 0, 6.0),
-                 ("key3", "3 clés", 3, 4.0), ("key5", "5 clés", 5, 1.8), ("jackpot", "Jackpot : 10 clés", 10, 1.0)]
-PRIZE_LOUPES = {"loupe1": 1, "loupe2": 2}
+# La roue d'un compte de la famille (26/10/2026) : la sienne, avec ses tours (2 par jour, 1 par secret qu'il trouve),
+# et des loupes a gagner. 45 % de perdu ; le reste du plus courant au plus rare. Rien ne va a la maison.
+FAMILY_PRIZES = [("none", "Pas cette fois", 0, 45.0), ("loupe1", "1 loupe", 0, 20.0), ("replay", "Tour rejoué", 0, 10.0),
+                 ("fhint", "Un indice offert", 0, 8.0), ("spins2", "2 tours de plus", 0, 7.0), ("loupe3", "3 loupes", 0, 6.0),
+                 ("loupe5", "5 loupes", 0, 3.0), ("loupe10", "10 loupes", 0, 1.0)]
+PRIZE_LOUPES = {"loupe1": 1, "loupe3": 3, "loupe5": 5, "loupe10": 10}
+FAM_SPINS_DAY, FAM_SPINS_START = 2, 2
 PRIZE_HELP = {
-    "loupe1": "Une loupe pour toi, en plus de celles du jour (même au-delà de trois).",
-    "loupe2": "Deux loupes pour toi, en plus de celles du jour (même au-delà de trois).",
+    "loupe1": "Une loupe, en plus de celle du jour (même au-delà du plafond).",
+    "loupe3": "Trois loupes d'un coup (même au-delà du plafond).",
+    "loupe5": "Cinq loupes d'un coup (même au-delà du plafond).",
+    "loupe10": "Le gros lot : dix loupes.",
+    "fhint": "L'indice d'un secret que la maison a déjà et toi pas encore, offert sans loupe. "
+             "S'il n'y en a plus à révéler : une loupe.",
+    "spins2": "Deux tours de roue de plus.",
     "none": "Rien cette fois : retente ta chance.",
     "key1": "Une clé, tout de suite.",
     "replay": "Le tour t'est rendu : tu rejoues.",

@@ -128,7 +128,8 @@ export default function Achievements({ embedded = false }) {
     try { await client.post(`/achievements/loupe/${aid}`, null, { params: what === "desc" ? { what } : {} }); await load(); }
     catch (e) { setKeyErr(e.response?.data?.detail || e.message); }
   };
-  const canSpin = !atFriend && !!data?.keys?.wheel && (canSpend || !!data?.me?.wheel);
+  // un compte de la famille a SA roue (ses tours, des loupes) ; sinon celle de la maison, si elle est permise
+  const canSpin = !atFriend && !!data?.keys?.wheel && (canSpend || !!data?.me?.wheel || !!data?.family);
   // ticket de palier : passer un succes a son palier suivant
   const [ceremony, setCeremony] = useState(null);
   const useTicket = async aid => {
@@ -1430,7 +1431,7 @@ function TreasureRow({ keys, onRules, onWheel, onSpent, loupes = null }) {
       <div style={{ display:"grid", gridTemplateColumns:`repeat(${1 + (w && !loupes ? 1 : 0) + (w ? 1 : 0)}, minmax(0, 1fr))`, gap:8 }}>
         {loupes ? (
           <div style={{ ...box("rgba(14,165,233,.35)", "rgba(14,165,233,.45)") }}>
-            <button type="button" onClick={onRules} aria-label="Les loupes, comment ça marche" title="Une loupe révèle l'indice d'un secret que la maison a déjà ; l'indice en main, trois loupes dévoilent son descriptif. Deux de plus chaque jour, trois au plus."
+            <button type="button" onClick={onRules} aria-label="Les loupes, comment ça marche" title="Une loupe révèle l'indice d'un secret que la maison a déjà ; l'indice en main, trois loupes dévoilent son descriptif. Une de plus chaque jour, cinq au plus ; la roue en donne aussi, au-delà."
               style={{ position:"absolute", top:4, right:4, width:18, height:18, borderRadius:"50%", border:"none", cursor:"pointer", fontSize:10.5, fontWeight:900,
                 color:"var(--muted)", background:"var(--surface)", boxShadow:"inset 0 0 0 1px var(--border)" }}>?</button>
             <span style={iconSlot}><span style={{ fontSize:24, lineHeight:1, animation:"bn-float 3.5s ease-in-out infinite" }}>🔍</span></span>
@@ -1491,7 +1492,7 @@ function TreasureRow({ keys, onRules, onWheel, onSpent, loupes = null }) {
               borderRadius:5, padding:"0 6px", fontSize:14, textShadow:"0 0 6px #f97316" }}>{String(w.spins || 0).padStart(2, "0")}</span>
             <span style={{ fontSize:9.5, fontWeight:900, color:"#7c2d12", borderRadius:8, padding:"3px 0", width:"92%", textAlign:"center",
               background: has ? "linear-gradient(180deg,#fde047,#f59e0b)" : "#d6c79f",
-              animation: has && onWheel ? "bn-press 2s ease-in-out infinite" : "none" }}>{has ? "TOURNER" : "LUNDI"}</span>
+              animation: has && onWheel ? "bn-press 2s ease-in-out infinite" : "none" }}>{has ? "TOURNER" : w.family ? "DEMAIN" : "LUNDI"}</span>
           </div>
         )}
       </div>
