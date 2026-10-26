@@ -479,7 +479,7 @@ async def auto_fetch_once() -> int:
 
 
 # ── Rattrapage (26/10/2026) : les timelapses deja sur l'imprimante, rattaches a leur impression passee ──
-ATTACH: dict = {"running": False, "done": 0, "total": 0, "bytes": 0, "errors": 0, "current": None, "finished_at": None}
+ATTACH: dict = {"running": False, "done": 0, "total": 0, "bytes": 0, "errors": 0, "current": None, "finished_at": None, "error": None}
 
 
 async def attach_all() -> dict:
@@ -487,10 +487,12 @@ async def attach_all() -> dict:
     from ..core.config import settings
     if ATTACH["running"]:
         return dict(ATTACH)
-    lst = await timelapses(fresh=True)
-    todo = [it for it in lst["items"] if it.get("print") and not it.get("attached")]
-    ATTACH.update(running=True, done=0, total=len(todo), bytes=0, errors=0, current=None, finished_at=None)
+    # « en cours » des le debut : la relecture de l'imprimante prend quelques secondes, et la page suit l'etat
+    ATTACH.update(running=True, done=0, total=0, bytes=0, errors=0, current="lecture de l'imprimante", finished_at=None, error=None)
     try:
+        lst = await timelapses(fresh=True)
+        todo = [it for it in lst["items"] if it.get("print") and not it.get("attached")]
+        ATTACH.update(total=len(todo), current=None)
         ip, code = await _creds()
         st = _auto_state()
         for it in todo:
@@ -514,6 +516,9 @@ async def attach_all() -> dict:
             if ATTACH["done"] % 10 == 0:
                 _auto_save(st)
         _auto_save(st)
+    except Exception as e:
+        ATTACH["error"] = _why(e) if not isinstance(e, SdError) else str(e)
+        logger.info(f"[SD] rattrapage interrompu : {ATTACH['error']}")
     finally:
         ATTACH.update(running=False, current=None, finished_at=_time.time())
     return dict(ATTACH)

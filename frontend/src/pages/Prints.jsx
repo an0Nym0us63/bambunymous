@@ -2427,8 +2427,10 @@ function TimelapsesView({ search, onCount }) {
     const mb = Math.round(todo.reduce((n, it) => n + (it.size || 0), 0) / 1048576);
     if (!(await showConfirm(`Copier ${todo.length} timelapse${todo.length > 1 ? "s" : ""} (${mb} Mo) dans la fiche de leur impression ? Ils restent aussi sur l'imprimante.`,
       { confirmLabel: "Copier" }))) return;
-    try { const { data: a } = await client.post("/printer/sd/timelapses/attach"); setAtt(a); }
-    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    // suivi tout de suite (le serveur relit d'abord l'imprimante, quelques secondes)
+    setAtt(a => ({ ...(a || {}), running: true, done: 0, total: 0, current: "lecture de l'imprimante", error: null }));
+    try { const { data: a } = await client.post("/printer/sd/timelapses/attach"); setAtt(x => ({ ...a, running: a.running || !a.finished_at || x?.running })); }
+    catch (e) { setAtt(null); showAlert(e.response?.data?.detail || e.message); }
   };
   useEffect(() => {
     if (!more.current || typeof IntersectionObserver === "undefined") return undefined;
@@ -2461,7 +2463,8 @@ function TimelapsesView({ search, onCount }) {
         background:"linear-gradient(135deg, rgba(249,115,22,0.14), transparent 70%), var(--surface2)", border:"1px solid rgba(249,115,22,0.35)" }}>
         {att?.running ? <>
           <span style={{ fontSize:12.5, fontWeight:800, color:"var(--text)", flex:1, minWidth:180 }}>
-            📥 Copie dans les fiches… {att.done} / {att.total}{att.current ? <span style={{ color:"var(--muted)", fontWeight:700 }}> · {att.current}</span> : null}</span>
+            📥 {att.total ? <>Copie dans les fiches… {att.done} / {att.total}</> : "Lecture de l'imprimante…"}
+            {att.total && att.current ? <span style={{ color:"var(--muted)", fontWeight:700 }}> · {att.current}</span> : null}</span>
           <span style={{ flexBasis:"100%", height:6, borderRadius:4, background:"var(--surface)", overflow:"hidden" }}>
             <span style={{ display:"block", height:"100%", width:`${att.total ? 100 * att.done / att.total : 0}%`, background:"linear-gradient(90deg, #F97316, #FBBF24)", transition:"width .4s" }}/></span>
         </> : <>
@@ -2471,6 +2474,7 @@ function TimelapsesView({ search, onCount }) {
             background:"linear-gradient(135deg, #F97316, #FB923C)" }}>📥 Les copier</button>
         </>}
       </div>)}
+    {!att?.running && att?.error && <p style={{ fontSize:12, color:"#ef4444", fontWeight:800, margin:"0 0 10px" }}>⚠ Copie interrompue : {att.error}</p>}
     {!att?.running && att?.finished_at && att.total > 0 && Date.now() / 1000 - att.finished_at < 120 && (
       <p style={{ fontSize:12, color:"#16a34a", fontWeight:800, margin:"0 0 10px" }}>✓ {att.total - att.errors} timelapse{att.total - att.errors > 1 ? "s" : ""} copié{att.total - att.errors > 1 ? "s" : ""} dans les fiches{att.errors ? ` · ${att.errors} en échec` : ""}</p>)}
     {!all.length && words.length > 0 && <p style={{ textAlign:"center", color:"var(--muted)", padding:"30px 0" }}>Aucun timelapse ne correspond.</p>}
