@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.pool import AsyncAdaptedQueuePool
+from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import DeclarativeBase
 from ..core.config import settings
 
@@ -17,12 +17,12 @@ engine = create_async_engine(
     },
     # pas de « SELECT 1 » avant chaque emprunt de connexion : un fichier local ne se coupe pas comme un serveur
     pool_pre_ping=False,
-    # Un vrai pool (26/10/2026) : pour un fichier SQLite, SQLAlchemy 2.0 n'en met aucun (NullPool), et chaque requete
-    # rouvrait la base, rejouait ses PRAGMA et repartait d'un cache vide. Les connexions sont desormais gardees
-    # (cache chaud) ; une page lance une quinzaine d'appels a la fois, assez pour qu'aucun n'attende la sienne.
-    poolclass=AsyncAdaptedQueuePool,
-    pool_size=12,
-    max_overflow=12,
+    # PAS de pool partage (27/10/2026) : le fil MQTT et plusieurs routes (imports, filaments, impressions, reglages)
+    # font tourner LEUR PROPRE boucle asyncio et y ouvrent des sessions. Un pool (AsyncAdaptedQueuePool) est lie a
+    # une seule boucle : essaye le 26/10, il a casse au demarrage (« Queue … is bound to a different event loop »,
+    # 77 appels en attente de connexion). Une connexion neuve par session, donc, comme avant ; pour garder un pool,
+    # il faudrait d'abord que tout passe par la boucle principale.
+    poolclass=NullPool,
 )
 
 
