@@ -5810,9 +5810,10 @@ def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> 
             medals[t0["id"]] = max(0, medals.get(t0["id"], 0) - 1)
             score -= t0["score"]
             lit = aid in ((loupes or {}).get("used") or {})        # indice debloque a la loupe
-            items.append({**base, "level": -1, "reveal": max(it.get("reveal") or 0, FREE_FROM_FRIENDS + (1 if lit else 0)),
-                          "hint": hint_of(a) if lit else None, "loupe": bool(lit),
-                          "masked": True, "desc": "Descriptif caché", "lore": None, "house": house,
+            dlit = lit and aid in ((loupes or {}).get("desc") or {})  # puis le descriptif (trois loupes)
+            items.append({**base, "level": -1, "reveal": max(it.get("reveal") or 0, FREE_FROM_FRIENDS + (1 if lit else 0) + (1 if dlit else 0)),
+                          "hint": hint_of(a) if lit else None, "loupe": bool(lit), "loupe_desc": bool(dlit),
+                          "masked": True, "desc": describe(a, a["tiers"][0]) if dlit else "Descriptif caché", "lore": None, "house": house,
                           "tiers": [{**it["tiers"][0], "at": None}]})
         else:
             items.append(it)
@@ -5821,12 +5822,15 @@ def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> 
             "family": {"house": house, "found": found, "total": len(FAMILY_IDS),
                        "scoops": sum(1 for x in items if x.get("scoop")),
                        "loupes": (loupes or {}).get("n", 0), "loupes_day": LOUPES_DAY, "loupes_max": LOUPES_MAX,
+                       "loupes_desc": LOUPES_DESC,
                        "loupes_used": len((loupes or {}).get("used") or {})}}
 
 
 # Les loupes de la famille (24/10/2026) : sans cles ni tickets, un compte de la famille revele l'indice d'un
-# secret que la maison a deja trouve. Deux par jour, gardees jusqu'a trois.
+# secret que la maison a deja trouve. Deux par jour, gardees jusqu'a trois. Une loupe pour l'indice ; puis,
+# l'indice en main, trois loupes pour le descriptif (26/10/2026).
 LOUPES_DAY, LOUPES_MAX = 2, 3
+LOUPES_DESC = 3
 
 
 async def loupes(username: str) -> dict:
@@ -5852,8 +5856,9 @@ async def loupes(username: str) -> dict:
     return me
 
 
-async def use_loupe(username: str, aid: str) -> dict:
-    """Une loupe sur un secret que la maison a et que ce compte n'a pas encore : son indice."""
+async def use_loupe(username: str, aid: str, what: str = "hint") -> dict:
+    """Une loupe sur un secret que la maison a et que ce compte n'a pas encore : son indice. Ou, l'indice deja
+    revele, trois loupes pour son descriptif (what="desc")."""
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting, set_setting
     if aid not in FAMILY_IDS:
@@ -5863,6 +5868,24 @@ async def use_loupe(username: str, aid: str) -> dict:
     if aid[4:] not in await eggs_found():
         raise ValueError("La maison ne l'a pas encore : pas d'indice à montrer")
     me = await loupes(username)
+    if what == "desc":
+        a = BY_ID[aid]
+        if aid not in (me.get("used") or {}):
+            raise ValueError("Révèle d'abord l'indice (une loupe)")
+        if aid in (me.get("desc") or {}):
+            return {"ok": True, "desc": describe(a, a["tiers"][0]), "loupes": me.get("n", 0)}
+        if int(me.get("n") or 0) < LOUPES_DESC:
+            raise ValueError(f"Il faut {LOUPES_DESC} loupes pour le descriptif (tu en as {int(me.get('n') or 0)})")
+        me = {**me, "n": int(me["n"]) - LOUPES_DESC, "desc": {**(me.get("desc") or {}), aid: datetime.utcnow().isoformat()}}
+        async with AsyncSessionLocal() as db:
+            try:
+                d = json.loads(await get_setting(db, KEY + "_LOUPES", "") or "{}")
+            except ValueError:
+                d = {}
+            d = d if isinstance(d, dict) else {}
+            d[username] = me
+            await set_setting(db, KEY + "_LOUPES", json.dumps(d))
+        return {"ok": True, "desc": describe(a, a["tiers"][0]), "loupes": me["n"]}
     if aid in (me.get("used") or {}):
         return {"ok": True, "hint": hint_of(BY_ID[aid]), "loupes": me.get("n", 0)}
     if int(me.get("n") or 0) <= 0:

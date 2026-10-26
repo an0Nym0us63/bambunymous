@@ -123,9 +123,9 @@ export default function Achievements({ embedded = false }) {
   // cles et tickets : le compte principal seul ; la roue : lui, ou un compte a qui il l'a permise
   const canSpend = isAdmin && !atFriend && !!data?.keys && data?.me?.main !== false;
   // famille : une loupe sur un secret que la maison a deja (son indice)
-  const loupe = async aid => {
+  const loupe = async (aid, what = "hint") => {
     setKeyErr(null);
-    try { await client.post(`/achievements/loupe/${aid}`); await load(); }
+    try { await client.post(`/achievements/loupe/${aid}`, null, { params: what === "desc" ? { what } : {} }); await load(); }
     catch (e) { setKeyErr(e.response?.data?.detail || e.message); }
   };
   const canSpin = !atFriend && !!data?.keys?.wheel && (canSpend || !!data?.me?.wheel);
@@ -419,8 +419,8 @@ export default function Achievements({ embedded = false }) {
                   <div style={{ display:"flex", flexDirection:"column", gap:4, padding:"8px 10px", borderRadius:10, fontSize:11.5,
                     lineHeight:1.45, color:"var(--text2)", background:"rgba(245,158,11,0.08)", border:"1px dashed rgba(245,158,11,0.5)" }}>
                     {data.family && <span><b style={{ color:"#EC4899" }}>🥚 Tes trouvailles : {data.family.found} / {data.family.total}</b>
-                      {" · "}<b style={{ color:"#0EA5E9" }}>🔍 {data.family.loupes} loupe{data.family.loupes > 1 ? "s" : ""}</b> pour révéler l'indice d'un secret
-                      que {data.family.house} a déjà ({data.family.loupes_day} de plus chaque jour, {data.family.loupes_max} au plus).
+                      {" · "}<b style={{ color:"#0EA5E9" }}>🔍 {data.family.loupes} loupe{data.family.loupes > 1 ? "s" : ""}</b> : une révèle l'indice d'un secret
+                      que {data.family.house} a déjà, puis {data.family.loupes_desc || 3} son descriptif ({data.family.loupes_day} de plus chaque jour, {data.family.loupes_max} au plus).
                       Easter eggs, cachettes, Android, farces, fêtes et pages cachées : ici, ce sont les tiennes. Le reste des succès est celui
                       de la maison.</span>}
                     {near > 0 && !atFriend && <span><b style={{ color:"#F59E0B" }}>👀 À portée</b> : pas encore à toi, mais {data.family
@@ -547,7 +547,8 @@ export default function Achievements({ embedded = false }) {
             <Card it={byId[detail]} sheet others={ringBy[detail]} shared={shared(byId[detail])} rivals={rivalsOf(byId[detail])}
               tickets={canSpend ? data.keys?.wheel?.tickets || 0 : 0} onTicket={() => useTicket(detail)}
               keys={canSpend ? data.keys : null} onSpend={() => spend(detail)} keyErr={keyErr}
-              loupes={data.family ? data.family.loupes : null} onLoupe={() => loupe(detail)}/>
+              loupes={data.family ? data.family.loupes : null} loupesDesc={data.family?.loupes_desc || 3}
+              onLoupe={what => loupe(detail, what)}/>
           </div>
         </div>, document.body
       )}
@@ -1429,7 +1430,7 @@ function TreasureRow({ keys, onRules, onWheel, onSpent, loupes = null }) {
       <div style={{ display:"grid", gridTemplateColumns:`repeat(${1 + (w && !loupes ? 1 : 0) + (w ? 1 : 0)}, minmax(0, 1fr))`, gap:8 }}>
         {loupes ? (
           <div style={{ ...box("rgba(14,165,233,.35)", "rgba(14,165,233,.45)") }}>
-            <button type="button" onClick={onRules} aria-label="Les loupes, comment ça marche" title="Une loupe révèle l'indice d'un secret que la maison a déjà. Deux de plus chaque jour, trois au plus."
+            <button type="button" onClick={onRules} aria-label="Les loupes, comment ça marche" title="Une loupe révèle l'indice d'un secret que la maison a déjà ; l'indice en main, trois loupes dévoilent son descriptif. Deux de plus chaque jour, trois au plus."
               style={{ position:"absolute", top:4, right:4, width:18, height:18, borderRadius:"50%", border:"none", cursor:"pointer", fontSize:10.5, fontWeight:900,
                 color:"var(--muted)", background:"var(--surface)", boxShadow:"inset 0 0 0 1px var(--border)" }}>?</button>
             <span style={iconSlot}><span style={{ fontSize:24, lineHeight:1, animation:"bn-float 3.5s ease-in-out infinite" }}>🔍</span></span>
@@ -1733,7 +1734,7 @@ const progress = it => {
   return span > 0 ? Math.max(0, Math.min(1, (it.value - (it.prev || 0)) / span)) : 0;
 };
 
-function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr, rivals, tickets = 0, onTicket, loupes = null, onLoupe }) {
+function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr, rivals, tickets = 0, onTicket, loupes = null, onLoupe, loupesDesc = 3 }) {
   const [sure, setSure] = useState(false);       // ticket : un second toucher pour confirmer
   const ref = useRef(null);
   const [open, setOpen] = useState(sheet);
@@ -1780,8 +1781,9 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
             {it.tickets > 0 && <span title={`${it.tickets} palier${it.tickets > 1 ? "s" : ""} passé${it.tickets > 1 ? "s" : ""} avec un ticket`}
               style={{ marginLeft:6, fontSize:11, fontWeight:800, color:"#F59E0B" }}>🎟️{it.tickets > 1 ? `×${it.tickets}` : ""}</span>}</div>
           <div style={{ fontSize:12, color:"var(--muted)", marginTop:2, lineHeight:1.35,
-            fontStyle: it.masked ? "italic" : "normal" }}>
-            {it.masked ? "🔒 Descriptif caché" : unique && got ? it.desc : done ? `✓ Tous les paliers atteints · ${it.desc}`
+            fontStyle: it.masked && !it.loupe_desc ? "italic" : "normal" }}>
+            {/* le descriptif devoile a la loupe (famille) s'affiche, le reste du secret reste masque */}
+            {it.masked ? (it.loupe_desc ? `🔍 ${it.desc}` : "🔒 Descriptif caché") : unique && got ? it.desc : done ? `✓ Tous les paliers atteints · ${it.desc}`
               : unique ? it.desc : (
                 // a paliers : ou j'en suis, et ce que demande le suivant
                 <span style={{ display:"flex", flexDirection:"column", gap:3, marginTop:2 }}>
@@ -1837,6 +1839,15 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
             cursor: loupes ? "pointer" : "default", fontWeight:800, fontSize:12.5, color:"#fff", opacity: loupes ? 1 : 0.55,
             background:"linear-gradient(135deg, #0EA5E9, #6366F1)" }}>
           🔍 {loupes ? `Révéler l'indice (il te reste ${loupes} loupe${loupes > 1 ? "s" : ""})` : "Plus de loupe aujourd'hui : deux de plus demain"}</button>
+      )}
+      {/* famille : l'indice en main, trois loupes devoilent le descriptif */}
+      {sheet && unique && !got && it.house && it.hint && !it.loupe_desc && loupes != null && (
+        <button type="button" onClick={() => onLoupe("desc")} disabled={loupes < loupesDesc}
+          style={{ alignSelf:"flex-start", display:"inline-flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:20, border:"none",
+            cursor: loupes >= loupesDesc ? "pointer" : "default", fontWeight:800, fontSize:12.5, color:"#fff", opacity: loupes >= loupesDesc ? 1 : 0.55,
+            background:"linear-gradient(135deg, #6366F1, #A855F7)" }}>
+          {"🔍".repeat(loupesDesc)} {loupes >= loupesDesc ? `Voir le descriptif (${loupesDesc} loupes, il t'en reste ${loupes})`
+            : `Le descriptif : ${loupesDesc} loupes (tu en as ${loupes})`}</button>
       )}
       {sheet && unique && !got && it.gift_from?.length > 0 && (
         <p style={{ margin:0, fontSize:12.5, fontWeight:700, color:"#8B5CF6" }}>
