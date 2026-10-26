@@ -4,7 +4,7 @@ from typing import Optional
 from ....core.mqtt import get_state
 from ....db.session import AsyncSessionLocal
 from ....services.hms import decode_hms
-from .auth import get_current_user
+from .auth import get_current_user, require_admin
 
 
 # La porte et le capot du haut par les alertes de l'imprimante (24/10/2026, codes de la serie H2 tires
@@ -323,6 +323,13 @@ def _tray_spool_info(t, spools_map, stock_map=None):
         if stock_map is not None and f is not None:
             si.filament_stock_g = stock_map.get(f.id)
     return si
+
+
+@router.get("/sd/probe")
+async def printer_sd_probe(_: str = Depends(require_admin)):
+    """La carte SD de l'imprimante : la racine et « timelapse », pour savoir si elle s'ouvre."""
+    from ....services.sd_card import probe
+    return await probe()
 
 
 @router.get("/details")

@@ -103,6 +103,55 @@ function AMSOrderSection() {
   );
 }
 
+// La carte SD de l'imprimante (26/10/2026) : une sonde, en lecture seule. Elle liste la racine et le dossier
+// des timelapses, pour savoir si l'imprimante les ouvre avant de construire leur lecture dans l'appli.
+function SdProbeSection() {
+  const [running, setRunning] = useState(false);
+  const [res, setRes] = useState(null);
+  const run = async () => {
+    setRunning(true); setRes(null);
+    try { const { data } = await client.get("/printer/sd/probe", { timeout: 120000 }); setRes(data); }
+    catch (e) { setRes({ ok: false, error: e.response?.data?.detail || e.message }); }
+    finally { setRunning(false); }
+  };
+  const mo = n => n >= 1048576 ? `${(n / 1048576).toFixed(1).replace(".", ",")} Mo` : n >= 1024 ? `${Math.round(n / 1024)} Ko` : `${n} o`;
+  const LABEL = { "/": "Racine de la carte", "/timelapse": "Timelapses", "/timelapse/thumbnail": "Vignettes des timelapses" };
+  return (
+    <div className="card" style={card}>
+      <p style={cardTitle}>Carte SD de l'imprimante</p>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"-8px 0 14px" }}>
+        Teste l'accès à la carte de l'imprimante (réseau local, lecture seule) : ce qu'elle contient à la racine
+        et dans le dossier des timelapses. Si elle s'ouvre, on pourra parcourir et regarder les timelapses dans l'appli.</p>
+      <button onClick={run} disabled={running}
+        style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 16px",
+          background: running ? "var(--border)" : "#3b82f6", border:"none", borderRadius:10,
+          color:"white", fontSize:13, fontWeight:700, cursor: running ? "not-allowed" : "pointer" }}>
+        {running ? <RefreshCw size={14} style={{ animation:"spin 1s linear infinite" }}/> : "💾"}
+        {running ? "Lecture de la carte…" : "Tester l'accès"}
+      </button>
+      {res && (
+        <div style={{ marginTop:14, display:"flex", flexDirection:"column", gap:8, fontSize:12 }}>
+          <p style={{ margin:0, fontWeight:800, color: res.ok ? "#16a34a" : "#ef4444" }}>
+            {res.ok ? "✓ La carte s'ouvre" : `✕ ${res.error || "Accès impossible"}`}</p>
+          {Object.entries(res.folders || {}).map(([path, f]) => (
+            <div key={path} style={{ padding:"8px 12px", borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)" }}>
+              <p style={{ margin:"0 0 4px", fontWeight:800, color:"var(--text)" }}>{LABEL[path] || path}
+                <span style={{ fontWeight:600, color:"var(--muted)" }}> · {f.error ? f.error : `${f.count} élément${f.count > 1 ? "s" : ""}`}</span></p>
+              {(f.items || []).slice(0, 30).map(x => (
+                <div key={x.name} style={{ display:"flex", gap:8, color:"var(--text2)", fontFamily:"monospace", fontSize:11.5 }}>
+                  <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{x.dir ? "📁 " : ""}{x.name}</span>
+                  {!x.dir && <span style={{ color:"var(--muted)" }}>{mo(x.size)}</span>}
+                  <span style={{ color:"var(--muted)" }}>{x.when}</span>
+                </div>))}
+              {f.count > 30 && <p style={{ margin:"4px 0 0", color:"var(--muted)" }}>… et {f.count - 30} autres</p>}
+              {f.raw?.length > 0 && <pre style={{ margin:"4px 0 0", fontSize:10.5, color:"var(--muted)", whiteSpace:"pre-wrap" }}>{f.raw.join("\n")}</pre>}
+            </div>))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EnrichFromCatalogSection() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState(null);
@@ -2010,6 +2059,7 @@ export default function Settings() {
       {tab === "tools" && (
       <AdminOnly><div className="wide-flow">
         <StorageSection/>
+        <SdProbeSection/>
         <SourceBackfillSection/>
         <EnrichFromCatalogSection/>
         <RecalculateSection/>
