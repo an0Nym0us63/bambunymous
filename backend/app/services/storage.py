@@ -145,8 +145,21 @@ def _nas_cat(parts: tuple, name: str) -> str:
     return "other"
 
 
+# Le detail des 3MF d'origine sur le NAS (26/10/2026) : la bibliotheque, ses anciennes versions et ce qu'aucun modele
+# ne reclame, et les copies restees dans les dossiers des impressions (retirees une fois verifiees, a la sauvegarde).
+MW_PARTS = [("lib", "bibliothèque"), ("old", "anciennes versions"), ("other", "sans modèle connu"), ("copies", "copies dans les impressions")]
+
+
+def _mw_part(parts: tuple) -> str:
+    if parts[0] != "Système":
+        return "copies"
+    sub = parts[2] if len(parts) > 3 else ""
+    return "old" if sub == "_Anciens" else "other" if sub in ("_Autres", "_Données") else "lib"
+
+
 def _nas_scan(root: Path) -> dict:
     sums = {k: [0, 0] for k, _l, _c in NAS_CATS}
+    mw = {k: [0, 0] for k, _l in MW_PARTS}
     for dirpath, _dirs, files in os.walk(root):
         rel = Path(dirpath).relative_to(root).parts
         for f in files:
@@ -159,8 +172,14 @@ def _nas_scan(root: Path) -> dict:
             k = _nas_cat(rel + (f,), f)
             sums[k][0] += n
             sums[k][1] += 1
+            if k == "mw_tmf":
+                m = mw[_mw_part(rel + (f,))]
+                m[0] += n
+                m[1] += 1
+    parts = [{"key": k, "label": l, "bytes": mw[k][0], "files": mw[k][1]} for k, l in MW_PARTS if mw[k][1]]
     return {"total": sum(v[0] for v in sums.values()), "files": sum(v[1] for v in sums.values()),
-            "cats": [{"key": k, "label": l, "color": c, "bytes": sums[k][0], "files": sums[k][1]} for k, l, c in NAS_CATS]}
+            "cats": [{"key": k, "label": l, "color": c, "bytes": sums[k][0], "files": sums[k][1],
+                      **({"parts": parts} if k == "mw_tmf" and parts else {})} for k, l, c in NAS_CATS]}
 
 
 async def nas_usage(fresh: bool = False) -> dict:
@@ -178,6 +197,8 @@ async def nas_usage(fresh: bool = False) -> dict:
     dk = chk.get("disk")
     v["disk"] = {"total": dk["total"], "free": dk["free"], "used": dk["total"] - dk["free"]} if dk else None
     only = [e for k, e in AR._index().items() if isinstance(e, dict) and e.get("purged")]
+    # le menage des copies dans les impressions se fait une fois, a la sauvegarde qui suit sa mise en place
+    v["mw_swept"] = bool(AR._index().get("@origin_swept"))
     v.update(ok=True, dir=root, at=time.time(), only_nas={"bytes": sum(e.get("size") or 0 for e in only), "files": len(only)},
              last_backup=(await AR.settings_get()).get("last_backup"))
     _NAS_CACHE.update(at=time.time(), v=v)

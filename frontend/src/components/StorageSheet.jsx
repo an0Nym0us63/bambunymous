@@ -131,6 +131,10 @@ export default function StorageSheet({ onClose }) {
                     {c.covers && <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", paddingLeft: 18 }}>
                       couvre <b style={{ color: c.color }}>{c.covers.prints.toLocaleString("fr-FR")}</b> impression{c.covers.prints > 1 ? "s" : ""} sur {c.covers.of.toLocaleString("fr-FR")}
                       {c.key === "mw_tmf" ? " liées à MakerWorld" : ""}</div>}
+                    {/* sur le NAS : de quoi sont faits les 3MF d'origine (la bibliotheque n'est qu'une partie) */}
+                    {c.parts && <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", paddingLeft: 18, display: "flex", flexDirection: "column", gap: 1 }}>
+                      {c.parts.map(p => <span key={p.key}>{p.label} <b style={{ color: p.key === "copies" ? "#d97706" : "var(--text2)" }}>{fmtBytes(p.bytes)}</b> · {p.files} fich.
+                        {p.key === "copies" && !cur.mw_swept ? " (retirées à la prochaine sauvegarde, une fois vérifiées)" : ""}</span>)}</div>}
                   </div>
                 ))}
               </div>
