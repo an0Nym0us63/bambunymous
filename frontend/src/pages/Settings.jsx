@@ -145,7 +145,7 @@ function ArchiveSection() {
         <div style={{ ...box, borderColor: ok ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)" }}>
           <b style={{ color: ok ? "#16a34a" : "#ef4444" }}>{ok ? "✓ Dossier prêt" : "✕ Dossier indisponible"}</b> · <code>{s.dir}</code>
           {ok && s.check.disk && <> · {go(s.check.disk.free)} libres sur {go(s.check.disk.total)}</>}
-          {ok && s.check.same_disk && <div style={{ color:"#d97706", fontWeight:700 }}>⚠ Ce dossier est sur le même disque que l'appli : le NAS n'est sans doute pas monté.</div>}
+          {ok && s.check.not_mounted && <div style={{ color:"#d97706", fontWeight:700 }}>⚠ Ce dossier n'est pas monté depuis la machine (compose.yaml) : la sauvegarde resterait dans le conteneur.</div>}
           {!ok && <div>{s.check.why}</div>}
         </div>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>

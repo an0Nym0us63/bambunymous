@@ -101,13 +101,14 @@ def _check_root(root: str) -> dict:
         free = {"total": du.total, "free": du.free}
     except OSError:
         free = None
-    # le dossier monte n'est-il pas simplement le disque du conteneur ? (montage oublie)
-    same = False
+    # un dossier monte depuis la machine (volume) est un point de montage ; sinon, c'est un simple dossier
+    # du conteneur (montage oublie) : la sauvegarde partirait avec lui. Meme disque que /data : possible et
+    # normal quand le NAS fait aussi tourner Docker, ce n'est donc pas un critere.
     try:
-        same = os.stat(p).st_dev == os.stat(DATA_DIR).st_dev
+        mounted = os.path.ismount(p)
     except OSError:
-        pass
-    return {"ok": True, "disk": free, "same_disk": same}
+        mounted = True
+    return {"ok": True, "disk": free, "not_mounted": not mounted}
 
 
 async def status() -> dict:
