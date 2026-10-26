@@ -241,6 +241,27 @@ async def _asgi_get(app, path: str, headers: list) -> dict:
     return box
 
 
+def _hot(prof, total_ms: float) -> list:
+    """Ou part le temps d'un appel profile : les fonctions de l'appli (temps cumule, elles et ce qu'elles
+    appellent), puis les plus gourmandes des bibliotheques (temps propre). Les 8 premieres."""
+    import pstats
+    st = pstats.Stats(prof)
+    mine, libs = [], []
+    for (fn, line, name), (_cc, nc, tt, ct, _callers) in st.stats.items():
+        if fn.startswith(_APP_DIR) and "site-packages" not in fn:
+            rel = os.path.relpath(fn, _APP_DIR).replace(os.sep, "/")
+            if rel.startswith("app/core/perf.py") or name in ("<module>",):
+                continue
+            mine.append({"fn": f"{rel}:{line} {name}", "ms": round(ct * 1000, 1), "calls": nc, "own": False})
+        elif "site-packages" in fn or "lib" in fn:
+            pkg = fn.replace(os.sep, "/").split("site-packages/")[-1].split("/")[0] if "site-packages" in fn else "python"
+            libs.append({"fn": f"{pkg} · {name}", "ms": round(tt * 1000, 1), "calls": nc, "own": True})
+    mine.sort(key=lambda x: -x["ms"])
+    libs.sort(key=lambda x: -x["ms"])
+    keep = [x for x in mine if x["ms"] >= max(1.0, total_ms * 0.05)][:5] + [x for x in libs if x["ms"] >= 1.0][:3]
+    return keep
+
+
 async def bench(app, headers: list, limit: int = 15) -> dict:
     """Les routes GET mesurees les plus lentes (sans parametre de chemin ni service exterieur), une a une."""
     rows = [r for r in snapshot(600)["routes"] if r["route"].startswith("GET ") and r["count"] > 0
@@ -257,11 +278,23 @@ async def bench(app, headers: list, limit: int = 15) -> dict:
                 runs.append({"error": f"{type(e).__name__}: {e}"})
         ok = [x for x in runs if "ms" in x]
         best = min(ok, key=lambda x: x["ms"]) if ok else None
+        # un quatrieme passage, profile : les fonctions ou part le temps (pas compte dans « seule »)
+        hot = []
+        if best is not None:
+            import cProfile
+            prof = cProfile.Profile()
+            try:
+                prof.enable()
+                x = await _asgi_get(app, path, headers)
+                prof.disable()
+                hot = _hot(prof, x.get("full") or best["ms"])
+            except Exception:
+                prof.disable()
         out.append({"route": r["route"], "live_p50": r["p50"], "live_p95": r["p95"],
                     "alone": round(best["ms"], 1) if best else None, "alone_db": round(best["db"], 1) if best else None,
                     "q": best["q"] if best else None, "status": best.get("status") if best else None,
                     "top_ms": round(best["top"][0], 1) if best else None, "top_sql": best["top"][1] if best else None,
-                    "error": None if ok else runs[-1].get("error")})
+                    "error": None if ok else runs[-1].get("error"), "hot": hot})
     return {"at": time.time(), "routes": out}
 
 

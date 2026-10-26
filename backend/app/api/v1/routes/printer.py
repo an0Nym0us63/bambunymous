@@ -433,9 +433,11 @@ async def printer_status(_: str = Depends(get_current_user)):
         from ....services import drying as _drying
         async with AsyncSessionLocal() as db:
             await _drying.load(db)
-            spools_r = await db.execute(_sel(_Spool).where(_Spool.id.in_(all_spool_ids)))
-            for sp in spools_r.scalars().all():
-                fil = await db.get(_Fil, sp.filament_id) if sp.filament_id else None
+            # chaque bobine avec son filament, en une requete (une par bobine avant le 26/10/2026 : l'etat de
+            # l'imprimante, relu toutes les quelques secondes, en faisait une trentaine)
+            spools_r = await db.execute(_sel(_Spool, _Fil).outerjoin(_Fil, _Fil.id == _Spool.filament_id)
+                                        .where(_Spool.id.in_(all_spool_ids)))
+            for sp, fil in spools_r.all():
                 _spools_map[sp.id] = (sp, fil)
             # Stock de chaque filament en place : somme du restant de ses
             # bobines actives (celle de l'AMS comprise).

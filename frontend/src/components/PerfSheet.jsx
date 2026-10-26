@@ -156,6 +156,14 @@ function DbView() {
           </div>
           {r.top_ms >= 20 && r.top_sql && <code data-tip={r.top_sql} style={{ fontSize: 10.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             plus lente {perfMs(r.top_ms)} : {r.top_sql}</code>}
+          {/* ou part le temps : les fonctions de l'appli (avec ce qu'elles appellent), puis les bibliotheques */}
+          {r.hot?.length > 0 && r.alone >= 30 && <details>
+            <summary style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text2)", cursor: "pointer" }}>Où part le temps</summary>
+            <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 4 }}>
+              {r.hot.map((h, i) => <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline", minWidth: 0, fontSize: 10.5 }}>
+                <code style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: h.own ? "var(--muted)" : "var(--text2)" }}>{h.fn}</code>
+                <span style={{ whiteSpace: "nowrap", fontWeight: 800, color: "var(--muted)" }}>{perfMs(h.ms)} · {h.calls}×</span></div>)}
+            </div></details>}
         </div>; })}
       {!bench.routes.length && <p style={{ fontSize: 13, color: "var(--muted)", textAlign: "center" }}>Aucune route à rejouer pour l'instant.</p>}
     </>}
