@@ -740,6 +740,7 @@ async def delete_collection(cid: str) -> dict:
 
 # ── Createurs suivis et leurs modeles ──────────────────────────────────────
 FOLLOWS = "/design-user-service/user/{uid}/follows?offset={offset}&limit=50"
+FANS = "/design-user-service/user/{uid}/fans?offset={offset}&limit=50"
 PUBLISHED = "/design-service/published/{uid}/design?offset=0&limit={limit}"
 _PUB_CACHE = {}            # uid -> (instant, [modeles]) : 1 h, pour ne pas relire a chaque ouverture
 _PUB_TTL = 7200           # 2 h : le prechargement horaire les rafraichit
@@ -763,11 +764,22 @@ async def following(fresh: bool = False) -> list:
     hit = _FOLLOW_CACHE.get(uid)
     if hit and not fresh and time.time() - hit[0] < _PUB_TTL:
         return hit[1]
+    out = await _people(FOLLOWS, uid, tok, 1000)
+    _FOLLOW_CACHE[uid] = (time.time(), out)
+    return out
+
+
+async def _people(path: str, uid: str, tok: str, most: int, strict: bool = False) -> list:
+    """Une liste de comptes MakerWorld (mes abonnements, mes abonnes), page par page."""
+    import asyncio
+    from .makerworld import _get_json
     out, offset = [], 0
-    while len(out) < 1000:
-        code, d = await asyncio.to_thread(_get_json, FOLLOWS.format(uid=uid, offset=offset), tok)
+    while len(out) < most:
+        code, d = await asyncio.to_thread(_get_json, path.format(uid=uid, offset=offset), tok)
         if code == 401:
             raise AccountError("Jeton refusé ou expiré : reconnecte le compte")
+        if strict and code != 200 and not out:          # (mes abonnements : liste vide, comme avant)
+            raise AccountError(f"Liste illisible (HTTP {code})")
         hits = [h for h in _items(d) if isinstance(h, dict) and str(h.get("uid") or "").isdigit()]
         if not hits:
             break
@@ -775,7 +787,25 @@ async def following(fresh: bool = False) -> list:
                  "handle": h.get("handle") if isinstance(h.get("handle"), str) else "",
                  "avatar": h.get("avatar") if isinstance(h.get("avatar"), str) else None} for h in hits]
         offset += 50
-    _FOLLOW_CACHE[uid] = (time.time(), out)
+    return out[:most]
+
+
+async def account_details() -> dict:
+    """Le detail du compte (26/10/2026) : mes boosts a donner avec leur expiration, mes abonnes et mes
+    abonnements. Chaque partie lue a part : une qui echoue ne cache pas les autres."""
+    out = {}
+    try:
+        out["boosts"] = await boost_rights()
+    except Exception as e:
+        out["boosts_error"] = str(e)
+    try:
+        out["follows"] = await following()
+    except Exception as e:
+        out["follows_error"] = str(e)
+    try:
+        out["fans"] = await _people(FANS, await _my_uid(), await token(), 300, strict=True)
+    except Exception as e:
+        out["fans_error"] = str(e)
     return out
 
 

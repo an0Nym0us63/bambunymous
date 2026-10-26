@@ -459,6 +459,13 @@ async def mw_boosts(_: str = Depends(get_current_user)):
     return await _call(A.boosts())
 
 
+@router.get("/me/details")
+async def mw_me_details(_: str = Depends(get_current_user)):
+    """Le detail de mon compte : boosts a donner (et leur expiration), abonnes, abonnements."""
+    from ....services import makerworld_account as A
+    return await _call(A.account_details())
+
+
 @router.get("/model/{design_id}/boost")
 async def mw_boost_state(design_id: str, _: str = Depends(get_current_user)):
     from ....services import makerworld_account as A

@@ -4,6 +4,7 @@ import { showAlert } from "../utils/dialog";
 import { useIsAdmin } from "../store/auth";
 import MwImg from "./MwImg";
 import { prefetchModel } from "./MakerWorldModelSheet";
+import MwAccountSheet from "./MwAccountSheet";
 import { Boxes, Coins, Download, Heart, Printer, Users, Zap } from "lucide-react";
 
 // Onglet « Créateur » : mes points MakerWorld (solde, gains 7 / 30 jours,
@@ -28,6 +29,7 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
   const [view, setView] = useState("models");    // models | points
   const [imported, setImported] = useState(0);   // relit la page apres un import
   const [importing, setImporting] = useState(false);
+  const [acct, setAcct] = useState(false);       // le detail du compte (boosts, abonnes, abonnements)
   const fileRef = useRef(null);
   const isAdmin = useIsAdmin();
 
@@ -143,6 +145,9 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
     <div style={{ display:"flex", flexDirection:"column", gap:12, paddingBottom:16 }}>
       <div style={{ padding:"14px 16px", borderRadius:22, border:"1px solid color-mix(in srgb, #F59E0B 25%, var(--border))",
         background:"radial-gradient(90% 60% at 100% 0%, rgba(245,158,11,0.16), transparent 70%), radial-gradient(70% 50% at 0% 0%, rgba(34,197,94,0.12), transparent 70%), var(--surface2)" }}>
+        {acct && <MwAccountSheet profile={p} fans={p.fans} onClose={() => setAcct(false)}/>}
+        {/* le nom, le niveau et les pastilles : touche pour le detail du compte (boosts et leur expiration, abonnes…) */}
+        <div onClick={() => setAcct(true)} data-tip="Détails du compte : boosts, abonnés, abonnements" style={{ cursor:"pointer" }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
           {p.avatar && <MwImg src={p.avatar} w={96} eager style={{ width:50, height:50, borderRadius:"50%", flexShrink:0, boxShadow:"0 0 0 2px #22C55E, 0 8px 18px -8px #22C55E" }}/>}
           <div style={{ flex:1, minWidth:0 }}>
@@ -166,6 +171,9 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
               <Icon size={13} color={c} strokeWidth={2.4}/><b style={{ color:"var(--text)" }}>{v}</b> {l}
             </span>
           ))}
+          <span style={{ display:"inline-flex", alignItems:"center", padding:"3px 10px", borderRadius:20, fontSize:11.5, fontWeight:700,
+            color:"var(--muted)", border:"1px dashed var(--border)" }}>Détails ›</span>
+        </div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(135px,1fr))", gap:10, marginTop:12 }}>
           {[[Coins, "#f59e0b", data.earned_total != null ? pts(data.earned_total) : "—", "points gagnés",
