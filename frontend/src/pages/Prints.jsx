@@ -2091,7 +2091,8 @@ const isVideoUrl = (u) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u || "");
 // Les medias d'une fiche (26/10/2026) : deux onglets, « Souvenirs » (mes photos et videos) et « Technique »
 // (le timelapse, les captures des couches dans l'ordre de l'impression). Une seule bande visible a la fois.
 const TL_NAME = "Video-Timelapse.mp4";
-const SNAP_ORDER = ["layer1", "layer2", "pct50", "pct99", "pct100", "fail"];
+// la fin d'abord (le resultat), puis en remontant vers la premiere couche
+const SNAP_ORDER = ["fail", "pct100", "pct99", "pct50", "layer2", "layer1"];
 const SNAP_NAMES = { layer1: "Couche 1", layer2: "Couche 2", pct50: "50 %", pct99: "99 %", pct100: "Fin", fail: "Échec" };
 const snapKey = name => (name || "").replace(/^snapshot-/, "").replace(/\.[^.]+$/, "");
 const snapRank = name => { const i = SNAP_ORDER.indexOf(snapKey(name)); return i < 0 ? 99 : i; };
@@ -2198,7 +2199,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
   useEffect(()=>{ onCountChange?.(allItems.length); }, [allItems.length]);
 
   // Souvenirs : mes photos, puis mes videos (en boucle) ; Technique : le timelapse, puis les captures des
-  // couches dans l'ordre de l'impression (Couche 1 -> 50 % -> Fin)
+  // couches de la fin vers le debut (Fin -> 99 % -> 50 % -> Couche 2 -> Couche 1)
   const isSnapName = n => /^snapshot-/.test(n || "");
   const vids = (userPhotos || []).filter(x => isVideoUrl(x.url) && x.filename !== TL_NAME && !deletedNames.has(x.filename))
     .map(x => ({ url: x.url, name: x.filename, label: "Vidéo" }));
