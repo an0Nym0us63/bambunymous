@@ -3257,6 +3257,17 @@ function Spool({ status, o, sz }) {
     {Math.round(pct * 100)}<span style={{ fontSize: fs * 0.7 }}>%</span></span>;
   const spool = size => <span data-pk="" style={{ display: "inline-flex", flexShrink: 0, filter: `drop-shadow(0 6px 14px ${color}55)` }}>
     <SpoolSVG colors={colors} size={size} active={live} type={si.multicolor_type}/></span>;
+  // les autres bobines du filament en stock (comme la fiche bobine) : leurs ombres decalees derriere, et « +x en stock »
+  const more = si.filament_spools > 1 ? si.filament_spools - 1 : 0;
+  const moreG = si.filament_stock_g != null && g != null ? Math.max(0, si.filament_stock_g - g) : null;
+  const stacked = size => { const k = size / 118;
+    return <span style={{ position: "relative", display: "inline-flex", flexShrink: 0, filter: `drop-shadow(0 8px 18px ${color}66)`,
+      marginRight: more > 0 ? (more > 1 ? 30 : 18) * k : 0 }}>
+      {more > 1 && <span aria-hidden="true" style={{ position: "absolute", top: 10 * k, left: 34 * k, opacity: 0.35 }}>
+        <SpoolSVG colors={colors} size={100 * k} type={si.multicolor_type}/></span>}
+      {more > 0 && <span aria-hidden="true" style={{ position: "absolute", top: 5 * k, left: 18 * k, opacity: 0.6 }}>
+        <SpoolSVG colors={colors} size={108 * k} type={si.multicolor_type}/></span>}
+      <span data-pk="" style={{ position: "relative", display: "inline-flex" }}><SpoolSVG colors={colors} size={size} active={live} type={si.multicolor_type}/></span></span>; };
   const chip = (txt, c) => <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 800,
     whiteSpace: "nowrap", color: c, background: `${c}1c` }}>{txt}</span>;
   const ago = iso => { if (!iso) return "—"; const d = Math.round((Date.now() - utc(iso).getTime()) / 86400000); return d <= 0 ? "aujourd'hui" : d === 1 ? "hier" : `il y a ${d} j`; };
@@ -3268,9 +3279,10 @@ function Spool({ status, o, sz }) {
         {/* la bobine en vedette, sur un fond de sa couleur */}
         <div style={{ position: "relative", overflow: "hidden", borderRadius: 22, padding: 18, display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap",
           background: `radial-gradient(circle at 15% 50%, ${color}55, transparent 60%), linear-gradient(135deg, ${color}22, transparent 70%), var(--surface2)` }}>
-          {spool(140)}
+          {stacked(140)}
           <div style={{ flex: "1 1 180px", minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{chip(slot, "#8B5CF6")}{live && chip("● en cours", "#22c55e")}
+              {more > 0 && chip(`🧵 +${more} en stock${moreG ? ` · ${fmtG(moreG)}` : ""}`, "#22C55E")}
               {si.needs_drying && chip("à sécher", "#0ea5e9")}{si.swatch === false && chip("échantillon à faire", "#f59e0b")}</div>
             <div style={{ fontSize: 26, fontWeight: 900, color: "var(--text)", lineHeight: 1.1 }}>{name}</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text2)" }}>{[type, si.brand].filter(Boolean).join(" · ")}</div>

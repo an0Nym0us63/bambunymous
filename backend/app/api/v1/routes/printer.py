@@ -132,6 +132,8 @@ class SpoolInfoOut(BaseModel):
     needs_drying: Optional[bool] = None
     # Restant cumule de toutes les bobines actives du filament.
     filament_stock_g: Optional[float] = None
+    # Nombre de bobines actives du filament (celle-ci comprise) : la fiche les dessine empilees, avec « +x ».
+    filament_spools: Optional[int] = None
     # Pour la fiche « filament en cours » de l'accueil
     color_code: Optional[str] = None     # code couleur du catalogue Bambu (ex. 10600)
     name_en: Optional[str] = None
@@ -321,7 +323,8 @@ def _tray_spool_info(t, spools_map, stock_map=None):
         si.last_dried_at = str(sp.last_dried_at) if sp.last_dried_at else None
         si.needs_drying = needs_drying(sp, f)
         if stock_map is not None and f is not None:
-            si.filament_stock_g = stock_map.get(f.id)
+            g, n = stock_map.get(f.id, (None, None))
+            si.filament_stock_g, si.filament_spools = g, n
     return si
 
 
@@ -439,11 +442,11 @@ async def printer_status(_: str = Depends(get_current_user)):
             from sqlalchemy import func as _func
             fil_ids = {f.id for _, f in _spools_map.values() if f is not None}
             if fil_ids:
-                _stock_map = dict((await db.execute(
-                    _sel(_Spool.filament_id, _func.coalesce(_func.sum(_Spool.remaining_weight_g), 0))
+                _stock_map = {fid: (g, n) for fid, g, n in (await db.execute(
+                    _sel(_Spool.filament_id, _func.coalesce(_func.sum(_Spool.remaining_weight_g), 0), _func.count(_Spool.id))
                     .where(_Spool.filament_id.in_(fil_ids), _Spool.archived.is_(False))
                     .group_by(_Spool.filament_id)
-                )).all())
+                )).all()}
     return PrinterStatusOut(
         connected=s.connected,
         serial=s.serial,
