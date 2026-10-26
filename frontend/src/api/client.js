@@ -90,6 +90,44 @@ client.interceptors.response.use(
   }
 );
 
+// Une meme lecture demandee par plusieurs tuiles au meme moment (27/10/2026 : l'accueil lancait 57 appels
+// dont l'etat de l'imprimante 4 fois, les bobines 3 fois…) : la seconde attend la reponse de la premiere au
+// lieu d'en relancer une. La reponse reste valable 1,5 s (les tuiles arrivent en deux vagues a ~100 ms) ;
+// chaque tuile qui s'y joint recoit sa propre copie (aucune ne modifie les donnees d'une autre) ; une ecriture
+// vide la table (une lecture lancee apres elle repart du serveur). Pas pour un appel annulable, ni un fichier.
+const SHARE_MS = 1500;
+const _inflight = new Map();
+const _clone = v => (typeof structuredClone === "function" ? structuredClone(v) : JSON.parse(JSON.stringify(v)));
+const _get = client.get.bind(client);
+client.get = (url, config = {}) => {
+  if (config.signal || config.onDownloadProgress || (config.responseType && config.responseType !== "json"))
+    return _get(url, config);
+  const key = JSON.stringify([currentFriend()?.id || "", url, config.params || null, !!config.home]);
+  const hit = _inflight.get(key);
+  if (hit && !hit.done) return hit.p.then(r => ({ ...r, data: _clone(hit.copy) }));
+  if (hit && hit.r && Date.now() < hit.until) return Promise.resolve({ ...hit.r, data: _clone(hit.copy) });
+  const e = { done: false, copy: undefined, r: null, until: 0 };
+  e.p = _get(url, config).then(r => {
+    // avant que la premiere tuile ne touche a la reponse : une copie intacte pour les suivantes
+    e.copy = _clone(r.data);
+    e.r = r;
+    e.until = Date.now() + SHARE_MS;
+    e.done = true;
+    setTimeout(() => { if (_inflight.get(key) === e) _inflight.delete(key); }, SHARE_MS);
+    return r;
+  }, err => {
+    e.done = true;
+    if (_inflight.get(key) === e) _inflight.delete(key);
+    throw err;
+  });
+  _inflight.set(key, e);
+  return e.p;
+};
+client.interceptors.request.use(config => {
+  if ((config.method || "get").toLowerCase() !== "get") _inflight.clear();
+  return config;
+});
+
 // Une photo d'impression ou de groupe ajoutee, retiree ou mise en avant : on le dit a toute
 // l'appli (les photos a joindre a une evaluation, l'apercu d'un partage ouvert se relisent).
 export const PHOTOS_CHANGED = "bn-photos-changed";
