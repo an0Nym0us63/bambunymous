@@ -3237,40 +3237,11 @@ async def _load_data() -> dict:
     pages = [(x,) for x in mem.get("pages") or []]
     late = [(datetime.fromisoformat(mem["late"]),)] if mem.get("late") else []
     act_kinds = {key: list((mem.get(key) or {}).items()) for key, _m, _rx in _ACT_PATTERNS}
-    # photos deposees dans le dossier d'un groupe d'impressions
-    gfiles = []
-    videos = []
-    photo_stats = []
-    try:
-        from ..core.config import settings
-        from pathlib import Path
-        data = Path(settings.DATA_DIR)
-        root = data / "groups"
-        if root.is_dir():
-            for d_ in root.iterdir():
-                if d_.is_dir():
-                    for f in d_.iterdir():
-                        if f.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"):
-                            gfiles.append(datetime.utcfromtimestamp(f.stat().st_mtime))
-                        v = _video_info(f)
-                        if v:
-                            videos.append({"print_id": None, "group": True, **v})
-        # videos des impressions : ajoutees a la main (une video devient un WebP anime)
-        for s_ in snaps:
-            fp = getattr(s_, "file_path", None)
-            if s_.trigger == "manual" and fp:
-                v = _video_info(data / fp)
-                if v:
-                    videos.append({"print_id": s_.print_id, "group": False, **v, "at": _ts(s_.taken_at) or v["at"]})
-        # photos ajoutees : taille et luminosite (photo noire, blanche, panorama…)
-        for s_ in snaps:
-            fp = getattr(s_, "file_path", None)
-            if s_.trigger == "manual" and fp:
-                p_ = _photo_info(data / fp)
-                if p_:
-                    photo_stats.append({**p_, "print_id": s_.print_id, "at": _ts(s_.taken_at) or p_["at"]})
-    except Exception:
-        logger.exception("[SUCCES] videos")
+    # photos et videos (groupes, impressions) : lues sur le disque, a part (26/10/2026) : ouvrir chaque photo
+    # avec PIL bloquait tout le serveur plusieurs secondes au premier calcul apres un redemarrage
+    import asyncio as _aio
+    gfiles, videos, photo_stats = await _aio.to_thread(_scan_media, [
+        (getattr(s_, "file_path", None), s_.trigger, s_.print_id, s_.taken_at) for s_ in snaps])
     try:
         from . import ams_log
         changes = [datetime.fromisoformat(x) for x in await ams_log.drain()]
@@ -3333,6 +3304,82 @@ _VIDEO_CACHE: dict = {}
 _PHOTO_CACHE: dict = {}
 
 
+def _scan_media(snaps: list) -> tuple:
+    """Photos de groupes, videos et photos ajoutees (taille, luminosite), lues sur le disque. Synchrone : appele
+    dans un fil a part. snaps : [(chemin, declencheur, impression, prise le)]."""
+    from ..core.config import settings
+    from pathlib import Path
+    data = Path(settings.DATA_DIR)
+    _photo_cache_load()
+    gfiles, videos, photo_stats = [], [], []
+    try:
+        root = data / "groups"
+        if root.is_dir():
+            for d_ in root.iterdir():
+                if d_.is_dir():
+                    for f in d_.iterdir():
+                        if f.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"):
+                            gfiles.append(datetime.utcfromtimestamp(f.stat().st_mtime))
+                        v = _video_info(f)
+                        if v:
+                            videos.append({"print_id": None, "group": True, **v})
+        # videos des impressions : ajoutees a la main (une video devient un WebP anime)
+        for fp, trig, pid, taken in snaps:
+            if trig == "manual" and fp:
+                v = _video_info(data / fp)
+                if v:
+                    videos.append({"print_id": pid, "group": False, **v, "at": _ts(taken) or v["at"]})
+        # photos ajoutees : taille et luminosite (photo noire, blanche, panorama…)
+        for fp, trig, pid, taken in snaps:
+            if trig == "manual" and fp:
+                p_ = _photo_info(data / fp)
+                if p_:
+                    photo_stats.append({**p_, "print_id": pid, "at": _ts(taken) or p_["at"]})
+    except Exception:
+        logger.exception("[SUCCES] videos")
+    _photo_cache_save()
+    return gfiles, videos, photo_stats
+
+
+# Ce qu'on sait des photos (taille, luminosite), garde aussi sur le disque (26/10/2026) : apres un redemarrage,
+# seules les photos nouvelles ou modifiees sont rouvertes.
+_PHOTO_DISK = {"loaded": False, "dirty": False}
+
+
+def _photo_cache_file():
+    from ..core.config import settings
+    from pathlib import Path
+    return Path(settings.DATA_DIR) / "cache" / "ach_photos.json"
+
+
+def _photo_cache_load() -> None:
+    if _PHOTO_DISK["loaded"]:
+        return
+    _PHOTO_DISK["loaded"] = True
+    try:
+        raw = json.loads(_photo_cache_file().read_text(encoding="utf-8"))
+        for k, v in raw.items():
+            p, _, mt = k.rpartition("|")
+            _PHOTO_CACHE[(p, float(mt))] = None if v is None else {**v, "at": datetime.fromisoformat(v["at"])}
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+
+
+def _photo_cache_save() -> None:
+    if not _PHOTO_DISK["dirty"]:
+        return
+    try:
+        f = _photo_cache_file()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        out = {f"{p}|{mt}": (None if v is None else {**v, "at": v["at"].isoformat()}) for (p, mt), v in _PHOTO_CACHE.items()}
+        tmp = f.with_suffix(".tmp")
+        tmp.write_text(json.dumps(out), encoding="utf-8")
+        tmp.replace(f)
+        _PHOTO_DISK["dirty"] = False
+    except OSError:
+        pass
+
+
 def _photo_info(path) -> dict | None:
     """Une photo : {at, w, h, lum (0-255)}, None pour une video ou un fichier
     illisible. Gardee en memoire par (chemin, date de modification)."""
@@ -3357,6 +3404,7 @@ def _photo_info(path) -> dict | None:
         except Exception:
             out = None
     _PHOTO_CACHE[key] = out
+    _PHOTO_DISK["dirty"] = True
     return out
 VIDEO_EXT = (".mp4", ".mov", ".m4v", ".webm")
 
@@ -5962,10 +6010,22 @@ _BASE: dict = {"t": 0.0, "v": None, "task": None}
 
 
 async def _compute_base(now: datetime) -> tuple:
-    series = compute_series(await _load_data(), now)
-    live = await _live_values()
-    _BASE.update(t=time.time(), v=(series, live))
-    return series, live
+    """Le gros calcul. Un seul a la fois (26/10/2026) : des appels simultanes (la page, le podium, la fete des
+    grades, a froid apres un redemarrage) attendent celui qui tourne au lieu d'en relancer chacun un. Les series
+    se calculent dans un fil a part : la boucle du serveur continue de repondre aux autres requetes."""
+    import asyncio
+    run = _BASE.get("run")
+    if run is not None and not run.done():
+        return await asyncio.shield(run)
+
+    async def go():
+        data = await _load_data()
+        series = await asyncio.to_thread(compute_series, data, now)
+        live = await _live_values()
+        _BASE.update(t=time.time(), v=(series, live))
+        return series, live
+    run = _BASE["run"] = asyncio.ensure_future(go())
+    return await asyncio.shield(run)
 
 
 async def warm(delay_s: int = 15) -> None:
@@ -6000,9 +6060,15 @@ async def _base(cached: bool, now: datetime) -> tuple:
 
 async def evaluate(now: datetime | None = None, cached: bool = False) -> dict:
     """Valeurs actuelles et paliers atteints (avec leur date), sans rien ecrire."""
+    import asyncio
     series, live = await _base(cached and now is None, now or datetime.utcnow())
     now = now or datetime.utcnow()
     st = await _state_get() or {}
+    # le parcours du catalogue (paliers, series, ensembles, cartes) : dans un fil a part, lui aussi
+    return await asyncio.to_thread(_evaluate_sync, series, live, st, now)
+
+
+def _evaluate_sync(series: dict, live: dict, st: dict, now: datetime) -> dict:
     bonus = st.get("bonus") or {}
     out = {}
     for a in CATALOG:
@@ -7103,23 +7169,58 @@ def summary(v: dict) -> dict:
             "got": sum(c["got"] for c in cats.values()), "total": sum(c["total"] for c in cats.values())}
 
 
-_PODIUM = {"t": 0.0, "v": None}
+_PODIUM = {"t": 0.0, "v": None, "run": None, "loaded": False}
+PODIUM_TTL = 300
+
+
+def _podium_file():
+    from ..core.config import settings
+    from pathlib import Path
+    return Path(settings.DATA_DIR) / "cache" / "podium.json"
 
 
 async def podium(me_name: str, fresh: bool = False) -> dict:
-    """Moi et chacun de mes copains : score par section, lu chez eux par leur
-    cle (avec mes medailles uniques jointes, comme le relais de la page)."""
+    """Moi et chacun de mes copains : score par section, lu chez eux par leur cle. Sans attendre les copains
+    (26/10/2026) : le dernier classement connu repart tout de suite (gardé aussi sur le disque, pour un redemarrage),
+    avec MON score toujours du moment ; les copains sont relus en fond quand il a plus de 5 min. Un copain
+    eteint faisait attendre la page (et la tuile de l'accueil) jusqu'a 30 s."""
+    import asyncio
+    if not _PODIUM["loaded"]:
+        _PODIUM["loaded"] = True
+        try:
+            _PODIUM["v"] = json.loads(_podium_file().read_text(encoding="utf-8"))
+            _PODIUM["t"] = 0.0
+        except (OSError, ValueError):
+            pass
+    if fresh or not _PODIUM["v"]:
+        return await _podium_shared(me_name)
+    if time.time() - _PODIUM["t"] >= PODIUM_TTL and (_PODIUM["run"] is None or _PODIUM["run"].done()):
+        _PODIUM["run"] = asyncio.ensure_future(_podium_compute(me_name))
+    me = {"id": "me", "name": me_name, "me": True, "status": "ok", **summary(await view())}
+    people = [me] + [p for p in _PODIUM["v"].get("people") or [] if not p.get("me")]
+    return {**_PODIUM["v"], "people": people, "refresh": _CACHE["v"] is None}
+
+
+async def _podium_shared(me_name: str) -> dict:
+    """Un seul calcul a la fois : les demandes simultanees attendent le meme."""
+    import asyncio
+    run = _PODIUM["run"]
+    if run is None or run.done():
+        run = _PODIUM["run"] = asyncio.ensure_future(_podium_compute(me_name))
+    return await asyncio.shield(run)
+
+
+async def _podium_compute(me_name: str) -> dict:
     import asyncio
     from . import friends as F
-    if not fresh and _PODIUM["v"] and time.time() - _PODIUM["t"] < 300:
-        return _PODIUM["v"]
     people = [{"id": "me", "name": me_name, "me": True, "status": "ok", **summary(await view())}]
     mine = ",".join(await my_uniques())
 
     async def one(f):
         head = {"id": f["id"], "name": f.get("name") or f"Copain {f['id']}", "me": False}
         try:
-            r = await asyncio.to_thread(F._get, f["url"], f["key"], "achievements", None, 30,
+            # 5 s pour joindre un copain (eteint : on n'attend plus 30 s), 25 s pour qu'il reponde
+            r = await asyncio.to_thread(F._get, f["url"], f["key"], "achievements", None, (5, 25),
                                         {"X-BN-Achievements": mine})
             if r.status_code == 404:
                 return {**head, "status": "outdated"}
@@ -7146,6 +7247,14 @@ async def podium(me_name: str, fresh: bool = False) -> dict:
             _CACHE["v"] = None
     out = {"people": people, "categories": [{"id": c, "emoji": e, "name": n} for c, e, n in CATEGORIES]}
     _PODIUM.update(t=time.time(), v={**out, "refresh": False})
+    try:
+        f = _podium_file()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        tmp = f.with_suffix(".tmp")
+        tmp.write_text(json.dumps(_PODIUM["v"], default=str), encoding="utf-8")
+        tmp.replace(f)
+    except (OSError, TypeError, ValueError):
+        pass
     return {**out, "refresh": _CACHE["v"] is None}
 
 
