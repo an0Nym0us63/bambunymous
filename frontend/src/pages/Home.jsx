@@ -565,15 +565,24 @@ function RackState({ rack, compact = false }) {
 // (rang A en haut : 1 3 5, rang B en bas : 2 4 6), les rangs a droite, fleche sur celui qui est leve ──
 const FLOW_SHORT = { S: "Standard", A: "Standard", X: "Standard", H: "Haut débit", E: "Haut débit", U: "TPU HF", B: "E3D HF" };
 const flowShort = t => FLOW_SHORT[String(t || "").toUpperCase()[1]] || "";
-// une buse dessinee : le radiateur a ailettes, le corps (un trait a la couleur du filament), la pointe
+// une buse dessinee, dans le style de l'appli (26/10/2026) : un radiateur en metal arrondi, le corps en
+// degrade a la couleur du filament (avec son reflet), la pointe en laiton, une ombre douce dessous
 function NozzleArt({ color, h = 54, dim = false }) {
-  const w = h * 0.5;
-  return <svg width={w} height={h} viewBox="0 0 26 52" aria-hidden="true" style={{ opacity: dim ? 0.35 : 1, flexShrink: 0 }}>
-    <rect x="2" y="1" width="22" height="13" rx="2.5" fill="#cbd5e1" stroke="#64748b" strokeWidth="1"/>
-    {[4.5, 8, 11.5].map(y => <line key={y} x1="4" x2="22" y1={y} y2={y} stroke="#64748b" strokeWidth="1"/>)}
-    <rect x="7" y="14" width="12" height="27" rx="2" fill="#e2e8f0" stroke="#64748b" strokeWidth="1"/>
-    <rect x="11" y="16" width="4" height="23" rx="2" fill={color || "#94a3b8"} stroke={color ? "rgba(0,0,0,0.25)" : "none"} strokeWidth=".6"/>
-    <path d="M9 41 H17 L14.5 50 H11.5 Z" fill="#94a3b8" stroke="#475569" strokeWidth="1" strokeLinejoin="round"/>
+  const id = React.useId().replace(/:/g, "");
+  const w = h * 0.5, c = color || "#94a3b8";
+  return <svg width={w} height={h} viewBox="0 0 26 52" aria-hidden="true" style={{ opacity: dim ? 0.4 : 1, flexShrink: 0, overflow: "visible" }}>
+    <defs>
+      <linearGradient id={`nzm${id}`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#f1f5f9"/><stop offset=".55" stopColor="#cbd5e1"/><stop offset="1" stopColor="#94a3b8"/></linearGradient>
+      <linearGradient id={`nzb${id}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" style={{ stopColor: `color-mix(in srgb, ${c} 60%, #ffffff)` }}/><stop offset="1" stopColor={c}/></linearGradient>
+      <linearGradient id={`nzt${id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={dim ? "#cbd5e1" : "#fcd34d"}/><stop offset="1" stopColor={dim ? "#94a3b8" : "#d97706"}/></linearGradient>
+    </defs>
+    <ellipse cx="13" cy="50.5" rx="7" ry="1.6" fill="#0f172a" opacity=".12"/>
+    <rect x="2.5" y="1" width="21" height="12" rx="5" fill={`url(#nzm${id})`}/>
+    <rect x="6" y="5.4" width="14" height="1.6" rx=".8" fill="#fff" opacity=".55"/>
+    <rect x="6" y="8.6" width="14" height="1.6" rx=".8" fill="#fff" opacity=".4"/>
+    <rect x="6.5" y="12" width="13" height="29" rx="6.5" fill={`url(#nzb${id})`} stroke="rgba(15,23,42,0.12)" strokeWidth=".6"/>
+    <rect x="8.6" y="14.5" width="2.6" height="22" rx="1.3" fill="#fff" opacity=".45"/>
+    <path d="M8.6 40 H17.4 Q18 40 17.8 40.8 L15 48.4 Q14.6 49.4 13.6 49.4 H12.4 Q11.4 49.4 11 48.4 L8.2 40.8 Q8 40 8.6 40 Z" fill={`url(#nzt${id})`}/>
   </svg>;
 }
 function VortekRack({ rack, H = 240, sel = null, onPick }) {
@@ -593,20 +602,25 @@ function VortekRack({ rack, H = 240, sel = null, onPick }) {
   const col = x => x && !x.empty && x.color ? `#${String(x.color).replace("#", "").slice(0, 6)}` : null;
   const cellH = Math.max(narrow ? 56 : 70, Math.min(tiny ? 118 : 150, (H - (tiny ? 40 : narrow ? 6 : 30)) / 2)), art = Math.max(22, Math.min(64, cellH - (narrow ? 34 : 50)));
   const fs = narrow ? 10 : cellH >= 110 ? 12.5 : 11;
+  // des cases larges et basses : la buse a gauche, sur toute la hauteur, le texte a droite
+  const side = !narrow && W >= 520 && cellH < 110, sideArt = Math.min(72, cellH - 14);
   const cell = num => {
     const x = slot(num), onHead = headNum === num, has = x && x.nozzle_type && !onHead;
     const hl = nozzleHealth(x?.stat), picked = sel === num;
     return <button key={num} type="button" onClick={e => { if (onPick) { e.stopPropagation(); onPick(num); } }} style={{ position: "relative", minWidth: 0, height: cellH,
-      borderRadius: 12, cursor: "pointer", font: "inherit", color: "inherit", padding: "6px 4px", display: "flex", flexDirection: "column", alignItems: "center",
-      justifyContent: "center", gap: 3, background: picked ? "rgba(14,165,233,0.12)" : "var(--surface2)",
+      borderRadius: 12, cursor: "pointer", font: "inherit", color: "inherit", padding: side ? "6px 10px 6px 24px" : "6px 4px", display: "flex",
+      flexDirection: side ? "row" : "column", alignItems: "center", justifyContent: "center", gap: side ? 10 : 3, background: picked ? "rgba(14,165,233,0.12)"
+        : has && col(x) ? `linear-gradient(160deg, color-mix(in srgb, ${col(x)} 16%, transparent), transparent 70%), var(--surface2)` : "var(--surface2)",
       border: `1.5px solid ${picked ? "#0ea5e9" : "var(--border)"}` }}>
       <span style={{ position: "absolute", top: narrow ? 3 : 5, left: narrow ? 5 : 8, fontSize: narrow ? 10 : 11, fontWeight: 900, color: "#0ea5e9" }}>{num}</span>
       {hl && hl[0] !== "En bon état" && <span title={hl[0]} style={{ position: "absolute", top: 7, right: 8, width: 8, height: 8, borderRadius: "50%", background: hl[1] }}/>}
-      <NozzleArt color={col(x)} h={art} dim={!has}/>
+      <NozzleArt color={col(x)} h={side ? sideArt : art} dim={!has}/>
+      <span style={{ display: "flex", flexDirection: "column", alignItems: side ? "flex-start" : "center", gap: 2, minWidth: 0 }}>
       {has ? <>
-        <span style={{ fontSize: fs, fontWeight: 800, color: "var(--text)", lineHeight: 1.1, whiteSpace: "nowrap" }}>{String(x.diameter).replace(".", ",")}{tiny ? "" : " mm"}</span>
+        <span style={{ fontSize: side ? fs + 1.5 : fs, fontWeight: 800, color: "var(--text)", lineHeight: 1.1, whiteSpace: "nowrap" }}>{String(x.diameter).replace(".", ",")}{tiny ? "" : " mm"}</span>
         {!narrow && <span style={{ fontSize: fs - 1.5, fontWeight: 700, color: "var(--muted)", lineHeight: 1.1, whiteSpace: "nowrap" }}>{flowShort(x.nozzle_type)}</span>}
       </> : <span style={{ fontSize: fs, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>{onHead ? (narrow ? "tête" : "sur la tête") : "Vide"}</span>}
+      </span>
     </button>;
   };
   const up = { 1: "A", 2: "B" }[rack.holder_pos], centre = rack.holder_pos === 3;
@@ -620,9 +634,7 @@ function VortekRack({ rack, H = 240, sel = null, onPick }) {
   if (tiny) return <div ref={box} style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
     <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 8px", borderRadius: 10, height: 30, boxSizing: "border-box",
       background: "linear-gradient(90deg, rgba(14,165,233,0.16), transparent), var(--surface2)", border: "1px solid rgba(14,165,233,0.35)", minWidth: 0 }}>
-      <svg width="10" height="20" viewBox="0 0 26 52" aria-hidden="true"><rect x="2" y="1" width="22" height="13" rx="2.5" fill="#cbd5e1"/>
-        <rect x="7" y="14" width="12" height="27" rx="2" fill="#e2e8f0"/><rect x="11" y="16" width="4" height="23" rx="2" fill={col(head) || "#94a3b8"}/>
-        <path d="M9 41 H17 L14.5 50 H11.5 Z" fill="#94a3b8"/></svg>
+      <NozzleArt color={col(head)} h={20}/>
       <span style={{ fontSize: 11, fontWeight: 900, color: "#0ea5e9", whiteSpace: "nowrap" }}>Tête{headNum ? ` · ${headNum}` : ""}</span>
       {head?.nozzle_type && <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {String(head.diameter).replace(".", ",")} mm</span>}
@@ -634,7 +646,7 @@ function VortekRack({ rack, H = 240, sel = null, onPick }) {
     <div style={{ borderRadius: 14, padding: "8px 6px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4,
       background: "linear-gradient(180deg, rgba(14,165,233,0.14), transparent 70%), var(--surface2)", border: "1px solid rgba(14,165,233,0.35)" }}>
       <span style={{ fontSize: narrow ? 9.5 : 11, fontWeight: 900, color: "var(--text2)", textAlign: "center", lineHeight: 1.15 }}>{narrow ? "Tête" : "Tête d'outil"}</span>
-      <NozzleArt color={col(head)} h={Math.min(84, art * 1.3)} dim={!head}/>
+      <NozzleArt color={col(head)} h={side ? Math.min(96, cellH * 0.95) : Math.min(84, art * 1.3)} dim={!head}/>
       {headNum && <span style={{ fontSize: 10.5, fontWeight: 900, color: "#0ea5e9" }}>buse {headNum}</span>}
       {head?.nozzle_type && <><span style={{ fontSize: fs, fontWeight: 800, color: "var(--text)", lineHeight: 1.1, whiteSpace: "nowrap" }}>{String(head.diameter).replace(".", ",")} mm</span>
         {!narrow && <span style={{ fontSize: fs - 1.5, fontWeight: 700, color: "var(--muted)", lineHeight: 1.1 }}>{flowShort(head.nozzle_type)}</span>}</>}
