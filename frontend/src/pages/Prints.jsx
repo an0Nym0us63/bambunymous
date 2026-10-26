@@ -2371,17 +2371,24 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
   }, []);
   const nMine = mine ? [...(mine.prints || []).map(p => p.title || p.file_name), ...(mine.groups || []).map(g => g.name)]
     .filter(t => !q || (t || "").toLowerCase().includes(q)).length : null;
+  const tiny = typeof window !== "undefined" && window.innerWidth < 420;
   return (<>
     {!currentFriend() && (
       <div style={{ display:"flex", gap:3, background:"var(--surface2)", borderRadius:16, padding:3,
         border:"1px solid var(--border)", marginBottom:10 }}>
-        {[["mine", `🖼️ Ma galerie${nMine != null ? ` (${nMine})` : ""}`, "#EC4899"],
-          hasFriends && ["friends", `👀 Chez les copains${nFr != null ? ` (${nFr})` : ""}`, "#8B5CF6"],
-          ["sd", `🎞️ Timelapses${nTl != null ? ` (${nTl})` : ""}`, "#F97316"]].filter(Boolean).map(([k, l, c]) => (
-          <button key={k} onClick={() => setWho(k)} style={{ flex:1, padding:"8px 8px", borderRadius:12, fontSize:12.5,
-            fontWeight:800, cursor:"pointer", border:"none", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+        {/* des libelles courts, le nombre dessous : au telephone, « Chez les copains (12) » etait coupe en « Chez les co… » */}
+        {[["mine", "🖼️", "Ma galerie", nMine, "#EC4899"],
+          hasFriends && ["friends", "👀", "Copains", nFr, "#8B5CF6"],
+          ["sd", "🎞️", "Timelapses", nTl, "#F97316"]].filter(Boolean).map(([k, e, l, n, c]) => (
+          <button key={k} onClick={() => setWho(k)} title={l} style={{ flex:1, minWidth:0, padding:"6px 6px", borderRadius:12, fontSize:12.5,
+            fontWeight:800, cursor:"pointer", border:"none", display:"flex", flexDirection:"column", alignItems:"center", gap:1, lineHeight:1.15,
             background: who === k ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` : "transparent",
-            color: who === k ? "white" : "var(--muted)", boxShadow: who === k ? `0 6px 14px -6px ${c}` : "none" }}>{l}</button>
+            color: who === k ? "white" : "var(--muted)", boxShadow: who === k ? `0 6px 14px -6px ${c}` : "none" }}>
+            {/* petit ecran : l'emoji passe sur la ligne du nombre (« Timelapses » ne tenait plus a 360 px avec trois onglets) */}
+            <span style={{ whiteSpace:"nowrap", maxWidth:"100%", overflow:"hidden" }}>{tiny ? l : `${e} ${l}`}</span>
+            <span style={{ fontSize:10.5, fontWeight:800, opacity: n != null || tiny ? 0.85 : 0, fontVariantNumeric:"tabular-nums" }}>
+              {tiny ? `${e}${n != null ? ` ${n}` : ""}` : n != null ? n : "·"}</span>
+          </button>
         ))}
       </div>
     )}
