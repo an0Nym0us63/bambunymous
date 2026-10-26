@@ -21,7 +21,7 @@ import RateTemplatesSettings from "../components/RateTemplatesSettings";
 import NotificationsSettings from "../components/NotificationsSettings";
 import MyAppNotifications from "../components/MyAppNotifications";
 import AndroidApp from "../components/AndroidApp";
-import PerfSheet, { perfLabel, perfMs, perfTone } from "../components/PerfSheet";
+import PerfSheet, { perfLabel, perfMs, perfTone, perfSlow, perfBad, perfSort } from "../components/PerfSheet";
 import StorageSheet from "../components/StorageSheet";
 import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
@@ -1183,8 +1183,8 @@ function PerfSection() {
   const load = () => client.get("/settings/perf").then(r => setD(r.data)).catch(() => {});
   useEffect(() => { load(); }, []);
   const reset = () => client.post("/settings/perf/reset").then(r => setD(r.data)).catch(e => showAlert(e.response?.data?.detail || e.message));
-  const rows = (d?.routes || []).filter(r => r.count > 0);
-  const slow = rows.filter(r => r.p95 >= 300).length, bad = rows.filter(r => r.p95 >= 1000).length;
+  const rows = perfSort((d?.routes || []).filter(r => r.count > 0));
+  const slow = rows.filter(perfSlow).length, bad = rows.filter(perfBad).length;
   const since = d ? new Date(d.since * 1000).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
   return (
     <div className="card" style={card}>
@@ -1194,17 +1194,17 @@ function PerfSection() {
         c'est par elles qu'il faut commencer.</p>
       {d && <>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
-          {[[d.requests.toLocaleString("fr-FR"), "appels", "var(--text)"], [slow, "lentes (> 300 ms)", slow ? "#f59e0b" : "#16a34a"],
-            [bad, "très lentes (> 1 s)", bad ? "#ef4444" : "#16a34a"]].map(([n, l, c]) => (
+          {[[d.requests.toLocaleString("fr-FR"), "appels", "var(--text)"], [slow, "plus lentes qu'attendu", slow ? "#f59e0b" : "#16a34a"],
+            [bad, "bien trop lentes", bad ? "#ef4444" : "#16a34a"]].map(([n, l, c]) => (
             <span key={l} style={{ flex:"1 1 90px", padding:"7px 10px", borderRadius:12, background:"var(--surface2)" }}>
               <b style={{ display:"block", fontSize:18, fontWeight:900, color:c, lineHeight:1.1 }}>{n}</b>
               <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)" }}>{l}</span></span>))}
         </div>
         {rows.slice(0, 3).map(r => { const lb = perfLabel(r.route);
           return <div key={r.route} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", borderRadius:10, background:"var(--surface2)", marginBottom:4, fontSize:12.5 }}>
-            <span style={{ width:8, height:8, borderRadius:"50%", flexShrink:0, background:perfTone(r.p95) }}/>
+            <span style={{ width:8, height:8, borderRadius:"50%", flexShrink:0, background:perfTone(r.p95, r.route) }}/>
             <span style={{ flex:1, minWidth:0, fontWeight:700, color:"var(--text2)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{lb.title}</span>
-            <b style={{ color:perfTone(r.p95) }}>{perfMs(r.p95)}</b></div>; })}
+            <b style={{ color:perfTone(r.p95, r.route) }}>{perfMs(r.p95)}</b></div>; })}
         <button onClick={() => { load(); setOpen(true); }} style={{ marginTop:8, padding:"8px 16px", borderRadius:10, border:"none", cursor:"pointer",
           fontSize:13, fontWeight:700, color:"#fff", background:"linear-gradient(135deg, #0EA5E9, #6366F1)" }}>⚡ Voir le détail</button>
       </>}

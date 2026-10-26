@@ -8,6 +8,7 @@ from collections import deque
 
 _STATS: dict = {}            # « GET /prints/{n} » -> {"n", "sum", "max", "recent": deque des derniers delais (ms)}
 _SINCE = {"t": time.time()}
+_COLD = {"on": True}             # au demarrage : le premier appel de chaque route est mis a part (pas apres une remise a zero)
 _ID = re.compile(r"/(\d+|[0-9a-f]{12,}|[0-9a-f-]{32,36})(?=/|$)", re.I)
 
 
@@ -24,7 +25,12 @@ def record(key: str, ms: float) -> None:
     if s is None:
         if len(_STATS) > 600:            # des adresses inattendues ne font pas grossir la memoire sans fin
             return
-        s = _STATS[key] = {"n": 0, "sum": 0.0, "max": 0.0, "recent": deque(maxlen=200)}
+        # le premier appel d'une route apres un redemarrage (caches vides, calculs a froid) est garde a part :
+        # il ne compte ni dans la mediane, ni dans le 95e centile, ni dans le pire (26/10/2026)
+        _STATS[key] = {"n": 0, "sum": 0.0, "max": 0.0, "recent": deque(maxlen=200), "cold": ms if _COLD["on"] else None}
+        if _COLD["on"]:
+            return
+        s = _STATS[key]
     s["n"] += 1
     s["sum"] += ms
     s["max"] = max(s["max"], ms)
@@ -43,7 +49,8 @@ def snapshot(limit: int = 60) -> dict:
     for k, s in _STATS.items():
         rec = list(s["recent"])
         rows.append({"route": k, "count": s["n"], "avg": round(s["sum"] / s["n"], 1) if s["n"] else 0,
-                     "p50": round(_pct(rec, .5), 1), "p95": round(_pct(rec, .95), 1), "max": round(s["max"], 1)})
+                     "p50": round(_pct(rec, .5), 1), "p95": round(_pct(rec, .95), 1), "max": round(s["max"], 1),
+                     "cold": round(s["cold"], 1) if s.get("cold") is not None else None})
     rows.sort(key=lambda r: -r["p95"])
     total = sum(s["n"] for s in _STATS.values())
     return {"since": _SINCE["t"], "requests": total, "routes": rows[:limit]}
@@ -52,6 +59,7 @@ def snapshot(limit: int = 60) -> dict:
 def reset() -> None:
     _STATS.clear()
     _SINCE["t"] = time.time()
+    _COLD["on"] = False              # apres une remise a zero, tout compte (les caches sont deja chauds)
 
 
 class PerfMiddleware:

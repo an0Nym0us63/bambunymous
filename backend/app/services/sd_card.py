@@ -211,7 +211,7 @@ async def _match(items: list[dict]) -> None:
     lo, hi = min(starts) - _td(days=2), max(starts) + _td(days=2)
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(Print.id, Print.print_date, Print.duration_seconds, Print.estimated_seconds, Print.file_name,
-                                        Print.translated_name, Print.status)
+                                        Print.translated_name, Print.status, Print.original_name)
                                  .where(Print.print_date >= lo, Print.print_date <= hi))).all()
     if not rows:
         return
@@ -234,7 +234,9 @@ async def _match(items: list[dict]) -> None:
         best = min(rows, key=lambda r: abs((r.print_date - t).total_seconds()) if r.print_date else 1e12)
         if best.print_date and abs((best.print_date - t).total_seconds()) <= 8 * 60:
             it["print"] = {"id": best.id, "name": best.translated_name or best.file_name or f"Impression #{best.id}",
-                           "status": best.status}
+                           "status": best.status,
+                           # les autres noms, pour la recherche (l'original, le fichier)
+                           "other": " ".join(x for x in (best.original_name, best.file_name) if x)}
 
 
 async def timelapses(fresh: bool = False) -> dict:

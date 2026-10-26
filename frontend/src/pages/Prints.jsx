@@ -2350,7 +2350,8 @@ const friendMatch = (it, q) => `${it.kind === "group" ? it.name : (it.title || i
 
 function PrintsGalleryView({ search, sortF = "recent" }) {
   const hasFriends = useHasFriends();
-  const [who, setWho] = useState("mine");          // mine | friends
+  const [who, setWho] = useState("mine");          // mine | friends | sd
+  const [nTl, setNTl] = useState(null);            // les timelapses (selon la recherche), une fois lus
   // Lue des l'ouverture (gardee 5 min) : le nombre d'elements suit la recherche.
   const fdata = useShared("/friends/shared/gallery", hasFriends);
   const q = (search || "").trim().toLowerCase();
@@ -2373,7 +2374,7 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
         border:"1px solid var(--border)", marginBottom:10 }}>
         {[["mine", `🖼️ Ma galerie${nMine != null ? ` (${nMine})` : ""}`, "#EC4899"],
           hasFriends && ["friends", `👀 Chez les copains${nFr != null ? ` (${nFr})` : ""}`, "#8B5CF6"],
-          ["sd", "🎞️ Timelapses", "#F97316"]].filter(Boolean).map(([k, l, c]) => (
+          ["sd", `🎞️ Timelapses${nTl != null ? ` (${nTl})` : ""}`, "#F97316"]].filter(Boolean).map(([k, l, c]) => (
           <button key={k} onClick={() => setWho(k)} style={{ flex:1, padding:"8px 8px", borderRadius:12, fontSize:12.5,
             fontWeight:800, cursor:"pointer", border:"none", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
             background: who === k ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` : "transparent",
@@ -2381,7 +2382,7 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
         ))}
       </div>
     )}
-    {who === "sd" && !currentFriend() ? <TimelapsesView search={search}/>
+    {who === "sd" && !currentFriend() ? <TimelapsesView search={search} onCount={setNTl}/>
       : who === "friends" && hasFriends ? <FriendsGalleryView search={search} data={fdata}/> : <MyGalleryView search={search} sortF={sortF} data={mine} loading={mineLoading}/>}
   </>);
 }
@@ -2389,7 +2390,7 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
 // Les timelapses de la carte SD de l'imprimante (26/10/2026) : les vignettes de la plus recente a la plus
 // ancienne, l'impression retrouvee pour chacune, la video dans la visionneuse (copiee sur le serveur a la
 // premiere lecture), puis « Fiche », « Telecharger » et, pour l'admin, « Supprimer » de la carte.
-function TimelapsesView({ search }) {
+function TimelapsesView({ search, onCount }) {
   const isAdmin = useIsAdmin();
   const [data, setData] = useState(null);
   const [shown, setShown] = useState(48);
@@ -2399,8 +2400,14 @@ function TimelapsesView({ search }) {
   const load = fresh => client.get("/printer/sd/timelapses", { params: fresh ? { fresh: 1 } : {}, timeout: 120000 })
     .then(r => setData(r.data)).catch(e => setData({ error: e.response?.data?.detail || e.message }));
   useEffect(() => { load(false); }, []);
-  const q = (search || "").trim().toLowerCase();
-  const all = (data?.items || []).filter(it => !q || `${it.name} ${it.print?.name || ""}`.toLowerCase().includes(q));
+  // la recherche de la Galerie : le nom de l'impression (traduit, d'origine, le fichier), la date (« 25 oct »),
+  // « non retrouvée », le nom du fichier video ; chaque mot doit s'y trouver, accents ignores
+  const norm = t => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const words = norm(search).trim().split(/\s+/).filter(Boolean);
+  const hay = it => { const d = it.at || it.start ? new Date(it.at || it.start) : null;
+    return norm(`${it.name} ${it.print?.name || "impression non retrouvee"} ${it.print?.other || ""} ${d ? d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) + " " + d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) + " " + d.toLocaleDateString("fr-FR") : ""}`); };
+  const all = (data?.items || []).filter(it => !words.length || words.every(w => hay(it).includes(w)));
+  useEffect(() => { if (data?.items) onCount?.(all.length); }, [data, all.length]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!more.current || typeof IntersectionObserver === "undefined") return undefined;
     const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) setShown(n => n + 48); }, { rootMargin: "400px" });
@@ -2423,9 +2430,11 @@ function TimelapsesView({ search }) {
     backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)", textDecoration:"none" });
   return (<>
     <p style={{ fontSize:11.5, color:"var(--muted)", margin:"0 0 10px", display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-      <span>{all.length} timelapse{all.length > 1 ? "s" : ""} sur l'imprimante · {mo(data.bytes || 0)}</span>
+      <span>{words.length ? <>{all.length} sur {(data.items || []).length} pour « <b style={{ color:"var(--text2)" }}>{search.trim()}</b> »</>
+        : <>{all.length} timelapse{all.length > 1 ? "s" : ""} sur l'imprimante · {mo(data.bytes || 0)}</>}</span>
       <button onClick={() => { setData(null); load(true); }} style={{ padding:"2px 10px", borderRadius:20, border:"1px solid var(--border)",
         background:"var(--surface2)", color:"var(--text2)", fontSize:11, fontWeight:800, cursor:"pointer" }}>↻ Relire</button></p>
+    {!all.length && words.length > 0 && <p style={{ textAlign:"center", color:"var(--muted)", padding:"30px 0" }}>Aucun timelapse ne correspond.</p>}
     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:10 }}>
       {all.slice(0, shown).map((it, i) => (
         <button key={it.name} onClick={() => setOpen(i)} style={{ textAlign:"left", padding:0, borderRadius:14, overflow:"hidden", cursor:"pointer",
