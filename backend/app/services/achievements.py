@@ -17,6 +17,7 @@ nouveau part en notification (achievement_unlocked).
 from __future__ import annotations
 
 import asyncio
+import copy as _copy
 import json
 import logging
 import os
@@ -7603,82 +7604,99 @@ async def my_uniques() -> list:
 
 
 # ── Vue pour la page ─────────────────────────────────────────────────────────
+_VIEW_LOCK = asyncio.Lock()
+
+
 async def view(fresh: bool = False) -> dict:
     if not fresh and _CACHE["v"] and time.time() - _CACHE["t"] < 60:
         return _CACHE["v"]
+    async with _VIEW_LOCK:                      # deux appels au meme moment : un seul calcul
+        if not fresh and _CACHE["v"] and time.time() - _CACHE["t"] < 60:
+            return _CACHE["v"]
+        return await _view(fresh)
+
+
+async def _view(fresh: bool) -> dict:
     ev = await evaluate(cached=not fresh)
     st = await _state_get() or {"unlocked": {}}
     if st.get("unlocked") is not None and st.get("sig") and (
             not isinstance(st.get("keys"), dict) or st["keys"].get("reveal_v") != REVEAL_V):
         _keys_init(st)                         # mise en route (ou reprise) des cles sans attendre le prochain passage
         await _state_put(st)
-    medals = {t["id"]: 0 for t in ALL_TIERS}
-    score = score_max = 0
-    items = []
-    for a in CATALOG:
-        r = ev[a["id"]]
-        got = dict(r["reached"])
-        stored = (st.get("unlocked") or {}).get(a["id"]) or {}
-        if a.get("live"):                               # acquis, meme si la valeur a baisse
-            best = (st.get("best") or {}).get(a["id"], 0) or 0
-            got.update({i: at for i, at in stored.items() if _still(a["id"], i, best)})
-        else:                                           # la date d'abord constatee
-            got.update({i: at for i, at in stored.items() if i in got})
-        tiers = tiers_of(a)
-        lvl = max((int(i) for i in got), default=-1)
-        if a.get("only_started") and lvl < 0 and not r["value"]:
-            continue                                   # matiere jamais imprimee : on ne l'affiche pas
-        if a.get("only_won") and lvl < 0:
-            continue                                   # secret d'une seule maison : ailleurs, il n'existe pas
-        for i in got:
-            medals[tiers[int(i)]["id"]] += 1
-            score += tiers[int(i)]["score"]
-        score_max += sum(t["score"] for t in tiers)
-        nxt = lvl + 1 if lvl + 1 < len(a["tiers"]) else None
-        secret = a.get("hidden") and lvl < 0
-        rv = _reveal_level(st, a["id"]) if secret else 0
-        items.append({
-            "id": a["id"], "cat": a["cat"], "emoji": "❔" if secret and rv < 2 else a["emoji"],
-            "name": "Succès secret" if secret and rv < 3 else a["name"],
-            "hint": hint_of(a) if secret and rv >= 4 else None, "reveal": rv,
-            # etapes offertes par des copains qui l'ont deja (grace a…)
-            "gift_from": _gift_from(st, a["id"]) if secret else [],
-            "desc": ("Continue d'imprimer : il se dévoilera tout seul." if rv < 1 else "Descriptif à révéler (🔑)")
-                    if secret and rv < 5 else
-                    describe(a, a["tiers"][nxt if nxt is not None else lvl]),
-            # medaille unique gagnee : ce qu'elle raconte, et ce qui l'a valu
-            "lore": a.get("lore") if lvl >= 0 and len(a["tiers"]) == 1 else None,
-            "secret": bool(a.get("hidden")), "money": bool(a.get("money")), "unit": a.get("unit"),
-            # un secret pas encore gagne reste « a decouvrir » tant que sa categorie n'est pas revelee
-            "sub": None if secret and rv < 1 else a.get("sub"),
-            "value": None if secret else r["value"], "level": lvl,
-            "next": None if nxt is None or secret else a["tiers"][nxt],
-            "prev": a["tiers"][lvl] if lvl >= 0 else 0,
-            "tiers": [{**{k: t[k] for k in ("id", "label", "emoji", "color", "card") if k in t}, "n": a["tiers"][i],
-                       # ce que demande ce palier (fiche : actuel et prochain, chacun le sien)
-                       **({"desc": describe(a, a["tiers"][i])} if len(a["tiers"]) > 1 else {}),
-                       "at": got.get(str(i)),
-                       "ticket": i in ((st.get("ticket_tiers") or {}).get(a["id"]) or [])} for i, t in enumerate(tiers)],
-            "tickets": tickets_paid(st, a["id"]),
-            "ticket_uses": ticket_uses(st, a["id"]),
-            "key_use": key_use(st, a["id"]) if len(a["tiers"]) == 1 else None,
-            "ticket_cost": ticket_cost(nxt) if nxt is not None and len(a["tiers"]) > 1 else None,
-            # carte : ou j'en suis (trouves / demandes)
-            **({"prog": r.get("prog")} if a.get("card_tier") else {}),
-        })
-    # derniers succes : le plus haut cran de chacun ; pas ceux du releve au
-    # present constates au premier calcul (ils n'ont pas de vraie date)
-    since = (st or {}).get("since") or ""
-    first_day = since[:10]
-    top, every = {}, []
-    for it in items:
-        for j, t in enumerate(it["tiers"]):
-            if t["at"] and not (BY_ID[it["id"]].get("live") and t["at"][:10] <= first_day):
-                top[it["id"]] = (t["at"], it["id"], j)
-                every.append((t["at"], it["id"], j))
-    recent = sorted(top.values(), reverse=True)[:6]
-    # tout ce qui a ete obtenu, chaque cran, du plus recent au plus ancien (« voir plus », 25/10/2026)
-    every.sort(reverse=True)
+    # le gros du calcul (le catalogue entier, ~130 ms) dans un fil a part, sur une copie de l'etat : le serveur
+    # continue de repondre pendant ce temps (27/10/2026 ; il le faisait sur sa file, qui se figeait)
+    st = _copy.deepcopy(st)
+
+    def _build():
+        medals = {t["id"]: 0 for t in ALL_TIERS}
+        score = score_max = 0
+        items = []
+        for a in CATALOG:
+            r = ev[a["id"]]
+            got = dict(r["reached"])
+            stored = (st.get("unlocked") or {}).get(a["id"]) or {}
+            if a.get("live"):                               # acquis, meme si la valeur a baisse
+                best = (st.get("best") or {}).get(a["id"], 0) or 0
+                got.update({i: at for i, at in stored.items() if _still(a["id"], i, best)})
+            else:                                           # la date d'abord constatee
+                got.update({i: at for i, at in stored.items() if i in got})
+            tiers = tiers_of(a)
+            lvl = max((int(i) for i in got), default=-1)
+            if a.get("only_started") and lvl < 0 and not r["value"]:
+                continue                                   # matiere jamais imprimee : on ne l'affiche pas
+            if a.get("only_won") and lvl < 0:
+                continue                                   # secret d'une seule maison : ailleurs, il n'existe pas
+            for i in got:
+                medals[tiers[int(i)]["id"]] += 1
+                score += tiers[int(i)]["score"]
+            score_max += sum(t["score"] for t in tiers)
+            nxt = lvl + 1 if lvl + 1 < len(a["tiers"]) else None
+            secret = a.get("hidden") and lvl < 0
+            rv = _reveal_level(st, a["id"]) if secret else 0
+            items.append({
+                "id": a["id"], "cat": a["cat"], "emoji": "❔" if secret and rv < 2 else a["emoji"],
+                "name": "Succès secret" if secret and rv < 3 else a["name"],
+                "hint": hint_of(a) if secret and rv >= 4 else None, "reveal": rv,
+                # etapes offertes par des copains qui l'ont deja (grace a…)
+                "gift_from": _gift_from(st, a["id"]) if secret else [],
+                "desc": ("Continue d'imprimer : il se dévoilera tout seul." if rv < 1 else "Descriptif à révéler (🔑)")
+                        if secret and rv < 5 else
+                        describe(a, a["tiers"][nxt if nxt is not None else lvl]),
+                # medaille unique gagnee : ce qu'elle raconte, et ce qui l'a valu
+                "lore": a.get("lore") if lvl >= 0 and len(a["tiers"]) == 1 else None,
+                "secret": bool(a.get("hidden")), "money": bool(a.get("money")), "unit": a.get("unit"),
+                # un secret pas encore gagne reste « a decouvrir » tant que sa categorie n'est pas revelee
+                "sub": None if secret and rv < 1 else a.get("sub"),
+                "value": None if secret else r["value"], "level": lvl,
+                "next": None if nxt is None or secret else a["tiers"][nxt],
+                "prev": a["tiers"][lvl] if lvl >= 0 else 0,
+                "tiers": [{**{k: t[k] for k in ("id", "label", "emoji", "color", "card") if k in t}, "n": a["tiers"][i],
+                           # ce que demande ce palier (fiche : actuel et prochain, chacun le sien)
+                           **({"desc": describe(a, a["tiers"][i])} if len(a["tiers"]) > 1 else {}),
+                           "at": got.get(str(i)),
+                           "ticket": i in ((st.get("ticket_tiers") or {}).get(a["id"]) or [])} for i, t in enumerate(tiers)],
+                "tickets": tickets_paid(st, a["id"]),
+                "ticket_uses": ticket_uses(st, a["id"]),
+                "key_use": key_use(st, a["id"]) if len(a["tiers"]) == 1 else None,
+                "ticket_cost": ticket_cost(nxt) if nxt is not None and len(a["tiers"]) > 1 else None,
+                # carte : ou j'en suis (trouves / demandes)
+                **({"prog": r.get("prog")} if a.get("card_tier") else {}),
+            })
+        # derniers succes : le plus haut cran de chacun ; pas ceux du releve au
+        # present constates au premier calcul (ils n'ont pas de vraie date)
+        since = (st or {}).get("since") or ""
+        first_day = since[:10]
+        top, every = {}, []
+        for it in items:
+            for j, t in enumerate(it["tiers"]):
+                if t["at"] and not (BY_ID[it["id"]].get("live") and t["at"][:10] <= first_day):
+                    top[it["id"]] = (t["at"], it["id"], j)
+                    every.append((t["at"], it["id"], j))
+        recent = sorted(top.values(), reverse=True)[:6]
+        # tout ce qui a ete obtenu, chaque cran, du plus recent au plus ancien (« voir plus », 25/10/2026)
+        every.sort(reverse=True)
+        return items, medals, score, score_max, recent, every
+    items, medals, score, score_max, recent, every = await asyncio.to_thread(_build)
     k = st.get("keys") if isinstance(st.get("keys"), dict) else None
     ok_since = await _ok_since(k.get("since")) if k else 0
     keys = None if k is None else {

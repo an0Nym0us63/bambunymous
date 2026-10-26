@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from ....db.session import get_db
 from ....core.security import (
-    verify_password, create_access_token, decode_token, decode_token_payload,
+    verify_password, averify_password, create_access_token, decode_token, decode_token_payload,
     hash_password,
 )
 from ....models.user import User, ROLE_ADMIN, ROLE_READONLY
@@ -51,7 +51,7 @@ async def _login(form, otp, db: AsyncSession):
     )).scalar_one_or_none()
 
     if user:
-        if not user.active or not verify_password(form.password, user.password_hash):
+        if not user.active or not await averify_password(form.password, user.password_hash):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Identifiants invalides")
         if user.totp_enabled:
             # Mot de passe bon : il faut encore le code de l'application (ou un
@@ -82,7 +82,7 @@ async def _login(form, otp, db: AsyncSession):
         if not stored_hash:
             if form.username != "admin" or form.password != "admin":
                 raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Identifiants invalides")
-        elif form.username != stored_user or not verify_password(form.password, stored_hash):
+        elif form.username != stored_user or not await averify_password(form.password, stored_hash):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Identifiants invalides")
         role = ROLE_ADMIN
 
@@ -269,7 +269,7 @@ async def twofa_enable(body: dict = Body({}), token: str = Depends(oauth2_scheme
 async def twofa_disable(body: dict = Body({}), token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
     """Desactive : le mot de passe est redemande (une session ouverte ne suffit pas)."""
     user = await _me_user(token, db)
-    if not verify_password(body.get("password", ""), user.password_hash):
+    if not await averify_password(body.get("password", ""), user.password_hash):
         raise HTTPException(400, "Mot de passe incorrect")
     user.totp_enabled, user.totp_secret, user.totp_last_step, user.totp_recovery = False, None, None, None
     await db.commit()
@@ -303,7 +303,7 @@ async def change_password(
     )).scalar_one_or_none()
 
     if user:
-        if not verify_password(body.current_password, user.password_hash):
+        if not await averify_password(body.current_password, user.password_hash):
             raise HTTPException(400, "Mot de passe actuel incorrect")
         user.password_hash = hash_password(body.new_password)
         # Toutes les sessions ouvertes tombent, y compris sur d'autres appareils :
@@ -317,7 +317,7 @@ async def change_password(
     else:
         # Compte historique (settings) : on met a jour la ou il est stocke.
         stored_hash = await get_setting(db, "ADMIN_PASSWORD_HASH")
-        if stored_hash and not verify_password(body.current_password, stored_hash):
+        if stored_hash and not await averify_password(body.current_password, stored_hash):
             raise HTTPException(400, "Mot de passe actuel incorrect")
         await set_setting(db, "ADMIN_PASSWORD_HASH", hash_password(body.new_password))
         await set_setting(db, "ADMIN_USERNAME", username)

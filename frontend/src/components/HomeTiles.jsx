@@ -609,9 +609,22 @@ const IcoChamber = ({ s = 12 }) => <svg width={s} height={s} viewBox="0 0 24 24"
   strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 3v18M12 8h5M12 12h5"/></svg>;
 
 // ── Donnees ──────────────────────────────────────────────────────────────────
-export function useTilesData(status = null) {
+// Les donnees dont chaque tuile se sert (27/10/2026) : l'accueil ne demande plus que celles des tuiles posees ET
+// proches de l'ecran (avant : toutes, pour toutes les tuiles possibles, d'un coup, meme absentes de l'accueil).
+export const TILE_NEEDS = {
+  today: ["today", "prints", "live"], next: ["queue"], last: ["prints", "live"], stock: ["spools"], dry: ["dry"],
+  friends: ["friends"], mw: ["mw"], rate: ["rate"], wheel: ["ach"], ach: ["ach"], month: ["month"], sales: ["sales"],
+  feed: ["feed"], gallery: ["prints"], family: ["family"], podium: ["podium", "ach"], alerts: ["attention"],
+};
+// lues une fois (pas relues toutes les 2 min avec le reste)
+const ONCE = new Set(["mw", "podium", "family"]);
+
+export function useTilesData(status = null, want = null) {
   const [d, setD] = useState({});
   const loadRef = useRef(null);
+  const fetchRef = useRef(null);
+  const wantRef = useRef(want);
+  wantRef.current = want;
   // un evenement franc de l'imprimante (lancement, preparation, pause, fin, echec, nouveau travail) :
   // tout est relu tout de suite, puis 15 s apres (la fin d'une impression se confirme en 10 s cote serveur)
   const phase = `${String(status?.status || "").toUpperCase()}|${status?.job_id || ""}`;
@@ -626,42 +639,57 @@ export function useTilesData(status = null) {
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     let dead = false;
+    const asked = new Set();
     const put = (k, p) => p.then(r => { if (!dead) setD(x => ({ ...x, [k]: r })); }).catch(() => { if (!dead) setD(x => ({ ...x, [k]: null })); });
     const get = (url, params) => client.get(url, { params }).then(r => r.data);
-    const load = () => {
-      const now = new Date(), t = ymd(now), y = new Date(now); y.setDate(now.getDate() - 1);
-      put("today", Promise.all([get("/prints/kpis", { date_from: t }), get("/prints/kpis", { date_from: t, status: "SUCCESS" }),
-        get("/prints/kpis", { date_from: ymd(y), date_to: ymd(y) })])
-        .then(([all, ok, yd]) => ({ ...all, ok: ok.count, yesterday: yd })));
-      put("prints", get("/prints", { limit: 16 }).then(r => (r.prints || r.items || []).filter(p => p.status !== "IN_PROGRESS")));
+    const F = {
+      today: () => {
+        const now = new Date(), t = ymd(now), y = new Date(now); y.setDate(now.getDate() - 1);
+        put("today", Promise.all([get("/prints/kpis", { date_from: t }), get("/prints/kpis", { date_from: t, status: "SUCCESS" }),
+          get("/prints/kpis", { date_from: ymd(y), date_to: ymd(y) })])
+          .then(([all, ok, yd]) => ({ ...all, ok: ok.count, yesterday: yd })));
+      },
+      prints: () => put("prints", get("/prints", { limit: 16 }).then(r => (r.prints || r.items || []).filter(p => p.status !== "IN_PROGRESS"))),
       // l'impression en cours, avec son vrai nom (celui de l'imprimante est souvent le nom du profil)
-      put("live", get("/prints", { status: "IN_PROGRESS", limit: 1 }).then(r => (r.prints || r.items || [])[0] || null));
-      put("spools", get("/filaments/spools", { archived: false }));
-      put("dry", get("/filaments/drying/overview"));
-      put("friends", get("/friends/shared/printing"));
-      put("ach", get("/achievements"));
-      const m0 = new Date(now.getFullYear(), now.getMonth(), 1), p0 = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const pEnd = new Date(now.getFullYear(), now.getMonth() - 1, Math.min(now.getDate(), 28));
-      put("month", Promise.all([get("/prints/kpis", { date_from: ymd(m0) }), get("/prints/kpis", { date_from: ymd(p0), date_to: ymd(pEnd) })])
-        .then(([cur, prev]) => ({ ...cur, prev })));
-      put("sales", get("/objects/objects/stats"));
-      put("feed", get("/notify/me/history"));
-      put("attention", get("/attention"));
+      live: () => put("live", get("/prints", { status: "IN_PROGRESS", limit: 1 }).then(r => (r.prints || r.items || [])[0] || null)),
+      spools: () => put("spools", get("/filaments/spools", { archived: false })),
+      dry: () => put("dry", get("/filaments/drying/overview")),
+      friends: () => put("friends", get("/friends/shared/printing")),
+      ach: () => put("ach", get("/achievements")),
+      month: () => {
+        const now = new Date();
+        const m0 = new Date(now.getFullYear(), now.getMonth(), 1), p0 = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const pEnd = new Date(now.getFullYear(), now.getMonth() - 1, Math.min(now.getDate(), 28));
+        put("month", Promise.all([get("/prints/kpis", { date_from: ymd(m0) }), get("/prints/kpis", { date_from: ymd(p0), date_to: ymd(pEnd) })])
+          .then(([cur, prev]) => ({ ...cur, prev })));
+      },
+      sales: () => put("sales", get("/objects/objects/stats")),
+      feed: () => put("feed", get("/notify/me/history")),
+      attention: () => put("attention", get("/attention")),
       // a evaluer : relu avec le reste (une impression qui vient de finir y entre sans recharger la page)
-      put("rate", get("/makerworld/to-rate"));
+      rate: () => put("rate", get("/makerworld/to-rate")),
       // « À faire » aussi : ce qui imprime, ce qui vient de finir, ce qui devient faisable bougent sans cesse
-      put("queue", get("/makerworld/queue"));
+      queue: () => put("queue", get("/makerworld/queue")),
+      mw: () => put("mw", get("/makerworld/creator")),
+      podium: () => put("podium", get("/achievements/podium")),
+      family: () => put("family", get("/achievements/family-board")),
     };
-    load();
-    put("mw", get("/makerworld/creator"));
-    put("podium", get("/achievements/podium"));
-    put("family", get("/achievements/family-board"));
+    // ce que les tuiles demandent (sans liste : tout, comme avant)
+    const wanted = () => (wantRef.current ? [...wantRef.current] : Object.keys(F));
+    // les nouvelles venues seulement (une tuile qui arrive pres de l'ecran)
+    fetchRef.current = () => wanted().filter(k => F[k] && !asked.has(k)).forEach(k => { asked.add(k); F[k](); });
+    // relire : ce qui est demande, sauf les « une fois »
+    const load = () => wanted().filter(k => F[k] && !ONCE.has(k)).forEach(k => { asked.add(k); F[k](); });
+    fetchRef.current();
     loadRef.current = load;
     const iv = setInterval(load, 120000);
     const again = () => load();
     window.addEventListener("bn-tiles-reload", again);
-    return () => { dead = true; clearInterval(iv); loadRef.current = null; window.removeEventListener("bn-tiles-reload", again); };
+    return () => { dead = true; clearInterval(iv); loadRef.current = null; fetchRef.current = null; window.removeEventListener("bn-tiles-reload", again); };
   }, []);
+  // une tuile s'approche de l'ecran : ses donnees, si elles n'ont pas encore ete demandees
+  const wantKey = want ? [...want].sort().join(",") : "*";
+  useEffect(() => { fetchRef.current?.(); }, [wantKey]);
   return d;
 }
 // une serie par jour (n jours jusqu'a aujourd'hui). Toutes les tuiles partagent UNE requete :

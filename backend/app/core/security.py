@@ -28,6 +28,13 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False   # empreinte absente ou illisible -> refus, sans planter
 
 
+async def averify_password(plain: str, hashed: str) -> bool:
+    """La meme verification, hors de la file du serveur (27/10/2026) : bcrypt est lent expres (~0,2 s), et sur
+    la file il figeait toutes les pages en cours le temps d'une connexion."""
+    import asyncio
+    return await asyncio.to_thread(verify_password, plain, hashed)
+
+
 def create_access_token(sub: str, role: str = "admin") -> str:
     now = datetime.utcnow()
     expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)

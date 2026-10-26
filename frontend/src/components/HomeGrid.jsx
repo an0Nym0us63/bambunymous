@@ -5,7 +5,7 @@ import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Che
 import client from "../api/client";
 import { currentFriend, useFriend } from "../store/friend";
 import { toast } from "../store/toast";
-import { TILES, useTilesData, tileWaiting, TileWaiting } from "./HomeTiles";
+import { TILES, TILE_NEEDS, useTilesData, tileWaiting, TileWaiting } from "./HomeTiles";
 import { showConfirm } from "../utils/dialog";
 import { useIsAdmin } from "../store/auth";
 
@@ -571,8 +571,29 @@ function SendSheet({ onSend, onClose }) {
     </div>, document.body);
 }
 
+// Une tuile ne se charge qu'en approchant de l'ecran (27/10/2026) : la premiere rafale ne contient que ce qui
+// se voit, celles du bas (Alertes…) suivent quand on descend. Avant, sa place est tenue (meme taille, « en attente ») ;
+// une fois venue, elle reste.
+const NEAR_MARGIN = "250px";
+function WhenNear({ id, onNear, near, children, fallback }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (near || !ref.current) return undefined;
+    if (typeof IntersectionObserver === "undefined") { onNear(id); return undefined; }
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); onNear(id); } },
+      { rootMargin: `${NEAR_MARGIN} ${NEAR_MARGIN}` });
+    io.observe(ref.current);
+    return () => io.disconnect();
+  }, [near, id, onNear]);
+  return near ? children : <div ref={ref} style={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column" }}>{fallback}</div>;
+}
+
 export default function HomeGrid({ status, blocks, top = null }) {
-  const data = useTilesData(status);
+  // les tuiles deja venues pres de l'ecran, et les donnees qu'elles demandent
+  const [near, setNear] = useState(() => new Set());
+  const markNear = React.useCallback(id => setNear(s => (s.has(id) ? s : new Set([...s, id]))), []);
+  const want = useMemo(() => new Set([...near].flatMap(id => TILE_NEEDS[id] || [])), [near]);
+  const data = useTilesData(status, want);
   const wide = useWide();
   const defs = useMemo(() => ({ ...blocks, ...TILES }), [blocks]);
   const [lay, setLay] = useState(() => defaults(defs));
@@ -814,11 +835,15 @@ export default function HomeGrid({ status, blocks, top = null }) {
       <Cell key={item.id} item={item} def={def} edit={edit} actions={actions} options={options} drag={edit ? drag : null}
         tint={lay.tint && o._bg !== false ? tintOf(item.id) : null} tintMode={lay.tint === "banner" ? "vivid" : lay.tint} tintStyle={lay.tint === "banner" ? "banner" : lay.tint ? lay.tintStyle || "glow" : null}
         selected={sel === item.id} onSelect={() => setSel(s => s === item.id ? null : item.id)}>
-        {TILES[item.id] && tileWaiting(item.id, data, status) ? <TileWaiting id={item.id} label={def.label} mini={item.h === 0.5}/>
-          : item.h === 0.5 && def.mini ? def.mini(data, status, o, item)
-          : def.frame ? <Frame def={def} item={item} summary={def.summary?.(data, status, o)} extra={def.frame.extra?.(status, item, o)}
-            badge={def.frame.badge?.(status, item, o)}>{def.render(data, status, o, item)}</Frame>
-          : def.render(data, status, o, item)}
+        {!TILES[item.id] ? (def.frame ? <Frame def={def} item={item} summary={def.summary?.(data, status, o)} extra={def.frame.extra?.(status, item, o)}
+            badge={def.frame.badge?.(status, item, o)}>{def.render(data, status, o, item)}</Frame> : def.render(data, status, o, item))
+          : <WhenNear id={item.id} near={near.has(item.id)} onNear={markNear} fallback={<TileWaiting id={item.id} label={def.label} mini={item.h === 0.5}/>}>
+            {tileWaiting(item.id, data, status) ? <TileWaiting id={item.id} label={def.label} mini={item.h === 0.5}/>
+              : item.h === 0.5 && def.mini ? def.mini(data, status, o, item)
+              : def.frame ? <Frame def={def} item={item} summary={def.summary?.(data, status, o)} extra={def.frame.extra?.(status, item, o)}
+                badge={def.frame.badge?.(status, item, o)}>{def.render(data, status, o, item)}</Frame>
+              : def.render(data, status, o, item)}
+          </WhenNear>}
       </Cell>
     );
   };
