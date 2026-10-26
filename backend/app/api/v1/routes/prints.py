@@ -192,14 +192,21 @@ def _search_condition(search: str):
         return None
     from ....models.print_history import MakerWorldDesign as _MW
 
-    def motif(m):
-        m = m.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        return f"%{m}%"
+    def esc(m):
+        return m.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    # Chaque mot doit COMMENCER un mot du champ (26/10/2026) : « ara » trouve « Ara bleu », « ara-macaw »,
+    # « billy_ara » ou le mot-cle "ara", mais plus « character », « caramel » ni « separate » (les mots-cles
+    # MakerWorld et les noms de filaments ramenaient des groupes entiers au hasard). Le debut d'un mot : en
+    # tete du champ, ou apres une espace, un tiret, un souligne, un point, une parenthese, un guillemet, une
+    # virgule, une barre ou une apostrophe (les mots-cles sont gardes en liste JSON : ["ara","parrot"]).
+    SEPS = [" ", "-", "\\_", ".", "(", '"', ",", "/", "'"]
 
     par_mot = []
     for m in mots:
-        s = motif(m)
-        lk = lambda col: col.ilike(s, escape="\\")
+        e = esc(m)
+        pats = [f"{e}%"] + [f"%{sep}{e}%" for sep in SEPS]
+        lk = lambda col, pats=pats: or_(*(col.ilike(p, escape="\\") for p in pats))
         hexa = re.fullmatch(r"#?([0-9a-fA-F]{6})", m)
         hx = f"%{hexa.group(1)}%" if hexa else None
 
