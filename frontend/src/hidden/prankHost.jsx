@@ -82,7 +82,7 @@ function effectOf(slug) {
 // pas encore trouvee / 30 % une deja trouvee (s'il y en a). Jamais chez un copain. Le secret suit la
 // regle des comptes (enregistre, ou « non comptabilise »).
 // Chaque arrivee sur l'accueil compte (26/10/2026 ; avant : seulement la premiere de chaque lancement). Le serveur
-// ne compte une ouverture que 5 min apres la precedente ; ici, on ne lui demande pas plus d'une fois par minute.
+// ne compte une ouverture que 15 min apres la precedente comptee ; ici, on ne lui demande pas plus d'une fois par minute.
 let lastRoll = 0;
 const ROLL_EVERY_MS = 60000;
 
@@ -146,7 +146,7 @@ export function PrankHost() {
   const { pathname } = useLocation();
   const visiting = useFriend(s => s.friend);
   const nav = useNavigate();
-  // chaque arrivee sur l'accueil : la surprise, peut-etre (le serveur espace les ouvertures comptees de 5 min)
+  // chaque arrivee sur l'accueil : la surprise, peut-etre (le serveur espace les ouvertures comptees de 15 min)
   useEffect(() => {
     if (pathname !== "/" || visiting || usePrank.getState().slug || Date.now() - lastRoll < ROLL_EVERY_MS) return;
     lastRoll = Date.now();

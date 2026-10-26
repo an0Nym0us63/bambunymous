@@ -5241,7 +5241,9 @@ async def _surprise_counts(db) -> dict:
     return d if isinstance(d, dict) else {}
 
 
-SURPRISE_GAP = timedelta(minutes=5)   # deux ouvertures plus proches : la seconde ne compte pas
+# deux ouvertures plus proches : la seconde ne compte pas. 15 min depuis que chaque retour sur l'accueil compte
+# (26/10/2026 ; 5 min avant) : on compte des moments passes dans l'appli, pas des allers-retours.
+SURPRISE_GAP = timedelta(minutes=15)
 _SURPRISE_LOCK = asyncio.Lock()       # deux ouvertures au meme instant : l'une apres l'autre
 
 
@@ -5259,7 +5261,7 @@ async def _surprise_state(db) -> tuple:
 
 async def roll_surprise(username: str, rnd=None, now=None) -> dict:
     """Une ouverture de l'appli. Elle ne compte (compteur + tirage) que si la
-    derniere ouverture comptee de ce compte date d'au moins 5 minutes : des F5 en
+    derniere ouverture comptee de ce compte date d'au moins 15 minutes : des F5 en
     rafale ne font pas monter les chances. Un tirage gagnant reste en attente tant
     que la surprise ne s'est pas affichee : elle revient a l'ouverture comptee
     suivante, sans faire monter le compteur (l'esquiver ne rapporte rien)."""
