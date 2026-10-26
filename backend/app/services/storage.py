@@ -27,7 +27,7 @@ CATS = [
     ("filaments", "Photos de filaments", "#F97316"),
     ("db", "Base de données", "#6366F1"),
     ("catalog", "Catalogue et données MakerWorld", "#A855F7"),
-    ("sd_cache", "Cache de la carte SD", "#F43F5E"),
+    ("sd_cache", "Cache des timelapses de l'imprimante", "#F43F5E"),
     ("tmp", "Fichiers temporaires", "#94A3B8"),
     ("other", "Autres", "#64748B"),
 ]

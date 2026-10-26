@@ -2406,7 +2406,7 @@ function TimelapsesView({ search }) {
     io.observe(more.current);
     return () => io.disconnect();
   }, [shown, all.length]);
-  if (!data) return <p style={{ textAlign:"center", color:"var(--muted)", padding:"40px 0" }}>Lecture de la carte de l'imprimante…</p>;
+  if (!data) return <p style={{ textAlign:"center", color:"var(--muted)", padding:"40px 0" }}>Lecture du stockage de l'imprimante…</p>;
   if (data.error) return <p style={{ textAlign:"center", color:"#ef4444", padding:"40px 0" }}>⚠ {data.error}</p>;
   const when = iso => { try { const d = new Date(iso); return `${d.toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })} · ${d.toLocaleTimeString("fr-FR", { hour:"2-digit", minute:"2-digit" })}`; } catch { return ""; } };
   const mo = n => n >= 1048576 ? `${(n / 1048576).toFixed(1).replace(".", ",")} Mo` : `${Math.max(1, Math.round(n / 1024))} Ko`;
@@ -2414,7 +2414,7 @@ function TimelapsesView({ search }) {
   const thumb = it => apiUrl(`/printer/sd/timelapse/thumb/${it.name.replace(/\.(mp4|avi)$/, ".jpg")}`);
   const openSheet = async it => { try { const { data: p } = await client.get(`/prints/${it.print.id}`); setSheet(p); } catch { /* introuvable */ } };
   const remove = async (it, close) => {
-    if (!(await showConfirm(`Supprimer ce timelapse de la carte de l'imprimante ?`, { danger: true, confirmLabel: "Supprimer" }))) return;
+    if (!(await showConfirm(`Supprimer ce timelapse du stockage de l'imprimante ?`, { danger: true, confirmLabel: "Supprimer" }))) return;
     try { await client.delete(`/printer/sd/timelapse/${it.name}`); close(); setData(d => ({ ...d, items: d.items.filter(x => x.name !== it.name), total: d.total - 1 })); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
@@ -2422,9 +2422,9 @@ function TimelapsesView({ search }) {
     backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)", textDecoration:"none" });
   return (<>
     <p style={{ fontSize:11.5, color:"var(--muted)", margin:"0 0 10px", display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-      <span>{all.length} timelapse{all.length > 1 ? "s" : ""} sur la carte · {mo(data.bytes || 0)}</span>
+      <span>{all.length} timelapse{all.length > 1 ? "s" : ""} sur l'imprimante · {mo(data.bytes || 0)}</span>
       <button onClick={() => { setData(null); load(true); }} style={{ padding:"2px 10px", borderRadius:20, border:"1px solid var(--border)",
-        background:"var(--surface2)", color:"var(--text2)", fontSize:11, fontWeight:800, cursor:"pointer" }}>↻ Relire la carte</button></p>
+        background:"var(--surface2)", color:"var(--text2)", fontSize:11, fontWeight:800, cursor:"pointer" }}>↻ Relire</button></p>
     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:10 }}>
       {all.slice(0, shown).map((it, i) => (
         <button key={it.name} onClick={() => setOpen(i)} style={{ textAlign:"left", padding:0, borderRadius:14, overflow:"hidden", cursor:"pointer",

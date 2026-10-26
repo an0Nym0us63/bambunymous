@@ -76,7 +76,7 @@ def _ip(v):
 SPEED = {1: "Silencieux", 2: "Standard", 3: "Sport", 4: "Ludique"}
 AMS_MAIN = {0: "au repos", 1: "changement de filament", 2: "lecture RFID", 3: "assistance", 4: "calibration",
             0x10: "auto-contrôle", 0x20: "débogage", 0xFF: "inconnu"}
-SD = {0: "absente", 1: "présente", 2: "anomalie", 3: "en lecture seule"}
+SD = {0: "absent", 1: "présent", 2: "anomalie", 3: "en lecture seule"}
 UPG = {0: "aucune", 1: "disponible", 2: "à jour"}
 # home_flag (X1, P1, A1) : les bits que Bambu Studio lit
 HOME_BITS = [
@@ -135,7 +135,7 @@ def build(state) -> dict:
          "Envoi du fichier à l'imprimante avant le départ")
     _row(r, "Étape (code)", p.get("stg_cur") if _int(p.get("stg_cur")) not in (None, 0, -1, 255) else None, "Le libellé est sur la popup")
     _row(r, "Ligne de G-code", p.get("mc_print_line_number") if _int(p.get("mc_print_line_number")) else None)
-    _row(r, "Origine", {"local": "carte SD / réseau local", "cloud": "cloud Bambu", "idle": None}.get(p.get("print_type"), p.get("print_type")))
+    _row(r, "Origine", {"local": "stockage de l'imprimante / réseau local", "cloud": "cloud Bambu", "idle": None}.get(p.get("print_type"), p.get("print_type")))
     lv = _int(p.get("spd_lvl"))
     _row(r, "Mode de vitesse", (SPEED.get(lv, str(lv)) + (f" · {p.get('spd_mag')} %" if p.get("spd_mag") else "")) if lv else None)
     sobj = p.get("s_obj")
@@ -195,9 +195,9 @@ def build(state) -> dict:
     r = []
     hf = _int(p.get("home_flag"))
     if "sdcard" in p:
-        _row(r, "Carte SD", "présente" if p.get("sdcard") else "absente")
+        _row(r, "Stockage (SD / USB)", "présent" if p.get("sdcard") else "absent")
     elif hf is not None:
-        _row(r, "Carte SD", SD.get((hf >> 8) & 0x3))
+        _row(r, "Stockage (SD / USB)", SD.get((hf >> 8) & 0x3))
     if hf is not None:
         for bit, label in HOME_BITS:
             _row(r, label, "oui" if (hf >> bit) & 1 else "non")

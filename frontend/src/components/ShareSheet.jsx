@@ -34,7 +34,7 @@ function TimelapsePicker({ items, picked, room, onDone, onClose, z }) {
       <div style={{ padding: "52px 16px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
         <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>🎬 Joindre des timelapses</div>
         <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 4px", lineHeight: 1.45 }}>
-          Ceux des impressions du groupe, copiés de la carte SD. {room} place{room > 1 ? "s" : ""} dans l'album (10 médias au plus).</p>
+          Ceux des impressions du groupe, copiés depuis l'imprimante. {room} place{room > 1 ? "s" : ""} dans l'album (10 médias au plus).</p>
         {items.map(t => {
           const yes = on.includes(t.id);
           const full = !yes && on.length >= room;
@@ -192,7 +192,7 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
                   const on = pick?.includes(m.id);
                   const st = { ...thumb, border: on ? `2.5px solid ${T}` : "2px solid transparent", opacity: on ? 1 : 0.4 };
                   if (m.timelapse) return (
-                    <span key={m.id} onClick={() => toggle(m.id)} data-tip={m.label ? `Timelapse · ${m.label}` : "Le timelapse, copié de la carte SD"}
+                    <span key={m.id} onClick={() => toggle(m.id)} data-tip={m.label ? `Timelapse · ${m.label}` : "Le timelapse, copié depuis l'imprimante"}
                       style={{ position: "relative", display: "block", cursor: "pointer" }}>
                       <video src={srcOf(m.url)} muted playsInline preload="metadata" style={{ ...st, background: "#0f172a" }}/>
                       <span style={{ position: "absolute", left: 4, bottom: 4, fontSize: 10, fontWeight: 900, color: "#fff", padding: "1px 5px",
