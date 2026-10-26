@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { FSheet, fBtn } from "./FicheKit";
+import client from "../api/client";
+import { fmtBytes } from "./StorageSheet";
 
 // La vitesse du serveur en grand (26/10/2026) : chaque route avec un nom lisible, une barre (mediane pleine,
 // 95e centile en trait, sur une echelle logarithmique de 10 ms a 30 s), le pire et le nombre d'appels.
@@ -97,6 +99,69 @@ function LoopView({ loop }) {
   </>);
 }
 
+// La base (26/10/2026) : son etat, « Optimiser » (journal vide, statistiques, compactage), et le banc d'essai qui
+// rejoue les routes lentes une par une : lente seule = la route a reprendre ; rapide seule = la foule d'une page.
+function DbView() {
+  const [facts, setFacts] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [opt, setOpt] = useState(null);
+  const [bench, setBench] = useState(null);
+  const [err, setErr] = useState(null);
+  React.useEffect(() => { client.get("/settings/perf/db").then(r => setFacts(r.data)).catch(() => setErr("État de la base illisible")); }, []);
+  const run = async (what) => {
+    setBusy(what); setErr(null);
+    try {
+      if (what === "opt") { const { data } = await client.post("/settings/perf/db/optimize"); setOpt(data); setFacts(data.facts); }
+      else { const { data } = await client.post("/settings/perf/bench", null, { timeout: 180000 }); setBench(data); }
+    } catch (e) { setErr(e?.response?.data?.detail || "Échec"); }
+    setBusy(null);
+  };
+  const box = { padding: "10px 12px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)" };
+  const C = "#0EA5E9";
+  const btn = on => ({ ...fBtn, flex: 1, border: "none", color: "#fff", opacity: on ? 0.6 : 1, background: `linear-gradient(135deg, ${C}, #6366F1)` });
+  const f = facts;
+  return (<>
+    {err && <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: "#ef4444" }}>{err}</p>}
+    {f && <div style={{ ...box, display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 8 }}>
+        {[[fmtBytes(f.db_bytes), "base"], [fmtBytes(f.wal_bytes), "journal en attente", f.wal_bytes > 64 * 1048576 ? "#ef4444" : f.wal_bytes > 8 * 1048576 ? "#f59e0b" : "#16a34a"],
+          [f.analyzed ? "à jour" : "jamais", "statistiques", f.analyzed ? "#16a34a" : "#f59e0b"]].map(([v, l, c]) => (
+          <div key={l}><div style={{ fontSize: 16, fontWeight: 900, color: c || "var(--text)" }}>{v}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>{l}</div></div>))}
+      </div>
+      <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+        mode {f.journal} · {f.indexes} index · {f.pages ? Math.round(100 * f.free_pages / f.pages) : 0} % de pages libres</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 10px", fontSize: 11.5, fontWeight: 700, color: "var(--muted)", lineHeight: 1.5 }}>
+        {f.tables.map(t => <span key={t.table} style={{ whiteSpace: "nowrap" }}>{t.table} <b style={{ color: "var(--text2)" }}>{(t.rows || 0).toLocaleString("fr-FR")}</b></span>)}</div>
+    </div>}
+    <div style={{ display: "flex", gap: 8 }}>
+      <button disabled={!!busy} onClick={() => run("opt")} style={btn(busy === "opt")}>{busy === "opt" ? "Optimisation…" : "🧹 Optimiser la base"}</button>
+      <button disabled={!!busy} onClick={() => run("bench")} style={btn(busy === "bench")}>{busy === "bench" ? "Mesure…" : "⏱ Banc d'essai"}</button>
+    </div>
+    {opt && <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#16a34a" }}>Fait en {perfMs(opt.ms)} : {opt.steps.join(", ")}.</p>}
+    {bench && <>
+      <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.4 }}>
+        Chaque route rejouée seule, trois fois (la meilleure). Lente seule : c'est elle qu'il faut reprendre. Rapide seule mais lente en vrai : c'est la foule d'appels simultanés.</p>
+      {bench.routes.map(r => { const lb = perfLabel(r.route), c = r.alone != null ? perfTone(r.alone, r.route) : "#94a3b8";
+        return <div key={r.route} style={{ ...box, display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lb.title}</span>
+            <span style={{ fontSize: 15, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{r.alone != null ? `seule ${perfMs(r.alone)}` : "échec"}</span>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+            <span>en vrai <b style={{ color: perfTone(r.live_p95, r.route) }}>{perfMs(r.live_p50)}</b> · pire <b style={{ color: perfTone(r.live_p95, r.route) }}>{perfMs(r.live_p95)}</b></span>
+            {r.alone_db != null && <span>base <b style={{ color: "var(--text2)" }}>{perfMs(r.alone_db)}</b> · {r.q} requête{r.q > 1 ? "s" : ""}</span>}
+            {r.status && r.status >= 400 && <span style={{ color: "#ef4444" }}>réponse {r.status}</span>}
+            {r.error && <span style={{ color: "#ef4444" }}>{r.error}</span>}
+          </div>
+          {r.top_ms >= 20 && r.top_sql && <code data-tip={r.top_sql} style={{ fontSize: 10.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            plus lente {perfMs(r.top_ms)} : {r.top_sql}</code>}
+        </div>; })}
+      {!bench.routes.length && <p style={{ fontSize: 13, color: "var(--muted)", textAlign: "center" }}>Aucune route à rejouer pour l'instant.</p>}
+    </>}
+  </>);
+}
+
 export default function PerfSheet({ data, onClose, onReset, onReload }) {
   const [only, setOnly] = useState("slow");
   const all = perfSort((data?.routes || []).filter(r => r.count > 0));
@@ -105,7 +170,7 @@ export default function PerfSheet({ data, onClose, onReset, onReload }) {
   const loop = data?.loop, stalls = loop?.stalls || [];
   const since = data ? new Date(data.since * 1000).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
   const C = "#0EA5E9";
-  const seg = on => ({ flex: 1, padding: "7px 10px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800,
+  const seg = on => ({ flex: "1 1 auto", padding: "7px 6px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap",
     color: on ? "#fff" : "var(--text2)", background: on ? `linear-gradient(135deg, ${C}, #6366F1)` : "transparent" });
   return createPortal(
     <FSheet onClose={onClose} z={1600} bottom={<>
@@ -137,8 +202,9 @@ export default function PerfSheet({ data, onClose, onReset, onReload }) {
           <button onClick={() => setOnly("slow")} style={seg(only === "slow")}>Lentes ({slow.length})</button>
           <button onClick={() => setOnly("all")} style={seg(only === "all")}>Toutes ({all.length})</button>
           {loop && <button onClick={() => setOnly("loop")} style={seg(only === "loop")}>Blocages ({stalls.length})</button>}
+          <button onClick={() => setOnly("db")} style={seg(only === "db")}>Base</button>
         </div>
-        {only === "loop" && loop ? <LoopView loop={loop}/> : <>
+        {only === "db" ? <DbView/> : only === "loop" && loop ? <LoopView loop={loop}/> : <>
         {/* la regle de l'echelle */}
         <div style={{ position: "relative", height: 14, margin: "0 2px", fontSize: 10, fontWeight: 700, color: "var(--muted)" }}>
           {[[10, "10 ms"], [100, "100 ms"], [1000, "1 s"], [10000, "10 s"]].map(([v, l]) => (

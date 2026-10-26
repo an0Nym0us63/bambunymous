@@ -199,13 +199,140 @@ class PerfMiddleware:
         done = {"v": False}
         req = {"db": 0.0, "q": 0, "top": (0.0, "")}
         _REQ.set(req)
+        bench = scope.get("perf_bench")          # un appel du banc d'essai : mesure rendue, pas comptee
 
         async def _send(message):
             if not done["v"] and message["type"] == "http.response.start":
                 done["v"] = True
                 try:
-                    record(route_key(scope.get("method", "GET"), scope["path"]), (time.perf_counter() - t0) * 1000, req)
+                    ms = (time.perf_counter() - t0) * 1000
+                    if bench is not None:
+                        bench.update(ms=ms, db=req["db"], q=req["q"], top=req["top"], status=message.get("status"))
+                    else:
+                        record(route_key(scope.get("method", "GET"), scope["path"]), ms, req)
                 except Exception:
                     pass
             await send(message)
         await self.app(scope, receive, _send)
+
+
+# ── Le banc d'essai (26/10/2026) ─────────────────────────────────────────────────────────────────────────
+# Rejoue les routes lentes UNE PAR UNE, chacune trois fois, dans le serveur lui-meme : leur cout propre, sans
+# l'embouteillage d'une page qui en lance quinze a la fois. Lente seule : la route est a reprendre ; rapide seule
+# mais lente en vrai : c'est la foule (a etaler, ou a mettre en cache).
+BENCH_SKIP = re.compile(r"/(makerworld|friends|camera|share|version|printer/sd|stream|settings/(storage|archive|perf))|\{")
+
+
+async def _asgi_get(app, path: str, headers: list) -> dict:
+    p, _, qs = path.partition("?")
+    box: dict = {}
+    scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "GET", "scheme": "http",
+             "path": p, "raw_path": p.encode(), "query_string": qs.encode(), "root_path": "", "headers": headers,
+             "client": ("127.0.0.1", 0), "server": ("bench", 80), "perf_bench": box}
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(_m):
+        return None
+    t0 = time.perf_counter()
+    await app(scope, receive, send)
+    box["full"] = (time.perf_counter() - t0) * 1000
+    return box
+
+
+async def bench(app, headers: list, limit: int = 15) -> dict:
+    """Les routes GET mesurees les plus lentes (sans parametre de chemin ni service exterieur), une a une."""
+    rows = [r for r in snapshot(600)["routes"] if r["route"].startswith("GET ") and r["count"] > 0
+            and not BENCH_SKIP.search(r["route"][4:])]
+    rows.sort(key=lambda r: -r["p95"])
+    out = []
+    for r in rows[:limit]:
+        path = "/api/v1" + r["route"][4:]
+        runs = []
+        for _ in range(3):
+            try:
+                runs.append(await _asgi_get(app, path, headers))
+            except Exception as e:
+                runs.append({"error": f"{type(e).__name__}: {e}"})
+        ok = [x for x in runs if "ms" in x]
+        best = min(ok, key=lambda x: x["ms"]) if ok else None
+        out.append({"route": r["route"], "live_p50": r["p50"], "live_p95": r["p95"],
+                    "alone": round(best["ms"], 1) if best else None, "alone_db": round(best["db"], 1) if best else None,
+                    "q": best["q"] if best else None, "status": best.get("status") if best else None,
+                    "top_ms": round(best["top"][0], 1) if best else None, "top_sql": best["top"][1] if best else None,
+                    "error": None if ok else runs[-1].get("error")})
+    return {"at": time.time(), "routes": out}
+
+
+# ── L'etat de la base (26/10/2026) ───────────────────────────────────────────────────────────────────────
+def _db_file() -> str:
+    from .config import settings
+    url = str(settings.DATABASE_URL)
+    return url.split(":///", 1)[1] if ":///" in url else ""
+
+
+async def db_facts(db) -> dict:
+    from sqlalchemy import text
+    q = lambda sql: db.execute(text(sql))
+    f = _db_file()
+    size = lambda p: os.path.getsize(p) if p and os.path.exists(p) else 0
+    page_size = (await q("PRAGMA page_size")).scalar() or 0
+    tables = [r[0] for r in (await q("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")).all()]
+    counts = []
+    for t in tables:
+        try:
+            counts.append({"table": t, "rows": (await q(f'SELECT COUNT(*) FROM "{t}"')).scalar()})
+        except Exception:
+            pass
+    counts.sort(key=lambda x: -(x["rows"] or 0))
+    stat = (await q("SELECT COUNT(*) FROM sqlite_master WHERE name='sqlite_stat1'")).scalar()
+    return {"journal": (await q("PRAGMA journal_mode")).scalar(), "page_size": page_size,
+            "pages": (await q("PRAGMA page_count")).scalar(), "free_pages": (await q("PRAGMA freelist_count")).scalar(),
+            "db_bytes": size(f), "wal_bytes": size(f + "-wal"), "analyzed": bool(stat),
+            "indexes": (await q("SELECT COUNT(*) FROM sqlite_master WHERE type='index'")).scalar(),
+            "tables": counts[:12]}
+
+
+async def db_optimize() -> dict:
+    """Vide le journal dans la base, recalcule les statistiques du planificateur, et compacte si beaucoup de
+    pages sont libres. Sur une connexion a part (le VACUUM refuse de tourner dans une transaction)."""
+    from sqlalchemy import text
+    from ..db.session import engine
+    t0 = time.perf_counter()
+    steps = []
+    async with engine.connect() as c:
+        c = await c.execution_options(isolation_level="AUTOCOMMIT")
+        r = (await c.execute(text("PRAGMA wal_checkpoint(TRUNCATE)"))).first()
+        steps.append(f"journal vidé ({r[2] if r else '?'} pages)")
+        await c.execute(text("ANALYZE"))
+        steps.append("statistiques recalculées")
+        await c.execute(text("PRAGMA optimize"))
+        pages = (await c.execute(text("PRAGMA page_count"))).scalar() or 0
+        free = (await c.execute(text("PRAGMA freelist_count"))).scalar() or 0
+        if pages and free / pages > 0.1:
+            await c.execute(text("VACUUM"))
+            steps.append(f"base compactée ({free} pages libres sur {pages})")
+    return {"ms": round((time.perf_counter() - t0) * 1000), "steps": steps}
+
+
+async def db_upkeep() -> None:
+    """L'entretien de la base, en tache de fond : les statistiques du planificateur au demarrage si elles
+    manquent (sans elles, SQLite choisit ses index a l'aveugle), puis « PRAGMA optimize » toutes les heures."""
+    import logging
+    from sqlalchemy import text
+    from ..db.session import engine
+    log = logging.getLogger(__name__)
+    await asyncio.sleep(90)                  # apres le demarrage (ses taches lisent beaucoup)
+    while True:
+        try:
+            async with engine.connect() as c:
+                c = await c.execution_options(isolation_level="AUTOCOMMIT")
+                has = (await c.execute(text("SELECT COUNT(*) FROM sqlite_master WHERE name='sqlite_stat1'"))).scalar()
+                if not has:
+                    await c.execute(text("ANALYZE"))
+                    log.info("[DB] statistiques du planificateur calculees")
+                await c.execute(text("PRAGMA optimize"))
+        except Exception:
+            log.exception("[DB] entretien non fait")
+        await asyncio.sleep(3600)

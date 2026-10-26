@@ -149,6 +149,9 @@ async def lifespan(app: FastAPI):
     # la boucle surveillee : ce qui la fige est releve (Parametres > Vitesse du serveur)
     from app.core.perf import loop_watch as _loop_watch
     _bg(_loop_watch())
+    # l'entretien de la base : statistiques au besoin, puis « PRAGMA optimize » chaque heure
+    from app.core.perf import db_upkeep as _db_upkeep
+    _bg(_db_upkeep())
     # 3MF d'origine MakerWorld : un rattrapage qui tournait a l'arret reprend tout seul
     from app.services.mw_source import resume_after_restart as _src_resume
     _bg(_src_resume())

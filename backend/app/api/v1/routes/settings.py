@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from typing import Optional
@@ -426,3 +426,27 @@ async def perf_reset(_: str = Depends(require_admin)):
     from ....core import perf
     perf.reset()
     return perf.snapshot()
+
+
+@router.post("/perf/bench")
+async def perf_bench(request: Request, _: str = Depends(require_admin)):
+    """Les routes lentes rejouees une par une (leur cout propre, sans la foule d'une page)."""
+    from ....core import perf
+    hdrs = [(k, v) for k, v in request.scope.get("headers", []) if k not in (b"host", b"content-length", b"content-type")]
+    return await perf.bench(request.app, hdrs)
+
+
+@router.get("/perf/db")
+async def perf_db(db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    from ....core import perf
+    return await perf.db_facts(db)
+
+
+@router.post("/perf/db/optimize")
+async def perf_db_optimize(db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    from ....core import perf
+    await db.close()
+    done = await perf.db_optimize()
+    from ....db.session import AsyncSessionLocal
+    async with AsyncSessionLocal() as s2:
+        return {**done, "facts": await perf.db_facts(s2)}

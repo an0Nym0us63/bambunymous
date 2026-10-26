@@ -15,6 +15,9 @@ engine = create_async_engine(
         "timeout": 30,           # attendre 30s si DB locked
     },
     pool_pre_ping=True,
+    # une page lance une quinzaine d'appels a la fois : assez de connexions pour qu'aucun n'attende la sienne
+    pool_size=12,
+    max_overflow=12,
 )
 
 
@@ -31,7 +34,8 @@ def _sqlite_pragmas(dbapi_conn, _rec):
     cur = dbapi_conn.cursor()
     try:
         for p in ("journal_mode=WAL", "synchronous=NORMAL", "busy_timeout=30000",
-                  "cache_size=-32000", "temp_store=MEMORY", "mmap_size=134217728"):
+                  # la base tient en entier en memoire (26/10/2026 : 64 Mo de cache, 512 Mo lus en direct)
+                  "cache_size=-65536", "temp_store=MEMORY", "mmap_size=536870912"):
             cur.execute(f"PRAGMA {p}")
     finally:
         cur.close()

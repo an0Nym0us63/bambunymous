@@ -127,16 +127,48 @@ def check(category: str, label: str, icon: str = "•",
     return deco
 
 
+# ── Lectures partagees (26/10/2026) ───────────────────────────────────────────
+# Douze verifications portent sur les filaments ou les bobines actives ; chacune relisait sa table (26 requetes
+# pour l'accueil, et la base etait l'essentiel du temps). Elles lisent desormais UNE fois les filaments et UNE fois
+# les bobines actives avec leur filament, gardes le temps de l'appel (db.info), et filtrent en memoire.
+async def _fils(db) -> list:
+    m = db.info.get("att_fils")
+    if m is None:
+        m = db.info["att_fils"] = list((await db.execute(select(Filament))).scalars().all())
+    return m
+
+
+async def _pairs(db) -> list:
+    """Les bobines actives et leur filament : [(spool, filament)]."""
+    m = db.info.get("att_pairs")
+    if m is None:
+        m = db.info["att_pairs"] = [tuple(r) for r in (await db.execute(
+            select(Spool, Filament).join(Filament, Filament.id == Spool.filament_id).where(Spool.archived.is_(False))
+        )).all()]
+    return m
+
+
+def _fresh(db) -> None:
+    """Un nouvel assemblage relit tout (rien de garde d'un appel a l'autre)."""
+    db.info.pop("att_fils", None)
+    db.info.pop("att_pairs", None)
+
+
+def _bambu(f) -> bool:
+    return "bambu" in (f.manufacturer or "").lower()
+
+
+def _under(s, f, pct) -> bool:
+    fw = f.filament_weight_g or 0
+    return s.remaining_weight_g is not None and fw > 0 and s.remaining_weight_g < fw * (pct / 100.0)
+
+
 # ── Verifications ──────────────────────────────────────────────────────────
 @check("no_spool", "Filaments sans bobine", "📦")
 async def _filaments_without_spool(db) -> list[Alert]:
     """Filament au catalogue mais plus aucune bobine active : a racheter."""
-    sub = (select(Spool.filament_id)
-           .where(Spool.archived.is_(False))
-           .distinct())
-    rows = (await db.execute(
-        select(Filament).where(Filament.id.notin_(sub))
-    )).scalars().all()
+    used = {s.filament_id for s, _f in await _pairs(db)}
+    rows = [f for f in await _fils(db) if f.id not in used]
     return [
         Alert(
             key=f"no_spool:filament:{f.id}",
@@ -162,16 +194,7 @@ STOCK_LOW_PCT  = 25   # "fin de stock" (derniere bobine) : plus tot, car il faut
        shown=5, random_sample=False)
 async def _spools_low(db) -> list[Alert]:
     """Bobine sous le seuil : penser a racheter, ou a lancer ce qui l'utilise."""
-    rows = (await db.execute(
-        select(Spool, Filament)
-        .join(Filament, Filament.id == Spool.filament_id)
-        .where(
-            Spool.archived.is_(False),
-            Spool.remaining_weight_g.isnot(None),
-            Filament.filament_weight_g > 0,
-            Spool.remaining_weight_g < Filament.filament_weight_g * (LOW_SPOOL_PCT / 100.0),
-        )
-    )).all()
+    rows = [(s, f) for s, f in await _pairs(db) if _under(s, f, LOW_SPOOL_PCT)]
     out = []
     for s, f in rows:
         pct = round(s.remaining_weight_g / f.filament_weight_g * 100)
@@ -206,25 +229,11 @@ async def _last_spool_low(db) -> list[Alert]:
     Un filament peut donc apparaitre dans les deux si sa derniere bobine est aussi
     presque vide : c'est voulu, les deux messages ne disent pas la meme chose.
     """
-    from sqlalchemy import func as _func
-
     # Nombre de bobines actives par filament
-    counts = dict((fid, n) for fid, n in (await db.execute(
-        select(Spool.filament_id, _func.count(Spool.id))
-        .where(Spool.archived.is_(False))
-        .group_by(Spool.filament_id)
-    )).all())
-
-    rows = (await db.execute(
-        select(Spool, Filament)
-        .join(Filament, Filament.id == Spool.filament_id)
-        .where(
-            Spool.archived.is_(False),
-            Spool.remaining_weight_g.isnot(None),
-            Filament.filament_weight_g > 0,
-            Spool.remaining_weight_g < Filament.filament_weight_g * (STOCK_LOW_PCT / 100.0),
-        )
-    )).all()
+    counts: dict = {}
+    for s, _f in await _pairs(db):
+        counts[s.filament_id] = counts.get(s.filament_id, 0) + 1
+    rows = [(s, f) for s, f in await _pairs(db) if _under(s, f, STOCK_LOW_PCT)]
 
     out = []
     for s, f in rows:
@@ -355,11 +364,7 @@ async def _filaments_without_profile(db) -> list[Alert]:
     profile_id absent : l'imprimante ne peut pas retrouver le profil du filament,
     et l'association automatique depuis l'AMS ne fonctionne pas.
     """
-    rows = (await db.execute(
-        select(Filament).where(
-            or_(Filament.profile_id.is_(None), Filament.profile_id == "")
-        )
-    )).scalars().all()
+    rows = [f for f in await _fils(db) if not f.profile_id]
     return [
         Alert(
             key=f"no_profile:filament:{f.id}",
@@ -382,12 +387,7 @@ async def _bambu_without_color_code(db) -> list[Alert]:
     officiel (et donc l'enrichissement automatique) ne peut pas se faire.
     Verification limitee aux filaments Bambu — les autres marques n'ont pas ce code.
     """
-    rows = (await db.execute(
-        select(Filament).where(
-            Filament.manufacturer.ilike("%bambu%"),
-            or_(Filament.fila_color_code.is_(None), Filament.fila_color_code == ""),
-        )
-    )).scalars().all()
+    rows = [f for f in await _fils(db) if _bambu(f) and not f.fila_color_code]
     return [
         Alert(
             key=f"no_color_code:filament:{f.id}",
@@ -413,14 +413,7 @@ async def _spools_without_price(db) -> list[Alert]:
     retombera de toute facon sur le prix du filament, puis sur 20 €/kg — mais
     tant que rien n'est saisi, autant le rappeler.
     """
-    rows = (await db.execute(
-        select(Spool, Filament)
-        .join(Filament, Filament.id == Spool.filament_id)
-        .where(
-            Spool.archived.is_(False),
-            Spool.price_override.is_(None),
-        )
-    )).all()
+    rows = [(s, f) for s, f in await _pairs(db) if s.price_override is None]
     return [
         Alert(
             key=f"spool_no_price:spool:{s.id}",
@@ -445,9 +438,7 @@ async def _filaments_without_price(db) -> list[Alert]:
     print quand la bobine n'a pas de prix propre ; sans lui, on tombe sur le
     defaut 20 €/kg, potentiellement faux.
     """
-    rows = (await db.execute(
-        select(Filament).where(Filament.price.is_(None))
-    )).scalars().all()
+    rows = [f for f in await _fils(db) if f.price is None]
     return [
         Alert(
             key=f"fil_no_price:filament:{f.id}",
@@ -469,15 +460,7 @@ async def _bambu_spools_without_rfid(db) -> list[Alert]:
     Bobine Bambu active sans tag RFID : l'AMS ne la reconnaitra pas toute seule,
     il faudra l'associer a la main a chaque changement.
     """
-    rows = (await db.execute(
-        select(Spool, Filament)
-        .join(Filament, Filament.id == Spool.filament_id)
-        .where(
-            Spool.archived.is_(False),
-            Filament.manufacturer.ilike("%bambu%"),
-            or_(Spool.tag_number.is_(None), Spool.tag_number == ""),
-        )
-    )).all()
+    rows = [(s, f) for s, f in await _pairs(db) if _bambu(f) and not s.tag_number]
     return [
         Alert(
             key=f"no_rfid:spool:{s.id}",
@@ -499,9 +482,7 @@ async def _filaments_without_swatch(db) -> list[Alert]:
     Filaments dont l'echantillon (nuancier) n'est pas marque. Utile pour savoir
     lesquels imprimer / referencer physiquement.
     """
-    rows = (await db.execute(
-        select(Filament).where(Filament.swatch.is_(False))
-    )).scalars().all()
+    rows = [f for f in await _fils(db) if f.swatch is not None and not f.swatch]
     return [
         Alert(
             key=f"fil_no_swatch:filament:{f.id}",
@@ -523,12 +504,7 @@ async def _swatches_without_label(db) -> list[Alert]:
     Echantillon imprime mais etiquette pas encore imprimee : la plaquette est
     faite, il ne lui manque que son QR pour etre retrouvee par un scan.
     """
-    rows = (await db.execute(
-        select(Filament).where(
-            Filament.swatch.is_(True),
-            or_(Filament.label_printed.is_(False), Filament.label_printed.is_(None)),
-        )
-    )).scalars().all()
+    rows = [f for f in await _fils(db) if f.swatch and not f.label_printed]
     return [
         Alert(
             key=f"fil_swatch_no_label:filament:{f.id}",
@@ -554,11 +530,7 @@ async def _spools_not_dried(db) -> list[Alert]:
     plus en retard sur son delai.
     """
     await _drying.load(db)
-    rows = (await db.execute(
-        select(Spool, Filament)
-        .join(Filament, Filament.id == Spool.filament_id)
-        .where(Spool.archived.is_(False))
-    )).all()
+    rows = await _pairs(db)
     now = datetime.utcnow()
     out = []
     for s, f in rows:
@@ -587,9 +559,7 @@ async def _spools_not_dried(db) -> list[Alert]:
 @check("to_order", "Filaments à commander", "🛒")
 async def _filaments_to_order(db) -> list[Alert]:
     """Marques \"a commander\" a la main (champ to_order)."""
-    rows = (await db.execute(
-        select(Filament).where(Filament.to_order.is_(True))
-    )).scalars().all()
+    rows = [f for f in await _fils(db) if f.to_order]
     return [
         Alert(
             key=f"to_order:filament:{f.id}",
@@ -616,16 +586,13 @@ async def _filaments_unused(db) -> list[Alert]:
     signaler deux fois ne servirait a rien.
     """
     cutoff = datetime.utcnow() - timedelta(days=UNUSED_DAYS)
-    rows = (await db.execute(
-        select(Filament, func.max(Spool.last_used_at).label("last"))
-        .join(Spool, Spool.filament_id == Filament.id)
-        .where(Spool.archived.is_(False))
-        .group_by(Filament.id)
-        .having(or_(
-            func.max(Spool.last_used_at).is_(None),
-            func.max(Spool.last_used_at) < cutoff,
-        ))
-    )).all()
+    # le dernier usage de chaque filament, sur ses bobines actives (le MAX du SQL : les vides ne comptent pas)
+    lasts: dict = {}
+    for s, f in await _pairs(db):
+        e = lasts.setdefault(f.id, [f, None])
+        if s.last_used_at is not None and (e[1] is None or s.last_used_at > e[1]):
+            e[1] = s.last_used_at
+    rows = [(f, last) for f, last in lasts.values() if last is None or last < cutoff]
     out = []
     for f, last in rows:
         if last:
@@ -800,6 +767,7 @@ async def build_attention(db, per_category: int = 3) -> tuple[list[dict], list[d
     si les cinq checks echouaient, l'ecran affichait "Rien a signaler" sans le
     moindre indice, ce qui rendait la panne invisible.
     """
+    _fresh(db)
     dismissed = await _dismissed_keys(db)
     out: list[dict] = []
     errors: list[dict] = []
@@ -847,6 +815,7 @@ async def all_alerts(db) -> tuple[list[dict], list[dict]]:
     complet (Parametres). Les mises en sourdine sont marquees, pas retirees :
     on veut pouvoir les voir et les reactiver.
     """
+    _fresh(db)
     dismissed = await _dismissed_keys(db)
     out: list[dict] = []
     errors: list[dict] = []
