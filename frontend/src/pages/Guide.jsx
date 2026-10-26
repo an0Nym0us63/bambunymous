@@ -88,6 +88,37 @@ export default function Guide() {
     else window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - off, behavior: smooth ? "smooth" : "auto" });
     history.replaceState(null, "", `#${id}`);
   };
+  // aller a une partie et y rester : les captures au-dessus (chargees en paresseux, sans taille reservee) se
+  // chargent apres le saut et poussent la cible plus bas ; on se recale a chaque chargement et pendant quelques
+  // secondes, tant que le lecteur n'a pas touche a la page
+  const settle = useRef(null);
+  const goTo = (id, smooth = false) => {
+    settle.current?.();
+    let done = false;
+    const evs = ["pointerdown", "wheel", "touchstart", "keydown"];
+    const imgs = [...(content.current?.querySelectorAll("img") || [])].filter(i => !i.complete);
+    const again = () => { if (!done) go(id); };
+    const ts = [];
+    const stop = () => {
+      if (done) return;
+      done = true;
+      ts.forEach(clearTimeout);
+      imgs.forEach(i => i.removeEventListener("load", again));
+      evs.forEach(e => window.removeEventListener(e, stop, { capture: true }));
+      if (settle.current === stop) settle.current = null;
+    };
+    settle.current = stop;
+    requestAnimationFrame(() => {
+      go(id, smooth);
+      if (done) return;
+      imgs.forEach(i => i.addEventListener("load", again));
+      evs.forEach(e => window.addEventListener(e, stop, { passive: true, capture: true }));
+      // un defilement doux dure un instant : les recalages commencent apres
+      (smooth ? [900, 1600, 2500, 4000] : [150, 500, 1000, 2000, 3500]).forEach(ms => ts.push(setTimeout(again, ms)));
+      ts.push(setTimeout(stop, 6000));
+    });
+  };
+  useEffect(() => () => settle.current?.(), []);
   const openTo = id => setOpen(o => {
     const n = new Set(o);
     for (const c of tree) { if (c.id === id) n.add(c.id);
@@ -143,14 +174,8 @@ export default function Guide() {
     const h = decodeURIComponent(window.location.hash.slice(1));
     if (!h) return undefined;
     openTo(h);
-    // les captures au-dessus se chargent et poussent la cible : on se recale, tant qu'on n'a pas touche a la page
-    let moved = false;
-    const stop = () => { moved = true; };
-    const evs = ["pointerdown", "wheel", "touchstart", "keydown"];
-    evs.forEach(e => window.addEventListener(e, stop, { passive: true, capture: true }));
-    requestAnimationFrame(() => go(h));
-    const ts = [400, 1000, 2000].map(ms => setTimeout(() => { if (!moved) go(h); }, ms));
-    return () => { ts.forEach(clearTimeout); evs.forEach(e => window.removeEventListener(e, stop, { capture: true })); };
+    goTo(h);
+    return undefined;
   }, [tree]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // la partie en cours, suivie au defilement
@@ -220,14 +245,16 @@ export default function Guide() {
     return s.split(re).map((p, i) => i % 2 ? <mark key={i}>{p}</mark> : p);
   };
   const snippet = t => { const s = t.replace(/\s+/g, " "), i = Math.max(0, norm(s).indexOf(words[0]) - 60); return `${i ? "…" : ""}${s.slice(i, i + 180).trim()}…`; };
-  const pick = id => { setQ(""); setMenu(false); openTo(id); requestAnimationFrame(() => go(id, true)); };
+  // un resultat de recherche ou une ligne du sommaire : le contenu etait cache sous les resultats, on y saute
+  // directement (pas de defilement doux depuis la liste des resultats)
+  const pick = id => { const fromHits = !!hits; setQ(""); setMenu(false); openTo(id); goTo(id, !fromHits); };
 
   // liens internes (#id) du contenu, captures agrandissables
   const onContent = e => {
     const img = e.target.closest("figure img");
     if (img) { setZoom({ src: img.src, cap: img.closest("figure").querySelector("figcaption")?.textContent || "" }); return; }
     const a = e.target.closest("a[href^='#']");
-    if (a) { e.preventDefault(); const id = decodeURIComponent(a.getAttribute("href").slice(1)); openTo(id); go(id, true); }
+    if (a) { e.preventDefault(); const id = decodeURIComponent(a.getAttribute("href").slice(1)); openTo(id); goTo(id, true); }
   };
 
   const toggle = id => setOpen(o => { const n = new Set(o); if (n.has(id)) n.delete(id); else n.add(id); return n; });
