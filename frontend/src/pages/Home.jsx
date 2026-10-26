@@ -566,15 +566,25 @@ function RackState({ rack, compact = false }) {
 const FLOW_SHORT = { S: "Standard", A: "Standard", X: "Standard", H: "Haut débit", E: "Haut débit", U: "TPU HF", B: "E3D HF" };
 const flowShort = t => FLOW_SHORT[String(t || "").toUpperCase()[1]] || "";
 // une buse dessinee, dans le style de l'appli (26/10/2026) : un radiateur en metal arrondi, le corps en
-// degrade a la couleur du filament (avec son reflet), la pointe en laiton, une ombre douce dessous
-function NozzleArt({ color, h = 54, dim = false }) {
+// degrade a la couleur du filament (avec son reflet), la pointe en metal, une ombre douce dessous.
+// La pointe ne rougit que sur la buse montee, selon sa chauffe : metal froid, puis orange, puis rouge (heat en °C).
+const TIP_COLD = 50, TIP_HOT = 250;
+function tipShades(heat) {
+  if (heat == null || heat < TIP_COLD) return ["#e2e8f0", "#94a3b8", false];
+  const p = Math.round(Math.min(1, (heat - TIP_COLD) / (TIP_HOT - TIP_COLD)) * 100);
+  return [`color-mix(in srgb, #f87171 ${p}%, #fdba74)`, `color-mix(in srgb, #b91c1c ${p}%, #ea580c)`, heat >= 150];
+}
+// la temperature de la buse du rack : la gauche sur une double tete (le Vortek y est), sinon la seule
+const rackHeat = st => { const nz = st?.nozzles || []; const l = nz.find(n => n.id === 1) || nz[0]; return l ? l.temp : st?.nozzle_temp ?? null; };
+function NozzleArt({ color, h = 54, dim = false, heat = null }) {
   const id = React.useId().replace(/:/g, "");
   const w = h * 0.5, c = color || "#94a3b8";
+  const [tipA, tipB, glow] = tipShades(dim ? null : heat);
   return <svg width={w} height={h} viewBox="0 0 26 52" aria-hidden="true" style={{ opacity: dim ? 0.4 : 1, flexShrink: 0, overflow: "visible" }}>
     <defs>
       <linearGradient id={`nzm${id}`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#a3b1c2"/><stop offset=".35" stopColor="#e2e8f0"/><stop offset="1" stopColor="#8494a8"/></linearGradient>
       <linearGradient id={`nzb${id}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" style={{ stopColor: `color-mix(in srgb, ${c} 60%, #ffffff)` }}/><stop offset="1" stopColor={c}/></linearGradient>
-      <linearGradient id={`nzt${id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={dim ? "#cbd5e1" : "#fcd34d"}/><stop offset="1" stopColor={dim ? "#94a3b8" : "#d97706"}/></linearGradient>
+      <linearGradient id={`nzt${id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" style={{ stopColor: dim ? "#cbd5e1" : tipA }}/><stop offset="1" style={{ stopColor: dim ? "#94a3b8" : tipB }}/></linearGradient>
     </defs>
     <ellipse cx="13" cy="50.5" rx="7" ry="1.6" fill="#0f172a" opacity=".12"/>
     <rect x="2.5" y="1" width="21" height="12" rx="5" fill={`url(#nzm${id})`} stroke="rgba(15,23,42,0.18)" strokeWidth=".6"/>
@@ -583,10 +593,11 @@ function NozzleArt({ color, h = 54, dim = false }) {
     {/* le corps part droit sous le radiateur ; seul son bas est arrondi */}
     <path d="M6.5 12.6 H19.5 V34.5 Q19.5 41 13 41 Q6.5 41 6.5 34.5 Z" fill={`url(#nzb${id})`} stroke="rgba(15,23,42,0.12)" strokeWidth=".6"/>
     <rect x="8.6" y="13.2" width="2.6" height="23.5" rx="1.3" fill="#fff" opacity=".45"/>
-    <path d="M8.6 40 H17.4 Q18 40 17.8 40.8 L15 48.4 Q14.6 49.4 13.6 49.4 H12.4 Q11.4 49.4 11 48.4 L8.2 40.8 Q8 40 8.6 40 Z" fill={`url(#nzt${id})`}/>
+    <path d="M8.6 40 H17.4 Q18 40 17.8 40.8 L15 48.4 Q14.6 49.4 13.6 49.4 H12.4 Q11.4 49.4 11 48.4 L8.2 40.8 Q8 40 8.6 40 Z" fill={`url(#nzt${id})`}
+      style={glow ? { filter: `drop-shadow(0 0 2.5px ${tipB})` } : undefined}/>
   </svg>;
 }
-function VortekRack({ rack, H = 240, sel = null, onPick }) {
+function VortekRack({ rack, H = 240, sel = null, onPick, heat = null }) {
   const box = useRef(null);
   const [W, setW] = useState(400);
   useEffect(() => {
@@ -635,7 +646,7 @@ function VortekRack({ rack, H = 240, sel = null, onPick }) {
   if (tiny) return <div ref={box} style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
     <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 8px", borderRadius: 10, height: 30, boxSizing: "border-box",
       background: "linear-gradient(90deg, rgba(14,165,233,0.16), transparent), var(--surface2)", border: "1px solid rgba(14,165,233,0.35)", minWidth: 0 }}>
-      <NozzleArt color={col(head)} h={20}/>
+      <NozzleArt color={col(head)} h={20} heat={heat}/>
       <span style={{ fontSize: 11, fontWeight: 900, color: "#0ea5e9", whiteSpace: "nowrap" }}>Tête{headNum ? ` · ${headNum}` : ""}</span>
       {head?.nozzle_type && <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {String(head.diameter).replace(".", ",")} mm</span>}
@@ -647,7 +658,7 @@ function VortekRack({ rack, H = 240, sel = null, onPick }) {
     <div style={{ borderRadius: 14, padding: "8px 6px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4,
       background: "linear-gradient(180deg, rgba(14,165,233,0.14), transparent 70%), var(--surface2)", border: "1px solid rgba(14,165,233,0.35)" }}>
       <span style={{ fontSize: narrow ? 9.5 : 11, fontWeight: 900, color: "var(--text2)", textAlign: "center", lineHeight: 1.15 }}>{narrow ? "Tête" : "Tête d'outil"}</span>
-      <NozzleArt color={col(head)} h={side ? Math.min(96, cellH * 0.95) : Math.min(84, art * 1.3)} dim={!head}/>
+      <NozzleArt color={col(head)} h={side ? Math.min(96, cellH * 0.95) : Math.min(84, art * 1.3)} dim={!head} heat={heat}/>
       {headNum && <span style={{ fontSize: 10.5, fontWeight: 900, color: "#0ea5e9" }}>buse {headNum}</span>}
       {head?.nozzle_type && <><span style={{ fontSize: fs, fontWeight: 800, color: "var(--text)", lineHeight: 1.1, whiteSpace: "nowrap" }}>{String(head.diameter).replace(".", ",")} mm</span>
         {!narrow && <span style={{ fontSize: fs - 1.5, fontWeight: 700, color: "var(--muted)", lineHeight: 1.1 }}>{flowShort(head.nozzle_type)}</span>}</>}
@@ -672,13 +683,13 @@ function HubBack() {
       whiteSpace: "nowrap", border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--muted)", flexShrink: 0 }}>AMS<ArrowLeftRight size={11}/></button>;
 }
 // le rack en grand : son etat, le dessin, et la fiche de la buse choisie (la montee par defaut)
-function VortekPanel({ rack, start = null }) {
+function VortekPanel({ rack, start = null, heat = null }) {
   const headNum = rack.head_id >= 16 ? rack.head_id - 15 : null, headSlot = rack.hotends.find(h => h.id === 0);
   const [sel, setSel] = useState(start ?? headNum ?? 1);
   const slot = rack.hotends.find(h => h.id === sel + 15);
   return <div onClick={e => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
     <RackState rack={rack}/>
-    <VortekRack rack={rack} H={320} sel={sel} onPick={setSel}/>
+    <VortekRack rack={rack} H={320} sel={sel} onPick={setSel} heat={heat}/>
     <SlotDetail slot={slot || { id: sel + 15, empty: true }} num={sel} isOnHead={headNum === sel} headSlot={headNum === sel ? headSlot : null}/>
   </div>;
 }
@@ -704,9 +715,9 @@ function VortekTile({ st, fitH = null, low = false }) {
     </div></div>;
   const H = fitH ?? 260;
   return <div onClick={() => setOpen(true)} style={{ cursor: "pointer", height: "100%", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
-    {low ? row : <><RackState rack={r} compact/><VortekRack rack={r} H={H - 28} onPick={pick}/></>}
+    {low ? row : <><RackState rack={r} compact/><VortekRack rack={r} H={H - 28} onPick={pick} heat={rackHeat(st)}/></>}
     {open && <Zoom icon={<Layers size={15}/>} color="#0EA5E9" label="Rack Vortek" onClose={() => { setOpen(false); setSel(null); }}>
-      <VortekPanel rack={r} start={sel}/></Zoom>}
+      <VortekPanel rack={r} start={sel} heat={rackHeat(st)}/></Zoom>}
   </div>;
 }
 
@@ -2240,7 +2251,7 @@ export default function Home() {
         rackTile={st?.hotend_rack && <div style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ flex: 1, minWidth: 0 }}><RackState rack={st.hotend_rack} compact/></div>
             <HubBack/></div>
-          <VortekRack rack={st.hotend_rack} H={(fitOf(item) || 260) - 34}/></div>}
+          <VortekRack rack={st.hotend_rack} H={(fitOf(item) || 260) - 34} heat={rackHeat(st)}/></div>}
         rackFull={st?.hotend_rack && <VortekPanel rack={st.hotend_rack}/>}/>,
       options: [
         { key: "_amsGrid", label: "Ma grille", group: "Disposition des AMS", hint: "La place de chaque unité : qui est au-dessus de qui. Commune à tout l'accueil.",
