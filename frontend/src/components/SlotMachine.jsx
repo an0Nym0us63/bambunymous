@@ -133,7 +133,7 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
                 </div>
               ))}
               <div style={{ marginTop:6, fontSize:11, color:"rgba(255,255,255,.65)" }}>
-                {wheel?.family ? <>Ta roue à toi : {wheel.per_day || 2} tours offerts chaque jour (un jour manqué ne se rattrape pas)
+                {wheel?.family ? <>Ta roue à toi : {wheel.per_day || 1} tour offert chaque jour (un jour manqué ne se rattrape pas)
                   et 1 par secret que tu trouves. Ses loupes s'ajoutent à celle du jour, même au-delà du plafond.</>
                 : <>{wheel?.weekly || 3} tours offerts chaque lundi, 1 toutes les {wheel?.prints_per_spin || 8} impressions
                 réussies et 1 par secret gagné ; un ticket de palier toutes les {wheel?.prints_per_ticket || 5} impressions
@@ -144,7 +144,7 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
           <div style={{ textAlign:"center", fontWeight:900, fontSize:20, color:"#fde047", letterSpacing:".04em",
             textShadow:"0 2px 0 #7c2d12, 0 0 12px rgba(253,224,71,.6)" }}>🎰 ROUE DE LA FORTUNE</div>
           <div style={{ textAlign:"center", fontSize:11.5, color:"rgba(255,255,255,.8)", marginTop:2 }}>
-            {spins} tour{spins > 1 ? "s" : ""} · {wheel?.family ? `${wheel.per_day || 2} de plus demain` : "prochain lundi"}</div>
+            {spins} tour{spins > 1 ? "s" : ""} · {wheel?.family ? `${wheel.per_day || 1} de plus demain` : "prochain lundi"}</div>
           {/* les rouleaux */}
           <div style={{ display:"flex", gap:8, margin:"14px 0 12px", padding:8, borderRadius:14,
             background:"#1c1917", boxShadow:"inset 0 4px 12px rgba(0,0,0,.8)" }}>

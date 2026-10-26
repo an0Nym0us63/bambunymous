@@ -1431,16 +1431,19 @@ function TreasureRow({ keys, onRules, onWheel, onSpent, loupes = null }) {
       <div style={{ display:"grid", gridTemplateColumns:`repeat(${1 + (w && !loupes ? 1 : 0) + (w ? 1 : 0)}, minmax(0, 1fr))`, gap:8 }}>
         {loupes ? (
           <div style={{ ...box("rgba(14,165,233,.35)", "rgba(14,165,233,.45)") }}>
-            <button type="button" onClick={onRules} aria-label="Les loupes, comment ça marche" title="Une loupe révèle l'indice d'un secret que la maison a déjà ; l'indice en main, trois loupes dévoilent son descriptif. Une de plus chaque jour, cinq au plus ; la roue en donne aussi, au-delà."
+            <button type="button" onClick={onRules} aria-label="Les loupes, comment ça marche" title="Une loupe révèle l'indice d'un secret que la maison a déjà ; l'indice en main, trois loupes dévoilent son descriptif. Une de plus chaque jour, dix au plus ; la roue en donne aussi, au-delà."
               style={{ position:"absolute", top:4, right:4, width:18, height:18, borderRadius:"50%", border:"none", cursor:"pointer", fontSize:10.5, fontWeight:900,
                 color:"var(--muted)", background:"var(--surface)", boxShadow:"inset 0 0 0 1px var(--border)" }}>?</button>
             <span style={iconSlot}><span style={{ fontSize:24, lineHeight:1, animation:"bn-float 3.5s ease-in-out infinite" }}>🔍</span></span>
             <span style={{ fontSize:24, fontWeight:900, lineHeight:1, background:"linear-gradient(180deg,#38bdf8,#6366f1)",
               WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}>{loupes.loupes || 0}</span>
             <span style={{ fontSize:10.5, color:"var(--muted)", fontWeight:700 }}>loupe{(loupes.loupes || 0) > 1 ? "s" : ""}</span>
-            <span style={{ display:"flex", gap:4, marginTop:3 }}>{[...Array(loupes.loupes_max || 3).keys()].map(i =>
-              <span key={i} style={{ width:7, height:7, borderRadius:"50%", background: i < (loupes.loupes || 0) ? "#0EA5E9" : "var(--surface)" }}/>)}</span>
-            <span style={{ fontSize:9.5, color:"var(--muted)" }}>+{loupes.loupes_day || 2} demain</span>
+            {/* une jauge vers le plafond (dix pastilles ne tenaient plus dans la case) ; la roue peut le depasser */}
+            <span data-tip={`${loupes.loupes || 0} / ${loupes.loupes_max || 10} (la roue peut dépasser)`} style={{ width:"80%", height:4, borderRadius:4,
+              background:"var(--surface)", overflow:"hidden", marginTop:3 }}>
+              <span style={{ display:"block", height:"100%", width:`${Math.min(100, 100 * (loupes.loupes || 0) / (loupes.loupes_max || 10))}%`,
+                background:"linear-gradient(90deg,#38bdf8,#6366f1)" }}/></span>
+            <span style={{ fontSize:9.5, color:"var(--muted)" }}>+{loupes.loupes_day || 1} demain · max {loupes.loupes_max || 10}</span>
           </div>
         ) : (
         <button onClick={() => (log.length || onSpent) && setOpen(o => !o)} style={{ ...box("rgba(250,204,21,.35)", "rgba(250,204,21,.45)"), cursor:"pointer",
@@ -2015,10 +2018,30 @@ function Rules({ data, onClose }) {
           sa main.</P>
         <P>Quatre <b>Jokers</b> : un pour tous les Valets, un pour toutes les Dames, un pour tous les Rois, et le <b>Joker
           d'or</b> pour tous les As (la carte des secrets de l'appli Android n'y compte qu'une fois l'un d'eux trouvé). Comme les collections, une carte <b>se retourne</b> si un nouveau succès ou secret arrive :
-          il suffit de le décrocher pour la retrouver. Une carte gagnée se fête à la prochaine ouverture de l'appli, sur le compte principal : c'est à toi de la retourner, et plus elle est haute, plus la fête est grande (son, vibration, reflet holographique pour l'As et les Jokers). Elle rapporte {k ? k.rules.secret : 3} clés et un tour de roue
+          il suffit de le décrocher pour la retrouver. Une carte gagnée se fête à la prochaine ouverture de l'appli, sur le compte principal : c'est à toi de la retourner, et plus elle est haute, plus la fête est grande (son, vibration, reflet holographique pour l'As et les Jokers). Elle rapporte {k?.rules?.secret ?? 3} clés et un tour de roue
           (celles de « Clés et roue », un tour seulement).</P>
 
-        {k && <>
+        {/* un compte de la famille : ses loupes et sa roue a lui (sans cles ni tickets ; sans ce cas, la fenetre plantait) */}
+        {data.family && <>
+          <H>🔍 Tes loupes</H>
+          <P>Une loupe révèle l'<b>indice</b> d'un secret que {data.family.house || "la maison"} a déjà et toi pas encore. L'indice en main,
+            {" "}<b>{data.family.loupes_desc || 3} loupes</b> dévoilent aussi son descriptif. Tu en reçois {data.family.loupes_day || 1} par jour,
+            {" "}jusqu'à {data.family.loupes_max || 10} ; celles gagnées à ta roue s'ajoutent, même au-delà.</P>
+        </>}
+        {data.family && k?.wheel && <>
+          <H>🎰 Ta roue</H>
+          <P>Ta roue à toi : {k.wheel.per_day || 1} tour par jour (un jour manqué ne se rattrape pas) et {k.wheel.per_secret || 1} par secret
+            que tu trouves. Ses lots sont pour toi ; plus un lot vaut, plus il est rare :</P>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:"3px 12px", fontSize:12.5, color:"var(--text2)", margin:"0 0 8px 4px" }}>
+            {(k.wheel.prizes || []).map(p => (
+              <React.Fragment key={p.id}>
+                <span>{p.label}{p.help && <span style={{ display:"block", fontSize:11, color:"var(--muted)" }}>{p.help}</span>}</span>
+                <span style={{ textAlign:"right", fontWeight:700, fontVariantNumeric:"tabular-nums" }}>{String(p.pct).replace(".", ",")} %</span>
+              </React.Fragment>))}
+          </div>
+        </>}
+
+        {k?.rules && <>
           <H>🔑 Clés</H>
           <P><b>Gagner des clés</b> : {k.rules.start} au départ · 1 toutes les {k.rules.prints} impressions réussies ·
             {" "}{k.rules.tier} par palier franchi · {k.rules.secret} par secret gagné. Et parfois, une surprise.
@@ -2035,7 +2058,7 @@ function Rules({ data, onClose }) {
             pris. Tu vois ce qui sera révélé avant de valider.</P>
         </>}
 
-        {k?.wheel && <>
+        {k?.wheel && !k.wheel.family && <>
           <H>🎰 Roue de la fortune</H>
           <P>{k.wheel.start} tours offerts au départ, puis {k.wheel.weekly} chaque lundi (une semaine manquée ne se rattrape pas).
             Toutes les {k.wheel.prints_per_spin || 8} impressions réussies, un tour de plus

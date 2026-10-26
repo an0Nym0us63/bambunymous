@@ -5831,7 +5831,7 @@ def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> 
 # Les loupes de la famille (24/10/2026) : sans cles ni tickets, un compte de la famille revele l'indice d'un
 # secret que la maison a deja trouve. Deux par jour, gardees jusqu'a trois. Une loupe pour l'indice ; puis,
 # l'indice en main, trois loupes pour le descriptif (26/10/2026).
-LOUPES_DAY, LOUPES_MAX = 1, 5            # (2 et 3 avant le 26/10/2026)
+LOUPES_DAY, LOUPES_MAX = 1, 10           # (2 et 3 avant le 26/10/2026)
 LOUPES_DESC = 3
 
 
@@ -6959,13 +6959,13 @@ TICKETS_WEEKLY = 1
 PRIZES = [("none", "Pas cette fois", 0, 44.2), ("key1", "1 clé", 1, 26.0), ("ticket", "Ticket de palier", 0, 10.0),
           ("replay", "Tour rejoué", 0, 7.0), ("hint", "Coup de pouce", 0, 6.0), ("key3", "3 clés", 3, 4.0),
           ("key5", "5 clés", 5, 1.8), ("jackpot", "Jackpot : 10 clés", 10, 1.0)]  # 1 % depuis le 26/10/2026 (0,2 % avant)
-# La roue d'un compte de la famille (26/10/2026) : la sienne, avec ses tours (2 par jour, 1 par secret qu'il trouve),
+# La roue d'un compte de la famille (26/10/2026) : la sienne, avec ses tours (1 par jour, 1 par secret qu'il trouve),
 # et des loupes a gagner. 45 % de perdu ; le reste du plus courant au plus rare. Rien ne va a la maison.
 FAMILY_PRIZES = [("none", "Pas cette fois", 0, 45.0), ("loupe1", "1 loupe", 0, 20.0), ("replay", "Tour rejoué", 0, 10.0),
                  ("fhint", "Un indice offert", 0, 8.0), ("spins2", "2 tours de plus", 0, 7.0), ("loupe3", "3 loupes", 0, 6.0),
                  ("loupe5", "5 loupes", 0, 3.0), ("loupe10", "10 loupes", 0, 1.0)]
 PRIZE_LOUPES = {"loupe1": 1, "loupe3": 3, "loupe5": 5, "loupe10": 10}
-FAM_SPINS_DAY, FAM_SPINS_START = 2, 2
+FAM_SPINS_DAY, FAM_SPINS_START = 1, 1
 PRIZE_HELP = {
     "loupe1": "Une loupe, en plus de celle du jour (même au-delà du plafond).",
     "loupe3": "Trois loupes d'un coup (même au-delà du plafond).",
