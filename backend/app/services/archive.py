@@ -514,6 +514,73 @@ def _library_sync(root: Path, idx: dict, plan: dict, rep: dict) -> None:
                 pass
 
 
+def _quick_sig(p: Path) -> tuple:
+    """Taille, et empreinte du premier et du dernier Mo : assez pour reconnaitre deux copies d'un meme 3MF."""
+    import hashlib
+    n = p.stat().st_size
+    h = hashlib.sha1()
+    with open(p, "rb") as f:
+        h.update(f.read(1 << 20))
+        if n > 2 << 20:
+            f.seek(-(1 << 20), 2)
+            h.update(f.read(1 << 20))
+    return n, h.hexdigest()
+
+
+def _sweep_origin_copies(root: Path, idx: dict, rep: dict) -> None:
+    """Le menage des copies de 3MF d'origine que les dossiers des impressions avaient avant le 26/10/2026,
+    independamment de l'index : une copie identique a un fichier de la bibliotheque est retiree ; une version
+    que la bibliotheque n'a plus y est rangee, une seule fois, dans « _Anciens ». Fait une fois pour toutes."""
+    if idx.get("@origin_swept") or not (root / PR).is_dir():
+        return
+    by_size: dict = {}
+    for dirpath, _d, files in os.walk(root / LIB):
+        for f in files:
+            if f.endswith(".3mf"):
+                p = Path(dirpath) / f
+                try:
+                    by_size.setdefault(p.stat().st_size, []).append(p)
+                except OSError:
+                    pass
+    sigs: dict = {}
+    def sig(p):
+        if p not in sigs:
+            sigs[p] = _quick_sig(p)
+        return sigs[p]
+    errors = 0
+    for dirpath, _d, files in os.walk(root / PR):
+        for f in files:
+            if not f.endswith(" - origine MakerWorld.3mf"):
+                continue
+            p = Path(dirpath) / f
+            rel = p.relative_to(root).as_posix()
+            try:
+                s = sig(p)
+                same = next((q for q in by_size.get(s[0], []) if q != p and sig(q) == s), None)
+                if same is not None:
+                    p.unlink()
+                    rep["deduped"] += 1
+                else:                                    # une version que la bibliotheque n'a plus : gardee la-bas
+                    dest = f"{LIB}/_Anciens/{f}"
+                    k = 2
+                    while (root / dest).exists():
+                        dest = f"{LIB}/_Anciens/{f[:-4]} ({k}).3mf"
+                        k += 1
+                    _move(root, rel, dest)
+                    by_size.setdefault(s[0], []).append(root / dest)
+                    sigs[root / dest] = s
+                    rep["moved"] += 1
+                _prune_empty(root, p.parent)
+                for k2 in [k2 for k2, e in idx.items() if k2.startswith("src:") and isinstance(e, dict) and e.get("to") == rel]:
+                    idx.pop(k2, None)
+            except OSError as e:
+                errors += 1
+                rep["errors"] += 1
+                logger.warning(f"[ARCHIVE] menage du 3MF {rel} : {e}")
+    if not errors:
+        idx["@origin_swept"] = 1
+
+
 def _library_path(src, plan: dict | None = None) -> str | None:
     """Ou est, sur le NAS, le 3MF d'origine d'une impression (chemin relatif a la racine)."""
     if not src:
@@ -734,6 +801,10 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict, name
             logger.warning(f"[ARCHIVE] impression {p.id} : {e}")
         if i % 50 == 0:
             _index_save()
+
+    # 2 bis) les copies de 3MF d'origine que l'index ne savait pas retirer (une fois pour toutes)
+    prog.update(what="ménage des copies de 3MF d'origine…")
+    _sweep_origin_copies(root, idx, rep)
 
     # 3) chaque groupe : son dossier (deplace s'il est renomme), sa fiche, ses photos
     for g in groups:
