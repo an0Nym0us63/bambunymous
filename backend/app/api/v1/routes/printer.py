@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 from ....core.mqtt import get_state
@@ -347,25 +347,25 @@ async def printer_sd_timelapses(fresh: bool = False, _: str = Depends(get_curren
 
 
 @router.get("/sd/timelapse/thumb/{name}")
-async def printer_sd_thumb(name: str):
+async def printer_sd_thumb(name: str, request: Request):
     """La vignette (ouverte comme les autres images de l'appli : une balise img n'envoie pas de jeton)."""
     from fastapi.responses import FileResponse
     from ....services import sd_card as SD
     try:
-        f = await SD.thumb(name.rsplit(".", 1)[0] + ".mp4" if name.endswith(".jpg") else name)
+        f = await SD.thumb(name.rsplit(".", 1)[0] + ".mp4" if name.endswith(".jpg") else name, request.is_disconnected)
     except SD.SdError as e:
         _sd(e)
     return FileResponse(f, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.get("/sd/timelapse/video/{name}")
-async def printer_sd_video(name: str, h264: bool = False):
+async def printer_sd_video(name: str, request: Request, h264: bool = False):
     """La video, copiee sur le serveur a la premiere lecture ; avance et retour (Range) par FileResponse.
     ?h264=1 : une version convertie, quand le navigateur ne lit pas celle de l'imprimante."""
     from fastapi.responses import FileResponse
     from ....services import sd_card as SD
     try:
-        f = await (SD.video_h264(name) if h264 else SD.video(name))
+        f = await (SD.video_h264(name, request.is_disconnected) if h264 else SD.video(name, request.is_disconnected))
     except SD.SdError as e:
         _sd(e)
     return FileResponse(f, media_type="video/mp4" if (h264 or name.endswith(".mp4")) else "video/x-msvideo",

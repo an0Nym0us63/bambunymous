@@ -99,6 +99,16 @@ _MONTHS = {m: i + 1 for i, m in enumerate("Jan Feb Mar Apr May Jun Jul Aug Sep O
 _LIST_CACHE = {"t": 0.0, "v": None}
 _LOCKS: dict = {}
 CACHE_MAX = 1536 * 1024 * 1024          # videos gardees sur le serveur : 1,5 Go au plus
+# Copies depuis la carte, peu a la fois : une galerie qui en demandait des centaines saturait les fils de
+# travail du serveur et ralentissait toute l'appli (26/10/2026). Une demande abandonnee entre-temps
+# (fenetre fermee, autre video) n'est pas lancee.
+_SEM: dict = {}
+
+
+def _sem(kind: str) -> asyncio.Semaphore:
+    if kind not in _SEM:
+        _SEM[kind] = asyncio.Semaphore(2 if kind == "video" else 4)
+    return _SEM[kind]
 
 
 async def _creds():
@@ -260,8 +270,9 @@ async def timelapses(fresh: bool = False) -> dict:
     return out
 
 
-async def _fetch(kind: str, name: str, remote: str) -> _Path:
-    """Le fichier, copie dans le cache du serveur a la premiere demande (puis servi de la)."""
+async def _fetch(kind: str, name: str, remote: str, gone=None) -> _Path:
+    """Le fichier, copie dans le cache du serveur a la premiere demande (puis servi de la). `gone` : une
+    fonction async qui dit si le demandeur est parti (on ne lance alors pas la copie)."""
     dest = _cache_dir(kind) / name
     if dest.exists() and dest.stat().st_size > 0:
         try:
@@ -271,9 +282,11 @@ async def _fetch(kind: str, name: str, remote: str) -> _Path:
             pass
         return dest
     lock = _LOCKS.setdefault(f"{kind}:{name}", asyncio.Lock())
-    async with lock:
+    async with lock, _sem(kind):
         if dest.exists() and dest.stat().st_size > 0:
             return dest
+        if gone is not None and await gone():
+            raise SdError("Demande abandonnée")
         ip, code = await _creds()
         try:
             await asyncio.to_thread(_download_sync, ip, code, remote, dest)
@@ -284,17 +297,17 @@ async def _fetch(kind: str, name: str, remote: str) -> _Path:
     return dest
 
 
-async def thumb(name: str) -> _Path:
+async def thumb(name: str, gone=None) -> _Path:
     if not NAME_RE.match(name):
         raise SdError("Nom inconnu")
     base = name.rsplit(".", 1)[0]
-    return await _fetch("thumb", f"{base}.jpg", f"/timelapse/thumbnail/{base}.jpg")
+    return await _fetch("thumb", f"{base}.jpg", f"/timelapse/thumbnail/{base}.jpg", gone)
 
 
-async def video(name: str) -> _Path:
+async def video(name: str, gone=None) -> _Path:
     if not NAME_RE.match(name):
         raise SdError("Nom inconnu")
-    return await _fetch("video", name, f"/timelapse/{name}")
+    return await _fetch("video", name, f"/timelapse/{name}", gone)
 
 
 def _h264_sync(src: _Path, dest: _Path) -> None:
@@ -310,15 +323,17 @@ def _h264_sync(src: _Path, dest: _Path) -> None:
         tmp.unlink(missing_ok=True)
 
 
-async def video_h264(name: str) -> _Path:
+async def video_h264(name: str, gone=None) -> _Path:
     """La video convertie (si le navigateur ne lit pas celle de l'imprimante), gardee comme l'originale."""
-    src = await video(name)
+    src = await video(name, gone)
     dest = _cache_dir("video") / (name.rsplit(".", 1)[0] + ".h264.mp4")
     if dest.exists() and dest.stat().st_size > 0:
         return dest
     lock = _LOCKS.setdefault(f"h264:{name}", asyncio.Lock())
-    async with lock:
+    async with lock, _sem("h264"):
         if not (dest.exists() and dest.stat().st_size > 0):
+            if gone is not None and await gone():
+                raise SdError("Demande abandonnée")
             try:
                 await asyncio.to_thread(_h264_sync, src, dest)
             except Exception as e:
