@@ -572,16 +572,17 @@ function NozzleArt({ color, h = 54, dim = false }) {
   const w = h * 0.5, c = color || "#94a3b8";
   return <svg width={w} height={h} viewBox="0 0 26 52" aria-hidden="true" style={{ opacity: dim ? 0.4 : 1, flexShrink: 0, overflow: "visible" }}>
     <defs>
-      <linearGradient id={`nzm${id}`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#f1f5f9"/><stop offset=".55" stopColor="#cbd5e1"/><stop offset="1" stopColor="#94a3b8"/></linearGradient>
+      <linearGradient id={`nzm${id}`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#a3b1c2"/><stop offset=".35" stopColor="#e2e8f0"/><stop offset="1" stopColor="#8494a8"/></linearGradient>
       <linearGradient id={`nzb${id}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" style={{ stopColor: `color-mix(in srgb, ${c} 60%, #ffffff)` }}/><stop offset="1" stopColor={c}/></linearGradient>
       <linearGradient id={`nzt${id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={dim ? "#cbd5e1" : "#fcd34d"}/><stop offset="1" stopColor={dim ? "#94a3b8" : "#d97706"}/></linearGradient>
     </defs>
     <ellipse cx="13" cy="50.5" rx="7" ry="1.6" fill="#0f172a" opacity=".12"/>
-    <rect x="2.5" y="1" width="21" height="12" rx="5" fill={`url(#nzm${id})`}/>
+    <rect x="2.5" y="1" width="21" height="12" rx="5" fill={`url(#nzm${id})`} stroke="rgba(15,23,42,0.18)" strokeWidth=".6"/>
     <rect x="6" y="5.4" width="14" height="1.6" rx=".8" fill="#fff" opacity=".55"/>
     <rect x="6" y="8.6" width="14" height="1.6" rx=".8" fill="#fff" opacity=".4"/>
-    <rect x="6.5" y="12" width="13" height="29" rx="6.5" fill={`url(#nzb${id})`} stroke="rgba(15,23,42,0.12)" strokeWidth=".6"/>
-    <rect x="8.6" y="14.5" width="2.6" height="22" rx="1.3" fill="#fff" opacity=".45"/>
+    {/* le corps part droit sous le radiateur ; seul son bas est arrondi */}
+    <path d="M6.5 12.6 H19.5 V34.5 Q19.5 41 13 41 Q6.5 41 6.5 34.5 Z" fill={`url(#nzb${id})`} stroke="rgba(15,23,42,0.12)" strokeWidth=".6"/>
+    <rect x="8.6" y="13.2" width="2.6" height="23.5" rx="1.3" fill="#fff" opacity=".45"/>
     <path d="M8.6 40 H17.4 Q18 40 17.8 40.8 L15 48.4 Q14.6 49.4 13.6 49.4 H12.4 Q11.4 49.4 11 48.4 L8.2 40.8 Q8 40 8.6 40 Z" fill={`url(#nzt${id})`}/>
   </svg>;
 }
