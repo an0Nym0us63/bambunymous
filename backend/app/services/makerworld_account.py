@@ -827,6 +827,97 @@ async def feed(uids: str = "", per: int = 10, fresh: bool = False) -> dict:
     return {"items": res["items"], "pending": res["pending"], "creators_read": len(pick)}
 
 
+# ── La frise des suivis (26/10/2026) ───────────────────────────────────────
+# Avec beaucoup de createurs suivis, tout lire d'un coup (10 modeles chacun) faisait attendre et chargeait
+# des milliers de tuiles. La frise sert une tranche de temps (les 7 derniers jours, puis plus loin a chaque
+# defilement) : chaque createur n'est relu plus loin que si la tranche le demande. Le prechargement horaire
+# garde ses 10 derniers modeles : la premiere tranche vient de la, sans attendre.
+PUBLISHED_PAGE = "/design-service/published/{uid}/design?offset={offset}&limit=20"
+_DEEP = {}                 # uid -> {"t": instant, "items": [...] (du plus recent au plus ancien), "done": bool}
+_DEEP_TTL = 7200
+_DEEP_BG = set()
+
+
+def _deep_seed(c: dict) -> dict:
+    """Ce qu'on sait deja d'un createur : sa liste profonde, sinon ses 10 derniers (prechargement)."""
+    import time
+    d = _DEEP.get(c["uid"])
+    if d and time.time() - d["t"] < _DEEP_TTL:
+        return d
+    hit = _PUB_CACHE.get((c["uid"], 10))
+    if hit and time.time() - hit[0] < _PUB_TTL:
+        d = {"t": hit[0], "items": list(hit[1]), "done": len(hit[1]) < 10}
+    else:
+        d = {"t": time.time(), "items": [], "done": False}
+    _DEEP[c["uid"]] = d
+    return d
+
+
+async def _deep_reach(c: dict, start: str, pages: int = 6) -> dict:
+    """Relit le createur plus loin (20 par page) jusqu'a depasser `start` (date ISO) ou tout avoir."""
+    import asyncio
+    from .makerworld import _get_json
+    d = _deep_seed(c)
+    n = 0
+    while not d["done"] and n < pages and (not d["items"] or (d["items"][-1].get("published") or "") >= start):
+        code, j = await asyncio.to_thread(_get_json, PUBLISHED_PAGE.format(uid=c["uid"], offset=len(d["items"])))
+        if code != 200:
+            break
+        got = [x for x in (_pub_hit(h, c) for h in _items(j)) if x]
+        seen = {x["design_id"] for x in d["items"]}
+        d["items"] += [x for x in got if x["design_id"] not in seen]
+        d["items"].sort(key=lambda x: x.get("published") or "", reverse=True)
+        d["done"] = len(got) < 20
+        n += 1
+    return d
+
+
+async def timeline(uids: str = "", before: str = "", days: int = 7, fresh: bool = False) -> dict:
+    """Les modeles des createurs suivis publies dans [before - days, before), du plus recent au plus ancien.
+    Rend aussi la borne de la tranche suivante (« next_before ») et s'il reste plus ancien (« has_more »)."""
+    import asyncio
+    from datetime import datetime, timedelta
+    creators = await following(fresh)
+    wanted = [u.strip() for u in str(uids or "").split(",") if u.strip()]
+    pick = [c for c in creators if not wanted or c["uid"] in wanted]
+    if fresh:
+        for c in pick:
+            _DEEP.pop(c["uid"], None)
+    end = before or (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
+    days = max(1, min(int(days or 7), 365))
+    start = (datetime.fromisoformat(end[:19]) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
+    sem = asyncio.Semaphore(6)
+
+    async def one(c):
+        async with sem:
+            try:
+                return await _deep_reach(c, start)
+            except Exception:
+                return _deep_seed(c)
+    deeps = await asyncio.gather(*(one(c) for c in pick))
+    items = [x for d in deeps for x in d["items"] if start <= (x.get("published") or "")[:19] < end[:19]]
+    items.sort(key=lambda x: x.get("published") or "", reverse=True)
+    has_more = any(not d["done"] or any((x.get("published") or "")[:19] < start for x in d["items"]) for d in deeps)
+    res = await _enrich(items) if items else {"items": [], "pending": 0}
+
+    # anticipe la tranche suivante (meme largeur), en fond : le prochain defilement la trouve prete
+    nxt = (datetime.fromisoformat(start) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
+    async def ahead():
+        for c in pick:
+            try:
+                async with sem:
+                    await _deep_reach(c, nxt, pages=2)
+            except Exception:
+                pass
+    key = (",".join(sorted(c["uid"] for c in pick)), nxt[:10])
+    if has_more and key not in _DEEP_BG:
+        _DEEP_BG.add(key)
+        t = asyncio.get_running_loop().create_task(ahead())
+        t.add_done_callback(lambda _t: _DEEP_BG.discard(key))
+    return {"items": res["items"], "pending": res.get("pending", 0), "start": start, "end": end,
+            "next_before": start, "has_more": has_more, "creators": len(pick)}
+
+
 # ── Prechargement en arriere-plan ──────────────────────────────────────────
 # Toutes les heures : collections (liste + 1re page de chacune), j'aime (1re
 # page), abonnements et 10 derniers modeles de chaque createur suivi. Les

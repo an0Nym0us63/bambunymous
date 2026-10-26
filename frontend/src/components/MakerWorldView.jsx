@@ -79,6 +79,20 @@ function useMyMw(ids) {
 const chipGlass = { width:30, height:30, borderRadius:"50%", border:"1px solid rgba(255,255,255,.25)", background:"rgba(15,23,42,0.55)",
   backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)", display:"flex", alignItems:"center", justifyContent:"center", boxSizing:"border-box" };
 
+// Les tranches de la frise des suivis deja demandees (anticipation) : une meme tranche n'est lue qu'une fois.
+const FOLLOW_AHEAD = new Map();
+function prefetchFollow(picked, before, days) {
+  const k = `${picked.join(",")}|${before}|${days}`;
+  if (!FOLLOW_AHEAD.has(k)) {
+    const p = client.get("/makerworld/following/timeline", { params: { uids: picked.join(","), before, days }, timeout: 120000 })
+      .then(({ data }) => ({ ...data, before }));
+    p.catch(() => FOLLOW_AHEAD.delete(k));
+    FOLLOW_AHEAD.set(k, p);
+    if (FOLLOW_AHEAD.size > 40) FOLLOW_AHEAD.delete(FOLLOW_AHEAD.keys().next().value);
+  }
+  return FOLLOW_AHEAD.get(k);
+}
+
 export default function MakerWorldView({ onSearch }) {
   const [tab, setTab] = useUrlTab("mw", "favorites", TABS.map(([k]) => k));
   useTrackDetail(`MakerWorld · ${(TABS.find(([k]) => k === tab) || [tab, tab])[1]}`);
@@ -184,36 +198,33 @@ export default function MakerWorldView({ onSearch }) {
     freshRef.current = false;
     const fp = fresh ? { fresh: 1 } : {};
     if (tab === "following") {
-      // Par lots de 20 createurs : les premiers modeles s'affichent tout de
-      // suite, la suite se complete (250 suivis ne font pas attendre).
+      // En frise (26/10/2026) : les 7 derniers jours de tous les suivis d'abord, puis plus loin au
+      // defilement (loadMore). Le serveur ne relit un createur plus loin que si la tranche le demande.
       const fkey = `follow:${picked.join(",") || "tous"}`;
       const cached = CACHE.get(fkey);
       setData(cached || null); setProgress(null);
       (async () => {
         try {
-          let list = fresh ? null : creators;
-          if (!list) {
-            list = (await client.get("/makerworld/following/creators", { params: fp })).data.creators || [];
+          if (fresh || !creators) {
+            const list = (await client.get("/makerworld/following/creators", { params: fp })).data.creators || [];
             if (!alive) return;
             setCreators(list);
           }
-          const target = picked.length ? picked : list.map(c => c.uid);
-          const per = target.length <= 5 ? 40 : 10;
-          let acc = [];
-          setProgress({ done: 0, total: target.length });
-          if (!target.length) { setData({ items: [] }); return; }
-          for (let i = 0; i < target.length && alive; i += 20) {
-            const { data: d } = await client.get("/makerworld/following",
-              { params: { uids: target.slice(i, i + 20).join(","), per, ...fp } });
-            if (!alive) return;
-            const seen = new Set(acc.map(x => x.design_id));
-            acc = [...acc, ...(d.items || []).filter(x => !seen.has(x.design_id))]
-              .sort((a, b) => (b.published || "").localeCompare(a.published || ""));
-            // Deja en cache : on garde l'affichage et on remplace a la fin.
-            if (!cached) setData({ items: acc });
-            setProgress({ done: Math.min(i + 20, target.length), total: target.length });
+          const { data: d } = await client.get("/makerworld/following/timeline",
+            { params: { uids: picked.join(","), days: 7, ...fp }, timeout: 120000 });
+          if (!alive) return;
+          let first = { items: d.items || [], has_more: d.has_more, next_before: d.next_before, days: 7, start: d.start };
+          // une semaine calme : on remonte de soi-meme jusqu'a trouver des modeles (6 tranches au plus)
+          for (let k = 0; k < 6 && alive && !first.items.length && first.has_more; k++) {
+            const days = Math.min(first.days * 2, 60);
+            const n = await prefetchFollow(picked, first.next_before, days);
+            first = { items: n.items || [], has_more: n.has_more, next_before: n.next_before, days, start: n.start };
           }
-          if (alive) { CACHE.set(fkey, { items: acc }); setData({ items: acc }); setBusy(false); }
+          if (!alive) return;
+          // la page d'apres ne fait pas attendre : on la demande des maintenant (le serveur l'a deja anticipee)
+          if (first.has_more) prefetchFollow(picked, first.next_before, Math.min(first.days * 2, 60));
+          if (!cached || !sameIds(cached.items, first.items)) { CACHE.set(fkey, first); setData(first); }
+          setBusy(false);
         } catch (e) { if (alive) { setBusy(false); if (!cached) setData({ error: e.response?.data?.detail || e.message }); } }
       })();
       return () => { alive = false; };
@@ -246,8 +257,23 @@ export default function MakerWorldView({ onSearch }) {
     : coll ? `/makerworld/collections/${coll.id}` : null;
   const pageKey = view === "discover" ? `disc:${dk}` : view === "search" ? `search:${sq}` : tab === "likes" ? "likes" : coll ? `coll:${coll.id}` : null;
   const hasMore = !!data?.items && (PUBLIC_TABS.includes(tab) ? data.total > data.items.length
-    : (tab === "likes" || coll) ? !!data.has_more : false);
+    : (tab === "likes" || coll || (tab === "following" && view !== "search" && view !== "discover")) ? !!data.has_more : false);
   const loadMore = () => {
+    if (!more && tab === "following" && view !== "search" && view !== "discover" && data?.next_before) {
+      // la tranche suivante, deux fois plus large (60 jours au plus), deja demandee si possible
+      const days = Math.min((data.days || 7) * 2, 60), fkey = `follow:${picked.join(",") || "tous"}`;
+      setMore(true);
+      prefetchFollow(picked, data.next_before, days).then(d => setData(prev => {
+        if (!prev || prev.next_before !== d.before) return prev;
+        const seen = new Set(prev.items.map(y => y.design_id));
+        const next = { ...prev, items: [...prev.items, ...(d.items || []).filter(x => !seen.has(x.design_id))],
+          has_more: d.has_more, next_before: d.next_before, days, start: d.start };
+        CACHE.set(fkey, next);
+        if (d.has_more) prefetchFollow(picked, d.next_before, Math.min(days * 2, 60));
+        return next;
+      })).catch(() => {}).finally(() => setMore(false));
+      return;
+    }
     if (more || !pageUrl) return;
     setMore(true);
     client.get(pageUrl, { params: { ...(view === "search" ? { q: sq } : view === "discover" ? { key: dk, ...(data.seed ? { seed: data.seed } : {}) } : {}),
@@ -623,7 +649,8 @@ export default function MakerWorldView({ onSearch }) {
                   {more ? <span className="mw-spin"/> : (
                     <button onClick={loadMore} style={{ padding:"9px 18px", borderRadius:20, fontSize:12.5, fontWeight:800,
                       cursor:"pointer", background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)" }}>
-                      Plus de modèles{data.total ? ` (${data.items.length} / ${data.total})` : ""}</button>
+                      Plus de modèles{data.total ? ` (${data.items.length} / ${data.total})` : ""}
+                      {tab === "following" && data.start ? ` · avant le ${new Date(data.start + "Z").toLocaleDateString("fr-FR", { day:"numeric", month:"short" })}` : ""}</button>
                   )}
                 </div>
               )}

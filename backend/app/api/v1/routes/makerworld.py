@@ -156,6 +156,13 @@ async def mw_following_creators(fresh: bool = False, _: str = Depends(get_curren
     return {"creators": await _call(acc.following(fresh))}
 
 
+@router.get("/following/timeline")
+async def mw_following_timeline(uids: str = "", before: str = "", days: int = 7, fresh: bool = False,
+                                _: str = Depends(get_current_user)):
+    """Les modeles des suivis par tranche de temps (les 7 derniers jours, puis plus loin au defilement)."""
+    return await _call(acc.timeline(uids, before, days, fresh))
+
+
 @router.get("/following")
 async def mw_following(uids: str = "", per: int = 10, fresh: bool = False, _: str = Depends(get_current_user)):
     """Modeles d'un lot de createurs suivis (uids=1,2,3 ; 25 au plus)."""
