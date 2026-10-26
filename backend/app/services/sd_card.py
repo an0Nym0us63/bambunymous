@@ -358,3 +358,108 @@ async def delete(name: str) -> None:
     for f in (_cache_dir("video") / name, _cache_dir("video") / f"{base}.h264.mp4", _cache_dir("thumb") / f"{base}.jpg"):
         f.unlink(missing_ok=True)
     _LIST_CACHE.update(t=0.0, v=None)
+
+
+
+# ── Le timelapse de chaque impression, recupere tout seul (26/10/2026) ───────────────────────────
+# Quelques minutes apres la fin d'une impression, son timelapse est copie de la carte dans son dossier
+# (« Video-Timelapse.mp4 ») : il apparait parmi ses videos dans la fiche, se partage et se supprime comme
+# elles. Une impression sans timelapse sur la carte (timelapse coupe) est reessayee deux jours, puis oubliee.
+AUTO_NAME = "Video-Timelapse.mp4"
+AUTO_EVERY = 300
+AUTO_AFTER = 180                     # la video est ecrite a la fin : on laisse 3 min a l'imprimante
+AUTO_WINDOW_DAYS = 3
+
+
+def _auto_state_path() -> _Path:
+    from ..core.config import settings
+    return _Path(settings.DATA_DIR) / "cache" / "sd_auto.json"
+
+
+def _auto_state() -> dict:
+    import json
+    try:
+        d = json.loads(_auto_state_path().read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _auto_save(st: dict) -> None:
+    import json
+    p = _auto_state_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    keep = dict(sorted(st.items(), key=lambda kv: -int(kv[0]))[:2000])
+    p.write_text(json.dumps(keep), encoding="utf-8")
+
+
+async def auto_fetch_once() -> int:
+    """Copie les timelapses des impressions finies recemment qui n'en ont pas encore. Rend le nombre copie."""
+    from sqlalchemy import select
+    from ..core.config import settings
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    try:
+        ip, code = await _creds()
+    except SdError:
+        return 0
+    now = _dt.utcnow()
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Print.id, Print.print_date, Print.duration_seconds, Print.estimated_seconds, Print.status)
+                                 .where(Print.print_date >= now - _td(days=AUTO_WINDOW_DAYS),
+                                        Print.status.in_(("SUCCESS", "PARTIAL", "FAILED", "TO_REDO"))))).all()
+    st = _auto_state()
+    todo = []
+    for r in rows:
+        if st.get(str(r.id)) == "done":
+            continue
+        d = _Path(settings.DATA_DIR) / "prints" / str(r.id)
+        if (d / AUTO_NAME).exists():
+            st[str(r.id)] = "done"
+            continue
+        end = r.print_date + _td(seconds=r.duration_seconds or r.estimated_seconds or 0) if r.print_date else None
+        if end and (now - end).total_seconds() < AUTO_AFTER:
+            continue
+        # pas trouve : 3 essais rapproches, puis un par heure (la carte n'est pas relue sans arret pour rien)
+        tried = st.get(str(r.id)) if isinstance(st.get(str(r.id)), dict) else {}
+        if (tried.get("n") or 0) >= 3 and _time.time() - (tried.get("at") or 0) < 3600:
+            continue
+        todo.append(r.id)
+    if not todo:
+        _auto_save(st)
+        return 0
+    try:
+        lst = await timelapses(fresh=True)
+    except Exception as e:
+        logger.info(f"[SD] timelapses automatiques : carte illisible ({e})")
+        return 0
+    by_print = {it["print"]["id"]: it for it in lst["items"] if it.get("print")}
+    n = 0
+    for pid in todo:
+        it = by_print.get(pid)
+        if not it:
+            prev = st.get(str(pid)) if isinstance(st.get(str(pid)), dict) else {}
+            st[str(pid)] = {"n": (prev.get("n") or 0) + 1, "at": _time.time()}
+            continue                              # pas (encore) de timelapse pour elle : on reessaiera
+        d = _Path(settings.DATA_DIR) / "prints" / str(pid)
+        d.mkdir(parents=True, exist_ok=True)
+        try:
+            async with _sem("video"):
+                await asyncio.to_thread(_download_sync, ip, code, f"/timelapse/{it['name']}", d / AUTO_NAME)
+            st[str(pid)] = "done"
+            n += 1
+            logger.info(f"[SD] timelapse de l'impression {pid} recupere ({it['name']})")
+        except Exception as e:
+            logger.info(f"[SD] timelapse de l'impression {pid} : {_why(e)}")
+    _auto_save(st)
+    return n
+
+
+async def auto_loop() -> None:
+    await asyncio.sleep(90)
+    while True:
+        try:
+            await auto_fetch_once()
+        except Exception:
+            logger.exception("[SD] timelapses automatiques")
+        await asyncio.sleep(AUTO_EVERY)
