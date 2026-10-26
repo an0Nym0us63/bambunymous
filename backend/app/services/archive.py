@@ -53,8 +53,10 @@ DEL = f"{PR}/_Supprimés"                    # ce qui a disparu de l'appli (jama
 PH = "Photos du groupe"
 STATUS = {"SUCCESS": "réussie", "FAILED": "échouée", "PARTIAL": "partielle", "TO_REDO": "à refaire"}
 # le reste des donnees, recopie tel quel dans « Système »
-SYSTEM_DIRS = [("filaments", "Photos des filaments"), ("objects", "Objets"), ("accessories", "Accessoires"),
-               ("bambu_catalog", "Catalogue Bambu")]
+SYSTEM_DIRS = [("bambu_catalog", "Catalogue Bambu")]
+# les photos des filaments, objets et accessoires : un dossier par element, a son nom (voir _named_sync)
+SYS_NAMED = [("filaments", "Photos des filaments"), ("objects", "Objets"), ("accessories", "Accessoires")]
+SYS_DEL = f"{SYS}/_Supprimés"
 LIB = f"{SYS}/3MF MakerWorld"               # rangee par modele, nommee (voir _library_sync)
 
 LAYERS = {"layer1": "Couche 1", "layer2": "Couche 2", "pct50": "50 %", "pct99": "99 %", "pct100": "Fin", "fail": "Échec"}
@@ -264,6 +266,24 @@ def _fiche(p, model: str, when: datetime, fil: list, mw_url: str | None) -> str:
     if p.file_name and clean(p.file_name) != model:
         lines += ["", f"Fichier : {p.file_name}"]
     return "\n".join(lines) + "\n"
+
+
+async def _named_meta() -> dict:
+    """Le nom humain du dossier de chaque filament, objet et accessoire (id -> chemin sous son dossier)."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.filament import Filament
+    from ..models.object_history import Object, Accessory
+    async with AsyncSessionLocal() as db:
+        fils = (await db.execute(select(Filament.id, Filament.manufacturer, Filament.translated_name, Filament.name))).all()
+        objs = (await db.execute(select(Object.id, Object.translated_name, Object.name))).all()
+        accs = (await db.execute(select(Accessory.id, Accessory.category, Accessory.name))).all()
+    return {
+        "filaments": {i: clean(" - ".join(filter(None, [m, tr or n]))) for i, m, tr, n in fils},
+        "objects": {i: clean(tr or n) for i, tr, n in objs},
+        # les accessoires par categorie (Visserie, Aimants…), puis a leur nom
+        "accessories": {i: (f"{clean(c)}/{clean(n)}" if c and c.strip() else clean(n)) for i, c, n in accs},
+    }
 
 
 async def _prints_meta():
@@ -501,6 +521,69 @@ def _library_path(src, plan: dict | None = None) -> str | None:
     return (plan or {}).get(Path(src).stem)
 
 
+def _named_sync(root: Path, idx: dict, rep: dict, src_name: str, label: str, names: dict) -> None:
+    """Les photos d'un filament, d'un objet ou d'un accessoire, dans un dossier a son nom (deplace s'il est
+    renomme ; la recopie brute d'avant, « <id> », est renommee sur place). Une photo supprimee dans l'appli, ou
+    un element supprime, part dans « Système/_Supprimés » : rien n'est efface du NAS."""
+    dirs = idx.setdefault("@sys", {})
+    base = DATA_DIR / src_name
+    local_ok = base.is_dir()
+    taken = set()
+    for eid, nm in sorted(names.items()):
+        rel = f"{SYS}/{label}/{nm}"
+        if rel.lower() in taken:
+            rel += f" #{eid}"
+        taken.add(rel.lower())
+        key = f"{src_name}:{eid}"
+        d = base / str(eid)
+        try:
+            old = dirs.get(key) or f"{SYS}/{label}/{eid}"
+            if old != rel and (root / old).is_dir():
+                _move(root, old, rel)
+                rep["moved"] += 1
+            if not d.is_dir():
+                if (root / rel).is_dir():
+                    dirs[key] = rel
+                continue
+            local = {f.name: f for f in d.iterdir() if f.is_file() and not f.name.endswith((".part", ".tmp"))}
+            for f in local.values():
+                if _copy(f, root / rel / f.name):
+                    rep["copied"] += 1
+                    rep["bytes"] += f.stat().st_size
+                else:
+                    rep["skipped"] += 1
+            if (root / rel).is_dir():
+                for f in list((root / rel).iterdir()):
+                    if f.is_file() and f.name not in local:          # supprimee dans l'appli
+                        _move(root, f"{rel}/{f.name}", f"{SYS_DEL}/{label}/{nm}/{f.name}")
+                        rep["set_aside"] += 1
+                dirs[key] = rel
+        except OSError as e:
+            rep["errors"] += 1
+            logger.warning(f"[ARCHIVE] {label} {eid} : {e}")
+    if not local_ok:                                  # donnees locales absentes : on ne deduit aucune suppression
+        return
+    for key, old in list(dirs.items()):
+        k, _, eid = key.partition(":")
+        if k != src_name or not eid.isdigit() or int(eid) in names:
+            continue
+        try:
+            if (root / old).exists():
+                _move(root, old, f"{SYS_DEL}/{old[len(SYS) + 1:]}")
+                rep["moved"] += 1
+            dirs.pop(key, None)
+        except OSError:
+            rep["errors"] += 1
+    # les recopies brutes d'avant d'elements qui n'existent plus
+    for f in list((root / SYS / label).iterdir()) if (root / SYS / label).is_dir() else []:
+        if f.is_dir() and f.name.isdigit() and int(f.name) not in names:
+            try:
+                _move(root, f"{SYS}/{label}/{f.name}", f"{SYS_DEL}/{label}/{f.name}")
+                rep["moved"] += 1
+            except OSError:
+                rep["errors"] += 1
+
+
 def _system_sync(root: Path, rep: dict) -> None:
     """Le reste des donnees, recopie tel quel (seul le nouveau ou le change) dans « Système »."""
     for src_name, label in SYSTEM_DIRS:
@@ -522,7 +605,7 @@ def _system_sync(root: Path, rep: dict) -> None:
                     rep["errors"] += 1
 
 
-def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> dict:
+def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict, named: dict | None = None) -> dict:
     """La sauvegarde, en delta. Copie le nouveau et le change ; DEPLACE sur le NAS ce dont la place a change
     (impression entree ou sortie d'un groupe, groupe renomme, nom traduit…), fichiers deja vides du local compris.
     Ce qui a disparu de l'appli (impression, groupe, photo, video…) part dans « _Supprimés », jamais efface."""
@@ -536,6 +619,8 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
     _system_sync(root, rep)
     lib_plan = _library_plan(mws)
     _library_sync(root, idx, lib_plan, rep)
+    for src_name, label in SYS_NAMED if named is not None else []:
+        _named_sync(root, idx, rep, src_name, label, named.get(src_name) or {})
     dirs = idx.setdefault("@dirs", {})           # « print:12 » / « grp:3 » -> son dossier sur le NAS
     # si les donnees locales ne sont pas la (volume absent), on ne deduit aucune suppression
     local_ok = (DATA_DIR / "prints").is_dir() and any((DATA_DIR / "prints").iterdir())
@@ -762,11 +847,12 @@ async def backup(trigger: str = "manuel") -> dict:
     t0 = time.time()
     try:
         prints, mws, groups, all_ids = await _prints_meta()
+        named = await _named_meta()
         root = Path(s["dir"])
         if not (root / MARK).exists():
             (root / MARK).write_text("Dossier des sauvegardes de BambuNymous : ne pas supprimer ce fichier.\n", encoding="utf-8")
         db_name = await asyncio.to_thread(_db_backup_sync, root)
-        rep = await asyncio.to_thread(_backup_sync, root, prints, mws, groups, all_ids, _STATE["progress"])
+        rep = await asyncio.to_thread(_backup_sync, root, prints, mws, groups, all_ids, _STATE["progress"], named)
         rep.update(at=datetime.utcnow().isoformat() + "Z", trigger=trigger, seconds=round(time.time() - t0), db=db_name)
     except Exception as e:
         logger.exception("[ARCHIVE] sauvegarde")

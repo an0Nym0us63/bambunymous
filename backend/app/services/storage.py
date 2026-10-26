@@ -119,6 +119,8 @@ def _nas_cat(parts: tuple, name: str) -> str:
     ext = os.path.splitext(name)[1].lower()
     top = parts[0] if len(parts) > 1 else ""
     if top == "Système" and len(parts) > 2:
+        if parts[1] == "_Supprimés":
+            return "deleted"
         if parts[1] == "3MF MakerWorld":
             return "mw_tmf" if ext == ".3mf" else "catalog"
         return SYS_SUBS.get(parts[1], "other")
