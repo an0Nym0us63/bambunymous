@@ -6624,9 +6624,9 @@ WHEEL_START = 3
 WHEEL_WEEKLY = 3
 TICKETS_WEEKLY = 1
 # Ranges par valeur : plus un lot vaut, plus il est rare.
-PRIZES = [("none", "Pas cette fois", 0, 45.0), ("key1", "1 clé", 1, 26.0), ("ticket", "Ticket de palier", 0, 10.0),
+PRIZES = [("none", "Pas cette fois", 0, 44.2), ("key1", "1 clé", 1, 26.0), ("ticket", "Ticket de palier", 0, 10.0),
           ("replay", "Tour rejoué", 0, 7.0), ("hint", "Coup de pouce", 0, 6.0), ("key3", "3 clés", 3, 4.0),
-          ("key5", "5 clés", 5, 1.8), ("jackpot", "Jackpot : 10 clés", 10, 0.2)]
+          ("key5", "5 clés", 5, 1.8), ("jackpot", "Jackpot : 10 clés", 10, 1.0)]  # 1 % depuis le 26/10/2026 (0,2 % avant)
 PRIZE_HELP = {
     "none": "Rien cette fois : retente ta chance.",
     "key1": "Une clé, tout de suite.",
