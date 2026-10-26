@@ -1578,7 +1578,10 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
             ? { background: "color-mix(in srgb, var(--surface) 55%, transparent)", boxShadow: "0 10px 24px rgba(0,0,0,.25)" }
             : { background: "linear-gradient(160deg, rgba(167,139,250,0.22), rgba(167,139,250,0.05))", border: "1px solid rgba(255,255,255,0.10)",
                 boxShadow: "0 10px 24px rgba(0,0,0,.35)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }) }}>
-          <img src={apiThumb(apiUrl("/prints/" + x.id + "/image"), 384)} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "contain" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
+          {/* le halo de chaque carte, comme celui de la fiche d'une impression : son image floutee et saturee derriere */}
+          <img src={apiThumb(apiUrl("/prints/" + x.id + "/image"), 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
+            objectFit: "cover", filter: "blur(18px) saturate(1.8)", opacity: 0.55, transform: "scale(1.35)" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
+          <img src={apiThumb(apiUrl("/prints/" + x.id + "/image"), 384)} alt="" loading="lazy" decoding="async" style={{ position: "relative", width: "100%", height: "100%", objectFit: "contain" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
         </div>)}
       </div>
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "34px 16px 12px",
