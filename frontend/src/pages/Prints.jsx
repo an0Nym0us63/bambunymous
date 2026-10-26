@@ -1358,10 +1358,10 @@ function GroupEditSheet({ groupId, name, onClose, onSaved }) {
 }
 
 // les photos du groupe (nouvelle fiche) : une bande qui defile ; ⭐ la vignette, 🗑 en deux temps, visionneuse
-function GroupPhotosV2({ groupId, onUpdated, prints = [] }) {
+function GroupPhotosV2({ groupId, onUpdated, prints = [] }) {   // prints : relire Technique quand la liste change
   const [photos, setPhotos] = useState([]);
   const [tab, setTab] = useState("souv");
-  const [tech, setTech] = useState(null);        // par impression : { p, tl, snaps }, lu a la premiere ouverture de l'onglet
+  const [tech, setTech] = useState(null);        // par impression : { p, tl, snaps }
   const [tlb, setTlb] = useState(-1);
   const [allTech, setAllTech] = useState(false);   // les 4 premieres impressions, puis « Voir les autres »
   const [cover, setCover] = useState(null);
@@ -1374,25 +1374,24 @@ function GroupPhotosV2({ groupId, onUpdated, prints = [] }) {
   const setCoverPhoto = async name => { try { await client.post(`/prints/groups/${groupId}/photo/${name}/cover`); setCover(name); onUpdated?.(); } catch (e) { showAlert(e.response?.data?.detail || e.message); } };
   const del = async name => { try { await client.delete(`/prints/groups/${groupId}/photo/${name}`); setArmed(null); load(); } catch (e) { showAlert(e.response?.data?.detail || e.message); } };
   const imgs = photos.filter(x => !isVideoUrl(x.url));
-  // Technique : pour chaque impression du groupe, son timelapse et ses captures des couches
+  // Technique : pour chaque impression du groupe, son timelapse et ses captures des couches (une requete,
+  // faite a l'ouverture : l'onglet affiche son nombre tout de suite)
   const pkey = prints.map(x => x.id).join(",");
-  useEffect(() => { setTech(null); }, [pkey]);
   useEffect(() => {
-    if (tab !== "tech" || tech || !prints.length) return;
+    if (!groupId) return undefined;
     let alive = true;
-    const order = [...prints].sort((a, b) => String(a.print_date || "").localeCompare(String(b.print_date || "")));
-    Promise.all(order.map(p => Promise.all([
-      client.get(`/prints/${p.id}/photos`).then(r => r.data || []).catch(() => []),
-      client.get(`/prints/${p.id}/snapshots`).then(r => r.data?.files || []).catch(() => []),
-    ]).then(([ph, sn]) => ({ p, tl: (Array.isArray(ph) ? ph : []).find(x => x.filename === TL_NAME),
-      snaps: sn.filter(f => /^snapshot-/.test(f.name || "")).sort((a, b) => snapRank(a.name) - snapRank(b.name))
-        .map(f => ({ url: f.url, label: SNAP_NAMES[snapKey(f.name)] || snapKey(f.name) })) }))))
-      .then(rows => { if (alive) setTech(rows.filter(r => r.tl || r.snaps.length)); });
+    client.get(`/prints/groups/${groupId}/tech`).then(r => {
+      if (!alive) return;
+      setTech((r.data?.prints || []).map(x => ({ p: { id: x.id, translated_name: x.name, print_date: x.print_date }, plate: x.plate,
+        tl: x.timelapse ? { url: x.timelapse } : null,
+        snaps: (x.snaps || []).sort((a, b) => snapRank(a.name) - snapRank(b.name))
+          .map(f => ({ url: f.url, label: SNAP_NAMES[snapKey(f.name)] || snapKey(f.name) })) })));
+    }).catch(() => { if (alive) setTech([]); });
     return () => { alive = false; };
-  }, [tab, tech, pkey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [groupId, pkey]);
   const techFlat = (tech || []).flatMap(r => [...(r.tl ? [{ url: r.tl.url, label: `Timelapse · ${r.p.translated_name || r.p.file_name || ""}` }] : []),
     ...r.snaps.map(s => ({ url: s.url, label: `${s.label} · ${r.p.translated_name || r.p.file_name || ""}` }))]);
-  const techN = tech ? techFlat.length : "…";
+  const techN = tech ? techFlat.length : 0;
   const when = d => d ? new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "";
   return (
     <div className="card-sm" style={{ display: "flex", flexDirection: "column", gap: 4, padding: "10px 12px" }}>
@@ -1406,8 +1405,11 @@ function GroupPhotosV2({ groupId, onUpdated, prints = [] }) {
           {(allTech ? tech : tech.slice(0, 4)).map(r => { const base = techFlat.findIndex(x => x.url === (r.tl?.url || r.snaps[0]?.url));
             return (
               <div key={r.p.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {r.p.translated_name || r.p.file_name || `Impression ${r.p.id}`} <span style={{ color: "var(--muted)", fontWeight: 700 }}>· {when(r.p.print_date)}</span></span>
+                <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                  {r.plate && <img src={r.plate} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
+                    style={{ width: 30, height: 30, borderRadius: 8, objectFit: "contain", flexShrink: 0, background: "var(--surface2)", border: "1px solid var(--border)" }}/>}
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
+                    {r.p.translated_name || r.p.file_name || `Impression ${r.p.id}`} <span style={{ color: "var(--muted)", fontWeight: 700 }}>· {when(r.p.print_date)}</span></span></span>
                 <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, alignItems: "center", touchAction: "pan-x pan-y", overscrollBehaviorX: "contain" }}>
                   {r.tl && <TimelapseTile small url={r.tl.url} onOpen={() => setTlb(base)}/>}
                   {r.snaps.map((s, i) => (

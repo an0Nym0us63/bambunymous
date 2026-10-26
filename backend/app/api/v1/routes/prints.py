@@ -584,6 +584,30 @@ async def group_photos(group_id: int):
     return {"files": files, "cover_photo": cover}
 
 
+@router.get("/groups/{group_id}/tech")
+async def group_tech(group_id: int):
+    """L'onglet Technique d'une fiche de groupe, en une requete : pour chacune de ses impressions (de la
+    plus ancienne a la plus recente), son timelapse et ses captures des couches, en local ou sur le NAS."""
+    from ....services.archive import archived_names
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Print.id, Print.translated_name, Print.file_name, Print.print_date)
+                                 .where(Print.group_id == group_id).order_by(Print.print_date))).all()
+    out = []
+    for pid, tr, fn, pd in rows:
+        d = DATA_DIR / "prints" / str(pid)
+        names = set(f.name for f in d.iterdir()) if d.exists() else set()
+        names |= set(archived_names(f"prints/{pid}"))
+        snaps = sorted(n for n in names if n.startswith("snapshot-")
+                       and os.path.splitext(n)[1].lower() in (".png", ".jpg", ".jpeg", ".webp"))
+        tl = "Video-Timelapse.mp4" in names
+        if tl or snaps:
+            out.append({"id": pid, "name": tr or fn or f"Impression {pid}", "print_date": pd.isoformat() if pd else None,
+                        "timelapse": f"/api/v1/prints/{pid}/file/Video-Timelapse.mp4" if tl else None,
+                        "plate": next((f"/api/v1/prints/{pid}/file/{n}" for n in ("plate.png", "plate.jpg") if n in names), None),
+                        "snaps": [{"name": n, "url": f"/api/v1/prints/{pid}/file/{n}"} for n in snaps]})
+    return {"prints": out}
+
+
 @router.get("/groups/{group_id}/photo/{filename}")
 async def group_photo(group_id: int, filename: str):
     """Sert une photo de groupe (pas d'auth — utilisée dans des balises <img>)."""

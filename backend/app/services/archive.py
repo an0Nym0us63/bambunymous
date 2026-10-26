@@ -54,7 +54,8 @@ PH = "Photos du groupe"
 STATUS = {"SUCCESS": "réussie", "FAILED": "échouée", "PARTIAL": "partielle", "TO_REDO": "à refaire"}
 # le reste des donnees, recopie tel quel dans « Système »
 SYSTEM_DIRS = [("filaments", "Photos des filaments"), ("objects", "Objets"), ("accessories", "Accessoires"),
-               ("mw_3mf", "3MF MakerWorld"), ("bambu_catalog", "Catalogue Bambu")]
+               ("bambu_catalog", "Catalogue Bambu")]
+LIB = f"{SYS}/3MF MakerWorld"               # rangee par modele, nommee (voir _library_sync)
 
 LAYERS = {"layer1": "Couche 1", "layer2": "Couche 2", "pct50": "50 %", "pct99": "99 %", "pct100": "Fin", "fail": "Échec"}
 
@@ -276,7 +277,13 @@ async def _prints_meta():
         prints = (await db.execute(select(Print).options(selectinload(Print.filament_usage))
                                    .where(Print.status != "IN_PROGRESS").order_by(Print.print_date))).scalars().all()
         all_ids = set((await db.execute(select(Print.id))).scalars().all())
-        dids = list({str(p.design_id) for p in prints if p.design_id})
+        dids = {str(p.design_id) for p in prints if p.design_id}
+        try:                                     # les modeles de la bibliotheque des 3MF d'origine, pour leur nom
+            from .mw_source import _index as _mw_index
+            dids |= {k.split(":", 1)[0] for k in _mw_index() if k.split(":", 1)[0].isdigit()}
+        except Exception:
+            pass
+        dids = list(dids)
         mws = {m.design_id: m for m in (await db.execute(select(MW).where(MW.design_id.in_(dids)))).scalars().all()} if dids else {}
         groups = (await db.execute(select(Group))).scalars().all()
     return prints, mws, groups, all_ids
@@ -418,6 +425,82 @@ def _migrate_layout(root: Path, idx: dict, rep: dict) -> None:
     idx["@layout"] = 2
 
 
+def _library_plan(mws: dict) -> dict:
+    """Le nom humain, sur le NAS, de chaque 3MF d'origine de la bibliotheque (son instance -> chemin) :
+    « 3MF MakerWorld/<modele traduit (original)>/<modele traduit> - profil <n>.3mf ». Un fichier qu'aucun
+    modele connu ne reclame va dans « _Autres »."""
+    try:
+        from .mw_source import _index as _mw_index, _dir as _mw_dir
+        idx, d = _mw_index(), _mw_dir()
+    except Exception:
+        return {}
+    by_iid: dict = {}
+    for key, iid in idx.items():
+        did, _, prof = str(key).partition(":")
+        if iid and (iid not in by_iid or (prof and not by_iid[iid][1])):
+            by_iid[iid] = (did, prof)
+    plan, taken = {}, set()
+    for f in sorted(d.glob("*.3mf")) if d.is_dir() else []:
+        iid = f.stem
+        did, prof = by_iid.get(iid, (None, None))
+        if not did:
+            plan[iid] = f"{LIB}/_Autres/{f.name}"
+            continue
+        m = mws.get(did) or mws.get(str(did))
+        title = _two(m.title_fr, m.title) if m and (m.title_fr or m.title) else f"Modèle {did}"
+        short = clean(m.title_fr or m.title) if m and (m.title_fr or m.title) else f"Modèle {did}"
+        name = f"{short} - profil {prof}" if prof else f"{short} - modèle"
+        rel = f"{LIB}/{title}/{name}.3mf"
+        if rel.lower() in taken:
+            rel = f"{LIB}/{title}/{name} ({iid}).3mf"
+        taken.add(rel.lower())
+        plan[iid] = rel
+    return plan
+
+
+def _library_sync(root: Path, idx: dict, plan: dict, rep: dict) -> None:
+    """La bibliotheque des 3MF d'origine, nommee : copie ce qui manque, renomme sur place ce qui a deja ete
+    copie (sous son nom d'instance avant le 26/10/2026, ou sous un titre qui a change depuis)."""
+    try:
+        from .mw_source import _dir as _mw_dir
+        d = _mw_dir()
+    except Exception:
+        return
+    for iid, rel in plan.items():
+        src = d / f"{iid}.3mf"
+        if not src.is_file():
+            continue
+        prev = idx.get(f"lib:{iid}")
+        olds = [prev.get("to")] if isinstance(prev, dict) and prev.get("to") else []
+        olds.append(f"{LIB}/{iid}.3mf")                          # la recopie brute d'avant
+        try:
+            for old in olds:
+                if old != rel and (root / old).is_file() and not (root / rel).exists():
+                    _move(root, old, rel)
+                    rep["moved"] += 1
+            if _copy(src, root / rel):
+                rep["copied"] += 1
+                rep["bytes"] += src.stat().st_size
+            idx[f"lib:{iid}"] = {"to": rel, "root": str(root), "size": src.stat().st_size}
+        except OSError as e:
+            rep["errors"] += 1
+            logger.warning(f"[ARCHIVE] 3MF d'origine {iid} : {e}")
+    # les petits fichiers d'a cote (filaments lus, index…) recopies bruts avant : rangés a part
+    for f in list((root / LIB).glob("*")) if (root / LIB).is_dir() else []:
+        if f.is_file() and not f.name.endswith(".3mf"):
+            try:
+                _move(root, f"{LIB}/{f.name}", f"{LIB}/_Données/{f.name}")
+            except OSError:
+                pass
+
+
+def _library_path(src, plan: dict | None = None) -> str | None:
+    """Ou est, sur le NAS, le 3MF d'origine d'une impression (chemin relatif a la racine)."""
+    if not src:
+        return None
+    return (plan or {}).get(Path(src).stem)
+
+
 def _system_sync(root: Path, rep: dict) -> None:
     """Le reste des donnees, recopie tel quel (seul le nouveau ou le change) dans « Système »."""
     for src_name, label in SYSTEM_DIRS:
@@ -445,8 +528,14 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
     Ce qui a disparu de l'appli (impression, groupe, photo, video…) part dans « _Supprimés », jamais efface."""
     from .mw_source import print_file as source_3mf
     idx = _index()
-    rep = {"copied": 0, "skipped": 0, "moved": 0, "set_aside": 0, "bytes": 0, "errors": 0, "prints": 0}
+    rep = {"copied": 0, "skipped": 0, "moved": 0, "set_aside": 0, "deduped": 0, "bytes": 0, "errors": 0, "prints": 0}
     _migrate_layout(root, idx, rep)
+    # 0) le reste des donnees, dans « Système » (d'abord : la bibliotheque des 3MF d'origine y est verifiee
+    #    avant de retirer les copies qu'en avaient les dossiers des impressions)
+    prog.update(what="photos des filaments, objets, accessoires, 3MF MakerWorld…")
+    _system_sync(root, rep)
+    lib_plan = _library_plan(mws)
+    _library_sync(root, idx, lib_plan, rep)
     dirs = idx.setdefault("@dirs", {})           # « print:12 » / « grp:3 » -> son dossier sur le NAS
     # si les donnees locales ne sont pas la (volume absent), on ne deduit aucune suppression
     local_ok = (DATA_DIR / "prints").is_dir() and any((DATA_DIR / "prints").iterdir())
@@ -527,26 +616,30 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
                     idx[rel] = {"to": to, "root": str(root), "size": f.stat().st_size, "at": int(time.time())}
                 elif e:                                         # vide du local : il ne vit plus qu'au NAS
                     e.update(to=to, root=str(root))
-            # le 3MF d'origine MakerWorld (partage par les impressions du meme modele)
+            # le 3MF d'origine MakerWorld : une seule copie, dans la bibliotheque de « Système » (partagee par
+            # toutes les impressions du meme profil) ; la fiche dit ou le trouver. Les copies qu'en avaient les
+            # dossiers des impressions (avant le 26/10/2026) sont retirees, une fois l'original verifie la-bas.
             src = source_3mf(p.design_id, p.mw_profile_id, p.mw_plates) if p.design_id else None
+            lib = _library_path(src, lib_plan)
             prev = idx.get(f"src:{p.id}")
-            if src and Path(src).is_file():
-                to = f"{rel_dir}/3MF/{model} - origine MakerWorld.3mf"
-                if isinstance(prev, dict) and prev.get("to") != to and (root / prev["to"]).exists():
-                    _move(root, prev["to"], to)
-                if _copy(Path(src), root / to):
-                    rep["copied"] += 1
-                    rep["bytes"] += Path(src).stat().st_size
-                    wrote = True
-                idx[f"src:{p.id}"] = {"to": to, "root": str(root)}
-            elif isinstance(prev, dict) and not p.design_id:     # plus lie a un modele MakerWorld
-                _set_aside(root, idx, f"src:{p.id}", rep)
+            if isinstance(prev, dict):
+                old = root / prev["to"] if prev.get("to") else None
+                if old is None or not old.exists():
+                    idx.pop(f"src:{p.id}", None)
+                elif lib and (root / lib).is_file() and (root / lib).stat().st_size == old.stat().st_size:
+                    old.unlink()
+                    _prune_empty(root, old.parent)
+                    idx.pop(f"src:{p.id}", None)
+                    rep["deduped"] += 1
+                elif not p.design_id:                            # plus lie a un modele MakerWorld
+                    _set_aside(root, idx, f"src:{p.id}", rep)
             # la fiche (reecrite si elle a change)
             fil = [f"{u.filament_type or 'Filament'} {u.color_hex or ''} — {round(u.grams_used or 0)} g".replace("  ", " ")
                    for u in (p.filament_usage or []) if (u.grams_used or 0) > 0]
             mw = f"https://makerworld.com/fr/models/{p.design_id}" if p.design_id else None
             g = next((x for x in groups if x.id == p.group_id), None) if p.group_id else None
-            txt = _fiche(p, model, when, fil, mw) + (f"\nGroupe : {g.name}\n" if g else "")
+            txt = _fiche(p, model, when, fil, mw) + (f"\nGroupe : {g.name}\n" if g else "") \
+                + (f"\n3MF d'origine MakerWorld : {lib}\n" if lib and (root / lib).is_file() else "")
             if _write_if_changed(root / rel_dir / "Fiche.txt", txt):
                 wrote = True
             if wrote:
@@ -581,7 +674,11 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
         dirs[f"grp:{g.id}"] = groot
         try:
             members = [(p, plan[p.id][1], plan[p.id][2]) for p in prints if p.group_id == g.id]
-            _write_if_changed(root / groot / "Fiche du groupe.txt", _fiche_group(g, members))
+            libs = list(dict.fromkeys(filter(None, (_library_path(source_3mf(p.design_id, p.mw_profile_id, p.mw_plates), lib_plan)
+                                                    for p, _m, _w in members if p.design_id))))
+            libs = [x for x in libs if (root / x).is_file()]
+            _write_if_changed(root / groot / "Fiche du groupe.txt", _fiche_group(g, members)
+                              + ("\n3MF d'origine MakerWorld :\n" + "".join(f"  - {x}\n" for x in libs) if libs else ""))
         except Exception as e:
             rep["errors"] += 1
             logger.warning(f"[ARCHIVE] fiche du groupe {g.id} : {e}")
@@ -622,9 +719,6 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict) -> d
             dirs[key] = new
         except OSError:
             rep["errors"] += 1
-    # 5) le reste des donnees, dans « Système »
-    prog.update(what="photos des filaments, objets, accessoires, 3MF MakerWorld…")
-    _system_sync(root, rep)
     _index_save()
     _nas_changed()
     return rep

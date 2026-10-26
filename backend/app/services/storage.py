@@ -27,6 +27,7 @@ CATS = [
     ("filaments", "Photos de filaments", "#F97316"),
     ("db", "Base de données", "#6366F1"),
     ("catalog", "Catalogue et données MakerWorld", "#A855F7"),
+    ("sd_cache", "Cache de la carte SD", "#F43F5E"),
     ("tmp", "Fichiers temporaires", "#94A3B8"),
     ("other", "Autres", "#64748B"),
 ]
@@ -39,6 +40,8 @@ def _cat(parts: tuple, name: str) -> str:
     top = parts[0] if len(parts) > 1 else ""
     if (".db" in low or ".sqlite" in low) and low.endswith((".db", ".sqlite", "-wal", "-shm", "-journal")):
         return "db"
+    if parts[:2] == ("cache", "sd"):            # timelapses lus sur la carte SD (et leurs conversions) : refaits a la demande
+        return "sd_cache"
     if ext in VID:
         return "videos"
     if top == "prints":
@@ -105,7 +108,7 @@ async def usage(fresh: bool = False) -> dict:
 # ── Le NAS (26/10/2026) : ce que la sauvegarde y range, par les memes sortes, d'apres ses dossiers ──
 NAS_CACHE_S = 600                                      # un partage reseau se parcourt lentement : 10 min
 _NAS_CACHE: dict = {"at": 0.0, "v": None}
-NAS_CATS = CATS[:-2] + [("fiches", "Fiches des impressions et des groupes", "#0EA5E9"),
+NAS_CATS = [c for c in CATS[:-2] if c[0] != "sd_cache"] + [("fiches", "Fiches des impressions et des groupes", "#0EA5E9"),
                         ("deleted", "Mis de côté (_Supprimés)", "#A1A1AA"), ("other", "Autres", "#64748B")]
 SYS_SUBS = {"Base de données": "db", "Photos des filaments": "filaments", "Objets": "objects",
             "Accessoires": "accessories", "Catalogue Bambu": "catalog"}

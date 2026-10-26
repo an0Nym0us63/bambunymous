@@ -43,8 +43,13 @@ function TimelapsePicker({ items, picked, room, onDone, onClose, z }) {
               cursor: full ? "not-allowed" : "pointer", opacity: full ? .5 : 1,
               background: yes ? `linear-gradient(135deg, ${T}26, transparent 70%), var(--surface)` : "var(--surface)",
               border: `1px solid ${yes ? `${T}88` : "var(--border)"}` }}>
-              <input type="checkbox" checked={yes} disabled={full} style={{ accentColor: T, width: 18, height: 18 }}
+              <input type="checkbox" checked={yes} disabled={full} style={{ accentColor: T, width: 18, height: 18, flexShrink: 0 }}
                 onChange={() => setOn(o => yes ? o.filter(x => x !== t.id) : [...o, t.id])}/>
+              {/* la vignette du plateau de l'impression : on reconnait le timelapse d'un coup d'oeil */}
+              <span style={{ width: 44, height: 44, borderRadius: 10, flexShrink: 0, overflow: "hidden", display: "flex", alignItems: "center",
+                justifyContent: "center", background: "var(--surface2)", border: "1px solid var(--border)", fontSize: 18 }}>
+                {t.plate ? <img src={srcOf(t.plate)} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                  onError={e => { e.currentTarget.replaceWith(document.createTextNode("🎬")); }}/> : "🎬"}</span>
               <span style={{ fontSize: 14, color: "var(--text)", fontWeight: yes ? 800 : 600, overflowWrap: "anywhere" }}>{t.label}</span>
             </label>
           );

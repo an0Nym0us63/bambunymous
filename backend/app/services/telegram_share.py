@@ -554,13 +554,15 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
                 pool += _snapshots(p)
             for p in ordered:
                 pool += _plate(p.id)
-            # les timelapses de ses impressions : a part (bouton « Joindre des timelapses »), jamais d'office
-            tls = {}
+            # les timelapses de ses impressions : a part (bouton « Joindre des timelapses »), jamais d'office ;
+            # chacun avec la vignette du plateau de son impression, pour le reconnaitre
+            tls, plates = {}, {}
             for p in prints:
                 tl = _timelapse(p.id)
                 if tl:
                     when = (p.print_date - timedelta(minutes=tz_offset_min or 0)).strftime("%d/%m %Hh%M") if p.print_date else ""
                     tls[f"prints/{p.id}/{TIMELAPSE}"] = (tl, " · ".join(filter(None, [p.translated_name or p.file_name or f"Impression {p.id}", when])))
+                    plates[f"prints/{p.id}/{TIMELAPSE}"] = next((_media_url(_media_id(f)) for f in _plate(p.id)), None)
             items = g.number_of_items or 1
         else:
             raise ShareError("Type inconnu")
@@ -644,7 +646,7 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
         media = [by_id[i] for i in ids if i != "camera"][:ALBUM_MAX - (1 if camera else 0)]
     return {"title": title, "stats": stats, "filaments": fil_lines, "links": links,
             "media": media, "live": live, "camera": camera, "pool": pool_out,
-            "timelapses": [{"id": i, "url": _media_url(i), "label": lab} for i, (_f, lab) in tls.items()] if kind == "group" else [],
+            "timelapses": [{"id": i, "url": _media_url(i), "label": lab, "plate": plates.get(i)} for i, (_f, lab) in tls.items()] if kind == "group" else [],
             "default_ids": default_ids}
 
 
