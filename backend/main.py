@@ -503,7 +503,12 @@ async def enforce_readonly(request, call_next):
         if path.startswith("/api/v1/achievements/egg/") or path in ("/api/v1/achievements/passage", "/api/v1/achievements/surprise",
                                                                          "/api/v1/achievements/surprise/shown",
                                                                          "/api/v1/achievements/card-fx/seen",
-                                                                         "/api/v1/achievements/grade-fx/seen"):
+                                                                         "/api/v1/achievements/grade-fx/seen",
+                                                                         # la roue (la sienne pour la famille) et les loupes : chaque
+                                                                         # route controle elle-meme qui peut (26/10/2026 : les comptes en
+                                                                         # lecture seule de la famille etaient refuses sans rien voir)
+                                                                         "/api/v1/achievements/wheel/spin", "/api/v1/achievements/wheel/settle") \
+                or path.startswith("/api/v1/achievements/loupe/"):
             return await call_next(request)
         # Notifications de l'appli : chaque compte gere SES telephones et ses
         # choix (controle par route : son compte, jamais une cle copain).

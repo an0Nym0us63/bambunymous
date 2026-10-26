@@ -549,7 +549,7 @@ export default function Achievements({ embedded = false }) {
               tickets={canSpend ? data.keys?.wheel?.tickets || 0 : 0} onTicket={() => useTicket(detail)}
               keys={canSpend ? data.keys : null} onSpend={() => spend(detail)} keyErr={keyErr}
               loupes={data.family ? data.family.loupes : null} loupesDesc={data.family?.loupes_desc || 3}
-              onLoupe={what => loupe(detail, what)}/>
+              onLoupe={what => loupe(detail, what)} loupeErr={data.family ? keyErr : null}/>
           </div>
         </div>, document.body
       )}
@@ -620,7 +620,7 @@ function Tile({ it, onOpen, others, shared, rivals }) {
         lineHeight:1.2, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden",
         width:"100%" }}>{it.name}</span>
       {!got && it.reveal > 0 && (
-        <span title={`${it.reveal}/5 révélé par des clés`} style={{ display:"flex", gap:3 }}>
+        <span title={`${it.reveal}/5 déjà révélé`} style={{ display:"flex", gap:3 }}>
           {[1, 2, 3, 4, 5].map(i => <span key={i} style={{ width:5, height:5, borderRadius:"50%",
             background: i <= it.reveal ? "#F59E0B" : "var(--border)" }}/>)}
         </span>
@@ -1754,7 +1754,7 @@ const progress = it => {
   return span > 0 ? Math.max(0, Math.min(1, (it.value - (it.prev || 0)) / span)) : 0;
 };
 
-function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr, rivals, tickets = 0, onTicket, loupes = null, onLoupe, loupesDesc = 3 }) {
+function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr, rivals, tickets = 0, onTicket, loupes = null, onLoupe, loupesDesc = 3, loupeErr = null }) {
   const [sure, setSure] = useState(false);       // ticket : un second toucher pour confirmer
   const ref = useRef(null);
   const [open, setOpen] = useState(sheet);
@@ -1860,6 +1860,12 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
             background:"linear-gradient(135deg, #0EA5E9, #6366F1)" }}>
           🔍 {loupes ? `Révéler l'indice (il te reste ${loupes} loupe${loupes > 1 ? "s" : ""})` : "Plus de loupe aujourd'hui : deux de plus demain"}</button>
       )}
+      {/* famille : un secret que la maison n'a pas encore trouve, la loupe n'y peut rien (le dire) */}
+      {sheet && unique && !got && it.no_loupe && loupes != null && (
+        <p style={{ margin:0, fontSize:12, color:"var(--muted)", lineHeight:1.45 }}>
+          🔍 Pas de loupe ici : la maison ne l'a pas encore trouvé. Une loupe ne révèle que les secrets qu'elle a déjà.</p>
+      )}
+      {sheet && loupeErr && <p style={{ margin:0, fontSize:12.5, fontWeight:700, color:"#ef4444" }}>{loupeErr}</p>}
       {/* famille : l'indice en main, trois loupes devoilent le descriptif */}
       {sheet && unique && !got && it.house && it.hint && !it.loupe_desc && loupes != null && (
         <button type="button" onClick={() => onLoupe("desc")} disabled={loupes < loupesDesc}

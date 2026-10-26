@@ -5818,7 +5818,8 @@ def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> 
                           "masked": True, "desc": describe(a, a["tiers"][0]) if dlit else "Descriptif caché", "lore": None, "house": house,
                           "tiers": [{**it["tiers"][0], "at": None}]})
         else:
-            items.append(it)
+            # pas encore a la maison : ni les cles qu'elle y a mises (rien a voir pour lui), ni loupe possible
+            items.append({**it, "key_use": None, "no_loupe": aid in FAMILY_IDS and it["level"] < 0} if aid in FAMILY_IDS else it)
     found = sum(1 for aid in FAMILY_IDS if aid[4:] in mine)
     return {**v, "items": items, "medals": medals, "score": score,
             "family": {"house": house, "found": found, "total": len(FAMILY_IDS),
