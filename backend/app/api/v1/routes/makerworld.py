@@ -512,6 +512,12 @@ async def mw_model_studio(design_id: str, instance_id: str, dev_model: str = "",
         raise HTTPException(400, str(e))
 
 
+@router.get("/comment/{kind}/{cid}/replies")
+async def mw_comment_replies(kind: str, cid: str, _: str = Depends(get_current_user)):
+    """Les reponses d'un commentaire ou d'un avis (publiques)."""
+    return await _call(mw.comment_replies(kind, cid))
+
+
 @router.get("/model/{design_id}/comments")
 async def mw_model_comments(design_id: str, offset: int = 0, _: str = Depends(get_current_user)):
     return await _call(mw.model_comments(design_id, offset))

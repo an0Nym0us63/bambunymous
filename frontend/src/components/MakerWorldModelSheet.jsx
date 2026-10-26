@@ -659,9 +659,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                               style={{ width:64, height:64, objectFit:"cover", borderRadius:6 }}/></a>)}
                         </div>
                       )}
-                      <div style={{ fontSize:10.5, color:"var(--muted)", marginTop:3 }}>
-                        ♥ {c.likes}{c.replies ? ` · ${c.replies} réponse${c.replies > 1 ? "s" : ""}` : ""}
-                      </div>
+                      <div style={{ fontSize:10.5, color:"var(--muted)", marginTop:3 }}>♥ {c.likes}</div>
+                      {c.replies > 0 && <Replies c={c} creatorUid={m.creator_uid} onZoom={(images, index) => setZoom({ images, index })}/>}
                     </div>
                   </div>
                 ))}
@@ -771,6 +770,70 @@ const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platfor
 // Avant : des liens <a> que la souris « attrapait » (glisser-deposer du lien au lieu de defiler),
 // et un calage strict qui ramenait la bande en arriere au pave tactile : elle semblait bloquee.
 // small : la bande d'un profil (vignettes de 110 px, sans le halo ni la marge du haut de la fiche)
+// Les reponses d'un commentaire ou d'un avis (26/10/2026) : repliees derriere « 💬 N reponses » ; depliees,
+// un fil en retrait (trait a gauche), chacun avec son avatar, « ↪ a Untel » quand il repond a quelqu'un, la
+// pastille « createur » pour l'auteur du modele, le texte traduit (l'original au toucher), ses images et ses ♥.
+// Les premieres arrivent avec le commentaire ; la suite se lit a l'ouverture.
+function Replies({ c, creatorUid, onZoom }) {
+  const [open, setOpen] = useState(false);
+  const [all, setAll] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [orig, setOrig] = useState({});
+  const items = all || c.reply_preview || [];
+  const toggle = () => {
+    const v = !open;
+    setOpen(v);
+    if (v && !all && c.replies > (c.reply_preview || []).length) {
+      setBusy(true);
+      client.get(`/makerworld/comment/${c.kind}/${c.id}/replies`).then(({ data }) => setAll(data.items || [])).catch(() => {}).finally(() => setBusy(false));
+    }
+  };
+  const P = "#EC4899";
+  return (
+    <div style={{ marginTop:6 }}>
+      <button onClick={toggle} aria-expanded={open} style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 10px", borderRadius:20,
+        border:`1px solid color-mix(in srgb, ${P} 35%, transparent)`, background:`color-mix(in srgb, ${P} ${open ? 16 : 9}%, transparent)`,
+        color:P, fontSize:11.5, fontWeight:800, cursor:"pointer", fontFamily:"inherit" }}>
+        💬 {c.replies} réponse{c.replies > 1 ? "s" : ""}
+        <span style={{ fontSize:9, transform: open ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span></button>
+      {open && (
+        <div style={{ marginTop:8, marginLeft:4, paddingLeft:12, borderLeft:`2px solid color-mix(in srgb, ${P} 30%, var(--border))`,
+          display:"flex", flexDirection:"column", gap:10 }}>
+          {items.map(r => {
+            const author = creatorUid && String(r.uid) === String(creatorUid);
+            return (
+              <div key={r.id} style={{ display:"flex", gap:8 }}>
+                {r.avatar ? <MwImg src={r.avatar} w={44} style={{ width:22, height:22, borderRadius:"50%", flexShrink:0 }}/>
+                  : <span style={{ width:22, height:22, borderRadius:"50%", background:"var(--surface2)", flexShrink:0 }}/>}
+                <div style={{ minWidth:0, flex:1 }}>
+                  <div style={{ fontSize:11, color:"var(--muted)", display:"flex", alignItems:"center", gap:5, flexWrap:"wrap" }}>
+                    <b style={{ color:"var(--text2)" }}>{r.user}</b>
+                    {author && <span style={{ fontSize:9.5, fontWeight:900, padding:"0 6px", borderRadius:10, color:"#fff",
+                      background:"linear-gradient(135deg, #06B6D4, #3B82F6)" }}>créateur</span>}
+                    {r.to && <span>↪ à <b style={{ color:"var(--text2)" }}>{r.to}</b></span>}
+                    {r.when && <span>· {fmtDate(r.when)}</span>}
+                  </div>
+                  {r.text && <div style={{ fontSize:12.5, color:"var(--text)", lineHeight:1.45, whiteSpace:"pre-wrap", marginTop:1 }}>
+                    {(orig[r.id] && r.original ? r.original : r.text).trim()}</div>}
+                  {r.original && <button onClick={() => setOrig(o => ({ ...o, [r.id]: !o[r.id] }))}
+                    style={{ ...textBtn, marginTop:1, fontSize:10.5, color:"var(--muted)" }}>
+                    {orig[r.id] ? "Afficher la traduction" : "Afficher l'original"}</button>}
+                  {r.images?.length > 0 && <div style={{ display:"flex", gap:4, marginTop:4, overflowX:"auto" }}>
+                    {r.images.map((u, i) => <a key={i} href={u} onClick={e => { e.preventDefault(); onZoom(r.images, i); }}>
+                      <MwImg src={u} w={112} animate style={{ width:52, height:52, objectFit:"cover", borderRadius:6 }}/></a>)}</div>}
+                  {r.likes > 0 && <div style={{ fontSize:10, color:"var(--muted)", marginTop:2 }}>♥ {r.likes}</div>}
+                </div>
+              </div>);
+          })}
+          {busy && <span style={{ fontSize:11, color:"var(--muted)" }}>Lecture des autres réponses…</span>}
+          {!busy && !all && c.replies > items.length && <span style={{ fontSize:11, color:"var(--muted)" }}>
+            {c.replies - items.length} autre{c.replies - items.length > 1 ? "s" : ""} réponse{c.replies - items.length > 1 ? "s" : ""} sur MakerWorld</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PicStrip({ pictures, onOpen, small = false }) {
   const ref = useRef(null);
   const drag = useRef(null);

@@ -772,6 +772,38 @@ def plate_keys(plate_id, profile_id, manual) -> list:
     return [f"{profile_id or ''}:{plate_id or '1'}"]
 
 
+def _reply(x) -> dict:
+    """Une reponse a un commentaire ou a un avis (26/10/2026) : qui, a qui, quand, le texte (traduit)."""
+    if not isinstance(x, dict):
+        return None
+    u = x.get("user") if isinstance(x.get("user"), dict) else x.get("creator") if isinstance(x.get("creator"), dict) else {}
+    at = x.get("atUser") if isinstance(x.get("atUser"), dict) else {}
+    orig = x.get("content") if isinstance(x.get("content"), str) else ""
+    fr = x.get("contentTranslated") if isinstance(x.get("contentTranslated"), str) else ""
+    imgs = [i.get("url") if isinstance(i, dict) else i for i in (x.get("images") or [])]
+    return {"id": str(x.get("id") or ""), "text": fr or orig, "original": orig if fr and fr.strip() != orig.strip() else None,
+            "when": x.get("createTime") if isinstance(x.get("createTime"), str) else None,
+            "likes": x.get("likeCount") if isinstance(x.get("likeCount"), int) else 0,
+            "user": u.get("name") if isinstance(u.get("name"), str) else "",
+            "uid": str(u.get("uid") or ""), "avatar": u.get("avatar") if isinstance(u.get("avatar"), str) else None,
+            "to": at.get("name") if isinstance(at.get("name"), str) and at.get("name") else None,
+            "images": [i for i in imgs if isinstance(i, str)][:6]}
+
+
+async def comment_replies(kind: str, cid: str) -> dict:
+    """Toutes les reponses d'un commentaire (kind « comment ») ou d'un avis (« rating »)."""
+    import asyncio
+    cid = str(cid or "").strip()
+    if not cid.isdigit() or kind not in ("comment", "rating"):
+        return {"items": [], "total": 0}
+    code, d = await asyncio.to_thread(_get_json, f"/comment-service/{kind}/{cid}/reply?offset=0&limit=100")
+    if not isinstance(d, dict):
+        return {"items": [], "total": 0, "error": f"MakerWorld ne répond pas (HTTP {code})"}
+    raw = d.get("replies") if isinstance(d.get("replies"), list) else d.get("hits") if isinstance(d.get("hits"), list) else []
+    items = [r for r in (_reply(x) for x in raw) if r]
+    return {"items": items, "total": d.get("total") if isinstance(d.get("total"), int) else len(items)}
+
+
 async def model_comments(design_id: str, offset: int = 0) -> dict:
     """Commentaires et avis d'un modele (publics), 10 par page."""
     import asyncio
@@ -800,6 +832,9 @@ async def model_comments(design_id: str, offset: int = 0) -> dict:
                     "when": src.get("createTime") if isinstance(src.get("createTime"), str) else None,
                     "likes": src.get("likeCount") if isinstance(src.get("likeCount"), int) else 0,
                     "replies": src.get("replyCount") if isinstance(src.get("replyCount"), int) else 0,
+                    # les premieres reponses viennent avec (3 au plus) ; la suite se demande a part
+                    "kind": "comment" if c else "rating", "uid": str(u.get("uid") or ""),
+                    "reply_preview": [x for x in (_reply(y) for y in (src.get("commentReply") or src.get("instRatingReply") or [])) if x],
                     "user": u.get("name") if isinstance(u.get("name"), str) else "",
                     "avatar": u.get("avatar") if isinstance(u.get("avatar"), str) else None,
                     "images": [x for x in imgs if isinstance(x, str)][:6]})
