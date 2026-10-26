@@ -86,6 +86,9 @@ async def _remember(key: str, report: dict) -> None:
         await set_setting(db, key, json.dumps(report, ensure_ascii=False))
 
 
+MARK = ".bambunymous"
+
+
 def _check_root(root: str) -> dict:
     p = Path(root)
     if not p.is_dir():
@@ -102,13 +105,19 @@ def _check_root(root: str) -> dict:
     except OSError:
         free = None
     # un dossier monte depuis la machine (volume) est un point de montage ; sinon, c'est un simple dossier
-    # du conteneur (montage oublie) : la sauvegarde partirait avec lui. Meme disque que /data : possible et
-    # normal quand le NAS fait aussi tourner Docker, ce n'est donc pas un critere.
+    # du conteneur (montage oublie) : la sauvegarde partirait avec lui.
     try:
         mounted = os.path.ismount(p)
     except OSError:
         mounted = True
-    return {"ok": True, "disk": free, "not_mounted": not mounted}
+    # Partage reseau (NFS, SMB) monte sur la machine : s'il ne l'est pas (au redemarrage), Docker cree un
+    # dossier VIDE a sa place, sur le disque du serveur. La premiere sauvegarde y pose un repere ; s'il
+    # manque alors que des sauvegardes ont deja ete faites, on refuse de sauvegarder ou de vider.
+    if not (p / MARK).exists() and _index():
+        return {"ok": False, "why": f"Le repère des sauvegardes manque dans « {root} » : le partage du NAS n'est sans doute pas monté "
+                                    "sur la machine (dossier vide à sa place). Rien n'est sauvegardé ni vidé tant qu'il n'est pas revenu.",
+                "disk": free}
+    return {"ok": True, "disk": free, "not_mounted": not mounted, "first": not (p / MARK).exists()}
 
 
 async def status() -> dict:
@@ -373,6 +382,8 @@ async def backup(trigger: str = "manuel") -> dict:
     try:
         prints, mws, groups = await _prints_meta()
         root = Path(s["dir"])
+        if not (root / MARK).exists():
+            (root / MARK).write_text("Dossier des sauvegardes de BambuNymous : ne pas supprimer ce fichier.\n", encoding="utf-8")
         db_name = await asyncio.to_thread(_db_backup_sync, root)
         rep = await asyncio.to_thread(_backup_sync, root, prints, mws, groups, _STATE["progress"])
         rep.update(at=datetime.utcnow().isoformat() + "Z", trigger=trigger, seconds=round(time.time() - t0), db=db_name)
@@ -431,6 +442,12 @@ async def purge(days: int | None = None, trigger: str = "manuel") -> dict:
     if _STATE["running"]:
         return {"error": "Une sauvegarde ou un vidage est déjà en cours."}
     s = await settings_get()
+    chk = await asyncio.to_thread(_check_root, s["dir"])
+    if not chk["ok"] or chk.get("first"):
+        rep = {"at": datetime.utcnow().isoformat() + "Z", "trigger": trigger,
+               "error": chk.get("why") or "Aucune sauvegarde faite dans ce dossier : sauvegarde d'abord."}
+        await _remember("ARCHIVE_LAST_PURGE", rep)
+        return rep
     days = int(days or s["purge_days"] or 30)
     limit = datetime.utcnow() - timedelta(days=days)
     async with AsyncSessionLocal() as db:
