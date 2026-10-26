@@ -21,6 +21,40 @@ const KIND_THIS = { group: "Ce groupe", design: "Ce modèle", creator: "Ce créa
 // une vignette : nos fichiers passent par l'API, la couverture d'un modele vient de MakerWorld
 const srcOf = u => /^https?:/.test(u) ? mwImg(u, 256) : apiUrl(u.slice(7));
 
+// Les timelapses des impressions d'un groupe (26/10/2026) : aucun d'office, on coche ceux a joindre.
+function TimelapsePicker({ items, picked, room, onDone, onClose, z }) {
+  const [on, setOn] = useState(() => items.filter(t => picked.includes(t.id)).map(t => t.id));
+  const T = "#229ED9";
+  return createPortal(
+    <FSheet onClose={onClose} z={z} bottom={<>
+      <button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Annuler</button>
+      <button onClick={() => onDone(on)} style={{ ...fBtn, flex: 2, border: "none", color: "#fff",
+        background: `linear-gradient(135deg, ${T}, #3B82F6)` }}>{on.length ? `Joindre ${on.length} timelapse${on.length > 1 ? "s" : ""}` : "Aucun timelapse"}</button>
+    </>}>
+      <div style={{ padding: "52px 16px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>🎬 Joindre des timelapses</div>
+        <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 4px", lineHeight: 1.45 }}>
+          Ceux des impressions du groupe, copiés de la carte SD. {room} place{room > 1 ? "s" : ""} dans l'album (10 médias au plus).</p>
+        {items.map(t => {
+          const yes = on.includes(t.id);
+          const full = !yes && on.length >= room;
+          return (
+            <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 14,
+              cursor: full ? "not-allowed" : "pointer", opacity: full ? .5 : 1,
+              background: yes ? `linear-gradient(135deg, ${T}26, transparent 70%), var(--surface)` : "var(--surface)",
+              border: `1px solid ${yes ? `${T}88` : "var(--border)"}` }}>
+              <input type="checkbox" checked={yes} disabled={full} style={{ accentColor: T, width: 18, height: 18 }}
+                onChange={() => setOn(o => yes ? o.filter(x => x !== t.id) : [...o, t.id])}/>
+              <span style={{ fontSize: 14, color: "var(--text)", fontWeight: yes ? 800 : 600, overflowWrap: "anywhere" }}>{t.label}</span>
+            </label>
+          );
+        })}
+      </div>
+    </FSheet>,
+    document.body
+  );
+}
+
 export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
   const [preview, setPreview] = useState(null);
   const [message, setMessage] = useState("");
@@ -28,6 +62,7 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
   const [pick, setPick] = useState(null);       // medias joints (ids), comme pour les evaluations
+  const [tlOpen, setTlOpen] = useState(false);
   useTrackDetail(`Partage Telegram · ${KIND_NAME[kind] || kind} #${id}`);
   const timer = useRef(null);
 
@@ -71,6 +106,10 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
   const max = preview?.album_max || 10;
   const nMedia = pick ? pick.length : preview?.media?.length || 0;
   const toggle = (mid) => setPick(p => p.includes(mid) ? p.filter(x => x !== mid) : p.length < max ? [...p, mid] : p);
+  const tls = preview?.timelapses || [];
+  const tlIds = new Set(tls.map(t => t.id));
+  // les timelapses choisis d'un groupe rejoignent les vignettes (touche pour retirer)
+  const shown = [...(preview?.pool || []), ...tls.filter(t => pick?.includes(t.id)).map(t => ({ ...t, video: true, timelapse: true }))];
   const thumb = { width: 62, height: 62, borderRadius: 12, objectFit: "cover", cursor: "pointer", display: "block", boxSizing: "border-box" };
   const T = "#229ED9";
   const canSend = dests.length > 0 && !preview?.error;
@@ -136,7 +175,7 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
           <FCard t="Ce qui partira" i="👀" c="#22C55E" aside={<span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)" }}>
             {nMedia ? `${nMedia} photo${nMedia > 1 ? "s" : ""} ou vidéo${nMedia > 1 ? "s" : ""}` : "texte seul"}{pick?.includes("camera") && " · caméra"}</span>}>
             {/* Medias joints : touche pour retirer ou ajouter, 10 au plus (limite Telegram). */}
-            {(preview.pool?.length > 0 || preview.live) && (
+            {(shown.length > 0 || preview.live) && (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "6px 0 10px" }}>
                 {preview.live && (
                   <div onClick={() => toggle("camera")} data-tip="Caméra en direct, capturée à l'envoi"
@@ -144,15 +183,26 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
                       background: "var(--surface)", border: pick?.includes("camera") ? `2.5px solid ${T}` : "2px solid var(--border)",
                       opacity: pick?.includes("camera") ? 1 : 0.45 }}>📷</div>
                 )}
-                {(preview.pool || []).map(m => {
+                {shown.map(m => {
                   const on = pick?.includes(m.id);
                   const st = { ...thumb, border: on ? `2.5px solid ${T}` : "2px solid transparent", opacity: on ? 1 : 0.4 };
+                  if (m.timelapse) return (
+                    <span key={m.id} onClick={() => toggle(m.id)} data-tip={m.label ? `Timelapse · ${m.label}` : "Le timelapse, copié de la carte SD"}
+                      style={{ position: "relative", display: "block", cursor: "pointer" }}>
+                      <video src={srcOf(m.url)} muted playsInline preload="metadata" style={{ ...st, background: "#0f172a" }}/>
+                      <span style={{ position: "absolute", left: 4, bottom: 4, fontSize: 10, fontWeight: 900, color: "#fff", padding: "1px 5px",
+                        borderRadius: 6, background: "linear-gradient(135deg, #8B5CF6, #3B82F6)", opacity: on ? 1 : .8 }}>🎬</span>
+                    </span>);
                   return m.video
                     ? <video key={m.id} src={srcOf(m.url)} muted playsInline preload="metadata" onClick={() => toggle(m.id)} style={st}/>
                     : <img key={m.id} src={srcOf(m.url)} alt="" referrerPolicy="no-referrer" onClick={() => toggle(m.id)} style={st}
                         data-tip={m.id === "mwcover" ? "La couverture du modèle sur MakerWorld" : m.id === "mwavatar" ? "Son avatar" : m.id.startsWith("mw") ? "Un de ses modèles" : undefined}/>;
                 })}
               </div>
+            )}
+            {kind === "group" && tls.length > 0 && (
+              <button onClick={() => setTlOpen(true)} style={{ ...fBtn, margin: "0 0 10px", border: "1px solid var(--border)", fontSize: 13 }}>
+                🎬 Joindre des timelapses{tls.some(t => pick?.includes(t.id)) ? ` · ${tls.filter(t => pick?.includes(t.id)).length} / ${tls.length}` : ` (${tls.length})`}</button>
             )}
             {/* Legende construite par le serveur, contenu deja echappe : seules
                 ses balises <b> et <a> sont interpretees. */}
@@ -165,6 +215,9 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
           </FCard>
         </>)}
       </div>
+      {tlOpen && <TimelapsePicker items={tls} picked={pick || []} z={z + 10} onClose={() => setTlOpen(false)}
+        room={max - (pick || []).filter(x => !tlIds.has(x)).length}
+        onDone={ids => { setPick(p => [...(p || []).filter(x => !tlIds.has(x)), ...ids]); setTlOpen(false); }}/>}
     </FSheet>,
     document.body
   );

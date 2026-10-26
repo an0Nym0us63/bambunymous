@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import html
+from datetime import timedelta
 import json
 import logging
 import os
@@ -342,11 +343,15 @@ def prepare_media(paths: list[Path], workdir: Path) -> list[tuple[Path, bool]]:
     return out
 
 
+# Le timelapse copie de la carte SD (sd_card.AUTO_NAME) : propose, jamais joint d'office (26/10/2026).
+TIMELAPSE = "Video-Timelapse.mp4"
+
+
 def _photos_of_dir(d: Path, cover: Optional[str]) -> list[Path]:
     if not d.exists():
         return []
     files = [f for f in sorted(d.iterdir())
-             if f.is_file() and f.suffix.lower() in MEDIA_EXT
+             if f.is_file() and f.suffix.lower() in MEDIA_EXT and f.name != TIMELAPSE
              and (f.name.startswith("Photo-") or f.name.startswith("Video-") or d.parent.name == "groups")]
     if cover:
         files.sort(key=lambda f: f.name != cover)     # la couverture en tete
@@ -365,6 +370,18 @@ def _snapshots(p) -> list[Path]:
         if f.exists() and f not in out:
             out.append(f)
     return out
+
+
+def _timelapse(print_id: int) -> Optional[Path]:
+    """Le timelapse d'une impression : en local, ou sur le NAS s'il a ete vide du local."""
+    f = DATA_DIR / "prints" / str(print_id) / TIMELAPSE
+    if f.is_file():
+        return f
+    try:
+        from .archive import local_or_archive
+        return local_or_archive(f"prints/{print_id}/{TIMELAPSE}")
+    except Exception:
+        return None
 
 
 def _plate(print_id: int) -> list[Path]:
@@ -507,6 +524,9 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
                      or _snapshots(p) or _plate(p.id))
             # Tout ce qu'on peut joindre (choix a la main dans l'appli).
             pool = _photos_of_dir(DATA_DIR / "prints" / str(p.id), p.cover_photo) + _snapshots(p) + _plate(p.id)
+            tl = _timelapse(p.id)
+            # le timelapse : propose apres les photos, pas coche d'office
+            tls = {f"prints/{p.id}/{TIMELAPSE}": (tl, None)} if tl else {}
             items = p.number_of_items or 1
         elif kind == "group":
             g = await db.get(Group, obj_id)
@@ -534,6 +554,13 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
                 pool += _snapshots(p)
             for p in ordered:
                 pool += _plate(p.id)
+            # les timelapses de ses impressions : a part (bouton « Joindre des timelapses »), jamais d'office
+            tls = {}
+            for p in prints:
+                tl = _timelapse(p.id)
+                if tl:
+                    when = (p.print_date - timedelta(minutes=tz_offset_min or 0)).strftime("%d/%m %Hh%M") if p.print_date else ""
+                    tls[f"prints/{p.id}/{TIMELAPSE}"] = (tl, " · ".join(filter(None, [p.translated_name or p.file_name or f"Impression {p.id}", when])))
             items = g.number_of_items or 1
         else:
             raise ShareError("Type inconnu")
@@ -601,6 +628,13 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
     pool = list(dict.fromkeys(pool))
     by_id = {_media_id(f): f for f in pool}
     default_ids = (["camera"] if live else []) + [_media_id(f) for f in media]
+    tl_pool = [{"id": i, "url": _media_url(i), "video": True, "timelapse": True} for i in tls] if kind == "print" else []
+    pool_out = [{"id": i, "url": _media_url(i), "video": f.suffix.lower() in (".mp4", ".mov", ".webm", ".m4v")}
+                for i, f in by_id.items()]
+    if tl_pool:          # apres les photos et videos, avant les captures des couches
+        at = next((n for n, m in enumerate(pool_out) if not m["video"] and not m["id"].split("/")[-1].startswith("Photo-")), len(pool_out))
+        pool_out[at:at] = tl_pool
+    by_id.update({i: f for i, (f, _l) in tls.items()})
     camera = bool(live)
     if chosen is not None:
         # Choix fait dans l'appli : dans son ordre, seulement des medias connus
@@ -609,9 +643,8 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
         camera = bool(live) and "camera" in ids
         media = [by_id[i] for i in ids if i != "camera"][:ALBUM_MAX - (1 if camera else 0)]
     return {"title": title, "stats": stats, "filaments": fil_lines, "links": links,
-            "media": media, "live": live, "camera": camera,
-            "pool": [{"id": i, "url": _media_url(i), "video": f.suffix.lower() in (".mp4", ".mov", ".webm", ".m4v")}
-                     for i, f in by_id.items()],
+            "media": media, "live": live, "camera": camera, "pool": pool_out,
+            "timelapses": [{"id": i, "url": _media_url(i), "label": lab} for i, (_f, lab) in tls.items()] if kind == "group" else [],
             "default_ids": default_ids}
 
 

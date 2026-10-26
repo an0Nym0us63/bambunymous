@@ -74,7 +74,7 @@ async def share_preview(kind: str, obj_id: int, message: str = "", tz: int | Non
             "media": (["camera"] if share["live"] else []) + [f"makerworld-{k}" for k, _u in enumerate(share.get("remote") or [])] + [p.name for p in share["media"]],
             "live": bool(share["live"]),
             # Medias qu'on peut joindre, et ceux choisis d'office (a cocher dans l'appli).
-            "pool": share["pool"], "default_ids": share["default_ids"], "album_max": tg.ALBUM_MAX,
+            "pool": share["pool"], "timelapses": share.get("timelapses") or [], "default_ids": share["default_ids"], "album_max": tg.ALBUM_MAX,
             "destinations": [{"id": d["id"], "label": d["label"]} for d in await tg.destinations()]}
 
 
