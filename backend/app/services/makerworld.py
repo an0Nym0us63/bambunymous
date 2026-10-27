@@ -13,6 +13,7 @@ par print, espacees de 1,5 s pour ne pas marteler le site.
 """
 import asyncio
 import logging
+import re
 import json
 import threading
 import time
@@ -124,7 +125,7 @@ def _parse_design(code, d) -> dict:
     }
 
 
-EXTRAS_V = 5          # 2 : le descriptif ; 3 : les filaments recommandes ; 4 : titres des profils traduits ; 5 : leur image (27/10/2026)
+EXTRAS_V = 6          # 2 : le descriptif ; 3 : les filaments recommandes ; 4 : titres des profils traduits ; 5 : leur image ; 6 : images et liens du descriptif (27/10/2026)
 
 
 def extras_stale(raw) -> bool:
@@ -559,13 +560,55 @@ async def similar(design_id: str) -> dict:
 _MODEL_CACHE = {}
 
 
+_SAFE_URL = re.compile(r"^https?://[^\s\"'<>\[\]|]+$")
+
+
+def _url(u) -> str:
+    """Une adresse sure pour un repere (http(s), sans caractere qui casserait le repere), sinon vide."""
+    import html as _h
+    u = _h.unescape(str(u or "")).strip()
+    if u.startswith("//"):
+        u = "https:" + u
+    return u if _SAFE_URL.match(u) else ""
+
+
 def _text(html: str) -> str:
     """Descriptif HTML -> texte lisible (paragraphes, listes a puces). Rien
-    du HTML d'origine n'est rendu tel quel dans l'appli."""
+    du HTML d'origine n'est rendu tel quel dans l'appli. Les images, videos, liens et intertitres
+    deviennent des reperes (27/10/2026 : ils disparaissaient, alors que le createur y explique souvent
+    l'assemblage) : [[img:URL]] et [[video:URL]] sur leur ligne, [[h:titre]], [[a:URL|texte]] dans le texte.
+    L'appli les affiche ; plain() les ramene a du texte (fiches du NAS)."""
     import re, html as _h
     if not isinstance(html, str):
         return ""
     t = re.sub(r"(?is)<(script|style).*?</\1>", "", html)
+
+    def img(m):
+        src = re.search(r"""(?i)\b(?:data-)?src\s*=\s*["']([^"']+)["']""", m.group(0))
+        u = _url(src.group(1)) if src else ""
+        return f"\n[[img:{u}]]\n" if u else ""
+
+    def media(m):
+        src = re.search(r"""(?i)\bsrc\s*=\s*["']([^"']+)["']""", m.group(0))
+        u = _url(src.group(1)) if src else ""
+        return f"\n[[video:{u}]]\n" if u else ""
+
+    def link(m):
+        href = re.search(r"""(?i)\bhref\s*=\s*["']([^"']+)["']""", m.group(1))
+        u = _url(href.group(1)) if href else ""
+        inner = re.sub(r"<[^>]+>", "", m.group(2))
+        label = re.sub(r"\s+", " ", _h.unescape(inner)).strip().replace("]]", "] ]").replace("|", "/")
+        if not u:
+            return inner
+        return f"[[a:{u}|{label or u}]]"
+
+    def head(m):
+        inner = re.sub(r"\s+", " ", _h.unescape(re.sub(r"<[^>]+>", "", m.group(2)))).strip().replace("]]", "] ]")
+        return f"\n[[h:{inner}]]\n" if inner else "\n"
+    t = re.sub(r"(?is)<img\b[^>]*>", img, t)
+    t = re.sub(r"(?is)<(?:iframe|video|source)\b[^>]*>", media, t)
+    t = re.sub(r"(?is)<a\b([^>]*)>(.*?)</a>", link, t)
+    t = re.sub(r"(?is)<h([1-4])\b[^>]*>(.*?)</h\1>", head, t)
     t = re.sub(r"(?i)<li[^>]*>", "\n• ", t)
     t = re.sub(r"(?i)<br\s*/?>|</(p|div|h[1-6]|li|ul|ol|tr)>", "\n", t)
     t = re.sub(r"<[^>]+>", "", t)
@@ -575,6 +618,17 @@ def _text(html: str) -> str:
     t = re.sub(r"[ \t]+", " ", t)
     t = re.sub(r"\n\s*\n\s*\n+", "\n\n", t)
     return t.strip()[:20000]
+
+
+def plain(t: str) -> str:
+    """Un descriptif a reperes -> texte simple (fichiers texte du NAS) : l'image et la video gardent leur adresse,
+    un lien son texte et son adresse."""
+    import re
+    t = re.sub(r"\[\[img:([^\]]+)\]\]", r"[image : \1]", str(t or ""))
+    t = re.sub(r"\[\[video:([^\]]+)\]\]", r"[vidéo : \1]", t)
+    t = re.sub(r"\[\[h:([^\]]*)\]\]", lambda m: m.group(1).upper(), t)
+    t = re.sub(r"\[\[a:([^|\]]+)\|([^\]]*)\]\]", lambda m: m.group(2) if m.group(2) == m.group(1) else f"{m.group(2)} ({m.group(1)})", t)
+    return t
 
 
 def _plate_detail(d) -> list:

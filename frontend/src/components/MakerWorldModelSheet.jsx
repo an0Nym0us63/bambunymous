@@ -14,6 +14,7 @@ import { mwLiked } from "../utils/mwSync";
 import { useMwAssign } from "../store/mwAssign";
 import { useFriend } from "../store/friend";
 import MwImg from "./MwImg";
+import MwRich, { richImages } from "./MwRich";
 import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf, platePicksOf, plateInAms, clearPicks, plateColorMap, usePicksVersion,
   PlateColors } from "./MwStockMatch";
 import PlateRecolor from "./PlateRecolor";
@@ -393,11 +394,13 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
               <Section title="Descriptif" icon="📝" c="#8B5CF6">
                 <Folded lines={7} open={more} onOverflow={setDescLong}
                   style={{ fontSize:13, color:"var(--text2)", lineHeight:1.55, whiteSpace:"pre-wrap" }}>
-                  {orig && m.description_original ? m.description_original : m.description}
+                  <MwRich text={orig && m.description_original ? m.description_original : m.description}
+                    onImage={(images, index) => setZoom({ images, index, title: "Descriptif" })} onModel={setId}/>
                 </Folded>
                 <div style={{ display:"flex", gap:14 }}>
                   {(descLong || more) && (
-                    <button onClick={() => setMore(v => !v)} style={textBtn}>{more ? "Réduire" : "Lire la suite"}</button>
+                    <button onClick={() => setMore(v => !v)} style={textBtn}>{more ? "Réduire"
+                      : `Lire la suite${richImages(m.description).length ? ` · 🖼 ${richImages(m.description).length} image${richImages(m.description).length > 1 ? "s" : ""}` : ""}`}</button>
                   )}
                   {m.description_original && (
                     <button onClick={() => setOrig(v => !v)} style={{ ...textBtn, color:"var(--muted)" }}>
@@ -474,7 +477,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                       </button>
                       {isOpen && p.pictures?.length > 1 && <div style={{ padding:"0 10px 8px" }}>
                         <PicStrip small pictures={p.pictures} onOpen={i => setZoom({ images: p.pictures, index: i, title: p.title })}/></div>}
-                      {isOpen && p.summary && <ProfileSummary p={p}/>}
+                      {isOpen && p.summary && <ProfileSummary p={p} onImage={(images, index) => setZoom({ images, index, title: p.title })} onModel={setId}/>}
                       {/* Imprimer CE profil : Handy (telephone, page open-app de MakerWorld)
                           ou Bambu Studio (ordinateur, lien du 3MF de ce profil). */}
                       {isOpen && (
@@ -948,7 +951,7 @@ function Folded({ lines, open, onOverflow, style, children }) {
 }
 
 // Descriptif du profil (traduit, original a la demande), replie s'il est long.
-function ProfileSummary({ p }) {
+function ProfileSummary({ p, onImage, onModel }) {
   const [more, setMore] = useState(false);
   const [orig, setOrig] = useState(false);
   const txt = orig && p.summary_original ? p.summary_original : p.summary;
@@ -958,10 +961,11 @@ function ProfileSummary({ p }) {
   return (
     <div style={{ padding:"0 10px 8px" }}>
       <Folded lines={4} open={more} onOverflow={setOverflow}
-        style={{ fontSize:12, color:"var(--text2)", lineHeight:1.5, whiteSpace:"pre-wrap" }}>{txt}</Folded>
+        style={{ fontSize:12, color:"var(--text2)", lineHeight:1.5, whiteSpace:"pre-wrap" }}><MwRich text={txt} onImage={onImage} onModel={onModel}/></Folded>
       {(long || p.summary_original) && (
         <div style={{ display:"flex", gap:12, marginTop:3 }}>
-          {long && <button onClick={() => setMore(v => !v)} style={b}>{more ? "Réduire" : "Lire la suite"}</button>}
+          {long && <button onClick={() => setMore(v => !v)} style={b}>{more ? "Réduire"
+            : `Lire la suite${richImages(txt).length ? ` · 🖼 ${richImages(txt).length}` : ""}`}</button>}
           {p.summary_original && <button onClick={() => setOrig(v => !v)} style={{ ...b, color:"var(--muted)" }}>
             {orig ? "Afficher la traduction" : "Afficher l'original"}</button>}
         </div>

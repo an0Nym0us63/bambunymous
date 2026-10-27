@@ -544,10 +544,11 @@ def _desc_sync(root: Path, mws: dict, docs_plan: dict, rep: dict) -> dict:
             lines.append(f"Catégories : {', '.join(cats)}")
         if tags:
             lines.append(f"Mots-clés : {', '.join(tags[:40])}")
+        from .makerworld import plain
         if x.get("description"):
-            lines += ["", "Descriptif :", "", x["description"]]
+            lines += ["", "Descriptif :", "", plain(x["description"])]
         if x.get("description_original"):
-            lines += ["", "Descriptif d'origine :", "", x["description_original"]]
+            lines += ["", "Descriptif d'origine :", "", plain(x["description_original"])]
         txt = "\n".join(lines) + "\n" + _extras_txt(m, docs_plan)
         try:
             (root / rel).parent.mkdir(parents=True, exist_ok=True)
