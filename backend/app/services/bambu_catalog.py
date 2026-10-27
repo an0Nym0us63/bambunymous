@@ -132,16 +132,23 @@ class BambuCatalogSync:
         return {"filaments": w_fil, "types": w_typ, "status": {"filaments": st_fil, "types": st_typ}}
 
     def run_periodic(self) -> None:
+        from ..core import tasks as _tasks
         log.info(f"[CATALOG] Démarrage BambuCatalogSync (dir={self.catalog_dir}, interval={self.interval_sec}s)")
+        _tasks.start("catalog")
         try:
             self.sync_once()
         except Exception:
+            _tasks.error("catalog")
             log.exception("[CATALOG] Sync initiale échouée")
+        _tasks.waiting("catalog", self.interval_sec)
         while not self._stop_evt.wait(self.interval_sec):
+            _tasks.start("catalog")
             try:
                 self.sync_once()
             except Exception:
+                _tasks.error("catalog")
                 log.exception("[CATALOG] Sync périodique échouée")
+            _tasks.waiting("catalog", self.interval_sec)
         log.info("[CATALOG] Arrêt BambuCatalogSync.")
 
     def start(self) -> threading.Thread:

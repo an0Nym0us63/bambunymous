@@ -79,7 +79,7 @@ function Viewer({ url, glb, onState, palette = null }) {
           const draco = new DRACOLoader(); draco.setDecoderPath("/draco/"); draco.setDecoderConfig({ type: "wasm" });
           disposables.push(draco);
           const gl = await new GLTFLoader().setDRACOLoader(draco).loadAsync(url);
-          const mat = new THREE.MeshStandardMaterial({ color: 0xb8c0cc, roughness: 0.55, metalness: 0.05 });
+          const mat = new THREE.MeshStandardMaterial({ color: 0xb8c0cc, roughness: 0.55, metalness: 0.05, flatShading: true });
           gl.scene.traverse(o => { if (o.isMesh) o.material = mat; });
           // l'apercu MakerWorld est en metres (glTF) : en millimetres, comme le plateau
           gl.scene.scale.setScalar(1000);
@@ -93,11 +93,12 @@ function Viewer({ url, glb, onState, palette = null }) {
             const geo = new THREE.BufferGeometry();
             geo.setAttribute("position", new THREE.BufferAttribute(g.pos, 3));
             geo.setIndex(new THREE.BufferAttribute(g.idx, 1));
-            geo.computeVertexNormals();
+            // ombre a plat, facette par facette (comme Bambu Studio) : des normales lissees par sommet tracaient des
+            // trainees de triangles la ou une face plate rejoint un arrondi ; et rien a calculer ni a garder en plus
             // recoloriee : la couleur du createur remplacee par celle du filament retenu (« À faire »)
             const own = g.color.map(x => x.toString(16).padStart(2, "0")).join("").toUpperCase();
             const c = palette?.[own] ? new THREE.Color(`#${hex6(palette[own])}`) : new THREE.Color(`rgb(${g.color.join(",")})`);
-            holder.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05 })));
+            holder.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true })));
           }
           model.add(holder);
         }

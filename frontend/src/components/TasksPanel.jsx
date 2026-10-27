@@ -11,7 +11,14 @@ const STATE = {
   done:     ["Terminée", "#64748B", "#94A3B8"],
   stopped:  ["Arrêtée", "#EF4444", "#DC2626"],
   unknown:  ["Pas lancée", "#94A3B8", "#CBD5E1"],
+  connected: ["Connectée", "#22C55E", "#16A34A"],
+  offline:  ["Déconnectée", "#F59E0B", "#EF4444"],
+  off:      ["Pas configurée", "#94A3B8", "#CBD5E1"],
+  planned:  ["Programmée", "#8B5CF6", "#6366F1"],
+  disabled: ["Désactivée", "#94A3B8", "#CBD5E1"],
 };
+const when = ts => new Date(ts * 1000).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const isoTs = v => (v ? Date.parse(v) / 1000 : null);
 const FAMILY_ICON = { Impressions: "🖨️", MakerWorld: "🌐", Notifications: "🔔", "Succès": "🏆", Serveur: "🖥️" };
 
 function dur(s) {
@@ -49,7 +56,7 @@ export default function TasksPanel() {
   if (err) return <div className="card" style={{ padding: 16, color: "#ef4444", fontWeight: 700 }}>Tâches illisibles : {err}</div>;
   if (!d) return <div className="card" style={{ padding: 16, color: "var(--muted)" }}>Lecture des tâches…</div>;
   const families = [...new Set(d.loops.map(l => l.family))];
-  const bad = d.loops.filter(l => l.state === "stopped").length;
+  const bad = d.loops.filter(l => l.state === "stopped" || l.state === "offline").length;
   const busy = d.loops.filter(l => l.state === "running").length + d.jobs.filter(j => j.running).length;
   const errs = d.loops.filter(l => l.error).length;
   return <div className="wide-flow">
@@ -62,12 +69,34 @@ export default function TasksPanel() {
         passée pour la dernière fois et sa dernière erreur. Les compteurs repartent à zéro à chaque redémarrage.</p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {[[busy, "en cours", "#0EA5E9"], [d.loops.length - bad, "tâches actives", "#22C55E"], [errs, "avec une erreur", errs ? "#F59E0B" : "#22C55E"],
-          [bad, "arrêtées", bad ? "#EF4444" : "#22C55E"]].map(([n, l, c]) => (
+          [bad, "arrêtées ou déconnectées", bad ? "#EF4444" : "#22C55E"]].map(([n, l, c]) => (
           <span key={l} style={{ flex: "1 1 120px", padding: "7px 10px", borderRadius: 12, background: "var(--surface2)" }}>
             <b style={{ display: "block", fontSize: 18, fontWeight: 900, color: c, lineHeight: 1.1 }}>{n}</b>
             <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>{l}</span></span>))}
       </div>
     </div>
+
+    {d.planned?.length > 0 && <div className="card" style={{ padding: "16px 20px" }}>
+      <h3 style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 900, color: "#6366F1" }}>🗓️ Planifié</h3>
+      {d.planned.map(p => {
+        const last = p.last, lt = isoTs(last?.at), lp = p.last_purge, lpt = isoTs(lp?.at);
+        return <div key={p.id} style={{ padding: "9px 10px", borderRadius: 12, background: "var(--surface2)", marginBottom: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: "var(--text)" }}>{p.label}</span>
+            <Chip state={p.running ? "running" : p.enabled ? "planned" : "disabled"}/>
+          </div>
+          <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2, lineHeight: 1.45 }}>{p.desc}</div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text2)", marginTop: 4, display: "flex", flexWrap: "wrap", gap: "2px 10px" }}>
+            {p.next_at && <span style={{ color: "#6366F1" }}>prochaine : {when(p.next_at)} (dans {dur(p.next_at - now)})</span>}
+            {!p.enabled && <span>activable dans ses réglages</span>}
+            {lt && !last?.error && <span style={{ color: "#16a34a" }}>✓ dernière il y a {dur(now - lt)}{last.trigger ? ` (${last.trigger})` : ""}{last.seconds != null ? `, ${dur(last.seconds)}` : ""}</span>}
+            {lpt && !lp?.error && <span>vidage il y a {dur(now - lpt)}{lp.trigger ? ` (${lp.trigger})` : ""}</span>}
+          </div>
+          {last?.error && <div style={{ fontSize: 11.5, fontWeight: 700, color: "#ef4444", marginTop: 4 }}>⚠ dernière il y a {dur(now - lt)} : {last.error}</div>}
+          {lp?.error && <div style={{ fontSize: 11.5, fontWeight: 700, color: "#ef4444", marginTop: 4 }}>⚠ vidage il y a {dur(now - lpt)} : {lp.error}</div>}
+        </div>;
+      })}
+    </div>}
 
     {d.jobs.length > 0 && <div className="card" style={{ padding: "16px 20px" }}>
       <h3 style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 900, color: "#8B5CF6" }}>⚙️ Travaux lancés à la demande</h3>

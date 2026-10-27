@@ -419,7 +419,7 @@ _ARCHIVE_TASKS: set = set()
 async def tasks_status(_: str = Depends(require_admin)):
     """Les taches de fond : ce qui tourne, quand ca repasse, la derniere erreur ; et les longs travaux en cours."""
     from ....core import tasks
-    return tasks.snapshot()
+    return {**tasks.snapshot(), "planned": await tasks.planned()}
 
 
 @router.get("/perf")

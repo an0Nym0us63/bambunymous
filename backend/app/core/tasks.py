@@ -12,6 +12,7 @@ import time
 
 # id -> (libelle, ce qu'elle fait, famille)
 CATALOG = {
+    "mqtt":         ("Connexion à l'imprimante", "Le lien MQTT avec l'imprimante (état, AMS, impressions) : reconnecté tout seul s'il tombe.", "Impressions"),
     "reconciler":   ("Rattrapage des 3MF tranchés", "Reprend les impressions restées sans leur 3MF (5 min).", "Impressions"),
     "translate":    ("Traduction des noms", "Traduit les noms restés vides (quota d'un service atteint) : toutes les 6 h.", "Impressions"),
     "sd_card":      ("Timelapses de la carte SD", "Copie le timelapse de chaque impression terminée depuis la carte SD de l'imprimante.", "Impressions"),
@@ -29,6 +30,7 @@ CATALOG = {
     "ach_warm":     ("Calcul des succès", "Prépare le gros calcul des succès au démarrage.", "Succès"),
     "db_upkeep":    ("Entretien de la base", "Statistiques au besoin, puis « PRAGMA optimize » : chaque heure.", "Serveur"),
     "loop_watch":   ("Surveillance du serveur", "Relève ce qui fige le serveur et la charge du processeur (Vitesse du serveur).", "Serveur"),
+    "catalog":      ("Catalogue des filaments Bambu", "Télécharge le catalogue des filaments Bambu (codes, couleurs) : au démarrage, puis toutes les 24 h s'il a changé.", "Serveur"),
     "nas":          ("Sauvegarde de nuit", "Sauvegarde vers le NAS (et vidage du local) chaque nuit, si elle est activée ; vérifie toutes les 5 min.", "Serveur"),
 }
 _ST: dict = {}
@@ -58,6 +60,16 @@ def start(i: str) -> None:
     st = _st(i)
     st.update(state="running", last_start=time.time(), next_at=None)
     st["runs"] += 1
+
+
+def waiting(i: str, s: float) -> None:
+    """Une tache d'un fil a part (sans asyncio) : son passage est fini, le prochain dans s secondes."""
+    st = _st(i)
+    now = time.time()
+    if st["state"] == "running":
+        st["last_end"] = now
+        st["last_s"] = round(now - (st["last_start"] or now), 1)
+    st.update(state="waiting", next_at=now + s)
 
 
 def finish(i: str) -> None:
@@ -115,6 +127,101 @@ def jobs() -> list:
         add("mw_refresh", "Lecture des fiches MakerWorld", {"running": makerworld._RUNNING.get("on")})
     except Exception:
         pass
+    try:
+        from ..services import mw_rate
+        q = mw_rate.queue_state().get("jobs") or []
+        live = [j for j in q if j.get("status") in ("queued", "sending")]
+        if q:
+            add("mw_rate", "Publication des évaluations MakerWorld", {"running": bool(live), "total": len(q), "done": len(q) - len(live),
+                                                                   "current": (live[0].get("title") if live else None)})
+    except Exception:
+        pass
+    try:
+        from ..services import mw_queue
+        t = mw_queue._TASK[0]
+        add("mw_queue", "Calcul de la liste « À faire »", {"running": bool(t and not t.done())})
+    except Exception:
+        pass
+    try:
+        from ..api.v1.routes.camera import _HUB
+        alive = bool(_HUB.thread and _HUB.thread.is_alive())
+        add("camera", "Flux de la caméra", {"running": alive, "current": f"{_HUB.subs} spectateur{'s' if _HUB.subs > 1 else ''}" if alive else None})
+    except Exception:
+        pass
+    try:
+        from ..api.v1.routes.import_zip import _JOBS as ZJ
+        for k, j in list(ZJ.items())[-3:]:
+            add(f"zip:{k}", "Import d'une archive ZIP", {"running": j.get("status") in ("running", "pending"), "done": j.get("done"),
+                                                       "total": j.get("total"), "current": j.get("current") or j.get("status")})
+    except Exception:
+        pass
+    return out
+
+
+def _mqtt() -> dict:
+    """La connexion a l'imprimante, lue sur le gestionnaire MQTT."""
+    try:
+        from .mqtt import mqtt_manager as M
+        if not M._ip:
+            return {"state": "off"}
+        alive = bool(M._thread and M._thread.is_alive())
+        return {"state": "connected" if M._connected else ("offline" if alive else "stopped")}
+    except Exception:
+        return {"state": "unknown"}
+
+
+def _next_daily(hour: int, now_local) -> float:
+    """Dans combien de secondes revient l'heure « hour » (heure locale)."""
+    from datetime import timedelta
+    t = now_local.replace(hour=hour, minute=0, second=0, microsecond=0)
+    if t <= now_local:
+        t += timedelta(days=1)
+    return (t - now_local).total_seconds()
+
+
+async def planned() -> list:
+    """Ce qui est programme a une heure donnee : la sauvegarde de nuit (et le vidage), le resume de la semaine, la
+    reprise d'un rattrapage arrete par la limite de MakerWorld."""
+    from datetime import datetime, timedelta
+    out = []
+    now = time.time()
+    try:
+        from ..services import archive
+        s = await archive.settings_get()
+        nl = archive._local(datetime.utcnow())
+        last = s.get("last_backup") or {}
+        lp = s.get("last_purge") or {}
+        desc = f"Chaque nuit à {s['hour']} h, vers {s['dir']}" + (f" ; puis vidage du local de ce qui a plus de {s['purge_days']} jours (copié sur le NAS)" if s["purge_auto"] else "")
+        out.append({"id": "nas_backup", "label": "Sauvegarde vers le NAS", "desc": desc, "enabled": s["nightly"],
+                    "next_at": now + _next_daily(s["hour"], nl) if s["nightly"] else None,
+                    "last": {"at": last.get("at"), "trigger": last.get("trigger"), "error": last.get("error"), "seconds": last.get("seconds")} if last else None,
+                    "last_purge": {"at": lp.get("at"), "trigger": lp.get("trigger"), "error": lp.get("error")} if lp else None,
+                    "running": archive._STATE.get("running")})
+    except Exception:
+        pass
+    try:
+        from ..services import notify as N
+        cfg = await N._load()                          # la config brute, comme la boucle qui l'envoie
+        on = N.enabled_in(cfg, "weekly_summary")
+        o = N.options_of(cfg, "weekly_summary")
+        days = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+        nl = datetime.now()
+        t = nl.replace(hour=int(o["hour"]), minute=0, second=0, microsecond=0) + timedelta(days=(int(o["day"]) - nl.weekday()) % 7)
+        if t <= nl:
+            t += timedelta(days=7)
+        out.append({"id": "weekly", "label": "Résumé de la semaine", "desc": f"Chaque {days[int(o['day'])]} à {o['hour']} h (Telegram, ntfy et appli)",
+                    "enabled": on, "next_at": now + (t - nl).total_seconds() if on else None})
+    except Exception:
+        pass
+    try:
+        from ..services import mw_source
+        j = mw_source.status()
+        if j.get("resume_at") and not j.get("running"):
+            out.append({"id": "mw_source_resume", "label": "Reprise du rattrapage des 3MF d'origine",
+                        "desc": "Arrêté par la limite de téléchargements du jour de MakerWorld : il reprend tout seul.",
+                        "enabled": True, "next_at": float(j["resume_at"])})
+    except Exception:
+        pass
     return out
 
 
@@ -132,6 +239,8 @@ def snapshot() -> dict:
                 st["error"], st["error_at"] = f"{type(e).__name__}: {e}"[:300], st.get("last_end") or now
         if not st and t is None:
             state = "unknown"
+        if i == "mqtt":
+            state = _mqtt()["state"]
         loops.append({"id": i, "label": label, "desc": desc, "family": family, "state": state, "runs": st.get("runs", 0),
                       "since": st.get("since"), "last_start": st.get("last_start"), "last_end": st.get("last_end"),
                       "last_s": st.get("last_s"), "next_at": st.get("next_at"), "error": st.get("error"), "error_at": st.get("error_at")})
