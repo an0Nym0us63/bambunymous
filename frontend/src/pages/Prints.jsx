@@ -1067,6 +1067,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [sharing, setSharing] = useState(false);
   const [ungrouped, setUngrouped] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [sliced3d, setSliced3d] = useState(false);      // la vue 3D du fichier imprime
   const [userPhotos, setUserPhotos] = useState([]);
   const loadUserPhotos = () => client.get(`/prints/${pProp.id}/photos`).then(r => setUserPhotos(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   useEffect(() => { loadUserPhotos(); }, [pProp.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1149,6 +1150,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
       !p.source_3mf && p.design_id && p.mw_profile_id && { icon: "⇣", label: "Récupérer le 3MF d'origine", hint: "depuis MakerWorld", tone: "#F97316",
         onClick: async () => { try { await client.post(`/makerworld/source3mf/print/${p.id}`); setP(prev => ({ ...prev, source_3mf: true })); toast("3MF d'origine récupéré"); }
           catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
+      p.model_3mf && { icon: "🧊", label: "Vue 3D du fichier imprimé", hint: "aux couleurs du tranchage", tone: "#0EA5E9", onClick: () => setSliced3d(true) },
       p.model_3mf && { icon: "⤓", label: "Télécharger le 3MF tranché", hint: "pour mon imprimante", tone: "#F59E0B", onClick: () => download3mf(p.id, "sliced") },
       (p.job_id || p.design_id) && { icon: "#", label: "Identifiants", hint: "Travail, modèle MakerWorld", tone: "#64748B", onClick: () => setIdsOpen(true) },
       "-",
@@ -1179,6 +1181,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
           <h2 style={{ flex: 1, minWidth: 0, margin: 0, fontSize: 19, fontWeight: 900, color: "var(--text)", letterSpacing: "-.01em", lineHeight: 1.2,
             overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{p.file_name || "Sans nom"}</h2>
+          {p.model_3mf && <button onClick={() => setSliced3d(true)} aria-label="Vue 3D du fichier imprimé" data-tip="Vue 3D du fichier imprimé"
+            style={{ width: 34, height: 34, borderRadius: 11, border: "1px solid rgba(14,165,233,0.4)", background: "rgba(14,165,233,0.12)",
+              cursor: "pointer", flexShrink: 0, fontSize: 15 }}>🧊</button>}
         </div>
         {p.original_name && p.original_name !== p.file_name && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.original_name}</div>}
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
@@ -1305,6 +1310,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           </div>}
         </div>
       </div>
+      {sliced3d && <Model3D sliced={[{ id: p.id, label: p.file_name || "Impression" }]} title={p.file_name || "Impression"}
+        onClose={() => setSliced3d(false)}/>}
       {idsOpen && createPortal(<div onClick={() => setIdsOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 6500, background: "rgba(2,6,23,0.5)",
         backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
         <div onClick={e => e.stopPropagation()} style={{ width: "min(380px, 100%)", borderRadius: 20, overflow: "hidden", background: "var(--sheet-bg)",
@@ -1510,6 +1517,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   const [costOpen, setCostOpen] = useState(false);     // replie a chaque ouverture
   const [grid, setGrid] = useState(false);              // les impressions en rangees, ou en grille
   const [listOpen, setListOpen] = useState(false);      // les impressions : repliees a chaque ouverture
+  const [group3d, setGroup3d] = useState(null);         // la vue 3D des fichiers imprimes (une puce par impression)
   const groupToRate = useToRateSet(!groupVisiting);
   const wide = typeof window !== "undefined" && window.innerWidth >= 900;
   const loadPrints = () => client.get("/prints", { params: { group_id: groupId, limit: 200 } }).then(r => {
@@ -1573,6 +1581,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     title, subtitle: `${prints.length} impression${prints.length > 1 ? "s" : ""}`, color: "#A78BFA",
     items: [
       { icon: "✏️", label: "Éditer", hint: "Le nom du groupe", tone: "#3B82F6", onClick: () => setEditGroup(true) },
+      prints.some(x => x.model_3mf) && { icon: "🧊", label: "Vue 3D des fichiers imprimés", hint: "une impression à la fois", tone: "#0EA5E9",
+        onClick: () => setGroup3d(prints.filter(x => x.model_3mf)) },
       { icon: "📣", label: "Partager", hint: "Telegram", tone: "#229ED9", onClick: () => setSharing(true) },
       objQ && { icon: "📦", label: objQ.remaining > 0 ? "Créer des objets" : "Objets : tous créés", hint: `${objQ.used} / ${objQ.total} déjà créés`, tone: "#22C55E",
         onClick: () => setObjCreate(true) },
@@ -1588,6 +1598,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     title: x.file_name || "Sans nom", subtitle: fmtDate(x.print_date), img: apiThumb(apiUrl("/prints/" + x.id + "/image"), 256),
     items: [
       { icon: "📄", label: "Ouvrir la fiche", tone: "#3B82F6", onClick: () => setSelectedPrint(x) },
+      x.model_3mf && { icon: "🧊", label: "Vue 3D du fichier imprimé", tone: "#0EA5E9", onClick: () => setGroup3d([x]) },
       isAdmin && { icon: "★", label: coverPrintId === x.id ? "Vignette du groupe" : "En faire la vignette du groupe", tone: "#F59E0B",
         disabled: coverPrintId === x.id, onClick: () => setCoverPrint(x) },
       isAdmin && !groupRankedOff && { icon: "📊", label: x.stats_excluded ? "Remettre dans les classements des stats" : "Retirer des classements des stats",
@@ -1801,6 +1812,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       {sharing && <ShareSheet kind="group" id={groupId} onClose={() => setSharing(false)}/>}
       {unmapping && <UnmapFilamentConfirm f={unmapping} printId={unmapping.print_id} onClose={() => setUnmapping(null)} onDone={() => { setUnmapping(null); loadPrints(); onUpdated?.(); }}/>}
       {editGroup && <GroupEditSheet groupId={groupId} name={title} onClose={() => setEditGroup(false)} onSaved={() => { setEditGroup(false); loadPrints(); onUpdated?.(); }}/>}
+      {group3d && <Model3D sliced={group3d.map(x => ({ id: x.id, label: x.file_name || `Impression ${x.id}` }))} title={title}
+        onClose={() => setGroup3d(null)}/>}
       {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={() => setSelSpool(null)} zIndex={2000}/>}
       {selectedPrint && <PrintDetail p={selectedPrint} onClose={() => setSelectedPrint(null)}
         onDelete={() => { setSelectedPrint(null); setPrints(ps => ps.filter(x => x.id !== selectedPrint.id)); }} onChanged={() => loadPrints()}/>}

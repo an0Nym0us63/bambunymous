@@ -386,6 +386,14 @@ def _step(key, pct, label: str) -> None:
         PROGRESS[key] = {"pct": None if pct is None else max(0, min(100, round(pct))), "label": label}
 
 
+def plates_out(meta: dict, key: str) -> tuple:
+    """(plateaux a montrer avec leur adresse, numeros des plateaux trop lourds) : ni les vides, ni les trop lourds."""
+    ext = "glb" if meta.get("glb") else "bin"
+    shown = [{**p, "url": f"/api/v1/makerworld/3d/file/{key}/plate_{p['n']}.{ext}"} for p in meta.get("plates") or []
+             if not p.get("skipped") and not p.get("empty") and (meta.get("glb") or p.get("size_mm"))]
+    return shown, [p["n"] for p in meta.get("plates") or [] if p.get("skipped")]
+
+
 def progress_of(did: str) -> dict:
     """Ou en est la preparation de la vue 3D de ce modele ({} : rien en cours)."""
     key = WATCH.get(str(did))
@@ -486,7 +494,9 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                     g[1].append(inv.reshape(-1, 3) + g[2])
                     g[2] += len(used)
         if not groups_out or total > MAX_TRIANGLES:
-            meta["plates"].append({"n": n, "name": pname, "triangles": total, "skipped": total > MAX_TRIANGLES})
+            # vide : un 3MF tranche ne garde souvent que les pieces du plateau imprime
+            meta["plates"].append({"n": n, "name": pname, "triangles": total, "skipped": total > MAX_TRIANGLES,
+                                   "empty": not groups_out})
             continue
         # recentre le plateau : au milieu en X et Y, pose sur z = 0
         allv = {col: np.concatenate(g[0]) for col, g in groups_out.items()}

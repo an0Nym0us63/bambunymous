@@ -10,6 +10,7 @@ import AdminOnly from "./AdminOnly";
 import { Pressable } from "./ContextMenu";
 import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
+import Model3D from "./Model3D";
 import { colorBg, parseColorsList } from "../utils/colors";
 import { moneyVal } from "../utils/money";
 
@@ -80,6 +81,16 @@ function PlateChips({ plates }) {
   );
 }
 
+function paletteOf(r) {
+  const out = {};
+  for (const f of r?.filaments || []) {
+    const to = f.chosen ? parseColorsList(f.chosen.color, f.chosen.colors_array)[0] : null;
+    const from = String(f.color || "").replace(/^#/, "").slice(0, 6).toUpperCase();
+    if (to && from) out[from] = to;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 export default function MwQueue() {
   const [q, setQ] = useState(null);
   const [err, setErr] = useState(null);
@@ -94,6 +105,7 @@ export default function MwQueue() {
   const [tab, setTab] = useUrlTab("afaire", "models", ["models", "filaments"]);
   useTrackDetail(`À faire · ${tab === "filaments" ? "Filaments pour tout imprimer" : "Modèles"}`);
   const [sorting, setSorting] = useState(false);   // mode « Réorganiser »
+  const [view3d, setView3d] = useState(null);       // un modele en 3D, aux couleurs des filaments retenus
   // « Jusqu'ici » : les stats ne portent que sur le debut de la file (garde dans ce navigateur).
   const [until, setUntilState] = useState(() => { try { return localStorage.getItem("mwQueueUntil") || null; } catch { return null; } });
   const [cutting, setCutting] = useState(false);
@@ -174,6 +186,7 @@ export default function MwQueue() {
       items: [
         { icon: "📄", label: "Ouvrir la fiche", tone: "#3B82F6", onClick: open },
         { icon: "🌐", label: "Voir sur MakerWorld", tone: "#06B6D4", onClick: () => window.open(`https://makerworld.com/fr/models/${r.design_id}`, "_blank", "noopener") },
+        r.profile && { icon: "🧊", label: "Vue 3D aux couleurs retenues", hint: r.profile.title || "le profil retenu", tone: "#0EA5E9", onClick: () => setView3d(r) },
         "-",
         isCut ? { icon: "↺", label: "Revenir à toute la liste", tone: "#3B82F6", onClick: () => setUntil(null) }
           : { icon: "✂", label: "Compter jusqu'ici", tone: "#3B82F6", hint: `Stats sur les ${i + 1} premier${i ? "s" : ""}`, onClick: () => setUntil(r.design_id) },
@@ -509,6 +522,8 @@ export default function MwQueue() {
       )}
       {pick && <CollectionsPicker chosen={q.collections.map(c => c.id)} onClose={() => setPick(false)}
         onSaved={() => { setPick(false); refresh(); }}/>}
+      {view3d && <Model3D designId={view3d.design_id} profileId={view3d.profile?.instance_id} fetchSource
+        title={view3d.title_fr || view3d.title} palette={paletteOf(view3d)} onClose={() => setView3d(null)}/>}
       {model && <MakerWorldModelSheet designId={model.design_id} preview={model}
         onClose={() => { setModel(null); refresh(); }}/>}
     </div>

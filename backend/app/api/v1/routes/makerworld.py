@@ -3,7 +3,7 @@ favoris) et diagnostic. Lecture seule cote MakerWorld."""
 import asyncio
 import logging
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile
 
 from .auth import get_current_user, require_admin, require_mw
 from ....services import makerworld as mw
@@ -585,7 +585,8 @@ async def mw_model_3d_progress(design_id: str, _: str = Depends(get_current_user
 
 
 @router.get("/3d/{design_id}")
-async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, _: str = Depends(get_current_user)):
+async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_src: int = Query(0, alias="fetch"),
+                      _: str = Depends(get_current_user)):
     """Les plateaux a afficher en 3D : {source: "3mf" | "makerworld", plates: [{n, name, url, size_mm}], ms}.
     print_id : le profil de cette impression (celui de l'imprimante, ou celui choisi a la main avec ses plateaux,
     27/10/2026 : seul le premier etait lu, et une impression sans lui montrait le profil par defaut)."""
@@ -621,7 +622,8 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, _: s
         from ....services.mw_source import resolve, fetch, _index_put
         try:
             cand = await resolve(did, prof)
-            if cand and not path_of(cand).is_file() and print_id:
+            # un modele imprime, ou retenu dans « À faire » (fetch=1) : son 3MF servira de toute facon
+            if cand and not path_of(cand).is_file() and (print_id or get_src):
                 T._step(f"did:{did}", None, "Récupération du 3MF chez MakerWorld")
                 await fetch(cand)
             if cand and path_of(cand).is_file():
@@ -655,7 +657,6 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, _: s
     ms = round((_t.perf_counter() - t0) * 1000)
     if ms > 1500:
         logger.info(f"[3D] {did} (profil {prof or '?'}) prepare en {ms} ms ({source})")
-    ext = "glb" if meta.get("glb") else "bin"
     # le nom (traduit) et l'image du profil montre, pour l'en-tete de la vue : la fiche MakerWorld gardee sur disque,
     # sinon la base (rien a demander a MakerWorld)
     ptitle = pcover = None
@@ -677,9 +678,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, _: s
         except Exception:
             pass
     return {"source": source, "profile": prof or None, "profile_title": ptitle, "profile_cover": pcover, "ms": ms,
-            "plates": [{**p, "url": f"/api/v1/makerworld/3d/file/{key}/plate_{p['n']}.{ext}"}
-                       for p in meta["plates"] if not p.get("skipped")],
-            "skipped": [p["n"] for p in meta["plates"] if p.get("skipped")]}
+            "plates": T.plates_out(meta, key)[0], "skipped": T.plates_out(meta, key)[1]}
 
 
 @router.get("/3d/file/{key}/{name}")
