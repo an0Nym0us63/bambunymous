@@ -375,7 +375,24 @@ def _gzip(data: bytes) -> bytes:
     return head + body + struct.pack("<II", zlib.crc32(data) & 0xFFFFFFFF, len(data) & 0xFFFFFFFF)
 
 
-def convert(src: Path, out_dir: Path) -> dict:
+# L'avancement des preparations en cours (27/10/2026), pour le cercle de la vue : cle -> {pct, label}. Une
+# preparation lancee par une ouverture se suit par le modele (WATCH : modele -> cle du 3MF en cours).
+PROGRESS: dict = {}
+WATCH: dict = {}
+
+
+def _step(key, pct, label: str) -> None:
+    if key:
+        PROGRESS[key] = {"pct": None if pct is None else max(0, min(100, round(pct))), "label": label}
+
+
+def progress_of(did: str) -> dict:
+    """Ou en est la preparation de la vue 3D de ce modele ({} : rien en cours)."""
+    key = WATCH.get(str(did))
+    return PROGRESS.get(key) or PROGRESS.get(f"did:{did}") or {}
+
+
+def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     """Le 3MF -> un fichier binaire par plateau, et plates.json. Rend {"plates": [{n, name, triangles}]}.
     Les sommets et triangles en tableaux numpy (27/10/2026 : 20 s pour un gros modele peint, en Python pur)."""
     import numpy as np
@@ -424,16 +441,32 @@ def convert(src: Path, out_dir: Path) -> dict:
 
     out_dir.mkdir(parents=True, exist_ok=True)
     meta = {"v": FORMAT_V, "plates": []}
+    # les pieces de chaque plateau d'abord : leur taille sert a mesurer l'avancement
+    _step(key, 2, "Ouverture du 3MF")
+    work = []
     for n, pname, inst in plates:
-        groups_out: dict = {}                           # couleur -> [sommets, triangles]
-        total = 0
+        lst = []
         for oid, k in inst:
             mts = items_by_obj.get(oid) or []
-            if k >= len(mts):
-                continue
-            for ext, fcol, mt, body in parts_of(oid, mts[k]):
+            if k < len(mts):
+                lst.append(parts_of(oid, mts[k]))
+        work.append((n, pname, lst))
+    weight = sum(len(p[3]) for _, _, lst in work for parts in lst for p in parts) or 1
+    done = 0
+    for n, pname, lst in work:
+        groups_out: dict = {}                           # couleur -> [sommets, triangles]
+        total = 0
+        for parts in lst:
+            for ext, fcol, mt, body in parts:
+                # la part de cette piece dans l'avancement (lecture 5 -> 75 %), decoupee en etapes
+                a0, a1 = 5 + 70 * done / weight, 5 + 70 * (done + len(body)) / weight
+                done += len(body)
+                _step(key, a0, "Lecture des pièces")
                 v, t, paint = _mesh(body)
+                if paint:
+                    _step(key, a0 + (a1 - a0) * 0.55, "Couleurs peintes")
                 v, by_ext = _painted(v, t, paint, ext) if paint else (v, {ext: t})
+                _step(key, a0 + (a1 - a0) * 0.85, "Mise en place")
                 total += sum(len(x) for x in by_ext.values())
                 if total > MAX_TRIANGLES:
                     break
@@ -468,6 +501,7 @@ def convert(src: Path, out_dir: Path) -> dict:
             buf += (vv - shift).astype("<f4").tobytes()
             buf += tt.astype("<u4").tobytes()
         # compresse une fois pour toutes : servi tel quel (Content-Encoding: gzip), le telephone le recoit leger
+        _step(key, 78 + 20 * (len(meta["plates"]) + 1) / max(1, len(work)) - 10 / max(1, len(work)), "Compression")
         (out_dir / f"plate_{n}.bin").write_bytes(_gzip(bytes(buf)))
         meta["plates"].append({"n": n, "name": pname, "triangles": total, "size_mm": [round(x, 1) for x in size]})
     (out_dir / "plates.json").write_text(json.dumps(meta), encoding="utf-8")
@@ -507,10 +541,12 @@ def _from_3mf(src: Path, key: str) -> dict | None:
             meta = json.loads(meta_f.read_text(encoding="utf-8"))
             if meta.get("v") == FORMAT_V:
                 return meta
-        return convert(src, d)
+        return convert(src, d, key)
     except Exception as e:
         logger.warning(f"[3D] {src.name} non converti : {type(e).__name__}: {e}")
         return None
+    finally:
+        PROGRESS.pop(key, None)
 
 
 # ── Le secours : l'apercu 3D de MakerWorld ──────────────────────────────────────────────────────────────────
@@ -537,6 +573,7 @@ def from_makerworld(did: str, profile: str | None) -> dict | None:
     meta_f = out / "plates.json"
     if meta_f.is_file():
         return json.loads(meta_f.read_text(encoding="utf-8"))
+    _step(f"did:{did}", None, "Aperçu 3D de MakerWorld")
     r = requests.get(url, timeout=(10, 120), headers={"User-Agent": "Mozilla/5.0"})
     r.raise_for_status()
     out.mkdir(parents=True, exist_ok=True)

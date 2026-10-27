@@ -124,7 +124,7 @@ def _parse_design(code, d) -> dict:
     }
 
 
-EXTRAS_V = 4          # 2 : le descriptif ; 3 : les filaments recommandes ; 4 : titres des profils traduits (27/10/2026)
+EXTRAS_V = 5          # 2 : le descriptif ; 3 : les filaments recommandes ; 4 : titres des profils traduits ; 5 : leur image (27/10/2026)
 
 
 def extras_stale(raw) -> bool:
@@ -265,6 +265,7 @@ def _profiles(d) -> str:
         t_fr = i.get("titleTranslated") if isinstance(i.get("titleTranslated"), str) and i.get("titleTranslated") else ""
         out.append({"profile_id": str(i.get("profileId") or ""), "instance_id": str(i.get("id") or ""), "title": t_fr or t_or,
                     "title_original": t_or if t_fr and t_fr != t_or else None,
+                    "cover": (_inst_pics(i) or [None])[0],
                     "default": i.get("id") == d.get("defaultInstanceId"), "plates": plates})
     return json.dumps(out, ensure_ascii=False) if out else None
 

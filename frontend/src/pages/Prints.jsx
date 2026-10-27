@@ -617,8 +617,11 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
           </div>
           {/* le profil imprime (ou deduit) : visible sans deplier la carte */}
           {shown?.title && <div data-tip={shown.deduced ? "Profil déduit de tes impressions : déplie la carte pour le corriger" : "Profil imprimé"}
-            style={{ fontSize:11, fontWeight:700, color:"#0891b2", marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-            🧩 {shown.title}{shown.deduced && <span style={{ color:"var(--muted)", fontWeight:600 }}> · déduit</span>}</div>}
+            style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, fontWeight:700, color:"#0891b2", marginTop:4, minWidth:0 }}>
+            {shown.cover ? <MwImg src={shown.cover} w={48} style={{ width:22, height:22, borderRadius:6, objectFit:"cover", flexShrink:0,
+              border:"1px solid var(--border)" }}/> : <span>🧩</span>}
+            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{shown.title}
+              {shown.deduced && <span style={{ color:"var(--muted)", fontWeight:600 }}> · déduit</span>}</span></div>}
         </div>
         {!visiting && <button onClick={e => { e.stopPropagation(); setView3d(true); }} aria-label="Voir en 3D" data-tip="Voir en 3D"
           style={{ width:32, height:32, borderRadius:10, border:"1px solid rgba(14,165,233,0.4)", background:"rgba(14,165,233,0.1)",
@@ -787,7 +790,7 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
   const shownP = prints.length ? avec.find(x => x.profile_id === pid) || guess || null : null;
   const shownId = shownP?.profile_id ?? null;
   useEffect(() => {
-    if (guessed) onProfile?.(shownP ? { id: shownId, title: shownP.title, deduced: !sure && !pid } : null);
+    if (guessed) onProfile?.(shownP ? { id: shownId, title: shownP.title, cover: shownP.cover, deduced: !sure && !pid } : null);
   }, [shownId, guessed]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (!avec.length || !prints.length) return null;
   const prof = avec.find(x => x.profile_id === pid) || guess;

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FSheet } from "./FicheKit";
 import client from "../api/client";
+import MwImg from "./MwImg";
 
 // La vue 3D d'un modele (27/10/2026) : son 3MF d'origine garde sur le serveur (converti la-bas, aux couleurs de
 // ses filaments), sinon l'apercu 3D de MakerWorld (sans couleurs). Un plateau a la fois ; on tourne au doigt
@@ -125,6 +126,28 @@ function Viewer({ url, glb, onState }) {
   </div>;
 }
 
+// Le cercle d'attente : l'avancement en %, ou un arc qui tourne quand il n'est pas mesurable
+function Ring({ pct = null, label }) {
+  const r = 30, c = 2 * Math.PI * r;
+  const known = pct != null;
+  return <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+    <div style={{ position: "relative", width: 76, height: 76 }}>
+      <svg width="76" height="76" viewBox="0 0 76 76" style={{ animation: known ? "none" : "bn3dspin 1s linear infinite" }}>
+        <defs><linearGradient id="bn3dring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#0EA5E9"/><stop offset="1" stopColor="#6366F1"/></linearGradient></defs>
+        <circle cx="38" cy="38" r={r} fill="none" stroke="var(--border)" strokeWidth="6"/>
+        <circle cx="38" cy="38" r={r} fill="none" stroke="url(#bn3dring)" strokeWidth="6" strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={known ? c * (1 - pct / 100) : c * 0.72} transform="rotate(-90 38 38)"
+          style={{ transition: "stroke-dashoffset .4s ease" }}/>
+      </svg>
+      {known && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 15, fontWeight: 900, background: "linear-gradient(135deg, #0EA5E9, #6366F1)", WebkitBackgroundClip: "text",
+        backgroundClip: "text", color: "transparent" }}>{pct} %</div>}
+    </div>
+    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)" }}>{label}</div>
+    <style>{"@keyframes bn3dspin { to { transform: rotate(360deg); } }"}</style>
+  </div>;
+}
+
 export default function Model3D({ designId, profileId = null, printId = null, wait = false, title = "", onClose }) {
   const [meta, setMeta] = useState(null);
   const [err, setErr] = useState(null);
@@ -140,14 +163,28 @@ export default function Model3D({ designId, profileId = null, printId = null, wa
       .catch(e => alive && setErr(e?.response?.data?.detail || "Pas de modèle 3D pour celui-ci"));
     return () => { alive = false; };
   }, [designId, profileId, printId, wait]);
+  // pendant la preparation, son avancement (le serveur le dit a part, la demande principale attend)
+  const [prog, setProg] = useState(null);
+  useEffect(() => {
+    if (wait || meta || err) { setProg(null); return; }
+    let alive = true;
+    const tick = () => client.get(`/makerworld/3d/${encodeURIComponent(designId)}/progress`, { params: { t: Date.now() } })
+      .then(({ data }) => alive && setProg(data?.label ? data : null)).catch(() => {});
+    const id = setInterval(tick, 500);
+    tick();
+    return () => { alive = false; clearInterval(id); };
+  }, [designId, wait, meta, err]);
   const p = meta?.plates?.[plate];
   const mm = v => `${Math.round(v)} mm`;
   return createPortal(
     <FSheet onClose={onClose} z={4600}>
       <div style={{ padding: "48px 16px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <span style={{ width: 40, height: 40, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0,
-            background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 8px 18px -8px #0EA5E9" }}>🧊</span>
+          {meta?.profile_cover
+            ? <MwImg src={meta.profile_cover} w={96} alt="" style={{ width: 48, height: 48, borderRadius: 13, objectFit: "cover", flexShrink: 0,
+                border: "1px solid var(--border)", boxShadow: "0 8px 18px -8px #0EA5E9" }}/>
+            : <span style={{ width: 40, height: 40, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0,
+            background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 8px 18px -8px #0EA5E9" }}>🧊</span>}
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 11.5, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#0EA5E9" }}>Vue 3D</div>
             <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title || `Modèle ${designId}`}</div>
@@ -164,7 +201,8 @@ export default function Model3D({ designId, profileId = null, printId = null, wa
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
           {p && <Viewer key={p.url} url={p.url} glb={p.url.endsWith(".glb")} onState={setSt}/>}
           {(!meta && !err) || (p && st.busy) ? <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 13, fontWeight: 700, color: "var(--muted)", pointerEvents: "none" }}>{meta ? "Chargement du plateau…" : "Préparation du modèle…"}</div> : null}
+            pointerEvents: "none" }}>
+            <Ring pct={meta ? null : prog?.pct ?? null} label={meta ? "Chargement du plateau…" : prog?.label || "Préparation du modèle…"}/></div> : null}
           {(err || st.error) && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
             textAlign: "center", fontSize: 13, fontWeight: 700, color: "#ef4444" }}>{err || `Plateau illisible : ${st.error}`}</div>}
         </div>

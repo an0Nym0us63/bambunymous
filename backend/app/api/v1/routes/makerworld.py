@@ -577,6 +577,13 @@ async def mw_doc(design_id: str, doc_id: str, dl: bool = False):
 
 
 # ── La vue 3D d'un modele (27/10/2026) : son 3MF d'origine garde ici, sinon l'apercu 3D de MakerWorld ──
+@router.get("/3d/{design_id}/progress")
+async def mw_model_3d_progress(design_id: str, _: str = Depends(get_current_user)):
+    """Ou en est la preparation de la vue 3D ouverte : {pct (0-100, ou None), label} ; {} si rien en cours."""
+    from ....services import mw_3d as T
+    return T.progress_of(str(design_id or "").strip())
+
+
 @router.get("/3d/{design_id}")
 async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, _: str = Depends(get_current_user)):
     """Les plateaux a afficher en 3D : {source: "3mf" | "makerworld", plates: [{n, name, url, size_mm}], ms}.
@@ -615,6 +622,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, _: s
         try:
             cand = await resolve(did, prof)
             if cand and not path_of(cand).is_file() and print_id:
+                T._step(f"did:{did}", None, "Récupération du 3MF chez MakerWorld")
                 await fetch(cand)
             if cand and path_of(cand).is_file():
                 _index_put(f"{did}:{prof}", cand)
@@ -624,6 +632,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, _: s
     meta, source, key = None, "3mf", None
     if iid:
         src = path_of(iid)
+        T.WATCH[did] = src.stem
         meta = await asyncio.to_thread(T.from_3mf, src, src.stem)
         key = src.stem
     if not meta or not any(not p.get("skipped") for p in meta.get("plates") or []):
@@ -637,29 +646,37 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, _: s
         key = (meta or {}).get("key")
         if not meta and prof and known(did, ""):
             src = path_of(known(did, ""))
+            T.WATCH[did] = src.stem
             meta, source, key = await asyncio.to_thread(T.from_3mf, src, src.stem), "3mf_other", src.stem
+    T.WATCH.pop(did, None)
+    T.PROGRESS.pop(f"did:{did}", None)
     if not meta or not meta.get("plates"):
         raise HTTPException(404, "Pas de modèle 3D pour celui-ci")
     ms = round((_t.perf_counter() - t0) * 1000)
     if ms > 1500:
         logger.info(f"[3D] {did} (profil {prof or '?'}) prepare en {ms} ms ({source})")
     ext = "glb" if meta.get("glb") else "bin"
-    # le nom du profil montre, pour l'en-tete de la vue (lu en base : rien a demander a MakerWorld)
-    ptitle = None
+    # le nom (traduit) et l'image du profil montre, pour l'en-tete de la vue : la fiche MakerWorld gardee sur disque,
+    # sinon la base (rien a demander a MakerWorld)
+    ptitle = pcover = None
     if prof:
         try:
             import json as _json
-            from sqlalchemy import select
-            from ....db.session import AsyncSessionLocal
-            from ....models.print_history import MakerWorldDesign as _MW
-            async with AsyncSessionLocal() as db:
-                raw = (await db.execute(select(_MW.profiles).where(_MW.design_id == did))).scalar()
-            profs = _json.loads(raw) if raw else []
-            hit = next((p for p in profs if prof in (str(p.get("profile_id")), str(p.get("instance_id")))), None)
-            ptitle = (hit or {}).get("title") or None
+            from ....services.makerworld import _disk_path
+            f = _disk_path(did)
+            profs = (_json.loads(f.read_text(encoding="utf-8")).get("base") or {}).get("profiles") or [] if f.is_file() else []
+            if not profs:
+                from sqlalchemy import select
+                from ....db.session import AsyncSessionLocal
+                from ....models.print_history import MakerWorldDesign as _MW
+                async with AsyncSessionLocal() as db:
+                    raw = (await db.execute(select(_MW.profiles).where(_MW.design_id == did))).scalar()
+                profs = _json.loads(raw) if raw else []
+            hit = next((p for p in profs if prof in (str(p.get("profile_id")), str(p.get("instance_id")))), None) or {}
+            ptitle, pcover = hit.get("title") or None, hit.get("cover") or None
         except Exception:
             pass
-    return {"source": source, "profile": prof or None, "profile_title": ptitle, "ms": ms,
+    return {"source": source, "profile": prof or None, "profile_title": ptitle, "profile_cover": pcover, "ms": ms,
             "plates": [{**p, "url": f"/api/v1/makerworld/3d/file/{key}/plate_{p['n']}.{ext}"}
                        for p in meta["plates"] if not p.get("skipped")],
             "skipped": [p["n"] for p in meta["plates"] if p.get("skipped")]}
