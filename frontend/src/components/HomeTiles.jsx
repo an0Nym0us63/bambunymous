@@ -4,6 +4,8 @@ import { importRetry } from "../utils/importRetry";
 import AllAlertsModal from "./AllAlertsModal";
 import { Hide } from "./Cachettes";
 import { useFriend } from "../store/friend";
+import { useIsAdmin } from "../store/auth";
+import { showAlert } from "../utils/dialog";
 import { relayed } from "./Friends";
 import { stageLabel } from "../utils/printStage";
 import { QUEUE_SORTS, sortQueue, plateRound, plateDoneInRound } from "../utils/queueSort";
@@ -1382,6 +1384,151 @@ function Stock({ s, o, sz }) {
 // la fenetre du stock : les chiffres, la repartition par matiere, et chaque bobine avec sa marque, sa matiere,
 // son sous-type ; des filtres pour s'y retrouver
 function StockZoom({ list, kg }) {
+  const [tab, setTab] = useState(() => { try { return localStorage.getItem("stockZoomTab") || "spools"; } catch { return "spools"; } });
+  const pick = t => { setTab(t); try { localStorage.setItem("stockZoomTab", t); } catch { /* indisponible */ } };
+  return <>
+    <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", alignSelf: "flex-start" }}>
+      {[["spools", "🧵 Les bobines"], ["fils", "🎨 Par filament"]].map(([k, l]) => <button key={k} type="button" onClick={() => pick(k)}
+        style={{ padding: "7px 14px", borderRadius: 11, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800,
+          background: tab === k ? "linear-gradient(135deg, #F59E0B, #D97706)" : "transparent", color: tab === k ? "#fff" : "var(--muted)" }}>{l}</button>)}
+    </div>
+    {tab === "fils" ? <FilamentStock/> : <SpoolsZoom list={list} kg={kg}/>}
+  </>;
+}
+// le stock par filament (28/10/2026) : toutes les bobines actives de chaque filament comptees ensemble, pour voir ce
+// qu'il reste vraiment de chaque couleur et ce qu'il faut commander ; regroupe par matiere, sous-type, marque, couleur ou etat
+const FIL_STATE = {
+  out: ["Épuisé", "#dc2626", 0], order: ["À commander", "#ea580c", 1], soon: ["Bientôt", "#d97706", 2], ok: ["En stock", "#16a34a", 3],
+  skip: ["Plus commandé", "#64748b", 4] };
+const BUCKET_FR = { rouge: "Rouge", orange: "Orange", jaune: "Jaune", vert: "Vert", bleu: "Bleu", violet: "Violet", rose: "Rose", marron: "Marron",
+  beige: "Beige", cyan: "Cyan", blanc: "Blanc", gris: "Gris", noir: "Noir", transparent: "Transparent", multicolore: "Multicolore" };
+function filState(f) {
+  const g = f.remaining_weight_total_g || 0, one = f.filament_weight_g || 1000;
+  if (f.no_reorder) return "skip";                   // je ne le recommanderai plus : jamais « a prevoir »
+  if (!f.active_spool_count) return "out";
+  if (f.to_order || g < one * 0.3) return "order";
+  if (g < one) return "soon";
+  return "ok";
+}
+function FilamentStock() {
+  const [fils, setFils] = useState(null);
+  const [group, setGroup] = useState(() => { try { return localStorage.getItem("stockFilGroup") || "material"; } catch { return "material"; } });
+  const [sort, setSort] = useState("g");
+  const [only, setOnly] = useState("all");                 // all | need (epuises + a commander + bientot) | skip (plus commandes)
+  const isAdmin = useIsAdmin(), visiting = useFriend(st => st.friend);
+  const toggleSkip = async f => {
+    try {
+      const { data } = await client.put(`/filaments/filaments/${f.id}/no-reorder`, { on: !f.no_reorder });
+      setFils(xs => xs.map(x => x.id === f.id ? { ...x, no_reorder: data.no_reorder } : x));
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
+  const [shut, setShut] = useState({});
+  useEffect(() => {
+    let alive = true;
+    client.get("/filaments/filaments").then(({ data }) => alive && setFils(Array.isArray(data) ? data : [])).catch(() => alive && setFils([]));
+    return () => { alive = false; };
+  }, []);
+  const setG = g => { setGroup(g); try { localStorage.setItem("stockFilGroup", g); } catch { /* indisponible */ } };
+  if (fils === null) return <Muted>Lecture des filaments…</Muted>;
+  // les filaments qu'on a eus : au moins une bobine (active ou finie), ou marques « a commander »
+  const all = fils.filter(f => f.spool_count > 0 || f.to_order).map(f => ({ ...f, st: filState(f) }));
+  const need = all.filter(f => f.st !== "ok" && f.st !== "skip");
+  const skipped = all.filter(f => f.st === "skip");
+  // un filament qu'on ne recommandera plus et dont il ne reste rien n'encombre pas la liste (il est dans « Plus commandés »)
+  const list = (only === "need" ? need : only === "skip" ? skipped : all.filter(f => !(f.st === "skip" && !f.active_spool_count))).slice().sort(
+    sort === "name" ? (a, b) => (a.translated_name || a.name).localeCompare(b.translated_name || b.name, "fr")
+      : sort === "n" ? (a, b) => b.active_spool_count - a.active_spool_count || (a.remaining_weight_total_g || 0) - (b.remaining_weight_total_g || 0)
+      : (a, b) => FIL_STATE[a.st][2] - FIL_STATE[b.st][2] || (a.remaining_weight_total_g || 0) - (b.remaining_weight_total_g || 0));
+  const keyOf = f => group === "material" ? (f.material || "Autre")
+    : group === "type" ? (f.fila_type || f.material || "Autre")
+    : group === "brand" ? (f.manufacturer || "Sans marque")
+    : group === "color" ? (BUCKET_FR[String(f.color_bucket || "").split(",")[0]] || "Autre")
+    : group === "state" ? FIL_STATE[f.st][0] : "";
+  const groups = [];
+  const at = {};
+  list.forEach(f => { const k = keyOf(f); if (!(k in at)) { at[k] = groups.length; groups.push({ k, items: [] }); } groups[at[k]].items.push(f); });
+  if (group === "state") groups.sort((a, b) => Object.values(FIL_STATE).find(x => x[0] === a.k)[2] - Object.values(FIL_STATE).find(x => x[0] === b.k)[2]);
+  else if (group) groups.sort((a, b) => b.items.reduce((t, f) => t + (f.remaining_weight_total_g || 0), 0) - a.items.reduce((t, f) => t + (f.remaining_weight_total_g || 0), 0));
+  const tot = all.reduce((t, f) => t + (f.remaining_weight_total_g || 0), 0);
+  const nOf = st => all.filter(f => f.st === st).length;
+  const chip = (on, c = "#F59E0B") => ({ height: 28, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontWeight: 800, fontSize: 12, border: "1px solid var(--border)",
+    background: on ? c : "var(--surface2)", color: on ? "#fff" : "var(--text2)", whiteSpace: "nowrap" });
+  const pill = (t, c) => <span style={{ fontSize: 10.5, fontWeight: 800, padding: "1px 7px", borderRadius: 20, whiteSpace: "nowrap", color: c,
+    background: `${c}1f`, border: `1px solid ${c}40` }}>{t}</span>;
+  const row = f => {
+    const [lab, c] = FIL_STATE[f.st], one = f.filament_weight_g || 1000, g = f.remaining_weight_total_g || 0;
+    const name = f.translated_name || f.name;
+    const kind = f.fila_type && f.fila_type !== f.material ? f.fila_type : f.material;
+    // la jauge : ce qui reste, en bobines pleines (une case par bobine active, au moins une)
+    const cells = Math.max(1, Math.min(8, f.active_spool_count || 1));
+    return <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 11px", borderRadius: 14, minWidth: 0,
+      background: `linear-gradient(135deg, ${hexCss(f.color)}22, transparent 55%), var(--surface2)`,
+      border: `1px solid ${f.st === "ok" ? "var(--border)" : `${c}55`}` }}>
+      <span style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, border: "1px solid rgba(0,0,0,0.15)", overflow: "hidden",
+        ...colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type, finishOf(f)) }}/>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "baseline", minWidth: 0 }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+          <span style={{ fontSize: 13.5, fontWeight: 900, color: f.st === "ok" ? "var(--text)" : c, whiteSpace: "nowrap" }}>{fmtG(g)}</span></div>
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+          {pill(lab, c)}
+          {f.manufacturer && group !== "brand" && pill(f.manufacturer, "#8B5CF6")}
+          {kind && group !== "type" && pill(kind, "#0EA5E9")}
+          {f.to_order && f.st !== "order" && pill("🛒 marqué à commander", "#ea580c")}
+          <Muted size={11}>{f.active_spool_count ? `${f.active_spool_count} bobine${f.active_spool_count > 1 ? "s" : ""}` : "plus de bobine"}</Muted>
+          {isAdmin && !visiting && <button type="button" onClick={() => toggleSkip(f)}
+            data-tip={f.no_reorder ? "Le remettre dans le stock à prévoir" : "Je ne le recommanderai plus : il sort du stock à prévoir"}
+            aria-label={f.no_reorder ? "Le remettre à prévoir" : "Ne plus le commander"}
+            style={{ marginLeft: "auto", width: 24, height: 22, padding: 0, borderRadius: 8, cursor: "pointer", fontSize: 11.5, fontWeight: 900,
+              border: "1px solid var(--border)", background: "var(--surface)", color: f.no_reorder ? "#16a34a" : "var(--muted)" }}>
+            {f.no_reorder ? "↺" : "🚫"}</button>}
+        </div>
+        <span style={{ display: "flex", gap: 3 }}>{Array.from({ length: cells }, (_, i) => {
+          const fill = Math.max(0, Math.min(1, (g - i * one) / one));
+          return <span key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
+            <span style={{ display: "block", height: "100%", width: `${fill * 100}%`, background: c }}/></span>; })}</span>
+      </div></div>;
+  };
+  return <>
+    <Stats items={[["Filaments", all.length, "#F59E0B"], ["Poids", fmtG(tot), "#D97706"], ["Épuisés", nOf("out"), "#dc2626"],
+      ["À commander", nOf("order"), "#ea580c"], ["Bientôt", nOf("soon"), "#d97706"]]}/>
+    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+      <Muted>Regrouper :</Muted>
+      {[["material", "matière"], ["type", "sous-type"], ["brand", "marque"], ["color", "couleur"], ["state", "état"], ["", "aucun"]].map(([k, l]) =>
+        <button key={k || "none"} type="button" style={chip(group === k, "#8B5CF6")} onClick={() => setG(k)}>{l}</button>)}
+    </div>
+    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+      <button type="button" style={chip(only === "need", "#ea580c")} onClick={() => setOnly(o => o === "need" ? "all" : "need")}>🛒 À prévoir ({need.length})</button>
+      {skipped.length > 0 && <button type="button" style={chip(only === "skip", "#64748b")} onClick={() => setOnly(o => o === "skip" ? "all" : "skip")}>
+        🚫 Plus commandés ({skipped.length})</button>}
+      <Muted>Trier :</Muted>
+      {[["g", "le moins en stock"], ["n", "nombre de bobines"], ["name", "par nom"]].map(([k, l]) =>
+        <button key={k} type="button" style={chip(sort === k, "#3B82F6")} onClick={() => setSort(k)}>{l}</button>)}
+    </div>
+    {!list.length ? <Muted>Rien ici.</Muted> : groups.map(gr => {
+      const g = gr.items.reduce((t, f) => t + (f.remaining_weight_total_g || 0), 0);
+      const n = gr.items.reduce((t, f) => t + (f.active_spool_count || 0), 0);
+      const low = gr.items.filter(f => f.st !== "ok" && f.st !== "skip").length;
+      const closed = group && shut[gr.k];
+      return <div key={gr.k || "all"} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {group && <button type="button" onClick={() => setShut(x => ({ ...x, [gr.k]: !x[gr.k] }))}
+          style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 12, cursor: "pointer", border: "1px solid var(--border)",
+            textAlign: "left", font: "inherit", background: "linear-gradient(135deg, rgba(245,158,11,0.14), transparent 70%), var(--surface)" }}>
+          <span style={{ fontSize: 12, color: "var(--muted)", width: 10 }}>{closed ? "▸" : "▾"}</span>
+          <span style={{ fontSize: 14.5, fontWeight: 900, color: "var(--text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{gr.k}</span>
+          {/* les couleurs du groupe, en petites pastilles */}
+          <span style={{ display: "inline-flex", gap: 2 }}>{gr.items.slice(0, 10).map(f => <span key={f.id} style={{ width: 10, height: 10, borderRadius: "50%",
+            border: "1px solid rgba(0,0,0,0.2)", ...colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type) }}/>)}</span>
+          <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap" }}>
+            {gr.items.length} fil. · {n} bob. · {fmtG(g)}</span>
+          {low > 0 && pill(`${low} à prévoir`, "#ea580c")}
+        </button>}
+        {!closed && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 8 }}>{gr.items.map(row)}</div>}
+      </div>; })}
+  </>;
+}
+// l'onglet des bobines : les chiffres, la repartition par matiere, chaque bobine
+function SpoolsZoom({ list, kg }) {
   const [only, setOnly] = useState("low");          // low | all | mat:<x> | brand:<x>
   const [sort, setSort] = useState("g");
   const [more, setMore] = useState(false);

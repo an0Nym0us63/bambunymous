@@ -25,6 +25,8 @@ class Filament(Base):
     # finition choisie a la main (silk, metal, sparkle, galaxy, marble, wood, carbon, glow, matte ; « none » = aucune) ;
     # None = deduite du nom ou du type (« PLA Silk+ »…), comme pour un filament Bambu
     fila_finish: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # « je ne le recommanderai plus » : ecarte du stock a prevoir (epuise, a commander) de la tuile Stock
+    no_reorder: Mapped[bool] = mapped_column(Boolean, default=False)
     color_bucket: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # CSV teintes ("bleu,rose") — cf. core/colors.py
     price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)       # €/bobine
     filament_weight_g: Mapped[float] = mapped_column(Float, default=1000.0)

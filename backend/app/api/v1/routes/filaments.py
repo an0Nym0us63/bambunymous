@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, HTTPException, UploadFile, File
+from fastapi import APIRouter, Body, Depends, Query, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, update
 from sqlalchemy.orm import selectinload
@@ -84,6 +84,7 @@ class FilamentOut(BaseModel):
     multicolor_type: str
     colors_array: Optional[str]
     fila_finish: Optional[str] = None
+    no_reorder: bool = False
     color_bucket: Optional[str] = None
     price: Optional[float]
     filament_weight_g: float
@@ -562,6 +563,18 @@ async def set_spool_tare(
     await db.commit()
     _clear_match_cache()
     return {"ok": True, "spool_weight_g": f.spool_weight_g, "spool_tare_name": f.spool_tare_name}
+
+
+@router.put("/filaments/{fid}/no-reorder")
+async def set_no_reorder(fid: int, body: dict = Body({}), db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
+    """Un filament qu'on ne recommandera plus (28/10/2026) : il sort du stock « a prevoir » de la tuile Stock.
+    Route a part, pour la meme raison que le poids du support (le PATCH recoit la fiche entiere)."""
+    f = await db.get(Filament, fid)
+    if not f:
+        raise HTTPException(404, "Filament introuvable")
+    f.no_reorder = bool(body.get("on"))
+    await db.commit()
+    return {"ok": True, "no_reorder": f.no_reorder}
 
 
 @router.post("/filaments/{fid}/mark-swatch", response_model=FilamentOut)
@@ -1218,6 +1231,7 @@ def _fil_out(f: Filament) -> FilamentOut:
         fila_type=getattr(f,"fila_type",None),
         color=f.color, multicolor_type=f.multicolor_type, colors_array=f.colors_array,
         fila_finish=getattr(f, "fila_finish", None),
+        no_reorder=bool(getattr(f, "no_reorder", False)),
         color_bucket=getattr(f, "color_bucket", None),
         price=f.price, filament_weight_g=f.filament_weight_g, spool_weight_g=f.spool_weight_g,
         spool_tare_name=getattr(f, "spool_tare_name", None),
