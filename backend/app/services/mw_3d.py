@@ -23,9 +23,6 @@ logger = logging.getLogger(__name__)
 
 FORMAT_V = 2                           # 2 : les couleurs peintes au pinceau (27/10/2026)
 MAX_TRIANGLES = 6_000_000              # au-dela, le plateau n'est pas converti (trop lourd pour un telephone)
-_NUM = r"(-?[0-9.]+(?:[eE][-+]?[0-9]+)?)"
-_VERTEX = re.compile(rb'<vertex\s+x="' + _NUM.encode() + rb'"\s+y="' + _NUM.encode() + rb'"\s+z="' + _NUM.encode() + rb'"')
-_TRI = re.compile(rb'<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"')
 _TRI_PAINT = re.compile(rb'<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"([^>]*)>')
 _PAINT = re.compile(rb'paint_color="([0-9A-F]+)"')
 _XYZ = re.compile(rb'\s[xyz]="([^"]+)"')
@@ -116,86 +113,196 @@ def _vals(blk: bytes, tag: bytes, rx) -> list:
     return rx.findall(blk)
 
 
-def _mesh(body: str):
-    """(sommets [x,y,z...], triangles [i,j,k...], peinture {numero de triangle: code}) d'un maillage."""
+def _mesh(body):
+    """(sommets (n, 3) float64, triangles (m, 3) int64, peinture) d'un maillage. Peinture : None, ou
+    (numeros des triangles peints, leurs codes) ; les valeurs sont lues a plat, en une fois."""
+    import numpy as np
     b = body.encode() if isinstance(body, str) else body
-    # les valeurs a plat, dans l'ordre (x, y, z ; v1, v2, v3) : une liste convertie d'un coup, sans tuples
     vs, ve = b.find(b"<vertices"), b.find(b"</vertices>")
-    verts = list(map(float, _vals(b[vs:ve], b"<vertex ", _XYZ))) if vs >= 0 and ve > vs else []
-    if b"paint_color" not in b:
-        ts, te = b.find(b"<triangles"), b.find(b"</triangles>")
-        return verts, (list(map(int, _vals(b[ts:te], b"<triangle ", _V123))) if ts >= 0 and te > ts else []), {}
-    tris, paint = [], {}
-    for k, (i, j, l, rest) in enumerate(_TRI_PAINT.findall(b)):
-        tris += (int(i), int(j), int(l))
-        if rest:
-            m = _PAINT.search(rest)
-            if m:
-                paint[k] = m.group(1).decode()
-    return verts, tris, paint
+    verts = np.array(list(map(float, _vals(b[vs:ve], b"<vertex ", _XYZ))) if vs >= 0 and ve > vs else [],
+                     dtype=np.float64).reshape(-1, 3)
+    ts, te = b.find(b"<triangles"), b.find(b"</triangles>")
+    blk = b[ts:te] if ts >= 0 and te > ts else b""
+    ntri = blk.count(b"<triangle ")
+    if b"paint_color" not in blk:
+        tris = np.array(list(map(int, _vals(blk, b"<triangle ", _V123))), dtype=np.int64).reshape(-1, 3)
+        return verts, tris, None
+    npaint = blk.count(b'paint_color="')
+    if blk.count(b'="') == 3 * ntri + npaint:
+        # le cas de Bambu Studio : v1, v2, v3, puis paint_color s'il y en a ; decoupe aux guillemets
+        from itertools import compress
+        toks = blk.split(b'"')
+        keys, vals = toks[0:-1:2], toks[1::2]
+        isp = np.fromiter(map(b" paint_color=".__eq__, keys), dtype=bool, count=len(keys))
+        if int(isp.sum()) != npaint:                    # autre mise en page : on regarde la fin de chaque cle
+            isp = np.fromiter((k.endswith(b"paint_color=") for k in keys), dtype=bool, count=len(keys))
+        tris = np.array(list(map(int, compress(vals, ~isp))), dtype=np.int64).reshape(-1, 3)
+        codes = [c.decode() for c in compress(vals, isp)]
+        pidx = np.cumsum(~isp)[isp] // 3 - 1             # le code suit le v3 de son triangle
+        return verts, tris, (pidx, codes)
+    # d'autres attributs sur les triangles : balise par balise
+    tl, pidx, codes = [], [], []
+    for k, (i_, j_, l_, rest) in enumerate(_TRI_PAINT.findall(blk)):
+        tl += (int(i_), int(j_), int(l_))
+        m = _PAINT.search(rest) if rest else None
+        if m:
+            pidx.append(k)
+            codes.append(m.group(1).decode())
+    return verts, np.array(tl, dtype=np.int64).reshape(-1, 3), (np.array(pidx, dtype=np.int64), codes)
 
 
-def _painted(v: list, t: list, paint: dict, ext: int) -> dict:
-    """Les triangles d'une piece peinte au pinceau multicolore, par extrudeur : {extrudeur: [i,j,k...]}.
+def _leaf_state(code: str):
+    """L'etat d'un code qui ne decoupe pas son triangle (le plus courant : un triangle peint d'un bloc) ;
+    None s'il le decoupe, 0 s'il est illisible (la couleur de la piece)."""
+    try:
+        nib = [int(ch, 16) for ch in reversed(code)]
+        c = nib[0]
+        if c & 3:
+            return None
+        st = c >> 2
+        if st == 3:
+            pos, k = 2, 0
+            n = nib[1]
+            while n == 15:
+                k += 1; n = nib[pos]; pos += 1
+            st = n + 15 * k + 3
+        return st
+    except (IndexError, ValueError):
+        return 0
 
-    Le code de chaque triangle (attribut paint_color de Bambu Studio, celui de TriangleSelector) est un arbre
-    lu en quartets hexadecimaux depuis la FIN de la chaine : 2 bits de decoupe (0 : feuille, sinon 1 a 3 cotes
-    coupes, 2 a 4 enfants), puis 2 bits d'etat (feuille : 0 = extrudeur de la piece, n = extrudeur n ; 3 = la
-    suite dans les quartets suivants) ou de cote particulier (decoupe). Les enfants sont lus du dernier au
-    premier. Les milieux d'aretes sont ajoutes aux sommets (v est complete)."""
-    out: dict = {}
+
+def _leaves(code: str, tri: tuple, mid) -> list:
+    """Les morceaux d'un triangle decoupe par la peinture : [(etat, (i, j, k))] ; mid(a, b) rend le sommet milieu.
+
+    Le code (attribut paint_color de Bambu Studio, celui de TriangleSelector) est un arbre lu en quartets
+    hexadecimaux depuis la FIN de la chaine : 2 bits de decoupe (0 : feuille, sinon 1 a 3 cotes coupes, 2 a 4
+    enfants), puis 2 bits d'etat (feuille : 0 = extrudeur de la piece, n = extrudeur n ; 3 = la suite dans les
+    quartets suivants) ou de cote particulier (decoupe). Les enfants sont lus du dernier au premier.
+    Leve IndexError / ValueError sur un code illisible."""
+    nib = [int(ch, 16) for ch in reversed(code)]
+    pos = 0
+    leaves = []
+    stack = [tri]
+    while stack:
+        a = stack.pop()
+        c = nib[pos]; pos += 1
+        sides = c & 3
+        if not sides:
+            st = c >> 2
+            if st == 3:
+                n, k = nib[pos], 0; pos += 1
+                while n == 15:
+                    k += 1; n = nib[pos]; pos += 1
+                st = n + 15 * k + 3
+            leaves.append((st, a))
+            continue
+        sp = c >> 2
+        w = [a[(sp + j) % 3] for j in range(3)]
+        if sides == 1:
+            m = mid(w[2], w[1])
+            kids = [(w[0], w[1], m), (m, w[2], w[0])]
+        elif sides == 2:
+            m1, m2 = mid(w[1], w[0]), mid(w[0], w[2])
+            kids = [(w[0], m1, m2), (m1, w[1], m2), (w[1], w[2], m2)]
+        else:
+            m1, m2, m3 = mid(w[1], w[0]), mid(w[2], w[1]), mid(w[0], w[2])
+            kids = [(w[0], m1, m3), (m1, w[1], m2), (m2, w[2], m3), (m1, m2, m3)]
+        stack.extend(kids)                             # depile : le dernier enfant d'abord, comme a l'ecriture
+    return leaves
+
+
+def _recipe(code: str):
+    """La decoupe d'un code, independante du triangle : (milieux a creer [(i, j)], morceaux [(etat, (i, j, k))]) en
+    indices locaux (0, 1, 2 : les coins ; puis les milieux dans l'ordre de creation). Leve sur un code illisible."""
+    pairs: list = []
+    seen: dict = {}
+
+    def mid(a, b):
+        k = (a, b) if a < b else (b, a)
+        if k not in seen:
+            seen[k] = 3 + len(pairs)
+            pairs.append((a, b))
+        return seen[k]
+    return pairs, _leaves(code, (0, 1, 2), mid)
+
+
+def _painted(v, t, paint, ext: int):
+    """Une piece peinte au pinceau multicolore : (sommets completes des milieux d'aretes, {extrudeur: triangles}).
+    Les triangles peints d'un bloc sont classes d'un coup ; seuls ceux que la peinture decoupe sont decodes un
+    a un. Chaque couleur garde l'ordre des triangles du fichier."""
+    import numpy as np
+    pidx, codes = paint
+    cache: dict = {}
+    sts = []
+    for c in codes:
+        st = cache.get(c, -2)
+        if st == -2:
+            st = cache[c] = _leaf_state(c)
+        sts.append(-1 if st is None else st)
+    state = np.full(len(t), ext, dtype=np.int64)
+    if len(pidx):
+        state[pidx] = np.array(sts, dtype=np.int64)
+    state[state == 0] = ext
+    n0 = len(v)
+    extra: list = []
     mids: dict = {}
+
+    def coord(i):
+        return v[i] if i < n0 else extra[i - n0]
 
     def mid(a, b):
         k = (a, b) if a < b else (b, a)
         i = mids.get(k)
         if i is None:
-            i = len(v) // 3
-            v.extend(((v[3 * a] + v[3 * b]) / 2, (v[3 * a + 1] + v[3 * b + 1]) / 2, (v[3 * a + 2] + v[3 * b + 2]) / 2))
+            pa, pb = coord(a), coord(b)
+            i = n0 + len(extra)
+            extra.append(((pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2, (pa[2] + pb[2]) / 2))
             mids[k] = i
         return i
-
-    for ti in range(len(t) // 3):
-        tri = (t[3 * ti], t[3 * ti + 1], t[3 * ti + 2])
-        code = paint.get(ti)
-        if not code:
-            out.setdefault(ext, []).extend(tri)
-            continue
-        leaves = []
-        try:
-            nib = [int(ch, 16) for ch in reversed(code)]
-            pos = 0
-            stack = [tri]
-            while stack:
-                a = stack.pop()
-                c = nib[pos]; pos += 1
-                sides = c & 3
-                if not sides:
-                    st = c >> 2
-                    if st == 3:
-                        n, k = nib[pos], 0; pos += 1
-                        while n == 15:
-                            k += 1; n = nib[pos]; pos += 1
-                        st = n + 15 * k + 3
-                    leaves.append((st or ext, a))
-                    continue
-                sp = c >> 2
-                w = [a[(sp + j) % 3] for j in range(3)]
-                if sides == 1:
-                    m = mid(w[2], w[1])
-                    kids = [(w[0], w[1], m), (m, w[2], w[0])]
-                elif sides == 2:
-                    m1, m2 = mid(w[1], w[0]), mid(w[0], w[2])
-                    kids = [(w[0], m1, m2), (m1, w[1], m2), (w[1], w[2], m2)]
-                else:
-                    m1, m2, m3 = mid(w[1], w[0]), mid(w[2], w[1]), mid(w[0], w[2])
-                    kids = [(w[0], m1, m3), (m1, w[1], m2), (m2, w[2], m3), (m1, m2, m3)]
-                stack.extend(kids)                     # depile : le dernier enfant d'abord, comme a l'ecriture
-        except (IndexError, ValueError):
-            leaves = [(ext, tri)]                      # code illisible : le triangle garde la couleur de la piece
-        for st, a in leaves:
-            out.setdefault(st, []).extend(a)
-    return out
+    code_at = {p: c for p, c, st in zip(pidx.tolist(), codes, sts) if st == -1}   # les triangles decoupes
+    split_tris: dict = {}                                 # etat -> ([triangles], [numero du triangle d'origine])
+    recipes: dict = {}
+    for ti in np.nonzero(state == -1)[0].tolist():
+        tri = tuple(t[ti].tolist())
+        code = code_at[ti]
+        r = recipes.get(code)
+        if r is None:
+            try:
+                r = recipes[code] = _recipe(code)
+            except (IndexError, ValueError):
+                r = recipes[code] = False
+        if r is False:
+            lv = [(ext, tri)]                          # code illisible : le triangle garde la couleur de la piece
+        else:
+            loc = list(tri)
+            for a_, b_ in r[0]:
+                loc.append(mid(loc[a_], loc[b_]))
+            lv = [(st, (loc[x], loc[y], loc[z])) for st, (x, y, z) in r[1]]
+        for st, a in lv:
+            e = split_tris.setdefault(st or ext, ([], []))
+            e[0].append(a)
+            e[1].append(ti)
+    if extra:
+        v = np.vstack([v, np.array(extra, dtype=np.float64)])
+    out = {}
+    # les couleurs dans l'ordre de leur premiere apparition (comme le fichier)
+    firsts = {}
+    for st in np.unique(state[state > 0]).tolist():
+        firsts[st] = int(np.argmax(state == st))
+    for st, (_, keys) in split_tris.items():
+        firsts[st] = min(firsts.get(st, keys[0]), keys[0])
+    for st in sorted(firsts, key=lambda s_: firsts[s_]):
+        whole = np.nonzero(state == st)[0]
+        parts, keys = [t[whole]], [whole]
+        if st in split_tris:
+            a, k = split_tris[st]
+            parts.append(np.array(a, dtype=np.int64).reshape(-1, 3))
+            keys.append(np.array(k, dtype=np.int64))
+        tt = np.concatenate(parts)
+        if len(parts) > 1:
+            tt = tt[np.argsort(np.concatenate(keys), kind="stable")]
+        out[st] = tt
+    return v, out
 
 
 def _colors_of(z: zipfile.ZipFile) -> list:
@@ -243,8 +350,35 @@ def _hex_rgba(h) -> int:
         return 0xB4BCC8FF
 
 
+_GZ_CHUNK = 4 << 20                    # 4 Mo par morceau
+
+
+def _gzip(data: bytes) -> bytes:
+    """gzip (niveau 1) compresse sur plusieurs coeurs, en UN seul flux valide : chaque morceau est compresse a part
+    et termine sur une frontiere d'octet (Z_SYNC_FLUSH), le dernier ferme le flux ; l'en-tete et la fin (CRC, taille)
+    sont ceux de tout le fichier (la methode de pigz). zlib libere le verrou de Python pendant qu'il compresse."""
+    import zlib
+    from concurrent.futures import ThreadPoolExecutor
+    parts = [data[i:i + _GZ_CHUNK] for i in range(0, len(data), _GZ_CHUNK)] or [b""]
+
+    def deflate(k):
+        c = zlib.compressobj(1, zlib.DEFLATED, -15)
+        last = k == len(parts) - 1
+        return c.compress(parts[k]) + c.flush(zlib.Z_FINISH if last else zlib.Z_SYNC_FLUSH)
+    if len(parts) == 1:
+        body = deflate(0)
+    else:
+        import os
+        with ThreadPoolExecutor(max_workers=min(len(parts), os.cpu_count() or 2)) as ex:
+            body = b"".join(ex.map(deflate, range(len(parts))))
+    head = b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff"
+    return head + body + struct.pack("<II", zlib.crc32(data) & 0xFFFFFFFF, len(data) & 0xFFFFFFFF)
+
+
 def convert(src: Path, out_dir: Path) -> dict:
-    """Le 3MF -> un fichier binaire par plateau, et plates.json. Rend {"plates": [{n, name, triangles}]}."""
+    """Le 3MF -> un fichier binaire par plateau, et plates.json. Rend {"plates": [{n, name, triangles}]}.
+    Les sommets et triangles en tableaux numpy (27/10/2026 : 20 s pour un gros modele peint, en Python pur)."""
+    import numpy as np
     z = zipfile.ZipFile(src)
     names = set(z.namelist())
     root_xml = z.read("3D/3dmodel.model").decode("utf-8", "replace")
@@ -299,59 +433,43 @@ def convert(src: Path, out_dir: Path) -> dict:
                 continue
             for ext, fcol, mt, body in parts_of(oid, mts[k]):
                 v, t, paint = _mesh(body)
-                by_ext = _painted(v, t, paint, ext) if paint else {ext: t}
-                total += sum(len(x) for x in by_ext.values()) // 3
+                v, by_ext = _painted(v, t, paint, ext) if paint else (v, {ext: t})
+                total += sum(len(x) for x in by_ext.values())
                 if total > MAX_TRIANGLES:
                     break
-                a, b, c, d, e, f, h, i_, j, tx, ty, tz = mt
-                xs, ys, zs = v[0::3], v[1::3], v[2::3]
-                if (a, b, c, d, e, f, h, i_, j) == (1, 0, 0, 0, 1, 0, 0, 0, 1):
-                    # une simple translation (le cas courant) : sans multiplications
-                    nx = [x + tx for x in xs]
-                    ny = [y + ty for y in ys]
-                    nz = [z_ + tz for z_ in zs]
-                else:
-                    nx = [x * a + y * d + z_ * h + tx for x, y, z_ in zip(xs, ys, zs)]
-                    ny = [x * b + y * e + z_ * i_ + ty for x, y, z_ in zip(xs, ys, zs)]
-                    nz = [x * c + y * f + z_ * j + tz for x, y, z_ in zip(xs, ys, zs)]
-                out_v = [0.0] * (len(nx) * 3)
-                out_v[0::3], out_v[1::3], out_v[2::3] = nx, ny, nz
+                rot = np.array(mt[:9], dtype=np.float64).reshape(3, 3)
+                vt = v + np.array(mt[9:], dtype=np.float64) if np.array_equal(rot, np.eye(3)) else v @ rot + np.array(mt[9:])
                 for ex, tt in by_ext.items():
                     col = colors[ex - 1] if 0 < ex <= len(colors) else fcol
-                    g = groups_out.setdefault(_hex_rgba(col), [[], []])
-                    base = len(g[0]) // 3
+                    g = groups_out.setdefault(_hex_rgba(col), [[], [], 0])
                     if len(by_ext) == 1:
-                        g[0] += out_v
-                        g[1] += [q + base for q in tt] if base else tt
+                        g[0].append(vt)
+                        g[1].append(tt + g[2])
+                        g[2] += len(vt)
                         continue
                     # piece peinte : seuls les sommets de cette couleur, renumerotes
-                    used = sorted(set(tt))
-                    ren = {q: base + r for r, q in enumerate(used)}
-                    for q in used:
-                        g[0] += out_v[3 * q:3 * q + 3]
-                    g[1] += [ren[q] for q in tt]
+                    used, inv = np.unique(tt.ravel(), return_inverse=True)
+                    g[0].append(vt[used])
+                    g[1].append(inv.reshape(-1, 3) + g[2])
+                    g[2] += len(used)
         if not groups_out or total > MAX_TRIANGLES:
             meta["plates"].append({"n": n, "name": pname, "triangles": total, "skipped": total > MAX_TRIANGLES})
             continue
         # recentre le plateau : au milieu en X et Y, pose sur z = 0
-        xs = [c for g in groups_out.values() for c in g[0][0::3]]
-        ys = [c for g in groups_out.values() for c in g[0][1::3]]
-        zs = [c for g in groups_out.values() for c in g[0][2::3]]
-        cx, cy, z0 = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, min(zs)
-        size = [max(xs) - min(xs), max(ys) - min(ys), max(zs) - z0]
-        from array import array
-        import gzip
+        allv = {col: np.concatenate(g[0]) for col, g in groups_out.items()}
+        lo = np.min([a.min(axis=0) for a in allv.values()], axis=0)
+        hi = np.max([a.max(axis=0) for a in allv.values()], axis=0)
+        shift = np.array([(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, lo[2]])
+        size = [float(hi[0] - lo[0]), float(hi[1] - lo[1]), float(hi[2] - lo[2])]
         buf = bytearray(struct.pack("<I", len(groups_out)))
-        for col, (v, t) in groups_out.items():
-            v[0::3] = [x - cx for x in v[0::3]]
-            v[1::3] = [y - cy for y in v[1::3]]
-            v[2::3] = [z_ - z0 for z_ in v[2::3]]
-            buf += struct.pack("<III", col, len(v) // 3, len(t) // 3)
-            buf += array("f", v).tobytes()               # petit-boutiste sur les machines visees (x86, ARM)
-            buf += array("I", t).tobytes()
+        for col, g in groups_out.items():
+            vv, tt = allv[col], np.concatenate(g[1])
+            buf += struct.pack("<III", col, len(vv), len(tt))
+            buf += (vv - shift).astype("<f4").tobytes()
+            buf += tt.astype("<u4").tobytes()
         # compresse une fois pour toutes : servi tel quel (Content-Encoding: gzip), le telephone le recoit leger
-        (out_dir / f"plate_{n}.bin").write_bytes(gzip.compress(bytes(buf), 1))
-        meta["plates"].append({"n": n, "name": pname, "triangles": total, "size_mm": [round(s, 1) for s in size]})
+        (out_dir / f"plate_{n}.bin").write_bytes(_gzip(bytes(buf)))
+        meta["plates"].append({"n": n, "name": pname, "triangles": total, "size_mm": [round(x, 1) for x in size]})
     (out_dir / "plates.json").write_text(json.dumps(meta), encoding="utf-8")
     return meta
 
