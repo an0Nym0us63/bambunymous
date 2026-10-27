@@ -133,7 +133,7 @@ async def summary() -> dict:
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import MakerWorldDesign as MW
-    from .makerworld import extras_of
+    from .makerworld import extras_of, extras_stale
     ids = await _printed_designs()
     async with AsyncSessionLocal() as db:
         rows = {m.design_id: (m.status, m.extras) for m in (await db.execute(select(MW).where(MW.design_id.in_(ids)))).scalars().all()} if ids else {}
@@ -141,7 +141,7 @@ async def summary() -> dict:
         n_read = n_with = n_docs = n_kept = 0
         for did in ids:
             st, raw = rows.get(did, (None, None))
-            if st != "ok" or raw is None:
+            if st != "ok" or extras_stale(raw):
                 continue
             n_read += 1
             docs = extras_of(raw).get("docs") or []
@@ -152,7 +152,7 @@ async def summary() -> dict:
         return n_read, n_with, n_docs, n_kept
     n_read, n_with, n_docs, n_kept = await asyncio.to_thread(count)
     unread = sum(1 for did in ids if rows.get(did, (None, None))[0] != "notfound" and
-                 (rows.get(did, (None, None))[0] != "ok" or rows.get(did, (None, None))[1] is None))
+                 (rows.get(did, (None, None))[0] != "ok" or extras_stale(rows.get(did, (None, None))[1])))
     return {"designs": len(ids), "read": n_read, "unread": unread, "with_docs": n_with, "docs": n_docs, "kept": n_kept}
 
 
@@ -182,7 +182,7 @@ async def backfill() -> None:
             had = await asyncio.to_thread(_kept_files, did)        # ce qui etait deja garde, pour le compte rendu
             async with AsyncSessionLocal() as db:
                 m = await db.get(MW, did)
-                need = m is None or m.status == "error" or (m.status == "ok" and m.extras is None)
+                need = m is None or m.status == "error" or (m.status == "ok" and mw.extras_stale(m.extras))
             if need:
                 r = await mw.refresh(limit=1, only=[did])     # garde aussi ses documents
                 JOB["read"] += r.get("read", 0)

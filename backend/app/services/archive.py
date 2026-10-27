@@ -520,6 +520,46 @@ def _docs_sync(root: Path, idx: dict, mws: dict, rep: dict) -> dict:
     return out
 
 
+def _desc_sync(root: Path, mws: dict, docs_plan: dict, rep: dict) -> dict:
+    """Le descriptif de chaque modele, a cote de ses 3MF : « 3MF MakerWorld/<modele>/Descriptif.txt » (titre,
+    createur, lien, categories, mots-cles, descriptif traduit puis original, documents, pieces a prevoir).
+    Reecrit s'il a change. Rend {design_id: chemin} pour les fiches."""
+    from .makerworld import extras_of, model_url
+    out: dict = {}
+    for did, m in mws.items():
+        if getattr(m, "status", None) != "ok":
+            continue
+        x = extras_of(getattr(m, "extras", None))
+        if not (x.get("description") or x.get("docs") or x.get("parts")):
+            continue
+        title = _two(m.title_fr, m.title) if (m.title_fr or m.title) else f"Modèle {did}"
+        rel = f"{LIB}/{title}/Descriptif.txt"
+        lines = [title, ""]
+        if m.creator_name:
+            lines.append(f"Par {m.creator_name}")
+        lines.append(f"MakerWorld : {model_url(did)}")
+        cats = [c for c in (m.categories or "").split(",") if c]
+        tags = [t for t in (m.tags or "").split(",") if t]
+        if cats:
+            lines.append(f"Catégories : {', '.join(cats)}")
+        if tags:
+            lines.append(f"Mots-clés : {', '.join(tags[:40])}")
+        if x.get("description"):
+            lines += ["", "Descriptif :", "", x["description"]]
+        if x.get("description_original"):
+            lines += ["", "Descriptif d'origine :", "", x["description_original"]]
+        txt = "\n".join(lines) + "\n" + _extras_txt(m, docs_plan)
+        try:
+            (root / rel).parent.mkdir(parents=True, exist_ok=True)
+            if _write_if_changed(root / rel, txt):
+                rep["copied"] += 1
+            out[str(did)] = rel
+        except OSError as e:
+            rep["errors"] += 1
+            logger.warning(f"[ARCHIVE] descriptif {did} : {e}")
+    return out
+
+
 def _extras_txt(m, docs_plan: dict, indent: str = "") -> str:
     """Pour une fiche : les documents joints du modele (ou les trouver sur le NAS) et ce qu'il faut prevoir
     (pieces de la boutique, autres pieces). Vide s'il n'y a rien."""
@@ -755,6 +795,7 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict, name
     lib_plan = _library_plan(mws)
     _library_sync(root, idx, lib_plan, rep)
     docs_plan = _docs_sync(root, idx, mws, rep)
+    desc_plan = _desc_sync(root, mws, docs_plan, rep)
     for src_name, label in SYS_NAMED if named is not None else []:
         _named_sync(root, idx, rep, src_name, label, named.get(src_name) or {})
     dirs = idx.setdefault("@dirs", {})           # « print:12 » / « grp:3 » -> son dossier sur le NAS
@@ -861,6 +902,7 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict, name
             g = next((x for x in groups if x.id == p.group_id), None) if p.group_id else None
             txt = _fiche(p, model, when, fil, mw) + (f"\nGroupe : {g.name}\n" if g else "") \
                 + (f"\n3MF d'origine MakerWorld : {lib}\n" if lib and (root / lib).is_file() else "") \
+                + (f"\nDescriptif du modèle : {desc_plan[str(p.design_id)]}\n" if p.design_id and str(p.design_id) in desc_plan else "") \
                 + (_extras_txt(mws.get(str(p.design_id)), docs_plan) if p.design_id else "")
             if _write_if_changed(root / rel_dir / "Fiche.txt", txt):
                 wrote = True
@@ -907,9 +949,10 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict, name
             extra = ""
             for did in dict.fromkeys(str(p.design_id) for p, _m, _w in members if p.design_id):
                 t = _extras_txt(mws.get(did), docs_plan, "  ")
-                if t:
+                dsc = f"  Descriptif : {desc_plan[did]}\n" if did in desc_plan else ""
+                if t or dsc:
                     m = mws.get(did)
-                    extra += f"\n{_two(m.title_fr, m.title) if (m.title_fr or m.title) else 'Modèle ' + did} :" + t
+                    extra += f"\n{_two(m.title_fr, m.title) if (m.title_fr or m.title) else 'Modèle ' + did} :\n" + dsc + t.lstrip("\n")
             _write_if_changed(root / groot / "Fiche du groupe.txt", _fiche_group(g, members)
                               + ("\n3MF d'origine MakerWorld :\n" + "".join(f"  - {x}\n" for x in libs) if libs else "")
                               + ("\nDocuments et pièces des modèles :\n" + extra if extra else ""))

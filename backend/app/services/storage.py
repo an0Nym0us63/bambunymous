@@ -127,6 +127,8 @@ def _nas_cat(parts: tuple, name: str) -> str:
         if parts[1] == "3MF MakerWorld":
             if "Documents" in parts[2:-1]:
                 return "mw_docs"
+            if name == "Descriptif.txt":
+                return "fiches"
             return "mw_tmf" if ext == ".3mf" else "catalog"
         return SYS_SUBS.get(parts[1], "other")
     if top == "Impressions":

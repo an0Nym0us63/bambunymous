@@ -124,6 +124,14 @@ def _parse_design(code, d) -> dict:
     }
 
 
+EXTRAS_V = 2
+
+
+def extras_stale(raw) -> bool:
+    """Une fiche a relire : jamais lue avec ses documents, ou avant l'ajout du descriptif."""
+    return raw is None or f'"v": {EXTRAS_V}' not in raw
+
+
 DOC_KINDS = (("guide", "design_guide", "auxiliaryGuide"), ("bom", "design_bom", "auxiliaryBom"),
              ("other", "design_other", "auxiliaryOther"))
 
@@ -172,7 +180,15 @@ def _extras(d) -> str:
             q = b.get("quantity") if isinstance(b, dict) else None
             parts.append({"title": t.strip()[:200], "quantity": q if isinstance(q, int) and q > 0 else None, "url": None})
     other = ext.get("boms_of_other_parts")
-    out = {}
+    # v2 (27/10/2026) : le descriptif aussi (pour le NAS) ; une fiche gardee d'avant est relue
+    out = {"v": EXTRAS_V}
+    desc = _text(d.get("summaryTranslated") or d.get("summary"))
+    if desc:
+        out["description"] = desc
+        if d.get("summaryTranslated") and d.get("summary"):
+            orig = _text(d.get("summary"))
+            if orig and orig != desc:
+                out["description_original"] = orig
     if docs:
         out["docs"] = docs
     if parts:
@@ -956,7 +972,7 @@ async def _todo(limit: int, only: str = None) -> list:
         if m is None or m.status == "error" or not m.fetched_at or m.fetched_at < old \
                 or (m.status == "ok" and m.title and not m.title_fr) \
                 or (m.status == "ok" and m.profiles is None)                 or (m.status == "ok" and m.profiles not in (None, "[]") and '"instance_id"' not in m.profiles)                 or (m.status == "ok" and not m.creator_uid) \
-                or (m.status == "ok" and m.extras is None):            # documents joints (27/10/2026)
+                or (m.status == "ok" and extras_stale(m.extras)):      # documents joints et descriptif (27/10/2026)
             out.append(str(i))
     return out[:limit]
 
