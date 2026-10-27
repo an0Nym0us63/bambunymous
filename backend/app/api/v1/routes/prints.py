@@ -89,10 +89,11 @@ def _usage_to_dict(u) -> dict:
     return d
 
 
-def _print_to_out(p: Print, gcache: Optional[dict] = None) -> dict:
+def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict] = None) -> dict:
     d = {col.name: getattr(p, col.name) for col in p.__table__.columns}
     d["filament_usage"] = [_usage_to_dict(u) for u in (p.filament_usage or [])]
-    d["snapshots"] = [
+    # snaps : les captures deja lues en lignes simples, par impression (la liste) ; sinon la relation
+    d["snapshots"] = snaps.get(p.id, []) if snaps is not None else [
         {col.name: getattr(s, col.name) for col in s.__table__.columns}
         for s in (p.snapshots or [])
     ]
@@ -443,8 +444,9 @@ async def list_prints(
 
         # 2. Les prints de la page, en entier ; chaque groupe complet (meme ses
         #    membres que les filtres ecartent), apres ceux qu'a donnes le tri
-        full = select(Print).options(selectinload(Print.filament_usage), selectinload(Print.snapshots),
-                                     selectinload(Print.tags), selectinload(Print.group))
+        # les captures a part, en lignes simples (27/10/2026 : en objets complets, ~4 par impression, c'etait le
+        # gros du calcul de la page)
+        full = select(Print).options(selectinload(Print.filament_usage), selectinload(Print.tags), selectinload(Print.group))
         cond = Print.id.in_(order) if order else None
         if groups:
             cond = Print.group_id.in_(groups) if cond is None else (cond | Print.group_id.in_(groups))
@@ -457,9 +459,17 @@ async def list_prints(
 
         await _enrich_filament_usage(db, rows)
 
+        from ....models.print_history import PrintSnapshot as _Snap
+        snaps: dict = {}
+        ids = [p.id for p in rows]
+        for i in range(0, len(ids), 500):
+            for r in (await db.execute(select(_Snap.__table__).where(_Snap.print_id.in_(ids[i:i + 500]))
+                                       .order_by(_Snap.print_id, _Snap.id))).all():
+                snaps.setdefault(r.print_id, []).append(dict(r._mapping))
+
     from ....core.fastjson import json_response
     return json_response({"total": total, "has_more": pos < total, "next_offset": pos,
-                          "prints": [_print_to_out(p, gc) for gc in ({},) for p in rows]})
+                          "prints": [_print_to_out(p, gc, snaps) for gc in ({},) for p in rows]})
 
 
 @router.get("/gallery")

@@ -42,14 +42,19 @@ def path_of(iid: str) -> Path:
     return _dir() / f"{iid}.3mf"
 
 
-_IDX = {"mt": None, "v": {}}
+_IDX = {"mt": None, "v": {}, "at": 0.0}
 
 
 def _index() -> dict:
-    """index.json, relu seulement quand il change (la liste des impressions le consulte pour chacune)."""
+    """index.json, relu seulement quand il change (la liste des impressions le consulte pour chacune) ; sa date
+    n'est regardee qu'une fois par seconde au plus (27/10/2026), une ecriture d'ici met la memoire a jour."""
+    import time as _t
+    if _IDX["mt"] is not None and _t.monotonic() - _IDX["at"] < 1.0:
+        return dict(_IDX["v"])
     f = _dir() / "index.json"
     try:
         mt = f.stat().st_mtime
+        _IDX["at"] = _t.monotonic()
     except OSError:
         return {}
     if _IDX["mt"] != mt:
@@ -68,6 +73,10 @@ def _index_put(key: str, iid: str) -> None:
             tmp = _dir() / "index.json.tmp"
             tmp.write_text(json.dumps(d), encoding="utf-8")
             tmp.replace(_dir() / "index.json")
+            try:
+                _IDX.update(mt=(_dir() / "index.json").stat().st_mtime, v=d, at=0.0)
+            except OSError:
+                pass
 
 
 def known(design_id, profile_id) -> str | None:
