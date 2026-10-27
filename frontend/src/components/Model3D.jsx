@@ -152,24 +152,21 @@ function Ring({ pct = null, label }) {
   </div>;
 }
 
-// Sources : designId (le 3MF d'origine MakerWorld, profileId / printId pour le profil), ou sliced = [{id, label}] :
-// le 3MF tranche d'une ou plusieurs impressions (un groupe : une puce par impression). palette : {couleur du
-// createur (RRGGBB) : couleur a montrer}, et fetchSource : recuperer le 3MF d'origine s'il manque (« À faire »).
+// Le 3MF d'origine MakerWorld (profileId / printId pour le profil). palette : {couleur du createur (RRGGBB) :
+// couleur a montrer}, et fetchSource : recuperer le 3MF d'origine s'il manque (« À faire »).
 export default function Model3D({ designId = null, profileId = null, printId = null, wait = false, title = "", onClose,
-                                  sliced = null, palette = null, fetchSource = false }) {
+                                  palette = null, fetchSource = false }) {
   const [meta, setMeta] = useState(null);
   const [err, setErr] = useState(null);
   const [plate, setPlate] = useState(0);
   const [st, setSt] = useState({ busy: true });
-  const [pick, setPick] = useState(0);                 // l'impression montree (fichiers tranches d'un groupe)
-  const cur = sliced?.[pick] || null;
-  const base = cur ? `/prints/${cur.id}/3d` : `/makerworld/3d/${encodeURIComponent(designId)}`;
+  const base = `/makerworld/3d/${encodeURIComponent(designId)}`;
   useEffect(() => {
     if (wait) return;                    // le profil se deduit encore (fiche d'une impression)
     let alive = true;
     setErr(null); setMeta(null);
     // le profil montre par la fiche ; sans lui, le serveur lit celui de l'impression (imprimante, ou choisi a la main)
-    client.get(base, { params: cur ? {} : { profile: profileId || "", print_id: printId || 0, fetch: fetchSource ? 1 : 0 }, timeout: 180000 })
+    client.get(base, { params: { profile: profileId || "", print_id: printId || 0, fetch: fetchSource ? 1 : 0 }, timeout: 180000 })
       .then(({ data }) => { if (alive) { setMeta(data); setPlate(0); } })
       .catch(e => alive && setErr(e?.response?.data?.detail || "Pas de modèle 3D pour celui-ci"));
     return () => { alive = false; };
@@ -198,17 +195,11 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 8px 18px -8px #0EA5E9" }}>🧊</span>}
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 11.5, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#0EA5E9" }}>Vue 3D</div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title || (designId ? `Modèle ${designId}` : "Fichier imprimé")}</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title || `Modèle ${designId}`}</div>
             {meta?.profile_title && <div data-tip="Le profil affiché" style={{ fontSize: 11.5, fontWeight: 700, color: "#0891b2", overflow: "hidden",
               textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🧩 {meta.profile_title}</div>}
           </div>
         </div>
-        {sliced?.length > 1 && <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
-          {sliced.map((x, i) => <button key={x.id} type="button" onClick={() => setPick(i)} style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer",
-            flexShrink: 0, fontSize: 12, fontWeight: 800, border: i === pick ? "none" : "1px solid var(--border)", color: i === pick ? "#fff" : "var(--text2)",
-            background: i === pick ? "linear-gradient(135deg, #F59E0B, #EF4444)" : "var(--surface2)", maxWidth: 220, overflow: "hidden",
-            textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📄 {x.label}</button>)}
-        </div>}
         {meta?.plates?.length > 1 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {meta.plates.map((x, i) => <button key={x.n} type="button" onClick={() => setPlate(i)} style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer",
             fontSize: 12.5, fontWeight: 800, border: i === plate ? "none" : "1px solid var(--border)", color: i === plate ? "#fff" : "var(--text2)",
@@ -224,8 +215,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             textAlign: "center", fontSize: 13, fontWeight: 700, color: "#ef4444" }}>{err || `Plateau illisible : ${st.error}`}</div>}
         </div>
         {meta && <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
-          <span>{meta.source === "sliced" ? "3MF imprimé, aux couleurs des filaments choisis au tranchage"
-            : meta.source === "3mf" && palette ? "3MF d'origine, aux couleurs des filaments retenus"
+          <span>{meta.source === "3mf" && palette ? "3MF d'origine, aux couleurs des filaments retenus"
             : meta.source === "3mf" ? "3MF d'origine, aux couleurs de ses filaments"
             : meta.source === "3mf_other" ? "3MF d'origine d'un autre profil du modèle" : "Aperçu MakerWorld (sans couleurs)"}</span>
           {meta.ms >= 1000 && <span data-tip="La première ouverture prépare le modèle ; les suivantes sont immédiates">· préparé en {(meta.ms / 1000).toFixed(1).replace(".", ",")} s</span>}

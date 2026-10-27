@@ -2287,42 +2287,6 @@ async def recalc_print_costs(print_id: int, _: str = Depends(get_current_user)):
     return {"ok": True}
 
 
-@router.get("/{print_id}/3d/progress")
-async def print_3d_progress(print_id: int, _: str = Depends(get_current_user)):
-    """Ou en est la preparation de la vue 3D du 3MF tranche ({} : rien en cours)."""
-    from ....services import mw_3d as T
-    return T.PROGRESS.get(f"p{print_id}") or {}
-
-
-@router.get("/{print_id}/3d")
-async def print_3d(print_id: int, _: str = Depends(get_current_user)):
-    """La vue 3D du 3MF tranche de l'impression (27/10/2026) : les pieces du plateau imprime, aux couleurs des
-    filaments choisis au tranchage. Converti une fois (DATA_DIR/mw_3d/p<id>/), comme le 3MF d'origine."""
-    import time as _t
-    from ....services import mw_3d as T
-    from ....services.archive import local_or_archive
-    async with AsyncSessionLocal() as db:
-        p = await db.get(Print, print_id)
-    if not p:
-        raise HTTPException(404, "Impression introuvable")
-    f = local_or_archive(p.model_3mf) if p.model_3mf else None     # vide du local : relu sur le NAS
-    if not f or not f.is_file():
-        raise HTTPException(404, "Pas de 3MF tranché pour cette impression")
-    key = f"p{print_id}"
-    t0 = _t.perf_counter()
-    meta = await asyncio.to_thread(T.from_3mf, f, key)
-    shown, skipped = T.plates_out(meta or {}, key)
-    if not shown:
-        raise HTTPException(404, "Pas de pièces 3D dans ce fichier")
-    # le plateau imprime d'abord
-    try:
-        n = int(p.plate_id or 0)
-    except (TypeError, ValueError):
-        n = 0
-    shown.sort(key=lambda x: x["n"] != n)
-    return {"source": "sliced", "ms": round((_t.perf_counter() - t0) * 1000), "plates": shown, "skipped": skipped}
-
-
 @router.get("/{print_id}/3mf")
 async def print_3mf(print_id: int, kind: str = Query("sliced", pattern="^(sliced|source)$"), _: str = Depends(get_current_user)):
     """Le 3MF d'une impression : « sliced » celui tranche pour mon imprimante (garde au lancement),
