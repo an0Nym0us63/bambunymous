@@ -681,34 +681,31 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             pass
     # used : des impressions de ce modele -> chaque couleur du 3MF d'origine et celle de la bobine qui l'a remplacee
     # (le numero du filament dans le projet est le meme ; sans bobine liee, la couleur notee au tranchage)
-    used_palette = None
+    used_palette, used_detail = None, None
     if used and source in ("3mf", "3mf_other") and key:
         try:
+            used_detail = []
             used_palette = await _used_palette(path_of(key), [int(x) for x in used.split(",") if x.strip().isdigit()][:60],
-                                               did, prof if source == "3mf" else "")
+                                               did, prof if source == "3mf" else "", used_detail)
         except Exception:
             logger.exception("[3D] couleurs utilisees")
     return {"source": source, "profile": prof or None, "profile_title": ptitle, "profile_cover": pcover, "ms": ms,
-            "used_palette": used_palette, "fetch_error": fetch_error,
+            "used_palette": used_palette, "used_detail": used_detail, "fetch_error": fetch_error,
             "plates": T.plates_out(meta, key)[0], "skipped": T.plates_out(meta, key)[1]}
 
 
 def _ext_by_name(z) -> dict:
-    """Le filament de chaque piece d'un 3MF Bambu : {nom#rang: {filament: nombre}} (objets et pieces ; des pieces de
-    meme nom se distinguent par leur ordre, le meme dans le projet d'origine et dans le projet imprime)."""
+    """Le filament de chaque piece d'un 3MF Bambu : {nom: [filament, ...]} (objets et pieces, dans l'ordre du fichier)."""
     import re as _re
     try:
         xml = z.read("Metadata/model_settings.config").decode("utf-8", "replace")
     except KeyError:
         return {}
     out: dict = {}
-    seen: dict = {}
 
     def add(name, ext):
         if name and ext:
-            seen[name] = seen.get(name, 0) + 1
-            d = out.setdefault(f"{name}#{seen[name]}", {})
-            d[ext] = d.get(ext, 0) + 1
+            out.setdefault(name, []).append(ext)
     for m in _re.finditer(r'<object id="\d+">(.*?)</object>', xml, _re.S):
         body = m.group(1)
         head = body.split("<part", 1)[0]
@@ -727,20 +724,25 @@ def _ext_by_name(z) -> dict:
 def _ext_map(origin: dict, sliced: dict) -> dict:
     """Filament du projet d'origine -> filament du projet imprime, d'apres les pieces de meme nom (27/10/2026 : par
     numero seulement, un projet retouche dans Bambu Studio -- filaments reordonnes, fusionnes -- melangeait les
-    couleurs). {} si aucun nom en commun."""
+    couleurs). Un nom dont toutes les pieces ont le meme filament (des deux cotes) vote d'un bloc ; sinon les pieces
+    s'associent dans l'ordre. Le fichier imprime ne garde souvent que les pieces de son plateau : un nom present
+    plusieurs fois peut y manquer en partie, d'ou le vote. {} si aucun nom en commun."""
     votes: dict = {}
     for name, eo in origin.items():
         es = sliced.get(name)
         if not es:
             continue
-        a = max(eo, key=eo.get)
-        b = max(es, key=es.get)
-        v = votes.setdefault(a, {})
-        v[b] = v.get(b, 0) + 1
+        if len(set(eo)) == 1 and len(set(es)) == 1:
+            pairs = [(eo[0], es[0])] * min(len(eo), len(es))
+        else:
+            pairs = list(zip(eo, es))
+        for a, b in pairs:
+            v = votes.setdefault(a, {})
+            v[b] = v.get(b, 0) + 1
     return {a: max(v, key=v.get) for a, v in votes.items()}
 
 
-async def _used_palette(src, print_ids: list, did: str = "", prof: str = "") -> dict | None:
+async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", detail_out: list | None = None) -> dict | None:
     """{couleur du 3MF d'origine (RRGGBB) : couleur utilisee} d'apres les filaments de ces impressions (la plus
     recente l'emporte). Seules comptent les impressions de ce profil (ou de profil inconnu). Chaque filament du
     projet d'origine est rapproche de celui du projet imprime par les pieces de meme nom (3MF tranche garde), a
@@ -780,6 +782,7 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "") -> 
         if slot:
             used_by.setdefault(pid, {})[int(slot)] = h6(fcol or chex)
     out: dict = {}
+    detail: list = []
     for pid, mwp, mwpl, m3 in prints:
         pp = norm(_profile(mwp, mwpl))
         if want and pp and pp != want:
@@ -787,19 +790,31 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "") -> 
         used = used_by.get(pid) or {}
         if not used:
             continue
-        emap = {}
+        emap, n_sliced = {}, None
         f = local_or_archive(m3) if m3 else None
         if f and f.is_file():
             try:
                 with zipfile.ZipFile(f) as zz:
                     emap = _ext_map(origin, _ext_by_name(zz))
+                    n_sliced = len(T._colors_of(zz)) or None
             except (OSError, zipfile.BadZipFile):
                 emap = {}
+        same_count = n_sliced is None or n_sliced == len(colors)
         for e in range(1, len(colors) + 1):
-            es = emap.get(e) if emap else e           # sans nom en commun : par numero
-            a, b = h6(colors[e - 1]), used.get(es) if es else None
-            if b and len(a) == 6 and len(b) == 6:
-                out.setdefault(a, b)
+            if e in emap:
+                es, how = emap[e], "pièces"
+            elif not emap or same_count:
+                es, how = e, "numéro"                  # sans piece rapprochee : par numero (meme nombre de filaments)
+            else:
+                continue
+            a, b = h6(colors[e - 1]), used.get(es)
+            if b and len(a) == 6 and len(b) == 6 and a not in out:
+                out[a] = b
+                detail.append({"from": a, "to": b, "e": e, "es": es, "how": how, "print": pid})
+    if detail_out is not None:
+        detail_out.extend(detail)
+        detail_out.extend({"from": h6(c), "to": None, "e": k + 1} for k, c in enumerate(colors)
+                          if len(h6(c)) == 6 and h6(c) not in out and h6(c) not in {x["from"] for x in detail_out})
     return out or None
 
 

@@ -246,6 +246,19 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {p?.triangles ? <span>· {p.triangles.toLocaleString("fr-FR")} triangles</span> : null}
           {meta.skipped?.length > 0 && <span>· plateau{meta.skipped.length > 1 ? "x" : ""} {meta.skipped.join(", ")} trop lourd{meta.skipped.length > 1 ? "s" : ""} pour être affiché</span>}
         </div>}
+        {/* les couleurs utilisees : chaque couleur du createur et ce qui l'a remplacee (ou rien de trouve) */}
+        {shown && !palette && meta?.used_detail?.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6,
+          fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+          <span>Correspondance :</span>
+          {meta.used_detail.map(x => {
+            const sw = c => <span style={{ width: 14, height: 14, borderRadius: "50%", display: "inline-block", border: "1px solid var(--border)",
+              background: c ? `#${c}` : "repeating-linear-gradient(45deg, var(--surface2) 0 3px, var(--border) 3px 6px)" }}/>;
+            const tip = x.to ? `Filament n°${x.e} du projet → n°${x.es} de l'impression (${x.how === "pièces" ? "trouvé par les pièces de même nom" : "par son numéro"})`
+              : `Filament n°${x.e} : aucune de ces impressions ne l'a utilisé`;
+            return <span key={`${x.from}-${x.e}`} data-tip={tip} style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 7px",
+              borderRadius: 12, background: "var(--surface2)" }}>{sw(x.from)}<span>→</span>{sw(x.to)}</span>;
+          })}
+        </div>}
         <p style={{ margin: 0, fontSize: 11.5, color: "var(--muted)" }}>Un doigt pour tourner, deux pour zoomer et déplacer ; ⟲ recentre.</p>
       </div>
     </FSheet>,
