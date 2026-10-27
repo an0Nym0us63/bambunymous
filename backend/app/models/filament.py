@@ -22,6 +22,9 @@ class Filament(Base):
     color: Mapped[Optional[str]] = mapped_column(String(9), nullable=True)   # hex sans # — 6 chars (RGB) ou 8 chars (RGBA)
     multicolor_type: Mapped[str] = mapped_column(String, default="monochrome")
     colors_array: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV hex
+    # finition choisie a la main (silk, metal, sparkle, galaxy, marble, wood, carbon, glow, matte ; « none » = aucune) ;
+    # None = deduite du nom ou du type (« PLA Silk+ »…), comme pour un filament Bambu
+    fila_finish: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     color_bucket: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # CSV teintes ("bleu,rose") — cf. core/colors.py
     price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)       # €/bobine
     filament_weight_g: Mapped[float] = mapped_column(Float, default=1000.0)

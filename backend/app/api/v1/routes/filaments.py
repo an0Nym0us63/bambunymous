@@ -83,6 +83,7 @@ class FilamentOut(BaseModel):
     color: Optional[str]
     multicolor_type: str
     colors_array: Optional[str]
+    fila_finish: Optional[str] = None
     color_bucket: Optional[str] = None
     price: Optional[float]
     filament_weight_g: float
@@ -108,6 +109,8 @@ class FilamentCreate(BaseModel):
     color: Optional[str] = None
     multicolor_type: str = "monochrome"
     colors_array: Optional[str] = None
+    # "" = revenir a la finition deduite du nom
+    fila_finish: Optional[str] = None
     price: Optional[float] = None
     filament_weight_g: float = 1000.0
     spool_weight_g: Optional[float] = None
@@ -139,6 +142,7 @@ class SpoolOut(BaseModel):
     filament_profile_id: Optional[str] = None
     filament_multicolor_type: Optional[str] = None
     filament_colors_array: Optional[str] = None
+    filament_fila_finish: Optional[str] = None
     filament_color_bucket: Optional[str] = None
     filament_external_id: Optional[str] = None
     filament_fila_color_code: Optional[str] = None
@@ -828,6 +832,8 @@ async def update_filament(
     # sinon un ancien residu masque la nouvelle couleur (parseColorsList le prefere).
     if "colors_array" in raw and raw["colors_array"] is None:
         payload["colors_array"] = None
+    if "fila_finish" in payload:
+        payload["fila_finish"] = (payload["fila_finish"] or "").strip() or None
 
     if "spool_tare_name" in payload:
         payload["spool_tare_name"] = payload["spool_tare_name"].strip() or None
@@ -900,6 +906,7 @@ async def drying_overview(db: AsyncSession = Depends(get_db), _: str = Depends(g
             "color": f.color if f else None,
             "colors_array": f.colors_array if f else None,
             "multicolor_type": f.multicolor_type if f else None,
+            "fila_finish": f.fila_finish if f else None,
             "location": s.location,
             "remaining_weight_g": s.remaining_weight_g,
             "last_dried_at": ref.isoformat() if ref else None,
@@ -1210,6 +1217,7 @@ def _fil_out(f: Filament) -> FilamentOut:
         manufacturer=f.manufacturer, material=f.material,
         fila_type=getattr(f,"fila_type",None),
         color=f.color, multicolor_type=f.multicolor_type, colors_array=f.colors_array,
+        fila_finish=getattr(f, "fila_finish", None),
         color_bucket=getattr(f, "color_bucket", None),
         price=f.price, filament_weight_g=f.filament_weight_g, spool_weight_g=f.spool_weight_g,
         spool_tare_name=getattr(f, "spool_tare_name", None),
@@ -1249,6 +1257,7 @@ def _spool_out(s: Spool, sib: tuple | None = None) -> SpoolOut:
         filament_swatch=bool(getattr(f, "swatch", False)) if f else False,
         filament_multicolor_type=f.multicolor_type if f else None,
         filament_colors_array=f.colors_array if f else None,
+        filament_fila_finish=getattr(f, "fila_finish", None) if f else None,
         filament_color_bucket=getattr(f, "color_bucket", None) if f else None,
         filament_external_id=f.external_filament_id if f else None,
         remaining_weight_g=s.remaining_weight_g,

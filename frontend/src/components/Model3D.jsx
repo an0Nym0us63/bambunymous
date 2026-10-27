@@ -26,12 +26,64 @@ function parseBin(buf) {
 const hex6 = c => String(c || "").replace(/^#/, "").slice(0, 6).toUpperCase();
 
 // le rendu d'une finition de filament (28/10/2026) : translucide, satine, metallique, mat, lumineux
+// reflets (silk, metal) : une piece eclairee servant d'environnement, sur ces seuls materiaux (les autres gardent
+// leur rendu) ; paillettes, galaxie, marbre, bois, carbone : un motif dessine, projete sur chaque face
 const FINISH_MAT = {
   translucent: { transparent: true, opacity: 0.55, depthWrite: false, roughness: 0.25, metalness: 0 },
-  silk: { roughness: 0.22, metalness: 0.35 },
-  metal: { roughness: 0.3, metalness: 0.8 },
+  silk: { roughness: 0.18, metalness: 0.45, envMapIntensity: 1.1 },
+  metal: { roughness: 0.32, metalness: 1, envMapIntensity: 1.5 },
   matte: { roughness: 0.95, metalness: 0 },
+  carbon: { roughness: 0.38, metalness: 0.1, envMapIntensity: 0.6 },
+  sparkle: { roughness: 0.35 },
+  galaxy: { roughness: 0.35 },
 };
+const TILE_MM = 16;                                   // un motif tous les 16 mm
+
+// le motif d'une finition, en canvas 256 px qui se repete ; « emit » : il brille (paillettes), sinon il teinte
+function finishCanvas(f) {
+  const cv = document.createElement("canvas"); cv.width = cv.height = 256;
+  const g = cv.getContext("2d");
+  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const dots = (n, cols, rmin, rmax) => { for (let i = 0; i < n; i++) { g.fillStyle = cols[i % cols.length]; g.beginPath();
+    g.arc(rnd() * 256, rnd() * 256, rmin + rnd() * (rmax - rmin), 0, 7); g.fill(); } };
+  if (f === "sparkle" || f === "galaxy") {
+    g.fillStyle = "#000"; g.fillRect(0, 0, 256, 256);
+    dots(f === "sparkle" ? 260 : 320, f === "sparkle" ? ["#fff", "#ddd", "#bbb"] : ["#9db8ff", "#d8b4ff", "#7aa2ff", "#fff"], 0.6, 1.5);
+    return { cv, emit: true };
+  }
+  g.fillStyle = "#fff"; g.fillRect(0, 0, 256, 256);
+  if (f === "marble") dots(90, ["rgba(40,26,20,.85)", "rgba(60,40,30,.7)", "rgba(40,26,20,.5)"], 1.6, 5);
+  if (f === "wood") for (let y = 0; y < 256; y += 1) {
+    // des veines plus ou moins serrees, legerement ondulees
+    const v = Math.sin(y * 0.16 + Math.sin(y * 0.045) * 2.5) * 0.5 + 0.5, k = Math.round(255 - 95 * Math.pow(v, 4) - 10 * rnd());
+    g.fillStyle = `rgb(${k},${Math.round(k * 0.97)},${Math.round(k * 0.92)})`; g.fillRect(0, y, 256, 1);
+  }
+  if (f === "carbon") for (let y = 0; y < 256; y += 32) for (let x = 0; x < 256; x += 32) {
+    const a = ((x + y) / 32) % 2 === 0;
+    const gr = a ? g.createLinearGradient(x, 0, x + 32, 0) : g.createLinearGradient(0, y, 0, y + 32);
+    gr.addColorStop(0, "#7a7a7a"); gr.addColorStop(0.5, "#ffffff"); gr.addColorStop(1, "#7a7a7a");
+    g.fillStyle = gr; g.fillRect(x, y, 32, 32);
+  }
+  return { cv, emit: false };
+}
+
+// des coordonnees de texture, face par face, projetees sur le plan le plus en face (geometrie desindexee)
+function boxUV(THREE, geo) {
+  const g = geo.toNonIndexed(), p = g.attributes.position, uv = new Float32Array(p.count * 2);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3();
+  for (let i = 0; i < p.count; i += 3) {
+    a.fromBufferAttribute(p, i); b.fromBufferAttribute(p, i + 1); c.fromBufferAttribute(p, i + 2);
+    n.subVectors(c, b).cross(a.clone().sub(b));
+    const ax = Math.abs(n.x), ay = Math.abs(n.y), az = Math.abs(n.z);
+    for (let k = 0; k < 3; k++) {
+      const v = [a, b, c][k];
+      const [u, w] = az >= ax && az >= ay ? [v.x, v.y] : ax >= ay ? [v.y, v.z] : [v.x, v.z];
+      uv[(i + k) * 2] = u / TILE_MM; uv[(i + k) * 2 + 1] = w / TILE_MM;
+    }
+  }
+  g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  return g;
+}
 
 function Viewer({ url, glb, onState, palette = null, finishes = null }) {
   const box = useRef(null);
@@ -52,6 +104,16 @@ function Viewer({ url, glb, onState, palette = null, finishes = null }) {
       scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1.6));
       const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(150, 300, 200); scene.add(sun);
       const back = new THREE.DirectionalLight(0xffffff, 0.6); back.position.set(-200, 120, -150); scene.add(back);
+      // l'environnement des reflets, prepare seulement s'il sert
+      let envTex = null;
+      const envMap = async () => {
+        if (envTex) return envTex;
+        const { RoomEnvironment } = await import("three/examples/jsm/environments/RoomEnvironment.js");
+        const pm = new THREE.PMREMGenerator(renderer);
+        envTex = pm.fromScene(new RoomEnvironment(), 0.04).texture; pm.dispose(); disposables.push(envTex);
+        return envTex;
+      };
+      const texOf = {};
       // le plateau de l'imprimante, en repere
       const grid = new THREE.GridHelper(BED, 16, 0x94a3b8, 0xcbd5e1); grid.material.transparent = true; grid.material.opacity = 0.45; scene.add(grid);
       const camera = new THREE.PerspectiveCamera(40, el.clientWidth / el.clientHeight, 1, 5000);
@@ -108,9 +170,23 @@ function Viewer({ url, glb, onState, palette = null, finishes = null }) {
             const c = palette?.[own] ? new THREE.Color(`#${hex6(palette[own])}`) : new THREE.Color(`rgb(${g.color.join(",")})`);
             // sa finition : celle du filament d'origine, ou celle de la bobine utilisee / choisie
             const fin = finishes?.[own];
-            const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true, ...(FINISH_MAT[fin] || {}) });
-            if (fin === "glow") { mat.emissive = c.clone(); mat.emissiveIntensity = 0.35; }
-            holder.add(new THREE.Mesh(geo, mat));
+            const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true, envMapIntensity: 0,
+              ...(FINISH_MAT[fin] || {}) });
+            if (fin === "glow") { mat.emissive = c.clone(); mat.emissiveIntensity = 0.6; }
+            if (FINISH_MAT[fin]?.envMapIntensity) mat.envMap = await envMap();
+            let mesh = geo;
+            if (["sparkle", "galaxy", "marble", "wood", "carbon"].includes(fin)) {
+              if (!texOf[fin]) {
+                const { cv, emit } = finishCanvas(fin);
+                const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
+                t.anisotropy = 4; texOf[fin] = { t, emit }; disposables.push(t);
+              }
+              const { t, emit } = texOf[fin];
+              mesh = boxUV(THREE, geo); geo.dispose();
+              if (emit) { mat.emissive = new THREE.Color(0xffffff); mat.emissiveMap = t; mat.emissiveIntensity = 0.9; }
+              else mat.map = t;
+            }
+            holder.add(new THREE.Mesh(mesh, mat));
           }
           model.add(holder);
         }

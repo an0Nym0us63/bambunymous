@@ -817,6 +817,7 @@ class MQTTManager:
                                                     "initial_weight_g": _fi2.filament_weight_g if _fi2 else None,
                                                     "multicolor_type": _fi2.multicolor_type if _fi2 else None,
                                                     "colors_array": _fi2.colors_array if _fi2 else None,
+                                                    "fila_finish": _fi2.fila_finish if _fi2 else None,
                                                 }
                                                 _t._spool_info_cache = _info
                                                 _SPOOL_INFO_CACHE[_key] = _info

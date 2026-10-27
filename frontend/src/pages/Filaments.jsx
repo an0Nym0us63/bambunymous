@@ -20,7 +20,7 @@ import { useTrackDetail } from "../utils/track";
 import Select from "../components/Select";
 import { useIsAdmin } from "../store/auth";
 import { Pressable, openMenu } from "../components/ContextMenu";
-import { colorBg, parseColorsList, finishOf } from "../utils/colors";
+import { colorBg, parseColorsList, finishOf, autoFinishOf, FINISHES } from "../utils/colors";
 import SpoolSVG from "../components/SpoolSVG";
 import { EmptyCard, FCard, FLAB, FROW, FRow, FSheet, FTile, FVAL, KpiBar, PageTabs, SearchRow, agoFr, dayFr, fBtn, fChip, fGrad, fRound, isLight, lighten } from "../components/FicheKit";
 import GalleryCompare from "../components/GalleryCompare";
@@ -64,6 +64,22 @@ function hexDisplay(hex) {
 
 
 // Swatch couleur — le damier de transparence est géré par colorBg.
+// La finition d'un filament : preremplie d'apres son nom ou son type (« PLA Silk+ »), a choisir pour tout
+// filament (une autre marque n'a pas forcement le mot dans son nom). L'apercu la montre sur sa couleur.
+function FinishPicker({ value, auto, colors, style, lStyle, onChange }) {
+  return <div style={{ marginBottom:10 }}>
+    <label style={lStyle}>Finition</label>
+    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+      <div style={{ flex:1, minWidth:0 }}>
+        <Select style={style} value={value || "none"} onChange={e => onChange(e.target.value)}
+          options={[{ value:"none", label: auto ? "Aucune" : "Aucune · d'après le nom" },
+            ...FINISHES.map(([k, l]) => ({ value:k, label: k === auto ? `${l} · d'après le nom` : l }))]}/></div>
+      <span style={{ width:34, height:34, flexShrink:0, borderRadius:9, border:"1px solid var(--border)", overflow:"hidden",
+        ...colorBg(colors?.length ? colors : ["#9CA3AF"], null, value === "none" ? null : value) }}/>
+    </div>
+  </div>;
+}
+
 function ColorSwatch({ color, colorsArray, multicolorType, finish = null, size=40, radius=10 }) {
   const colors = parseColorsList(color, colorsArray);
   return (
@@ -843,6 +859,10 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
   };
   const [deleting, setDeleting] = React.useState(false);
   const [showUsage, setShowUsage] = React.useState(false);
+  // l'historique, et la fiche d'impression qu'il ouvre, juste au-dessus des fiches deja ouvertes (la bobine peut
+  // venir d'une fiche AMS...), mais sous la vue 3D, la fiche MakerWorld et les dialogues : a 9999 / 10000, la vue 3D
+  // ouverte depuis la fiche d'impression s'affichait derriere
+  const [usageZ, setUsageZ] = React.useState(1300);
   const [usageHistory, setUsageHistory] = React.useState([]);
   const [loadingUsage, setLoadingUsage] = React.useState(false);
 
@@ -851,6 +871,8 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
     try {
       const r = await client.get(`/filaments/spools/${spool.id}/usage`);
       setUsageHistory(r.data || []);
+      setUsageZ(Math.max(1300, ...[...document.body.children].map(e => parseInt(getComputedStyle(e).zIndex, 10) || 0)
+        .filter(z => z < 4000).map(z => z + 1)));
       setShowUsage(true);
     } catch(e) { showAlert('Erreur: ' + e.message); }
     setLoadingUsage(false);
@@ -1046,7 +1068,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
       {addOpen && <AddSpoolModal preselect={spool.filament_id} onClose={() => setAddOpen(false)}
         onSave={() => { setAddOpen(false); onDelete?.(); }}/>}
       {showUsage && createPortal(
-        <FSheet onClose={() => setShowUsage(false)} z={9999}>
+        <FSheet onClose={() => setShowUsage(false)} z={usageZ}>
           <div style={{ padding:"40px 16px 14px", display:"flex", alignItems:"center", gap:12,
             background:`radial-gradient(circle at 12% 50%, ${main}40, transparent 60%), var(--surface2)` }}>
             <SpoolSVG colors={colorsList} finish={finishOf(spool)} size={52} type={spool.filament_multicolor_type}/>
@@ -1080,7 +1102,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
               </button>; })}
           </div>
         </FSheet>, document.body)}
-      {detail && createPortal(<div onClick={e => e.stopPropagation()} style={{ position:"relative", zIndex:10000 }}>
+      {detail && createPortal(<div onClick={e => e.stopPropagation()} style={{ position:"relative", zIndex:usageZ + 1 }}>
         <PrintDetail p={detail} onClose={() => setDetail(null)} onDelete={() => { setDetail(null); loadUsage(); }}/></div>, document.body)}
       {filSheet && createPortal(
         <FilamentSheet f={filSheet} onClose={() => setFilSheet(null)}/>,
@@ -1584,6 +1606,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
       ? f.colors_array.split(",").map(c=>c.trim().replace(/^#/,"")).join(", ")
       : (f.color || ""),
     multicolor_type:  f.multicolor_type || "monochrome",
+    fila_finish:      f.fila_finish || autoFinishOf(f) || "none",
     profile_id:       f.profile_id || "",
     fila_color_code:  f.fila_color_code || "",
     filament_weight_g: f.filament_weight_g || 1000,
@@ -1637,6 +1660,8 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
         color:             col || undefined,
         colors_array:      ca ?? null,
         multicolor_type:   mct,
+        // gardee seulement si elle differe de celle que le nom donne ("" : on suit le nom)
+        fila_finish:       form.fila_finish === (autoFinishOf(form) || "none") ? "" : form.fila_finish,
         profile_id:        form.profile_id || undefined,
         fila_color_code:   form.fila_color_code || undefined,
         filament_weight_g: Number(form.filament_weight_g) || 1000,
@@ -1771,6 +1796,8 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
                               { value:"coaxial",  label:"Coaxial (segments)" }]}/>
                 </div>
               )}
+              <FinishPicker value={form.fila_finish} auto={autoFinishOf(form)} colors={liveColors} style={iStyle} lStyle={lStyle}
+                onChange={v => setForm(p => ({ ...p, fila_finish: v }))}/>
               {F("Profile ID Bambu (ex: GFA00)","profile_id")}
               {F("Code couleur Bambu (ex: 10600)","fila_color_code")}
               {F("Poids total (g)","filament_weight_g","number")}
@@ -1814,6 +1841,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               <FRow l="Sous-type" v={f.fila_type}/>
               <FRow l="Couleur" v={colorTxt} mono pre={<ColorSwatch color={f.color} colorsArray={f.colors_array} multicolorType={f.multicolor_type} finish={finishOf(f)} size={16} radius={4}/>}/>
               <FRow l="Multicolor" v={f.multicolor_type && f.multicolor_type !== "monochrome" ? f.multicolor_type : null}/>
+              <FRow l="Finition" v={FINISHES.find(([k]) => k === finishOf(f))?.[1] || null}/>
             </FCard>
             <FCard t="Côté Bambu" i="🏷️" c="#0EA5E9">
               <FRow l="Profile ID" v={f.profile_id} mono/>
@@ -2310,6 +2338,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
         color:             col || undefined,
         colors_array:      ca ?? null,
         multicolor_type:   mct,
+        fila_finish:       form.fila_finish && form.fila_finish !== (autoFinishOf(form) || "none") ? form.fila_finish : undefined,
         profile_id:        form.profile_id || undefined,
         fila_color_code:   form.fila_color_code || undefined,
         filament_weight_g: Number(form.weight) || 1000,
@@ -2486,6 +2515,9 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
                                 { value:"coaxial",  label:"Coaxial (segments)" }]}/>
                   </div>
                 )}
+                <div style={{ marginTop:8 }}>
+                  <FinishPicker value={form.fila_finish || autoFinishOf(form) || "none"} auto={autoFinishOf(form)} colors={liveColors}
+                    style={field} lStyle={lStyle} onChange={v => setForm(p => ({ ...p, fila_finish: v }))}/></div>
               </FCard>
               <FCard t="Côté Bambu et poids" i="⚖" c="#0EA5E9">
                 {F("Profile ID Bambu (ex: GFA00)", "profile_id", "", { fontFamily:"JetBrains Mono,monospace" })}

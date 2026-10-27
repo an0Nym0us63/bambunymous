@@ -109,6 +109,7 @@ class SpoolInfoOut(BaseModel):
     profile_id: Optional[str] = None
     multicolor_type: Optional[str] = None
     colors_array: Optional[str] = None
+    fila_finish: Optional[str] = None
     remaining_weight_g: Optional[float] = None
     initial_weight_g: Optional[float] = None
     spool_weight_g: Optional[float] = None
@@ -278,6 +279,7 @@ def _spool_info(spool_id, spools_map):
         profile_id=f.profile_id if f else None,
         multicolor_type=f.multicolor_type if f else None,
         colors_array=f.colors_array if f else None,
+        fila_finish=f.fila_finish if f else None,
         remaining_weight_g=s.remaining_weight_g,
         initial_weight_g=f.filament_weight_g if f else None,
         spool_weight_g=f.spool_weight_g if f else None,

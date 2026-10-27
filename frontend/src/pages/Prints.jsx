@@ -717,8 +717,11 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
 // plusieurs plateaux MakerWorld regroupes sur un seul).
 const manualPlates = (raw) => { try { const m = JSON.parse(raw || "null"); return m && Array.isArray(m.plates) ? m : null; } catch { return null; } };
 
+// les corrections faites sur la page, avant relecture des prints : partagees par la carte depliee et son double
+// cache (carte repliee), sinon replier la carte oubliait le profil qu'on venait de retenir
+const PLATES_OVER = {};
 function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, modelTitle, modelTitleFr }) {
-  const [over, setOver] = useState({});          // corrections faites ici, avant relecture
+  const [over, setOver] = useState(() => ({ ...PLATES_OVER }));          // corrections faites ici, avant relecture
   const [imgGuess, setImgGuess] = useState({});        // plateau probable par print (silhouette de son apercu)
   const guessIds = printsIn.filter(pr => !manualPlates(pr.mw_plates) && pr.status !== "FAILED" && pr.status !== "CANCELLED")
     .map(pr => pr.id).join(",");
@@ -794,7 +797,7 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
   const shownId = shownP?.profile_id ?? null;
   useEffect(() => {
     if (guessed) onProfile?.(shownP ? { id: shownId, title: shownP.title, cover: shownP.cover, deduced: !sure && !pid } : null);
-  }, [shownId, guessed]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [shownId, guessed, !sure && !pid]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (!avec.length || !prints.length) return null;
   const prof = avec.find(x => x.profile_id === pid) || guess;
   const deduit = !sure;
@@ -832,6 +835,7 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
   const save = async (pr, plates, reset = false) => {
     try {
       const { data } = await client.put(`/prints/${pr.id}/mw-plates`, { profile: prof.profile_id, plates, reset });
+      PLATES_OVER[pr.id] = data.mw_plates;
       setOver(o => ({ ...o, [pr.id]: data.mw_plates }));
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
@@ -862,6 +866,16 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
       ],
     });
   };
+  // « C'est celui-la » : le profil montre devient celui de tous ces prints (choix a la main, garde en base) ; leurs
+  // plateaux suivent -- ceux deja coches pour ce profil, sinon le numero lu dans le fichier s'il existe ici
+  const confirmed = sure && String(sure.profile_id) === String(prof.profile_id);
+  const confirm = async () => {
+    for (const pr of prints) {
+      const i = parseInt(pr.plate_id, 10);
+      await save(pr, platesOf(pr) || (i && prof.plates.some(q => q.index === i) ? [i] : []));
+    }
+    setPid(null);
+  };
   const nDone = prof.plates.filter(pl => done[pl.index]).length;
   return (
     <div style={{ padding:"8px 10px 10px", borderTop:"1px solid var(--border)" }}>
@@ -876,8 +890,13 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
             {avec.map(x => <option key={x.profile_id} value={x.profile_id}>{x.title || `Profil ${x.profile_id}`}</option>)}
           </select>
         ) : <span style={{ fontSize:11, color:"var(--muted)" }}>{prof.title}</span>}
-        {deduit && !pid && <span title="L'imprimante n'a pas donné le profil de ces prints : profil déduit"
+        {deduit && !pid && <span data-tip="L'imprimante n'a pas donné le profil de ces prints : profil déduit"
           style={{ fontSize:10, color:"var(--muted)", opacity:0.8 }}>(profil déduit)</span>}
+        {isAdmin && !visiting && !confirmed && (
+          <button onClick={confirm} data-tip="C'est bien ce profil : le retenir pour ces prints"
+            style={{ width:22, height:22, padding:0, borderRadius:"50%", cursor:"pointer", fontSize:12, fontWeight:800,
+              lineHeight:"20px", color:"#16a34a", background:"rgba(34,197,94,0.12)", border:"1px solid rgba(34,197,94,0.5)" }}>✓</button>
+        )}
         {isAdmin && !visiting && <span style={{ fontSize:10, color:"var(--muted)", opacity:0.8 }}>· touche un plateau pour corriger</span>}
         {isAdmin && !visiting && nProbable > 0 && (
           <button onClick={acceptAll} title="Plateaux reconnus à l'image de tes prints"

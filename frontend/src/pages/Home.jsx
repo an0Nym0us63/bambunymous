@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
+import { trayBg, parseColorsList, finishOf } from "../utils/colors";
 import { stageLabel, stageIsPause } from "../utils/printStage";
 import { createPortal } from "react-dom";
 import { usePrinter } from "../store/printer";
@@ -754,8 +755,8 @@ function HubSwatch({ t, active, h, radius = 6 }) {
   return (
     <span title={t?.empty ? "vide" : [t?.filament_type, r != null ? `${Math.round(r * 100)} %` : null].filter(Boolean).join(" · ")}
       style={{ position: "relative", display: "block", height: h, minWidth: 0, borderRadius: radius,
-        background: c ? (r != null && h >= 18 ? `linear-gradient(to bottom, rgba(0,0,0,0.30) ${(1 - r) * 100}%, transparent ${(1 - r) * 100}%), ${c}` : c)
-          : "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0 2px, transparent 2px 6px)",
+        ...(c ? trayBg(t, r != null && h >= 18 ? `linear-gradient(to bottom, rgba(0,0,0,0.30) ${(1 - r) * 100}%, transparent ${(1 - r) * 100}%)` : null)
+          : { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0 2px, transparent 2px 6px)" }),
         border: c ? "1px solid rgba(0,0,0,0.18)" : "1px dashed rgba(148,163,184,0.6)",
         outline: active ? "2px solid #3b82f6" : "none", outlineOffset: 1.5,
         animation: active ? (pop ? "bn-swap .55s ease-out, bn-ring 2s ease-out .55s infinite" : "bn-ring 2s ease-out infinite") : "none" }}/>
@@ -944,7 +945,7 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
       <span style={{ flex: 1, minWidth: 0, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden" }}>
         {actT ? <><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#3b82f6", animation: "livePulse 2s infinite" }}/>
           <span style={{ color: "#3b82f6" }}>{slotLabel(act, actTray)}</span>
-          <span style={{ width: 11, height: 11, borderRadius: 4, background: trayHex(actT) || "var(--border)", border: "1px solid rgba(0,0,0,0.2)" }}/>
+          <span style={{ width: 11, height: 11, borderRadius: 4, ...(trayBg(actT) || { background: "var(--border)" }), border: "1px solid rgba(0,0,0,0.2)" }}/>
           <span style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.15, overflow: "hidden" }}>
             <span style={{ color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis" }}>{actT.spool_info?.translated_name || actT.spool_info?.name || actT.filament_type}</span>
             {(actT.spool_info?.fila_type || actT.spool_info?.material || actT.spool_info?.brand) && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)",
@@ -1158,7 +1159,7 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
             color: on ? "#3b82f6" : "var(--text2)" }}>
             {amsName(a.id)}
             <span style={{ display: "inline-flex", gap: 2 }}>{(a.trays || []).map(t => <span key={t.id} style={{ width: 7, height: 7, borderRadius: 2,
-              background: trayHex(t) || "var(--border)" }}/>)}</span>
+              ...(trayBg(t) || { background: "var(--border)" }) }}/>)}</span>
             {act && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#3b82f6", animation: "livePulse 2s infinite" }}/>}
           </button>
         );
@@ -1611,7 +1612,8 @@ function PrinterPopup({ status, img, name, onClose }) {
 
         {tray && !tray.empty ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
           {tray && !tray.empty && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, background: "var(--surface2)" }}>
-            <span style={{ flexShrink: 0, display: "inline-flex" }}><SpoolSVG colors={[trayHex(tray) || "#888888"]} size={52} active={live}/></span>
+            <span style={{ flexShrink: 0, display: "inline-flex" }}><SpoolSVG colors={tray && !tray.empty ? parseColorsList(tray.spool_info?.color || tray.color, tray.spool_info?.colors_array) : ["#888888"]}
+              finish={finishOf(tray?.spool_info, tray)} size={52} active={live}/></span>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>Filament en cours · {slotLabel(status.active_ams_id, status.active_tray_id)}</div>
               <div style={{ fontSize: 14.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -1838,7 +1840,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
         {side && status?.connected && (
           <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end", flexShrink: 0 }}>
             {tray && !tray.empty && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>
-              <span style={{ width: 14, height: 14, borderRadius: "50%", background: trayHex(tray) || "#888888",
+              <span style={{ width: 14, height: 14, borderRadius: "50%", ...(trayBg(tray) || { background: "#888888" }),
                 boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2)" }}/>{tray.filament_type || "?"}
               <span style={{ color: "var(--muted)", fontWeight: 700 }}>{slotLabel(status.active_ams_id, status.active_tray_id)}</span></span>}
             {temps(12, 10)}
@@ -2214,7 +2216,7 @@ export default function Home() {
     if (!trays.length) return null;
     return <span style={{ display: "inline-flex", gap: 3 }}>{trays.slice(0, 16).map((t, i) => <span key={i} data-pk="" title={t.empty ? "vide" : t.filament_type || ""}
       style={{ width: 14, height: 14, borderRadius: "50%", border: "1px solid rgba(0,0,0,0.2)",
-        background: trayHex(t) || "var(--surface2)" }}/>)}</span>;
+        ...(trayBg(t) || { background: "var(--surface2)" }) }}/>)}</span>;
   };
   // les blocs de l'accueil, tuiles de la grille comme les autres (l'imprimante ne se masque pas)
   const blocks = {

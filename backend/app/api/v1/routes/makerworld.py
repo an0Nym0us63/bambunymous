@@ -808,7 +808,7 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
                                    .where(Print.id.in_(print_ids)).order_by(Print.id.desc()))).all()
         rows = (await db.execute(
             select(FU.print_id, FU.ams_slot, FU.color_hex, Filament.color, FU.grams_used, FU.filament_type,
-                   Filament.fila_type, Filament.name)
+                   Filament.fila_type, Filament.name, Filament.fila_finish)
             .outerjoin(Spool, Spool.id == FU.spool_id).outerjoin(Filament, Filament.id == Spool.filament_id)
             .where(FU.print_id.in_(print_ids)))).all()
         raw = (await db.execute(select(MW.profiles).where(MW.design_id == did))).scalar() if did else None
@@ -822,11 +822,12 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
     used_by: dict = {}
     grams_by: dict = {}
     fin_by: dict = {}
-    for pid, slot, chex, fcol, g, ftype, ffila, fname in rows:
+    for pid, slot, chex, fcol, g, ftype, ffila, fname, ffin in rows:
         if slot:
             used_by.setdefault(pid, {})[int(slot)] = h6(fcol or chex)
             grams_by.setdefault(pid, {})[int(slot)] = float(g or 0)
-            fin_by.setdefault(pid, {})[int(slot)] = T.finish_of(ffila, fname, ftype, color=fcol or chex)
+            fin_by.setdefault(pid, {})[int(slot)] = (None if ffin == "none" else ffin) if ffin \
+                else T.finish_of(ffila, fname, ftype, color=fcol or chex)
     # le poids de chaque filament sur chaque plateau du profil d'origine (fiche MakerWorld en cache) : quand le projet
     # imprime a renumerote ses filaments sans garder le nom des pieces, le plus lourd va avec le plus lourd
     plate_fils: dict = {}

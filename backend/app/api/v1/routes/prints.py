@@ -86,6 +86,8 @@ def _usage_to_dict(u) -> dict:
         d["filament_colors_array"] = u._filament_colors_array
     if hasattr(u, "_filament_multicolor_type"):
         d["filament_multicolor_type"] = u._filament_multicolor_type
+    if getattr(u, "_filament_fila_finish", None):
+        d["filament_fila_finish"] = u._filament_fila_finish
     return d
 
 
@@ -170,6 +172,7 @@ async def _enrich_filament_usage(db, prints):
             u._filament_fila_type  = fil.fila_type
             u._filament_colors_array    = fil.colors_array
             u._filament_multicolor_type = fil.multicolor_type
+            u._filament_fila_finish = fil.fila_finish
 
 
 def _search_condition(search: str):
@@ -1082,7 +1085,7 @@ async def prints_stats(
         # ── Filaments les plus utilisés
         fil_rows = (await db.execute(
             select(_Fil.id, _Fil.name, _Fil.translated_name, _Fil.manufacturer,
-                   _Fil.color, _Fil.colors_array, _Fil.multicolor_type,
+                   _Fil.color, _Fil.colors_array, _Fil.multicolor_type, _Fil.fila_finish, _Fil.fila_type,
                    func.sum(FilamentUsage.grams_used).label("grams"),
                    func.sum(func.coalesce(FilamentUsage.cost, 0)).label("cost"))
             .join(_Spool, FilamentUsage.spool_id == _Spool.id)
@@ -1180,6 +1183,7 @@ async def prints_stats(
                 "color": r.color,
                 "colors_array": r.colors_array,
                 "multicolor_type": r.multicolor_type,
+                "fila_finish": r.fila_finish, "fila_type": r.fila_type,
                 "grams": round(float(r.grams or 0)),
                 "cost": round(float(r.cost or 0), 2),
             } for r in fil_rows],

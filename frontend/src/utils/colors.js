@@ -86,7 +86,19 @@ const FINISH_WORDS = [
 ];
 const FINISH_KEYS = ["fila_type", "sub_brand", "sub_brands", "tray_sub_brands", "name", "translated_name", "material",
   "filament_type", "filament_name", "filament_fila_type", "product", "type", "tray_type"];
+// les finitions, dans l'ordre du menu de la fiche d'un filament
+export const FINISHES = [["silk", "Soie (silk)"], ["metal", "Métal"], ["sparkle", "Paillettes (sparkle)"], ["galaxy", "Galaxie"],
+  ["marble", "Marbre"], ["wood", "Bois"], ["carbon", "Carbone"], ["glow", "Phosphorescent (glow)"], ["matte", "Mat"]];
+// La finition choisie sur la fiche du filament (fila_finish ; « none » = aucune) passe avant celle lue dans le nom.
 export function finishOf(...objs) {
+  for (const o of objs) {
+    const v = o && typeof o === "object" ? o.fila_finish || o.filament_fila_finish : null;
+    if (v) return v === "none" ? null : v;
+  }
+  return autoFinishOf(...objs);
+}
+// la finition lue dans le nom ou le type seulement (ce que la fiche propose par defaut)
+export function autoFinishOf(...objs) {
   const txt = objs.flatMap(o => (typeof o === "string" ? [o] : o && typeof o === "object" ? FINISH_KEYS.map(k => o[k]) : []))
     .filter(v => typeof v === "string" && v).join(" ").toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
   if (!txt) return null;
@@ -120,9 +132,10 @@ function finishLayers(f, bar) {
       ? [dot("rgba(45,30,25,.6)", 0.9, "0 0", 9), dot("rgba(45,30,25,.45)", 0.6, "4px 3px", 7)]
       : [dot("rgba(45,30,25,.65)", 1.1, "0 0", 11), dot("rgba(45,30,25,.5)", 0.7, "4px 6px", 9),
          dot("rgba(60,40,30,.45)", 1.4, "7px 2px", 17), dot("rgba(255,240,228,.55)", 0.6, "2px 8px", 13)];
+    // le bois : un fil irregulier, veines sombres et claires (lisibles sur un bois clair comme fonce)
     case "wood": return bar
-      ? [["repeating-linear-gradient(95deg,rgba(70,40,15,0) 0 5px,rgba(70,40,15,.14) 5px 6px)", ...FULL]]
-      : [["repeating-radial-gradient(ellipse 140% 60% at 10% 120%,rgba(70,40,15,0) 0 5px,rgba(70,40,15,.18) 5px 6px)", ...FULL]];
+      ? [["repeating-linear-gradient(95deg,rgba(75,40,12,0) 0 4px,rgba(75,40,12,.22) 4px 5px,rgba(255,235,205,0) 5px 8px,rgba(255,235,205,.2) 8px 9px)", ...FULL]]
+      : [["repeating-radial-gradient(ellipse 260% 120% at 0% 160%,rgba(75,40,12,0) 0 2.5px,rgba(75,40,12,.34) 2.5px 3.5px,rgba(75,40,12,0) 3.5px 5px,rgba(255,235,205,.3) 5px 6px,rgba(75,40,12,0) 6px 8.5px,rgba(75,40,12,.2) 8.5px 9px,rgba(75,40,12,0) 9px 11px)", ...FULL]];
     case "carbon": return bar
       ? [["repeating-conic-gradient(rgba(255,255,255,.07) 0 25%,rgba(0,0,0,.18) 0 50%)", "4px 4px", "0 0"]]
       : [["linear-gradient(135deg,rgba(255,255,255,.18),rgba(255,255,255,0) 45%)", ...FULL],
@@ -146,6 +159,30 @@ export function colorBg(colors, type, finish = null, opts = {}) {
   return _colorBg(colors, type);
 }
 
+// Le fond d'un emplacement d'AMS (la bobine associee d'abord, puis ce que dit l'AMS) : couleurs, transparence,
+// finition. `top` : une couche posee par-dessus (l'assombri de ce qui est consomme). null si vide ou sans couleur.
+export function trayBg(t, top = null) {
+  if (!t || t.empty) return null;
+  const si = t.spool_info || {};
+  const colors = parseColorsList(si.color || si.filament_color || t.color, si.colors_array || t.colors_array);
+  if (!colors.length) return null;
+  const st = colorBg(colors, si.multicolor_type || t.multicolor_type, finishOf(si, t));
+  return top ? bgWithTop(st, top) : st;
+}
+
+// Pose une couche (un degrade CSS) au-dessus d'un fond rendu par colorBg, quelle que soit sa forme.
+export function bgWithTop(st, layer) {
+  if (st.backgroundImage) {
+    const n = st.backgroundImage.split(/,(?![^(]*\))/).length;
+    return { ...st, backgroundImage: `${layer},${st.backgroundImage}`,
+      backgroundSize: `100% 100%,${st.backgroundSize || Array(n).fill("100% 100%").join(",")}`,
+      backgroundPosition: `0 0,${st.backgroundPosition || Array(n).fill("0 0").join(",")}`,
+      backgroundRepeat: `no-repeat,${st.backgroundRepeat || Array(n).fill("no-repeat").join(",")}` };
+  }
+  if (st.background) return { ...st, background: `${layer},${st.background}` };
+  return { ...st, backgroundImage: layer, backgroundRepeat: "no-repeat" };
+}
+
 function _withFinish(colors, type, over, finish, opts) {
   const base = _colorBg(colors, type);
   // la couche couleur (et le damier) de base, a placer sous la finition
@@ -160,7 +197,7 @@ function _withFinish(colors, type, over, finish, opts) {
       base.backgroundRepeat || Array(nBase).fill("no-repeat").join(",")].join(","),
   };
   // le phosphorescent : un halo autour (pas sur une barre)
-  if (finish === "glow" && !opts.bar) style.filter = `drop-shadow(0 0 4px ${opaqueColors([colors[0]])[0]})`;
+  if (finish === "glow" && !opts.bar) style.filter = `drop-shadow(0 0 3px ${opaqueColors([colors[0]])[0]}) drop-shadow(0 0 7px ${opaqueColors([colors[0]])[0]})`;
   return style;
 }
 

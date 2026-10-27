@@ -208,6 +208,7 @@ async def _migrate():
         ("makerworld_designs", "extras",       "TEXT"),
         ("filaments", "multicolor_type",      "TEXT DEFAULT 'monochrome'"),
         ("filaments", "colors_array",         "TEXT"),
+        ("filaments", "fila_finish",          "TEXT"),
         ("filaments", "swatch",               "INTEGER DEFAULT 0"),
         ("filaments", "transparent",          "INTEGER DEFAULT 0"),
         ("filaments", "to_order",             "INTEGER DEFAULT 0"),

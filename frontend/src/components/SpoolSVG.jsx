@@ -47,6 +47,35 @@ function FinishDefs({ f, id }) {
   return null;
 }
 
+// Le bois (28/10/2026) : des cernes irreguliers, ondules et decentres, alternant veine sombre et bois clair, et
+// deux fentes de sechage -- une coupe de tronc, pas des cercles. Claires sur un bois fonce, sombres sinon.
+const WOOD_RINGS = (() => {
+  const out = [];
+  const radii = [15.5, 17.2, 18.6, 20.6, 22.1, 23.4, 25.3, 26.6, 28.4];
+  radii.forEach((r, k) => {
+    // meme ondulation d'un cerne a l'autre (a peine decalee) : ils ne se croisent pas, comme dans un tronc
+    const ph = k * 0.25, pts = [];
+    for (let i = 0; i <= 48; i++) {
+      const a = (i / 48) * 2 * Math.PI;
+      const rr = r + 0.9 * Math.sin(3 * a + ph) + 0.35 * Math.sin(7 * a + ph);
+      pts.push(`${(41 + rr * Math.cos(a)).toFixed(2)} ${(39.5 + rr * Math.sin(a)).toFixed(2)}`);
+    }
+    out.push({ d: `M${pts.join("L")}Z`, w: [1.3, 0.6, 0.9, 1.6, 0.6, 1.1, 0.8, 1.4, 0.7][k], light: k % 3 === 1 });
+  });
+  return out;
+})();
+function WoodGrain({ dark, id }) {
+  const vein = dark ? "rgba(255,225,180,.38)" : "rgba(75,40,12,.42)";
+  const pale = dark ? "rgba(0,0,0,.25)" : "rgba(255,240,215,.45)";
+  return <g>
+    <clipPath id={id}><circle cx="40" cy="40" r="29.5"/></clipPath>
+    <g clipPath={`url(#${id})`}>
+      {WOOD_RINGS.map((x, i) => <path key={i} d={x.d} fill="none" stroke={x.light ? pale : vein} strokeWidth={x.w} strokeLinejoin="round"/>)}
+      <path d="M58 22 L62.5 18.5 M21 56 L17.5 60.5" stroke={vein} strokeWidth="1" strokeLinecap="round"/>
+    </g>
+  </g>;
+}
+
 export default function SpoolSVG({ colors, empty, size=68, active, type, finish = null }) {
   const c1 = colors?.[0] || (empty ? "#2a2a2a" : "#888");
   const multi = colors && colors.length > 1;
@@ -91,7 +120,7 @@ export default function SpoolSVG({ colors, empty, size=68, active, type, finish 
           </linearGradient>
         )}
         {fin && <FinishDefs f={fin} id={finId}/>}
-        {fin === "glow" && <filter id={`gl${uid}`} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.5"/></filter>}
+        {fin === "glow" && <filter id={`gl${uid}`} x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="3.5"/></filter>}
         {isGradient && (
           <linearGradient id={uid} x1="10" y1="40" x2="70" y2="40" gradientUnits="userSpaceOnUse">
             {colors.map((cl, i) => (
@@ -106,7 +135,9 @@ export default function SpoolSVG({ colors, empty, size=68, active, type, finish 
         style={{ transformBox: "view-box", transformOrigin: "40px 40px", animation: "bn-spool-glow 2.4s ease-in-out infinite" }}/>}
 
       {/* phosphorescent : un halo de sa couleur autour */}
-      {fin === "glow" && <circle cx="40" cy="40" r="33" fill={c1} opacity=".55" filter={`url(#gl${uid})`}/>}
+      {fin === "glow" && <>
+        <circle cx="40" cy="40" r="36" fill={c1} opacity=".9" filter={`url(#gl${uid})`}/>
+        <circle cx="40" cy="40" r="32" fill="#fff" opacity=".35" filter={`url(#gl${uid})`}/></>}
 
       {/* Damier de transparence derrière le disque : rend l'alpha visible. */}
       {transp && <circle cx="40" cy="40" r="30" fill={`url(#${cbId})`}/>}
@@ -143,8 +174,9 @@ export default function SpoolSVG({ colors, empty, size=68, active, type, finish 
       )}
 
       {/* la finition, par-dessus la couleur : reflet, paillettes, mouchetures, tissage, lueur ; le bois en cernes */}
-      {fin && fin !== "wood" && fin !== "matte" && <circle cx="40" cy="40" r="30" fill={`url(#${finId})`}/>}
-      {fin === "wood" && [17, 19.5, 22, 24.5, 27, 29].map(r => <circle key={r} cx="40" cy="40" r={r} fill="none" stroke="rgba(70,40,15,.22)" strokeWidth=".8"/>)}
+      {fin && fin !== "wood" && fin !== "matte" && <path fillRule="evenodd" fill={`url(#${finId})`}
+        d="M10 40a30 30 0 1 0 60 0a30 30 0 1 0-60 0ZM26 40a14 14 0 1 1 28 0a14 14 0 1 1-28 0Z"/>}
+      {fin === "wood" && <WoodGrain dark={dark} id={`wd${uid}`}/>}
       {fin === "matte" && <circle cx="40" cy="40" r="29.5" fill="none" stroke="rgba(0,0,0,.18)" strokeWidth="1"/>}
 
       {/* Anneau extérieur (léger contour) */}
