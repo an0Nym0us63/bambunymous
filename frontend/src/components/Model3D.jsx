@@ -184,7 +184,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
               piece.userData.glow = true; mat.userData.dayEmit = mat.emissiveIntensity;
               // dans le noir, autant de lumiere pour toutes les couleurs : un bleu ou un rouge (sombres) luisent plus fort
               const lum = 0.2126 * mat.emissive.r + 0.7152 * mat.emissive.g + 0.0722 * mat.emissive.b;
-              mat.userData.nightEmit = Math.min(1.8, 0.42 / Math.max(0.12, lum));
+              mat.userData.nightEmit = Math.min(1.3, 0.3 / Math.max(0.12, lum));
               // un liseré lumineux sur les bords (la ou la surface fuit le regard) : on le devine phosphorescent meme
               // lumiere allumee
               const rim = { value: 2.2 };
@@ -223,7 +223,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
             composer = new EffectComposer(renderer);
             composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(el.clientWidth, el.clientHeight);
             composer.addPass(new RenderPass(scene, camera));
-            composer.addPass(new UnrealBloomPass(new THREE.Vector2(el.clientWidth, el.clientHeight), 0.65, 0.35, 0.35));
+            composer.addPass(new UnrealBloomPass(new THREE.Vector2(el.clientWidth, el.clientHeight), 0.45, 0.3, 0.3));
             composer.addPass(new OutputPass());
             disposables.push(composer);
           }
