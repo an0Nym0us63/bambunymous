@@ -551,6 +551,17 @@ def _from_3mf(src: Path, key: str) -> dict | None:
             meta = json.loads(meta_f.read_text(encoding="utf-8"))
             if meta.get("v") == FORMAT_V:
                 return meta
+        # perdu en local mais sauvegarde sur le NAS (et a jour) : repris, sans reconvertir
+        if not meta_f.is_file():
+            try:
+                from .archive import restore_3d
+                if restore_3d(key, d) and meta_f.is_file():
+                    meta = json.loads(meta_f.read_text(encoding="utf-8"))
+                    if meta.get("v") == FORMAT_V and any(p.get("size_mm") for p in meta.get("plates") or []):
+                        logger.info(f"[3D] {key} : repris du NAS")
+                        return meta
+            except Exception:
+                logger.exception("[3D] reprise du NAS")
         return convert(src, d, key)
     except Exception as e:
         logger.warning(f"[3D] {src.name} non converti : {type(e).__name__}: {e}")

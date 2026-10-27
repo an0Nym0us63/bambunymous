@@ -520,6 +520,89 @@ def _docs_sync(root: Path, idx: dict, mws: dict, rep: dict) -> dict:
     return out
 
 
+def _3d_dest(key: str, lib_plan: dict) -> str:
+    """Ou range la vue 3D d'un 3MF : a cote de son 3MF d'origine (« <modele>/Vue 3D/<nom du 3MF> »), sinon dans
+    « Système/Vues 3D/<cle> » (apercus MakerWorld, 3MF dont le modele n'est pas connu)."""
+    rel = lib_plan.get(key)
+    if rel:
+        folder, name = rel.rsplit("/", 1)
+        return f"{folder}/Vue 3D/{name[:-4] if name.lower().endswith('.3mf') else name}"
+    return f"{SYS}/Vues 3D/{key}"
+
+
+def _3d_sync(root: Path, idx: dict, lib_plan: dict, rep: dict) -> None:
+    """Les vues 3D deja preparees (27/10/2026), sur le NAS : une copie, le local reste. Si le local les perd, la vue
+    les reprend la (restore_3d) au lieu de tout reconvertir. Deplacees si le titre du modele change."""
+    from .mw_3d import _root as root3d
+    from .mw_source import path_of
+    base = root3d()
+    if not base.is_dir():
+        return
+    for d in sorted(base.iterdir()):
+        meta = d / "plates.json"
+        if not d.is_dir() or not meta.is_file():
+            continue
+        key = d.name
+        try:                                          # rien a montrer (une conversion vide) : rien a sauvegarder
+            m3 = json.loads(meta.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not m3.get("glb") and not any(p.get("size_mm") for p in m3.get("plates") or []):
+            continue
+        dest = _3d_dest(key, lib_plan)
+        prev = idx.get(f"3d:{key}")
+        old = prev.get("to") if isinstance(prev, dict) else None
+        try:
+            if old and old != dest and (root / old).is_dir():
+                _move(root, old, dest)
+                rep["moved"] += 1
+            for f in sorted(d.iterdir()):
+                if not f.is_file() or f.suffix == ".part":
+                    continue
+                t = root / dest / f.name
+                if f.name == "plates.json":           # petit, et sa taille peut rester la meme : compare au contenu
+                    same = t.is_file() and t.read_bytes() == f.read_bytes()
+                    if not same:
+                        t.parent.mkdir(parents=True, exist_ok=True)
+                        t.write_bytes(f.read_bytes())
+                        rep["copied"] += 1
+                elif _copy(f, t):
+                    rep["copied"] += 1
+                    rep["bytes"] += f.stat().st_size
+            src = path_of(key)
+            idx[f"3d:{key}"] = {"to": dest, "root": str(root),
+                                "src_mt": src.stat().st_mtime if src.is_file() else None,
+                                "meta_mt": meta.stat().st_mtime}
+        except OSError as e:
+            rep["errors"] += 1
+            logger.warning(f"[ARCHIVE] vue 3D {key} : {e}")
+
+
+def restore_3d(key: str, out_dir: Path) -> bool:
+    """Reprend du NAS la vue 3D d'un 3MF, si elle y est et date d'apres ce 3MF. Rend True si reprise."""
+    from .mw_source import path_of
+    e = _index().get(f"3d:{key}")
+    if not isinstance(e, dict) or not e.get("to"):
+        return False
+    d = Path(e.get("root") or DEFAULT_ROOT) / e["to"]
+    src = path_of(key)
+    try:
+        if not (d / "plates.json").is_file():
+            return False
+        if src.is_file() and (e.get("src_mt") or 0) < src.stat().st_mtime:
+            return False                              # le 3MF a change depuis : a reconvertir
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for f in d.iterdir():
+            if f.is_file():
+                tmp = out_dir / (f.name + ".part")
+                shutil.copyfile(f, tmp)
+                os.replace(tmp, out_dir / f.name)
+        return True
+    except OSError as ex:
+        logger.warning(f"[ARCHIVE] reprise de la vue 3D {key} : {ex}")
+        return False
+
+
 def _desc_sync(root: Path, mws: dict, docs_plan: dict, rep: dict) -> dict:
     """Le descriptif de chaque modele, a cote de ses 3MF : « 3MF MakerWorld/<modele>/Descriptif.txt » (titre,
     createur, lien, categories, mots-cles, descriptif traduit puis original, documents, pieces a prevoir).
@@ -808,6 +891,8 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict, name
     _library_sync(root, idx, lib_plan, rep)
     docs_plan = _docs_sync(root, idx, mws, rep)
     desc_plan = _desc_sync(root, mws, docs_plan, rep)
+    prog.update(what="vues 3D…")
+    _3d_sync(root, idx, lib_plan, rep)
     for src_name, label in SYS_NAMED if named is not None else []:
         _named_sync(root, idx, rep, src_name, label, named.get(src_name) or {})
     dirs = idx.setdefault("@dirs", {})           # « print:12 » / « grp:3 » -> son dossier sur le NAS
