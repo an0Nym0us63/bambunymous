@@ -8,7 +8,7 @@ import MwImg from "./MwImg";
 // La vue 3D d'un modele (27/10/2026) : son 3MF d'origine garde sur le serveur (converti la-bas, aux couleurs de
 // ses filaments), sinon l'apercu 3D de MakerWorld (sans couleurs). Un plateau a la fois ; on tourne au doigt
 // ou a la souris, on zoome, on recentre. three.js n'est charge qu'ici, a l'ouverture.
-const BED = 256;
+const BED = [256, 256];          // le plateau par defaut ; le serveur donne celui de mon imprimante (A1 mini, H2D...)
 
 function parseBin(buf) {
   const dv = new DataView(buf);
@@ -33,7 +33,7 @@ const hex6 = c => String(c || "").replace(/^#/, "").slice(0, 6).toUpperCase();
 // leur rendu) ; paillettes, galaxie, marbre, bois, carbone : un motif dessine, projete sur chaque face
 const FINISH_MAT = {
   translucent: { transparent: true, opacity: 0.55, depthWrite: false, roughness: 0.25, metalness: 0 },
-  silk: { roughness: 0.18, metalness: 0.45, envMapIntensity: 1.1 },
+  silk: { roughness: 0.32, metalness: 0.1, envMapIntensity: 0.22 },       // un brillant satine, pas un metal (un gris virait au blanc)
   metal: { roughness: 0.32, metalness: 1, envMapIntensity: 1.5 },
   matte: { roughness: 0.95, metalness: 0 },
   carbon: { roughness: 0.38, metalness: 0.1, envMapIntensity: 0.6 },
@@ -60,7 +60,7 @@ function boxUV(THREE, geo) {
   return g;
 }
 
-function Viewer({ url, glb, onState, palette = null, finishes = null, glow = false }) {
+function Viewer({ url, glb, onState, palette = null, finishes = null, glow = false, bed = null }) {
   const box = useRef(null);
   const [dark, setDark] = useState(false);
   const api = useRef(null);
@@ -91,7 +91,10 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
       };
       const texOf = {};
       // le plateau de l'imprimante, en repere
-      const grid = new THREE.GridHelper(BED, 16, 0x94a3b8, 0xcbd5e1); grid.material.transparent = true; grid.material.opacity = 0.45; scene.add(grid);
+      // un carre de 16 mm, etire a la taille du plateau
+      const [bw, bd] = bed || BED, side = Math.max(bw, bd);
+      const grid = new THREE.GridHelper(side, Math.round(side / 16), 0x94a3b8, 0xcbd5e1); grid.material.transparent = true; grid.material.opacity = 0.45;
+      grid.scale.set(bw / side, 1, bd / side); scene.add(grid);
       const camera = new THREE.PerspectiveCamera(40, el.clientWidth / el.clientHeight, 1, 5000);
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
@@ -167,6 +170,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
             // (la couleur eclairee baissee d'autant : sinon la somme sature, et la piece vire au blanc)
             if (fin === "glow") { mat.color = c.clone().multiplyScalar(0.6); mat.emissive = c.clone(); mat.emissiveIntensity = 0.45; mat.roughness = 0.6; }
             if (FINISH_MAT[fin]?.envMapIntensity) mat.envMap = await envMap();
+            // le reflet s'ajoute a l'eclairage : la couleur est un peu baissee d'autant, sinon un gris satine sort blanc
+            if (fin === "silk") mat.color.multiplyScalar(0.82);
             let mesh = geo;
             if (["sparkle", "galaxy", "marble", "wood", "carbon"].includes(fin)) {
               if (!texOf[fin]) {
@@ -351,7 +356,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         <div style={{ position: "relative", height: "min(62dvh, 560px)", borderRadius: 18, overflow: "hidden", border: "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
           {p && <Viewer key={`${p.url}|${shown ? "alt" : "own"}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown}
-            finishes={shown ? (palette || platePalettes ? paletteFinishes : meta?.used_finishes) : meta?.finishes} glow={!!st.glow}/>}
+            finishes={shown ? (palette || platePalettes ? paletteFinishes : meta?.used_finishes) : meta?.finishes} glow={!!st.glow} bed={meta?.bed}/>}
           {alt && p && !isGlb(p.url) && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
             background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
             {[[true, "Couleurs d'origine"], [false, `Couleurs ${altLabel.toLowerCase()}`]].map(([o, l]) => <button key={l} type="button" onClick={() => setOwn(o)}

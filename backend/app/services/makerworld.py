@@ -726,6 +726,18 @@ SERIAL_MODELS = {"31B": "H2C", "094": "H2D", "00M": "X1 Carbon", "00W": "X1", "0
                  "01P": "P1S", "01S": "P1P", "039": "A1", "030": "A1 mini"}
 
 
+def bed_of(printer: str) -> list:
+    """Le plateau [largeur, profondeur] en mm d'une imprimante Bambu (fiches techniques) ; 256 x 256 par defaut."""
+    p = re.sub(r"[^a-z0-9]", "", str(printer or "").lower())
+    if "a1mini" in p:
+        return [180, 180]
+    if "h2s" in p:
+        return [340, 320]
+    if "h2d" in p or "h2c" in p:
+        return [350, 320]
+    return [256, 256]
+
+
 def printer_from_serial(serial) -> str:
     return SERIAL_MODELS.get(str(serial or "").strip().upper()[:3], "")
 

@@ -699,7 +699,11 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
                                                did, prof if source == "3mf" else "", used_detail)
         except Exception:
             logger.exception("[3D] couleurs utilisees")
-    return {"source": source, "profile": prof or None, "profile_title": ptitle, "profile_cover": pcover, "ms": ms,
+    try:
+        bed = mw.bed_of(await mw.my_printer())        # le plateau de mon imprimante, en repere dans la vue
+    except Exception:
+        bed = [256, 256]
+    return {"source": source, "profile": prof or None, "profile_title": ptitle, "profile_cover": pcover, "ms": ms, "bed": bed,
             "used_palette": used_palette, "used_detail": used_detail, "fetch_error": fetch_error,
             # la finition de chaque couleur, pour le rendu : d'origine (profils filament du 3MF), et des bobines utilisees
             "finishes": T.origin_finishes(path_of(key)) if source in ("3mf", "3mf_other") and key else {},
