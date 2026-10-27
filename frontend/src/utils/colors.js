@@ -1,3 +1,4 @@
+import { finishImage } from "./finishTex";
 /**
  * Rendu des couleurs de filament — source unique.
  *
@@ -108,7 +109,6 @@ export function autoFinishOf(...objs) {
 
 // Les couches d'une finition, posees PAR-DESSUS la couleur : [image, taille, position]. « bar » : la version
 // legere, pour les barres de niveau (le niveau reste lisible).
-const dot = (c, r, at, size) => [`radial-gradient(circle,${c} 0 ${r}px,transparent ${r + 0.35}px)`, `${size}px ${size}px`, at];
 const FULL = ["100% 100%", "0 0"];
 function finishLayers(f, bar) {
   switch (f) {
@@ -119,27 +119,17 @@ function finishLayers(f, bar) {
     case "metal": return bar
       ? [["linear-gradient(90deg,rgba(255,255,255,.35),rgba(0,0,0,.18) 50%,rgba(255,255,255,.3))", ...FULL]]
       : [["linear-gradient(135deg,rgba(255,255,255,.55),rgba(255,255,255,0) 35%,rgba(0,0,0,.3) 60%,rgba(255,255,255,.35) 85%)", ...FULL]];
-    case "sparkle": return bar
-      ? [dot("rgba(255,255,255,.6)", 0.35, "0 0", 4)]
-      : [dot("rgba(255,255,255,.75)", 0.35, "0 0", 4), dot("rgba(255,255,255,.6)", 0.4, "2px 3px", 7),
-         dot("rgba(255,255,255,.85)", 0.5, "5px 1px", 11)];
-    case "galaxy": return bar
-      ? [dot("rgba(150,180,255,.8)", 0.4, "0 0", 4), dot("rgba(220,180,255,.7)", 0.4, "2px 1px", 5)]
-      : [["linear-gradient(125deg,rgba(255,255,255,0) 25%,rgba(200,190,255,.16) 45%,rgba(255,255,255,0) 65%)", ...FULL],
-         dot("rgba(150,180,255,.85)", 0.4, "0 0", 4), dot("rgba(220,180,255,.75)", 0.4, "2px 1px", 5),
-         dot("rgba(120,160,255,.7)", 0.5, "3px 3px", 7), dot("rgba(255,255,255,.75)", 0.45, "6px 2px", 9)];
-    case "marble": return bar
-      ? [dot("rgba(45,30,25,.6)", 0.9, "0 0", 9), dot("rgba(45,30,25,.45)", 0.6, "4px 3px", 7)]
-      : [dot("rgba(45,30,25,.65)", 1.1, "0 0", 11), dot("rgba(45,30,25,.5)", 0.7, "4px 6px", 9),
-         dot("rgba(60,40,30,.45)", 1.4, "7px 2px", 17), dot("rgba(255,240,228,.55)", 0.6, "2px 8px", 13)];
-    // le bois : un fil irregulier, veines sombres et claires (lisibles sur un bois clair comme fonce)
-    case "wood": return bar
-      ? [["repeating-linear-gradient(95deg,rgba(75,40,12,0) 0 4px,rgba(75,40,12,.22) 4px 5px,rgba(255,235,205,0) 5px 8px,rgba(255,235,205,.2) 8px 9px)", ...FULL]]
-      : [["repeating-radial-gradient(ellipse 260% 120% at 0% 160%,rgba(75,40,12,0) 0 2.5px,rgba(75,40,12,.34) 2.5px 3.5px,rgba(75,40,12,0) 3.5px 5px,rgba(255,235,205,.3) 5px 6px,rgba(75,40,12,0) 6px 8.5px,rgba(75,40,12,.2) 8.5px 9px,rgba(75,40,12,0) 9px 11px)", ...FULL]];
-    case "carbon": return bar
-      ? [["repeating-conic-gradient(rgba(255,255,255,.07) 0 25%,rgba(0,0,0,.18) 0 50%)", "4px 4px", "0 0"]]
-      : [["linear-gradient(135deg,rgba(255,255,255,.18),rgba(255,255,255,0) 45%)", ...FULL],
-         ["repeating-conic-gradient(rgba(255,255,255,.07) 0 25%,rgba(0,0,0,.18) 0 50%)", "4px 4px", "0 0"]];
+    // paillettes, galaxie, marbre, bois, carbone : le meme dessin que la vue 3D et les bobines (utils/finishTex),
+    // au hasard -- une grille de points reguliere faisait un motif de tissu, pas du marbre
+    case "sparkle": case "marble": case "wood": case "carbon": {
+      const img = finishImage(f);
+      return img ? [[`url(${img})`, bar ? "64px 64px" : "96px 96px", "0 0"]] : [];
+    }
+    case "galaxy": {
+      const img = finishImage(f);
+      return img ? [...(bar ? [] : [["linear-gradient(125deg,rgba(255,255,255,0) 25%,rgba(200,190,255,.16) 45%,rgba(255,255,255,0) 65%)", ...FULL]]),
+        [`url(${img})`, bar ? "64px 64px" : "96px 96px", "0 0"]] : [];
+    }
     case "glow": return bar
       ? [["linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.45),rgba(255,255,255,0))", ...FULL]]
       : [["radial-gradient(circle,rgba(240,255,230,.85) 0,rgba(220,255,200,.45) 35%,rgba(220,255,200,0) 70%)", ...FULL]];

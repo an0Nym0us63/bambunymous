@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { finishCanvas } from "../utils/finishTex";
 import { FSheet } from "./FicheKit";
 import client from "../api/client";
 import MwImg from "./MwImg";
@@ -38,34 +39,6 @@ const FINISH_MAT = {
   galaxy: { roughness: 0.35 },
 };
 const TILE_MM = 16;                                   // un motif tous les 16 mm
-
-// le motif d'une finition, en canvas 256 px qui se repete ; « emit » : il brille (paillettes), sinon il teinte
-function finishCanvas(f) {
-  const cv = document.createElement("canvas"); cv.width = cv.height = 256;
-  const g = cv.getContext("2d");
-  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const dots = (n, cols, rmin, rmax) => { for (let i = 0; i < n; i++) { g.fillStyle = cols[i % cols.length]; g.beginPath();
-    g.arc(rnd() * 256, rnd() * 256, rmin + rnd() * (rmax - rmin), 0, 7); g.fill(); } };
-  if (f === "sparkle" || f === "galaxy") {
-    g.fillStyle = "#000"; g.fillRect(0, 0, 256, 256);
-    dots(f === "sparkle" ? 260 : 320, f === "sparkle" ? ["#fff", "#ddd", "#bbb"] : ["#9db8ff", "#d8b4ff", "#7aa2ff", "#fff"], 0.6, 1.5);
-    return { cv, emit: true };
-  }
-  g.fillStyle = "#fff"; g.fillRect(0, 0, 256, 256);
-  if (f === "marble") dots(90, ["rgba(40,26,20,.85)", "rgba(60,40,30,.7)", "rgba(40,26,20,.5)"], 1.6, 5);
-  if (f === "wood") for (let y = 0; y < 256; y += 1) {
-    // des veines plus ou moins serrees, legerement ondulees
-    const v = Math.sin(y * 0.16 + Math.sin(y * 0.045) * 2.5) * 0.5 + 0.5, k = Math.round(255 - 95 * Math.pow(v, 4) - 10 * rnd());
-    g.fillStyle = `rgb(${k},${Math.round(k * 0.97)},${Math.round(k * 0.92)})`; g.fillRect(0, y, 256, 1);
-  }
-  if (f === "carbon") for (let y = 0; y < 256; y += 32) for (let x = 0; x < 256; x += 32) {
-    const a = ((x + y) / 32) % 2 === 0;
-    const gr = a ? g.createLinearGradient(x, 0, x + 32, 0) : g.createLinearGradient(0, y, 0, y + 32);
-    gr.addColorStop(0, "#7a7a7a"); gr.addColorStop(0.5, "#ffffff"); gr.addColorStop(1, "#7a7a7a");
-    g.fillStyle = gr; g.fillRect(x, y, 32, 32);
-  }
-  return { cv, emit: false };
-}
 
 // des coordonnees de texture, face par face, projetees sur le plan le plus en face (geometrie desindexee)
 function boxUV(THREE, geo) {
@@ -177,7 +150,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null }) {
             let mesh = geo;
             if (["sparkle", "galaxy", "marble", "wood", "carbon"].includes(fin)) {
               if (!texOf[fin]) {
-                const { cv, emit } = finishCanvas(fin);
+                const { cv, emit } = finishCanvas(fin, "3d");
                 const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
                 t.anisotropy = 4; texOf[fin] = { t, emit }; disposables.push(t);
               }

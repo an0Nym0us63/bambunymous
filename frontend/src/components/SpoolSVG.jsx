@@ -9,6 +9,8 @@
  * sans dependance vers l'un ou l'autre, supprime le probleme.
  */
 
+import { finishImage } from "../utils/finishTex";
+
 // Luminance percue (recommandation ITU-R BT.601) : sert a decider si les
 // details du dessin doivent etre clairs ou fonces sur la couleur du filament.
 function luminance(hex) {
@@ -28,20 +30,16 @@ function _translucent(c) {
 }
 
 // La finition du filament (28/10/2026), dessinee sur le disque : les memes que les pastilles (utils/colors).
-function FinishDefs({ f, id }) {
-  const dots = (n, list) => <pattern id={id} patternUnits="userSpaceOnUse" width={n} height={n}>
-    {list.map(([x, y, r, c, o], i) => <circle key={i} cx={x} cy={y} r={r} fill={c} opacity={o}/>)}</pattern>;
+export function FinishDefs({ f, id }) {
   if (f === "silk") return <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
     <stop offset="20%" stopColor="#fff" stopOpacity="0"/><stop offset="45%" stopColor="#fff" stopOpacity=".55"/><stop offset="62%" stopColor="#fff" stopOpacity="0"/></linearGradient>;
   if (f === "metal") return <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
     <stop offset="0%" stopColor="#fff" stopOpacity=".55"/><stop offset="35%" stopColor="#fff" stopOpacity="0"/>
     <stop offset="60%" stopColor="#000" stopOpacity=".3"/><stop offset="85%" stopColor="#fff" stopOpacity=".35"/></linearGradient>;
-  if (f === "sparkle") return dots(6, [[1, 1, .35, "#fff", .75], [4, 3.5, .4, "#fff", .6], [2.5, 5, .3, "#fff", .85]]);
-  if (f === "galaxy") return dots(7, [[1, 1, .4, "#96b4ff", .85], [4.5, 2, .4, "#dcb4ff", .75], [2.5, 4.5, .5, "#78a0ff", .7], [6, 6, .45, "#fff", .75]]);
-  if (f === "marble") return dots(11, [[2, 2, 1.1, "#2d1e19", .6], [7, 5, .7, "#2d1e19", .5], [4, 8.5, 1.3, "#3c281e", .45], [9, 9.5, .6, "#fff0e4", .55]]);
-  if (f === "carbon") return <pattern id={id} patternUnits="userSpaceOnUse" width="3" height="3">
-    <rect width="1.5" height="1.5" fill="#fff" opacity=".07"/><rect x="1.5" y="1.5" width="1.5" height="1.5" fill="#fff" opacity=".07"/>
-    <rect x="1.5" width="1.5" height="1.5" fill="#000" opacity=".18"/><rect y="1.5" width="1.5" height="1.5" fill="#000" opacity=".18"/></pattern>;
+  // paillettes, galaxie, marbre, carbone : le meme dessin que les pastilles et la vue 3D (utils/finishTex)
+  const img = finishImage(f);
+  if (img) return <pattern id={id} patternUnits="userSpaceOnUse" width="96" height="96">
+    <image href={img} width="96" height="96"/></pattern>;
   if (f === "glow") return <radialGradient id={id}>
     <stop offset="0%" stopColor="#f0ffe6" stopOpacity=".85"/><stop offset="35%" stopColor="#dcffc8" stopOpacity=".45"/><stop offset="70%" stopColor="#dcffc8" stopOpacity="0"/></radialGradient>;
   return null;

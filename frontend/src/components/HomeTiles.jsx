@@ -18,7 +18,7 @@ import { mwImg } from "./MwImg";
 import LiveCamera from "./LiveCamera";
 import { Medal, gradeOf, GradeEmblem, CARD_ORDER } from "./medals";
 import { DryCard } from "./AMSSection";
-import SpoolSVG from "./SpoolSVG";
+import SpoolSVG, { FinishDefs } from "./SpoolSVG";
 import { switchRoutes, slotLabel, grilleAccueil, lireDisposition, trayPct } from "../utils/ams";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 
@@ -3417,7 +3417,7 @@ export function switchModel(status) {
   const nz = status?.nozzles || [];
   // rien d'engage (ams / bac negatifs) : pas d'emplacement, pas de « @0 »
   const slot = s => { if (!s || s.ams == null || s.ams < 0 || s.tray < 0) return null; const a = ams.find(x => x.id === s.ams); const t = a?.trays?.find(x => x.id === s.tray);
-    return { label: s.ams >= 128 ? amsLab({ id: s.ams }) : `${String.fromCharCode(65 + s.ams)}${s.tray + 1}`, color: trayCol(t),
+    return { tr: t, label: s.ams >= 128 ? amsLab({ id: s.ams }) : `${String.fromCharCode(65 + s.ams)}${s.tray + 1}`, color: trayCol(t),
       type: t?.filament_type || "" }; };
   const activeAms = ams.find(x => x.id === status?.active_ams_id);
   const activeNz = nz.find(n => n.active)?.id;
@@ -3464,7 +3464,8 @@ function dotsAlong(d, step) {
   }
   return out;
 }
-function SwitchRail({ d, live, color, hl, w = 10, idle = false }) {
+function SwitchRail({ d, live, color, hl, w = 10, idle = false, finish = null }) {
+  const fid = `swf${React.useId().replace(/:/g, "")}`;
   // au repos : le rail en pointilles, estompe (pas de chemin annonce par la machine)
   if (idle) return <g opacity="0.8">{dotsAlong(d, w * 1.3).map(([x, y], k) => <circle key={k} cx={x} cy={y} r={w * 0.28} fill="#4b5563"/>)}</g>;
   return <g>
@@ -3475,6 +3476,12 @@ function SwitchRail({ d, live, color, hl, w = 10, idle = false }) {
     {color && <path d={d} fill="none" stroke={color} strokeWidth={Math.max(2.5, w * 0.36)} strokeLinecap="round"
       strokeDasharray={live ? "10 7" : "none"} opacity={live ? 1 : 0.7}
       style={{ transition: "d .8s cubic-bezier(.5,1.3,.5,1)", ...(live ? { animation: "bn-dash .8s linear infinite" } : {}) }}/>}
+    {/* le filament qui passe garde sa finition (marbre, paillettes, silk...), comme sa bobine */}
+    {color && finish && finish !== "matte" && <>
+      <defs><FinishDefs f={finish} id={fid}/></defs>
+      <path d={d} fill="none" stroke={`url(#${fid})`} strokeWidth={Math.max(2.5, w * 0.36)} strokeLinecap="round"
+        strokeDasharray={live ? "10 7" : "none"} opacity={live ? 1 : 0.7}
+        style={{ transition: "d .8s cubic-bezier(.5,1.3,.5,1)", ...(live ? { animation: "bn-dash .8s linear infinite" } : {}) }}/></>}
   </g>;
 }
 // un trait fluide qui passe par ces points (depart et arrivee a l'horizontale, sans palier au milieu) :
@@ -3507,7 +3514,8 @@ export function SwitchArt({ m, W, H }) {
     <svg viewBox={`0 0 ${VW} ${VH}`} width={W} height={H} style={{ display: "block", overflow: "visible" }} aria-label="Aiguillage">
       {/* le corps de l'aiguillage, dessous : les rails le traversent */}
       <rect x="150" y="46" width="80" height="88" rx="16" fill="#111827" stroke="rgba(255,255,255,0.12)"/>
-      {[A, B].sort((a, b) => a.live - b.live).map(x => <SwitchRail key={x.p} d={path(x)} live={x.live} color={x.slot?.color} hl={HL} w={11} idle={m.rest}/>)}
+      {[A, B].sort((a, b) => a.live - b.live).map(x => <SwitchRail key={x.p} d={path(x)} live={x.live} color={x.slot?.color} hl={HL} w={11} idle={m.rest}
+        finish={x.slot?.tr ? finishOf(x.slot.tr.spool_info, x.slot.tr) : null}/>)}
       {m.fs.calibrating && <text x="190" y="148" textAnchor="middle" fontSize="11" fontWeight="800" fill="#f59e0b">calibration</text>}
       {m.idle && <text x="190" y="148" textAnchor="middle" fontSize="11" fontWeight="800" fill="var(--muted)">au repos</text>}
       {/* les entrees */}
@@ -3516,8 +3524,12 @@ export function SwitchArt({ m, W, H }) {
           <text x="16" y={y + 19} fontSize="13.5" fontWeight="900" fill="#8b5cf6">Entrée {x.p}</text>
           {x.live && <text x="110" y={y + 19} textAnchor="end" fontSize="11" fontWeight="900" fill={HL}>●</text>}
           {x.slot ? <>
-            <rect x="16" y={y + 27} width="14" height="14" rx="4" fill={x.slot.color || "transparent"} stroke="var(--muted)" strokeOpacity="0.6"
-              strokeDasharray={x.slot.color ? "none" : "2 2"}/>
+            {x.slot.color && trayBg(x.slot.tr)
+              // la case de la bobine : meme rendu que partout (couleur, transparence, finition)
+              ? <foreignObject x="16" y={y + 27} width="14" height="14"><div style={{ width: 14, height: 14, boxSizing: "border-box", borderRadius: 4,
+                  border: "1px solid color-mix(in srgb, var(--muted) 60%, transparent)", ...trayBg(x.slot.tr) }}/></foreignObject>
+              : <rect x="16" y={y + 27} width="14" height="14" rx="4" fill={x.slot.color || "transparent"} stroke="var(--muted)" strokeOpacity="0.6"
+                strokeDasharray={x.slot.color ? "none" : "2 2"}/>}
             <text x="35" y={y + 39} fontSize="12" fontWeight="800" fill="var(--text)">{cut(`${x.slot.label}${x.slot.type ? ` · ${x.slot.type}` : ""}`, 13)}</text></>
             : <text x="16" y={y + 39} fontSize="12" fontWeight="700" fill="var(--muted)">rien d'engagé</text>}
           <text x="16" y={y + 54} fontSize="10.5" fontWeight="700" fill="var(--muted)">{units(x.units)}</text></g>; })}

@@ -197,6 +197,7 @@ class HotendSlotOut(BaseModel):
     empty: bool
     stat: int = -1
     spool_id: Optional[int] = None
+    fila_finish: Optional[str] = None    # la finition du filament qu'elle porte (celle de la bobine de l'AMS)
 
 
 class HotendRackOut(BaseModel):
@@ -451,7 +452,7 @@ async def printer_status(_: str = Depends(get_current_user)):
                     .where(_Spool.filament_id.in_(fil_ids), _Spool.archived.is_(False))
                     .group_by(_Spool.filament_id)
                 )).all()}
-    return PrinterStatusOut(
+    out = PrinterStatusOut(
         connected=s.connected,
         serial=s.serial,
         status=s.status,
@@ -550,6 +551,29 @@ async def printer_status(_: str = Depends(get_current_user)):
         fila_switch=getattr(s, "fila_switch", {}) or {},
         printer_model=await _model(),
     )
+    _hotend_finishes(out)
+    return out
+
+
+def _hotend_finishes(out):
+    """La finition du filament d'une buse du rack : celle de la bobine d'AMS de meme filament (identifiant Bambu)
+    et de meme couleur, sinon de meme filament. Pour que la buse s'affiche comme la bobine (marbre, silk...)."""
+    from ....services.mw_3d import finish_of
+    by_id, by_col = {}, {}
+    for a in out.ams_list:
+        for t in a.trays:
+            if t.empty or not t.tray_info_idx:
+                continue
+            si = t.spool_info
+            f = (si.fila_finish if si and si.fila_finish else None) or finish_of(
+                si.fila_type if si else "", si.name if si else "", t.filament_type, color=t.color)
+            if f == "none" or not f:
+                continue
+            by_id.setdefault(t.tray_info_idx, f)
+            by_col.setdefault((t.tray_info_idx, str(t.color or "")[:6].upper()), f)
+    for h in out.hotend_rack.hotends:
+        if not h.empty and h.filament_id:
+            h.fila_finish = by_col.get((h.filament_id, str(h.color or "").lstrip("#")[:6].upper())) or by_id.get(h.filament_id)
 
 
 # ── Bobines posees pour le sechage (emplacement vide) ─────────────────────────
