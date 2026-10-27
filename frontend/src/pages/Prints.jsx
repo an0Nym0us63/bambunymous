@@ -8,6 +8,7 @@ import { useSearchParams } from "react-router-dom";
 import { useUrlTab } from "../utils/useUrlTab";
 import MakerWorldView from "../components/MakerWorldView";
 import MakerWorldCollectionsPicker from "../components/MakerWorldCollectionsPicker";
+import MwDocs from "../components/MwDocs";
 import MakerWorldModelSheet, { prefetchModel } from "../components/MakerWorldModelSheet";
 import { openCreator } from "../components/MwCreatorPage";
 import { useToRateSet, RateButton, RateStar as RateStarBtn } from "../components/MwToRate";
@@ -616,6 +617,8 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
             color:"#3b82f6", cursor:"pointer", flexShrink:0, fontSize:14, fontWeight:900 }}>↗</button>
         <span style={{ fontSize:11, color:"var(--muted)", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s", flexShrink:0 }}>▶</span>
       </div>
+      {/* ses documents joints et ce qu'il faut prevoir : visibles meme replie */}
+      <MwDocs docs={mw.docs || []} parts={mw.parts || []} otherParts={mw.other_parts} style={{ padding:"0 12px 10px" }}/>
       {open && <>
       <a href={url} onClick={e => { e.preventDefault(); setSheet(designId); }} onPointerDown={() => prefetchModel(designId)}
         style={{ display:"flex", gap:10, padding:"0 12px 10px", textDecoration:"none", color:"var(--text)", cursor:"pointer" }}>

@@ -116,11 +116,82 @@ def _parse_design(code, d) -> dict:
         "categories": ",".join(c.replace(",", " ") for c in cats)[:512] or None,
         "tags": ",".join(t.replace(",", " ").strip() for t in tags) or None,
         "profiles": _profiles(d) or "[]",
+        "extras": _extras(d),
         "like_count": num(d.get("likeCount")),
         "download_count": num(d.get("downloadCount")),
         "print_count": num(d.get("printCount")),
         "collection_count": num(d.get("collectionCount")),
     }
+
+
+DOC_KINDS = (("guide", "design_guide", "auxiliaryGuide"), ("bom", "design_bom", "auxiliaryBom"),
+             ("other", "design_other", "auxiliaryOther"))
+
+
+def _extras(d) -> str:
+    """Documents joints (notice d'assemblage, nomenclature, autres : une solution, des conseils…), ceux du
+    modele et ceux de chaque profil, et les pieces a prevoir (boutique Bambu, et le texte libre du createur).
+    JSON compact, toujours rendu (« {} » : lu, rien) ; une forme inattendue donne simplement moins."""
+    import json
+    ext = d.get("designExtension") if isinstance(d.get("designExtension"), dict) else {}
+    lst = lambda v: v if isinstance(v, list) else []
+    docs, seen = [], set()
+
+    def add(kind, x, prof=None, ptitle=None):
+        if not isinstance(x, dict):
+            return
+        url, name = x.get("url"), x.get("name")
+        if not isinstance(url, str) or not url.startswith("http") or url in seen:
+            return
+        seen.add(url)
+        docs.append({"kind": kind, "name": (name if isinstance(name, str) and name.strip() else url.rsplit("/", 1)[-1])[:200],
+                     "url": url, "profile_id": prof, "profile": ptitle})
+    for kind, k_design, _k_prof in DOC_KINDS:
+        for x in lst(ext.get(k_design)):
+            add(kind, x)
+    for i in lst(d.get("instances")):
+        if not isinstance(i, dict):
+            continue
+        mi = ((i.get("extention") or {}) if isinstance(i.get("extention"), dict) else {}).get("modelInfo")
+        mi = mi if isinstance(mi, dict) else {}
+        for kind, _k, k_prof in DOC_KINDS:
+            for x in lst(mi.get(k_prof)):
+                add(kind, x, str(i.get("profileId") or "") or None, i.get("title") if isinstance(i.get("title"), str) else None)
+    parts = []
+    for b in lst(ext.get("boms")):
+        if not isinstance(b, dict):
+            continue
+        t = b.get("displayTitle") or b.get("title") or b.get("parentTitle")
+        if isinstance(t, str) and t.strip():
+            q = b.get("quantity")
+            parts.append({"title": t.strip()[:200], "quantity": q if isinstance(q, int) and q > 0 else 1,
+                          "url": b.get("url") if isinstance(b.get("url"), str) and b["url"].startswith("http") else None})
+    for b in lst(ext.get("boms_of_other_part_list")):
+        t = b if isinstance(b, str) else (b.get("name") or b.get("title")) if isinstance(b, dict) else None
+        if isinstance(t, str) and t.strip():
+            q = b.get("quantity") if isinstance(b, dict) else None
+            parts.append({"title": t.strip()[:200], "quantity": q if isinstance(q, int) and q > 0 else None, "url": None})
+    other = ext.get("boms_of_other_parts")
+    out = {}
+    if docs:
+        out["docs"] = docs
+    if parts:
+        out["parts"] = parts
+    if isinstance(other, str) and other.strip():
+        out["other_parts"] = other.strip()[:2000]
+    return json.dumps(out, ensure_ascii=False)
+
+
+def extras_of(raw) -> dict:
+    """Les documents et pieces d'une fiche gardee (texte JSON, ou deja lu) : {docs, parts, other_parts}."""
+    import json
+    if isinstance(raw, dict):
+        return raw
+    try:
+        v = json.loads(raw) if raw else {}
+        return v if isinstance(v, dict) else {}
+    except ValueError:
+        return {}
 
 
 def _plate_thumb(p: dict):
@@ -177,7 +248,15 @@ def to_dict(m) -> dict:
         "print_count": m.print_count, "collection_count": m.collection_count,
         "fetched_at": m.fetched_at.isoformat() if m.fetched_at else None,
         "profiles": _load(m.profiles),
+        **_docs_view(m.design_id, m.extras),
     }
+
+
+def _docs_view(did, raw) -> dict:
+    """Documents (avec l'adresse ou les ouvrir : la copie gardee ici, sinon MakerWorld) et pieces a prevoir."""
+    from .mw_docs import view
+    x = extras_of(raw)
+    return {"docs": view(did, x.get("docs") or []), "parts": x.get("parts") or [], "other_parts": x.get("other_parts")}
 
 
 def _load(s):
@@ -662,6 +741,8 @@ async def _fetch_base(did: str) -> dict:
             "license": s(d.get("license")), "created": s(d.get("createTime")),
             "comment_count": d.get("commentCount") if isinstance(d.get("commentCount"), int) else None,
             "profiles": _plate_detail(d)}
+    base.update(extras_of(base.pop("extras", None)))
+    base.setdefault("docs", [])
     base["categories"] = [c for c in (base.get("categories") or "").split(",") if c]
     base["tags"] = [t for t in (base.get("tags") or "").split(",") if t]
     return base
@@ -671,7 +752,9 @@ async def _fetch_base(did: str) -> dict:
 # createur) est relue : sinon le champ manquerait jusqu'a l'expiration du cache.
 def _current(base) -> bool:
     # les illustrations des profils (25/10/2026) : une fiche gardee d'avant se relit
-    return isinstance(base, dict) and "creator_uid" in base and all(isinstance(p, dict) and "pictures" in p for p in base.get("profiles") or [])
+    # et les documents joints (27/10/2026)
+    return isinstance(base, dict) and "creator_uid" in base and "docs" in base \
+        and all(isinstance(p, dict) and "pictures" in p for p in base.get("profiles") or [])
 
 
 async def _base(did: str, stale_ok: bool = False) -> dict:
@@ -754,7 +837,9 @@ async def model_detail(design_id: str, stale_ok: bool = False) -> dict:
     for r in done:
         for k in plate_keys(r[2], r[3], r[4]):
             counts[norm(k)] = counts.get(norm(k), 0) + 1
-    return {**base, "stock": stock, "printer": printer, "profiles": rank_profiles(profs, printer), "title_fr": base.get("title_mw_fr") or (m.title_fr if m else None),
+    from .mw_docs import view as _docs
+    return {**base, "docs": _docs(did, base.get("docs") or []), "stock": stock, "printer": printer,
+            "profiles": rank_profiles(profs, printer), "title_fr": base.get("title_mw_fr") or (m.title_fr if m else None),
             "printed": len(done), "in_progress": sum(1 for r in rows if r[1] == "IN_PROGRESS"),
             "printed_plates": sorted(counts), "printed_plate_counts": counts,
             "printing_plates": sorted({norm(k) for r in rows if r[1] == "IN_PROGRESS" for k in plate_keys(r[2], r[3], r[4])})}
@@ -870,7 +955,8 @@ async def _todo(limit: int, only: str = None) -> list:
         m = known.get(str(i))
         if m is None or m.status == "error" or not m.fetched_at or m.fetched_at < old \
                 or (m.status == "ok" and m.title and not m.title_fr) \
-                or (m.status == "ok" and m.profiles is None)                 or (m.status == "ok" and m.profiles not in (None, "[]") and '"instance_id"' not in m.profiles)                 or (m.status == "ok" and not m.creator_uid):          # page du createur
+                or (m.status == "ok" and m.profiles is None)                 or (m.status == "ok" and m.profiles not in (None, "[]") and '"instance_id"' not in m.profiles)                 or (m.status == "ok" and not m.creator_uid) \
+                or (m.status == "ok" and m.extras is None):            # documents joints (27/10/2026)
             out.append(str(i))
     return out[:limit]
 
@@ -918,7 +1004,7 @@ async def refresh(limit: int = 200, only: str = None) -> dict:
             ok += 1
             for f in ("title", "cover_url", "creator_name", "creator_handle", "creator_avatar", "creator_uid",
                       "categories", "tags", "like_count", "download_count", "print_count",
-                      "collection_count", "profiles"):
+                      "collection_count", "profiles", "extras"):
                 setattr(m, f, r.get(f))
             if r.get("title_fr"):
                 m.title_fr = r["title_fr"][:512]          # traduction de MakerWorld
@@ -927,6 +1013,12 @@ async def refresh(limit: int = 200, only: str = None) -> dict:
                 m.title_fr = (tr or r["title"])[:512]
         await db.commit()
     logger.info(f"[MW] {len(todo)} modele(s) lu(s), {ok} fiche(s) a jour")
+    # leurs documents joints, gardes ici (un modele imprime : ceux de la liste le sont tous)
+    try:
+        from . import mw_docs
+        await asyncio.to_thread(mw_docs.keep_many, [(did, r.get("extras")) for did, r in res.items() if r.get("status") == "ok"])
+    except Exception:
+        logger.exception("[MW] documents joints non gardes")
     _LAST["run"] = {"read": len(todo), "ok": ok, "at": datetime.utcnow().isoformat()}
     return {"read": len(todo), "ok": ok}
 

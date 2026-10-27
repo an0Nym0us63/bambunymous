@@ -205,6 +205,7 @@ async def _migrate():
         ("prints",    "paused_since",         "TIMESTAMP"),
         ("makerworld_designs", "profiles",     "TEXT"),
         ("makerworld_designs", "creator_uid",  "TEXT"),
+        ("makerworld_designs", "extras",       "TEXT"),
         ("filaments", "multicolor_type",      "TEXT DEFAULT 'monochrome'"),
         ("filaments", "colors_array",         "TEXT"),
         ("filaments", "swatch",               "INTEGER DEFAULT 0"),

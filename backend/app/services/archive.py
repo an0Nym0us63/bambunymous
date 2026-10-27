@@ -478,6 +478,74 @@ def _library_plan(mws: dict) -> dict:
     return plan
 
 
+def _docs_sync(root: Path, idx: dict, mws: dict, rep: dict) -> dict:
+    """Les documents joints des modeles (notices, solutions… gardes ici, 27/10/2026), ranges avec leurs 3MF
+    d'origine : « 3MF MakerWorld/<modele>/Documents/<nom> ». Deplaces si le titre du modele change. Rend, par
+    modele, la liste (document, chemin sur le NAS) pour les fiches."""
+    from . import mw_docs as D
+    from .makerworld import extras_of
+    out: dict = {}
+    for did, m in mws.items():
+        docs = [d for d in (extras_of(getattr(m, "extras", None)).get("docs") or []) if isinstance(d, dict) and d.get("url")]
+        if not docs or m.status != "ok":
+            continue
+        base = f"{LIB}/{_two(m.title_fr, m.title) if (m.title_fr or m.title) else f'Modèle {did}'}/Documents"
+        taken, lst = set(), []
+        for d in docs:
+            src = D.local_path(did, d)
+            name = D._safe(d.get("name"))
+            rel = f"{base}/{name}"
+            if rel.lower() in taken:
+                rel = f"{base}/{D.doc_id(d['url'])}-{name}"
+            taken.add(rel.lower())
+            key = f"doc:{did}:{D.doc_id(d['url'])}"
+            try:
+                prev = idx.get(key)
+                old = prev.get("to") if isinstance(prev, dict) else None
+                if old and old != rel and (root / old).is_file() and not (root / rel).exists():
+                    _move(root, old, rel)
+                    rep["moved"] += 1
+                if src.is_file():
+                    if _copy(src, root / rel):
+                        rep["copied"] += 1
+                        rep["bytes"] += src.stat().st_size
+                    idx[key] = {"to": rel, "root": str(root), "size": src.stat().st_size}
+                if (root / rel).is_file():
+                    lst.append((d, rel))
+            except OSError as e:
+                rep["errors"] += 1
+                logger.warning(f"[ARCHIVE] document {did} : {e}")
+        if lst:
+            out[str(did)] = lst
+    return out
+
+
+def _extras_txt(m, docs_plan: dict, indent: str = "") -> str:
+    """Pour une fiche : les documents joints du modele (ou les trouver sur le NAS) et ce qu'il faut prevoir
+    (pieces de la boutique, autres pieces). Vide s'il n'y a rien."""
+    from .makerworld import extras_of
+    from . import mw_docs as D
+    if m is None or getattr(m, "status", None) != "ok":
+        return ""
+    x = extras_of(getattr(m, "extras", None))
+    lines = []
+    # tous ses documents : sur le NAS quand ils y sont, sinon leur adresse chez MakerWorld
+    on_nas = {d.get("url"): rel for d, rel in docs_plan.get(str(m.design_id)) or []}
+    docs = [(d, on_nas.get(d.get("url"))) for d in x.get("docs") or [] if isinstance(d, dict) and d.get("url")]
+    if docs:
+        lines += [f"{indent}Documents :"] + [
+            f"{indent}  - {D.KIND_LABEL.get(d.get('kind'), 'Document')}{' (profil ' + d['profile'] + ')' if d.get('profile') else ''} : "
+            f"{d.get('name')}{'  →  ' + rel if rel else '  →  ' + d.get('url', '')}" for d, rel in docs]
+    parts, other = x.get("parts") or [], x.get("other_parts")
+    if parts or other:
+        lines += [f"{indent}À prévoir :"] + [
+            f"{indent}  - {str(p.get('quantity')) + ' × ' if p.get('quantity') else ''}{p.get('title')}{'  (' + p['url'] + ')' if p.get('url') else ''}"
+            for p in parts]
+        if other:
+            lines += [f"{indent}  {ln}" for ln in str(other).splitlines() if ln.strip()]
+    return ("\n" + "\n".join(lines) + "\n") if lines else ""
+
+
 def _library_sync(root: Path, idx: dict, plan: dict, rep: dict) -> None:
     """La bibliotheque des 3MF d'origine, nommee : copie ce qui manque, renomme sur place ce qui a deja ete
     copie (sous son nom d'instance avant le 26/10/2026, ou sous un titre qui a change depuis)."""
@@ -686,6 +754,7 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict, name
     _system_sync(root, rep)
     lib_plan = _library_plan(mws)
     _library_sync(root, idx, lib_plan, rep)
+    docs_plan = _docs_sync(root, idx, mws, rep)
     for src_name, label in SYS_NAMED if named is not None else []:
         _named_sync(root, idx, rep, src_name, label, named.get(src_name) or {})
     dirs = idx.setdefault("@dirs", {})           # « print:12 » / « grp:3 » -> son dossier sur le NAS
@@ -791,7 +860,8 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict, name
             mw = f"https://makerworld.com/fr/models/{p.design_id}" if p.design_id else None
             g = next((x for x in groups if x.id == p.group_id), None) if p.group_id else None
             txt = _fiche(p, model, when, fil, mw) + (f"\nGroupe : {g.name}\n" if g else "") \
-                + (f"\n3MF d'origine MakerWorld : {lib}\n" if lib and (root / lib).is_file() else "")
+                + (f"\n3MF d'origine MakerWorld : {lib}\n" if lib and (root / lib).is_file() else "") \
+                + (_extras_txt(mws.get(str(p.design_id)), docs_plan) if p.design_id else "")
             if _write_if_changed(root / rel_dir / "Fiche.txt", txt):
                 wrote = True
             if wrote:
@@ -833,8 +903,16 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict, name
             libs = list(dict.fromkeys(filter(None, (_library_path(source_3mf(p.design_id, p.mw_profile_id, p.mw_plates), lib_plan)
                                                     for p, _m, _w in members if p.design_id))))
             libs = [x for x in libs if (root / x).is_file()]
+            # les documents et pieces a prevoir de chacun de ses modeles
+            extra = ""
+            for did in dict.fromkeys(str(p.design_id) for p, _m, _w in members if p.design_id):
+                t = _extras_txt(mws.get(did), docs_plan, "  ")
+                if t:
+                    m = mws.get(did)
+                    extra += f"\n{_two(m.title_fr, m.title) if (m.title_fr or m.title) else 'Modèle ' + did} :" + t
             _write_if_changed(root / groot / "Fiche du groupe.txt", _fiche_group(g, members)
-                              + ("\n3MF d'origine MakerWorld :\n" + "".join(f"  - {x}\n" for x in libs) if libs else ""))
+                              + ("\n3MF d'origine MakerWorld :\n" + "".join(f"  - {x}\n" for x in libs) if libs else "")
+                              + ("\nDocuments et pièces des modèles :\n" + extra if extra else ""))
         except Exception as e:
             rep["errors"] += 1
             logger.warning(f"[ARCHIVE] fiche du groupe {g.id} : {e}")

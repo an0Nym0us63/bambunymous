@@ -553,6 +553,48 @@ async def mw_debug(name: str, _: str = Depends(require_admin)):
     return await _call(acc.debug(name))
 
 
+# ── Les documents joints des modeles (27/10/2026) : la copie gardee ici, sinon MakerWorld ──
+@router.get("/doc/{design_id}/{doc_id}")
+async def mw_doc(design_id: str, doc_id: str):
+    """Un document joint (notice, nomenclature, solution…), a lire dans le navigateur. Public, comme chez
+    MakerWorld (un lien ou un onglet n'envoie pas le jeton)."""
+    from fastapi.responses import FileResponse, RedirectResponse
+    from ....services import mw_docs as D
+    if not design_id.isdigit() or not doc_id.isalnum():
+        raise HTTPException(404, "Document inconnu")
+    doc, path = await D.find(design_id, doc_id)
+    if doc is None:
+        raise HTTPException(404, "Document inconnu")
+    if path is None:
+        return RedirectResponse(doc["url"])
+    import mimetypes
+    from urllib.parse import quote
+    mt = mimetypes.guess_type(doc.get("name") or "")[0] or "application/octet-stream"
+    return FileResponse(path, media_type=mt, headers={
+        "Content-Disposition": f"inline; filename*=UTF-8''{quote(doc.get('name') or 'document')}",
+        "Cache-Control": "private, max-age=86400"})
+
+
+@router.get("/docs/status")
+async def mw_docs_status(_: str = Depends(require_admin)):
+    from ....services import mw_docs as D
+    return {**D.status(), "summary": await D.summary()}
+
+
+@router.post("/docs/backfill")
+async def mw_docs_backfill(_: str = Depends(require_admin)):
+    """Relit les fiches des modeles deja imprimes et garde leurs documents joints (en fond)."""
+    from ....services import mw_docs as D
+    return {"started": D.start_backfill(), **D.status(), "summary": await D.summary()}
+
+
+@router.post("/docs/stop")
+async def mw_docs_stop(_: str = Depends(require_admin)):
+    from ....services import mw_docs as D
+    D.stop_backfill()
+    return D.status()
+
+
 # ── Le 3MF d'origine MakerWorld des impressions (24/10/2026) ──
 @router.post("/source3mf/print/{print_id}")
 async def mw_source_print(print_id: int, _: str = Depends(require_mw)):

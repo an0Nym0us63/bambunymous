@@ -20,6 +20,7 @@ CATS = [
     ("plates", "Vignettes de plateau", "#8B5CF6"),
     ("tmf", "Fichiers 3MF tranchés", "#F59E0B"),
     ("mw_tmf", "3MF d'origine MakerWorld", "#FB923C"),
+    ("mw_docs", "Documents joints MakerWorld", "#2563EB"),
     ("videos", "Vidéos", "#EF4444"),
     ("groups", "Photos de groupes", "#EC4899"),
     ("objects", "Photos d'objets", "#22C55E"),
@@ -52,6 +53,8 @@ def _cat(parts: tuple, name: str) -> str:
         if low.startswith("plate"):
             return "plates"
         return "print_photos" if ext in IMG else "other"
+    if top == "mw_docs":                        # notices, solutions… des modeles imprimes (27/10/2026)
+        return "mw_docs"
     if top == "mw_3mf":
         # les 3MF d'origine ; a cote, de petits fichiers (filaments exacts lus, index, etat du rattrapage)
         return "mw_tmf" if ext == ".3mf" else "catalog"
@@ -122,6 +125,8 @@ def _nas_cat(parts: tuple, name: str) -> str:
         if parts[1] == "_Supprimés":
             return "deleted"
         if parts[1] == "3MF MakerWorld":
+            if "Documents" in parts[2:-1]:
+                return "mw_docs"
             return "mw_tmf" if ext == ".3mf" else "catalog"
         return SYS_SUBS.get(parts[1], "other")
     if top == "Impressions":

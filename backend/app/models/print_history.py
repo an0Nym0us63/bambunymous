@@ -204,4 +204,7 @@ class MakerWorldDesign(Base):
     # Profils et leurs plateaux (JSON) : [{profile_id, title, plates:[{index,
     # name, thumb, weight_g, seconds}]}]
     profiles       = Column(Text, nullable=True)
+    # Documents joints et pieces a prevoir (JSON, 27/10/2026) : {docs: [{kind, name, url, profile_id, profile}],
+    # parts: [{title, quantity, url}], other_parts}. None : pas encore lu (le rattrapage le relit).
+    extras         = Column(Text, nullable=True)
     fetched_at     = Column(DateTime, nullable=True)

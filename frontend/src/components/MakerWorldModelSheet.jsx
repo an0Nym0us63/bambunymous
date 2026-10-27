@@ -1,4 +1,5 @@
 import { Hide } from "./Cachettes";
+import MwDocs from "./MwDocs";
 import React, { useEffect, useRef, useState } from "react";
 import { plateRound, plateDoneInRound } from "../utils/queueSort";
 import { useTrackDetail } from "../utils/track";
@@ -401,6 +402,13 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                       {orig ? "Afficher la traduction" : "Afficher l'original"}</button>
                   )}
                 </div>
+              </Section>
+            )}
+
+            {/* Documents joints (notice, solution…) et pieces a prevoir */}
+            {(m.docs?.length > 0 || m.parts?.length > 0 || m.other_parts) && (
+              <Section title="Documents et pièces" icon="📎" c="#0EA5E9">
+                <MwDocs docs={m.docs || []} parts={m.parts || []} otherParts={m.other_parts}/>
               </Section>
             )}
 

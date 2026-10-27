@@ -1233,6 +1233,65 @@ function StorageSection() {
 }
 // Le rattrapage des 3MF d'origine MakerWorld : tourne sur le serveur ; la carte relit son avancement
 // (toutes les 2 s tant qu'il tourne), on peut quitter la page et revenir
+// Les documents joints des modeles (27/10/2026) : notices, nomenclatures, solutions… gardes ici pour chaque modele
+// imprime ; le rattrapage relit les fiches deja connues (sans compte : ces documents sont publics).
+function MwDocsSection() {
+  const [st, setSt] = React.useState(null);
+  const load = () => client.get("/makerworld/docs/status").then(r => setSt(r.data)).catch(() => {});
+  React.useEffect(() => { load(); }, []);
+  React.useEffect(() => {
+    if (!st?.running) return undefined;
+    const t = setInterval(load, 2000);
+    return () => clearInterval(t);
+  }, [st?.running]); // eslint-disable-line react-hooks/exhaustive-deps
+  const start = () => client.post("/makerworld/docs/backfill").then(r => setSt(r.data)).catch(e => showAlert(e.response?.data?.detail || e.message));
+  const stop = () => client.post("/makerworld/docs/stop").then(r => setSt(r.data)).catch(() => {});
+  const run = !!st?.running, sm = st?.summary, has = st && st.total != null;
+  const mo = b => `${((b || 0) / 1048576).toFixed(1).replace(".", ",")} Mo`;
+  const hm = t => new Date(t * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const big = (n, l, c) => <div style={{ flex:"1 1 90px", padding:"8px 10px", borderRadius:12, background:"var(--surface2)", display:"flex", flexDirection:"column", gap:1 }}>
+    <span style={{ fontSize:20, fontWeight:900, backgroundImage:`linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 55%, #ffffff))`, WebkitBackgroundClip:"text",
+      backgroundClip:"text", color:"transparent" }}>{n}</span>
+    <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)" }}>{l}</span></div>;
+  const pct = sm?.designs ? Math.round(100 * sm.read / sm.designs) : 0;
+  return (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Documents joints MakerWorld</h3>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+        Notices d'assemblage, nomenclatures, solutions et autres documents que les créateurs joignent à leurs modèles. Ils sont
+        gardés ici pour chaque modèle imprimé (lisibles même si le créateur les retire, et rangés avec le modèle sur le NAS). C'est
+        fait à chaque relecture d'une fiche ; ce bouton rattrape les modèles déjà imprimés, un à la fois. Sans compte MakerWorld :
+        ces documents sont publics, et ne comptent pas comme des téléchargements.
+      </p>
+      {sm && <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:12 }}>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          {big(sm.kept, `gardé${sm.kept > 1 ? "s" : ""} sur ${sm.docs} documents`, "#16a34a")}
+          {big(sm.with_docs, `modèle${sm.with_docs > 1 ? "s" : ""} en ont`, "#0EA5E9")}
+          {big(sm.unread, "fiches à relire", sm.unread ? "#F97316" : "#64748B")}
+        </div>
+        <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)" }}>{sm.read} fiches relues sur {sm.designs} modèles imprimés</div>
+        <div style={{ height:8, borderRadius:6, background:"var(--surface2)", overflow:"hidden" }}>
+          <div style={{ height:"100%", width:`${pct}%`, borderRadius:6, background:"linear-gradient(90deg, #0EA5E9, #6366F1)", transition:"width .4s" }}/></div>
+      </div>}
+      {has && (
+        <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:12, padding:"10px 12px", borderRadius:12, fontSize:12, fontWeight:700, color:"var(--text2)",
+          border:`1px solid ${run ? "rgba(14,165,233,.35)" : "var(--border)"}`, background: run ? "rgba(14,165,233,.06)" : "transparent" }}>
+          <span style={{ fontWeight:800 }}>{run ? `⏳ En cours · ${st.done} / ${st.total}` : `Dernier passage${st.finished_at ? ` · ${hm(st.finished_at)}` : ""}`}</span>
+          <span>{st.read} fiche{st.read > 1 ? "s" : ""} relue{st.read > 1 ? "s" : ""} · {st.fetched} document{st.fetched > 1 ? "s" : ""} récupéré{st.fetched > 1 ? "s" : ""} ({mo(st.bytes)}){st.failed ? ` · ${st.failed} en échec` : ""}</span>
+          {st.stopped && <span style={{ color:"#d97706" }}>{st.stopped}</span>}
+          {st.error && <span style={{ color:"#ef4444" }}>{st.error}</span>}
+        </div>
+      )}
+      <div style={{ display:"flex", gap:8 }}>
+        {run ? <button onClick={stop} style={{ padding:"8px 16px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text2)",
+            fontSize:13, fontWeight:700, cursor:"pointer" }}>■ Arrêter</button>
+          : <button onClick={start} style={{ padding:"8px 16px", borderRadius:10, border:"none", cursor:"pointer", fontSize:13, fontWeight:700, color:"#fff",
+            background:"linear-gradient(135deg, #0EA5E9, #6366F1)" }}>⇣ Tout récupérer</button>}
+      </div>
+    </div>
+  );
+}
+
 function SourceBackfillSection() {
   const [st, setSt] = React.useState(null);
   const load = () => client.get("/makerworld/source3mf/status").then(r => setSt(r.data)).catch(() => {});
@@ -2186,6 +2245,7 @@ export default function Settings() {
         <ArchiveSection/>
         <SdProbeSection/>
         <SourceBackfillSection/>
+        <MwDocsSection/>
         <EnrichFromCatalogSection/>
         <RecalculateSection/>
         <DiagExportSection/>
