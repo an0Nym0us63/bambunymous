@@ -862,10 +862,21 @@ async def model_detail(design_id: str, stale_ok: bool = False) -> dict:
     profs = base.get("profiles") or []
     by_inst = {str(p.get("instance_id")): str(p.get("profile_id")) for p in profs if p.get("instance_id")}
     known = {str(p.get("profile_id")) for p in profs if p.get("profile_id")}
+    # le profil que j'ai imprime (donne, choisi a la main, sinon deduit) : un plateau sans profil connu lui revient,
+    # au lieu de compter sur tous les profils (27/10/2026 : deux profils affichaient « 4/4 » pour un seul imprime)
+    pp = {"profile": None, "sure": False}
+    if rows:
+        try:
+            from .mw_plate_guess import printed_profile
+            pp = await printed_profile(did)
+        except Exception:
+            logger.exception("[MW] profil imprime")
+    mine = pp["profile"] if pp["profile"] in known else ""
+
     def norm(k):
         prof, _, n = k.partition(":")
         prof = by_inst.get(prof, prof)
-        return f"{prof if prof in known else ''}:{n}"
+        return f"{prof if prof in known else mine}:{n}"
     counts = {}
     for r in done:
         for k in plate_keys(r[2], r[3], r[4]):
@@ -874,6 +885,7 @@ async def model_detail(design_id: str, stale_ok: bool = False) -> dict:
     return {**base, "docs": _docs(did, base.get("docs") or []), "filaments": await _fils(base.get("filaments") or []),
             "stock": stock, "printer": printer,
             "profiles": rank_profiles(profs, printer), "title_fr": base.get("title_mw_fr") or (m.title_fr if m else None),
+            "printed_profile": pp["profile"], "printed_profile_sure": pp["sure"],
             "printed": len(done), "in_progress": sum(1 for r in rows if r[1] == "IN_PROGRESS"),
             "printed_plates": sorted(counts), "printed_plate_counts": counts,
             "printing_plates": sorted({norm(k) for r in rows if r[1] == "IN_PROGRESS" for k in plate_keys(r[2], r[3], r[4])})}

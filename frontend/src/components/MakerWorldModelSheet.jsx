@@ -453,7 +453,12 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                             p.print_count != null ? `${fmtK(p.print_count)} impressions` : null].filter(Boolean).join(" · ")}
                         </div>
                         <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginTop:4 }}>
-                          {p.main && <span style={{ ...pBadge, background:"linear-gradient(135deg, #3B82F6, #6366F1)", border:"none", color:"white" }}>Retenu</span>}
+                          {m.printed_profile && String(m.printed_profile) === String(p.profile_id) &&
+                            <span data-tip={m.printed_profile_sure ? "Le profil de tes impressions" : "Déduit de tes impressions (nom de la tâche, image, poids)"}
+                              style={{ ...pBadge, background:"linear-gradient(135deg, #22C55E, #16A34A)", border:"none", color:"white" }}>
+                              🖨 Imprimé{m.printed_profile_sure ? "" : " (déduit)"}</span>}
+                          {p.main && <span data-tip="Le meilleur pour ton imprimante, proposé pour « À faire »"
+                            style={{ ...pBadge, background:"linear-gradient(135deg, #3B82F6, #6366F1)", border:"none", color:"white" }}>Retenu</span>}
                           {p.fit === 2 ? <span style={{ ...pBadge, color:"#22c55e" }}>🖨️ pour ta {m.printer}</span>
                             : p.fit === 1 ? <span style={{ ...pBadge, color:"#84cc16" }}>🖨️ compatible {m.printer}</span>
                             : m.printer ? <span style={{ ...pBadge, color:"#f59e0b" }}>pas pour ta {m.printer}</span> : null}
@@ -763,7 +768,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
           </div>
         )}
         {/* la vue 3D : le profil le mieux adapte a mon imprimante (le premier de la liste) */}
-        {view3d && <Model3D designId={id} profileId={m.profiles?.[0]?.profile_id} title={m.title_fr || m.title} onClose={() => setView3d(false)}/>}
+        {view3d && <Model3D designId={id} profileId={m.printed_profile || m.profiles?.[0]?.profile_id}title={m.title_fr || m.title} onClose={() => setView3d(false)}/>}
       </div>
     </div>,
     document.body

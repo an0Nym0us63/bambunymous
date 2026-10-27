@@ -609,7 +609,7 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
           <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:10.5, fontWeight:900, color:"#3b82f6", letterSpacing:".05em" }}>
             🌐 MAKERWORLD
             {!rated && <span style={{ fontSize:10.5, fontWeight:800, color:"#f59e0b", letterSpacing:0 }}>· ⭐ à évaluer</span>}</div>
-          <div style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", lineHeight:1.3, overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis" }}>{mw.title}</div>
+          <div style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", lineHeight:1.3, overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis" }}>{mw.title_fr || mw.title}</div>
           <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:11, fontWeight:700, color:"var(--muted)", marginTop:2, whiteSpace:"nowrap", overflow:"hidden" }}>
             {mw.creator_name && <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>par {mw.creator_name}</span>}
             {stats.slice(0, 2).map(([ico, n, lbl]) => <span key={lbl}>{ico} {fmtK(n)}</span>)}
@@ -629,12 +629,12 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
       <a href={url} onClick={e => { e.preventDefault(); setSheet(designId); }} onPointerDown={() => prefetchModel(designId)}
         style={{ display:"flex", gap:10, padding:"0 12px 10px", textDecoration:"none", color:"var(--text)", cursor:"pointer" }}>
         <div style={{ minWidth:0, flex:1 }}>
-          {/* le titre entier seulement s'il est coupe dans le resume */}
-          {mw.title?.length > 34 && <div style={{ fontSize:13, fontWeight:700, lineHeight:1.3, overflow:"hidden",
-            display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{mw.title}</div>}
+          {/* le titre (traduit) entier seulement s'il est coupe dans le resume ; dessous, celui d'origine */}
+          {(mw.title_fr || mw.title)?.length > 34 && <div style={{ fontSize:13, fontWeight:700, lineHeight:1.3, overflow:"hidden",
+            display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{mw.title_fr || mw.title}</div>}
           {mw.title_fr && mw.title_fr !== mw.title && (
             <div style={{ fontSize:11, color:"var(--muted)", marginTop:1, overflow:"hidden",
-              textOverflow:"ellipsis", whiteSpace:"nowrap" }} title="Titre traduit (recherche)">{mw.title_fr}</div>
+              textOverflow:"ellipsis", whiteSpace:"nowrap" }} data-tip="Titre d'origine">{mw.title}</div>
           )}
           {mw.creator_name && (
             <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:"var(--muted)", marginTop:3 }}>
@@ -670,7 +670,8 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
         </div>
       )}
       {!toRate.has(String(designId)) && <RateStatusLine designId={designId}/>}
-      <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShownProf}/>
+      <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShownProf}
+        modelTitle={mw.title} modelTitleFr={mw.title_fr}/>
       <AdminOnly home mw>
         <button onClick={() => setPick(true)} style={{ display:"block", width:"100%", padding:"7px", border:"none",
           borderTop:"1px solid var(--border)", background:"none", color:"#3b82f6", fontSize:11.5, fontWeight:600,
@@ -689,9 +690,10 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
       {/* la vue 3D, au profil montre par les plateaux (sinon celui de l'impression) ; carte repliee : les plateaux
           deduisent quand meme le profil, sans s'afficher, et la vue l'attend */}
       {view3d && !open && <div style={{ display:"none" }}>
-        <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShownProf}/></div>}
+        <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShownProf}
+        modelTitle={mw.title} modelTitleFr={mw.title_fr}/></div>}
       {view3d && <Model3D designId={designId} profileId={shownProf || null} wait={shownProf === undefined} printId={(prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id}
-        title={mw.title} onClose={() => setView3d(false)}/>}
+        title={mw.title_fr || mw.title} onClose={() => setView3d(false)}/>}
     </div>
   );
 }
@@ -704,7 +706,7 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
 // plusieurs plateaux MakerWorld regroupes sur un seul).
 const manualPlates = (raw) => { try { const m = JSON.parse(raw || "null"); return m && Array.isArray(m.plates) ? m : null; } catch { return null; } };
 
-function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile }) {
+function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, modelTitle, modelTitleFr }) {
   const [over, setOver] = useState({});          // corrections faites ici, avant relecture
   const [imgGuess, setImgGuess] = useState({});        // plateau probable par print (silhouette de son apercu)
   const guessIds = printsIn.filter(pr => !manualPlates(pr.mw_plates) && pr.status !== "FAILED" && pr.status !== "CANCELLED")
@@ -722,9 +724,14 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile }) {
   const visiting = useFriend((s) => s.friend);
   const prints = printsIn.map(pr => pr.id in over ? { ...pr, mw_plates: over[pr.id] } : pr);
   const avec = profiles.filter(x => x.plates?.length);
+  // l'imprimante donne parfois l'identifiant d'instance du profil a la place du sien : ramene au profil
+  // (27/10/2026 : sans cela le profil imprime passait pour inconnu, et on le devinait -- mal)
+  const byInst = {};
+  profiles.forEach(x => { if (x.instance_id) byInst[String(x.instance_id)] = String(x.profile_id); });
+  const profOf = v => (v ? byInst[String(v)] || String(v) : null);
   const known = {};
   prints.forEach(pr => {
-    const pp = manualPlates(pr.mw_plates)?.profile || pr.mw_profile_id;
+    const pp = profOf(manualPlates(pr.mw_plates)?.profile || pr.mw_profile_id);
     if (pp) known[pp] = (known[pp] || 0) + 1;
   });
   const sure = avec.find(x => known[x.profile_id] && known[x.profile_id] === Math.max(...Object.values(known)));
@@ -736,9 +743,12 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile }) {
   // il reprend souvent le titre du profil MakerWorld, en tout ou en partie.
   const words = (t) => new Set(String(t || "").toLowerCase().normalize("NFD").replace(/\p{M}/gu, "")
     .split(/[^a-z0-9.]+/).filter(w => w.length > 1 && !/^(plate|plateau|the|and|for|with|de|du|la|le|les|et)$/.test(w)));
+  // les mots du titre du MODELE ne disent rien du profil (la tache reprend souvent ce titre : « Art The Clown
+  // multipart no AMS » designait a tort le profil « Version Multipart sans ams ») : on ne compte que les autres
+  const modelWords = words(`${modelTitle || ""} ${modelTitleFr || ""}`);
   const nameScore = (pr, x) => {
     const name = `${pr.original_name || ""} ${pr.task_name || ""} ${pr.file_name || ""}`;
-    const pw = words(x.title);
+    const pw = new Set([...words(x.title)].filter(w => !modelWords.has(w)));
     if (pw.size < 2) return 0;
     const nw = words(name);
     const common = [...pw].filter(w => nw.has(w)).length;
@@ -783,7 +793,7 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile }) {
   const platesOf = (pr) => {
     const m = manualPlates(pr.mw_plates);
     if (m) return !m.profile || String(m.profile) === String(prof.profile_id) ? m.plates : null;
-    const pp = pr.mw_profile_id ? String(pr.mw_profile_id) : null;
+    const pp = profOf(pr.mw_profile_id);
     if (pp && pp !== String(prof.profile_id) && withPlates.has(pp)) return null;
     const i = parseInt(pr.plate_id, 10);
     return i ? [i] : null;

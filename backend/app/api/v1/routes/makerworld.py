@@ -598,6 +598,13 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, _: s
             r = (await db.execute(select(Print.mw_profile_id, Print.mw_plates).where(Print.id == print_id))).first()
         if r:
             prof = _profile(r[0], r[1]) or prof
+    if not prof:
+        # rien de donne : le profil que j'ai imprime (deduit de mes impressions), comme la carte et la fiche
+        try:
+            from ....services.mw_plate_guess import printed_profile
+            prof = (await printed_profile(did))["profile"] or ""
+        except Exception:
+            logger.exception("[3D] profil imprime")
     t0 = _t.perf_counter()
     # le 3MF d'origine de CE profil ; sans profil connu, celui retenu pour le modele
     iid = known(did, prof) if prof else known(did, "")

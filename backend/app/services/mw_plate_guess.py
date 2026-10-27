@@ -161,3 +161,105 @@ async def guess(design_id: str, print_ids: list) -> dict:
         weights = {i: w for i, w in (await db.execute(
             select(Print.id, Print.total_weight_g).where(Print.id.in_(ids)))).all() if w}
     return {"guesses": await asyncio.to_thread(_guess, profiles, ids, weights)}
+
+
+# ── Le profil imprime d'un modele (27/10/2026) ──
+# Le meme raisonnement que la ligne « Plateaux » de la carte d'une impression, ici cote serveur pour la fiche
+# du modele et la vue 3D (qui prenaient le profil « retenu » pour mon imprimante, pas celui que j'ai imprime).
+_STOP = {"plate", "plateau", "the", "and", "for", "with", "de", "du", "la", "le", "les", "et"}
+
+
+def _words(t) -> set:
+    import re
+    import unicodedata
+    s = unicodedata.normalize("NFD", str(t or "").lower())
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return {w for w in re.split(r"[^a-z0-9.]+", s) if len(w) > 1 and w not in _STOP}
+
+
+def _manual(raw):
+    import json
+    try:
+        m = json.loads(raw) if raw else None
+    except (TypeError, ValueError):
+        return None
+    return m if isinstance(m, dict) and isinstance(m.get("plates"), list) else None
+
+
+async def printed_profile(design_id: str) -> dict:
+    """{"profile": profile_id | None, "sure": bool} : le profil donne par l'imprimante ou choisi a la main (le
+    plus frequent) ; sinon deduit des impressions -- nom de la tache, image de l'apercu, numero et poids du
+    plateau ; a egalite ou sans indice, le profil par defaut. None : modele jamais imprime."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    from .makerworld import _base
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        return {"profile": None, "sure": False}
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Print.id, Print.status, Print.plate_id, Print.mw_profile_id, Print.mw_plates,
+                                        Print.original_name, Print.task_name, Print.file_name, Print.total_weight_g)
+                                 .where(Print.design_id == did))).all()
+    if not rows:
+        return {"profile": None, "sure": False}
+    base = await _base(did, True)
+    profs = [p for p in ((base.get("profiles") if isinstance(base, dict) else None) or []) if isinstance(p, dict)]
+    avec = [p for p in profs if p.get("plates")]
+    if not avec:
+        return {"profile": None, "sure": False}
+    by_inst = {str(p.get("instance_id")): str(p.get("profile_id")) for p in profs if p.get("instance_id")}
+    known: dict = {}
+    for r in rows:
+        pp = str((_manual(r.mw_plates) or {}).get("profile") or r.mw_profile_id or "")
+        pp = by_inst.get(pp, pp)
+        if pp and pp != "0":
+            known[pp] = known.get(pp, 0) + 1
+    if known:
+        top = max(known.values())
+        sure = next((p for p in avec if known.get(str(p.get("profile_id"))) == top), None)
+        if sure:
+            return {"profile": str(sure["profile_id"]), "sure": True}
+    if len(avec) == 1:
+        return {"profile": str(avec[0]["profile_id"]), "sure": False}
+    ids = [r.id for r in rows if not _manual(r.mw_plates) and r.status not in ("FAILED", "CANCELLED")][:60]
+    weights = {r.id: r.total_weight_g for r in rows if r.total_weight_g}
+    try:
+        img = await asyncio.to_thread(_guess, avec, ids, weights) if ids else {}
+    except Exception:
+        logger.exception("[MW] profil imprime : reconnaissance a l'image")
+        img = {}
+
+    mwords = _words(" ".join(str(base.get(k) or "") for k in ("title", "title_fr", "title_mw_fr")))
+
+    def score(p) -> float:
+        sc = 0.0
+        # le titre du profil, traduit et d'origine, sans les mots du titre du MODELE (la tache reprend souvent ce
+        # titre : « Art The Clown multipart no AMS » designait a tort le profil « Version Multipart sans ams »)
+        pws = [w for w in (_words(p.get("title")) - mwords, _words(p.get("title_original")) - mwords) if len(w) >= 2]
+        for r in rows:
+            nw = _words(f"{r.original_name or ''} {r.task_name or ''} {r.file_name or ''}")
+            ns = max((len(pw & nw) / len(pw) for pw in pws), default=0)
+            if ns >= 0.5:
+                sc += 12 * ns                      # indice fort : le nom de la tache cite ce profil
+            g = img.get(str(r.id))
+            if g and str(g["profile"]) == str(p.get("profile_id")):
+                sc += 6 if g.get("sure") is False else 10
+            try:
+                i = int(r.plate_id or 0)
+            except (TypeError, ValueError):
+                i = 0
+            pl = next((q for q in p["plates"] if q.get("index") == i), None) if i else None
+            if i and not pl:
+                sc -= 4                            # ce profil n'a pas ce plateau
+            elif pl and pl.get("weight_g") and (r.total_weight_g or 0) > 0:
+                sc += 3 * min(pl["weight_g"], r.total_weight_g) / max(pl["weight_g"], r.total_weight_g)
+        return sc
+    best_p, best_sc = None, None
+    for p in avec:                                 # a egalite, l'ordre de la fiche
+        sc = score(p)
+        if best_sc is None or sc > best_sc:
+            best_p, best_sc = p, sc
+    if best_sc is None or best_sc <= 0:
+        best_p = next((p for p in avec if p.get("default")), avec[0])
+    return {"profile": str(best_p["profile_id"]), "sure": False}
