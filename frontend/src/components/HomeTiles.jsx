@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import { importRetry } from "../utils/importRetry";
 import AllAlertsModal from "./AllAlertsModal";
 import { Hide } from "./Cachettes";
@@ -460,7 +461,7 @@ function Spark({ values, color, height = 38 }) {
   );
 }
 // une bobine : sa couleur, et ce qu'il en reste en anneau
-function SpoolDot({ color, pct, size = 34, title }) {
+function SpoolDot({ color, colors = null, multicolor = null, finish = null, pct, size = 34, title }) {
   const sw = Math.max(3, Math.round(size / 9));
   const r = size / 2 - sw / 2 - 1, C = 2 * Math.PI * r, v = Math.max(0, Math.min(1, pct ?? 1));
   return (
@@ -470,7 +471,8 @@ function SpoolDot({ color, pct, size = 34, title }) {
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={v < 0.15 ? "#ef4444" : v < 0.35 ? "#f59e0b" : "#22c55e"}
           strokeWidth={sw} strokeDasharray={C} strokeDashoffset={C * (1 - v)}/>
       </svg>
-      <span style={{ position: "absolute", inset: sw + 3, borderRadius: "50%", background: hexCss(color), border: "1px solid rgba(0,0,0,0.15)" }}/>
+      <span style={{ position: "absolute", inset: sw + 3, borderRadius: "50%", border: "1px solid rgba(0,0,0,0.15)", overflow: "hidden",
+        ...colorBg(parseColorsList(color, colors), multicolor, finish) }}/>
     </span>
   );
 }
@@ -1332,7 +1334,7 @@ function Stock({ s, o, sz }) {
   // une rangee de liste : la pastille, le nom, « marque · sous-type », le poids et une barre
   const line = (x, h) => { const pc = spoolPct(x), c = pctColor(pc), two = h >= 34;
     return <div key={x.id} data-tip={spoolTip(x)} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, height: h }}>
-      <SpoolDot color={x.filament_color} pct={pc} size={two ? 28 : 20}/>
+      <SpoolDot color={x.filament_color} colors={x.filament_colors_array} multicolor={x.filament_multicolor_type} finish={finishOf(x)} pct={pc} size={two ? 28 : 20}/>
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
         <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><W text={spoolName(x)}/></span>
         {two && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -1348,7 +1350,7 @@ function Stock({ s, o, sz }) {
     {few > 0 && <FewChip n={few}/>}</div>;
   return (
     <Tile icon={<Package size={15}/>} color="#F59E0B" label="Stock" to="/filaments"
-      mini={sz.h === 0.5} summary={<>{list.length}<span style={{ display: "inline-flex", gap: 2 }}>{low.slice(0, 3).map(x => <span key={x.id} data-tip={spoolTip(x)}><SpoolDot color={x.filament_color} pct={spoolPct(x)} size={22}/></span>)}</span></>}
+      mini={sz.h === 0.5} summary={<>{list.length}<span style={{ display: "inline-flex", gap: 2 }}>{low.slice(0, 3).map(x => <span key={x.id} data-tip={spoolTip(x)}><SpoolDot color={x.filament_color} colors={x.filament_colors_array} multicolor={x.filament_multicolor_type} finish={finishOf(x)} pct={spoolPct(x)} size={22}/></span>)}</span></>}
       zoom={<StockZoom list={list} kg={kg}/>}>
       {({ W, H }) => {
         const rest = H - 34;
@@ -1368,7 +1370,7 @@ function Stock({ s, o, sz }) {
         return <>{head}<div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, minmax(${g.size}px, ${cell}px))`, gap: 6, alignContent: "center",
           justifyContent: "space-evenly", marginTop: 4 }}>
           {low.slice(0, g.n || low.length).map(x => <span key={x.id} data-tip={spoolTip(x)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, minWidth: 0 }}>
-            <SpoolDot color={x.filament_color} pct={spoolPct(x)} size={g.size}/>
+            <SpoolDot color={x.filament_color} colors={x.filament_colors_array} multicolor={x.filament_multicolor_type} finish={finishOf(x)} pct={spoolPct(x)} size={g.size}/>
             {labels && two && <span style={{ fontSize: 9.5, fontWeight: 700, lineHeight: "13px", color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden",
               textOverflow: "ellipsis", maxWidth: "100%" }}>{spoolShort(x)}</span>}
             {labels && <span style={{ fontSize: 10.5, fontWeight: 800, lineHeight: "14px", whiteSpace: "nowrap",
@@ -1427,7 +1429,7 @@ function StockZoom({ list, kg }) {
       {shown.slice(0, cap).map(x => { const pc = spoolPct(x), c = pctColor(pc);
         return <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 14, minWidth: 0,
           background: `linear-gradient(135deg, ${hexCss(x.filament_color)}22, transparent 55%), var(--surface2)`, border: "1px solid var(--border)" }}>
-          <SpoolDot color={x.filament_color} pct={pc} size={40}/>
+          <SpoolDot color={x.filament_color} colors={x.filament_colors_array} multicolor={x.filament_multicolor_type} finish={finishOf(x)} pct={pc} size={40}/>
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{spoolName(x)}</span>
@@ -1517,7 +1519,8 @@ function Dry({ v, status, o, sz }) {
           const ring = Math.floor(wide ? Math.min(Hr - 10, W * 0.42, 170) : Math.min(W * 0.78, Hr - 96, 170));
           const pill = (txt, c) => <span style={{ fontSize: 11.5, fontWeight: 800, color: c, padding: "3px 9px", borderRadius: 12, background: `${c}1c`, whiteSpace: "nowrap" }}>{txt}</span>;
           const below = extra > 0 && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
-            {trays.length > 0 && <span style={{ display: "inline-flex", gap: 4 }}>{trays.map(t => <SpoolDot key={t.id} color={trayCol(t)} size={26}
+            {trays.length > 0 && <span style={{ display: "inline-flex", gap: 4 }}>{trays.map(t => <SpoolDot key={t.id} color={t.spool_info?.color || t.spool_info?.filament_color || t.color} colors={t.spool_info?.colors_array}
+              multicolor={t.spool_info?.multicolor_type} finish={finishOf(t.spool_info, t)} size={26}
               pct={t.remain >= 0 ? t.remain / 100 : null} title={`${t.filament_type || ""}`}/>)}</span>}
             {a.humidity > 0 && pill(`💧 ${a.humidity} %`, "#0ea5e9")}
             {a.temp > 0 && W >= 215 && pill(`${Math.round(a.temp)} °C dedans`, "#f97316")}
@@ -3284,7 +3287,7 @@ function Spool({ status, o, sz }) {
     border: light ? "1px solid rgba(0,0,0,0.18)" : "none", boxShadow: `0 3px 10px ${light ? "rgba(0,0,0,0.12)" : `${barCol}55`}` }}>
     {Math.round(pct * 100)}<span style={{ fontSize: fs * 0.7 }}>%</span></span>;
   const spool = size => <span data-pk="" style={{ display: "inline-flex", flexShrink: 0, filter: `drop-shadow(0 6px 14px ${color}55)` }}>
-    <SpoolSVG colors={colors} size={size} active={live} type={si.multicolor_type}/></span>;
+    <SpoolSVG colors={colors} finish={finishOf(si, t)} size={size} active={live} type={si.multicolor_type}/></span>;
   // les autres bobines du filament en stock (comme la fiche bobine) : leurs ombres decalees derriere, et « +x en stock »
   const more = si.filament_spools > 1 ? si.filament_spools - 1 : 0;
   const moreG = si.filament_stock_g != null && g != null ? Math.max(0, si.filament_stock_g - g) : null;
@@ -3292,17 +3295,17 @@ function Spool({ status, o, sz }) {
     return <span style={{ position: "relative", display: "inline-flex", flexShrink: 0, filter: `drop-shadow(0 8px 18px ${color}66)`,
       marginRight: more > 0 ? (more > 1 ? 30 : 18) * k : 0 }}>
       {more > 1 && <span aria-hidden="true" style={{ position: "absolute", top: 10 * k, left: 34 * k, opacity: 0.35 }}>
-        <SpoolSVG colors={colors} size={100 * k} type={si.multicolor_type}/></span>}
+        <SpoolSVG colors={colors} finish={finishOf(si, t)} size={100 * k} type={si.multicolor_type}/></span>}
       {more > 0 && <span aria-hidden="true" style={{ position: "absolute", top: 5 * k, left: 18 * k, opacity: 0.6 }}>
-        <SpoolSVG colors={colors} size={108 * k} type={si.multicolor_type}/></span>}
-      <span data-pk="" style={{ position: "relative", display: "inline-flex" }}><SpoolSVG colors={colors} size={size} active={live} type={si.multicolor_type}/></span></span>; };
+        <SpoolSVG colors={colors} finish={finishOf(si, t)} size={108 * k} type={si.multicolor_type}/></span>}
+      <span data-pk="" style={{ position: "relative", display: "inline-flex" }}><SpoolSVG colors={colors} finish={finishOf(si, t)} size={size} active={live} type={si.multicolor_type}/></span></span>; };
   const chip = (txt, c) => <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 800,
     whiteSpace: "nowrap", color: c, background: `${c}1c` }}>{txt}</span>;
   const ago = iso => { if (!iso) return "—"; const d = Math.round((Date.now() - utc(iso).getTime()) / 86400000); return d <= 0 ? "aujourd'hui" : d === 1 ? "hier" : `il y a ${d} j`; };
   return (
     <Tile icon={<Disc3 size={15}/>} color="#8B5CF6" label="Filament en cours" to="/filaments"
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13.5 }}>
-        <SpoolDot color={color} pct={pct} size={22}/>{name}<Muted>{weight}</Muted></span>}
+        <SpoolDot color={si.color || t.color} colors={si.colors_array} multicolor={si.multicolor_type} finish={finishOf(si, t)} pct={pct} size={22}/>{name}<Muted>{weight}</Muted></span>}
       zoom={<>
         {/* la bobine en vedette, sur un fond de sa couleur */}
         <div style={{ position: "relative", overflow: "hidden", borderRadius: 22, padding: 18, display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap",

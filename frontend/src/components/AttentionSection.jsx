@@ -5,7 +5,7 @@ import AdminOnly from "./AdminOnly";
 import { Pressable } from "./ContextMenu";
 import AllAlertsModal from "./AllAlertsModal";
 import { ChevronDown, ChevronRight, List } from "lucide-react";
-import { colorBg, parseColorsList } from "../utils/colors";
+import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import { FilamentSheet, FilamentSheetFromSpool, PrintDetail } from "./LazySheets";
 
 /**
@@ -36,7 +36,7 @@ function Dot({ a, size = 26 }) {
   const cols = parseColorsList(a.color, a.colors_array);
   return (
     <div style={{ ...box, boxShadow:"0 1px 3px rgba(0,0,0,0.18)" }}>
-      <div style={{ position:"absolute", inset:0, ...colorBg(cols, a.multicolor_type) }}/>
+      <div style={{ position:"absolute", inset:0, ...colorBg(cols, a.multicolor_type, finishOf(a)) }}/>
       {/* le liseré PAR-DESSUS la couleur : sinon un filament blanc disparait sur le fond clair */}
       <div style={{ position:"absolute", inset:0, borderRadius:"inherit", pointerEvents:"none", boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.25)" }}/>
     </div>

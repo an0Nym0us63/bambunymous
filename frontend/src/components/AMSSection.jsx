@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useTrackDetail } from "../utils/track";
 import { Droplets, Sun, Thermometer, Timer, Clock, Package, Palette } from "lucide-react";
 import client from "../api/client";
-import { colorBg, opaqueColors } from "../utils/colors";
+import { colorBg, opaqueColors, finishOf } from "../utils/colors";
 import { createPortal } from "react-dom";
 import { FilamentSheetFromSpool } from "./LazySheets";
 import SpoolSVG from "./SpoolSVG";
@@ -135,10 +135,10 @@ function ColorPill({ tray, spoolInfo, active, h = 28 }) {
   // Toutes ses couleurs (bobine multicolore comprise) ; les hachures viennent
   // par-dessus, en calque (HatchOverlay).
   const bg = posee
-    ? { ...colorBg(parseColors({}, posee), multicolorType({}, posee)), opacity: 0.85 }
+    ? { ...colorBg(parseColors({}, posee), multicolorType({}, posee), finishOf(posee)), opacity: 0.85 }
     : isEmpty
     ? { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.18) 0px, rgba(148,163,184,0.18) 2px, transparent 2px, transparent 6px)" }
-    : colorBg(colors, multicolorType(tray, spoolInfo));
+    : colorBg(colors, multicolorType(tray, spoolInfo), finishOf(spoolInfo, tray));
   const lum = luminance((c1||"").replace("#",""));
   const ringColor = active ? "#3b82f6" : isEmpty ? "rgba(148,163,184,0.2)" : lum > 200 ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.1)";
   return (
@@ -317,7 +317,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
   const mcType = multicolorType(tray, spoolInfo);
   // Barre de niveau : couleur OPAQUE, sans damier — sinon translucide sur damier
   // masque le niveau. Le damier reste sur la bobine et les pastilles.
-  const barBg = colorBg(opaqueColors(colors), mcType);
+  const barBg = colorBg(opaqueColors(colors), mcType, finishOf(spoolInfo, tray), { bar: true });
   // Si filament gris/blanc → fond de la barre plus foncé
   const barTrackColor = "var(--border)";
 
@@ -351,7 +351,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
         transform: isActive ? "scale(1.06)" : "scale(1)", transition:"transform 0.3s" }}>
         {empty && tray.drying_spool ? (
           <div style={{ opacity:0.6, position:"relative" }} title="Posée pour séchage (non insérée)">
-            <SpoolSVG colors={parseColors({}, tray.drying_spool)} empty={false} size={size} active={false}
+            <SpoolSVG colors={parseColors({}, tray.drying_spool)} finish={finishOf(tray.drying_spool)} empty={false} size={size} active={false}
               type={multicolorType({}, tray.drying_spool)}/>
             {/* Hachures legeres : la bobine est la, mais pas inseree. */}
             <span style={{ position:"absolute", left:"50%", top:"50%", width:size, height:size,
@@ -359,7 +359,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
               background:"repeating-linear-gradient(-45deg, rgba(255,255,255,0.28) 0px, rgba(255,255,255,0.28) 1.5px, transparent 1.5px, transparent 7px)" }}/>
           </div>
         ) : (
-          <SpoolSVG colors={empty?null:colors} empty={empty} size={size} active={isActive} type={mcType}/>
+          <SpoolSVG colors={empty?null:colors} finish={finishOf(spoolInfo, tray)} empty={empty} size={size} active={isActive} type={mcType}/>
         )}
         {/* Label slot */}
         <div style={{ position:"absolute", bottom: Math.round(size * 0.14), left:"50%",
@@ -426,13 +426,13 @@ function TrayRow({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loa
   const hasT = (spoolInfo?.initial_weight_g ?? spoolInfo?.filament_weight_g) != null;
   const pct = hasW && hasT ? Math.round((spoolInfo.remaining_weight_g / (spoolInfo.initial_weight_g ?? spoolInfo.filament_weight_g)) * 100) : (tray.remain ?? 0);
   const w = hasW ? `${Math.round(spoolInfo.remaining_weight_g)} g` : tray.remain != null ? `≈ ${tray.remain * 10} g` : "";
-  const barBg = colorBg(opaqueColors(colors), mcType);
+  const barBg = colorBg(opaqueColors(colors), mcType, finishOf(spoolInfo, tray), { bar: true });
   return (
     <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, height: size + 4, cursor: onClick ? "pointer" : "default",
       borderRadius: 14, padding: "2px 10px 2px 2px", boxSizing: "border-box", background: isActive ? "rgba(59,130,246,0.08)" : "transparent",
       border: `1px solid ${isActive ? "rgba(59,130,246,0.45)" : "transparent"}` }}>
       <div style={{ position: "relative", flexShrink: 0, opacity: posee ? 0.6 : 1 }}>
-        <SpoolSVG colors={vide ? null : (posee ? parseColors({}, posee) : colors)} empty={vide} size={size} active={isActive} type={posee ? multicolorType({}, posee) : mcType}/>
+        <SpoolSVG colors={vide ? null : (posee ? parseColors({}, posee) : colors)} finish={posee ? finishOf(posee) : finishOf(spoolInfo, tray)} empty={vide} size={size} active={isActive} type={posee ? multicolorType({}, posee) : mcType}/>
       </div>
       <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
         <div style={{ fontSize: size >= 64 ? 13.5 : 12, fontWeight: 800, color: "var(--text)", lineHeight: 1.2, minWidth: 0,
@@ -731,7 +731,7 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
       <div style={{ position:"relative", overflow:"hidden", padding:"52px 18px 18px", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap",
         background:`radial-gradient(circle at 18% 45%, ${tint}55, transparent 60%), linear-gradient(135deg, ${tint}26, transparent 70%), var(--surface2)` }}>
         <span style={{ position:"relative", display:"inline-flex", flexShrink:0, filter:`drop-shadow(0 8px 18px ${tint}66)`, opacity: isEmpty && !tray.drying_spool ? .35 : 1 }}>
-          <SpoolSVG colors={cols || ["#94a3b8"]} size={104} type={isEmpty ? multicolorType({}, tray.drying_spool) : multicolorType(tray, info)}/>
+          <SpoolSVG colors={cols || ["#94a3b8"]} finish={isEmpty ? finishOf(tray.drying_spool) : finishOf(info, tray)} size={104} type={isEmpty ? multicolorType({}, tray.drying_spool) : multicolorType(tray, info)}/>
           {/* Bobine posee pour sechage : hachuree (non inseree). */}
           {isEmpty && tray.drying_spool && <HatchOverlay radius={52}/>}
         </span>

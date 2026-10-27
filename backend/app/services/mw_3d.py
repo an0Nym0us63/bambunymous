@@ -341,6 +341,47 @@ def _settings(z: zipfile.ZipFile) -> tuple:
     return sorted(plates), objs
 
 
+# La finition d'un filament (28/10/2026), comme finishOf de l'appli : lue dans son nom ou son type (« Bambu PLA Silk+
+# @BBL X1C »…) ; translucide quand sa couleur a une transparence (8 hexa). Pour le rendu de la vue 3D.
+_FINISH_WORDS = [("glow", r"glow|phosphor|luminesc"), ("galaxy", r"galaxy|galax"), ("sparkle", r"sparkle|glitter|paillet"),
+                 ("marble", r"marble|marbre"), ("silk", r"silk|soie"), ("metal", r"metal"), ("wood", r"wood|\bbois\b"),
+                 ("carbon", r"carbon|carbone|(^|[\s-])cf\b"), ("matte", r"matte|\bmat\b")]
+
+
+def finish_of(*texts, color: str = "") -> str | None:
+    import unicodedata
+    t = " ".join(str(x) for x in texts if x).lower()
+    t = "".join(c for c in unicodedata.normalize("NFD", t) if not unicodedata.combining(c))
+    h = str(color or "").lstrip("#")
+    if len(h) == 8 and h[6:].lower() != "ff":
+        return "translucent"
+    if re.search(r"translucent|transparent", t):
+        return "translucent"
+    for f, rx in _FINISH_WORDS:
+        if re.search(rx, t):
+            return f
+    return None
+
+
+def origin_finishes(src: Path) -> dict:
+    """{couleur RRGGBB : finition} des filaments d'un 3MF (profil filament et couleur de chacun)."""
+    try:
+        with zipfile.ZipFile(src) as z:
+            ps = json.loads(z.read("Metadata/project_settings.config"))
+    except Exception:
+        return {}
+    cols = ps.get("filament_colour") or []
+    names = ps.get("filament_settings_id") or []
+    types = ps.get("filament_type") or []
+    out = {}
+    for k, c in enumerate(cols):
+        h = str(c or "").lstrip("#").upper()
+        f = finish_of(names[k] if k < len(names) else "", types[k] if k < len(types) else "", color=c)
+        if f and len(h) >= 6 and h[:6] not in out:
+            out[h[:6]] = f
+    return out
+
+
 def _hex_rgba(h) -> int:
     h = str(h or "").lstrip("#")
     try:

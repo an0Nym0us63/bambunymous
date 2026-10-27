@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import HiddenMark from "../components/HiddenMark";
 import Cachettes from "../components/Cachettes";
 import { useUrlTab } from "../utils/useUrlTab";
@@ -24,7 +25,7 @@ const fmtEur = c => isMoneyHidden() ? MONEY_MASK : `${(c || 0).toFixed(2)} €`;
 
 // Pastille couleur : dégradé sur un calque interne d'un conteneur overflow:hidden,
 // anneau en box-shadow. Aucun border sur l'élément peint → pas de halo.
-function Dot({ hex, colors, multicolor, size = 12 }) {
+function Dot({ hex, colors, multicolor, finish = null, size = 12 }) {
   let bg = hex
     ? (String(hex).startsWith("#") ? String(hex).slice(0, 7) : `#${String(hex).slice(0, 6)}`)
     : "#888";
@@ -40,7 +41,7 @@ function Dot({ hex, colors, multicolor, size = 12 }) {
     <div style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0,
       position: "relative", overflow: "hidden",
       boxShadow: "inset 0 0 0 1px rgba(128,128,128,0.35)" }}>
-      <div style={{ position: "absolute", inset: 0, background: bg }}/>
+      <div style={{ position: "absolute", inset: 0, ...(hex || colors ? colorBg(parseColorsList(hex, colors), multicolor, finish) : { background: bg }) }}/>
     </div>
   );
 }
@@ -274,7 +275,7 @@ function DryingStats() {
     <div onClick={() => setOpen(s)} role="button" tabIndex={0}
       style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 4px", cursor:"pointer",
         borderBottom:"1px dashed var(--border)" }}>
-      <Dot hex={s.color} colors={s.colors_array} multicolor={s.multicolor_type} size={14}/>
+      <Dot hex={s.color} colors={s.colors_array} multicolor={s.multicolor_type} finish={finishOf(s)} size={14}/>
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", overflow:"hidden",
           textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</div>
@@ -1201,7 +1202,7 @@ export default function Stats() {
                   <Bar key={f.id} label={f.name}
                     value={f.grams} max={data.top_filaments[0].grams}
                     sublabel={`${f.grams} g`} color="#3b82f6"
-                    dot={<Dot hex={f.color} colors={f.colors_array} multicolor={f.multicolor_type} size={10}/>}/>
+                    dot={<Dot hex={f.color} colors={f.colors_array} multicolor={f.multicolor_type} finish={finishOf(f)} size={10}/>}/>
                 ))}
               </div>
             )}

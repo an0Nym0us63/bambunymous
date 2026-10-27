@@ -5,7 +5,7 @@ import { Sun } from "lucide-react";
 import client from "../api/client";
 import { usePrinter } from "../store/printer";
 import { amsName, slotLabel, isExternal, grilleAccueil, lireDisposition, columnWeight, slotCount } from "../utils/ams";
-import { colorBg } from "../utils/colors";
+import { colorBg, finishOf } from "../utils/colors";
 import { showAlert } from "../utils/dialog";
 
 // « Sechee aujourd'hui » : date la bobine, et dit OU elle seche. Par defaut
@@ -117,7 +117,7 @@ export default function DryNowDialog({ spoolId, spoolName, onClose, onDone }) {
                       : empty ? [] : colorsOf(t.cols, t.color);
                     const bg = empty && !posee
                       ? { background:"repeating-linear-gradient(-45deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 2px, transparent 2px, transparent 6px)" }
-                      : colorBg(cols, posee ? posee.multicolor_type : null);
+                      : colorBg(cols, posee ? posee.multicolor_type : null, finishOf(posee, t));
                     return (
                       <button key={t.id} disabled={!empty} onClick={() => setWhere(on ? "" : key)}
                         title={empty ? (posee ? `${slotLabel(a.id, t.id)} — posée : ${posee.translated_name || posee.name}`

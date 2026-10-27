@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import client from "../api/client";
 import { useCanMw } from "../store/auth";
 import { useNavigate } from "react-router-dom";
-import { colorBg, parseColorsList } from "../utils/colors";
+import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 
 // Filaments d'un profil MakerWorld face au stock : pour chacun, le filament
 // en stock de la meme matiere dont la couleur s'en approche le plus (ecart
@@ -96,6 +96,17 @@ export function profilePalette(items, scope, plate = null) {
     if (from.length === 6 && to.length === 6 && !(from in out)) out[from] = to;
   });
   return Object.keys(out).length ? out : null;
+}
+// Pour la vue 3D : { couleur du createur RRGGBB : finition du filament choisi } (silk, metal, translucide…).
+export function profileFinishes(items, scope) {
+  const out = {};
+  (items || []).forEach((x, i) => {
+    const c = chosenOf(x, scope, i);
+    const from = String(x.color || "").replace(/^#/, "").slice(0, 6).toUpperCase();
+    const f = c ? (/^#?[0-9a-f]{6}(?!ff)[0-9a-f]{2}$/i.test(String(c.color || "")) ? "translucent" : finishOf(c)) : null;
+    if (from.length === 6 && f && !(from in out)) out[from] = f;
+  });
+  return out;
 }
 export function picksOf(scope, items) {
   const out = {};
@@ -336,7 +347,7 @@ export function PlateColors({ items, plate, scope, canEdit, onNavigate }) {
   const dots = (
     <span style={{ display:"flex", gap:3, flexWrap:"wrap", alignItems:"center" }}>
       {rows.map((r, k) => <span key={k} title={`${r.f.type || ""} ${r.f.g ? `${r.f.g} g` : ""}${r.c ? ` → ${r.c.name}` : ""}`}
-        style={{ width:12, height:12, borderRadius:"50%", boxSizing:"border-box", ...(r.c ? colorBg(parseColorsList(r.c.color, r.c.colors_array), r.c.multicolor_type) : { background: r.f.color || "#888" }),
+        style={{ width:12, height:12, borderRadius:"50%", boxSizing:"border-box", ...(r.c ? colorBg(parseColorsList(r.c.color, r.c.colors_array), r.c.multicolor_type, finishOf(r.c)) : { background: r.f.color || "#888" }),
           border: r.own ? "2px solid #3b82f6" : "1px solid rgba(255,255,255,0.3)" }}/>)}
       {canEdit && items?.length > 0 && <span style={{ fontSize:9.5, color:"#3b82f6", fontWeight:700, marginLeft:2 }}>🎨</span>}
     </span>
@@ -540,7 +551,7 @@ function RefBadge({ mt }) {
 }
 
 function Swatch({ color, f, size = 16, title }) {
-  const bg = f ? colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type) : { background: color || "#888" };
+  const bg = f ? colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type, finishOf(f)) : { background: color || "#888" };
   return <span title={title} style={{ width:size, height:size, borderRadius:"50%", flexShrink:0, ...bg,
     border:"1px solid rgba(128,128,128,0.45)" }}/>;
 }

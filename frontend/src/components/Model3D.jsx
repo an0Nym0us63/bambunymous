@@ -25,7 +25,15 @@ function parseBin(buf) {
 
 const hex6 = c => String(c || "").replace(/^#/, "").slice(0, 6).toUpperCase();
 
-function Viewer({ url, glb, onState, palette = null }) {
+// le rendu d'une finition de filament (28/10/2026) : translucide, satine, metallique, mat, lumineux
+const FINISH_MAT = {
+  translucent: { transparent: true, opacity: 0.55, depthWrite: false, roughness: 0.25, metalness: 0 },
+  silk: { roughness: 0.22, metalness: 0.35 },
+  metal: { roughness: 0.3, metalness: 0.8 },
+  matte: { roughness: 0.95, metalness: 0 },
+};
+
+function Viewer({ url, glb, onState, palette = null, finishes = null }) {
   const box = useRef(null);
   const api = useRef(null);
   useEffect(() => {
@@ -98,7 +106,11 @@ function Viewer({ url, glb, onState, palette = null }) {
             // recoloriee : la couleur du createur remplacee par celle du filament retenu (« À faire »)
             const own = g.color.map(x => x.toString(16).padStart(2, "0")).join("").toUpperCase();
             const c = palette?.[own] ? new THREE.Color(`#${hex6(palette[own])}`) : new THREE.Color(`rgb(${g.color.join(",")})`);
-            holder.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true })));
+            // sa finition : celle du filament d'origine, ou celle de la bobine utilisee / choisie
+            const fin = finishes?.[own];
+            const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true, ...(FINISH_MAT[fin] || {}) });
+            if (fin === "glow") { mat.emissive = c.clone(); mat.emissiveIntensity = 0.35; }
+            holder.add(new THREE.Mesh(geo, mat));
           }
           model.add(holder);
         }
@@ -158,7 +170,8 @@ function Ring({ pct = null, label }) {
 // (usedPrints : ces impressions, le serveur rapproche chaque filament du projet de la bobine qui l'a remplace).
 // fetchSource : recuperer le 3MF d'origine s'il manque (« À faire »).
 export default function Model3D({ designId = null, profileId = null, printId = null, wait = false, title = "", onClose,
-                                  palette = null, platePalettes = null, altName = null, usedPrints = null, fetchSource = false }) {
+                                  palette = null, platePalettes = null, paletteFinishes = null, altName = null, usedPrints = null,
+                                  fetchSource = false }) {
   const [meta, setMeta] = useState(null);
   const [err, setErr] = useState(null);
   const [plate, setPlate] = useState(0);
@@ -219,7 +232,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         </div>}
         <div style={{ position: "relative", height: "min(62dvh, 560px)", borderRadius: 18, overflow: "hidden", border: "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
-          {p && <Viewer key={`${p.url}|${shown ? "alt" : "own"}`} url={p.url} glb={p.url.endsWith(".glb")} onState={setSt} palette={shown}/>}
+          {p && <Viewer key={`${p.url}|${shown ? "alt" : "own"}`} url={p.url} glb={p.url.endsWith(".glb")} onState={setSt} palette={shown}
+            finishes={shown ? (palette || platePalettes ? paletteFinishes : meta?.used_finishes) : meta?.finishes}/>}
           {alt && p && !p.url.endsWith(".glb") && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
             background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
             {[[true, "Couleurs d'origine"], [false, `Couleurs ${altLabel.toLowerCase()}`]].map(([o, l]) => <button key={l} type="button" onClick={() => setOwn(o)}

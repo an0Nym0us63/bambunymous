@@ -27,7 +27,27 @@ function _translucent(c) {
   return m ? parseFloat(m[1]) < 1 : false;
 }
 
-export default function SpoolSVG({ colors, empty, size=68, active, type }) {
+// La finition du filament (28/10/2026), dessinee sur le disque : les memes que les pastilles (utils/colors).
+function FinishDefs({ f, id }) {
+  const dots = (n, list) => <pattern id={id} patternUnits="userSpaceOnUse" width={n} height={n}>
+    {list.map(([x, y, r, c, o], i) => <circle key={i} cx={x} cy={y} r={r} fill={c} opacity={o}/>)}</pattern>;
+  if (f === "silk") return <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+    <stop offset="20%" stopColor="#fff" stopOpacity="0"/><stop offset="45%" stopColor="#fff" stopOpacity=".55"/><stop offset="62%" stopColor="#fff" stopOpacity="0"/></linearGradient>;
+  if (f === "metal") return <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stopColor="#fff" stopOpacity=".55"/><stop offset="35%" stopColor="#fff" stopOpacity="0"/>
+    <stop offset="60%" stopColor="#000" stopOpacity=".3"/><stop offset="85%" stopColor="#fff" stopOpacity=".35"/></linearGradient>;
+  if (f === "sparkle") return dots(6, [[1, 1, .35, "#fff", .75], [4, 3.5, .4, "#fff", .6], [2.5, 5, .3, "#fff", .85]]);
+  if (f === "galaxy") return dots(7, [[1, 1, .4, "#96b4ff", .85], [4.5, 2, .4, "#dcb4ff", .75], [2.5, 4.5, .5, "#78a0ff", .7], [6, 6, .45, "#fff", .75]]);
+  if (f === "marble") return dots(11, [[2, 2, 1.1, "#2d1e19", .6], [7, 5, .7, "#2d1e19", .5], [4, 8.5, 1.3, "#3c281e", .45], [9, 9.5, .6, "#fff0e4", .55]]);
+  if (f === "carbon") return <pattern id={id} patternUnits="userSpaceOnUse" width="3" height="3">
+    <rect width="1.5" height="1.5" fill="#fff" opacity=".07"/><rect x="1.5" y="1.5" width="1.5" height="1.5" fill="#fff" opacity=".07"/>
+    <rect x="1.5" width="1.5" height="1.5" fill="#000" opacity=".18"/><rect y="1.5" width="1.5" height="1.5" fill="#000" opacity=".18"/></pattern>;
+  if (f === "glow") return <radialGradient id={id}>
+    <stop offset="0%" stopColor="#f0ffe6" stopOpacity=".85"/><stop offset="35%" stopColor="#dcffc8" stopOpacity=".45"/><stop offset="70%" stopColor="#dcffc8" stopOpacity="0"/></radialGradient>;
+  return null;
+}
+
+export default function SpoolSVG({ colors, empty, size=68, active, type, finish = null }) {
   const c1 = colors?.[0] || (empty ? "#2a2a2a" : "#888");
   const multi = colors && colors.length > 1;
   const isGradient = multi && type === "gradient";
@@ -42,6 +62,8 @@ export default function SpoolSVG({ colors, empty, size=68, active, type }) {
   const patId = `pat${uid}`;
   const transp = !empty && !!colors?.some(_translucent);
   const cbId = `cb${uid}`;
+  const fin = empty ? null : finish;
+  const finId = `fn${uid}`;
 
   return (
     <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
@@ -68,6 +90,8 @@ export default function SpoolSVG({ colors, empty, size=68, active, type }) {
             <stop offset="100%" stopColor="#bfdbfe" stopOpacity="1"/>
           </linearGradient>
         )}
+        {fin && <FinishDefs f={fin} id={finId}/>}
+        {fin === "glow" && <filter id={`gl${uid}`} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.5"/></filter>}
         {isGradient && (
           <linearGradient id={uid} x1="10" y1="40" x2="70" y2="40" gradientUnits="userSpaceOnUse">
             {colors.map((cl, i) => (
@@ -80,6 +104,9 @@ export default function SpoolSVG({ colors, empty, size=68, active, type }) {
       {/* En cours : un halo bleu qui respire derriere la bobine */}
       {active && <circle cx="40" cy="40" r="34" fill="rgba(59,130,246,0.22)"
         style={{ transformBox: "view-box", transformOrigin: "40px 40px", animation: "bn-spool-glow 2.4s ease-in-out infinite" }}/>}
+
+      {/* phosphorescent : un halo de sa couleur autour */}
+      {fin === "glow" && <circle cx="40" cy="40" r="33" fill={c1} opacity=".55" filter={`url(#gl${uid})`}/>}
 
       {/* Damier de transparence derrière le disque : rend l'alpha visible. */}
       {transp && <circle cx="40" cy="40" r="30" fill={`url(#${cbId})`}/>}
@@ -114,6 +141,11 @@ export default function SpoolSVG({ colors, empty, size=68, active, type }) {
       ) : (
         <circle cx="40" cy="40" r="30" fill={empty ? `url(#${patId})` : fill}/>
       )}
+
+      {/* la finition, par-dessus la couleur : reflet, paillettes, mouchetures, tissage, lueur ; le bois en cernes */}
+      {fin && fin !== "wood" && fin !== "matte" && <circle cx="40" cy="40" r="30" fill={`url(#${finId})`}/>}
+      {fin === "wood" && [17, 19.5, 22, 24.5, 27, 29].map(r => <circle key={r} cx="40" cy="40" r={r} fill="none" stroke="rgba(70,40,15,.22)" strokeWidth=".8"/>)}
+      {fin === "matte" && <circle cx="40" cy="40" r="29.5" fill="none" stroke="rgba(0,0,0,.18)" strokeWidth="1"/>}
 
       {/* Anneau extérieur (léger contour) */}
       <circle cx="40" cy="40" r="30" fill="none" stroke={ringColor} strokeWidth="2"/>

@@ -20,7 +20,7 @@ import { useTrackDetail } from "../utils/track";
 import Select from "../components/Select";
 import { useIsAdmin } from "../store/auth";
 import { Pressable, openMenu } from "../components/ContextMenu";
-import { colorBg, parseColorsList } from "../utils/colors";
+import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import SpoolSVG from "../components/SpoolSVG";
 import { EmptyCard, FCard, FLAB, FROW, FRow, FSheet, FTile, FVAL, KpiBar, PageTabs, SearchRow, agoFr, dayFr, fBtn, fChip, fGrad, fRound, isLight, lighten } from "../components/FicheKit";
 import GalleryCompare from "../components/GalleryCompare";
@@ -64,17 +64,17 @@ function hexDisplay(hex) {
 
 
 // Swatch couleur — le damier de transparence est géré par colorBg.
-function ColorSwatch({ color, colorsArray, multicolorType, size=40, radius=10 }) {
+function ColorSwatch({ color, colorsArray, multicolorType, finish = null, size=40, radius=10 }) {
   const colors = parseColorsList(color, colorsArray);
   return (
     <div style={{ width:size, height:size, borderRadius:radius, flexShrink:0,
       overflow:"hidden", boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.12)",
-      ...colorBg(colors, multicolorType) }}/>
+      ...colorBg(colors, multicolorType, finish) }}/>
   );
 }
 
-function ColorDot({ color, colorsArray, multicolorType, size=16 }) {
-  return <ColorSwatch color={color} colorsArray={colorsArray} multicolorType={multicolorType}
+function ColorDot({ color, colorsArray, multicolorType, finish = null, size=16 }) {
+  return <ColorSwatch color={color} colorsArray={colorsArray} multicolorType={multicolorType} finish={finish}
     size={size} radius={4}/>;
 }
 
@@ -149,7 +149,7 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect })
       <div style={{ padding:"44px 16px 16px", display:"flex", alignItems:"center", gap:14,
         background:`radial-gradient(circle at 15% 50%, ${selMain}50, transparent 60%), linear-gradient(135deg, ${selMain}22, transparent 70%), var(--surface2)` }}>
         <span style={{ display:"inline-flex", flexShrink:0, filter:`drop-shadow(0 6px 14px ${selMain}66)` }}>
-          {selected ? <SpoolSVG colors={selColors} size={74} type={selected.multicolor_type}/>
+          {selected ? <SpoolSVG colors={selColors} finish={finishOf(selected)} size={74} type={selected.multicolor_type}/>
             : <span style={{ width:74, height:74, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:30,
                 border:"2px dashed var(--border)", color:"var(--muted)" }}>＋</span>}</span>
         <div style={{ minWidth:0, flex:1 }}>
@@ -171,7 +171,7 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect })
           {selected ? (
             <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", marginTop:4,
               borderRadius:12, background:"rgba(139,92,246,0.12)", border:"1px solid rgba(139,92,246,0.3)" }}>
-              <ColorDot color={selected.color} colorsArray={selected.colors_array}
+              <ColorDot color={selected.color} colorsArray={selected.colors_array} finish={finishOf(selected)}
                 multicolorType={selected.multicolor_type} size={20}/>
               <span style={{ flex:1, minWidth:0, fontSize:13, color:"var(--text)", fontWeight:800,
                 overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -222,7 +222,7 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect })
                         style={{ display:"flex", alignItems:"center", gap:9, width:"100%",
                           padding:"8px 10px", borderRadius:12, border:"1px solid var(--border)", cursor:"pointer",
                           textAlign:"left", marginBottom:3, background:"var(--surface)" }}>
-                        <ColorDot color={f.color} colorsArray={f.colors_array}
+                        <ColorDot color={f.color} colorsArray={f.colors_array} finish={finishOf(f)}
                           multicolorType={f.multicolor_type} size={18}/>
                         <span style={{ flex:1, minWidth:0, fontSize:12.5, fontWeight:800, color:"var(--text)",
                           overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -804,7 +804,7 @@ function PriceEditRow({ spoolId, current, filamentPrice, onUpdated }) {
 // ── Fiches bobine et filament (25/10/2026) : le langage du popup de la tuile « Filament en cours »
 // (la bobine en vedette sur un fond de sa couleur, des cartes de faits), les actions en bas a portee du pouce.
 // la bobine en vedette : son dessin sur un fond de sa couleur, les pastilles, le nom, puis ce qu'on veut mettre dessous
-function FHero({ colors, type, color, chips, name, sub, children, stack = 0 }) {
+function FHero({ colors, type, finish = null, color, chips, name, sub, children, stack = 0 }) {
   return (
     <div style={{ position:"relative", overflow:"hidden", padding:"52px 18px 18px", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap",
       background:`radial-gradient(circle at 18% 45%, ${color}55, transparent 60%), linear-gradient(135deg, ${color}26, transparent 70%), var(--surface2)` }}>
@@ -812,10 +812,10 @@ function FHero({ colors, type, color, chips, name, sub, children, stack = 0 }) {
         marginRight: stack > 0 ? (stack > 1 ? 30 : 18) : 0 }}>
         {/* d'autres bobines du meme filament en stock : leurs ombres, decalees derriere (deux au plus) */}
         {stack > 1 && <span aria-hidden="true" style={{ position:"absolute", top:10, left:34, opacity:0.35 }}>
-          <SpoolSVG colors={colors} size={100} type={type}/></span>}
+          <SpoolSVG colors={colors} finish={finish} size={100} type={type}/></span>}
         {stack > 0 && <span aria-hidden="true" style={{ position:"absolute", top:5, left:18, opacity:0.6 }}>
-          <SpoolSVG colors={colors} size={108} type={type}/></span>}
-        <span style={{ position:"relative", display:"inline-flex" }}><SpoolSVG colors={colors} size={118} type={type}/></span></span>
+          <SpoolSVG colors={colors} finish={finish} size={108} type={type}/></span>}
+        <span style={{ position:"relative", display:"inline-flex" }}><SpoolSVG colors={colors} finish={finish} size={118} type={type}/></span></span>
       <div style={{ flex:"1 1 190px", minWidth:0, display:"flex", flexDirection:"column", gap:6 }}>
         {chips.filter(Boolean).length > 0 && <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
           {chips.filter(Boolean).map((c, k) => <React.Fragment key={k}>{c}</React.Fragment>)}</div>}
@@ -941,7 +941,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
         {!isAdmin && spool.filament_id && <button onClick={openFilament} style={{ ...fBtn, flex:1 }}>🧵 Filament</button>}
         <button onClick={menu} aria-label="Plus d'actions" style={{ ...fBtn, width:48, flex:"0 0 auto" }}>⋯</button>
       </>}>
-      <FHero colors={colorsList} type={spool.filament_multicolor_type} color={main} name={name}
+      <FHero colors={colorsList} type={spool.filament_multicolor_type} finish={finishOf(spool)} color={main} name={name}
         stack={spool.archived ? 0 : (spool.sibling_count || 0)}
         chips={[fChip(`#${spool.id}`, "#64748B"), spool.archived && fChip("Archivée", "#94a3b8"),
           spool.location && fChip(`📍 ${spool.location}`, "#8B5CF6"),
@@ -1016,7 +1016,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
               style={{ width:30, height:30, borderRadius:10, border:"1px solid var(--border)", background:"var(--surface)", color:"#EC4899", cursor:"pointer",
                 fontSize:14, fontWeight:900, flexShrink:0 }}>↗</button>}</>}
           summary={<div style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, fontSize:12.5, fontWeight:700, color:"var(--muted)", minWidth:0 }}>
-            <ColorSwatch color={spool.filament_color} colorsArray={spool.filament_colors_array} multicolorType={spool.filament_multicolor_type} size={18} radius={5}/>
+            <ColorSwatch color={spool.filament_color} colorsArray={spool.filament_colors_array} multicolorType={spool.filament_multicolor_type} finish={finishOf(spool)} size={18} radius={5}/>
             <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
               {[spool.filament_material, color, spool.filament_price != null ? `${moneyVal(Number(spool.filament_price), 2)} € au catalogue` : null].filter(Boolean).join(" · ")}</span></div>}>
           <FRow l="Nom" v={name}/>
@@ -1026,7 +1026,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <FRow l="Sous-type" v={spool.filament_fila_type}/>
           <FRow l="Échantillon" v={spool.filament_swatch ? "fait" : "à faire"} vc={spool.filament_swatch ? "#16a34a" : "#d97706"}/>
           <FRow l="Couleur" v={color} mono pre={<ColorSwatch color={spool.filament_color} colorsArray={spool.filament_colors_array}
-            multicolorType={spool.filament_multicolor_type} size={16} radius={4}/>}/>
+            multicolorType={spool.filament_multicolor_type} finish={finishOf(spool)} size={16} radius={4}/>}/>
           <FRow l="Code Bambu" v={spool.filament_profile_id} mono/>
           <FRow l="Code couleur Bambu" v={spool.filament_fila_color_code} mono/>
           <FRow l="Stock du filament" v={stockFil != null ? fmtStock(stockFil) : null} d="toutes bobines"/>
@@ -1049,7 +1049,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
         <FSheet onClose={() => setShowUsage(false)} z={9999}>
           <div style={{ padding:"40px 16px 14px", display:"flex", alignItems:"center", gap:12,
             background:`radial-gradient(circle at 12% 50%, ${main}40, transparent 60%), var(--surface2)` }}>
-            <SpoolSVG colors={colorsList} size={52} type={spool.filament_multicolor_type}/>
+            <SpoolSVG colors={colorsList} finish={finishOf(spool)} size={52} type={spool.filament_multicolor_type}/>
             <div style={{ minWidth:0, flex:1 }}>
               <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#8B5CF6" }}>📋 Historique · bobine #{spool.id}</div>
               <div style={{ fontSize:17, fontWeight:900, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
@@ -1156,10 +1156,10 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
         {/* d'autres bobines du meme filament en stock : une bobine estompee derriere, et leur nombre en discret
             (pas dans les archives : elles ne sont plus en stock) */}
         {more > 1 && <span aria-hidden="true" style={{ position:"absolute", top:7, left:"calc(50% - 12px)", opacity:0.3 }}>
-          <SpoolSVG colors={colorsList} empty={false} size={56} type={s.filament_multicolor_type}/></span>}
+          <SpoolSVG colors={colorsList} finish={finishOf(s)} empty={false} size={56} type={s.filament_multicolor_type}/></span>}
         {more > 0 && <span aria-hidden="true" style={{ position:"absolute", top:3, left:"calc(50% - 24px)", opacity:0.6 }}>
-          <SpoolSVG colors={colorsList} empty={false} size={64} type={s.filament_multicolor_type}/></span>}
-        <span style={{ position:"relative" }}><SpoolSVG colors={colorsList} empty={false} size={70}
+          <SpoolSVG colors={colorsList} finish={finishOf(s)} empty={false} size={64} type={s.filament_multicolor_type}/></span>}
+        <span style={{ position:"relative" }}><SpoolSVG colors={colorsList} finish={finishOf(s)} empty={false} size={70}
           type={s.filament_multicolor_type}/></span>
         {more > 0 && <span data-tip={`${more} autre${more > 1 ? "s" : ""} bobine${more > 1 ? "s" : ""} de ce filament en stock`
           + (s.sibling_weight_g ? ` (${fmtStock(s.sibling_weight_g)})` : "")}
@@ -1718,7 +1718,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
           <Plus size={15}/> Bobine</button>
         <button onClick={menu} aria-label="Plus d'actions" style={{ ...fBtn, width:48, flex:"0 0 auto" }}>⋯</button>
       </>)}>
-      <FHero colors={colorsList} type={f.multicolor_type} color={main} name={name}
+      <FHero colors={colorsList} type={f.multicolor_type} finish={finishOf(f)} color={main} name={name}
         chips={[fChip(`#${f.id}`, "#64748B"),
           fChip(<><Palette size={11}/>{f.swatch ? "Échantillon" : "Sans échantillon"}</>, f.swatch ? "#22c55e" : "#94a3b8"),
           <span key="lbl" data-tip={labelDay ? `Étiquette imprimée le ${labelDay}` : undefined}>
@@ -1812,7 +1812,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               <FRow l="Marque" v={f.manufacturer}/>
               <FRow l="Matière" v={f.material}/>
               <FRow l="Sous-type" v={f.fila_type}/>
-              <FRow l="Couleur" v={colorTxt} mono pre={<ColorSwatch color={f.color} colorsArray={f.colors_array} multicolorType={f.multicolor_type} size={16} radius={4}/>}/>
+              <FRow l="Couleur" v={colorTxt} mono pre={<ColorSwatch color={f.color} colorsArray={f.colors_array} multicolorType={f.multicolor_type} finish={finishOf(f)} size={16} radius={4}/>}/>
               <FRow l="Multicolor" v={f.multicolor_type && f.multicolor_type !== "monochrome" ? f.multicolor_type : null}/>
             </FCard>
             <FCard t="Côté Bambu" i="🏷️" c="#0EA5E9">
@@ -1860,7 +1860,7 @@ function FilamentCard({ f, onClick, extra = null, menu, onLong }) {
       style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative", borderRadius:18, minHeight:96,
         boxShadow:`0 10px 22px -14px ${hexToCss(f.color) || "#000"}`, border: pale ? "1px solid rgba(0,0,0,0.18)" : "1px solid transparent" }}>
       {/* fond couleur (damier de transparence géré par colorBg), un reflet en haut */}
-      <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type) }}/>
+      <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type, finishOf(f)) }}/>
       <div style={{ position:"absolute", inset:0, background:"linear-gradient(160deg, rgba(255,255,255,0.22), transparent 45%, rgba(0,0,0,0.25))" }}/>
       {f.to_order && <span data-tip="À commander" style={{ ...glass, position:"absolute", top:7, right:7, background:"rgba(249,115,22,0.85)" }}>🛒</span>}
       <div style={{ position:"relative", padding:"10px 11px 32px", display:"flex", flexDirection:"column", gap:0 }}>
@@ -1962,7 +1962,7 @@ function FilamentPrintsSheet({ f, onClose }) {
         <div style={{ display:"flex", alignItems:"center", gap:12, padding:"14px 16px",
           borderBottom:"1px solid var(--border)", background:`radial-gradient(circle at 10% 50%, ${fMain}45, transparent 60%), var(--surface2)` }}>
           <span style={{ display:"inline-flex", flexShrink:0, filter:`drop-shadow(0 4px 10px ${fMain}66)` }}>
-            <SpoolSVG colors={colorsList} size={46} type={f.multicolor_type}/></span>
+            <SpoolSVG colors={colorsList} finish={finishOf(f)} size={46} type={f.multicolor_type}/></span>
           <div style={{ flex:1, minWidth:0 }}>
             <p style={{ margin:0, fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#EC4899" }}>🖨️ Imprimé avec</p>
             <p style={{ margin:0, fontSize:16, fontWeight:900, color:"var(--text)",
@@ -2588,7 +2588,7 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
         }}
         renderCover={f => {
           const colors = parseColorsList(f.color, f.colors_array);
-          return <div style={{ width:"100%", height:"100%", ...colorBg(colors, f.multicolor_type) }}/>;
+          return <div style={{ width:"100%", height:"100%", ...colorBg(colors, f.multicolor_type, finishOf(f)) }}/>;
         }}
         compareFields={[
           ["Matière",  f => f.material],

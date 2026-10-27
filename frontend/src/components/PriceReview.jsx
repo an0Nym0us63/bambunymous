@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import client from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
-import { colorBg, parseColorsList } from "../utils/colors";
+import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import { moneyVal } from "../utils/money";
 
 /**
@@ -185,7 +185,7 @@ export default function PriceReview({ onClose }) {
                 style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
                   cursor: nSp ? "pointer" : "default" }}>
                 <span style={{ width:30, height:30, borderRadius:"50%", flexShrink:0, boxShadow:"inset 0 0 0 1px rgba(148,163,184,.5)",
-                  ...colorBg(colors, f.multicolor_type) }}/>
+                  ...colorBg(colors, f.multicolor_type, finishOf(f)) }}/>
                 <div style={{ flex:1, minWidth:0 }}>
                   <p style={{ margin:0, fontSize:13.5, fontWeight:800, color:"var(--text)",
                     overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>

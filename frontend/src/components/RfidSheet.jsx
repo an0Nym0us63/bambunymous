@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import client from "../api/client";
-import { colorBg, parseColorsList } from "../utils/colors";
+import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 
 /**
  * Bobine scannée mais inconnue : création guidée.
@@ -110,7 +110,7 @@ export default function RfidSheet({ scanId, onClose, onCreated }) {
             <div style={{ width:48, height:48, borderRadius:12, flexShrink:0,
               position:"relative", overflow:"hidden", boxShadow:"0 2px 6px rgba(0,0,0,0.2)" }}>
               <div style={{ position:"absolute", inset:0,
-                ...colorBg(cols, cat?.multicolor_type) }}/>
+                ...colorBg(cols, cat?.multicolor_type, finishOf(cat)) }}/>
               {/* le liseré par-dessus la couleur : un filament blanc reste visible */}
               <div style={{ position:"absolute", inset:0, borderRadius:12, boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.25)" }}/>
             </div>

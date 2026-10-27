@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import HiddenMark from "../components/HiddenMark";
 import Cachettes, { Hide } from "../components/Cachettes";
 import { createPortal } from "react-dom";
@@ -85,7 +86,7 @@ function swatchBg(colorHex, colorsArray, multicolorType) {
  * `overflow:hidden` et l'anneau est un box-shadow : contrairement à un `border`
  * sur l'élément peint, rien ne peut déborder ni se décaler (halo/artefacts).
  */
-function ColorDot({ hex, colors, multicolor, size = 14, ring = "default", style }) {
+function ColorDot({ hex, colors, multicolor, finish = null, size = 14, ring = "default", style }) {
   const rings = {
     default: "inset 0 0 0 1px rgba(128,128,128,0.35)",
     mapped:  "inset 0 0 0 1px rgba(128,128,128,0.35), 0 0 0 2px #22c55e",
@@ -95,8 +96,9 @@ function ColorDot({ hex, colors, multicolor, size = 14, ring = "default", style 
     <div style={{ width:size, height:size, borderRadius:"50%", flexShrink:0,
       position:"relative", overflow:"hidden", boxShadow:rings[ring] ?? rings.default,
       ...style }}>
+      {/* la couleur avec sa transparence (damier) et sa finition (silk, paillettes…) */}
       <div style={{ position:"absolute", inset:0,
-        background: swatchBg(hex, colors, multicolor) }}/>
+        ...colorBg(parseColorsList(hex, colors), multicolor, finish) }}/>
     </div>
   );
 }
@@ -110,7 +112,7 @@ function FilamentDots({ filaments }) {
           title={`${f.filament_type} — ${f.grams_used.toFixed(1)}g${f.spool_id ? " · Bobine liée" : " · Non mappé"}`}
           style={{ position:"relative", flexShrink:0 }}>
           <ColorDot hex={f.color_hex} colors={f.filament_colors_array}
-            multicolor={f.filament_multicolor_type} size={14}
+            multicolor={f.filament_multicolor_type} finish={finishOf(f)} size={14}
             ring={f.spool_id ? "mapped" : "default"}/>
           {!f.spool_id && (
             <span style={{ position:"absolute", top:-2, right:-2,

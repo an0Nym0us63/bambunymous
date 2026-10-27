@@ -11,7 +11,7 @@ import { Pressable } from "./ContextMenu";
 import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
 import Model3D from "./Model3D";
-import { colorBg, parseColorsList } from "../utils/colors";
+import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import { moneyVal } from "../utils/money";
 
 // Impressions → File : les modeles de mes collections « a imprimer », avec le
@@ -79,6 +79,17 @@ function PlateChips({ plates }) {
       )}
     </span>
   );
+}
+
+// la finition de chaque filament retenu, pour la vue 3D
+function finishesOf(r) {
+  const out = {};
+  for (const f of r?.filaments || []) {
+    const from = String(f.color || "").replace(/^#/, "").slice(0, 6).toUpperCase();
+    const fin = f.chosen ? finishOf(f.chosen) : null;
+    if (from && fin) out[from] = fin;
+  }
+  return out;
 }
 
 function paletteOf(r) {
@@ -455,7 +466,7 @@ export default function MwQueue() {
                     {r.filaments.map((f, i) => (
                       <span key={i} data-tip={`${f.type} ${Math.round(f.g)} g → ${f.chosen ? f.chosen.name + (f.chosen.in_ams ? " (AMS)" : "") : "rien en stock"}`}
                         style={{ width:16, height:16, borderRadius:"50%", flexShrink:0,
-                          ...(f.chosen ? colorBg(parseColorsList(f.chosen.color, f.chosen.colors_array), f.chosen.multicolor_type) : { background:f.color }),
+                          ...(f.chosen ? colorBg(parseColorsList(f.chosen.color, f.chosen.colors_array), f.chosen.multicolor_type, finishOf(f.chosen)) : { background:f.color }),
                           border: !f.chosen ? "2px solid #ef4444" : f.chosen.enough_ams ? "2px solid #22c55e"
                             : f.chosen.enough_stock ? "2px solid #f59e0b" : "2px solid #ef4444" }}/>
                     ))}
@@ -525,7 +536,8 @@ export default function MwQueue() {
         onSaved={() => { setPick(false); refresh(); }}/>}
       {view3d && <Model3D designId={view3d.design_id} profileId={view3d.planned ? view3d.profile?.instance_id : view3d.default_instance || view3d.profile?.instance_id}
         fetchSource={view3d.planned}
-        title={view3d.title_fr || view3d.title} palette={view3d.planned ? paletteOf(view3d) : null} onClose={() => setView3d(null)}/>}
+        title={view3d.title_fr || view3d.title} palette={view3d.planned ? paletteOf(view3d) : null}
+        paletteFinishes={view3d.planned ? finishesOf(view3d) : null} onClose={() => setView3d(null)}/>}
       {model && <MakerWorldModelSheet designId={model.design_id} preview={model}
         onClose={() => { setModel(null); refresh(); }}/>}
     </div>
@@ -596,7 +608,7 @@ function CollectionsPicker({ chosen, onClose, onSaved }) {
 const hexOf = f => { const c = parseColorsList(f.color, f.colors_array)?.[0]; return /^#[0-9a-f]{6}$/i.test(c || "") ? c : "#94A3B8"; };
 function Swatch({ f, size = 18 }) {
   return <span style={{ width:size, height:size, borderRadius:"50%", flexShrink:0, border:"1px solid rgba(128,128,128,0.45)",
-    boxShadow:`0 4px 10px -4px ${hexOf(f)}`, ...colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type) }}/>;
+    boxShadow:`0 4px 10px -4px ${hexOf(f)}`, ...colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type, finishOf(f)) }}/>;
 }
 
 const msg = { fontSize:13, color:"var(--muted)", padding:"20px 4px", margin:0, lineHeight:1.5 };
