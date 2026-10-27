@@ -31,6 +31,7 @@ _LOCK = threading.Lock()
 _BUSY: set = set()               # instances en cours de telechargement
 JOB: dict = {}                   # le rattrapage en cours (aussi sur disque : backfill.json)
 _STOP = {"flag": False}
+_PREP: set = set()               # conversions 3D lancees en fond (gardees : asyncio n'en retient qu'une reference faible)
 
 
 def _dir() -> Path:
@@ -205,6 +206,14 @@ async def fetch(iid: str) -> Path:
             except Exception:
                 pass
         logger.info(f"[MW-3MF] instance {iid} : 3MF d'origine garde ({len(data) // 1024} Ko)")
+        # sa vue 3D, preparee tout de suite en fond (l'ouverture n'aura pas a attendre la conversion)
+        try:
+            from .mw_3d import prepare
+            t = asyncio.get_running_loop().create_task(prepare(iid))
+            _PREP.add(t)
+            t.add_done_callback(_PREP.discard)
+        except Exception:
+            pass
         return dest
     finally:
         with _LOCK:

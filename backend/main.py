@@ -155,6 +155,9 @@ async def lifespan(app: FastAPI):
     # l'entretien de la base : statistiques au besoin, puis « PRAGMA optimize » chaque heure
     from app.core.perf import db_upkeep as _db_upkeep
     _bg(_db_upkeep())
+    # les vues 3D des 3MF d'origine deja gardes, preparees a l'avance (une a une, 10 min apres le demarrage)
+    from app.services.mw_3d import warm_loop as _w3d
+    _bg(_w3d())
     # 3MF d'origine MakerWorld : un rattrapage qui tournait a l'arret reprend tout seul
     from app.services.mw_source import resume_after_restart as _src_resume
     _bg(_src_resume())

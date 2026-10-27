@@ -236,8 +236,32 @@ def convert(src: Path, out_dir: Path) -> dict:
     return meta
 
 
+_LOCKS: dict = {}
+_LOCKS_GUARD = __import__("threading").Lock()
+
+
+def _lock(key: str):
+    with _LOCKS_GUARD:
+        return _LOCKS.setdefault(key, __import__("threading").Lock())
+
+
+def ready(src: Path, key: str) -> bool:
+    """Deja converti (et a jour) ?"""
+    meta_f = _root() / key / "plates.json"
+    try:
+        return meta_f.is_file() and meta_f.stat().st_mtime >= src.stat().st_mtime             and json.loads(meta_f.read_text(encoding="utf-8")).get("v") == FORMAT_V
+    except (OSError, ValueError):
+        return False
+
+
 def from_3mf(src: Path, key: str) -> dict | None:
-    """Le modele d'un 3MF garde, converti au besoin (et refait si le 3MF a change). None : rien a montrer."""
+    """Le modele d'un 3MF garde, converti au besoin (et refait si le 3MF a change). None : rien a montrer.
+    Une conversion a la fois par modele (la vue ouverte pendant la conversion de fond attend la meme)."""
+    with _lock(key):
+        return _from_3mf(src, key)
+
+
+def _from_3mf(src: Path, key: str) -> dict | None:
     d = _root() / key
     meta_f = d / "plates.json"
     try:
@@ -294,3 +318,35 @@ def file_path(key: str, name: str) -> Path | None:
         return None
     p = _root() / key / name
     return p if p.is_file() else None
+
+
+# ── La conversion a l'avance (27/10/2026) : la vue 3D s'ouvre sans attendre la conversion ──
+async def prepare(iid: str) -> None:
+    """Convertit en fond le 3MF d'origine d'une instance (juste apres sa recuperation)."""
+    import asyncio
+    from .mw_source import path_of
+    src = path_of(iid)
+    if src.is_file() and not ready(src, src.stem):
+        await asyncio.to_thread(from_3mf, src, src.stem)
+
+
+async def warm_loop(first_delay_s: int = 600, period_s: int = 12 * 3600) -> None:
+    """Les 3MF d'origine deja gardes, convertis un a un (quelques secondes entre deux), puis a chaque passage
+    ceux qui manquent : la premiere ouverture d'une vue 3D n'a plus a attendre."""
+    import asyncio
+    from .mw_source import _dir
+    await asyncio.sleep(first_delay_s)
+    while True:
+        try:
+            files = sorted(_dir().glob("*.3mf"))
+            done = 0
+            for f in files:
+                if not ready(f, f.stem):
+                    await asyncio.to_thread(from_3mf, f, f.stem)
+                    done += 1
+                    await asyncio.sleep(3)
+            if done:
+                logger.info(f"[3D] {done} modele(s) prepare(s) pour la vue 3D")
+        except Exception:
+            logger.exception("[3D] preparation des vues 3D")
+        await asyncio.sleep(period_s)

@@ -34,7 +34,7 @@ function Viewer({ url, glb, onState }) {
       if (dead || !box.current) return;
       const el = box.current;
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));   // assez net, et 2 a 4 fois moins de pixels a calculer qu'un ecran x3
       renderer.setSize(el.clientWidth, el.clientHeight);
       el.appendChild(renderer.domElement);
       const scene = new THREE.Scene();
@@ -46,10 +46,22 @@ function Viewer({ url, glb, onState }) {
       const camera = new THREE.PerspectiveCamera(40, el.clientWidth / el.clientHeight, 1, 5000);
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
-      let raf = 0;
+      controls.dampingFactor = 0.15;                  // un elan court : la vue s'arrete vite d'elle-meme
+      // une seule boucle, et seulement pendant que la vue bouge (27/10/2026) : avant, chaque image en demandait
+      // deux (la suivante, et une de plus par l'evenement « change » que la mise a jour declenche elle-meme) ;
+      // ca doublait a chaque image, plus de 3 000 rendus par seconde en tournant
+      let raf = 0, running = false, dragging = false, stopAt = 0;
       const render = () => { renderer.render(scene, camera); };
-      const loop = () => { raf = 0; if (controls.update()) { render(); raf = requestAnimationFrame(loop); } else render(); };
-      controls.addEventListener("change", () => { if (!raf) raf = requestAnimationFrame(loop); });
+      const loop = () => {
+        const moving = controls.update();
+        render();
+        // l'elan apres le lacher : 1,2 s au plus (il ne s'eteignait jamais tout a fait, la vue tournait a vide)
+        if (moving && (dragging || performance.now() < stopAt)) raf = requestAnimationFrame(loop); else { running = false; raf = 0; }
+      };
+      const kick = () => { if (!running) { running = true; raf = requestAnimationFrame(loop); } };
+      controls.addEventListener("start", () => { dragging = true; kick(); });
+      controls.addEventListener("end", () => { dragging = false; stopAt = performance.now() + 1200; });
+      controls.addEventListener("change", kick);
       const ro = new ResizeObserver(() => { renderer.setSize(el.clientWidth, el.clientHeight); camera.aspect = el.clientWidth / el.clientHeight; camera.updateProjectionMatrix(); render(); });
       ro.observe(el);
       const disposables = [renderer];
@@ -80,7 +92,7 @@ function Viewer({ url, glb, onState }) {
             geo.setIndex(new THREE.BufferAttribute(g.idx, 1));
             geo.computeVertexNormals();
             const c = new THREE.Color(`rgb(${g.color.join(",")})`);
-            holder.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, side: THREE.DoubleSide })));
+            holder.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05 })));
           }
           model.add(holder);
         }
