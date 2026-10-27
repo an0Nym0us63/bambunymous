@@ -29,10 +29,16 @@ class ExactError(Exception):
     pass
 
 
+_MADE: set = set()
+
+
 def _dir() -> Path:
     from ..core.config import settings
     d = Path(settings.DATA_DIR) / "mw_3mf"
-    d.mkdir(parents=True, exist_ok=True)
+    # cree une fois par demarrage (la liste des impressions passe ici pour chacune : un mkdir a chaque fois)
+    if d not in _MADE:
+        d.mkdir(parents=True, exist_ok=True)
+        _MADE.add(d)
     return d
 
 

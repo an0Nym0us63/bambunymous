@@ -89,7 +89,7 @@ def _usage_to_dict(u) -> dict:
     return d
 
 
-def _print_to_out(p: Print) -> dict:
+def _print_to_out(p: Print, gcache: Optional[dict] = None) -> dict:
     d = {col.name: getattr(p, col.name) for col in p.__table__.columns}
     d["filament_usage"] = [_usage_to_dict(u) for u in (p.filament_usage or [])]
     d["snapshots"] = [
@@ -111,8 +111,13 @@ def _print_to_out(p: Print) -> dict:
         d["source_3mf"] = bool(_src(p.design_id, p.mw_profile_id, p.mw_plates))
     except Exception:
         d["source_3mf"] = False
+    if gcache is not None and p.group_id in gcache:
+        d["group_has_photos"] = gcache[p.group_id]
+        return d
     d["group_has_photos"] = bool(gd and any(f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v")
                                             for f in gd.iterdir()))
+    if gcache is not None and p.group_id:
+        gcache[p.group_id] = d["group_has_photos"]
     return d
 
 
@@ -454,7 +459,7 @@ async def list_prints(
 
     from ....core.fastjson import json_response
     return json_response({"total": total, "has_more": pos < total, "next_offset": pos,
-                          "prints": [_print_to_out(p) for p in rows]})
+                          "prints": [_print_to_out(p, gc) for gc in ({},) for p in rows]})
 
 
 @router.get("/gallery")
@@ -466,18 +471,29 @@ async def prints_gallery(_: str = Depends(get_current_user)):
     carrousel complet de photos pour chacun. Les photos du dossier groupe
     lui-même (/data/groups/{id}/, uploads directs) sont aussi incluses.
     """
+    # Les seules colonnes utiles, et les seules photos manuelles (27/10/2026) : avant, toutes les impressions et
+    # toutes leurs captures arrivaient en objets complets (~9 000 pour 1 900 impressions, 0,3 s de calcul).
+    from types import SimpleNamespace as _NS
+    from ....models.print_history import PrintSnapshot as _Snap
+    cols = (Print.id, Print.group_id, Print.file_name, Print.status, Print.print_date, Print.duration_seconds,
+            Print.estimated_seconds, Print.total_weight_g, Print.total_cost_filament, Print.electric_cost,
+            Print.total_cost, Print.number_of_items, Print.cover_photo, Print.design_id)
     async with AsyncSessionLocal() as db:
-        rows = (await db.execute(
-            select(Print).options(selectinload(Print.snapshots), selectinload(Print.group))
-        )).scalars().all()
+        rows = [_NS(**r._mapping) for r in (await db.execute(select(*cols))).all()]
+        snaps: dict = {}
+        for pid, fp in (await db.execute(select(_Snap.print_id, _Snap.file_path).where(_Snap.trigger == "manual")
+                                         .order_by(_Snap.print_id, _Snap.id))).all():
+            snaps.setdefault(pid, []).append(fp)
+        grp = {r.id: r for r in (await db.execute(select(Group.id, Group.name, Group.number_of_items, Group.cover_print_id,
+                                                         Group.cover_photo))).all()}
 
     items, group_acc = [], {}
     for p in rows:
-        manual = [s for s in (p.snapshots or []) if s.trigger == "manual"]
+        p.group = grp.get(p.group_id) if p.group_id else None
         photos = [
-            {"url": f"/api/v1/prints/{p.id}/file/{(s.file_path or '').split('/')[-1]}",
-             "name": (s.file_path or "").split("/")[-1], "label": s.trigger}
-            for s in manual if s.file_path
+            {"url": f"/api/v1/prints/{p.id}/file/{(fp or '').split('/')[-1]}",
+             "name": (fp or "").split("/")[-1], "label": "manual"}
+            for fp in snaps.get(p.id, ()) if fp
         ]
         # La vignette de la galerie est photos[0] : on remonte la photo choisie.
         if p.cover_photo:
@@ -519,15 +535,23 @@ async def prints_gallery(_: str = Depends(get_current_user)):
                 "design_id": str(p.design_id) if p.design_id else None,
             })
 
-    # Photos uploadées directement dans le dossier du groupe (pas via un print précis)
+    # Photos uploadées directement dans le dossier du groupe (pas via un print précis) : le disque est lu
+    # dans un fil a part (une lecture de dossier par groupe), le serveur continue de repondre
     groups_dir = DATA_DIR / "groups"
+    def _scan(gids):
+        out = {}
+        for gid in gids:
+            d = groups_dir / str(gid)
+            if d.exists():
+                out[gid] = [f.name for f in sorted(d.iterdir())
+                            if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v")]
+        return out
+    import asyncio as _aio
+    on_disk = await _aio.to_thread(_scan, list(group_acc))
     for gid, acc in group_acc.items():
-        d = groups_dir / str(gid)
-        if d.exists():
-            for f in sorted(d.iterdir()):
-                if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v"):
-                    acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{f.name}",
-                                          "label": f.name, "name": f.name})
+        for name in on_disk.get(gid, ()):
+            acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{name}",
+                                  "label": name, "name": name})
         # La vignette est photos[0]. Si une photo de couverture est definie pour
         # le groupe, on la remonte en tete -- meme principe que Print.cover_photo.
         cover = acc.get("cover_photo")
@@ -545,28 +569,36 @@ async def prints_gallery(_: str = Depends(get_current_user)):
     ]
     items.sort(key=lambda it: it["print_date"] or "", reverse=True)
     groups.sort(key=lambda g: g["latest_date"] or "", reverse=True)
-    return {"prints": items, "groups": groups}
+    from ....core.fastjson import json_response
+    return json_response({"prints": items, "groups": groups})
 
 
 @router.get("/groups")
 async def list_groups(_: str = Depends(get_current_user)):
     """Retourne les groupes (id BambuNymous + nom + nb de prints + date), pour distinguer
     deux groupes portant le même nom (créés à des dates différentes)."""
+    # Deux lectures legeres (27/10/2026) : avant, chaque groupe chargeait ses impressions en objets complets
+    # (les 1 900) pour les compter et trouver la plus recente.
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Group).options(selectinload(Group.prints)).order_by(Group.name)
-        )
-        groups = []
-        for g in result.scalars().all():
-            dates = [p.print_date for p in (g.prints or []) if p.print_date]
-            groups.append({
-                "id": g.id, "name": g.name,
-                "print_count": len(g.prints or []),
-                "created_at": g.created_at,
-                "latest_date": max(dates) if dates else g.created_at,
-            })
+        gs = (await db.execute(select(Group.id, Group.name, Group.created_at).order_by(Group.name))).all()
+        per: dict = {}
+        for gid, pd in (await db.execute(select(Print.group_id, Print.print_date).where(Print.group_id.isnot(None)))).all():
+            e = per.setdefault(gid, [0, []])
+            e[0] += 1
+            if pd:
+                e[1].append(pd)
+    groups = []
+    for gid, name, created in gs:
+        n, dates = per.get(gid, (0, []))
+        groups.append({
+            "id": gid, "name": name,
+            "print_count": n,
+            "created_at": created,
+            "latest_date": max(dates) if dates else created,
+        })
     groups.sort(key=lambda g: g["latest_date"] or "", reverse=True)
-    return {"groups": groups}
+    from ....core.fastjson import json_response
+    return json_response({"groups": groups})
 
 
 def _group_dir(group_id: int) -> Optional[Path]:

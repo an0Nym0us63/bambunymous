@@ -73,7 +73,8 @@ def _index_put(key: str, iid: str) -> None:
 def known(design_id, profile_id) -> str | None:
     """L'instance deja recuperee pour ce modele et ce profil (sans rien demander a MakerWorld). Profil vide :
     celle choisie pour le modele quand le profil imprime est inconnu ou n'existe plus."""
-    iid = _index().get(f"{design_id}:{profile_id or ''}")
+    _index()                                   # relu s'il a change ; puis lu sans copie (une cle, pour chaque impression)
+    iid = _IDX["v"].get(f"{design_id}:{profile_id or ''}")
     return iid if iid and path_of(iid).is_file() else None
 
 
