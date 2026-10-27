@@ -327,7 +327,13 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const p = meta?.plates?.[plate];
   // les couleurs montrees : d'origine, ou celles des filaments retenus / utilises (par defaut, s'il y en a)
   // un plateau peut avoir ses propres choix (platePalettes : { numero : palette })
-  const alt = (p && platePalettes?.[p.n]) || palette || meta?.used_palette || null;
+  // les couleurs utilisees du plateau affiche (un groupe : celles des impressions de CE plateau) ; sans
+  // rattachement par plateau, celles de toutes les impressions
+  const byPlate = meta?.used_plates && Object.keys(meta.used_plates).length > 0;
+  const usedPal = byPlate ? (p && meta.used_plates[String(p.n)]) || null : meta?.used_palette;
+  const usedDetail = byPlate ? (p && meta.used_details_plates?.[String(p.n)]) || [] : meta?.used_detail || [];
+  const usedFin = byPlate ? (p && meta.used_finishes_plates?.[String(p.n)]) || {} : meta?.used_finishes;
+  const alt = (p && platePalettes?.[p.n]) || palette || usedPal || null;
   const altLabel = altName || (palette || platePalettes ? "Retenues" : "Utilisées");
   const [own, setOwn] = useState(false);
   const shown = alt && !own ? alt : null;
@@ -356,7 +362,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         <div style={{ position: "relative", height: "min(62dvh, 560px)", borderRadius: 18, overflow: "hidden", border: "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
           {p && <Viewer key={`${p.url}|${shown ? "alt" : "own"}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown}
-            finishes={shown ? (palette || platePalettes ? paletteFinishes : meta?.used_finishes) : meta?.finishes} glow={!!st.glow} bed={meta?.bed}/>}
+            finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes} glow={!!st.glow} bed={meta?.bed}/>}
           {alt && p && !isGlb(p.url) && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
             background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
             {[[true, "Couleurs d'origine"], [false, `Couleurs ${altLabel.toLowerCase()}`]].map(([o, l]) => <button key={l} type="button" onClick={() => setOwn(o)}
@@ -384,10 +390,10 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {meta.skipped?.length > 0 && <span>· plateau{meta.skipped.length > 1 ? "x" : ""} {meta.skipped.join(", ")} trop lourd{meta.skipped.length > 1 ? "s" : ""} pour être affiché</span>}
         </div>}
         {/* les couleurs utilisees : chaque couleur du createur et ce qui l'a remplacee (ou rien de trouve) */}
-        {shown && !palette && meta?.used_detail?.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6,
+        {shown && !palette && usedDetail.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6,
           fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
           <span>Correspondance :</span>
-          {meta.used_detail.map(x => {
+          {usedDetail.map(x => {
             const sw = c => <span style={{ width: 14, height: 14, borderRadius: "50%", display: "inline-block", border: "1px solid var(--border)",
               background: c ? `#${c}` : "repeating-linear-gradient(45deg, var(--surface2) 0 3px, var(--border) 3px 6px)" }}/>;
             const tip = x.to ? `Filament n°${x.e} du projet → n°${x.es} de l'impression (${x.how === "pièces" ? "trouvé par les pièces de même nom" : x.how === "couleur et poids" ? "la bobine la plus ressemblante, en couleur et en poids" : "par son numéro"})`

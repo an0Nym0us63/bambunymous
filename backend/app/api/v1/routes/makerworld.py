@@ -692,11 +692,21 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
     # used : des impressions de ce modele -> chaque couleur du 3MF d'origine et celle de la bobine qui l'a remplacee
     # (le numero du filament dans le projet est le meme ; sans bobine liee, la couleur notee au tranchage)
     used_palette, used_detail = None, None
+    used_plates, used_details_plates = {}, {}
     if used and source in ("3mf", "3mf_other") and key:
         try:
+            ids = [int(x) for x in used.split(",") if x.strip().isdigit()][:60]
             used_detail = []
-            used_palette = await _used_palette(path_of(key), [int(x) for x in used.split(",") if x.strip().isdigit()][:60],
-                                               did, prof if source == "3mf" else "", used_detail)
+            used_palette = await _used_palette(path_of(key), ids, did, prof if source == "3mf" else "", used_detail)
+            # plateau par plateau (28/10/2026) : sur un groupe, chaque plateau prend les couleurs des impressions qui
+            # l'ont fait, pas un melange de toutes ; un plateau que personne n'a imprime reste aux couleurs d'origine
+            ns = [p["n"] for p in T.plates_out(meta, key)[0]] if meta else []
+            if len(ns) > 1:
+                for n in ns:
+                    dd = []
+                    pal = await _used_palette(path_of(key), ids, did, prof if source == "3mf" else "", dd, plate=n)
+                    if pal:
+                        used_plates[str(n)], used_details_plates[str(n)] = pal, dd
         except Exception:
             logger.exception("[3D] couleurs utilisees")
     try:
@@ -705,6 +715,10 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
         bed = [256, 256]
     return {"source": source, "profile": prof or None, "profile_title": ptitle, "profile_cover": pcover, "ms": ms, "bed": bed,
             "used_palette": used_palette, "used_detail": used_detail, "fetch_error": fetch_error,
+            # par plateau (vide : aucune impression rattachee a un plateau precis, on garde le melange ci-dessus)
+            "used_plates": used_plates, "used_details_plates": used_details_plates,
+            "used_finishes_plates": {n: {d["from"]: d["finish"] for d in dd if d.get("to") and d.get("finish")}
+                                     for n, dd in used_details_plates.items()},
             # la finition de chaque couleur, pour le rendu : d'origine (profils filament du 3MF), et des bobines utilisees
             "finishes": T.origin_finishes(path_of(key)) if source in ("3mf", "3mf_other") and key else {},
             "used_finishes": {d["from"]: d["finish"] for d in used_detail or [] if d.get("to") and d.get("finish")},
@@ -797,11 +811,13 @@ def _assign(origin: list, used: list) -> list:
     return [(o[0], u[0]) for o, u in pairs]
 
 
-async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", detail_out: list | None = None) -> dict | None:
+async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", detail_out: list | None = None,
+                        plate: int | None = None) -> dict | None:
     """{couleur du 3MF d'origine (RRGGBB) : couleur utilisee} d'apres les filaments de ces impressions (la plus
     recente l'emporte). Seules comptent les impressions de ce profil (ou de profil inconnu). Chaque filament du
     projet d'origine est rapproche de celui du projet imprime par les pieces de meme nom (3MF tranche garde), a
-    defaut par son numero ; puis de la bobine qui l'a imprime (sans bobine liee : la couleur notee au tranchage)."""
+    defaut par son numero ; puis de la bobine qui l'a imprime (sans bobine liee : la couleur notee au tranchage).
+    plate : seulement les impressions de ce plateau (un groupe melange les plateaux d'un modele multi-plateaux)."""
     import json as _json
     import zipfile
     from sqlalchemy import select
@@ -863,6 +879,8 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
         pp = norm(_profile(mwp, mwpl))
         if want and pp and pp != want:
             continue                                  # une impression d'un autre profil du modele
+        if plate is not None and plate not in _print_plates(mwpl, plate_id):
+            continue                                  # une impression d'un autre plateau
         used = used_by.get(pid) or {}
         if not used:
             continue
@@ -906,6 +924,21 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
         detail_out.extend({"from": h6(c), "to": None, "e": k + 1} for k, c in enumerate(colors)
                           if len(h6(c)) == 6 and h6(c) not in out and h6(c) not in {x["from"] for x in detail_out})
     return out or None
+
+
+def _print_plates(mwpl, plate_id) -> list:
+    """Les plateaux d'origine qu'une impression a faits : choisis a la main sur sa fiche, sinon son numero de plateau."""
+    import json as _json
+    try:
+        m = _json.loads(mwpl) if mwpl else None
+        if isinstance(m, dict) and isinstance(m.get("plates"), list):
+            return [int(x) for x in m["plates"]]       # (vide : choisi « aucun plateau de ce profil »)
+    except (TypeError, ValueError):
+        pass
+    try:
+        return [int(plate_id)] if plate_id else []
+    except (TypeError, ValueError):
+        return []
 
 
 @router.get("/3d/file/{key}/{name}")
