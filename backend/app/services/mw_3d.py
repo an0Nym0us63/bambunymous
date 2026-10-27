@@ -21,11 +21,13 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 1
+FORMAT_V = 2                           # 2 : les couleurs peintes au pinceau (27/10/2026)
 MAX_TRIANGLES = 6_000_000              # au-dela, le plateau n'est pas converti (trop lourd pour un telephone)
 _NUM = r"(-?[0-9.]+(?:[eE][-+]?[0-9]+)?)"
 _VERTEX = re.compile(rb'<vertex\s+x="' + _NUM.encode() + rb'"\s+y="' + _NUM.encode() + rb'"\s+z="' + _NUM.encode() + rb'"')
 _TRI = re.compile(rb'<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"')
+_TRI_PAINT = re.compile(rb'<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"([^>]*)>')
+_PAINT = re.compile(rb'paint_color="([0-9A-F]+)"')
 _NOT_SHOWN = {"modifier_part", "negative_part", "support_blocker", "support_enforcer"}
 
 
@@ -84,11 +86,82 @@ def _objects(xml: str) -> dict:
 
 
 def _mesh(body: str):
-    """(sommets [x,y,z...], triangles [i,j,k...]) d'un maillage."""
+    """(sommets [x,y,z...], triangles [i,j,k...], peinture {numero de triangle: code}) d'un maillage."""
     b = body.encode() if isinstance(body, str) else body
     verts = [float(x) for t in _VERTEX.findall(b) for x in t]
-    tris = [int(x) for t in _TRI.findall(b) for x in t]
-    return verts, tris
+    if b"paint_color" not in b:
+        return verts, [int(x) for t in _TRI.findall(b) for x in t], {}
+    tris, paint = [], {}
+    for k, (i, j, l, rest) in enumerate(_TRI_PAINT.findall(b)):
+        tris += (int(i), int(j), int(l))
+        if rest:
+            m = _PAINT.search(rest)
+            if m:
+                paint[k] = m.group(1).decode()
+    return verts, tris, paint
+
+
+def _painted(v: list, t: list, paint: dict, ext: int) -> dict:
+    """Les triangles d'une piece peinte au pinceau multicolore, par extrudeur : {extrudeur: [i,j,k...]}.
+
+    Le code de chaque triangle (attribut paint_color de Bambu Studio, celui de TriangleSelector) est un arbre
+    lu en quartets hexadecimaux depuis la FIN de la chaine : 2 bits de decoupe (0 : feuille, sinon 1 a 3 cotes
+    coupes, 2 a 4 enfants), puis 2 bits d'etat (feuille : 0 = extrudeur de la piece, n = extrudeur n ; 3 = la
+    suite dans les quartets suivants) ou de cote particulier (decoupe). Les enfants sont lus du dernier au
+    premier. Les milieux d'aretes sont ajoutes aux sommets (v est complete)."""
+    out: dict = {}
+    mids: dict = {}
+
+    def mid(a, b):
+        k = (a, b) if a < b else (b, a)
+        i = mids.get(k)
+        if i is None:
+            i = len(v) // 3
+            v.extend(((v[3 * a] + v[3 * b]) / 2, (v[3 * a + 1] + v[3 * b + 1]) / 2, (v[3 * a + 2] + v[3 * b + 2]) / 2))
+            mids[k] = i
+        return i
+
+    for ti in range(len(t) // 3):
+        tri = (t[3 * ti], t[3 * ti + 1], t[3 * ti + 2])
+        code = paint.get(ti)
+        if not code:
+            out.setdefault(ext, []).extend(tri)
+            continue
+        leaves = []
+        try:
+            nib = [int(ch, 16) for ch in reversed(code)]
+            pos = 0
+            stack = [tri]
+            while stack:
+                a = stack.pop()
+                c = nib[pos]; pos += 1
+                sides = c & 3
+                if not sides:
+                    st = c >> 2
+                    if st == 3:
+                        n, k = nib[pos], 0; pos += 1
+                        while n == 15:
+                            k += 1; n = nib[pos]; pos += 1
+                        st = n + 15 * k + 3
+                    leaves.append((st or ext, a))
+                    continue
+                sp = c >> 2
+                w = [a[(sp + j) % 3] for j in range(3)]
+                if sides == 1:
+                    m = mid(w[2], w[1])
+                    kids = [(w[0], w[1], m), (m, w[2], w[0])]
+                elif sides == 2:
+                    m1, m2 = mid(w[1], w[0]), mid(w[0], w[2])
+                    kids = [(w[0], m1, m2), (m1, w[1], m2), (w[1], w[2], m2)]
+                else:
+                    m1, m2, m3 = mid(w[1], w[0]), mid(w[2], w[1]), mid(w[0], w[2])
+                    kids = [(w[0], m1, m3), (m1, w[1], m2), (m2, w[2], m3), (m1, m2, m3)]
+                stack.extend(kids)                     # depile : le dernier enfant d'abord, comme a l'ecriture
+        except (IndexError, ValueError):
+            leaves = [(ext, tri)]                      # code illisible : le triangle garde la couleur de la piece
+        for st, a in leaves:
+            out.setdefault(st, []).extend(a)
+    return out
 
 
 def _colors_of(z: zipfile.ZipFile) -> list:
@@ -165,14 +238,12 @@ def convert(src: Path, out_dir: Path) -> dict:
         plates = [(1, "", [(oid, i) for oid, lst in items_by_obj.items() for i in range(len(lst))])]
 
     def parts_of(oid, mt):
-        """(couleur, sommets transformes, triangles) de chaque piece visible d'un objet place."""
+        """(extrudeur, couleur de secours, transformation, maillage) de chaque piece visible d'un objet place."""
         o = root_objs.get(oid) or {}
         st = settings.get(oid) or {"extruder": 1, "parts": {}}
         out = []
         if "mesh" in o:
-            ext = st["extruder"]
-            col = colors[ext - 1] if 0 < ext <= len(colors) else groups.get(o.get("pid") or "", None)
-            out.append((col, mt, o["mesh"]))
+            out.append((st["extruder"], groups.get(o.get("pid") or "", None), mt, o["mesh"]))
         for c in o.get("components") or []:
             pe, ptype = st["parts"].get(str(c["objectid"]), (None, "normal_part"))
             if ptype in _NOT_SHOWN:
@@ -180,9 +251,7 @@ def convert(src: Path, out_dir: Path) -> dict:
             sub = objs_in(c["path"]).get(str(c["objectid"])) or {}
             if "mesh" not in sub:
                 continue
-            ext = pe or st["extruder"]
-            col = colors[ext - 1] if 0 < ext <= len(colors) else groups.get(sub.get("pid") or "", None)
-            out.append((col, _mul(c["transform"], mt), sub["mesh"]))
+            out.append((pe or st["extruder"], groups.get(sub.get("pid") or "", None), _mul(c["transform"], mt), sub["mesh"]))
         return out
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -194,13 +263,12 @@ def convert(src: Path, out_dir: Path) -> dict:
             mts = items_by_obj.get(oid) or []
             if k >= len(mts):
                 continue
-            for col, mt, body in parts_of(oid, mts[k]):
-                v, t = _mesh(body)
-                total += len(t) // 3
+            for ext, fcol, mt, body in parts_of(oid, mts[k]):
+                v, t, paint = _mesh(body)
+                by_ext = _painted(v, t, paint, ext) if paint else {ext: t}
+                total += sum(len(x) for x in by_ext.values()) // 3
                 if total > MAX_TRIANGLES:
                     break
-                g = groups_out.setdefault(_hex_rgba(col), [[], []])
-                base = len(g[0]) // 3
                 a, b, c, d, e, f, h, i_, j, tx, ty, tz = mt
                 xs, ys, zs = v[0::3], v[1::3], v[2::3]
                 nx = [x * a + y * d + z_ * h + tx for x, y, z_ in zip(xs, ys, zs)]
@@ -208,8 +276,20 @@ def convert(src: Path, out_dir: Path) -> dict:
                 nz = [x * c + y * f + z_ * j + tz for x, y, z_ in zip(xs, ys, zs)]
                 out_v = [0.0] * (len(nx) * 3)
                 out_v[0::3], out_v[1::3], out_v[2::3] = nx, ny, nz
-                g[0] += out_v
-                g[1] += [k + base for k in t] if base else t
+                for ex, tt in by_ext.items():
+                    col = colors[ex - 1] if 0 < ex <= len(colors) else fcol
+                    g = groups_out.setdefault(_hex_rgba(col), [[], []])
+                    base = len(g[0]) // 3
+                    if len(by_ext) == 1:
+                        g[0] += out_v
+                        g[1] += [q + base for q in tt] if base else tt
+                        continue
+                    # piece peinte : seuls les sommets de cette couleur, renumerotes
+                    used = sorted(set(tt))
+                    ren = {q: base + r for r, q in enumerate(used)}
+                    for q in used:
+                        g[0] += out_v[3 * q:3 * q + 3]
+                    g[1] += [ren[q] for q in tt]
         if not groups_out or total > MAX_TRIANGLES:
             meta["plates"].append({"n": n, "name": pname, "triangles": total, "skipped": total > MAX_TRIANGLES})
             continue

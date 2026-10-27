@@ -125,19 +125,21 @@ function Viewer({ url, glb, onState }) {
   </div>;
 }
 
-export default function Model3D({ designId, profileId = null, printId = null, title = "", onClose }) {
+export default function Model3D({ designId, profileId = null, printId = null, wait = false, title = "", onClose }) {
   const [meta, setMeta] = useState(null);
   const [err, setErr] = useState(null);
   const [plate, setPlate] = useState(0);
   const [st, setSt] = useState({ busy: true });
   useEffect(() => {
+    if (wait) return;                    // le profil se deduit encore (fiche d'une impression)
     let alive = true;
-    // une impression : le serveur lit son profil (celui de l'imprimante, ou celui choisi a la main avec ses plateaux)
+    setErr(null);
+    // le profil montre par la fiche ; sans lui, le serveur lit celui de l'impression (imprimante, ou choisi a la main)
     client.get(`/makerworld/3d/${encodeURIComponent(designId)}`, { params: { profile: profileId || "", print_id: printId || 0 }, timeout: 180000 })
       .then(({ data }) => { if (alive) { setMeta(data); setPlate(0); } })
       .catch(e => alive && setErr(e?.response?.data?.detail || "Pas de modèle 3D pour celui-ci"));
     return () => { alive = false; };
-  }, [designId, profileId, printId]);
+  }, [designId, profileId, printId, wait]);
   const p = meta?.plates?.[plate];
   const mm = v => `${Math.round(v)} mm`;
   return createPortal(

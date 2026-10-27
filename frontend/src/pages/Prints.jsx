@@ -568,6 +568,7 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
   const [pick, setPick] = useState(false);       // ranger dans mes collections
   const [sheet, setSheet] = useState(null);      // fiche du modele (ou d'un similaire)
   const [view3d, setView3d] = useState(false);   // la vue 3D du modele
+  const [shownProf, setShownProf] = useState(undefined);   // le profil montre par les plateaux (deduit ou choisi) ; undefined : pas encore deduit
   const hasFriends = useHasFriends();
   const shared = useShared(`/friends/shared/design/${encodeURIComponent(designId)}`, hasFriends && !!designId);
   const nShared = sharedCount(shared);           // section seulement s'il y a quelque chose chez eux
@@ -669,7 +670,7 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
         </div>
       )}
       {!toRate.has(String(designId)) && <RateStatusLine designId={designId}/>}
-      <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints}/>
+      <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShownProf}/>
       <AdminOnly home mw>
         <button onClick={() => setPick(true)} style={{ display:"block", width:"100%", padding:"7px", border:"none",
           borderTop:"1px solid var(--border)", background:"none", color:"#3b82f6", fontSize:11.5, fontWeight:600,
@@ -685,8 +686,11 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
       <MakerWorldSimilar designId={designId} onOpen={setSheet}/>
       </>}
       {sheet && <MakerWorldModelSheet designId={sheet} onClose={() => setSheet(null)}/>}
-      {/* la vue 3D, au profil de l'impression */}
-      {view3d && <Model3D designId={designId} printId={(prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id}
+      {/* la vue 3D, au profil montre par les plateaux (sinon celui de l'impression) ; carte repliee : les plateaux
+          deduisent quand meme le profil, sans s'afficher, et la vue l'attend */}
+      {view3d && !open && <div style={{ display:"none" }}>
+        <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShownProf}/></div>}
+      {view3d && <Model3D designId={designId} profileId={shownProf || null} wait={shownProf === undefined} printId={(prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id}
         title={mw.title} onClose={() => setView3d(false)}/>}
     </div>
   );
@@ -700,16 +704,18 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
 // plusieurs plateaux MakerWorld regroupes sur un seul).
 const manualPlates = (raw) => { try { const m = JSON.parse(raw || "null"); return m && Array.isArray(m.plates) ? m : null; } catch { return null; } };
 
-function MakerWorldPlates({ designId, profiles, prints: printsIn }) {
+function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile }) {
   const [over, setOver] = useState({});          // corrections faites ici, avant relecture
   const [imgGuess, setImgGuess] = useState({});        // plateau probable par print (silhouette de son apercu)
   const guessIds = printsIn.filter(pr => !manualPlates(pr.mw_plates) && pr.status !== "FAILED" && pr.status !== "CANCELLED")
     .map(pr => pr.id).join(",");
+  const [guessed, setGuessed] = useState(false);       // reconnaissance a l'image terminee (le profil deduit est final)
   useEffect(() => {
-    if (!designId || !guessIds) return;
+    if (!designId || !guessIds) { setGuessed(true); return; }
     let alive = true;
     client.get(`/makerworld/model/${designId}/plate-guess`, { params: { ids: guessIds } })
-      .then(({ data }) => alive && setImgGuess(data.guesses || {})).catch(() => {});
+      .then(({ data }) => alive && setImgGuess(data.guesses || {})).catch(() => {})
+      .finally(() => alive && setGuessed(true));
     return () => { alive = false; };
   }, [designId, guessIds]);
   const isAdmin = useIsAdmin();
@@ -761,6 +767,9 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn }) {
   const guess = sure || (avec.length === 1 ? avec[0]
     : deduced && deduced.sc > 0 ? deduced.x : avec.find(x => x.default) || avec[0]);
   const [pid, setPid] = useState(null);
+  // le profil montre ici, pour la vue 3D de la carte
+  const shownId = prints.length ? (avec.find(x => x.profile_id === pid) || guess)?.profile_id ?? null : null;
+  useEffect(() => { if (guessed) onProfile?.(shownId); }, [shownId, guessed]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (!avec.length || !prints.length) return null;
   const prof = avec.find(x => x.profile_id === pid) || guess;
   const deduit = !sure;

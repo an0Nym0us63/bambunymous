@@ -588,8 +588,9 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, _: s
     did = str(design_id or "").strip()
     if not did.isdigit():
         raise HTTPException(404, "Modèle inconnu")
+    # le profil affiche par la fiche (deduit, ou choisi dans la liste) passe avant celui lu sur l'impression
     prof = str(profile or "").strip()
-    if print_id:
+    if print_id and not prof:
         from sqlalchemy import select
         from ....db.session import AsyncSessionLocal
         from ....models.print_history import Print
@@ -600,6 +601,19 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, _: s
     t0 = _t.perf_counter()
     # le 3MF d'origine de CE profil ; sans profil connu, celui retenu pour le modele
     iid = known(did, prof) if prof else known(did, "")
+    if prof and not iid:
+        # le 3MF de ce profil peut etre garde sous une autre cle (rattrapage d'une impression au profil devine) ;
+        # sinon, pour un modele imprime, on le recupere maintenant (une fois : il sert ensuite a tout)
+        from ....services.mw_source import resolve, fetch, _index_put
+        try:
+            cand = await resolve(did, prof)
+            if cand and not path_of(cand).is_file() and print_id:
+                await fetch(cand)
+            if cand and path_of(cand).is_file():
+                _index_put(f"{did}:{prof}", cand)
+                iid = cand
+        except Exception as e:
+            logger.info(f"[3D] 3MF du profil {prof} de {did} non recupere : {e}")
     meta, source, key = None, "3mf", None
     if iid:
         src = path_of(iid)
