@@ -285,7 +285,8 @@ def from_makerworld(did: str, profile: str | None) -> dict | None:
     if not isinstance(d, dict):
         return None
     insts = [i for i in d.get("instances") or [] if isinstance(i, dict)]
-    inst = next((i for i in insts if profile and str(i.get("profileId")) == str(profile)), None) \
+    # le profil demande (l'imprimante donne parfois l'identifiant d'instance a sa place)
+    inst = next((i for i in insts if profile and str(profile) in (str(i.get("profileId")), str(i.get("id")))), None) \
         or next((i for i in insts if i.get("id") == d.get("defaultInstanceId")), None) or (insts[0] if insts else None)
     if inst is None:
         return None

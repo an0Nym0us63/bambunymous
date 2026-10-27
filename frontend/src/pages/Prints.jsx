@@ -686,7 +686,8 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
       </>}
       {sheet && <MakerWorldModelSheet designId={sheet} onClose={() => setSheet(null)}/>}
       {/* la vue 3D, au profil de l'impression */}
-      {view3d && <Model3D designId={designId} profileId={prints.find(x => x.mw_profile_id)?.mw_profile_id} title={mw.title} onClose={() => setView3d(false)}/>}
+      {view3d && <Model3D designId={designId} printId={(prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id}
+        title={mw.title} onClose={() => setView3d(false)}/>}
     </div>
   );
 }

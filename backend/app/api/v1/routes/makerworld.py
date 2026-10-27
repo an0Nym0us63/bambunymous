@@ -578,31 +578,54 @@ async def mw_doc(design_id: str, doc_id: str, dl: bool = False):
 
 # ── La vue 3D d'un modele (27/10/2026) : son 3MF d'origine garde ici, sinon l'apercu 3D de MakerWorld ──
 @router.get("/3d/{design_id}")
-async def mw_model_3d(design_id: str, profile: str = "", _: str = Depends(get_current_user)):
-    """Les plateaux a afficher en 3D : {source: "3mf" | "makerworld", plates: [{n, name, url, size_mm}]}."""
+async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, _: str = Depends(get_current_user)):
+    """Les plateaux a afficher en 3D : {source: "3mf" | "makerworld", plates: [{n, name, url, size_mm}], ms}.
+    print_id : le profil de cette impression (celui de l'imprimante, ou celui choisi a la main avec ses plateaux,
+    27/10/2026 : seul le premier etait lu, et une impression sans lui montrait le profil par defaut)."""
+    import time as _t
     from ....services import mw_3d as T
-    from ....services.mw_source import print_file
+    from ....services.mw_source import known, path_of, _profile
     did = str(design_id or "").strip()
     if not did.isdigit():
         raise HTTPException(404, "Modèle inconnu")
-    src = print_file(did, profile or None, None)
-    meta, source = None, "3mf"
-    if src is not None and src.is_file():
+    prof = str(profile or "").strip()
+    if print_id:
+        from sqlalchemy import select
+        from ....db.session import AsyncSessionLocal
+        from ....models.print_history import Print
+        async with AsyncSessionLocal() as db:
+            r = (await db.execute(select(Print.mw_profile_id, Print.mw_plates).where(Print.id == print_id))).first()
+        if r:
+            prof = _profile(r[0], r[1]) or prof
+    t0 = _t.perf_counter()
+    # le 3MF d'origine de CE profil ; sans profil connu, celui retenu pour le modele
+    iid = known(did, prof) if prof else known(did, "")
+    meta, source, key = None, "3mf", None
+    if iid:
+        src = path_of(iid)
         meta = await asyncio.to_thread(T.from_3mf, src, src.stem)
         key = src.stem
     if not meta or not any(not p.get("skipped") for p in meta.get("plates") or []):
+        # l'apercu MakerWorld du meme profil ; a defaut, le 3MF garde d'un autre profil du modele
         source = "makerworld"
         try:
-            meta = await asyncio.to_thread(T.from_makerworld, did, profile or None)
+            meta = await asyncio.to_thread(T.from_makerworld, did, prof or None)
         except Exception as e:
             logger.info(f"[3D] apercu MakerWorld de {did} : {e}")
             meta = None
         key = (meta or {}).get("key")
+        if not meta and prof and known(did, ""):
+            src = path_of(known(did, ""))
+            meta, source, key = await asyncio.to_thread(T.from_3mf, src, src.stem), "3mf_other", src.stem
     if not meta or not meta.get("plates"):
         raise HTTPException(404, "Pas de modèle 3D pour celui-ci")
+    ms = round((_t.perf_counter() - t0) * 1000)
+    if ms > 1500:
+        logger.info(f"[3D] {did} (profil {prof or '?'}) prepare en {ms} ms ({source})")
     ext = "glb" if meta.get("glb") else "bin"
-    return {"source": source, "plates": [{**p, "url": f"/api/v1/makerworld/3d/file/{key}/plate_{p['n']}.{ext}"}
-                                         for p in meta["plates"] if not p.get("skipped")],
+    return {"source": source, "profile": prof or None, "ms": ms,
+            "plates": [{**p, "url": f"/api/v1/makerworld/3d/file/{key}/plate_{p['n']}.{ext}"}
+                       for p in meta["plates"] if not p.get("skipped")],
             "skipped": [p["n"] for p in meta["plates"] if p.get("skipped")]}
 
 

@@ -125,22 +125,23 @@ function Viewer({ url, glb, onState }) {
   </div>;
 }
 
-export default function Model3D({ designId, profileId = null, title = "", onClose }) {
+export default function Model3D({ designId, profileId = null, printId = null, title = "", onClose }) {
   const [meta, setMeta] = useState(null);
   const [err, setErr] = useState(null);
   const [plate, setPlate] = useState(0);
   const [st, setSt] = useState({ busy: true });
   useEffect(() => {
     let alive = true;
-    client.get(`/makerworld/3d/${encodeURIComponent(designId)}`, { params: { profile: profileId || "" }, timeout: 180000 })
+    // une impression : le serveur lit son profil (celui de l'imprimante, ou celui choisi a la main avec ses plateaux)
+    client.get(`/makerworld/3d/${encodeURIComponent(designId)}`, { params: { profile: profileId || "", print_id: printId || 0 }, timeout: 180000 })
       .then(({ data }) => { if (alive) { setMeta(data); setPlate(0); } })
       .catch(e => alive && setErr(e?.response?.data?.detail || "Pas de modèle 3D pour celui-ci"));
     return () => { alive = false; };
-  }, [designId, profileId]);
+  }, [designId, profileId, printId]);
   const p = meta?.plates?.[plate];
   const mm = v => `${Math.round(v)} mm`;
   return createPortal(
-    <FSheet onClose={onClose} z={1700}>
+    <FSheet onClose={onClose} z={4600}>
       <div style={{ padding: "48px 16px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
           <span style={{ width: 40, height: 40, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0,
@@ -164,7 +165,9 @@ export default function Model3D({ designId, profileId = null, title = "", onClos
             textAlign: "center", fontSize: 13, fontWeight: 700, color: "#ef4444" }}>{err || `Plateau illisible : ${st.error}`}</div>}
         </div>
         {meta && <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
-          <span>{meta.source === "3mf" ? "3MF d'origine, aux couleurs de ses filaments" : "Aperçu MakerWorld (sans couleurs)"}</span>
+          <span>{meta.source === "3mf" ? "3MF d'origine, aux couleurs de ses filaments"
+            : meta.source === "3mf_other" ? "3MF d'origine d'un autre profil du modèle" : "Aperçu MakerWorld (sans couleurs)"}</span>
+          {meta.ms >= 1000 && <span data-tip="La première ouverture prépare le modèle ; les suivantes sont immédiates">· préparé en {(meta.ms / 1000).toFixed(1).replace(".", ",")} s</span>}
           {st.size && <span>· {mm(st.size[0])} × {mm(st.size[1])} × {mm(st.size[2])}</span>}
           {p?.triangles ? <span>· {p.triangles.toLocaleString("fr-FR")} triangles</span> : null}
           {meta.skipped?.length > 0 && <span>· plateau{meta.skipped.length > 1 ? "x" : ""} {meta.skipped.join(", ")} trop lourd{meta.skipped.length > 1 ? "s" : ""} pour être affiché</span>}
