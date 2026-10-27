@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { currentFriend } from "../store/friend";
 
 // Documents joints d'un modele MakerWorld et pieces a prevoir (27/10/2026) : notice d'assemblage, nomenclature,
@@ -32,29 +32,54 @@ function FilaLine({ f }) {
   </div>;
 }
 
-export default function MwDocs({ docs = [], parts = [], otherParts = null, filaments = [], style }) {
+// replie par defaut (27/10/2026) : une ligne dit ce qu'il y a (documents, filaments dont a commander, pieces),
+// un toucher deplie le detail. Un document garde sur le serveur s'ouvre (↗) ou s'enregistre (⬇).
+export default function MwDocs({ docs = [], parts = [], otherParts = null, filaments = [], style, open: openAt = false }) {
+  const [open, setOpen] = useState(openAt);
   if (!docs.length && !parts.length && !otherParts && !filaments.length) return null;
   const friend = !!currentFriend();
   const head = t => <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>{t}</div>;
+  const missing = filaments.filter(f => !(f.stock && f.stock.spools > 0)).length;
+  const nParts = parts.length + (otherParts ? 1 : 0);
+  const pill = (txt, c) => <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap", color: c,
+    background: `color-mix(in srgb, ${c} 14%, transparent)` }}>{txt}</span>;
   return (
     <div onClick={e => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: 8, ...style }}>
+      {/* le resume : ce qu'il y a, d'un coup d'oeil */}
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+        style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", width: "100%", padding: "6px 10px", borderRadius: 12, cursor: "pointer",
+          border: "1px solid color-mix(in srgb, #0EA5E9 30%, var(--border))", textAlign: "left", font: "inherit",
+          background: "linear-gradient(135deg, color-mix(in srgb, #0EA5E9 12%, transparent), transparent 80%), var(--surface)" }}>
+        <span style={{ fontSize: 12, fontWeight: 900, color: "var(--text)" }}>📎 Documents et pièces</span>
+        {docs.length > 0 && pill(`${docs.length} document${docs.length > 1 ? "s" : ""}`, "#3B82F6")}
+        {filaments.length > 0 && pill(`${filaments.length} filament${filaments.length > 1 ? "s" : ""}${missing ? ` · ${missing} à commander` : " · tout en stock"}`,
+          missing ? "#EA580C" : "#16A34A")}
+        {nParts > 0 && pill(`${nParts} à prévoir`, "#D97706")}
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▶</span>
+      </button>
+      {open && <>
       {docs.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
         {head(`Documents (${docs.length})`)}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {docs.map(d => { const [ico, c] = KIND[d.kind] || KIND.other;
-            const href = d.kept && !friend ? d.href : d.url;
-            return <a key={d.id || d.url} href={href} target="_blank" rel="noopener noreferrer"
-              data-tip={`${d.label}${d.profile ? ` · profil « ${d.profile} »` : ""}${d.kept ? " · gardé sur le serveur" : " · chez MakerWorld"}`}
-              style={{ display: "inline-flex", alignItems: "center", gap: 6, maxWidth: "100%", minWidth: 0, padding: "5px 10px", borderRadius: 12,
-                textDecoration: "none", fontSize: 12, fontWeight: 700, color: "var(--text)", border: `1px solid ${c}40`,
-                background: `linear-gradient(135deg, ${c}1f, ${c}0a)` }}>
-              <span style={{ flexShrink: 0 }}>{ico}</span>
-              <span style={{ display: "flex", flexDirection: "column", minWidth: 0, lineHeight: 1.2 }}>
-                <span style={{ fontSize: 10, fontWeight: 800, color: c }}>{d.label}{d.profile ? " · profil" : ""}</span>
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
-              </span>
-              <span style={{ flexShrink: 0, color: "var(--muted)", fontSize: 11 }}>↗</span>
-            </a>; })}
+            const local = d.kept && !friend, href = local ? d.href : d.url;
+            return <span key={d.id || d.url} style={{ display: "inline-flex", alignItems: "stretch", maxWidth: "100%", minWidth: 0, borderRadius: 12,
+              border: `1px solid ${c}40`, background: `linear-gradient(135deg, ${c}1f, ${c}0a)`, overflow: "hidden" }}>
+              <a href={href} target="_blank" rel="noopener noreferrer"
+                data-tip={`Ouvrir · ${d.label}${d.profile ? ` · profil « ${d.profile} »` : ""}${d.kept ? " · gardé sur le serveur" : " · chez MakerWorld"}`}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0, padding: "5px 10px", textDecoration: "none", fontSize: 12,
+                  fontWeight: 700, color: "var(--text)" }}>
+                <span style={{ flexShrink: 0 }}>{ico}</span>
+                <span style={{ display: "flex", flexDirection: "column", minWidth: 0, lineHeight: 1.2 }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: c }}>{d.label}{d.profile ? " · profil" : ""}</span>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
+                </span>
+                <span style={{ flexShrink: 0, color: "var(--muted)", fontSize: 11 }}>↗</span>
+              </a>
+              {local && <a href={`${d.href}?dl=1`} download={d.name} data-tip="Télécharger"
+                style={{ display: "flex", alignItems: "center", padding: "0 10px", borderLeft: `1px solid ${c}40`, textDecoration: "none", fontSize: 13,
+                  fontWeight: 900, color: c }}>⬇</a>}
+            </span>; })}
         </div>
       </div>}
       {filaments.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -72,6 +97,7 @@ export default function MwDocs({ docs = [], parts = [], otherParts = null, filam
         </div>)}
         {otherParts && <div style={{ fontSize: 12, color: "var(--text2)", whiteSpace: "pre-wrap", lineHeight: 1.4 }}>{otherParts}</div>}
       </div>}
+      </>}
     </div>
   );
 }

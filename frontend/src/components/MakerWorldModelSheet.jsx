@@ -406,11 +406,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
             )}
 
             {/* Documents joints (notice, solution…) et pieces a prevoir */}
-            {(m.docs?.length > 0 || m.parts?.length > 0 || m.other_parts || m.filaments?.length > 0) && (
-              <Section title="Documents et pièces" icon="📎" c="#0EA5E9">
-                <MwDocs docs={m.docs || []} parts={m.parts || []} otherParts={m.other_parts} filaments={m.filaments || []}/>
-              </Section>
-            )}
+            {/* repliee par defaut : son resume dit ce qu'il y a */}
+            <MwDocs docs={m.docs || []} parts={m.parts || []} otherParts={m.other_parts} filaments={m.filaments || []} style={{ marginBottom:12 }}/>
 
             {/* Profils et plateaux */}
             {m.profiles?.length > 0 && (

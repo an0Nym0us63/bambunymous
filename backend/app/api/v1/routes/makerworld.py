@@ -555,7 +555,7 @@ async def mw_debug(name: str, _: str = Depends(require_admin)):
 
 # ── Les documents joints des modeles (27/10/2026) : la copie gardee ici, sinon MakerWorld ──
 @router.get("/doc/{design_id}/{doc_id}")
-async def mw_doc(design_id: str, doc_id: str):
+async def mw_doc(design_id: str, doc_id: str, dl: bool = False):
     """Un document joint (notice, nomenclature, solution…), a lire dans le navigateur. Public, comme chez
     MakerWorld (un lien ou un onglet n'envoie pas le jeton)."""
     from fastapi.responses import FileResponse, RedirectResponse
@@ -571,7 +571,8 @@ async def mw_doc(design_id: str, doc_id: str):
     from urllib.parse import quote
     mt = mimetypes.guess_type(doc.get("name") or "")[0] or "application/octet-stream"
     return FileResponse(path, media_type=mt, headers={
-        "Content-Disposition": f"inline; filename*=UTF-8''{quote(doc.get('name') or 'document')}",
+        # dl : a enregistrer (le bouton ⬇) ; sinon a lire dans le navigateur
+        "Content-Disposition": f"{'attachment' if dl else 'inline'}; filename*=UTF-8''{quote(doc.get('name') or 'document')}",
         "Cache-Control": "private, max-age=86400"})
 
 
