@@ -62,7 +62,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [com, setCom] = useState(null);            // { items, total }
   const [comBusy, setComBusy] = useState(false);
   const [pick, setPick] = useState(false);
-  const [view3d, setView3d] = useState(false);
+  const [view3d, setView3d] = useState(null);       // le profil montre en 3D
   const [sharing, setSharing] = useState(false);     // le partage Telegram du modele
   const [sim, setSim] = useState(null);
   const [zoom, setZoom] = useState(null);          // galerie plein ecran { images, index }
@@ -446,6 +446,11 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                             {p.title || "Profil"}{p.default ? " ★" : ""}</span>
                           {nDone > 0 && <span style={{ fontSize:10.5, fontWeight:800, color:"white", background:"linear-gradient(135deg, #22C55E, #16A34A)",
                             padding:"1px 7px", borderRadius:20 }}>✓ {nDone}/{p.plates.length}</span>}
+                          {!friend && <span role="button" tabIndex={0} aria-label="Ce profil en 3D" data-tip="Ce profil en 3D"
+                            onClick={e => { e.stopPropagation(); setView3d(p); }}
+                            onKeyDown={e => { if (e.key === "Enter") { e.stopPropagation(); setView3d(p); } }}
+                            style={{ width:28, height:28, borderRadius:9, display:"inline-flex", alignItems:"center", justifyContent:"center", fontSize:13,
+                              border:"1px solid rgba(14,165,233,0.4)", background:"rgba(14,165,233,0.1)", cursor:"pointer", flexShrink:0 }}>🧊</span>}
                           <span style={{ color:"var(--muted)", fontSize:11, transform: isOpen ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>
                         </div>
                         <div style={{ fontSize:11, color:"var(--muted)", marginTop:2 }}>
@@ -765,13 +770,17 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                 return <button onClick={() => toast("⭐ " + why, "info", 3500)} aria-label="Évaluer" data-tip={why}
                   style={{ ...sq, ...dim("245,158,11") }}><span style={{ opacity:.5 }}>⭐</span></button>;
               })())}
-            {!friend && <button onClick={() => setView3d(true)} aria-label="Voir en 3D" data-tip="Voir en 3D"
+            {!friend && <button onClick={() => setView3d((m.profiles || []).find(p => p.instance_id === plan?.instance_id)
+              || (m.profiles || []).find(p => p.default) || m.profiles?.[0] || {})} aria-label="Voir en 3D" data-tip="Voir en 3D"
               style={{ ...sq, background:"rgba(14,165,233,0.12)", borderColor:"rgba(14,165,233,0.4)" }}>🧊</button>}
             <button onClick={menu} aria-label="Plus d'actions" style={sq}>⋯</button>
           </div>
         )}
         {/* la vue 3D : le profil le mieux adapte a mon imprimante (le premier de la liste) */}
-        {view3d && <Model3D designId={id} profileId={m.printed_profile || m.profiles?.[0]?.profile_id}title={m.title_fr || m.title} onClose={() => setView3d(false)}/>}
+        {/* le 3MF d'origine se recupere pour un profil retenu ou imprime ; sinon, l'apercu de MakerWorld */}
+        {view3d && <Model3D designId={id} profileId={view3d.instance_id || view3d.profile_id || null}
+          fetchSource={!!view3d.instance_id && (view3d.instance_id === plan?.instance_id || String(view3d.profile_id) === String(m.printed_profile))}
+          title={m.title_fr || m.title} onClose={() => setView3d(null)}/>}
       </div>
     </div>,
     document.body

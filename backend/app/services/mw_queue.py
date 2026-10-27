@@ -452,7 +452,8 @@ async def _compute() -> dict:
                "cover_url": base.get("cover_url") or m.get("cover_url"), "collections": where.get(did, []),
                "printed": m.get("printed") or 0, "planned": chosen_plan, "qty": qty, "error": m.get("error"),
                "plates_ready": [], "plates_count": 0, "_need": {}, "_miss": {}, "_inprog": m.get("in_progress") or 0,
-               "profile": None, "seconds": None, "weight_g": 0.0, "filaments": [], "status": "unknown"}
+               "profile": None, "seconds": None, "weight_g": 0.0, "filaments": [], "status": "unknown",
+               "default_instance": next((p.get("instance_id") for p in profiles if p.get("default")), None)}
         if prof:
             sel = plan.get("plates") if plan and plan.get("instance_id") == prof.get("instance_id") else None
             plates = [pl for pl in prof.get("plates") or [] if sel is None or pl.get("index") in sel]

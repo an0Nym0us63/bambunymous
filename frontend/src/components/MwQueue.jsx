@@ -186,7 +186,8 @@ export default function MwQueue() {
       items: [
         { icon: "📄", label: "Ouvrir la fiche", tone: "#3B82F6", onClick: open },
         { icon: "🌐", label: "Voir sur MakerWorld", tone: "#06B6D4", onClick: () => window.open(`https://makerworld.com/fr/models/${r.design_id}`, "_blank", "noopener") },
-        r.profile && { icon: "🧊", label: "Vue 3D aux couleurs retenues", hint: r.profile.title || "le profil retenu", tone: "#0EA5E9", onClick: () => setView3d(r) },
+        r.profile && { icon: "🧊", label: "Vue 3D", hint: r.planned ? `profil retenu : ${r.profile.title || ""}` : "profil par défaut du modèle",
+          tone: "#0EA5E9", onClick: () => setView3d(r) },
         "-",
         isCut ? { icon: "↺", label: "Revenir à toute la liste", tone: "#3B82F6", onClick: () => setUntil(null) }
           : { icon: "✂", label: "Compter jusqu'ici", tone: "#3B82F6", hint: `Stats sur les ${i + 1} premier${i ? "s" : ""}`, onClick: () => setUntil(r.design_id) },
@@ -522,8 +523,9 @@ export default function MwQueue() {
       )}
       {pick && <CollectionsPicker chosen={q.collections.map(c => c.id)} onClose={() => setPick(false)}
         onSaved={() => { setPick(false); refresh(); }}/>}
-      {view3d && <Model3D designId={view3d.design_id} profileId={view3d.profile?.instance_id} fetchSource
-        title={view3d.title_fr || view3d.title} palette={paletteOf(view3d)} onClose={() => setView3d(null)}/>}
+      {view3d && <Model3D designId={view3d.design_id} profileId={view3d.planned ? view3d.profile?.instance_id : view3d.default_instance || view3d.profile?.instance_id}
+        fetchSource={view3d.planned}
+        title={view3d.title_fr || view3d.title} palette={view3d.planned ? paletteOf(view3d) : null} onClose={() => setView3d(null)}/>}
       {model && <MakerWorldModelSheet designId={model.design_id} preview={model}
         onClose={() => { setModel(null); refresh(); }}/>}
     </div>

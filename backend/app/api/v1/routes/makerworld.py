@@ -682,7 +682,8 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
     used_palette = None
     if used and source in ("3mf", "3mf_other") and key:
         try:
-            used_palette = await _used_palette(path_of(key), [int(x) for x in used.split(",") if x.strip().isdigit()][:60])
+            used_palette = await _used_palette(path_of(key), [int(x) for x in used.split(",") if x.strip().isdigit()][:60],
+                                               did, prof if source == "3mf" else "")
         except Exception:
             logger.exception("[3D] couleurs utilisees")
     return {"source": source, "profile": prof or None, "profile_title": ptitle, "profile_cover": pcover, "ms": ms,
@@ -690,32 +691,113 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             "plates": T.plates_out(meta, key)[0], "skipped": T.plates_out(meta, key)[1]}
 
 
-async def _used_palette(src, print_ids: list) -> dict | None:
+def _ext_by_name(z) -> dict:
+    """Le filament de chaque piece d'un 3MF Bambu : {nom#rang: {filament: nombre}} (objets et pieces ; des pieces de
+    meme nom se distinguent par leur ordre, le meme dans le projet d'origine et dans le projet imprime)."""
+    import re as _re
+    try:
+        xml = z.read("Metadata/model_settings.config").decode("utf-8", "replace")
+    except KeyError:
+        return {}
+    out: dict = {}
+    seen: dict = {}
+
+    def add(name, ext):
+        if name and ext:
+            seen[name] = seen.get(name, 0) + 1
+            d = out.setdefault(f"{name}#{seen[name]}", {})
+            d[ext] = d.get(ext, 0) + 1
+    for m in _re.finditer(r'<object id="\d+">(.*?)</object>', xml, _re.S):
+        body = m.group(1)
+        head = body.split("<part", 1)[0]
+        oname = (_re.search(r'key="name" value="([^"]*)"', head) or [None, None])[1]
+        oext = int((_re.search(r'key="extruder" value="(\d+)"', head) or [None, 1])[1])
+        add(oname, oext)
+        for p in _re.finditer(r'<part id="\d+" subtype="([^"]*)">(.*?)</part>', body, _re.S):
+            if p.group(1) != "normal_part":
+                continue
+            pname = (_re.search(r'key="name" value="([^"]*)"', p.group(2)) or [None, None])[1]
+            pe = _re.search(r'key="extruder" value="(\d+)"', p.group(2))
+            add(pname, int(pe.group(1)) if pe else oext)
+    return out
+
+
+def _ext_map(origin: dict, sliced: dict) -> dict:
+    """Filament du projet d'origine -> filament du projet imprime, d'apres les pieces de meme nom (27/10/2026 : par
+    numero seulement, un projet retouche dans Bambu Studio -- filaments reordonnes, fusionnes -- melangeait les
+    couleurs). {} si aucun nom en commun."""
+    votes: dict = {}
+    for name, eo in origin.items():
+        es = sliced.get(name)
+        if not es:
+            continue
+        a = max(eo, key=eo.get)
+        b = max(es, key=es.get)
+        v = votes.setdefault(a, {})
+        v[b] = v.get(b, 0) + 1
+    return {a: max(v, key=v.get) for a, v in votes.items()}
+
+
+async def _used_palette(src, print_ids: list, did: str = "", prof: str = "") -> dict | None:
     """{couleur du 3MF d'origine (RRGGBB) : couleur utilisee} d'apres les filaments de ces impressions (la plus
-    recente l'emporte)."""
+    recente l'emporte). Seules comptent les impressions de ce profil (ou de profil inconnu). Chaque filament du
+    projet d'origine est rapproche de celui du projet imprime par les pieces de meme nom (3MF tranche garde), a
+    defaut par son numero ; puis de la bobine qui l'a imprime (sans bobine liee : la couleur notee au tranchage)."""
+    import json as _json
     import zipfile
     from sqlalchemy import select
     from ....db.session import AsyncSessionLocal
-    from ....models.print_history import FilamentUsage as FU
+    from ....models.print_history import FilamentUsage as FU, Print, MakerWorldDesign as MW
     from ....models.filament import Filament, Spool
     from ....services import mw_3d as T
+    from ....services.mw_source import _profile
+    from ....services.archive import local_or_archive
     if not print_ids or not src or not src.is_file():
         return None
     with zipfile.ZipFile(src) as z:
         colors = T._colors_of(z)
+        origin = _ext_by_name(z)
     h6 = lambda c: str(c or "").lstrip("#")[:6].upper()
     async with AsyncSessionLocal() as db:
+        prints = (await db.execute(select(Print.id, Print.mw_profile_id, Print.mw_plates, Print.model_3mf)
+                                   .where(Print.id.in_(print_ids)).order_by(Print.id.desc()))).all()
         rows = (await db.execute(
-            select(FU.ams_slot, FU.color_hex, Filament.color)
+            select(FU.print_id, FU.ams_slot, FU.color_hex, Filament.color)
             .outerjoin(Spool, Spool.id == FU.spool_id).outerjoin(Filament, Filament.id == Spool.filament_id)
-            .where(FU.print_id.in_(print_ids)).order_by(FU.print_id.desc()))).all()
+            .where(FU.print_id.in_(print_ids)))).all()
+        raw = (await db.execute(select(MW.profiles).where(MW.design_id == did))).scalar() if did else None
+    # un profil donne par son identifiant d'instance : ramene au profil
+    try:
+        by_inst = {str(p.get("instance_id")): str(p.get("profile_id")) for p in _json.loads(raw or "[]") if p.get("instance_id")}
+    except ValueError:
+        by_inst = {}
+    norm = lambda v: by_inst.get(str(v), str(v)) if v else ""
+    want = norm(prof)
+    used_by: dict = {}
+    for pid, slot, chex, fcol in rows:
+        if slot:
+            used_by.setdefault(pid, {})[int(slot)] = h6(fcol or chex)
     out: dict = {}
-    for slot, chex, fcol in rows:
-        if not slot or slot > len(colors):
+    for pid, mwp, mwpl, m3 in prints:
+        pp = norm(_profile(mwp, mwpl))
+        if want and pp and pp != want:
+            continue                                  # une impression d'un autre profil du modele
+        used = used_by.get(pid) or {}
+        if not used:
             continue
-        a, b = h6(colors[slot - 1]), h6(fcol or chex)
-        if len(a) == 6 and len(b) == 6:
-            out.setdefault(a, b)
+        emap = {}
+        f = local_or_archive(m3) if m3 else None
+        if f and f.is_file():
+            try:
+                with zipfile.ZipFile(f) as zz:
+                    emap = _ext_map(origin, _ext_by_name(zz))
+            except (OSError, zipfile.BadZipFile):
+                emap = {}
+        for e in range(1, len(colors) + 1):
+            es = emap.get(e) if emap else e           # sans nom en commun : par numero
+            a, b = h6(colors[e - 1]), used.get(es) if es else None
+            if b and len(a) == 6 and len(b) == 6:
+                out.setdefault(a, b)
     return out or None
 
 
