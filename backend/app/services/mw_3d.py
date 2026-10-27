@@ -668,7 +668,7 @@ def from_makerworld(did: str, profile: str | None) -> dict | None:
         for name in sorted(zf.namelist()):
             m = re.search(r"plate_(\d+)\.glb$", name)
             if m:
-                (out / f"plate_{m.group(1)}.glb").write_bytes(zf.read(name))
+                _write(out / f"plate_{m.group(1)}.glb", zf.read(name))
                 plates.append({"n": int(m.group(1)), "name": ""})
     meta = {"v": FORMAT_V, "glb": True, "key": key, "plates": sorted(plates, key=lambda p: p["n"])}
     meta_f.write_text(json.dumps(meta), encoding="utf-8")

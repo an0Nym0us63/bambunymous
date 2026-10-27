@@ -24,6 +24,8 @@ function parseBin(buf) {
   return groups;
 }
 
+// un apercu MakerWorld (GLB) ou un plateau de l'appli : l'adresse porte une version (« plate_1.glb?v=… »)
+const isGlb = u => /\.glb(\?|$)/.test(String(u || ""));
 const hex6 = c => String(c || "").replace(/^#/, "").slice(0, 6).toUpperCase();
 
 // le rendu d'une finition de filament (28/10/2026) : translucide, satine, metallique, mat, lumineux
@@ -348,9 +350,9 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         </div>}
         <div style={{ position: "relative", height: "min(62dvh, 560px)", borderRadius: 18, overflow: "hidden", border: "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
-          {p && <Viewer key={`${p.url}|${shown ? "alt" : "own"}`} url={p.url} glb={p.url.endsWith(".glb")} onState={setSt} palette={shown}
+          {p && <Viewer key={`${p.url}|${shown ? "alt" : "own"}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : meta?.used_finishes) : meta?.finishes} glow={!!st.glow}/>}
-          {alt && p && !p.url.endsWith(".glb") && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
+          {alt && p && !isGlb(p.url) && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
             background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
             {[[true, "Couleurs d'origine"], [false, `Couleurs ${altLabel.toLowerCase()}`]].map(([o, l]) => <button key={l} type="button" onClick={() => setOwn(o)}
               style={{ padding: "5px 11px", borderRadius: 16, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800,
