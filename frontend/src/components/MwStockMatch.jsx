@@ -86,6 +86,17 @@ export function plateColorMap(items, plate, scope = "") {
   }
   return out;
 }
+// Pour la vue 3D : { couleur du createur RRGGBB : couleur du filament choisi } (plate : avec les choix de ce plateau).
+export function profilePalette(items, scope, plate = null) {
+  const out = {};
+  (items || []).forEach((x, i) => {
+    const c = chosenOf(x, scope, i, plate);
+    const from = String(x.color || "").replace(/^#/, "").slice(0, 6).toUpperCase();
+    const to = String(c?.color || "").replace(/^#/, "").slice(0, 6).toUpperCase();
+    if (from.length === 6 && to.length === 6 && !(from in out)) out[from] = to;
+  });
+  return Object.keys(out).length ? out : null;
+}
 export function picksOf(scope, items) {
   const out = {};
   (items || []).forEach((x, i) => {

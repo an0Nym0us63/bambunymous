@@ -15,7 +15,7 @@ import { useMwAssign } from "../store/mwAssign";
 import { useFriend } from "../store/friend";
 import MwImg from "./MwImg";
 import MwRich, { richImages } from "./MwRich";
-import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf, platePicksOf, plateInAms, clearPicks, plateColorMap, usePicksVersion,
+import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf, platePicksOf, plateInAms, clearPicks, plateColorMap, usePicksVersion, profilePalette,
   PlateColors } from "./MwStockMatch";
 import PlateRecolor from "./PlateRecolor";
 import Lightbox from "./Lightbox";
@@ -778,7 +778,11 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
         )}
         {/* la vue 3D : le profil le mieux adapte a mon imprimante (le premier de la liste) */}
         {/* le 3MF d'origine se recupere pour un profil retenu ou imprime ; sinon, l'apercu de MakerWorld */}
+        {/* les couleurs choisies en face de chaque couleur du createur (et celles d'un plateau, s'il a les siennes) */}
         {view3d && <Model3D designId={id} profileId={view3d.instance_id || view3d.profile_id || null}
+          palette={profilePalette(m.stock?.[view3d.instance_id], `${id}|${view3d.instance_id}`)} altName="Choisies"
+          platePalettes={Object.fromEntries((view3d.plates || []).map(pl => [pl.index,
+            profilePalette(m.stock?.[view3d.instance_id], `${id}|${view3d.instance_id}`, pl.index)]))}
           fetchSource={!!view3d.instance_id && (view3d.instance_id === plan?.instance_id || String(view3d.profile_id) === String(m.printed_profile))}
           title={m.title_fr || m.title} onClose={() => setView3d(null)}/>}
       </div>

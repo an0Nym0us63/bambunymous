@@ -157,7 +157,7 @@ function Ring({ pct = null, label }) {
 // (usedPrints : ces impressions, le serveur rapproche chaque filament du projet de la bobine qui l'a remplace).
 // fetchSource : recuperer le 3MF d'origine s'il manque (« À faire »).
 export default function Model3D({ designId = null, profileId = null, printId = null, wait = false, title = "", onClose,
-                                  palette = null, usedPrints = null, fetchSource = false }) {
+                                  palette = null, platePalettes = null, altName = null, usedPrints = null, fetchSource = false }) {
   const [meta, setMeta] = useState(null);
   const [err, setErr] = useState(null);
   const [plate, setPlate] = useState(0);
@@ -187,8 +187,9 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   }, [base, wait, meta, err]);
   const p = meta?.plates?.[plate];
   // les couleurs montrees : d'origine, ou celles des filaments retenus / utilises (par defaut, s'il y en a)
-  const alt = palette || meta?.used_palette || null;
-  const altLabel = palette ? "Retenues" : "Utilisées";
+  // un plateau peut avoir ses propres choix (platePalettes : { numero : palette })
+  const alt = (p && platePalettes?.[p.n]) || palette || meta?.used_palette || null;
+  const altLabel = altName || (palette || platePalettes ? "Retenues" : "Utilisées");
   const [own, setOwn] = useState(false);
   const shown = alt && !own ? alt : null;
   const mm = v => `${Math.round(v)} mm`;
