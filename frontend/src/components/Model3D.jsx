@@ -58,8 +58,9 @@ function boxUV(THREE, geo) {
   return g;
 }
 
-function Viewer({ url, glb, onState, palette = null, finishes = null }) {
+function Viewer({ url, glb, onState, palette = null, finishes = null, glow = false }) {
   const box = useRef(null);
+  const [dark, setDark] = useState(false);
   const api = useRef(null);
   useEffect(() => {
     let dead = false, cleanup = () => {};
@@ -74,7 +75,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null }) {
       renderer.setSize(el.clientWidth, el.clientHeight);
       el.appendChild(renderer.domElement);
       const scene = new THREE.Scene();
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1.6));
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1.6); scene.add(hemi);
       const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(150, 300, 200); scene.add(sun);
       const back = new THREE.DirectionalLight(0xffffff, 0.6); back.position.set(-200, 120, -150); scene.add(back);
       // l'environnement des reflets, prepare seulement s'il sert
@@ -161,15 +162,19 @@ function Viewer({ url, glb, onState, palette = null, finishes = null }) {
               if (emit) { mat.emissive = new THREE.Color(0xffffff); mat.emissiveMap = t; mat.emissiveIntensity = 0.9; }
               else mat.map = t;
             }
-            holder.add(new THREE.Mesh(mesh, mat));
+            const piece = new THREE.Mesh(mesh, mat);
+            if (fin === "glow") { piece.userData.glow = true; mat.userData.dayEmit = mat.emissiveIntensity; }
+            holder.add(piece);
             // et un halo autour : deux enveloppes gonflees le long des normales, de sa couleur, qui s'ajoutent a la lumiere
             if (fin === "glow") for (const [d, o] of [[0.8, 0.4], [2.2, 0.18]]) {
               const hg = geo.clone(); hg.computeVertexNormals();
               const p = hg.attributes.position, nn = hg.attributes.normal;
               for (let i = 0; i < p.count; i++) p.setXYZ(i, p.getX(i) + nn.getX(i) * d, p.getY(i) + nn.getY(i) * d, p.getZ(i) + nn.getZ(i) * d);
               hg.deleteAttribute("normal");
-              holder.add(new THREE.Mesh(hg, new THREE.MeshBasicMaterial({ color: c.clone(), transparent: true,
-                opacity: o, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending })));
+              const halo = new THREE.Mesh(hg, new THREE.MeshBasicMaterial({ color: c.clone(), transparent: true,
+                opacity: o, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+              halo.userData.glow = true; halo.material.userData.dayOp = o;
+              holder.add(halo);
             }
           }
           model.add(holder);
@@ -186,9 +191,19 @@ function Viewer({ url, glb, onState, palette = null, finishes = null }) {
           controls.target.copy(sph.center); camera.near = Math.max(0.1, d / 100); camera.far = d * 20; camera.updateProjectionMatrix(); controls.update(); render();
         };
         fit();
-        api.current = { fit };
+        // lumiere eteinte : seules les pieces phosphorescentes luisent (leur halo ressort dans le noir)
+        const glowMats = [];
+        scene.traverse(o => { if (o.isMesh && o.userData.glow) glowMats.push(o.material); });
+        const night = on => {
+          hemi.intensity = on ? 0.05 : 1.6; sun.intensity = on ? 0.06 : 1.6; back.intensity = on ? 0 : 0.6;
+          grid.material.opacity = on ? 0.12 : 0.45;
+          glowMats.forEach(m => { if (m.emissiveIntensity != null && m.emissive) m.emissiveIntensity = on ? 1.25 : m.userData.dayEmit ?? m.emissiveIntensity;
+            else m.opacity = on ? Math.min(1, m.userData.dayOp * 1.8) : m.userData.dayOp; });
+          render();
+        };
+        api.current = { fit, night };
         const s = bb2.getSize(new THREE.Vector3());
-        onState({ busy: false, error: null, size: glb ? [s.x, s.z, s.y] : [s.x, s.z, s.y] });
+        onState({ busy: false, error: null, size: glb ? [s.x, s.z, s.y] : [s.x, s.z, s.y], glow: glowMats.length > 0 });
       } catch (e) {
         onState({ busy: false, error: e?.message || "Modèle illisible" });
       }
@@ -196,7 +211,13 @@ function Viewer({ url, glb, onState, palette = null, finishes = null }) {
     return () => { dead = true; cleanup(); api.current = null; };
   }, [url, glb]); // eslint-disable-line react-hooks/exhaustive-deps
   return <div style={{ position: "relative", width: "100%", height: "100%" }}>
-    <div ref={box} style={{ position: "absolute", inset: 0, touchAction: "none" }}/>
+    <div ref={box} style={{ position: "absolute", inset: 0, touchAction: "none", borderRadius: "inherit", transition: "background .4s",
+      background: dark ? "radial-gradient(circle at 50% 40%, #0b1020, #020308)" : "transparent" }}/>
+    {glow && <button type="button" onClick={() => { const v = !dark; setDark(v); api.current?.night(v); }}
+      data-tip={dark ? "Rallumer la lumière" : "Éteindre la lumière : le filament phosphorescent luit"}
+      style={{ position: "absolute", right: 56, bottom: 10, height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
+        background: dark ? "linear-gradient(135deg, #facc15, #f59e0b)" : "linear-gradient(135deg, #1e293b, #0f172a)", color: dark ? "#1e293b" : "#e2e8f0",
+        fontSize: 13, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{dark ? "💡 Rallumer" : "🌙 Éteindre"}</button>}
     <button type="button" onClick={() => api.current?.fit()} data-tip="Recentrer la vue"
       style={{ position: "absolute", right: 10, bottom: 10, width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
         background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>⟲</button>
@@ -293,7 +314,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         <div style={{ position: "relative", height: "min(62dvh, 560px)", borderRadius: 18, overflow: "hidden", border: "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
           {p && <Viewer key={`${p.url}|${shown ? "alt" : "own"}`} url={p.url} glb={p.url.endsWith(".glb")} onState={setSt} palette={shown}
-            finishes={shown ? (palette || platePalettes ? paletteFinishes : meta?.used_finishes) : meta?.finishes}/>}
+            finishes={shown ? (palette || platePalettes ? paletteFinishes : meta?.used_finishes) : meta?.finishes} glow={!!st.glow}/>}
           {alt && p && !p.url.endsWith(".glb") && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
             background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
             {[[true, "Couleurs d'origine"], [false, `Couleurs ${altLabel.toLowerCase()}`]].map(([o, l]) => <button key={l} type="button" onClick={() => setOwn(o)}

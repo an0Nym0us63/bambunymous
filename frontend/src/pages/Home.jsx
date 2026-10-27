@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
-import { trayBg, parseColorsList, finishOf, colorBg } from "../utils/colors";
+import { trayBg, parseColorsList, finishOf, colorBg, bgWithTop } from "../utils/colors";
 import { stageLabel, stageIsPause } from "../utils/printStage";
 import { createPortal } from "react-dom";
 import { usePrinter } from "../store/printer";
@@ -756,11 +756,15 @@ const dryLeft = m => !m ? "" : m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60)
 let hubShownAt = 0;
 function HubSwatch({ t, active, h, radius = 6 }) {
   const p = trayPct(t), c = trayHex(t), r = p != null ? p / 100 : null;
+  // une bobine posee pour le sechage (emplacement vide) : sa couleur, hachuree, comme dans le detail de l'AMS
+  const posee = !c && t?.empty && t.drying_spool;
   const [pop] = useState(() => active && Date.now() - hubShownAt > 1500);
   return (
-    <span title={t?.empty ? "vide" : [t?.filament_type, r != null ? `${Math.round(r * 100)} %` : null].filter(Boolean).join(" · ")}
+    <span title={posee ? `posée pour le séchage : ${posee.translated_name || posee.name}` : t?.empty ? "vide" : [t?.filament_type, r != null ? `${Math.round(r * 100)} %` : null].filter(Boolean).join(" · ")}
       style={{ position: "relative", display: "block", height: h, minWidth: 0, borderRadius: radius,
         ...(c ? trayBg(t, r != null && h >= 18 ? `linear-gradient(to bottom, rgba(0,0,0,0.30) ${(1 - r) * 100}%, transparent ${(1 - r) * 100}%)` : null)
+          : posee ? { ...bgWithTop(colorBg(parseColorsList(posee.color, posee.colors_array), posee.multicolor_type, finishOf(posee)),
+              "repeating-linear-gradient(-45deg, rgba(255,255,255,0.45) 0 2px, transparent 2px 6px)"), opacity: 0.8 }
           : { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0 2px, transparent 2px 6px)" }),
         border: c ? "1px solid rgba(0,0,0,0.18)" : "1px dashed rgba(148,163,184,0.6)",
         outline: active ? "2px solid #3b82f6" : "none", outlineOffset: 1.5,
