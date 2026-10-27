@@ -265,12 +265,29 @@ def _profile(prof, manual) -> str:
         return ""
 
 
+_BY_DID = {"mt": None, "n": -1, "v": {}}
+
+
 def print_file(design_id, profile_id, manual=None) -> Path | None:
     """Le 3MF d'origine d'une impression : celui de son profil, sinon celui retenu pour le modele."""
     if not design_id:
         return None
     prof = _profile(profile_id, manual)
     iid = (known(design_id, prof) if prof else None) or known(design_id, "")
+    if not iid and prof and path_of(prof).is_file():
+        iid = prof                                   # l'imprimante a donne l'identifiant d'instance : c'est le fichier
+    if not iid and not prof:
+        # profil inconnu (28/10/2026) : le 3MF garde pour ce modele sous un autre profil (vue 3D au profil deduit,
+        # rattrapage…) plutot que rien ; s'il y en a plusieurs, le plus recent
+        _index()
+        if _BY_DID["mt"] != _IDX["mt"] or _BY_DID["n"] != len(_IDX["v"]):      # l'index range par modele, refait s'il change
+            by: dict = {}
+            for k, v in _IDX["v"].items():
+                by.setdefault(k.split(":", 1)[0], set()).add(v)
+            _BY_DID.update(mt=_IDX["mt"], n=len(_IDX["v"]), v=by)
+        cands = {v for v in _BY_DID["v"].get(str(design_id), ()) if path_of(v).is_file()}
+        if cands:
+            iid = max(cands, key=lambda v: path_of(v).stat().st_mtime)
     return path_of(iid) if iid else None
 
 
