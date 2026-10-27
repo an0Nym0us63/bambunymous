@@ -701,6 +701,7 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
         <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShown}
         modelTitle={mw.title} modelTitleFr={mw.title_fr}/></div>}
       {view3d && <Model3D designId={designId} profileId={shownProf || null} wait={shownProf === undefined} printId={(prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id}
+        usedPrints={prints.map(x => x.id)}
         title={mw.title_fr || mw.title} onClose={() => setView3d(false)}/>}
     </div>
   );

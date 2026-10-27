@@ -152,10 +152,12 @@ function Ring({ pct = null, label }) {
   </div>;
 }
 
-// Le 3MF d'origine MakerWorld (profileId / printId pour le profil). palette : {couleur du createur (RRGGBB) :
-// couleur a montrer}, et fetchSource : recuperer le 3MF d'origine s'il manque (« À faire »).
+// Le 3MF d'origine MakerWorld (profileId / printId pour le profil). Un interrupteur passe des couleurs d'origine
+// a celles des filaments retenus (palette : {couleur du createur RRGGBB : couleur}, « À faire ») ou utilises
+// (usedPrints : ces impressions, le serveur rapproche chaque filament du projet de la bobine qui l'a remplace).
+// fetchSource : recuperer le 3MF d'origine s'il manque (« À faire »).
 export default function Model3D({ designId = null, profileId = null, printId = null, wait = false, title = "", onClose,
-                                  palette = null, fetchSource = false }) {
+                                  palette = null, usedPrints = null, fetchSource = false }) {
   const [meta, setMeta] = useState(null);
   const [err, setErr] = useState(null);
   const [plate, setPlate] = useState(0);
@@ -166,7 +168,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     let alive = true;
     setErr(null); setMeta(null);
     // le profil montre par la fiche ; sans lui, le serveur lit celui de l'impression (imprimante, ou choisi a la main)
-    client.get(base, { params: { profile: profileId || "", print_id: printId || 0, fetch: fetchSource ? 1 : 0 }, timeout: 180000 })
+    client.get(base, { params: { profile: profileId || "", print_id: printId || 0, fetch: fetchSource ? 1 : 0,
+                                 used: (usedPrints || []).join(",") }, timeout: 180000 })
       .then(({ data }) => { if (alive) { setMeta(data); setPlate(0); } })
       .catch(e => alive && setErr(e?.response?.data?.detail || "Pas de modèle 3D pour celui-ci"));
     return () => { alive = false; };
@@ -183,6 +186,11 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     return () => { alive = false; clearInterval(id); };
   }, [base, wait, meta, err]);
   const p = meta?.plates?.[plate];
+  // les couleurs montrees : d'origine, ou celles des filaments retenus / utilises (par defaut, s'il y en a)
+  const alt = palette || meta?.used_palette || null;
+  const altLabel = palette ? "Retenues" : "Utilisées";
+  const [own, setOwn] = useState(false);
+  const shown = alt && !own ? alt : null;
   const mm = v => `${Math.round(v)} mm`;
   return createPortal(
     <FSheet onClose={onClose} z={4600}>
@@ -207,7 +215,13 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         </div>}
         <div style={{ position: "relative", height: "min(62dvh, 560px)", borderRadius: 18, overflow: "hidden", border: "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
-          {p && <Viewer key={p.url} url={p.url} glb={p.url.endsWith(".glb")} onState={setSt} palette={palette}/>}
+          {p && <Viewer key={`${p.url}|${shown ? "alt" : "own"}`} url={p.url} glb={p.url.endsWith(".glb")} onState={setSt} palette={shown}/>}
+          {alt && p && !p.url.endsWith(".glb") && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
+            background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
+            {[[true, "Couleurs d'origine"], [false, `Couleurs ${altLabel.toLowerCase()}`]].map(([o, l]) => <button key={l} type="button" onClick={() => setOwn(o)}
+              style={{ padding: "5px 11px", borderRadius: 16, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800,
+                color: own === o ? "#fff" : "var(--text2)", background: own === o ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "transparent" }}>{l}</button>)}
+          </div>}
           {(!meta && !err) || (p && st.busy) ? <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
             pointerEvents: "none" }}>
             <Ring pct={meta ? null : prog?.pct ?? null} label={meta ? "Chargement du plateau…" : prog?.label || "Préparation du modèle…"}/></div> : null}
@@ -215,7 +229,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             textAlign: "center", fontSize: 13, fontWeight: 700, color: "#ef4444" }}>{err || `Plateau illisible : ${st.error}`}</div>}
         </div>
         {meta && <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
-          <span>{meta.source === "3mf" && palette ? "3MF d'origine, aux couleurs des filaments retenus"
+          <span>{meta.source === "3mf" && shown ? `3MF d'origine, aux couleurs des filaments ${altLabel.toLowerCase()}`
             : meta.source === "3mf" ? "3MF d'origine, aux couleurs de ses filaments"
             : meta.source === "3mf_other" ? "3MF d'origine d'un autre profil du modèle" : "Aperçu MakerWorld (sans couleurs)"}</span>
           {meta.ms >= 1000 && <span data-tip="La première ouverture prépare le modèle ; les suivantes sont immédiates">· préparé en {(meta.ms / 1000).toFixed(1).replace(".", ",")} s</span>}

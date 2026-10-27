@@ -586,7 +586,7 @@ async def mw_model_3d_progress(design_id: str, _: str = Depends(get_current_user
 
 @router.get("/3d/{design_id}")
 async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_src: int = Query(0, alias="fetch"),
-                      _: str = Depends(get_current_user)):
+                      used: str = "", _: str = Depends(get_current_user)):
     """Les plateaux a afficher en 3D : {source: "3mf" | "makerworld", plates: [{n, name, url, size_mm}], ms}.
     print_id : le profil de cette impression (celui de l'imprimante, ou celui choisi a la main avec ses plateaux,
     27/10/2026 : seul le premier etait lu, et une impression sans lui montrait le profil par defaut)."""
@@ -677,8 +677,46 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             ptitle, pcover = hit.get("title") or None, hit.get("cover") or None
         except Exception:
             pass
+    # used : des impressions de ce modele -> chaque couleur du 3MF d'origine et celle de la bobine qui l'a remplacee
+    # (le numero du filament dans le projet est le meme ; sans bobine liee, la couleur notee au tranchage)
+    used_palette = None
+    if used and source in ("3mf", "3mf_other") and key:
+        try:
+            used_palette = await _used_palette(path_of(key), [int(x) for x in used.split(",") if x.strip().isdigit()][:60])
+        except Exception:
+            logger.exception("[3D] couleurs utilisees")
     return {"source": source, "profile": prof or None, "profile_title": ptitle, "profile_cover": pcover, "ms": ms,
+            "used_palette": used_palette,
             "plates": T.plates_out(meta, key)[0], "skipped": T.plates_out(meta, key)[1]}
+
+
+async def _used_palette(src, print_ids: list) -> dict | None:
+    """{couleur du 3MF d'origine (RRGGBB) : couleur utilisee} d'apres les filaments de ces impressions (la plus
+    recente l'emporte)."""
+    import zipfile
+    from sqlalchemy import select
+    from ....db.session import AsyncSessionLocal
+    from ....models.print_history import FilamentUsage as FU
+    from ....models.filament import Filament, Spool
+    from ....services import mw_3d as T
+    if not print_ids or not src or not src.is_file():
+        return None
+    with zipfile.ZipFile(src) as z:
+        colors = T._colors_of(z)
+    h6 = lambda c: str(c or "").lstrip("#")[:6].upper()
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(
+            select(FU.ams_slot, FU.color_hex, Filament.color)
+            .outerjoin(Spool, Spool.id == FU.spool_id).outerjoin(Filament, Filament.id == Spool.filament_id)
+            .where(FU.print_id.in_(print_ids)).order_by(FU.print_id.desc()))).all()
+    out: dict = {}
+    for slot, chex, fcol in rows:
+        if not slot or slot > len(colors):
+            continue
+        a, b = h6(colors[slot - 1]), h6(fcol or chex)
+        if len(a) == 6 and len(b) == 6:
+            out.setdefault(a, b)
+    return out or None
 
 
 @router.get("/3d/file/{key}/{name}")
