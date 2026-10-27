@@ -817,6 +817,31 @@ async def following(fresh: bool = False) -> list:
     return out
 
 
+FOLLOW = "/design-user-service/my/follow/{uid}"     # POST suit, DELETE ne suit plus (comme le site)
+
+
+async def follow_state(uid: str, fresh: bool = False) -> dict:
+    """Est-ce que je suis ce createur ? (ma liste d'abonnements : celle gardee en memoire, relue avant d'ecrire)"""
+    uid = str(uid or "").strip()
+    if not uid.isdigit():
+        raise AccountError("Créateur inconnu")
+    return {"following": any(str(c.get("uid")) == uid for c in await following(fresh=fresh))}
+
+
+async def set_follow(uid: str, on: bool) -> dict:
+    """Suit / ne suit plus un createur (28/10/2026). Comme le j'aime : l'etat lu d'abord, l'ordre envoye seulement
+    s'il change quelque chose, puis relu (la liste des createurs suivis de l'appli suit d'elle-meme)."""
+    import asyncio
+    cur = await follow_state(uid, fresh=True)
+    if cur["following"] == bool(on):
+        return cur
+    tok = await _tok()
+    await asyncio.to_thread(_send, "POST" if on else "DELETE", FOLLOW.format(uid=str(uid).strip()), {}, tok)
+    after = await follow_state(uid, fresh=True)
+    logger.info(f"[MW] createur {uid} : {'suivi' if on else 'plus suivi'} ({after['following']})")
+    return after
+
+
 async def _people(path: str, uid: str, tok: str, most: int, strict: bool = False) -> list:
     """Une liste de comptes MakerWorld (mes abonnements, mes abonnes), page par page."""
     import asyncio

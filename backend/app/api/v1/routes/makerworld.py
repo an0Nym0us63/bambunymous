@@ -179,6 +179,16 @@ async def mw_rename_collection(cid: str, body: dict = Body({}), _: str = Depends
     return await _call(acc.rename_collection(cid, str(body.get("title", ""))))
 
 
+@router.get("/creators/{uid}/follow")
+async def mw_follow_state(uid: str, _: str = Depends(get_current_user)):
+    return await _call(acc.follow_state(uid))
+
+
+@router.put("/creators/{uid}/follow")
+async def mw_set_follow(uid: str, body: dict = Body({}), _: str = Depends(require_mw)):
+    return await _call(acc.set_follow(uid, bool(body.get("follow"))))
+
+
 @router.get("/model/{design_id}/like")
 async def mw_like_state(design_id: str, _: str = Depends(get_current_user)):
     return await _call(acc.like_state(design_id))

@@ -9,6 +9,7 @@ import { FSheet, FTile, fChip, fBtn } from "./FicheKit";
 import ShareSheet from "./ShareSheet";
 import { useIsAdmin } from "../store/auth";
 import { useFriend } from "../store/friend";
+import { showAlert } from "../utils/dialog";
 
 // Page d'un createur MakerWorld : son profil et TOUS ses modeles. S'ouvre de
 // partout (« par … » d'une fiche ou d'une tuile, createurs suivis) ; une seule
@@ -32,6 +33,25 @@ export function CreatorPageHost() {
   const [sharing, setSharing] = useState(false);   // la page partagee sur Telegram, comme un modele
   const isAdmin = useIsAdmin();
   const friend = useFriend(s => s.friend);
+  // le suivre ou non sur MakerWorld (null : pas encore lu ; undefined : illisible, compte non connecte)
+  const [follow, setFollow] = useState(null);
+  const [followBusy, setFollowBusy] = useState(false);
+  useEffect(() => {
+    if (!creator || !isAdmin || friend) return;
+    let alive = true;
+    setFollow(null);
+    client.get(`/makerworld/creators/${creator.uid}/follow`).then(({ data }) => alive && setFollow(!!data.following))
+      .catch(() => alive && setFollow(undefined));
+    return () => { alive = false; };
+  }, [creator?.uid, isAdmin, friend]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const toggleFollow = async () => {
+    setFollowBusy(true);
+    try {
+      const { data } = await client.put(`/makerworld/creators/${creator.uid}/follow`, { follow: !follow });
+      setFollow(!!data.following);
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    setFollowBusy(false);
+  };
 
   useEffect(() => {
     if (!creator) { setData(null); return; }
@@ -92,6 +112,13 @@ export function CreatorPageHost() {
             {c && fChip(`🧩 ${fmt(c.designs ?? data.total)} modèles`, "#3B82F6")}
             {c?.contest_wins > 0 && fChip(`🏆 ${c.contest_wins} concours`, "#EAB308")}
           </div>
+          {typeof follow === "boolean" && <button onClick={toggleFollow} disabled={followBusy}
+            data-tip={follow ? "Tu le suis sur MakerWorld : toucher pour ne plus le suivre" : "Le suivre sur MakerWorld : ses nouveaux modèles arrivent dans tes créateurs suivis"}
+            style={{ alignSelf: "flex-start", marginTop: 2, padding: "7px 14px", borderRadius: 14, cursor: "pointer", fontSize: 13, fontWeight: 900,
+              opacity: followBusy ? 0.6 : 1, ...(follow
+                ? { color: C, background: `${C}1a`, border: `1.5px solid ${C}66` }
+                : { color: "#fff", border: "none", background: `linear-gradient(135deg, ${C}, #3B82F6)`, boxShadow: `0 8px 18px -10px ${C}` }) }}>
+            {followBusy ? "…" : follow ? "✓ Suivi" : "＋ Suivre"}</button>}
         </div>
       </div>
 
