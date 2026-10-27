@@ -616,6 +616,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
     t0 = _t.perf_counter()
     # le 3MF d'origine de CE profil ; sans profil connu, celui retenu pour le modele
     iid = known(did, prof) if prof else known(did, "")
+    fetch_error = None
     if prof and not iid:
         # le 3MF de ce profil peut etre garde sous une autre cle (rattrapage d'une impression au profil devine) ;
         # sinon, pour un modele imprime, on le recupere maintenant (une fois : il sert ensuite a tout)
@@ -631,6 +632,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
                 iid = cand
         except Exception as e:
             logger.info(f"[3D] 3MF du profil {prof} de {did} non recupere : {e}")
+            fetch_error = str(e)[:200] if (print_id or get_src) else None
     meta, source, key = None, "3mf", None
     if iid:
         src = path_of(iid)
@@ -687,7 +689,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
         except Exception:
             logger.exception("[3D] couleurs utilisees")
     return {"source": source, "profile": prof or None, "profile_title": ptitle, "profile_cover": pcover, "ms": ms,
-            "used_palette": used_palette,
+            "used_palette": used_palette, "fetch_error": fetch_error,
             "plates": T.plates_out(meta, key)[0], "skipped": T.plates_out(meta, key)[1]}
 
 

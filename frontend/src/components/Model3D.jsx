@@ -162,18 +162,20 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const [err, setErr] = useState(null);
   const [plate, setPlate] = useState(0);
   const [st, setSt] = useState({ busy: true });
+  // l'apercu MakerWorld (sans couleurs) : le 3MF d'origine se recupere a la demande (un telechargement MakerWorld)
+  const [want3mf, setWant3mf] = useState(false);
   const base = `/makerworld/3d/${encodeURIComponent(designId)}`;
   useEffect(() => {
     if (wait) return;                    // le profil se deduit encore (fiche d'une impression)
     let alive = true;
     setErr(null); setMeta(null);
     // le profil montre par la fiche ; sans lui, le serveur lit celui de l'impression (imprimante, ou choisi a la main)
-    client.get(base, { params: { profile: profileId || "", print_id: printId || 0, fetch: fetchSource ? 1 : 0,
+    client.get(base, { params: { profile: profileId || "", print_id: printId || 0, fetch: fetchSource || want3mf ? 1 : 0,
                                  used: (usedPrints || []).join(",") }, timeout: 180000 })
       .then(({ data }) => { if (alive) { setMeta(data); setPlate(0); } })
       .catch(e => alive && setErr(e?.response?.data?.detail || "Pas de modèle 3D pour celui-ci"));
     return () => { alive = false; };
-  }, [base, profileId, printId, wait]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [base, profileId, printId, wait, want3mf]);   // eslint-disable-line react-hooks/exhaustive-deps
   // pendant la preparation, son avancement (le serveur le dit a part, la demande principale attend)
   const [prog, setProg] = useState(null);
   useEffect(() => {
@@ -233,6 +235,11 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           <span>{meta.source === "3mf" && shown ? `3MF d'origine, aux couleurs des filaments ${altLabel.toLowerCase()}`
             : meta.source === "3mf" ? "3MF d'origine, aux couleurs de ses filaments"
             : meta.source === "3mf_other" ? "3MF d'origine d'un autre profil du modèle" : "Aperçu MakerWorld (sans couleurs)"}</span>
+          {meta.source === "makerworld" && !want3mf && <button type="button" onClick={() => setWant3mf(true)}
+            data-tip="Compte comme un téléchargement MakerWorld (une fois pour ce profil)"
+            style={{ padding: "3px 10px", borderRadius: 14, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800, color: "#fff",
+              background: "linear-gradient(135deg, #0EA5E9, #6366F1)" }}>🎨 Récupérer le 3MF d'origine (couleurs)</button>}
+          {meta.fetch_error && <span style={{ color: "#ef4444" }}>· 3MF non récupéré : {meta.fetch_error}</span>}
           {meta.ms >= 1000 && <span data-tip="La première ouverture prépare le modèle ; les suivantes sont immédiates">· préparé en {(meta.ms / 1000).toFixed(1).replace(".", ",")} s</span>}
           {st.size && <span>· {mm(st.size[0])} × {mm(st.size[1])} × {mm(st.size[2])}</span>}
           {p?.triangles ? <span>· {p.triangles.toLocaleString("fr-FR")} triangles</span> : null}
