@@ -124,7 +124,7 @@ def _parse_design(code, d) -> dict:
     }
 
 
-EXTRAS_V = 3          # 2 : le descriptif ; 3 : les filaments recommandes (27/10/2026)
+EXTRAS_V = 4          # 2 : le descriptif ; 3 : les filaments recommandes ; 4 : titres des profils traduits (27/10/2026)
 
 
 def extras_stale(raw) -> bool:
@@ -260,7 +260,11 @@ def _profiles(d) -> str:
                            "thumb": _plate_thumb(p),
                            "weight_g": p.get("weight") if isinstance(p.get("weight"), (int, float)) else None,
                            "seconds": p.get("prediction") if isinstance(p.get("prediction"), (int, float)) else None})
-        out.append({"profile_id": str(i.get("profileId") or ""), "instance_id": str(i.get("id") or ""), "title": i.get("title") if isinstance(i.get("title"), str) else "",
+        # le titre traduit par MakerWorld, et celui d'origine (la tache le reprend souvent, pour deviner le profil)
+        t_or = i.get("title") if isinstance(i.get("title"), str) else ""
+        t_fr = i.get("titleTranslated") if isinstance(i.get("titleTranslated"), str) and i.get("titleTranslated") else ""
+        out.append({"profile_id": str(i.get("profileId") or ""), "instance_id": str(i.get("id") or ""), "title": t_fr or t_or,
+                    "title_original": t_or if t_fr and t_fr != t_or else None,
                     "default": i.get("id") == d.get("defaultInstanceId"), "plates": plates})
     return json.dumps(out, ensure_ascii=False) if out else None
 

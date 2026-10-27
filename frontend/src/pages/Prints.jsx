@@ -568,7 +568,8 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
   const [pick, setPick] = useState(false);       // ranger dans mes collections
   const [sheet, setSheet] = useState(null);      // fiche du modele (ou d'un similaire)
   const [view3d, setView3d] = useState(false);   // la vue 3D du modele
-  const [shownProf, setShownProf] = useState(undefined);   // le profil montre par les plateaux (deduit ou choisi) ; undefined : pas encore deduit
+  const [shown, setShown] = useState(undefined);   // le profil montre par les plateaux {id, title, deduced} ; undefined : pas encore deduit
+  const shownProf = shown === undefined ? undefined : shown?.id || null;
   const hasFriends = useHasFriends();
   const shared = useShared(`/friends/shared/design/${encodeURIComponent(designId)}`, hasFriends && !!designId);
   const nShared = sharedCount(shared);           // section seulement s'il y a quelque chose chez eux
@@ -614,6 +615,10 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
             {mw.creator_name && <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>par {mw.creator_name}</span>}
             {stats.slice(0, 2).map(([ico, n, lbl]) => <span key={lbl}>{ico} {fmtK(n)}</span>)}
           </div>
+          {/* le profil imprime (ou deduit) : visible sans deplier la carte */}
+          {shown?.title && <div data-tip={shown.deduced ? "Profil déduit de tes impressions : déplie la carte pour le corriger" : "Profil imprimé"}
+            style={{ fontSize:11, fontWeight:700, color:"#0891b2", marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            🧩 {shown.title}{shown.deduced && <span style={{ color:"var(--muted)", fontWeight:600 }}> · déduit</span>}</div>}
         </div>
         {!visiting && <button onClick={e => { e.stopPropagation(); setView3d(true); }} aria-label="Voir en 3D" data-tip="Voir en 3D"
           style={{ width:32, height:32, borderRadius:10, border:"1px solid rgba(14,165,233,0.4)", background:"rgba(14,165,233,0.1)",
@@ -670,7 +675,7 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
         </div>
       )}
       {!toRate.has(String(designId)) && <RateStatusLine designId={designId}/>}
-      <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShownProf}
+      <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShown}
         modelTitle={mw.title} modelTitleFr={mw.title_fr}/>
       <AdminOnly home mw>
         <button onClick={() => setPick(true)} style={{ display:"block", width:"100%", padding:"7px", border:"none",
@@ -687,10 +692,10 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
       <MakerWorldSimilar designId={designId} onOpen={setSheet}/>
       </>}
       {sheet && <MakerWorldModelSheet designId={sheet} onClose={() => setSheet(null)}/>}
-      {/* la vue 3D, au profil montre par les plateaux (sinon celui de l'impression) ; carte repliee : les plateaux
-          deduisent quand meme le profil, sans s'afficher, et la vue l'attend */}
-      {view3d && !open && <div style={{ display:"none" }}>
-        <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShownProf}
+      {/* carte repliee : les plateaux deduisent quand meme le profil, sans s'afficher (le resume le montre, la vue
+          3D l'attend) ; la vue 3D, au profil montre par les plateaux (sinon celui de l'impression) */}
+      {!open && <div style={{ display:"none" }}>
+        <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShown}
         modelTitle={mw.title} modelTitleFr={mw.title_fr}/></div>}
       {view3d && <Model3D designId={designId} profileId={shownProf || null} wait={shownProf === undefined} printId={(prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id}
         title={mw.title_fr || mw.title} onClose={() => setView3d(false)}/>}
@@ -748,11 +753,12 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
   const modelWords = words(`${modelTitle || ""} ${modelTitleFr || ""}`);
   const nameScore = (pr, x) => {
     const name = `${pr.original_name || ""} ${pr.task_name || ""} ${pr.file_name || ""}`;
-    const pw = new Set([...words(x.title)].filter(w => !modelWords.has(w)));
-    if (pw.size < 2) return 0;
     const nw = words(name);
-    const common = [...pw].filter(w => nw.has(w)).length;
-    return common / pw.size;                  // part du titre du profil retrouvee dans le nom
+    // le titre du profil, traduit et d'origine : la meilleure part retrouvee dans le nom
+    return Math.max(0, ...[x.title, x.title_original].map(t => {
+      const pw = new Set([...words(t)].filter(w => !modelWords.has(w)));
+      return pw.size < 2 ? 0 : [...pw].filter(w => nw.has(w)).length / pw.size;
+    }));
   };
   const scoreOf = (x) => {
     let sc = 0;
@@ -778,8 +784,11 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
     : deduced && deduced.sc > 0 ? deduced.x : avec.find(x => x.default) || avec[0]);
   const [pid, setPid] = useState(null);
   // le profil montre ici, pour la vue 3D de la carte
-  const shownId = prints.length ? (avec.find(x => x.profile_id === pid) || guess)?.profile_id ?? null : null;
-  useEffect(() => { if (guessed) onProfile?.(shownId); }, [shownId, guessed]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const shownP = prints.length ? avec.find(x => x.profile_id === pid) || guess || null : null;
+  const shownId = shownP?.profile_id ?? null;
+  useEffect(() => {
+    if (guessed) onProfile?.(shownP ? { id: shownId, title: shownP.title, deduced: !sure && !pid } : null);
+  }, [shownId, guessed]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (!avec.length || !prints.length) return null;
   const prof = avec.find(x => x.profile_id === pid) || guess;
   const deduit = !sure;
