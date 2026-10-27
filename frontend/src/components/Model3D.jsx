@@ -178,7 +178,22 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
               else mat.map = t;
             }
             const piece = new THREE.Mesh(mesh, mat);
-            if (fin === "glow") { piece.userData.glow = true; mat.userData.dayEmit = mat.emissiveIntensity; }
+            if (fin === "glow") {
+              piece.userData.glow = true; mat.userData.dayEmit = mat.emissiveIntensity;
+              // dans le noir, autant de lumiere pour toutes les couleurs : un bleu ou un rouge (sombres) luisent plus fort
+              const lum = 0.2126 * mat.emissive.r + 0.7152 * mat.emissive.g + 0.0722 * mat.emissive.b;
+              mat.userData.nightEmit = Math.min(1.8, 0.42 / Math.max(0.12, lum));
+              // un liseré lumineux sur les bords (la ou la surface fuit le regard) : on le devine phosphorescent meme
+              // lumiere allumee
+              const rim = { value: 2.2 };
+              mat.userData.rim = rim;
+              mat.onBeforeCompile = sh => {
+                sh.uniforms.rimK = rim;
+                sh.fragmentShader = "uniform float rimK;\n" + sh.fragmentShader.replace("#include <emissivemap_fragment>",
+                  "#include <emissivemap_fragment>\n  float rimF = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 1.6);\n" +
+                  "  totalEmissiveRadiance += emissive * rimF * rimK;");
+              };
+            }
             holder.add(piece);
           }
           model.add(holder);
@@ -206,15 +221,16 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
             composer = new EffectComposer(renderer);
             composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(el.clientWidth, el.clientHeight);
             composer.addPass(new RenderPass(scene, camera));
-            composer.addPass(new UnrealBloomPass(new THREE.Vector2(el.clientWidth, el.clientHeight), 0.6, 0.3, 0.4));
+            composer.addPass(new UnrealBloomPass(new THREE.Vector2(el.clientWidth, el.clientHeight), 0.65, 0.35, 0.35));
             composer.addPass(new OutputPass());
             disposables.push(composer);
           }
           bloomOn = on;
-          hemi.intensity = on ? 0.05 : 1.6; sun.intensity = on ? 0.06 : 1.6; back.intensity = on ? 0 : 0.6;
+          // une veilleuse : assez pour garder le relief de ce qui luit (sinon une silhouette plate)
+          hemi.intensity = on ? 0.12 : 1.6; sun.intensity = on ? 0.35 : 1.6; back.intensity = on ? 0.08 : 0.6;
           grid.material.opacity = on ? 0.12 : 0.45;
           scene.background = on ? new THREE.Color(0x05070d) : null;
-          glowMats.forEach(m => { m.emissiveIntensity = on ? 0.75 : m.userData.dayEmit; });
+          glowMats.forEach(m => { m.emissiveIntensity = on ? m.userData.nightEmit : m.userData.dayEmit; if (m.userData.rim) m.userData.rim.value = on ? 0.6 : 2.2; });
           render();
         };
         api.current = { fit, night };
