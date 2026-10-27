@@ -709,14 +709,14 @@ def _ext_by_name(z) -> dict:
     def add(name, ext):
         if name and ext:
             out.setdefault(name, []).append(ext)
-    for m in _re.finditer(r'<object id="\d+">(.*?)</object>', xml, _re.S):
+    for m in _re.finditer(r'<object id="\d+"[^>]*>(.*?)</object>', xml, _re.S):     # (uuid=... selon les versions)
         body = m.group(1)
         head = body.split("<part", 1)[0]
         oname = (_re.search(r'key="name" value="([^"]*)"', head) or [None, None])[1]
         oext = int((_re.search(r'key="extruder" value="(\d+)"', head) or [None, 1])[1])
         add(oname, oext)
-        for p in _re.finditer(r'<part id="\d+" subtype="([^"]*)">(.*?)</part>', body, _re.S):
-            if p.group(1) != "normal_part":
+        for p in _re.finditer(r'<part id="\d+"([^>]*)>(.*?)</part>', body, _re.S):
+            if (_re.search(r'subtype="([^"]*)"', p.group(1)) or [None, "normal_part"])[1] != "normal_part":
                 continue
             pname = (_re.search(r'key="name" value="([^"]*)"', p.group(2)) or [None, None])[1]
             pe = _re.search(r'key="extruder" value="(\d+)"', p.group(2))

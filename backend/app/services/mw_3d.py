@@ -22,7 +22,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 2                           # 2 : les couleurs peintes au pinceau (27/10/2026)
+FORMAT_V = 3                           # 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10)
 MAX_TRIANGLES = 6_000_000              # au-dela, le plateau n'est pas converti (trop lourd pour un telephone)
 _TRI_PAINT = re.compile(rb'<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"([^>]*)>')
 _PAINT = re.compile(rb'paint_color="([0-9A-F]+)"')
@@ -321,14 +321,17 @@ def _settings(z: zipfile.ZipFile) -> tuple:
     except KeyError:
         return [], {}
     objs = {}
-    for m in re.finditer(r'<object id="(\d+)">(.*?)</object>', xml, re.S):
+    # les balises prennent d'autres attributs selon la version de Bambu Studio (uuid=... depuis 2.x) : on ne lit que
+    # ceux qui servent (le 28/10/2026, un modele recent sortait d'une seule couleur, ses pieces n'etant pas reconnues)
+    for m in re.finditer(r'<object id="(\d+)"[^>]*>(.*?)</object>', xml, re.S):
         body = m.group(2)
         head = body.split("<part", 1)[0]
         ext = re.search(r'key="extruder" value="(\d+)"', head)
         parts = {}
-        for p in re.finditer(r'<part id="(\d+)" subtype="([^"]*)">(.*?)</part>', body, re.S):
+        for p in re.finditer(r'<part id="(\d+)"([^>]*)>(.*?)</part>', body, re.S):
             e = re.search(r'key="extruder" value="(\d+)"', p.group(3))
-            parts[p.group(1)] = (int(e.group(1)) if e else None, p.group(2))
+            st = re.search(r'subtype="([^"]*)"', p.group(2))
+            parts[p.group(1)] = (int(e.group(1)) if e else None, st.group(1) if st else "normal_part")
         objs[m.group(1)] = {"extruder": int(ext.group(1)) if ext else 1, "parts": parts}
     plates = []
     for m in re.finditer(r"<plate>(.*?)</plate>", xml, re.S):
