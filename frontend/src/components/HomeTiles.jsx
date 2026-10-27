@@ -1402,12 +1402,13 @@ const FIL_STATE = {
   skip: ["Plus commandé", "#64748b", 4] };
 const BUCKET_FR = { rouge: "Rouge", orange: "Orange", jaune: "Jaune", vert: "Vert", bleu: "Bleu", violet: "Violet", rose: "Rose", marron: "Marron",
   beige: "Beige", cyan: "Cyan", blanc: "Blanc", gris: "Gris", noir: "Noir", transparent: "Transparent", multicolore: "Multicolore" };
-function filState(f) {
+// les seuils : en % d'une bobine pleine (reglables dans l'onglet ; 30 % et 100 % par defaut)
+function filState(f, thr = { order: 30, soon: 100 }) {
   const g = f.remaining_weight_total_g || 0, one = f.filament_weight_g || 1000;
   if (f.no_reorder) return "skip";                   // je ne le recommanderai plus : jamais « a prevoir »
   if (!f.active_spool_count) return "out";
-  if (f.to_order || g < one * 0.3) return "order";
-  if (g < one) return "soon";
+  if (f.to_order || g < one * thr.order / 100) return "order";
+  if (g < one * thr.soon / 100) return "soon";
   return "ok";
 }
 function FilamentStock() {
@@ -1423,15 +1424,23 @@ function FilamentStock() {
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
   const [shut, setShut] = useState({});
+  const [thr, setThr] = useState({ order: 30, soon: 100 });
+  const [thrOpen, setThrOpen] = useState(false);
+  const [thrSaved, setThrSaved] = useState(null);       // ce qui est enregistre (pour savoir s'il y a a enregistrer)
   useEffect(() => {
     let alive = true;
     client.get("/filaments/filaments").then(({ data }) => alive && setFils(Array.isArray(data) ? data : [])).catch(() => alive && setFils([]));
+    client.get("/filaments/stock-thresholds").then(({ data }) => { if (alive && data?.order != null) { setThr(data); setThrSaved(data); } }).catch(() => {});
     return () => { alive = false; };
   }, []);
+  const saveThr = async () => {
+    try { const { data } = await client.put("/filaments/stock-thresholds", thr); setThr(data); setThrSaved(data); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
   const setG = g => { setGroup(g); try { localStorage.setItem("stockFilGroup", g); } catch { /* indisponible */ } };
   if (fils === null) return <Muted>Lecture des filaments…</Muted>;
   // les filaments qu'on a eus : au moins une bobine (active ou finie), ou marques « a commander »
-  const all = fils.filter(f => f.spool_count > 0 || f.to_order).map(f => ({ ...f, st: filState(f) }));
+  const all = fils.filter(f => f.spool_count > 0 || f.to_order).map(f => ({ ...f, st: filState(f, thr) }));
   const need = all.filter(f => f.st !== "ok" && f.st !== "skip");
   const skipped = all.filter(f => f.st === "skip");
   // un filament qu'on ne recommandera plus et dont il ne reste rien n'encombre pas la liste (il est dans « Plus commandés »)
@@ -1504,7 +1513,28 @@ function FilamentStock() {
       <Muted>Trier :</Muted>
       {[["g", "le moins en stock"], ["n", "nombre de bobines"], ["name", "par nom"]].map(([k, l]) =>
         <button key={k} type="button" style={chip(sort === k, "#3B82F6")} onClick={() => setSort(k)}>{l}</button>)}
+      <button type="button" style={{ ...chip(thrOpen, "#64748b"), marginLeft: "auto" }} onClick={() => setThrOpen(o => !o)}>⚙️ Seuils</button>
     </div>
+    {/* les seuils, en % d'une bobine pleine : l'effet se voit tout de suite dans la liste, « Enregistrer » le garde */}
+    {thrOpen && <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px", borderRadius: 14, border: "1px solid var(--border)",
+      background: "linear-gradient(135deg, rgba(234,88,12,0.10), transparent 70%), var(--surface2)" }}>
+      {[["order", "À commander", "#ea580c", 0, 100, 5], ["soon", "Bientôt", "#d97706", 0, 300, 10]].map(([k, l, c, lo, hi, st]) =>
+        <label key={k} style={{ display: "grid", gridTemplateColumns: "minmax(110px, auto) 1fr auto", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 800, color: c }}>{l} sous</span>
+          <input type="range" min={lo} max={hi} step={st} value={thr[k]} disabled={!isAdmin || visiting} style={{ accentColor: c, width: "100%" }}
+            onChange={e => { const v = Number(e.target.value);
+              setThr(t => k === "order" ? { order: v, soon: Math.max(t.soon, v) } : { order: Math.min(t.order, v), soon: v }); }}/>
+          <span style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", minWidth: 150, textAlign: "right" }}>
+            {thr[k]} % d'une bobine <Muted size={11}>({fmtG(thr[k] * 10)} sur 1 kg)</Muted></span>
+        </label>)}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <Muted size={11}>Épuisé : plus aucune bobine. Un filament marqué « à commander » sur sa fiche y est toujours.</Muted>
+        {isAdmin && !visiting && <button type="button" onClick={saveThr} disabled={thrSaved && thrSaved.order === thr.order && thrSaved.soon === thr.soon}
+          style={{ marginLeft: "auto", height: 30, padding: "0 14px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: "#fff",
+            background: "linear-gradient(135deg, #F59E0B, #D97706)", opacity: thrSaved && thrSaved.order === thr.order && thrSaved.soon === thr.soon ? 0.5 : 1 }}>
+          Enregistrer</button>}
+      </div>
+    </div>}
     {!list.length ? <Muted>Rien ici.</Muted> : groups.map(gr => {
       const g = gr.items.reduce((t, f) => t + (f.remaining_weight_total_g || 0), 0);
       const n = gr.items.reduce((t, f) => t + (f.active_spool_count || 0), 0);

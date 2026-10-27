@@ -63,7 +63,7 @@ from pathlib import Path
 from ....db.session import get_db, AsyncSessionLocal
 from ....models.filament import Filament, Spool
 from ....models.print_history import FilamentUsage
-from .auth import get_current_user
+from .auth import get_current_user, require_admin
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
 
@@ -563,6 +563,43 @@ async def set_spool_tare(
     await db.commit()
     _clear_match_cache()
     return {"ok": True, "spool_weight_g": f.spool_weight_g, "spool_tare_name": f.spool_tare_name}
+
+
+# Les seuils du stock par filament (28/10/2026), en % d'une bobine pleine : « a commander » en dessous du premier,
+# « bientot » en dessous du second. Un reglage de la maison (cle STOCK_THRESHOLDS), le meme sur tous les appareils.
+_THR_DEF = {"order": 30, "soon": 100}
+
+
+async def _thresholds(db) -> dict:
+    import json as _j
+    from ....services.settings_service import get_setting
+    try:
+        v = _j.loads(await get_setting(db, "STOCK_THRESHOLDS", "") or "{}")
+    except ValueError:
+        v = {}
+    out = {k: int(v.get(k, d)) if str(v.get(k, d)).isdigit() else d for k, d in _THR_DEF.items()}
+    return out
+
+
+@router.get("/stock-thresholds")
+async def get_stock_thresholds(db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
+    return await _thresholds(db)
+
+
+@router.put("/stock-thresholds")
+async def set_stock_thresholds(body: dict = Body({}), db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    import json as _j
+    from ....services.settings_service import set_setting
+    try:
+        order, soon = int(body.get("order")), int(body.get("soon"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Seuils invalides")
+    if not (0 <= order <= 500 and 0 <= soon <= 1000):
+        raise HTTPException(400, "Seuils hors limites")
+    soon = max(soon, order)                    # « bientot » ne peut pas etre plus bas que « a commander »
+    await set_setting(db, "STOCK_THRESHOLDS", _j.dumps({"order": order, "soon": soon}))
+    await db.commit()
+    return {"order": order, "soon": soon}
 
 
 @router.put("/filaments/{fid}/no-reorder")
