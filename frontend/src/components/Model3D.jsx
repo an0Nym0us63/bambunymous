@@ -145,7 +145,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null }) {
             const fin = finishes?.[own];
             const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true, envMapIntensity: 0,
               ...(FINISH_MAT[fin] || {}) });
-            if (fin === "glow") { mat.emissive = c.clone(); mat.emissiveIntensity = 0.6; }
+            // phosphorescent : il luit de sa couleur, eclaircie (une piece eclairee de l'interieur)
+            // (la couleur eclairee baissee d'autant : sinon la somme sature, et la piece vire au blanc)
+            if (fin === "glow") { mat.color = c.clone().multiplyScalar(0.45); mat.emissive = c.clone(); mat.emissiveIntensity = 0.8; mat.roughness = 0.6; }
             if (FINISH_MAT[fin]?.envMapIntensity) mat.envMap = await envMap();
             let mesh = geo;
             if (["sparkle", "galaxy", "marble", "wood", "carbon"].includes(fin)) {
@@ -160,6 +162,15 @@ function Viewer({ url, glb, onState, palette = null, finishes = null }) {
               else mat.map = t;
             }
             holder.add(new THREE.Mesh(mesh, mat));
+            // et un halo autour : deux enveloppes gonflees le long des normales, de sa couleur, qui s'ajoutent a la lumiere
+            if (fin === "glow") for (const [d, o] of [[0.8, 0.4], [2.2, 0.18]]) {
+              const hg = geo.clone(); hg.computeVertexNormals();
+              const p = hg.attributes.position, nn = hg.attributes.normal;
+              for (let i = 0; i < p.count; i++) p.setXYZ(i, p.getX(i) + nn.getX(i) * d, p.getY(i) + nn.getY(i) * d, p.getZ(i) + nn.getZ(i) * d);
+              hg.deleteAttribute("normal");
+              holder.add(new THREE.Mesh(hg, new THREE.MeshBasicMaterial({ color: c.clone(), transparent: true,
+                opacity: o, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending })));
+            }
           }
           model.add(holder);
         }
