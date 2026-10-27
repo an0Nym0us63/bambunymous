@@ -713,6 +713,17 @@ export default function HomeGrid({ status, blocks, top = null }) {
   const paged = n === 1;
   const nPages = paged ? cols.length : 1;
   const cur = Math.min(page, nPages - 1);
+  // les ecrans voisins se preparent en fond, une fois celui qu'on regarde servi (27/10/2026) : le premier
+  // chargement reste leger, et un glissement arrive sur des tuiles deja pretes
+  const neighbours = paged && nPages > 1
+    ? [...new Set([(cur + 1) % nPages, (cur - 1 + nPages) % nPages])].filter(i => i !== cur).flatMap(i => (cols[i] || []).map(x => x.id)).join(",")
+    : "";
+  useEffect(() => {
+    if (!neighbours) return undefined;
+    const t = setTimeout(() => setNear(s => { const ids = neighbours.split(",").filter(id => TILES[id] && !s.has(id));
+      return ids.length ? new Set([...s, ...ids]) : s; }), 2500);
+    return () => clearTimeout(t);
+  }, [neighbours]);
   const flashT = useRef(null);
   const goPage = (i, quiet = false) => {
     setPageState(i);
