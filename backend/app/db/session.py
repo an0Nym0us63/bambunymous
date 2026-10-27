@@ -82,6 +82,42 @@ for _e in (engine, _pooled):
     _event.listen(_e.sync_engine, "before_cursor_execute", _sql_t0)
     _event.listen(_e.sync_engine, "after_cursor_execute", _sql_t1)
 
+# Ce qui a change dans la base (27/10/2026) : un compteur par table, monte a chaque ecriture (INSERT, UPDATE,
+# DELETE, REPLACE) puis a sa validation, quelle qu'en soit l'origine (pages, fil MQTT, taches de fond, SQL brut).
+# Un calcul garde en memoire (les alertes) se sait ainsi a jour tant que les compteurs de ses tables n'ont pas
+# bouge. Monte deux fois : une lecture faite entre l'ecriture et sa validation ne passe pas pour a jour.
+import re as _re
+_WRITE = _re.compile(r'^\s*(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM|REPLACE\s+INTO)\s+["`\[]?(\w+)', _re.I)
+_TABLE_V: dict = {}
+
+
+def data_version(*tables) -> tuple:
+    """L'etat des tables : change des qu'une ligne de l'une d'elles est ecrite."""
+    return tuple(_TABLE_V.get(t, 0) for t in tables)
+
+
+def _w_exec(conn, cursor, statement, params, context, executemany):
+    m = _WRITE.match(statement or "")
+    if m:
+        t = m.group(1).lower()
+        _TABLE_V[t] = _TABLE_V.get(t, 0) + 1
+        conn.info.setdefault("_dirty_tables", set()).add(t)
+
+
+def _w_commit(conn):
+    for t in conn.info.pop("_dirty_tables", ()):
+        _TABLE_V[t] = _TABLE_V.get(t, 0) + 1
+
+
+def _w_rollback(conn):
+    conn.info.pop("_dirty_tables", None)
+
+
+for _e in (engine, _pooled):
+    _event.listen(_e.sync_engine, "before_cursor_execute", _w_exec)
+    _event.listen(_e.sync_engine, "commit", _w_commit)
+    _event.listen(_e.sync_engine, "rollback", _w_rollback)
+
 _MAKER_POOLED = async_sessionmaker(_pooled, expire_on_commit=False)
 _MAKER_ANY = async_sessionmaker(engine, expire_on_commit=False)
 

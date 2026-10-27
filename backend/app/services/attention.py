@@ -14,6 +14,7 @@ ignoree definitivement.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
 from dataclasses import dataclass, field
@@ -754,6 +755,36 @@ async def list_dismissed(db) -> list[dict]:
     return out
 
 
+# Les alertes gardees en memoire (27/10/2026) : dans la rafale de l'accueil, leurs 8 lectures prenaient 0,5 s
+# (4 ms seules). Le resultat de chaque verification est garde tant que rien n'a ete ecrit dans les tables dont
+# elles dependent (compteurs de db/session.py), et 60 s au plus (les delais qui avancent seuls : sechage,
+# « sans metadonnees » apres 30 min). Le tirage au hasard, lui, se refait a chaque appel.
+_DEPENDS = ("bobines", "filaments", "prints", "filament_usage", "attention_dismissals", "settings")
+CACHE_S = 60
+_CHECKS_CACHE = {"key": None, "at": 0.0, "res": None}
+_CHECKS_LOCK = asyncio.Lock()
+
+
+async def _run_check(db, fn):
+    """Une verification, depuis la memoire si rien n'a change."""
+    import time as _t
+    from ..db.session import data_version
+    key = data_version(*_DEPENDS)
+    c = _CHECKS_CACHE
+    if c["key"] != key or _t.monotonic() - c["at"] > CACHE_S:
+        async with _CHECKS_LOCK:
+            key = data_version(*_DEPENDS)
+            if c["key"] != key or _t.monotonic() - c["at"] > CACHE_S:
+                c.update(key=key, at=_t.monotonic(), res={})
+    res = c["res"]
+    if fn not in res:
+        try:
+            res[fn] = ("ok", await fn(db))
+        except Exception as e:
+            return ("err", e)
+    return res[fn]
+
+
 async def build_attention(db, per_category: int = 3) -> tuple[list[dict], list[dict]]:
     """
     Renvoie (categories, erreurs).
@@ -775,8 +806,11 @@ async def build_attention(db, per_category: int = 3) -> tuple[list[dict], list[d
     # Ordre choisi par l'utilisateur, categories masquees exclues.
     for c in await ordered_checks(db):
         cat, label, icon, fn = c["category"], c["label"], c["icon"], c["fn"]
+        kind, alerts = await _run_check(db, fn)
         try:
-            alerts = await fn(db)
+            if kind == "err":
+                raise alerts
+            alerts = list(alerts)
         except Exception as e:
             logger.exception(f"[ATTENTION] check {cat} a échoué")
             errors.append({"category": cat, "label": label,
@@ -823,8 +857,11 @@ async def all_alerts(db) -> tuple[list[dict], list[dict]]:
     # de l'accueil, sinon elles deviendraient inaccessibles.
     for c in await ordered_checks(db, include_hidden=True):
         cat, label, icon, fn = c["category"], c["label"], c["icon"], c["fn"]
+        kind, alerts = await _run_check(db, fn)
         try:
-            alerts = await fn(db)
+            if kind == "err":
+                raise alerts
+            alerts = list(alerts)
         except Exception as e:
             logger.exception(f"[ATTENTION] check {cat} a échoué")
             errors.append({"category": cat, "label": label,
