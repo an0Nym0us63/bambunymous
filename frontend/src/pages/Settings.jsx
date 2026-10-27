@@ -3,6 +3,7 @@ import Cachettes from "../components/Cachettes";
 import { Save, Wifi, RefreshCw, Sun, Moon, Users, KeyRound, Trash2, Activity } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useUrlTab } from "../utils/useUrlTab";
+import TasksPanel from "../components/TasksPanel";
 import client from "../api/client";
 import { FriendsCard, FriendKeyButtons } from "../components/Friends";
 import { showAlert, showConfirm } from "../utils/dialog";
@@ -1986,6 +1987,7 @@ const SET_TABS = [
   { id:"share",    label:"📤 Partage",    admin:true,  c:"#0EA5E9" },
   { id:"android",  label:"📱 Appli Android", admin:false, c:"#22C55E" },
   { id:"tools",    label:"🛠️ Outils",     admin:true,  c:"#64748B" },
+  { id:"tasks",    label:"⏱️ Tâches",     admin:true,  c:"#0EA5E9" },   // les taches de fond du serveur
 ];
 
 export default function Settings() {
@@ -2236,6 +2238,9 @@ export default function Settings() {
       <AdminOnly home mw><RateTemplatesSettings/></AdminOnly>
       <FriendsCard/>
       </div>)}
+
+      {/* ── Tâches de fond du serveur ─────────────────────────────── */}
+      {tab === "tasks" && <AdminOnly><TasksPanel/></AdminOnly>}
 
       {/* ── Outils (maintenance) ──────────────────────────────────── */}
       {tab === "tools" && (

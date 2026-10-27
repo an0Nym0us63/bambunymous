@@ -652,11 +652,13 @@ _TICKS = [(("attention_new",), attention_tick), (("weekly_summary",), weekly_tic
 async def loop(period_s: int = 900, first_delay_s: int = 180):
     """Toutes les 15 min : chaque verification seulement si son type est voulu ;
     l'echec de l'une n'empeche pas les autres."""
-    await asyncio.sleep(first_delay_s)
+    from ..core import tasks as _tasks
+    await _tasks.sleep("notify_extra", first_delay_s)
     while True:
         try:
             cfg = await N._load()
         except Exception as e:
+            _tasks.error("notify_extra")
             cfg = None
             logger.warning(f"[NOTIF] verifications periodiques : {e}")
         for events, tick in _TICKS if cfg else []:
@@ -664,14 +666,16 @@ async def loop(period_s: int = 900, first_delay_s: int = 180):
                 if events is None or any(N.enabled_in(cfg, e) for e in events):
                     await tick(cfg)
             except Exception as e:
+                _tasks.error("notify_extra")
                 logger.warning(f"[NOTIF] {tick.__name__} : {e}")
-        await asyncio.sleep(period_s)
+        await _tasks.sleep("notify_extra", period_s)
 
 
 async def update_loop(period_s: int = 6 * 3600, first_delay_s: int = 600):
     """Mise a jour de BambuNymous : annoncee une fois par nouveau commit."""
+    from ..core import tasks as _tasks
     from . import version_check
-    await asyncio.sleep(first_delay_s)
+    await _tasks.sleep("update", first_delay_s)
     while True:
         try:
             v = await version_check.check(fresh=True)
@@ -685,5 +689,6 @@ async def update_loop(period_s: int = 6 * 3600, first_delay_s: int = 600):
                 await N.notify("app_update", f"🆕 BambuNymous : {n} nouveauté{'s' if n > 1 else ''}",
                                "\n".join(lines), click=N.app_link(cfg, "/settings"), priority=2)
         except Exception as e:
+            _tasks.error("update")
             logger.warning(f"[NOTIF] mise a jour : {e}")
-        await asyncio.sleep(period_s)
+        await _tasks.sleep("update", period_s)

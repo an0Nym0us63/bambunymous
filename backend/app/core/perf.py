@@ -416,11 +416,12 @@ async def db_optimize() -> dict:
 async def db_upkeep() -> None:
     """L'entretien de la base, en tache de fond : les statistiques du planificateur au demarrage si elles
     manquent (sans elles, SQLite choisit ses index a l'aveugle), puis « PRAGMA optimize » toutes les heures."""
+    from . import tasks as _tasks
     import logging
     from sqlalchemy import text
     from ..db.session import engine
     log = logging.getLogger(__name__)
-    await asyncio.sleep(90)                  # apres le demarrage (ses taches lisent beaucoup)
+    await _tasks.sleep("db_upkeep", 90)                  # apres le demarrage (ses taches lisent beaucoup)
     while True:
         try:
             async with engine.connect() as c:
@@ -431,5 +432,6 @@ async def db_upkeep() -> None:
                     log.info("[DB] statistiques du planificateur calculees")
                 await c.execute(text("PRAGMA optimize"))
         except Exception:
+            _tasks.error("db_upkeep")
             log.exception("[DB] entretien non fait")
-        await asyncio.sleep(3600)
+        await _tasks.sleep("db_upkeep", 3600)

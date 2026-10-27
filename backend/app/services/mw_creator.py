@@ -671,12 +671,14 @@ async def check_creator() -> int:
 
 
 async def watch_loop(period_s: int = 1800, first_delay_s: int = 300):
-    await asyncio.sleep(first_delay_s)
+    from ..core import tasks as _tasks
+    await _tasks.sleep("mw_creator", first_delay_s)
     while True:
         try:
             n = await check_creator()
             if n:
                 logger.info(f"[MW] createur : {n} notification(s)")
         except Exception as e:
+            _tasks.error("mw_creator")
             logger.warning(f"[MW] suivi createur : {e}")
-        await asyncio.sleep(period_s)
+        await _tasks.sleep("mw_creator", period_s)

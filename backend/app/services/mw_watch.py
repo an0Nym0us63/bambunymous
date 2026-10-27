@@ -204,12 +204,14 @@ async def check_collections() -> int:
 
 
 async def watch_loop(period_s: int = PERIOD, first_delay_s: int = 240):
-    await asyncio.sleep(first_delay_s)
+    from ..core import tasks as _tasks
+    await _tasks.sleep("mw_watch", first_delay_s)
     while True:
         try:
             n = await check_collections()
             if n:
                 logger.info(f"[MW] collections : {n} notification(s)")
         except Exception as e:
+            _tasks.error("mw_watch")
             logger.warning(f"[MW] surveillance des collections : {e}")
-        await asyncio.sleep(period_s)
+        await _tasks.sleep("mw_watch", period_s)

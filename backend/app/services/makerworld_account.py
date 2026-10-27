@@ -1176,14 +1176,16 @@ async def check_new_models(creators: list) -> int:
 
 
 async def warm_loop(period_s: int = 3600, first_delay_s: int = 180):
+    from ..core import tasks as _tasks
     import asyncio
-    await asyncio.sleep(first_delay_s)
+    await _tasks.sleep("mw_account", first_delay_s)
     while True:
         try:
             await warm_all()
         except Exception:
+            _tasks.error("mw_account")
             logger.exception("[MW] prechargement")
-        await asyncio.sleep(period_s)
+        await _tasks.sleep("mw_account", period_s)
 
 
 async def _debug_collections() -> dict:

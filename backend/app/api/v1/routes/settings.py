@@ -415,6 +415,13 @@ _ARCHIVE_TASKS: set = set()
 
 
 # ── La vitesse du serveur (26/10/2026) : delai de reponse de chaque route, depuis le demarrage ──
+@router.get("/tasks")
+async def tasks_status(_: str = Depends(require_admin)):
+    """Les taches de fond : ce qui tourne, quand ca repasse, la derniere erreur ; et les longs travaux en cours."""
+    from ....core import tasks
+    return tasks.snapshot()
+
+
 @router.get("/perf")
 async def perf_status(_: str = Depends(require_admin)):
     from ....core import perf

@@ -76,7 +76,8 @@ def _refresh_bg():
 
 async def warm():
     """Au demarrage : calcule la liste sans attendre qu'on ouvre la page."""
-    await asyncio.sleep(30)
+    from ..core import tasks as _tasks
+    await _tasks.sleep("mw_queue", 30)
     try:
         if (await _load())["collections"]:
             snap = await asyncio.to_thread(_snap_get)
@@ -86,7 +87,9 @@ async def warm():
             if _CACHE[0] == 0.0:
                 await _recompute()
     except Exception:
+        _tasks.error("mw_queue")
         logger.exception("[QUEUE] calcul au demarrage")
+    _tasks.finish("mw_queue")
 
 
 class QueueError(Exception):

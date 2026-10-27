@@ -787,10 +787,12 @@ async def friends_loop(period_s: int = 300, first_delay_s: int = 120):
     passage memorise sans rien envoyer ; ensuite l'etat de reference est relu
     en base (un redemarrage ne fait rien perdre). Un copain injoignable garde
     son dernier etat connu (pas de fausse fin)."""
-    await asyncio.sleep(first_delay_s)
+    from ..core import tasks as _tasks
+    await _tasks.sleep("friends", first_delay_s)
     try:
         last = await _friends_last_get()
     except Exception:
+        _tasks.error("friends")
         last = None
     while True:
         try:
@@ -857,14 +859,16 @@ async def friends_loop(period_s: int = 300, first_delay_s: int = 120):
                     last = cur
                     await _friends_last_put(cur)
         except Exception as e:
+            _tasks.error("friends")
             logger.warning(f"[NOTIF] copains : {e}")
-        await asyncio.sleep(period_s)
+        await _tasks.sleep("friends", period_s)
 
 
 async def mw_rate_loop(period_s: int = 6 * 3600, first_delay_s: int = 900):
     """Impressions a evaluer sur MakerWorld : previent des nouvelles (le
     premier passage memorise)."""
-    await asyncio.sleep(first_delay_s)
+    from ..core import tasks as _tasks
+    await _tasks.sleep("mw_rate", first_delay_s)
     seen = None
     while True:
         try:
@@ -878,7 +882,7 @@ async def mw_rate_loop(period_s: int = 6 * 3600, first_delay_s: int = 900):
                 if not res.get("rated_known"):
                     # liste de mes evaluations illisible : tout semblerait « a evaluer »
                     logger.info("[NOTIF] a evaluer : evaluations MakerWorld illisibles, passage ignore")
-                    await asyncio.sleep(period_s)
+                    await _tasks.sleep("mw_rate", period_s)
                     continue
                 items = res.get("items") or []
                 ids = {str(x.get("design_id")) for x in items}
@@ -893,8 +897,9 @@ async def mw_rate_loop(period_s: int = 6 * 3600, first_delay_s: int = 900):
                                        actions=[("Ouvrir BambuNymous", link)] if link else None)
                 seen = ids
         except Exception as e:
+            _tasks.error("mw_rate")
             logger.warning(f"[NOTIF] a evaluer : {e}")
-        await asyncio.sleep(period_s)
+        await _tasks.sleep("mw_rate", period_s)
 
 
 async def app_started(delay_s: int = 45):

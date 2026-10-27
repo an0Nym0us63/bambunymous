@@ -99,13 +99,15 @@ async def enrichment_reconciler(interval_sec: int = 300):
     (set _ENRICHING) et bascule sur FTP, donc les relances sont sans risque et
     finissent par recuperer le fichier des qu'il est disponible dans /cache.
     """
+    from ..core import tasks as _tasks
     while True:
         try:
-            await asyncio.sleep(interval_sec)
+            await _tasks.sleep("reconciler", interval_sec)
             await resume_enrichment()
         except asyncio.CancelledError:
             break
         except Exception as e:
+            _tasks.error("reconciler")
             logger.error(f"[RECONCILE] {e}")
 
 

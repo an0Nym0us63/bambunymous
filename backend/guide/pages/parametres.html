@@ -1,5 +1,5 @@
 <h1>Paramètres</h1>
-<p class="lead">Tous les réglages de BambuNymous : imprimante, filaments, affichage, comptes, connexions, notifications, partage, appli Android et outils de maintenance. Entrée « Paramètres » de la navigation.</p>
+<p class="lead">Tous les réglages de BambuNymous : imprimante, filaments, affichage, comptes, connexions, notifications, partage, appli Android, outils de maintenance et tâches du serveur. Entrée « Paramètres » de la navigation.</p>
 
 <section id="parametres-structure">
   <h2>Organisation de la page</h2>
@@ -15,6 +15,7 @@
     <tr><td><a href="#parametres-share">📤 Partage</a></td><td>Partage Telegram en ton nom</td><td><span class="admin">admin</span></td></tr>
     <tr><td><a href="#parametres-android">📱 Appli Android</a></td><td>Téléchargement et réglages de l'appli</td><td>tous</td></tr>
     <tr><td><a href="#parametres-tools">🛠️ Outils</a></td><td>Maintenance, espace de stockage, export de diagnostic</td><td><span class="admin">admin</span></td></tr>
+    <tr><td><a href="#parametres-tasks">⏱️ Tâches</a></td><td>Les tâches de fond du serveur et les longs travaux en cours</td><td><span class="admin">admin</span></td></tr>
   </table>
   <ul>
     <li>Un compte non administrateur ne voit que quatre onglets : Affichage, Comptes, Notifs et Appli Android.</li>
@@ -331,6 +332,16 @@
     <h4>🏅 Succès : paliers et progression</h4>
     <p>Exporte tous les succès à paliers : ce qui compte, ta valeur actuelle, le palier atteint, le prochain seuil et les seuils de chaque palier. <span class="ui">⬇️ Télécharger (CSV)</span> donne <code>succes-paliers-AAAA-MM-JJ.csv</code> ; <span class="ui">📋 Copier</span> le copie dans le presse-papiers.</p>
   </section>
+</section>
+
+<section id="parametres-tasks">
+  <h2>⏱️ Tâches <span class="admin">admin</span></h2>
+  <p>Ce que le serveur fait en fond, relu toutes les 3 secondes. En tête, quatre compteurs : tâches <b>en cours</b>, <b>tâches actives</b>, <b>avec une erreur</b>, <b>arrêtées</b>.</p>
+  <ul>
+    <li><b>Travaux lancés à la demande</b> (s'il y en a) : rattrapage des 3MF d'origine ou des documents MakerWorld, sauvegarde vers le NAS ou vidage du local, lecture des fiches MakerWorld. Chacun dit s'il tourne, avec une barre d'avancement (« 37 / 120 (31 %) ») et ce qu'il traite en ce moment, ou depuis quand il est terminé.</li>
+    <li><b>Les tâches de fond</b>, par famille (Impressions, MakerWorld, Notifications, Succès, Serveur) : rattrapage des 3MF tranchés, traduction des noms, timelapses de la carte SD, fiches et compte MakerWorld, collections suivies, activité de créateur, liste « À faire », vues 3D, copains, impressions à évaluer, points d'attention, nouvelle version, succès, entretien de la base, surveillance du serveur, sauvegarde de nuit. Chacune a son état : <span class="ui">En cours</span> (et depuis combien de temps), <span class="ui">En attente</span> (avec « prochain dans 3 min 39 s »), <span class="ui">Démarrage</span> (pas encore passée), <span class="ui">Terminée</span> (une tâche qui ne passe qu'une fois), <span class="ui">Arrêtée</span> (morte sur une erreur : elle ne repassera qu'au prochain redémarrage). Dessous : son dernier passage et sa durée, le nombre de passages, et en rouge sa dernière erreur, avec son heure.</li>
+  </ul>
+  <p>Les compteurs repartent à zéro à chaque redémarrage du serveur.</p>
 </section>
 
 <section id="parametres-version">

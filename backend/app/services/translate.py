@@ -511,11 +511,13 @@ def start_backfill(retry_same: bool = False) -> bool:
 async def auto_backfill_loop(period_s: int = 6 * 3600, first_delay_s: int = 300):
     """Reprend toutes les 6 h les prints restes sans nom francais (echecs de
     quota) : un nom non traduit ne doit pas attendre un clic dans les reglages."""
+    from ..core import tasks as _tasks
     import asyncio
-    await asyncio.sleep(first_delay_s)
+    await _tasks.sleep("translate", first_delay_s)
     while True:
         try:
             start_backfill()
         except Exception:
+            _tasks.error("translate")
             logger.exception("[TRAD] rattrapage automatique")
-        await asyncio.sleep(period_s)
+        await _tasks.sleep("translate", period_s)

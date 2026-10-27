@@ -1,0 +1,138 @@
+"""Les taches de fond (27/10/2026), pour Parametres > Taches : ce qui tourne, quand ca repasse, la derniere erreur.
+
+Chaque boucle attend avec sleep(id, secondes) au lieu d'asyncio.sleep : le registre sait alors si elle travaille
+(« en cours ») ou attend son prochain passage (et quand), combien de passages elle a faits et combien de temps le
+dernier a pris. error(id) dans son « except » garde la derniere erreur. track(id, tache) la surveille : une boucle
+morte (exception sortie) se voit « arretee ». Les longs travaux lances a la demande (rattrapages, sauvegarde du
+NAS…) s'y ajoutent avec leur avancement, lus chez eux (jobs()).
+"""
+import asyncio
+import sys
+import time
+
+# id -> (libelle, ce qu'elle fait, famille)
+CATALOG = {
+    "reconciler":   ("Rattrapage des 3MF tranchés", "Reprend les impressions restées sans leur 3MF (5 min).", "Impressions"),
+    "translate":    ("Traduction des noms", "Traduit les noms restés vides (quota d'un service atteint) : toutes les 6 h.", "Impressions"),
+    "sd_card":      ("Timelapses de la carte SD", "Copie le timelapse de chaque impression terminée depuis la carte SD de l'imprimante.", "Impressions"),
+    "mw_models":    ("Fiches MakerWorld", "Lit ou relit les fiches des modèles imprimés (nouvelles, en erreur, vieilles de 30 jours) : toutes les 6 h.", "MakerWorld"),
+    "mw_account":   ("Compte MakerWorld", "Prépare collections, j'aime et suivis : chaque heure.", "MakerWorld"),
+    "mw_watch":     ("Collections suivies", "Surveille les collections MakerWorld (ajouts, créations) pour les notifications.", "MakerWorld"),
+    "mw_creator":   ("Activité de créateur", "Points, boosts, abonnés et paliers MakerWorld : toutes les 30 min.", "MakerWorld"),
+    "mw_queue":     ("Liste « À faire »", "Calcule la liste « À faire » au démarrage.", "MakerWorld"),
+    "mw_3d":        ("Vues 3D", "Prépare les vues 3D des 3MF d'origine pas encore converties : 90 s après le démarrage, puis toutes les 12 h.", "MakerWorld"),
+    "friends":      ("Copains", "Débuts et fins d'impression des copains, pour les notifications : toutes les 5 min.", "Notifications"),
+    "mw_rate":      ("Impressions à évaluer", "Rappelle les modèles MakerWorld à évaluer : toutes les 6 h.", "Notifications"),
+    "notify_extra": ("Points d'attention", "Alertes, résumé de la semaine, imprimante au repos : toutes les 15 min.", "Notifications"),
+    "update":       ("Nouvelle version", "Regarde si une nouvelle version de l'appli est publiée : toutes les 6 h.", "Notifications"),
+    "ach_watch":    ("Relevés des succès", "Relève l'imprimante et les copains pour les succès.", "Succès"),
+    "ach_warm":     ("Calcul des succès", "Prépare le gros calcul des succès au démarrage.", "Succès"),
+    "db_upkeep":    ("Entretien de la base", "Statistiques au besoin, puis « PRAGMA optimize » : chaque heure.", "Serveur"),
+    "loop_watch":   ("Surveillance du serveur", "Relève ce qui fige le serveur et la charge du processeur (Vitesse du serveur).", "Serveur"),
+    "nas":          ("Sauvegarde de nuit", "Sauvegarde vers le NAS (et vidage du local) chaque nuit, si elle est activée ; vérifie toutes les 5 min.", "Serveur"),
+}
+_ST: dict = {}
+_TASKS: dict = {}
+
+
+def _st(i: str) -> dict:
+    return _ST.setdefault(i, {"state": "starting", "since": time.time(), "runs": 0, "last_start": None, "last_end": None,
+                              "last_s": None, "next_at": None, "error": None, "error_at": None})
+
+
+async def sleep(i: str, s: float) -> None:
+    """Attendre le prochain passage de la boucle i (s secondes), en le disant au registre."""
+    st = _st(i)
+    now = time.time()
+    if st["state"] == "running":
+        st["last_end"] = now
+        st["last_s"] = round(now - (st["last_start"] or now), 1)
+    st.update(state="waiting", next_at=now + s)
+    await asyncio.sleep(s)
+    st.update(state="running", last_start=time.time(), next_at=None)
+    st["runs"] += 1
+
+
+def start(i: str) -> None:
+    """Une tache qui ne passe qu'une fois (ou sans attente) : elle commence."""
+    st = _st(i)
+    st.update(state="running", last_start=time.time(), next_at=None)
+    st["runs"] += 1
+
+
+def finish(i: str) -> None:
+    st = _st(i)
+    now = time.time()
+    st.update(state="done", last_end=now, last_s=round(now - (st["last_start"] or now), 1))
+
+
+def error(i: str, e: BaseException | None = None) -> None:
+    """La derniere erreur de la tache i (par defaut, celle qu'on est en train de traiter)."""
+    e = e or sys.exc_info()[1]
+    if e is None:
+        return
+    st = _st(i)
+    st["error"] = f"{type(e).__name__}: {e}"[:300]
+    st["error_at"] = time.time()
+
+
+def track(i: str, task):
+    """Surveiller la tache asyncio de la boucle i (rend la tache)."""
+    _TASKS[i] = task
+    _st(i)
+    return task
+
+
+def jobs() -> list:
+    """Les longs travaux lances a la demande, avec leur avancement (lus chez eux)."""
+    out = []
+
+    def add(i, label, st):
+        if not isinstance(st, dict):
+            return
+        out.append({"id": i, "label": label, "running": bool(st.get("running")), "done": st.get("done"), "total": st.get("total"),
+                    "current": st.get("current") or st.get("what"), "stopped": st.get("stopped"),
+                    "started": st.get("started"), "finished": st.get("finished") or st.get("finished_at")})
+    try:
+        from ..services import mw_source
+        add("mw_source", "Rattrapage des 3MF d'origine MakerWorld", mw_source.status())
+    except Exception:
+        pass
+    try:
+        from ..services import mw_docs
+        add("mw_docs", "Rattrapage des documents MakerWorld", mw_docs.status())
+    except Exception:
+        pass
+    try:
+        from ..services import archive
+        r, p = archive._STATE.get("running"), archive._STATE.get("progress") or {}
+        add("archive", {"backup": "Sauvegarde vers le NAS", "purge": "Vidage du local (copié sur le NAS)"}.get(r, "Sauvegarde vers le NAS"),
+            {"running": bool(r), **p})
+    except Exception:
+        pass
+    try:
+        from ..services import makerworld
+        add("mw_refresh", "Lecture des fiches MakerWorld", {"running": makerworld._RUNNING.get("on")})
+    except Exception:
+        pass
+    return out
+
+
+def snapshot() -> dict:
+    now = time.time()
+    loops = []
+    for i, (label, desc, family) in CATALOG.items():
+        st = dict(_ST.get(i) or {})
+        t = _TASKS.get(i)
+        state = st.get("state") or "unknown"
+        if t is not None and t.done():
+            state = "stopped" if state != "done" else "done"
+            if not t.cancelled() and t.exception() is not None and not st.get("error"):
+                e = t.exception()
+                st["error"], st["error_at"] = f"{type(e).__name__}: {e}"[:300], st.get("last_end") or now
+        if not st and t is None:
+            state = "unknown"
+        loops.append({"id": i, "label": label, "desc": desc, "family": family, "state": state, "runs": st.get("runs", 0),
+                      "since": st.get("since"), "last_start": st.get("last_start"), "last_end": st.get("last_end"),
+                      "last_s": st.get("last_s"), "next_at": st.get("next_at"), "error": st.get("error"), "error_at": st.get("error_at")})
+    return {"now": now, "loops": loops, "jobs": jobs()}

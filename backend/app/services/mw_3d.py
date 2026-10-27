@@ -630,9 +630,10 @@ async def prepare(iid: str) -> None:
 async def warm_loop(first_delay_s: int = 90, period_s: int = 12 * 3600) -> None:
     """Les 3MF d'origine deja gardes, convertis un a un (quelques secondes entre deux), puis a chaque passage
     ceux qui manquent : la premiere ouverture d'une vue 3D n'a plus a attendre."""
+    from ..core import tasks as _tasks
     import asyncio
     from .mw_source import _dir
-    await asyncio.sleep(first_delay_s)
+    await _tasks.sleep("mw_3d", first_delay_s)
     while True:
         try:
             # les plus recents d'abord (ceux qu'on a le plus de chances d'ouvrir)
@@ -646,5 +647,6 @@ async def warm_loop(first_delay_s: int = 90, period_s: int = 12 * 3600) -> None:
             if done:
                 logger.info(f"[3D] {done} modele(s) prepare(s) pour la vue 3D")
         except Exception:
+            _tasks.error("mw_3d")
             logger.exception("[3D] preparation des vues 3D")
-        await asyncio.sleep(period_s)
+        await _tasks.sleep("mw_3d", period_s)

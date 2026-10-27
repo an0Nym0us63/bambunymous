@@ -278,6 +278,7 @@ async def _friends(now: datetime) -> None:
 
 async def loop() -> None:
     """La boucle de fond (lancee au demarrage)."""
+    from ..core import tasks as _tasks
     global W
     from ..core.mqtt import get_state
     W = await _load()
@@ -290,10 +291,12 @@ async def loop() -> None:
             try:
                 await _friends(now)
             except Exception as e:
+                _tasks.error("ach_watch")
                 logger.info(f"[SUCCES] copains illisibles : {e}")
             if ev or (now - saved).total_seconds() >= SAVE_S:
                 await _save()
                 saved = now
         except Exception:
+            _tasks.error("ach_watch")
             logger.exception("[SUCCES] releve")
-        await asyncio.sleep(STEP_S)
+        await _tasks.sleep("ach_watch", STEP_S)

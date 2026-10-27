@@ -1202,14 +1202,16 @@ def launch(design_id) -> None:
 
 async def auto_loop(period_s: int = 6 * 3600, first_delay_s: int = 120):
     """Toutes les 6 h : modeles jamais lus, en erreur ou vieux de 30 jours."""
-    await asyncio.sleep(first_delay_s)
+    from ..core import tasks as _tasks
+    await _tasks.sleep("mw_models", first_delay_s)
     while True:
         if not _RUNNING["on"]:
             _RUNNING["on"] = True
             try:
                 await refresh(200)
             except Exception:
+                _tasks.error("mw_models")
                 logger.exception("[MW] passage automatique")
             finally:
                 _RUNNING["on"] = False
-        await asyncio.sleep(period_s)
+        await _tasks.sleep("mw_models", period_s)

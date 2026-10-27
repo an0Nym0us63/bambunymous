@@ -116,27 +116,28 @@ async def lifespan(app: FastAPI):
     # Rattrapage PERIODIQUE du 3MF : sans lui, un print laisse sans 3MF obligeait
     # a redemarrer le container a la main. Tourne toutes les ~5 min (self-healing).
     import asyncio as _aio
-    _reconciler_task = _aio.create_task(enrichment_reconciler())
+    from app.core import tasks as _tasks
+    _reconciler_task = _tasks.track("reconciler", _aio.create_task(enrichment_reconciler()))
     # Noms francais restes vides (quota d'un service de traduction atteint) :
     # repris toutes les 6 h, sans attendre un clic dans les reglages.
     from app.services.translate import auto_backfill_loop
-    _trad_task = _aio.create_task(auto_backfill_loop())
+    _trad_task = _tasks.track("translate", _aio.create_task(auto_backfill_loop()))
     # Fiches publiques des modeles MakerWorld (titre, couverture, createur,
     # categories, tags) : lues en cache, relues tous les 30 jours.
     from app.services.makerworld import auto_loop as _mw_loop
-    _mw_task = _aio.create_task(_mw_loop())
+    _mw_task = _tasks.track("mw_models", _aio.create_task(_mw_loop()))
     # Compte MakerWorld : collections, j'aime et suivis prepares chaque heure.
     from app.services.makerworld_account import warm_loop as _mw_warm
-    _mw_warm_task = _aio.create_task(_mw_warm())
+    _mw_warm_task = _tasks.track("mw_account", _aio.create_task(_mw_warm()))
     # Collections MakerWorld (ajouts, creations…) pour les notifications : 10 min.
     from app.services.mw_watch import watch_loop as _mw_watch
-    _mw_watch_task = _aio.create_task(_mw_watch())
+    _mw_watch_task = _tasks.track("mw_watch", _aio.create_task(_mw_watch()))
     # Mon activite de createur (points, boosts, abonnes, paliers) : 30 min.
     from app.services.mw_creator import watch_loop as _mw_creator
-    _mw_creator_task = _aio.create_task(_mw_creator())
+    _mw_creator_task = _tasks.track("mw_creator", _aio.create_task(_mw_creator()))
     # Liste « À faire » : calculee des le demarrage (et reprise de son dernier calcul).
     from app.services.mw_queue import warm as _queue_warm
-    _queue_warm_task = _aio.create_task(_queue_warm())
+    _queue_warm_task = _tasks.track("mw_queue", _aio.create_task(_queue_warm()))
     # Evaluations MakerWorld laissees en file avant l'arret : on les reprend.
     from app.services.mw_rate import resume_queue as _rate_resume
     # Taches de fond sans variable : gardees ici. asyncio ne retient qu'une
@@ -151,13 +152,14 @@ async def lifespan(app: FastAPI):
     _bg(_rate_resume())
     # la boucle surveillee : ce qui la fige est releve (Parametres > Vitesse du serveur)
     from app.core.perf import loop_watch as _loop_watch
-    _bg(_loop_watch())
+    _tasks.track("loop_watch", _bg(_loop_watch()))
+    _tasks.start("loop_watch")
     # l'entretien de la base : statistiques au besoin, puis « PRAGMA optimize » chaque heure
     from app.core.perf import db_upkeep as _db_upkeep
-    _bg(_db_upkeep())
+    _tasks.track("db_upkeep", _bg(_db_upkeep()))
     # les vues 3D des 3MF d'origine deja gardes, preparees a l'avance (une a une, 90 s apres le demarrage)
     from app.services.mw_3d import warm_loop as _w3d
-    _bg(_w3d())
+    _tasks.track("mw_3d", _bg(_w3d()))
     # 3MF d'origine MakerWorld : un rattrapage qui tournait a l'arret reprend tout seul
     from app.services.mw_source import resume_after_restart as _src_resume
     _bg(_src_resume())
@@ -171,21 +173,21 @@ async def lifespan(app: FastAPI):
         pass
     _sub(_nev.watch)
     # Copains (debut / fin d'impression), impressions a evaluer, redemarrage
-    _bg(_nev.friends_loop())
-    _bg(_nev.mw_rate_loop())
+    _tasks.track("friends", _bg(_nev.friends_loop()))
+    _tasks.track("mw_rate", _bg(_nev.mw_rate_loop()))
     _bg(_nev.app_started())
     # Points d'attention, resume de la semaine, imprimante au repos ; version
     from app.services import notify_extra as _nx
-    _bg(_nx.loop())
-    _bg(_nx.update_loop())
+    _tasks.track("notify_extra", _bg(_nx.loop()))
+    _tasks.track("update", _bg(_nx.update_loop()))
     from app.services import achievements as _ach
-    _bg(_ach.warm())                 # succes : gros calcul prepare d'avance
+    _tasks.track("ach_warm", _bg(_ach.warm()))                 # succes : gros calcul prepare d'avance
     from app.services import ach_watch as _aw
-    _bg(_aw.loop())                  # succes : releves de l'imprimante et des copains
+    _tasks.track("ach_watch", _bg(_aw.loop()))                  # succes : releves de l'imprimante et des copains
     from app.services import sd_card as _sd
-    _bg(_sd.auto_loop())             # timelapse de chaque impression, copie de la carte SD apres la fin
+    _tasks.track("sd_card", _bg(_sd.auto_loop()))             # timelapse de chaque impression, copie de la carte SD apres la fin
     from app.services import archive as _arch
-    _bg(_arch.nightly_loop())        # sauvegarde vers le NAS (et vidage du local) chaque nuit, si activee
+    _tasks.track("nas", _bg(_arch.nightly_loop()))        # sauvegarde vers le NAS (et vidage du local) chaque nuit, si activee
     await mqtt_manager.start()
     # Catalogue filaments Bambu (m0h31h31/3DPrint-Filament-RFID-Tool) :
     # téléchargé au démarrage depuis GitHub, re-vérifié toutes les 24h via ETag.

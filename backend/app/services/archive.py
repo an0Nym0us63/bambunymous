@@ -1231,7 +1231,8 @@ async def purge(days: int | None = None, trigger: str = "manuel") -> dict:
 
 # ── Chaque nuit ────────────────────────────────────────────────────────────────────────────────────
 async def nightly_loop() -> None:
-    await asyncio.sleep(120)
+    from ..core import tasks as _tasks
+    await _tasks.sleep("nas", 120)
     done_day = None
     while True:
         try:
@@ -1243,5 +1244,6 @@ async def nightly_loop() -> None:
                 if s["purge_auto"] and not rep.get("error"):
                     await purge(s["purge_days"], "nuit")
         except Exception:
+            _tasks.error("nas")
             logger.exception("[ARCHIVE] boucle de nuit")
-        await asyncio.sleep(300)
+        await _tasks.sleep("nas", 300)

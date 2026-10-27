@@ -547,10 +547,12 @@ async def attach_all() -> dict:
 
 
 async def auto_loop() -> None:
-    await asyncio.sleep(90)
+    from ..core import tasks as _tasks
+    await _tasks.sleep("sd_card", 90)
     while True:
         try:
             await auto_fetch_once()
         except Exception:
+            _tasks.error("sd_card")
             logger.exception("[SD] timelapses automatiques")
-        await asyncio.sleep(AUTO_EVERY)
+        await _tasks.sleep("sd_card", AUTO_EVERY)

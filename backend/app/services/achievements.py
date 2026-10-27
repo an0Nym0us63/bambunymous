@@ -6220,13 +6220,16 @@ async def _compute_base(now: datetime) -> tuple:
 async def warm(delay_s: int = 15) -> None:
     """Au demarrage : prepare le gros calcul pour que la premiere page ouverte
     n'ait pas a l'attendre (la boucle des 15 min ne passe qu'apres 3 min)."""
+    from ..core import tasks as _tasks
     import asyncio
-    await asyncio.sleep(delay_s)
+    await _tasks.sleep("ach_warm", delay_s)
     try:
         if _BASE["v"] is None:
             await _compute_base(datetime.utcnow())
     except Exception:
+        _tasks.error("ach_warm")
         logger.exception("[SUCCES] prechauffage")
+    _tasks.finish("ach_warm")
 
 
 async def _base(cached: bool, now: datetime) -> tuple:
