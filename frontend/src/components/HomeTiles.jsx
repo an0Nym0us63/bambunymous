@@ -1444,7 +1444,8 @@ function FilamentStock() {
   const need = all.filter(f => f.st !== "ok" && f.st !== "skip");
   const skipped = all.filter(f => f.st === "skip");
   // un filament qu'on ne recommandera plus et dont il ne reste rien n'encombre pas la liste (il est dans « Plus commandés »)
-  const list = (only === "need" ? need : only === "skip" ? skipped : all.filter(f => !(f.st === "skip" && !f.active_spool_count))).slice().sort(
+  const list = (only === "need" ? need : only === "skip" ? skipped : FIL_STATE[only] ? all.filter(f => f.st === only)
+    : all.filter(f => !(f.st === "skip" && !f.active_spool_count))).slice().sort(
     sort === "name" ? (a, b) => (a.translated_name || a.name).localeCompare(b.translated_name || b.name, "fr")
       : sort === "n" ? (a, b) => b.active_spool_count - a.active_spool_count || (a.remaining_weight_total_g || 0) - (b.remaining_weight_total_g || 0)
       : (a, b) => FIL_STATE[a.st][2] - FIL_STATE[b.st][2] || (a.remaining_weight_total_g || 0) - (b.remaining_weight_total_g || 0));
@@ -1476,21 +1477,21 @@ function FilamentStock() {
       <span style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, border: "1px solid rgba(0,0,0,0.15)", overflow: "hidden",
         ...colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type, finishOf(f)) }}/>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "baseline", minWidth: 0 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
           <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
-          <span style={{ fontSize: 13.5, fontWeight: 900, color: f.st === "ok" ? "var(--text)" : c, whiteSpace: "nowrap" }}>{fmtG(g)}</span></div>
+          <span style={{ fontSize: 13.5, fontWeight: 900, color: f.st === "ok" ? "var(--text)" : c, whiteSpace: "nowrap" }}>{fmtG(g)}</span>
+          {isAdmin && !visiting && <button type="button" onClick={() => toggleSkip(f)}
+            data-tip={f.no_reorder ? "Le remettre dans le stock à prévoir" : "Je ne le recommanderai plus : il sort du stock à prévoir"}
+            aria-label={f.no_reorder ? "Le remettre à prévoir" : "Ne plus le commander"}
+            style={{ width: 24, height: 22, padding: 0, flexShrink: 0, borderRadius: 8, cursor: "pointer", fontSize: 11.5, fontWeight: 900,
+              border: "1px solid var(--border)", background: "var(--surface)", color: f.no_reorder ? "#16a34a" : "var(--muted)" }}>
+            {f.no_reorder ? "↺" : "🚫"}</button>}</div>
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
           {pill(lab, c)}
           {f.manufacturer && group !== "brand" && pill(f.manufacturer, "#8B5CF6")}
           {kind && group !== "type" && pill(kind, "#0EA5E9")}
           {f.to_order && f.st !== "order" && pill("🛒 marqué à commander", "#ea580c")}
           <Muted size={11}>{f.active_spool_count ? `${f.active_spool_count} bobine${f.active_spool_count > 1 ? "s" : ""}` : "plus de bobine"}</Muted>
-          {isAdmin && !visiting && <button type="button" onClick={() => toggleSkip(f)}
-            data-tip={f.no_reorder ? "Le remettre dans le stock à prévoir" : "Je ne le recommanderai plus : il sort du stock à prévoir"}
-            aria-label={f.no_reorder ? "Le remettre à prévoir" : "Ne plus le commander"}
-            style={{ marginLeft: "auto", width: 24, height: 22, padding: 0, borderRadius: 8, cursor: "pointer", fontSize: 11.5, fontWeight: 900,
-              border: "1px solid var(--border)", background: "var(--surface)", color: f.no_reorder ? "#16a34a" : "var(--muted)" }}>
-            {f.no_reorder ? "↺" : "🚫"}</button>}
         </div>
         <span style={{ display: "flex", gap: 3 }}>{Array.from({ length: cells }, (_, i) => {
           const fill = Math.max(0, Math.min(1, (g - i * one) / one));
@@ -1499,33 +1500,43 @@ function FilamentStock() {
       </div></div>;
   };
   return <>
-    <Stats items={[["Filaments", all.length, "#F59E0B"], ["Poids", fmtG(tot), "#D97706"], ["Épuisés", nOf("out"), "#dc2626"],
-      ["À commander", nOf("order"), "#ea580c"], ["Bientôt", nOf("soon"), "#d97706"]]}/>
-    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-      <Muted>Regrouper :</Muted>
-      {[["material", "matière"], ["type", "sous-type"], ["brand", "marque"], ["color", "couleur"], ["state", "état"], ["", "aucun"]].map(([k, l]) =>
-        <button key={k || "none"} type="button" style={chip(group === k, "#8B5CF6")} onClick={() => setG(k)}>{l}</button>)}
+    {/* le total, puis chaque etat : une pastille, qui filtre la liste au toucher (le meme toucher la rend entiere) */}
+    <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+      <span style={{ fontSize: 22, fontWeight: 900, lineHeight: 1, ...gradText("#D97706", "#F59E0B") }}>{all.length}</span>
+      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>filaments · {fmtG(tot)}</span>
     </div>
-    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-      <button type="button" style={chip(only === "need", "#ea580c")} onClick={() => setOnly(o => o === "need" ? "all" : "need")}>🛒 À prévoir ({need.length})</button>
-      {skipped.length > 0 && <button type="button" style={chip(only === "skip", "#64748b")} onClick={() => setOnly(o => o === "skip" ? "all" : "skip")}>
-        🚫 Plus commandés ({skipped.length})</button>}
-      <Muted>Trier :</Muted>
-      {[["g", "le moins en stock"], ["n", "nombre de bobines"], ["name", "par nom"]].map(([k, l]) =>
-        <button key={k} type="button" style={chip(sort === k, "#3B82F6")} onClick={() => setSort(k)}>{l}</button>)}
-      <button type="button" style={{ ...chip(thrOpen, "#64748b"), marginLeft: "auto" }} onClick={() => setThrOpen(o => !o)}>⚙️ Seuils</button>
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {[["need", "🛒 À prévoir", need.length, "#ea580c"], ["out", "Épuisés", nOf("out"), "#dc2626"], ["order", "À commander", nOf("order"), "#ea580c"],
+        ["soon", "Bientôt", nOf("soon"), "#d97706"], ["skip", "🚫 Plus commandés", skipped.length, "#64748b"]].filter(([k, , n]) => n > 0 || k === "need").map(([k, l, n, c]) =>
+        <button key={k} type="button" onClick={() => setOnly(o => o === k ? "all" : k)}
+          style={{ height: 30, padding: "0 11px", borderRadius: 10, cursor: "pointer", fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap",
+            border: `1px solid ${only === k ? c : `${c}55`}`, color: only === k ? "#fff" : c, background: only === k ? c : `${c}14` }}>
+          {l} <b>{n}</b></button>)}
+    </div>
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      {[["Grouper", group, setG, [["material", "matière"], ["type", "sous-type"], ["brand", "marque"], ["color", "couleur"], ["state", "état"], ["", "aucun"]]],
+        ["Trier", sort, setSort, [["g", "stock bas"], ["n", "bobines"], ["name", "nom"]]]].map(([l, v, set, opts]) =>
+        <label key={l} style={{ display: "flex", alignItems: "center", gap: 6, flex: "1 1 0", minWidth: 0 }}>
+          <Muted>{l}</Muted>
+          <select value={v} onChange={e => set(e.target.value)} style={{ flex: 1, minWidth: 0, height: 32, padding: "0 8px", borderRadius: 10, fontSize: 12.5, fontWeight: 700,
+            border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)" }}>
+            {opts.map(([k, t]) => <option key={k || "none"} value={k}>{t}</option>)}</select>
+        </label>)}
+      <button type="button" data-tip="Les seuils « à commander » et « bientôt »" aria-label="Seuils" style={{ ...chip(thrOpen, "#64748b"), height: 32, padding: "0 9px" }}
+        onClick={() => setThrOpen(o => !o)}>⚙️</button>
     </div>
     {/* les seuils, en % d'une bobine pleine : l'effet se voit tout de suite dans la liste, « Enregistrer » le garde */}
     {thrOpen && <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px", borderRadius: 14, border: "1px solid var(--border)",
       background: "linear-gradient(135deg, rgba(234,88,12,0.10), transparent 70%), var(--surface2)" }}>
       {[["order", "À commander", "#ea580c", 0, 100, 5], ["soon", "Bientôt", "#d97706", 0, 300, 10]].map(([k, l, c, lo, hi, st]) =>
-        <label key={k} style={{ display: "grid", gridTemplateColumns: "minmax(110px, auto) 1fr auto", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 800, color: c }}>{l} sous</span>
+        <label key={k} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12.5, fontWeight: 800, color: c }}>{l} sous</span>
+            <span style={{ fontSize: 13, fontWeight: 900, color: "var(--text)" }}>{thr[k]} % d'une bobine</span>
+            <Muted size={11}>{fmtG(thr[k] * 10)} sur 1 kg</Muted></span>
           <input type="range" min={lo} max={hi} step={st} value={thr[k]} disabled={!isAdmin || visiting} style={{ accentColor: c, width: "100%" }}
             onChange={e => { const v = Number(e.target.value);
               setThr(t => k === "order" ? { order: v, soon: Math.max(t.soon, v) } : { order: Math.min(t.order, v), soon: v }); }}/>
-          <span style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", minWidth: 150, textAlign: "right" }}>
-            {thr[k]} % d'une bobine <Muted size={11}>({fmtG(thr[k] * 10)} sur 1 kg)</Muted></span>
         </label>)}
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <Muted size={11}>Épuisé : plus aucune bobine. Un filament marqué « à commander » sur sa fiche y est toujours.</Muted>
@@ -1544,16 +1555,20 @@ function FilamentStock() {
         {group && <button type="button" onClick={() => setShut(x => ({ ...x, [gr.k]: !x[gr.k] }))}
           style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 12, cursor: "pointer", border: "1px solid var(--border)",
             textAlign: "left", font: "inherit", background: "linear-gradient(135deg, rgba(245,158,11,0.14), transparent 70%), var(--surface)" }}>
-          <span style={{ fontSize: 12, color: "var(--muted)", width: 10 }}>{closed ? "▸" : "▾"}</span>
-          <span style={{ fontSize: 14.5, fontWeight: 900, color: "var(--text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{gr.k}</span>
-          {/* les couleurs du groupe, en petites pastilles */}
-          <span style={{ display: "inline-flex", gap: 2 }}>{gr.items.slice(0, 10).map(f => <span key={f.id} style={{ width: 10, height: 10, borderRadius: "50%",
-            border: "1px solid rgba(0,0,0,0.2)", ...colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type) }}/>)}</span>
-          <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap" }}>
-            {gr.items.length} fil. · {n} bob. · {fmtG(g)}</span>
-          {low > 0 && pill(`${low} à prévoir`, "#ea580c")}
+          <span style={{ fontSize: 12, color: "var(--muted)", width: 10, alignSelf: "flex-start", marginTop: 3 }}>{closed ? "▸" : "▾"}</span>
+          <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+              <span style={{ fontSize: 14.5, fontWeight: 900, color: "var(--text)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{gr.k}</span>
+              {low > 0 && pill(`${low} à prévoir`, "#ea580c")}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap" }}>
+                {gr.items.length} filament{gr.items.length > 1 ? "s" : ""} · {n} bobine{n > 1 ? "s" : ""} · {fmtG(g)}</span>
+              {/* les couleurs du groupe, en petites pastilles */}
+              <span style={{ display: "inline-flex", gap: 2, flexWrap: "wrap" }}>{gr.items.slice(0, 14).map(f => <span key={f.id} style={{ width: 10, height: 10, borderRadius: "50%",
+                border: "1px solid rgba(0,0,0,0.2)", ...colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type) }}/>)}</span></span>
+          </span>
         </button>}
-        {!closed && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 8 }}>{gr.items.map(row)}</div>}
+        {!closed && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))", gap: 8 }}>{gr.items.map(row)}</div>}
       </div>; })}
   </>;
 }
