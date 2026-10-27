@@ -1190,11 +1190,12 @@ function PerfSection() {
     <div className="card" style={card}>
       <p style={cardTitle}>Vitesse du serveur</p>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"-8px 0 12px", lineHeight:1.5 }}>
-        Le temps que met le serveur à répondre, route par route, depuis {since || "le démarrage"}. Les plus lentes d'abord :
-        c'est par elles qu'il faut commencer.</p>
+        Le temps que met le serveur à répondre, depuis {since || "le démarrage"}{d ? ` (${d.requests.toLocaleString("fr-FR")} appels)` : ""}.
+        En tête, l'ensemble ; dessous, les routes les plus lentes d'abord, chacune à son 95ᵉ centile.</p>
       {d && <>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
-          {[[d.requests.toLocaleString("fr-FR"), "appels", "var(--text)"], [slow, "plus lentes qu'attendu", slow ? "#f59e0b" : "#16a34a"],
+          {[[d.p95_all != null ? perfMs(d.p95_all) : "—", "95 % des appels en moins de", d.p95_all == null ? "var(--text)" : perfTone(d.p95_all, "")],
+            [slow, "plus lentes qu'attendu", slow ? "#f59e0b" : "#16a34a"],
             [bad, "bien trop lentes", bad ? "#ef4444" : "#16a34a"]].map(([n, l, c]) => (
             <span key={l} style={{ flex:"1 1 90px", padding:"7px 10px", borderRadius:12, background:"var(--surface2)" }}>
               <b style={{ display:"block", fontSize:18, fontWeight:900, color:c, lineHeight:1.1 }}>{n}</b>
@@ -1204,6 +1205,7 @@ function PerfSection() {
           return <div key={r.route} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", borderRadius:10, background:"var(--surface2)", marginBottom:4, fontSize:12.5 }}>
             <span style={{ width:8, height:8, borderRadius:"50%", flexShrink:0, background:perfTone(r.p95, r.route) }}/>
             <span style={{ flex:1, minWidth:0, fontWeight:700, color:"var(--text2)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{lb.title}</span>
+            <span style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)" }}>95 %</span>
             <b style={{ color:perfTone(r.p95, r.route) }}>{perfMs(r.p95)}</b></div>; })}
         <button onClick={() => { load(); setOpen(true); }} style={{ marginTop:8, padding:"8px 16px", borderRadius:10, border:"none", cursor:"pointer",
           fontSize:13, fontWeight:700, color:"#fff", background:"linear-gradient(135deg, #0EA5E9, #6366F1)" }}>⚡ Voir le détail</button>

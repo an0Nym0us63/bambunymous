@@ -133,7 +133,10 @@ def snapshot(limit: int = 60) -> dict:
                      **({k: round(s.get(k, 0.0) / s["n"], 1) for k in ("db_wait", "db_run", "db_back")} if s["n"] else {})})
     rows.sort(key=lambda r: -r["p95"])
     total = sum(s["n"] for s in _STATS.values())
+    # l'indicateur d'ensemble : 95 % des appels repondent en moins de… (sur les derniers de chaque route)
+    every = [v for st in _STATS.values() for v in st["recent"]]
     return {"since": _SINCE["t"], "requests": total, "routes": rows[:limit], "loop": _loop_view(),
+            "p50_all": round(_pct(every, .5), 1), "p95_all": round(_pct(every, .95), 1),
             "warmup_s": WARMUP_S, "warming": warming(), "warm_requests": sum(s.get("cold_n", 0) for s in _STATS.values())}
 
 

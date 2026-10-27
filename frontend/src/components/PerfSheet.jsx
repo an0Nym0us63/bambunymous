@@ -200,7 +200,8 @@ export default function PerfSheet({ data, onClose, onReset, onReload }) {
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 8, marginTop: 14 }}>
-          {[[all.length, "routes", "var(--text)"], [slow.length, "plus lentes qu'attendu", slow.length ? "#f59e0b" : "#16a34a"],
+          {[[data?.p95_all != null ? perfMs(data.p95_all) : all.length, data?.p95_all != null ? "95 % des appels en moins de" : "routes",
+              data?.p95_all != null ? perfTone(data.p95_all, "") : "var(--text)"], [slow.length, "plus lentes qu'attendu", slow.length ? "#f59e0b" : "#16a34a"],
             [all.filter(perfBad).length, "bien trop lentes", all.some(perfBad) ? "#ef4444" : "#16a34a"]].map(([n, l, c]) => (
             <div key={l} style={{ padding: "8px 10px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
               <div style={{ fontSize: 20, fontWeight: 900, color: c, lineHeight: 1.1 }}>{n}</div>
@@ -227,7 +228,7 @@ export default function PerfSheet({ data, onClose, onReset, onReload }) {
               display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
                 <span style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lb.title}</span>
-                <span style={{ fontSize: 15, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{perfMs(r.p95)}</span>
+                <span style={{ fontSize: 15, fontWeight: 900, color: c, whiteSpace: "nowrap" }}><span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>95 % </span>{perfMs(r.p95)}</span>
               </div>
               {/* la barre : mediane pleine, 95 % en trait, le pire en point */}
               <div style={{ position: "relative", height: 8, borderRadius: 6, background: "var(--surface2)" }}>

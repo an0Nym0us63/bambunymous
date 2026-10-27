@@ -759,30 +759,36 @@ async def list_dismissed(db) -> list[dict]:
 # (4 ms seules). Le resultat de chaque verification est garde tant que rien n'a ete ecrit dans les tables dont
 # elles dependent (compteurs de db/session.py), et 60 s au plus (les delais qui avancent seuls : sechage,
 # « sans metadonnees » apres 30 min). Le tirage au hasard, lui, se refait a chaque appel.
-_DEPENDS = ("bobines", "filaments", "prints", "filament_usage", "attention_dismissals", "settings")
+# Les tables dont depend chaque verification (27/10/2026) : pas la table des reglages, que l'accueil ecrit a chaque
+# chargement (surprise, fetes) et qui effacait tout ; une impression en cours ne relance que celles des impressions.
+_PRINT_DEPS = ("prints", "filament_usage")
+_STOCK_DEPS = ("bobines", "filaments")
 CACHE_S = 60
-_CHECKS_CACHE = {"key": None, "at": 0.0, "res": None}
-_CHECKS_LOCK = asyncio.Lock()
+_CHECKS_CACHE: dict = {}          # fonction -> (cle, instant, resultat)
+
+
+def _check_key(fn):
+    import json as _j
+    from ..db.session import data_version
+    if fn.__name__.startswith("_prints_"):
+        return data_version(*_PRINT_DEPS)
+    # les delais de sechage vivent dans les reglages : leur valeur fait partie de la cle
+    return data_version(*_STOCK_DEPS) + (_j.dumps(_drying.current(), sort_keys=True, default=str),)
 
 
 async def _run_check(db, fn):
-    """Une verification, depuis la memoire si rien n'a change."""
+    """Une verification, depuis la memoire si ses tables n'ont pas change (60 s au plus)."""
     import time as _t
-    from ..db.session import data_version
-    key = data_version(*_DEPENDS)
-    c = _CHECKS_CACHE
-    if c["key"] != key or _t.monotonic() - c["at"] > CACHE_S:
-        async with _CHECKS_LOCK:
-            key = data_version(*_DEPENDS)
-            if c["key"] != key or _t.monotonic() - c["at"] > CACHE_S:
-                c.update(key=key, at=_t.monotonic(), res={})
-    res = c["res"]
-    if fn not in res:
-        try:
-            res[fn] = ("ok", await fn(db))
-        except Exception as e:
-            return ("err", e)
-    return res[fn]
+    key = _check_key(fn)
+    hit = _CHECKS_CACHE.get(fn)
+    if hit and hit[0] == key and _t.monotonic() - hit[1] <= CACHE_S:
+        return hit[2]
+    try:
+        res = ("ok", await fn(db))
+    except Exception as e:
+        return ("err", e)
+    _CHECKS_CACHE[fn] = (key, _t.monotonic(), res)    # la cle d'AVANT le calcul : une ecriture pendant le relancera
+    return res
 
 
 async def build_attention(db, per_category: int = 3) -> tuple[list[dict], list[dict]]:
