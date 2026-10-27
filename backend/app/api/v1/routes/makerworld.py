@@ -763,10 +763,10 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
         origin = _ext_by_name(z)
     h6 = lambda c: str(c or "").lstrip("#")[:6].upper()
     async with AsyncSessionLocal() as db:
-        prints = (await db.execute(select(Print.id, Print.mw_profile_id, Print.mw_plates, Print.model_3mf)
+        prints = (await db.execute(select(Print.id, Print.mw_profile_id, Print.mw_plates, Print.model_3mf, Print.plate_id)
                                    .where(Print.id.in_(print_ids)).order_by(Print.id.desc()))).all()
         rows = (await db.execute(
-            select(FU.print_id, FU.ams_slot, FU.color_hex, Filament.color)
+            select(FU.print_id, FU.ams_slot, FU.color_hex, Filament.color, FU.grams_used)
             .outerjoin(Spool, Spool.id == FU.spool_id).outerjoin(Filament, Filament.id == Spool.filament_id)
             .where(FU.print_id.in_(print_ids)))).all()
         raw = (await db.execute(select(MW.profiles).where(MW.design_id == did))).scalar() if did else None
@@ -778,12 +778,29 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
     norm = lambda v: by_inst.get(str(v), str(v)) if v else ""
     want = norm(prof)
     used_by: dict = {}
-    for pid, slot, chex, fcol in rows:
+    grams_by: dict = {}
+    for pid, slot, chex, fcol, g in rows:
         if slot:
             used_by.setdefault(pid, {})[int(slot)] = h6(fcol or chex)
+            grams_by.setdefault(pid, {})[int(slot)] = float(g or 0)
+    # le poids de chaque filament sur chaque plateau du profil d'origine (fiche MakerWorld en cache) : quand le projet
+    # imprime a renumerote ses filaments sans garder le nom des pieces, le plus lourd va avec le plus lourd
+    plate_fils: dict = {}
+    try:
+        from ....services.makerworld import _base
+        base = await _base(did, True) if did else {}
+        for p in (base.get("profiles") or []) if isinstance(base, dict) else []:
+            if not want or want in (str(p.get("profile_id")), str(p.get("instance_id"))):
+                for pl in p.get("plates") or []:
+                    fl = [(h6(f.get("color")), float(f.get("g") or 0)) for f in pl.get("filaments") or [] if f.get("color")]
+                    plate_fils[int(pl.get("index") or 0)] = [x for x in fl if x[1] > 0 and len(x[0]) == 6]
+                if want:
+                    break
+    except Exception:
+        plate_fils = {}
     out: dict = {}
     detail: list = []
-    for pid, mwp, mwpl, m3 in prints:
+    for pid, mwp, mwpl, m3, plate_id in prints:
         pp = norm(_profile(mwp, mwpl))
         if want and pp and pp != want:
             continue                                  # une impression d'un autre profil du modele
@@ -800,6 +817,22 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
             except (OSError, zipfile.BadZipFile):
                 emap = {}
         same_count = n_sliced is None or n_sliced == len(colors)
+        if not emap:
+            # par le poids : les filaments du plateau d'origine et ceux de l'impression, classes du plus lourd au plus leger
+            try:
+                pn = int(((_json.loads(mwpl) or {}).get("plates") or [None])[0] if mwpl else plate_id or 1)
+            except (TypeError, ValueError, AttributeError):
+                pn = 1
+            fo = sorted(plate_fils.get(pn) or [], key=lambda x: -x[1])
+            fu = sorted(((k, g) for k, g in (grams_by.get(pid) or {}).items() if g > 0), key=lambda x: -x[1])
+            if fo and fu and len(fo) == len(fu):
+                for (a, _ga), (es, _gu) in zip(fo, fu):
+                    b = used.get(es)
+                    e = next((k + 1 for k, c in enumerate(colors) if h6(c) == a), None)
+                    if b and a not in out:
+                        out[a] = b
+                        detail.append({"from": a, "to": b, "e": e, "es": es, "how": "poids", "print": pid})
+                continue
         for e in range(1, len(colors) + 1):
             if e in emap:
                 es, how = emap[e], "pièces"

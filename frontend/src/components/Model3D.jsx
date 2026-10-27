@@ -253,7 +253,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {meta.used_detail.map(x => {
             const sw = c => <span style={{ width: 14, height: 14, borderRadius: "50%", display: "inline-block", border: "1px solid var(--border)",
               background: c ? `#${c}` : "repeating-linear-gradient(45deg, var(--surface2) 0 3px, var(--border) 3px 6px)" }}/>;
-            const tip = x.to ? `Filament n°${x.e} du projet → n°${x.es} de l'impression (${x.how === "pièces" ? "trouvé par les pièces de même nom" : "par son numéro"})`
+            const tip = x.to ? `Filament n°${x.e} du projet → n°${x.es} de l'impression (${x.how === "pièces" ? "trouvé par les pièces de même nom" : x.how === "poids" ? "trouvé par le poids sur le plateau" : "par son numéro"})`
               : `Filament n°${x.e} : aucune de ces impressions ne l'a utilisé`;
             return <span key={`${x.from}-${x.e}`} data-tip={tip} style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 7px",
               borderRadius: 12, background: "var(--surface2)" }}>{sw(x.from)}<span>→</span>{sw(x.to)}</span>;
