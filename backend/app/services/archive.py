@@ -530,7 +530,7 @@ def _desc_sync(root: Path, mws: dict, docs_plan: dict, rep: dict) -> dict:
         if getattr(m, "status", None) != "ok":
             continue
         x = extras_of(getattr(m, "extras", None))
-        if not (x.get("description") or x.get("docs") or x.get("parts")):
+        if not (x.get("description") or x.get("docs") or x.get("parts") or x.get("filaments")):
             continue
         title = _two(m.title_fr, m.title) if (m.title_fr or m.title) else f"Modèle {did}"
         rel = f"{LIB}/{title}/Descriptif.txt"
@@ -576,6 +576,17 @@ def _extras_txt(m, docs_plan: dict, indent: str = "") -> str:
         lines += [f"{indent}Documents :"] + [
             f"{indent}  - {D.KIND_LABEL.get(d.get('kind'), 'Document')}{' (profil ' + d['profile'] + ')' if d.get('profile') else ''} : "
             f"{d.get('name')}{'  →  ' + rel if rel else '  →  ' + d.get('url', '')}" for d, rel in docs]
+    fils = x.get("filaments") or []
+    if fils:
+        from .mw_docs import _split_title, _catalog
+        cat = _catalog()
+        lines += [f"{indent}Filaments recommandés :"]
+        for f in fils:
+            code = (f.get("codes") or [None])[0]
+            color, variant, size = _split_title(f.get("title"))
+            color = (cat.get(code) or {}).get("name_fr") or color
+            what = " · ".join(filter(None, [f.get("product"), f"{color} ({code})" if code else color, variant, size]))
+            lines.append(f"{indent}  - {f.get('quantity') or 1} × {what}{'  (' + f['url'] + ')' if f.get('url') else ''}")
     parts, other = x.get("parts") or [], x.get("other_parts")
     if parts or other:
         lines += [f"{indent}À prévoir :"] + [

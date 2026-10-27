@@ -7,8 +7,33 @@ import { currentFriend } from "../store/friend";
 // sinon, et chez un copain, chez MakerWorld.
 const KIND = { guide: ["📘", "#3B82F6"], bom: ["📋", "#8B5CF6"], other: ["📄", "#0EA5E9"] };
 
-export default function MwDocs({ docs = [], parts = [], otherParts = null, style }) {
-  if (!docs.length && !parts.length && !otherParts) return null;
+// les filaments recommandes par le createur, face a mon stock (meme code couleur Bambu)
+const kg = g => g >= 1000 ? `${(g / 1000).toFixed(1).replace(".", ",")} kg` : `${Math.round(g)} g`;
+function FilaLine({ f }) {
+  const s = f.stock, has = s && s.spools > 0;
+  const hex = f.hex ? `#${String(f.hex).replace("#", "").slice(0, 6)}` : "#94a3b8";
+  return <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+    <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: "50%", background: `radial-gradient(circle at 35% 30%, color-mix(in srgb, ${hex} 55%, #ffffff), ${hex})`,
+      boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.18)" }}/>
+    <span style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, lineHeight: 1.25 }}>
+      <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {f.quantity > 1 ? `${f.quantity} × ` : ""}{f.product} · {f.color}{f.code ? ` (${f.code})` : ""}</span>
+      <span style={{ fontSize: 10.5, fontWeight: 600, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {[f.variant, f.size].filter(Boolean).join(" · ")}</span>
+    </span>
+    {has
+      ? <span data-tip={`${s.name} : ${s.spools} bobine${s.spools > 1 ? "s" : ""} en stock, ${kg(s.grams)} restants`} style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 800,
+          padding: "2px 8px", borderRadius: 20, color: "#fff", background: "linear-gradient(135deg, #22C55E, #16A34A)", whiteSpace: "nowrap" }}>
+          ✓ {s.spools} · {kg(s.grams)}</span>
+      : <span data-tip={s ? "Au catalogue, mais plus de bobine" : "Pas dans ton stock"} style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 800, padding: "2px 8px",
+          borderRadius: 20, color: "#fff", background: "linear-gradient(135deg, #F59E0B, #EA580C)", whiteSpace: "nowrap" }}>à commander</span>}
+    {f.url && <a href={f.url} target="_blank" rel="noopener noreferrer" data-tip="Dans la boutique Bambu Lab"
+      style={{ flexShrink: 0, fontSize: 11, fontWeight: 800, color: "#3b82f6", textDecoration: "none" }}>↗</a>}
+  </div>;
+}
+
+export default function MwDocs({ docs = [], parts = [], otherParts = null, filaments = [], style }) {
+  if (!docs.length && !parts.length && !otherParts && !filaments.length) return null;
   const friend = !!currentFriend();
   const head = t => <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>{t}</div>;
   return (
@@ -31,6 +56,10 @@ export default function MwDocs({ docs = [], parts = [], otherParts = null, style
               <span style={{ flexShrink: 0, color: "var(--muted)", fontSize: 11 }}>↗</span>
             </a>; })}
         </div>
+      </div>}
+      {filaments.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {head(`Filaments recommandés (${filaments.length})`)}
+        {filaments.map((f, i) => <FilaLine key={i} f={f}/>)}
       </div>}
       {(parts.length > 0 || otherParts) && <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
         {head("À prévoir")}

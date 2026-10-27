@@ -124,7 +124,7 @@ def _parse_design(code, d) -> dict:
     }
 
 
-EXTRAS_V = 2
+EXTRAS_V = 3          # 2 : le descriptif ; 3 : les filaments recommandes (27/10/2026)
 
 
 def extras_stale(raw) -> bool:
@@ -166,7 +166,22 @@ def _extras(d) -> str:
             for x in lst(mi.get(k_prof)):
                 add(kind, x, str(i.get("profileId") or "") or None, i.get("title") if isinstance(i.get("title"), str) else None)
     parts = []
-    for b in lst(ext.get("boms")):
+    # les filaments recommandes par le createur (« pack pret a assembler ») : produit, variante, code couleur
+    fils = []
+    for b in lst(ext.get("boms_of_filaments")):
+        if not isinstance(b, dict):
+            continue
+        codes = [str(c) for c in lst(b.get("filamentCodes")) if str(c).strip().isdigit()]
+        t = b.get("displayTitle") or b.get("title")
+        if not codes and not (isinstance(t, str) and t.strip()):
+            continue
+        q = b.get("quantity")
+        fils.append({"product": (b.get("displayParentTitle") or b.get("parentTitle") or "")[:120] if isinstance(b.get("parentTitle") or "", str) else "",
+                     "title": t.strip()[:200] if isinstance(t, str) else "", "codes": codes,
+                     "quantity": q if isinstance(q, int) and q > 0 else 1,
+                     "url": b.get("url") if isinstance(b.get("url"), str) and b["url"].startswith("http") else None,
+                     "image": b.get("image") if isinstance(b.get("image"), str) and b["image"].startswith("http") else None})
+    for b in lst(ext.get("boms")) + lst(ext.get("boms_of_materials")):
         if not isinstance(b, dict):
             continue
         t = b.get("displayTitle") or b.get("title") or b.get("parentTitle")
@@ -193,6 +208,8 @@ def _extras(d) -> str:
         out["docs"] = docs
     if parts:
         out["parts"] = parts
+    if fils:
+        out["filaments"] = fils
     if isinstance(other, str) and other.strip():
         out["other_parts"] = other.strip()[:2000]
     return json.dumps(out, ensure_ascii=False)
@@ -853,8 +870,9 @@ async def model_detail(design_id: str, stale_ok: bool = False) -> dict:
     for r in done:
         for k in plate_keys(r[2], r[3], r[4]):
             counts[norm(k)] = counts.get(norm(k), 0) + 1
-    from .mw_docs import view as _docs
-    return {**base, "docs": _docs(did, base.get("docs") or []), "stock": stock, "printer": printer,
+    from .mw_docs import view as _docs, filaments_view as _fils
+    return {**base, "docs": _docs(did, base.get("docs") or []), "filaments": await _fils(base.get("filaments") or []),
+            "stock": stock, "printer": printer,
             "profiles": rank_profiles(profs, printer), "title_fr": base.get("title_mw_fr") or (m.title_fr if m else None),
             "printed": len(done), "in_progress": sum(1 for r in rows if r[1] == "IN_PROGRESS"),
             "printed_plates": sorted(counts), "printed_plate_counts": counts,

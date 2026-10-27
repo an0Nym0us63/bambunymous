@@ -1445,7 +1445,13 @@ async def _makerworld_for(design_id) -> dict:
         if m is None:
             _mw_launch(did)
             return {"makerworld": None, "status": "pending"}
-        return {"makerworld": _mw_dict(m), "status": m.status}
+        d = _mw_dict(m)
+        if d is not None:
+            # les filaments recommandes par le createur, face a mon stock (lu a chaque fois : le stock bouge)
+            from ....services.makerworld import extras_of as _ex
+            from ....services.mw_docs import filaments_view as _fv
+            d["filaments"] = await _fv(_ex(m.extras).get("filaments") or [])
+        return {"makerworld": d, "status": m.status}
     except Exception:
         logging.getLogger(__name__).exception("[MW] fiche du modele")
         return {"makerworld": None, "status": "error"}

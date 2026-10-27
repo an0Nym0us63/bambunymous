@@ -224,6 +224,89 @@ def stop_backfill() -> None:
     _STOP["flag"] = True
 
 
+# ── Les filaments recommandes, face au stock (27/10/2026) ──
+_CAT = {"mt": None, "v": {}}
+VARIANT_FR = {"refill": "Recharge", "filament with spool": "Filament avec bobine", "with spool": "Avec bobine"}
+
+
+def _catalog() -> dict:
+    """Le nuancier Bambu de l'appli, par code couleur : {code: {name_fr, hex, type}} (relu s'il a change)."""
+    import json
+    from ..core.config import settings
+    p = Path(settings.DATA_DIR) / "bambu_catalog" / "filaments_color_codes.json"
+    try:
+        mt = p.stat().st_mtime
+    except OSError:
+        return {}
+    if _CAT["mt"] != mt:
+        out, en_fr = {}, {}
+        try:
+            data = json.loads(p.read_text(encoding="utf-8")).get("data", [])
+        except (OSError, ValueError):
+            data = []
+        for e in data:
+            n = e.get("fila_color_name") or {}
+            if n.get("en") and n.get("fr"):
+                en_fr[n["en"]] = n["fr"]
+        for e in data:
+            code = str(e.get("fila_color_code") or "").strip()
+            if not code or code in out:
+                continue
+            n = e.get("fila_color_name") or {}
+            cols = e.get("fila_color") or []
+            out[code] = {"name_fr": n.get("fr") or en_fr.get(n.get("en", "")) or n.get("en") or "",
+                         "hex": cols[0].lstrip("#")[:6] if cols else None, "type": e.get("fila_type") or ""}
+        _CAT.update(mt=mt, v=out)
+    return _CAT["v"]
+
+
+def _split_title(title: str) -> tuple:
+    """« Silver (13109) / Filament with spool / 1 kg » -> (« Silver », « Filament avec bobine », « 1 kg »)."""
+    parts = [x.strip() for x in str(title or "").split("/")]
+    color = re.sub(r"\s*\(\d+\)\s*$", "", parts[0]) if parts else ""
+    variant = VARIANT_FR.get(parts[1].lower(), parts[1]) if len(parts) > 1 else ""
+    size = parts[2].replace("1kg", "1 kg") if len(parts) > 2 else ""
+    return color, variant, size
+
+
+async def filaments_view(fils: list) -> list:
+    """Les filaments recommandes d'un modele, en francais (nuancier Bambu), avec ce que j'en ai en stock :
+    les filaments de meme code couleur, leurs bobines actives et ce qu'il en reste."""
+    from sqlalchemy import select, func
+    from ..db.session import AsyncSessionLocal
+    from ..models.filament import Filament, Spool
+    fils = [f for f in fils or [] if isinstance(f, dict)]
+    if not fils:
+        return []
+    codes = sorted({c for f in fils for c in f.get("codes") or []})
+    stock: dict = {}
+    if codes:
+        async with AsyncSessionLocal() as db:
+            rows = (await db.execute(
+                select(Filament.id, Filament.fila_color_code, Filament.translated_name, Filament.name, Filament.color,
+                       func.count(Spool.id), func.coalesce(func.sum(Spool.remaining_weight_g), 0))
+                .outerjoin(Spool, (Spool.filament_id == Filament.id) & Spool.archived.is_(False))
+                .where(Filament.fila_color_code.in_(codes)).group_by(Filament.id))).all()
+        for fid, code, tr, nm, col, n, g in rows:
+            e = stock.setdefault(str(code), {"filament_id": fid, "name": tr or nm, "color": col, "spools": 0, "grams": 0.0})
+            e["spools"] += int(n or 0)
+            e["grams"] += float(g or 0)
+            if n and not e.get("_has"):                  # le filament qui a des bobines passe devant
+                e.update(filament_id=fid, name=tr or nm, color=col, _has=True)
+    cat = await asyncio.to_thread(_catalog)
+    out = []
+    for f in fils:
+        code = (f.get("codes") or [None])[0]
+        color, variant, size = _split_title(f.get("title"))
+        c = cat.get(code) if code else None
+        s = stock.get(code) if code else None
+        out.append({"product": f.get("product"), "color": (c or {}).get("name_fr") or color, "code": code,
+                    "variant": variant, "size": size, "quantity": f.get("quantity") or 1, "url": f.get("url"),
+                    "image": f.get("image"), "hex": (s or {}).get("color") or (c or {}).get("hex"),
+                    "stock": {k: v for k, v in s.items() if not k.startswith("_")} if s else None})
+    return out
+
+
 async def find(did: str, docid: str):
     """(document, chemin garde ou None) d'apres la fiche gardee."""
     from ..db.session import AsyncSessionLocal

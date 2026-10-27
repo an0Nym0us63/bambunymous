@@ -618,7 +618,7 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
         <span style={{ fontSize:11, color:"var(--muted)", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s", flexShrink:0 }}>▶</span>
       </div>
       {/* ses documents joints et ce qu'il faut prevoir : visibles meme replie */}
-      <MwDocs docs={mw.docs || []} parts={mw.parts || []} otherParts={mw.other_parts} style={{ padding:"0 12px 10px" }}/>
+      <MwDocs docs={mw.docs || []} parts={mw.parts || []} otherParts={mw.other_parts} filaments={mw.filaments || []} style={{ padding:"0 12px 10px" }}/>
       {open && <>
       <a href={url} onClick={e => { e.preventDefault(); setSheet(designId); }} onPointerDown={() => prefetchModel(designId)}
         style={{ display:"flex", gap:10, padding:"0 12px 10px", textDecoration:"none", color:"var(--text)", cursor:"pointer" }}>
