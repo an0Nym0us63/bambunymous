@@ -644,7 +644,22 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, _: s
     if ms > 1500:
         logger.info(f"[3D] {did} (profil {prof or '?'}) prepare en {ms} ms ({source})")
     ext = "glb" if meta.get("glb") else "bin"
-    return {"source": source, "profile": prof or None, "ms": ms,
+    # le nom du profil montre, pour l'en-tete de la vue (lu en base : rien a demander a MakerWorld)
+    ptitle = None
+    if prof:
+        try:
+            import json as _json
+            from sqlalchemy import select
+            from ....db.session import AsyncSessionLocal
+            from ....models.print_history import MakerWorldDesign as _MW
+            async with AsyncSessionLocal() as db:
+                raw = (await db.execute(select(_MW.profiles).where(_MW.design_id == did))).scalar()
+            profs = _json.loads(raw) if raw else []
+            hit = next((p for p in profs if prof in (str(p.get("profile_id")), str(p.get("instance_id")))), None)
+            ptitle = (hit or {}).get("title") or None
+        except Exception:
+            pass
+    return {"source": source, "profile": prof or None, "profile_title": ptitle, "ms": ms,
             "plates": [{**p, "url": f"/api/v1/makerworld/3d/file/{key}/plate_{p['n']}.{ext}"}
                        for p in meta["plates"] if not p.get("skipped")],
             "skipped": [p["n"] for p in meta["plates"] if p.get("skipped")]}

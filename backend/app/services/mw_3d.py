@@ -28,6 +28,8 @@ _VERTEX = re.compile(rb'<vertex\s+x="' + _NUM.encode() + rb'"\s+y="' + _NUM.enco
 _TRI = re.compile(rb'<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"')
 _TRI_PAINT = re.compile(rb'<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"([^>]*)>')
 _PAINT = re.compile(rb'paint_color="([0-9A-F]+)"')
+_XYZ = re.compile(rb'\s[xyz]="([^"]+)"')
+_V123 = re.compile(rb'\sv[123]="(\d+)"')
 _NOT_SHOWN = {"modifier_part", "negative_part", "support_blocker", "support_enforcer"}
 
 
@@ -64,33 +66,65 @@ def _mul(a: list, b: list) -> list:
     return out
 
 
-def _objects(xml: str) -> dict:
-    """Les objets d'un fichier .model : id -> {"mesh": (debut, fin) dans le texte, ou "components": [...], "pid"}."""
+def _objects(xml) -> dict:
+    """Les objets d'un fichier .model : id -> {"mesh": son maillage (octets), ou "components": [...], "pid"}.
+    Decoupe par recherche de balises, sans expression sur tout le texte (des dizaines de Mo : 27/10/2026)."""
+    b = xml.encode() if isinstance(xml, str) else xml
     out = {}
-    for m in re.finditer(r"<object\b([^>]*)>(.*?)</object>", xml, re.S):
-        head, body = m.group(1), m.group(2)
+    pos = 0
+    while True:
+        i = b.find(b"<object", pos)
+        if i < 0:
+            break
+        j = b.find(b">", i)
+        if j < 0:
+            break
+        if b[i + 7:i + 8] not in (b" ", b"\t", b"\n", b"\r", b">", b"/"):
+            pos = i + 7                                    # <objects…> : pas un objet
+            continue
+        head = b[i + 7:j].decode("utf-8", "replace")
+        if head.endswith("/"):
+            body, pos = b"", j + 1
+        else:
+            k = b.find(b"</object>", j)
+            if k < 0:
+                break
+            body, pos = b[j + 1:k], k + 9
         oid = _attr(head, "id")
         if oid is None:
             continue
         o = {"pid": _attr(head, "pid"), "type": _attr(head, "type")}
-        if "<mesh" in body:
+        if b"<mesh" in body:
             o["mesh"] = body
         comps = []
-        for c in re.finditer(r"<component\b([^>]*)/?>", body):
-            comps.append({"path": _attr(c.group(1), "p:path"), "objectid": _attr(c.group(1), "objectid"),
-                          "transform": _matrix(_attr(c.group(1), "transform"))})
+        if b"<component" in body:
+            for c in re.finditer(rb"<component\b([^>]*)/?>", body):
+                h = c.group(1).decode("utf-8", "replace")
+                comps.append({"path": _attr(h, "p:path"), "objectid": _attr(h, "objectid"),
+                              "transform": _matrix(_attr(h, "transform"))})
         if comps:
             o["components"] = comps
         out[oid] = o
     return out
 
 
+def _vals(blk: bytes, tag: bytes, rx) -> list:
+    """Les valeurs des attributs d'un bloc de balises, a plat. Quand chaque balise n'a que ses trois attributs
+    (le cas de Bambu Studio), un simple decoupage aux guillemets ; sinon l'expression, qui ne prend que les bons."""
+    if blk.count(b'="') == 3 * blk.count(tag):
+        return blk.split(b'"')[1::2]
+    return rx.findall(blk)
+
+
 def _mesh(body: str):
     """(sommets [x,y,z...], triangles [i,j,k...], peinture {numero de triangle: code}) d'un maillage."""
     b = body.encode() if isinstance(body, str) else body
-    verts = [float(x) for t in _VERTEX.findall(b) for x in t]
+    # les valeurs a plat, dans l'ordre (x, y, z ; v1, v2, v3) : une liste convertie d'un coup, sans tuples
+    vs, ve = b.find(b"<vertices"), b.find(b"</vertices>")
+    verts = list(map(float, _vals(b[vs:ve], b"<vertex ", _XYZ))) if vs >= 0 and ve > vs else []
     if b"paint_color" not in b:
-        return verts, [int(x) for t in _TRI.findall(b) for x in t], {}
+        ts, te = b.find(b"<triangles"), b.find(b"</triangles>")
+        return verts, (list(map(int, _vals(b[ts:te], b"<triangle ", _V123))) if ts >= 0 and te > ts else []), {}
     tris, paint = [], {}
     for k, (i, j, l, rest) in enumerate(_TRI_PAINT.findall(b)):
         tris += (int(i), int(j), int(l))
@@ -222,7 +256,7 @@ def convert(src: Path, out_dir: Path) -> dict:
         if not p:
             return root_objs
         if p not in files:
-            files[p] = _objects(z.read(p).decode("utf-8", "replace")) if p in names else {}
+            files[p] = _objects(z.read(p)) if p in names else {}
         return files[p]
     colors = _colors_of(z)
     plates, settings = _settings(z)
@@ -271,9 +305,15 @@ def convert(src: Path, out_dir: Path) -> dict:
                     break
                 a, b, c, d, e, f, h, i_, j, tx, ty, tz = mt
                 xs, ys, zs = v[0::3], v[1::3], v[2::3]
-                nx = [x * a + y * d + z_ * h + tx for x, y, z_ in zip(xs, ys, zs)]
-                ny = [x * b + y * e + z_ * i_ + ty for x, y, z_ in zip(xs, ys, zs)]
-                nz = [x * c + y * f + z_ * j + tz for x, y, z_ in zip(xs, ys, zs)]
+                if (a, b, c, d, e, f, h, i_, j) == (1, 0, 0, 0, 1, 0, 0, 0, 1):
+                    # une simple translation (le cas courant) : sans multiplications
+                    nx = [x + tx for x in xs]
+                    ny = [y + ty for y in ys]
+                    nz = [z_ + tz for z_ in zs]
+                else:
+                    nx = [x * a + y * d + z_ * h + tx for x, y, z_ in zip(xs, ys, zs)]
+                    ny = [x * b + y * e + z_ * i_ + ty for x, y, z_ in zip(xs, ys, zs)]
+                    nz = [x * c + y * f + z_ * j + tz for x, y, z_ in zip(xs, ys, zs)]
                 out_v = [0.0] * (len(nx) * 3)
                 out_v[0::3], out_v[1::3], out_v[2::3] = nx, ny, nz
                 for ex, tt in by_ext.items():
@@ -411,7 +451,7 @@ async def prepare(iid: str) -> None:
         await asyncio.to_thread(from_3mf, src, src.stem)
 
 
-async def warm_loop(first_delay_s: int = 600, period_s: int = 12 * 3600) -> None:
+async def warm_loop(first_delay_s: int = 90, period_s: int = 12 * 3600) -> None:
     """Les 3MF d'origine deja gardes, convertis un a un (quelques secondes entre deux), puis a chaque passage
     ceux qui manquent : la premiere ouverture d'une vue 3D n'a plus a attendre."""
     import asyncio
@@ -419,7 +459,8 @@ async def warm_loop(first_delay_s: int = 600, period_s: int = 12 * 3600) -> None
     await asyncio.sleep(first_delay_s)
     while True:
         try:
-            files = sorted(_dir().glob("*.3mf"))
+            # les plus recents d'abord (ceux qu'on a le plus de chances d'ouvrir)
+            files = sorted(_dir().glob("*.3mf"), key=lambda f: f.stat().st_mtime, reverse=True)
             done = 0
             for f in files:
                 if not ready(f, f.stem):
