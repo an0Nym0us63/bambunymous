@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import CardHelp from "./CardHelp";
 import client from "../api/client";
 import { showAlert } from "../utils/dialog";
 
@@ -55,10 +56,10 @@ export default function DryRulesCard({ card, cardTitle }) {
   return (
     <div className="card" style={card}>
       <div style={cardTitle}>Délais de séchage</div>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px", lineHeight:1.5 }}>
+      <CardHelp title="Délais de séchage">
         Au-delà, une bobine passe « à sécher ». Les cas déclarés s'appliquent ;
         tout le reste prend la valeur par défaut. Une sous-famille l'emporte sur sa famille.
-      </p>
+      </CardHelp>
 
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:10 }}>
         <span style={{ fontSize:13, color:"var(--text2)", fontWeight:600 }}>Par défaut</span>

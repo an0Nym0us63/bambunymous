@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import CardHelp from "./CardHelp";
 import client from "../api/client";
 import { CreatorPicker } from "./MakerWorldView";
 import MwImg from "./MwImg";
@@ -134,11 +135,12 @@ export default function NotificationsSettings() {
   const channelCard = (kind, title, intro, body) => (
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px", display:"flex", alignItems:"center", gap:10 }}>
-        <span style={{ flex:1 }}>{title}</span>
+        {/* l'interrupteur occupe l'angle : le « ? » de l'explication suit le titre */}
+        <span style={{ flex:1, display:"flex", alignItems:"center" }}>{title}<CardHelp inline title={title}>{intro}</CardHelp></span>
         <span style={{ fontSize:11, fontWeight:700, color: on[kind] ? "#22c55e" : "var(--muted)" }}>{on[kind] ? "activé" : "désactivé"}</span>
         <Switch on={!!on[kind]} onChange={v => setKind(kind, v)} disabled={busy === `ch_${kind}`}/>
       </h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin: on[kind] ? "0 0 12px" : 0, lineHeight:1.5 }}>{intro}</p>
+      {on[kind] && <div style={{ height: 8 }}/>}
       {on[kind] && body}
       <Msg k={`ch_${kind}`}/>
     </div>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import CardHelp from "./CardHelp";
 import client from "../api/client";
 
 // Parametres > Taches (27/10/2026) : les taches de fond du serveur (ce qui tourne, quand ca repasse, la derniere
@@ -64,9 +65,9 @@ export default function TasksPanel() {
     <div className="card" style={{ padding: "16px 20px" }}>
       <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 900, background: "linear-gradient(135deg, #0EA5E9, #6366F1)",
         WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>Tâches du serveur</h3>
-      <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>
+      <CardHelp title="Tâches du serveur">
         Ce que le serveur fait en fond : chaque tâche dit si elle travaille ou attend son prochain passage, quand elle est
-        passée pour la dernière fois et sa dernière erreur. Les compteurs repartent à zéro à chaque redémarrage.</p>
+        passée pour la dernière fois et sa dernière erreur. Les compteurs repartent à zéro à chaque redémarrage.</CardHelp>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {[[busy, "en cours", "#0EA5E9"], [d.loops.length - bad, "tâches actives", "#22C55E"], [errs, "avec une erreur", errs ? "#F59E0B" : "#22C55E"],
           [bad, "arrêtées ou déconnectées", bad ? "#EF4444" : "#22C55E"]].map(([n, l, c]) => (

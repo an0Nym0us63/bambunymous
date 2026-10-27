@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import CardHelp from "./CardHelp";
 import { Download } from "lucide-react";
 import { pushApi } from "./PushBridge";
 
@@ -17,9 +18,9 @@ export default function AndroidApp({ card, cardTitle }) {
       {window.BambuScan && (
         <div className="card" style={card}>
           <div style={cardTitle}>Réglages de l'appli</div>
-          <p style={{ fontSize:12.5, color:"var(--muted)", margin:"0 0 12px", lineHeight:1.5 }}>
+          <CardHelp title="Réglages de l'appli">
             L'adresse de BambuNymous et le jeton RFID sont gardés par l'appli Android. Tu peux les modifier ici.
-          </p>
+          </CardHelp>
           {native?.url && (
             <p style={{ fontSize:12, color:"var(--text2)", margin:"0 0 12px",
               fontFamily:"JetBrains Mono, monospace", wordBreak:"break-all" }}>

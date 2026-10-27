@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import CardHelp from "./CardHelp";
 import client from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 
@@ -79,10 +80,10 @@ export default function TelegramSettings({ card, cardTitle }) {
   return (
     <div className="card" style={card}>
       <div style={cardTitle}>Partage Telegram</div>
-      <p style={{ fontSize:12.5, color:"var(--muted)", margin:"0 0 12px", lineHeight:1.5 }}>
+      <CardHelp title="Partage Telegram">
         Publie une impression ou un groupe (photos, statistiques, lien MakerWorld) dans tes
         discussions Telegram, <b>en ton nom</b>.
-      </p>
+      </CardHelp>
 
       {unreachable && step === "idle" ? (
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, flexWrap:"wrap" }}>

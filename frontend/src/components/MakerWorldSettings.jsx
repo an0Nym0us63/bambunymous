@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import CardHelp from "./CardHelp";
 import client from "../api/client";
 
 // Parametres MakerWorld : fiches publiques des modeles (cache), compte
@@ -58,12 +59,12 @@ export default function MakerWorldSettings() {
   return (
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>MakerWorld</h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px", lineHeight:1.5 }}>
+      <CardHelp title="MakerWorld">
         Fiche du modèle (couverture, créateur, catégories, compteurs) sur chaque print et groupe, et recherche
         par titre, tags et catégories. Ces infos sont lues via une <b>API interne de MakerWorld, non officielle</b> :
         si elle change ou se ferme, l'appli continue de fonctionner normalement et les fiches retombent sur le
         simple lien. Lecture seule : rien n'est jamais publié, aimé ni rangé depuis l'appli.
-      </p>
+      </CardHelp>
 
       {/* ── Fiches des modeles ── */}
       <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", marginBottom:14 }}>
@@ -132,12 +133,11 @@ export default function MakerWorldSettings() {
       {/* ── Historique cloud : liens MakerWorld des vieux prints ── */}
       {st?.connected && (
         <div style={{ marginTop:12, padding:12, borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)" }}>
-          <div style={{ fontSize:12, fontWeight:700, color:"var(--text)", marginBottom:4 }}>Historique cloud Bambu</div>
-          <p style={{ fontSize:11.5, color:"var(--muted)", margin:"0 0 8px", lineHeight:1.5 }}>
-            Retrouve le modèle MakerWorld (et son profil) des prints qui n'en ont pas, d'après tes impressions cloud :
-            par numéro de tâche, sinon par heure de début (à 10 min près, seulement si un seul print correspond).
-            Ne remplit que les liens vides, n'écrase jamais.
-          </p>
+          <div style={{ fontSize:12, fontWeight:700, color:"var(--text)", marginBottom:8, display:"flex", alignItems:"center" }}>Historique cloud Bambu
+            <CardHelp inline title="Historique cloud Bambu">
+              Retrouve le modèle MakerWorld (et son profil) des prints qui n'en ont pas, d'après tes impressions cloud :
+              par numéro de tâche, sinon par heure de début (à 10 min près, seulement si un seul print correspond).
+              Ne remplit que les liens vides, n'écrase jamais.</CardHelp></div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             <button onClick={() => history(false)} disabled={busy} style={btn}>{busy ? "…" : "Analyser"}</button>
             {hist && !hist.applied && hist.to_link + hist.to_profile > 0 && (

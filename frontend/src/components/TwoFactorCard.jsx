@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import CardHelp from "./CardHelp";
 import { ShieldCheck } from "lucide-react";
 import client from "../api/client";
 
@@ -106,10 +107,9 @@ export default function TwoFactorCard() {
         )
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          <p style={{ fontSize:12, color:"var(--muted)", margin:0, lineHeight:1.5 }}>
+          <CardHelp title="Double authentification">
             En plus du mot de passe, un code à 6 chiffres de ton application d'authentification
-            sera demandé à la connexion.
-          </p>
+            sera demandé à la connexion.</CardHelp>
           <button disabled={busy} onClick={() => run(async () => setSetup((await client.post("/auth/2fa/setup")).data))}
             style={{ ...btn("#3b82f6"), alignSelf:"flex-start" }}>Activer la double authentification</button>
         </div>

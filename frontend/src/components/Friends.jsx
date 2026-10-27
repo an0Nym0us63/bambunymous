@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import CardHelp from "./CardHelp";
 import client from "../api/client";
 import { useFriend } from "../store/friend";
 import { useIsHomeAdmin, ROLE_LABEL } from "../store/auth";
@@ -120,11 +121,11 @@ export function FriendsCard() {
   return (
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>👀 Copains</h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px", lineHeight:1.5 }}>
+      <CardHelp title="👀 Copains">
         Parcours le BambuNymous d'un ami (historique, collections MakerWorld…) en lecture seule, avec les droits du
         compte qu'il t'a créé chez lui. Il te donne une <b>invitation copain</b> (dans ses Paramètres → Comptes) ; colle-la ici.
         Chez lui, 🔖 range toujours dans <b>tes</b> collections, et l'appli te dit si tu as déjà le modèle.
-      </p>
+      </CardHelp>
       {list === null ? <p style={{ fontSize:12, color:"var(--muted)" }}>…</p> : list.map(f => (
         <Pressable key={f.id} menu={() => ({ title: f.name, subtitle: f.url, items: [
             { icon: "👀", label: "Visiter", onClick: () => visit(f) },

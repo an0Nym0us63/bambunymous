@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import CardHelp from "./CardHelp";
 import client from "../api/client";
 import { showConfirm } from "../utils/dialog";
 import { forgetTemplates } from "./MwToRate";
@@ -47,10 +48,10 @@ export default function RateTemplatesSettings() {
     <div className="card" style={{ padding: 16, marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
       <div>
         <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>⭐ Messages d'évaluation</div>
-        <div style={{ fontSize: 12, color: "var(--muted)" }}>
+        <CardHelp title="Messages d'évaluation">
           Rangés par familles. En évaluant à 5 étoiles, tu choisis la famille et un message est tiré au hasard,
           modifiable avant de publier. La première famille est proposée d'office.
-          <code> {"{modèle}"}</code> et <code>{"{créateur}"}</code> sont remplacés automatiquement.</div>
+          <code> {"{modèle}"}</code> et <code>{"{créateur}"}</code> sont remplacés automatiquement.</CardHelp>
       </div>
 
       {fams.map((f, i) => (

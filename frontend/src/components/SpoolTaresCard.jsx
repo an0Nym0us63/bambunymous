@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import CardHelp from "./CardHelp";
 import { Trash2 } from "lucide-react";
 import client from "../api/client";
 import { showAlert } from "../utils/dialog";
@@ -41,12 +42,12 @@ export default function SpoolTaresCard({ card, cardTitle }) {
   return (
     <div className="card" style={card}>
       <div style={cardTitle}>Supports vides</div>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px", lineHeight:1.5 }}>
+      <CardHelp title="Supports vides">
         Poids d'une bobine vide par marque ou modèle. Proposés en liste à la pesée
         et sur la fiche filament, avec « Autre » pour un poids libre. Un filament
         lié à un modèle suit ses changements de poids et de nom ; le restant des
         bobines déjà pesées n'est pas recalculé.
-      </p>
+      </CardHelp>
 
       {rows.map((r, i) => (
         <div key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>

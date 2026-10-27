@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import CardHelp from "../components/CardHelp";
 import Cachettes from "../components/Cachettes";
 import { Save, Wifi, RefreshCw, Sun, Moon, Users, KeyRound, Trash2, Activity } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -77,8 +78,8 @@ function HomeDisplayCard() {
   return (
     <div className="card" style={card}>
       <div style={cardTitle}>Accueil</div>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 10px", lineHeight:1.45 }}>
-        Les tuiles, leur place et le bandeau. Aussi depuis l'accueil : ton menu de compte, « Personnaliser l'accueil ».</p>
+      <CardHelp title="Accueil">
+        Les tuiles, leur place et le bandeau. Aussi depuis l'accueil : ton menu de compte, « Personnaliser l'accueil ».</CardHelp>
       <button type="button" onClick={() => { window.location.href = "/?edit=1"; }}
         style={{ padding:"8px 14px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
           color:"var(--text)", fontSize:13, fontWeight:700, cursor:"pointer" }}>Personnaliser l'accueil</button>
@@ -94,10 +95,10 @@ function AMSOrderSection() {
   return (
     <div className="card" style={card}>
       <p style={cardTitle}>Disposition AMS sur l'accueil</p>
-      <p style={{ fontSize:12.5, color:"var(--muted)", margin:"-8px 0 12px", lineHeight:1.45 }}>
+      <CardHelp title="Disposition AMS sur l'accueil">
         L'organisation des AMS se règle maintenant dans la tuile AMS de l'accueil : en personnalisation,
         touche la tuile puis son engrenage.
-      </p>
+      </CardHelp>
       <button type="button" onClick={() => { window.location.href = "/?edit=1&tile=ams"; }}
         style={{ padding:"8px 14px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
           color:"var(--text)", fontSize:13, fontWeight:700, cursor:"pointer" }}>Régler la tuile AMS</button>
@@ -139,11 +140,11 @@ function ArchiveSection() {
   return (
     <div className="card" style={card}>
       <p style={cardTitle}>Sauvegarde et NAS</p>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"-8px 0 12px", lineHeight:1.5 }}>
+      <CardHelp title="Sauvegarde et NAS">
         Copie dans le dossier du NAS monté sur le conteneur : « Impressions », avec « Groupes » (un dossier par groupe : sa fiche, ses photos,
         ses impressions) et « Impressions seules », rangées par modèle puis par date (3MF, Photos, Vidéos, Timelapse, Couches, avec une fiche) ;
         et « Système », la base (14 dernières copies), les photos des filaments, objets, accessoires, 3MF MakerWorld et catalogue Bambu.
-        Seul le nouveau est copié ; ce qui change de place ou de nom est déplacé, ce qui est supprimé dans l'appli part dans « _Supprimés ».</p>
+        Seul le nouveau est copié ; ce qui change de place ou de nom est déplacé, ce qui est supprimé dans l'appli part dans « _Supprimés ».</CardHelp>
       {err && <p style={{ color:"#ef4444", fontSize:12.5 }}>{err}</p>}
       {s && <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         <div style={{ ...box, borderColor: ok ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)" }}>
@@ -165,9 +166,10 @@ function ArchiveSection() {
               background:"var(--surface2)", color:"var(--text)" }}>{Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{h} h</option>)}</select>
             {sw(s.nightly, () => put({ nightly: !s.nightly }))}</span></div>
         <div style={{ borderTop:"1px solid var(--border)", paddingTop:10, display:"flex", flexDirection:"column", gap:10 }}>
-          <p style={{ fontSize:12, color:"var(--muted)", margin:0, lineHeight:1.5 }}>
-            Vider le local : retire de l'appli les vidéos, timelapses, 3MF et captures des couches des impressions plus anciennes que
-            le délai, <b>seulement s'ils sont déjà sur le NAS</b>. Ils restent visibles : l'appli les relit sur le NAS.</p>
+          <span style={{ fontSize:13, fontWeight:800, color:"var(--text2)", display:"flex", alignItems:"center" }}>🧹 Vider le local
+            <CardHelp inline title="Vider le local">
+              Retire de l'appli les vidéos, timelapses, 3MF et captures des couches des impressions plus anciennes que
+              le délai, <b>seulement s'ils sont déjà sur le NAS</b>. Ils restent visibles : l'appli les relit sur le NAS.</CardHelp></span>
           <div style={row}><span>Plus anciennes que</span>
             <select value={s.purge_days} onChange={e => put({ purge_days: Number(e.target.value) })} style={{ padding:"4px 8px", borderRadius:8,
               border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)" }}>
@@ -202,9 +204,9 @@ function SdProbeSection() {
   return (
     <div className="card" style={card}>
       <p style={cardTitle}>Stockage de l'imprimante</p>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"-8px 0 14px" }}>
+      <CardHelp title="Stockage de l'imprimante">
         Teste l'accès au stockage de l'imprimante (carte SD ou clé USB, par le réseau local, en lecture seule) : ce qu'il
-        contient à la racine et dans le dossier des timelapses. S'il s'ouvre, on peut parcourir et regarder les timelapses dans l'appli.</p>
+        contient à la racine et dans le dossier des timelapses. S'il s'ouvre, on peut parcourir et regarder les timelapses dans l'appli.</CardHelp>
       <button onClick={run} disabled={running}
         style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 16px",
           background: running ? "var(--border)" : "#3b82f6", border:"none", borderRadius:10,
@@ -251,10 +253,10 @@ function EnrichFromCatalogSection() {
   return (
     <div className="card" style={card}>
       <p style={cardTitle}>Enrichissement catalogue Bambu</p>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"-8px 0 14px" }}>
+      <CardHelp title="Enrichissement catalogue Bambu">
         Pour tous les filaments Bambu en base (avec Profile ID), cherche leur fiche officielle
         dans le catalogue et met à jour : nom, code couleur, type multicolore, couleurs…
-      </p>
+      </CardHelp>
       <button onClick={run} disabled={running}
         style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 16px",
           background: running ? "var(--border)" : "#3b82f6", border:"none", borderRadius:10,
@@ -400,13 +402,15 @@ function AchievementUsersSection() {
   return (
     <div className="card" style={{ padding:"14px 16px", display:"flex", flexDirection:"column", gap:10 }}>
       <div style={{ fontSize:14, fontWeight:800, color:"var(--text)" }}>🏆 Comptes qui font avancer les succès</div>
-      <p style={{ margin:0, fontSize:12.5, color:"var(--muted)", lineHeight:1.5 }}>
+      <CardHelp title="Comptes qui font avancer les succès">
+      <p style={{ margin:0 }}>
         Visites, fiches consultées, actions et easter eggs ne comptent que pour les comptes cochés. Les autres peuvent
         jouer et trouver les secrets : ils voient le succès, marqué « non comptabilisé ».</p>
-      <p style={{ margin:0, fontSize:12.5, color:"var(--muted)", lineHeight:1.5 }}>
+      <p style={{ margin:0 }}>
         <b style={{ color:"#EC4899" }}>🥚 Ses secrets</b> : le compte cherche les easter eggs, cachettes, farces, fêtes, pages cachées et
         secrets Android pour lui-même, et voit ceux de la maison comme un copain. <b style={{ color:"#8B5CF6" }}>🎰 Roue</b> : il peut
         tourner la roue (le lot va à la maison). Clés et tickets restent au compte principal.</p>
+      </CardHelp>
       {!list ? <span style={{ fontSize:12.5, color:"var(--muted)" }}>Chargement…</span>
         : list.map(u => (
           <div key={u.username} style={{ display:"flex", flexDirection:"column", gap:4, padding:"4px 0", opacity: u.active ? 1 : 0.55 }}>
@@ -482,11 +486,11 @@ function UsersSection() {
         display:"flex", alignItems:"center", gap:7 }}>
         <Users size={15}/> Utilisateurs
       </h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+      <CardHelp title="Utilisateurs">
         Un compte <b>administrateur</b> a tous les droits. Un compte <b>lecture seule (avec
         prix)</b> consulte tout, montants compris, sans rien pouvoir modifier. Un compte <b>lecture seule</b> peut
         tout consulter, sans aucune modification, et les montants lui sont masqués.
-      </p>
+      </CardHelp>
 
       {err && <p style={{ fontSize:12, color:"#ef4444", margin:"0 0 10px" }}>{err}</p>}
 
@@ -746,6 +750,11 @@ function ActivitySection() {
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 4px",
         display:"flex", alignItems:"center", gap:7 }}>
         <Activity size={15}/> Activité
+        <CardHelp inline title="Activité">
+          <b>Actions</b> : créations, modifications, suppressions. <b>Pages</b> : arrivée sur
+          une page. <b>Détails</b> : onglet ouvert ou fiche consultée. Les vues ne sont
+          enregistrées qu'au changement, jamais en continu.
+          {keep ? ` Le journal est purgé au-delà de ${keep} jours.` : ""}</CardHelp>
         {/* Discret et a l'ecart des filtres : c'est une action irreversible,
             elle ne doit pas se trouver sous un doigt qui trie. */}
         <button disabled={busy}
@@ -765,12 +774,7 @@ function ActivitySection() {
           {purge ? "Confirmer ?" : "Vider"}
         </button>
       </h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
-        <b>Actions</b> : créations, modifications, suppressions. <b>Pages</b> : arrivée sur
-        une page. <b>Détails</b> : onglet ouvert ou fiche consultée. Les vues ne sont
-        enregistrées qu'au changement, jamais en continu.
-        {keep ? ` Le journal est purgé au-delà de ${keep} jours.` : ""}
-      </p>
+      <div style={{ height: 10 }}/>
 
       <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:8 }}>
         {ACT_KINDS.map(([k,l]) => (
@@ -884,12 +888,12 @@ function RfidDebugSection() {
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>
         Débug RFID
       </h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+      <CardHelp title="Débug RFID">
         Affiche le détail brut du dernier tag scanné (payload, champs parsés,
         correspondance catalogue, profil résolu). Utile pour vérifier un profil
         quand un scan ouvre directement la fiche d'une bobine existante. Scannez un
         tag, puis appuyez ici.
-      </p>
+      </CardHelp>
       <button onClick={load} disabled={loading}
         style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:loading?"wait":"pointer",
           border:"none", background:"#3b82f6", color:"white" }}>
@@ -946,12 +950,12 @@ function PriceReviewSection() {
         <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>
           Révision des prix
         </h3>
-        <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+        <CardHelp title="Révision des prix">
           Compare le tarif catalogue de chaque filament au prix d'achat de ses bobines,
           <b> archivées comprises</b>, et permet de corriger sur place. Utile pour repérer
           les prix manquants — qui font retomber le calcul des coûts sur 20 €/kg par
           défaut — et les écarts inhabituels.
-        </p>
+        </CardHelp>
         <button onClick={()=>setOpen(true)}
           style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700,
             cursor:"pointer", border:"none", background:"#3b82f6", color:"white" }}>
@@ -1021,9 +1025,9 @@ function AchievementsExportSection() {
   return (
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>🏅 Succès : paliers et progression</h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 10px", lineHeight:1.5 }}>
+      <CardHelp title="🏅 Succès : paliers et progression">
         Tous les succès à paliers : ce qui compte, ta valeur actuelle, le palier atteint, le prochain seuil, et les seuils de
-        Bronze à Éternel. Pour revoir les paliers.</p>
+        Bronze à Éternel. Pour revoir les paliers.</CardHelp>
       <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
         <button onClick={download} disabled={busy} style={btn}>⬇️ Télécharger (CSV)</button>
         <button onClick={copy} disabled={busy} style={btn}>📋 Copier</button>
@@ -1088,13 +1092,13 @@ function TranslateNamesSection() {
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>
         Traduire les noms de prints
       </h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+      <CardHelp title="Traduire les noms de prints">
         Les prints arrivent nommés en anglais ou en chinois : ce rattrapage leur ajoute
         un nom français, utilisé <b>uniquement pour la recherche</b> — le nom d'origine
         reste affiché. Les noms saisis à la main ne sont jamais écrasés. Les nouveaux
         prints sont traduits automatiquement ; ceux qu'un service saturé n'a pas pu
         traduire sont repris seuls toutes les 6 h.
-      </p>
+      </CardHelp>
 
       {/* Ordre : Google Cloud (cle, gratuit jusqu'a 500 000 car./mois,
           renouvele), Google public, DeepL (cle, credit gratuit qui ne se
@@ -1161,9 +1165,9 @@ function RecalculateSection() {
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>
         Recalculer les coûts
       </h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+      <CardHelp title="Recalculer les coûts">
         Recalcule les coûts filament et électricité de tous les prints (utile après changement de prix ou d'import). Les groupes se mettent à jour automatiquement.
-      </p>
+      </CardHelp>
       <button onClick={run} disabled={loading}
         style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:loading?"wait":"pointer",
           border:"none", background: done ? "#22c55e" : loading ? "var(--border)" : "#3b82f6",
@@ -1190,10 +1194,10 @@ function PerfSection() {
   return (
     <div className="card" style={card}>
       <p style={cardTitle}>Vitesse du serveur</p>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"-8px 0 12px", lineHeight:1.5 }}>
+      <CardHelp title="Vitesse du serveur">
         Le temps que met le serveur à répondre, depuis {since || "le démarrage"}{d ? ` (${d.requests.toLocaleString("fr-FR")} appels)` : ""}.
         Chaque chiffre est une moyenne qui laisse de côté les 5 % d'appels les plus lents : un appel lent isolé ne fait pas
-        passer une route à l'orange. En tête, l'ensemble ; dessous, les plus lentes d'abord.</p>
+        passer une route à l'orange. En tête, l'ensemble ; dessous, les plus lentes d'abord.</CardHelp>
       {d && <>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
           {[[d.t95_all != null ? perfMs(d.t95_all) : "—", "par appel en moyenne", d.t95_all == null ? "var(--text)" : perfTone(d.t95_all, "")],
@@ -1221,11 +1225,11 @@ function StorageSection() {
   return (
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Espace de stockage</h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+      <CardHelp title="Espace de stockage">
         Ce que l'appli garde sur le serveur, par sorte : photos automatiques et ajoutées, vignettes, 3MF, vidéos, photos de
         groupes, d'objets et d'accessoires, base de données… avec la place du disque et les impressions les plus lourdes.
         L'onglet NAS fait de même pour ce que la sauvegarde y range.
-      </p>
+      </CardHelp>
       <button onClick={() => setOpen(true)} style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer",
         border:"none", background:"#6366F1", color:"white" }}>💾 Voir l'espace de stockage</button>
       {open && <StorageSheet onClose={() => setOpen(false)}/>}
@@ -1258,12 +1262,12 @@ function MwDocsSection() {
   return (
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Documents joints MakerWorld</h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+      <CardHelp title="Documents joints MakerWorld">
         Notices d'assemblage, nomenclatures, solutions et autres documents que les créateurs joignent à leurs modèles. Ils sont
         gardés ici pour chaque modèle imprimé (lisibles même si le créateur les retire, et rangés avec le modèle sur le NAS). C'est
         fait à chaque relecture d'une fiche ; ce bouton rattrape les modèles déjà imprimés, un à la fois. Sans compte MakerWorld :
         ces documents sont publics, et ne comptent pas comme des téléchargements.
-      </p>
+      </CardHelp>
       {sm && <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:12 }}>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
           {big(sm.kept, `gardé${sm.kept > 1 ? "s" : ""} sur ${sm.docs} documents`, "#16a34a")}
@@ -1317,12 +1321,12 @@ function SourceBackfillSection() {
   return (
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>3MF d'origine MakerWorld</h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+      <CardHelp title="3MF d'origine MakerWorld">
         Pour chaque modèle MakerWorld imprimé, garde le projet de son profil (à retrancher, ou à garder si le modèle disparaît).
         C'est fait dès le lancement d'une impression ; ce bouton rattrape les anciennes. Un fichier par profil ; sans profil connu,
         celui du modèle le plus proche de ton imprimante. Chaque récupération compte comme un téléchargement sur MakerWorld,
         et il faut le compte MakerWorld connecté.
-      </p>
+      </CardHelp>
       {/* le bilan, toujours a jour : ce qui est garde, ce qui reste */}
       {sm && <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:12 }}>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -1418,10 +1422,10 @@ function DiagExportSection() {
   return (
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Exporter pour diagnostic</h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+      <CardHelp title="Exporter pour diagnostic">
         Télécharge les impressions des derniers jours telles qu'enregistrées (dates, durées, pauses, statut, poids, coût)
         et le calcul jour par jour des tuiles. Aucune bobine, aucun compte, aucun réglage.
-      </p>
+      </CardHelp>
       <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
         <select value={days} onChange={e => setDays(+e.target.value)} style={{ height:34, borderRadius:10, border:"1px solid var(--border)",
           background:"var(--surface2)", color:"var(--text)", fontWeight:700, fontSize:13, padding:"0 8px" }}>
@@ -1475,10 +1479,10 @@ function AttentionCard({ card, cardTitle }) {
   return (
     <div className="card" style={card}>
       <div style={cardTitle}>Points d'attention</div>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px" }}>
+      <CardHelp title="Points d'attention">
         Choisis l'ordre des catégories sur l'accueil, et masque celles qui ne
         t'intéressent pas. La liste des alertes, elle, s'ouvre depuis l'accueil.
-      </p>
+      </CardHelp>
       <button type="button" onClick={() => setOpen(true)}
         style={{ padding:"9px 14px", borderRadius:8, border:"none", cursor:"pointer",
           background:"#3b82f6", color:"white", fontSize:12, fontWeight:700 }}>
@@ -1636,16 +1640,15 @@ function CategoriesModal({ onClose }) {
             background:"linear-gradient(135deg, #EC4899, #F472B6)", boxShadow:"0 8px 18px -8px #EC4899" }}>🗂️</span>
           <p style={{ fontSize:17, fontWeight:900, color:"var(--text)", margin:0, flex:1 }}>
             Catégories de l'accueil
+            <CardHelp inline title="Catégories de l'accueil" color="#EC4899">
+              Fais glisser la poignée (ou utilise les flèches) pour réordonner. L'œil masque une catégorie de l'accueil — elle reste
+              consultable dans la liste des alertes.</CardHelp>
           </p>
           <button type="button" onClick={onClose} aria-label="Fermer"
             style={{ width:34, height:34, borderRadius:"50%", border:"1px solid var(--border)", background:"var(--surface)",
               color:"var(--text2)", fontSize:15, cursor:"pointer", flexShrink:0 }}>✕</button>
         </div>
-        <p style={{ margin:0, padding:"10px 16px 10px", fontSize:12, fontWeight:600, color:"var(--muted)", lineHeight:1.45 }}>
-          Fais glisser la poignée (ou utilise les flèches) pour réordonner. L'œil
-          masque une catégorie de l'accueil — elle reste consultable dans la liste
-          des alertes.
-        </p>
+
 
         {err && <p style={{ margin:0, padding:"0 16px 8px", fontSize:12, color:"#ef4444" }}>⚠ {err}</p>}
 
@@ -1854,11 +1857,11 @@ function LabelsCard({ card, cardTitle }) {
   return (
     <div className="card" style={card}>
       <div style={cardTitle}>Étiquettes filaments</div>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px" }}>
+      <CardHelp title="Étiquettes filaments">
         Planche d'étiquettes à coller sur les échantillons : un QR code de 9 × 9 mm
         encodant l'ID du filament, et l'ID en clair juste en dessous pour pouvoir
         le saisir à la main. C'est ce QR que lit le bouton Scanner.
-      </p>
+      </CardHelp>
       <button type="button" onClick={() => setOpen(true)} style={btn("#3b82f6")}>
         Générer les étiquettes…
       </button>
@@ -2190,13 +2193,13 @@ export default function Settings() {
               {codeSet && !code && <p style={{ fontSize:10, color:"#22c55e", marginTop:4 }}>✓ Code configuré</p>}
             </div>
             <div>
-              <label style={lbl}>Modèle</label>
+              <label style={lbl}>Modèle<CardHelp inline title="Modèle d'imprimante">
+                Sert à MakerWorld (profil fait pour ton imprimante, compatibilité, fichier ouvert dans Studio) et à la vue 3D (la taille du plateau).
+                Automatique : déduit du numéro de série.</CardHelp></label>
               <select value={pmodel} onChange={e => setPmodel(e.target.value)} style={inp}>
                 <option value="">Automatique{pauto ? ` (${pauto}, d'après le n° de série)` : ""}</option>
                 {pmodels.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
-              <p style={{ fontSize:10, color:"var(--muted)", marginTop:4 }}>
-                Sert à MakerWorld : profil fait pour ton imprimante, compatibilité, fichier ouvert dans Studio.</p>
             </div>
             {F("Nom affiché", pname, setPname, { placeholder:"Mon imprimante" })}
           </div>
@@ -2295,6 +2298,7 @@ const SET_CSS = `
 .set-page .card { border-radius: 20px !important; border: 1px solid color-mix(in srgb, var(--set-c) 24%, var(--border)) !important;
   background: radial-gradient(90% 60% at 100% 0%, color-mix(in srgb, var(--set-c) 13%, transparent), transparent 70%), var(--surface2) !important;
   box-shadow: 0 10px 24px -20px var(--set-c); }
+.set-page .card { position: relative; }
 .set-page .card .card { background: var(--surface) !important; box-shadow: none; border-color: var(--border) !important; border-radius: 16px !important; }
 .set-page input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), .set-page select, .set-page textarea { border-radius: 12px; }
 .set-page button[style*="background: rgb(59, 130, 246)"], .set-page button[style*="background: rgb(59,130,246)"] {

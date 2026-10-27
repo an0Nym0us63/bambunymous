@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import CardHelp from "./CardHelp";
 import client from "../api/client";
 import { pushApi, readPushStatus, sendEndpoint } from "./PushBridge";
 
@@ -58,10 +59,10 @@ export default function MyAppNotifications({ embedded = false }) {
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>
         {embedded ? "Mon téléphone" : "Mes notifications"}</h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 10px", lineHeight:1.5 }}>
+      <CardHelp title={embedded ? "Mon téléphone" : "Mes notifications"}>
         Active ce que tu veux recevoir sur ton téléphone (appli Android BambuNymous, avec l'appli <b>ntfy</b>). Tu les retrouves aussi dans la 🔔 cloche, lues dès que tu les touches.
         Les autres comptes ont leurs propres choix.
-      </p>
+      </CardHelp>
       {!me.app_on && (
         <p style={{ fontSize:12, color:"#f59e0b", margin:"0 0 10px" }}>
           L'administrateur n'a pas activé l'appli Android : rien ne partira sur le téléphone pour l'instant.</p>
