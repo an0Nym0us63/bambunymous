@@ -114,6 +114,16 @@ def record(key: str, ms: float, req: dict = None) -> None:
             s["top"] = req["top"]
 
 
+def _best95(vals) -> float:
+    """La moyenne des 95 % d'appels les plus rapides (27/10/2026) : un appel lent isole ne fait plus passer une
+    route au rouge ; ce que vit l'utilisateur la plupart du temps."""
+    if not vals:
+        return 0.0
+    v = sorted(vals)
+    k = max(1, int(len(v) * 0.95 + 0.5))
+    return sum(v[:k]) / k
+
+
 def _pct(vals, q):
     if not vals:
         return 0.0
@@ -126,17 +136,17 @@ def snapshot(limit: int = 60) -> dict:
     for k, s in _STATS.items():
         rec = list(s["recent"])
         rows.append({"route": k, "count": s["n"], "avg": round(s["sum"] / s["n"], 1) if s["n"] else 0,
-                     "p50": round(_pct(rec, .5), 1), "p95": round(_pct(rec, .95), 1), "max": round(s["max"], 1),
+                     "p50": round(_pct(rec, .5), 1), "p95": round(_pct(rec, .95), 1), "t95": round(_best95(rec), 1), "max": round(s["max"], 1),
                      "cold": round(s["cold"], 1) if s.get("cold") is not None else None, "cold_n": s.get("cold_n", 0),
                      "db_avg": round(s["db"] / s["n"], 1) if s["n"] else 0, "q_avg": round(s["q"] / s["n"], 1) if s["n"] else 0,
                      "top_ms": round(s["top"][0], 1), "top_sql": s["top"][1],
                      **({k: round(s.get(k, 0.0) / s["n"], 1) for k in ("db_wait", "db_run", "db_back")} if s["n"] else {})})
-    rows.sort(key=lambda r: -r["p95"])
+    rows.sort(key=lambda r: -r["t95"])
     total = sum(s["n"] for s in _STATS.values())
     # l'indicateur d'ensemble : 95 % des appels repondent en moins de… (sur les derniers de chaque route)
     every = [v for st in _STATS.values() for v in st["recent"]]
     return {"since": _SINCE["t"], "requests": total, "routes": rows[:limit], "loop": _loop_view(),
-            "p50_all": round(_pct(every, .5), 1), "p95_all": round(_pct(every, .95), 1),
+            "p50_all": round(_pct(every, .5), 1), "p95_all": round(_pct(every, .95), 1), "t95_all": round(_best95(every), 1),
             "warmup_s": WARMUP_S, "warming": warming(), "warm_requests": sum(s.get("cold_n", 0) for s in _STATS.values())}
 
 

@@ -21,7 +21,7 @@ import RateTemplatesSettings from "../components/RateTemplatesSettings";
 import NotificationsSettings from "../components/NotificationsSettings";
 import MyAppNotifications from "../components/MyAppNotifications";
 import AndroidApp from "../components/AndroidApp";
-import PerfSheet, { perfLabel, perfMs, perfTone, perfSlow, perfBad, perfSort } from "../components/PerfSheet";
+import PerfSheet, { perfLabel, perfMs, perfTone, perfSlow, perfBad, perfSort, perfVal } from "../components/PerfSheet";
 import StorageSheet from "../components/StorageSheet";
 import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
@@ -1191,10 +1191,11 @@ function PerfSection() {
       <p style={cardTitle}>Vitesse du serveur</p>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"-8px 0 12px", lineHeight:1.5 }}>
         Le temps que met le serveur à répondre, depuis {since || "le démarrage"}{d ? ` (${d.requests.toLocaleString("fr-FR")} appels)` : ""}.
-        En tête, l'ensemble ; dessous, les routes les plus lentes d'abord, chacune à son 95ᵉ centile.</p>
+        Chaque chiffre est une moyenne qui laisse de côté les 5 % d'appels les plus lents : un appel lent isolé ne fait pas
+        passer une route à l'orange. En tête, l'ensemble ; dessous, les plus lentes d'abord.</p>
       {d && <>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
-          {[[d.p95_all != null ? perfMs(d.p95_all) : "—", "95 % des appels en moins de", d.p95_all == null ? "var(--text)" : perfTone(d.p95_all, "")],
+          {[[d.t95_all != null ? perfMs(d.t95_all) : "—", "par appel en moyenne", d.t95_all == null ? "var(--text)" : perfTone(d.t95_all, "")],
             [slow, "plus lentes qu'attendu", slow ? "#f59e0b" : "#16a34a"],
             [bad, "bien trop lentes", bad ? "#ef4444" : "#16a34a"]].map(([n, l, c]) => (
             <span key={l} style={{ flex:"1 1 90px", padding:"7px 10px", borderRadius:12, background:"var(--surface2)" }}>
@@ -1203,10 +1204,9 @@ function PerfSection() {
         </div>
         {rows.slice(0, 3).map(r => { const lb = perfLabel(r.route);
           return <div key={r.route} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", borderRadius:10, background:"var(--surface2)", marginBottom:4, fontSize:12.5 }}>
-            <span style={{ width:8, height:8, borderRadius:"50%", flexShrink:0, background:perfTone(r.p95, r.route) }}/>
+            <span style={{ width:8, height:8, borderRadius:"50%", flexShrink:0, background:perfTone(perfVal(r), r.route) }}/>
             <span style={{ flex:1, minWidth:0, fontWeight:700, color:"var(--text2)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{lb.title}</span>
-            <span style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)" }}>95 %</span>
-            <b style={{ color:perfTone(r.p95, r.route) }}>{perfMs(r.p95)}</b></div>; })}
+            <b style={{ color:perfTone(perfVal(r), r.route) }}>{perfMs(perfVal(r))}</b></div>; })}
         <button onClick={() => { load(); setOpen(true); }} style={{ marginTop:8, padding:"8px 16px", borderRadius:10, border:"none", cursor:"pointer",
           fontSize:13, fontWeight:700, color:"#fff", background:"linear-gradient(135deg, #0EA5E9, #6366F1)" }}>⚡ Voir le détail</button>
       </>}
