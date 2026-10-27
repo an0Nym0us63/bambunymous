@@ -742,6 +742,44 @@ def _ext_map(origin: dict, sliced: dict) -> dict:
     return {a: max(v, key=v.get) for a, v in votes.items()}
 
 
+def _rgb(h: str) -> tuple:
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+def _assign(origin: list, used: list) -> list:
+    """Filaments d'origine [(n°, couleur, grammes|None)] face aux bobines [(n°, couleur, grammes|None)] : les paires
+    qui se ressemblent le plus, chacun pris une fois. Le cout d'une paire : l'ecart de couleur (0 a 1), plus la moitie
+    de l'ecart relatif de poids quand les deux sont connus (il departage des couleurs remplacees). Toutes les
+    combinaisons jusqu'a 7, sinon la meilleure paire d'abord."""
+    import itertools, math
+    if not origin or not used:
+        return []
+
+    def cost(o, u):
+        c = math.dist(_rgb(o[1]), _rgb(u[1])) / 441.7
+        if o[2] and u[2]:
+            c += 0.5 * abs(o[2] - u[2]) / max(o[2], u[2])
+        return c
+    small, big, flip = (origin, used, False) if len(origin) <= len(used) else (used, origin, True)
+    if len(big) <= 7:
+        best, best_c = None, None
+        for perm in itertools.permutations(range(len(big)), len(small)):
+            c = sum(cost(*((big[j], small[k]) if flip else (small[k], big[j]))) for k, j in enumerate(perm))
+            if best_c is None or c < best_c:
+                best, best_c = perm, c
+        pairs = [((big[j], small[k]) if flip else (small[k], big[j])) for k, j in enumerate(best)]
+    else:
+        left = [(cost(o, u), o, u) for o in origin for u in used]
+        left.sort(key=lambda x: x[0])
+        pairs, so, su = [], set(), set()
+        for _c, o, u in left:
+            if o[0] not in so and u[0] not in su:
+                pairs.append((o, u))
+                so.add(o[0])
+                su.add(u[0])
+    return [(o[0], u[0]) for o, u in pairs]
+
+
 async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", detail_out: list | None = None) -> dict | None:
     """{couleur du 3MF d'origine (RRGGBB) : couleur utilisee} d'apres les filaments de ces impressions (la plus
     recente l'emporte). Seules comptent les impressions de ce profil (ou de profil inconnu). Chaque filament du
@@ -807,39 +845,36 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
         used = used_by.get(pid) or {}
         if not used:
             continue
-        emap, n_sliced = {}, None
+        emap = {}
         f = local_or_archive(m3) if m3 else None
         if f and f.is_file():
             try:
                 with zipfile.ZipFile(f) as zz:
                     emap = _ext_map(origin, _ext_by_name(zz))
-                    n_sliced = len(T._colors_of(zz)) or None
             except (OSError, zipfile.BadZipFile):
                 emap = {}
-        same_count = n_sliced is None or n_sliced == len(colors)
-        if not emap:
-            # par le poids : les filaments du plateau d'origine et ceux de l'impression, classes du plus lourd au plus leger
-            try:
-                pn = int(((_json.loads(mwpl) or {}).get("plates") or [None])[0] if mwpl else plate_id or 1)
-            except (TypeError, ValueError, AttributeError):
-                pn = 1
-            fo = sorted(plate_fils.get(pn) or [], key=lambda x: -x[1])
-            fu = sorted(((k, g) for k, g in (grams_by.get(pid) or {}).items() if g > 0), key=lambda x: -x[1])
-            if fo and fu and len(fo) == len(fu):
-                for (a, _ga), (es, _gu) in zip(fo, fu):
-                    b = used.get(es)
-                    e = next((k + 1 for k, c in enumerate(colors) if h6(c) == a), None)
-                    if b and a not in out:
-                        out[a] = b
-                        detail.append({"from": a, "to": b, "e": e, "es": es, "how": "poids", "print": pid})
-                continue
-        for e in range(1, len(colors) + 1):
-            if e in emap:
-                es, how = emap[e], "pièces"
-            elif not emap or same_count:
-                es, how = e, "numéro"                  # sans piece rapprochee : par numero (meme nombre de filaments)
-            else:
-                continue
+        # 1) les pieces de meme nom
+        assigned = {e: (es, "pièces") for e, es in emap.items() if es in used}
+        # 2) le reste, par ressemblance de couleur et de poids : les filaments du plateau d'origine (fiche MakerWorld),
+        #    sinon tous, face aux bobines de l'impression pas encore prises. Un modele peint au pinceau n'a que le
+        #    filament de ses pieces dans les noms (28/10/2026 : le perroquet, numeros renumerotes, couleurs melangees).
+        try:
+            pn = int(((_json.loads(mwpl) or {}).get("plates") or [None])[0] if mwpl else plate_id or 1)
+        except (TypeError, ValueError, AttributeError):
+            pn = 1
+        g_of = {}
+        for c, g in plate_fils.get(pn) or []:
+            for k, col in enumerate(colors):
+                if h6(col) == c and (k + 1) not in g_of:
+                    g_of[k + 1] = g
+                    break
+        cand = sorted(g_of) if g_of else list(range(1, len(colors) + 1))
+        o_rem = [(e, h6(colors[e - 1]), g_of.get(e)) for e in cand if e not in assigned and len(h6(colors[e - 1])) == 6]
+        taken = {es for es, _h in assigned.values()}
+        u_rem = [(es, c, (grams_by.get(pid) or {}).get(es)) for es, c in used.items() if es not in taken and len(c) == 6]
+        for e, es in _assign(o_rem, u_rem):
+            assigned[e] = (es, "couleur et poids")
+        for e, (es, how) in sorted(assigned.items()):
             a, b = h6(colors[e - 1]), used.get(es)
             if b and len(a) == 6 and len(b) == 6 and a not in out:
                 out[a] = b
