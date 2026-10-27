@@ -98,7 +98,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
       // deux (la suivante, et une de plus par l'evenement « change » que la mise a jour declenche elle-meme) ;
       // ca doublait a chaque image, plus de 3 000 rendus par seconde en tournant
       let raf = 0, running = false, dragging = false, stopAt = 0;
-      const render = () => { renderer.render(scene, camera); };
+      // lumiere eteinte : rendu avec un vrai halo (bloom) autour de ce qui luit
+      let composer = null, bloomOn = false;
+      const render = () => { if (bloomOn && composer) composer.render(); else renderer.render(scene, camera); };
       const loop = () => {
         const moving = controls.update();
         render();
@@ -109,7 +111,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
       controls.addEventListener("start", () => { dragging = true; kick(); });
       controls.addEventListener("end", () => { dragging = false; stopAt = performance.now() + 1200; });
       controls.addEventListener("change", kick);
-      const ro = new ResizeObserver(() => { renderer.setSize(el.clientWidth, el.clientHeight); camera.aspect = el.clientWidth / el.clientHeight; camera.updateProjectionMatrix(); render(); });
+      const ro = new ResizeObserver(() => { renderer.setSize(el.clientWidth, el.clientHeight); composer?.setSize(el.clientWidth, el.clientHeight); camera.aspect = el.clientWidth / el.clientHeight; camera.updateProjectionMatrix(); render(); });
       ro.observe(el);
       const disposables = [renderer];
       cleanup = () => { ro.disconnect(); cancelAnimationFrame(raf); controls.dispose();
@@ -129,9 +131,22 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
           gl.scene.scale.setScalar(1000);
           model.add(gl.scene);
         } else {
-          const r = await fetch(url);
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          const groups = parseBin(await r.arrayBuffer());
+          // le plateau, compresse ; s'il n'a pas pu etre lu (coupure, fichier abime), une seconde fois decompresse par
+          // le serveur, qui oublie la vue si le fichier est abime (410 : a refaire)
+          let buf;
+          try {
+            const r = await fetch(url);
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            buf = await r.arrayBuffer();
+          } catch (e) {
+            if (/^HTTP 4/.test(e.message)) throw e;
+            const r = await fetch(`${url}${url.includes("?") ? "&" : "?"}plain=1`);
+            if (r.status === 410) { onState({ busy: false, error: null, broken: true }); return; }
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            buf = await r.arrayBuffer();
+          }
+          if (dead) return;
+          const groups = parseBin(buf);
           const holder = new THREE.Group(); holder.rotation.x = -Math.PI / 2;     // le 3MF a Z vers le haut
           for (const g of groups) {
             const geo = new THREE.BufferGeometry();
@@ -148,7 +163,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
               ...(FINISH_MAT[fin] || {}) });
             // phosphorescent : il luit de sa couleur, eclaircie (une piece eclairee de l'interieur)
             // (la couleur eclairee baissee d'autant : sinon la somme sature, et la piece vire au blanc)
-            if (fin === "glow") { mat.color = c.clone().multiplyScalar(0.45); mat.emissive = c.clone(); mat.emissiveIntensity = 0.8; mat.roughness = 0.6; }
+            if (fin === "glow") { mat.color = c.clone().multiplyScalar(0.6); mat.emissive = c.clone(); mat.emissiveIntensity = 0.45; mat.roughness = 0.6; }
             if (FINISH_MAT[fin]?.envMapIntensity) mat.envMap = await envMap();
             let mesh = geo;
             if (["sparkle", "galaxy", "marble", "wood", "carbon"].includes(fin)) {
@@ -165,17 +180,6 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
             const piece = new THREE.Mesh(mesh, mat);
             if (fin === "glow") { piece.userData.glow = true; mat.userData.dayEmit = mat.emissiveIntensity; }
             holder.add(piece);
-            // et un halo autour : deux enveloppes gonflees le long des normales, de sa couleur, qui s'ajoutent a la lumiere
-            if (fin === "glow") for (const [d, o] of [[0.8, 0.4], [2.2, 0.18]]) {
-              const hg = geo.clone(); hg.computeVertexNormals();
-              const p = hg.attributes.position, nn = hg.attributes.normal;
-              for (let i = 0; i < p.count; i++) p.setXYZ(i, p.getX(i) + nn.getX(i) * d, p.getY(i) + nn.getY(i) * d, p.getZ(i) + nn.getZ(i) * d);
-              hg.deleteAttribute("normal");
-              const halo = new THREE.Mesh(hg, new THREE.MeshBasicMaterial({ color: c.clone(), transparent: true,
-                opacity: o, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending }));
-              halo.userData.glow = true; halo.material.userData.dayOp = o;
-              holder.add(halo);
-            }
           }
           model.add(holder);
         }
@@ -194,11 +198,23 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
         // lumiere eteinte : seules les pieces phosphorescentes luisent (leur halo ressort dans le noir)
         const glowMats = [];
         scene.traverse(o => { if (o.isMesh && o.userData.glow) glowMats.push(o.material); });
-        const night = on => {
+        const night = async on => {
+          if (on && !composer) {
+            const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
+              import("three/examples/jsm/postprocessing/EffectComposer.js"), import("three/examples/jsm/postprocessing/RenderPass.js"),
+              import("three/examples/jsm/postprocessing/UnrealBloomPass.js"), import("three/examples/jsm/postprocessing/OutputPass.js")]);
+            composer = new EffectComposer(renderer);
+            composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(el.clientWidth, el.clientHeight);
+            composer.addPass(new RenderPass(scene, camera));
+            composer.addPass(new UnrealBloomPass(new THREE.Vector2(el.clientWidth, el.clientHeight), 0.6, 0.3, 0.4));
+            composer.addPass(new OutputPass());
+            disposables.push(composer);
+          }
+          bloomOn = on;
           hemi.intensity = on ? 0.05 : 1.6; sun.intensity = on ? 0.06 : 1.6; back.intensity = on ? 0 : 0.6;
           grid.material.opacity = on ? 0.12 : 0.45;
-          glowMats.forEach(m => { if (m.emissiveIntensity != null && m.emissive) m.emissiveIntensity = on ? 1.25 : m.userData.dayEmit ?? m.emissiveIntensity;
-            else m.opacity = on ? Math.min(1, m.userData.dayOp * 1.8) : m.userData.dayOp; });
+          scene.background = on ? new THREE.Color(0x05070d) : null;
+          glowMats.forEach(m => { m.emissiveIntensity = on ? 0.75 : m.userData.dayEmit; });
           render();
         };
         api.current = { fit, night };
@@ -259,6 +275,9 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const [st, setSt] = useState({ busy: true });
   // l'apercu MakerWorld (sans couleurs) : le 3MF d'origine se recupere a la demande (un telechargement MakerWorld)
   const [want3mf, setWant3mf] = useState(false);
+  // un plateau abime (le serveur a oublie la vue) : on redemande, la vue se refait -- une fois
+  const [redo, setRedo] = useState(0);
+  useEffect(() => { if (st.broken && redo < 1) { setSt({ busy: true }); setRedo(r => r + 1); } }, [st.broken]);   // eslint-disable-line react-hooks/exhaustive-deps
   const base = `/makerworld/3d/${encodeURIComponent(designId)}`;
   useEffect(() => {
     if (wait) return;                    // le profil se deduit encore (fiche d'une impression)
@@ -270,7 +289,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
       .then(({ data }) => { if (alive) { setMeta(data); setPlate(0); } })
       .catch(e => alive && setErr(e?.response?.data?.detail || "Pas de modèle 3D pour celui-ci"));
     return () => { alive = false; };
-  }, [base, profileId, printId, wait, want3mf]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [base, profileId, printId, wait, want3mf, redo]);   // eslint-disable-line react-hooks/exhaustive-deps
   // pendant la preparation, son avancement (le serveur le dit a part, la demande principale attend)
   const [prog, setProg] = useState(null);
   useEffect(() => {
@@ -324,8 +343,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {(!meta && !err) || (p && st.busy) ? <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
             pointerEvents: "none" }}>
             <Ring pct={meta ? null : prog?.pct ?? null} label={meta ? "Chargement du plateau…" : prog?.label || "Préparation du modèle…"}/></div> : null}
-          {(err || st.error) && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
-            textAlign: "center", fontSize: 13, fontWeight: 700, color: "#ef4444" }}>{err || `Plateau illisible : ${st.error}`}</div>}
+          {(err || st.error || (st.broken && redo >= 1)) && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+            textAlign: "center", fontSize: 13, fontWeight: 700, color: "#ef4444" }}>{err || (st.error ? `Plateau illisible : ${st.error}` : "Plateau abîmé, même refait : rouvre la vue plus tard")}</div>}
         </div>
         {meta && <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
           <span>{meta.source === "3mf" && shown ? `3MF d'origine, aux couleurs des filaments ${altLabel.toLowerCase()}`

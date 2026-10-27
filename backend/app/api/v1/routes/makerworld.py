@@ -895,13 +895,23 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
 
 
 @router.get("/3d/file/{key}/{name}")
-async def mw_model_3d_file(key: str, name: str):
-    """Un plateau en 3D (binaire de l'appli, ou GLB de MakerWorld). Public, comme les images."""
-    from fastapi.responses import FileResponse
+async def mw_model_3d_file(key: str, name: str, plain: bool = False):
+    """Un plateau en 3D (binaire de l'appli, ou GLB de MakerWorld). Public, comme les images.
+    plain : decompresse ici (secours de la vue quand le navigateur n'a pas pu le lire) ; un plateau abime est
+    alors oublie avec sa vue (410), que la prochaine ouverture refait."""
+    from fastapi.responses import FileResponse, Response
     from ....services import mw_3d as T
     p = T.file_path(key, name)
     if p is None:
         raise HTTPException(404, "Plateau introuvable")
+    if plain and name.endswith(".bin"):
+        import gzip, zlib, asyncio
+        try:
+            raw = await asyncio.to_thread(lambda: gzip.decompress(p.read_bytes()))
+        except (OSError, EOFError, zlib.error):
+            T.unreadable(key)
+            raise HTTPException(410, "Plateau abîmé : la vue est à refaire")
+        return Response(raw, media_type="application/octet-stream", headers={"Cache-Control": "no-store"})
     hdr = {"Cache-Control": "private, max-age=86400"}
     if name.endswith(".bin"):
         hdr["Content-Encoding"] = "gzip"            # deja compresse a la conversion

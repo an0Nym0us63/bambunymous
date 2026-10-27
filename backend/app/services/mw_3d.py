@@ -13,6 +13,7 @@ u32 nombre de sommets, u32 nombre de triangles, float32 x,y,z par sommet (mm, Z 
 sur 0,0 et pose a z=0), uint32 trois indices par triangle.
 """
 import json
+import os
 import logging
 import re
 import struct
@@ -430,7 +431,11 @@ def _step(key, pct, label: str) -> None:
 def plates_out(meta: dict, key: str) -> tuple:
     """(plateaux a montrer avec leur adresse, numeros des plateaux trop lourds) : ni les vides, ni les trop lourds."""
     ext = "glb" if meta.get("glb") else "bin"
-    shown = [{**p, "url": f"/api/v1/makerworld/3d/file/{key}/plate_{p['n']}.{ext}"} for p in meta.get("plates") or []
+    try:
+        ver = int((_root() / key / "plates.json").stat().st_mtime)
+    except OSError:
+        ver = 0
+    shown = [{**p, "url": f"/api/v1/makerworld/3d/file/{key}/plate_{p['n']}.{ext}?v={ver}"} for p in meta.get("plates") or []
              if not p.get("skipped") and not p.get("empty") and (meta.get("glb") or p.get("size_mm"))]
     return shown, [p["n"] for p in meta.get("plates") or [] if p.get("skipped")]
 
@@ -553,10 +558,29 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
             buf += tt.astype("<u4").tobytes()
         # compresse une fois pour toutes : servi tel quel (Content-Encoding: gzip), le telephone le recoit leger
         _step(key, 78 + 20 * (len(meta["plates"]) + 1) / max(1, len(work)) - 10 / max(1, len(work)), "Compression")
-        (out_dir / f"plate_{n}.bin").write_bytes(_gzip(bytes(buf)))
+        _write(out_dir / f"plate_{n}.bin", _gzip(bytes(buf)))
         meta["plates"].append({"n": n, "name": pname, "triangles": total, "size_mm": [round(x, 1) for x in size]})
-    (out_dir / "plates.json").write_text(json.dumps(meta), encoding="utf-8")
+    _write(out_dir / "plates.json", json.dumps(meta).encode("utf-8"))
     return meta
+
+
+def _write(p: Path, data: bytes) -> None:
+    """Ecrit d'un coup (fichier a cote, puis renomme) : un plateau lu pendant qu'on le reecrit (conversion de fond)
+    arrivait tronque au navigateur (« Failed to fetch »)."""
+    tmp = p.with_name(p.name + ".part")
+    tmp.write_bytes(data)
+    os.replace(tmp, p)
+
+
+def unreadable(key: str) -> None:
+    """Un plateau illisible (abime) : la vue de ce 3MF est oubliee, la prochaine ouverture la refait."""
+    d = _root() / key
+    for f in list(d.glob("plate_*")) + [d / "plates.json"]:
+        try:
+            f.unlink()
+        except OSError:
+            pass
+    logger.warning(f"[3D] {key} : plateau illisible, vue a refaire")
 
 
 _LOCKS: dict = {}
