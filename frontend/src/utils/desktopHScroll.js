@@ -25,8 +25,19 @@ export function installDesktopHScroll() {
     if (!row) return;
     const max = row.scrollWidth - row.clientWidth;
     if ((e.deltaY > 0 && row.scrollLeft >= max - 1) || (e.deltaY < 0 && row.scrollLeft <= 0)) return;
-    row.scrollLeft += e.deltaY;
     e.preventDefault();
+    // une rangee qui se cale sur ses elements (galerie d'images) : un element entier par cran (27/10/2026).
+    // Un pas de 100 px y etait ramene aussitot sur l'image en cours : un a-coup, puis plus rien.
+    if (getComputedStyle(row).scrollSnapType.startsWith("x") || getComputedStyle(row).scrollSnapType.startsWith("both")) {
+      const now = Date.now();
+      if (now < (row.__bnWheelLock || 0)) return;
+      row.__bnWheelLock = now + 280;
+      const item = row.firstElementChild?.getBoundingClientRect().width || row.clientWidth * 0.8;
+      const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
+      row.scrollBy({ left: Math.sign(e.deltaY) * (item + gap), behavior: "smooth" });
+      return;
+    }
+    row.scrollLeft += e.deltaY;
   }, { passive: false });
 
   // saisir et faire glisser (souris seulement)

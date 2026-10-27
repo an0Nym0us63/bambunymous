@@ -16,6 +16,8 @@ export default defineConfig({
           if (!id.includes("node_modules")) return undefined;
           if (/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler|@remix-run)[\\/]/.test(id)) return "vendor-react";
           if (id.includes("lucide-react")) return "vendor-icons";
+          // three.js (la vue 3D) : charge seulement a l'ouverture de la vue, jamais avec le reste de l'appli
+          if (/[\\/]node_modules[\\/]three[\\/]/.test(id)) return undefined;
           return "vendor";
         },
       },

@@ -576,6 +576,50 @@ async def mw_doc(design_id: str, doc_id: str, dl: bool = False):
         "Cache-Control": "private, max-age=86400"})
 
 
+# ── La vue 3D d'un modele (27/10/2026) : son 3MF d'origine garde ici, sinon l'apercu 3D de MakerWorld ──
+@router.get("/3d/{design_id}")
+async def mw_model_3d(design_id: str, profile: str = "", _: str = Depends(get_current_user)):
+    """Les plateaux a afficher en 3D : {source: "3mf" | "makerworld", plates: [{n, name, url, size_mm}]}."""
+    from ....services import mw_3d as T
+    from ....services.mw_source import print_file
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        raise HTTPException(404, "Modèle inconnu")
+    src = print_file(did, profile or None, None)
+    meta, source = None, "3mf"
+    if src is not None and src.is_file():
+        meta = await asyncio.to_thread(T.from_3mf, src, src.stem)
+        key = src.stem
+    if not meta or not any(not p.get("skipped") for p in meta.get("plates") or []):
+        source = "makerworld"
+        try:
+            meta = await asyncio.to_thread(T.from_makerworld, did, profile or None)
+        except Exception as e:
+            logger.info(f"[3D] apercu MakerWorld de {did} : {e}")
+            meta = None
+        key = (meta or {}).get("key")
+    if not meta or not meta.get("plates"):
+        raise HTTPException(404, "Pas de modèle 3D pour celui-ci")
+    ext = "glb" if meta.get("glb") else "bin"
+    return {"source": source, "plates": [{**p, "url": f"/api/v1/makerworld/3d/file/{key}/plate_{p['n']}.{ext}"}
+                                         for p in meta["plates"] if not p.get("skipped")],
+            "skipped": [p["n"] for p in meta["plates"] if p.get("skipped")]}
+
+
+@router.get("/3d/file/{key}/{name}")
+async def mw_model_3d_file(key: str, name: str):
+    """Un plateau en 3D (binaire de l'appli, ou GLB de MakerWorld). Public, comme les images."""
+    from fastapi.responses import FileResponse
+    from ....services import mw_3d as T
+    p = T.file_path(key, name)
+    if p is None:
+        raise HTTPException(404, "Plateau introuvable")
+    hdr = {"Cache-Control": "private, max-age=86400"}
+    if name.endswith(".bin"):
+        hdr["Content-Encoding"] = "gzip"            # deja compresse a la conversion
+    return FileResponse(p, media_type="model/gltf-binary" if name.endswith(".glb") else "application/octet-stream", headers=hdr)
+
+
 @router.get("/docs/status")
 async def mw_docs_status(_: str = Depends(require_admin)):
     from ....services import mw_docs as D

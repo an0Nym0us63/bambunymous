@@ -9,6 +9,7 @@ import { useUrlTab } from "../utils/useUrlTab";
 import MakerWorldView from "../components/MakerWorldView";
 import MakerWorldCollectionsPicker from "../components/MakerWorldCollectionsPicker";
 import MwDocs from "../components/MwDocs";
+import Model3D from "../components/Model3D";
 import MakerWorldModelSheet, { prefetchModel } from "../components/MakerWorldModelSheet";
 import { openCreator } from "../components/MwCreatorPage";
 import { useToRateSet, RateButton, RateStar as RateStarBtn } from "../components/MwToRate";
@@ -566,6 +567,7 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
   const [mw, setMw] = useState(undefined);       // undefined = en cours, null = rien
   const [pick, setPick] = useState(false);       // ranger dans mes collections
   const [sheet, setSheet] = useState(null);      // fiche du modele (ou d'un similaire)
+  const [view3d, setView3d] = useState(false);   // la vue 3D du modele
   const hasFriends = useHasFriends();
   const shared = useShared(`/friends/shared/design/${encodeURIComponent(designId)}`, hasFriends && !!designId);
   const nShared = sharedCount(shared);           // section seulement s'il y a quelque chose chez eux
@@ -612,6 +614,9 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
             {stats.slice(0, 2).map(([ico, n, lbl]) => <span key={lbl}>{ico} {fmtK(n)}</span>)}
           </div>
         </div>
+        {!visiting && <button onClick={e => { e.stopPropagation(); setView3d(true); }} aria-label="Voir en 3D" data-tip="Voir en 3D"
+          style={{ width:32, height:32, borderRadius:10, border:"1px solid rgba(14,165,233,0.4)", background:"rgba(14,165,233,0.1)",
+            cursor:"pointer", flexShrink:0, fontSize:14 }}>🧊</button>}
         <button onClick={e => { e.stopPropagation(); setSheet(designId); }} onPointerDown={() => prefetchModel(designId)} aria-label="Fiche du modèle"
           data-tip="Fiche du modèle" style={{ width:32, height:32, borderRadius:10, border:"1px solid var(--border)", background:"var(--surface)",
             color:"#3b82f6", cursor:"pointer", flexShrink:0, fontSize:14, fontWeight:900 }}>↗</button>
@@ -680,6 +685,8 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
       <MakerWorldSimilar designId={designId} onOpen={setSheet}/>
       </>}
       {sheet && <MakerWorldModelSheet designId={sheet} onClose={() => setSheet(null)}/>}
+      {/* la vue 3D, au profil de l'impression */}
+      {view3d && <Model3D designId={designId} profileId={prints.find(x => x.mw_profile_id)?.mw_profile_id} title={mw.title} onClose={() => setView3d(false)}/>}
     </div>
   );
 }

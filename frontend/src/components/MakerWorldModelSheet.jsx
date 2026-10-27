@@ -1,5 +1,6 @@
 import { Hide } from "./Cachettes";
 import MwDocs from "./MwDocs";
+import Model3D from "./Model3D";
 import React, { useEffect, useRef, useState } from "react";
 import { plateRound, plateDoneInRound } from "../utils/queueSort";
 import { useTrackDetail } from "../utils/track";
@@ -60,6 +61,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [com, setCom] = useState(null);            // { items, total }
   const [comBusy, setComBusy] = useState(false);
   const [pick, setPick] = useState(false);
+  const [view3d, setView3d] = useState(false);
   const [sharing, setSharing] = useState(false);     // le partage Telegram du modele
   const [sim, setSim] = useState(null);
   const [zoom, setZoom] = useState(null);          // galerie plein ecran { images, index }
@@ -755,9 +757,13 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                 return <button onClick={() => toast("⭐ " + why, "info", 3500)} aria-label="Évaluer" data-tip={why}
                   style={{ ...sq, ...dim("245,158,11") }}><span style={{ opacity:.5 }}>⭐</span></button>;
               })())}
+            {!friend && <button onClick={() => setView3d(true)} aria-label="Voir en 3D" data-tip="Voir en 3D"
+              style={{ ...sq, background:"rgba(14,165,233,0.12)", borderColor:"rgba(14,165,233,0.4)" }}>🧊</button>}
             <button onClick={menu} aria-label="Plus d'actions" style={sq}>⋯</button>
           </div>
         )}
+        {/* la vue 3D : le profil le mieux adapte a mon imprimante (le premier de la liste) */}
+        {view3d && <Model3D designId={id} profileId={m.profiles?.[0]?.profile_id} title={m.title_fr || m.title} onClose={() => setView3d(false)}/>}
       </div>
     </div>,
     document.body
