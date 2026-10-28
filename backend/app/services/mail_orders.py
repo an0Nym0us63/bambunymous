@@ -618,6 +618,32 @@ def _imap_folder(name: str) -> str:
     return '"' + "".join(out) + '"'
 
 
+def _sender_hint(M, since: str, senders: list) -> list[str]:
+    """Aucun mail des expediteurs regles sur la periode : cherche des mails « bambulab » venus d'ailleurs et rend un
+    conseil (les adresses vues, a ajouter), ou la piste du dossier."""
+    try:
+        typ, data = M.uid("search", None, f'(SINCE {since} FROM "bambulab")')
+        ids = data[0].split() if typ == "OK" and data and data[0] else []
+    except Exception:
+        return []
+    if not ids:
+        return [f"Aucun mail de la boutique depuis le {since} dans ce dossier : vérifie le dossier (Proton range parfois les mails de boutique dans un autre dossier ou un libellé) et la période."]
+    seen_from = []
+    for u in ids[-15:]:
+        try:
+            typ, data = M.uid("fetch", u, "(BODY.PEEK[HEADER.FIELDS (FROM)])")
+            if typ == "OK" and data and isinstance(data[0], tuple):
+                hdr = email.message_from_bytes(data[0][1])
+                addr = email.utils.parseaddr(_decode(hdr.get("From")))[1].lower()
+                if addr and addr not in senders and addr not in seen_from:
+                    seen_from.append(addr)
+        except Exception:
+            continue
+    if seen_from:
+        return [f"{len(ids)} mail(s) Bambu Lab trouvés, mais depuis d'autres adresses que celles réglées : " + ", ".join(seen_from[:5]) + " — ajoute-les dans les expéditeurs lus."]
+    return [f"{len(ids)} mail(s) Bambu Lab trouvés mais sans expéditeur reconnu : vérifie les adresses d'expéditeur."]
+
+
 def _fetch_sync(cfg: dict, password: str, seen: set) -> tuple[list, list]:
     """Se connecte, cherche les mails de la boutique, rend (nouveaux mails analyses, erreurs). Un releve
     automatique ne regarde que depuis le dernier mail deja vu (UID IMAP superieur, 28/10/2026) : pas de retour dans
@@ -641,6 +667,9 @@ def _fetch_sync(cfg: dict, password: str, seen: set) -> tuple[list, list]:
                 uids |= set(data[0].split())
         # « UID n:* » rend aussi le dernier mail connu quand rien de neuf n'est arrive : les deja vus sont ecartes
         new = [u for u in sorted(uids, key=lambda x: int(x)) if u.decode() not in seen and int(u) > last_uid]
+        if not uids and not last_uid:
+            # rien de ces expediteurs (28/10/2026) : on regarde si la boutique ecrit depuis une autre adresse, pour le dire
+            errors.extend(_sender_hint(M, since, senders))
         for u in new[-200:]:
             try:
                 typ, data = M.uid("fetch", u, "(RFC822)")

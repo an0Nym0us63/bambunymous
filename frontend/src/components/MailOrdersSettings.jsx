@@ -107,7 +107,9 @@ export default function MailOrdersSettings({ card, cardTitle }) {
         </div>
         {last && <div style={{ padding:"8px 12px", borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)", fontSize:12, color:"var(--text2)", lineHeight:1.5 }}>
           Dernier relevé ({last.trigger}{last.days ? `, ${last.days} j` : ""}) : {when(last.at)} · {last.error ? <b style={{ color:"#ef4444" }}>{last.error}</b>
-            : <>{last.mails} mail{last.mails > 1 ? "s" : ""} lu{last.mails > 1 ? "s" : ""}, {last.created} commande{last.created > 1 ? "s" : ""} nouvelle{last.created > 1 ? "s" : ""}, {last.updated} mise{last.updated > 1 ? "s" : ""} à jour{last.ignored ? `, ${last.ignored} mail${last.ignored > 1 ? "s" : ""} sans commande` : ""}{last.errors?.length ? ` · ${last.errors.length} erreur(s)` : ""}</>}
+            : <>{last.mails} mail{last.mails > 1 ? "s" : ""} lu{last.mails > 1 ? "s" : ""}, {last.created} commande{last.created > 1 ? "s" : ""} nouvelle{last.created > 1 ? "s" : ""}, {last.updated} mise{last.updated > 1 ? "s" : ""} à jour{last.ignored ? `, ${last.ignored} mail${last.ignored > 1 ? "s" : ""} sans commande` : ""}{last.errors?.length ? ` · ${last.errors.length} remarque${last.errors.length > 1 ? "s" : ""}` : ""}
+              {/* les remarques du releve (28/10/2026) : aucun mail des expediteurs regles, adresses vues ailleurs, dossier a verifier… */}
+              {last.errors?.length ? <ul style={{ margin:"6px 0 0", paddingLeft:18 }}>{last.errors.map((e, i) => <li key={i} style={{ color:"#d97706" }}>{e}</li>)}</ul> : null}</>}
         </div>}
         {/* l'historique des commandes lues (finies et cachees comprises), replie ; la page Filaments ne garde que ce qui attend */}
         <OrdersHistory/>
