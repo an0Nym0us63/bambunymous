@@ -16,15 +16,18 @@ const when = iso => iso ? new Date(iso).toLocaleString("fr-FR", { day:"numeric",
 
 export default function MailOrdersSettings({ card, cardTitle }) {
   const [s, setS] = useState(null);
-  const [f, setF] = useState({ host:"", port:993, user:"", password:"", folder:"INBOX", sender:"bambulab", days:21, every_h:3 });
+  const [f, setF] = useState({ host:"", port:993, user:"", password:"", folder:"INBOX", senders:[], days:21, every_h:3 });
+  const [newSender, setNewSender] = useState("");
   const [busy, setBusy] = useState(false);
   const load = () => client.get("/settings/mail").then(r => {
     setS(r.data);
-    setF(x => ({ ...x, host: r.data.host, port: r.data.port, user: r.data.user, folder: r.data.folder, sender: r.data.sender,
+    setF(x => ({ ...x, host: r.data.host, port: r.data.port, user: r.data.user, folder: r.data.folder, senders: r.data.senders || [],
       days: r.data.days, every_h: r.data.every_h }));
   }).catch(e => showAlert(e.response?.data?.detail || e.message));
   useEffect(() => { load(); }, []);
   const set = k => e => setF(x => ({ ...x, [k]: e.target.value }));
+  const addSender = () => { const a = newSender.trim().toLowerCase(); if (!a || !a.includes("@")) return;
+    setF(x => ({ ...x, senders: x.senders.includes(a) ? x.senders : [...x.senders, a] })); setNewSender(""); };
   const save = async (extra = {}) => {
     setBusy(true);
     try {
@@ -72,7 +75,16 @@ export default function MailOrdersSettings({ card, cardTitle }) {
           <div><span style={lbl}>Mot de passe d'application {s.has_password ? "(enregistré, laisser vide pour garder)" : ""}</span>
             <input type="password" value={f.password} onChange={set("password")} autoComplete="new-password" placeholder={s.has_password ? "••••••••" : "xxxx xxxx xxxx xxxx"} style={inp}/></div>
           <div><span style={lbl}>Dossier</span><input value={f.folder} onChange={set("folder")} placeholder="INBOX" style={inp}/></div>
-          <div><span style={lbl}>Expéditeur contient</span><input value={f.sender} onChange={set("sender")} placeholder="bambulab" style={inp}/></div>
+          <div style={{ gridColumn:"1 / -1" }}><span style={lbl}>Adresses d'expéditeur lues (tout le reste de la boîte est ignoré)</span>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6, alignItems:"center" }}>
+              {(f.senders || []).map(a => <span key={a} style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"4px 10px", borderRadius:14, fontSize:12.5,
+                background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)" }}>{a}
+                <button type="button" aria-label={`Retirer ${a}`} onClick={() => setF(x => ({ ...x, senders: x.senders.filter(y => y !== a) }))}
+                  style={{ border:"none", background:"none", color:"var(--muted)", cursor:"pointer", padding:0, fontSize:13 }}>✕</button></span>)}
+              <input value={newSender} onChange={e => setNewSender(e.target.value)} placeholder="noreply@notify-us.bambulab.com" autoComplete="off"
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSender(); } }} style={{ ...inp, width:"auto", flex:1, minWidth:200 }}/>
+              <button type="button" onClick={addSender} style={btn(false)}>Ajouter</button>
+            </div></div>
           <div><span style={lbl}>Remonter sur (jours, 21 au plus)</span><input value={f.days} onChange={e => setF(x => ({ ...x, days: e.target.value === "" ? "" : Math.min(21, Number(e.target.value.replace(/\D/g, "")) || "") }))} inputMode="numeric" style={inp}/></div>
           <div><span style={lbl}>Relever toutes les (heures)</span><input value={f.every_h} onChange={set("every_h")} inputMode="numeric" style={inp}/></div>
         </div>

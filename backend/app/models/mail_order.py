@@ -23,6 +23,7 @@ class MailOrder(Base):
     carrier     = Column(String(64), nullable=True)
     subject     = Column(String(256), nullable=True)
     items_json  = Column(Text, nullable=False, default="[]")
+    shipments_json = Column(Text, nullable=True)             # les envois (Bambu expedie souvent en plusieurs colis)
     total       = Column(String(32), nullable=True)
     hidden      = Column(Boolean, default=False)
     done        = Column(Boolean, default=False)

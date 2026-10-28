@@ -161,6 +161,7 @@ async def init_db():
     await _normalize_archived_spools()
     await _seed_admin_user()
     await _migrate_last_seen()
+    await _migrate_mail_orders()
     await _migrate_label_printed()
     await _migrate_object_status()
     await _cleanup_bogus_translations()
@@ -473,6 +474,19 @@ async def _normalize_print_dates():
                     f"BEGIN UPDATE prints SET print_date = {_DATE_NORM.format(x='NEW.print_date')} WHERE id = NEW.id; END"))
     except Exception as e:
         print(f"[migration] format des dates d'impression ignore : {e}")
+
+
+async def _migrate_mail_orders():
+    """mail_orders.shipments_json (28/10/2026) sur une base qui a deja la table. Idempotent."""
+    from sqlalchemy import text as _text
+    try:
+        async with engine.begin() as conn:
+            cols = [r[1] for r in (await conn.execute(_text("PRAGMA table_info(mail_orders)"))).all()]
+            if cols and "shipments_json" not in cols:
+                await conn.execute(_text("ALTER TABLE mail_orders ADD COLUMN shipments_json TEXT"))
+                print("[migration] colonne mail_orders.shipments_json ajoutee")
+    except Exception as e:
+        print(f"[migration] mail_orders ignoree : {e}")
 
 
 async def _migrate_last_seen():

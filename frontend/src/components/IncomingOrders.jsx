@@ -31,8 +31,9 @@ function lineState(it) {
   if (it.confirmed && !left) return ["reçue, confirmée", "#22c55e"];
   if (it.assumed) return [`présumée reçue (commande ancienne)${it.auto ? `, ${it.auto} retrouvée${it.auto > 1 ? "s" : ""} par la date d'ajout` : ""} · à confirmer`, "#f59e0b"];
   if (!left) return [it.auto ? "reçue (bobine ajoutée après la commande)" : "reçue", "#22c55e"];
-  if (rec) return [`${rec} reçue${rec > 1 ? "s" : ""}, ${left} attendue${left > 1 ? "s" : ""}`, "#0EA5E9"];
-  return ["attendue", "#0EA5E9"];
+  const sent = Math.max(0, (it.shipped || 0) - rec);
+  if (rec) return [`${rec} reçue${rec > 1 ? "s" : ""}, ${left} ${sent ? "en route" : "attendue" + (left > 1 ? "s" : "")}`, "#0EA5E9"];
+  return [sent ? "en route" : "attendue", sent ? "#f59e0b" : "#0EA5E9"];
 }
 
 /** La fenetre d'une commande : depuis la carte, ou depuis une notification (/filaments?order=ID). */
@@ -68,6 +69,9 @@ export function OrderSheet({ id, order: given = null, onClose, onChanged }) {
           {o.ordered_at && <span>Commandée le {dayY(o.ordered_at)}</span>}
           {o.shipped_at && <span>Expédiée le {dayY(o.shipped_at)}{o.carrier ? ` · ${o.carrier}` : ""}{o.tracking_url && <> · <a href={o.tracking_url} target="_blank" rel="noreferrer" style={{ color:"#0EA5E9", fontWeight:700 }}>suivi ↗</a></>}</span>}
           {o.delivered_at && <span>Livrée le {dayY(o.delivered_at)}</span>}
+          {(o.shipments || []).map((sh, i) => <span key={i}>📦 Envoi du {dayY(sh.at)}{sh.carrier ? ` · ${sh.carrier}` : ""}{sh.tracking ? ` · ${sh.tracking}` : ""}
+            {sh.url && <> · <a href={sh.url} target="_blank" rel="noreferrer" style={{ color:"#0EA5E9", fontWeight:700 }}>suivre ↗</a></>}
+            {sh.items?.length ? ` : ${sh.items.join(", ")}` : ""}</span>)}
         </div>
         {o.to_confirm > 0 && <div style={{ marginTop:10, padding:"8px 10px", borderRadius:10, background:"color-mix(in srgb, #f59e0b 12%, var(--surface2))",
           border:"1px solid color-mix(in srgb, #f59e0b 40%, transparent)", fontSize:12.5, color:"var(--text)" }}>

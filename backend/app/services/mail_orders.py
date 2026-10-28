@@ -30,6 +30,9 @@ K_FOLDER, K_SENDER, K_ENABLED, K_DAYS, K_EVERY, K_LAST, K_SEEN = \
     "MAIL_FOLDER", "MAIL_SENDER", "MAIL_ENABLED", "MAIL_DAYS", "MAIL_EVERY_H", "MAIL_LAST", "MAIL_SEEN"
 _STATE = {"running": False}
 REREAD_MAX_DAYS = 21       # le plus loin qu'un releve remonte (reglage ou rattrapage)
+# les adresses d'expediteur de la boutique (28/10/2026, d'apres un vrai mail) : seuls leurs mails sont lus, tout le
+# reste de la boite est ignore ; d'autres adresses s'ajoutent dans les reglages (boutique US, CN…)
+DEFAULT_SENDERS = "noreply@notify-eu.bambulab.com"
 _SEEN_MAX = 2000
 
 
@@ -42,7 +45,7 @@ async def settings_get() -> dict:
             return await g_(db, k, d)
         out = {"host": await g(K_HOST, "imap.gmail.com"), "port": int((await g(K_PORT, "993")) or 993),
                "user": await g(K_USER, ""), "has_password": bool(await g(K_PASS, "")),
-               "folder": await g(K_FOLDER, "INBOX"), "sender": await g(K_SENDER, "bambulab"),
+               "folder": await g(K_FOLDER, "INBOX"), "senders": [x.strip() for x in (await g(K_SENDER, DEFAULT_SENDERS)).split(",") if x.strip()],
                "enabled": (await g(K_ENABLED, "0")) == "1", "days": min(REREAD_MAX_DAYS, int((await g(K_DAYS, "21")) or 21)),
                "every_h": int((await g(K_EVERY, "3")) or 3), "running": _STATE["running"]}
         try:
@@ -56,9 +59,12 @@ async def settings_set(body: dict) -> dict:
     from ..db.session import AsyncSessionLocal
     from .settings_service import set_setting
     async with AsyncSessionLocal() as db:
-        for key, k in ((K_HOST, "host"), (K_USER, "user"), (K_FOLDER, "folder"), (K_SENDER, "sender")):
+        for key, k in ((K_HOST, "host"), (K_USER, "user"), (K_FOLDER, "folder")):
             if k in body:
                 await set_setting(db, key, str(body[k] or "").strip())
+        if "senders" in body and isinstance(body["senders"], list):
+            lst = sorted({str(x).strip().lower() for x in body["senders"] if str(x).strip() and "," not in str(x)})
+            await set_setting(db, K_SENDER, ",".join(lst) or DEFAULT_SENDERS)
         if "port" in body:
             await set_setting(db, K_PORT, str(max(1, min(65535, int(body["port"] or 993)))))
         if "password" in body and body["password"] is not None:
@@ -183,17 +189,22 @@ _SKIP = ("sous-total", "subtotal", "total", "taxes", "tva", "tax", "livraison", 
          "quantité", "quantity", "prix", "price", "articles", "items")
 
 
-def classify(subject: str, text: str) -> str | None:
-    s = _fold(subject + " " + text[:400])
+def _kind_of(s: str) -> str | None:
     if re.search(r"annul|cancel", s):
         return "cancelled"
     if re.search(r"livree|delivered|est arrivee|has arrived|a ete livre", s):
         return "delivered"
-    if re.search(r"expedie|shipped|on the way|en route|en cours de livraison|out for delivery|has been sent|envoyee", s):
-        return "shipped"
     if re.search(r"confirm|merci pour votre commande|thank you for your (order|purchase)|recapitulatif|received your order", s):
         return "confirmed"
+    if re.search(r"expedie|shipped|on the way|en route|en cours de livraison|out for delivery|has been sent|envoyee|un envoi", s):
+        return "shipped"
     return None
+
+
+def classify(subject: str, text: str) -> str | None:
+    """L'objet decide d'abord (28/10/2026 : le corps d'une confirmation Bambu dit deja « pour l'expedier », qui la
+    faisait passer pour une expedition) ; le corps ne sert qu'a un objet muet."""
+    return _kind_of(_fold(subject)) or _kind_of(_fold(text[:400]))
 
 
 def order_number(subject: str, text: str) -> str | None:
@@ -204,8 +215,25 @@ def order_number(subject: str, text: str) -> str | None:
     return None
 
 
-def tracking(text: str, links: list) -> tuple[str | None, str | None]:
-    """(adresse de suivi, transporteur) d'apres les liens du mail."""
+_TRACK_URL = {"dhl": "https://www.dhl.com/fr-fr/home/tracking.html?tracking-id={n}", "ups": "https://www.ups.com/track?tracknum={n}",
+              "fedex": "https://www.fedex.com/fedextrack/?trknbr={n}", "dpd": "https://www.dpd.com/fr/fr/suivre-mon-colis/?parcelNumber={n}",
+              "gls": "https://gls-group.com/FR/fr/suivi-colis?match={n}", "colissimo": "https://www.laposte.fr/outils/suivre-vos-envois?code={n}",
+              "chronopost": "https://www.chronopost.fr/tracking-no-cms/suivi-page?listeNumerosLT={n}", "usps": "https://tools.usps.com/go/TrackConfirmAction?tLabels={n}",
+              "la poste": "https://www.laposte.fr/outils/suivre-vos-envois?code={n}", "tnt": "https://www.tnt.com/express/fr_fr/site/outils-expedition/suivi.html?searchType=con&cons={n}"}
+
+
+def tracking(text: str, links: list) -> tuple[str | None, str | None, str | None]:
+    """(adresse de suivi, transporteur, numero) : le « Numero de suivi de DHL : XXX » en clair d'abord (format
+    Bambu, 28/10/2026), sinon un lien de transporteur."""
+    m = re.search(r"(?:num[ée]ro de suivi|tracking number|suivi)\s*(?:de|du|:)?\s*([A-Za-z][A-Za-z ]{1,20}?)?\s*:\s*([A-Z0-9]{8,})", text, re.I)
+    if m:
+        name = (m.group(1) or "").strip()
+        n = m.group(2).strip()
+        key = next((k for k in _TRACK_URL if k in name.lower()), None)
+        url = _TRACK_URL[key].format(n=n) if key else None
+        if not url:
+            url = next((u for u in links if n in u), None)
+        return url, (name or None), n
     carriers = (("ups.com", "UPS"), ("dhl", "DHL"), ("fedex", "FedEx"), ("dpd", "DPD"), ("gls", "GLS"), ("laposte", "La Poste"),
                 ("colissimo", "Colissimo"), ("chronopost", "Chronopost"), ("tnt", "TNT"), ("usps", "USPS"), ("17track", None),
                 ("aftership", None), ("track", None))
@@ -215,8 +243,23 @@ def tracking(text: str, links: list) -> tuple[str | None, str | None]:
             continue
         for key, name in carriers:
             if key in lu:
-                return u, name
-    return None, None
+                return u, name, None
+    return None, None, None
+
+
+# « PLA Marble x 1 » (ou « × 1 ») puis « Granit rouge (13201) / Filament avec bobine / 1 kg » : le produit, la
+# quantite, le nom de couleur, le CODE COULEUR Bambu (celui du catalogue : plus rien a deviner), bobine ou recharge
+_BAMBU_RE = re.compile(r"(?P<title>[A-Za-z][A-Za-z0-9+\- ]{1,40}?)\s*[×x]\s*(?P<qty>\d{1,3})\s+(?P<color>[^/\n()]{1,60}?)\s*\((?P<code>\d{5})\)\s*/\s*(?P<pack>[^/\n]{1,40})(?:/\s*(?P<w>[\d.,]+\s*k?g))?", re.I)
+
+
+def items_bambu(text: str) -> list[dict]:
+    out = []
+    for m in _BAMBU_RE.finditer(text):
+        pack = _fold(m.group("pack"))[:30]
+        out.append({"title": f"{m.group('title').strip()} - {m.group('color').strip()}", "qty": int(m.group("qty")),
+                    "product": m.group("title").strip(), "color_name": m.group("color").strip(), "fila_color_code": m.group("code"),
+                    "refill": "recharge" in pack or "refill" in pack, "weight": (m.group("w") or "").replace(" ", "") or None})
+    return out
 
 
 def items_from_text(text: str) -> list[dict]:
@@ -271,6 +314,20 @@ def _catalog_index():
     types = sorted(colors, key=len, reverse=True)
     _CAT.update(n=len(data), types=types, colors=colors)
     return types, colors
+
+
+def match_catalog_code(code: str) -> dict | None:
+    """L'entree du catalogue par son code couleur Bambu (« 13201 »), exact."""
+    from .bambu_catalog import catalog_entries
+    data, _ = catalog_entries()
+    for e in data or []:
+        if str(e.get("fila_color_code") or "") == str(code):
+            names = e.get("fila_color_name") or {}
+            cols = e.get("fila_color") or []
+            return {"fila_id": e.get("fila_id"), "fila_color_code": e.get("fila_color_code"), "fila_type": e.get("fila_type"),
+                    "name_fr": names.get("fr") or names.get("en"), "name_en": names.get("en"),
+                    "color_hex": (cols[0].lstrip("#")[:6] if cols else None), "refill": False}
+    return None
 
 
 def match_catalog(title: str) -> dict | None:
@@ -328,7 +385,15 @@ async def enrich_items(items: list[dict]) -> list[dict]:
     from ..db.session import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         for it in items:
-            cat = match_catalog(it["title"])
+            cat = match_catalog_code(it["fila_color_code"]) if it.get("fila_color_code") else None
+            if cat:
+                cat["refill"] = bool(it.get("refill"))
+            elif it.get("fila_color_code"):
+                # un code que le catalogue local ne connait pas encore : le produit et le nom de couleur du mail
+                cat = {"fila_id": None, "fila_color_code": it["fila_color_code"], "fila_type": it.get("product"),
+                       "name_fr": it.get("color_name"), "name_en": None, "color_hex": None, "refill": bool(it.get("refill"))}
+            else:
+                cat = match_catalog(it["title"])
             it["kind"] = "filament" if cat else "other"
             it.setdefault("received", 0)
             if cat:
@@ -351,7 +416,7 @@ def _fetch_sync(cfg: dict, password: str, seen: set) -> tuple[list, list]:
         typ, _ = M.select(cfg["folder"] or "INBOX", readonly=True)
         if typ != "OK":
             raise RuntimeError(f"Dossier « {cfg['folder']} » introuvable")
-        senders = [s.strip() for s in (cfg["sender"] or "bambulab").split(",") if s.strip()]
+        senders = cfg.get("senders") or DEFAULT_SENDERS.split(",")
         uids = set()
         for s in senders:
             typ, data = M.uid("search", None, f'(SINCE {since} FROM "{s}")')
@@ -426,9 +491,12 @@ async def sync(trigger: str = "manuel", days: int | None = None, reread: bool = 
         seen = await _seen()
         mails, errors = await asyncio.to_thread(_fetch_sync, cfg, password, set() if reread else seen)
         created, updated, ignored = 0, 0, 0
+        # seules les lectures automatiques previennent (28/10/2026) : une relecture ou un releve a la main ne
+        # doit pas faire pleuvoir les notifications de commandes deja connues
+        notify = trigger == "auto"
         for m in sorted(mails, key=lambda x: x["date"]):
             seen.add(m["uid"])
-            r = await _apply(m)
+            r = await _apply(m, notify=notify)
             if r == "created":
                 created += 1
             elif r == "updated":
@@ -485,7 +553,7 @@ async def _reconcile_existing(items: list, ordered_at) -> None:
                 it["received"] = qty
 
 
-async def _apply(m: dict) -> str:
+async def _apply(m: dict, notify: bool = True) -> str:
     """Un mail analyse -> une commande creee ou mise a jour. Rend created / updated / ignored."""
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
@@ -494,13 +562,14 @@ async def _apply(m: dict) -> str:
     no = order_number(m["subject"], m["text"])
     if not kind or not no:
         return "ignored"
-    items = items_from_text(m["text"]) if kind == "confirmed" else []
+    parsed = items_bambu(m["text"]) or items_from_text(m["text"])
+    items = parsed if kind == "confirmed" else []
     if kind == "confirmed" and not items:
         return "ignored"
     if items:
         items = await enrich_items(items)
         await _reconcile_existing(items, m["date"])
-    url, carrier = tracking(m["text"], m["links"]) if kind in ("shipped", "delivered") else (None, None)
+    url, carrier, tno = tracking(m["text"], m["links"]) if kind in ("shipped", "delivered") else (None, None, None)
     store = None
     mm = re.search(r"https?://([a-z0-9.-]*store\.bambulab\.com)", m["text"] + " " + " ".join(m["links"]), re.I)
     if mm:
@@ -526,6 +595,25 @@ async def _apply(m: dict) -> str:
                 o.status = kind
         if kind == "shipped":
             o.shipped_at = o.shipped_at or m["date"]
+            # un envoi (souvent partiel) : les lignes qu'il contient passent « en route », et il est garde avec son suivi
+            cur = json.loads(o.items_json or "[]")
+            sent = []
+            for p_ in parsed:
+                tgt = next((i for i in cur if i.get("kind") == "filament" and (i.get("shipped") or 0) < (i.get("qty") or 0)
+                            and ((p_.get("fila_color_code") and p_["fila_color_code"] == i.get("fila_color_code"))
+                                 or _fold(p_["title"]) == _fold(i.get("title")))), None)
+                if tgt is not None:
+                    tgt["shipped"] = min(int(tgt.get("qty") or 0), int(tgt.get("shipped") or 0) + int(p_.get("qty") or 1))
+                    sent.append(tgt.get("name_fr") or tgt.get("title"))
+            ships = json.loads(o.shipments_json or "[]")
+            if not any(sh.get("tracking") == tno for sh in ships if tno) or not tno:
+                ships.append({"at": m["date"].isoformat(), "carrier": carrier, "tracking": tno, "url": url, "items": sent or [p_["title"] for p_ in parsed]})
+            if not parsed:                       # pas de detail d'articles : tout est en route
+                for i in cur:
+                    if i.get("kind") == "filament":
+                        i["shipped"] = i.get("qty") or 0
+            o.items_json = json.dumps(cur, ensure_ascii=False)
+            o.shipments_json = json.dumps(ships, ensure_ascii=False)
         if kind == "delivered":
             o.delivered_at = o.delivered_at or m["date"]
         if url:
@@ -542,20 +630,21 @@ async def _apply(m: dict) -> str:
             o.done = True                      # une expedition de plus de deux mois sans lignes connues : rien a suivre
         await db.commit()
         oid, status, items_now = o.id, o.status, json.loads(o.items_json or "[]")
-    try:
-        from . import notify_events as NE
-        # une vieille commande fermee par anciennete : une notification « a confirmer » plutot qu'une confirmation
-        assumed = res == "created" and any(i.get("assumed") for i in items_now)
-        NE._spawn(NE.order_mail, oid, "assumed" if assumed else kind)
-    except Exception:
-        pass
+    if notify:
+        try:
+            from . import notify_events as NE
+            # une vieille commande fermee par anciennete : une notification « a confirmer » plutot qu'une confirmation
+            assumed = res == "created" and any(i.get("assumed") for i in items_now)
+            NE._spawn(NE.order_mail, oid, "assumed" if assumed else kind, [p_["title"] for p_ in parsed] if kind == "shipped" else None)
+        except Exception:
+            pass
     return res
 
 
 # ── A venir, et l'arrivee des bobines ─────────────────────────────────────────
 def _item_view(it: dict) -> dict:
     return {k: it.get(k) for k in ("title", "qty", "received", "kind", "fila_type", "name_fr", "color_hex", "filament_id", "refill",
-                                   "fila_color_code", "auto", "assumed", "confirmed")}
+                                   "fila_color_code", "auto", "assumed", "confirmed", "shipped")}
 
 
 async def one(order_id: int) -> dict | None:
@@ -591,7 +680,7 @@ def _views(rows) -> list[dict]:
             "shipping" if o.status == "shipped" else "ordered"
         out.append({"id": o.id, "order_no": o.order_no, "store": o.store, "status": o.status, "stage": stage, "ordered_at": o.ordered_at,
                     "shipped_at": o.shipped_at, "delivered_at": o.delivered_at, "tracking_url": o.tracking_url, "carrier": o.carrier,
-                    "done": bool(o.done), "hidden": bool(o.hidden), "items": items,
+                    "done": bool(o.done), "hidden": bool(o.hidden), "items": items, "shipments": json.loads(o.shipments_json or "[]"),
                     "pending": sum(max(0, (i.get("qty") or 0) - (i.get("received") or 0)) for i in items if i.get("kind") == "filament"),
                     "to_confirm": sum(int(i.get("assumed") or 0) for i in items if not i.get("confirmed"))})
     return out

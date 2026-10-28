@@ -468,7 +468,7 @@ async def fil_to_order(fid: int):
                 link=f"/filaments?id={fid}", priority=2)
 
 
-async def order_mail(oid: int, kind: str):
+async def order_mail(oid: int, kind: str, sent: list | None = None):
     """Une commande Bambu Lab lue dans les mails : confirmee, expediee, livree ou annulee (28/10/2026)."""
     import json as _j
     from ..db.session import AsyncSessionLocal
@@ -485,6 +485,9 @@ async def order_mail(oid: int, kind: str):
              "delivered": f"📦 Commande {no} livrée", "cancelled": f"❌ Commande {no} annulée",
              "assumed": f"📬 Commande {no} : à confirmer"}.get(kind, f"📬 Commande {no}")
     lines = []
+    if kind == "shipped" and sent:
+        items = [i for i in items if (i.get("title") in sent) or (i.get("name_fr") and any(i["name_fr"] in t for t in sent))] or items
+        title = f"🚚 Commande {no} : un envoi en route"
     if kind == "assumed":
         # une vieille commande lue apres coup : ce que les bobines ajoutees expliquent, et ce qui est presume recu
         n_auto = sum(int(i.get("auto") or 0) for i in items)
