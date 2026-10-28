@@ -425,6 +425,96 @@ async def achievements_wheel_extra(body: dict, username: str = Depends(require_m
         raise HTTPException(400, str(e))
 
 
+# ── Le coup de pouce (28/10/2026) : une seule page pour offrir tours, cles, tickets, loupes et chance de surprise,
+# a un ou plusieurs comptes de la maison, en une fois (les pages « rembobiner » et « coup de pouce » reunies)
+GIFT_KINDS = ("spins", "keys", "tickets", "loupes", "surprise")
+
+
+@router.get("/gift/accounts")
+async def achievements_gift_accounts(username: str = Depends(require_main), db: AsyncSession = Depends(get_db)):
+    """Les comptes de la maison et ce qu'ils ont en main : tours, cles et tickets (la maison), loupes, chance de
+    surprise. La maison d'abord."""
+    from ....services import achievements as A
+    from .users import _root_admin_id
+    main_id = await _root_admin_id(db)
+    users = (await db.execute(select(User).where(User.active.is_(True), User.friend_key_hash.is_(None))
+                              .order_by(User.id))).scalars().all()
+    users = sorted(users, key=lambda x: (x.id != main_id, x.role != ROLE_ADMIN, x.id))
+    odds = {r["username"]: r for r in await A.surprise_odds([x.username for x in users])}
+    st = await A._state_get() or {}
+    fam = (await A.family())["secrets"]
+    out = []
+    for x in users:
+        main = x.id == main_id
+        row = {"username": x.username, "main": main, "role": x.role, "wheel": main or x.username in fam,
+               "loupes": int((await A.loupes(x.username)).get("n") or 0)}
+        if main:
+            row.update(spins=(st.get("wheel") or {}).get("spins", 0), keys=(st.get("keys") or {}).get("balance", 0),
+                       tickets=(st.get("wheel") or {}).get("tickets", 0))
+        elif row["wheel"]:
+            row.update(spins=(await A.famwheel(x.username)).get("spins", 0))
+        o = odds.get(x.username) or {}
+        row.update(surprise=o.get("next"), pending=bool(o.get("pending")), shown=o.get("shown", 0), last=o.get("last"))
+        out.append(row)
+    return {"accounts": out}
+
+
+@router.post("/gift")
+async def achievements_gift(body: dict, username: str = Depends(require_main), db: AsyncSession = Depends(get_db)):
+    """Offre en une fois : gifts = [{to, kind, n}], kind parmi spins / keys / tickets / loupes / surprise (n = %).
+    Cles et tickets : la maison seulement ; tours : la maison ou un compte de la famille qui a sa roue."""
+    await _check_secret(body, username, db)
+    from ....services import achievements as A
+    gifts = (body or {}).get("gifts") or []
+    if not isinstance(gifts, list) or not gifts or len(gifts) > 40:
+        raise HTTPException(400, "Rien à offrir")
+    users = {u.username: u for u in (await db.execute(select(User).where(User.active.is_(True), User.friend_key_hash.is_(None)))).scalars().all()}
+    fam = (await A.family())["secrets"]
+    done, errors = [], []
+    for g in gifts:
+        to = str((g or {}).get("to") or "").strip()
+        kind = str((g or {}).get("kind") or "")
+        try:
+            n = float((g or {}).get("n"))
+        except (TypeError, ValueError):
+            n = 0
+        if to not in users or kind not in GIFT_KINDS or n <= 0:
+            errors.append({"to": to, "kind": kind, "error": "Cadeau invalide"})
+            continue
+        main = to == username
+        try:
+            if kind == "surprise":
+                if n > 100:
+                    raise ValueError("Entre 0 et 100")
+                r = await A.set_surprise_chance(to, n)
+                done.append({"to": to, "kind": kind, "n": n, "now": r.get("next"), "pending": r.get("pending")})
+            elif kind == "loupes":
+                done.append({"to": to, "kind": kind, "n": int(n), "now": await A.add_loupes(to, int(n))})
+            elif kind == "spins":
+                if main:
+                    r = await A.add_spins(int(n))
+                elif to in fam:
+                    r = await A.add_family_spins(to, int(n))
+                else:
+                    raise ValueError("Ce compte n'a pas sa roue")
+                done.append({"to": to, "kind": kind, "n": r["added"], "now": r["spins"]})
+            elif kind == "keys":
+                if not main:
+                    raise ValueError("Les clés sont à la maison seulement")
+                r = await A.add_keys(int(n))
+                done.append({"to": to, "kind": kind, "n": r["added"], "now": r["keys"]})
+            elif kind == "tickets":
+                if not main:
+                    raise ValueError("Les tickets sont à la maison seulement")
+                r = await A.add_tickets(int(n))
+                done.append({"to": to, "kind": kind, "n": r["added"], "now": r["tickets"]})
+        except ValueError as e:
+            errors.append({"to": to, "kind": kind, "error": str(e)})
+    if not done and errors:
+        raise HTTPException(400, errors[0]["error"])
+    return {"done": done, "errors": errors}
+
+
 @router.post("/wheel/settle")
 async def achievements_settle(since: str, _: str = Depends(require_wheel)):
     """Apres un tour : les cles rapportees en plus par les succes qu'il a debloques."""

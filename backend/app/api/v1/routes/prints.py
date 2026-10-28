@@ -475,8 +475,30 @@ async def list_prints(
                           "prints": [_print_to_out(p, gc, snaps) for gc in ({},) for p in rows]})
 
 
+# La galerie est gardee en memoire (28/10/2026) : chaque ouverture de l'onglet la recalculait entierement.
+# Invalidee par une ecriture dans les impressions, leurs captures ou les groupes (compteurs de la base), et par
+# les photos de dossier (hors base) via gallery_touched(), appele par les routes qui les ajoutent ou les retirent.
+_GALLERY = {"disk": 0, "key": None, "out": None}
+
+
+def gallery_touched() -> None:
+    _GALLERY["disk"] += 1
+    _GALLERY["key"] = None
+
+
 @router.get("/gallery")
 async def prints_gallery(_: str = Depends(get_current_user)):
+    from ....core.fastjson import json_response
+    from ....db.session import data_version
+    key = (data_version("prints", "print_snapshots", "groups"), _GALLERY["disk"])
+    if _GALLERY["key"] == key and _GALLERY["out"] is not None:
+        return json_response(_GALLERY["out"])
+    out = await _build_gallery()
+    _GALLERY["key"], _GALLERY["out"] = key, out
+    return json_response(out)
+
+
+async def _build_gallery() -> dict:
     """
     Galerie photo — INDÉPENDANTE de la pagination de /prints (parcourt tout
     l'historique, pas seulement la page courante). Ne retourne que les prints
@@ -494,19 +516,20 @@ async def prints_gallery(_: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
         rows = [_NS(**r._mapping) for r in (await db.execute(select(*cols))).all()]
         snaps: dict = {}
-        for pid, fp in (await db.execute(select(_Snap.print_id, _Snap.file_path).where(_Snap.trigger == "manual")
-                                         .order_by(_Snap.print_id, _Snap.id))).all():
-            snaps.setdefault(pid, []).append(fp)
+        for pid, fp, sid in (await db.execute(select(_Snap.print_id, _Snap.file_path, _Snap.id).where(_Snap.trigger == "manual")
+                                              .order_by(_Snap.print_id, _Snap.id))).all():
+            snaps.setdefault(pid, []).append((fp, sid))
         grp = {r.id: r for r in (await db.execute(select(Group.id, Group.name, Group.number_of_items, Group.cover_print_id,
                                                          Group.cover_photo))).all()}
 
     items, group_acc = [], {}
     for p in rows:
         p.group = grp.get(p.group_id) if p.group_id else None
+        # ?v= : une version dans l'adresse (28/10/2026), le navigateur garde la vignette sans la redemander
         photos = [
-            {"url": f"/api/v1/prints/{p.id}/file/{(fp or '').split('/')[-1]}",
+            {"url": f"/api/v1/prints/{p.id}/file/{(fp or '').split('/')[-1]}?v={sid}",
              "name": (fp or "").split("/")[-1], "label": "manual"}
-            for fp in snaps.get(p.id, ()) if fp
+            for fp, sid in snaps.get(p.id, ()) if fp
         ]
         # La vignette de la galerie est photos[0] : on remonte la photo choisie.
         if p.cover_photo:
@@ -556,14 +579,14 @@ async def prints_gallery(_: str = Depends(get_current_user)):
         for gid in gids:
             d = groups_dir / str(gid)
             if d.exists():
-                out[gid] = [f.name for f in sorted(d.iterdir())
+                out[gid] = [(f.name, int(f.stat().st_mtime)) for f in sorted(d.iterdir())
                             if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v")]
         return out
     import asyncio as _aio
     on_disk = await _aio.to_thread(_scan, list(group_acc))
     for gid, acc in group_acc.items():
-        for name in on_disk.get(gid, ()):
-            acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{name}",
+        for name, mt in on_disk.get(gid, ()):
+            acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{name}?v={mt}",
                                   "label": name, "name": name})
         # La vignette est photos[0]. Si une photo de couverture est definie pour
         # le groupe, on la remonte en tete -- meme principe que Print.cover_photo.
@@ -582,8 +605,7 @@ async def prints_gallery(_: str = Depends(get_current_user)):
     ]
     items.sort(key=lambda it: it["print_date"] or "", reverse=True)
     groups.sort(key=lambda g: g["latest_date"] or "", reverse=True)
-    from ....core.fastjson import json_response
-    return json_response({"prints": items, "groups": groups})
+    return {"prints": items, "groups": groups}
 
 
 @router.get("/groups")
@@ -612,6 +634,21 @@ async def list_groups(_: str = Depends(get_current_user)):
     groups.sort(key=lambda g: g["latest_date"] or "", reverse=True)
     from ....core.fastjson import json_response
     return json_response({"groups": groups})
+
+
+@router.get("/groups/{group_id}")
+async def get_group(group_id: int, _: str = Depends(get_current_user)):
+    """Un groupe seul, au format de la liste (28/10/2026 : la fiche d'un objet chargeait tous les groupes pour
+    en retrouver un)."""
+    async with AsyncSessionLocal() as db:
+        g = (await db.execute(select(Group.id, Group.name, Group.created_at).where(Group.id == group_id))).first()
+        if not g:
+            raise HTTPException(404, "Groupe introuvable")
+        n, latest = (await db.execute(select(func.count(Print.id), func.max(Print.print_date))
+                                      .where(Print.group_id == group_id))).one()
+    from ....core.fastjson import json_response
+    return json_response({"id": g.id, "name": g.name, "print_count": int(n or 0), "created_at": g.created_at,
+                          "latest_date": latest or g.created_at})
 
 
 def _group_dir(group_id: int) -> Optional[Path]:
@@ -840,6 +877,11 @@ def _clean_name(fn: Optional[str]) -> str:
     return n
 
 
+# Le resume des statistiques (une vingtaine de requetes et des boucles sur toutes les impressions) est garde par
+# periode tant que rien n'a ete ecrit dans les tables qu'il lit, 10 min au plus (28/10/2026)
+_SUMMARY_CACHE: dict = {}
+
+
 @router.get("/stats/summary")
 async def prints_stats(
     days: int = 0,   # retro-compat : fenetre glissante en jours (0 = tout)
@@ -847,6 +889,20 @@ async def prints_stats(
     date_to: Optional[str] = None,     # borne fin incluse
     _: str = Depends(get_current_user),
 ):
+    import time as _t
+    from ....db.session import data_version
+    key = (data_version("prints", "filament_usage", "groups", "bobines", "filaments"), days, date_from or "", date_to or "")
+    hit = _SUMMARY_CACHE.get(key)
+    if hit and _t.monotonic() - hit[0] < 600:
+        return hit[1]
+    out = await _prints_stats_calc(days, date_from, date_to)
+    if len(_SUMMARY_CACHE) >= 8:
+        _SUMMARY_CACHE.clear()
+    _SUMMARY_CACHE[key] = (_t.monotonic(), out)
+    return out
+
+
+async def _prints_stats_calc(days: int, date_from: Optional[str], date_to: Optional[str]) -> dict:
     from ....models.filament import Spool as _Spool, Filament as _Fil
     from datetime import timedelta
 
@@ -1695,6 +1751,7 @@ async def delete_print(print_id: int, _: str = Depends(get_current_user)):
 async def set_print_cover_photo(print_id: int, filename: str,
                                 _: str = Depends(get_current_user)):
     """Definit la photo mise en avant (vignette de la galerie)."""
+    gallery_touched()
     d = DATA_DIR / "prints" / str(print_id)
     # Garde-fou : sans lui, un filename du type "../../x" sortait du dossier du
     # print et se retrouvait stocke tel quel dans cover_photo.
@@ -1732,6 +1789,7 @@ async def upload_print_photo(
 ):
     import subprocess as _sp, tempfile as _tf, os as _os
     from ....models.print_history import PrintSnapshot as _PS
+    gallery_touched()
     is_video = bool(file.content_type and file.content_type.startswith("video/"))
     if not file.content_type or not (file.content_type.startswith("image/") or is_video):
         raise HTTPException(400, "Fichier image ou vidéo requis")
@@ -1830,6 +1888,7 @@ async def print_upload_file(print_id: int, filename: str):
 @router.delete("/{print_id}/upload/{filename}")
 async def delete_print_upload(print_id: int, filename: str, _: str = Depends(get_current_user)):
     """Supprime une photo uploadée (Photo-*.webp) + son PrintSnapshot en DB."""
+    gallery_touched()
     from ....models.print_history import PrintSnapshot as _PS
     from sqlalchemy import select as _sel
     if ".." in filename or "/" in filename:
@@ -1907,6 +1966,7 @@ async def import_print(
 
 @router.delete("/{print_id}/snapshots/{snapshot_id}")
 async def delete_snapshot(print_id: int, snapshot_id: int, _: str = Depends(get_current_user)):
+    gallery_touched()
     import os as _os
     async with AsyncSessionLocal() as db:
         s = await db.get(PrintSnapshot, snapshot_id)
@@ -2070,6 +2130,7 @@ async def recalculate_all_prints(_: str = Depends(get_current_user)):
 async def upload_group_photo(
     group_id: int, file: UploadFile = File(...), _: str = Depends(get_current_user),
 ):
+    gallery_touched()
     import subprocess as _sp, tempfile as _tf, os as _os
     is_video = bool(file.content_type and file.content_type.startswith("video/"))
     if not file.content_type or not (file.content_type.startswith("image/") or is_video):
@@ -2115,6 +2176,7 @@ async def upload_group_photo(
 
 @router.post("/groups/{group_id}/photo/{filename}/cover")
 async def set_group_cover_photo(group_id: int, filename: str, _: str = Depends(get_current_user)):
+    gallery_touched()
     """
     Choisit la photo affichee en vignette dans la galerie pour ce groupe.
     Stocke juste le nom de fichier ; la galerie remonte cette photo en tete.
@@ -2135,6 +2197,7 @@ async def set_group_cover_photo(group_id: int, filename: str, _: str = Depends(g
 
 @router.delete("/groups/{group_id}/photo/{filename}")
 async def delete_group_photo_ep(group_id: int, filename: str, _: str = Depends(get_current_user)):
+    gallery_touched()
     if ".." in filename or "/" in filename: raise HTTPException(400)
     path = DATA_DIR / "groups" / str(group_id) / filename
     if not path.exists(): raise HTTPException(404)

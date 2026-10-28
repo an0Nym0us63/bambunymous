@@ -49,112 +49,9 @@ import Anonymous from "./pages/Anonymous";
 import HiddenPage, { isHidden } from "./hidden";
 import { PrankRedirect, isPrank } from "./hidden/prankHost";
 
-function Rewind() {
-  const [pw, setPw] = React.useState("");
-  const [msg, setMsg] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-  // le nombre de tours : un champ, prerempli par ?n= (5 sinon)
-  const [n, setN] = React.useState(() => new URLSearchParams(window.location.search).get("n") || "5");
-  // a qui : la roue de la maison, ou celle d'un compte de la famille (ses tours a lui, 26/10/2026)
-  const [accs, setAccs] = React.useState(null);
-  const [to, setTo] = React.useState("");
-  const loadAccs = async () => {
-    const { default: client } = await import("./api/client");
-    const { data } = await client.get("/achievements/wheel/accounts");
-    setAccs(data.accounts || []);
-    setTo(t => t || (data.accounts || [])[0]?.username || "");
-  };
-  React.useEffect(() => { loadAccs().catch(() => setAccs([])); }, []);
-  const go = async e => {
-    e.preventDefault();
-    if (!pw) { setMsg("Mot de passe requis"); return; }
-    setBusy(true); setMsg("");
-    try {
-      const { default: client } = await import("./api/client");
-      const { data } = await client.post("/achievements/wheel/extra", { n: Number(n), secret: pw, to: to || undefined });
-      setMsg(`${to ? `${to} · ` : ""}+${data.added} · ${data.spins}`); setPw("");
-      loadAccs().catch(() => {});
-    } catch (err) { setMsg(err.response?.data?.detail || err.message); }
-    setBusy(false);
-  };
-  return (
-    <form onSubmit={go} style={{ maxWidth:320, margin:"60px auto", padding:"0 16px", display:"flex", flexDirection:"column", gap:10 }}>
-      {accs?.length > 1 && <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-        {accs.map(a => (
-          <button type="button" key={a.username} onClick={() => { setTo(a.username); setMsg(""); }} style={{ padding:"10px 12px", borderRadius:10,
-            border:`1.5px solid ${to === a.username ? "#3b82f6" : "var(--border)"}`, background:"var(--surface2)", color:"var(--text)", fontSize:14,
-            display:"flex", alignItems:"center", gap:8, cursor:"pointer", textAlign:"left" }}>
-            <span style={{ flex:1, fontWeight:800 }}>{a.main ? `${a.username} (la maison)` : a.username}</span>
-            <span style={{ fontFamily:"monospace", fontSize:13, color:"var(--muted)" }}>{a.spins} tour{a.spins > 1 ? "s" : ""}</span>
-          </button>))}
-      </div>}
-      <input type="number" min="1" value={n} onChange={e => { setN(e.target.value); setMsg(""); }} placeholder="Nombre de tours"
-        aria-label="Nombre de tours" style={{ padding:"10px 12px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
-          color:"var(--text)", fontSize:14 }}/>
-      <input type="password" value={pw} onChange={e => { setPw(e.target.value); setMsg(""); }} placeholder="Mot de passe"
-        autoComplete="off" style={{ padding:"10px 12px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
-          color:"var(--text)", fontSize:14 }}/>
-      <button type="submit" disabled={busy} style={{ padding:"10px 0", borderRadius:10, border:"none", background:"#3b82f6",
-        color:"#fff", fontWeight:700, cursor:"pointer" }}>{busy ? "…" : "Valider"}</button>
-      {msg && <p style={{ margin:0, textAlign:"center", color:"var(--muted)", fontFamily:"monospace", fontSize:13 }}>{msg}</p>}
-    </form>
-  );
-}
-
-// La chance de surprise d'un compte de la maison, reglee a la main (26/10/2026) : le compte principal et le meme
-// secret que les tours en plus. Le compteur est pose pour que la prochaine ouverture ait cette chance, puis monte.
-function Nudge() {
-  const [rows, setRows] = React.useState(null);
-  const [who, setWho] = React.useState("");
-  const [pct, setPct] = React.useState("");
-  const [pw, setPw] = React.useState("");
-  const [msg, setMsg] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-  const load = async () => {
-    const { default: client } = await import("./api/client");
-    const { data } = await client.get("/achievements/surprise/odds");
-    setRows(data.accounts || []);
-    setWho(w => w || (data.accounts || []).find(a => !a.main)?.username || (data.accounts || [])[0]?.username || "");
-  };
-  React.useEffect(() => { load().catch(e => setMsg(e.response?.data?.detail || e.message)); }, []);
-  const fmt = p => `${(Math.round(p * 1000) / 10).toString().replace(".", ",")} %`;
-  // depuis la derniere ouverture comptee
-  const ago = l => { if (!l) return "jamais comptée"; const m = Math.max(0, Math.round((Date.now() - new Date(/Z|[+-]\d\d:\d\d$/.test(l) ? l : l + "Z")) / 60000));
-    return m < 60 ? `il y a ${m} min` : m < 1440 ? `il y a ${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` : `il y a ${Math.floor(m / 1440)} j`; };
-  const go = async e => {
-    e.preventDefault();
-    if (!who || pct === "") { setMsg("Compte et pourcentage requis"); return; }
-    if (!pw) { setMsg("Mot de passe requis"); return; }
-    setBusy(true); setMsg("");
-    try {
-      const { default: client } = await import("./api/client");
-      const { data } = await client.post("/achievements/surprise/set", { username: who, pct: Number(String(pct).replace(",", ".")), secret: pw });
-      setMsg(`${who} · prochaine ${fmt(data.next)}${data.pending ? " · une surprise l'attend déjà" : ""}`); setPw(""); setPct("");
-      await load();
-    } catch (err) { setMsg(err.response?.data?.detail || err.message); }
-    setBusy(false);
-  };
-  const field = { padding:"10px 12px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", fontSize:14 };
-  return (
-    <form onSubmit={go} style={{ maxWidth:340, margin:"60px auto", padding:"0 16px", display:"flex", flexDirection:"column", gap:10 }}>
-      {rows && <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-        {rows.map(r => (
-          <button type="button" key={r.username} onClick={() => { setWho(r.username); setMsg(""); }} style={{ ...field, display:"flex", alignItems:"center",
-            gap:8, cursor:"pointer", textAlign:"left", border:`1.5px solid ${who === r.username ? "#3b82f6" : "var(--border)"}` }}>
-            <span style={{ flex:1, fontWeight:800 }}>{r.username}</span>
-            <span style={{ fontFamily:"monospace", fontSize:13, color:"var(--muted)", textAlign:"right" }}>{r.pending ? "en attente" : fmt(r.next)} · {r.n}
-              <span style={{ display:"block", fontSize:11 }}>{ago(r.last)}</span></span>
-          </button>))}
-      </div>}
-      <input type="text" inputMode="decimal" value={pct} onChange={e => { setPct(e.target.value); setMsg(""); }} placeholder="Chance à la prochaine ouverture (%)"
-        aria-label="Pourcentage" style={field}/>
-      <input type="password" value={pw} onChange={e => { setPw(e.target.value); setMsg(""); }} placeholder="Mot de passe" autoComplete="off" style={field}/>
-      <button type="submit" disabled={busy} style={{ padding:"10px 0", borderRadius:10, border:"none", background:"#3b82f6",
-        color:"#fff", fontWeight:700, cursor:"pointer" }}>{busy ? "…" : "Valider"}</button>
-      {msg && <p style={{ margin:0, textAlign:"center", color:"var(--muted)", fontFamily:"monospace", fontSize:13 }}>{msg}</p>}
-    </form>
-  );
-}
+// Le coup de pouce (28/10/2026) : tours, cles, tickets, loupes et chance de surprise, a qui on veut, en une fois ;
+// remplace « rembobiner » (tours) et l'ancien coup de pouce (surprise), dont l'adresse mene ici
+const CoupDePouce = React.lazy(() => importRetry(() => import("./pages/CoupDePouce")));
 
 // Adresse inconnue : une page cachee si elle existe (chargee a la demande), sinon « introuvable »
 function LostOrHidden() {
@@ -223,8 +120,8 @@ export default function App() {
         {/* ancienne adresse des succes (liens deja envoyes) : onglet des statistiques */}
         <Route path="achievements" element={<AchievementsRedirect />} />
         <Route path="anonymous" element={<Anonymous />} />
-        <Route path="rembobiner" element={<Rewind />} />
-        <Route path="coup-de-pouce" element={<Nudge />} />
+        <Route path="rembobiner" element={<Navigate to="/coup-de-pouce" replace />} />
+        <Route path="coup-de-pouce" element={<React.Suspense fallback={null}><CoupDePouce /></React.Suspense>} />
         <Route path="teapot" element={<Teapot />} />
         <Route path="guide" element={<React.Suspense fallback={null}><Guide /></React.Suspense>} />
         {/* l'ancienne adresse du guide (fichiers statiques, ouverts a tous jusqu'au 23/10/2026) */}

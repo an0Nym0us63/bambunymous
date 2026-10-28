@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import HiddenMark from "../components/HiddenMark";
 import Cachettes, { Hide } from "../components/Cachettes";
@@ -2438,8 +2438,11 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
   const hasFriends = useHasFriends();
   const [who, setWho] = useState("mine");          // mine | friends | sd
   const [nTl, setNTl] = useState(null);            // les timelapses (selon la recherche), une fois lus
-  // Lue des l'ouverture (gardee 5 min) : le nombre d'elements suit la recherche.
-  const fdata = useShared("/friends/shared/gallery", hasFriends);
+  // Les galeries des copains : relayees a la premiere ouverture de leur onglet (gardees 5 min), pas des l'arrivee
+  // (28/10/2026 : tous les copains etaient interroges juste pour afficher un nombre) ; le nombre suit la recherche.
+  const [askedFriends, setAskedFriends] = useState(false);
+  useEffect(() => { if (who === "friends") setAskedFriends(true); }, [who]);
+  const fdata = useShared("/friends/shared/gallery", hasFriends && askedFriends);
   const q = (search || "").trim().toLowerCase();
   const nFr = fdata?.items ? (q ? fdata.items.filter(it => friendMatch(it, q)).length : fdata.items.length) : null;
   // Ma galerie, lue ici pour compter aussi ses elements selon la recherche.
@@ -2604,14 +2607,17 @@ function TimelapsesView({ search, onCount }) {
 }
 
 function FriendsGalleryView({ search, data }) {
+  const items = useMemo(() => {
+    let list = (data?.items || []).map(it => ({ ...it, title: it.kind === "group" ? it.name : (it.title || it.file_name),
+      photos: (it.photos || []).map(ph => ({ ...ph, url: relayed(ph.url) })) }));
+    if (search?.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(it => friendMatch(it, q));
+    }
+    return list;
+  }, [data, search]);
   if (!data) return <p style={{ textAlign:"center", color:"var(--muted)", padding:"40px 0" }}>Je demande à tes copains…</p>;
   if (data.error) return <p style={{ textAlign:"center", color:"#ef4444", padding:"40px 0" }}>⚠ {data.error}</p>;
-  let items = data.items.map(it => ({ ...it, title: it.kind === "group" ? it.name : (it.title || it.file_name),
-    photos: (it.photos || []).map(ph => ({ ...ph, url: relayed(ph.url) })) }));
-  if (search?.trim()) {
-    const q = search.trim().toLowerCase();
-    items = items.filter(it => friendMatch(it, q));
-  }
   const off = (data.friends || []).filter(f => f.status !== "ok");
   return (<>
     {off.length > 0 && (
@@ -2645,25 +2651,29 @@ function FriendsGalleryView({ search, data }) {
 function MyGalleryView({ search, sortF = "recent", data, loading }) {
   const [selectedPrint, setSelectedPrint] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
+  // la liste ne change qu'avec les donnees, la recherche ou le tri (28/10/2026 : recreee a chaque rendu, la
+  // grille repartait a ses 30 premieres tuiles a chaque ouverture de fiche ou de visionneuse)
+  const items = useMemo(() => {
+    let list = [
+      ...(data?.prints||[]).map(p => ({ ...p, kind:"print", title:p.title||p.file_name, count:1 })),
+      ...(data?.groups||[]).map(g => ({ ...g, kind:"group", title:g.name, count:g.prints })),
+    ];
+    if (search?.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(it => (it.title||"").toLowerCase().includes(q));
+    }
+    list.sort((a,b) => {
+      if (sortF==="oldest")   return (a.print_date||a.latest_date||"").localeCompare(b.print_date||b.latest_date||"");
+      if (sortF==="cost")     return (b.total_cost||0)-(a.total_cost||0);
+      if (sortF==="weight")   return (b.total_weight_g||0)-(a.total_weight_g||0);
+      if (sortF==="duration") return (b.duration_seconds||0)-(a.duration_seconds||0);
+      return (b.print_date||b.latest_date||"").localeCompare(a.print_date||a.latest_date||"");
+    });
+    return list;
+  }, [data, search, sortF]);
 
   if (loading) return <p style={{ textAlign:"center", color:"var(--muted)", padding:"40px 0" }}>Chargement…</p>;
   if (!data) return null;
-
-  let items = [
-    ...(data.prints||[]).map(p => ({ ...p, kind:"print", title:p.title||p.file_name, count:1 })),
-    ...(data.groups||[]).map(g => ({ ...g, kind:"group", title:g.name, count:g.prints })),
-  ];
-  if (search?.trim()) {
-    const q = search.trim().toLowerCase();
-    items = items.filter(it => (it.title||"").toLowerCase().includes(q));
-  }
-  items.sort((a,b) => {
-    if (sortF==="oldest")   return (a.print_date||a.latest_date||"").localeCompare(b.print_date||b.latest_date||"");
-    if (sortF==="cost")     return (b.total_cost||0)-(a.total_cost||0);
-    if (sortF==="weight")   return (b.total_weight_g||0)-(a.total_weight_g||0);
-    if (sortF==="duration") return (b.duration_seconds||0)-(a.duration_seconds||0);
-    return (b.print_date||b.latest_date||"").localeCompare(a.print_date||a.latest_date||"");
-  });
 
   return (
     <>
@@ -2884,7 +2894,12 @@ export default function Prints() {
     } catch {}
   }, [searchQ, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo]);
 
-  useEffect(() => { loadKpis(); }, [loadKpis]);
+  // la liste et ses KPI ne servent qu'a l'onglet Liste : en galerie, MakerWorld ou file, on note seulement que les
+  // filtres ont change, et on recharge au retour sur la liste si besoin (28/10/2026 : chaque recherche en galerie
+  // relançait la liste paginee et les KPI)
+  const listDirty = useRef(true), kpisDirty = useRef(true);
+  useEffect(() => { kpisDirty.current = true; }, [loadKpis]);
+  useEffect(() => { if (viewMode === "list" && kpisDirty.current) { kpisDirty.current = false; loadKpis(); } }, [loadKpis, viewMode]);
 
   // Charger la palette de teintes (n'affiche que celles réellement utilisées)
   // Les options des filtres (teintes, filaments : jusqu'a 2 000 lignes) : lues seulement quand
@@ -3042,7 +3057,8 @@ export default function Prints() {
     } catch(e) { console.error("[GROUPES] erreur", e); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { listDirty.current = true; }, [load]);
+  useEffect(() => { if (viewMode === "list" && listDirty.current) { listDirty.current = false; load(); } }, [load, viewMode]);
   // la liste des groupes ne sert qu'au selecteur « Ajouter a un groupe » : lue a son ouverture (28/10/2026 :
   // elle partait a chaque ouverture de la page), puis rafraichie apres les actions qui la changent
   useEffect(() => { if (groupPickerOpen) loadGroups(); }, [groupPickerOpen, loadGroups]);

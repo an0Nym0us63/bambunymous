@@ -36,28 +36,10 @@ def _top(s):
     return (_hms_has(s, 0x03009700) or None) if d is None else d
 
 
-# Le catalogue Bambu (quelques milliers d'entrees) etait relu et re-analyse a chaque lecture de l'etat de
-# l'imprimante, pour chaque bobine sans fiche (28/10/2026) : garde en memoire, relu quand le fichier change.
-_CATALOG = {"path": None, "mtime": None, "data": None, "fr": None}
-
-
 def _catalog_data():
-    """(entrees, nom anglais -> nom francais) du catalogue local ; (None, None) sans fichier."""
-    from ....core.config import settings
-    import os, json as _j
-    path = os.path.join(settings.DATA_DIR, "bambu_catalog", "filaments_color_codes.json")
-    try:
-        mtime = os.stat(path).st_mtime
-    except OSError:
-        return None, None
-    c = _CATALOG
-    if c["path"] != path or c["mtime"] != mtime or c["data"] is None:
-        with open(path, encoding="utf-8") as f:
-            data = _j.load(f).get("data", [])
-        en_to_fr = {e.get("fila_color_name", {}).get("en", ""): e.get("fila_color_name", {}).get("fr", "")
-                    for e in data if e.get("fila_color_name", {}).get("en") and e.get("fila_color_name", {}).get("fr")}
-        c.update(path=path, mtime=mtime, data=data, fr=en_to_fr)
-    return c["data"], c["fr"]
+    """Le catalogue local, garde en memoire par le service (relu quand le fichier change)."""
+    from ....services.bambu_catalog import catalog_entries
+    return catalog_entries()
 
 
 def _catalog_lookup(fila_id: str, color_hex: str, cols: list = None) -> Optional[str]:

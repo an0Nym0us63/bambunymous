@@ -41,8 +41,8 @@ export function perfBudget(route = "") {
 }
 // la couleur d'un temps, selon ce qu'on attend de sa route
 export const perfTone = (v, route) => { const b = perfBudget(route); return v >= b.warn ? "#ef4444" : v >= b.ok ? "#f59e0b" : "#16a34a"; };
-// le chiffre d'une route (27/10/2026) : la moyenne de ses 95 % d'appels les plus rapides, pas son pire ni son 95e
-// centile (un appel lent isole la mettait au rouge). Lente : au-dela de ce qu'on attend d'elle ; tres lente : du seuil orange
+// le chiffre d'une route (27/10/2026) : la moyenne de ses appels sans les plus lents (5 %, au moins un : 28/10/2026), pas son
+// pire ni son 95e centile (un appel lent isole la mettait au rouge). Lente : au-dela de ce qu'on attend d'elle ; tres lente : du seuil orange
 export const perfVal = r => r.t95 ?? r.p95;
 export const perfSlow = r => perfVal(r) >= perfBudget(r.route).ok;
 export const perfBad = r => perfVal(r) >= perfBudget(r.route).warn;
@@ -230,16 +230,20 @@ export default function PerfSheet({ data, onClose, onReset, onReload }) {
               display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
                 <span style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lb.title}</span>
-                <span data-tip="La moyenne de ses 95 % d'appels les plus rapides : un appel lent isolé ne compte pas" style={{ fontSize: 15, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{perfMs(perfVal(r))}</span>
+                <span data-tip="La moyenne de ses appels sans les plus lents (5 %, et toujours au moins un) : un appel lent isolé, pendant que le serveur faisait autre chose, ne compte pas" style={{ fontSize: 15, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{perfMs(perfVal(r))}</span>
               </div>
-              {/* la barre : mediane pleine, 95 % en trait, le pire en point */}
-              <div style={{ position: "relative", height: 8, borderRadius: 6, background: "var(--surface2)" }}>
-                {/* la zone attendue pour cette route, en fond */}
-                <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pos(bg.ok)}%`, borderRadius: 6, background: "rgba(34,197,94,.12)" }}/>
-                <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pos(r.p50)}%`, borderRadius: 6,
-                  background: `linear-gradient(90deg, ${perfTone(r.p50, r.route)}88, ${perfTone(r.p50, r.route)})` }}/>
-                <span style={{ position: "absolute", left: `${pos(r.p95)}%`, top: -3, width: 3, height: 14, borderRadius: 2, background: perfTone(r.p95, r.route), transform: "translateX(-50%)" }}/>
-                <span style={{ position: "absolute", left: `${pos(r.max)}%`, top: 1, width: 6, height: 6, borderRadius: "50%", background: perfTone(r.max, r.route), opacity: .7, transform: "translateX(-50%)" }}/>
+              {/* la barre (28/10/2026) : pleine jusqu'au chiffre, la plage ou tombent la plupart des appels (mediane -> 95 %)
+                  en bande claire, la mediane en trait fin, le pire en anneau (isole = pas grave) */}
+              <div data-tip={`Plein : la moyenne · bande : de la médiane (trait) au 95e centile · anneau : le pire appel · fond vert : < ${perfMs(bg.ok)} attendu`}
+                style={{ position: "relative", height: 10, borderRadius: 6, background: "var(--surface2)" }}>
+                <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pos(bg.ok)}%`, borderRadius: 6, background: "rgba(34,197,94,.14)" }}/>
+                <span style={{ position: "absolute", left: `${pos(r.p50)}%`, width: `${Math.max(0.8, pos(r.p95) - pos(r.p50))}%`, top: 2, bottom: 2, borderRadius: 4,
+                  background: `${perfTone(r.p95, r.route)}3a` }}/>
+                <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pos(perfVal(r))}%`, borderRadius: 6,
+                  background: `linear-gradient(90deg, ${c}88, ${c})` }}/>
+                <span style={{ position: "absolute", left: `${pos(r.p50)}%`, top: -2, width: 2, height: 14, borderRadius: 1, background: "var(--text)", opacity: .55, transform: "translateX(-50%)" }}/>
+                <span style={{ position: "absolute", left: `${pos(r.max)}%`, top: 0, width: 10, height: 10, borderRadius: "50%", boxSizing: "border-box",
+                  border: `2px solid ${perfTone(r.max, r.route)}`, background: "var(--surface)", transform: "translateX(-50%)" }}/>
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
                 <span>médiane <b style={{ color: perfTone(r.p50, r.route) }}>{perfMs(r.p50)}</b></span>

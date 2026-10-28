@@ -59,9 +59,27 @@ class AccessoryUpdate(BaseModel):
     category: Optional[str] = None
 
 
-def _acc_out(a: Accessory) -> AccessoryOut:
-    img_dir = DATA_DIR / "accessories" / str(a.id)
-    has_img = any(img_dir.iterdir()) if img_dir.exists() else False
+def _acc_images() -> set:
+    """Les ids d'accessoires qui ont une photo : un seul parcours du dossier (28/10/2026 : un iterdir()
+    par accessoire a chaque listage)."""
+    root = DATA_DIR / "accessories"
+    out = set()
+    try:
+        with os.scandir(root) as it:
+            for e in it:
+                if e.is_dir() and e.name.isdigit():
+                    with os.scandir(e.path) as inner:
+                        if any(True for _ in inner):
+                            out.add(int(e.name))
+    except FileNotFoundError:
+        pass
+    return out
+
+
+def _acc_out(a: Accessory, has_img: bool | None = None) -> AccessoryOut:
+    if has_img is None:
+        img_dir = DATA_DIR / "accessories" / str(a.id)
+        has_img = any(img_dir.iterdir()) if img_dir.exists() else False
     return AccessoryOut(id=a.id, external_ref=a.external_ref, name=a.name,
         category=a.category,
                         quantity=a.quantity, unit_price=a.unit_price,
@@ -347,8 +365,10 @@ async def list_objects(
         if personal is not None: stmt = stmt.where(Object.personal == personal)
         if sold is True: stmt = stmt.where(Object.sold_price.isnot(None), Object.sold_price > 0)
         if sold is False: stmt = stmt.where((Object.sold_price.is_(None)) | (Object.sold_price == 0))
-        total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar()
         rows = (await db.execute(stmt.offset(offset).limit(limit))).scalars().all()
+        # le total n'a besoin d'une requete que si la page est tronquee
+        total = offset + len(rows) if len(rows) < limit else \
+            (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar()
     return {"total": total, "items": [_obj_out(o) for o in rows]}
 
 
@@ -477,6 +497,41 @@ async def update_object(oid: int, body: ObjectUpdate, _: str = Depends(get_curre
     return {"ok": True}
 
 
+# Les dossiers ou chercher la photo d'un objet (le sien, puis celui de son parent, puis ceux des impressions
+# du groupe) : resolus une fois par version des tables (28/10/2026 : une a trois requetes SQL par vignette,
+# meme quand le navigateur ne faisait que revalider)
+_OBJ_IMG_DIRS: dict = {}
+
+
+async def _object_image_dirs(oid: int) -> list:
+    from ....db.session import data_version
+    v = data_version("objects", "prints", "groups")
+    hit = _OBJ_IMG_DIRS.get(oid)
+    if hit and hit[0] == v:
+        return hit[1]
+    dirs = [DATA_DIR / "objects" / str(oid)]
+    async with AsyncSessionLocal() as db:
+        o = await db.get(Object, oid)
+        if o and o.parent_type and o.parent_id:
+            folder = "prints" if o.parent_type == "print" else "groups"
+            dirs.append(DATA_DIR / folder / str(o.parent_id))
+            # groupe sans photo -> la vignette d'un print du groupe : celui de couverture, sinon le plus recent
+            if o.parent_type == "group":
+                from ....models.print_history import Group as PGroup, Print
+                grp = await db.get(PGroup, o.parent_id)
+                cover_id = getattr(grp, "cover_print_id", None) if grp else None
+                if cover_id:
+                    dirs.append(DATA_DIR / "prints" / str(cover_id))
+                recent = (await db.execute(select(Print.id).where(Print.group_id == o.parent_id)
+                                           .order_by(Print.print_date.desc()).limit(1))).scalar_one_or_none()
+                if recent:
+                    dirs.append(DATA_DIR / "prints" / str(recent))
+    if len(_OBJ_IMG_DIRS) > 5000:
+        _OBJ_IMG_DIRS.clear()
+    _OBJ_IMG_DIRS[oid] = (v, dirs)
+    return dirs
+
+
 @router.get("/objects/{oid}/image")
 async def object_image(oid: int):
     IMG_EXT = {".jpg",".jpeg",".png",".webp"}
@@ -488,36 +543,10 @@ async def object_image(oid: int):
                     return f
         return None
 
-    # 1. Photo uploadée de l'objet
-    img = _first_img(DATA_DIR / "objects" / str(oid))
-    if img: return FileResponse(str(img))
-
-    # 2. Photo du parent (print ou groupe)
-    async with AsyncSessionLocal() as db:
-        o = await db.get(Object, oid)
-        if o and o.parent_type and o.parent_id:
-            folder = "prints" if o.parent_type == "print" else "groups"
-            img = _first_img(DATA_DIR / folder / str(o.parent_id))
-            if img: return FileResponse(str(img))
-
-            # 3. Groupe sans photo -> on retombe sur la vignette d'un print du groupe :
-            #    d'abord le print de couverture (cover_print_id), sinon le plus recent.
-            if o.parent_type == "group":
-                from ....models.print_history import Group as PGroup, Print
-                grp = await db.get(PGroup, o.parent_id)
-                cover_id = getattr(grp, "cover_print_id", None) if grp else None
-                if cover_id:
-                    img = _first_img(DATA_DIR / "prints" / str(cover_id))
-                    if img: return FileResponse(str(img))
-                # print le plus recent du groupe
-                recent = (await db.execute(
-                    select(Print).where(Print.group_id == o.parent_id)
-                    .order_by(Print.print_date.desc()).limit(1)
-                )).scalar_one_or_none()
-                if recent:
-                    img = _first_img(DATA_DIR / "prints" / str(recent.id))
-                    if img: return FileResponse(str(img))
-
+    for d in await _object_image_dirs(oid):
+        img = _first_img(d)
+        if img:
+            return FileResponse(str(img))
     raise HTTPException(404)
 
 
@@ -538,7 +567,8 @@ async def list_accessories(q: str = Query(""), _: str = Depends(get_current_user
         stmt = select(Accessory).order_by(Accessory.name)
         if q: stmt = stmt.where(Accessory.name.ilike(f"%{q}%"))
         rows = (await db.execute(stmt)).scalars().all()
-    return [_acc_out(a) for a in rows]
+    imgs = _acc_images()
+    return [_acc_out(a, a.id in imgs) for a in rows]
 
 
 @router.patch("/accessories/{aid}")

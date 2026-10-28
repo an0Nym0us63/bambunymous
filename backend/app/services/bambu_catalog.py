@@ -282,3 +282,30 @@ def _normalize_color_code(raw: str) -> str:
         return raw
     prefix, digits = m.group(1), m.group(2)
     return prefix + str(int(digits))   # strip leading zeros
+
+
+# ── Le catalogue des couleurs, en memoire (28/10/2026) ───────────────────────────────────────────────
+# Il etait relu et re-analyse depuis le disque a chaque usage (etat de l'imprimante, recherche catalogue a
+# chaque frappe, rapprochement des couleurs) : garde ici, relu seulement quand le fichier change.
+_ENTRIES = {"path": None, "mtime": None, "data": None, "fr": None}
+
+
+def catalog_entries() -> Tuple[Optional[list], Optional[dict]]:
+    """(entrees du catalogue, nom anglais -> nom francais) ; (None, None) sans fichier lisible."""
+    from ..core.config import settings
+    path = os.path.join(settings.DATA_DIR, "bambu_catalog", FILAMENTS_FILE)
+    try:
+        mtime = os.stat(path).st_mtime
+    except OSError:
+        return None, None
+    c = _ENTRIES
+    if c["path"] != path or c["mtime"] != mtime or c["data"] is None:
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f).get("data", [])
+        except Exception:
+            return None, None
+        en_to_fr = {e.get("fila_color_name", {}).get("en", ""): e.get("fila_color_name", {}).get("fr", "")
+                    for e in data if e.get("fila_color_name", {}).get("en") and e.get("fila_color_name", {}).get("fr")}
+        c.update(path=path, mtime=mtime, data=data, fr=en_to_fr)
+    return c["data"], c["fr"]

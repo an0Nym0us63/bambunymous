@@ -1588,6 +1588,9 @@ EGGS = {
     "split_screen": ('🪟', 'Côte à côte', "Mettre l'appli sur une moitié d'écran : fenêtre sur ordinateur, ou écran partagé dans l'appli Android",
         "Sur un grand écran, l'appli accepte de partager la place avec autre chose.",
         "Une moitié pour l'appli, une moitié pour le reste. Le partage, c'est beau."),
+    "mecene": ('🎁', 'Mécène', "Offrir plusieurs cadeaux d'un coup depuis le coup de pouce",
+               "Un tour, une clé, une loupe… Pourquoi choisir ? Quelqu'un distribue sans compter.",
+               "Tours, clés, tickets ou loupes : tu as tout donné d'un geste. La maison te dit merci."),
     "daltonien": ('🎨', 'Œil du peintre', "Corriger à la main la couleur qui remplace celle du créateur, sur une impression ou un groupe",
                   "L'appli devine les couleurs de tes impressions. Quand elle se trompe, c'est toi qui as l'œil.",
                   "Tu as remis la bonne couleur à sa place. L'appli en prend note, et n'y reviendra plus."),
@@ -7268,6 +7271,38 @@ async def add_spins(n: int) -> dict:
         await _state_put(st)
         _CACHE["v"] = None
     return {"added": n, "spins": w["spins"]}
+
+
+async def add_keys(n: int, why: str = "Coup de pouce") -> dict:
+    """Des cles en plus pour la maison (le coup de pouce de l'administrateur, 28/10/2026) : memes ecritures
+    qu'un gain a la roue (solde, total gagne, journal, record)."""
+    n = max(1, min(int(n or 1), 100))
+    async with _lock():
+        st = await _state_get()
+        if st is None:
+            raise ValueError("Pas encore d'état des succès : attends le premier passage")
+        k = _keys_init(st)
+        k["balance"] += n
+        k["earned"] = k.get("earned", 0) + n
+        k["log"] = ([{"at": datetime.utcnow().isoformat(), "n": n, "why": why}] + (k.get("log") or []))[:KEY_LOG_MAX]
+        _keys_peak(k)
+        await _state_put(st)
+        _CACHE["v"] = None
+    return {"added": n, "keys": k["balance"]}
+
+
+async def add_tickets(n: int) -> dict:
+    """Des tickets de palier en plus pour la maison (coup de pouce, 28/10/2026)."""
+    n = max(1, min(int(n or 1), 100))
+    async with _lock():
+        st = await _state_get()
+        if st is None:
+            raise ValueError("Pas encore d'état des succès : attends le premier passage")
+        w = _wheel_init(st)
+        w["tickets"] = w.get("tickets", 0) + n
+        await _state_put(st)
+        _CACHE["v"] = None
+    return {"added": n, "tickets": w["tickets"]}
 
 
 def wheel_view(st: dict) -> dict | None:

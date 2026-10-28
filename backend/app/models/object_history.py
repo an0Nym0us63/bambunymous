@@ -77,6 +77,7 @@ class Object(Base):
     __table_args__ = (
         Index("idx_objects_parent", "parent_type", "parent_id"),
         Index("idx_objects_group",  "group_id"),
+        Index("idx_objects_created", "created_at"),   # la liste est triee dessus
         Index("idx_objects_avail",  "available"),
     )
 

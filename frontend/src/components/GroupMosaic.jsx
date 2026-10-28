@@ -38,7 +38,7 @@ export default function GroupMosaic({ photos = [], title = "", cover = null }) {
   // de la photo choisie, sans la dupliquer.
   const ordered = React.useMemo(() => {
     if (!cover) return urls;
-    const idx = urls.findIndex(u => u.endsWith(`/${cover}`));
+    const idx = urls.findIndex(u => u.split("?")[0].endsWith(`/${cover}`));
     if (idx <= 0) return urls;
     return [urls[idx], ...urls.slice(0, idx), ...urls.slice(idx + 1)];
   }, [urls.join("|"), cover]);
@@ -52,13 +52,25 @@ export default function GroupMosaic({ photos = [], title = "", cover = null }) {
   // la case dominante -- la couverture doit rester reconnaissable.
   const extra = ordered.length - cells;
   const nextRef = useRef(cells);
+  // seulement a l'ecran et onglet visible (28/10/2026 : toutes les tuiles montees tournaient, meme hors ecran,
+  // et chargeaient une image a chaque tic)
+  const rootRef = useRef(null);
+  const [onScreen, setOnScreen] = useState(false);
   useEffect(() => {
-    if (extra <= 0 || cells < 2) return;
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") { setOnScreen(true); return; }
+    const io = new IntersectionObserver(es => setOnScreen(es.some(e => e.isIntersecting)), { rootMargin: "100px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  useEffect(() => {
+    if (extra <= 0 || cells < 2 || !onScreen) return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
     // Periode volontairement longue et desynchronisee d'une vignette a l'autre :
     // une grille entiere qui change en cadence serait insupportable.
     const period = 3500 + Math.floor(Math.random() * 2500);
     const id = setInterval(() => {
+      if (document.hidden) return;
       setShown(prev => {
         const next = [...prev];
         const slot = 1 + Math.floor(Math.random() * (cells - 1));
@@ -68,7 +80,7 @@ export default function GroupMosaic({ photos = [], title = "", cover = null }) {
       });
     }, period);
     return () => clearInterval(id);
-  }, [ordered.join("|"), cells, extra]);
+  }, [ordered.join("|"), cells, extra, onScreen]);
 
   if (!ordered.length) {
     return (
@@ -79,7 +91,7 @@ export default function GroupMosaic({ photos = [], title = "", cover = null }) {
   }
 
   return (
-    <div style={{ width:"100%", height:"100%", display:"grid",
+    <div ref={rootRef} style={{ width:"100%", height:"100%", display:"grid",
       gridTemplateColumns: cols, gridTemplateRows: rows, gap:1.5,
       gridTemplateAreas: areas ? areas[0] : undefined,
       background:"var(--border)" }}>
@@ -88,7 +100,7 @@ export default function GroupMosaic({ photos = [], title = "", cover = null }) {
           gridArea: areas ? ["a","b","c"][i] : undefined,
           background: tintOf[u] ? `radial-gradient(75% 70% at 50% 45%, ${tintOf[u]}2e, transparent 75%), linear-gradient(180deg, ${tintOf[u]}1a, transparent 55%), var(--surface2)`
             : "var(--surface2)" }}>
-          <img src={apiThumb(u, 384)} alt="" loading="lazy" decoding="async"
+          <img src={apiThumb(u, cells === 1 ? 384 : (cells === 2 || i === 0) ? 256 : 192)} alt="" loading="lazy" decoding="async"
             style={{ width:"100%", height:"100%", objectFit:"cover", display:"block",
               transition:"opacity 0.4s" }}
             onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>

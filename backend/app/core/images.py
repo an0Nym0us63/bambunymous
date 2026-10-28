@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 
 THUMB_DIR = Path(os.getenv("DATA_DIR", "/data")) / "cache" / "thumbs"
 _RESIZABLE = ("image/png", "image/jpeg", "image/webp")
-_WIDTHS = (96, 128, 192, 256, 384, 512, 768)          # quelques tailles : le cache reste petit
+_WIDTHS = (96, 128, 192, 256, 384, 512, 768, 1024, 1280, 1600)   # quelques tailles : le cache reste petit ; 1024+ pour la visionneuse
 
 
 def _bucket(w: int) -> int:

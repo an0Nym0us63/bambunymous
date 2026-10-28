@@ -63,7 +63,8 @@ export default function Lightbox({ images, index = 0, onClose, title = null, act
     WebkitBackdropFilter: "blur(10px)", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
   const arrow = { ...glass, position: "absolute", top: "50%", transform: "translateY(-50%)", width: 46, height: 46, borderRadius: "50%",
     zIndex: 2, boxShadow: "0 8px 24px rgba(0,0,0,0.35)" };
-  const src = u => isVideo(u) ? u : mwImg(u, w, true);
+  // nos photos aussi en reduit, a la taille de l'ecran (28/10/2026 : les originales de plusieurs Mo partaient)
+  const src = u => isVideo(u) ? u : String(u || "").startsWith("/api/") ? apiThumb(u, w) : mwImg(u, w, true);
   // en petit (fond flou, vignettes) : notre serveur reduit les siennes, MakerWorld les leurs
   const small = (u, n) => String(u || "").startsWith("/api/") ? apiThumb(u, n) : mwImg(u, n);
 

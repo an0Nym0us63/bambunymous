@@ -115,12 +115,16 @@ def record(key: str, ms: float, req: dict = None) -> None:
 
 
 def _best95(vals) -> float:
-    """La moyenne des 95 % d'appels les plus rapides (27/10/2026) : un appel lent isole ne fait plus passer une
-    route au rouge ; ce que vit l'utilisateur la plupart du temps."""
+    """La moyenne des appels sans les plus lents (27/10/2026) : ce que vit l'utilisateur la plupart du temps.
+    On ecarte 5 % des appels, et toujours au moins un des qu'il y en a trois (28/10/2026 : avec trois appels,
+    l'arrondi ne retirait rien et un seul appel lent, le serveur occupe ailleurs, faisait passer la route au
+    rouge) ; a deux appels, le plus rapide."""
     if not vals:
         return 0.0
     v = sorted(vals)
-    k = max(1, int(len(v) * 0.95 + 0.5))
+    if len(v) <= 2:
+        return float(v[0])
+    k = len(v) - max(1, int(len(v) * 0.05 + 0.5))
     return sum(v[:k]) / k
 
 

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Body, Depends, Query, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, update
+from sqlalchemy import select, func, or_, update, case
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from typing import Optional
@@ -202,7 +202,9 @@ async def list_filaments(
     db: AsyncSession = Depends(get_db),
     _: str = Depends(get_current_user),
 ):
-    stmt = select(Filament).options(selectinload(Filament.spools))
+    # les comptes et le restant par filament viennent d'une agregation (28/10/2026) : la liste chargeait toutes les
+    # bobines, archivees comprises, en objets complets pour n'en tirer que trois nombres
+    stmt = select(Filament)
     if q:
         like = f"%{q}%"
         stmt = stmt.where(or_(
@@ -217,7 +219,8 @@ async def list_filaments(
     stmt = stmt.order_by(Filament.manufacturer, Filament.name)
     result = await db.execute(stmt)
     filaments = result.scalars().all()
-    return [_fil_out(f) for f in filaments]
+    agg = await _spool_aggregates(db, [f.id for f in filaments])
+    return [_fil_out(f, agg.get(f.id, (0, 0, 0.0))) for f in filaments]
 
 
 @router.post("/filaments/labels/pdf")
@@ -1125,6 +1128,17 @@ async def create_spool(
     return _spool_out(await _load_spool(db, s.id))
 
 
+@router.get("/spools/{sid}", response_model=SpoolOut)
+async def get_spool(sid: int, db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
+    """Une bobine seule (28/10/2026) : ouvrir une bobine depuis un scan, l'AMS ou une alerte telechargeait
+    deux listes completes pour la retrouver."""
+    s = await _load_spool(db, sid)
+    if not s:
+        raise HTTPException(404, "Bobine introuvable")
+    sibs = await _siblings_map(db, [s.filament_id])
+    return _spool_out(s, sibs.get(s.filament_id))
+
+
 @router.patch("/spools/{sid}", response_model=SpoolOut)
 async def update_spool(
     sid: int,
@@ -1258,8 +1272,30 @@ async def _load_spool(db, sid):
     return result.scalar_one_or_none()
 
 
-def _fil_out(f: Filament) -> FilamentOut:
-    active = [s for s in f.spools if not s.archived]
+async def _spool_aggregates(db, fids) -> dict:
+    """{filament_id: (bobines, actives, restant_g)} en une requete groupee ; sans filtre au-dela de quelques
+    centaines d'ids (la liste IN a une limite en SQLite, et parcourir toute la table coute pareil)."""
+    if not fids:
+        return {}
+    active = Spool.archived.is_(False)
+    # une bobine dont on n'a jamais pese le restant est supposee pleine (meme regle que _fil_out)
+    left = func.coalesce(Spool.remaining_weight_g, Filament.filament_weight_g, 0)
+    stmt = (select(Spool.filament_id, func.count(Spool.id), func.sum(case((active, 1), else_=0)),
+                   func.sum(case((active, left), else_=0)))
+            .join(Filament, Filament.id == Spool.filament_id).group_by(Spool.filament_id))
+    if len(fids) <= 400:
+        stmt = stmt.where(Spool.filament_id.in_(list(fids)))
+    return {r[0]: (int(r[1] or 0), int(r[2] or 0), float(r[3] or 0)) for r in (await db.execute(stmt)).all()}
+
+
+def _fil_out(f: Filament, agg: tuple | None = None) -> FilamentOut:
+    """agg = (bobines, actives, restant_g) deja agreges ; sinon lus sur f.spools (charge explicitement)."""
+    if agg is not None:
+        n_all, n_act, left = agg
+    else:
+        active = [s for s in f.spools if not s.archived]
+        n_all, n_act = len(f.spools), len(active)
+        left = sum((s.remaining_weight_g if s.remaining_weight_g is not None else (f.filament_weight_g or 0)) for s in active)
     return FilamentOut(
         id=f.id, name=f.name,
         name_en=getattr(f,"name_en",None),
@@ -1276,13 +1312,8 @@ def _fil_out(f: Filament) -> FilamentOut:
         swatch=f.swatch, to_order=f.to_order,
         label_printed=bool(getattr(f, "label_printed", False)),
         label_printed_at=getattr(f, "label_printed_at", None),
-        spool_count=len(f.spools), active_spool_count=len(active),
-        # Une bobine dont on n'a jamais pese le restant est supposee pleine.
-        remaining_weight_total_g=round(sum(
-            (s.remaining_weight_g if s.remaining_weight_g is not None
-             else (f.filament_weight_g or 0))
-            for s in active
-        ), 1),
+        spool_count=n_all, active_spool_count=n_act,
+        remaining_weight_total_g=round(left, 1),
     )
 
 
@@ -1375,21 +1406,11 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
 
     updated, not_found, skipped = [], [], []
 
-    import os as _os, json as _json
-    cat_path = _os.path.join(settings.DATA_DIR, "bambu_catalog", "filaments_color_codes.json")
-    if not _os.path.exists(cat_path):
+    from ....services.bambu_catalog import catalog_entries
+    cat_data, en_to_fr = catalog_entries()
+    if cat_data is None:
         return {"error": "Catalogue non disponible — démarrez l'app pour le télécharger", "total_bambu": 0}
-
-    cat_data = _json.loads(open(cat_path).read()).get("data", [])
     COLOR_TYPE_FR = {"单色": "monochrome", "渐变色": "gradient", "多拼色": "coaxial"}
-
-    # Dict en→fr pour fallback traduction
-    en_to_fr: dict = {}
-    for e in cat_data:
-        n = e.get("fila_color_name", {})
-        en, fr = n.get("en",""), n.get("fr","")
-        if en and fr:
-            en_to_fr[en] = fr
 
     async with AsyncSessionLocal() as db:
         for f in filaments:
@@ -1524,15 +1545,9 @@ async def catalog_search(
     Filtre par famille (PLA/PETG…), type détaillé, et/ou substring sur le nom couleur.
     Retourne les entrées triées par type puis nom.
     """
-    import os, json as _json, re as _re
-    from ....core.config import settings
-    path = os.path.join(settings.DATA_DIR, "bambu_catalog", "filaments_color_codes.json")
-    if not os.path.exists(path):
-        return {"entries": [], "available": False}
-
-    try:
-        data = _json.loads(open(path).read())
-    except Exception:
+    from ....services.bambu_catalog import catalog_entries
+    entries, en_to_fr = catalog_entries()
+    if entries is None:
         return {"entries": [], "available": False}
 
     # Famille de chaque type : deduite, le fichier communautaire en secours
@@ -1544,16 +1559,8 @@ async def catalog_search(
         "多拼色": "coaxial",
     }
 
-    # Dict en→fr pour fallback traduction FR
-    en_to_fr: dict = {}
-    for e in data.get("data", []):
-        n = e.get("fila_color_name", {})
-        en, fr = n.get("en",""), n.get("fr","")
-        if en and fr:
-            en_to_fr[en] = fr
-
     results = []
-    for entry in data.get("data", []):
+    for entry in entries:
         ftype = entry.get("fila_type", "")
         # Filtre famille
         if family:
