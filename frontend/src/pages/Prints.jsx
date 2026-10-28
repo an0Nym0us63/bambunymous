@@ -565,7 +565,8 @@ function RateStatusLine({ designId }) {
 // la portee d'un choix de couleur a la main : l'impression, ou le groupe de ces impressions
 const colorScope = prints => prints.length === 1 ? `print:${prints[0].id}` : prints[0]?.group_id ? `group:${prints[0].group_id}` : null;
 
-function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) {
+// others : les autres impressions du groupe, pas (encore) liees a ce modele ; onLinked : l'une d'elles vient de l'etre
+function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false, others = [], onLinked = null }) {
   const [open, setOpen] = useState(false);       // replie a chaque ouverture : le resume suffit
   const mineOf = useMine([designId]);            // chez un copain : l'ai-je deja ?
   const visiting = useFriend((s) => s.friend);
@@ -688,7 +689,7 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
       )}
       {!toRate.has(String(designId)) && <RateStatusLine designId={designId}/>}
       <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShown}
-        modelTitle={mw.title} modelTitleFr={mw.title_fr}/>
+        modelTitle={mw.title} modelTitleFr={mw.title_fr} others={others} onLinked={onLinked}/>
       <AdminOnly home mw>
         <button onClick={() => setPick(true)} style={{ display:"block", width:"100%", padding:"7px", border:"none",
           borderTop:"1px solid var(--border)", background:"none", color:"#3b82f6", fontSize:11.5, fontWeight:600,
@@ -727,7 +728,7 @@ const manualPlates = (raw) => { try { const m = JSON.parse(raw || "null"); retur
 // les corrections faites sur la page, avant relecture des prints : partagees par la carte depliee et son double
 // cache (carte repliee), sinon replier la carte oubliait le profil qu'on venait de retenir
 const PLATES_OVER = {};
-function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, modelTitle, modelTitleFr }) {
+function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, modelTitle, modelTitleFr, others = [], onLinked = null }) {
   const [over, setOver] = useState(() => ({ ...PLATES_OVER }));          // corrections faites ici, avant relecture
   const [imgGuess, setImgGuess] = useState({});        // plateau probable par print (silhouette de son apercu)
   const guessIds = printsIn.filter(pr => !manualPlates(pr.mw_plates) && pr.status !== "FAILED" && pr.status !== "CANCELLED")
@@ -866,6 +867,15 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
             hint: [fmtDate(pr.print_date), STATUS_CFG[pr.status]?.label].filter(Boolean).join(" · "),
             onClick: () => save(pr, on ? cur.filter(i => i !== pl.index) : [...cur, pl.index]) };
         }),
+        // les impressions du groupe pas encore liees a ce modele (28/10/2026 : elles manquaient a la liste) : les choisir
+        // les lie au modele et marque le plateau
+        others.length > 0 && "-",
+        ...others.map(pr => ({ icon: "🔗", img: apiThumb(apiUrl(`/prints/${pr.id}/image`), 128), label: pr.translated_name || pr.file_name,
+          hint: [fmtDate(pr.print_date), "pas encore liée à ce modèle : la lier et marquer ce plateau"].filter(Boolean).join(" · "),
+          onClick: async () => {
+            try { await client.patch(`/prints/${pr.id}`, { design_id: designId }); await save(pr, [pl.index]); onLinked?.(); }
+            catch (e) { showAlert(e.response?.data?.detail || e.message); }
+          } })),
         prints.some(pr => manualPlates(pr.mw_plates)) && "-",
         prints.some(pr => manualPlates(pr.mw_plates)) && { icon: "↺", label: "Revenir à la détection",
           hint: "Oublie les choix faits à la main sur ces prints",
@@ -1791,6 +1801,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       {printsBlock}
       {filaments.length > 0 && <FilamentsV2 filaments={filaments} onSpoolClick={setSelSpool} onUnmap={setUnmapping}/>}
       {designs.map(([d, n]) => <MakerWorldCard key={d} designId={d} rateElsewhere prints={prints.filter(x => String(x.design_id || "").trim() === d)}
+        others={prints.filter(x => String(x.design_id || "").trim() !== d)} onLinked={loadPrints}
         note={designs.length > 1 || n < prints.length ? `${n} print${n > 1 ? "s" : ""} sur ${prints.length} de ce modèle` : null}/>)}
     </div>);
   return (
