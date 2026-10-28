@@ -99,6 +99,7 @@ class FilamentOut(BaseModel):
     spool_count: int = 0
     active_spool_count: int = 0
     ordered_spool_count: int = 0          # commandees, pas encore recues (28/10/2026)
+    shipping_spool_count: int = 0         # dont deja en route (un envoi est parti)
     remaining_weight_total_g: float = 0   # somme du restant sur les bobines actives
 
 class FilamentCreate(BaseModel):
@@ -223,7 +224,18 @@ async def list_filaments(
     result = await db.execute(stmt)
     filaments = result.scalars().all()
     agg = await _spool_aggregates(db, [f.id for f in filaments])
-    return [_fil_out(f, agg.get(f.id, (0, 0, 0.0, 0))) for f in filaments]
+    outs = [_fil_out(f, agg.get(f.id, (0, 0, 0.0, 0))) for f in filaments]
+    # parmi les bobines commandees, celles deja en route (lu dans les mails de la boutique)
+    if any(o.ordered_spool_count for o in outs):
+        try:
+            from ....services import mail_orders as _MO
+            ship = await _MO.shipping_by_filament()
+            for o in outs:
+                if o.ordered_spool_count:
+                    o.shipping_spool_count = min(o.ordered_spool_count, ship.get(o.id, 0))
+        except Exception:
+            pass
+    return outs
 
 
 @router.post("/filaments/labels/pdf")

@@ -805,6 +805,33 @@ async def incoming(include_done: bool = False, include_hidden: bool = False) -> 
     return views if include_done else [v for v in views if not v["done"] or v["to_confirm"] > 0]
 
 
+_SHIP_CACHE: dict = {"v": None, "map": {}}
+
+
+async def shipping_by_filament() -> dict[int, int]:
+    """{filament_id: bobines en route} : les lignes des commandes ouvertes dont un envoi est parti et qui ne sont
+    pas recues (28/10/2026). Sert a dire « en livraison » plutot que « en commande » sur un filament."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal, data_version
+    from ..models.mail_order import MailOrder
+    v = data_version("mail_orders")
+    if _SHIP_CACHE["v"] == v:
+        return _SHIP_CACHE["map"]
+    out: dict[int, int] = {}
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(MailOrder.items_json).where(MailOrder.done.is_(False), MailOrder.status == "shipped",
+                                                                   MailOrder.hidden.is_(False)))).scalars().all()
+    for raw in rows:
+        for it in json.loads(raw or "[]"):
+            if it.get("kind") != "filament" or not it.get("filament_id"):
+                continue
+            n = max(0, min(int(it.get("qty") or 0), int(it.get("shipped") or 0)) - int(it.get("received") or 0))
+            if n:
+                out[int(it["filament_id"])] = out.get(int(it["filament_id"]), 0) + n
+    _SHIP_CACHE["v"], _SHIP_CACHE["map"] = v, out
+    return out
+
+
 async def _live_ordered(db) -> set[int]:
     """Les bobines « en commande » qui existent encore : une ligne ne compte que celles-la (une bobine supprimee
     a la main, 28/10/2026, ne bloque plus « creer »)."""

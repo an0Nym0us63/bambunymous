@@ -149,10 +149,31 @@ async def _pairs(db) -> list:
     return m
 
 
+async def _awaited(db) -> set:
+    """Les filaments qui n'existent encore que par une commande (28/10/2026) : des bobines commandees et aucune en
+    stock. Rien a leur reprocher tant que la bobine n'est pas la (echantillon, prix, profil, code couleur)."""
+    m = db.info.get("att_awaited")
+    if m is None:
+        here = {s.filament_id for s, _f in await _pairs(db)}
+        m = db.info["att_awaited"] = {fid for fid in await _coming(db) if fid not in here}
+    return m
+
+
+async def _coming(db) -> set:
+    """Les filaments dont des bobines sont commandees, pas encore recues (28/10/2026) : plus rien a racheter."""
+    m = db.info.get("att_coming")
+    if m is None:
+        m = db.info["att_coming"] = set((await db.execute(
+            select(Spool.filament_id).where(Spool.ordered.is_(True), Spool.archived.is_(False)).distinct())).scalars().all())
+    return m
+
+
 def _fresh(db) -> None:
     """Un nouvel assemblage relit tout (rien de garde d'un appel a l'autre)."""
     db.info.pop("att_fils", None)
     db.info.pop("att_pairs", None)
+    db.info.pop("att_coming", None)
+    db.info.pop("att_awaited", None)
 
 
 def _bambu(f) -> bool:
@@ -168,7 +189,7 @@ def _under(s, f, pct) -> bool:
 @check("no_spool", "Filaments sans bobine", "📦")
 async def _filaments_without_spool(db) -> list[Alert]:
     """Filament au catalogue mais plus aucune bobine active : a racheter."""
-    used = {s.filament_id for s, _f in await _pairs(db)}
+    used = {s.filament_id for s, _f in await _pairs(db)} | await _coming(db)     # une bobine en commande : elle arrive
     rows = [f for f in await _fils(db) if f.id not in used]
     return [
         Alert(
@@ -235,10 +256,13 @@ async def _last_spool_low(db) -> list[Alert]:
     for s, _f in await _pairs(db):
         counts[s.filament_id] = counts.get(s.filament_id, 0) + 1
     rows = [(s, f) for s, f in await _pairs(db) if _under(s, f, STOCK_LOW_PCT)]
+    coming = await _coming(db)
 
     out = []
     for s, f in rows:
         if counts.get(f.id, 0) != 1:        # pas la derniere bobine -> ignore
+            continue
+        if f.id in coming:                  # une autre est commandee : le rachat est fait
             continue
         pct = round(s.remaining_weight_g / f.filament_weight_g * 100)
         out.append(Alert(
@@ -365,7 +389,8 @@ async def _filaments_without_profile(db) -> list[Alert]:
     profile_id absent : l'imprimante ne peut pas retrouver le profil du filament,
     et l'association automatique depuis l'AMS ne fonctionne pas.
     """
-    rows = [f for f in await _fils(db) if not f.profile_id]
+    awaited = await _awaited(db)
+    rows = [f for f in await _fils(db) if not f.profile_id and f.id not in awaited]
     return [
         Alert(
             key=f"no_profile:filament:{f.id}",
@@ -388,7 +413,8 @@ async def _bambu_without_color_code(db) -> list[Alert]:
     officiel (et donc l'enrichissement automatique) ne peut pas se faire.
     Verification limitee aux filaments Bambu — les autres marques n'ont pas ce code.
     """
-    rows = [f for f in await _fils(db) if _bambu(f) and not f.fila_color_code]
+    awaited = await _awaited(db)
+    rows = [f for f in await _fils(db) if _bambu(f) and not f.fila_color_code and f.id not in awaited]
     return [
         Alert(
             key=f"no_color_code:filament:{f.id}",
@@ -439,7 +465,8 @@ async def _filaments_without_price(db) -> list[Alert]:
     print quand la bobine n'a pas de prix propre ; sans lui, on tombe sur le
     defaut 20 €/kg, potentiellement faux.
     """
-    rows = [f for f in await _fils(db) if f.price is None]
+    awaited = await _awaited(db)
+    rows = [f for f in await _fils(db) if f.price is None and f.id not in awaited]
     return [
         Alert(
             key=f"fil_no_price:filament:{f.id}",
@@ -483,7 +510,8 @@ async def _filaments_without_swatch(db) -> list[Alert]:
     Filaments dont l'echantillon (nuancier) n'est pas marque. Utile pour savoir
     lesquels imprimer / referencer physiquement.
     """
-    rows = [f for f in await _fils(db) if f.swatch is not None and not f.swatch]
+    awaited = await _awaited(db)
+    rows = [f for f in await _fils(db) if f.swatch is not None and not f.swatch and f.id not in awaited]
     return [
         Alert(
             key=f"fil_no_swatch:filament:{f.id}",
@@ -559,8 +587,9 @@ async def _spools_not_dried(db) -> list[Alert]:
 
 @check("to_order", "Filaments à commander", "🛒")
 async def _filaments_to_order(db) -> list[Alert]:
-    """Marques \"a commander\" a la main (champ to_order)."""
-    rows = [f for f in await _fils(db) if f.to_order]
+    """Marques \"a commander\" a la main (champ to_order) ; pas ceux dont une bobine est deja commandee."""
+    coming = await _coming(db)
+    rows = [f for f in await _fils(db) if f.to_order and f.id not in coming]
     return [
         Alert(
             key=f"to_order:filament:{f.id}",

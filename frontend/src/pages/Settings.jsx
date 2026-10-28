@@ -1952,7 +1952,7 @@ function LabelsCard({ card, cardTitle }) {
                       opacity: aBobine(f) ? 1 : 0.6 }}>
                     {aBobine(f)
                       ? `${f.active_spool_count} bobine${f.active_spool_count > 1 ? "s" : ""}`
-                      : "pas de bobine"}
+                      : f.ordered_spool_count > 0 ? "📬 en commande" : "pas de bobine"}
                   </span>
                   {!f.swatch && enPlace.has(f.id) && (
                     <span title="Bobine en place dans l'AMS : l'échantillon peut s'imprimer tout de suite"

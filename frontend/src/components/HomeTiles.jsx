@@ -1407,19 +1407,25 @@ function StockZoom({ list, kg }) {
 // le stock par filament (28/10/2026) : toutes les bobines actives de chaque filament comptees ensemble, pour voir ce
 // qu'il reste vraiment de chaque couleur et ce qu'il faut commander ; regroupe par matiere, sous-type, marque, couleur ou etat
 const FIL_STATE = {
-  out: ["Épuisé", "#dc2626", 0], order: ["À commander", "#ea580c", 1], soon: ["Bientôt", "#d97706", 2], ok: ["En stock", "#16a34a", 3],
-  skip: ["Plus commandé", "#64748b", 4] };
+  out: ["Épuisé", "#dc2626", 0], order: ["À commander", "#ea580c", 1], soon: ["Bientôt", "#d97706", 2], coming: ["En commande", "#0EA5E9", 2.5],
+  ok: ["En stock", "#16a34a", 3], skip: ["Plus commandé", "#64748b", 4] };
 const BUCKET_FR = { rouge: "Rouge", orange: "Orange", jaune: "Jaune", vert: "Vert", bleu: "Bleu", violet: "Violet", rose: "Rose", marron: "Marron",
   beige: "Beige", cyan: "Cyan", blanc: "Blanc", gris: "Gris", noir: "Noir", transparent: "Transparent", multicolore: "Multicolore" };
 // les seuils : en % d'une bobine pleine (reglables dans l'onglet ; 30 % et 100 % par defaut)
 function filState(f, thr = { order: 30, soon: 100 }) {
   const g = f.remaining_weight_total_g || 0, one = f.filament_weight_g || 1000;
   if (f.no_reorder) return "skip";                   // je ne le recommanderai plus : jamais « a prevoir »
+  // des bobines commandees (mails de la boutique, 28/10/2026) : le rachat est fait, rien a prevoir
+  const low = !f.active_spool_count || f.to_order || g < one * thr.soon / 100;
+  if (low && f.ordered_spool_count > 0) return "coming";
   if (!f.active_spool_count) return "out";
   if (f.to_order || g < one * thr.order / 100) return "order";
   if (g < one * thr.soon / 100) return "soon";
   return "ok";
 }
+// l'etiquette d'un filament « en commande » : « en livraison » des qu'un envoi est parti
+const comingLabel = f => f.shipping_spool_count > 0 ? `🚚 En livraison${f.ordered_spool_count > 1 ? ` ${f.shipping_spool_count}/${f.ordered_spool_count}` : ""}`
+  : `📬 En commande${f.ordered_spool_count > 1 ? ` ×${f.ordered_spool_count}` : ""}`;
 function FilamentStock() {
   const [fils, setFils] = useState(null);
   const [group, setGroup] = useState(() => { try { return localStorage.getItem("stockFilGroup") || "material"; } catch { return "material"; } });
@@ -1450,7 +1456,7 @@ function FilamentStock() {
   if (fils === null) return <Muted>Lecture des filaments…</Muted>;
   // les filaments qu'on a eus : au moins une bobine (active ou finie), ou marques « a commander »
   const all = fils.filter(f => f.spool_count > 0 || f.to_order).map(f => ({ ...f, st: filState(f, thr) }));
-  const need = all.filter(f => f.st !== "ok" && f.st !== "skip");
+  const need = all.filter(f => f.st !== "ok" && f.st !== "skip" && f.st !== "coming");
   const skipped = all.filter(f => f.st === "skip");
   // un filament qu'on ne recommandera plus et dont il ne reste rien n'encombre pas la liste (il est dans « Plus commandés »)
   const list = (only === "need" ? need : only === "skip" ? skipped : FIL_STATE[only] ? all.filter(f => f.st === only)
@@ -1496,10 +1502,11 @@ function FilamentStock() {
               border: "1px solid var(--border)", background: "var(--surface)", color: f.no_reorder ? "#16a34a" : "var(--muted)" }}>
             {f.no_reorder ? "↺" : "🚫"}</button>}</div>
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-          {pill(lab, c)}
+          {f.st === "coming" ? <span data-tip={`${f.ordered_spool_count} bobine${f.ordered_spool_count > 1 ? "s" : ""} commandée${f.ordered_spool_count > 1 ? "s" : ""} (mails de la boutique)${f.shipping_spool_count ? `, ${f.shipping_spool_count} déjà en route` : ""}`}>{pill(comingLabel(f), c)}</span> : pill(lab, c)}
           {f.manufacturer && group !== "brand" && pill(f.manufacturer, "#8B5CF6")}
           {kind && group !== "type" && pill(kind, "#0EA5E9")}
-          {f.to_order && f.st !== "order" && pill("🛒 marqué à commander", "#ea580c")}
+          {f.to_order && f.st !== "order" && f.st !== "coming" && pill("🛒 marqué à commander", "#ea580c")}
+          {f.st !== "coming" && f.ordered_spool_count > 0 && pill(`📬 +${f.ordered_spool_count} en commande`, "#0EA5E9")}
           <Muted size={11}>{f.active_spool_count ? `${f.active_spool_count} bobine${f.active_spool_count > 1 ? "s" : ""}` : "plus de bobine"}</Muted>
         </div>
         <span style={{ display: "flex", gap: 3 }}>{Array.from({ length: cells }, (_, i) => {
@@ -1516,7 +1523,7 @@ function FilamentStock() {
     </div>
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
       {[["need", "🛒 À prévoir", need.length, "#ea580c"], ["out", "Épuisés", nOf("out"), "#dc2626"], ["order", "À commander", nOf("order"), "#ea580c"],
-        ["soon", "Bientôt", nOf("soon"), "#d97706"], ["skip", "🚫 Plus commandés", skipped.length, "#64748b"]].filter(([k, , n]) => n > 0 || k === "need").map(([k, l, n, c]) =>
+        ["soon", "Bientôt", nOf("soon"), "#d97706"], ["coming", "📬 En commande", nOf("coming"), "#0EA5E9"], ["skip", "🚫 Plus commandés", skipped.length, "#64748b"]].filter(([k, , n]) => n > 0 || k === "need").map(([k, l, n, c]) =>
         <button key={k} type="button" onClick={() => setOnly(o => o === k ? "all" : k)}
           style={{ height: 30, padding: "0 11px", borderRadius: 10, cursor: "pointer", fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap",
             border: `1px solid ${only === k ? c : `${c}55`}`, color: only === k ? "#fff" : c, background: only === k ? c : `${c}14` }}>
@@ -1548,7 +1555,7 @@ function FilamentStock() {
               setThr(t => k === "order" ? { order: v, soon: Math.max(t.soon, v) } : { order: Math.min(t.order, v), soon: v }); }}/>
         </label>)}
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <Muted size={11}>Épuisé : plus aucune bobine. Un filament marqué « à commander » sur sa fiche y est toujours.</Muted>
+        <Muted size={11}>Épuisé : plus aucune bobine. Un filament marqué « à commander » sur sa fiche y est toujours. En commande : des bobines arrivent (commande lue dans tes mails), rien à prévoir ; en livraison dès qu'un envoi est parti.</Muted>
         {isAdmin && !visiting && <button type="button" onClick={saveThr} disabled={thrSaved && thrSaved.order === thr.order && thrSaved.soon === thr.soon}
           style={{ marginLeft: "auto", height: 30, padding: "0 14px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: "#fff",
             background: "linear-gradient(135deg, #F59E0B, #D97706)", opacity: thrSaved && thrSaved.order === thr.order && thrSaved.soon === thr.soon ? 0.5 : 1 }}>
