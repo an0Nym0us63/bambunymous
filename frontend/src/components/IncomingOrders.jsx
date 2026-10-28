@@ -41,6 +41,15 @@ export default function IncomingOrders() {
             <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:12.5 }}>
               <span style={{ fontWeight:800 }}>Commande {o.order_no}</span>
               <span style={{ padding:"1px 8px", borderRadius:12, fontSize:11, fontWeight:800, color:"#fff", background:sc }}>{sl}{o.status === "shipped" && o.shipped_at ? ` le ${day(o.shipped_at)}` : o.ordered_at ? ` le ${day(o.ordered_at)}` : ""}</span>
+              {/* les trois etapes : commandee -> en livraison -> livree (mail, ou tout recu a la main / au scan) */}
+              <span data-tip="Commandée → en livraison → livrée (livrée aussi quand toutes les bobines sont reçues, à la main ou au scan)"
+                style={{ display:"inline-flex", alignItems:"center", gap:3 }}>
+                {[["ordered", "📬"], ["shipping", "🚚"], ["delivered", "📦"]].map(([k, e], i) => {
+                  const idx = ["ordered", "shipping", "delivered"].indexOf(o.stage), on = i <= idx;
+                  return <span key={k} style={{ display:"inline-flex", alignItems:"center", gap:3 }}>
+                    {i > 0 && <span style={{ width:10, height:2, borderRadius:1, background: on ? "#0EA5E9" : "var(--border)" }}/>}
+                    <span style={{ fontSize:12, filter: on ? "none" : "grayscale(1)", opacity: on ? 1 : 0.4 }}>{e}</span></span>; })}
+              </span>
               {o.tracking_url && <a href={o.tracking_url} target="_blank" rel="noreferrer" style={{ fontSize:11.5, fontWeight:700, color:"#0EA5E9" }}>suivi {o.carrier || ""} ↗</a>}
               <span style={{ flex:1 }}/>
               {isAdmin && <button type="button" onClick={() => hide(o)} data-tip="Ne plus montrer cette commande" style={{ border:"none", background:"none", color:"var(--muted)", cursor:"pointer", fontSize:12 }}>✕</button>}

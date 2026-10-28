@@ -520,7 +520,9 @@ async def incoming(include_done: bool = False) -> list[dict]:
     out = []
     for o in rows:
         items = [_item_view(i) for i in json.loads(o.items_json or "[]")]
-        out.append({"id": o.id, "order_no": o.order_no, "store": o.store, "status": o.status, "ordered_at": o.ordered_at,
+        stage = "cancelled" if o.status == "cancelled" else "delivered" if (o.status == "delivered" or o.done) else \
+            "shipping" if o.status == "shipped" else "ordered"
+        out.append({"id": o.id, "order_no": o.order_no, "store": o.store, "status": o.status, "stage": stage, "ordered_at": o.ordered_at,
                     "shipped_at": o.shipped_at, "delivered_at": o.delivered_at, "tracking_url": o.tracking_url, "carrier": o.carrier,
                     "done": bool(o.done), "items": items,
                     "pending": sum(max(0, (i.get("qty") or 0) - (i.get("received") or 0)) for i in items if i.get("kind") == "filament")})
@@ -543,8 +545,16 @@ async def mark(order_id: int, index: int | None = None, received: bool = True, h
         if hide is not None:
             o.hidden = bool(hide)
         o.done = all((i.get("received") or 0) >= (i.get("qty") or 0) for i in items if i.get("kind") == "filament") if items else o.done
+        _settle(o)
         await db.commit()
     return (await incoming(include_done=True))
+
+
+def _settle(o) -> None:
+    """Tout est arrive (coche a la main ou bobines scannees) : la commande est livree, meme sans mail de livraison."""
+    if o.done and o.status in ("confirmed", "shipped"):
+        o.status = "delivered"
+        o.delivered_at = o.delivered_at or datetime.utcnow()
 
 
 async def spool_arrived(filament) -> int:
@@ -578,6 +588,7 @@ async def spool_arrived(filament) -> int:
             if hit:
                 o.items_json = json.dumps(items, ensure_ascii=False)
                 o.done = all((i.get("received") or 0) >= (i.get("qty") or 0) for i in items if i.get("kind") == "filament")
+                _settle(o)
                 await db.commit()
                 break
     return n
