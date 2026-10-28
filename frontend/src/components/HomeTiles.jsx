@@ -3926,12 +3926,16 @@ export function HeadArt({ st, h = 160 }) {
   const nozzle = (x, s, id, dark, moves) => {
     if (!s) return null;
     const up = moves && !s.n.active, dy = moves ? (s.n.active ? 10 : -12) : 0, hot = heat(s.n.temp);
-    return <g key={id} transform={`translate(0 ${dy})`} style={{ transition: "transform .6s" }} opacity={up ? 0.75 : 1}>
+    return <g key={id} opacity={up ? 0.75 : 1}>
+      {/* baissee : un cou relie le corps a la buse (elle ne flotte pas sous la tete) */}
+      {dy > 0 && <rect x={x - 10} y="118" width="20" height={dy + 6} fill={dark ? "#475569" : "#94a3b8"} stroke="#334155"/>}
+      <g transform={`translate(0 ${dy})`} style={{ transition: "transform .6s" }}>
       <rect x={x - 14} y="118" width="28" height="18" rx="4" fill={dark ? "#475569" : "#94a3b8"} stroke="#334155"/>
       <path d={`M${x - 7} 136 H${x + 7} L${x + 3} 150 H${x - 3} Z`} fill={s.n.temp > 40 ? hot : "#64748b"} stroke="#334155" strokeLinejoin="round"
         style={s.printing && s.n.temp > 150 ? { filter: `drop-shadow(0 0 5px ${hot})` } : undefined}/>
       {s.printing && <rect x={x - 22} y="112" width="44" height="42" rx="8" fill={small ? "rgba(34,197,94,0.18)" : "none"} stroke="#22c55e"
         strokeWidth={small ? 5 : 2} strokeDasharray={small ? "none" : "4 3"} opacity={small ? 1 : 0.8}/>}
+      </g>
     </g>;
   };
   return <svg viewBox="0 0 200 170" width={w} height={h} aria-label="Tête d'impression" style={{ display: "block", overflow: "visible" }}>
