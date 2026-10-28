@@ -16,15 +16,21 @@ export const ORD_C = "#0284c7", ORD_BG = "color-mix(in srgb, #0EA5E9 14%, transp
 export const tipStock = (n, w) => `${n} autre${n > 1 ? "s" : ""} bobine${n > 1 ? "s" : ""} de ce filament en stock${w ? ` (${w})` : ""}`;
 export const tipOrdered = n => `${n} bobine${n > 1 ? "s" : ""} de ce filament commandée${n > 1 ? "s" : ""}, pas encore reçue${n > 1 ? "s" : ""}`;
 
-// l'en-tete d'une fiche (118 px) : la bobine et ses ombres, les comptes poses a cote, au-dessus de l'ombre portee
+// l'en-tete d'une fiche (118 px) : la bobine et ses ombres ; les comptes en dessous, en petite rangee centree (rien ne
+// chevauche la bobine ni son ombre portee)
 export function HeroSpool({ colors, finish, type, color, stack = 0, ordered = 0, size = 118, stockWeight = null, children }) {
   const k = size / 118;
-  return <span style={{ position:"relative", display:"inline-flex", flexShrink:0, filter:`drop-shadow(0 8px 18px ${color}66)`,
-    marginRight: stack > 0 ? 12 * k : 0, marginLeft: ordered > 0 ? 12 * k : 0 }}>
-    {stack > 0 && <Ghost side="right" size={108 * k} off={12 * k} top={5 * k} colors={colors} finish={finish} type={type}/>}
-    {ordered > 0 && <Ghost side="left" size={108 * k} off={12 * k} top={5 * k} colors={colors} finish={finish} type={type} ordered/>}
-    {children || <span style={{ position:"relative", display:"inline-flex" }}><SpoolSVG colors={colors} finish={finish} size={size} type={type}/></span>}
-    {stack > 0 && <GhostBadge side="right" size={11} bottom={22 * k} off={-18 * k} tip={tipStock(stack, stockWeight)}>🧵 +{stack}</GhostBadge>}
-    {ordered > 0 && <GhostBadge side="left" size={11} bottom={22 * k} off={-18 * k} color={ORD_C} bg={ORD_BG} tip={tipOrdered(ordered)}>📬 +{ordered}</GhostBadge>}
+  const pill = (c, bg, tip, txt) => <span data-tip={tip} style={{ fontSize:11, fontWeight:700, color:c, background:bg, borderRadius:8, padding:"1px 7px", whiteSpace:"nowrap", lineHeight:1.5 }}>{txt}</span>;
+  return <span style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", gap:4, flexShrink:0 }}>
+    <span style={{ position:"relative", display:"inline-flex", filter:`drop-shadow(0 8px 18px ${color}66)`,
+      marginRight: stack > 0 ? 12 * k : 0, marginLeft: ordered > 0 ? 12 * k : 0 }}>
+      {stack > 0 && <Ghost side="right" size={108 * k} off={12 * k} top={5 * k} colors={colors} finish={finish} type={type}/>}
+      {ordered > 0 && <Ghost side="left" size={108 * k} off={12 * k} top={5 * k} colors={colors} finish={finish} type={type} ordered/>}
+      {children || <span style={{ position:"relative", display:"inline-flex" }}><SpoolSVG colors={colors} finish={finish} size={size} type={type}/></span>}
+    </span>
+    {(stack > 0 || ordered > 0) && <span style={{ display:"flex", gap:6, justifyContent:"center" }}>
+      {ordered > 0 && pill(ORD_C, ORD_BG, tipOrdered(ordered), `📬 +${ordered}`)}
+      {stack > 0 && pill("var(--muted)", "color-mix(in srgb, var(--muted) 12%, transparent)", tipStock(stack, stockWeight), `🧵 +${stack}`)}
+    </span>}
   </span>;
 }
