@@ -1200,8 +1200,8 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
           {more > 0 && <Ghost side="right" size={64} off={9} top={3} colors={colorsList} finish={finishOf(s)} type={s.filament_multicolor_type}/>}
           {ord > 0 && <Ghost side="left" size={64} off={9} top={3} colors={colorsList} finish={finishOf(s)} type={s.filament_multicolor_type} ordered/>}
           <span style={{ position:"relative" }}><SpoolSVG colors={colorsList} finish={finishOf(s)} empty={false} size={70} type={s.filament_multicolor_type}/></span>
-          {more > 0 && <GhostBadge side="right" off={-6} tip={`${more} autre${more > 1 ? "s" : ""} bobine${more > 1 ? "s" : ""} de ce filament en stock` + (s.sibling_weight_g ? ` (${fmtStock(s.sibling_weight_g)})` : "")}>+{more}</GhostBadge>}
-          {ord > 0 && <GhostBadge side="left" off={-6} color="#0284c7" bg="color-mix(in srgb, #0EA5E9 14%, transparent)"
+          {more > 0 && <GhostBadge side="right" off={-14} bottom={-5} tip={`${more} autre${more > 1 ? "s" : ""} bobine${more > 1 ? "s" : ""} de ce filament en stock` + (s.sibling_weight_g ? ` (${fmtStock(s.sibling_weight_g)})` : "")}>+{more}</GhostBadge>}
+          {ord > 0 && <GhostBadge side="left" off={-14} bottom={-5} color="#0284c7" bg="color-mix(in srgb, #0EA5E9 14%, transparent)"
             tip={`${ord} bobine${ord > 1 ? "s" : ""} de ce filament commandée${ord > 1 ? "s" : ""}, pas encore reçue${ord > 1 ? "s" : ""}`}>📬 +{ord}</GhostBadge>}
         </span>
       </div>
