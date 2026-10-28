@@ -353,6 +353,11 @@ async def _apply_meta(pid: int, meta: dict, taskname: str, job_id: str = ""):
             plate_image=meta.get("plate_image"),
             model_3mf=meta.get("model_3mf"),
         ))
+        # le profil MakerWorld lu dans le 3MF (DesignProfileId), si l'imprimante n'en a pas donne (28/10/2026)
+        prof3 = str(meta.get("mw_profile_id") or "").strip()
+        if prof3.isdigit():
+            await db.execute(update(Print).where(Print.id == pid, (Print.mw_profile_id.is_(None)) | (Print.mw_profile_id.in_(["", "0"])))
+                             .values(mw_profile_id=prof3))
         # NB: on ne touche PAS a design_id ici. Il est pose une seule fois a la
         # creation depuis le MQTT (comme Spoolnymous). Le 3MF ne contient pas cette
         # metadonnee de facon fiable, donc on ne la ré-ecrit jamais depuis le 3MF.

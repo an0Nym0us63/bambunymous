@@ -276,7 +276,7 @@ def _parse_3mf(data: bytes, print_id: int, strict: bool = True) -> dict:
     result = {
         "title": "", "file": "", "plate_id": "1",
         "estimated_seconds": 0, "filaments": {},
-        "plate_image": None, "model_3mf": None, "design_id": "",
+        "plate_image": None, "model_3mf": None, "design_id": "", "mw_profile_id": "",
     }
     print_dir = DATA_DIR / "prints" / str(print_id)
     logger.info(f"[3MF-PARSE] ▶ Parsing {len(data)} bytes, print_id={print_id}")
@@ -297,6 +297,8 @@ def _parse_3mf(data: bytes, print_id: int, strict: bool = True) -> dict:
                             k = meta.attrib.get("name", "").lower()
                             if k == "title":    result["title"]     = (meta.text or "").strip()
                             if k == "design_id": result["design_id"] = (meta.text or "").strip()
+                            # le profil MakerWorld imprime (28/10/2026) : le fichier le dit, mieux que toute deduction
+                            if k == "designprofileid": result["mw_profile_id"] = (meta.text or "").strip()
                             logger.debug(f"[3MF] metadata k={k!r} v={(meta.text or "").strip()!r}")
                 except Exception as e: logger.debug(f"3dmodel parse: {e}")
 

@@ -1620,7 +1620,14 @@ async def set_mw_plates(print_id: int, body: dict, _: str = Depends(get_current_
             raise HTTPException(404)
         p.mw_plates = None if body.get("reset") else _json.dumps({"profile": prof or None, "plates": plates})
         await db.commit()
-        return {"id": print_id, "mw_plates": p.mw_plates}
+        out = {"id": print_id, "mw_plates": p.mw_plates}
+    # le 3MF d'origine de ce profil, recupere en fond s'il manque (28/10/2026) : la vue 3D, les couleurs et la
+    # sauvegarde NAS suivent le profil choisi sans attendre un rattrapage
+    if prof:
+        import asyncio
+        from ....services.mw_source import for_print
+        asyncio.get_running_loop().create_task(for_print(print_id))
+    return out
 
 
 @router.patch("/{print_id}")

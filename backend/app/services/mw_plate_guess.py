@@ -186,6 +186,49 @@ def _manual(raw):
     return m if isinstance(m, dict) and isinstance(m.get("plates"), list) else None
 
 
+_PROF_RX = None
+
+
+def profile_in_3mf(path) -> str | None:
+    """L'identifiant du profil MakerWorld ecrit dans un 3MF tranche (DesignProfileId), None s'il n'y est pas."""
+    import re
+    import zipfile
+    global _PROF_RX
+    if _PROF_RX is None:
+        _PROF_RX = re.compile(r'<metadata name="DesignProfileId">\s*(\d+)\s*</metadata>')
+    try:
+        with zipfile.ZipFile(path) as z:
+            head = z.read("3D/3dmodel.model")[:200_000].decode("utf-8", "replace")
+    except Exception:
+        return None
+    m = _PROF_RX.search(head)
+    return m.group(1) if m else None
+
+
+async def profiles_from_files(rows) -> dict:
+    """{print_id: profil} lu dans le 3MF tranche garde des impressions sans profil (28/10/2026), et pose sur elles
+    (une fois : la prochaine fois, l'impression le sait). rows : (id, mw_profile_id, model_3mf)."""
+    from sqlalchemy import update
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    from .archive import local_or_archive
+    found = {}
+    for pid, prof, m3 in rows:
+        if (prof and str(prof) != "0") or not m3:
+            continue
+        f = local_or_archive(m3)
+        p = await asyncio.to_thread(profile_in_3mf, f) if f else None
+        if p:
+            found[pid] = p
+    if found:
+        async with AsyncSessionLocal() as db:
+            for pid, p in found.items():
+                await db.execute(update(Print).where(Print.id == pid).values(mw_profile_id=p))
+            await db.commit()
+        logger.info(f"[MW] profil lu dans le 3MF tranche de {len(found)} impression(s) : {found}")
+    return found
+
+
 async def printed_profile(design_id: str) -> dict:
     """{"profile": profile_id | None, "sure": bool} : le profil donne par l'imprimante ou choisi a la main (le
     plus frequent) ; sinon deduit des impressions -- nom de la tache, image de l'apercu, numero et poids du
@@ -199,10 +242,17 @@ async def printed_profile(design_id: str) -> dict:
         return {"profile": None, "sure": False}
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(Print.id, Print.status, Print.plate_id, Print.mw_profile_id, Print.mw_plates,
-                                        Print.original_name, Print.task_name, Print.file_name, Print.total_weight_g)
+                                        Print.original_name, Print.task_name, Print.file_name, Print.total_weight_g,
+                                        Print.model_3mf)
                                  .where(Print.design_id == did))).all()
     if not rows:
         return {"profile": None, "sure": False}
+    # le profil ecrit dans le 3MF tranche (imprime depuis MakerWorld) : l'indice le plus sur, et il manquait
+    try:
+        from_files = await profiles_from_files([(r.id, r.mw_profile_id, r.model_3mf) for r in rows])
+    except Exception:
+        logger.exception("[MW] profil lu dans les 3MF")
+        from_files = {}
     base = await _base(did, True)
     profs = [p for p in ((base.get("profiles") if isinstance(base, dict) else None) or []) if isinstance(p, dict)]
     avec = [p for p in profs if p.get("plates")]
@@ -211,7 +261,7 @@ async def printed_profile(design_id: str) -> dict:
     by_inst = {str(p.get("instance_id")): str(p.get("profile_id")) for p in profs if p.get("instance_id")}
     known: dict = {}
     for r in rows:
-        pp = str((_manual(r.mw_plates) or {}).get("profile") or r.mw_profile_id or "")
+        pp = str((_manual(r.mw_plates) or {}).get("profile") or r.mw_profile_id or from_files.get(r.id) or "")
         pp = by_inst.get(pp, pp)
         if pp and pp != "0":
             known[pp] = known.get(pp, 0) + 1
