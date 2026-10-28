@@ -81,8 +81,8 @@ export function OrderSheet({ id, order: given = null, onClose, onChanged }) {
   return (
     <FSheet onClose={onClose} z={3000} bottom={isAdmin ? <>
       {o.to_confirm > 0 && <button onClick={() => act({ confirm: true })} disabled={busy} style={{ ...fBtn, flex:1, background:"#22c55e", color:"#fff", border:"none" }}>✓ Tout est bien là</button>}
-      {o.items.some(toCreate) && o.status !== "cancelled" && <button onClick={() => create(null)} disabled={busy} data-tip="Crée les fiches filament manquantes et une bobine « en commande » par unité attendue"
-        style={{ ...fBtn, flex:1, background:"#0EA5E9", color:"#fff", border:"none" }}>📬 Créer les bobines en commande</button>}
+      {o.items.some(toCreate) && o.status !== "cancelled" && <button onClick={() => create(null)} disabled={busy} data-tip="Tout d'un coup : les fiches filament manquantes et une bobine « en commande » par unité attendue (ligne par ligne : le bouton « 📬 créer » de chaque ligne)"
+        style={{ ...fBtn, flex:1, background:"#0EA5E9", color:"#fff", border:"none" }}>📬 Tout créer en commande</button>}
       <button onClick={async () => { await act({ hide: !o.hidden }); if (!o.hidden) onClose(); }} disabled={busy} style={{ ...fBtn, flex: o.to_confirm > 0 ? 0 : 1 }}>{o.hidden ? "Remontrer" : "Cacher"}</button>
     </> : null}>
       <div style={{ padding:"18px 16px 12px" }}>
@@ -117,7 +117,7 @@ export function OrderSheet({ id, order: given = null, onClose, onChanged }) {
               </span>
               <span style={{ fontWeight:900, fontVariantNumeric:"tabular-nums" }}>{it.received || 0}/{it.qty}</span>
               {isAdmin && left > 0 && (toCreate(it)
-                ? <button onClick={() => create(i)} disabled={busy} data-tip="Créer la fiche filament si elle manque, et la bobine en commande" style={{ ...fBtn, padding:"6px 10px", fontSize:12 }}>📬</button>
+                ? <button onClick={() => create(i)} disabled={busy} data-tip="Créer seulement cette ligne : la fiche filament si elle manque, et sa bobine « en commande »" style={{ ...fBtn, padding:"6px 8px", fontSize:12, whiteSpace:"nowrap" }}>📬 créer</button>
                 : <span data-tip={`${it.spools.length} bobine${it.spools.length > 1 ? "s" : ""} en commande dans le stock`} style={{ fontSize:12, opacity:0.7 }}>📬✓</span>)}
               {isAdmin && (left ? <button onClick={() => act({ index: i, received: true })} disabled={busy} style={{ ...fBtn, padding:"6px 10px", fontSize:12 }}>reçu</button>
                 : <button onClick={() => act({ index: i, received: false })} disabled={busy} style={{ ...fBtn, padding:"6px 10px", fontSize:12, color:"var(--muted)" }}>pas reçu</button>)}

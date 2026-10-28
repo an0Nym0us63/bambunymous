@@ -3416,50 +3416,75 @@ function Orders({ list, o, sz }) {
   const orders = (Array.isArray(list) ? list : []).filter(x => x.status !== "cancelled" && (x.pending > 0 || x.to_confirm > 0));
   const [open, setOpen] = useState(null);                   // la commande ouverte depuis la fenetre
   const pending = orders.reduce((n, x) => n + x.pending, 0);
-  const shipping = orders.filter(x => x.stage === "shipping").length;
-  const lines = x => x.items.filter(i => i.kind === "filament" && (i.qty || 0) - (i.received || 0) > 0);
   const day = iso => iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "";
-  const dot = i => <span style={{ width: 10, height: 10, borderRadius: "50%", flexShrink: 0, border: "1px solid var(--border)",
-    background: i.color_hex ? `#${i.color_hex}` : "repeating-linear-gradient(45deg, var(--surface) 0 2px, var(--border) 2px 4px)" }}/>;
-  // une rangee par commande : l'etape, le numero (court), les pastilles des bobines attendues, le compte
-  const row = (x, h, W) => { const [sl, sc, ic] = ORD_ST[x.stage] || ORD_ST.ordered; const ls = lines(x);
-    const sent = x.items.filter(i => i.kind === "filament").reduce((n, i) => n + Math.min(i.qty || 0, i.shipped || 0), 0);
-    return <div key={x.id} role="button" data-tip={`Commande ${x.order_no} · ${sl}${x.shipped_at ? ` le ${day(x.shipped_at)}` : x.ordered_at ? ` le ${day(x.ordered_at)}` : ""}\n${ls.slice(0, 6).map(i => `${i.fila_type || ""} ${i.name_fr || i.title} ×${(i.qty || 0) - (i.received || 0)}`).join("\n")}`}
-      onClick={e => { e.stopPropagation(); setOpen(x.id); }}
-      style={{ display: "flex", alignItems: "center", gap: 8, height: h, minWidth: 0, cursor: "pointer", padding: "0 8px 0 4px", borderRadius: 12,
-        background: `linear-gradient(90deg, ${sc}1f, transparent 70%)` }}>
-      <span data-pk="" style={{ width: Math.max(20, Math.min(30, h - 6)), height: Math.max(20, Math.min(30, h - 6)), borderRadius: 9, flexShrink: 0, display: "flex",
-        alignItems: "center", justifyContent: "center", fontSize: 15, background: `${sc}26`, boxShadow: `inset 0 0 0 1px ${sc}55` }}>{ic}</span>
-      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-        <span style={{ fontSize: h >= 40 ? 12.5 : 11.5, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {sl}{x.stage === "shipping" && sent < x.items.filter(i => i.kind === "filament").reduce((n, i) => n + (i.qty || 0), 0) ? " (partiel)" : ""}
-          {x.to_confirm > 0 ? " · à confirmer" : ""} <Muted size={10.5}>…{String(x.order_no).slice(-6)}</Muted></span>
-        {h >= 34 && <span style={{ display: "flex", gap: 3, alignItems: "center", overflow: "hidden" }}>{ls.slice(0, Math.max(4, Math.floor(W / 16))).map((i, k) => <span key={k}>{dot(i)}</span>)}</span>}
-      </span>
-      <b data-pk="" style={{ minWidth: 24, textAlign: "center", fontSize: 12, fontWeight: 900, color: "#fff", background: sc, borderRadius: 10, padding: "1px 7px", flexShrink: 0 }}>{x.pending}</b>
+  const name = i => `${i.fila_type || ""} ${i.name_fr || i.title || ""}`.trim();
+  // chaque bobine attendue, une par une : sa couleur, son nom, et si elle est deja partie (envoi partiel compris)
+  const units = [];
+  for (const x of orders) for (const i of x.items) {
+    if (i.kind !== "filament") continue;
+    const left = Math.max(0, (i.qty || 0) - (i.received || 0)), sent = Math.min(left, Math.max(0, (i.shipped || 0) - (i.received || 0)));
+    for (let k = 0; k < left; k++) units.push({ order: x, it: i, sent: k < sent, refill: !!i.refill });
+  }
+  const enRoute = units.filter(u => u.sent), waiting = units.filter(u => !u.sent);
+  // une bobine en miniature : un cylindre de la couleur du filament (hachure si inconnue), un liseré ambre quand elle roule
+  const spool = (u, k, sz) => <span key={k} role="button" aria-label={name(u.it)} data-tip={`${name(u.it)}${u.refill ? " (recharge)" : ""} · ${u.sent ? "en route" : "attendue"} · …${String(u.order.order_no).slice(-6)}`}
+    onClick={e => { e.stopPropagation(); setOpen(u.order.id); }}
+    style={{ width: sz, height: Math.round(sz * 1.35), borderRadius: Math.round(sz * 0.28), flexShrink: 0, cursor: "pointer", position: "relative",
+      background: u.it.color_hex ? `#${u.it.color_hex}` : "repeating-linear-gradient(45deg, var(--surface) 0 3px, var(--border) 3px 6px)",
+      boxShadow: `inset 0 0 0 1px rgba(0,0,0,0.18)${u.sent ? ", 0 0 0 2px #f59e0b" : ""}`, opacity: u.sent ? 1 : 0.92 }}>
+    <span aria-hidden="true" style={{ position: "absolute", left: "22%", right: "22%", top: "44%", height: "12%", borderRadius: 2, background: "rgba(255,255,255,0.55)", boxShadow: "0 0 0 1px rgba(0,0,0,0.12)" }}/>
+  </span>;
+  // une etagere : l'etape a gauche, les bobines en rang, « +n » quand la place manque
+  const shelf = (ic, label, list, sz, perRow, rows, key) => { const max = Math.max(1, perRow * rows), cut = list.length > max ? max - 1 : list.length;
+    return <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+      <span aria-hidden="true" data-tip={label} style={{ fontSize: 13, width: 18, textAlign: "center", flexShrink: 0 }}>{ic}</span>
+      <span style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center", minWidth: 0, flex: 1, overflow: "hidden", maxHeight: rows * (Math.round(sz * 1.35) + 3) }}>
+        {list.slice(0, cut).map((u, k) => spool(u, k, sz))}
+        {cut < list.length && <Muted size={11} style={{ fontWeight: 800 }}>+{list.length - cut}</Muted>}</span>
     </div>; };
-  const head = big => <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", minWidth: 0 }}>
-    <span data-pk="" style={{ fontSize: big ? 30 : 24, fontWeight: 900, lineHeight: 1.05, ...gradText("#0EA5E9", "#3B82F6") }}>{pending}</span>
-    <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>bobine{pending > 1 ? "s" : ""} à venir</span>
-    {shipping > 0 && <Muted size={11.5}>· {shipping} en livraison</Muted>}</div>;
+  const head = big => <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+    <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
+      <span data-pk="" style={{ fontSize: big ? 30 : 24, fontWeight: 900, lineHeight: 1.05, ...gradText("#0EA5E9", "#3B82F6") }}>{pending}</span>
+      <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>bobine{pending > 1 ? "s" : ""} à venir</span></div>
+    {units.length > 0 && <Muted size={11}>{enRoute.length ? `🚚 ${enRoute.length} en route` : ""}{enRoute.length && waiting.length ? " · " : ""}{waiting.length ? `📬 ${waiting.length} attendue${waiting.length > 1 ? "s" : ""}` : ""}
+      {orders.length > 1 ? ` · ${orders.length} commandes` : ""}</Muted>}</div>;
+  // en grand : une carte par commande, avec ses bobines
+  const card = x => { const [sl, sc, ic] = ORD_ST[x.stage] || ORD_ST.ordered; const us = units.filter(u => u.order === x);
+    return <div key={x.id} role="button" onClick={e => { e.stopPropagation(); setOpen(x.id); }}
+      style={{ display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", padding: "10px 12px", borderRadius: 14, background: `linear-gradient(90deg, ${sc}1f, transparent 70%)`, boxShadow: `inset 0 0 0 1px ${sc}33` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ width: 28, height: 28, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, background: `${sc}26`, boxShadow: `inset 0 0 0 1px ${sc}55` }}>{ic}</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {sl}{x.stage === "shipping" && us.some(u => !u.sent) ? " (partiel)" : ""}{x.to_confirm > 0 ? " · à confirmer" : ""}
+          <Muted size={11}> · …{String(x.order_no).slice(-6)}{x.shipped_at ? ` · envoyée le ${day(x.shipped_at)}` : x.ordered_at ? ` · le ${day(x.ordered_at)}` : ""}</Muted></span>
+        <b data-pk="" style={{ minWidth: 24, textAlign: "center", fontSize: 12, fontWeight: 900, color: "#fff", background: sc, borderRadius: 10, padding: "1px 7px", flexShrink: 0 }}>{x.pending}</b>
+      </div>
+      {us.some(u => u.sent) && shelf("🚚", "En route", us.filter(u => u.sent), 18, 40, 3, "s")}
+      {us.some(u => !u.sent) && shelf("📬", "Attendues", us.filter(u => !u.sent), 18, 40, 3, "w")}
+    </div>; };
   const zoom = <>
     {head(true)}
     {!orders.length && <Muted>Rien en route. Les commandes Bambu Lab lues dans tes mails apparaissent ici.</Muted>}
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{orders.map(x => row(x, 44, 600))}</div>
-    {orders.length > 0 && <Muted size={11}>Touche une commande pour son détail : envois, suivi, chaque bobine, et la création des fiches et bobines « en commande ».</Muted>}
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{orders.map(card)}</div>
+    {orders.length > 0 && <Muted size={11}>Touche une bobine ou une commande pour le détail : envois, suivi, chaque ligne, et la création des fiches et bobines « en commande ».</Muted>}
     {open != null && <React.Suspense fallback={null}><OrderSheetLazy id={open} onClose={() => setOpen(null)}/></React.Suspense>}
   </>;
   return (
     <Tile icon={<PackageOpen size={15}/>} color="#0EA5E9" label="Commandes" to="/filaments" zoom={zoom} mini={sz.h === 0.5}
-      summary={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13.5 }}><b>{pending}</b> à venir{shipping ? ` · ${shipping} 🚚` : ""}</span>}>
+      summary={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13.5 }}><b>{pending}</b> à venir{enRoute.length ? ` · ${enRoute.length} 🚚` : ""}</span>}>
       {({ W, H }) => {
         if (!orders.length) return <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{head(false)}<Muted>Rien en route pour l'instant.</Muted></div>;
-        const rows = Math.max(1, Math.min(orders.length, Math.floor((H - 40) / 40)));
-        const h = Math.min(48, Math.max(26, Math.floor((H - 40) / rows) - 4));
-        return <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+        // les etageres se partagent la hauteur qui reste sous l'en-tete ; les bobines grossissent quand la tuile est haute
+        const sz = Math.max(13, Math.min(22, Math.floor(W / 11))), rowH = Math.round(sz * 1.35) + 3;
+        const perRow = Math.max(3, Math.floor((W - 26) / (sz + 3)));
+        const parts = [[enRoute, "🚚", "En route", "s"], [waiting, "📬", "Attendues", "w"]].filter(([l]) => l.length);
+        const total = Math.max(parts.length, Math.floor((H - 50 - 6 * (parts.length - 1)) / rowH));
+        const want = parts.map(([l]) => Math.ceil(l.length / perRow));
+        let rows = want.slice();                               // chacune sa place, puis on rogne la plus haute s'il en manque
+        while (rows.reduce((a, b) => a + b, 0) > total) { const i = rows.indexOf(Math.max(...rows)); if (rows[i] <= 1) break; rows[i]--; }
+        return <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
           {head(false)}
-          {orders.slice(0, rows).map(x => row(x, h, W))}
-          {orders.length > rows && <Muted size={11}>+{orders.length - rows} commande{orders.length - rows > 1 ? "s" : ""}</Muted>}
+          {parts.map(([l, ic, lb, k], i) => shelf(ic, lb, l, sz, perRow, rows[i], k))}
         </div>;
       }}
     </Tile>
