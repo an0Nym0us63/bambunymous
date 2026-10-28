@@ -449,6 +449,36 @@ async def sync(trigger: str = "manuel", days: int | None = None, reread: bool = 
     return rep
 
 
+AUTO_CLOSE_DAYS = 60       # une commande plus vieille que ca est arrivee depuis longtemps : rien a attendre
+MATCH_WINDOW_DAYS = 90     # les bobines ajoutees dans cette fenetre apres la commande comptent comme recues
+
+
+async def _reconcile_existing(items: list, ordered_at) -> None:
+    """Les bobines deja dans l'appli pour les lignes d'une commande (28/10/2026 : relire un mail de six mois ne
+    doit pas remettre en « a venir » des bobines recues depuis longtemps) : chaque bobine du filament ajoutee
+    apres la commande (dans les 90 jours) compte comme recue ; au-dela de 60 jours, tout est considere recu."""
+    from sqlalchemy import select, func
+    from ..db.session import AsyncSessionLocal
+    from ..models.filament import Spool
+    if not ordered_at:
+        return
+    old = ordered_at < datetime.utcnow() - timedelta(days=AUTO_CLOSE_DAYS)
+    async with AsyncSessionLocal() as db:
+        for it in items:
+            if it.get("kind") != "filament":
+                continue
+            qty = int(it.get("qty") or 1)
+            if old:
+                it["received"] = qty
+                continue
+            if not it.get("filament_id"):
+                continue
+            n = (await db.execute(select(func.count(Spool.id)).where(
+                Spool.filament_id == it["filament_id"], Spool.created_at >= ordered_at,
+                Spool.created_at <= ordered_at + timedelta(days=MATCH_WINDOW_DAYS)))).scalar() or 0
+            it["received"] = min(qty, int(n))
+
+
 async def _apply(m: dict) -> str:
     """Un mail analyse -> une commande creee ou mise a jour. Rend created / updated / ignored."""
     from sqlalchemy import select
@@ -463,6 +493,7 @@ async def _apply(m: dict) -> str:
         return "ignored"
     if items:
         items = await enrich_items(items)
+        await _reconcile_existing(items, m["date"])
     url, carrier = tracking(m["text"], m["links"]) if kind in ("shipped", "delivered") else (None, None)
     store = None
     mm = re.search(r"https?://([a-z0-9.-]*store\.bambulab\.com)", m["text"] + " " + " ".join(m["links"]), re.I)
@@ -497,6 +528,12 @@ async def _apply(m: dict) -> str:
             o.done = True
         if store and not o.store:
             o.store = store
+        cur = json.loads(o.items_json or "[]")
+        if cur and not o.done:
+            o.done = all((i.get("received") or 0) >= (i.get("qty") or 0) for i in cur if i.get("kind") == "filament")
+            _settle(o)
+        elif not cur and o.status in ("confirmed", "shipped") and (o.ordered_at or m["date"]) < datetime.utcnow() - timedelta(days=AUTO_CLOSE_DAYS):
+            o.done = True                      # une expedition de plus de deux mois sans lignes connues : rien a suivre
         await db.commit()
         oid, status, items_now = o.id, o.status, json.loads(o.items_json or "[]")
     try:
