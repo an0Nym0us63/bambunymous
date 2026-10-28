@@ -16,7 +16,7 @@ const when = iso => iso ? new Date(iso).toLocaleString("fr-FR", { day:"numeric",
 
 export default function MailOrdersSettings({ card, cardTitle }) {
   const [s, setS] = useState(null);
-  const [f, setF] = useState({ host:"", port:993, user:"", password:"", folder:"INBOX", sender:"bambulab", days:120, every_h:3 });
+  const [f, setF] = useState({ host:"", port:993, user:"", password:"", folder:"INBOX", sender:"bambulab", days:21, every_h:3 });
   const [busy, setBusy] = useState(false);
   const load = () => client.get("/settings/mail").then(r => {
     setS(r.data);
@@ -28,18 +28,18 @@ export default function MailOrdersSettings({ card, cardTitle }) {
   const save = async (extra = {}) => {
     setBusy(true);
     try {
-      const { data } = await client.put("/settings/mail", { ...f, port: Number(f.port) || 993, days: Number(f.days) || 120,
+      const { data } = await client.put("/settings/mail", { ...f, port: Number(f.port) || 993, days: Math.min(21, Number(f.days) || 21),
         every_h: Number(f.every_h) || 3, password: f.password || null, ...extra });
       setS(data); setF(x => ({ ...x, password: "" }));
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setBusy(false);
   };
-  const [back, setBack] = useState(365);
+  const [back, setBack] = useState(21);   // jamais plus de 21 jours : au-dela, de vieilles commandes a confirmer
   const sync = async (reread = false) => {
     setBusy(true);
     try {
       await save();
-      const { data } = await client.post("/settings/mail/sync", reread ? { days: Number(back) || 365, reread: true } : {}, { timeout: 300000 });
+      const { data } = await client.post("/settings/mail/sync", reread ? { days: Math.min(21, Number(back) || 21), reread: true } : {}, { timeout: 300000 });
       if (data.error) showAlert(data.error);
       await load();
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
@@ -73,7 +73,7 @@ export default function MailOrdersSettings({ card, cardTitle }) {
             <input type="password" value={f.password} onChange={set("password")} autoComplete="new-password" placeholder={s.has_password ? "••••••••" : "xxxx xxxx xxxx xxxx"} style={inp}/></div>
           <div><span style={lbl}>Dossier</span><input value={f.folder} onChange={set("folder")} placeholder="INBOX" style={inp}/></div>
           <div><span style={lbl}>Expéditeur contient</span><input value={f.sender} onChange={set("sender")} placeholder="bambulab" style={inp}/></div>
-          <div><span style={lbl}>Remonter sur (jours)</span><input value={f.days} onChange={set("days")} inputMode="numeric" style={inp}/></div>
+          <div><span style={lbl}>Remonter sur (jours, 21 au plus)</span><input value={f.days} onChange={e => setF(x => ({ ...x, days: e.target.value === "" ? "" : Math.min(21, Number(e.target.value.replace(/\D/g, "")) || "") }))} inputMode="numeric" style={inp}/></div>
           <div><span style={lbl}>Relever toutes les (heures)</span><input value={f.every_h} onChange={set("every_h")} inputMode="numeric" style={inp}/></div>
         </div>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
@@ -84,9 +84,9 @@ export default function MailOrdersSettings({ card, cardTitle }) {
         {/* le rattrapage : relire les mails deja vus sur N jours (une commande connue est remise a jour, jamais doublee) */}
         <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:12.5, color:"var(--text2)" }}>
           <span>Rattraper le passé : relire les</span>
-          <input value={back} onChange={e => setBack(e.target.value.replace(/\D/g, ""))} inputMode="numeric" aria-label="Jours à relire"
+          <input value={back} onChange={e => { const v = e.target.value.replace(/\D/g, ""); setBack(v === "" ? "" : Math.min(21, Number(v))); }} inputMode="numeric" aria-label="Jours à relire"
             style={{ ...inp, width:70, padding:"6px 8px", textAlign:"center" }}/>
-          <span>derniers jours, mails déjà vus compris</span>
+          <span>derniers jours (21 au plus), mails déjà vus compris</span>
           <button type="button" onClick={() => sync(true)} disabled={busy || s.running} style={btn(false, busy || s.running)}>Relire</button>
         </div>
         {last && <div style={{ padding:"8px 12px", borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)", fontSize:12, color:"var(--text2)", lineHeight:1.5 }}>

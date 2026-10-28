@@ -29,6 +29,7 @@ K_HOST, K_PORT, K_USER, K_PASS = "MAIL_HOST", "MAIL_PORT", "MAIL_USER", "MAIL_PA
 K_FOLDER, K_SENDER, K_ENABLED, K_DAYS, K_EVERY, K_LAST, K_SEEN = \
     "MAIL_FOLDER", "MAIL_SENDER", "MAIL_ENABLED", "MAIL_DAYS", "MAIL_EVERY_H", "MAIL_LAST", "MAIL_SEEN"
 _STATE = {"running": False}
+REREAD_MAX_DAYS = 21       # le plus loin qu'un releve remonte (reglage ou rattrapage)
 _SEEN_MAX = 2000
 
 
@@ -42,7 +43,7 @@ async def settings_get() -> dict:
         out = {"host": await g(K_HOST, "imap.gmail.com"), "port": int((await g(K_PORT, "993")) or 993),
                "user": await g(K_USER, ""), "has_password": bool(await g(K_PASS, "")),
                "folder": await g(K_FOLDER, "INBOX"), "sender": await g(K_SENDER, "bambulab"),
-               "enabled": (await g(K_ENABLED, "0")) == "1", "days": int((await g(K_DAYS, "120")) or 120),
+               "enabled": (await g(K_ENABLED, "0")) == "1", "days": min(REREAD_MAX_DAYS, int((await g(K_DAYS, "21")) or 21)),
                "every_h": int((await g(K_EVERY, "3")) or 3), "running": _STATE["running"]}
         try:
             out["last"] = json.loads(await g(K_LAST, "") or "null")
@@ -70,7 +71,7 @@ async def settings_set(body: dict) -> dict:
         if "enabled" in body:
             await set_setting(db, K_ENABLED, "1" if body["enabled"] else "0")
         if "days" in body:
-            await set_setting(db, K_DAYS, str(max(7, min(730, int(body["days"] or 120)))))
+            await set_setting(db, K_DAYS, str(max(1, min(REREAD_MAX_DAYS, int(body["days"] or 21)))))
         if "every_h" in body:
             await set_setting(db, K_EVERY, str(max(1, min(48, int(body["every_h"] or 3)))))
     return await settings_get()
@@ -410,7 +411,9 @@ async def sync(trigger: str = "manuel", days: int | None = None, reread: bool = 
         return {"error": "Un relevé est déjà en cours."}
     cfg = await settings_get()
     if days:
-        cfg["days"] = max(1, min(3650, int(days)))
+        # un rattrapage ne remonte jamais au-dela de 21 jours (28/10/2026 : relire un an ramenait de vieilles
+        # commandes a confirmer) ; le releve courant est borne pareil par ses reglages
+        cfg["days"] = max(1, min(REREAD_MAX_DAYS, int(days)))
     async with AsyncSessionLocal() as db:
         password = await get_setting(db, K_PASS, "")
     if not (cfg["user"] and password):
