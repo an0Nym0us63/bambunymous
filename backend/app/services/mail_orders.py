@@ -530,7 +530,14 @@ def _local_host(host: str) -> bool:
     try:
         return ipaddress.ip_address(h).is_private or ipaddress.ip_address(h).is_loopback
     except ValueError:
+        pass
+    # un nom (service Docker « protonmail-bridge », machine du LAN) : local si toutes ses adresses le sont
+    import socket
+    try:
+        addrs = {ai[4][0] for ai in socket.getaddrinfo(h, None)}
+    except OSError:
         return False
+    return bool(addrs) and all(ipaddress.ip_address(a.split("%")[0]).is_private or ipaddress.ip_address(a.split("%")[0]).is_loopback for a in addrs)
 
 
 def _connect(host: str, port: int, trust_local: bool = False, pin: str = "") -> tuple:
