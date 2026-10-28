@@ -672,12 +672,14 @@ async def one(order_id: int) -> dict | None:
     return _views(rows)[0]
 
 
-async def incoming(include_done: bool = False) -> list[dict]:
+async def incoming(include_done: bool = False, include_hidden: bool = False) -> list[dict]:
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
     from ..models.mail_order import MailOrder
     async with AsyncSessionLocal() as db:
-        q = select(MailOrder).where(MailOrder.hidden.is_(False)).order_by(MailOrder.ordered_at.desc())
+        q = select(MailOrder).order_by(MailOrder.ordered_at.desc())
+        if not include_hidden:
+            q = q.where(MailOrder.hidden.is_(False))
         rows = (await db.execute(q)).scalars().all()
     views = _views(rows)
     # sans include_done : ce qui attend encore, et les commandes fermees par anciennete pas encore confirmees

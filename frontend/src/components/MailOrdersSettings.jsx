@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import SwitchCard from "./SwitchCard";
+import { OrdersHistory } from "./IncomingOrders";
 import client from "../api/client";
 import { showAlert } from "../utils/dialog";
 
@@ -97,6 +98,8 @@ export default function MailOrdersSettings({ card, cardTitle }) {
           Dernier relevé ({last.trigger}{last.days ? `, ${last.days} j` : ""}) : {when(last.at)} · {last.error ? <b style={{ color:"#ef4444" }}>{last.error}</b>
             : <>{last.mails} mail{last.mails > 1 ? "s" : ""} lu{last.mails > 1 ? "s" : ""}, {last.created} commande{last.created > 1 ? "s" : ""} nouvelle{last.created > 1 ? "s" : ""}, {last.updated} mise{last.updated > 1 ? "s" : ""} à jour{last.ignored ? `, ${last.ignored} mail${last.ignored > 1 ? "s" : ""} sans commande` : ""}{last.errors?.length ? ` · ${last.errors.length} erreur(s)` : ""}</>}
         </div>}
+        {/* l'historique des commandes lues (finies et cachees comprises), replie ; la page Filaments ne garde que ce qui attend */}
+        <OrdersHistory/>
       </div>
     </SwitchCard>
   );

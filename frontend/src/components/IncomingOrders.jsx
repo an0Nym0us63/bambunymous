@@ -131,88 +131,139 @@ export function OrderSheet({ id, order: given = null, onClose, onChanged }) {
   );
 }
 
+// une bobine en miniature (la meme que sur la tuile Commandes) : la couleur du filament, hachuree si inconnue
+export function MiniSpool({ hex, size = 14, sent = false, style }) {
+  return <span aria-hidden="true" style={{ width:size, height:Math.round(size * 1.35), borderRadius:Math.round(size * 0.28), flexShrink:0, position:"relative",
+    background: hex ? `#${hex}` : "repeating-linear-gradient(45deg, var(--surface) 0 3px, var(--border) 3px 6px)",
+    boxShadow:`inset 0 0 0 1px rgba(0,0,0,0.18)${sent ? ", 0 0 0 2px #f59e0b" : ""}`, ...style }}>
+    <span style={{ position:"absolute", left:"22%", right:"22%", top:"44%", height:"12%", borderRadius:2, background:"rgba(255,255,255,0.55)", boxShadow:"0 0 0 1px rgba(0,0,0,0.12)" }}/>
+  </span>;
+}
+
+const STAGE = { ordered: ["commandée", "#3b82f6", "📬"], shipping: ["en livraison", "#f59e0b", "🚚"], delivered: ["livrée", "#22c55e", "📦"], cancelled: ["annulée", "#94a3b8", "✕"] };
+
+// la carte d'une commande en route (28/10/2026) : un clic n'importe ou ouvre sa fenetre ; seuls « recu », le suivi et
+// « cacher » font autre chose. En tete, l'etape en couleur, le numero, la date, les trois etapes ; puis les bobines qui manquent.
+function OrderCard({ o, isAdmin, onOpen, onMark, onHide }) {
+  const [sl, sc, ic] = STAGE[o.stage] || STAGE.ordered;
+  const fil = o.items.filter(i => i.kind === "filament"), tot = fil.reduce((n, i) => n + (i.qty || 0), 0);
+  const sent = fil.reduce((n, i) => n + Math.min(i.qty || 0, i.shipped || 0), 0), partial = o.stage === "shipping" && tot && sent < tot;
+  const got = fil.reduce((n, it) => n + (it.received || 0), 0);
+  const left = o.items.map((it, i) => ({ it, i })).filter(({ it }) => it.kind === "filament" && (it.qty || 0) - (it.received || 0) > 0);
+  const stop = f => e => { e.stopPropagation(); f && f(); };
+  return (
+    <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
+      className="bn-order-card" style={{ borderRadius:14, background:"var(--surface)", border:`1px solid color-mix(in srgb, ${sc} 35%, var(--border))`, overflow:"hidden", cursor:"pointer",
+        boxShadow:"0 1px 2px rgba(0,0,0,0.04)" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", background:`linear-gradient(90deg, color-mix(in srgb, ${sc} 18%, var(--surface)), var(--surface) 75%)` }}>
+        <span style={{ width:36, height:36, borderRadius:11, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:19,
+          background:`color-mix(in srgb, ${sc} 22%, var(--surface))`, boxShadow:`inset 0 0 0 1px color-mix(in srgb, ${sc} 45%, transparent)` }}>{ic}</span>
+        <span style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
+          <span style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+            <span style={{ fontSize:13.5, fontWeight:900, color:"var(--text)" }}>{partial ? "Envoi partiel" : sl[0].toUpperCase() + sl.slice(1)}</span>
+            {partial ? <span style={{ fontSize:11, fontWeight:800, color:sc }}>{sent}/{tot} en route</span> : null}
+            {o.to_confirm > 0 && <span style={{ padding:"1px 7px", borderRadius:10, fontSize:10.5, fontWeight:800, color:"#fff", background:"#f59e0b" }}>à confirmer</span>}
+            <Steps stage={o.stage} size={11}/>
+          </span>
+          <span style={{ fontSize:11.5, color:"var(--muted)", fontWeight:600, display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+            <span>N° {o.order_no}</span>
+            <span>· {o.stage === "shipping" && o.shipped_at ? `envoyée le ${day(o.shipped_at)}` : o.ordered_at ? `le ${day(o.ordered_at)}` : ""}</span>
+            {o.tracking_url && <a href={o.tracking_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ fontWeight:800, color:"#0EA5E9" }}>suivi {o.carrier || ""} ↗</a>}
+          </span>
+        </span>
+        <span style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
+          <b data-tip={`${o.pending} bobine${o.pending > 1 ? "s" : ""} encore attendue${o.pending > 1 ? "s" : ""}`} style={{ minWidth:26, textAlign:"center", fontSize:12.5, fontWeight:900, color:"#fff", background:sc, borderRadius:11, padding:"2px 8px" }}>{o.pending}</b>
+          {isAdmin && <button type="button" onClick={stop(onHide)} data-tip="Ne plus montrer cette commande" aria-label="Cacher"
+            style={{ border:"none", background:"none", color:"var(--muted)", cursor:"pointer", fontSize:13, padding:"2px 4px" }}>✕</button>}
+          <span aria-hidden="true" style={{ color:"var(--muted)", fontSize:16, lineHeight:1 }}>›</span>
+        </span>
+      </div>
+      {got > 0 && <div style={{ fontSize:11.5, fontWeight:700, color:"#22c55e", padding:"6px 12px 0" }}>✓ {got} bobine{got > 1 ? "s" : ""} déjà reçue{got > 1 ? "s" : ""}</div>}
+      <div style={{ padding:"6px 12px 10px", display:"flex", flexDirection:"column" }}>
+        {/* seules les bobines encore attendues ; ce qui est recu (ajoute, scanne ou coche) sort de la carte, la fenetre garde tout */}
+        {left.map(({ it, i }, k) => { const n = (it.qty || 0) - (it.received || 0), onWay = Math.max(0, (it.shipped || 0) - (it.received || 0)) > 0; return (
+          <div key={i} style={{ display:"flex", alignItems:"center", gap:10, fontSize:12.5, padding:"6px 0", borderTop: k ? "1px solid color-mix(in srgb, var(--border) 60%, transparent)" : "none" }}>
+            <MiniSpool hex={it.color_hex} sent={onWay}/>
+            <span style={{ flex:1, minWidth:0, lineHeight:1.2, overflowWrap:"anywhere", color:"var(--text)", fontWeight:600 }}>{lineName(it)}</span>
+            <Marks it={it}/>
+            <span style={{ fontWeight:900, fontVariantNumeric:"tabular-nums", color: n > 1 ? "var(--text)" : "var(--muted)" }}>×{n}</span>
+            {isAdmin && <button type="button" onClick={stop(() => onMark(i))} data-tip="La bobine est là, sans passer par un ajout ou un scan"
+              style={{ border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", cursor:"pointer", fontSize:11, fontWeight:800, padding:"3px 9px", borderRadius:10 }}>reçu</button>}
+          </div>); })}
+      </div>
+    </div>
+  );
+}
+
 export default function IncomingOrders() {
   const isAdmin = useIsAdmin();
   const [orders, setOrders] = useState(null);
   const [open, setOpen] = useState(true);
-  // toutes les commandes (les finies aussi : l'historique, replie, 28/10/2026) ; les cachees n'y sont plus
-  const load = () => client.get("/filaments/incoming", { params: { all: 1 } }).then(r => setOrders((r.data.orders || []).filter(o => !o.hidden))).catch(() => setOrders([]));
+  // seulement ce qui attend encore (28/10/2026) : une commande finie (tout recu, livree, annulee) sort de la page Filaments ;
+  // l'historique se lit dans Parametres -> Comptes -> Commandes Bambu Lab
+  const load = () => client.get("/filaments/incoming").then(r => setOrders((r.data.orders || []).filter(o => !o.hidden))).catch(() => setOrders([]));
   useEffect(() => { load(); }, []);
   const [sheet, setSheet] = useState(null);
-  const [pastOpen, setPastOpen] = useState(false);
   const live = (orders || []).filter(o => o.status !== "cancelled" && (o.pending > 0 || o.to_confirm > 0));
-  const past = (orders || []).filter(o => !live.includes(o));
   useEffect(() => { if (live.length) egg("facteur"); }, [live.length]);   // eslint-disable-line react-hooks/exhaustive-deps
-  if (!live.length && !past.length) return null;
-  const mark = async (o, i, received) => {
-    try { const { data } = await client.post(`/filaments/incoming/${o.id}/mark`, { index: i, received }); setOrders(data.orders || []); }
+  if (!live.length) return null;
+  const mark = async (o, i) => {
+    try { const { data } = await client.post(`/filaments/incoming/${o.id}/mark`, { index: i, received: true }); setOrders((data.orders || []).filter(x => !x.hidden)); }
     catch { /* rien */ }
   };
   const hide = async o => {
     try { const { data } = await client.post(`/filaments/incoming/${o.id}/mark`, { hide: true }); setOrders((data.orders || []).filter(x => !x.hidden)); }
     catch { /* rien */ }
   };
-  const total = live.reduce((n, o) => n + o.pending, 0);
-  const quiet = !live.length;          // rien a venir : juste l'historique, discret et replie
+  const total = live.reduce((n, o) => n + o.pending, 0), onWay = live.reduce((n, o) => n + o.items.filter(i => i.kind === "filament").reduce((m, i) => m + Math.max(0, Math.min((i.qty || 0) - (i.received || 0), (i.shipped || 0) - (i.received || 0))), 0), 0);
   return (
-    <div style={{ borderRadius:16, border:`1px solid ${quiet ? "var(--border)" : "color-mix(in srgb, #0EA5E9 35%, var(--border))"}`,
-      background: quiet ? "var(--surface)" : "color-mix(in srgb, #0EA5E9 6%, var(--surface))", overflow:"hidden" }}>
-      <button type="button" onClick={() => quiet ? setPastOpen(v => !v) : setOpen(v => !v)} style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
+    <div style={{ borderRadius:16, border:"1px solid color-mix(in srgb, #0EA5E9 35%, var(--border))", overflow:"hidden",
+      background:"linear-gradient(180deg, color-mix(in srgb, #0EA5E9 9%, var(--surface)), color-mix(in srgb, #0EA5E9 3%, var(--surface)))" }}>
+      <button type="button" onClick={() => setOpen(v => !v)} style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
         border:"none", background:"transparent", cursor:"pointer", color:"var(--text)", textAlign:"left" }}>
-        <span style={{ fontSize:18 }}>📬</span>
-        <span style={{ fontWeight:800, fontSize:14, flex:1 }}>{quiet ? "Commandes Bambu Lab" : `À venir · ${total} bobine${total > 1 ? "s" : ""}`}</span>
-        <span style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)" }}>{quiet ? `${past.length} passée${past.length > 1 ? "s" : ""} ${pastOpen ? "▴" : "▾"}`
-          : `${live.length} commande${live.length > 1 ? "s" : ""} ${open ? "▴" : "▾"}`}</span>
+        <span style={{ fontSize:20 }}>📬</span>
+        <span style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:1 }}>
+          <span style={{ fontWeight:900, fontSize:14.5 }}>À venir · {total} bobine{total > 1 ? "s" : ""}</span>
+          <span style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)" }}>{onWay ? `🚚 ${onWay} en route · ` : ""}📬 {total - onWay} attendue{total - onWay > 1 ? "s" : ""} · {live.length} commande{live.length > 1 ? "s" : ""}</span>
+        </span>
+        <span style={{ fontSize:12, fontWeight:700, color:"var(--muted)" }}>{open ? "▴" : "▾"}</span>
       </button>
-      {open && !quiet && <div style={{ display:"flex", flexDirection:"column", gap:8, padding:"0 12px 12px" }}>
-        {live.map(o => { const [sl, sc] = ST[o.status] || [o.status, "#94a3b8"]; return (
-          <div key={o.id} style={{ borderRadius:12, background:"var(--surface2)", border:"1px solid var(--border)", padding:"8px 10px" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:12.5 }}>
-              <span role="button" tabIndex={0} onClick={() => setSheet(o.id)} style={{ fontWeight:800, cursor:"pointer", textDecoration:"underline dotted" }}>Commande {o.order_no}</span>
-              {o.to_confirm > 0 && <span style={{ padding:"1px 8px", borderRadius:12, fontSize:11, fontWeight:800, color:"#fff", background:"#f59e0b" }}>à confirmer</span>}
-              {(() => { const fil = o.items.filter(i => i.kind === "filament"); const tot = fil.reduce((n, i) => n + (i.qty || 0), 0);
-                const sent = fil.reduce((n, i) => n + Math.min(i.qty || 0, i.shipped || 0), 0); const partial = o.status === "shipped" && tot && sent < tot;
-                return <span style={{ padding:"1px 8px", borderRadius:12, fontSize:11, fontWeight:800, color:"#fff", background:sc }}>
-                  {partial ? `envoi partiel · ${sent}/${tot} en route` : sl}{o.status === "shipped" && o.shipped_at ? ` · ${day(o.shipped_at)}` : o.ordered_at ? ` le ${day(o.ordered_at)}` : ""}</span>; })()}
-              <Steps stage={o.stage}/>
-              {o.tracking_url && <a href={o.tracking_url} target="_blank" rel="noreferrer" style={{ fontSize:11.5, fontWeight:700, color:"#0EA5E9" }}>suivi {o.carrier || ""} ↗</a>}
-              <span style={{ flex:1 }}/>
-              {isAdmin && <button type="button" onClick={() => hide(o)} data-tip="Ne plus montrer cette commande" style={{ border:"none", background:"none", color:"var(--muted)", cursor:"pointer", fontSize:12 }}>✕</button>}
-            </div>
-            {(() => { const got = o.items.filter(it => it.kind === "filament" && (it.received || 0) > 0).reduce((n, it) => n + (it.received || 0), 0);
-              return got > 0 ? <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:4 }}>✓ {got} bobine{got > 1 ? "s" : ""} déjà reçue{got > 1 ? "s" : ""} · le détail dans la commande</div> : null; })()}
-            <div style={{ display:"flex", flexDirection:"column", gap:4, marginTop:6 }}>
-              {/* seules les bobines encore attendues (28/10/2026) : ce qui est recu (bobine ajoutee ou scannee, ou coche) sort de la carte,
-                  la fenetre de la commande garde tout */}
-              {o.items.map((it, i) => ({ it, i })).filter(({ it }) => it.kind === "filament" && (it.qty || 0) - (it.received || 0) > 0).map(({ it, i }) => { const left = (it.qty || 0) - (it.received || 0); return (
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5 }}>
-                  <span style={{ width:14, height:14, borderRadius:"50%", flexShrink:0, border:"1px solid var(--border)",
-                    background: it.color_hex ? `#${it.color_hex}` : "repeating-linear-gradient(45deg, var(--surface) 0 3px, var(--border) 3px 6px)" }}/>
-                  <span style={{ flex:1, minWidth:0, lineHeight:1.2, overflowWrap:"anywhere" }}>{lineName(it)}</span>
-                  <Marks it={it}/>
-                  <span style={{ fontWeight:800, fontVariantNumeric:"tabular-nums" }}>{it.received ? `${left}/${it.qty}` : `×${it.qty}`}</span>
-                  {isAdmin && <button type="button" onClick={() => mark(o, i, true)} data-tip="La bobine est là, sans passer par un ajout ou un scan"
-                        style={{ border:"1px solid var(--border)", background:"var(--surface)", color:"var(--text)", cursor:"pointer", fontSize:11, fontWeight:800, padding:"2px 8px", borderRadius:10 }}>reçu</button>}
-                </div>); })}
-            </div>
-          </div>); })}
+      {open && <div style={{ display:"flex", flexDirection:"column", gap:8, padding:"0 10px 10px" }}>
+        {live.map(o => <OrderCard key={o.id} o={o} isAdmin={isAdmin} onOpen={() => setSheet(o.id)} onMark={i => mark(o, i)} onHide={() => hide(o)}/>)}
       </div>}
-      {/* l'historique : les commandes finies (livrees, confirmees, annulees), une ligne chacune, la fenetre au clic */}
-      {past.length > 0 && !quiet && <button type="button" onClick={() => setPastOpen(v => !v)} style={{ width:"100%", display:"flex", alignItems:"center", gap:6,
-        padding:"6px 12px 8px", border:"none", borderTop:"1px solid var(--border)", background:"transparent", cursor:"pointer", color:"var(--muted)", fontSize:11.5, fontWeight:700, textAlign:"left" }}>
-        <span style={{ flex:1 }}>Commandes passées · {past.length}</span><span>{pastOpen ? "▴" : "▾"}</span></button>}
-      {pastOpen && past.length > 0 && <div style={{ display:"flex", flexDirection:"column", gap:4, padding:"0 12px 12px" }}>
-        {past.map(o => { const [sl, sc] = ST[o.status] || [o.status, "#94a3b8"]; const nb = o.items.filter(i => i.kind === "filament").reduce((n, i) => n + (i.qty || 0), 0); return (
+      {sheet != null && <OrderSheet id={sheet} onClose={() => setSheet(null)} onChanged={list => setOrders((list || []).filter(x => !x.hidden))}/>}
+    </div>
+  );
+}
+
+// l'historique (28/10/2026) : toutes les commandes lues, finies comprises, une ligne chacune, la fenetre au clic.
+// Dans Parametres -> Comptes, sous la carte des commandes Bambu Lab.
+export function OrdersHistory() {
+  const [orders, setOrders] = useState(null);
+  const [openList, setOpenList] = useState(false);
+  const [sheet, setSheet] = useState(null);
+  const load = () => client.get("/filaments/incoming", { params: { all: 1 } }).then(r => setOrders(r.data.orders || [])).catch(() => setOrders([]));
+  useEffect(() => { load(); }, []);
+  const list = orders || [];
+  if (!list.length) return null;
+  return (
+    <div style={{ borderTop:"1px solid var(--border)", marginTop:4, paddingTop:6 }}>
+      <button type="button" onClick={() => setOpenList(v => !v)} style={{ width:"100%", display:"flex", alignItems:"center", gap:6, padding:"4px 0",
+        border:"none", background:"transparent", cursor:"pointer", color:"var(--muted)", fontSize:12, fontWeight:700, textAlign:"left" }}>
+        <span style={{ flex:1 }}>Commandes lues · {list.length}</span><span>{openList ? "▴" : "▾"}</span></button>
+      {openList && <div style={{ display:"flex", flexDirection:"column", gap:4, marginTop:4 }}>
+        {list.map(o => { const [sl, sc] = STAGE[o.stage] || STAGE.ordered; const nb = o.items.filter(i => i.kind === "filament").reduce((n, i) => n + (i.qty || 0), 0); return (
           <button type="button" key={o.id} onClick={() => setSheet(o.id)} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:10,
-            border:"1px solid var(--border)", background:"var(--surface2)", cursor:"pointer", color:"var(--text)", textAlign:"left", fontSize:12.5 }}>
+            border:"1px solid var(--border)", background:"var(--surface2)", cursor:"pointer", color:"var(--text)", textAlign:"left", fontSize:12.5, opacity: o.hidden ? 0.6 : 1 }}>
             <span style={{ fontWeight:800 }}>{o.order_no}</span>
             <span style={{ padding:"1px 7px", borderRadius:10, fontSize:10.5, fontWeight:800, color:"#fff", background:sc }}>{sl}</span>
+            {o.hidden && <span style={{ fontSize:10.5, color:"var(--muted)", fontWeight:700 }}>cachée</span>}
             <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:"var(--muted)" }}>
               {nb ? `${nb} bobine${nb > 1 ? "s" : ""}` : "sans lignes"}{o.items.length > nb ? ` · ${o.items.length - nb} autre${o.items.length - nb > 1 ? "s" : ""}` : ""}</span>
             <span style={{ color:"var(--muted)", fontVariantNumeric:"tabular-nums" }}>{day(o.delivered_at || o.shipped_at || o.ordered_at)}</span>
           </button>); })}
       </div>}
-      {sheet != null && <OrderSheet id={sheet} onClose={() => setSheet(null)} onChanged={list => setOrders((list || []).filter(x => !x.hidden))}/>}
+      {sheet != null && <OrderSheet id={sheet} onClose={() => setSheet(null)} onChanged={() => load()}/>}
     </div>
   );
 }
