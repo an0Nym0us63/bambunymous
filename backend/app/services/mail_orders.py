@@ -786,7 +786,8 @@ async def one(order_id: int) -> dict | None:
         if not o:
             return None
         rows = [o]
-    return _views(rows)[0]
+        live = await _live_ordered(db)
+    return _views(rows, live)[0]
 
 
 async def incoming(include_done: bool = False, include_hidden: bool = False) -> list[dict]:
@@ -798,12 +799,21 @@ async def incoming(include_done: bool = False, include_hidden: bool = False) -> 
         if not include_hidden:
             q = q.where(MailOrder.hidden.is_(False))
         rows = (await db.execute(q)).scalars().all()
-    views = _views(rows)
+        live = await _live_ordered(db)
+    views = _views(rows, live)
     # sans include_done : ce qui attend encore, et les commandes fermees par anciennete pas encore confirmees
     return views if include_done else [v for v in views if not v["done"] or v["to_confirm"] > 0]
 
 
-def _views(rows) -> list[dict]:
+async def _live_ordered(db) -> set[int]:
+    """Les bobines « en commande » qui existent encore : une ligne ne compte que celles-la (une bobine supprimee
+    a la main, 28/10/2026, ne bloque plus « creer »)."""
+    from sqlalchemy import select
+    from ..models.filament import Spool
+    return {int(i) for i in (await db.execute(select(Spool.id).where(Spool.ordered.is_(True)))).scalars().all()}
+
+
+def _views(rows, live: set[int] | None = None) -> list[dict]:
     out = []
     for o in rows:
         tot = json.loads(o.totals_json) if getattr(o, "totals_json", None) else None
@@ -811,6 +821,8 @@ def _views(rows) -> list[dict]:
         for i in items:
             if i.get("kind") == "filament":
                 i["paid_unit"], i["base_unit"] = paid_unit(i, tot, items), base_unit(i)
+                if live is not None:
+                    i["spools"] = [sid for sid in (i.get("spools") or []) if int(sid) in live]
         stage = "cancelled" if o.status == "cancelled" else "delivered" if (o.status == "delivered" or o.done) else \
             "shipping" if o.status == "shipped" else "ordered"
         out.append({"id": o.id, "order_no": o.order_no, "store": o.store, "status": o.status, "stage": stage, "ordered_at": o.ordered_at,
@@ -919,7 +931,14 @@ async def create_spools(order_id: int, index: int | None = None) -> dict | None:
                 continue
             if it.get("kind") != "filament":
                 continue
-            left = int(it.get("qty") or 0) - int(it.get("received") or 0) - len(it.get("spools") or [])
+            # une bobine en commande supprimee a la main (ou adoptee) ne compte plus : on peut la recreer
+            keep = []
+            for sid in it.get("spools") or []:
+                sp = await db.get(Spool, int(sid))
+                if sp is not None and sp.ordered:
+                    keep.append(sp.id)
+            it["spools"] = keep
+            left = int(it.get("qty") or 0) - int(it.get("received") or 0) - len(keep)
             if left <= 0:
                 continue
             f, created = await _ensure_filament(db, it)
