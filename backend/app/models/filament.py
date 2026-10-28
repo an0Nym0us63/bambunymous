@@ -81,6 +81,9 @@ class Spool(Base):
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     external_spool_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     found_mode: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # rfid/profile/color
+    # commandee, pas encore recue (28/10/2026) : creee depuis une commande lue dans les mails, hors du stock
+    # (poids, alertes, rapprochement AMS/RFID) jusqu'a l'arrivee, ou elle est adoptee par le scan ou l'ajout
+    ordered: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     first_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

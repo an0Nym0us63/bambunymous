@@ -1159,8 +1159,8 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
 
   return (
     <Pressable onClick={onClick} menu={menu} className="card-sm"
-      style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative", borderRadius:18,
-        display:"flex", flexDirection:"column", border:`1px solid color-mix(in srgb, ${main} 30%, var(--border))`,
+      style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative", borderRadius:18, opacity: s.ordered ? 0.72 : 1,
+        display:"flex", flexDirection:"column", border:`1px ${s.ordered ? "dashed" : "solid"} color-mix(in srgb, ${main} 30%, var(--border))`,
         background:`radial-gradient(120% 60% at 50% 0%, ${main}2e, transparent 70%), var(--surface)`,
         boxShadow:`0 10px 22px -16px ${main}` }}>
 
@@ -1171,7 +1171,10 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
         textOverflow:"ellipsis" }}>
         {sub || " "}
       </p>
-      {s.needs_drying && <span data-tip="À sécher" style={{ position:"absolute", top:5, right:6, fontSize:10 }}>💧</span>}
+      {s.needs_drying && !s.ordered && <span data-tip="À sécher" style={{ position:"absolute", top:5, right:6, fontSize:10 }}>💧</span>}
+      {/* commandee, pas encore recue (28/10/2026) : hors du stock jusqu'a l'arrivee, ou le scan ou l'ajout l'adopte */}
+      {s.ordered && <span data-tip="Commandée, pas encore reçue : le scan RFID ou l'ajout d'une bobine de ce filament l'adoptera"
+        style={{ position:"absolute", top:5, left:6, fontSize:9, fontWeight:900, padding:"1px 6px", borderRadius:10, background:"#0EA5E9", color:"#fff" }}>📬 commandée</span>}
 
 
       {/* La bobine, meme dessin qu'au slot AMS de l'accueil */}
@@ -1510,8 +1513,9 @@ function SpoolsView({ filaments, showArchived }) {
     if (filters.sub?.length)   res = res.filter(s => filters.sub.includes(itemSub(s)));
     if (filters.stock === "instock")     res = res.filter(s => (s.remaining_weight_g||0) > 0);
     if (filters.stock === "unavailable") res = res.filter(s => !(s.remaining_weight_g > 0));
-    // Tri
+    // Tri (les bobines commandees, pas encore la, toujours en dernier)
     res = [...res].sort((a,b) => {
+      if (!!a.ordered !== !!b.ordered) return a.ordered ? 1 : -1;
       if (sort==="hue") return compareHue(a.filament_color, b.filament_color);
       if (sort==="name")      return (a.filament_translated_name||a.filament_name||"").localeCompare(b.filament_translated_name||b.filament_name||"");
       if (sort==="brand")     return (a.filament_manufacturer||"").localeCompare(b.filament_manufacturer||"");
@@ -1539,11 +1543,12 @@ function SpoolsView({ filaments, showArchived }) {
         { label:"valeur",    value: prixTotal > 0 ? `${moneyVal(prixTotal, 0)} €` : null, accent:"#94a3b8" },
       ];
     }
-    const marques = new Set(spools.map(b => b.filament_manufacturer).filter(Boolean)).size;
-    const poids = spools.reduce((s, b) => s + (b.remaining_weight_g ?? b.filament_weight_g ?? 0), 0);
-    const prix  = spools.reduce((s, b) => s + (b.price_override || 0), 0);
+    const here = spools.filter(b => !b.ordered), ordered = spools.length - here.length;
+    const marques = new Set(here.map(b => b.filament_manufacturer).filter(Boolean)).size;
+    const poids = here.reduce((s, b) => s + (b.remaining_weight_g ?? b.filament_weight_g ?? 0), 0);
+    const prix  = here.reduce((s, b) => s + (b.price_override || 0), 0);
     return [
-      { label:"bobines",  value: spools.length, accent:"#3b82f6" },
+      { label:"bobines",  value: ordered ? `${here.length} +${ordered}` : here.length, accent:"#3b82f6" },
       { label:"marques",  value: marques || null, accent:"#8b5cf6" },
       { label:"en stock", value: poids > 0 ? `${(poids/1000).toFixed(2)} kg` : null, accent:"#f59e0b" },
       { label:"valeur",   value: prix > 0 ? `${moneyVal(prix, 0)} €` : null, accent:"#22c55e" },
@@ -1756,6 +1761,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
       </>)}>
       <FHero colors={colorsList} type={f.multicolor_type} finish={finishOf(f)} color={main} name={name}
         chips={[fChip(`#${f.id}`, "#64748B"),
+          f.ordered_spool_count > 0 && fChip(`📬 ${f.ordered_spool_count} en commande`, "#0EA5E9"),
           fChip(<><Palette size={11}/>{f.swatch ? "Échantillon" : "Sans échantillon"}</>, f.swatch ? "#22c55e" : "#94a3b8"),
           <span key="lbl" data-tip={labelDay ? `Étiquette imprimée le ${labelDay}` : undefined}>
             {fChip(<><Tag size={11}/>{f.label_printed ? "Étiquette" : "Sans étiquette"}</>, f.label_printed ? "#3b82f6" : "#94a3b8")}</span>,

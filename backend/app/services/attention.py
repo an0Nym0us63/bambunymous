@@ -144,7 +144,7 @@ async def _pairs(db) -> list:
     m = db.info.get("att_pairs")
     if m is None:
         m = db.info["att_pairs"] = [tuple(r) for r in (await db.execute(
-            select(Spool, Filament).join(Filament, Filament.id == Spool.filament_id).where(Spool.archived.is_(False))
+            select(Spool, Filament).join(Filament, Filament.id == Spool.filament_id).where(Spool.archived.is_(False), Spool.ordered.is_(False))
         )).all()]
     return m
 

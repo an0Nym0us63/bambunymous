@@ -452,7 +452,7 @@ async def printer_status(_: str = Depends(get_current_user)):
             if fil_ids:
                 _stock_map = {fid: (g, n) for fid, g, n in (await db.execute(
                     _sel(_Spool.filament_id, _func.coalesce(_func.sum(_Spool.remaining_weight_g), 0), _func.count(_Spool.id))
-                    .where(_Spool.filament_id.in_(fil_ids), _Spool.archived.is_(False))
+                    .where(_Spool.filament_id.in_(fil_ids), _Spool.archived.is_(False), _Spool.ordered.is_(False))
                     .group_by(_Spool.filament_id)
                 )).all()}
     out = PrinterStatusOut(
@@ -603,8 +603,8 @@ async def place_drying_spool(ams_id: int, tray_id: int, body: dict = Body({}),
         raise HTTPException(400, "spool_id requis")
     async with AsyncSessionLocal() as db:
         sp = await db.get(_Spool, sid)
-        if not sp or sp.archived:
-            raise HTTPException(404, "Bobine introuvable ou archivée")
+        if not sp or sp.archived or sp.ordered:
+            raise HTTPException(404, "Bobine introuvable, archivée ou pas encore reçue")
     await _dslots.place(ams_id, tray_id, sid)
     return {"ok": True}
 

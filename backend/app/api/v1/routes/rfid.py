@@ -394,6 +394,30 @@ async def rfid_create(
             "redirect": f"/filaments?id={fil.id}&spool={spool.id}",
         }
 
+    # une bobine de ce filament attendue d'une commande (mails) : le scan est son arrivee, elle est adoptee
+    ordered = (await db.execute(select(Spool).where(Spool.filament_id == fil.id, Spool.ordered.is_(True), Spool.archived.is_(False))
+                                .order_by(Spool.id))).scalars().first()
+    if ordered is not None:
+        ordered.tag_number = tray_uid
+        ordered.ordered = False
+        ordered.location = "Tiroir"
+        if body.spool_price is not None:
+            ordered.price_override = body.spool_price
+        ordered.remaining_weight_g = body.remaining_weight_g if body.remaining_weight_g is not None else scan["spool_weight_g"]
+        if body.comment:
+            ordered.comment = body.comment
+        ordered.last_dried_at = datetime.utcnow()
+        await db.commit()
+        await db.refresh(ordered)
+        try:
+            from ....services import mail_orders as _MO
+            await _MO.spool_arrived(fil)
+        except Exception:
+            pass
+        logger.info(f"[RFID] bobine commandée #{ordered.id} reçue (tag {tray_uid}, filament #{fil.id})")
+        return {"created": True, "mapped": False, "adopted": True, "filament_created": filament_created, "filament_id": fil.id,
+                "spool_id": ordered.id, "redirect": f"/filaments?id={fil.id}&spool={ordered.id}"}
+
     spool = Spool(
         filament_id=fil.id,
         tag_number=tray_uid,                 # c'est tout l'interet : le tag NFC

@@ -323,10 +323,12 @@ def match_catalog_code(code: str) -> dict | None:
     for e in data or []:
         if str(e.get("fila_color_code") or "") == str(code):
             names = e.get("fila_color_name") or {}
-            cols = e.get("fila_color") or []
+            cols = [c.lstrip("#")[:6] for c in (e.get("fila_color") or []) if isinstance(c, str)]
+            ctype = {"单色": "monochrome", "渐变色": "gradient", "多拼色": "coaxial"}.get(e.get("fila_color_type") or "", "monochrome")
             return {"fila_id": e.get("fila_id"), "fila_color_code": e.get("fila_color_code"), "fila_type": e.get("fila_type"),
                     "name_fr": names.get("fr") or names.get("en"), "name_en": names.get("en"),
-                    "color_hex": (cols[0].lstrip("#")[:6] if cols else None), "refill": False}
+                    "color_hex": (cols[0] if cols else None), "colors": cols, "multicolor_type": ctype if len(cols) > 1 else "monochrome",
+                    "refill": False}
     return None
 
 
@@ -626,6 +628,10 @@ async def _apply(m: dict, notify: bool = True) -> str:
             o.tracking_url, o.carrier = url, carrier
         if kind == "cancelled":
             o.done = True
+            cur = json.loads(o.items_json or "[]")
+            for it in cur:
+                await _drop_ordered(db, it)
+            o.items_json = json.dumps(cur, ensure_ascii=False)
         if store and not o.store:
             o.store = store
         cur = json.loads(o.items_json or "[]")
@@ -650,7 +656,7 @@ async def _apply(m: dict, notify: bool = True) -> str:
 # ── A venir, et l'arrivee des bobines ─────────────────────────────────────────
 def _item_view(it: dict) -> dict:
     return {k: it.get(k) for k in ("title", "qty", "received", "kind", "fila_type", "name_fr", "color_hex", "filament_id", "refill",
-                                   "fila_color_code", "auto", "assumed", "confirmed", "shipped")}
+                                   "fila_color_code", "auto", "assumed", "confirmed", "shipped", "spools")}
 
 
 async def one(order_id: int) -> dict | None:
@@ -688,6 +694,7 @@ def _views(rows) -> list[dict]:
                     "shipped_at": o.shipped_at, "delivered_at": o.delivered_at, "tracking_url": o.tracking_url, "carrier": o.carrier,
                     "done": bool(o.done), "hidden": bool(o.hidden), "items": items, "shipments": json.loads(o.shipments_json or "[]"),
                     "pending": sum(max(0, (i.get("qty") or 0) - (i.get("received") or 0)) for i in items if i.get("kind") == "filament"),
+                    "ordered_spools": sum(len(i.get("spools") or []) for i in items),
                     "to_confirm": sum(int(i.get("assumed") or 0) for i in items if not i.get("confirmed"))})
     return out
 
@@ -705,6 +712,10 @@ async def mark(order_id: int, index: int | None = None, received: bool = True, h
         items = json.loads(o.items_json or "[]")
         if index is not None and 0 <= index < len(items):
             it = items[index]
+            if received:
+                # une bobine « en commande » de cette ligne, s'il y en a, passe en stock pour chaque unite cochee
+                for _ in range(int(it.get("qty") or 1) - int(it.get("received") or 0)):
+                    await _adopt_ordered(db, it)
             it["received"] = (it.get("qty") or 1) if received else 0
             it["assumed"] = 0
             it["confirmed"] = bool(received)
@@ -732,6 +743,102 @@ def _settle(o) -> None:
         o.delivered_at = o.delivered_at or datetime.utcnow()
 
 
+async def _ensure_filament(db, it: dict):
+    """La fiche filament d'une ligne de commande : celle deja liee, sinon celle du code couleur, sinon creee
+    depuis le catalogue Bambu (ou, a defaut, depuis les mots du mail)."""
+    from ..models.filament import Filament
+    from ..core.materials import family_of
+    if it.get("filament_id"):
+        f = await db.get(Filament, it["filament_id"])
+        if f:
+            return f, False
+    cat = match_catalog_code(it["fila_color_code"]) if it.get("fila_color_code") else None
+    f = await _filament_for(db, cat or {k: it.get(k) for k in ("fila_id", "fila_color_code", "color_hex")})
+    if f:
+        return f, False
+    name_fr = (cat or {}).get("name_fr") or it.get("name_fr") or it.get("color_name") or it.get("title")
+    name_en = (cat or {}).get("name_en") or name_fr
+    ftype = (cat or {}).get("fila_type") or it.get("fila_type") or it.get("product") or "PLA"
+    cols = (cat or {}).get("colors") or ([it["color_hex"]] if it.get("color_hex") else [])
+    try:
+        from ..core.colors import buckets_for
+        bucket = buckets_for(cols[0] if cols else None, ",".join(cols) if len(cols) > 1 else None)
+    except Exception:
+        bucket = None
+    f = Filament(name=name_en, name_en=name_en, translated_name=name_fr if name_fr != name_en else None, manufacturer="Bambu Lab",
+                 material=family_of(ftype, "PLA") or "PLA", fila_type=ftype, color=cols[0] if cols else None,
+                 colors_array=",".join(cols) if len(cols) > 1 else None,
+                 multicolor_type=(cat or {}).get("multicolor_type") or "monochrome",
+                 profile_id=(cat or {}).get("fila_id") or it.get("fila_id"), fila_color_code=str(it.get("fila_color_code") or "") or None,
+                 filament_weight_g=1000.0, color_bucket=bucket)
+    db.add(f)
+    await db.flush()
+    return f, True
+
+
+async def create_spools(order_id: int, index: int | None = None) -> dict | None:
+    """Cree, pour une ligne (ou toutes les lignes encore attendues), la fiche filament si elle manque et autant de
+    bobines « en commande » qu'il en reste a recevoir (28/10/2026). Ces bobines sont hors du stock jusqu'a
+    l'arrivee, ou le scan RFID ou l'ajout a la main les adopte. Rend {order, created_filaments, created_spools}."""
+    from ..db.session import AsyncSessionLocal
+    from ..models.filament import Spool
+    from ..models.mail_order import MailOrder
+    n_f, n_s = 0, 0
+    async with AsyncSessionLocal() as db:
+        o = await db.get(MailOrder, order_id)
+        if not o:
+            return None
+        items = json.loads(o.items_json or "[]")
+        for i, it in enumerate(items):
+            if index is not None and i != index:
+                continue
+            if it.get("kind") != "filament":
+                continue
+            left = int(it.get("qty") or 0) - int(it.get("received") or 0) - len(it.get("spools") or [])
+            if left <= 0:
+                continue
+            f, created = await _ensure_filament(db, it)
+            n_f += int(created)
+            it["filament_id"] = f.id
+            if not it.get("color_hex") and f.color:
+                it["color_hex"] = f.color
+            ids = list(it.get("spools") or [])
+            for _ in range(left):
+                sp = Spool(filament_id=f.id, ordered=True, location="En commande", remaining_weight_g=f.filament_weight_g or 1000.0,
+                           comment=f"Commande Bambu Lab {o.order_no}", last_dried_at=datetime.utcnow())
+                db.add(sp)
+                await db.flush()
+                ids.append(sp.id)
+                n_s += 1
+            it["spools"] = ids
+        o.items_json = json.dumps(items, ensure_ascii=False)
+        await db.commit()
+    return {"order": await one(order_id), "created_filaments": n_f, "created_spools": n_s}
+
+
+async def _adopt_ordered(db, it: dict) -> bool:
+    """Une bobine « en commande » de cette ligne passe en stock (coche a la main). True si une l'a ete."""
+    from ..models.filament import Spool
+    for sid in it.get("spools") or []:
+        sp = await db.get(Spool, int(sid))
+        if sp and sp.ordered:
+            sp.ordered = False
+            sp.location = "Tiroir"
+            sp.last_dried_at = datetime.utcnow()
+            return True
+    return False
+
+
+async def _drop_ordered(db, it: dict) -> None:
+    """Les bobines « en commande » d'une ligne qui n'arrivera pas (annulation, ligne remise en attendue a tort)."""
+    from ..models.filament import Spool
+    for sid in it.get("spools") or []:
+        sp = await db.get(Spool, int(sid))
+        if sp and sp.ordered:
+            await db.delete(sp)
+    it["spools"] = []
+
+
 async def spool_arrived(filament) -> int:
     """Une bobine de ce filament vient d'etre ajoutee (a la main ou par scan) : la ligne de commande qui
     l'attendait est comptee comme recue (la plus ancienne d'abord). Rend le nombre de lignes touchees."""
@@ -757,6 +864,15 @@ async def spool_arrived(filament) -> int:
                 if same:
                     it["received"] = (it.get("received") or 0) + 1
                     it["filament_id"] = filament.id
+                    # la bobine adoptee par le scan ou l'ajout n'est plus « en commande » : elle sort de la liste
+                    if it.get("spools"):
+                        from ..models.filament import Spool as _Sp
+                        keep = []
+                        for sid in it["spools"]:
+                            sp = await db.get(_Sp, int(sid))
+                            if sp and sp.ordered:
+                                keep.append(sid)
+                        it["spools"] = keep
                     hit = True
                     n += 1
                     break

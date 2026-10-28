@@ -62,7 +62,7 @@ async def get_override(ams_id: int, tray_id: int, sig: str) -> Optional[int]:
         if not entry:
             return None
         spool = await db.get(Spool, int(entry.get("spool_id") or 0))
-        if entry.get("sig") != sig or spool is None or spool.archived:
+        if entry.get("sig") != sig or spool is None or spool.archived or spool.ordered:
             # Filament change (ou bobine archivee) : le choix ne vaut plus.
             data.pop(key, None)
             await set_setting(db, KEY, json.dumps(data))

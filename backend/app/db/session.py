@@ -162,6 +162,7 @@ async def init_db():
     await _seed_admin_user()
     await _migrate_last_seen()
     await _migrate_mail_orders()
+    await _migrate_spool_ordered()
     await _migrate_label_printed()
     await _migrate_object_status()
     await _cleanup_bogus_translations()
@@ -474,6 +475,19 @@ async def _normalize_print_dates():
                     f"BEGIN UPDATE prints SET print_date = {_DATE_NORM.format(x='NEW.print_date')} WHERE id = NEW.id; END"))
     except Exception as e:
         print(f"[migration] format des dates d'impression ignore : {e}")
+
+
+async def _migrate_spool_ordered():
+    """bobines.ordered (28/10/2026) sur une base existante. Idempotent."""
+    from sqlalchemy import text as _text
+    try:
+        async with engine.begin() as conn:
+            cols = [r[1] for r in (await conn.execute(_text("PRAGMA table_info(bobines)"))).all()]
+            if cols and "ordered" not in cols:
+                await conn.execute(_text("ALTER TABLE bobines ADD COLUMN ordered BOOLEAN NOT NULL DEFAULT 0"))
+                print("[migration] colonne bobines.ordered ajoutee")
+    except Exception as e:
+        print(f"[migration] bobines.ordered ignoree : {e}")
 
 
 async def _migrate_mail_orders():

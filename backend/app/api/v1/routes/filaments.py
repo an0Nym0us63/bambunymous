@@ -98,6 +98,7 @@ class FilamentOut(BaseModel):
     to_order: bool
     spool_count: int = 0
     active_spool_count: int = 0
+    ordered_spool_count: int = 0          # commandees, pas encore recues (28/10/2026)
     remaining_weight_total_g: float = 0   # somme du restant sur les bobines actives
 
 class FilamentCreate(BaseModel):
@@ -129,6 +130,7 @@ class FilamentCreate(BaseModel):
 class SpoolOut(BaseModel):
     id: int
     filament_id: int
+    ordered: bool = False                 # commandee, pas encore recue
     # Filament catalogue
     filament_name: str
     filament_translated_name: Optional[str] = None
@@ -220,7 +222,7 @@ async def list_filaments(
     result = await db.execute(stmt)
     filaments = result.scalars().all()
     agg = await _spool_aggregates(db, [f.id for f in filaments])
-    return [_fil_out(f, agg.get(f.id, (0, 0, 0.0))) for f in filaments]
+    return [_fil_out(f, agg.get(f.id, (0, 0, 0.0, 0))) for f in filaments]
 
 
 @router.post("/filaments/labels/pdf")
@@ -686,6 +688,18 @@ async def filaments_incoming(all: bool = Query(False), _: str = Depends(get_curr
     return {"orders": await MO.incoming(include_done=all)}
 
 
+@router.post("/incoming/{order_id}/create")
+async def filaments_incoming_create(order_id: int, body: dict = Body(default={}), _: str = Depends(require_admin)):
+    """Cree la fiche filament (si elle manque) et les bobines « en commande » d'une ligne (index), ou de toutes
+    les lignes encore attendues (sans index)."""
+    from ....services import mail_orders as MO
+    out = await MO.create_spools(order_id, (body or {}).get("index"))
+    if out is None:
+        raise HTTPException(404, "Commande inconnue")
+    _clear_match_cache()
+    return out
+
+
 @router.get("/incoming/{order_id}")
 async def filaments_incoming_one(order_id: int, _: str = Depends(get_current_user)):
     from ....services import mail_orders as MO
@@ -1139,8 +1153,18 @@ async def create_spool(
     # Une bobine neuve arrive seche (sous vide) : son ajout vaut sechage, sinon
     # elle partirait aussitot dans l'alerte « a secher ».
     data["last_dried_at"] = datetime.utcnow()
-    s = Spool(**data)
-    db.add(s)
+    # une bobine de ce filament etait « en commande » (creee depuis une commande lue dans les mails) : c'est
+    # elle qui arrive, on la complete au lieu d'en creer une seconde (28/10/2026)
+    s = (await db.execute(select(Spool).where(Spool.filament_id == fil.id, Spool.ordered.is_(True), Spool.archived.is_(False))
+                          .order_by(Spool.id))).scalars().first()
+    if s is not None:
+        for k, v in data.items():
+            if v is not None or k in ("tag_number",):
+                setattr(s, k, v)
+        s.ordered = False
+    else:
+        s = Spool(**data)
+        db.add(s)
 
     # Ajouter une bobine physique avec son tag NFC signifie qu'on la possede :
     # le filament n'est donc plus a commander. On ne le fait QUE si un tag est
@@ -1292,7 +1316,7 @@ async def _siblings_map(db, filament_ids):
         select(Spool.filament_id,
                func.count(Spool.id),
                func.coalesce(func.sum(Spool.remaining_weight_g), 0))
-        .where(Spool.filament_id.in_(fids), Spool.archived.is_(False))
+        .where(Spool.filament_id.in_(fids), Spool.archived.is_(False), Spool.ordered.is_(False))
         .group_by(Spool.filament_id)
     )).all()
     return {r[0]: (int(r[1]), float(r[2] or 0)) for r in rows}
@@ -1310,24 +1334,25 @@ async def _spool_aggregates(db, fids) -> dict:
     centaines d'ids (la liste IN a une limite en SQLite, et parcourir toute la table coute pareil)."""
     if not fids:
         return {}
-    active = Spool.archived.is_(False)
+    active = (Spool.archived.is_(False)) & (Spool.ordered.is_(False))     # une bobine commandee n'est pas en stock
     # une bobine dont on n'a jamais pese le restant est supposee pleine (meme regle que _fil_out)
     left = func.coalesce(Spool.remaining_weight_g, Filament.filament_weight_g, 0)
     stmt = (select(Spool.filament_id, func.count(Spool.id), func.sum(case((active, 1), else_=0)),
-                   func.sum(case((active, left), else_=0)))
+                   func.sum(case((active, left), else_=0)), func.sum(case((Spool.ordered.is_(True), 1), else_=0)))
             .join(Filament, Filament.id == Spool.filament_id).group_by(Spool.filament_id))
     if len(fids) <= 400:
         stmt = stmt.where(Spool.filament_id.in_(list(fids)))
-    return {r[0]: (int(r[1] or 0), int(r[2] or 0), float(r[3] or 0)) for r in (await db.execute(stmt)).all()}
+    return {r[0]: (int(r[1] or 0), int(r[2] or 0), float(r[3] or 0), int(r[4] or 0)) for r in (await db.execute(stmt)).all()}
 
 
 def _fil_out(f: Filament, agg: tuple | None = None) -> FilamentOut:
     """agg = (bobines, actives, restant_g) deja agreges ; sinon lus sur f.spools (charge explicitement)."""
     if agg is not None:
-        n_all, n_act, left = agg
+        n_all, n_act, left, n_ord = (list(agg) + [0])[:4]
     else:
-        active = [s for s in f.spools if not s.archived]
+        active = [s for s in f.spools if not s.archived and not getattr(s, "ordered", False)]
         n_all, n_act = len(f.spools), len(active)
+        n_ord = sum(1 for s in f.spools if getattr(s, "ordered", False))
         left = sum((s.remaining_weight_g if s.remaining_weight_g is not None else (f.filament_weight_g or 0)) for s in active)
     return FilamentOut(
         id=f.id, name=f.name,
@@ -1345,7 +1370,7 @@ def _fil_out(f: Filament, agg: tuple | None = None) -> FilamentOut:
         swatch=f.swatch, to_order=f.to_order,
         label_printed=bool(getattr(f, "label_printed", False)),
         label_printed_at=getattr(f, "label_printed_at", None),
-        spool_count=n_all, active_spool_count=n_act,
+        spool_count=n_all, active_spool_count=n_act, ordered_spool_count=n_ord,
         remaining_weight_total_g=round(left, 1),
     )
 
@@ -1384,6 +1409,7 @@ def _spool_out(s: Spool, sib: tuple | None = None) -> SpoolOut:
         comment=s.comment,
         external_spool_id=s.external_spool_id,
         found_mode=getattr(s, "found_mode", None),
+        ordered=bool(getattr(s, "ordered", False)),
         # On retranche la bobine courante : l'interface veut savoir ce qu'il
         # reste A COTE, pas le total du filament. Une bobine archivee n'est pas
         # dans le compte (actives seulement) : rien a retrancher (25/10/2026).

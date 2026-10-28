@@ -123,7 +123,7 @@ async def stock_rows():
     from ..models.filament import Filament, Spool
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(Spool, Filament).join(Filament, Filament.id == Spool.filament_id)
-                                 .where(Spool.archived.is_(False)))).all()
+                                 .where(Spool.archived.is_(False), Spool.ordered.is_(False)))).all()
     out = {}
     for s, f in rows:
         rem = s.remaining_weight_g if s.remaining_weight_g is not None else (f.filament_weight_g or 0)

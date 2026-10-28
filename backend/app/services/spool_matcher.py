@@ -72,7 +72,7 @@ async def match_spool(
             result = await db.execute(
                 select(Spool).where(
                     Spool.tag_number == tag_uid,
-                    Spool.archived == False
+                    Spool.archived == False, Spool.ordered.is_(False)
                 )
             )
             spool = result.scalar_one_or_none()
@@ -94,7 +94,7 @@ async def match_spool(
                 spools_result = await db.execute(
                     select(Spool).where(
                         Spool.filament_id.in_(fil_ids),
-                        Spool.archived == False
+                        Spool.archived == False, Spool.ordered.is_(False)
                     ).order_by(Spool.last_used_at.desc().nullslast(), Spool.id.desc())
                 )
                 spools = spools_result.scalars().all()

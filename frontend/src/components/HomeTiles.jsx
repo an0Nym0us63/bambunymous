@@ -13,7 +13,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets, Coins, Star, Users, Trophy,
          Dices, ChevronRight, Camera, Video, Thermometer, CalendarDays, ShoppingBag, Rss, Images, Zap, Medal as MedalIcon,
-         BellRing, Split, Fan, Wrench, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck, Maximize2 } from "lucide-react";
+         BellRing, Split, Fan, Wrench, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck, Maximize2, PackageOpen } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
 import { RateButton } from "./MwToRate";
 import { mwImg } from "./MwImg";
@@ -620,7 +620,7 @@ const IcoChamber = ({ s = 12 }) => <svg width={s} height={s} viewBox="0 0 24 24"
 export const TILE_NEEDS = {
   today: ["today", "prints", "live"], next: ["queue"], last: ["prints", "live"], stock: ["spools"], dry: ["dry"],
   friends: ["friends"], mw: ["mw"], rate: ["rate"], wheel: ["ach"], ach: ["ach"], month: ["month"], sales: ["sales"],
-  feed: ["feed"], gallery: ["prints"], family: ["family"], podium: ["podium", "ach"], alerts: ["attention"],
+  feed: ["feed"], gallery: ["prints"], family: ["family"], podium: ["podium", "ach"], alerts: ["attention"], orders: ["orders"],
 };
 // lues une fois (pas relues toutes les 2 min avec le reste)
 const ONCE = new Set(["mw", "podium", "family"]);
@@ -672,6 +672,7 @@ export function useTilesData(status = null, want = null) {
       sales: () => put("sales", get("/objects/objects/stats")),
       feed: () => put("feed", get("/notify/me/history")),
       attention: () => put("attention", get("/attention")),
+      orders: () => put("orders", get("/filaments/incoming").then(r => r.orders || [])),
       // a evaluer : relu avec le reste (une impression qui vient de finir y entre sans recharger la page)
       rate: () => put("rate", get("/makerworld/to-rate")),
       // « À faire » aussi : ce qui imprime, ce qui vient de finir, ce qui devient faisable bougent sans cesse
@@ -3408,6 +3409,63 @@ function Alerts({ a, o, sz }) {
   );
 }
 
+// ── Commandes Bambu Lab (28/10/2026) : ce qui arrive, lu dans les mails ──
+const OrderSheetLazy = React.lazy(() => importRetry(() => import("./IncomingOrders")).then(m => ({ default: m.OrderSheet })));
+const ORD_ST = { ordered: ["commandée", "#3b82f6", "📬"], shipping: ["en livraison", "#f59e0b", "🚚"], delivered: ["livrée", "#22c55e", "📦"] };
+function Orders({ list, o, sz }) {
+  const orders = (Array.isArray(list) ? list : []).filter(x => x.status !== "cancelled" && (x.pending > 0 || x.to_confirm > 0));
+  const [open, setOpen] = useState(null);                   // la commande ouverte depuis la fenetre
+  const pending = orders.reduce((n, x) => n + x.pending, 0);
+  const shipping = orders.filter(x => x.stage === "shipping").length;
+  const lines = x => x.items.filter(i => i.kind === "filament" && (i.qty || 0) - (i.received || 0) > 0);
+  const day = iso => iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "";
+  const dot = i => <span style={{ width: 10, height: 10, borderRadius: "50%", flexShrink: 0, border: "1px solid var(--border)",
+    background: i.color_hex ? `#${i.color_hex}` : "repeating-linear-gradient(45deg, var(--surface) 0 2px, var(--border) 2px 4px)" }}/>;
+  // une rangee par commande : l'etape, le numero (court), les pastilles des bobines attendues, le compte
+  const row = (x, h, W) => { const [sl, sc, ic] = ORD_ST[x.stage] || ORD_ST.ordered; const ls = lines(x);
+    const sent = x.items.filter(i => i.kind === "filament").reduce((n, i) => n + Math.min(i.qty || 0, i.shipped || 0), 0);
+    return <div key={x.id} role="button" data-tip={`Commande ${x.order_no} · ${sl}${x.shipped_at ? ` le ${day(x.shipped_at)}` : x.ordered_at ? ` le ${day(x.ordered_at)}` : ""}\n${ls.slice(0, 6).map(i => `${i.fila_type || ""} ${i.name_fr || i.title} ×${(i.qty || 0) - (i.received || 0)}`).join("\n")}`}
+      onClick={e => { e.stopPropagation(); setOpen(x.id); }}
+      style={{ display: "flex", alignItems: "center", gap: 8, height: h, minWidth: 0, cursor: "pointer", padding: "0 8px 0 4px", borderRadius: 12,
+        background: `linear-gradient(90deg, ${sc}1f, transparent 70%)` }}>
+      <span data-pk="" style={{ width: Math.max(20, Math.min(30, h - 6)), height: Math.max(20, Math.min(30, h - 6)), borderRadius: 9, flexShrink: 0, display: "flex",
+        alignItems: "center", justifyContent: "center", fontSize: 15, background: `${sc}26`, boxShadow: `inset 0 0 0 1px ${sc}55` }}>{ic}</span>
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ fontSize: h >= 40 ? 12.5 : 11.5, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {sl}{x.stage === "shipping" && sent < x.items.filter(i => i.kind === "filament").reduce((n, i) => n + (i.qty || 0), 0) ? " (partiel)" : ""}
+          {x.to_confirm > 0 ? " · à confirmer" : ""} <Muted size={10.5}>…{String(x.order_no).slice(-6)}</Muted></span>
+        {h >= 34 && <span style={{ display: "flex", gap: 3, alignItems: "center", overflow: "hidden" }}>{ls.slice(0, Math.max(4, Math.floor(W / 16))).map((i, k) => <span key={k}>{dot(i)}</span>)}</span>}
+      </span>
+      <b data-pk="" style={{ minWidth: 24, textAlign: "center", fontSize: 12, fontWeight: 900, color: "#fff", background: sc, borderRadius: 10, padding: "1px 7px", flexShrink: 0 }}>{x.pending}</b>
+    </div>; };
+  const head = big => <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", minWidth: 0 }}>
+    <span data-pk="" style={{ fontSize: big ? 30 : 24, fontWeight: 900, lineHeight: 1.05, ...gradText("#0EA5E9", "#3B82F6") }}>{pending}</span>
+    <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>bobine{pending > 1 ? "s" : ""} à venir</span>
+    {shipping > 0 && <Muted size={11.5}>· {shipping} en livraison</Muted>}</div>;
+  const zoom = <>
+    {head(true)}
+    {!orders.length && <Muted>Rien en route. Les commandes Bambu Lab lues dans tes mails apparaissent ici.</Muted>}
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{orders.map(x => row(x, 44, 600))}</div>
+    {orders.length > 0 && <Muted size={11}>Touche une commande pour son détail : envois, suivi, chaque bobine, et la création des fiches et bobines « en commande ».</Muted>}
+    {open != null && <React.Suspense fallback={null}><OrderSheetLazy id={open} onClose={() => setOpen(null)}/></React.Suspense>}
+  </>;
+  return (
+    <Tile icon={<PackageOpen size={15}/>} color="#0EA5E9" label="Commandes" to="/filaments" zoom={zoom} mini={sz.h === 0.5}
+      summary={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13.5 }}><b>{pending}</b> à venir{shipping ? ` · ${shipping} 🚚` : ""}</span>}>
+      {({ W, H }) => {
+        if (!orders.length) return <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{head(false)}<Muted>Rien en route pour l'instant.</Muted></div>;
+        const rows = Math.max(1, Math.min(orders.length, Math.floor((H - 40) / 40)));
+        const h = Math.min(48, Math.max(26, Math.floor((H - 40) / rows) - 4));
+        return <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+          {head(false)}
+          {orders.slice(0, rows).map(x => row(x, h, W))}
+          {orders.length > rows && <Muted size={11}>+{orders.length - rows} commande{orders.length - rows > 1 ? "s" : ""}</Muted>}
+        </div>;
+      }}
+    </Tile>
+  );
+}
+
 // ── Nouvelles tuiles ─────────────────────────────────────────────────────────
 // la fin de l'impression : un compte a rebours en anneau (l'avancement), l'heure de fin, la couche
 const finAt = min => { const d = new Date(Date.now() + min * 60000); const t = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
@@ -4439,6 +4497,7 @@ export const TILES = {
   alerts: { label: "Alertes en bref", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Alerts a={d.attention} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "chips", [["chips", "rangées"], ["icons", "icônes"], ["list", "rangées et exemples"]], { hint: "Rangées : une par catégorie, sa couleur, une barre et le nombre. Icônes : une grosse icône, le nombre en badge. Rangées et exemples : les premières alertes sous chaque catégorie quand il y a la place." }),
       B("detail", "Exemples (quand la tuile est large)", true)] },
+  orders: { label: "Commandes", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Orders list={d.orders} o={o} sz={sz(it)}/>, options: [] },
   countdown: { label: "Fin d'impression", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Countdown status={st} o={o} sz={sz(it)}/>,
     options: [B("fin", "Heure de fin", true), B("layer", "Couche", true)] },
   spool: { label: "Filament en cours", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Spool status={st} o={o} sz={sz(it)}/> },
@@ -4479,6 +4538,7 @@ const WAIT = {
   podium: ["podium", "Ton classement face à tes copains."],
   family: ["family", "Qui de la famille a trouvé le plus de secrets."],
   alerts: ["attention", "Ce qui mérite ton attention dans le stock et les fiches."],
+  orders: ["orders", "Les commandes Bambu Lab en route, lues dans tes mails."],
   countdown: ["status", "Le temps qu'il reste à l'impression en cours."],
   spool: ["status", "La bobine qui imprime en ce moment."],
   head: ["status", "Les buses de la tête d'impression."],
