@@ -679,6 +679,24 @@ async def mark_labels_printed(
     return {"ok": True, "marked": res.rowcount or 0}
 
 
+# ── Les commandes Bambu Lab a venir (lues dans les mails, 28/10/2026) ──
+@router.get("/incoming")
+async def filaments_incoming(all: bool = Query(False), _: str = Depends(get_current_user)):
+    from ....services import mail_orders as MO
+    return {"orders": await MO.incoming(include_done=all)}
+
+
+@router.post("/incoming/{order_id}/mark")
+async def filaments_incoming_mark(order_id: int, body: dict = Body(default={}), _: str = Depends(require_admin)):
+    """Coche ou decoche une ligne (index, received), ou cache la commande (hide)."""
+    from ....services import mail_orders as MO
+    b = body or {}
+    out = await MO.mark(order_id, b.get("index"), bool(b.get("received", True)), b.get("hide"))
+    if out is None:
+        raise HTTPException(404, "Commande inconnue")
+    return {"orders": out}
+
+
 @router.get("/filaments/print-counts")
 async def filament_print_counts(
     db: AsyncSession = Depends(get_db),
@@ -1125,6 +1143,12 @@ async def create_spool(
     await db.commit()
     await db.refresh(s)
     _clear_match_cache()
+    # une bobine de ce filament etait attendue d'une commande (mails) : elle est arrivee
+    try:
+        from ....services import mail_orders as _MO
+        await _MO.spool_arrived(fil)
+    except Exception:
+        pass
     return _spool_out(await _load_spool(db, s.id))
 
 

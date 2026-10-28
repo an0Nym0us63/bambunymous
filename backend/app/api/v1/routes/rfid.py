@@ -410,6 +410,11 @@ async def rfid_create(
     db.add(spool)
     await db.commit()
     await db.refresh(spool)
+    try:                                         # attendue d'une commande (mails) : arrivee
+        from ....services import mail_orders as _MO
+        await _MO.spool_arrived(fil)
+    except Exception:
+        pass
 
     logger.info(f"[RFID] bobine #{spool.id} créée (tag {tray_uid}, "
                 f"filament #{fil.id}{' créé' if filament_created else ''})")

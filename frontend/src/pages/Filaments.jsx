@@ -16,6 +16,7 @@ import { useFriend } from "../store/friend";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
+import IncomingOrders from "../components/IncomingOrders";
 import { useTrackDetail } from "../utils/track";
 import Select from "../components/Select";
 import { useIsAdmin } from "../store/auth";
@@ -1552,6 +1553,7 @@ function SpoolsView({ filaments, showArchived }) {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
       <KpiBar kpis={kpis} icons={KPI_ICON}/>
+      {!showArchived && <IncomingOrders/>}
       {/* Pas de « + Bobine » dans l'onglet Archivees : on y consulte un historique, une
           bobine neuve n'a aucune raison d'y naitre -- elle apparaitrait
           aussitot dans l'onglet Stock, hors de la vue en cours. */}

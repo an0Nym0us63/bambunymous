@@ -188,6 +188,8 @@ async def lifespan(app: FastAPI):
     _tasks.track("sd_card", _bg(_sd.auto_loop()))             # timelapse de chaque impression, copie de la carte SD apres la fin
     from app.services import archive as _arch
     _tasks.track("nas", _bg(_arch.nightly_loop()))        # sauvegarde vers le NAS (et vidage du local) chaque nuit, si activee
+    from app.services import mail_orders as _mail
+    _tasks.track("mail", _bg(_mail.loop()))               # commandes Bambu Lab lues dans les mails, si active
     await mqtt_manager.start()
     # Catalogue filaments Bambu (m0h31h31/3DPrint-Filament-RFID-Tool) :
     # téléchargé au démarrage depuis GitHub, re-vérifié toutes les 24h via ETag.

@@ -398,6 +398,26 @@ async def archive_backup(_: str = Depends(require_admin)):
     return {"started": True}
 
 
+# ── Commandes Bambu Lab lues dans les mails (28/10/2026) ──
+@router.get("/mail")
+async def mail_status(_: str = Depends(require_admin)):
+    from ....services import mail_orders as MO
+    return await MO.settings_get()
+
+
+@router.put("/mail")
+async def mail_settings(body: dict, _: str = Depends(require_admin)):
+    from ....services import mail_orders as MO
+    return await MO.settings_set(body or {})
+
+
+@router.post("/mail/sync")
+async def mail_sync(_: str = Depends(require_admin)):
+    """Un releve tout de suite (attend le resultat : quelques secondes)."""
+    from ....services import mail_orders as MO
+    return await MO.sync("manuel")
+
+
 @router.post("/archive/purge")
 async def archive_purge(body: dict = None, _: str = Depends(require_admin)):
     import asyncio

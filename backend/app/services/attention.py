@@ -576,6 +576,26 @@ async def _filaments_to_order(db) -> list[Alert]:
     ]
 
 
+@check("orders", "Commandes Bambu Lab à venir", "📬", shown=3, random_sample=False)
+async def _orders_incoming(db) -> list[Alert]:
+    """Les commandes lues dans les mails dont des bobines ne sont pas encore arrivees (28/10/2026)."""
+    from . import mail_orders as MO
+    out = []
+    for o in await MO.incoming():
+        if o["status"] == "cancelled" or not o["pending"]:
+            continue
+        when = o.get("shipped_at") or o.get("ordered_at")
+        st = {"confirmed": "confirmée", "shipped": "expédiée", "delivered": "livrée"}.get(o["status"], o["status"])
+        names = [f"{(i.get('fila_type') or '').strip()} {(i.get('name_fr') or i.get('title') or '').strip()}".strip()
+                 for i in o["items"] if i.get("kind") == "filament" and (i.get("received") or 0) < (i.get("qty") or 0)]
+        out.append(Alert(key=f"orders:order:{o['id']}", category="orders", title=f"Commande {o['order_no']} · {st}",
+                         detail=", ".join(names[:4]) + (" …" if len(names) > 4 else ""),
+                         value=f"{o['pending']} bobine{'s' if o['pending'] > 1 else ''}",
+                         severity="info", link="/filaments", rank=0 if o["status"] == "shipped" else 1,
+                         color=next((i.get("color_hex") for i in o["items"] if i.get("color_hex")), None)))
+    return out
+
+
 UNUSED_DAYS = 180
 
 

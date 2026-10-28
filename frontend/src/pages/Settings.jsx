@@ -16,6 +16,7 @@ import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY,
          ROLE_OPTIONS, ROLE_LABEL, ROLE_BADGE } from "../store/auth";
 import AdminOnly from "../components/AdminOnly";
 import TelegramSettings from "../components/TelegramSettings";
+import MailOrdersSettings from "../components/MailOrdersSettings";
 import DryRulesCard from "../components/DryRulesCard";
 import SpoolTaresCard from "../components/SpoolTaresCard";
 import MakerWorldSettings from "../components/MakerWorldSettings";
@@ -2283,6 +2284,7 @@ export default function Settings() {
       {tab === "share" && (
       <AdminOnly><div className="wide-flow">
         <TelegramSettings card={card} cardTitle={cardTitle}/>
+        <MailOrdersSettings card={card} cardTitle={cardTitle}/>
       </div></AdminOnly>
       )}
 

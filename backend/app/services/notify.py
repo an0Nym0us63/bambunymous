@@ -145,6 +145,13 @@ EVENTS = {
         "sample": {"title": "🛒 Ajouté au panier", "priority": 2, "link": "/filaments",
                    "message": "Vert · Bambu Lab\n🧵 PLA Basic\n📦 en stock : 1 bobine, 180 g"},
     },
+    "order_mail": {
+        "section": "spools", "label": "Commande Bambu Lab (mail)",
+        "description": "Une commande de la boutique est confirmée, expédiée ou livrée (lue dans tes mails).",
+        "options": [],
+        "sample": {"title": "🚚 Commande EU123456 expédiée", "priority": 3, "link": "/filaments",
+                   "message": "🧵 PLA Basic · Blanc de jade ×2\n🧵 PETG HF · Noir ×1\n📦 suivi UPS"},
+    },
     "spool_short": {
         "section": "spools", "label": "Pas assez de filament",
         "description": "Au démarrage d'une impression, une bobine a moins que ce qu'il faut.",
@@ -514,7 +521,7 @@ _ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_en
           "print_paused", "print_resumed", "print_speed",
           "printer_hms", "printer_offline", "bed_cooled", "printer_firmware",
           "dry_started", "dry_done", "dry_needed_loaded", "dry_forgotten",
-          "spool_loaded", "spool_removed", "ams_humidity", "spool_runout", "spool_low", "spool_short", "stock_low", "fil_to_order",
+          "spool_loaded", "spool_removed", "ams_humidity", "spool_runout", "spool_low", "spool_short", "stock_low", "fil_to_order", "order_mail",
           "printer_idle", "weekly_summary", "mw_queue_ready", "app_update", "app_started"]
 EVENTS = {**{k: EVENTS[k] for k in _ORDER if k in EVENTS}, **{k: v for k, v in EVENTS.items() if k not in _ORDER}}
 

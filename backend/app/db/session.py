@@ -140,6 +140,7 @@ async def init_db():
     from ..models import setting, printer  # noqa - import pour créer les tables
     from ..models import filament, print_history, object_history  # noqa
     from ..models import attention  # noqa - table des mises en sourdine
+    from ..models import mail_order  # noqa - commandes lues dans les mails
     from ..models import rfid       # noqa - table des scans NFC
     from ..models import user       # noqa - comptes et roles
     from ..models import activity   # noqa - journal d'activite
