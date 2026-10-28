@@ -450,13 +450,13 @@ async def sync(trigger: str = "manuel", days: int | None = None, reread: bool = 
 
 
 AUTO_CLOSE_DAYS = 60       # une commande plus vieille que ca est arrivee depuis longtemps : rien a attendre
-MATCH_WINDOW_DAYS = 90     # les bobines ajoutees dans cette fenetre apres la commande comptent comme recues
+MATCH_WINDOW_DAYS = 21     # les bobines ajoutees dans cette fenetre apres la commande comptent comme recues (90 avant le 28/10/2026)
 
 
 async def _reconcile_existing(items: list, ordered_at) -> None:
     """Les bobines deja dans l'appli pour les lignes d'une commande (28/10/2026 : relire un mail de six mois ne
     doit pas remettre en « a venir » des bobines recues depuis longtemps) : chaque bobine du filament ajoutee
-    apres la commande (dans les 90 jours) compte comme recue ; au-dela de 60 jours, tout est considere recu."""
+    apres la commande (dans les 21 jours) compte comme recue ; au-dela de 60 jours, tout est considere recu."""
     from sqlalchemy import select, func
     from ..db.session import AsyncSessionLocal
     from ..models.filament import Spool
