@@ -51,7 +51,10 @@ class Filament(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    spools: Mapped[list["Spool"]] = relationship("Spool", back_populates="filament", lazy="selectin")
+    # charge a la demande seulement (selectinload la ou f.spools est lu) : en « selectin » implicite, toute
+    # lecture d'un filament tirait toutes ses bobines, archivees comprises -- les alertes et la liste des
+    # bobines relisaient ainsi toute la table des bobines une fois de trop a chaque appel (28/10/2026)
+    spools: Mapped[list["Spool"]] = relationship("Spool", back_populates="filament")
 
     __table_args__ = (
         Index("idx_filaments_material", "material"),

@@ -118,6 +118,22 @@ async def objects_stats(
     if _d_to:
         _d_to = _d_to + _td(days=1)   # borne de fin incluse
     _period_active = bool(_d_from or _d_to)
+    # tout l'inventaire est relu et parcouru a chaque appel (la tuile de l'accueil toutes les 2 min) : le resultat
+    # est garde tant que rien n'a ete ecrit dans les objets, les accessoires ou leurs liens (28/10/2026)
+    from ....db.session import data_version
+    _ck = (data_version("objects", "accessories", "object_accessories"), _d_from, _d_to)
+    hit = _STATS_CACHE.get("v")
+    if hit and hit[0] == _ck:
+        return hit[1]
+    out = await _objects_stats(_d_from, _d_to, _period_active)
+    _STATS_CACHE["v"] = (_ck, out)
+    return out
+
+
+_STATS_CACHE: dict = {}
+
+
+async def _objects_stats(_d_from, _d_to, _period_active):
 
     def _in_period(dt):
         if dt is None:

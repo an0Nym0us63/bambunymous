@@ -2,7 +2,15 @@ import React, { useEffect } from "react";
 import { FriendChip } from "../Friends";
 import { useFriend } from "../../store/friend";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
-import { Home, Settings, Package, History, ShoppingBag, BarChart2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Home, Settings, Printer, ShoppingBag, BarChart2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+
+// Une bobine vue de face (flasque, noyau, brin qui part) dans le trait des autres icones : la bibliotheque n'en a
+// pas, et le colis qui la remplacait ne disait rien (28/10/2026)
+const Spool = ({ size = 24, ...p }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...p}>
+    <circle cx="11" cy="12" r="8"/><circle cx="11" cy="12" r="2.5"/><path d="M19 12c1.5 1.5 2 4.5 2.5 8"/>
+  </svg>
+);
 import UserMenu from "../UserMenu";
 import NotifBell from "../NotifBell";
 import ShareProgress from "../ShareProgress";
@@ -25,8 +33,8 @@ import { useUpdates, updatesTip } from "../../utils/updates";
 // chaque page a sa couleur (celle de ses onglets) : la barre laterale la reprend
 const nav = [
   { to: "/",          icon: Home,       label: "Accueil",     c: "#3B82F6" },
-  { to: "/prints",    icon: History,    label: "Impressions", c: "#06B6D4" },
-  { to: "/filaments", icon: Package,    label: "Filaments",   c: "#F97316" },
+  { to: "/prints",    icon: Printer,    label: "Impressions", c: "#06B6D4" },
+  { to: "/filaments", icon: Spool,      label: "Filaments",   c: "#F97316" },
   { to: "/objects",   icon: ShoppingBag,label: "Objets",      c: "#8B5CF6" },
   { to: "/stats",     icon: BarChart2,  label: "Stats",       c: "#22C55E" },
   { to: "/settings",  icon: Settings,   label: "Paramètres",  c: "#64748B" },

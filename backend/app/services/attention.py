@@ -757,13 +757,15 @@ async def list_dismissed(db) -> list[dict]:
 
 # Les alertes gardees en memoire (27/10/2026) : dans la rafale de l'accueil, leurs 8 lectures prenaient 0,5 s
 # (4 ms seules). Le resultat de chaque verification est garde tant que rien n'a ete ecrit dans les tables dont
-# elles dependent (compteurs de db/session.py), et 60 s au plus (les delais qui avancent seuls : sechage,
+# elles dependent (compteurs de db/session.py), et 10 min au plus (les delais qui avancent seuls : sechage,
 # « sans metadonnees » apres 30 min). Le tirage au hasard, lui, se refait a chaque appel.
 # Les tables dont depend chaque verification (27/10/2026) : pas la table des reglages, que l'accueil ecrit a chaque
 # chargement (surprise, fetes) et qui effacait tout ; une impression en cours ne relance que celles des impressions.
 _PRINT_DEPS = ("prints", "filament_usage")
 _STOCK_DEPS = ("bobines", "filaments")
-CACHE_S = 60
+# 10 min (28/10/2026, 60 s avant) : la tuile relit toutes les 2 min, chaque appel recalculait donc tout ; une
+# ecriture dans les tables concernees invalide de toute facon, seuls les delais qui avancent seuls attendent
+CACHE_S = 600
 _CHECKS_CACHE: dict = {}          # fonction -> (cle, instant, resultat)
 
 

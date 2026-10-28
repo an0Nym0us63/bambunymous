@@ -452,7 +452,9 @@ async def fil_to_order(fid: int):
     if not cfg:
         return
     async with AsyncSessionLocal() as db:
-        f = await db.get(Filament, fid)
+        from sqlalchemy import select as _sel
+        from sqlalchemy.orm import selectinload as _sil
+        f = (await db.execute(_sel(Filament).options(_sil(Filament.spools)).where(Filament.id == fid))).scalar_one_or_none()
         if not f:
             return
         name, brand, sub = f.translated_name or f.name, f.manufacturer, f.fila_type or f.material
