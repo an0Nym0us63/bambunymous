@@ -786,11 +786,20 @@ def _assign(origin: list, used: list) -> list:
     if not origin or not used:
         return []
 
+    def ok(o, u):
+        # une paire plausible : des couleurs proches, ou (couleur remplacee) des poids qui concordent (28/10/2026 :
+        # avec une seule bobine dans l'impression, le rouge du createur partait sur la bobine orange d'un autre plateau)
+        close = math.dist(_rgb(o[1]), _rgb(u[1])) / 441.7 <= 0.4
+        dw = abs(o[2] - u[2]) / max(o[2], u[2]) if o[2] and u[2] else None
+        if dw is not None and dw > 0.35:
+            return False                              # meme plateau, meme geometrie : les poids ne peuvent pas differer autant
+        return close or (dw is not None and dw <= 0.2)
+
     def cost(o, u):
         c = math.dist(_rgb(o[1]), _rgb(u[1])) / 441.7
         if o[2] and u[2]:
             c += 0.5 * abs(o[2] - u[2]) / max(o[2], u[2])
-        return c
+        return c + (0 if ok(o, u) else 10)
     small, big, flip = (origin, used, False) if len(origin) <= len(used) else (used, origin, True)
     if len(big) <= 7:
         best, best_c = None, None
@@ -808,7 +817,7 @@ def _assign(origin: list, used: list) -> list:
                 pairs.append((o, u))
                 so.add(o[0])
                 su.add(u[0])
-    return [(o[0], u[0]) for o, u in pairs]
+    return [(o[0], u[0]) for o, u in pairs if ok(o, u)]
 
 
 def _match_filaments(o_cols: list, used: dict, sliced: dict, sl_colors: list, emap: dict, grams: dict, plate_fils: list) -> dict:
@@ -916,13 +925,26 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
                     break
     except Exception:
         plate_fils = {}
+    # plateau par plateau : une impression dont le plateau n'est pas valide sur la fiche prend celui que l'appli
+    # devine (image et poids, comme la carte « Plateaux »), pas le numero du fichier imprime -- un plateau telecharge
+    # seul depuis MakerWorld est toujours « 1 » (28/10/2026 : les quatre plateaux d'un pingouin comptaient pour le 1er)
+    guesses: dict = {}
+    if plate is not None and did:
+        need = [pid for pid, _mwp, mwpl, _m3, _pl in prints if _manual_plates(mwpl) is None]
+        if need:
+            try:
+                from ....services.mw_plate_guess import guess as _pguess
+                guesses = {int(k): v for k, v in ((await _pguess(did, need)).get("guesses") or {}).items()
+                           if not want or norm(v.get("profile")) == want}
+            except Exception:
+                logger.exception("[3D] plateaux devines")
     out: dict = {}
     detail: list = []
     for pid, mwp, mwpl, m3, plate_id in prints:
         pp = norm(_profile(mwp, mwpl))
         if want and pp and pp != want:
             continue                                  # une impression d'un autre profil du modele
-        if plate is not None and plate not in _print_plates(mwpl, plate_id):
+        if plate is not None and plate not in _print_plates(mwpl, plate_id, guesses.get(pid)):
             continue                                  # une impression d'un autre plateau
         used = used_by.get(pid) or {}
         if not used:
@@ -955,13 +977,27 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
     return out or None
 
 
-def _print_plates(mwpl, plate_id) -> list:
-    """Les plateaux d'origine qu'une impression a faits : choisis a la main sur sa fiche, sinon son numero de plateau."""
+def _manual_plates(mwpl) -> list | None:
+    """Les plateaux choisis a la main sur la fiche d'une impression (vide : « aucun plateau de ce profil ») ; None sinon."""
     import json as _json
     try:
         m = _json.loads(mwpl) if mwpl else None
         if isinstance(m, dict) and isinstance(m.get("plates"), list):
-            return [int(x) for x in m["plates"]]       # (vide : choisi « aucun plateau de ce profil »)
+            return [int(x) for x in m["plates"]]
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+def _print_plates(mwpl, plate_id, guess: dict | None = None) -> list:
+    """Les plateaux d'origine qu'une impression a faits : choisis a la main sur sa fiche, sinon celui que l'appli
+    devine (guess, image et poids), sinon son numero de plateau."""
+    manual = _manual_plates(mwpl)
+    if manual is not None:
+        return manual
+    try:
+        if guess and guess.get("plate"):
+            return [int(guess["plate"])]
     except (TypeError, ValueError):
         pass
     try:
