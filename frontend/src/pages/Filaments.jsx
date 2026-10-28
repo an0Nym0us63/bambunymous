@@ -967,8 +967,11 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
       <FHero colors={colorsList} type={spool.filament_multicolor_type} finish={finishOf(spool)} color={main} name={name}
         stack={spool.archived ? 0 : (spool.sibling_count || 0)}
         chips={[fChip(`#${spool.id}`, "#64748B"), spool.archived && fChip("Archivée", "#94a3b8"),
-          spool.location && fChip(`📍 ${spool.location}`, "#8B5CF6"),
+          // commandee, pas encore recue : son statut, et ce qu'il faut faire a l'arrivee (28/10/2026)
+          spool.ordered && <span key="ord" data-tip="Créée depuis une commande lue dans les mails : hors du stock jusqu'à l'arrivée. Le scan RFID, ou l'ajout d'une bobine de ce filament, l'adoptera.">{fChip("📬 Commandée, pas encore reçue", "#0EA5E9")}</span>,
+          !spool.ordered && spool.location && fChip(`📍 ${spool.location}`, "#8B5CF6"),
           !spool.archived && spool.sibling_count > 0 && fChip(`🧵 +${spool.sibling_count} en stock${spool.sibling_weight_g ? ` · ${fmtStock(spool.sibling_weight_g)}` : ""}`, "#22C55E"),
+          !spool.archived && spool.ordered_siblings > 0 && <span key="osib" data-tip="D'autres bobines de ce filament sont commandées, pas encore reçues">{fChip(`📬 +${spool.ordered_siblings} en commande`, "#0EA5E9")}</span>,
           dryChip, fChip(<><Palette size={11}/>{spool.filament_swatch ? "Échantillon" : "Sans échantillon"}</>, spool.filament_swatch ? "#22c55e" : "#94a3b8")]}
         sub={<>
           {spool.filament_translated_name && spool.filament_name && spool.filament_name !== spool.filament_translated_name &&
@@ -1772,7 +1775,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
           <div style={{ fontSize:14, fontWeight:700, color:"var(--text2)" }}>{[f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}</div></>}>
         <div style={{ display:"flex", alignItems:"baseline", gap:8, flexWrap:"wrap", marginTop:2 }}>
           <span style={{ fontSize:28, fontWeight:900, lineHeight:1.2, paddingBottom:2, ...(nAct ? fGrad("#16A34A", "#4ADE80") : { color:"var(--muted)" }) }}>{nAct ? fmtStock(stock) : "0 g"}</span>
-          <span style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>en stock · {nAct} bobine{nAct !== 1 ? "s" : ""} active{nAct !== 1 ? "s" : ""}</span>
+          <span style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>en stock · {nAct} bobine{nAct !== 1 ? "s" : ""} active{nAct !== 1 ? "s" : ""}{f.ordered_spool_count > 0 ? ` · ${f.ordered_spool_count} en commande` : ""}</span>
         </div>
       </FHero>
 
@@ -1844,7 +1847,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
         ) : <>
           {/* les chiffres du filament */}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4, minmax(0, 1fr))", gap:6 }}>
-            <FTile label="🧵 Stock" value={nAct ? fmtStock(stock) : "—"} sub={`${nAct} active${nAct !== 1 ? "s" : ""}`} c1="#16A34A" c2="#4ADE80"
+            <FTile label="🧵 Stock" value={nAct ? fmtStock(stock) : "—"} sub={`${nAct} active${nAct !== 1 ? "s" : ""}${f.ordered_spool_count > 0 ? ` · ${f.ordered_spool_count} en commande` : ""}`} c1="#16A34A" c2="#4ADE80"
               onClick={isAdmin ? () => setAddSpool(true) : undefined} tip={isAdmin ? "Créer une bobine" : undefined}/>
             <FTile label="💶 Prix" value={f.price != null && f.price !== "" ? `${moneyVal(Number(f.price), 2)} €` : "—"}
               sub={f.price && f.filament_weight_g ? `${moneyVal(Number(f.price) * 1000 / f.filament_weight_g, 2)} €/kg` : null} c1="#F59E0B" c2="#FBBF24"/>
@@ -1929,7 +1932,7 @@ function FilamentCard({ f, onClick, extra = null, menu, onLong }) {
           cote a cote se chevauchaient, et la galerie n'a que faire des bobines. */}
       <span style={{ ...glass, position:"absolute", bottom:8, left:10, fontSize:9.5 }}>
         {extra != null ? extra : (<>
-          {f.active_spool_count>0 ? `🧵 ${f.active_spool_count} bobine${f.active_spool_count>1?"s":""}` : "0 bobine"}
+          {f.active_spool_count>0 ? `🧵 ${f.active_spool_count} bobine${f.active_spool_count>1?"s":""}` : "0 bobine"}{f.ordered_spool_count > 0 ? ` +${f.ordered_spool_count} 📬` : ""}
           {f.active_spool_count>0 && f.remaining_weight_total_g > 0 && ` · ${fmtStock(f.remaining_weight_total_g)}`}
         </>)}
       </span>

@@ -143,7 +143,7 @@
     <h4>En haut : la bobine en vedette</h4>
     <p>Le dessin de la bobine sur un fond de sa couleur, puis des pastilles :</p>
     <ul>
-      <li>son numéro (<span class="ui">#26</span>), <span class="ui">Archivée</span> si elle l'est, l'emplacement (<span class="ui">📍 AMS-B slot 1</span> ou <span class="ui">📍 Étagère B</span>), et <span class="ui">🧵 +2 en stock · 1,50 kg</span> en vert quand d'autres bobines de ce filament sont en stock (pas pour une bobine archivée) ; leur ombre se dessine alors derrière la bobine de l'en-tête, comme sur la carte ;</li>
+      <li>son numéro (<span class="ui">#26</span>), <span class="ui">Archivée</span> si elle l'est, l'emplacement (<span class="ui">📍 AMS-B slot 1</span> ou <span class="ui">📍 Étagère B</span>), et <span class="ui">🧵 +2 en stock · 1,50 kg</span> en vert quand d'autres bobines de ce filament sont en stock (pas pour une bobine archivée) ; <span class="ui">📬 Commandée, pas encore reçue</span> (bleu) pour une bobine créée depuis une commande, à la place de l'emplacement, et <span class="ui">📬 +1 en commande</span> quand d'autres bobines du filament sont commandées ; leur ombre se dessine alors derrière la bobine de l'en-tête, comme sur la carte ;</li>
       <li>un badge de séchage quand il le faut : <span class="ui">Séchage nécessaire</span> (bleu ciel, jamais séchée ou délai dépassé), <span class="ui">Séchage dans 12 j</span> (orange, délai atteint dans moins de 30 jours) ou <span class="ui">Séchage aujourd'hui</span>. Pour un admin, ce badge porte un petit soleil : le toucher ouvre <a href="#filaments-sechee">Séchée aujourd'hui</a> ;</li>
       <li><span class="ui">Échantillon</span> (vert) si la plaquette du nuancier existe, sinon <span class="ui">Sans échantillon</span> (gris).</li>
     </ul>
@@ -245,6 +245,7 @@
 
   <section id="filaments-fiche-filament">
     <h3>La fiche d'un filament</h3>
+    <p>Quand des bobines de ce filament sont commandées et pas encore reçues, la pastille <span class="ui">📬 2 en commande</span> s'ajoute aux pastilles de l'en-tête, et le stock le rappelle (« 1 active · 2 en commande ») ; dans la grille des filaments, la carte affiche « 🧵 1 bobine +2 📬 ».</p>
     <figure class="phone"><img src="img/filaments-fiche-filament.webp" alt="Fiche d'un filament"><figcaption>La fiche d'une référence : sa bobine en vedette, ses chiffres, ses cartes.</figcaption></figure>
     <p>En haut, la bobine sur un fond de sa couleur, avec des pastilles : le numéro, <span class="ui">Échantillon</span> / <span class="ui">Sans échantillon</span>, <span class="ui">Étiquette</span> / <span class="ui">Sans étiquette</span> (l'info-bulle donne la date d'impression de l'étiquette) et <span class="ui">🛒 À commander</span> s'il est sur la liste. Puis le nom (le nom officiel en petit s'il diffère), « Marque · Sous-type », et le stock en grand : « 790 g en stock · 2 bobines actives ».</p>
     <p>Quatre tuiles : <b>Stock</b> (et le nombre de bobines actives ; <span class="admin">admin</span> la toucher crée une bobine), <b>Prix</b> (et le prix au kilo), <b>Bobine</b> (le poids de filament d'une bobine neuve), <b>Support</b> (le poids du support vide et son modèle).</p>

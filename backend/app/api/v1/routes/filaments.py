@@ -165,6 +165,7 @@ class SpoolOut(BaseModel):
     # eviter une requete par bobine.
     sibling_count: Optional[int] = None
     sibling_weight_g: Optional[float] = None
+    ordered_siblings: Optional[int] = None    # d'autres bobines de ce filament en commande, pas encore recues
     first_used_at: Optional[datetime] = None
     last_used_at: Optional[datetime] = None
     last_dried_at: Optional[datetime] = None
@@ -1312,14 +1313,16 @@ async def _siblings_map(db, filament_ids):
     fids = [f for f in set(filament_ids) if f]
     if not fids:
         return {}
+    here = Spool.ordered.is_(False)
     rows = (await db.execute(
         select(Spool.filament_id,
-               func.count(Spool.id),
-               func.coalesce(func.sum(Spool.remaining_weight_g), 0))
-        .where(Spool.filament_id.in_(fids), Spool.archived.is_(False), Spool.ordered.is_(False))
+               func.sum(case((here, 1), else_=0)),
+               func.coalesce(func.sum(case((here, Spool.remaining_weight_g), else_=0)), 0),
+               func.sum(case((Spool.ordered.is_(True), 1), else_=0)))        # en commande, pas encore recues (28/10/2026)
+        .where(Spool.filament_id.in_(fids), Spool.archived.is_(False))
         .group_by(Spool.filament_id)
     )).all()
-    return {r[0]: (int(r[1]), float(r[2] or 0)) for r in rows}
+    return {r[0]: (int(r[1] or 0), float(r[2] or 0), int(r[3] or 0)) for r in rows}
 
 
 async def _load_spool(db, sid):
@@ -1413,8 +1416,9 @@ def _spool_out(s: Spool, sib: tuple | None = None) -> SpoolOut:
         # On retranche la bobine courante : l'interface veut savoir ce qu'il
         # reste A COTE, pas le total du filament. Une bobine archivee n'est pas
         # dans le compte (actives seulement) : rien a retrancher (25/10/2026).
-        sibling_count=(max(0, sib[0] - (0 if s.archived else 1)) if sib else None),
-        sibling_weight_g=(round(max(0.0, sib[1] - (0 if s.archived else (s.remaining_weight_g or 0))), 1)
+        sibling_count=(max(0, sib[0] - (0 if (s.archived or s.ordered) else 1)) if sib else None),
+        ordered_siblings=((sib[2] if len(sib) > 2 else 0) - (1 if s.ordered else 0)) if sib else None,
+        sibling_weight_g=(round(max(0.0, sib[1] - (0 if (s.archived or s.ordered) else (s.remaining_weight_g or 0))), 1)
                           if sib else None),
         first_used_at=s.first_used_at,
         last_used_at=s.last_used_at,
