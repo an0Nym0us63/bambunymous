@@ -400,13 +400,17 @@ async def _seen_put(s: set) -> None:
         await set_setting(db, K_SEEN, json.dumps(lst))
 
 
-async def sync(trigger: str = "manuel") -> dict:
-    """Un releve : les nouveaux mails de la boutique, et les commandes creees ou mises a jour."""
+async def sync(trigger: str = "manuel", days: int | None = None, reread: bool = False) -> dict:
+    """Un releve : les nouveaux mails de la boutique, et les commandes creees ou mises a jour. days : remonter
+    sur ce nombre de jours au lieu du reglage ; reread : relire aussi les mails deja vus (rattrapage dans le passe,
+    28/10/2026) -- une commande deja connue est simplement remise a jour, jamais doublee."""
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting
     if _STATE["running"]:
         return {"error": "Un relevé est déjà en cours."}
     cfg = await settings_get()
+    if days:
+        cfg["days"] = max(1, min(3650, int(days)))
     async with AsyncSessionLocal() as db:
         password = await get_setting(db, K_PASS, "")
     if not (cfg["user"] and password):
@@ -417,7 +421,7 @@ async def sync(trigger: str = "manuel") -> dict:
     t0 = time.time()
     try:
         seen = await _seen()
-        mails, errors = await asyncio.to_thread(_fetch_sync, cfg, password, seen)
+        mails, errors = await asyncio.to_thread(_fetch_sync, cfg, password, set() if reread else seen)
         created, updated, ignored = 0, 0, 0
         for m in sorted(mails, key=lambda x: x["date"]):
             seen.add(m["uid"])
@@ -430,7 +434,8 @@ async def sync(trigger: str = "manuel") -> dict:
                 ignored += 1
         await _seen_put(seen)
         rep = {"at": datetime.utcnow().isoformat() + "Z", "trigger": trigger, "mails": len(mails), "created": created,
-               "updated": updated, "ignored": ignored, "errors": errors[:5], "seconds": round(time.time() - t0, 1)}
+               "updated": updated, "ignored": ignored, "errors": errors[:5], "seconds": round(time.time() - t0, 1),
+               "days": cfg["days"], "reread": bool(reread)}
     except imaplib.IMAP4.error as e:
         rep = {"at": datetime.utcnow().isoformat() + "Z", "trigger": trigger,
                "error": f"Connexion refusée : {str(e)[:160]} (pour Gmail : un mot de passe d'application, pas celui du compte)"}

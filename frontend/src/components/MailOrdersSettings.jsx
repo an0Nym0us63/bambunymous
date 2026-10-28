@@ -34,11 +34,12 @@ export default function MailOrdersSettings({ card, cardTitle }) {
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setBusy(false);
   };
-  const sync = async () => {
+  const [back, setBack] = useState(365);
+  const sync = async (reread = false) => {
     setBusy(true);
     try {
       await save();
-      const { data } = await client.post("/settings/mail/sync", null, { timeout: 120000 });
+      const { data } = await client.post("/settings/mail/sync", reread ? { days: Number(back) || 365, reread: true } : {}, { timeout: 300000 });
       if (data.error) showAlert(data.error);
       await load();
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
@@ -77,11 +78,19 @@ export default function MailOrdersSettings({ card, cardTitle }) {
         </div>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
           <button type="button" onClick={() => save()} disabled={busy} style={btn(false, busy)}>Enregistrer</button>
-          <button type="button" onClick={sync} disabled={busy || s.running} style={btn(true, busy || s.running)}>{s.running || busy ? "Relevé…" : "Relever maintenant"}</button>
+          <button type="button" onClick={() => sync(false)} disabled={busy || s.running} style={btn(true, busy || s.running)}>{s.running || busy ? "Relevé…" : "Relever maintenant"}</button>
           {s.has_password && <button type="button" onClick={() => save({ password: "-" })} disabled={busy} style={{ ...btn(false, busy), color:"#ef4444" }}>Oublier le mot de passe</button>}
         </div>
+        {/* le rattrapage : relire les mails deja vus sur N jours (une commande connue est remise a jour, jamais doublee) */}
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:12.5, color:"var(--text2)" }}>
+          <span>Rattraper le passé : relire les</span>
+          <input value={back} onChange={e => setBack(e.target.value.replace(/\D/g, ""))} inputMode="numeric" aria-label="Jours à relire"
+            style={{ ...inp, width:70, padding:"6px 8px", textAlign:"center" }}/>
+          <span>derniers jours, mails déjà vus compris</span>
+          <button type="button" onClick={() => sync(true)} disabled={busy || s.running} style={btn(false, busy || s.running)}>Relire</button>
+        </div>
         {last && <div style={{ padding:"8px 12px", borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)", fontSize:12, color:"var(--text2)", lineHeight:1.5 }}>
-          Dernier relevé ({last.trigger}) : {when(last.at)} · {last.error ? <b style={{ color:"#ef4444" }}>{last.error}</b>
+          Dernier relevé ({last.trigger}{last.days ? `, ${last.days} j` : ""}) : {when(last.at)} · {last.error ? <b style={{ color:"#ef4444" }}>{last.error}</b>
             : <>{last.mails} mail{last.mails > 1 ? "s" : ""} lu{last.mails > 1 ? "s" : ""}, {last.created} commande{last.created > 1 ? "s" : ""} nouvelle{last.created > 1 ? "s" : ""}, {last.updated} mise{last.updated > 1 ? "s" : ""} à jour{last.ignored ? `, ${last.ignored} mail${last.ignored > 1 ? "s" : ""} sans commande` : ""}{last.errors?.length ? ` · ${last.errors.length} erreur(s)` : ""}</>}
         </div>}
       </div>

@@ -412,10 +412,12 @@ async def mail_settings(body: dict, _: str = Depends(require_admin)):
 
 
 @router.post("/mail/sync")
-async def mail_sync(_: str = Depends(require_admin)):
-    """Un releve tout de suite (attend le resultat : quelques secondes)."""
+async def mail_sync(body: dict = None, _: str = Depends(require_admin)):
+    """Un releve tout de suite (attend le resultat : quelques secondes). body.days + body.reread : relire les
+    mails deja vus sur N jours (rattrapage dans le passe)."""
     from ....services import mail_orders as MO
-    return await MO.sync("manuel")
+    b = body or {}
+    return await MO.sync("rattrapage" if b.get("reread") else "manuel", b.get("days"), bool(b.get("reread")))
 
 
 @router.post("/archive/purge")
