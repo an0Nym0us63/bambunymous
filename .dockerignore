@@ -1,0 +1,9 @@
+# hors du contexte de construction (28/10/2026) : le depot git, les modules et le build locaux du frontend, les caches
+.git
+.github
+**/node_modules
+frontend/dist
+**/__pycache__
+**/*.pyc
+.env
+nas

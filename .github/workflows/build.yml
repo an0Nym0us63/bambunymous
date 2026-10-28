@@ -45,6 +45,11 @@ jobs:
           file: docker/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          # le cache des couches entre deux builds (28/10/2026) : sans lui, l'installation systeme (ffmpeg...), les
+          # paquets Python et les modules du frontend etaient refaits a chaque fois, avec une nouvelle empreinte, et
+          # Portainer retelechargeait toute l'image a chaque deploiement ; ici seules les couches changees repartent
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             BUILD_BRANCH=master
             COMMIT_SHA=${{ github.sha }}
