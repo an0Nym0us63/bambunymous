@@ -775,9 +775,9 @@ def _rgb(h: str) -> tuple:
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
 
 
-def _assign(origin: list, used: list) -> list:
+def _assign(origin: list, used: list, veto: bool = False) -> list:
     """Filaments d'origine [(n°, couleur, grammes|None)] face aux bobines [(n°, couleur, grammes|None)] : les paires
-    qui se ressemblent le plus, chacun pris une fois. Le cout d'une paire : l'ecart de couleur (0 a 1), plus la moitie
+    qui se ressemblent le plus, chacun pris une fois. Le cout d'une paire : l'ecart de couleur (0 a 1), plus le quart
     de l'ecart relatif de poids quand les deux sont connus (il departage des couleurs remplacees). Toutes les
     combinaisons jusqu'a 7, sinon la meilleure paire d'abord."""
     import itertools, math
@@ -786,17 +786,22 @@ def _assign(origin: list, used: list) -> list:
 
     def ok(o, u):
         # une paire plausible : des couleurs proches, ou (couleur remplacee) des poids qui concordent (28/10/2026 :
-        # avec une seule bobine dans l'impression, le rouge du createur partait sur la bobine orange d'un autre plateau)
+        # avec une seule bobine dans l'impression, le rouge du createur partait sur la bobine orange d'un autre plateau).
+        # veto (un seul filament d'un cote, sans mise a l'echelle possible) : des poids trop differents ecartent la
+        # paire ; sinon les poids ne font que departager (28/10/2026 : un filament du createur non imprime empechait
+        # la mise a l'echelle, et les grammes bruts refusaient tout)
         close = math.dist(_rgb(o[1]), _rgb(u[1])) / 441.7 <= 0.4
         dw = abs(o[2] - u[2]) / max(o[2], u[2]) if o[2] and u[2] else None
-        if dw is not None and dw > 0.35:
-            return False                              # meme plateau, meme geometrie : les poids ne peuvent pas differer autant
+        if veto and dw is not None and dw > 0.35:
+            return False
         return close or (dw is not None and dw <= 0.2)
 
     def cost(o, u):
+        # la couleur d'abord ; le poids departage (un quart : au-dela, un blanc de meme poids passait devant un vert
+        # proche en teinte, 28/10/2026)
         c = math.dist(_rgb(o[1]), _rgb(u[1])) / 441.7
         if o[2] and u[2]:
-            c += 0.5 * abs(o[2] - u[2]) / max(o[2], u[2])
+            c += 0.25 * abs(o[2] - u[2]) / max(o[2], u[2])
         return c + (0 if ok(o, u) else 10)
     small, big, flip = (origin, used, False) if len(origin) <= len(used) else (used, origin, True)
     if len(big) <= 7:
@@ -833,8 +838,9 @@ def _match_filaments(o_cols: list, used: dict, sliced: dict, sl_colors: list, em
     3) le reste, par ressemblance de couleur (celle notee au tranchage, sinon la bobine) et de poids : les filaments
        du plateau d'origine, sinon tous, face aux emplacements pas encore pris. Un modele peint au pinceau n'a que
        le filament de ses pieces dans les noms (28/10/2026 : le perroquet, numeros renumerotes, couleurs melangees) ;
-    4) par elimination, seulement quand les plateaux de l'impression sont confirmes a la main (sure) : un seul filament
-       du createur et une seule bobine qui restent vont ensemble."""
+    4) par elimination : un seul filament du createur et une seule bobine qui restent vont ensemble, quand le plateau
+       est sur (confirme a la main, plateau unique du profil, reconnaissance sure : sure) ou quand l'impression a
+       exactement autant de bobines que le plateau a de filaments (elle a imprime tout le jeu)."""
     import math
     assigned = {e: (es, "pièces") for e, es in emap.items() if es in used}
     sl = {es: c for es, c in sliced.items() if c}
@@ -880,7 +886,9 @@ def _match_filaments(o_cols: list, used: dict, sliced: dict, sl_colors: list, em
             r = sum(gu) / sum(go)
             if 0.2 <= r <= 5:
                 o_rem = [(e, c, g * r) for e, c, g in o_rem]
-        for e, es in _assign(o_rem, u_rem):
+        # un seul filament d'un cote (une bobine seule, ou un plateau a une couleur) : il a ete imprime en entier, ses
+        # grammes bruts se comparent, et des poids trop differents ecartent la paire
+        for e, es in _assign(o_rem, u_rem, veto=len(o_rem) == 1 or len(u_rem) == 1):
             assigned[e] = (es, "couleur et poids")
         if not g_of:
             break
@@ -889,7 +897,8 @@ def _match_filaments(o_cols: list, used: dict, sliced: dict, sl_colors: list, em
     taken = {es for es, _h in assigned.values()}
     left_o = [e for e in range(1, len(o_cols) + 1) if e not in assigned and len(o_cols[e - 1]) == 6 and (not g_of or e in g_of)]
     left_u = [es for es, c in used.items() if es not in taken and len(c) == 6]
-    if sure and len(left_o) == 1 and len(left_u) == 1:
+    full = len(used) == (len(g_of) if g_of else len([c for c in o_cols if len(c) == 6]))
+    if (sure or full) and len(left_o) == 1 and len(left_u) == 1:
         assigned[left_o[0]] = (left_u[0], "élimination")
     return assigned
 
@@ -1026,8 +1035,10 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
             for n_ in pls:
                 for c, g in plate_fils.get(n_) or []:
                     agg[c] = agg.get(c, 0) + g
+            # le plateau est sur : confirme a la main, seul plateau du profil, ou reconnu sans doute
+            sure = _manual_plates(mwpl) is not None or len(plate_fils) == 1 or bool((guesses.get(pid) or {}).get("sure"))
             assigned = _match_filaments([h6(c) for c in colors], used, sliced_by.get(pid) or {}, sl_colors, emap,
-                                        grams_by.get(pid) or {}, list(agg.items()), sure=_manual_plates(mwpl) is not None)
+                                        grams_by.get(pid) or {}, list(agg.items()), sure=sure)
             logger.info(f"[3D] couleurs : impression {pid} (profil {_profile(mwp, mwpl) or '?'}{' ≠ ' + str(prof) if tier else ''}, "
                         f"plateaux {pls}) filaments {used} -> {assigned}")
             for e, (es, how) in sorted(assigned.items()):
