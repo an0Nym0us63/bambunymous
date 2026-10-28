@@ -252,7 +252,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               // dans le noir, autant de lumiere pour toutes les couleurs : un bleu ou un rouge (sombres) luisent plus fort
               const lum = 0.2126 * mat.emissive.r + 0.7152 * mat.emissive.g + 0.0722 * mat.emissive.b;
               // (dose baissee le 28/10/2026 : trop de lumiere noyait le relief des pieces)
-              mat.userData.nightEmit = Math.min(1.0, 0.24 / Math.max(0.12, lum));
+              mat.userData.nightEmit = Math.min(0.7, 0.14 / Math.max(0.12, lum));
               // un liseré lumineux sur les bords (la ou la surface fuit le regard) : on le devine phosphorescent meme
               // lumiere allumee
               const rim = { value: 1.6 };
@@ -260,8 +260,10 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               mat.onBeforeCompile = sh => {
                 sh.uniforms.rimK = rim;
                 sh.fragmentShader = "uniform float rimK;\n" + sh.fragmentShader.replace("#include <emissivemap_fragment>",
-                  "#include <emissivemap_fragment>\n  float rimF = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 1.6);\n" +
-                  "  totalEmissiveRadiance += emissive * rimF * rimK;");
+                  // la lueur suit un peu le relief (plus forte de face, moindre en biais) : les details restent lisibles dans le noir
+                  "#include <emissivemap_fragment>\n  float ndv = abs(dot(normalize(normal), normalize(vViewPosition)));\n" +
+                  "  float rimF = pow(1.0 - ndv, 1.6);\n" +
+                  "  totalEmissiveRadiance = totalEmissiveRadiance * (0.55 + 0.45 * ndv) + emissive * rimF * rimK;");
               };
             }
             holder.add(piece);
@@ -288,20 +290,24 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
               import("three/examples/jsm/postprocessing/EffectComposer.js"), import("three/examples/jsm/postprocessing/RenderPass.js"),
               import("three/examples/jsm/postprocessing/UnrealBloomPass.js"), import("three/examples/jsm/postprocessing/OutputPass.js")]);
-            composer = new EffectComposer(renderer);
+            // rendu multi-echantillonne (28/10/2026) : sans lui, le passage par le composeur perdait l'anticrenelage et les
+            // aretes scintillaient dans le noir
+            const rt = new THREE.WebGLRenderTarget(el.clientWidth, el.clientHeight, { samples: 4, type: THREE.HalfFloatType });
+            disposables.push(rt);
+            composer = new EffectComposer(renderer, rt);
             composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(el.clientWidth, el.clientHeight);
             composer.addPass(new RenderPass(scene, camera));
             // halo mesure (28/10/2026) : seuil plus haut et force moindre, pour que le halo entoure la piece sans gommer ses details
-            composer.addPass(new UnrealBloomPass(new THREE.Vector2(el.clientWidth, el.clientHeight), 0.32, 0.3, 0.5));
+            composer.addPass(new UnrealBloomPass(new THREE.Vector2(el.clientWidth, el.clientHeight), 0.22, 0.35, 0.55));
             composer.addPass(new OutputPass());
             disposables.push(composer);
           }
           bloomOn = on;
           // une veilleuse : assez pour garder le relief de ce qui luit (sinon une silhouette plate)
-          hemi.intensity = on ? 0.14 : 1.6; sun.intensity = on ? 0.5 : 1.6; back.intensity = on ? 0.1 : 0.6;
+          hemi.intensity = on ? 0.16 : 1.6; sun.intensity = on ? 0.7 : 1.6; back.intensity = on ? 0.12 : 0.6;
           grid.material.opacity = on ? 0.12 : 0.45;
           scene.background = on ? new THREE.Color(0x05070d) : null;
-          glowMats.forEach(m => { m.emissiveIntensity = on ? m.userData.nightEmit : m.userData.dayEmit; if (m.userData.rim) m.userData.rim.value = on ? 0.5 : 1.6; });
+          glowMats.forEach(m => { m.emissiveIntensity = on ? m.userData.nightEmit : m.userData.dayEmit; if (m.userData.rim) m.userData.rim.value = on ? 0.35 : 1.6; });
           render();
         };
         // lumiere derriere (28/10/2026) : un lithophane ne se lit qu'eclaire par l'arriere. En chaque pixel, l'epaisseur
