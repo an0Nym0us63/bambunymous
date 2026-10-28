@@ -1366,8 +1366,15 @@ function SourceBackfillSection() {
                 : "MakerWorld limite les téléchargements par jour. Le rattrapage reprend tout seul"}
                 {" "}{new Date(st.resume_at * 1000).toLocaleDateString("fr-FR", { weekday:"long" })} vers {hm(st.resume_at)} ; tu peux aussi relancer à la main plus tôt.</div>
             </div>)}
-          {!run && st.resume_at && !st.daily && <div style={{ fontSize:12, fontWeight:700, color:"#6366F1" }}>
+          {!run && st.resume_at && !st.daily && !st.captcha && <div style={{ fontSize:12, fontWeight:700, color:"#6366F1" }}>
             ↻ Le serveur a redémarré pendant le rattrapage : il reprend tout seul vers {hm(st.resume_at)}.</div>}
+          {!run && st.resume_at && st.captcha && (
+            <div style={{ display:"flex", flexDirection:"column", gap:6, padding:"10px 12px", borderRadius:10, background:"rgba(245,158,11,.12)",
+              border:"1px solid rgba(245,158,11,.45)" }}>
+              <div style={{ fontSize:12.5, fontWeight:800, color:"#d97706" }}>🤖 MakerWorld demande de vérifier que tu n'es pas un robot</div>
+              <div style={{ fontSize:12, color:"var(--text2)" }}>Le rattrapage se calme et réessaie tout seul vers {hm(st.resume_at)}. Pour aller plus vite :
+                ouvre makerworld.com (même réseau, même compte), fais le captcha, puis « Reprendre ».</div>
+            </div>)}
           {!run && !st.resume_at && st.captcha && (
             <div style={{ display:"flex", flexDirection:"column", gap:8, padding:"10px 12px", borderRadius:10, background:"rgba(245,158,11,.12)",
               border:"1px solid rgba(245,158,11,.45)" }}>

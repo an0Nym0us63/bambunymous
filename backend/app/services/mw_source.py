@@ -23,10 +23,14 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-PAUSE_S = 3                      # entre deux telechargements du rattrapage (plus un hasard de 0 a 3 s)
+PAUSE_S = 12                     # entre deux telechargements du rattrapage (plus un hasard de 0 a 18 s)
+PAUSE_RAND_S = 18
 # MakerWorld finit par demander « es-tu un robot ? » (HTTP 418) quand on enchaine. Le blocage tient au
-# reseau ou au compte (captcha aussi dans le navigateur) et les pauses ne le levaient pas : le rattrapage se
-# suspend tout de suite, dit d'aller faire le captcha sur le site, et « Reprendre » repart d'ou il en etait.
+# reseau ou au compte (captcha aussi dans le navigateur) et de courtes pauses ne le levaient pas : le rattrapage
+# se suspend tout de suite. Depuis le 28/10/2026, il reessaie une fois de lui-meme une heure plus tard (un
+# rythme plus calme, 12 a 30 s entre deux fichiers, le rend plus rare) ; si ca bloque encore, il dit d'aller
+# faire le captcha sur le site, et « Reprendre » repart d'ou il en etait.
+CAPTCHA_RETRY_S = 3600
 _LOCK = threading.Lock()
 _BUSY: set = set()               # instances en cours de telechargement
 JOB: dict = {}                   # le rattrapage en cours (aussi sur disque : backfill.json)
@@ -334,10 +338,13 @@ async def backfill() -> None:
     _STOP["flag"] = False
     blocks = list(JOB.get("blocks") or []) if JOB.get("resumed") else []   # une reprise garde l'historique des blocages
     resumed = bool(JOB.get("resumed"))
+    # la reprise automatique apres un 418 ne se joue qu'une fois : la suivante attend ton captcha
+    retried = bool(JOB.get("captcha_retried")) if resumed else False
     JOB.clear()
     JOB.update(running=True, started=time.time(), finished=None, total=len(pairs), done=0, ok=0, already=0,
                skipped=0, failed=0, current=None, errors=[], stopped=None, bytes=0, paused_until=None, guessed=0,
-               blocks=blocks, resumed=resumed, resume_at=None, captcha=False, daily=False, budget=False)
+               blocks=blocks, resumed=resumed, resume_at=None, captcha=False, daily=False, budget=False,
+               captcha_retried=retried)
     _job_save()
     cap = await budget()
     async def nap(sec) -> bool:
@@ -384,7 +391,7 @@ async def backfill() -> None:
                             JOB["bytes"] += p.stat().st_size
                             _note_download()
                             _job_save()
-                            if not await nap(PAUSE_S + random.uniform(0, PAUSE_S)):
+                            if not await nap(PAUSE_S + random.uniform(0, PAUSE_RAND_S)):
                                 JOB["stopped"] = "Arrêté"
                     except ExactError as e:
                         if daily_limited(e):
@@ -395,10 +402,15 @@ async def backfill() -> None:
                             _job_save()
                             break
                         if rate_limited(e):
-                            # MakerWorld veut un captcha : on suspend (ce modele n'est pas compte, il sera repris)
+                            # MakerWorld veut un captcha : on suspend (ce modele n'est pas compte, il sera repris) ;
+                            # la premiere fois, nouvel essai tout seul une heure plus tard
                             JOB["blocks"] = (JOB.get("blocks", []) + [{"at": time.time(), "ok": JOB["ok"]}])[-10:]
-                            JOB.update(captcha=True, stopped="MakerWorld demande de vérifier que tu n'es pas un robot. Fais le captcha "
-                                                              "sur makerworld.com (même réseau, même compte), puis « Reprendre ».")
+                            if not JOB.get("captcha_retried"):
+                                JOB.update(captcha=True, captcha_retried=True, resume_at=time.time() + CAPTCHA_RETRY_S,
+                                           stopped="MakerWorld demande de vérifier que tu n'es pas un robot : nouvel essai dans une heure.")
+                            else:
+                                JOB.update(captcha=True, stopped="MakerWorld demande de vérifier que tu n'es pas un robot. Fais le captcha "
+                                                                  "sur makerworld.com (même réseau, même compte), puis « Reprendre ».")
                             _job_save()
                             break
                         JOB["failed"] += 1
@@ -415,7 +427,7 @@ async def backfill() -> None:
     finally:
         JOB.update(running=False, finished=time.time(), current=None)
         _job_save()
-    if JOB.get("daily") and JOB.get("resume_at"):
+    if (JOB.get("daily") or JOB.get("captcha")) and JOB.get("resume_at"):
         asyncio.get_running_loop().create_task(_resume_at(float(JOB["resume_at"])))
 
 
@@ -437,12 +449,12 @@ def stop_backfill() -> None:
 
 async def resume_after_restart() -> None:
     """Au demarrage : un rattrapage qui tournait a l'arret reprend tout seul apres une minute ; un rattrapage
-    suspendu par la limite du jour reprend a l'heure prevue. Ce qui etait deja recupere compte en « deja la »."""
+    suspendu par la limite du jour (ou, une fois, par le controle anti-robot) reprend a l'heure prevue. Ce qui etait deja recupere compte en « deja la »."""
     try:
         d = json.loads((_dir() / "backfill.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return
-    if d.get("daily") and d.get("resume_at"):
+    if (d.get("daily") or d.get("captcha")) and d.get("resume_at"):
         JOB.clear()
         JOB.update(d)
         JOB.update(running=False, current=None, resumed=True)
