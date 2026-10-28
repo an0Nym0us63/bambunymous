@@ -3,9 +3,12 @@ import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import HiddenMark from "../components/HiddenMark";
 import Cachettes from "../components/Cachettes";
 import { useUrlTab } from "../utils/useUrlTab";
+import { useNavigate } from "react-router-dom";
 
-import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2, ShoppingBag, TrendingUp, Tag, Filter, Droplets } from "lucide-react";
+import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2, ShoppingBag, TrendingUp, Tag, Filter, Droplets,
+  Gauge, Activity, Timer, Target, PauseCircle } from "lucide-react";
 import client from "../api/client";
+import { egg } from "../eggs";
 import HeaderAction from "../components/HeaderAction";
 import { useTrackDetail } from "../utils/track";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
@@ -23,6 +26,24 @@ const fmtH = s => {
 };
 const fmtKg  = g => `${((g || 0) / 1000).toFixed(2)} kg`;
 const fmtEur = c => isMoneyHidden() ? MONEY_MASK : `${(c || 0).toFixed(2)} €`;
+// un chiffre a une decimale, virgule francaise : 4,2
+const fr1 = n => String(Math.round((n || 0) * 10) / 10).replace(".", ",");
+// un ecart entre deux lancements : « 2 j 4 h » au-dela d'un jour, sinon « 3h 12min »
+const fmtGap = s => { const t = Math.round(s || 0); if (t < 86400) return fmtH(t);
+  const d = Math.floor(t / 86400), h = Math.round((t % 86400) / 3600); return `${d} j${h > 0 ? ` ${h} h` : ""}`; };
+
+// Tendance par rapport a la periode precedente (28/10/2026) : { text, good } ou null si rien a comparer.
+// En pourcentage (« +12 % ») ou en points pour un taux (pts: true) ; invert: true quand monter est mauvais (un cout).
+function deltaOf(cur, prev, { pts = false, invert = false } = {}) {
+  if (prev == null || cur == null || !(prev > 0)) return null;
+  const d = pts ? cur - prev : (cur - prev) / prev * 100;
+  if (!isFinite(d)) return null;
+  const r = Math.round(d * (pts ? 10 : 1)) / (pts ? 10 : 1);
+  if (r === 0) return { text: pts ? "= 0 pt" : "= 0 %", good: null };
+  const up = r > 0;
+  const txt = `${up ? "▲ +" : "▼ −"}${String(Math.abs(r)).replace(".", ",")} ${pts ? "pts" : "%"}`;
+  return { text: txt, good: invert ? !up : up };
+}
 
 // Pastille couleur : dégradé sur un calque interne d'un conteneur overflow:hidden,
 // anneau en box-shadow. Aucun border sur l'élément peint → pas de halo.
@@ -395,6 +416,7 @@ function GlobalBadge() {
 const SECTION_ICON = {
   "Impressions": "🖨️", "Moyennes par impression": "➗", "Habitudes d'impression": "🕰️", "Perdu sur les échecs": "💥",
   "Évolution dans le temps": "📈", "Classements": "🏆", "Stock actuel": "📦", "Consommé sur la période": "🧵",
+  "Cadence et précision": "🎯", "Fiabilité par filament": "🧪",
   "Répartition de la consommation": "🎨",
   "Inventaire": "🎁", "Ventes": "💶", "Ratios": "➗", "Meilleures marges": "🏅", "Accessoires": "🔩", "Par famille": "🧪",
 };
@@ -418,7 +440,9 @@ const statCard = (c = "#3b82f6", extra = {}) => ({ borderRadius: 18, border: `1p
   minWidth: 0, ...extra });
 const cardTitle = { fontSize: 14, fontWeight: 900, color: "var(--text)", margin: "0 0 12px" };
 
-function KpiCard({ icon: Icon, label, value, sub, color = "#3b82f6" }) {
+// delta (28/10/2026) : la tendance par rapport a la periode precedente, voir deltaOf ; rien quand elle est nulle
+function KpiCard({ icon: Icon, label, value, sub, color = "#3b82f6", delta = null }) {
+  const dc = delta ? (delta.good == null ? "var(--muted)" : delta.good ? "#16a34a" : "#ef4444") : null;
   return (
     <div style={{ ...statCard(color), padding: "11px 12px", display: "flex", flexDirection: "column", gap: 3 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
@@ -427,7 +451,10 @@ function KpiCard({ icon: Icon, label, value, sub, color = "#3b82f6" }) {
           <Icon size={13} style={{ color: "#fff" }}/>
         </span>
         <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em",
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>{label}</span>
+        {delta && <span data-tip="Par rapport à la période précédente de même longueur"
+          style={{ fontSize: 10.5, fontWeight: 900, color: dc, whiteSpace: "nowrap", flexShrink: 0, padding: "1px 6px", borderRadius: 10,
+            background: `color-mix(in srgb, ${dc} 12%, transparent)` }}>{delta.text}</span>}
       </div>
       <p style={{ fontSize: "clamp(17px, 5vw, 21px)", fontWeight: 900, margin: "2px 0 0", lineHeight: 1.2, whiteSpace: "nowrap",
         overflow: "hidden", textOverflow: "ellipsis", ...fGrad(color, `color-mix(in srgb, ${color} 55%, #ffffff)`) }}>{value ?? "—"}</p>
@@ -772,6 +799,63 @@ function TopList({ title, prints, groups, valueKey, valueLabel, barColor = "#3b8
   );
 }
 
+// ── Fiabilite par matiere (28/10/2026) : une barre empilee ok (vert) / ko (rouge) par matiere,
+// « 92 % · 48 g gâchés » a droite. Les partielles et a-refaire font partie du total, ni vertes ni rouges.
+function ReliabilityByMaterial({ rows }) {
+  if (!rows?.length) return null;
+  const max = Math.max(...rows.map(r => r.total), 1);
+  return (
+    <div style={{ ...statCard("#22c55e"), padding: "14px 14px" }}>
+      <p style={cardTitle}>Par matière</p>
+      {rows.map(r => (
+        <div key={r.name} style={{ padding: "8px 6px", borderBottom: "1px dashed var(--border)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {r.name} <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>· {r.total} impression{r.total > 1 ? "s" : ""}</span>
+            </span>
+            <span style={{ fontSize: 12.5, fontWeight: 900, color: r.ko ? "#ef4444" : "#16a34a", flexShrink: 0, whiteSpace: "nowrap" }}>
+              {fr1(r.rate)} %{r.wasted_g > 0 ? ` · ${r.wasted_g} g gâchés` : ""}
+            </span>
+          </div>
+          <div style={{ height: 8, background: "var(--surface2)", borderRadius: 4, overflow: "hidden", display: "flex", width: `${Math.max(4, r.total / max * 100)}%` }}
+            title={`${r.ok} réussie${r.ok > 1 ? "s" : ""}, ${r.ko} échec${r.ko > 1 ? "s" : ""} sur ${r.total}`}>
+            <div style={{ width: `${r.ok / r.total * 100}%`, background: "linear-gradient(90deg, #22c55e, #4ade80)", transition: "width .5s ease" }}/>
+            <div style={{ width: `${(r.total - r.ok - r.ko) / r.total * 100}%`, background: "#f59e0b", opacity: .7 }}/>
+            <div style={{ width: `${r.ko / r.total * 100}%`, background: "linear-gradient(90deg, #ef4444, #f87171)", transition: "width .5s ease" }}/>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Filaments qui ratent le plus (28/10/2026) : pastille, nom, taux d'echec, ko/total ; touche -> fiche filament
+function WorstFilaments({ rows, onOpen }) {
+  if (!rows?.length) return null;
+  return (
+    <div style={{ ...statCard("#ef4444"), padding: "14px 14px" }}>
+      <p style={cardTitle}>Filaments qui ratent le plus</p>
+      {rows.map(f => (
+        <div key={f.id} onClick={() => onOpen(f.id)} role="button" tabIndex={0}
+          style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 4px", cursor: "pointer", borderBottom: "1px dashed var(--border)" }}>
+          <Dot hex={f.color} colors={f.colors_array} multicolor={f.multicolor_type} finish={finishOf(f)} size={14}/>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {[f.brand, f.fila_type, f.wasted_g > 0 ? `${f.wasted_g} g gâchés` : null].filter(Boolean).join(" · ")}
+            </div>
+          </div>
+          <div style={{ textAlign: "right", flexShrink: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: "#ef4444" }}>{fr1(f.fail_rate)} % d'échec</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>{f.ko} sur {f.total}</div>
+          </div>
+        </div>
+      ))}
+      <p style={{ fontSize: 10, color: "var(--muted)", margin: "8px 0 0" }}>Filaments d'au moins 3 impressions sur la période. Touche une ligne pour ouvrir la fiche.</p>
+    </div>
+  );
+}
+
 // Les onglets de la page : cinq, chacun sa couleur ; sur petit ecran, les inactifs n'ont que leur icone
 function StatTabs({ tabs, tab, setTab }) {
   return (
@@ -870,6 +954,7 @@ function PeriodFilterSheet({ value, onApply, onClose }) {
 }
 
 export default function Stats() {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [period, setPeriod] = useState({ from: null, to: null, label: "Tout" });
   const [filterOpen, setFilterOpen] = useState(false);
@@ -887,7 +972,7 @@ export default function Stats() {
   useEffect(() => {
     setLoading(true);
     client.get("/prints/stats/summary", { params: { date_from: period.from || undefined, date_to: period.to || undefined } })
-      .then(r => { setData(r.data); setError(null); })
+      .then(r => { setData(r.data); setError(null); if (r.data?.previous?.total_prints > 0) egg("retroviseur"); })
       .catch(e => setError(e.response?.data?.detail || e.message || "Erreur"))
       .finally(() => setLoading(false));
   }, [period]);
@@ -1030,19 +1115,30 @@ export default function Stats() {
       <StatHero color="#3B82F6" icon="🖨️" label={`Impressions · ${period.label.toLowerCase()}`} value={data.total_prints}
         ring={data.success_rate} ringLabel="réussite"
         chips={[`⏱ ${fmtH(data.total_hours * 3600)}`, `⚖ ${fmtKg(data.total_weight_g)}`, !isMoneyHidden() && `💶 ${fmtEur(data.total_cost)}`]}/>
+      {/* Tendances (28/10/2026) : fleche par rapport a la periode precedente de meme longueur ; rien en mode « Tout » */}
       <Section title="Impressions">
         <div className="kpi-grid st-kpis">
           <KpiCard icon={Layers} label="Terminées" value={data.total_prints} color="#3b82f6"
-            sub={`${data.failed_prints} échec${data.failed_prints > 1 ? "s" : ""}`}/>
+            sub={`${data.failed_prints} échec${data.failed_prints > 1 ? "s" : ""}`}
+            delta={deltaOf(data.total_prints, data.previous?.total_prints)}/>
           <KpiCard icon={CheckCircle2} label="Taux de réussite" value={`${data.success_rate} %`} color="#22c55e"
-            sub={`${data.success_prints} réussies`}/>
+            sub={`${data.success_prints} réussies`}
+            delta={data.previous?.total_prints > 0 ? deltaOf(data.success_rate, data.previous.success_rate, { pts: true }) : null}/>
           <KpiCard icon={Clock} label="Temps total" value={fmtH(data.total_hours * 3600)} color="#f59e0b"
-            sub={data.avg_duration_h > 0 ? `moy. ${fmtH(data.avg_duration_h * 3600)}` : null}/>
+            sub={data.avg_duration_h > 0 ? `moy. ${fmtH(data.avg_duration_h * 3600)}` : null}
+            delta={deltaOf(data.total_hours, data.previous?.total_hours)}/>
           <KpiCard icon={Weight} label="Filament" value={fmtKg(data.total_weight_g)} color="#8b5cf6"
-            sub={data.avg_weight_g > 0 ? `moy. ${data.avg_weight_g} g` : null}/>
+            sub={data.avg_weight_g > 0 ? `moy. ${data.avg_weight_g} g` : null}
+            delta={deltaOf(data.total_weight_g, data.previous?.total_weight_g)}/>
           <KpiCard icon={Euro} label="Coût total" value={fmtEur(data.total_cost)} color="#ef4444"
-            sub={data.avg_cost > 0 ? `moy. ${fmtEur(data.avg_cost)}` : null}/>
+            sub={data.avg_cost > 0 ? `moy. ${fmtEur(data.avg_cost)}` : null}
+            delta={isMoneyHidden() ? null : deltaOf(data.total_cost, data.previous?.total_cost, { invert: true })}/>
         </div>
+        {data.previous && data.previous.total_prints > 0 && (
+          <p style={{ fontSize: 10, color: "var(--muted)", margin: "8px 0 0" }}>
+            Flèches : par rapport à la période précédente ({data.previous.from} → {data.previous.to}, {data.previous.total_prints} impression{data.previous.total_prints > 1 ? "s" : ""}).
+          </p>
+        )}
       </Section>
 
       <Section title="Moyennes par impression">
@@ -1060,6 +1156,31 @@ export default function Stats() {
           )}
         </div>
       </Section>
+
+      {/* Cadence et precision (28/10/2026) : l'imprimante tourne-t-elle, a quel rythme, et le trancheur dit-il vrai */}
+      {data.period_days > 0 && (
+        <Section title="Cadence et précision">
+          <div className="kpi-grid st-kpis">
+            <KpiCard icon={Gauge} label="Occupation" value={`${fr1(data.occupation_pct)} %`} color="#06b6d4"
+              sub={`${Math.round(data.total_hours)} h sur ${Math.round(data.period_days)} j`}/>
+            <KpiCard icon={Activity} label="Cadence" value={`${fr1(data.cadence_per_week)} / semaine`} color="#3b82f6"
+              sub={`${data.total_prints} impression${data.total_prints > 1 ? "s" : ""} en ${Math.round(data.period_days)} j`}/>
+            {data.median_gap_s != null && (
+              <KpiCard icon={Timer} label="Entre deux lancements" value={fmtGap(data.median_gap_s)} color="#8b5cf6" sub="écart médian"/>
+            )}
+            {data.estimate_gap_pct != null && (
+              <KpiCard icon={Target} label="Écart estimation"
+                value={`${data.estimate_gap_pct > 0 ? "+" : data.estimate_gap_pct < 0 ? "−" : ""}${fr1(Math.abs(data.estimate_gap_pct))} %`}
+                color={Math.abs(data.estimate_gap_pct) <= 5 ? "#22c55e" : Math.abs(data.estimate_gap_pct) <= 15 ? "#f59e0b" : "#ef4444"}
+                sub={`réel ${Math.round(data.estimate_real_h)} h · estimé ${Math.round(data.estimate_est_h)} h`}/>
+            )}
+            {data.paused_hours > 0 && (
+              <KpiCard icon={PauseCircle} label="En pause" value={fmtH(data.paused_hours * 3600)} color="#f97316"
+                sub="bobine vide, erreur, pause manuelle"/>
+            )}
+          </div>
+        </Section>
+      )}
 
       {/* Habitudes : quand imprimes-tu ? */}
       {(data.by_weekday || data.by_hour) && (
@@ -1101,6 +1222,16 @@ export default function Stats() {
             <KpiCard icon={Weight} label="Filament" value={fmtKg(data.failed_weight_g)} color="#ef4444"/>
             <KpiCard icon={Euro} label="Coût" value={fmtEur(data.failed_cost)} color="#ef4444"/>
             <KpiCard icon={Clock} label="Temps" value={fmtH(data.failed_hours * 3600)} color="#ef4444"/>
+          </div>
+        </Section>
+      )}
+
+      {/* Fiabilite par matiere et par filament (28/10/2026) : une carte par ligne sur telephone */}
+      {((data.reliability_by_material || []).length > 0 || (data.worst_filaments || []).length > 0) && (
+        <Section title="Fiabilité par filament">
+          <div className="kpi-grid" style={{ "--kpi-min": "280px", gap: 12 }}>
+            <ReliabilityByMaterial rows={data.reliability_by_material}/>
+            <WorstFilaments rows={data.worst_filaments} onOpen={id => navigate(`/filaments?id=${id}`)}/>
           </div>
         </Section>
       )}

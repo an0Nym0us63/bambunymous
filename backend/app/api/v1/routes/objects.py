@@ -36,6 +36,8 @@ class ObjectOut(BaseModel):
     sold_price: Optional[float]; sold_date: Optional[str]; desired_price: Optional[float]
     margin: Optional[float]
     accessories: List[dict] = []
+    # date de creation, pour l'age du stock (28/10/2026)
+    created_at: Optional[str] = None
 
 class ObjectUpdate(BaseModel):
     name: Optional[str] = None; translated_name: Optional[str] = None
@@ -98,6 +100,7 @@ def _obj_out(o: Object) -> ObjectOut:
         available=bool(o.available), personal=bool(o.personal),
         sold_price=o.sold_price, sold_date=str(o.sold_date) if o.sold_date else None,
         desired_price=o.desired_price, margin=o.margin,
+        created_at=o.created_at.isoformat() if o.created_at else None,
         accessories=[{
             "id": oa.accessory_id, "name": oa.accessory.name if oa.accessory else "?",
             "quantity": oa.quantity, "unit_price_at_link": oa.unit_price_at_link,
@@ -268,6 +271,11 @@ async def _objects_stats(_d_from, _d_to, _period_active):
     sold_costed = [o for o in sold if (o.cost_total or 0) > 0]
     top_margin_pct = sorted(sold_costed, key=_pct, reverse=True)[:5]
 
+    # L'age du stock (28/10/2026) : combien de temps un objet met a partir (mediane des delais creation -> vente,
+    # sur les ventes de la periode : la moyenne serait tiree par un objet oublie un an), combien attendent depuis
+    # plus de STALE_DAYS, et le plus ancien encore a vendre.
+    age = _stock_age(sold, available)
+
     return {
         "accessories": accessories,
         "total": total,
@@ -313,8 +321,38 @@ async def _objects_stats(_d_from, _d_to, _period_active):
         ],
         # Cout moyen de fabrication d'un objet.
         "avg_cost": round(sum((o.cost_total or 0) for o in rows) / total, 2) if total else 0,
+        # L'age du stock : delai median de vente (jours), nb d'objets a vendre depuis plus de 90 j, le plus ancien
+        **age,
         # Les ventes dans le temps (tous temps, par sold_date) : douze mois, ce mois-ci, les dernieres
         **_sales_timeline(by_status["sold"]),
+    }
+
+
+# Au-dela de ce delai, un objet a vendre est considere comme en attente depuis trop longtemps (28/10/2026)
+STALE_DAYS = 90
+
+
+def _stock_age(sold: list, available: list) -> dict:
+    from datetime import datetime as _dt
+    now = _dt.utcnow()
+    delays = sorted((o.sold_date - o.created_at).total_seconds() / 86400
+                    for o in sold if o.sold_date and o.created_at and o.sold_date >= o.created_at)
+    median = None
+    if delays:
+        k = len(delays)
+        median = delays[k // 2] if k % 2 else (delays[k // 2 - 1] + delays[k // 2]) / 2
+    dated = [o for o in available if o.created_at]
+    stale = [o for o in dated if (now - o.created_at).days > STALE_DAYS]
+    oldest = min(dated, key=lambda o: o.created_at) if dated else None
+    return {
+        "avg_days_to_sell": round(median, 1) if median is not None else None,
+        "days_to_sell_n": len(delays),
+        "stale_count": len(stale),
+        "stale_days": STALE_DAYS,
+        "oldest_available": {
+            "id": oldest.id, "name": oldest.translated_name or oldest.name, "thumbnail": oldest.thumbnail,
+            "created_at": oldest.created_at.isoformat(), "days": (now - oldest.created_at).days,
+        } if oldest else None,
     }
 
 
@@ -411,6 +449,46 @@ async def get_object(oid: int, _: str = Depends(get_current_user)):
     return _obj_out(o)
 
 
+def _apply_status(o: Object, st: str) -> None:
+    """Pose un etat sur un objet. Les anciens champs restent tenus a jour en miroir : ils alimentent encore des filtres
+    et des statistiques, et les laisser diverger du statut recreerait exactement l'incoherence qu'on corrige."""
+    if st not in OBJECT_STATUSES:
+        raise HTTPException(400, f"Statut invalide : {st}")
+    o.status = st
+    o.personal  = (st == "personal")
+    o.available = (st == "available")
+    if st != "sold":
+        # Quitter l'etat vendu efface le montant : le conserver ferait apparaitre l'objet dans le chiffre
+        # d'affaires alors qu'il n'est plus vendu.
+        o.sold_price = None
+        o.sold_date = None
+
+
+class BulkStatus(BaseModel):
+    object_ids: List[int]
+    status: str
+
+
+# Declare AVANT /objects/{oid} : sinon "bulk-status" serait pris pour un identifiant.
+@router.patch("/objects/bulk-status")
+async def bulk_status(body: BulkStatus, _: str = Depends(get_current_user)):
+    """Le meme etat pose sur plusieurs objets d'un coup (la barre de selection, 28/10/2026). « Vendu » reste objet par
+    objet (chacun son prix) : refuse ici. Les objets introuvables sont ignores, le compte renvoye dit combien ont change."""
+    if body.status == "sold":
+        raise HTTPException(400, "Vendre se fait objet par objet")
+    if body.status not in OBJECT_STATUSES:
+        raise HTTPException(400, f"Statut invalide : {body.status}")
+    ids = list({int(i) for i in body.object_ids})
+    if not ids:
+        return {"updated": 0}
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Object).where(Object.id.in_(ids)))).scalars().all()
+        for o in rows:
+            _apply_status(o, body.status)
+        await db.commit()
+    return {"updated": len(rows)}
+
+
 @router.patch("/objects/{oid}")
 async def update_object(oid: int, body: ObjectUpdate, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
@@ -442,12 +520,7 @@ async def update_object(oid: int, body: ObjectUpdate, _: str = Depends(get_curre
         # ils alimentent encore des filtres et des statistiques, et les laisser
         # diverger du statut recreerait exactement l'incoherence qu'on corrige.
         if "status" in data:
-            st = data.pop("status")
-            if st not in OBJECT_STATUSES:
-                raise HTTPException(400, f"Statut invalide : {st}")
-            o.status = st
-            o.personal  = (st == "personal")
-            o.available = (st == "available")
+            _apply_status(o, data.pop("status"))
             # Le statut est la SOURCE DE VERITE : on ignore les miroirs
             # personal/available du payload (le selecteur front peut les laisser
             # obsoletes). Sinon la boucle generique plus bas re-appliquerait
@@ -455,12 +528,6 @@ async def update_object(oid: int, body: ObjectUpdate, _: str = Depends(get_curre
             # demarrage le repasserait en perso au prochain rebuild.
             data.pop("personal", None)
             data.pop("available", None)
-            if st != "sold":
-                # Quitter l'etat vendu efface le montant : le conserver
-                # ferait apparaitre l'objet dans le chiffre d'affaires alors
-                # qu'il n'est plus vendu.
-                o.sold_price = None
-                o.sold_date = None
 
         # sold_date : chaine ISO -> datetime (SQLite exige un datetime).
         if "sold_date" in data:

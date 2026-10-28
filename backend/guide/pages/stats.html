@@ -38,6 +38,7 @@
     <li><b>Séchage</b> : rien, c'est un état présent.</li>
     <li><b>Objets</b> : seulement les ventes et ce qui en découle (chiffre d'affaires, marges, ratios), selon la date de vente.</li>
   </ul>
+  <p>Dès qu'une période a une longueur (tout sauf « Tout » et « Jusqu'au … »), l'onglet Prints compare aussi avec la <b>période précédente de même longueur</b>, juste avant : voir les flèches de <a href="#stats-prints-impressions">tendance</a>.</p>
   <div class="tip"><p>La période n'est pas mémorisée : en rechargeant la page, elle revient à « Tout ».</p></div>
 </section>
 
@@ -54,7 +55,20 @@
       <dt>Filament</dt><dd>Poids total consommé ; en dessous, le poids moyen.</dd>
       <dt>Coût total</dt><dd>Filament + électricité ; en dessous, le coût moyen.</dd>
     </dl>
+    <h4>Flèches de tendance</h4>
+    <p>Quand la période a une longueur (« 30 jours », « Ce mois », une plage de dates…), chaque carte porte en haut à droite une flèche qui la compare à la <b>période précédente de même longueur</b>, juste avant : « ▲ +12 % » ou « ▼ −3 % » pour les nombres, « ▲ +2,5 pts » pour le taux de réussite (en points, pas en pourcentage du pourcentage). Vert quand ça va dans le bon sens, rouge sinon : pour le <b>Coût total</b>, le sens est inversé, une hausse est rouge. Un « = 0 % » gris veut dire pareil qu'avant. Sous les cartes, une ligne rappelle la période comparée et son nombre d'impressions. Aucune flèche en mode « Tout », ni quand la période précédente est vide.</p>
     <p>La section <b>Moyennes par impression</b> reprend <b>Coût moyen</b>, <b>Durée moyenne</b>, <b>Poids moyen</b>, et ajoute <b>Coût / kg</b> (ce que te coûte un kilo imprimé) et <b>Coût / heure</b> (ce que coûte une heure d'imprimante).</p>
+  </section>
+  <section id="stats-prints-cadence">
+    <h3>Cadence et précision</h3>
+    <p>L'imprimante tourne-t-elle beaucoup, à quel rythme, et le trancheur dit-il vrai ? Cinq cartes :</p>
+    <dl class="opts">
+      <dt>Occupation</dt><dd>Part du temps où l'imprimante a imprimé sur la période, plafonnée à 100 % ; en dessous, « 165 h sur 30 j ». En mode « Tout », la période court du premier print à aujourd'hui.</dd>
+      <dt>Cadence</dt><dd>Nombre d'impressions terminées par semaine (« 4,2 / semaine »).</dd>
+      <dt>Entre deux lancements</dt><dd>L'écart <b>médian</b> entre deux impressions successives (« 2 j 4 h », « 5h 30min »). Il faut au moins deux impressions.</dd>
+      <dt>Écart estimation</dt><dd>De combien la durée réelle s'écarte de l'estimation du trancheur, en médiane sur les impressions réussies qui ont les deux (« +7 % » : ça prend 7 % de plus qu'annoncé). Vert jusqu'à 5 %, orange jusqu'à 15 %, rouge au-delà ; en dessous, « réel 42 h · estimé 39 h ».</dd>
+      <dt>En pause</dt><dd>Temps total passé en pause (bobine vide, erreur, pause manuelle) ; affiché seulement s'il y en a eu.</dd>
+    </dl>
   </section>
   <section id="stats-prints-habitudes">
     <h3>Habitudes d'impression</h3>
@@ -71,6 +85,12 @@
     <h3>Perdu sur les échecs et évolution</h3>
     <figure><img src="img/stats-prints-evolution.webp" alt="Cartes Perdu sur les échecs et histogramme Évolution dans le temps"><figcaption>Ce que t'ont coûté les échecs, puis l'évolution semaine par semaine.</figcaption></figure>
     <p><b>Perdu sur les échecs</b> (affiché seulement s'il y a des échecs) chiffre le gâchis : nombre d'<b>Échecs</b>, <b>Filament</b>, <b>Coût</b> et <b>Temps</b> perdus.</p>
+    <h4>Fiabilité par filament</h4>
+    <p>Quels filaments te font rater ? La section (affichée dès qu'une impression de la période a une bobine connue) compte, pour chaque filament utilisé, les impressions terminées qui s'en sont servies : une impression à deux bobines du même filament compte une fois.</p>
+    <dl class="opts">
+      <dt>Par matière</dt><dd>Une barre par famille (PLA, PETG…), la plus imprimée en premier : vert pour les réussies, rouge pour les échecs, orange pour les partielles et à refaire. À droite, le taux de réussite et les grammes gâchés par les échecs (« 92 % · 48 g gâchés »).</dd>
+      <dt>Filaments qui ratent le plus</dt><dd>Les huit filaments au pire taux d'échec parmi ceux utilisés dans au moins <b>3 impressions</b> de la période et ayant au moins un échec : pastille de couleur, nom, « marque · type · grammes gâchés », puis « 40 % d'échec » et « 2 sur 5 ». Touche une ligne pour ouvrir la fiche du filament. Rien n'apparaît si aucun filament ne rate.</dd>
+    </dl>
     <p><b>Évolution dans le temps</b> est un histogramme. Les boutons au-dessus choisissent la mesure : <span class="ui">Impressions</span> (nombre), <span class="ui">Coût</span>, <span class="ui">Filament</span> (kg) ou <span class="ui">Durée</span>. Le découpage s'adapte à la période :</p>
     <ul>
       <li>jusqu'à 45 jours : une barre par jour (« 12/10 ») ;</li>

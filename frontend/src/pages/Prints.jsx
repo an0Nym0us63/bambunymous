@@ -18,6 +18,7 @@ import { useFriend, currentFriend } from "../store/friend";
 import MwImg from "../components/MwImg";
 import client, { apiUrl, apiThumb } from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
+import { egg } from "../eggs";
 import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { useMine, MineBadge, FriendsPrints, useHasFriends, useShared, sharedCount, relayed } from "../components/Friends";
@@ -1103,7 +1104,10 @@ async function download3mf(pid, kind) {
   } catch (e) { showAlert(e.response?.status === 404 ? "Ce 3MF n'est pas sur le serveur." : (e.message || "Téléchargement impossible")); }
 }
 
-export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
+// onPrev / onNext (28/10/2026) : la fiche precedente / suivante de la liste d'ou elle vient (null = pas de fleche) ;
+// deux boutons ronds ‹ › dans la barre du haut, et un glisse horizontal sur l'en-tete. Quand l'impression change,
+// la fiche recharge ses donnees et replie ce qui etait ouvert (cout, identifiants, champs en edition).
+export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = null, onNext = null }) {
   const [sharing, setSharing] = useState(false);
   const [ungrouped, setUngrouped] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -1115,10 +1119,49 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [editFr, setEditFr] = useState(false);
   const [frVal, setFrVal] = useState("");
   useTrackDetail(`Fiche print · ${p?.file_name || pProp?.file_name || "#" + pProp.id}`);
+  const scrollRef = useRef(null);
+  const firstId = useRef(pProp.id);
   useEffect(() => {
     if (pProp.total_cost_filament == null) client.get("/prints/" + pProp.id).then(r => setP(r.data)).catch(() => setP(pProp));
     else setP(pProp);
+    if (firstId.current !== pProp.id) {
+      // une autre impression dans la meme fiche (‹ › ou glisse) : etat propre, retour en haut
+      firstId.current = pProp.id;
+      setUngrouped(false); setEditFr(false); setEditNb(false); setCostOpen(false); setIdsOpen(false); setUserPhotos([]);
+      if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    }
   }, [pProp.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // le glisse horizontal sur l'en-tete : vers la gauche la suivante, vers la droite la precedente (seuil 60 px) ; ignore quand
+  // le doigt part d'une bande qui defile a l'horizontale, ou quand le geste est surtout vertical (le defilement de la fiche)
+  const swipe = useRef(null);
+  const swipeStart = e => {
+    swipe.current = null;
+    if (!onPrev && !onNext) return;
+    for (let el = e.target; el && el !== e.currentTarget; el = el.parentElement) {
+      const ox = getComputedStyle(el).overflowX;
+      if ((ox === "auto" || ox === "scroll") && el.scrollWidth > el.clientWidth) return;
+    }
+    swipe.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+  const swipeEnd = e => {
+    const s = swipe.current; swipe.current = null;
+    if (!s || !e.changedTouches?.length) return;
+    const dx = e.changedTouches[0].clientX - s.x, dy = e.changedTouches[0].clientY - s.y;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
+    if (dx < 0) onNext?.(); else onPrev?.();
+    egg("feuilleteur");
+  };
+  // au clavier : ← → (hors d'un champ de saisie)
+  useEffect(() => {
+    if (!onPrev && !onNext) return;
+    const k = e => {
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || "")) return;
+      if (e.key === "ArrowLeft" && onPrev) { e.preventDefault(); onPrev(); }
+      else if (e.key === "ArrowRight" && onNext) { e.preventDefault(); onNext(); }
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [onPrev, onNext]);
   const isAdmin = useIsAdmin();
   const visiting = useFriend(s => s.friend);
   const toRateSet = useToRateSet(!visiting && !!pProp.design_id);
@@ -1205,7 +1248,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
     </button>);
   // l'en-tete : le plateau en grand, le titre et l'etat poses dessus
   const hero = (
-    <div style={{ position: "relative", height: wide ? 300 : "min(36vh, 280px)", minHeight: 200, borderRadius: wide ? 20 : 0, overflow: "hidden",
+    <div onTouchStart={swipeStart} onTouchEnd={swipeEnd} onTouchCancel={() => { swipe.current = null; }}
+      style={{ position: "relative", height: wide ? 300 : "min(36vh, 280px)", minHeight: 200, borderRadius: wide ? 20 : 0, overflow: "hidden",
       background: "var(--surface2)" }}>
       {/* le fond : l'image floutee et saturee, une lueur de la couleur de l'etat */}
       <img src={thumbUrl(p, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
@@ -1320,10 +1364,16 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         justifyContent: "center", padding: wide ? 20 : 0 }} onClick={onClose}>
         <div onClick={e => e.stopPropagation()} className="sheet-inner" style={{ background: "var(--sheet-bg)", borderRadius: wide ? 24 : "22px 22px 0 0",
           width: "100%", maxWidth: wide ? 980 : 640, maxHeight: wide ? "90dvh" : "94dvh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", position: "relative" }}>
-            {/* la barre du haut : poignee, ⋯ et ✕ par-dessus l'image */}
+          <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", position: "relative" }}>
+            {/* la barre du haut : poignee, ‹ › a gauche (quand la fiche vient d'une liste), ⋯ et ✕ par-dessus l'image */}
             <div style={{ position: "sticky", top: 0, zIndex: 10, height: 0 }}>
               {!wide && <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", width: 38, height: 4, borderRadius: 2, background: "rgba(148,163,184,.6)" }}/>}
+              {(onPrev || onNext) && <div style={{ position: "absolute", top: 10, left: 12, display: "flex", gap: 8 }}>
+                <button onClick={onPrev || undefined} disabled={!onPrev} aria-label="Impression précédente" data-tip={onPrev ? "Précédente" : undefined}
+                  style={{ ...v2Round, fontSize: 20, opacity: onPrev ? 1 : 0.3, cursor: onPrev ? "pointer" : "default" }}>‹</button>
+                <button onClick={onNext ? () => { onNext(); egg("feuilleteur"); } : undefined} disabled={!onNext} aria-label="Impression suivante" data-tip={onNext ? "Suivante" : undefined}
+                  style={{ ...v2Round, fontSize: 20, opacity: onNext ? 1 : 0.3, cursor: onNext ? "pointer" : "default" }}>›</button>
+              </div>}
               <div style={{ position: "absolute", top: 10, right: 12, display: "flex", gap: 8 }}>
                 {canRate && <RateStar designs={[p.design_id]} name={p.file_name} enabled={!visiting}/>}
                 {isAdmin && <button onClick={more} aria-label="Plus d'actions" style={v2Round}>⋯</button>}
@@ -1845,8 +1895,14 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       {unmapping && <UnmapFilamentConfirm f={unmapping} printId={unmapping.print_id} onClose={() => setUnmapping(null)} onDone={() => { setUnmapping(null); loadPrints(); onUpdated?.(); }}/>}
       {editGroup && <GroupEditSheet groupId={groupId} name={title} onClose={() => setEditGroup(false)} onSaved={() => { setEditGroup(false); loadPrints(); onUpdated?.(); }}/>}
       {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={() => setSelSpool(null)} zIndex={2000}/>}
-      {selectedPrint && <PrintDetail p={selectedPrint} onClose={() => setSelectedPrint(null)}
-        onDelete={() => { setSelectedPrint(null); setPrints(ps => ps.filter(x => x.id !== selectedPrint.id)); }} onChanged={() => loadPrints()}/>}
+      {selectedPrint && (() => {
+        // ‹ › dans la fiche : les impressions du groupe, dans l'ordre affiche (28/10/2026)
+        const i = prints.findIndex(x => x.id === selectedPrint.id);
+        return <PrintDetail p={selectedPrint} onClose={() => setSelectedPrint(null)}
+          onPrev={i > 0 ? () => setSelectedPrint(prints[i - 1]) : null}
+          onNext={i >= 0 && i < prints.length - 1 ? () => setSelectedPrint(prints[i + 1]) : null}
+          onDelete={() => { setSelectedPrint(null); setPrints(ps => ps.filter(x => x.id !== selectedPrint.id)); }} onChanged={() => loadPrints()}/>;
+      })()}
     </>);
 }
 
@@ -2758,6 +2814,68 @@ function countDisplayItems(list) {
 // sans, il revalidait chaque vignette de la page a chaque ouverture (une requete par carte, 304 ou pas)
 const thumbUrl = (p, w) => `${apiThumb(apiUrl("/prints/" + p.id + "/image"), w)}&v=${encodeURIComponent(String(p.updated_at || p.print_date || "").slice(0, 19))}`;
 
+const STATUSES = ["","IN_PROGRESS","SUCCESS","PARTIAL","TO_REDO","FAILED"];
+const STATUS_LABELS = {"":"Tous","IN_PROGRESS":"En cours","SUCCESS":"Réussis",
+  "PARTIAL":"Partiels","TO_REDO":"À refaire","FAILED":"Échoués"};
+const SORT_KEYS = ["recent", "oldest", "cost", "weight", "duration"];
+// Les filtres de la liste dans l'adresse (28/10/2026) : cles courtes, une valeur par defaut n'y est pas ecrite.
+const FILTER_DEFAULTS = { q: "", st: "", sort: "recent", mat: "", type: "", fil: "", col: "", from: "", to: "" };
+const FILTER_KEYS = Object.keys(FILTER_DEFAULTS);
+const isYmd = s => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
+
+// La cle de tri d'un element de la liste, la meme que celle du serveur : un groupe est classe sur sa valeur
+// agregee, un print solo sur la sienne.
+const sortKeyOf = (it, sortF) => {
+  const isG = it.type === "group";
+  switch (sortF) {
+    case "oldest":   return isG ? (it.earliestDate||"") : (it.p.print_date||"");
+    case "cost":     return isG ? (it.total_cost||0)     : (it.p.total_cost||0);
+    case "weight":   return isG ? (it.total_weight_g||0) : (it.p.total_weight_g||0);
+    case "duration": return isG ? (it.duration_seconds||0)
+                                : (it.p.duration_seconds || it.p.estimated_seconds || 0);
+    default:         return isG ? (it.latestDate||"") : (it.p.print_date||"");
+  }
+};
+const sortItems = (items, sortF) => {
+  const asc = sortF === "oldest";
+  return items.sort((a,b) => {
+    const ka = sortKeyOf(a, sortF), kb = sortKeyOf(b, sortF);
+    const cmp = typeof ka === "string" ? ka.localeCompare(kb) : (ka - kb);
+    return asc ? cmp : -cmp;
+  });
+};
+// La liste affichee : un print solo, ou un groupe entier (une seule carte, classee sur ses totaux).
+// Agréger les groupes par id (et non par nom — deux groupes distincts peuvent porter le même nom,
+// ex. import Spoolnymous à des dates différentes) ; dédupliquer (le lazy load peut introduire des doublons).
+function buildDisplayItems(prints, sortF) {
+  const seenIds = new Set();
+  const uniquePrints = prints.filter(p => { if (seenIds.has(p.id)) return false; seenIds.add(p.id); return true; });
+  const groupMap = {};   // group_id → { name, prints[], latestDate }
+  uniquePrints.forEach(p => {
+    if (!p.group_id) return;
+    if (!groupMap[p.group_id]) groupMap[p.group_id] = { name: p.group_name, prints:[], latestDate:"", earliestDate:"", duration_seconds:0, total_cost:0, total_weight_g:0, number_of_items:p.group_number_of_items||1, cover_print_id:p.group_cover_print_id||null };
+    const g = groupMap[p.group_id];
+    g.prints.push(p);
+    if (!g.latestDate   || p.print_date > g.latestDate)   g.latestDate   = p.print_date;
+    if (!g.earliestDate || p.print_date < g.earliestDate) g.earliestDate = p.print_date;
+    // Un groupe est trié sur SA valeur agrégée, pas sur celle d'un membre
+    g.duration_seconds = (g.duration_seconds||0) + (p.duration_seconds || p.estimated_seconds || 0);
+    g.total_cost       = (g.total_cost||0)       + (p.total_cost || 0);
+    g.total_weight_g   = (g.total_weight_g||0)   + (p.total_weight_g || 0);
+  });
+  const items = [];
+  const addedGroups = new Set();
+  uniquePrints.forEach(p => {
+    if (!p.group_id) items.push({ type:"print", p, date: p.print_date });
+    else if (!addedGroups.has(p.group_id)) { addedGroups.add(p.group_id); items.push({ type:"group", groupId:p.group_id, ...groupMap[p.group_id] }); }
+  });
+  return sortItems(items, sortF);
+}
+// La liste aplatie, pour passer d'une fiche a la suivante (28/10/2026) : les solos et les membres des groupes,
+// dans l'ordre du tri (les membres d'un groupe classes entre eux sur la meme cle).
+const flattenItems = (items, sortF) => items.flatMap(it => it.type === "print" ? [it.p]
+  : sortItems(it.prints.map(p => ({ type: "print", p })), sortF).map(x => x.p));
+
 export default function Prints() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [prints, setPrints]   = useState([]);
@@ -2807,39 +2925,69 @@ export default function Prints() {
   const loadingMoreRef = useRef(false);
   const printsRef = useRef([]);
   printsRef.current = prints;
-  const [search, setSearch]   = useState("");
+  // Les filtres, la recherche, le tri et les dates vivent dans l'adresse (28/10/2026) : ?q=…&st=…&sort=…&mat=…&type=…
+  // &fil=…&col=…&from=…&to=…. Un retour sur la page (ou un lien de l'accueil, /prints?st=FAILED&from=…) retrouve les
+  // memes filtres ; l'adresse est remplacee, pas empilee, pour ne pas polluer l'historique (comme useUrlTab).
+  // Plusieurs changements dans un meme geste s'enchainent via pendingUrl : setSearchParams repart sinon de l'adresse
+  // du dernier rendu, et seul le dernier gagnerait. Une valeur inconnue (lien ancien) retombe sur le defaut.
+  const paramsRef = useRef(searchParams); paramsRef.current = searchParams;
+  const pendingUrl = useRef(null);
+  useEffect(() => { pendingUrl.current = null; }, [searchParams]);
+  const patchUrl = useCallback(patch => {
+    const base = pendingUrl.current || paramsRef.current;
+    const next = new URLSearchParams(base);
+    for (const [k, v] of Object.entries(patch)) {
+      if (v == null || v === "" || v === FILTER_DEFAULTS[k]) next.delete(k); else next.set(k, String(v));
+    }
+    if (next.toString() === base.toString()) return;
+    pendingUrl.current = next;
+    setSearchParams(next, { replace: true });
+  }, [setSearchParams]);
+  const urlQ = searchParams.get("q") || "";
+  const [search, setSearch]   = useState(urlQ);
   // Texte reellement envoye au serveur : 300 ms apres la derniere frappe. Une
   // requete par lettre, sans garde, laissait la reponse d'une frappe ancienne
   // (« p », lente car large) arriver apres la bonne et l'ecraser -- le champ
-  // disait une chose, la liste en montrait une autre.
-  const [searchQ, setSearchQ] = useState("");
+  // disait une chose, la liste en montrait une autre. C'est ce texte-la qui
+  // s'ecrit dans l'adresse (?q=), pas chaque frappe.
+  const [searchQ, setSearchQ] = useState(urlQ.trim());
   useEffect(() => {
-    const t = setTimeout(() => setSearchQ(search.trim()), 300);
+    const t = setTimeout(() => { const v = search.trim(); setSearchQ(v); patchUrl({ q: v }); }, 300);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+  // l'adresse change sans passer par le champ (« Tout effacer », lien de l'accueil) : le champ suit
+  useEffect(() => { if (urlQ.trim() !== searchQ) { setSearch(urlQ); setSearchQ(urlQ.trim()); } }, [urlQ]); // eslint-disable-line react-hooks/exhaustive-deps
   // Numero de la derniere demande de liste / de totaux : une reponse qui
   // n'est plus la derniere est ignoree.
   const loadGen = useRef(0);
   const kpiGen = useRef(0);
-  const [statusF, setStatusF] = useState("");
+  const urlVal = (k, allowed) => { const v = searchParams.get(k) || ""; return v && allowed && !allowed.includes(v) ? "" : v; };
+  const statusF = urlVal("st", STATUSES);
+  const setStatusF = v => patchUrl({ st: v });
   const [selected, setSelected] = useState(null);
   const [importing, setImporting] = useState(false);
   const [error, setError]     = useState(null);
   const [groups, setGroups]   = useState([]);
   const [groupF, setGroupF]   = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
-  const [materialF, setMaterialF] = useState("");
-  const [filaTypeF, setFilaTypeF] = useState("");
-  const [filamentIdF, setFilamentIdF] = useState("");
-  const [colorF, setColorF] = useState("");
-  const [dateFrom, setDateFrom] = useState("");  // borne debut plage temporelle
-  const [dateTo, setDateTo] = useState("");      // borne fin (incluse)
+  const materialF = urlVal("mat"), setMaterialF = v => patchUrl({ mat: v });
+  const filaTypeF = urlVal("type"), setFilaTypeF = v => patchUrl({ type: v });
+  const filamentIdF = urlVal("fil"), setFilamentIdF = v => patchUrl({ fil: v });
+  const colorF = urlVal("col"), setColorF = v => patchUrl({ col: v });
+  const dateFrom = isYmd(searchParams.get("from")) ? searchParams.get("from") : "";  // borne debut plage temporelle
+  const dateTo = isYmd(searchParams.get("to")) ? searchParams.get("to") : "";        // borne fin (incluse)
+  const setDateFrom = v => patchUrl({ from: v });
+  const setDateTo = v => patchUrl({ to: v });
+  const setDates = (a, b) => patchUrl({ from: a, to: b });
   const [colorBuckets, setColorBuckets] = useState([]);
   const [allFilaments, setAllFilaments] = useState([]);
   const [allMaterials, setAllMaterials] = useState([]);
   const [allFilaTypes, setAllFilaTypes] = useState([]);
   const [filSearch, setFilSearch] = useState("");
-  const [sortF, setSortF]     = useState("recent");
+  const sortF = urlVal("sort", SORT_KEYS) || "recent";
+  const setSortF = v => patchUrl({ sort: v });
+  // « Tout effacer » : plus aucun parametre de filtre dans l'adresse (recherche comprise)
+  const clearFilters = () => { patchUrl(Object.fromEntries(FILTER_KEYS.map(k => [k, ""]))); setFilSearch(""); };
   const [viewMode, setViewMode] = useUrlTab("tab", "list", ["list", "gallery", "makerworld", "queue"]);
   // la liste en grille de cartes, ou en rangees compactes (choix retenu sur l'appareil)
   const [rows, setRows0] = useState(() => { try { return localStorage.getItem("bn-prints-rows") === "1"; } catch { return false; } });
@@ -3093,9 +3241,27 @@ export default function Prints() {
     finally { setImporting(false); e.target.value = ""; }
   };
 
-  const STATUSES = ["","IN_PROGRESS","SUCCESS","PARTIAL","TO_REDO","FAILED"];
-  const STATUS_LABELS = {"":"Tous","IN_PROGRESS":"En cours","SUCCESS":"Réussis",
-    "PARTIAL":"Partiels","TO_REDO":"À refaire","FAILED":"Échoués"};
+  // La liste affichee (solos + groupes, tries) et sa version aplatie, pour les ‹ › de la fiche (28/10/2026) :
+  // la precedente / la suivante dans l'ordre de l'ecran, les membres d'un groupe compris. Au bout de la liste,
+  // s'il reste des cartes a charger, › les charge puis avance.
+  const listItems = useMemo(() => groupF ? [] : buildDisplayItems(prints, sortF), [prints, sortF, groupF]);
+  const flatPrints = useMemo(() => groupF ? prints : flattenItems(listItems, sortF), [prints, listItems, sortF, groupF]);
+  const selIdx = selected && viewMode === "list" ? flatPrints.findIndex(x => x.id === selected.id) : -1;
+  const goTo = useCallback(q => {
+    setSelected(q);
+    // ouverte par son adresse (?id=…) : l'adresse suit, pour que Retour / rafraichir retombent sur la bonne
+    if (paramsRef.current.get("id")) patchUrl({ id: String(q.id) });
+  }, [patchUrl]);
+  const wantNext = useRef(false);
+  useEffect(() => {
+    if (!wantNext.current) return;
+    if (selIdx >= 0 && selIdx < flatPrints.length - 1) { wantNext.current = false; goTo(flatPrints[selIdx + 1]); }
+    else if (!hasMore && !loadingMore) wantNext.current = false;
+  }, [flatPrints, selIdx, hasMore, loadingMore, goTo]);
+  const onPrevPrint = selIdx > 0 ? () => goTo(flatPrints[selIdx - 1]) : null;
+  const onNextPrint = selIdx < 0 ? null
+    : selIdx < flatPrints.length - 1 ? () => goTo(flatPrints[selIdx + 1])
+    : hasMore ? () => { wantNext.current = true; loadMore(); } : null;
 
   return (
     <div className="page-wide">
@@ -3155,7 +3321,7 @@ export default function Prints() {
         const dFr = d => d ? new Date(d + "T00:00").toLocaleDateString("fr-FR", { day:"numeric", month:"short" }) : "…";
         const SORTS = { oldest:"Plus ancien", cost:"Coût ↓", weight:"Poids ↓", duration:"Durée ↓" };
         const chips = [
-          (dateFrom || dateTo) && ["📅", `${dFr(dateFrom)} → ${dFr(dateTo)}`, () => { setDateFrom(""); setDateTo(""); }],
+          (dateFrom || dateTo) && ["📅", `${dFr(dateFrom)} → ${dFr(dateTo)}`, () => setDates("", "")],
           statusF && ["●", STATUS_CFG[statusF]?.label || statusF, () => setStatusF("")],
           sortF !== "recent" && ["↕", SORTS[sortF] || sortF, () => setSortF("recent")],
           materialF && ["🧪", materialF, () => setMaterialF("")],
@@ -3200,7 +3366,7 @@ export default function Prints() {
               <span>{ic}</span>{l}
               <button onClick={off} aria-label={`Retirer ${l}`} style={{ width:18, height:18, borderRadius:"50%", border:"none", background:"rgba(59,130,246,0.2)",
                 color:"#3b82f6", cursor:"pointer", fontSize:10, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button></span>)}
-            {chips.length > 1 && <button onClick={()=>{ setStatusF(""); setSortF("recent"); setMaterialF(""); setFilaTypeF(""); setFilamentIdF(""); setColorF(""); setDateFrom(""); setDateTo(""); setFilSearch(""); }}
+            {chips.length > 1 && <button onClick={clearFilters}
               style={{ fontSize:12, fontWeight:800, color:"var(--muted)", background:"none", border:"none", cursor:"pointer" }}>Tout effacer</button>}
           </div>}
         </div>;
@@ -3216,8 +3382,8 @@ export default function Prints() {
         const PERIODS = [["all", "Tout", "", ""], ["7", "7 jours", back(7), ""], ["30", "30 jours", back(30), ""],
           ["month", "Ce mois", ymdL(new Date(today.getFullYear(), today.getMonth(), 1)), ""], ["year", "Cette année", ymdL(new Date(today.getFullYear(), 0, 1)), ""]];
         const period = PERIODS.find(([, , a, b]) => a === dateFrom && b === dateTo);
-        const anyF = !!(statusF || sortF !== "recent" || materialF || filaTypeF || filamentIdF || colorF || dateFrom || dateTo);
-        const clearAll = () => { setStatusF(""); setSortF("recent"); setMaterialF(""); setFilaTypeF(""); setFilamentIdF(""); setColorF(""); setDateFrom(""); setDateTo(""); setFilSearch(""); };
+        const anyF = !!(searchQ || statusF || sortF !== "recent" || materialF || filaTypeF || filamentIdF || colorF || dateFrom || dateTo);   // la recherche aussi : « Tout effacer » la vide
+        const clearAll = clearFilters;
         const chip = (on, c = "#3b82f6") => ({ display:"inline-flex", alignItems:"center", gap:5, padding:"7px 13px", borderRadius:20, fontSize:12.5, fontWeight:800,
           cursor:"pointer", border:`1px solid ${on ? c : "var(--border)"}`, background: on ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 72%, #ffffff))` : "var(--surface)",
           color: on ? "#fff" : "var(--text2)", boxShadow: on ? `0 4px 12px -4px ${c}` : "none" });
@@ -3263,7 +3429,7 @@ export default function Prints() {
             <div style={{ flex:1, minHeight:0, overflowY:"auto", padding:"4px 14px 14px", display:"flex", flexDirection:"column", gap:10 }}>
               {sec("📅", "Période", period ? (period[0] === "all" ? null : period[1]) : `${dateFrom || "…"} → ${dateTo || "…"}`, "#3B82F6", <>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                  {PERIODS.map(([id, l, a, b]) => <button key={id} onClick={() => { setDateFrom(a); setDateTo(b); }} style={chip(period?.[0] === id)}>{l}</button>)}
+                  {PERIODS.map(([id, l, a, b]) => <button key={id} onClick={() => setDates(a, b)} style={chip(period?.[0] === id)}>{l}</button>)}
                 </div>
                 <div style={{ display:"flex", gap:8 }}>
                   {dateIn(dateFrom, setDateFrom, "Début", { max: dateTo || undefined })}
@@ -3410,60 +3576,8 @@ export default function Prints() {
           );
         }
 
-        // Agréger les groupes par id (et non par nom — deux groupes distincts peuvent
-        // porter le même nom, ex. import Spoolnymous à des dates différentes)
-        // Déduplication (lazy load peut introduire des doublons)
-        const seenIds = new Set();
-        const uniquePrints = prints.filter(p => { if (seenIds.has(p.id)) return false; seenIds.add(p.id); return true; });
-        const groupMap = {};   // group_id → { name, prints[], latestDate }
-        uniquePrints.forEach(p => {
-          if (!p.group_id) return;
-          if (!groupMap[p.group_id]) groupMap[p.group_id] = { name: p.group_name, prints:[], latestDate:"", earliestDate:"", duration_seconds:0, total_cost:0, total_weight_g:0, number_of_items:p.group_number_of_items||1, cover_print_id:p.group_cover_print_id||null };
-          const g = groupMap[p.group_id];
-          g.prints.push(p);
-          if (!g.latestDate   || p.print_date > g.latestDate)   g.latestDate   = p.print_date;
-          if (!g.earliestDate || p.print_date < g.earliestDate) g.earliestDate = p.print_date;
-          // Un groupe est trié sur SA valeur agrégée, pas sur celle d'un membre
-          g.duration_seconds = (g.duration_seconds||0) + (p.duration_seconds || p.estimated_seconds || 0);
-          g.total_cost       = (g.total_cost||0)       + (p.total_cost || 0);
-          g.total_weight_g   = (g.total_weight_g||0)   + (p.total_weight_g || 0);
-        });
-
-        // Construire la liste d'items : soit un print solo, soit un groupe entier
-        const items = [];
-        const addedGroups = new Set();
-        uniquePrints.forEach(p => {
-          if (!p.group_id) {
-            // Print solo → item individuel
-            items.push({ type:"print", p, date: p.print_date });
-          } else if (!addedGroups.has(p.group_id)) {
-            // Print de groupe → ajouter le groupe une seule fois à sa date max
-            addedGroups.add(p.group_id);
-            items.push({ type:"group", groupId:p.group_id, ...groupMap[p.group_id] });
-          }
-        });
-
-        // Trier selon le filtre actif, avec les mêmes clés que le backend :
-        // un groupe est classé sur sa valeur agrégée, un print solo sur la sienne.
-        const keyOf = (it) => {
-          const isG = it.type === "group";
-          switch (sortF) {
-            case "oldest":   return isG ? (it.earliestDate||"") : (it.p.print_date||"");
-            case "cost":     return isG ? (it.total_cost||0)     : (it.p.total_cost||0);
-            case "weight":   return isG ? (it.total_weight_g||0) : (it.p.total_weight_g||0);
-            case "duration": return isG ? (it.duration_seconds||0)
-                                        : (it.p.duration_seconds || it.p.estimated_seconds || 0);
-            default:         return isG ? (it.latestDate||"") : (it.p.print_date||"");
-          }
-        };
-        const asc = sortF === "oldest";
-        items.sort((a,b) => {
-          const ka = keyOf(a), kb = keyOf(b);
-          const cmp = typeof ka === "string" ? ka.localeCompare(kb) : (ka - kb);
-          return asc ? cmp : -cmp;
-        });
-
-        // Grille responsive : 2 cols mobile, 3-4 cols desktop
+        // la liste d'items (solos et groupes, tries) est calculee plus haut (listItems), partagee avec les ‹ › de la fiche
+        const items = listItems;
         const GRID = "repeat(auto-fill, minmax(160px, 1fr))";
         return (
           <div style={rows ? { display:"flex", flexDirection:"column", gap:8 } : { display:"grid", gridTemplateColumns:GRID, gap:10 }}>
@@ -3514,7 +3628,7 @@ export default function Prints() {
         onSelectPrint={p => setSelected(p)} onUngroup={() => { closeGroupDeep(); load(); loadGroups(); }}
         onDelete={id => setPrints(ps => ps.filter(p => p.id !== id))} onUpdated={() => { load(); loadGroups(); }}/>}
 
-      {selected && <PrintDetail p={selected} onClose={()=>{ setSelected(null); closeDeep(); }}
+      {selected && <PrintDetail p={selected} onClose={()=>{ setSelected(null); closeDeep(); }} onPrev={onPrevPrint} onNext={onNextPrint}
         onDelete={id=>{setPrints(ps=>ps.filter(p=>p.id!==id));setTotal(t=>t-1);}}
         onChanged={() => { load(); loadGroups(); }}/>}
 

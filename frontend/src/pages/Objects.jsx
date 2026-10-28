@@ -15,6 +15,7 @@ import { useLongPress, openMenu } from "../components/ContextMenu";
 import GroupMosaic from "../components/GroupMosaic";
 import { KpiBar, SearchRow, EmptyCard, PageTabs, fGrad, FSheet, FTile, FCard, FRow, fChip, fBtn, dayFr } from "../components/FicheKit";
 import { useIsAdmin } from "../store/auth";
+import { create } from "zustand";
 
 // Les montants sont masques pour les comptes en lecture seule.
 function fmtPrice(v) {
@@ -623,6 +624,82 @@ const costLine = o => {
   return Math.abs(normal - real) >= 0.01 ? `${fmtPrice(real)} (${fmtPrice(normal)})` : fmtPrice(real);
 };
 
+// L'age du stock (28/10/2026) : depuis quand un objet attend, en combien de temps il est parti. Au-dela de
+// STALE_DAYS a vendre, il attend trop (en rouge). Les dates du serveur arrivent en ISO, parfois avec un espace.
+const STALE_DAYS = 90;
+const toDate = iso => new Date(String(iso).replace(" ", "T"));
+const daysSince = iso => iso ? Math.max(0, Math.floor((Date.now() - toDate(iso).getTime()) / 86400000)) : null;
+// une duree en mots : « 12 jours », « 4 mois », « 2 ans »
+const spanFr = d => d == null ? null : d < 1 ? "moins d'un jour" : d === 1 ? "1 jour" : d < 30 ? `${d} jours`
+  : d < 365 ? `${Math.max(1, Math.round(d / 30))} mois` : (y => `${y} an${y > 1 ? "s" : ""}`)(Math.max(1, Math.round(d / 365)));
+const isStale = o => objStatus(o) === "available" && daysSince(o.created_at) > STALE_DAYS;
+const daysToSell = o => (o.sold_date && o.created_at) ? Math.max(0, Math.round((toDate(o.sold_date) - toDate(o.created_at)) / 86400000)) : null;
+const median = arr => { const a = [...arr].sort((x, y) => x - y), k = a.length;
+  return !k ? null : k % 2 ? a[(k - 1) / 2] : (a[k / 2 - 1] + a[k / 2]) / 2; };
+
+// Les actions en un geste (28/10/2026) : un changement d'etat s'applique tout de suite, et une barre en bas propose
+// de le defaire pendant cinq secondes, a la place d'une confirmation avant coup (le toast commun n'a pas de bouton).
+const UNDO_MS = 5000;
+const useQuickUndo = create((set, get) => ({
+  item: null,   // { id, text, color, undo }
+  show: (text, color, undo) => {
+    const id = Date.now() + Math.random();
+    set({ item: { id, text, color, undo } });
+    setTimeout(() => { if (get().item?.id === id) set({ item: null }); }, UNDO_MS);
+  },
+  clear: () => set({ item: null }),
+}));
+// vrai sous la page Objets, qui porte la barre ; la fiche objet ouverte ailleurs (Stats) monte la sienne
+const UndoHostCtx = React.createContext(false);
+function QuickUndoBar() {
+  const item = useQuickUndo(st => st.item), clear = useQuickUndo(st => st.clear);
+  const [busy, setBusy] = useState(false);
+  if (!item) return null;
+  const c = item.color || "#8B5CF6";
+  const undo = async () => {
+    if (busy) return;
+    setBusy(true);
+    try { await item.undo(); } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    setBusy(false); clear();
+  };
+  return (
+    <div className="quick-undo" role="status" style={{ position:"fixed", left:"50%", transform:"translateX(-50%)", zIndex:9400,
+      display:"flex", alignItems:"center", gap:12, padding:"8px 8px 8px 14px", borderRadius:14, maxWidth:"calc(100vw - 32px)",
+      color:"#fff", fontSize:13, fontWeight:800, background:"rgba(15,23,42,0.94)", border:`1px solid ${c}66`,
+      boxShadow:`0 8px 24px -8px ${c}`, animation:"quick-undo-in 0.15s ease-out" }}>
+      <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.text}</span>
+      {item.undo && <button onClick={undo} disabled={busy} style={{ flexShrink:0, padding:"6px 12px", borderRadius:10, border:"none", cursor:"pointer",
+        fontSize:12.5, fontWeight:900, color:"#fff", background:`linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 65%, #ffffff))`,
+        opacity: busy ? .6 : 1 }}>{busy ? "…" : "Annuler"}</button>}
+      <style>{`
+        .quick-undo { bottom: 24px; }
+        @media (max-width: 767px) { .quick-undo { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); } }
+        @keyframes quick-undo-in { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translateX(-50%); } }
+      `}</style>
+    </div>
+  );
+}
+// Pose un etat sur un objet et propose de le defaire ; onDone recharge la liste (et la fiche)
+async function quickStatus(obj, st, onDone) {
+  const prev = objStatus(obj), cfg = OBJ_STATUS[st];
+  await client.patch(`/objects/objects/${obj.id}`, { status: st });
+  onDone?.();
+  useQuickUndo.getState().show(`${cfg.icon} ${cfg.label} ✓`, cfg.color, async () => {
+    await client.patch(`/objects/objects/${obj.id}`, { status: prev });
+    onDone?.();
+  });
+}
+// Les entrees « en un geste » du menu d'un objet : offert, perso, indisponible (et retour a vendre), sauf l'etat
+// courant et sauf pour un vendu, dont la vente serait effacee : lui passe par Modifier.
+const QUICK_STATES = ["gifted", "personal", "unavailable", "available"];
+const QUICK_LABEL = { gifted:"Marquer offert", personal:"Garder pour moi", unavailable:"Indisponible", available:"Remettre à vendre" };
+function quickStatusItems(obj, onDone) {
+  const st = objStatus(obj);
+  if (st === "sold") return [];
+  return QUICK_STATES.filter(k => k !== st).map(k => ({ icon: OBJ_STATUS[k].icon, label: QUICK_LABEL[k], tone: OBJ_STATUS[k].color,
+    onClick: () => quickStatus(obj, k, onDone).catch(e => showAlert(e.response?.data?.detail || e.message)) }));
+}
+
 // ── Object Detail Sheet ───────────────────────────────────────────────────
 
 // ── Sélecteur d'accessoire ────────────────────────────────────────────────
@@ -900,10 +977,13 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
   const [parentGroup, setParentGroup] = React.useState(null);
   const [editing, setEditing] = React.useState(false);
   const [viewAcc, setViewAcc] = React.useState(null);   // fiche accessoire ouverte sur place
+  const undoHosted = React.useContext(UndoHostCtx);     // la page Objets porte deja la barre « Annuler »
 
   React.useEffect(() => {
     client.get(`/objects/objects/${obj.id}/accessories`).then(r=>setAccessories(r.data)).catch(()=>{});
   }, [obj.id]);
+  // relit l'objet et le remonte au parent (fiche et liste a jour), apres une vente ou un changement d'etat
+  const refresh = async () => { try { const r = await client.get(`/objects/objects/${obj.id}`); onUpdated?.(r.data); } catch { onUpdated?.(); } };
 
   // Ouvre la fiche du parent (print ou groupe) par-dessus, en la chargeant.
   const openParent = async () => {
@@ -982,6 +1062,8 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
   const margin = isSold ? obj.sold_price - (obj.cost_total || 0) : null;
   const parentLabel = obj.parent_type === "print" ? "Voir l'impression" : "Voir le groupe d'impressions";
   const hasParent = (obj.parent_type === "print" || obj.parent_type === "group") && obj.parent_id;
+  // son age (28/10/2026) : depuis quand il attend, en combien de temps il est parti
+  const age = daysSince(obj.created_at), stale = isStale(obj), sellDays = isSold ? daysToSell(obj) : null;
   const menu = e => openMenu(e, {
     title: obj.translated_name || obj.name, subtitle: cfg.label, color: c,
     items: [
@@ -989,6 +1071,8 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
       isAdmin && "-",
       isAdmin && { icon: "✏️", label: "Modifier", hint: "Nom, commentaire, état, prix, vente", onClick: () => setEditing(true) },
       isAdmin && st === "available" && { icon: "💶", label: "Vendre…", tone: "#22c55e", onClick: () => setSelling(true) },
+      // en un geste : offert, perso, indisponible (28/10/2026)
+      ...(isAdmin ? quickStatusItems(obj, refresh) : []),
       isAdmin && { icon: "🔩", label: "Ajouter un accessoire", tone: "#14B8A6", onClick: openAddAcc },
       isAdmin && "-",
       isAdmin && { icon: "🗑", label: "Supprimer l'objet…", tone: "#ef4444", onClick: askDelete },
@@ -1020,6 +1104,7 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
             {fChip(`${cfg.icon} ${cfg.label}`, c)}
             {obj.group_id && fChip(`📁 ${obj.group_name || "Groupe"}`, "#8B5CF6")}
             {isSold && obj.sold_date && fChip(`📅 ${dayFr(String(obj.sold_date).slice(0, 10))}`, "#22c55e")}
+            {age != null && st === "available" && fChip(`⏳ depuis ${spanFr(age)}`, stale ? "#ef4444" : "#94a3b8")}
           </div>
           <div style={{ fontSize:24, fontWeight:900, color:"var(--text)", lineHeight:1.12, overflowWrap:"anywhere" }}>{obj.translated_name || obj.name}</div>
           {obj.translated_name && obj.translated_name !== obj.name && <div style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>{obj.name}</div>}
@@ -1076,6 +1161,15 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
 
         {obj.group_id && <ObjectGroupControl obj={obj} onChanged={onUpdated}/>}
 
+        {/* Son histoire (28/10/2026) : cree quand, vendu quand et en combien de temps, ou depuis quand il attend */}
+        {obj.created_at && <FCard t="Son histoire" i="📜" c="#64748B">
+          <FRow l="Créé le" v={dayFr(String(obj.created_at).slice(0, 10))} d={age > 0 ? `il y a ${spanFr(age)}` : "aujourd'hui"}/>
+          {isSold && obj.sold_date && <FRow l="Vendu le" v={dayFr(String(obj.sold_date).slice(0, 10))} vc="#16a34a"
+            d={sellDays != null ? (sellDays < 1 ? "vendu le jour même" : `vendu en ${spanFr(sellDays)}`) : null}/>}
+          {st === "available" && <FRow l="À vendre depuis" v={age > 0 ? spanFr(age) : "aujourd'hui"} vc={stale ? "#ef4444" : undefined}
+            d={stale ? "plus de 3 mois : il attend trop ?" : null}/>}
+        </FCard>}
+
         {/* Le detail des couts, replie (le total est deja en tuile) */}
         <FCard t="Le détail des coûts" i="🧾" c="#3B82F6" fold open={costOpen} onToggle={() => setCostOpen(o => !o)}
           summary={<p style={{ margin:"4px 0 0", fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>
@@ -1092,7 +1186,8 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
     </FSheet>
 
     {selling && <QuickSell obj={obj} onClose={() => setSelling(false)}
-      onDone={async () => { setSelling(false); try { const r = await client.get(`/objects/objects/${obj.id}`); onUpdated?.(r.data); } catch { onUpdated?.(); } }}/>}
+      onDone={async () => { setSelling(false); await refresh(); }}/>}
+    {!undoHosted && <QuickUndoBar/>}
 
       {/* Picker accessoire — recherche filtrée, vignette, quantité bornee au stock */}
       {addingAcc && (
@@ -1250,11 +1345,13 @@ export const objStatus = (o) =>
 function StatusSection({ sec, open, onToggle, children }) {
   const cfg = OBJ_STATUS[sec.st];
   const resume =
-    sec.st === "sold"      ? `${fmtPrice(sec.revenue)} encaissés`
+    sec.st === "sold"      ? `${fmtPrice(sec.revenue)} encaissés${sec.medianDays != null ? ` · vendus en ${spanFr(sec.medianDays)}` : ""}`
     : sec.st === "available" ? (sec.desired > 0 ? `${fmtPrice(sec.desired)} espérés`
                                                 : `${fmtPrice(sec.cost)} de production`)
     : `${fmtPrice(sec.cost)} de production`;
-  return <FoldSection color={cfg.color} icon={cfg.icon} title={cfg.label} count={sec.count}
+  // (28/10/2026) a vendre : ceux qui attendent depuis plus de 3 mois, en rouge ; vendus : le delai moyen (mediane) de vente
+  const alert = sec.stale > 0 ? `${sec.stale} attend${sec.stale > 1 ? "ent" : ""} depuis plus de 3 mois` : null;
+  return <FoldSection color={cfg.color} icon={cfg.icon} title={cfg.label} count={sec.count} alert={alert}
     sub={`${sec.count} objet${sec.count>1?"s":""} · ${resume}`} thumbs={sec.thumbs} open={open} onToggle={onToggle}>{children}</FoldSection>;
 }
 
@@ -1408,15 +1505,20 @@ function ObjectGroupPickerSheet({ title, onClose, onPick }) {
   );
 }
 
-function ObjectCard({ obj, onClick, onLongPress, selectMode, selected, onToggleSelect }) {
+function ObjectCard({ obj, onClick, onLongPress, selectMode, selected, onToggleSelect, onChanged }) {
   const st = objStatus(obj);
   const cfg = OBJ_STATUS[st];
-  // Appui long / clic droit : menu (ouvrir, selectionner).
+  const isAdmin = useIsAdmin();
+  const [selling, setSelling] = useState(false);   // la vente rapide, depuis la tuile (28/10/2026)
+  // Appui long / clic droit : menu (ouvrir, vendre, changer d'etat en un geste, selectionner).
   const [press, guard] = useLongPress(e => openMenu(e, {
-    title: obj.name || "Objet", subtitle: cfg?.label || null,
+    title: obj.translated_name || obj.name || "Objet", subtitle: cfg?.label || null, color: cfg?.color,
     items: [
       onClick && { icon: "📄", label: "Ouvrir", onClick },
-      onLongPress && { icon: "☑", label: "Sélectionner", hint: "Pour ajouter plusieurs objets à un groupe", onClick: onLongPress },
+      isAdmin && st === "available" && { icon: "💶", label: "Vendre…", tone: "#22c55e", onClick: () => setSelling(true) },
+      ...(isAdmin ? quickStatusItems(obj, onChanged) : []),
+      onLongPress && "-",
+      onLongPress && { icon: "☑", label: "Sélectionner", hint: "Pour agir sur plusieurs objets", onClick: onLongPress },
     ],
   }), { disabled: selectMode });
   const handleClick = guard(() => {
@@ -1429,7 +1531,9 @@ function ObjectCard({ obj, onClick, onLongPress, selectMode, selected, onToggleS
   const price = st === "sold" ? obj.sold_price : obj.desired_price;
   const margin = st === "sold" && obj.sold_price > 0 ? obj.sold_price - (obj.cost_total || 0) : null;
   const nAcc = (obj.accessories || []).length;
-  return (
+  // depuis quand il attend, pour un objet a vendre : en gris, en rouge passe STALE_DAYS (28/10/2026)
+  const age = st === "available" ? daysSince(obj.created_at) : null;
+  return (<>
     <div className="card" onClick={handleClick} {...press}
       style={{ WebkitTouchCallout:"none", userSelect:"none", padding:0, overflow:"hidden", cursor:"pointer", position:"relative",
         borderRadius:18, display:"flex", flexDirection:"column", border:`1px solid color-mix(in srgb, ${c} 30%, var(--border))`,
@@ -1453,9 +1557,14 @@ function ObjectCard({ obj, onClick, onLongPress, selectMode, selected, onToggleS
           whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Coût {costLine(obj)}</span>
         {margin != null && !isMoneyHidden() && <span style={{ fontSize:11.5, fontWeight:900, ...fGrad(margin >= 0 ? "#16a34a" : "#ef4444", margin >= 0 ? "#4ade80" : "#f87171") }}>
           {margin >= 0 ? "+" : ""}{fmtPrice(margin)} de marge</span>}
+        {age != null && <span style={{ fontSize:11, fontWeight:800, color: age > STALE_DAYS ? "#ef4444" : "var(--muted)" }}>
+          ⏳ {age > 0 ? `depuis ${spanFr(age)}` : "créé aujourd'hui"}</span>}
       </div>
     </div>
-  );
+    {/* la fenetre de vente hors de la tuile (display: contents) : ses touchers n'ouvrent pas la fiche ni le menu */}
+    {selling && <div style={{ display:"contents" }}><QuickSell obj={obj} onClose={() => setSelling(false)}
+      onDone={() => { setSelling(false); onChanged?.(); }}/></div>}
+  </>);
 }
 
 // ── Object Group Sheet ────────────────────────────────────────────────────
@@ -1629,7 +1738,7 @@ function ObjectGroupSheet({ group, objects, allObjects, sectionStatus, onClose, 
         <AdminOnly><GroupBulkPanel group={group} memberCount={full.length} onChanged={onChanged}/></AdminOnly>
 
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
-          {shown.map(o => <ObjectCard key={o.id} obj={o} onClick={() => { onClose(); onSelectObj(o); }}/>)}
+          {shown.map(o => <ObjectCard key={o.id} obj={o} onClick={() => { onClose(); onSelectObj(o); }} onChanged={onChanged}/>)}
         </div>
       </div>
     </FSheet>
@@ -1753,6 +1862,27 @@ export default function Objects() {
   const [objSel, setObjSel] = React.useState(null);   // selection multiple d'objets
   const [bulkGroup, setBulkGroup] = React.useState(false);
   const objSelCount = objSel ? objSel.size : 0;
+  // « Changer l'etat » de la selection (28/10/2026) : un seul appel, les vendus mis de cote (leur vente serait
+  // effacee : eux se changent un par un depuis leur fiche), et une barre « Annuler » qui remet chacun dans son etat
+  const bulkStatus = async (st) => {
+    const sel = objects.filter(o => objSel?.has(o.id)), keep = sel.filter(o => objStatus(o) !== "sold");
+    const cfg = OBJ_STATUS[st];
+    if (!keep.length) { showAlert("Les objets vendus gardent leur vente : change-les un par un depuis leur fiche."); return; }
+    const prev = {};   // ancien etat -> identifiants, pour defaire
+    for (const o of keep) (prev[objStatus(o)] = prev[objStatus(o)] || []).push(o.id);
+    try {
+      await client.patch("/objects/objects/bulk-status", { object_ids: keep.map(o => o.id), status: st });
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); return; }
+    setObjSel(null); loadObjects();
+    const n = keep.length, skipped = sel.length - n;
+    useQuickUndo.getState().show(`${cfg.icon} ${n} objet${n > 1 ? "s" : ""} → ${cfg.label} ✓${skipped ? ` (${skipped} vendu${skipped > 1 ? "s" : ""} inchangé${skipped > 1 ? "s" : ""})` : ""}`,
+      cfg.color, async () => {
+        for (const [old, ids] of Object.entries(prev)) await client.patch("/objects/objects/bulk-status", { object_ids: ids, status: old });
+        loadObjects();
+      });
+  };
+  const bulkStatusMenu = e => openMenu(e, { title:"Changer l'état", subtitle:`${objSelCount} objet${objSelCount > 1 ? "s" : ""} sélectionné${objSelCount > 1 ? "s" : ""}`, color:"#8B5CF6",
+    items: ["available", "gifted", "personal", "unavailable"].map(k => ({ icon: OBJ_STATUS[k].icon, label: OBJ_STATUS[k].label, tone: OBJ_STATUS[k].color, onClick: () => bulkStatus(k) })) });
   const toggleObjSel = (id) => setObjSel(s => {
     const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n;
   });
@@ -1764,6 +1894,7 @@ export default function Objects() {
   const OBJ_SORTS = [
     ["name",    "Nom (A→Z)"],
     ["recent",  "Plus récents"],
+    ["oldest",  "Le plus ancien d'abord"],
     ["cost",    "Coût décroissant"],
     ["value",   "Valeur décroissante"],
   ];
@@ -1780,10 +1911,16 @@ export default function Objects() {
   };
   const objId = (it) => (it.kind === "group"
     ? Math.max(...it.objects.map(o => o.id || 0)) : (it.obj.id || 0));
+  // la date de creation (le plus ancien membre pour un groupe) ; sans date, l'identifiant fait foi (28/10/2026)
+  const objCreated = (it) => {
+    const arr = it.kind === "group" ? it.objects : [it.obj];
+    return Math.min(...arr.map(o => o.created_at ? toDate(o.created_at).getTime() : (o.id || 0)));
+  };
 
   const sortItems = (arr) => {
     const c = [...arr];
     if (objSort === "recent") c.sort((a, b) => objId(b) - objId(a));
+    else if (objSort === "oldest") c.sort((a, b) => objCreated(a) - objCreated(b));
     else if (objSort === "cost")  c.sort((a, b) => objCost(b) - objCost(a));
     else if (objSort === "value") c.sort((a, b) => objValue(b) - objValue(a));
     else c.sort((a, b) => OBJ_COLLATOR.compare(objLabel(a), objLabel(b)));
@@ -1872,7 +2009,10 @@ export default function Objects() {
       ? String(y.sold_date || "").localeCompare(String(x.sold_date || "")) || (y.id - x.id) : (y.id - x.id));
     // l'en-tete n'en montre que trois : pas la peine de fabriquer une adresse par objet
     const thumbs = recent.slice(0, 3).map(o => apiThumb(apiUrl(`/objects/objects/${o.id}/image`), 128));
-    return { st, items, count: objs.length, cost, revenue, desired, thumbs };
+    // l'age du stock (28/10/2026) : a vendre depuis plus de 3 mois ; delai median de vente pour les vendus
+    const stale = st === "available" ? objs.filter(isStale).length : 0;
+    const medianDays = st === "sold" ? median(objs.map(daysToSell).filter(n => n != null)) : null;
+    return { st, items, count: objs.length, cost, revenue, desired, thumbs, stale, medianDays };
   }).filter(Boolean), [gridItems, objSort]);   // eslint-disable-line react-hooks/exhaustive-deps
   // les chiffres de l'onglet Objets : ce qui attend une vente, ce qu'on en espere, ce qu'on a encaisse et gagne
   const objKpis = React.useMemo(() => {
@@ -1885,6 +2025,7 @@ export default function Objects() {
   }, [objects]);
 
   return (
+    <UndoHostCtx.Provider value={true}>
     <div className="page-wide" style={{ "--page-max":"900px", gap:12 }}>
       <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Objets & Accessoires</h1>
@@ -1926,7 +2067,7 @@ export default function Objects() {
                         totalCount={item.group.items?.length} onChanged={loadObjects}
                         onSelectObj={setSelected}/>
                     : <ObjectCard key={item.obj.id} obj={item.obj}
-                        onClick={() => setSelected(item.obj)}
+                        onClick={() => setSelected(item.obj)} onChanged={loadObjects}
                         selectMode={!!objSel}
                         selected={!!objSel && objSel.has(item.obj.id)}
                         onToggleSelect={toggleObjSel}
@@ -1981,11 +2122,19 @@ export default function Objects() {
               style={{ flexShrink:0, padding:"5px 12px", borderRadius:8, fontSize:12, background:"none",
                 border:"1px solid var(--border)", color:"var(--muted)", cursor:"pointer" }}>Annuler</button>
           </div>
-          <button onClick={()=>setBulkGroup(true)}
-            style={{ width:"100%", padding:"11px", borderRadius:12, border:"none", background:"linear-gradient(135deg, #8B5CF6, #A78BFA)",
-              color:"white", fontSize:13, fontWeight:800, cursor:"pointer", boxShadow:"0 8px 18px -10px #8B5CF6" }}>
-            Ajouter ces {objSelCount} objet{objSelCount>1?"s":""} à un groupe
-          </button>
+          {/* deux actions cote a cote : le groupe, et l'etat en un geste (28/10/2026) */}
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={()=>setBulkGroup(true)}
+              style={{ flex:1, minWidth:0, padding:"11px 8px", borderRadius:12, border:"none", background:"linear-gradient(135deg, #8B5CF6, #A78BFA)",
+                color:"white", fontSize:13, fontWeight:800, cursor:"pointer", boxShadow:"0 8px 18px -10px #8B5CF6" }}>
+              📁 Ajouter à un groupe
+            </button>
+            <button onClick={bulkStatusMenu}
+              style={{ flex:1, minWidth:0, padding:"11px 8px", borderRadius:12, border:"none", background:"linear-gradient(135deg, #F59E0B, #FBBF24)",
+                color:"white", fontSize:13, fontWeight:800, cursor:"pointer", boxShadow:"0 8px 18px -10px #F59E0B" }}>
+              🔁 Changer l'état
+            </button>
+          </div>
         </div>
       )}
 
@@ -2045,6 +2194,8 @@ export default function Objects() {
       )}
       <HiddenMark egg="lost_key" e="🗝️" side="left"/>
       <Cachettes spot="objects"/>
+      <QuickUndoBar/>
     </div>
+    </UndoHostCtx.Provider>
   );
 }

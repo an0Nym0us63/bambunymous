@@ -12,6 +12,7 @@ import TarePicker, { useSpoolTares, tareForBrand } from "../components/TarePicke
 import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette, Tag, Sun } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
+import { egg } from "../eggs";
 import { useFriend } from "../store/friend";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
@@ -21,10 +22,10 @@ import { useTrackDetail } from "../utils/track";
 import Select from "../components/Select";
 import { useIsAdmin } from "../store/auth";
 import { Pressable, openMenu } from "../components/ContextMenu";
-import { colorBg, parseColorsList, finishOf, autoFinishOf, FINISHES } from "../utils/colors";
+import { colorBg, parseColorsList, finishOf, autoFinishOf, FINISHES, COLOR_BUCKETS, BUCKET_FR, BUCKET_HEX, bucketsOf } from "../utils/colors";
 import SpoolSVG from "../components/SpoolSVG";
 import { Ghost, GhostBadge, HeroSpool, ORD_C, ORD_BG, tipStock, tipOrdered } from "../components/SpoolGhost";
-import { EmptyCard, FCard, FLAB, FROW, FRow, FSheet, FTile, FVAL, KpiBar, PageTabs, SearchRow, agoFr, dayFr, fBtn, fChip, fGrad, fRound, isLight, lighten } from "../components/FicheKit";
+import { EmptyCard, FCard, FLAB, FROW, FRow, FSheet, FTile, FVAL, PageTabs, SearchRow, agoFr, dayFr, fBtn, fChip, fGrad, fRound, isLight, lighten } from "../components/FicheKit";
 import GalleryCompare from "../components/GalleryCompare";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 import { FriendsPrints, useHasFriends, useShared, sharedCount } from "../components/Friends";
@@ -111,7 +112,9 @@ function RemainBar({ remaining, total=1000 }) {
 }
 
 // ── Modal ajout bobine ─────────────────────────────────────────────────────
-function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect }) {
+// preselectFilament (28/10/2026) : le filament qui vient d'etre cree, ajoute en tete de la liste s'il n'y est pas
+// encore (la liste peut sortir d'un cache) ; z : au-dessus de la fenetre qui l'ouvre (creation de filament a 1200).
+function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect, preselectFilament = null, z = 1100 }) {
   useTrackDetail("Filaments · Ajouter une bobine");
   const [form, setForm] = useState({ filament_id: preselect ? String(preselect) : "",
     remaining_weight_g:"", price_override:"", tag_number:"", comment:"" });
@@ -124,7 +127,9 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect })
     if (filamentsProp) return;
     client.get("/filaments/filaments").then(r => setFetched(r.data || [])).catch(() => setFetched([]));
   }, [filamentsProp]);
-  const filaments = filamentsProp || fetched || [];
+  const loaded = filamentsProp || fetched || [];
+  const filaments = preselectFilament && !loaded.some(f => String(f.id) === String(preselectFilament.id))
+    ? [preselectFilament, ...loaded] : loaded;
 
   const selected = filaments.find(f => String(f.id) === String(form.filament_id));
 
@@ -153,7 +158,7 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect })
   const full = selected?.filament_weight_g || 1000;
 
   return (
-    <FSheet onClose={onClose} z={1100}
+    <FSheet onClose={onClose} z={z}
       bottom={<>
         <button onClick={onClose} style={{ ...fBtn, flex:1, color:"var(--muted)" }}>Annuler</button>
         <button onClick={handleSave} disabled={saving||!form.filament_id}
@@ -837,7 +842,20 @@ function FHero({ colors, type, finish = null, color, chips, name, sub, children,
     </div>);
 }
 
-export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
+// onChanged (facultatif) : previent le parent qu'une bobine a change, pour qu'il recharge sa liste SANS fermer la fiche.
+export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelete, onChanged }) {
+  // La bobine affichee (28/10/2026) : chaque modification (poids, prix, tag, sechage) la recharge par sa route
+  // et la fiche reste ouverte ; avant, onUpdated fermait la fiche. Seuls archiver et supprimer ferment.
+  const [cur, setCur] = useState(spoolProp);
+  useEffect(() => { setCur(spoolProp); }, [spoolProp]);
+  const spool = cur;
+  const refresh = async () => {
+    try {
+      const r = await client.get(`/filaments/spools/${spoolProp.id}`);
+      if (r.data?.id) setCur(r.data);
+    } catch { /* la fiche garde ce qu'elle affichait */ }
+    onChanged?.();
+  };
   useTrackDetail(spool ? `Fiche bobine · ${spool.filament_translated_name || spool.filament_name || "#" + spool.id}` : null);
   const [filSheet, setFilSheet] = React.useState(null);   // fiche filament ouverte par-dessus
   const isAdmin = useIsAdmin();
@@ -1029,10 +1047,10 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
             <div id={`weigh-${spool.id}`}>
               <WeightEditRow spoolId={spool.id} filamentId={spool.filament_id} brand={spool.filament_manufacturer}
                 current={remaining} total={total} openKey={weighKey}
-                tare={spool.filament_spool_weight_g} tareName={spool.filament_spool_tare_name} onUpdated={onClose}/></div>
-            <PriceEditRow spoolId={spool.id} current={spool.price_override} filamentPrice={spool.filament_price} onUpdated={onClose}/>
+                tare={spool.filament_spool_weight_g} tareName={spool.filament_spool_tare_name} onUpdated={refresh}/></div>
+            <PriceEditRow spoolId={spool.id} current={spool.price_override} filamentPrice={spool.filament_price} onUpdated={refresh}/>
             <FRow l="Ce qu'il en reste" v={worth != null ? eur(worth) : null} vc="#16a34a"/>
-            <TagEditRow spoolId={spool.id} current={spool.tag_number} onUpdated={onClose}/>
+            <TagEditRow spoolId={spool.id} current={spool.tag_number} onUpdated={refresh}/>
             <FRow l="Emplacement" v={spool.location}/>
           </FCard>
           <FCard t="Son histoire" i="🗓️" c="#3B82F6">
@@ -1041,7 +1059,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
             <FRow l="Dernière utilisation" v={dayFr(spool.last_used_at) || "jamais"} d={agoFr(spool.last_used_at)}/>
             <FRow l="Déjà consommé" v={consumed != null ? `${Math.round(consumed)} g` : "poids inconnu"} d={consumedPct != null ? `${consumedPct} % de ${Math.round(total)} g` : null}/>
             <FRow l="Rythme" v={rythme ? rythme.v : (spool.first_used_at ? null : "pas encore utilisée")} d={rythme?.d}/>
-            <DryEditRow spoolId={spool.id} spoolName={name} current={spool.last_dried_at} aSecher={aSecher} onUpdated={onClose}/>
+            <DryEditRow spoolId={spool.id} spoolName={name} current={spool.last_dried_at} aSecher={aSecher} onUpdated={refresh}/>
             <div style={FROW}>
               <span style={FLAB}>Utilisation</span>
               <button onClick={loadUsage} disabled={loadingUsage} style={{ padding:"4px 11px", borderRadius:9, fontSize:12, fontWeight:800, cursor:"pointer",
@@ -1088,9 +1106,10 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
       </div>
 
       {dryOpen && <DryNowDialog spoolId={spool.id} spoolName={name}
-        onClose={() => setDryOpen(false)} onDone={() => { setDryOpen(false); onClose?.(); }}/>}
+        onClose={() => setDryOpen(false)} onDone={() => { setDryOpen(false); refresh(); }}/>}
+      {/* une bobine de plus : la fiche reste ouverte, ses compteurs « +n en stock » se mettent a jour */}
       {addOpen && <AddSpoolModal preselect={spool.filament_id} onClose={() => setAddOpen(false)}
-        onSave={() => { setAddOpen(false); onDelete?.(); }}/>}
+        onSave={() => { setAddOpen(false); refresh(); }}/>}
       {showUsage && createPortal(
         <FSheet onClose={() => setShowUsage(false)} z={usageZ}>
           <div style={{ padding:"40px 16px 14px", display:"flex", alignItems:"center", gap:12,
@@ -1139,15 +1158,85 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
 // ── Vue Bobines ────────────────────────────────────────────────────────────
 // Les chiffres d'une liste, en tuiles (meme dessin que la page Impressions).
 const KPI_ICON = { bobines:"🧵", marques:"🏷️", "en stock":"⚖", valeur:"💶", "valeur d'achat":"💶", archivées:"🗄", références:"🎨", types:"🧪", "à commander":"🛒" };
+// Les tuiles de resume, a toucher (28/10/2026) : une tuile qui a un filtre de meme sens (« en stock »,
+// « a commander »…) l'applique ou le retire, et se montre active (bord et fond de sa couleur). Meme dessin
+// que KpiBar (FicheKit) ; kpi.onClick et kpi.active en plus.
+function KpiTiles({ kpis, icons = {} }) {
+  const list = kpis.filter(k => k && k.value !== "—" && k.value != null);
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:`repeat(${Math.min(Math.max(list.length, 1), 4)}, minmax(0, 1fr))`, gap:6 }}>
+      {list.map(({ label, value, accent, onClick, active, tip }) => {
+        const c = accent || "#94a3b8";
+        const El = onClick ? "button" : "div";
+        return (
+          <El key={label} onClick={onClick} aria-pressed={onClick ? !!active : undefined}
+            data-tip={onClick ? (tip || (active ? "Retirer ce filtre" : "Filtrer sur ces éléments")) : undefined}
+            style={{ minWidth:0, padding:"7px 8px", borderRadius:14, textAlign:"left", font:"inherit", cursor: onClick ? "pointer" : "default",
+              border:`1px solid ${active ? c : `color-mix(in srgb, ${c} 22%, var(--border))`}`,
+              background: active ? `linear-gradient(135deg, ${c}30, ${c}12), var(--surface2)` : `radial-gradient(90% 70% at 100% 0%, ${c}22, transparent 70%), var(--surface2)`,
+              boxShadow: active ? `0 0 0 2px ${c}55, 0 6px 18px -12px ${c}` : `0 6px 18px -12px ${c}` }}>
+            <div style={{ fontSize:9.5, fontWeight:800, letterSpacing:".05em", textTransform:"uppercase", color: active ? c : "var(--muted)", whiteSpace:"nowrap",
+              overflow:"hidden", textOverflow:"ellipsis" }}>{icons[label] ? `${icons[label]} ` : ""}{label}{active ? " ✓" : ""}</div>
+            <div style={{ fontSize:"clamp(13px, 3.9vw, 16px)", fontWeight:900, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+              backgroundImage:`linear-gradient(135deg, ${c}, ${lighten(c)})`, WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}>{value}</div>
+          </El>
+        );
+      })}
+    </div>
+  );
+}
+
+// Les etats d'une bobine et d'un filament (28/10/2026) : [cle, libelle, test, icone]. Dans la feuille des filtres,
+// un bloc « Etat » multi-choix propre a l'onglet ; tous les etats coches doivent etre vrais (une bobine
+// « a secher » ET « dans un AMS »), contrairement aux matieres ou aux marques ou une valeur suffit.
+const inAms = s => !!s.ams_tray || (s.location || "").toUpperCase().startsWith("AMS");
+const SPOOL_STATES = [
+  ["dry",     "À sécher",         s => !!s.needs_drying, "💧"],
+  ["notag",   "Sans tag NFC",     s => !s.tag_number, "📡"],
+  ["ams",     "Dans un AMS",      s => inAms(s), "🎰"],
+  ["drawer",  "Au tiroir",        s => !inAms(s) && !s.archived && !s.ordered && (s.location || "Tiroir") === "Tiroir", "🗄"],
+  ["single",  "Seule bobine",     s => !(s.sibling_count > 0), "1️⃣"],
+  ["noprice", "Prix non défini",  s => s.price_override == null && s.filament_price == null, "💶"],
+];
+const FIL_STATES = [
+  ["order",    "À commander",      f => !!f.to_order, "🛒"],
+  ["skip",     "Plus commandé",    f => !!f.no_reorder, "🚫"],
+  ["noswatch", "Sans échantillon", f => !f.swatch, "🎨"],
+  ["nolabel",  "Sans étiquette",   f => !f.label_printed, "🏷️"],
+  ["nospool",  "Sans bobine",      f => !(f.active_spool_count > 0), "🧵"],
+];
+// la teinte d'un element, bobine (filament_color_bucket) ou filament (color_bucket) : la liste de ses slugs
+const itemTints = x => bucketsOf(x.filament_color_bucket ?? x.color_bucket);
+// Applique les filtres teinte et etat d'un onglet a sa liste (apres matiere, sous-type, marque, disponibilite).
+function applyTintState(res, filters, states) {
+  if (filters.tint?.length) res = res.filter(x => itemTints(x).some(t => filters.tint.includes(t)));
+  if (filters.state?.length) {
+    const tests = states.filter(([k]) => filters.state.includes(k)).map(([, , test]) => test);
+    if (tests.length) res = res.filter(x => tests.every(t => t(x)));
+  }
+  return res;
+}
+// le nombre de filtres actifs d'un onglet (pastille du bouton rond et de la feuille)
+const countFilters = f => (f.brand?.length||0) + (f.mat?.length||0) + (f.sub?.length||0) + (f.tint?.length||0) + (f.state?.length||0)
+  + (f.stock && f.stock !== "all" ? 1 : 0);
+// bascule un etat dans les filtres (tuile de resume touchee)
+const toggleState = (setFilters, k) => setFilters(f => ({ ...f, state: (f.state || []).includes(k) ? f.state.filter(x => x !== k) : [...(f.state || []), k] }));
+const EMPTY_FILTERS = { brand:[], mat:[], sub:[], tint:[], state:[], stock:"all" };
+
 // Les filtres actifs : une etiquette chacun, ✕ pour l'enlever (comme la page Impressions).
 const STOCK_L = { instock:"En stock", unavailable:"Non disponible" };
-function FilterChips({ filters, setFilters, sort, setSort, defSort, sorts = SPOOL_SORTS }) {
+function FilterChips({ filters, setFilters, sort, setSort, defSort, sorts = SPOOL_SORTS, states = SPOOL_STATES }) {
   const label = Object.fromEntries(sorts);
+  const stateL = Object.fromEntries(states.map(([k, l, , ic]) => [k, [ic || "🔖", l]]));
   const drop = (k, v) => setFilters(f => ({ ...f, [k]: (f[k] || []).filter(x => x !== v) }));
   const chips = [
     ...(filters.mat || []).map(v => ["🧪", v, () => drop("mat", v)]),
     ...(filters.sub || []).map(v => ["🏷️", v, () => drop("sub", v)]),
     ...(filters.brand || []).map(v => ["🏭", v, () => drop("brand", v)]),
+    // teinte : la pastille ronde de la couleur, puis son nom (28/10/2026)
+    ...(filters.tint || []).map(v => [<span key="t" style={{ display:"inline-block", width:12, height:12, borderRadius:"50%", background:BUCKET_HEX[v] || "#94a3b8",
+      boxShadow:"0 0 0 1px rgba(128,128,128,0.4)", verticalAlign:-1 }}/>, BUCKET_FR[v] || v, () => drop("tint", v)]),
+    ...(filters.state || []).map(v => [...(stateL[v] || ["🔖", v]), () => drop("state", v)]),
     filters.stock && filters.stock !== "all" && ["📦", STOCK_L[filters.stock] || filters.stock, () => setFilters(f => ({ ...f, stock:"all" }))],
     sort && sort !== defSort && ["↕", label[sort] || sort, () => setSort(defSort)],
   ].filter(Boolean);
@@ -1160,7 +1249,7 @@ function FilterChips({ filters, setFilters, sort, setSort, defSort, sorts = SPOO
           border:"1px solid rgba(59,130,246,0.3)" }}>
           {ic} {l}<span style={{ width:18, height:18, borderRadius:"50%", background:"rgba(59,130,246,0.2)", display:"inline-flex", alignItems:"center",
             justifyContent:"center", fontSize:10 }}>✕</span></button>))}
-      {chips.length > 1 && <button onClick={() => { setFilters({ brand:[], mat:[], sub:[], stock:"all" }); setSort(defSort); }}
+      {chips.length > 1 && <button onClick={() => { setFilters({ ...EMPTY_FILTERS }); setSort(defSort); }}
         style={{ padding:"4px 10px", borderRadius:20, fontSize:12, fontWeight:800, cursor:"pointer", border:"none", background:"none", color:"var(--muted)",
           textDecoration:"underline" }}>Tout effacer</button>}
     </div>
@@ -1345,12 +1434,15 @@ function ChipGroup({ label, icon = null, c = "#3B82F6", options, selected, onTog
   );
 }
 
-function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose, sorts = SPOOL_SORTS, stockHint = null }) {
+// states : les etats proposes par l'onglet (SPOOL_STATES ou FIL_STATES), stateLabel : le titre du bloc (28/10/2026)
+function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose, sorts = SPOOL_SORTS, stockHint = null, states = SPOOL_STATES, stateLabel = "État de la bobine" }) {
   useTrackDetail("Filtres et tri");
   // Tableaux et non chaînes : le multi-choix est tout l'objet de ce composant.
   const [fb, setFb] = useState(filters.brand || []);
   const [fm, setFm] = useState(filters.mat   || []);
   const [fs, setFs] = useState(filters.sub   || []);
+  const [ft, setFt] = useState(filters.tint  || []);   // teintes (slugs), une suffit
+  const [fe, setFe] = useState((filters.state || []).filter(k => states.some(([id]) => id === k)));   // etats, tous requis
   const [fst,setFst]= useState(filters.stock || "all"); // all/instock/unavailable
   // un tri garde d'une autre version, inconnu de cet onglet, retombe sur le premier propose (28/10/2026)
   const [so, setSo] = useState(sorts.some(([id]) => id === sort) ? sort : sorts[0][0]);
@@ -1361,6 +1453,14 @@ function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose,
   // Options TOUJOURS depuis le dataset complet (pas filtré)
   const brands = useMemo(() => tally(allItems, itemBrand), [allItems]);
   const fams   = useMemo(() => tally(allItems, getFamily), [allItems, getFamily]);
+  // Les teintes, dans l'ordre de la palette (pas par frequence : l'arc-en-ciel se lit mieux), avec le nombre
+  // d'elements de chaque ; un multicolore compte dans chacune de ses teintes. Les etats, chacun avec son nombre.
+  const tints = useMemo(() => {
+    const m = new Map();
+    for (const it of allItems) for (const t of itemTints(it)) m.set(t, (m.get(t) || 0) + 1);
+    return COLOR_BUCKETS.filter(([k]) => m.has(k)).map(([k, l, h]) => [k, l, h, m.get(k)]);
+  }, [allItems]);
+  const stateOpts = useMemo(() => states.map(([k, l, test, ic]) => [k, l, ic, allItems.filter(test).length]), [allItems, states]);
   // Les sous-types se restreignent aux matériaux cochés : proposer "PETG-HF"
   // alors qu'on a coché PLA ne mène qu'à zéro résultat.
   const subs   = useMemo(() => {
@@ -1375,7 +1475,7 @@ function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose,
     setFs(prev => prev.filter(v => ok.has(v)));
   }, [subs]);
 
-  const activeCount = fb.length + fm.length + fs.length + (fst !== "all" ? 1 : 0);
+  const activeCount = fb.length + fm.length + fs.length + ft.length + fe.length + (fst !== "all" ? 1 : 0);
   const card = (c) => ({ padding:"11px 12px", borderRadius:16, border:`1px solid ${c}33`, background:`linear-gradient(160deg, ${c}14, transparent 55%), var(--surface2)` });
   const head = (ic, l, c) => <p style={{ display:"flex", alignItems:"center", gap:7, fontSize:12.5, fontWeight:900, color:"var(--text)", margin:"0 0 8px" }}>
     <span style={{ width:24, height:24, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, background:`${c}26` }}>{ic}</span>{l}</p>;
@@ -1427,6 +1527,36 @@ function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose,
             {stockHint && <p style={{ margin:"7px 2px 0", fontSize:11, fontWeight:600, color:"var(--muted)" }}>{stockHint}</p>}
           </div>
 
+          {/* Etat (28/10/2026) : les etats propres a l'onglet, tous requis quand plusieurs sont coches */}
+          {stateOpts.length > 0 && <div style={card("#0EA5E9")}>
+            {head("🔖", stateLabel, "#0EA5E9")}
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+              {stateOpts.map(([k, l, ic, n]) => { const on = fe.includes(k);
+                return <button key={k} onClick={() => toggle(setFe)(k)} disabled={!n && !on} aria-pressed={on}
+                  style={{ padding:"6px 11px", borderRadius:20, fontSize:12, fontWeight:800, cursor: n || on ? "pointer" : "default", whiteSpace:"nowrap",
+                    border: on ? "1px solid transparent" : "1px solid var(--border)", opacity: n || on ? 1 : 0.45,
+                    background: on ? "linear-gradient(135deg, #0EA5E9, color-mix(in srgb, #0EA5E9 70%, #ffffff))" : "var(--surface)",
+                    color: on ? "#fff" : "var(--text2)", boxShadow: on ? "0 6px 14px -8px #0EA5E9" : "none" }}>
+                  {ic} {l}<span style={{ opacity:0.7, marginLeft:5 }}>{n}</span></button>; })}
+            </div>
+            {fe.length > 1 && <p style={{ margin:"7px 2px 0", fontSize:11, fontWeight:600, color:"var(--muted)" }}>Plusieurs états cochés : tous doivent être vrais.</p>}
+          </div>}
+
+          {/* Teinte (28/10/2026) : la pastille ronde de chaque teinte presente, son nom, son nombre ; une teinte cochee suffit */}
+          {tints.length > 0 && <div style={card("#EC4899")}>
+            {head("🎨", <>Teinte{ft.length > 0 && <span style={{ fontSize:11, fontWeight:900, color:"#EC4899" }}> · {ft.length}</span>}</>, "#EC4899")}
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {tints.map(([k, l, h, n]) => { const on = ft.includes(k);
+                return <button key={k} onClick={() => toggle(setFt)(k)} aria-pressed={on} data-tip={`${l} · ${n}`}
+                  style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, width:58, padding:"6px 2px", borderRadius:14, cursor:"pointer",
+                    border:`1px solid ${on ? "#EC4899" : "transparent"}`, background: on ? "rgba(236,72,153,0.12)" : "transparent" }}>
+                  <span style={{ width:30, height:30, borderRadius:"50%", background:h, boxShadow: on ? "0 0 0 3px var(--sheet-bg), 0 0 0 5px #EC4899" : "0 0 0 1px rgba(128,128,128,0.4)" }}/>
+                  <span style={{ fontSize:10.5, fontWeight:800, color: on ? "#EC4899" : "var(--text2)", maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l}</span>
+                  <span style={{ fontSize:9.5, fontWeight:700, color:"var(--muted)" }}>{n}</span>
+                </button>; })}
+            </div>
+          </div>}
+
           {/* Filtres */}
           <ChipGroup label="Matière" icon="🧪" c="#F59E0B" options={fams} selected={fm} onToggle={toggle(setFm)}/>
           {subs.length > 1 && (
@@ -1437,12 +1567,12 @@ function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose,
 
         {/* le pied, toujours visible */}
         <div style={{ display:"flex", gap:8, padding:"10px 14px calc(10px + env(safe-area-inset-bottom, 0px))", borderTop:"1px solid var(--border)" }}>
-          <button onClick={()=>{ setFb([]); setFm([]); setFs([]); setFst("all"); }} disabled={!activeCount}
+          <button onClick={()=>{ setFb([]); setFm([]); setFs([]); setFt([]); setFe([]); setFst("all"); }} disabled={!activeCount}
             style={{ flex:1, padding:"12px", borderRadius:12, fontSize:13.5, fontWeight:800, cursor:"pointer",
               background:"var(--surface2)", border:"1px solid var(--border)", color: activeCount ? "var(--text)" : "var(--muted)" }}>
             Tout effacer
           </button>
-          <button onClick={()=>onApply({brand:fb,mat:fm,sub:fs,stock:fst},so)}
+          <button onClick={()=>{ if (ft.length) egg("arc_en_ciel"); onApply({brand:fb,mat:fm,sub:fs,tint:ft,state:fe,stock:fst},so); }}
             style={{ flex:2, padding:"12px", borderRadius:12, fontSize:13.5, fontWeight:800,
               background:"linear-gradient(135deg, #3B82F6, #6366F1)", color:"white", border:"none", cursor:"pointer", boxShadow:"0 8px 18px -10px #3B82F6" }}>
             Appliquer
@@ -1502,7 +1632,7 @@ function SpoolsView({ filaments, showArchived }) {
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [filters, setFilters] = useState(() => _kept(KEY + ":f", { brand:[], mat:[], sub:[] }));
+  const [filters, setFilters] = useState(() => _kept(KEY + ":f", { ...EMPTY_FILTERS }));
   const [sort, setSort] = useState(() => _kept(KEY + ":s", "recent"));
   useEffect(() => { _KEEP.ui[KEY + ":q"] = q; _KEEP.ui[KEY + ":f"] = filters; _KEEP.ui[KEY + ":s"] = sort; }, [KEY, q, filters, sort]);
 
@@ -1535,7 +1665,7 @@ function SpoolsView({ filaments, showArchived }) {
         const hay = [
           s.filament_translated_name, s.filament_name, s.filament_manufacturer,
           s.filament_material, s.filament_fila_type, (s.filament_color||"").replace("#",""),
-          s.filament_fila_color_code, s.location, s.tag_number, s.comment, s.external_spool_id,
+          s.filament_fila_color_code, s.filament_color_bucket, s.location, s.tag_number, s.comment, s.external_spool_id,
           String(s.id),
         ].filter(Boolean).join(" ").toLowerCase();
         return words.every(w => hay.includes(w));
@@ -1548,6 +1678,7 @@ function SpoolsView({ filaments, showArchived }) {
     if (filters.sub?.length)   res = res.filter(s => filters.sub.includes(itemSub(s)));
     if (filters.stock === "instock")     res = res.filter(s => (s.remaining_weight_g||0) > 0);
     if (filters.stock === "unavailable") res = res.filter(s => !(s.remaining_weight_g > 0));
+    res = applyTintState(res, filters, SPOOL_STATES);   // teinte et etat (28/10/2026)
     // Tri (les bobines commandees, pas encore la, toujours en dernier)
     res = [...res].sort((a,b) => {
       if (!!a.ordered !== !!b.ordered) return a.ordered ? 1 : -1;
@@ -1566,10 +1697,10 @@ function SpoolsView({ filaments, showArchived }) {
     return res;
   }, [allSpools, q, filters, sort]);
 
-  const activeFilters = (filters.brand?.length||0) + (filters.mat?.length||0) + (filters.sub?.length||0)
-    + (filters.stock && filters.stock !== "all" ? 1 : 0);
+  const activeFilters = countFilters(filters);
 
-  // KPIs dynamiques (recalculés à chaque changement de spools filtrés)
+  // KPIs dynamiques (recalculés à chaque changement de spools filtrés). Les tuiles « en stock » et « valeur »
+  // (28/10/2026) basculent le filtre de meme sens : la disponibilite « En stock », l'etat « Prix non defini ».
   const kpis = useMemo(() => {
     // Le prix d'une bobine : le sien, sinon celui du filament -- meme regle que la tuile 💶 de la
     // fiche bobine (28/10/2026 : seul price_override comptait, une bobine au prix catalogue valait 0).
@@ -1594,22 +1725,27 @@ function SpoolsView({ filaments, showArchived }) {
       return s + p * Math.max(0, Math.min(reste, total)) / total;
     }, 0);
     const prix = achat(here);
+    const noPrice = (filters.state || []).includes("noprice");   // une tuile active reste visible, meme a 0
     return [
       { label:"bobines",  value: ordered ? `${here.length} +${ordered}` : here.length, accent:"#3b82f6" },
       { label:"marques",  value: marques || null, accent:"#8b5cf6" },
-      { label:"en stock", value: poids > 0 ? `${(poids/1000).toFixed(2)} kg` : null, accent:"#f59e0b" },
-      { label:"valeur",   value: prix > 0 ? <span data-tip={`Ce qu'il reste des bobines, à leur prix\nachetées pour ${moneyVal(prix, 0)} €`}>{moneyVal(valeur, 0)} €</span> : null, accent:"#22c55e" },
+      { label:"en stock", value: poids > 0 ? `${(poids/1000).toFixed(2)} kg` : filters.stock === "instock" ? "0 kg" : null, accent:"#f59e0b",
+        active: filters.stock === "instock", tip: filters.stock === "instock" ? "Retirer le filtre En stock" : "Ne garder que les bobines où il reste du filament",
+        onClick: () => setFilters(f => ({ ...f, stock: f.stock === "instock" ? "all" : "instock" })) },
+      { label:"valeur",   value: prix > 0 ? <span data-tip={`Ce qu'il reste des bobines, à leur prix\nachetées pour ${moneyVal(prix, 0)} €`}>{moneyVal(valeur, 0)} €</span> : noPrice ? `${moneyVal(0, 0)} €` : null, accent:"#22c55e",
+        active: noPrice, tip: noPrice ? "Retirer le filtre Prix non défini" : "Voir les bobines sans prix (qui ne comptent pas ici)",
+        onClick: () => toggleState(setFilters, "noprice") },
     ];
-  }, [spools, showArchived]);
+  }, [spools, showArchived, filters.stock, filters.state]);
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-      <KpiBar kpis={kpis} icons={KPI_ICON}/>
+      <KpiTiles kpis={kpis} icons={KPI_ICON}/>
       {!showArchived && <IncomingOrders/>}
       {/* Pas de « + Bobine » dans l'onglet Archivees : on y consulte un historique, une
           bobine neuve n'a aucune raison d'y naitre -- elle apparaitrait
           aussitot dans l'onglet Stock, hors de la vue en cours. */}
-      <SearchRow q={q} setQ={setQ} placeholder="Nom, marque, type (silk…), couleur, code…" active={activeFilters}
+      <SearchRow q={q} setQ={setQ} placeholder="Nom, marque, type (silk…), teinte (bleu…), code…" active={activeFilters}
         onFilter={() => setFilterOpen(true)} addLabel={showArchived ? null : "Bobine"} onAdd={() => setShowAdd(true)}/>
       <FilterChips filters={filters} setFilters={setFilters} sort={sort} setSort={setSort} defSort="recent"/>
       {filterOpen && (
@@ -1644,6 +1780,7 @@ function SpoolsView({ filaments, showArchived }) {
           onClose={()=>setSelected(null)}
           onArchive={async(id)=>{ await client.delete(`/filaments/spools/${id}`); load(); }}
           onDelete={load}
+          onChanged={load}
         />
       )}
     </div>
@@ -2192,7 +2329,7 @@ function FilamentsView() {
   const [selectedFil, setSelectedFil] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [filters, setFilters] = useState(() => _kept("fil:f", { brand:[], mat:[], sub:[] }));
+  const [filters, setFilters] = useState(() => _kept("fil:f", { ...EMPTY_FILTERS }));
   const [sort, setSort] = useState(() => _kept("fil:s", "name"));
   useEffect(() => { _KEEP.ui["fil:q"] = q; _KEEP.ui["fil:f"] = filters; _KEEP.ui["fil:s"] = sort; }, [q, filters, sort]);
 
@@ -2224,7 +2361,7 @@ function FilamentsView() {
     if (q) {
       const ql = q.toLowerCase();
       const words = ql.split(/\s+/).filter(Boolean);   // mot par mot, dans tous les champs
-      res = res.filter(f => { const hay = [f.translated_name,f.name,f.manufacturer,f.material,f.fila_type,f.fila_color_code,f.color,String(f.id)].filter(Boolean).join(" ").toLowerCase();
+      res = res.filter(f => { const hay = [f.translated_name,f.name,f.manufacturer,f.material,f.fila_type,f.fila_color_code,f.color,f.color_bucket,String(f.id)].filter(Boolean).join(" ").toLowerCase();
         return words.every(w => hay.includes(w)); });
     }
     if (filters.brand?.length) res = res.filter(f => filters.brand.includes(itemBrand(f)));
@@ -2234,6 +2371,7 @@ function FilamentsView() {
     // moins une bobine active, comme la tuile « en stock » et la galerie.
     if (filters.stock === "instock")     res = res.filter(f => (f.active_spool_count||0) > 0);
     if (filters.stock === "unavailable") res = res.filter(f => !(f.active_spool_count > 0));
+    res = applyTintState(res, filters, FIL_STATES);   // teinte et etat (28/10/2026)
     return [...res].sort((a,b) => {
       // Manquait ici : "Teinte" figurait dans la liste des tris mais aucune
       // branche ne le traitait, le tri retombait donc silencieusement sur le
@@ -2248,9 +2386,10 @@ function FilamentsView() {
     });
   }, [allFilaments, q, filters, sort]);
 
-  const activeFilters = (filters.brand?.length||0) + (filters.mat?.length||0) + (filters.sub?.length||0)
-    + (filters.stock && filters.stock !== "all" ? 1 : 0);
+  const activeFilters = countFilters(filters);
 
+  // Les tuiles « en stock » et « a commander » (28/10/2026) basculent le filtre de meme sens. La tuile « a
+  // commander » ne s'affiche que s'il y en a : filtre actif, tous ceux de la liste le sont, elle reste.
   const kpis = useMemo(() => {
     const marques = new Set(filaments.map(f => f.manufacturer).filter(Boolean)).size;
     const types   = new Set(filaments.map(f => f.fila_type || f.material).filter(Boolean)).size;
@@ -2260,19 +2399,24 @@ function FilamentsView() {
       { label:"références",  value: filaments.length, accent:"#3b82f6" },
       { label:"marques",     value: marques || null,  accent:"#8b5cf6" },
       { label:"types",       value: types || null,    accent:"#06b6d4" },
-      { label:"en stock",    value: avecBobines || null, accent:"#22c55e" },
-      ...(aCommander > 0 ? [{ label:"à commander", value: aCommander, accent:"#f59e0b" }] : []),
+      { label:"en stock",    value: avecBobines || (filters.stock === "instock" ? 0 : null), accent:"#22c55e",
+        active: filters.stock === "instock", tip: filters.stock === "instock" ? "Retirer le filtre En stock" : "Ne garder que les filaments qui ont une bobine",
+        onClick: () => setFilters(f => ({ ...f, stock: f.stock === "instock" ? "all" : "instock" })) },
+      ...(aCommander > 0 || (filters.state || []).includes("order") ? [{ label:"à commander", value: aCommander, accent:"#f59e0b",
+        active: (filters.state || []).includes("order"), tip: (filters.state || []).includes("order") ? "Retirer le filtre À commander" : "Ne garder que les filaments à commander",
+        onClick: () => toggleState(setFilters, "order") }] : []),
     ];
-  }, [filaments]);
+  }, [filaments, filters.stock, filters.state]);
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-      <KpiBar kpis={kpis} icons={KPI_ICON}/>
-      <SearchRow q={q} setQ={setQ} placeholder="Nom, marque, code couleur…" active={activeFilters}
+      <KpiTiles kpis={kpis} icons={KPI_ICON}/>
+      <SearchRow q={q} setQ={setQ} placeholder="Nom, marque, teinte, code couleur…" active={activeFilters}
         onFilter={() => setFilterOpen(true)} addLabel="Filament" onAdd={() => setCreateOpen(true)}/>
-      <FilterChips filters={filters} setFilters={setFilters} sort={sort} setSort={setSort} defSort="name" sorts={FIL_SORTS}/>
+      <FilterChips filters={filters} setFilters={setFilters} sort={sort} setSort={setSort} defSort="name" sorts={FIL_SORTS} states={FIL_STATES}/>
       {filterOpen && (
         <FilterSortSheet allItems={allFilaments} getFamily={getFamilyF} filters={filters} sort={sort} sorts={FIL_SORTS} stockHint={STOCK_HINT_FIL}
+          states={FIL_STATES} stateLabel="État du filament"
           onApply={(f,s)=>{ setFilters(f); if(s) setSort(s); setFilterOpen(false); }}
           onClose={()=>setFilterOpen(false)}/>
       )}
@@ -2300,6 +2444,13 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
   // prefill: objet pré-rempli depuis le catalogue ou un tray MQTT
   const [mode, setMode] = useState(prefill ? "free" : "choose"); // "choose"|"catalog"|"free"
   const [saving, setSaving] = useState(false);
+  // Une bobine dans la foulee (28/10/2026) : coche par defaut, la fenetre « Nouvelle bobine » s'ouvre sur le
+  // filament cree (et son prix) des qu'il est enregistre ; created = le filament rendu par le serveur.
+  const [addSpoolAfter, setAddSpoolAfter] = useState(true);
+  const [created, setCreated] = useState(null);
+  const tares = useSpoolTares();
+  // support choisi a la main (ou deja fourni par prefill) : on ne le remplace plus d'apres la marque
+  const tareTouched = useRef(!!(prefill && prefill.spool_weight_g));
 
   // Catalogue Bambu
   const [families, setFamilies] = useState([]);
@@ -2312,12 +2463,20 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
   const [catalogEntry, setCatalogEntry] = useState(null); // entrée choisie
 
   // Formulaire libre
-  const [form, setForm] = useState(prefill || {
+  // prix, support vide et commentaire (28/10/2026) : saisis a la creation, plus besoin de passer par Editer
+  const [form, setForm] = useState({
     name:"", manufacturer:"", material:"PLA Basic",
     colors_input:"", multicolor_type:"monochrome",
     fila_type:"", profile_id:"", fila_color_code:"", weight:1000,
-    translated_name:"",
+    translated_name:"", price:"", spool_weight_g:"", spool_tare_name:"", comment:"",
+    ...(prefill || {}),
   });
+  // Support vide propose d'apres la marque (modele des Parametres au nom de la marque), tant qu'il n'a pas ete choisi a la main
+  const brandTare = tareForBrand(tares, form.manufacturer);
+  useEffect(() => {
+    if (tareTouched.current) return;
+    setForm(f => ({ ...f, spool_weight_g: brandTare ? String(brandTare.weight_g) : "", spool_tare_name: brandTare ? brandTare.name : "" }));
+  }, [brandTare?.name, brandTare?.weight_g]);
   const iStyle = { width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
     borderRadius:8, padding:"8px 10px", fontSize:13, color:"var(--text)", outline:"none", boxSizing:"border-box" };
   const lStyle = { fontSize:12, fontWeight:800, color:"var(--muted)", margin:"0 0 5px", display:"block" };
@@ -2388,7 +2547,8 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
     const colorsInput = entry.colors?.length > 1
       ? entry.colors.join(", ")   // ex: "0047bb, bb22a3"
       : (entry.color_hex || "");
-    setForm({
+    setForm(f => ({
+      price: f.price, spool_weight_g: f.spool_weight_g, spool_tare_name: f.spool_tare_name, comment: f.comment,
       name:            entry.name,
       manufacturer:    "Bambu Lab",
       material:        entry.fila_type,
@@ -2399,7 +2559,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
       profile_id:      entry.fila_id,
       fila_color_code: entry.fila_color_code || "",
       weight:          1000,
-    });
+    }));
     setMode("free");
   };
 
@@ -2409,7 +2569,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
     const { color: col, colors_array: ca, multicolor_type: mct } = parseColorsInput(form.colors_input, form.multicolor_type);
     setSaving(true); setDuplicate(null);
     try {
-      await client.post("/filaments/filaments", {
+      const r = await client.post("/filaments/filaments", {
         name:              form.name || "Sans nom",
         name_en:           form.name || undefined,
         translated_name:   form.translated_name || undefined,
@@ -2423,8 +2583,14 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
         profile_id:        form.profile_id || undefined,
         fila_color_code:   form.fila_color_code || undefined,
         filament_weight_g: Number(form.weight) || 1000,
+        price:             form.price !== "" && form.price != null ? Number(form.price) : undefined,
+        spool_weight_g:    form.spool_weight_g !== "" && form.spool_weight_g != null ? Number(form.spool_weight_g) : undefined,
+        spool_tare_name:   form.spool_tare_name || undefined,
+        comment:           form.comment || undefined,
       });
-      onCreated();
+      // la bobine dans la foulee : la fenetre s'ouvre par-dessus, onCreated a sa fermeture
+      if (addSpoolAfter && r.data?.id) setCreated(r.data);
+      else onCreated();
     } catch(e) {
       if (e.response?.status === 409) {
         const d = e.response.data?.detail || {};
@@ -2445,6 +2611,9 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
       <input style={{ ...field, ...extra }} value={form[k] || ""} placeholder={ph}
         onChange={e => setForm(f => ({...f, [k]: e.target.value}))}/>
     </div>);
+  // le prix au kilo, d'apres le prix de la bobine et son poids
+  const perKg = form.price !== "" && form.price != null && Number(form.weight) > 0 && !isNaN(Number(form.price))
+    ? `${moneyVal(Number(form.price) * 1000 / Number(form.weight), 2)} €/kg` : null;
 
   return (
     <FSheet onClose={onClose} z={1200}
@@ -2452,7 +2621,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
         {!prefill && (
           <button onClick={() => { setMode("choose"); setCatalogEntry(null); }} style={{ ...fBtn, flex:1, color:"var(--muted)" }}>← Retour</button>
         )}
-        <button onClick={save} disabled={saving}
+        <button onClick={save} disabled={saving || !!created}
           style={{ ...fBtn, flex:2, border:"none", color:"#fff", background: saving ? "var(--border)" : "linear-gradient(135deg, #8B5CF6, #6366F1)",
             boxShadow:"0 8px 18px -10px #8B5CF6" }}>
           {saving ? "Création…" : "✓ Créer le filament"}
@@ -2608,7 +2777,36 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
                   <input style={field} type="number" value={form.weight}
                     onChange={e => setForm(f => ({...f, weight: e.target.value}))}/>
                 </div>
+                {/* prix, support vide, commentaire (28/10/2026) : tout ce que la fiche demandait apres coup */}
+                <div style={{ marginTop:8 }}>
+                  <label style={lStyle}>Prix (€ la bobine)</label>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <input style={{ ...field, flex:1, minWidth:0 }} type="number" inputMode="decimal" min="0" step="0.01" value={form.price ?? ""}
+                      placeholder="ex: 19.90" onChange={e => setForm(f => ({...f, price: e.target.value}))}/>
+                    {perKg && <span style={{ fontSize:12.5, fontWeight:800, color:"#F59E0B", whiteSpace:"nowrap", flexShrink:0 }}>{perKg}</span>}
+                  </div>
+                </div>
+                <div style={{ marginTop:8 }}>
+                  <label style={lStyle}>Poids support vide{brandTare && !tareTouched.current ? ` · proposé d'après la marque (${brandTare.name})` : ""}</label>
+                  <div style={{ display:"flex" }}>
+                    <TarePicker value={form.spool_weight_g === "" || form.spool_weight_g == null ? "" : String(form.spool_weight_g)}
+                      tareName={form.spool_tare_name || null}
+                      onChange={(v, name) => { tareTouched.current = true; setForm(p => ({ ...p, spool_weight_g: v, spool_tare_name: name || "" })); }}
+                      selectStyle={field} inputStyle={field}/>
+                  </div>
+                </div>
+                {F("Commentaire", "comment", "ex: acheté en lot, finit vite…")}
               </FCard>
+              {/* en pied : une bobine dans la foulee, la fenetre « Nouvelle bobine » s'ouvre sur ce filament */}
+              <label style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderRadius:14, cursor:"pointer",
+                border:"1px solid var(--border)", background: addSpoolAfter ? "rgba(34,197,94,0.10)" : "var(--surface2)" }}>
+                <input type="checkbox" checked={addSpoolAfter} onChange={e => setAddSpoolAfter(e.target.checked)}/>
+                <span style={{ flex:1, minWidth:0 }}>
+                  <span style={{ display:"block", fontSize:13.5, fontWeight:900, color: addSpoolAfter ? "#16a34a" : "var(--text)" }}>＋ Ajouter une bobine dans la foulée</span>
+                  <span style={{ display:"block", fontSize:11.5, fontWeight:600, color:"var(--muted)", marginTop:1 }}>
+                    Une fois le filament créé, la fenêtre « Nouvelle bobine » s'ouvre dessus, avec son prix.</span>
+                </span>
+              </label>
               {duplicate && (
                 <div style={{ padding:"10px 14px", borderRadius:14,
                   background:"rgba(245,158,11,0.10)", border:"1px solid rgba(245,158,11,0.4)" }}>
@@ -2623,6 +2821,10 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
             </>
           )}
       </div>
+      {/* la bobine dans la foulee : au-dessus de cette fenetre ; creee ou annulee, le filament existe, on finit */}
+      {created && <AddSpoolModal preselect={created.id} preselectFilament={created} z={1300}
+        onClose={() => { setCreated(null); onCreated(); }}
+        onSave={() => { setCreated(null); onCreated(); }}/>}
     </FSheet>
   );
 }
@@ -2773,7 +2975,7 @@ export default function Filaments() {
   const [allFilaments, setAllFilaments] = useState([]);
   const [galQ, setGalQ] = useState("");
   const [galFilterOpen, setGalFilterOpen] = useState(false);
-  const [galFilters, setGalFilters] = useState({ brand:[], mat:[], sub:[], stock:"all" });
+  const [galFilters, setGalFilters] = useState({ ...EMPTY_FILTERS });
   const [galSort, setGalSort] = useState(GAL_DEF_SORT);
   const [galSelectMode, setGalSelectMode] = useState(false);
   const [galPreselect, setGalPreselect] = useState(null);   // filament coche en arrivant de la vue Photos
@@ -2880,7 +3082,7 @@ export default function Filaments() {
     if (galQ) {
       const ql = galQ.toLowerCase();
       const words = ql.split(/\s+/).filter(Boolean);
-      res = res.filter(f => { const hay = [f.translated_name,f.name,f.manufacturer,f.material,f.fila_type,f.fila_color_code,f.color].filter(Boolean).join(" ").toLowerCase();
+      res = res.filter(f => { const hay = [f.translated_name,f.name,f.manufacturer,f.material,f.fila_type,f.fila_color_code,f.color,f.color_bucket].filter(Boolean).join(" ").toLowerCase();
         return words.every(w => hay.includes(w)); });
     }
     if (galFilters.brand?.length) res = res.filter(f => galFilters.brand.includes(itemBrand(f)));
@@ -2888,6 +3090,7 @@ export default function Filaments() {
     if (galFilters.sub?.length)   res = res.filter(f => galFilters.sub.includes(itemSub(f)));
     if (galFilters.stock === "instock")     res = res.filter(f => (f.active_spool_count||0) > 0);
     if (galFilters.stock === "unavailable") res = res.filter(f => !(f.active_spool_count > 0));
+    res = applyTintState(res, galFilters, FIL_STATES);   // teinte et etat (28/10/2026)
     // Tri
     res = [...res].sort((a,b) => {
       if (galSort === "hue") return compareHue(a.color, b.color);
@@ -2910,8 +3113,7 @@ export default function Filaments() {
       .then(r => setPrintCounts(r.data || {})).catch(() => {});
   }, [tab]);
 
-  const galActiveFilters = (galFilters.brand?.length||0) + (galFilters.mat?.length||0) + (galFilters.sub?.length||0)
-    + (galFilters.stock && galFilters.stock !== "all" ? 1 : 0);
+  const galActiveFilters = countFilters(galFilters);
 
   const tabs = [
     { id:"spools",   label:"Stock",     ic:"🧵", c:"#3B82F6" },
@@ -2978,10 +3180,11 @@ export default function Filaments() {
       {tab==="gallery" && (
         <>
           {/* Barre recherche + filtres partages Photos/Nuancier */}
-          <SearchRow q={galQ} setQ={setGalQ} placeholder="Nom, marque, matériau…" active={galActiveFilters} onFilter={() => setGalFilterOpen(true)}/>
-          <FilterChips filters={galFilters} setFilters={setGalFilters} sort={galSort} setSort={setGalSort} defSort={GAL_DEF_SORT} sorts={FIL_SORTS}/>
+          <SearchRow q={galQ} setQ={setGalQ} placeholder="Nom, marque, matériau, teinte…" active={galActiveFilters} onFilter={() => setGalFilterOpen(true)}/>
+          <FilterChips filters={galFilters} setFilters={setGalFilters} sort={galSort} setSort={setGalSort} defSort={GAL_DEF_SORT} sorts={FIL_SORTS} states={FIL_STATES}/>
           {galFilterOpen && (
             <FilterSortSheet allItems={allFilaments} getFamily={getFamilyG} filters={galFilters} sort={galSort} sorts={FIL_SORTS} stockHint={STOCK_HINT_FIL}
+              states={FIL_STATES} stateLabel="État du filament"
               onApply={(f,s)=>{ setGalFilters(f); if(s) setGalSort(s); setGalFilterOpen(false); }}
               onClose={()=>setGalFilterOpen(false)}/>
           )}

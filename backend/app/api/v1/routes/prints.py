@@ -949,6 +949,8 @@ async def prints_stats(
 async def _prints_stats_calc(days: int, date_from: Optional[str], date_to: Optional[str]) -> dict:
     from ....models.filament import Spool as _Spool, Filament as _Fil
     from datetime import timedelta
+    from sqlalchemy import case as _case
+    from statistics import median as _median
 
     def _parse_d(s):
         if not s:
@@ -1092,7 +1094,8 @@ async def _prints_stats_calc(days: int, date_from: Optional[str], date_to: Optio
         # ne donnait qu'une ou deux barres (d'ou un graphe vide, la condition front
         # exigeant > 1 point). On choisit donc le grain selon l'etendue reelle.
         rows = (await db.execute(
-            select(Print.print_date, Print.total_cost, Print.total_weight_g, Print.status, DUR.label("dur_s"))
+            select(Print.print_date, Print.total_cost, Print.total_weight_g, Print.status, DUR.label("dur_s"),
+                   Print.estimated_seconds, Print.duration_seconds, Print.paused_seconds)
             .where(*period, done_all, Print.print_date.isnot(None)).order_by(Print.print_date)
         )).all()
 
@@ -1196,6 +1199,80 @@ async def _prints_stats_calc(days: int, date_from: Optional[str], date_to: Optio
             .group_by(_Fil.id).order_by(desc("grams")).limit(10)
         )).all()
 
+        # ── Fiabilite par matiere et par filament (28/10/2026) : pour chaque filament (via sa bobine), les
+        # impressions terminees de la periode qui l'ont utilise. Une impression a deux bobines du meme
+        # filament ne compte qu'une fois (count distinct) ; les grammes gaches = ce que les echecs ont consomme.
+        _N_ALL = func.count(func.distinct(Print.id))
+        _N_OK  = func.count(func.distinct(_case((ok, Print.id))))
+        _N_KO  = func.count(func.distinct(_case((ko, Print.id))))
+        _G_KO  = func.sum(_case((ko, FilamentUsage.grams_used), else_=0))
+
+        def _rel_q(*cols, group):
+            return (select(*cols, _N_ALL.label("n"), _N_OK.label("n_ok"), _N_KO.label("n_ko"), _G_KO.label("g_ko"))
+                    .select_from(FilamentUsage)
+                    .join(_Spool, FilamentUsage.spool_id == _Spool.id)
+                    .join(_Fil, _Spool.filament_id == _Fil.id)
+                    .join(Print, FilamentUsage.print_id == Print.id)
+                    .where(*W())
+                    .group_by(*group))
+
+        rel_mat_rows = (await db.execute(
+            _rel_q(_Fil.material, group=[_Fil.material]).order_by(desc("n"))
+        )).all()
+        reliability_by_material = [{
+            "name": r.material or "?", "total": int(r.n or 0), "ok": int(r.n_ok or 0), "ko": int(r.n_ko or 0),
+            "rate": round(float(r.n_ok or 0) / r.n * 100, 1) if r.n else 0,
+            "wasted_g": round(float(r.g_ko or 0)),
+        } for r in rel_mat_rows if r.n]
+
+        # les filaments qui ratent : au moins 3 impressions et au moins un echec, les 8 pires taux d'echec
+        rel_fil_rows = (await db.execute(
+            _rel_q(_Fil.id, _Fil.name, _Fil.translated_name, _Fil.manufacturer, _Fil.color, _Fil.colors_array,
+                   _Fil.multicolor_type, _Fil.fila_finish, _Fil.fila_type, group=[_Fil.id])
+            .having(_N_ALL >= 3, _N_KO > 0)
+        )).all()
+        worst_filaments = sorted(({
+            "id": r.id, "name": r.translated_name or r.name, "brand": r.manufacturer,
+            "color": r.color, "colors_array": r.colors_array, "multicolor_type": r.multicolor_type,
+            "fila_finish": r.fila_finish, "fila_type": r.fila_type,
+            "total": int(r.n or 0), "ok": int(r.n_ok or 0), "ko": int(r.n_ko or 0),
+            "rate": round(float(r.n_ok or 0) / r.n * 100, 1) if r.n else 0,
+            "fail_rate": round(float(r.n_ko or 0) / r.n * 100, 1) if r.n else 0,
+            "wasted_g": round(float(r.g_ko or 0)),
+        } for r in rel_fil_rows if r.n), key=lambda x: (-x["fail_rate"], -x["ko"], -x["wasted_g"]))[:8]
+
+        # ── Periode precedente (28/10/2026) : la fenetre juste avant, de meme longueur, pour les fleches de
+        # tendance des cartes. Rien en mode « Tout » (pas de longueur) ni avec une seule borne de fin.
+        _now = datetime.utcnow()
+        p_from = p_to = None
+        if d_from and d_to:
+            p_from, p_to = d_from - (d_to - d_from), d_from
+        elif d_from:
+            p_from, p_to = d_from - (_now - d_from), d_from
+        elif not d_to and days and days > 0:
+            p_to = _now - timedelta(days=days)
+            p_from = p_to - timedelta(days=days)
+        previous = None
+        if p_from and p_to and p_to > p_from:
+            pr = (await db.execute(
+                select(func.count(Print.id),
+                       func.sum(_case((ok, 1), else_=0)),
+                       func.sum(func.coalesce(Print.total_weight_g, 0)),
+                       func.sum(func.coalesce(Print.total_cost, 0)),
+                       func.sum(DUR))
+                .where(done, Print.print_date >= p_from, Print.print_date < p_to)
+            )).one()
+            _pt = int(pr[0] or 0)
+            previous = {
+                "from": str(p_from)[:10], "to": str(p_to)[:10],
+                "total_prints":   _pt,
+                "success_prints": int(pr[1] or 0),
+                "success_rate":   round(float(pr[1] or 0) / _pt * 100, 1) if _pt else 0,
+                "total_weight_g": round(float(pr[2] or 0), 1),
+                "total_cost":     round(float(pr[3] or 0), 2),
+                "total_hours":    round(float(pr[4] or 0) / 3600, 1),
+            }
+
         # ── Stock (indépendant de la période)
         stock = (await db.execute(
             select(func.count(_Spool.id),
@@ -1243,6 +1320,37 @@ async def _prints_stats_calc(days: int, date_from: Optional[str], date_to: Optio
         _best_day = max(_by_day.items(), key=lambda kv: kv[1]) if _by_day else None
         _peak_hour = max(range(24), key=lambda h: _hour[h]) if any(_hour) else None
         DOW_NAMES = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+
+        # ── Cadence et precision (28/10/2026), a partir de `rows` ────────────────
+        # Longueur de la periode : la fenetre demandee ; en mode « Tout » (ou avec une seule borne de fin),
+        # du premier print a maintenant (ou a la borne).
+        _first = rows[0].print_date if rows else None
+        if d_from and d_to:
+            _period_s = (d_to - d_from).total_seconds()
+        elif d_from:
+            _period_s = (_now - d_from).total_seconds()
+        elif d_to:
+            _period_s = (d_to - _first).total_seconds() if _first else 0
+        elif days and days > 0:
+            _period_s = days * 86400
+        else:
+            _period_s = (_now - _first).total_seconds() if _first else 0
+        period_days = max(_period_s / 86400, 1.0) if total else 0
+        # occupation : heures imprimees sur la duree de la periode, plafonnee a 100 %
+        occupation_pct = min(100.0, round(float(dur) / _period_s * 100, 1)) if _period_s > 0 and total else 0
+        cadence_per_week = round(total / (period_days / 7), 1) if period_days else 0
+        # ecart median entre deux lancements successifs
+        _dates = [r.print_date for r in rows if r.print_date]
+        _gaps = [(b - a).total_seconds() for a, b in zip(_dates, _dates[1:]) if b >= a]
+        median_gap_s = round(_median(_gaps)) if _gaps else None
+        # precision de l'estimation : mediane de (reel - estime) / estime sur les reussites qui ont les deux
+        _est = [(float(r.duration_seconds), float(r.estimated_seconds)) for r in rows
+                if r.status == "SUCCESS" and (r.estimated_seconds or 0) > 0 and (r.duration_seconds or 0) > 0]
+        estimate_gap_pct = round(_median([(d - e) / e * 100 for d, e in _est]), 1) if _est else None
+        estimate_real_h = round(sum(d for d, _ in _est) / 3600, 1)
+        estimate_est_h  = round(sum(e for _, e in _est) / 3600, 1)
+        # temps total passe en pause (bobine vide, erreur, pause manuelle)
+        paused_hours = round(sum(float(r.paused_seconds or 0) for r in rows) / 3600, 2)
 
         return {
             "days": days,
@@ -1303,6 +1411,21 @@ async def _prints_stats_calc(days: int, date_from: Optional[str], date_to: Optio
                 {"name": "Réussies", "value": success},
                 {"name": "Échecs",   "value": failed},
             ],
+            # ── Fiabilite par matiere / filament (28/10/2026) ──
+            "reliability_by_material": reliability_by_material,
+            "worst_filaments": worst_filaments,
+            # ── Periode precedente de meme longueur (None en mode « Tout ») ──
+            "previous": previous,
+            # ── Cadence et precision ──
+            "period_days":      round(period_days, 1),
+            "occupation_pct":   occupation_pct,
+            "cadence_per_week": cadence_per_week,
+            "median_gap_s":     median_gap_s,
+            "estimate_gap_pct": estimate_gap_pct,
+            "estimate_real_h":  estimate_real_h,
+            "estimate_est_h":   estimate_est_h,
+            "estimate_n":       len(_est),
+            "paused_hours":     paused_hours,
         }
 
 

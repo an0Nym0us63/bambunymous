@@ -566,14 +566,20 @@ function Thumbs({ list, size = 52, title }) {
       fontSize: 13, fontWeight: 900, color: "var(--text2)", flexShrink: 0 }}>+{more + 1}</span>}</div>
   </div>;
 }
+// un chiffre peut porter une adresse en 4e position ([label, valeur, couleur, to]) : la case mene a cette page
+// (les ratees du jour vers la liste filtree, 28/10/2026)
 function Stats({ items }) {
   const { W, zoom } = useBox();
+  const nav = useNavigate();
   const list = items.filter(it => it && it[1] != null && it[1] !== "" && it[1] !== "—");
   const cols = Math.max(1, Math.min(list.length, Math.floor((W + 6) / (zoom ? 150 : 96))));
   const wrap = zoom ? { overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", lineHeight: 1.25 }
     : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
   return <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: zoom ? 8 : 6 }}>
-    {list.map(([l, x, c]) => <div key={l} className="card-sm" style={{ padding: zoom ? "9px 11px" : "6px 8px", minWidth: 0 }}>
+    {list.map(([l, x, c, to]) => <div key={l} className="card-sm" role={to ? "button" : undefined} tabIndex={to ? 0 : undefined}
+      onClick={to ? e => { e.stopPropagation(); nav(to); } : undefined}
+      onKeyDown={to ? e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); nav(to); } } : undefined}
+      style={{ padding: zoom ? "9px 11px" : "6px 8px", minWidth: 0, cursor: to ? "pointer" : undefined }}>
       <div style={{ fontSize: zoom ? 11.5 : 10.5, fontWeight: 700, color: "var(--muted)", ...wrap }}>{l}</div>
       <div data-pk="" style={{ fontSize: zoom ? 17 : 14.5, fontWeight: 900, color: c || "var(--text)", marginTop: zoom ? 2 : 0, ...wrap }}>{x}</div></div>)}
   </div>;
@@ -766,9 +772,10 @@ function Today({ v, p, o, sz, st, lp }) {
   const versus = v?.yesterday && <Versus color="#3B82F6" rows={[["Impressions", v.count, v.yesterday.count, x => x || 0],
     ["Poids", v.weight_g, v.yesterday.weight_g, fmtG], ["Machine", v.duration, v.yesterday.duration, fmtH], ["Coût", v.cost, v.yesterday.cost, fmtEur]]}/>;
   return (
-    <Tile icon={<CalendarClock size={15}/>} color="#3B82F6" label="Aujourd'hui" to="/prints"
+    // la tuile ouvre la liste du jour (?from=), et la case « Ratées » les ratees du jour (?st=FAILED) (28/10/2026)
+    <Tile icon={<CalendarClock size={15}/>} color="#3B82F6" label="Aujourd'hui" to={`/prints?from=${t0}`}
       mini={sz.h === 0.5} summary={v ? <>{v.count}{rate != null && <span style={{ fontSize: 12, color: col }}>{Math.round(rate * 100)} %</span>}</> : "…"}
-      zoom={<>{hero(0)}<Stats items={v ? [["Réussies", v.ok ?? "—", "#16a34a"], ["Ratées", v.failed ?? "—", v.failed ? "#dc2626" : undefined],
+      zoom={<>{hero(0)}<Stats items={v ? [["Réussies", v.ok ?? "—", "#16a34a"], ["Ratées", v.failed ?? "—", v.failed ? "#dc2626" : undefined, v.failed ? `/prints?st=FAILED&from=${t0}` : null],
         ["Poids", fmtG(v.weight_g)], ["Machine", fmtH(v.duration)], ["Coût", fmtEur(v.cost)]] : []}/>
         {versus && <><H2>Face à hier</H2>{versus}</>}
         {mine.length > 0 && <><H2>Imprimées aujourd'hui</H2><div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -776,7 +783,7 @@ function Today({ v, p, o, sz, st, lp }) {
             sub={[x.print_date && utc(x.print_date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }), x.duration_seconds && fmtDur(x.duration_seconds),
               x.total_weight_g && fmtG(x.total_weight_g)].filter(Boolean).join(" · ")} onClick={() => nav(`/prints?id=${x.id}`)}/>)}</div></>}</>}>
       {({ W, H }) => v && v.count === 0 ? <TodayEmpty st={st} y={v.yesterday} W={W} H={H} lp={lp}/> : <Stack min={W < 240 ? 150 : 96} head={hero(0)} blocks={[versus && { h: W < 240 ? 150 : 104, node: versus },
-        v && { opt: true, h: w => statsH(3, w), node: <Stats items={[["Réussies", v.ok ?? "—", "#16a34a"], ["Ratées", v.failed ?? 0, v.failed ? "#dc2626" : undefined],
+        v && { opt: true, h: w => statsH(3, w), node: <Stats items={[["Réussies", v.ok ?? "—", "#16a34a"], ["Ratées", v.failed ?? 0, v.failed ? "#dc2626" : undefined, v.failed ? `/prints?st=FAILED&from=${t0}` : null],
           ["Coût", fmtEur(v.cost)]]}/> },
         strip && { opt: true, h: 76, node: strip }]}/>}
     </Tile>

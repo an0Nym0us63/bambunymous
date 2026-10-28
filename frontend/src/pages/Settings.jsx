@@ -17,7 +17,7 @@ import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY,
 import AdminOnly from "../components/AdminOnly";
 import TelegramSettings from "../components/TelegramSettings";
 import MailOrdersSettings from "../components/MailOrdersSettings";
-import SwitchCard from "../components/SwitchCard";
+import SwitchCard, { phoneWidth } from "../components/SwitchCard";
 import DryRulesCard from "../components/DryRulesCard";
 import SpoolTaresCard from "../components/SpoolTaresCard";
 import MakerWorldSettings from "../components/MakerWorldSettings";
@@ -2078,6 +2078,21 @@ export default function Settings() {
   const [tab, setUrlTab] = useUrlTab("tab", defTab, tabs.map(t => t.id));
   const setTab = t => { setUrlTab(t); try { localStorage.setItem("settingsTab", t); } catch { /* indisponible */ } };
   useTrackDetail(`Paramètres · ${tabs.find(t => t.id === tab)?.label || tab}`);
+  // Telephone (sous 700 px) : la barre d'onglets est une seule rangee qui defile (28/10/2026) ;
+  // on suit la largeur pour revenir a la grille si la fenetre s'elargit (rotation, redimensionnement).
+  const [phone, setPhone] = useState(phoneWidth);
+  useEffect(() => {
+    const onResize = () => setPhone(phoneWidth());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  // L'onglet actif se centre dans la rangee au montage et a chaque changement (28/10/2026) ;
+  // sans cela, un onglet du bout de la ligne (Appli Android, Outils) restait hors de vue.
+  const tabRef = React.useRef(null);
+  useEffect(() => {
+    if (!phone || loading) return;
+    try { tabRef.current?.scrollIntoView({ block:"nearest", inline:"center" }); } catch { /* ancien navigateur */ }
+  }, [tab, phone, loading]);
 
   // Tous les hooks sont declares AVANT ce retour anticipe. Les placer apres
   // aurait fait varier leur nombre entre le rendu "chargement" et le suivant,
@@ -2136,20 +2151,29 @@ export default function Settings() {
       </div>
 
       {/* Meme composant visuel que Filaments / Historique / Objets. */}
-      {/* Six onglets : une ligne sur ordinateur, deux lignes de trois sur telephone. */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(118px, 1fr))", gap:4,
-        background:"var(--surface2)", borderRadius:16, padding:4, border:"1px solid var(--border)" }}>
+      {/* Les onglets : au-dessus de 700 px, une grille qui se remplit (une ou deux lignes selon la largeur) ;
+          sur telephone (28/10/2026), une seule rangee de pastilles qui defile de cote (sans barre, calee sur
+          les pastilles, bords fondus), l'onglet actif centre. Dix onglets en grille y faisaient quatre lignes. */}
+      <div style={{ background:"var(--surface2)", borderRadius:16, padding:4, border:"1px solid var(--border)" }}>
+        <div className={phone ? "no-scrollbar" : undefined} style={phone
+          ? { display:"flex", gap:4, overflowX:"auto", scrollSnapType:"x proximity", overscrollBehaviorX:"contain",
+              scrollbarWidth:"none", padding:"0 14px",
+              WebkitMaskImage:"linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent)",
+              maskImage:"linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent)" }
+          : { display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(118px, 1fr))", gap:4 }}>
         {tabs.map(t => { const on = tab === t.id;
           return (
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{
-            minWidth:0, padding:"9px 4px", borderRadius:12, fontSize:12.5, fontWeight:800,
+          <button key={t.id} ref={on ? tabRef : null} onClick={()=>setTab(t.id)} aria-pressed={on} style={{
+            minWidth:0, padding: phone ? "9px 12px" : "9px 4px", borderRadius:12, fontSize:12.5, fontWeight:800,
             whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+            flexShrink:0, scrollSnapAlign: phone ? "center" : undefined,
             cursor:"pointer", border:"none", transition:"all 0.15s",
             background: on ? `linear-gradient(135deg, ${t.c}, color-mix(in srgb, ${t.c} 70%, #ffffff))` : "transparent",
             boxShadow: on ? `0 6px 16px -6px ${t.c}` : "none",
             color: on ? "white" : "var(--muted)" }}>
             {t.label}
           </button>); })}
+        </div>
       </div>
 
       {/* ── Affichage ─────────────────────────────────────────────── */}

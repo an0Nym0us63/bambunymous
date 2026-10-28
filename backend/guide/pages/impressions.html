@@ -58,7 +58,8 @@
       <dt>🎨 Teinte</dt><dd>Des pastilles de couleur avec leur nom et leur nombre : garde les prints qui utilisent un filament de cette couleur. Seules les teintes réellement utilisées sont proposées.</dd>
       <dt>🧵 Filament exact</dt><dd>Un champ de recherche et la liste de tes filaments, rangés par matériau (limitée par la matière et la teinte choisies). Choisis-en un pour ne voir que les prints qui l'ont utilisé ; il s'affiche en haut de la carte, son <span class="ui">✕</span> le retire.</dd>
     </dl>
-    <p>En bas, toujours visibles : <span class="ui">Tout effacer</span> remet tout à zéro, <span class="ui">Voir N impressions</span> ferme le panneau.</p>
+    <p>En bas, toujours visibles : <span class="ui">Tout effacer</span> remet tout à zéro (la recherche comprise), <span class="ui">Voir N impressions</span> ferme le panneau.</p>
+    <p>Tes filtres, ta recherche, ton tri et tes dates sont <b>écrits dans l'adresse de la page</b> (<code>/prints?q=dragon&amp;st=FAILED&amp;sort=cost&amp;from=2026-10-01</code>) : reviens sur la page, rafraîchis-la ou ajoute-la à ton écran d'accueil, tu retrouves les mêmes filtres ; <span class="ui">Tout effacer</span> vide l'adresse. Ils ne s'empilent pas dans l'historique : un seul <span class="ui">Retour</span> quitte la page, quel que soit le nombre de filtres touchés. L'accueil s'en sert aussi : la tuile <b>Aujourd'hui</b> ouvre la liste du jour, et sa case <b>Ratées</b> les ratées du jour.</p>
   </section>
 
   <section id="impressions-cartes">
@@ -131,6 +132,7 @@
       <li>Si une purge a vidé du local des fichiers de ce print (timelapse, captures des couches, 3MF tranché, vidéos) ou de son modèle MakerWorld (vue 3D, 3MF d'origine, documents, listés dans une section à part), une pastille <span class="ui">🗄️ 3 sur le NAS</span> le signale : touche-la pour voir le compte par type (captures, timelapses, vidéos, 3MF tranchés, 3MF d'origine, vues 3D, documents), leur poids, et si le NAS répond en ce moment. C'est une information, rien ne s'y ouvre.</li>
       <li><b>🔎 Nom de recherche</b> <span class="admin">admin</span> : la traduction française du nom, faite automatiquement, qui sert <b>uniquement</b> à la recherche (« Dragon » se retrouve en tapant « dragon » même si le fichier s'appelait « Dragon_articulated »). Touche-la pour la corriger ou mettre ton propre nom (« la tirelire de Matteo »).</li>
       <li><b>⋯</b> et <b>✕</b> en haut, toujours visibles ; une <b>⭐ dorée</b> s'y ajoute quand le modèle MakerWorld attend ton évaluation : la toucher ouvre directement l'évaluation (photos de l'impression déjà jointes).</li>
+      <li><b>‹ ›</b> en haut à gauche, quand la fiche vient de la liste ou d'un groupe : <b>la précédente et la suivante</b>, dans l'ordre de l'écran (les prints d'un groupe comptent, dans l'ordre du tri). Tu peux aussi <b>glisser le plateau</b> vers la gauche (suivante) ou la droite (précédente), ou utiliser ← → au clavier. Au bout de la liste, › charge la suite s'il en reste ; la fiche repart du haut, replie le coût et recharge les photos. Une fiche ouverte depuis l'accueil ou la galerie n'a pas de flèches.</li>
     </ul>
     <h4>Les quatre cases</h4>
     <dl class="opts">
@@ -300,7 +302,7 @@
       <li>Une <b>carte MakerWorld</b> par modèle présent dans le groupe, le plus imprimé d'abord ; « 4 prints sur 12 de ce modèle » quand le groupe mêle plusieurs modèles. Chacune montre les documents joints et les pièces à prévoir de son modèle.</li>
       <li><b>Filaments</b> : les filaments de tous les prints additionnés.</li>
       <li><span class="ui">📦 Créer des objets depuis ce groupe</span> <span class="admin">admin</span> : le coût de chaque objet est le coût total divisé par le nombre d'éléments.</li>
-      <li><b>Prints (N)</b> : une tuile par print (vignette, statut, nom, date) ; touche-la pour ouvrir sa fiche. <span class="admin">admin</span> : la croix en haut à droite retire le print du groupe, l'étoile en haut à gauche en fait la <b>référence visuelle</b> du groupe (étoile orange), celle qui passe en tête de la mosaïque.</li>
+      <li><b>Prints (N)</b> : une tuile par print (vignette, statut, nom, date) ; touche-la pour ouvrir sa fiche, puis ses <b>‹ ›</b> (ou un glissé sur le plateau) passent d'un print du groupe à l'autre. <span class="admin">admin</span> : la croix en haut à droite retire le print du groupe, l'étoile en haut à gauche en fait la <b>référence visuelle</b> du groupe (étoile orange), celle qui passe en tête de la mosaïque.</li>
     </ul>
     <p>Les boutons <span class="admin">admin</span> en bas :</p>
     <dl class="opts">

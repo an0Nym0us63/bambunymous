@@ -251,3 +251,18 @@ export function opaqueColors(colors) {
     return m ? `rgb(${m[1]},${m[2]},${m[3]})` : s;
   });
 }
+
+/**
+ * Les teintes d'un filament (28/10/2026) : la meme palette que le serveur (core/colors.py), dans le meme ordre,
+ * pour les filtres par teinte (pastille ronde + libelle francais). Filament.color_bucket est un CSV de ces
+ * slugs (« bleu,rose »), la teinte dominante en tete ; bucketsOf le decoupe.
+ */
+export const COLOR_BUCKETS = [
+  ["rouge", "Rouge", "#e11d48"], ["orange", "Orange", "#f97316"], ["jaune", "Jaune", "#facc15"], ["vert", "Vert", "#22c55e"],
+  ["cyan", "Cyan", "#06b6d4"], ["bleu", "Bleu", "#3b82f6"], ["violet", "Violet", "#8b5cf6"], ["rose", "Rose", "#ec4899"],
+  ["marron", "Marron", "#8b5e3c"], ["beige", "Beige", "#e3d5b8"], ["blanc", "Blanc", "#f8fafc"], ["gris", "Gris", "#94a3b8"],
+  ["noir", "Noir", "#1e293b"], ["transparent", "Transparent", "#cbd5e1"], ["multicolore", "Multicolore", "#a855f7"],
+];
+export const BUCKET_FR  = Object.fromEntries(COLOR_BUCKETS.map(([k, l]) => [k, l]));
+export const BUCKET_HEX = Object.fromEntries(COLOR_BUCKETS.map(([k, , h]) => [k, h]));
+export const bucketsOf = (csv) => String(csv || "").split(",").map(t => t.trim()).filter(Boolean);

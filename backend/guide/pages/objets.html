@@ -66,18 +66,18 @@
     <h3>Les en-têtes de section</h3>
     <p>Chaque section est une carte teintée de la couleur de son état. Son en-tête montre l'icône de l'état (🏷️ À vendre, ✅ Vendu, 🎁 Offert, 🏠 Perso, ⛔ Indisponible), son nom, une ligne de résumé « N objets · montant », un aperçu des photos les plus récentes quand la section est fermée (les dernières ventes pour Vendu, sinon les derniers objets créés), et une pastille avec le nombre d'objets :</p>
     <dl class="opts">
-      <dt>Vendu</dt><dd>« X € encaissés » : la somme des prix de vente.</dd>
-      <dt>À vendre</dt><dd>« X € espérés » : la somme des prix désirés (ou « X € de production » si aucun prix désiré n'est saisi).</dd>
+      <dt>Vendu</dt><dd>« X € encaissés » : la somme des prix de vente ; puis « · vendus en N jours », le <b>délai moyen de vente</b> (le temps entre la création d'un objet et sa vente ; c'est la médiane, pour qu'un objet oublié un an ne fausse pas le chiffre).</dd>
+      <dt>À vendre</dt><dd>« X € espérés » : la somme des prix désirés (ou « X € de production » si aucun prix désiré n'est saisi). En rouge à la suite, « · 3 attendent depuis plus de 3 mois » compte les objets en vente depuis plus de 90 jours.</dd>
       <dt>Offert, Perso, Indisponible</dt><dd>« X € de production » : ce que ces objets t'ont coûté.</dd>
     </dl>
     <p>Les sections fonctionnent en accordéon : en ouvrir une referme les autres et fait défiler la page jusqu'à elle.</p>
   </section>
   <section id="objets-liste-tuiles">
     <h3>Les tuiles</h3>
-    <p>Une tuile montre la photo de l'objet (sur un fond teinté de la couleur de son état ; sans photo, l'icône de l'état), son badge d'état en haut à gauche et, en haut à droite, son prix : le prix de vente pour un objet vendu, sinon le prix désiré. En bas à gauche de la photo, <span class="ui">🔩 N</span> indique combien d'accessoires lui sont montés. Sous la photo : son nom, puis « Coût X € (Y €) », le coût réel et, entre parenthèses, ce qu'il aurait coûté au prix normal du filament (seulement s'il diffère). Un objet vendu ajoute sa marge en vert (« +X € de marge »), ou en rouge s'il a été vendu à perte.</p>
+    <p>Une tuile montre la photo de l'objet (sur un fond teinté de la couleur de son état ; sans photo, l'icône de l'état), son badge d'état en haut à gauche et, en haut à droite, son prix : le prix de vente pour un objet vendu, sinon le prix désiré. En bas à gauche de la photo, <span class="ui">🔩 N</span> indique combien d'accessoires lui sont montés. Sous la photo : son nom, puis « Coût X € (Y €) », le coût réel et, entre parenthèses, ce qu'il aurait coûté au prix normal du filament (seulement s'il diffère). Un objet vendu ajoute sa marge en vert (« +X € de marge »), ou en rouge s'il a été vendu à perte. Un objet <b>à vendre</b> indique en gris depuis quand il attend (« ⏳ depuis 4 mois », « créé aujourd'hui ») ; passé 90 jours, la mention passe en rouge.</p>
     <figure class="phone"><img src="img/objets-section-vendu.webp" alt="Section Vendu avec prix de vente sur les tuiles et une tuile de groupe"><figcaption>Section « Vendu » : prix de vente en haut à droite ; la tuile violette « 📁 1 / 3 » est un groupe dont un objet sur trois est vendu.</figcaption></figure>
     <p>Les tuiles <b>violettes</b> marquées <span class="ui">📁</span> sont des <a href="#objets-groupes">groupes d'objets</a>.</p>
-    <p>Toucher une tuile ouvre la <a href="#objets-fiche">fiche de l'objet</a>. Un <b>appui long</b> (téléphone) ou un <b>clic droit</b> (ordinateur) ouvre un petit menu : <span class="ui">📄 Ouvrir</span> et <span class="ui">☑ Sélectionner</span> (« Pour ajouter plusieurs objets à un groupe »).</p>
+    <p>Toucher une tuile ouvre la <a href="#objets-fiche">fiche de l'objet</a>. Un <b>appui long</b> (téléphone) ou un <b>clic droit</b> (ordinateur) ouvre un petit menu : <span class="ui">📄 Ouvrir</span>, puis <span class="admin">admin</span> <span class="ui">💶 Vendre…</span> (pour un objet à vendre : la <a href="#objets-vendre">fenêtre de vente</a> s'ouvre directement, sans passer par la fiche), les <a href="#objets-un-geste">changements d'état en un geste</a> (<span class="ui">🎁 Marquer offert</span>, <span class="ui">🏠 Garder pour moi</span>, <span class="ui">⛔ Indisponible</span>, ou <span class="ui">🏷️ Remettre à vendre</span> ; pas pour un objet vendu), et <span class="ui">☑ Sélectionner</span> (« Pour agir sur plusieurs objets »).</p>
   </section>
   <section id="objets-liste-photos">
     <h3>Les photos</h3>
@@ -89,6 +89,7 @@
     <dl class="opts">
       <dt>Nom (A→Z)</dt><dd>Par défaut. Ordre alphabétique (« Pièce 2 » avant « Pièce 10 »).</dd>
       <dt>Plus récents</dt><dd>Les derniers créés d'abord.</dd>
+      <dt>Le plus ancien d'abord</dt><dd>L'inverse : ce qui attend depuis le plus longtemps en tête (pour un groupe, son membre le plus ancien compte).</dd>
       <dt>Coût décroissant</dt><dd>Les plus coûteux à fabriquer d'abord.</dd>
       <dt>Valeur décroissante</dt><dd>Selon le prix de vente, sinon le prix désiré.</dd>
     </dl>
@@ -101,14 +102,15 @@
   <p>Elle s'ouvre en touchant une tuile. On y lit tout ce que l'objet a coûté et rapporté.</p>
   <figure class="phone"><img src="img/objets-fiche.webp" alt="Fiche de l'objet Lithophanie chat, vendue 32 €, avec deux accessoires"><figcaption>Fiche d'un objet vendu : prix de vente et marge en tête, tuiles de coûts, accessoires montés.</figcaption></figure>
   <dl class="opts">
-    <dt>En-tête</dt><dd>La photo de l'objet sur un fond de la couleur de son état, ses pastilles (état, groupe d'objets, date de vente), son nom, puis en grand le prix qui compte : le prix de vente et la marge pour un objet vendu, sinon le prix visé.</dd>
+    <dt>En-tête</dt><dd>La photo de l'objet sur un fond de la couleur de son état, ses pastilles (état, groupe d'objets, date de vente, et pour un objet à vendre « ⏳ depuis 4 mois », en rouge passé 90 jours), son nom, puis en grand le prix qui compte : le prix de vente et la marge pour un objet vendu, sinon le prix visé.</dd>
     <dt>↗ Voir l'impression</dt><dd>Ouvre par-dessus la fiche de l'impression d'origine (ou <span class="ui">Voir le groupe d'impressions</span>).</dd>
     <dt>Les tuiles</dt><dd><b>💰 Coût</b> (le coût réel, et entre parenthèses ce qu'il aurait été au prix normal du filament), <b>🖨️ Fabrication</b>, <b>🔩 Accessoires</b> (et combien de pièces), puis <b>✅ Vendu</b> (le prix et la marge en pourcentage) ou <b>🎯 Prix visé</b> (et la marge espérée).</dd>
     <dt>💬 Commentaire</dt><dd>Une carte, s'il y en a un.</dd>
     <dt>🔩 Accessoires</dt><dd>Les accessoires montés sur l'objet : vignette, nom, quantité « ×1 », coût, et ✕ pour le retirer <span class="admin">admin</span>. Toucher une ligne ouvre la fiche de l'accessoire. <span class="ui">+ Ajouter</span> en monte un autre. Vide : « Aucun accessoire monté. »</dd>
     <dt>📁 Groupe</dt><dd>Si l'objet fait partie d'un groupe d'objets : son nom et <span class="ui">Retirer du groupe</span>.</dd>
+    <dt>📜 Son histoire</dt><dd>« Créé le » (et il y a combien de temps) ; pour un objet vendu, « Vendu le » et « vendu en 12 jours » (le délai entre sa création et sa vente) ; pour un objet à vendre, « À vendre depuis 4 mois », en rouge au-delà de 3 mois (« il attend trop ? »).</dd>
     <dt>🧾 Le détail des coûts</dt><dd>Une carte repliée (touche son titre) : fabrication (et au prix normal), accessoires, total réel (au prix normal), prix désiré, vente avec le pourcentage au-dessus du coût, date de vente.</dd>
-    <dt>Les boutons du bas</dt><dd><span class="ui">💶 Vendre</span> pour un objet à vendre <span class="admin">admin</span> (voir <a href="#objets-vendre">Vendre un objet</a>), sinon <span class="ui">🖨️ L'impression</span> ; <span class="ui">✏️ Modifier</span> <span class="admin">admin</span> ; et <span class="ui">⋯</span>, qui reprend tout : voir l'impression, modifier, vendre, ajouter un accessoire, <span class="ui">🗑 Supprimer l'objet…</span>. ✕ en haut ferme la fiche.</dd>
+    <dt>Les boutons du bas</dt><dd><span class="ui">💶 Vendre</span> pour un objet à vendre <span class="admin">admin</span> (voir <a href="#objets-vendre">Vendre un objet</a>), sinon <span class="ui">🖨️ L'impression</span> ; <span class="ui">✏️ Modifier</span> <span class="admin">admin</span> ; et <span class="ui">⋯</span>, qui reprend tout : voir l'impression, modifier, vendre, les <a href="#objets-un-geste">changements d'état en un geste</a> (<span class="ui">🎁 Marquer offert</span>, <span class="ui">🏠 Garder pour moi</span>, <span class="ui">⛔ Indisponible</span>, <span class="ui">🏷️ Remettre à vendre</span>), ajouter un accessoire, <span class="ui">🗑 Supprimer l'objet…</span>. ✕ en haut ferme la fiche.</dd>
   </dl>
   <section id="objets-marges">
     <h3>Comment se calculent coûts et marges</h3>
@@ -133,9 +135,16 @@
   <p>Touche <span class="ui">✓ Enregistrer</span> en bas pour valider, <span class="ui">Annuler</span> pour abandonner.</p>
 </section>
 
+<section id="objets-un-geste">
+  <h2>Changer d'état en un geste <span class="admin">admin</span></h2>
+  <p>Pas besoin d'ouvrir <span class="ui">✏️ Modifier</span> pour un simple changement d'état. Dans le menu <span class="ui">⋯</span> de la fiche, ou dans le menu d'appui long d'une tuile, touche <span class="ui">🎁 Marquer offert</span>, <span class="ui">🏠 Garder pour moi</span>, <span class="ui">⛔ Indisponible</span> ou <span class="ui">🏷️ Remettre à vendre</span> (l'état actuel n'est pas proposé). L'état change tout de suite ; une barre en bas confirme (« 🎁 Offert ✓ ») avec un bouton <span class="ui">Annuler</span> pendant cinq secondes, qui remet l'objet dans son état d'avant.</p>
+  <p>Un objet <b>vendu</b> n'a pas ces raccourcis : changer son état effacerait sa vente. Passe par <span class="ui">✏️ Modifier</span> (voir <a href="#objets-vendre">annuler une vente</a>).</p>
+  <p>Pour plusieurs objets d'un coup : sélectionne-les (appui long, <span class="ui">☑ Sélectionner</span>), puis <span class="ui">🔁 Changer l'état</span> dans la barre du bas (voir <a href="#objets-groupes-selection">la sélection</a>).</p>
+</section>
+
 <section id="objets-vendre">
   <h2>Vendre un objet</h2>
-  <p>Le plus court : dans la fiche d'un objet à vendre, touche <span class="ui">💶 Vendre</span> <span class="admin">admin</span>.</p>
+  <p>Le plus court : dans la fiche d'un objet à vendre, touche <span class="ui">💶 Vendre</span> <span class="admin">admin</span>. Plus court encore : un appui long (ou clic droit) sur sa tuile, puis <span class="ui">💶 Vendre…</span>, ouvre la même fenêtre sans passer par la fiche.</p>
   <ol>
     <li>Le <b>prix de vente</b> est pré-rempli avec le prix visé : garde-le ou corrige-le.</li>
     <li>La <b>date de la vente</b> est celle d'aujourd'hui ; change-la si la vente date d'un autre jour.</li>
@@ -202,11 +211,11 @@
     </dl>
   </section>
   <section id="objets-groupes-selection">
-    <h3>Regrouper des objets existants</h3>
+    <h3>Regrouper des objets existants (ou changer leur état)</h3>
     <ol>
       <li>Appui long (ou clic droit) sur une tuile, puis <span class="ui">☑ Sélectionner</span>.</li>
       <li>Touche les autres objets à réunir : un rond coché et un contour bleu les marquent.</li>
-      <li>En bas, touche <span class="ui">Ajouter ces N objets à un groupe</span> (<span class="ui">Annuler</span> quitte la sélection).</li>
+      <li>En bas, la barre « N sélectionnés » propose deux boutons : <span class="ui">📁 Ajouter à un groupe</span> et <span class="ui">🔁 Changer l'état</span> (<span class="ui">Annuler</span> quitte la sélection). Touche <span class="ui">📁 Ajouter à un groupe</span>.</li>
       <li>Choisis un groupe existant dans la liste « 📁 nom », ou tape un nom dans <span class="ui">Rechercher ou créer un groupe…</span> puis <span class="ui">+ Créer un nouveau groupe « nom »</span>.</li>
     </ol>
     <figure class="pair">
@@ -216,6 +225,7 @@
     </figure>
     <figure class="phone"><img src="img/objets-ajout-groupe.webp" alt="Feuille Ajouter 2 objets à un groupe avec création d'un nouveau groupe"><figcaption>Créer un nouveau groupe en tapant son nom.</figcaption></figure>
     <p>Si le nom tapé existe déjà, l'appli le signale (« Un groupe porte déjà ce nom — tu peux le rejoindre ci-dessous. ») : choisis-le dans la liste. Pour sortir un objet d'un groupe, utilise <span class="ui">Retirer du groupe</span> dans sa fiche.</p>
+    <p><span class="ui">🔁 Changer l'état</span> <span class="admin">admin</span> ouvre un menu (<span class="ui">🏷️ À vendre</span>, <span class="ui">🎁 Offert</span>, <span class="ui">🏠 Perso</span>, <span class="ui">⛔ Indisponible</span>) et applique l'état choisi à toute la sélection d'un coup. Les objets <b>vendus</b> de la sélection ne bougent pas (leur vente serait effacée ; la barre du bas le dit : « 2 vendus inchangés »), et <span class="ui">Annuler</span>, pendant cinq secondes, remet chaque objet dans l'état qu'il avait. « Vendu » n'est pas proposé : on vend objet par objet, chacun à son prix.</p>
   </section>
 </section>
 
