@@ -215,7 +215,7 @@ function OrderCard({ o, isAdmin, onOpen, onMark, onHide }) {
 export default function IncomingOrders() {
   const isAdmin = useIsAdmin();
   const [orders, setOrders] = useState(null);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);     // repliee par defaut : la ligne de tete suffit, on deplie pour le detail
   // seulement ce qui attend encore (28/10/2026) : une commande finie (tout recu, livree, annulee) sort de la page Filaments ;
   // l'historique se lit dans Parametres -> Comptes -> Commandes Bambu Lab
   const load = () => client.get("/filaments/incoming").then(r => setOrders((r.data.orders || []).filter(o => !o.hidden))).catch(() => setOrders([]));
