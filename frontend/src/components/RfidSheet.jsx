@@ -177,11 +177,14 @@ export default function RfidSheet({ scanId, onClose, onCreated }) {
                           border:`1px solid ${mapSpoolId===sp.id ? "#3b82f6" : "var(--border)"}`,
                           background: mapSpoolId===sp.id ? "rgba(59,130,246,0.12)" : "transparent",
                           color:"var(--text)" }}>
-                        <span style={{ fontWeight:700 }}>Bobine #{sp.id}</span>
+                        <span style={{ fontWeight:700, display:"inline-flex", alignItems:"center", gap:6, minWidth:0 }}>Bobine #{sp.id}
+                          {/* une bobine en commande (mails de la boutique, 28/10/2026) : la valider, c'est son arrivee, elle repasse en stock */}
+                          {sp.ordered && <span data-tip="Commandée, pas encore reçue : la choisir la fait passer en stock, et la commande la compte reçue"
+                            style={{ fontSize:10.5, fontWeight:800, padding:"1px 7px", borderRadius:10, background:"#0EA5E9", color:"#fff", whiteSpace:"nowrap" }}>📬 en commande</span>}</span>
                         <span style={{ fontSize:11, color:"var(--muted)",
                           fontFamily:"JetBrains Mono,monospace" }}>
-                          {sp.remaining_weight_g != null ? `${Math.round(sp.remaining_weight_g)} g` : "—"}
-                          {sp.location ? ` · ${sp.location}` : ""}
+                          {sp.ordered ? "arrive" : sp.remaining_weight_g != null ? `${Math.round(sp.remaining_weight_g)} g` : "—"}
+                          {sp.location && !sp.ordered ? ` · ${sp.location}` : ""}
                         </span>
                       </button>
                     ))}

@@ -82,7 +82,7 @@ async def _mappable_spools(db, filament_id: int) -> list[Spool]:
             Spool.filament_id == filament_id,
             Spool.archived.is_(False),
             or_(Spool.tag_number.is_(None), Spool.tag_number == ""),
-        ).order_by(Spool.id)
+        ).order_by(Spool.ordered.desc(), Spool.id)      # les « en commande » d'abord : le scan, c'est leur arrivee (28/10/2026)
     )
     return list(res.scalars().all())
 
@@ -271,7 +271,8 @@ async def rfid_scan_detail(
              "remaining_weight_g": sp.remaining_weight_g,
              "location": sp.location,
              "comment": sp.comment,
-             "price_override": sp.price_override}
+             "price_override": sp.price_override,
+             "ordered": bool(getattr(sp, "ordered", False))}
             for sp in await _mappable_spools(db, fil.id)
         ] if fil else []),
     }
@@ -380,14 +381,28 @@ async def rfid_create(
         # spool_location : on n'y touche pas ici.
         if body.comment and not spool.comment:
             spool.comment = body.comment
+        adopted = bool(getattr(spool, "ordered", False))
+        if adopted:
+            # une bobine « en commande » choisie dans la liste : c'est elle qui arrive, elle repasse en stock
+            spool.ordered = False
+            spool.location = "Tiroir"
+            spool.remaining_weight_g = body.remaining_weight_g if body.remaining_weight_g is not None else scan["spool_weight_g"]
+            spool.last_dried_at = datetime.utcnow()
 
         await db.commit()
         await db.refresh(spool)
+        if adopted:
+            try:
+                from ....services import mail_orders as _MO
+                await _MO.spool_arrived(fil)              # la ligne de commande qui l'attendait est recue
+            except Exception:
+                logger.exception("[RFID] arrivee de la bobine commandee non notee")
         logger.info(f"[RFID] bobine existante #{spool.id} mappee (tag {tray_uid}, "
                     f"filament #{fil.id})")
         return {
             "created": False,
             "mapped": True,
+            "adopted": adopted,
             "filament_created": filament_created,
             "filament_id": fil.id,
             "spool_id": spool.id,
