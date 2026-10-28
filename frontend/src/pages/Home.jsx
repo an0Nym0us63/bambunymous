@@ -577,14 +577,20 @@ function tipShades(heat) {
 }
 // la temperature de la buse du rack : la gauche sur une double tete (le Vortek y est), sinon la seule
 const rackHeat = st => { const nz = st?.nozzles || []; const l = nz.find(n => n.id === 1) || nz[0]; return l ? l.temp : st?.nozzle_temp ?? null; };
-function NozzleArt({ color, h = 54, dim = false, heat = null, finish = null }) {
+// multi : le multicolore de la bobine ({type, colors}) : un degrade du haut vers le bas, ou les tranches d'un coaxial
+function NozzleArt({ color, h = 54, dim = false, heat = null, finish = null, multi = null }) {
   const id = React.useId().replace(/:/g, "");
   const w = h * 0.5, c = color || "#94a3b8";
+  const mcols = multi?.colors?.length >= 2 && !dim ? multi.colors.map(x => `#${String(x).replace("#", "").slice(0, 6)}`) : null;
   const [tipA, tipB, glow] = tipShades(dim ? null : heat);
   return <svg width={w} height={h} viewBox="0 0 26 52" aria-hidden="true" style={{ opacity: dim ? 0.4 : 1, flexShrink: 0, overflow: "visible" }}>
     <defs>
       <linearGradient id={`nzm${id}`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#a3b1c2"/><stop offset=".35" stopColor="#e2e8f0"/><stop offset="1" stopColor="#8494a8"/></linearGradient>
-      <linearGradient id={`nzb${id}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" style={{ stopColor: `color-mix(in srgb, ${c} 60%, #ffffff)` }}/><stop offset="1" stopColor={c}/></linearGradient>
+      {!mcols && <linearGradient id={`nzb${id}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" style={{ stopColor: `color-mix(in srgb, ${c} 60%, #ffffff)` }}/><stop offset="1" stopColor={c}/></linearGradient>}
+      {mcols && multi.type === "gradient" && <linearGradient id={`nzb${id}`} x1="0" y1="0" x2="0" y2="1">
+        {mcols.map((x, i) => <stop key={i} offset={i / (mcols.length - 1)} stopColor={x}/>)}</linearGradient>}
+      {mcols && multi.type !== "gradient" && <linearGradient id={`nzb${id}`} x1="0" y1="0" x2="1" y2="0">
+        {mcols.flatMap((x, i) => [<stop key={`a${i}`} offset={i / mcols.length} stopColor={x}/>, <stop key={`b${i}`} offset={(i + 1) / mcols.length} stopColor={x}/>])}</linearGradient>}
       {finish && !dim && <FinishDefs f={finish} id={`nzf${id}`} size={w} units={26} dark={isDark(c)}/>}
       <linearGradient id={`nzt${id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" style={{ stopColor: dim ? "#cbd5e1" : tipA }}/><stop offset="1" style={{ stopColor: dim ? "#94a3b8" : tipB }}/></linearGradient>
     </defs>
@@ -617,6 +623,8 @@ function VortekRack({ rack, H = 240, sel = null, onPick, heat = null }) {
   const headId = rack.head_id, headNum = headId >= 16 ? headId - 15 : null;
   const head = rack.hotends.find(h => h.id === 0) || (headNum ? slot(headNum) : null);
   const col = x => x && !x.empty && x.color ? `#${String(x.color).replace("#", "").slice(0, 6)}` : null;
+  const multiOf = x => x && !x.empty && (x.multicolor_type === "gradient" || x.multicolor_type === "coaxial") && x.colors_array
+    ? { type: x.multicolor_type, colors: String(x.colors_array).split(",").filter(Boolean) } : null;
   const cellH = Math.max(narrow ? 56 : 70, Math.min(tiny ? 118 : 150, (H - (tiny ? 40 : narrow ? 6 : 30)) / 2)), art = Math.max(22, Math.min(64, cellH - (narrow ? 34 : 50)));
   const fs = narrow ? 10 : cellH >= 110 ? 12.5 : 11;
   // des cases larges et basses : la buse a gauche, sur toute la hauteur, le texte a droite
@@ -631,7 +639,7 @@ function VortekRack({ rack, H = 240, sel = null, onPick, heat = null }) {
       border: `1.5px solid ${picked ? "#0ea5e9" : "var(--border)"}` }}>
       <span style={{ position: "absolute", top: narrow ? 3 : 5, left: narrow ? 5 : 8, fontSize: narrow ? 10 : 11, fontWeight: 900, color: "#0ea5e9" }}>{num}</span>
       {hl && hl[0] !== "En bon état" && <span title={hl[0]} style={{ position: "absolute", top: 7, right: 8, width: 8, height: 8, borderRadius: "50%", background: hl[1] }}/>}
-      <NozzleArt color={col(x)} finish={x?.fila_finish} h={side ? sideArt : art} dim={!has}/>
+      <NozzleArt color={col(x)} finish={x?.fila_finish} multi={multiOf(x)} h={side ? sideArt : art} dim={!has}/>
       <span style={{ display: "flex", flexDirection: "column", alignItems: side ? "flex-start" : "center", gap: 2, minWidth: 0 }}>
       {has ? <>
         <span style={{ fontSize: side ? fs + 1.5 : fs, fontWeight: 800, color: "var(--text)", lineHeight: 1.1, whiteSpace: "nowrap" }}>{String(x.diameter).replace(".", ",")}{tiny ? "" : " mm"}</span>
@@ -651,7 +659,7 @@ function VortekRack({ rack, H = 240, sel = null, onPick, heat = null }) {
   if (tiny) return <div ref={box} style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
     <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 8px", borderRadius: 10, height: 30, boxSizing: "border-box",
       background: "linear-gradient(90deg, rgba(14,165,233,0.16), transparent), var(--surface2)", border: "1px solid rgba(14,165,233,0.35)", minWidth: 0 }}>
-      <NozzleArt color={col(head)} finish={head?.fila_finish} h={20} heat={heat}/>
+      <NozzleArt color={col(head)} finish={head?.fila_finish} multi={multiOf(head)} h={20} heat={heat}/>
       <span style={{ fontSize: 11, fontWeight: 900, color: "#0ea5e9", whiteSpace: "nowrap" }}>Tête{headNum ? ` · ${headNum}` : ""}</span>
       {head?.nozzle_type && <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {String(head.diameter).replace(".", ",")} mm</span>}
@@ -663,7 +671,7 @@ function VortekRack({ rack, H = 240, sel = null, onPick, heat = null }) {
     <div style={{ borderRadius: 14, padding: "8px 6px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4,
       background: "linear-gradient(180deg, rgba(14,165,233,0.14), transparent 70%), var(--surface2)", border: "1px solid rgba(14,165,233,0.35)" }}>
       <span style={{ fontSize: narrow ? 9.5 : 11, fontWeight: 900, color: "var(--text2)", textAlign: "center", lineHeight: 1.15 }}>{narrow ? "Tête" : "Tête d'outil"}</span>
-      <NozzleArt color={col(head)} finish={head?.fila_finish} h={side ? Math.min(96, cellH * 0.95) : Math.min(84, art * 1.3)} dim={!head} heat={heat}/>
+      <NozzleArt color={col(head)} finish={head?.fila_finish} multi={multiOf(head)} h={side ? Math.min(96, cellH * 0.95) : Math.min(84, art * 1.3)} dim={!head} heat={heat}/>
       {headNum && <span style={{ fontSize: 10.5, fontWeight: 900, color: "#0ea5e9" }}>buse {headNum}</span>}
       {head?.nozzle_type && <><span style={{ fontSize: fs, fontWeight: 800, color: "var(--text)", lineHeight: 1.1, whiteSpace: "nowrap" }}>{String(head.diameter).replace(".", ",")} mm</span>
         {!narrow && <span style={{ fontSize: fs - 1.5, fontWeight: 700, color: "var(--muted)", lineHeight: 1.1 }}>{flowShort(head.nozzle_type)}</span>}</>}

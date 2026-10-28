@@ -198,6 +198,8 @@ class HotendSlotOut(BaseModel):
     stat: int = -1
     spool_id: Optional[int] = None
     fila_finish: Optional[str] = None    # la finition du filament qu'elle porte (celle de la bobine de l'AMS)
+    multicolor_type: Optional[str] = None   # et son multicolore (degrade, coaxial), avec ses couleurs (28/10/2026)
+    colors_array: Optional[str] = None
 
 
 class HotendRackOut(BaseModel):
@@ -567,13 +569,17 @@ def _hotend_finishes(out):
             si = t.spool_info
             f = (si.fila_finish if si and si.fila_finish else None) or finish_of(
                 si.fila_type if si else "", si.name if si else "", t.filament_type, color=t.color)
-            if f == "none" or not f:
+            mt = si.multicolor_type if si and si.multicolor_type in ("gradient", "coaxial") and si.colors_array else None
+            if (f == "none" or not f) and not mt:
                 continue
-            by_id.setdefault(t.tray_info_idx, f)
-            by_col.setdefault((t.tray_info_idx, str(t.color or "")[:6].upper()), f)
+            v = (f if f and f != "none" else None, mt, si.colors_array if mt else None)
+            by_id.setdefault(t.tray_info_idx, v)
+            by_col.setdefault((t.tray_info_idx, str(t.color or "")[:6].upper()), v)
     for h in out.hotend_rack.hotends:
         if not h.empty and h.filament_id:
-            h.fila_finish = by_col.get((h.filament_id, str(h.color or "").lstrip("#")[:6].upper())) or by_id.get(h.filament_id)
+            v = by_col.get((h.filament_id, str(h.color or "").lstrip("#")[:6].upper())) or by_id.get(h.filament_id)
+            if v:
+                h.fila_finish, h.multicolor_type, h.colors_array = v
 
 
 # ── Bobines posees pour le sechage (emplacement vide) ─────────────────────────
