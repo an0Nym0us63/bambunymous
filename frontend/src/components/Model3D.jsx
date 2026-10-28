@@ -35,7 +35,9 @@ const hex6 = c => String(c || "").replace(/^#/, "").slice(0, 6).toUpperCase();
 // leur rendu) ; paillettes, galaxie, marbre, bois, carbone : un motif dessine, projete sur chaque face
 const FINISH_MAT = {
   translucent: { transparent: true, opacity: 0.55, depthWrite: false, roughness: 0.25, metalness: 0 },
-  silk: { roughness: 0.17, metalness: 0.14, envMapIntensity: 0.3 },       // un brillant satine : reflet net et etroit, pas un voile (un gris virait au blanc) ; regle le 28/10/2026
+  // satine nacre (28/10/2026) : a moitie metal, le reflet de la piece eclairee prend la couleur de la piece au lieu de la
+  // blanchir (un gris reste gris, un vert reflete du vert), et une face plate accroche enfin la lumiere
+  silk: { roughness: 0.3, metalness: 0.42, envMapIntensity: 0.85 },
   metal: { roughness: 0.32, metalness: 1, envMapIntensity: 1.5 },
   matte: { roughness: 0.95, metalness: 0 },
   carbon: { roughness: 0.55, metalness: 0.35, envMapIntensity: 0.6 },   // la trame module la brillance (voir plus bas)
@@ -218,7 +220,6 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             if (FINISH_MAT[fin]?.envMapIntensity) mat.envMap = await envMap();
             // le reflet s'ajoute a l'eclairage : la couleur est un peu baissee d'autant, sinon un gris satine sort blanc
             if (fin === "silk") {
-              mat.color.multiplyScalar(0.9);
               // le brillant d'un silk : la couleur de la face reste la sienne (aucun voile, c'est lui qui blanchissait un gris) ;
               // seul un lisere etroit, de sa propre couleur, s'allume sur la tranche vue en biais, comme un fil qui accroche la lumiere
               const prev = mat.onBeforeCompile;
@@ -227,7 +228,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
                 sh.fragmentShader = sh.fragmentShader.replace("#include <emissivemap_fragment>",
                   "#include <emissivemap_fragment>\n  { float fr = 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)));\n" +
                   "    float rim = pow(smoothstep(0.5, 1.0, fr), 2.5);\n" +
-                  "    totalEmissiveRadiance += diffuseColor.rgb * rim * 0.45; }");
+                  "    totalEmissiveRadiance += diffuseColor.rgb * rim * 0.35; }");
               };
             }
             let mesh = geo;
