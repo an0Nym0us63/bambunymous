@@ -750,6 +750,52 @@ def _ext_by_name(z) -> dict:
     return out
 
 
+def _plate_objects(z) -> dict:
+    """{plateau : [noms des objets poses dessus]} d'un 3MF Bambu d'origine (model_settings.config)."""
+    import re as _re
+    try:
+        xml = z.read("Metadata/model_settings.config").decode("utf-8", "replace")
+    except KeyError:
+        return {}
+    names = {}
+    for m in _re.finditer(r'<object id="(\d+)"[^>]*>(.*?)</object>', xml, _re.S):
+        nm = _re.search(r'key="name" value="([^"]*)"', m.group(2).split("<part", 1)[0])
+        if nm:
+            names[m.group(1)] = nm.group(1)
+    out = {}
+    for m in _re.finditer(r"<plate>(.*?)</plate>", xml, _re.S):
+        n = _re.search(r'key="plater_id" value="(\d+)"', m.group(1))
+        ids = _re.findall(r'<metadata key="object_id" value="(\d+)"/>', m.group(1))
+        if n and ids:
+            out[int(n.group(1))] = [names[i] for i in ids if i in names]
+    return out
+
+
+def _sliced_objects(z) -> list:
+    """Les noms des objets qu'un 3MF tranche imprime (slice_info.config), sans ceux qu'il saute."""
+    import re as _re
+    try:
+        xml = z.read("Metadata/slice_info.config").decode("utf-8", "replace")
+    except KeyError:
+        return []
+    return [m.group(1) for m in _re.finditer(r'<object\b[^>]*\bname="([^"]*)"[^>]*>', xml)
+            if 'skipped="true"' not in m.group(0)]
+
+
+def _plate_from_objects(plate_objs: dict, names: list) -> int | None:
+    """Le plateau d'origine dont les objets sont ceux du fichier imprime : tous ses noms s'y retrouvent (en nombre),
+    et un seul plateau convient ; a plusieurs, celui dont le compte colle exactement, s'il est seul. None sinon."""
+    from collections import Counter
+    if not names or not plate_objs:
+        return None
+    want = Counter(names)
+    fits = [n for n, objs in plate_objs.items() if not (want - Counter(objs))]
+    if len(fits) == 1:
+        return fits[0]
+    exact = [n for n in fits if Counter(plate_objs[n]) == want]
+    return exact[0] if len(exact) == 1 else None
+
+
 def _ext_map(origin: dict, sliced: dict) -> dict:
     """Filament du projet d'origine -> filament du projet imprime, d'apres les pieces de meme nom (27/10/2026 : par
     numero seulement, un projet retouche dans Bambu Studio -- filaments reordonnes, fusionnes -- melangeait les
@@ -942,6 +988,7 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
     with zipfile.ZipFile(src) as z:
         colors = T._colors_of(z)
         origin = _ext_by_name(z)
+        plate_objs = _plate_objects(z)              # {plateau : noms des objets}, pour reconnaitre le plateau imprime
     h6 = lambda c: str(c or "").lstrip("#")[:6].upper()
     async with AsyncSessionLocal() as db:
         prints = (await db.execute(select(Print.id, Print.mw_profile_id, Print.mw_plates, Print.model_3mf, Print.plate_id)
@@ -1012,8 +1059,6 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
         rounds[1 if want and pp and pp != want else 0].append(row)
     for tier, lst in enumerate(rounds):
         for pid, mwp, mwpl, m3, plate_id in lst:
-            if plate is not None and plate not in _print_plates(mwpl, plate_id, guesses.get(pid)):
-                continue                              # une impression d'un autre plateau
             used = used_by.get(pid) or {}
             if not used:
                 logger.info(f"[3D] couleurs : impression {pid} sans filament note (pas de bobine ni de couleur)")
@@ -1025,8 +1070,16 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
                     with zipfile.ZipFile(f) as zz:
                         emap = _ext_map(origin, _ext_by_name(zz))
                         sl_colors = [h6(c) for c in T._colors_of(zz)]
+                        # le plateau imprime, reconnu a ses objets (28/10/2026) : le fichier tranche nomme les objets
+                        # qu'il imprime, le 3MF d'origine sait sur quel plateau ils sont -- bien plus sur que l'image
+                        if _manual_plates(mwpl) is None and plate_objs:
+                            n_ = _plate_from_objects(plate_objs, _sliced_objects(zz))
+                            if n_:
+                                guesses[pid] = {"plate": n_, "sure": True, "by": "objets"}
                 except (OSError, zipfile.BadZipFile):
                     emap, sl_colors = {}, []
+            if plate is not None and plate not in _print_plates(mwpl, plate_id, guesses.get(pid)):
+                continue                              # une impression d'un autre plateau
             # les filaments et poids d'origine face a cette impression : ceux de tous les plateaux qu'elle a faits
             # (plusieurs plateaux regroupes en une impression : ses grammes par filament les couvrent tous), sinon le
             # plateau affiche ou son numero
