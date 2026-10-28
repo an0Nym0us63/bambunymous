@@ -407,8 +407,11 @@ async def enrich_items(items: list[dict]) -> list[dict]:
 
 # ── Le releve ──────────────────────────────────────────────────────────────────
 def _fetch_sync(cfg: dict, password: str, seen: set) -> tuple[list, list]:
-    """Se connecte, cherche les mails de la boutique depuis N jours, rend (nouveaux mails analyses, erreurs)."""
+    """Se connecte, cherche les mails de la boutique, rend (nouveaux mails analyses, erreurs). Un releve
+    automatique ne regarde que depuis le dernier mail deja vu (UID IMAP superieur, 28/10/2026) : pas de retour dans
+    le temps ; sans mail deja vu, ou pour un releve a la main ou une relecture, la fenetre de N jours."""
     since = (datetime.utcnow() - timedelta(days=cfg["days"])).strftime("%d-%b-%Y")
+    last_uid = max((int(u) for u in seen if str(u).isdigit()), default=0) if cfg.get("from_last") else 0
     found, errors = [], []
     M = imaplib.IMAP4_SSL(cfg["host"], cfg["port"])
     try:
@@ -419,10 +422,12 @@ def _fetch_sync(cfg: dict, password: str, seen: set) -> tuple[list, list]:
         senders = cfg.get("senders") or DEFAULT_SENDERS.split(",")
         uids = set()
         for s in senders:
-            typ, data = M.uid("search", None, f'(SINCE {since} FROM "{s}")')
+            crit = f'(UID {last_uid + 1}:* FROM "{s}")' if last_uid else f'(SINCE {since} FROM "{s}")'
+            typ, data = M.uid("search", None, crit)
             if typ == "OK" and data and data[0]:
                 uids |= set(data[0].split())
-        new = [u for u in sorted(uids, key=lambda x: int(x)) if u.decode() not in seen]
+        # « UID n:* » rend aussi le dernier mail connu quand rien de neuf n'est arrive : les deja vus sont ecartes
+        new = [u for u in sorted(uids, key=lambda x: int(x)) if u.decode() not in seen and int(u) > last_uid]
         for u in new[-200:]:
             try:
                 typ, data = M.uid("fetch", u, "(RFC822)")
@@ -489,6 +494,7 @@ async def sync(trigger: str = "manuel", days: int | None = None, reread: bool = 
     t0 = time.time()
     try:
         seen = await _seen()
+        cfg["from_last"] = trigger == "auto" and not reread     # automatique : depuis le dernier mail vu seulement
         mails, errors = await asyncio.to_thread(_fetch_sync, cfg, password, set() if reread else seen)
         created, updated, ignored = 0, 0, 0
         # seules les lectures automatiques previennent (28/10/2026) : une relecture ou un releve a la main ne
