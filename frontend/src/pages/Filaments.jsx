@@ -821,12 +821,19 @@ function PriceEditRow({ spoolId, current, filamentPrice, onUpdated }) {
 // ── Fiches bobine et filament (25/10/2026) : le langage du popup de la tuile « Filament en cours »
 // (la bobine en vedette sur un fond de sa couleur, des cartes de faits), les actions en bas a portee du pouce.
 // la bobine en vedette : son dessin sur un fond de sa couleur, les pastilles, le nom, puis ce qu'on veut mettre dessous
-function FHero({ colors, type, finish = null, color, chips, name, sub, children, stack = 0 }) {
+function FHero({ colors, type, finish = null, color, chips, name, sub, children, stack = 0, ordered = 0 }) {
   return (
     <div style={{ position:"relative", overflow:"hidden", padding:"52px 18px 18px", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap",
       background:`radial-gradient(circle at 18% 45%, ${color}55, transparent 60%), linear-gradient(135deg, ${color}26, transparent 70%), var(--surface2)` }}>
       <span style={{ position:"relative", display:"inline-flex", flexShrink:0, filter:`drop-shadow(0 8px 18px ${color}66)`,
-        marginRight: stack > 0 ? (stack > 1 ? 30 : 18) : 0 }}>
+        marginRight: stack > 0 ? (stack > 1 ? 30 : 18) : 0, marginLeft: ordered > 0 ? 18 : 0 }}>
+        {/* d'autres bobines de ce filament commandees, pas encore recues (28/10/2026) : une ombre bleutee, en pointille,
+            decalee de l'autre cote, avec la boite aux lettres et leur nombre */}
+        {ordered > 0 && <span aria-hidden="true" style={{ position:"absolute", top:5, left:-18, opacity:0.5, filter:"saturate(.6)" }}>
+          <SpoolSVG colors={colors} finish={finish} size={108} type={type}/>
+          <span style={{ position:"absolute", inset:6, borderRadius:"50%", border:"2px dashed #0EA5E9", opacity:0.8 }}/></span>}
+        {ordered > 0 && <span data-tip={`${ordered} bobine${ordered > 1 ? "s" : ""} de ce filament commandée${ordered > 1 ? "s" : ""}, pas encore reçue${ordered > 1 ? "s" : ""}`}
+          style={{ position:"absolute", left:-14, bottom:-4, zIndex:2, fontSize:11, fontWeight:900, color:"#fff", background:"#0EA5E9", borderRadius:10, padding:"1px 7px" }}>📬 +{ordered}</span>}
         {/* d'autres bobines du meme filament en stock : leurs ombres, decalees derriere (deux au plus) */}
         {stack > 1 && <span aria-hidden="true" style={{ position:"absolute", top:10, left:34, opacity:0.35 }}>
           <SpoolSVG colors={colors} finish={finish} size={100} type={type}/></span>}
@@ -965,7 +972,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
         <button onClick={menu} aria-label="Plus d'actions" style={{ ...fBtn, width:48, flex:"0 0 auto" }}>⋯</button>
       </>}>
       <FHero colors={colorsList} type={spool.filament_multicolor_type} finish={finishOf(spool)} color={main} name={name}
-        stack={spool.archived ? 0 : (spool.sibling_count || 0)}
+        stack={spool.archived ? 0 : (spool.sibling_count || 0)} ordered={spool.archived ? 0 : (spool.ordered_siblings || 0)}
         chips={[fChip(`#${spool.id}`, "#64748B"), spool.archived && fChip("Archivée", "#94a3b8"),
           // commandee, pas encore recue : son statut, et ce qu'il faut faire a l'arrivee (28/10/2026)
           spool.ordered && <span key="ord" data-tip="Créée depuis une commande lue dans les mails : hors du stock jusqu'à l'arrivée. Le scan RFID, ou l'ajout d'une bobine de ce filament, l'adoptera.">{fChip("📬 Commandée, pas encore reçue", "#0EA5E9")}</span>,
@@ -1159,6 +1166,7 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
   // une bobine blanche (ou tres claire) prend un liseré gris : sinon elle disparait sur le fond clair
   const main = paleHex(s.filament_color) ? "#94a3b8" : (hexToCss(s.filament_color) || "#94a3b8");
   const more = s.archived ? 0 : (s.sibling_count || 0);
+  const ord = s.archived ? 0 : (s.ordered_siblings || 0);     // d'autres bobines de ce filament commandees, pas recues
 
   return (
     <Pressable onClick={onClick} menu={menu} className="card-sm"
@@ -1186,8 +1194,15 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
           <SpoolSVG colors={colorsList} finish={finishOf(s)} empty={false} size={56} type={s.filament_multicolor_type}/></span>}
         {more > 0 && <span aria-hidden="true" style={{ position:"absolute", top:3, left:"calc(50% - 24px)", opacity:0.6 }}>
           <SpoolSVG colors={colorsList} finish={finishOf(s)} empty={false} size={64} type={s.filament_multicolor_type}/></span>}
+        {/* commandees, pas encore recues (28/10/2026) : une ombre bleutee en pointille de l'autre cote, et « 📬 +n » */}
+        {ord > 0 && <span aria-hidden="true" style={{ position:"absolute", top:3, left:"calc(50% - 8px)", opacity:0.45, filter:"saturate(.6)" }}>
+          <SpoolSVG colors={colorsList} finish={finishOf(s)} empty={false} size={64} type={s.filament_multicolor_type}/>
+          <span style={{ position:"absolute", inset:4, borderRadius:"50%", border:"1.5px dashed #0EA5E9", opacity:0.8 }}/></span>}
         <span style={{ position:"relative" }}><SpoolSVG colors={colorsList} finish={finishOf(s)} empty={false} size={70}
           type={s.filament_multicolor_type}/></span>
+        {ord > 0 && <span data-tip={`${ord} bobine${ord > 1 ? "s" : ""} de ce filament commandée${ord > 1 ? "s" : ""}, pas encore reçue${ord > 1 ? "s" : ""}`}
+          style={{ position:"absolute", left:"calc(50% - 44px)", bottom:0, fontSize:9.5, fontWeight:800, color:"#0EA5E9", opacity:.95,
+            padding:"0 5px", borderRadius:8, background:"color-mix(in srgb, #0EA5E9 14%, transparent)" }}>📬 +{ord}</span>}
         {more > 0 && <span data-tip={`${more} autre${more > 1 ? "s" : ""} bobine${more > 1 ? "s" : ""} de ce filament en stock`
           + (s.sibling_weight_g ? ` (${fmtStock(s.sibling_weight_g)})` : "")}
           style={{ position:"absolute", right:"calc(50% - 40px)", bottom:0, fontSize:9.5, fontWeight:700, color:"var(--muted)", opacity:.85,
