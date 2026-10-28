@@ -99,30 +99,36 @@ export default function IncomingOrders() {
   const isAdmin = useIsAdmin();
   const [orders, setOrders] = useState(null);
   const [open, setOpen] = useState(true);
-  const load = () => client.get("/filaments/incoming").then(r => setOrders(r.data.orders || [])).catch(() => setOrders([]));
+  // toutes les commandes (les finies aussi : l'historique, replie, 28/10/2026) ; les cachees n'y sont plus
+  const load = () => client.get("/filaments/incoming", { params: { all: 1 } }).then(r => setOrders((r.data.orders || []).filter(o => !o.hidden))).catch(() => setOrders([]));
   useEffect(() => { load(); }, []);
   const [sheet, setSheet] = useState(null);
+  const [pastOpen, setPastOpen] = useState(false);
   const live = (orders || []).filter(o => o.status !== "cancelled" && (o.pending > 0 || o.to_confirm > 0));
+  const past = (orders || []).filter(o => !live.includes(o));
   useEffect(() => { if (live.length) egg("facteur"); }, [live.length]);   // eslint-disable-line react-hooks/exhaustive-deps
-  if (!live.length) return null;
+  if (!live.length && !past.length) return null;
   const mark = async (o, i, received) => {
     try { const { data } = await client.post(`/filaments/incoming/${o.id}/mark`, { index: i, received }); setOrders(data.orders || []); }
     catch { /* rien */ }
   };
   const hide = async o => {
-    try { const { data } = await client.post(`/filaments/incoming/${o.id}/mark`, { hide: true }); setOrders(data.orders || []); }
+    try { const { data } = await client.post(`/filaments/incoming/${o.id}/mark`, { hide: true }); setOrders((data.orders || []).filter(x => !x.hidden)); }
     catch { /* rien */ }
   };
   const total = live.reduce((n, o) => n + o.pending, 0);
+  const quiet = !live.length;          // rien a venir : juste l'historique, discret et replie
   return (
-    <div style={{ borderRadius:16, border:"1px solid color-mix(in srgb, #0EA5E9 35%, var(--border))", background:"color-mix(in srgb, #0EA5E9 6%, var(--surface))", overflow:"hidden" }}>
-      <button type="button" onClick={() => setOpen(v => !v)} style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
+    <div style={{ borderRadius:16, border:`1px solid ${quiet ? "var(--border)" : "color-mix(in srgb, #0EA5E9 35%, var(--border))"}`,
+      background: quiet ? "var(--surface)" : "color-mix(in srgb, #0EA5E9 6%, var(--surface))", overflow:"hidden" }}>
+      <button type="button" onClick={() => quiet ? setPastOpen(v => !v) : setOpen(v => !v)} style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
         border:"none", background:"transparent", cursor:"pointer", color:"var(--text)", textAlign:"left" }}>
         <span style={{ fontSize:18 }}>📬</span>
-        <span style={{ fontWeight:800, fontSize:14, flex:1 }}>À venir · {total} bobine{total > 1 ? "s" : ""}</span>
-        <span style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)" }}>{live.length} commande{live.length > 1 ? "s" : ""} {open ? "▴" : "▾"}</span>
+        <span style={{ fontWeight:800, fontSize:14, flex:1 }}>{quiet ? "Commandes Bambu Lab" : `À venir · ${total} bobine${total > 1 ? "s" : ""}`}</span>
+        <span style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)" }}>{quiet ? `${past.length} passée${past.length > 1 ? "s" : ""} ${pastOpen ? "▴" : "▾"}`
+          : `${live.length} commande${live.length > 1 ? "s" : ""} ${open ? "▴" : "▾"}`}</span>
       </button>
-      {open && <div style={{ display:"flex", flexDirection:"column", gap:8, padding:"0 12px 12px" }}>
+      {open && !quiet && <div style={{ display:"flex", flexDirection:"column", gap:8, padding:"0 12px 12px" }}>
         {live.map(o => { const [sl, sc] = ST[o.status] || [o.status, "#94a3b8"]; return (
           <div key={o.id} style={{ borderRadius:12, background:"var(--surface2)", border:"1px solid var(--border)", padding:"8px 10px" }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:12.5 }}>
@@ -152,7 +158,22 @@ export default function IncomingOrders() {
             </div>
           </div>); })}
       </div>}
-      {sheet != null && <OrderSheet id={sheet} onClose={() => setSheet(null)} onChanged={list => setOrders(list)}/>}
+      {/* l'historique : les commandes finies (livrees, confirmees, annulees), une ligne chacune, la fenetre au clic */}
+      {past.length > 0 && !quiet && <button type="button" onClick={() => setPastOpen(v => !v)} style={{ width:"100%", display:"flex", alignItems:"center", gap:6,
+        padding:"6px 12px 8px", border:"none", borderTop:"1px solid var(--border)", background:"transparent", cursor:"pointer", color:"var(--muted)", fontSize:11.5, fontWeight:700, textAlign:"left" }}>
+        <span style={{ flex:1 }}>Commandes passées · {past.length}</span><span>{pastOpen ? "▴" : "▾"}</span></button>}
+      {pastOpen && past.length > 0 && <div style={{ display:"flex", flexDirection:"column", gap:4, padding:"0 12px 12px" }}>
+        {past.map(o => { const [sl, sc] = ST[o.status] || [o.status, "#94a3b8"]; const nb = o.items.filter(i => i.kind === "filament").reduce((n, i) => n + (i.qty || 0), 0); return (
+          <button type="button" key={o.id} onClick={() => setSheet(o.id)} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:10,
+            border:"1px solid var(--border)", background:"var(--surface2)", cursor:"pointer", color:"var(--text)", textAlign:"left", fontSize:12.5 }}>
+            <span style={{ fontWeight:800 }}>{o.order_no}</span>
+            <span style={{ padding:"1px 7px", borderRadius:10, fontSize:10.5, fontWeight:800, color:"#fff", background:sc }}>{sl}</span>
+            <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:"var(--muted)" }}>
+              {nb ? `${nb} bobine${nb > 1 ? "s" : ""}` : "sans lignes"}{o.items.length > nb ? ` · ${o.items.length - nb} autre${o.items.length - nb > 1 ? "s" : ""}` : ""}</span>
+            <span style={{ color:"var(--muted)", fontVariantNumeric:"tabular-nums" }}>{day(o.delivered_at || o.shipped_at || o.ordered_at)}</span>
+          </button>); })}
+      </div>}
+      {sheet != null && <OrderSheet id={sheet} onClose={() => setSheet(null)} onChanged={list => setOrders((list || []).filter(x => !x.hidden))}/>}
     </div>
   );
 }
