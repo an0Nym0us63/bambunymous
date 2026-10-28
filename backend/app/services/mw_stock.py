@@ -275,10 +275,34 @@ def _grams(v):
         return None
 
 
+# Les propositions d'un modele, gardees tant que le stock et les 3MF lus ne changent pas (28/10/2026 : 130 ms de
+# calcul pur a chaque ouverture d'une fiche ou d'une ligne de la file, qui figeaient la boucle)
+_MATCH_CACHE: dict = {}
+
+
 async def match_profiles(profiles: list) -> dict:
     """{instance_id: [{type, color, g, exact, matches: [...]}]} pour les profils
     d'un modele. Un profil dont le 3MF a deja ete lu (filaments exacts) en
     profite : reference, finition et marque departagent les propositions."""
+    import json as _j
+    from ..db.session import data_version
+    from .mw_3mf import _dir as _exact_dir
+    # le 3MF lu ou non pour chaque profil fait partie de la signature (son contenu ne change pas une fois lu)
+    sig = _j.dumps([(str(p.get("instance_id")), [(fl.get("type"), fl.get("color"), fl.get("g")) for fl in p.get("filaments") or []],
+                     (_exact_dir() / f"{p.get('instance_id')}.json").is_file() if str(p.get("instance_id") or "").isdigit() else None)
+                    for p in profiles or []], sort_keys=True, default=str)
+    key = (sig, data_version("filaments", "bobines"))
+    hit = _MATCH_CACHE.get(sig)
+    if hit and hit[0] == key:
+        return _j.loads(hit[1])
+    res = await _match_profiles(profiles)
+    if len(_MATCH_CACHE) > 200:
+        _MATCH_CACHE.clear()
+    _MATCH_CACHE[sig] = (key, _j.dumps(res, default=str))
+    return res
+
+
+async def _match_profiles(profiles: list) -> dict:
     from .mw_3mf import cached as exact_cached, slot_for
     stock = await stock_rows()
     res = {}

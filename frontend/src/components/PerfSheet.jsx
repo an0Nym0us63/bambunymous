@@ -74,7 +74,8 @@ function LoopView({ loop }) {
       {" "}(100 % = un cœur entier{loop.cores ? `, ${loop.cores} cœurs` : ""}) · {loop.threads} fils</div>}
     <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.4 }}>
       Le serveur traite tout sur une seule file. Quand un calcul la fige plus de {perfMs(loop.stall_ms)}, toutes les pages en cours attendent :
-      voici où il en était, du plus coûteux au moins coûteux.</p>
+      voici où il en était, du plus coûteux au moins coûteux. Une ligne « ⇄ fil … » : la file n'était pas en cause, c'est ce fil à côté
+      (imprimante, conversion 3D, import…) qui tenait la main de Python pendant ce temps.</p>
     {loop.stalls.map(s => (
       <div key={s.where} style={{ padding: "10px 12px", borderRadius: 14, background: "var(--surface)", border: `1px solid ${tone(s.max)}55`, display: "flex", flexDirection: "column", gap: 5 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>

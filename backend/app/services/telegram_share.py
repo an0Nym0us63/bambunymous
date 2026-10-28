@@ -103,7 +103,8 @@ async def _connected_client():
     session, api_id, api_hash = await _get(K_SESSION), await _get(K_API_ID), await _get(K_API_HASH)
     if not (session and api_id and api_hash):
         raise ShareError("Compte Telegram non relié (Paramètres > Partage Telegram)")
-    c = _new_client(session, api_id, api_hash)
+    # la creation (import de Telethon, session, crypto) prend 100 a 200 ms : dans un fil, la boucle continue
+    c = await asyncio.to_thread(_new_client, session, api_id, api_hash)
     await c.connect()
     if not await c.is_user_authorized():
         await c.disconnect()

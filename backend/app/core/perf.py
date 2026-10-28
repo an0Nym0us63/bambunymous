@@ -167,18 +167,60 @@ _APP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 
 
 def _where(frame) -> tuple:
-    """La pile du fil bloque, ramenee au code de l'appli : (cle, 4 dernieres lignes de l'appli)."""
-    mine = []
+    """La pile du fil bloque, ramenee au code de l'appli : (cle, 4 dernieres lignes de l'appli). Sans ligne de
+    l'appli (une bibliotheque : encodage JSON d'une grosse reponse, liberation d'objets…), les 4 lignes de
+    bibliotheque les plus profondes, et dans les deux cas la requete en cours si la pile en porte une
+    (28/10/2026 : « encoder.py iterencode · 193 ms » ne disait pas quelle route)."""
+    mine, libs, route = [], [], None
     f = frame
     while f is not None:
         fn = f.f_code.co_filename
         if fn.startswith(_APP_DIR) and "site-packages" not in fn:
             mine.append(f"{os.path.relpath(fn, _APP_DIR).replace(os.sep, '/')}:{f.f_lineno} {f.f_code.co_name}")
+        elif len(libs) < 4:
+            libs.append(f"{os.path.basename(fn)}:{f.f_lineno} {f.f_code.co_name}")
+        if route is None:
+            try:
+                sc = f.f_locals.get("scope")
+                if isinstance(sc, dict) and sc.get("type") == "http" and sc.get("path"):
+                    route = f"{sc.get('method', '')} {sc['path']}".strip()
+            except Exception:
+                pass
         f = f.f_back
-    if not mine:                 # rien de l'appli : la bibliotheque la plus profonde
-        fn = frame.f_code.co_filename
-        mine = [f"{os.path.basename(fn)}:{frame.f_lineno} {frame.f_code.co_name}"]
-    return mine[0], mine[:4]
+    if route:
+        route = re.sub(r"/\d+", "/{n}", route.replace("/api/v1", ""))
+    stack = (mine or libs)[:4]
+    key = stack[0] if stack else "?"
+    if route:
+        key = f"{key} → {route}"
+        stack = stack + [f"→ {route}"]
+    return key, stack
+
+
+def _blame(main_frame, frames: dict) -> tuple:
+    """Qui bloque : la pile du fil principal s'il est dans le code de l'appli ; sinon (il n'est que dans la
+    bibliotheque, typiquement « runners.py run » : il attend la main), le fil qui la tient probablement, celui
+    dont la pile est dans le code de l'appli (28/10/2026 : « run · 10 fois · pire 961 ms » ne nommait personne).
+    Un seul fil Python avance a la fois : un fil (MQTT, conversion 3D, imports…) qui calcule longtemps fait
+    attendre la boucle, et toutes les pages avec elle."""
+    key, stack = _where(main_frame)
+    if "/" in key or key.startswith("app"):
+        return key, stack
+    names = {t.ident: t.name for t in threading.enumerate()}
+    best = None
+    for ident, fr in frames.items():
+        if ident == _LOOP["ident"] or ident == threading.get_ident():
+            continue
+        k, st = _where(fr)
+        own = "/" in k or k.startswith("app")
+        if own or best is None:
+            best = (own, names.get(ident, "?"), k, st)
+            if own:
+                break
+    if best is None or not best[0]:
+        return key, stack
+    _, name, k, st = best
+    return f"⇄ fil {name} · {k}", st
 
 
 def _guard() -> None:
@@ -190,10 +232,11 @@ def _guard() -> None:
             continue
         late = (time.perf_counter() - beat) * 1000
         if late >= STALL_MS and caught is None and _LOOP["ident"] is not None:
-            fr = sys._current_frames().get(_LOOP["ident"])
+            frames = sys._current_frames()
+            fr = frames.get(_LOOP["ident"])
             if fr is not None:
                 try:
-                    caught = (_where(fr), beat)
+                    caught = (_blame(fr, frames), beat)
                 except Exception:
                     caught = None
         elif caught is not None and _LOOP["beat"] != caught[1]:
