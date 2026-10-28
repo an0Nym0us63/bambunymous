@@ -35,7 +35,7 @@ const hex6 = c => String(c || "").replace(/^#/, "").slice(0, 6).toUpperCase();
 // leur rendu) ; paillettes, galaxie, marbre, bois, carbone : un motif dessine, projete sur chaque face
 const FINISH_MAT = {
   translucent: { transparent: true, opacity: 0.55, depthWrite: false, roughness: 0.25, metalness: 0 },
-  silk: { roughness: 0.32, metalness: 0.1, envMapIntensity: 0.22 },       // un brillant satine, pas un metal (un gris virait au blanc)
+  silk: { roughness: 0.2, metalness: 0.12, envMapIntensity: 0.5 },        // un brillant satine, pas un metal (un gris virait au blanc) ; accentue le 28/10/2026
   metal: { roughness: 0.32, metalness: 1, envMapIntensity: 1.5 },
   matte: { roughness: 0.95, metalness: 0 },
   carbon: { roughness: 0.55, metalness: 0.35, envMapIntensity: 0.6 },   // la trame module la brillance (voir plus bas)
@@ -217,7 +217,20 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             if (fin === "glow") { mat.color = c.clone().multiplyScalar(0.6); mat.emissive = c.clone(); mat.emissiveIntensity = 0.45; mat.roughness = 0.6; }
             if (FINISH_MAT[fin]?.envMapIntensity) mat.envMap = await envMap();
             // le reflet s'ajoute a l'eclairage : la couleur est un peu baissee d'autant, sinon un gris satine sort blanc
-            if (fin === "silk") mat.color.multiplyScalar(0.82);
+            if (fin === "silk") {
+              mat.color.multiplyScalar(0.74);
+              // le satine d'un silk tient a sa lumiere rasante : la face en biais s'eclaire d'un voile clair, la face de front
+              // garde sa couleur (sans ca, le reflet d'ambiance seul reste timide)
+              const prev = mat.onBeforeCompile;
+              mat.onBeforeCompile = sh => {
+                prev?.(sh);
+                sh.fragmentShader = sh.fragmentShader.replace("#include <emissivemap_fragment>",
+                  "#include <emissivemap_fragment>\n  { float fr = 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)));\n" +
+                  "    float sheen = pow(smoothstep(0.1, 1.0, fr), 1.6);\n" +
+                  "    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.55 + vec3(0.55), sheen * 0.7);\n" +
+                  "    totalEmissiveRadiance += vec3(0.08) * sheen; }");
+              };
+            }
             let mesh = geo;
             if (["sparkle", "galaxy", "marble", "wood", "carbon"].includes(fin)) {
               if (!texOf[fin]) {
