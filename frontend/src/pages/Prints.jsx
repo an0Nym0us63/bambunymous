@@ -2126,9 +2126,6 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
           padding:"2px 8px", borderRadius:20, boxShadow:"0 2px 6px rgba(0,0,0,0.35)" }}>×{p.number_of_items}</span>}
         {p.status !== "SUCCESS" && <span style={{ position:"absolute", top:7, left:7, background:stC, color:"white", fontSize:10, fontWeight:900,
           padding:"2px 9px", borderRadius:20, boxShadow:`0 4px 12px ${stC}66`, visibility: selectMode ? "hidden" : "visible" }}>{stI} {stL}</span>}
-        {p.nas_only > 0 && <span data-tip={`${p.nas_only} fichier${p.nas_only > 1 ? "s" : ""} seulement sur le NAS (détail dans la fiche)`}
-          style={{ position:"absolute", bottom:7, left:7, fontSize:11, lineHeight:"18px", width:20, height:20, borderRadius:"50%", textAlign:"center",
-            background:"rgba(14,165,233,0.9)", color:"#fff", boxShadow:"0 2px 6px rgba(0,0,0,0.35)", visibility: selectMode ? "hidden" : "visible" }}>🗄️</span>}
         {rateMe && <span data-tip="À évaluer sur MakerWorld" style={{ position:"absolute", bottom:7, right:7, fontSize:11, fontWeight:900, color:"#fff",
           background:"linear-gradient(135deg, #F59E0B, #FBBF24)", borderRadius:20, padding:"1px 7px", boxShadow:"0 3px 10px rgba(245,158,11,.5)" }}>⭐</span>}
         {dots && <span style={{ position:"absolute", bottom:7, left:7 }}>{dots}</span>}
