@@ -19,7 +19,7 @@ export function ColorPairs({ detail = [], options = [], chosen = {}, scope = nul
     if (!scope || !onChoose) return;
     const seen = new Set();
     const items = options.filter(o => { const k = `${o.print}:${o.slot}`; if (seen.has(k)) return false; seen.add(k); return true; })
-      .map(o => ({ icon: <Sw c={o.color} size={16}/>, label: o.name || `Filament n°${o.slot}`,
+      .map(o => ({ icon: <Sw c={o.color} size={16}/>, label: `${o.name || `Filament n°${o.slot}`}${o.kind ? ` — ${o.kind}` : ""}`,
         hint: `${o.print_name}${o.grams ? ` · ${String(o.grams).replace(".", ",")} g` : ""}`,
         onClick: () => onChoose(x.from, { print: o.print, slot: o.slot }) }));
     openMenu(e, { title: `Couleur n°${x.e} du créateur : quelle bobine l'a remplacée ?`, items: [
