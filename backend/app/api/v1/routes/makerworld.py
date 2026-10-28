@@ -715,6 +715,9 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             "used_options": used_options, "chosen": chosen, "scope": scope if _SCOPE.fullmatch(scope or "") else None,
             # par plateau (vide : aucune impression rattachee a un plateau precis, on garde le melange ci-dessus)
             "used_plates": used_plates, "used_details_plates": used_details_plates,
+            "used_multi_plates": {n: {d["from"]: d["multi"] for d in dd if d.get("to") and d.get("multi")}
+                                  for n, dd in used_details_plates.items()},
+            "used_multi": {d["from"]: d["multi"] for d in used_detail or [] if d.get("to") and d.get("multi")},
             "used_finishes_plates": {n: {d["from"]: d["finish"] for d in dd if d.get("to") and d.get("finish")}
                                      for n, dd in used_details_plates.items()},
             # la finition de chaque couleur, pour le rendu : d'origine (profils filament du 3MF), et des bobines utilisees
@@ -998,7 +1001,7 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
         prints.sort(key=lambda r: rank.get(r[0], 10 ** 9))
         rows = (await db.execute(
             select(FU.print_id, FU.ams_slot, FU.color_hex, Filament.color, FU.grams_used, FU.filament_type,
-                   Filament.fila_type, Filament.name, Filament.fila_finish)
+                   Filament.fila_type, Filament.name, Filament.fila_finish, Filament.multicolor_type, Filament.colors_array)
             .outerjoin(Spool, Spool.id == FU.spool_id).outerjoin(Filament, Filament.id == Spool.filament_id)
             .where(FU.print_id.in_(print_ids)))).all()
         raw = (await db.execute(select(MW.profiles).where(MW.design_id == did))).scalar() if did else None
@@ -1013,7 +1016,12 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
     grams_by: dict = {}
     fin_by: dict = {}
     sliced_by: dict = {}                             # la couleur notee au tranchage, par emplacement
-    for pid, slot, chex, fcol, g, ftype, ffila, fname, ffin in rows:
+    multi_by: dict = {}                              # le multicolore de la bobine (degrade, coaxial) : {type, colors}
+    for pid, slot, chex, fcol, g, ftype, ffila, fname, ffin, mtype, carr in rows:
+        if slot and mtype in ("gradient", "coaxial"):
+            cols = [h6(x) for x in str(carr or "").split(",") if len(h6(x)) == 6]
+            if len(cols) >= 2:
+                multi_by.setdefault(pid, {})[int(slot)] = {"type": mtype, "colors": cols[:3]}
         if slot:
             used_by.setdefault(pid, {})[int(slot)] = h6(fcol or chex)
             sliced_by.setdefault(pid, {})[int(slot)] = h6(chex) if len(h6(chex)) == 6 else None
@@ -1099,7 +1107,8 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
                 if b and len(a) == 6 and len(b) == 6 and a not in out:
                     out[a] = b
                     detail.append({"from": a, "to": b, "e": e, "es": es, "how": how, "print": pid,
-                                   "finish": (fin_by.get(pid) or {}).get(es), **({"other_profile": True} if tier else {})})
+                                   "finish": (fin_by.get(pid) or {}).get(es), "multi": (multi_by.get(pid) or {}).get(es),
+                                   **({"other_profile": True} if tier else {})})
     # les correspondances choisies a la main (28/10/2026) passent avant la deduction : une bobine de ces
     # impressions, ou « aucune » ; un choix qui vise une impression absente d'ici est ignore (la deduction reste)
     o_cols = [h6(c) for c in colors]
@@ -1121,7 +1130,8 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
         if b:
             out[a] = b
             detail = [d for d in detail if d["from"] != a] + [{"from": a, "to": b, "e": e, "es": es, "how": "choisi", "print": cp,
-                                                               "finish": (fin_by.get(cp) or {}).get(es), **grp}]
+                                                               "finish": (fin_by.get(cp) or {}).get(es),
+                                                               "multi": (multi_by.get(cp) or {}).get(es), **grp}]
     if detail_out is not None:
         detail_out.extend(detail)
         detail_out.extend({"from": h6(c), "to": None, "e": k + 1} for k, c in enumerate(colors)

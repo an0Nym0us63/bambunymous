@@ -62,7 +62,7 @@ function boxUV(THREE, geo) {
   return g;
 }
 
-function Viewer({ url, glb, onState, palette = null, finishes = null, glow = false, bed = null, litho = false }) {
+function Viewer({ url, glb, onState, palette = null, finishes = null, multi = null, glow = false, bed = null, litho = false }) {
   const box = useRef(null);
   const [dark, setDark] = useState(false);
   const [lit, setLit] = useState(false);
@@ -175,6 +175,43 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
             const fin = finishes?.[own];
             const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true, envMapIntensity: 0,
               ...(FINISH_MAT[fin] || {}) });
+            // un filament multicolore (28/10/2026), en simili, la finition posee par-dessus comme pour les autres :
+            // le degrade evolue le long du filament consomme, donc surtout avec la hauteur d'impression, et un peu dans
+            // la couche elle-meme, le long du parcours (le remplissage du dessus change sur sa longueur) : couleur par
+            // sommet ; le bicolore ou tricolore coaxial change selon l'angle de vue (une couleur de face, l'autre en
+            // biais, la troisieme sur la tranche), avec un leger scintillement irise
+            const mc = multi?.[own];
+            if (mc?.type === "gradient" && mc.colors?.length >= 2) {
+              const cols = mc.colors.map(h => new THREE.Color(`#${hex6(h)}`));
+              let z0 = Infinity, z1 = -Infinity, x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+              for (let i = 0; i < g.pos.length; i += 3) {
+                const x = g.pos[i], y = g.pos[i + 1], z = g.pos[i + 2];
+                if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z;
+              }
+              const vc = new Float32Array(g.pos.length), sz = Math.max(1e-6, z1 - z0), sxy = Math.max(1e-6, (x1 - x0) + (y1 - y0)), tmp = new THREE.Color();
+              for (let i = 0; i < g.pos.length; i += 3) {
+                // 80 % la hauteur, 20 % l'avancee dans la couche (en diagonale, comme un parcours qui balaie le plateau)
+                const f = 0.8 * (g.pos[i + 2] - z0) / sz + 0.2 * ((g.pos[i] - x0) + (g.pos[i + 1] - y0)) / sxy;
+                const t = Math.min(1, Math.max(0, f)) * (cols.length - 1), k = Math.min(cols.length - 2, Math.floor(t));
+                tmp.copy(cols[k]).lerp(cols[k + 1], t - k);
+                vc[i] = tmp.r; vc[i + 1] = tmp.g; vc[i + 2] = tmp.b;
+              }
+              geo.setAttribute("color", new THREE.BufferAttribute(vc, 3));
+              mat.vertexColors = true; mat.color.set(0xffffff);
+            } else if (mc?.type === "coaxial" && mc.colors?.length >= 2) {
+              const [a, b, d] = [0, 1, 2].map(i => new THREE.Color(`#${hex6(mc.colors[Math.min(i, mc.colors.length - 1)])}`));
+              const u = { cA: { value: a }, cB: { value: b }, cC: { value: d }, nC: { value: mc.colors.length } };
+              mat.color.set(0xffffff);
+              const prev = mat.onBeforeCompile;
+              mat.onBeforeCompile = sh => {
+                prev?.(sh);
+                Object.assign(sh.uniforms, u);
+                sh.fragmentShader = "uniform vec3 cA; uniform vec3 cB; uniform vec3 cC; uniform float nC;\n" + sh.fragmentShader.replace("#include <emissivemap_fragment>",
+                  "#include <emissivemap_fragment>\n  { float fr = smoothstep(0.0, 0.85, 1.0 - abs(dot(normalize(normal), normalize(vViewPosition))));\n" +
+                  "    vec3 mc = nC > 2.5 ? (fr < 0.5 ? mix(cA, cB, fr * 2.0) : mix(cB, cC, (fr - 0.5) * 2.0)) : mix(cA, cB, fr);\n" +
+                  "    diffuseColor.rgb *= mc * (0.92 + 0.25 * fr); }");     // *= : le motif de la finition reste par-dessus
+              };
+            }
             // phosphorescent : il luit de sa couleur, eclaircie (une piece eclairee de l'interieur)
             // (la couleur eclairee baissee d'autant : sinon la somme sature, et la piece vire au blanc)
             if (fin === "glow") { mat.color = c.clone().multiplyScalar(0.6); mat.emissive = c.clone(); mat.emissiveIntensity = 0.45; mat.roughness = 0.6; }
@@ -392,7 +429,7 @@ function Ring({ pct = null, label }) {
 // (usedPrints : ces impressions, le serveur rapproche chaque filament du projet de la bobine qui l'a remplace).
 // fetchSource : recuperer le 3MF d'origine s'il manque (« À faire »).
 export default function Model3D({ designId = null, profileId = null, printId = null, wait = false, title = "", onClose,
-                                  palette = null, platePalettes = null, paletteFinishes = null, altName = null, usedPrints = null,
+                                  palette = null, platePalettes = null, paletteFinishes = null, paletteMulti = null, altName = null, usedPrints = null,
                                   fetchSource = false, scope = null }) {
   const [meta, setMeta] = useState(null);
   const [err, setErr] = useState(null);
@@ -440,6 +477,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const usedPal = byPlate ? (p && meta.used_plates[String(p.n)]) || null : meta?.used_palette;
   const usedDetail = byPlate ? (p && meta.used_details_plates?.[String(p.n)]) || [] : meta?.used_detail || [];
   const usedFin = byPlate ? (p && meta.used_finishes_plates?.[String(p.n)]) || {} : meta?.used_finishes;
+  const usedMulti = byPlate ? (p && meta.used_multi_plates?.[String(p.n)]) || {} : meta?.used_multi;
   const alt = (p && platePalettes?.[p.n]) || palette || usedPal || null;
   const altLabel = altName || (palette || platePalettes ? "Retenues" : "Utilisées");
   const [own, setOwn] = useState(false);
@@ -469,7 +507,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         <div style={{ position: "relative", height: "min(62dvh, 560px)", borderRadius: 18, overflow: "hidden", border: "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
           {p && <Viewer key={`${p.url}|${shown ? "alt" : "own"}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown}
-            finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes} glow={!!st.glow} bed={meta?.bed} litho={!!p.litho}/>}
+            finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
+            multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} bed={meta?.bed} litho={!!p.litho}/>}
           {alt && p && !isGlb(p.url) && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
             background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
             {[[true, "Couleurs d'origine"], [false, `Couleurs ${altLabel.toLowerCase()}`]].map(([o, l]) => <button key={l} type="button" onClick={() => setOwn(o)}

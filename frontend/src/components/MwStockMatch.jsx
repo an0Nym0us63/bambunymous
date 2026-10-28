@@ -108,6 +108,18 @@ export function profileFinishes(items, scope) {
   });
   return out;
 }
+// le multicolore (degrade, coaxial) des filaments choisis : {couleur du createur : {type, colors}} pour la vue 3D
+export function profileMulti(items, scope) {
+  const out = {};
+  (items || []).forEach((x, i) => {
+    const c = chosenOf(x, scope, i);
+    const from = String(x.color || "").replace(/^#/, "").slice(0, 6).toUpperCase();
+    const t = c?.multicolor_type;
+    const cols = String(c?.colors_array || "").split(",").map(v => v.replace(/^#/, "").slice(0, 6).toUpperCase()).filter(v => v.length === 6);
+    if (from.length === 6 && (t === "gradient" || t === "coaxial") && cols.length >= 2 && !(from in out)) out[from] = { type: t, colors: cols.slice(0, 3) };
+  });
+  return out;
+}
 export function picksOf(scope, items) {
   const out = {};
   (items || []).forEach((x, i) => {
