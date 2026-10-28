@@ -28,7 +28,9 @@ export default function NasChip({ count, url, what = "cette impression", style =
         if (byPrint && f.print !== last) { if (items.length) items.push("-"); items.push({ icon: "🖨️", label: f.print, disabled: true }); last = f.print; }
         const pid = f.pid ?? url.match(/\/prints\/(\d+)\/nas/)?.[1];
         items.push({ icon: f.icon, label: f.label, disabled: !f.present,
-          hint: [fmtSize(f.size), f.at ? `copié le ${dayFr(f.at)}` : null, f.present ? null : "ne répond pas"].filter(Boolean).join(" · "),
+          // le nom du fichier quand le libelle ne suffit pas (deux 3MF tranches, plusieurs videos)
+          hint: [["3MF tranché", "Vidéo", "Photo"].includes(f.label) ? f.name : null, fmtSize(f.size), f.at ? `copié le ${dayFr(f.at)}` : null,
+            f.present ? null : "ne répond pas"].filter(Boolean).join(" · "),
           onClick: pid && f.present ? () => window.open(`/api/v1/prints/${pid}/file/${encodeURIComponent(f.name)}`, "_blank", "noopener") : undefined });
       }
       openMenu(e, { title: `Sur le NAS seulement · ${files.length}`, color: "#0EA5E9",
