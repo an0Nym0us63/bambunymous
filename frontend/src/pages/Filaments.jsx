@@ -821,24 +821,30 @@ function PriceEditRow({ spoolId, current, filamentPrice, onUpdated }) {
 // ── Fiches bobine et filament (25/10/2026) : le langage du popup de la tuile « Filament en cours »
 // (la bobine en vedette sur un fond de sa couleur, des cartes de faits), les actions en bas a portee du pouce.
 // la bobine en vedette : son dessin sur un fond de sa couleur, les pastilles, le nom, puis ce qu'on veut mettre dessous
+// un exemplaire fantome derriere la bobine : le meme dessin, estompe et desature, cercle d'un anneau (plein : en stock,
+// pointille : en commande). side : de quel cote il depasse ; off : de combien ; size : sa taille.
+function Ghost({ side, color, dashed, size, off, top, colors, finish, type, ring = 2, inset = 6 }) {
+  return <span aria-hidden="true" style={{ position:"absolute", top, [side]: -off, opacity:0.45, filter:"saturate(.55)" }}>
+    <SpoolSVG colors={colors} finish={finish} size={size} type={type}/>
+    <span style={{ position:"absolute", inset, borderRadius:"50%", border:`${ring}px ${dashed ? "dashed" : "solid"} ${color}`, opacity:0.85 }}/></span>;
+}
+function GhostBadge({ side, color, tip, children, size = 11, bottom = -4, off = 14 }) {
+  return <span data-tip={tip} style={{ position:"absolute", [side]: -off, bottom, zIndex:2, fontSize:size, fontWeight:900, color:"#fff", background:color,
+    borderRadius:10, padding:"1px 7px", whiteSpace:"nowrap" }}>{children}</span>;
+}
+
 function FHero({ colors, type, finish = null, color, chips, name, sub, children, stack = 0, ordered = 0 }) {
   return (
     <div style={{ position:"relative", overflow:"hidden", padding:"52px 18px 18px", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap",
       background:`radial-gradient(circle at 18% 45%, ${color}55, transparent 60%), linear-gradient(135deg, ${color}26, transparent 70%), var(--surface2)` }}>
       <span style={{ position:"relative", display:"inline-flex", flexShrink:0, filter:`drop-shadow(0 8px 18px ${color}66)`,
-        marginRight: stack > 0 ? (stack > 1 ? 30 : 18) : 0, marginLeft: ordered > 0 ? 18 : 0 }}>
-        {/* d'autres bobines de ce filament commandees, pas encore recues (28/10/2026) : une ombre bleutee, en pointille,
-            decalee de l'autre cote, avec la boite aux lettres et leur nombre */}
-        {ordered > 0 && <span aria-hidden="true" style={{ position:"absolute", top:5, left:-18, opacity:0.5, filter:"saturate(.6)" }}>
-          <SpoolSVG colors={colors} finish={finish} size={108} type={type}/>
-          <span style={{ position:"absolute", inset:6, borderRadius:"50%", border:"2px dashed #0EA5E9", opacity:0.8 }}/></span>}
-        {ordered > 0 && <span data-tip={`${ordered} bobine${ordered > 1 ? "s" : ""} de ce filament commandée${ordered > 1 ? "s" : ""}, pas encore reçue${ordered > 1 ? "s" : ""}`}
-          style={{ position:"absolute", left:-14, bottom:-4, zIndex:2, fontSize:11, fontWeight:900, color:"#fff", background:"#0EA5E9", borderRadius:10, padding:"1px 7px" }}>📬 +{ordered}</span>}
-        {/* d'autres bobines du meme filament en stock : leurs ombres, decalees derriere (deux au plus) */}
-        {stack > 1 && <span aria-hidden="true" style={{ position:"absolute", top:10, left:34, opacity:0.35 }}>
-          <SpoolSVG colors={colors} finish={finish} size={100} type={type}/></span>}
-        {stack > 0 && <span aria-hidden="true" style={{ position:"absolute", top:5, left:18, opacity:0.6 }}>
-          <SpoolSVG colors={colors} finish={finish} size={108} type={type}/></span>}
+        marginRight: stack > 0 ? 18 : 0, marginLeft: ordered > 0 ? 18 : 0 }}>
+        {/* les autres exemplaires du filament, en fantome (28/10/2026) : meme dessin estompe, cercle d'un anneau. A droite,
+            ceux en stock (anneau vert plein, « 🧵 +n ») ; a gauche, ceux commandes pas encore recus (anneau bleu pointille, « 📬 +n ») */}
+        {stack > 0 && <Ghost side="right" color="#22c55e" dashed={false} size={108} off={18} top={5} colors={colors} finish={finish} type={type}/>}
+        {ordered > 0 && <Ghost side="left" color="#0EA5E9" dashed size={108} off={18} top={5} colors={colors} finish={finish} type={type}/>}
+        {stack > 0 && <GhostBadge side="right" color="#22c55e" tip={`${stack} autre${stack > 1 ? "s" : ""} bobine${stack > 1 ? "s" : ""} de ce filament en stock`}>🧵 +{stack}</GhostBadge>}
+        {ordered > 0 && <GhostBadge side="left" color="#0EA5E9" tip={`${ordered} bobine${ordered > 1 ? "s" : ""} de ce filament commandée${ordered > 1 ? "s" : ""}, pas encore reçue${ordered > 1 ? "s" : ""}`}>📬 +{ordered}</GhostBadge>}
         <span style={{ position:"relative", display:"inline-flex" }}><SpoolSVG colors={colors} finish={finish} size={118} type={type}/></span></span>
       <div style={{ flex:"1 1 190px", minWidth:0, display:"flex", flexDirection:"column", gap:6 }}>
         {chips.filter(Boolean).length > 0 && <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
@@ -1188,25 +1194,17 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
 
       {/* La bobine, meme dessin qu'au slot AMS de l'accueil */}
       <div style={{ position:"relative", display:"flex", justifyContent:"center", margin:"3px 0 0", filter:`drop-shadow(0 6px 10px ${main}55)` }}>
-        {/* d'autres bobines du meme filament en stock : une bobine estompee derriere, et leur nombre en discret
-            (pas dans les archives : elles ne sont plus en stock) */}
-        {more > 1 && <span aria-hidden="true" style={{ position:"absolute", top:7, left:"calc(50% - 12px)", opacity:0.3 }}>
-          <SpoolSVG colors={colorsList} finish={finishOf(s)} empty={false} size={56} type={s.filament_multicolor_type}/></span>}
-        {more > 0 && <span aria-hidden="true" style={{ position:"absolute", top:3, left:"calc(50% - 24px)", opacity:0.6 }}>
-          <SpoolSVG colors={colorsList} finish={finishOf(s)} empty={false} size={64} type={s.filament_multicolor_type}/></span>}
-        {/* commandees, pas encore recues (28/10/2026) : une ombre bleutee en pointille de l'autre cote, et « 📬 +n » */}
-        {ord > 0 && <span aria-hidden="true" style={{ position:"absolute", top:3, left:"calc(50% - 8px)", opacity:0.45, filter:"saturate(.6)" }}>
-          <SpoolSVG colors={colorsList} finish={finishOf(s)} empty={false} size={64} type={s.filament_multicolor_type}/>
-          <span style={{ position:"absolute", inset:4, borderRadius:"50%", border:"1.5px dashed #0EA5E9", opacity:0.8 }}/></span>}
-        <span style={{ position:"relative" }}><SpoolSVG colors={colorsList} finish={finishOf(s)} empty={false} size={70}
-          type={s.filament_multicolor_type}/></span>
-        {ord > 0 && <span data-tip={`${ord} bobine${ord > 1 ? "s" : ""} de ce filament commandée${ord > 1 ? "s" : ""}, pas encore reçue${ord > 1 ? "s" : ""}`}
-          style={{ position:"absolute", left:"calc(50% - 44px)", bottom:0, fontSize:9.5, fontWeight:800, color:"#0EA5E9", opacity:.95,
-            padding:"0 5px", borderRadius:8, background:"color-mix(in srgb, #0EA5E9 14%, transparent)" }}>📬 +{ord}</span>}
-        {more > 0 && <span data-tip={`${more} autre${more > 1 ? "s" : ""} bobine${more > 1 ? "s" : ""} de ce filament en stock`
-          + (s.sibling_weight_g ? ` (${fmtStock(s.sibling_weight_g)})` : "")}
-          style={{ position:"absolute", right:"calc(50% - 40px)", bottom:0, fontSize:9.5, fontWeight:700, color:"var(--muted)", opacity:.85,
-            padding:"0 5px", borderRadius:8, background:"color-mix(in srgb, var(--muted) 12%, transparent)" }}>+{more}</span>}
+        {/* les autres exemplaires, en fantome (28/10/2026) : en stock a droite (anneau vert, « 🧵 +n »), commandes a gauche
+            (anneau bleu pointille, « 📬 +n ») ; pas dans les archives (elles ne sont plus en stock) */}
+        <span style={{ position:"relative", display:"inline-flex" }}>
+          {more > 0 && <Ghost side="right" color="#22c55e" dashed={false} size={64} off={14} top={3} ring={1.5} inset={4} colors={colorsList} finish={finishOf(s)} type={s.filament_multicolor_type}/>}
+          {ord > 0 && <Ghost side="left" color="#0EA5E9" dashed size={64} off={14} top={3} ring={1.5} inset={4} colors={colorsList} finish={finishOf(s)} type={s.filament_multicolor_type}/>}
+          <span style={{ position:"relative" }}><SpoolSVG colors={colorsList} finish={finishOf(s)} empty={false} size={70} type={s.filament_multicolor_type}/></span>
+          {more > 0 && <GhostBadge side="right" color="#22c55e" size={9.5} bottom={0} off={16}
+            tip={`${more} autre${more > 1 ? "s" : ""} bobine${more > 1 ? "s" : ""} de ce filament en stock` + (s.sibling_weight_g ? ` (${fmtStock(s.sibling_weight_g)})` : "")}>🧵 +{more}</GhostBadge>}
+          {ord > 0 && <GhostBadge side="left" color="#0EA5E9" size={9.5} bottom={0} off={16}
+            tip={`${ord} bobine${ord > 1 ? "s" : ""} de ce filament commandée${ord > 1 ? "s" : ""}, pas encore reçue${ord > 1 ? "s" : ""}`}>📬 +{ord}</GhostBadge>}
+        </span>
       </div>
 
       <div style={{ padding:"2px 9px 10px", display:"flex", flexDirection:"column", gap:5 }}>
