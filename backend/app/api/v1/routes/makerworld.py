@@ -811,6 +811,47 @@ def _assign(origin: list, used: list) -> list:
     return [(o[0], u[0]) for o, u in pairs]
 
 
+def _match_filaments(o_cols: list, used: dict, sliced: dict, sl_colors: list, emap: dict, grams: dict, plate_fils: list) -> dict:
+    """Chaque filament du projet d'origine (couleurs o_cols, numeros 1..n) -> (emplacement du projet imprime, methode).
+    used : {emplacement : couleur de la bobine} ; sliced : {emplacement : couleur notee au tranchage} ; sl_colors : les
+    filaments du projet imprime dans l'ordre (3MF tranche garde) ; emap : par les pieces de meme nom ; grams : les
+    grammes par emplacement ; plate_fils : [(couleur, grammes)] du plateau d'origine (fiche MakerWorld).
+    1) les pieces de meme nom (les 3MF tranches recents n'ont plus ni pieces ni noms : rien ici) ;
+    2) la couleur notee au tranchage (28/10/2026) : imprime depuis MakerWorld, le projet imprime garde les filaments
+       du createur, memes numeros et memes couleurs, meme si la bobine posee dans l'AMS est d'une autre couleur --
+       avant, on comparait a la couleur de la bobine, et un filament sautait sur un autre. Un filament dont la
+       couleur est unique dans le projet d'origine va a l'emplacement de meme couleur (le meme numero d'abord,
+       sinon le seul qui l'a) ;
+    3) le reste, par ressemblance de couleur (celle notee au tranchage, sinon la bobine) et de poids : les filaments
+       du plateau d'origine, sinon tous, face aux emplacements pas encore pris. Un modele peint au pinceau n'a que
+       le filament de ses pieces dans les noms (28/10/2026 : le perroquet, numeros renumerotes, couleurs melangees)."""
+    assigned = {e: (es, "pièces") for e, es in emap.items() if es in used}
+    sl = {es: c for es, c in sliced.items() if c}
+    for k, c in enumerate(sl_colors):
+        sl.setdefault(k + 1, c)
+    taken = {es for es, _h in assigned.values()}
+    for e, a in enumerate(o_cols, 1):
+        if e in assigned or len(a) != 6 or o_cols.count(a) != 1:
+            continue
+        same = [es for es, c in sl.items() if c == a and es in used and es not in taken]
+        es = e if e in same else (same[0] if len(same) == 1 else None)
+        if es:
+            assigned[e] = (es, "tranchage")
+            taken.add(es)
+    g_of = {}
+    for c, g in plate_fils:
+        for k, col in enumerate(o_cols):
+            if col == c and (k + 1) not in g_of:
+                g_of[k + 1] = g
+                break
+    cand = sorted(g_of) if g_of else list(range(1, len(o_cols) + 1))
+    o_rem = [(e, o_cols[e - 1], g_of.get(e)) for e in cand if e not in assigned and len(o_cols[e - 1]) == 6]
+    u_rem = [(es, sl.get(es) or c, grams.get(es)) for es, c in used.items() if es not in taken and len(sl.get(es) or c) == 6]
+    for e, es in _assign(o_rem, u_rem):
+        assigned[e] = (es, "couleur et poids")
+    return assigned
+
+
 async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", detail_out: list | None = None,
                         plate: int | None = None) -> dict | None:
     """{couleur du 3MF d'origine (RRGGBB) : couleur utilisee} d'apres les filaments de ces impressions (la plus
@@ -852,9 +893,11 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
     used_by: dict = {}
     grams_by: dict = {}
     fin_by: dict = {}
+    sliced_by: dict = {}                             # la couleur notee au tranchage, par emplacement
     for pid, slot, chex, fcol, g, ftype, ffila, fname, ffin in rows:
         if slot:
             used_by.setdefault(pid, {})[int(slot)] = h6(fcol or chex)
+            sliced_by.setdefault(pid, {})[int(slot)] = h6(chex) if len(h6(chex)) == 6 else None
             grams_by.setdefault(pid, {})[int(slot)] = float(g or 0)
             fin_by.setdefault(pid, {})[int(slot)] = (None if ffin == "none" else ffin) if ffin \
                 else T.finish_of(ffila, fname, ftype, color=fcol or chex)
@@ -884,35 +927,21 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
         used = used_by.get(pid) or {}
         if not used:
             continue
-        emap = {}
+        emap, sl_colors = {}, []
         f = local_or_archive(m3) if m3 else None
         if f and f.is_file():
             try:
                 with zipfile.ZipFile(f) as zz:
                     emap = _ext_map(origin, _ext_by_name(zz))
+                    sl_colors = [h6(c) for c in T._colors_of(zz)]
             except (OSError, zipfile.BadZipFile):
-                emap = {}
-        # 1) les pieces de meme nom
-        assigned = {e: (es, "pièces") for e, es in emap.items() if es in used}
-        # 2) le reste, par ressemblance de couleur et de poids : les filaments du plateau d'origine (fiche MakerWorld),
-        #    sinon tous, face aux bobines de l'impression pas encore prises. Un modele peint au pinceau n'a que le
-        #    filament de ses pieces dans les noms (28/10/2026 : le perroquet, numeros renumerotes, couleurs melangees).
+                emap, sl_colors = {}, []
         try:
-            pn = int(((_json.loads(mwpl) or {}).get("plates") or [None])[0] if mwpl else plate_id or 1)
+            pn = int(plate if plate is not None else (((_json.loads(mwpl) or {}).get("plates") or [None])[0] if mwpl else plate_id or 1))
         except (TypeError, ValueError, AttributeError):
             pn = 1
-        g_of = {}
-        for c, g in plate_fils.get(pn) or []:
-            for k, col in enumerate(colors):
-                if h6(col) == c and (k + 1) not in g_of:
-                    g_of[k + 1] = g
-                    break
-        cand = sorted(g_of) if g_of else list(range(1, len(colors) + 1))
-        o_rem = [(e, h6(colors[e - 1]), g_of.get(e)) for e in cand if e not in assigned and len(h6(colors[e - 1])) == 6]
-        taken = {es for es, _h in assigned.values()}
-        u_rem = [(es, c, (grams_by.get(pid) or {}).get(es)) for es, c in used.items() if es not in taken and len(c) == 6]
-        for e, es in _assign(o_rem, u_rem):
-            assigned[e] = (es, "couleur et poids")
+        assigned = _match_filaments([h6(c) for c in colors], used, sliced_by.get(pid) or {}, sl_colors, emap,
+                                    grams_by.get(pid) or {}, plate_fils.get(pn) or [])
         for e, (es, how) in sorted(assigned.items()):
             a, b = h6(colors[e - 1]), used.get(es)
             if b and len(a) == 6 and len(b) == 6 and a not in out:
