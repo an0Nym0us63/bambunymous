@@ -237,6 +237,7 @@ async def for_print(pid: int) -> dict:
     did, prof = str(r[0]), _profile(r[1], r[2])
     iid = known(did, prof) or (known(did, "") if not prof else None)
     if iid:
+        await attribute_plate(pid, iid)
         return {"ok": iid, "already": True}
     iid = await resolve(did, prof) if prof else None
     key = f"{did}:{prof}"
@@ -253,7 +254,40 @@ async def for_print(pid: int) -> dict:
         logger.exception("[MW-3MF] recuperation")
         return {"skip": f"{type(e).__name__}"}
     _index_put(key, iid)
+    await attribute_plate(pid, iid)
     return {"ok": iid}
+
+
+async def attribute_plate(pid: int, iid: str) -> None:
+    """Le plateau d'origine qu'une impression a fait, reconnu aux noms des objets de son fichier imprime dans le 3MF
+    d'origine (28/10/2026), pose sur elle (mw_plates, marque « auto ») si rien n'est choisi a la main : des
+    l'arrivee d'une impression, tout est su -- modele, profil, plateau, bobines -- et la deduction ne sert qu'au passe."""
+    import zipfile
+    from sqlalchemy import select, update
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    try:
+        async with AsyncSessionLocal() as db:
+            r = (await db.execute(select(Print.model_3mf, Print.mw_plates, Print.mw_profile_id).where(Print.id == pid))).first()
+        if not r or not r[0] or r[1]:
+            return
+        from .archive import local_or_archive
+        from ..api.v1.routes.makerworld import _plate_objects, _sliced_objects, _plate_from_objects
+        f, src = local_or_archive(r[0]), path_of(iid)
+        if not f or not f.is_file() or not src.is_file():
+            return
+        with zipfile.ZipFile(src) as zo, zipfile.ZipFile(f) as zs:
+            n = _plate_from_objects(_plate_objects(zo), _sliced_objects(zs))
+        if not n:
+            return
+        prof = str(r[2] or "").strip()
+        async with AsyncSessionLocal() as db:
+            await db.execute(update(Print).where(Print.id == pid, Print.mw_plates.is_(None))
+                             .values(mw_plates=json.dumps({"profile": prof if prof and prof != "0" else None, "plates": [int(n)], "auto": "objets"})))
+            await db.commit()
+        logger.info(f"[MW-3MF] impression {pid} : plateau {n} reconnu aux objets de son fichier imprime")
+    except Exception:
+        logger.exception("[MW-3MF] plateau aux objets")
 
 
 def _profile(prof, manual) -> str:
