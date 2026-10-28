@@ -36,6 +36,7 @@ import GroupMosaic from "../components/GroupMosaic";
 import ObjectCreateSheet from "../components/ObjectCreateSheet";
 import Select from "../components/Select";
 import { useLongPress, openMenu } from "../components/ContextMenu";
+import ColorMap from "../components/ColorMap";
 
 // PARTIAL et TO_REDO viennent de Spoolnymous, qui gerait cinq statuts. Les
 // prints importes les portent toujours, mais l'application ne les connaissait
@@ -561,6 +562,9 @@ function RateStatusLine({ designId }) {
   }[st.state];
   return txt ? <div style={{ fontSize:11, fontWeight:700, color: st.state === "rated" && st.noscore ? "#d97706" : "var(--muted)", padding:"0 10px 8px" }}>{txt}</div> : null;
 }
+// la portee d'un choix de couleur a la main : l'impression, ou le groupe de ces impressions
+const colorScope = prints => prints.length === 1 ? `print:${prints[0].id}` : prints[0]?.group_id ? `group:${prints[0].group_id}` : null;
+
 function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) {
   const [open, setOpen] = useState(false);       // replie a chaque ouverture : le resume suffit
   const mineOf = useMine([designId]);            // chez un copain : l'ai-je deja ?
@@ -635,6 +639,9 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
       </div>
       {/* ses documents joints et ce qu'il faut prevoir : visibles meme replie */}
       <MwDocs docs={mw.docs || []} parts={mw.parts || []} otherParts={mw.other_parts} filaments={mw.filaments || []} style={{ padding:"0 12px 10px" }}/>
+      {/* les couleurs du createur et ce qui les a remplacees (3MF d'origine garde) : a corriger d'un toucher */}
+      {!visiting && <ColorMap designId={designId} profileId={shownProf || null} wait={shownProf === undefined} usedPrints={prints.map(x => x.id)}
+        printId={(prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id} scope={colorScope(prints)} style={{ padding:"0 12px 10px" }}/>}
       {open && <>
       <a href={url} onClick={e => { e.preventDefault(); setSheet(designId); }} onPointerDown={() => prefetchModel(designId)}
         style={{ display:"flex", gap:10, padding:"0 12px 10px", textDecoration:"none", color:"var(--text)", cursor:"pointer" }}>
@@ -703,7 +710,7 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false }) 
         <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShown}
         modelTitle={mw.title} modelTitleFr={mw.title_fr}/></div>}
       {view3d && <Model3D designId={designId} profileId={shownProf || null} wait={shownProf === undefined} printId={(prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id}
-        usedPrints={prints.map(x => x.id)}
+        usedPrints={prints.map(x => x.id)} scope={colorScope(prints)}
         title={mw.title_fr || mw.title} onClose={() => setView3d(false)}/>}
     </div>
   );

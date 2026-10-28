@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { finishCanvas } from "../utils/finishTex";
 import { egg } from "../eggs";
+import { ColorPairs, chooseColor } from "./ColorMap";
 import { FSheet } from "./FicheKit";
 import client from "../api/client";
 import MwImg from "./MwImg";
@@ -380,7 +381,7 @@ function Ring({ pct = null, label }) {
 // fetchSource : recuperer le 3MF d'origine s'il manque (« À faire »).
 export default function Model3D({ designId = null, profileId = null, printId = null, wait = false, title = "", onClose,
                                   palette = null, platePalettes = null, paletteFinishes = null, altName = null, usedPrints = null,
-                                  fetchSource = false }) {
+                                  fetchSource = false, scope = null }) {
   const [meta, setMeta] = useState(null);
   const [err, setErr] = useState(null);
   const [plate, setPlate] = useState(0);
@@ -389,6 +390,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const [want3mf, setWant3mf] = useState(false);
   // un plateau abime (le serveur a oublie la vue) : on redemande, la vue se refait -- une fois
   const [redo, setRedo] = useState(0);
+  const [tick, setTick] = useState(0);                 // un choix de couleur a la main : la vue se relit
   useEffect(() => { if (st.broken && redo < 1) { setSt({ busy: true }); setRedo(r => r + 1); } }, [st.broken]);   // eslint-disable-line react-hooks/exhaustive-deps
   const base = `/makerworld/3d/${encodeURIComponent(designId)}`;
   useEffect(() => {
@@ -397,11 +399,11 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     setErr(null); setMeta(null);
     // le profil montre par la fiche ; sans lui, le serveur lit celui de l'impression (imprimante, ou choisi a la main)
     client.get(base, { params: { profile: profileId || "", print_id: printId || 0, fetch: fetchSource || want3mf ? 1 : 0,
-                                 used: (usedPrints || []).join(",") }, timeout: 180000 })
+                                 used: (usedPrints || []).join(","), scope: scope || "" }, timeout: 180000 })
       .then(({ data }) => { if (alive) { setMeta(data); setPlate(0); } })
       .catch(e => alive && setErr(e?.response?.data?.detail || "Pas de modèle 3D pour celui-ci"));
     return () => { alive = false; };
-  }, [base, profileId, printId, wait, want3mf, redo]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [base, profileId, printId, wait, want3mf, redo, tick]);   // eslint-disable-line react-hooks/exhaustive-deps
   // pendant la preparation, son avancement (le serveur le dit a part, la demande principale attend)
   const [prog, setProg] = useState(null);
   useEffect(() => {
@@ -487,19 +489,10 @@ export default function Model3D({ designId = null, profileId = null, printId = n
                 background: shown?.[c] ? `#${hex6(shown[c])}` : `#${c}` }}/>{String(z).replace(".", ",")} mm{i < zc.length - 1 ? "," : ""}</span>)}</span>}
           {meta.skipped?.length > 0 && <span>· plateau{meta.skipped.length > 1 ? "x" : ""} {meta.skipped.join(", ")} trop lourd{meta.skipped.length > 1 ? "s" : ""} pour être affiché</span>}
         </div>}
-        {/* les couleurs utilisees : chaque couleur du createur et ce qui l'a remplacee (ou rien de trouve) */}
-        {shown && !palette && usedDetail.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6,
-          fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
-          <span>Correspondance :</span>
-          {usedDetail.map(x => {
-            const sw = c => <span style={{ width: 14, height: 14, borderRadius: "50%", display: "inline-block", border: "1px solid var(--border)",
-              background: c ? `#${c}` : "repeating-linear-gradient(45deg, var(--surface2) 0 3px, var(--border) 3px 6px)" }}/>;
-            const tip = x.to ? `Filament n°${x.e} du projet → n°${x.es} de l'impression (${x.how === "pièces" ? "trouvé par les pièces de même nom" : x.how === "tranchage" ? "même couleur notée au tranchage" : x.how === "couleur et poids" ? "la bobine la plus ressemblante, en couleur et en poids" : "par son numéro"})`
-              : `Filament n°${x.e} : aucune de ces impressions ne l'a utilisé`;
-            return <span key={`${x.from}-${x.e}`} data-tip={tip} style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 7px",
-              borderRadius: 12, background: "var(--surface2)" }}>{sw(x.from)}<span>→</span>{sw(x.to)}</span>;
-          })}
-        </div>}
+        {/* les couleurs utilisees : chaque couleur du createur et ce qui l'a remplacee (ou rien de trouve) ; avec une
+            portee (impression ou groupe), toucher une paire pour choisir soi-meme */}
+        {shown && !palette && usedDetail.length > 0 && <ColorPairs detail={usedDetail} options={meta?.used_options || []} chosen={meta?.chosen || {}}
+          scope={meta?.scope || null} onChoose={async (o, body) => { try { await chooseColor(meta.scope, o, body); } catch { /* rien */ } setTick(t => t + 1); }}/>}
         <p style={{ margin: 0, fontSize: 11.5, color: "var(--muted)" }}>Un doigt pour tourner, deux pour zoomer et déplacer ; ⟲ recentre.</p>
       </div>
     </FSheet>,

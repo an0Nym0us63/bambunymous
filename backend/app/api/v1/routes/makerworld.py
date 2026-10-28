@@ -5,7 +5,7 @@ import logging
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile
 
-from .auth import get_current_user, require_admin, require_mw
+from .auth import get_current_user, require_admin, require_mw, require_own_account
 from ....services import makerworld as mw
 from ....services import makerworld_account as acc
 
@@ -596,7 +596,7 @@ async def mw_model_3d_progress(design_id: str, _: str = Depends(get_current_user
 
 @router.get("/3d/{design_id}")
 async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_src: int = Query(0, alias="fetch"),
-                      used: str = "", _: str = Depends(get_current_user)):
+                      used: str = "", scope: str = "", _: str = Depends(get_current_user)):
     """Les plateaux a afficher en 3D : {source: "3mf" | "makerworld", plates: [{n, name, url, size_mm}], ms}.
     print_id : le profil de cette impression (celui de l'imprimante, ou celui choisi a la main avec ses plateaux,
     27/10/2026 : seul le premier etait lu, et une impression sans lui montrait le profil par defaut)."""
@@ -607,22 +607,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
     if not did.isdigit():
         raise HTTPException(404, "Modèle inconnu")
     # le profil affiche par la fiche (deduit, ou choisi dans la liste) passe avant celui lu sur l'impression
-    prof = str(profile or "").strip()
-    if print_id and not prof:
-        from sqlalchemy import select
-        from ....db.session import AsyncSessionLocal
-        from ....models.print_history import Print
-        async with AsyncSessionLocal() as db:
-            r = (await db.execute(select(Print.mw_profile_id, Print.mw_plates).where(Print.id == print_id))).first()
-        if r:
-            prof = _profile(r[0], r[1]) or prof
-    if not prof:
-        # rien de donne : le profil que j'ai imprime (deduit de mes impressions), comme la carte et la fiche
-        try:
-            from ....services.mw_plate_guess import printed_profile
-            prof = (await printed_profile(did))["profile"] or ""
-        except Exception:
-            logger.exception("[3D] profil imprime")
+    prof = await _prof_of(did, profile, print_id)
     t0 = _t.perf_counter()
     # le 3MF d'origine de CE profil ; sans profil connu, celui retenu pour le modele
     iid = known(did, prof) if prof else known(did, "")
@@ -693,18 +678,22 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
     # (le numero du filament dans le projet est le meme ; sans bobine liee, la couleur notee au tranchage)
     used_palette, used_detail = None, None
     used_plates, used_details_plates = {}, {}
+    used_options, chosen = [], {}
     if used and source in ("3mf", "3mf_other") and key:
         try:
             ids = [int(x) for x in used.split(",") if x.strip().isdigit()][:60]
+            # les correspondances choisies a la main pour cette impression ou ce groupe (28/10/2026)
+            chosen = await _color_choices(scope)
+            used_options = await _used_options(ids)
             used_detail = []
-            used_palette = await _used_palette(path_of(key), ids, did, prof if source == "3mf" else "", used_detail)
+            used_palette = await _used_palette(path_of(key), ids, did, prof if source == "3mf" else "", used_detail, chosen=chosen)
             # plateau par plateau (28/10/2026) : sur un groupe, chaque plateau prend les couleurs des impressions qui
             # l'ont fait, pas un melange de toutes ; un plateau que personne n'a imprime reste aux couleurs d'origine
             ns = [p["n"] for p in T.plates_out(meta, key)[0]] if meta else []
             if len(ns) > 1:
                 for n in ns:
                     dd = []
-                    pal = await _used_palette(path_of(key), ids, did, prof if source == "3mf" else "", dd, plate=n)
+                    pal = await _used_palette(path_of(key), ids, did, prof if source == "3mf" else "", dd, plate=n, chosen=chosen)
                     if pal:
                         used_plates[str(n)], used_details_plates[str(n)] = pal, dd
         except Exception:
@@ -715,6 +704,8 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
         bed = [256, 256]
     return {"source": source, "profile": prof or None, "profile_title": ptitle, "profile_cover": pcover, "ms": ms, "bed": bed,
             "used_palette": used_palette, "used_detail": used_detail, "fetch_error": fetch_error,
+            # les filaments de ces impressions (pour choisir a la main), les choix faits, et la portee de ces choix
+            "used_options": used_options, "chosen": chosen, "scope": scope if _SCOPE.fullmatch(scope or "") else None,
             # par plateau (vide : aucune impression rattachee a un plateau precis, on garde le melange ci-dessus)
             "used_plates": used_plates, "used_details_plates": used_details_plates,
             "used_finishes_plates": {n: {d["from"]: d["finish"] for d in dd if d.get("to") and d.get("finish")}
@@ -880,7 +871,7 @@ async def _plate_guesses(did: str, ids: list) -> dict:
     return g
 
 async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", detail_out: list | None = None,
-                        plate: int | None = None) -> dict | None:
+                        plate: int | None = None, chosen: dict | None = None) -> dict | None:
     """{couleur du 3MF d'origine (RRGGBB) : couleur utilisee} d'apres les filaments de ces impressions (la plus
     recente l'emporte). Seules comptent les impressions de ce profil (ou de profil inconnu). Chaque filament du
     projet d'origine est rapproche de celui du projet imprime par les pieces de meme nom (3MF tranche garde), a
@@ -991,11 +982,172 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
                 out[a] = b
                 detail.append({"from": a, "to": b, "e": e, "es": es, "how": how, "print": pid,
                                "finish": (fin_by.get(pid) or {}).get(es)})
+    # les correspondances choisies a la main (28/10/2026) passent avant la deduction : une bobine de ces
+    # impressions, ou « aucune » ; un choix qui vise une impression absente d'ici est ignore (la deduction reste)
+    o_cols = [h6(c) for c in colors]
+    for a, ch in (chosen or {}).items():
+        a = h6(a)
+        if a not in o_cols or not isinstance(ch, dict):
+            continue
+        e = o_cols.index(a) + 1
+        if ch.get("none"):
+            out.pop(a, None)
+            detail = [d for d in detail if d["from"] != a] + [{"from": a, "to": None, "e": e, "how": "choisi"}]
+            continue
+        try:
+            cp, es = int(ch.get("print")), int(ch.get("slot"))
+        except (TypeError, ValueError):
+            continue
+        b = (used_by.get(cp) or {}).get(es)
+        if b:
+            out[a] = b
+            detail = [d for d in detail if d["from"] != a] + [{"from": a, "to": b, "e": e, "es": es, "how": "choisi", "print": cp,
+                                                               "finish": (fin_by.get(cp) or {}).get(es)}]
     if detail_out is not None:
         detail_out.extend(detail)
         detail_out.extend({"from": h6(c), "to": None, "e": k + 1} for k, c in enumerate(colors)
                           if len(h6(c)) == 6 and h6(c) not in out and h6(c) not in {x["from"] for x in detail_out})
     return out or None
+
+
+# ── Les correspondances de couleurs choisies a la main (28/10/2026) ──
+# La deduction fait le gros du travail ; quand elle se trompe, on choisit soi-meme, pour une impression ou un groupe,
+# quelle bobine de ces impressions remplace une couleur du createur (ou aucune). Garde en reglage :
+# MW_COLORS:<print|group>:<id> = {"RRGGBB": {"print": id, "slot": n} | {"none": true}}.
+import re as _re_scope
+_SCOPE = _re_scope.compile(r"(print|group):\d{1,9}")
+
+
+async def _color_choices(scope: str) -> dict:
+    import json as _json
+    if not _SCOPE.fullmatch(scope or ""):
+        return {}
+    from ....db.session import AsyncSessionLocal
+    from ....services.settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, f"MW_COLORS:{scope}", "")
+    try:
+        d = _json.loads(raw) if raw else {}
+        return d if isinstance(d, dict) else {}
+    except ValueError:
+        return {}
+
+
+async def _save_color_choice(scope: str, origin: str, choice: dict | None) -> dict:
+    """choice : {"print", "slot"} ou {"none": true} ; None : retour a la deduction automatique."""
+    import json as _json
+    from ....db.session import AsyncSessionLocal
+    from ....services.settings_service import set_setting
+    d = await _color_choices(scope)
+    a = str(origin or "").lstrip("#")[:6].upper()
+    if choice is None:
+        d.pop(a, None)
+    else:
+        d[a] = choice
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, f"MW_COLORS:{scope}", _json.dumps(d))
+    return d
+
+
+async def _used_options(print_ids: list) -> list:
+    """Les filaments de ces impressions, a choisir : [{print, print_name, slot, color, name, finish, grams}]."""
+    from sqlalchemy import select
+    from ....db.session import AsyncSessionLocal
+    from ....models.print_history import FilamentUsage as FU, Print
+    from ....models.filament import Filament, Spool
+    from ....services import mw_3d as T
+    if not print_ids:
+        return []
+    h6 = lambda c: str(c or "").lstrip("#")[:6].upper()
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(
+            select(FU.print_id, FU.ams_slot, FU.color_hex, Filament.color, FU.grams_used, FU.filament_type, Filament.fila_type,
+                   Filament.name, Filament.translated_name, Filament.fila_finish, Print.translated_name, Print.file_name)
+            .join(Print, Print.id == FU.print_id)
+            .outerjoin(Spool, Spool.id == FU.spool_id).outerjoin(Filament, Filament.id == Spool.filament_id)
+            .where(FU.print_id.in_(print_ids)).order_by(FU.print_id.desc(), FU.ams_slot))).all()
+    out = []
+    for pid, slot, chex, fcol, g, ftype, ffila, fname, ftr, ffin, pname, pfile in rows:
+        c = h6(fcol or chex)
+        if not slot or len(c) != 6:
+            continue
+        out.append({"print": pid, "print_name": (pname or pfile or f"Impression {pid}")[:60], "slot": int(slot), "color": c,
+                    "name": (ftr or fname or ffila or ftype or "")[:60], "grams": round(float(g or 0), 1),
+                    "finish": (None if ffin == "none" else ffin) if ffin else T.finish_of(ffila, fname, ftype, color=fcol or chex)})
+    return out
+
+
+async def _prof_of(did: str, profile: str, print_id: int) -> str:
+    """Le profil a montrer : celui donne par la fiche, sinon celui de l'impression (imprimante, ou choisi a la main
+    avec ses plateaux), sinon celui que j'ai imprime, deduit de mes impressions (comme la carte et la fiche)."""
+    from ....services.mw_source import _profile
+    prof = str(profile or "").strip()
+    if print_id and not prof:
+        from sqlalchemy import select
+        from ....db.session import AsyncSessionLocal
+        from ....models.print_history import Print
+        async with AsyncSessionLocal() as db:
+            r = (await db.execute(select(Print.mw_profile_id, Print.mw_plates).where(Print.id == print_id))).first()
+        if r:
+            prof = _profile(r[0], r[1]) or prof
+    if not prof:
+        try:
+            from ....services.mw_plate_guess import printed_profile
+            prof = (await printed_profile(did))["profile"] or ""
+        except Exception:
+            logger.exception("[3D] profil imprime")
+    return prof
+
+
+@router.get("/3d/{design_id}/colors")
+async def mw_model_3d_colors(design_id: str, profile: str = "", print_id: int = 0, used: str = "", scope: str = "",
+                             _: str = Depends(get_current_user)):
+    """Les couleurs du createur (3MF d'origine garde, sans le convertir) et ce qui les remplace dans ces impressions :
+    la deduction, les choix faits a la main, et les filaments a choisir. Pour la carte MakerWorld d'une impression
+    ou d'un groupe. {colors: [], detail: [], options: [], chosen: {}, scope} ; colors vide : pas de 3MF d'origine."""
+    from ....services import mw_3d as T
+    from ....services.mw_source import known, path_of
+    import zipfile
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        raise HTTPException(404, "Modèle inconnu")
+    prof = await _prof_of(did, profile, print_id)
+    iid = (known(did, prof) if prof else None) or known(did, "")
+    src = path_of(iid) if iid else None
+    if not src or not src.is_file():
+        return {"colors": [], "detail": [], "options": [], "chosen": {}, "scope": None}
+    ids = [int(x) for x in used.split(",") if x.strip().isdigit()][:60]
+    chosen = await _color_choices(scope)
+    detail: list = []
+    try:
+        with zipfile.ZipFile(src) as z:
+            colors = [c for c in (str(x or "").lstrip("#")[:6].upper() for x in T._colors_of(z)) if len(c) == 6]
+        await _used_palette(src, ids, did, prof if known(did, prof or "") == iid else "", detail, chosen=chosen)
+    except Exception:
+        logger.exception("[3D] couleurs")
+        colors = []
+    return {"colors": colors, "detail": detail, "options": await _used_options(ids), "chosen": chosen,
+            "scope": scope if _SCOPE.fullmatch(scope or "") else None, "finishes": T.origin_finishes(src)}
+
+
+@router.post("/3d/colors/set")
+async def mw_model_3d_colors_set(body: dict = Body(...), _=Depends(require_own_account)):
+    """Choisir a la main ce qui remplace une couleur du createur : {scope, origin, print, slot} (cette bobine),
+    {scope, origin, none: true} (aucune), {scope, origin, auto: true} (retour a la deduction)."""
+    scope = str(body.get("scope") or "")
+    origin = str(body.get("origin") or "").lstrip("#")[:6].upper()
+    if not _SCOPE.fullmatch(scope) or len(origin) != 6:
+        raise HTTPException(400, "Choix incomplet")
+    if body.get("auto"):
+        choice = None
+    elif body.get("none"):
+        choice = {"none": True}
+    else:
+        try:
+            choice = {"print": int(body.get("print")), "slot": int(body.get("slot"))}
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Choix incomplet")
+    return {"chosen": await _save_color_choice(scope, origin, choice)}
 
 
 def _manual_plates(mwpl) -> list | None:
