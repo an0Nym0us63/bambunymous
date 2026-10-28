@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 K_HOST, K_PORT, K_USER, K_PASS = "MAIL_HOST", "MAIL_PORT", "MAIL_USER", "MAIL_PASS"
 K_FOLDER, K_SENDER, K_ENABLED, K_DAYS, K_EVERY, K_LAST, K_SEEN = \
     "MAIL_FOLDER", "MAIL_SENDER", "MAIL_ENABLED", "MAIL_DAYS", "MAIL_EVERY_H", "MAIL_LAST", "MAIL_SEEN"
+# un serveur du reseau local (Proton Bridge, NAS) a un certificat auto-signe (28/10/2026) : l'admin accepte
+# explicitement ce serveur, et son certificat est EPINGLE (empreinte SHA-256) a la premiere connexion ; un
+# certificat qui change ensuite bloque le releve, comme un vrai controle
+K_TRUST, K_PIN = "MAIL_TRUST_LOCAL", "MAIL_CERT_PIN"
 _STATE = {"running": False}
 REREAD_MAX_DAYS = 21       # le plus loin qu'un releve remonte (reglage ou rattrapage)
 # les adresses d'expediteur de la boutique (28/10/2026, d'apres un vrai mail) : seuls leurs mails sont lus, tout le
@@ -47,7 +51,8 @@ async def settings_get() -> dict:
                "user": await g(K_USER, ""), "has_password": bool(await g(K_PASS, "")),
                "folder": await g(K_FOLDER, "INBOX"), "senders": [x.strip() for x in (await g(K_SENDER, DEFAULT_SENDERS)).split(",") if x.strip()],
                "enabled": (await g(K_ENABLED, "0")) == "1", "days": min(REREAD_MAX_DAYS, int((await g(K_DAYS, "21")) or 21)),
-               "every_h": int((await g(K_EVERY, "3")) or 3), "running": _STATE["running"]}
+               "every_h": int((await g(K_EVERY, "3")) or 3), "running": _STATE["running"],
+               "trust_local": (await g(K_TRUST, "0")) == "1", "has_pin": bool(await g(K_PIN, ""))}
         try:
             out["last"] = json.loads(await g(K_LAST, "") or "null")
         except ValueError:
@@ -59,6 +64,8 @@ async def settings_set(body: dict) -> dict:
     from ..db.session import AsyncSessionLocal
     from .settings_service import set_setting
     async with AsyncSessionLocal() as db:
+        from .settings_service import get_setting
+        before = (await get_setting(db, K_HOST, ""), await get_setting(db, K_PORT, ""), await get_setting(db, K_TRUST, "0"))
         for key, k in ((K_HOST, "host"), (K_USER, "user"), (K_FOLDER, "folder")):
             if k in body:
                 await set_setting(db, key, str(body[k] or "").strip())
@@ -67,6 +74,12 @@ async def settings_set(body: dict) -> dict:
             await set_setting(db, K_SENDER, ",".join(lst) or DEFAULT_SENDERS)
         if "port" in body:
             await set_setting(db, K_PORT, str(max(1, min(65535, int(body["port"] or 993)))))
+        if "trust_local" in body:
+            await set_setting(db, K_TRUST, "1" if body["trust_local"] else "0")
+        after = (await get_setting(db, K_HOST, ""), await get_setting(db, K_PORT, ""), await get_setting(db, K_TRUST, "0"))
+        # serveur, port ou confiance VRAIMENT changes : l'empreinte epinglee ne vaut plus, reprise a la prochaine connexion
+        if before != after:
+            await set_setting(db, K_PIN, "")
         if "password" in body and body["password"] is not None:
             # vide : on garde l'ancien (le champ ne le reaffiche jamais) ; « - » : on l'efface
             pw = str(body["password"])
@@ -507,6 +520,51 @@ async def enrich_items(items: list[dict]) -> list[dict]:
 
 
 # ── Le releve ──────────────────────────────────────────────────────────────────
+def _local_host(host: str) -> bool:
+    """Un serveur du reseau local (Proton Bridge sur une machine de la maison, NAS) : seul cas ou l'admin peut
+    accepter un certificat auto-signe, qui est alors epingle."""
+    import ipaddress
+    h = (host or "").strip().lower()
+    if h in ("localhost", "::1") or h.endswith(".local") or h.endswith(".lan"):
+        return True
+    try:
+        return ipaddress.ip_address(h).is_private or ipaddress.ip_address(h).is_loopback
+    except ValueError:
+        return False
+
+
+def _connect(host: str, port: int, trust_local: bool = False, pin: str = "") -> tuple:
+    """La connexion IMAP selon le port (28/10/2026) : 993 = TLS direct (Gmail, OVH, Yahoo…) ; 143 ou 1143 = session
+    en clair puis STARTTLS (Proton Bridge ecoute en 1143). Le certificat est verifie normalement, sauf pour un serveur
+    du reseau local que l'admin a accepte : son empreinte SHA-256 est alors epinglee a la premiere connexion et exigee
+    ensuite. Rend (connexion, empreinte vue)."""
+    import hashlib
+    import ssl
+    pinned = bool(trust_local and _local_host(host))
+    ctx = ssl.create_default_context()
+    if pinned:
+        # pas de chaine de confiance possible pour un auto-signe : c'est l'empreinte, ci-dessous, qui fait foi
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    if port in (143, 1143):
+        M = imaplib.IMAP4(host, port, timeout=30)
+        M.starttls(ctx)                    # jamais en clair : un STARTTLS refuse fait echouer la connexion
+    else:
+        M = imaplib.IMAP4_SSL(host, port, ssl_context=ctx, timeout=30)
+    fp = ""
+    if pinned:
+        der = M.sock.getpeercert(binary_form=True)
+        fp = hashlib.sha256(der or b"").hexdigest()
+        if pin and fp != pin:
+            try:
+                M.shutdown()
+            except Exception:
+                pass
+            raise RuntimeError("Le certificat du serveur a changé depuis la première connexion : relevé refusé. "
+                               "Si c'est voulu (Bridge réinstallé), enregistre à nouveau les réglages du mail.")
+    return M, fp
+
+
 def _fetch_sync(cfg: dict, password: str, seen: set) -> tuple[list, list]:
     """Se connecte, cherche les mails de la boutique, rend (nouveaux mails analyses, erreurs). Un releve
     automatique ne regarde que depuis le dernier mail deja vu (UID IMAP superieur, 28/10/2026) : pas de retour dans
@@ -514,7 +572,8 @@ def _fetch_sync(cfg: dict, password: str, seen: set) -> tuple[list, list]:
     since = (datetime.utcnow() - timedelta(days=cfg["days"])).strftime("%d-%b-%Y")
     last_uid = max((int(u) for u in seen if str(u).isdigit()), default=0) if cfg.get("from_last") else 0
     found, errors = [], []
-    M = imaplib.IMAP4_SSL(cfg["host"], cfg["port"])
+    M, fp = _connect(cfg["host"], int(cfg["port"]), bool(cfg.get("trust_local")), cfg.get("pin") or "")
+    cfg["seen_pin"] = fp                   # epinglee par sync apres un releve reussi
     try:
         M.login(cfg["user"], password)
         typ, _ = M.select(cfg["folder"] or "INBOX", readonly=True)
@@ -587,6 +646,7 @@ async def sync(trigger: str = "manuel", days: int | None = None, reread: bool = 
         cfg["days"] = max(1, min(REREAD_MAX_DAYS, int(days)))
     async with AsyncSessionLocal() as db:
         password = await get_setting(db, K_PASS, "")
+        cfg["pin"] = await get_setting(db, K_PIN, "")
     if not (cfg["user"] and password):
         rep = {"at": datetime.utcnow().isoformat() + "Z", "trigger": trigger, "error": "Adresse ou mot de passe d'application manquant"}
         await _remember(rep)
@@ -597,6 +657,11 @@ async def sync(trigger: str = "manuel", days: int | None = None, reread: bool = 
         seen = await _seen()
         cfg["from_last"] = trigger == "auto" and not reread     # automatique : depuis le dernier mail vu seulement
         mails, errors = await asyncio.to_thread(_fetch_sync, cfg, password, set() if reread else seen)
+        if cfg.get("seen_pin") and not cfg.get("pin"):
+            # premiere connexion a un serveur local accepte : son empreinte est epinglee (28/10/2026)
+            from .settings_service import set_setting
+            async with AsyncSessionLocal() as db:
+                await set_setting(db, K_PIN, cfg["seen_pin"])
         created, updated, ignored = 0, 0, 0
         # seules les lectures automatiques previennent (28/10/2026) : une relecture ou un releve a la main ne
         # doit pas faire pleuvoir les notifications de commandes deja connues

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import SwitchCard from "./SwitchCard";
+import SwitchCard, { Switch } from "./SwitchCard";
 import { OrdersHistory } from "./IncomingOrders";
 import client from "../api/client";
 import { showAlert } from "../utils/dialog";
@@ -17,13 +17,13 @@ const when = iso => iso ? new Date(iso).toLocaleString("fr-FR", { day:"numeric",
 
 export default function MailOrdersSettings({ card, cardTitle }) {
   const [s, setS] = useState(null);
-  const [f, setF] = useState({ host:"", port:993, user:"", password:"", folder:"INBOX", senders:[], days:21, every_h:3 });
+  const [f, setF] = useState({ host:"", port:993, user:"", password:"", folder:"INBOX", senders:[], days:21, every_h:3, trust_local:false });
   const [newSender, setNewSender] = useState("");
   const [busy, setBusy] = useState(false);
   const load = () => client.get("/settings/mail").then(r => {
     setS(r.data);
     setF(x => ({ ...x, host: r.data.host, port: r.data.port, user: r.data.user, folder: r.data.folder, senders: r.data.senders || [],
-      days: r.data.days, every_h: r.data.every_h }));
+      days: r.data.days, every_h: r.data.every_h, trust_local: !!r.data.trust_local }));
   }).catch(e => showAlert(e.response?.data?.detail || e.message));
   useEffect(() => { load(); }, []);
   const set = k => e => setF(x => ({ ...x, [k]: e.target.value }));
@@ -59,7 +59,9 @@ export default function MailOrdersSettings({ card, cardTitle }) {
         expédiée, livrée). Les bobines commandées apparaissent en <b>à venir</b> dans la page Filaments et dans les alertes,
         et s'effacent quand la bobine arrive (ajoutée ou scannée). L'interrupteur du titre active le relevé automatique.
         Pour Gmail : active la validation en deux étapes, puis crée un <b>mot de passe d'application</b> (Compte Google → Sécurité) ;
-        ce n'est jamais le mot de passe du compte.</>}>
+        ce n'est jamais le mot de passe du compte. Port 993 : connexion chiffrée directe ; port 143 ou 1143 : STARTTLS, le cas de
+        <b>Proton Bridge</b> (adresse de la machine du Bridge, port 1143, le mot de passe donné par le Bridge, et l'interrupteur
+        « serveur du réseau local » pour son certificat).</>}>
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))", gap:8 }}>
           <div><span style={lbl}>Serveur IMAP</span><input value={f.host} onChange={set("host")} placeholder="imap.gmail.com" style={inp}/></div>
@@ -78,6 +80,15 @@ export default function MailOrdersSettings({ card, cardTitle }) {
                 onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSender(); } }} style={{ ...inp, width:"auto", flex:1, minWidth:200 }}/>
               <button type="button" onClick={addSender} style={btn(false)}>Ajouter</button>
             </div></div>
+          {/* un serveur du reseau local (Proton Bridge, NAS) a un certificat auto-signe (28/10/2026) : l'admin l'accepte
+              explicitement, et l'appli epingle ce certificat a la premiere connexion (un changement bloque le releve) */}
+          <div style={{ gridColumn:"1 / -1", display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:10,
+            background:"var(--surface2)", border:"1px solid var(--border)" }}>
+            <Switch on={!!f.trust_local} onToggle={() => setF(x => ({ ...x, trust_local: !x.trust_local }))} label="Accepter le certificat d'un serveur du réseau local"/>
+            <span style={{ fontSize:12.5, color:"var(--text)", lineHeight:1.35 }}>Serveur du <b>réseau local</b> (Proton Bridge, NAS) : accepter son certificat auto-signé
+              <span style={{ display:"block", fontSize:11.5, color:"var(--muted)" }}>Ne vaut que pour une adresse locale (192.168…, 10…, localhost). L'appli retient le certificat à la première
+                connexion{s.has_pin ? " · certificat retenu ✓" : ""} ; s'il change, le relevé est refusé jusqu'à ce que tu réenregistres.</span></span>
+          </div>
           <div><span style={lbl}>Remonter sur (jours, 21 au plus)</span><input value={f.days} onChange={e => setF(x => ({ ...x, days: e.target.value === "" ? "" : Math.min(21, Number(e.target.value.replace(/\D/g, "")) || "") }))} inputMode="numeric" style={inp}/></div>
           <div><span style={lbl}>Relever toutes les (heures)</span><input value={f.every_h} onChange={set("every_h")} inputMode="numeric" style={inp}/></div>
         </div>
