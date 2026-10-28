@@ -19,7 +19,8 @@ export const usePrinter = create((set, get) => ({
       if (raw === get()._raw && !get().error) return;
       set({ status: data, error: null, _raw: raw });
     } catch (e) {
-      set({ error: e.message });
+      // imprimante injoignable : la meme erreur qu'il y a 3 s ne redessine rien
+      if (get().error !== e.message) set({ error: e.message });
     }
   },
 

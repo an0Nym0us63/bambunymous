@@ -36,6 +36,30 @@ def _top(s):
     return (_hms_has(s, 0x03009700) or None) if d is None else d
 
 
+# Le catalogue Bambu (quelques milliers d'entrees) etait relu et re-analyse a chaque lecture de l'etat de
+# l'imprimante, pour chaque bobine sans fiche (28/10/2026) : garde en memoire, relu quand le fichier change.
+_CATALOG = {"path": None, "mtime": None, "data": None, "fr": None}
+
+
+def _catalog_data():
+    """(entrees, nom anglais -> nom francais) du catalogue local ; (None, None) sans fichier."""
+    from ....core.config import settings
+    import os, json as _j
+    path = os.path.join(settings.DATA_DIR, "bambu_catalog", "filaments_color_codes.json")
+    try:
+        mtime = os.stat(path).st_mtime
+    except OSError:
+        return None, None
+    c = _CATALOG
+    if c["path"] != path or c["mtime"] != mtime or c["data"] is None:
+        with open(path, encoding="utf-8") as f:
+            data = _j.load(f).get("data", [])
+        en_to_fr = {e.get("fila_color_name", {}).get("en", ""): e.get("fila_color_name", {}).get("fr", "")
+                    for e in data if e.get("fila_color_name", {}).get("en") and e.get("fila_color_name", {}).get("fr")}
+        c.update(path=path, mtime=mtime, data=data, fr=en_to_fr)
+    return c["data"], c["fr"]
+
+
 def _catalog_lookup(fila_id: str, color_hex: str, cols: list = None) -> Optional[str]:
     """Lookup nom FR dans le catalogue Bambu local.
     cols = champ MQTT 'cols' du tray. Si len(cols) > 1 → multicolore, sinon mono.
@@ -44,14 +68,9 @@ def _catalog_lookup(fila_id: str, color_hex: str, cols: list = None) -> Optional
     if not fila_id:
         return None
     try:
-        from ....core.config import settings
-        import os, json as _j
-        path = os.path.join(settings.DATA_DIR, "bambu_catalog", "filaments_color_codes.json")
-        if not os.path.exists(path):
+        data, en_to_fr = _catalog_data()
+        if data is None:
             return None
-        data = _j.loads(open(path).read()).get("data", [])
-        en_to_fr = {e.get("fila_color_name",{}).get("en",""): e.get("fila_color_name",{}).get("fr","")
-                    for e in data if e.get("fila_color_name",{}).get("en") and e.get("fila_color_name",{}).get("fr")}
 
         COLOR_TYPE = {"\u5355\u8272": "monochrome", "\u6e10\u53d8\u8272": "gradient", "\u591a\u62fc\u8272": "coaxial"}
         tray_is_multi = bool(cols and len(cols) > 1)

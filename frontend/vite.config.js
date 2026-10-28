@@ -18,6 +18,8 @@ export default defineConfig({
           if (id.includes("lucide-react")) return "vendor-icons";
           // three.js (la vue 3D) : charge seulement a l'ouverture de la vue, jamais avec le reste de l'appli
           if (/[\\/]node_modules[\\/]three[\\/]/.test(id)) return undefined;
+          // le decodeur QR : charge a l'ouverture du lecteur seulement
+          if (/[\\/]node_modules[\\/]jsqr[\\/]/.test(id)) return undefined;
           return "vendor";
         },
       },

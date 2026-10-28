@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
-import jsQR from "jsqr";
+// le decodeur QR (130 Ko) : charge a l'ouverture du lecteur, pas avec le reste de l'appli
+const loadQR = () => import("jsqr").then(m => m.default || m);
 
 /**
  * Scan du QR code imprimé sur les échantillons.
@@ -98,10 +99,12 @@ export default function ScanSheet({ onDetect, onClose }) {
       try { await start(id); } catch { /* objectif indisponible : on garde l'actuel */ }
     };
 
+    let jsQR = null;
+    loadQR().then(f => { jsQR = f; }).catch(() => { /* sans decodeur : la camera reste, rien n'est lu */ });
     const tick = () => {
       if (!aliveRef.current) return;
       const v = videoRef.current, c = canvasRef.current;
-      if (v && c && v.readyState === v.HAVE_ENOUGH_DATA) {
+      if (jsQR && v && c && v.readyState === v.HAVE_ENOUGH_DATA) {
         c.width = v.videoWidth; c.height = v.videoHeight;
         const ctx = c.getContext("2d", { willReadFrequently: true });
         ctx.drawImage(v, 0, 0, c.width, c.height);

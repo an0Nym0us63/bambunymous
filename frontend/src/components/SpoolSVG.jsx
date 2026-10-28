@@ -9,6 +9,7 @@
  * sans dependance vers l'un ou l'autre, supprime le probleme.
  */
 
+import { useId } from "react";
 import { finishImage, tierOf, TIER_PX } from "../utils/finishTex";
 
 // Luminance percue (recommandation ITU-R BT.601) : sert a decider si les
@@ -81,7 +82,9 @@ export default function SpoolSVG({ colors, empty, size=68, active, type, finish 
   const c1 = colors?.[0] || (empty ? "#2a2a2a" : "#888");
   const multi = colors && colors.length > 1;
   const isGradient = multi && type === "gradient";
-  const uid = `sg${Math.random().toString(36).slice(2,7)}`;
+  // un identifiant stable d'un rendu a l'autre (un nouveau a chaque rendu redefinissait les degrades de
+  // toutes les bobines de l'accueil a chaque lecture de l'imprimante)
+  const uid = "sg" + useId().replace(/:/g, "");
   const lum = luminance(c1.replace("#",""));
   const dark = lum < 128;
   // Teinte légèrement plus claire/foncée pour l'anneau extérieur

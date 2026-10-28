@@ -688,10 +688,16 @@ export function useTilesData(status = null, want = null) {
     const load = () => wanted().filter(k => F[k] && !ONCE.has(k)).forEach(k => { asked.add(k); F[k](); });
     fetchRef.current();
     loadRef.current = load;
-    const iv = setInterval(load, 120000);
-    const again = () => load();
+    // onglet cache : on ne relit pas (une tuile que personne ne voit) ; au retour, on relit si la derniere
+    // lecture date de plus de deux minutes
+    let last = Date.now();
+    const iv = setInterval(() => { if (!document.hidden) { last = Date.now(); load(); } }, 120000);
+    const back = () => { if (!document.hidden && Date.now() - last > 120000) { last = Date.now(); load(); } };
+    document.addEventListener("visibilitychange", back);
+    const again = () => { last = Date.now(); load(); };
     window.addEventListener("bn-tiles-reload", again);
-    return () => { dead = true; clearInterval(iv); loadRef.current = null; fetchRef.current = null; window.removeEventListener("bn-tiles-reload", again); };
+    return () => { dead = true; clearInterval(iv); loadRef.current = null; fetchRef.current = null;
+      window.removeEventListener("bn-tiles-reload", again); document.removeEventListener("visibilitychange", back); };
   }, []);
   // une tuile s'approche de l'ecran : ses donnees, si elles n'ont pas encore ete demandees
   const wantKey = want ? [...want].sort().join(",") : "*";
