@@ -482,8 +482,15 @@ async def order_mail(oid: int, kind: str):
             return
         items, no, carrier, url = _j.loads(o.items_json or "[]"), o.order_no, o.carrier, o.tracking_url
     title = {"confirmed": f"📬 Commande {no} confirmée", "shipped": f"🚚 Commande {no} expédiée",
-             "delivered": f"📦 Commande {no} livrée", "cancelled": f"❌ Commande {no} annulée"}.get(kind, f"📬 Commande {no}")
+             "delivered": f"📦 Commande {no} livrée", "cancelled": f"❌ Commande {no} annulée",
+             "assumed": f"📬 Commande {no} : à confirmer"}.get(kind, f"📬 Commande {no}")
     lines = []
+    if kind == "assumed":
+        # une vieille commande lue apres coup : ce que les bobines ajoutees expliquent, et ce qui est presume recu
+        n_auto = sum(int(i.get("auto") or 0) for i in items)
+        n_ass = sum(int(i.get("assumed") or 0) for i in items)
+        lines.append(f"Commande ancienne lue dans les mails : {n_auto} bobine{'s' if n_auto > 1 else ''} retrouvée{'s' if n_auto > 1 else ''} "
+                     f"par la date d'ajout, {n_ass} présumée{'s' if n_ass > 1 else ''} reçue{'s' if n_ass > 1 else ''}. Touche pour confirmer.")
     for it in items[:12]:
         if it.get("kind") == "filament":
             lines.append(f"🧵 {it.get('fila_type') or ''} · {it.get('name_fr') or it.get('title')} ×{it.get('qty') or 1}".replace("  ", " "))
@@ -493,8 +500,9 @@ async def order_mail(oid: int, kind: str):
         lines.append(f"… et {len(items) - 12} autre(s)")
     if kind == "shipped" and (carrier or url):
         lines.append(f"📦 suivi {carrier or ''}".strip())
-    await _send(cfg, "order_mail", title, "\n".join(lines) or "Détail dans la page Filaments", link=url if kind == "shipped" and url else "/filaments",
-                priority=3 if kind in ("shipped", "delivered") else 2)
+    await _send(cfg, "order_mail", title, "\n".join(lines) or "Détail dans la page Filaments",
+                link=url if kind == "shipped" and url else f"/filaments?order={oid}",
+                priority=3 if kind in ("shipped", "delivered", "assumed") else 2)
 
 
 async def after_deduction(pid: int, changes: list):

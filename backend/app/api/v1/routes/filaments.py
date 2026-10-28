@@ -686,15 +686,24 @@ async def filaments_incoming(all: bool = Query(False), _: str = Depends(get_curr
     return {"orders": await MO.incoming(include_done=all)}
 
 
+@router.get("/incoming/{order_id}")
+async def filaments_incoming_one(order_id: int, _: str = Depends(get_current_user)):
+    from ....services import mail_orders as MO
+    o = await MO.one(order_id)
+    if o is None:
+        raise HTTPException(404, "Commande inconnue")
+    return o
+
+
 @router.post("/incoming/{order_id}/mark")
 async def filaments_incoming_mark(order_id: int, body: dict = Body(default={}), _: str = Depends(require_admin)):
-    """Coche ou decoche une ligne (index, received), ou cache la commande (hide)."""
+    """Coche ou decoche une ligne (index, received), confirme les lignes presumees (confirm), ou cache la commande (hide)."""
     from ....services import mail_orders as MO
     b = body or {}
-    out = await MO.mark(order_id, b.get("index"), bool(b.get("received", True)), b.get("hide"))
+    out = await MO.mark(order_id, b.get("index"), bool(b.get("received", True)), b.get("hide"), bool(b.get("confirm")))
     if out is None:
         raise HTTPException(404, "Commande inconnue")
-    return {"orders": out}
+    return {"orders": out, "order": next((o for o in out if o["id"] == order_id), None)}
 
 
 @router.get("/filaments/print-counts")

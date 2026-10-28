@@ -10,6 +10,7 @@ import { PrintDetail } from "../components/LazySheets";
 import { openCreator } from "../components/MwCreatorPage";
 // la fiche d'un modele MakerWorld, chargee seulement si une notification l'ouvre (28/10/2026)
 const MakerWorldModelSheet = React.lazy(() => import("../components/MakerWorldModelSheet"));
+const OrderSheet = React.lazy(() => import("../components/IncomingOrders").then(m => ({ default: m.OrderSheet })));
 
 // Historique de MES notifications (15 jours) : celles que j'ai choisies, avec
 // leur image quand il y en a une (couverture MakerWorld, plateau d'une
@@ -88,6 +89,8 @@ export default function Notifications() {
       client.get(`/prints/${ps.get("id")}`).then(({ data }) => setSheet({ print: data })).catch(() => navigate(it.link));
       return;
     }
+    const om = /^\/filaments\?order=(\d+)$/.exec(it.link);
+    if (om) { setSheet({ order: Number(om[1]) }); return; }
     if (it.link.startsWith("/")) navigate(it.link);
     else window.open(it.link, "_blank", "noopener");
   };
@@ -106,6 +109,7 @@ export default function Notifications() {
     <div className="page-wide" style={{ "--page-max":"720px", gap:14 }}>
       {sheet?.model && <React.Suspense fallback={null}><MakerWorldModelSheet designId={sheet.model} onClose={() => setSheet(null)}/></React.Suspense>}
       {sheet?.print && <PrintDetail p={sheet.print} onClose={() => setSheet(null)}/>}
+      {sheet?.order && <React.Suspense fallback={null}><OrderSheet id={sheet.order} onClose={() => setSheet(null)}/></React.Suspense>}
       <div style={{ display:"flex", alignItems:"center", gap:10 }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0, flex:1 }}>Notifications</h1>
         <button onClick={() => navigate("/settings?tab=notify")} title="Choisir mes notifications"

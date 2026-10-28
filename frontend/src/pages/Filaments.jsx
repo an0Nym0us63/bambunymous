@@ -16,7 +16,7 @@ import { useFriend } from "../store/friend";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
-import IncomingOrders from "../components/IncomingOrders";
+import IncomingOrders, { OrderSheet } from "../components/IncomingOrders";
 import { useTrackDetail } from "../utils/track";
 import Select from "../components/Select";
 import { useIsAdmin } from "../store/auth";
@@ -2732,6 +2732,7 @@ export default function Filaments() {
   // cible peut etre absente du filtre/onglet courant.
   const deepId    = searchParams.get("id");
   const deepSpool = searchParams.get("spool");
+  const deepOrder = searchParams.get("order");     // une commande (mails) depuis une notification
 
   // ?swatch=1 dans l'URL = on arrive par le scan du QR d'un echantillon (le QR
   // imprime sur la planche encode ce parametre). Dans ce seul cas on coche la
@@ -2995,6 +2996,7 @@ export default function Filaments() {
           filamentId={deepId ? Number(deepId) : undefined}
           onClose={closeDeep}/>
       )}
+      {deepOrder && <OrderSheet id={Number(deepOrder)} onClose={() => { const n = new URLSearchParams(searchParams); n.delete("order"); setSearchParams(n, { replace: true }); }}/>}
       {deepErr && (
         <div style={{ padding:"12px 16px", borderRadius:10,
           background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.3)",

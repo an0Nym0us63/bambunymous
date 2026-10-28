@@ -468,15 +468,18 @@ async def _reconcile_existing(items: list, ordered_at) -> None:
             if it.get("kind") != "filament":
                 continue
             qty = int(it.get("qty") or 1)
-            if old:
+            n = 0
+            if it.get("filament_id"):
+                # les bobines du filament ajoutees apres la commande (sans limite pour une vieille commande)
+                q = select(func.count(Spool.id)).where(Spool.filament_id == it["filament_id"], Spool.created_at >= ordered_at)
+                if not old:
+                    q = q.where(Spool.created_at <= ordered_at + timedelta(days=MATCH_WINDOW_DAYS))
+                n = int((await db.execute(q)).scalar() or 0)
+            it["received"] = min(qty, n)
+            it["auto"] = min(qty, n)                      # ce que les dates de creation de bobines expliquent
+            if old and it["received"] < qty:
+                it["assumed"] = qty - it["received"]      # presume recu par anciennete : a confirmer
                 it["received"] = qty
-                continue
-            if not it.get("filament_id"):
-                continue
-            n = (await db.execute(select(func.count(Spool.id)).where(
-                Spool.filament_id == it["filament_id"], Spool.created_at >= ordered_at,
-                Spool.created_at <= ordered_at + timedelta(days=MATCH_WINDOW_DAYS)))).scalar() or 0
-            it["received"] = min(qty, int(n))
 
 
 async def _apply(m: dict) -> str:
@@ -538,7 +541,9 @@ async def _apply(m: dict) -> str:
         oid, status, items_now = o.id, o.status, json.loads(o.items_json or "[]")
     try:
         from . import notify_events as NE
-        NE._spawn(NE.order_mail, oid, kind)
+        # une vieille commande fermee par anciennete : une notification « a confirmer » plutot qu'une confirmation
+        assumed = res == "created" and any(i.get("assumed") for i in items_now)
+        NE._spawn(NE.order_mail, oid, "assumed" if assumed else kind)
     except Exception:
         pass
     return res
@@ -547,7 +552,20 @@ async def _apply(m: dict) -> str:
 # ── A venir, et l'arrivee des bobines ─────────────────────────────────────────
 def _item_view(it: dict) -> dict:
     return {k: it.get(k) for k in ("title", "qty", "received", "kind", "fila_type", "name_fr", "color_hex", "filament_id", "refill",
-                                   "fila_color_code")}
+                                   "fila_color_code", "auto", "assumed", "confirmed")}
+
+
+async def one(order_id: int) -> dict | None:
+    """Une commande seule (la fenetre dediee), meme finie ou cachee."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.mail_order import MailOrder
+    async with AsyncSessionLocal() as db:
+        o = await db.get(MailOrder, order_id)
+        if not o:
+            return None
+        rows = [o]
+    return _views(rows)[0]
 
 
 async def incoming(include_done: bool = False) -> list[dict]:
@@ -556,9 +574,13 @@ async def incoming(include_done: bool = False) -> list[dict]:
     from ..models.mail_order import MailOrder
     async with AsyncSessionLocal() as db:
         q = select(MailOrder).where(MailOrder.hidden.is_(False)).order_by(MailOrder.ordered_at.desc())
-        if not include_done:
-            q = q.where(MailOrder.done.is_(False))
         rows = (await db.execute(q)).scalars().all()
+    views = _views(rows)
+    # sans include_done : ce qui attend encore, et les commandes fermees par anciennete pas encore confirmees
+    return views if include_done else [v for v in views if not v["done"] or v["to_confirm"] > 0]
+
+
+def _views(rows) -> list[dict]:
     out = []
     for o in rows:
         items = [_item_view(i) for i in json.loads(o.items_json or "[]")]
@@ -566,13 +588,16 @@ async def incoming(include_done: bool = False) -> list[dict]:
             "shipping" if o.status == "shipped" else "ordered"
         out.append({"id": o.id, "order_no": o.order_no, "store": o.store, "status": o.status, "stage": stage, "ordered_at": o.ordered_at,
                     "shipped_at": o.shipped_at, "delivered_at": o.delivered_at, "tracking_url": o.tracking_url, "carrier": o.carrier,
-                    "done": bool(o.done), "items": items,
-                    "pending": sum(max(0, (i.get("qty") or 0) - (i.get("received") or 0)) for i in items if i.get("kind") == "filament")})
+                    "done": bool(o.done), "hidden": bool(o.hidden), "items": items,
+                    "pending": sum(max(0, (i.get("qty") or 0) - (i.get("received") or 0)) for i in items if i.get("kind") == "filament"),
+                    "to_confirm": sum(int(i.get("assumed") or 0) for i in items if not i.get("confirmed"))})
     return out
 
 
-async def mark(order_id: int, index: int | None = None, received: bool = True, hide: bool | None = None) -> dict | None:
-    """Coche (ou decoche) une ligne a la main ; hide : cache la commande."""
+async def mark(order_id: int, index: int | None = None, received: bool = True, hide: bool | None = None,
+               confirm: bool = False) -> dict | None:
+    """Coche (ou decoche) une ligne a la main ; hide : cache la commande ; confirm : les lignes presumees recues
+    sont confirmees (ou, index donne et received False, la ligne repasse attendue)."""
     from ..db.session import AsyncSessionLocal
     from ..models.mail_order import MailOrder
     async with AsyncSessionLocal() as db:
@@ -583,10 +608,20 @@ async def mark(order_id: int, index: int | None = None, received: bool = True, h
         if index is not None and 0 <= index < len(items):
             it = items[index]
             it["received"] = (it.get("qty") or 1) if received else 0
-            o.items_json = json.dumps(items, ensure_ascii=False)
+            it["assumed"] = 0
+            it["confirmed"] = bool(received)
+        if confirm:
+            for it in items:
+                if it.get("assumed"):
+                    it["confirmed"] = True
+        o.items_json = json.dumps(items, ensure_ascii=False)
         if hide is not None:
             o.hidden = bool(hide)
         o.done = all((i.get("received") or 0) >= (i.get("qty") or 0) for i in items if i.get("kind") == "filament") if items else o.done
+        if not o.done and o.status == "delivered" and not o.delivered_at:
+            o.status = "shipped"                      # une ligne rouverte : la commande n'est plus « livree par anciennete »
+        elif not o.done and o.status == "delivered":
+            o.status = "shipped"
         _settle(o)
         await db.commit()
     return (await incoming(include_done=True))
