@@ -1188,7 +1188,21 @@ async def mw_model_3d_colors(design_id: str, profile: str = "", print_id: int = 
     if not did.isdigit():
         raise HTTPException(404, "Modèle inconnu")
     prof = await _prof_of(did, profile, print_id)
-    iid = (known(did, prof) if prof else None) or known(did, "")
+    # le 3MF de CE profil, comme la vue 3D : garde sous sa cle, sinon sous celle d'une impression au profil devine
+    # (resolve, sans rien telecharger) ; jamais celui d'un autre profil du modele (28/10/2026 : la carte montrait les
+    # couleurs d'un autre profil, une seule, la vue 3D les deux du bon)
+    iid = known(did, prof) if prof else None
+    if prof and not iid:
+        try:
+            from ....services.mw_source import resolve, _index_put
+            cand = await resolve(did, prof)
+            if cand and path_of(cand).is_file():
+                _index_put(f"{did}:{prof}", cand)
+                iid = cand
+        except Exception:
+            logger.exception("[3D] couleurs : profil")
+    if not prof:
+        iid = known(did, "")
     src = path_of(iid) if iid else None
     if not src or not src.is_file():
         return {"colors": [], "detail": [], "options": [], "chosen": {}, "scope": None}
@@ -1198,7 +1212,7 @@ async def mw_model_3d_colors(design_id: str, profile: str = "", print_id: int = 
     try:
         with zipfile.ZipFile(src) as z:
             colors = [c for c in (str(x or "").lstrip("#")[:6].upper() for x in T._colors_of(z)) if len(c) == 6]
-        await _used_palette(src, ids, did, prof if known(did, prof or "") == iid else "", detail, chosen=chosen)
+        await _used_palette(src, ids, did, prof, detail, chosen=chosen)
     except Exception:
         logger.exception("[3D] couleurs")
         colors = []
