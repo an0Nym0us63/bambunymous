@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import HiddenMark from "../components/HiddenMark";
 import Cachettes, { Hide } from "../components/Cachettes";
 import { createPortal } from "react-dom";
@@ -1414,8 +1414,15 @@ function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose 
   );
 }
 
+// Les listes et les reglages (recherche, filtres, tri) de chaque onglet, gardes le temps de la page (28/10/2026 :
+// chaque changement d'onglet demontait la vue, relançait la liste complete et perdait la recherche). La liste
+// gardee s'affiche tout de suite, et se relit derriere.
+const _KEEP = { lists: {}, ui: {} };
+const _kept = (k, dflt) => (k in _KEEP.ui ? _KEEP.ui[k] : dflt);
+
 function SpoolsView({ filaments, showArchived }) {
   const isAdmin = useIsAdmin();
+  const KEY = `spools:${showArchived ? 1 : 0}`;
   const [selFil, setSelFil] = useState(null);
   // Appui long / clic droit sur une bobine.
   const spoolMenu = s => {
@@ -1450,14 +1457,15 @@ function SpoolsView({ filaments, showArchived }) {
       ],
     };
   };
-  const [allSpools, setAllSpools] = useState([]);
-  const [q, setQ] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [allSpools, setAllSpools] = useState(() => _KEEP.lists[KEY] || []);
+  const [q, setQ] = useState(() => _kept(KEY + ":q", ""));
+  const [loading, setLoading] = useState(() => !_KEEP.lists[KEY]);
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [filters, setFilters] = useState({ brand:[], mat:[], sub:[] });
-  const [sort, setSort] = useState("recent");
+  const [filters, setFilters] = useState(() => _kept(KEY + ":f", { brand:[], mat:[], sub:[] }));
+  const [sort, setSort] = useState(() => _kept(KEY + ":s", "recent"));
+  useEffect(() => { _KEEP.ui[KEY + ":q"] = q; _KEEP.ui[KEY + ":f"] = filters; _KEEP.ui[KEY + ":s"] = sort; }, [KEY, q, filters, sort]);
 
   const FAMILIES = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];
   const getFamily = s => {
@@ -1466,12 +1474,13 @@ function SpoolsView({ filaments, showArchived }) {
   };
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!_KEEP.lists[KEY]) setLoading(true);
     try {
       const { data } = await client.get("/filaments/spools", { params:{ archived:showArchived } });
+      _KEEP.lists[KEY] = data;
       setAllSpools(data);
     } finally { setLoading(false); }
-  }, [showArchived]);
+  }, [showArchived, KEY]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1650,7 +1659,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
     const { color: col, colors_array: ca, multicolor_type: mct } = parseColorsInput(form.colors_input, form.multicolor_type);
     setSaving(true);
     try {
-      await client.patch(`/filaments/filaments/${f.id}`, {
+      const r = await client.patch(`/filaments/filaments/${f.id}`, {
         name:              form.name,
         name_en:           form.name_en || undefined,
         translated_name:   form.translated_name || undefined,
@@ -1674,7 +1683,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
         to_order:          form.to_order,
       });
       setEditing(false);
-      onUpdated?.();
+      onUpdated?.(r.data);
     } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setSaving(false); }
   };
@@ -2121,14 +2130,15 @@ function FilamentsView() {
       isAdmin && { icon: "＋", label: "Ajouter une bobine", tone: "#22C55E", onClick: () => setAddFor(f.id) },
     ],
   });
-  const [allFilaments, setAllFilaments] = useState([]);
-  const [q, setQ] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [allFilaments, setAllFilaments] = useState(() => _KEEP.lists.filaments || []);
+  const [q, setQ] = useState(() => _kept("fil:q", ""));
+  const [loading, setLoading] = useState(() => !_KEEP.lists.filaments);
   const [selectedFil, setSelectedFil] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [filters, setFilters] = useState({ brand:[], mat:[], sub:[] });
-  const [sort, setSort] = useState("name");
+  const [filters, setFilters] = useState(() => _kept("fil:f", { brand:[], mat:[], sub:[] }));
+  const [sort, setSort] = useState(() => _kept("fil:s", "name"));
+  useEffect(() => { _KEEP.ui["fil:q"] = q; _KEEP.ui["fil:f"] = filters; _KEEP.ui["fil:s"] = sort; }, [q, filters, sort]);
 
   const FAMILIES_F = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];
   const getFamilyF = f => {
@@ -2137,14 +2147,21 @@ function FilamentsView() {
   };
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!_KEEP.lists.filaments) setLoading(true);
     try {
       const { data } = await client.get("/filaments/filaments");
+      _KEEP.lists.filaments = data;
       setAllFilaments(data);
     } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  // la fiche renvoie le filament a jour : on le remplace dans la liste, sans tout relire
+  const onFilUpdated = useCallback(u => {
+    if (!u?.id) { load(); return; }
+    setAllFilaments(l => { const n = l.map(x => x.id === u.id ? u : x); _KEEP.lists.filaments = n; return n; });
+    setSelectedFil(s => (s && s.id === u.id ? u : s));
+  }, [load]);
 
   const filaments = useMemo(() => {
     let res = allFilaments;
@@ -2208,9 +2225,9 @@ function FilamentsView() {
       )}
       {selectedFil && <FilamentSheet f={selectedFil} onClose={() => setSelectedFil(null)}
         onDeleted={() => { setSelectedFil(null); load(); }}
-        onUpdated={load}/>}
+        onUpdated={onFilUpdated}/>}
       {createOpen && <FilamentCreateSheet onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); load(); }}/>}
-      {addFor && <AddSpoolModal preselect={addFor} onSave={() => { setAddFor(null); load(); }} onClose={() => setAddFor(null)}/>}
+      {addFor && <AddSpoolModal preselect={addFor} filaments={allFilaments} onSave={() => { setAddFor(null); load(); }} onClose={() => setAddFor(null)}/>}
     </div>
   );
 }
@@ -2268,14 +2285,16 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
     }).catch(() => {});
   }, [mode]);
 
-  // Chercher dans le catalogue
+  // Chercher dans le catalogue, un quart de seconde apres la derniere frappe (28/10/2026 : un appel par frappe)
+  const [catalogDq, setCatalogDq] = useState("");
+  useEffect(() => { const t = setTimeout(() => setCatalogDq(catalogQ), 250); return () => clearTimeout(t); }, [catalogQ]);
   useEffect(() => {
     if (mode !== "catalog") return;
     setCatalogLoading(true);
     const params = {};
     if (selectedFamily) params.family = selectedFamily;
     if (selectedType) params.fila_type = selectedType;
-    if (catalogQ.trim()) params.q = catalogQ.trim();
+    if (catalogDq.trim()) params.q = catalogDq.trim();
     params.lang = "fr";
     client.get("/filaments/catalog/search", { params })
       .then(({ data }) => {
@@ -2284,7 +2303,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
       })
       .catch(() => setCatalogEntries([]))
       .finally(() => setCatalogLoading(false));
-  }, [mode, selectedFamily, selectedType, catalogQ]);
+  }, [mode, selectedFamily, selectedType, catalogDq]);
 
   // Helper : affiche la couleur selon le type (gradient / coaxial / mono)
   const colorSwatch = (e, size=28) => {
@@ -2578,7 +2597,15 @@ function hexToHsl(hex) {
  * conventionnel d'un arc-en-ciel (rouge, orange, jaune, vert, bleu, violet,
  * rose) et le déplacer surprendrait plus qu'il n'aiderait.
  */
+const _HUE_KEYS = new Map();   // quelques centaines de couleurs au plus : la conversion ne se refait pas a chaque comparaison
 function hueSortKey(hex) {
+  const hit = _HUE_KEYS.get(hex);
+  if (hit) return hit;
+  const k = _hueSortKey(hex);
+  _HUE_KEYS.set(hex, k);
+  return k;
+}
+function _hueSortKey(hex) {
   const [h, s, l] = hexToHsl(hex);
   // s est en 0-100 ici. En dessous de 12 la teinte n'est plus perceptible et
   // devient instable : un gris très légèrement chaud tomberait au milieu des
@@ -2645,25 +2672,16 @@ export function FilamentSheetFromSpool({ filamentId, spoolId, filamentColorHex, 
   React.useEffect(() => {
     const load = async () => {
       try {
-        // Chercher la bobine directement
+        // La bobine par sa route (28/10/2026 : deux listes completes partaient pour la retrouver)
         if (spoolId) {
-          const r = await client.get("/filaments/spools", { params:{ limit:2000, archived:false } });
-          const r2 = await client.get("/filaments/spools", { params:{ limit:2000, archived:true } });
-          const allSpools = [...(r.data||[]), ...(r2.data||[])];
-          const found = allSpools.find(s => s.id === spoolId);
-          if (found) { setSpool(found); return; }
+          try {
+            const r = await client.get(`/filaments/spools/${spoolId}`);
+            if (r.data?.id) { setSpool(r.data); return; }
+          } catch { /* introuvable : la fiche de son filament, ci-dessous */ }
         }
         if (filamentId) {
           const r = await client.get("/filaments/filaments/" + filamentId);
           setFil(r.data); return;
-        }
-        if (spoolId) {
-          const spools = await client.get("/filaments/spools", { params:{ limit:1000 } });
-          const spool = (spools.data || []).find(s => s.id === spoolId);
-          if (spool?.filament_id) {
-            const r = await client.get("/filaments/filaments/" + spool.filament_id);
-            setFil(r.data); return;
-          }
         }
         if (filamentColorHex) {
           const hex = filamentColorHex.replace("#","");
@@ -2820,8 +2838,10 @@ export default function Filaments() {
     return res;
   }, [allFilaments, galQ, galFilters, galSort]);
 
+  const pcDone = useRef(false);
   useEffect(() => {
-    if (tab !== "gallery") return;
+    if (tab !== "gallery" || pcDone.current) return;
+    pcDone.current = true;
     client.get("/filaments/filaments/print-counts")
       .then(r => setPrintCounts(r.data || {})).catch(() => {});
   }, [tab]);

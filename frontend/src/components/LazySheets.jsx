@@ -17,3 +17,7 @@ const prints = () => import("../pages/Prints");
 export const FilamentSheet = lazyNamed(filaments, "FilamentSheet");
 export const FilamentSheetFromSpool = lazyNamed(filaments, "FilamentSheetFromSpool");
 export const PrintDetail = lazyNamed(prints, "PrintDetail");
+export const GroupBottomSheet = lazyNamed(prints, "GroupBottomSheet");
+const objects = () => import("../pages/Objects");
+export const ObjectSheet = lazyNamed(objects, "ObjectSheet");
+export const AccessorySheet = lazyNamed(objects, "AccessorySheet");

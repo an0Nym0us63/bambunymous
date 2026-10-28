@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import HiddenMark from "../components/HiddenMark";
 import Cachettes, { Hide } from "../components/Cachettes";
 import { useUrlTab } from "../utils/useUrlTab";
@@ -34,6 +34,9 @@ function fmtKpi(v) {
 // ── Fiche accessoire ──────────────────────────────────────────────────────
 // Consultation (photo, stock, valeur, objets qui l'utilisent), edition,
 // reapprovisionnement (prix moyen pondere), photo et suppression.
+// un seul comparateur pour tous les tris par nom (un localeCompare par comparaison refaisait son travail)
+const OBJ_COLLATOR = new Intl.Collator("fr", { numeric: true });
+
 export function AccessorySheet({ accId, onClose, onChanged }) {
   const [d, setD] = React.useState(null);
   // Le nom n'arrive qu'apres le chargement : on annonce d'abord l'identifiant,
@@ -913,11 +916,9 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
         const r = await client.get(`/prints/${obj.parent_id}`);
         setParentPrint(r.data);
       } else if (obj.parent_type === "group") {
-        // /prints/groups renvoie { groups: [...] }, pas un tableau direct.
-        const r = await client.get("/prints/groups");
-        const list = r.data?.groups || r.data || [];
-        const g = list.find(x => Number(x.id) === Number(obj.parent_id));
-        if (g) setParentGroup(g);
+        // le groupe seul (28/10/2026 : toute la liste des groupes partait pour en retrouver un)
+        const r = await client.get(`/prints/groups/${obj.parent_id}`);
+        if (r.data?.id) setParentGroup(r.data);
       }
     } catch { /* parent introuvable : rien */ }
   };
@@ -1707,34 +1708,43 @@ export default function Objects() {
   // pastille en isolait un seul. Surtout, filtrer cote serveur privait les
   // en-tetes des donnees necessaires a leurs resumes.
 
+  // « Chargement… » seulement quand il n'y a encore rien a montrer : un rechargement apres une action se fait en
+  // place (28/10/2026 : la grille entiere disparaissait a chaque vente, lien d'accessoire ou edition). La recherche
+  // filtre la liste deja en memoire (elle est complete, 500 au plus) : plus un appel serveur par frappe.
+  const nObj = useRef(0), nAcc = useRef(0);
+  nObj.current = objects.length; nAcc.current = accessories.length;
   const loadObjects = useCallback(async () => {
-    setLoading(true);
+    if (!nObj.current) setLoading(true);
     try {
-      const params = { q: q||undefined, limit:500 };
-      const { data } = await client.get("/objects/objects", { params });
+      const { data } = await client.get("/objects/objects", { params: { limit: 500 } });
       setObjects(data.items || []);
     } catch(e) { console.error(e); } finally { setLoading(false); }
-  }, [q]);
+  }, []);
 
   const loadAccessories = useCallback(async () => {
-    setLoading(true);
+    if (!nAcc.current) setLoading(true);
     try {
-      const { data } = await client.get("/objects/accessories", { params: { q: q||undefined } });
+      const { data } = await client.get("/objects/accessories");
       setAccessories(data || []);
     } catch(e) { console.error(e); } finally { setLoading(false); }
-  }, [q]);
+  }, []);
 
   useEffect(() => {
     if (tab === "objects") loadObjects(); else loadAccessories();
-  }, [tab, q]);
+  }, [tab, loadObjects, loadAccessories]);
+  const qn = q.trim().toLowerCase();
+  const seen = useMemo(() => !qn ? objects : objects.filter(o => `${o.translated_name || ""} ${o.name || ""}`.toLowerCase().includes(qn)), [objects, qn]);
+  const seenAcc = useMemo(() => !qn ? accessories : accessories.filter(a => (a.name || "").toLowerCase().includes(qn)), [accessories, qn]);
 
-  // Séparer objets groupés vs solo — comme les prints
-  const grouped = {};
-  const solo = [];
-  for (const o of objects) {
-    if (o.group_id) { (grouped[o.group_id] = grouped[o.group_id] || { id: o.group_id, name: o.group_name, desired_price: o.desired_price ?? null, items: [] }).items.push(o); }
-    else solo.push(o);
-  }
+  // Séparer objets groupés vs solo — comme les prints (memoise : refait seulement quand la liste ou la recherche change)
+  const { grouped, solo } = useMemo(() => {
+    const grouped = {}, solo = [];
+    for (const o of seen) {
+      if (o.group_id) { (grouped[o.group_id] = grouped[o.group_id] || { id: o.group_id, name: o.group_name, desired_price: o.desired_price ?? null, items: [] }).items.push(o); }
+      else solo.push(o);
+    }
+    return { grouped, solo };
+  }, [seen]);
   // Items pour la grille : groupes d'abord puis solos — comme galerie prints
   const [openSections, setOpenSections] = React.useState({});
   const [openAccSections, setOpenAccSections] = React.useState({});
@@ -1775,7 +1785,7 @@ export default function Objects() {
     if (objSort === "recent") c.sort((a, b) => objId(b) - objId(a));
     else if (objSort === "cost")  c.sort((a, b) => objCost(b) - objCost(a));
     else if (objSort === "value") c.sort((a, b) => objValue(b) - objValue(a));
-    else c.sort((a, b) => objLabel(a).localeCompare(objLabel(b), "fr", { numeric: true }));
+    else c.sort((a, b) => OBJ_COLLATOR.compare(objLabel(a), objLabel(b)));
     return c;
   };
   const [bulkCat, setBulkCat] = React.useState(false);
@@ -1786,7 +1796,7 @@ export default function Objects() {
   // ceux a consulter, et les remonter en tete aurait mis le desordre devant.
   const accSections = React.useMemo(() => {
     const by = new Map();
-    for (const a of accessories) {
+    for (const a of seenAcc) {
       const k = (a.category || "").trim() || null;
       if (!by.has(k)) by.set(k, []);
       by.get(k).push(a);
@@ -1813,10 +1823,10 @@ export default function Objects() {
       accent: accessories.some(x => !(x.quantity > 0)) ? "#ef4444" : "#94a3b8" },
   ], [accessories]);
 
-  const gridItems = [
+  const gridItems = useMemo(() => [
     ...Object.entries(grouped).map(([gid, g]) => ({ kind:"group", group_id:Number(gid), group:g, objects:g.items })),
     ...solo.map(o => ({ kind:"object", obj:o })),
-  ];
+  ], [grouped, solo]);
 
   // Ordre volontaire : ce sur quoi on peut agir en premier, l'archive en
   // dernier. "A vendre" ouvre la page parce que c'est la seule section qui
@@ -1828,7 +1838,7 @@ export default function Objects() {
   // dans "Vendus" avec ses 3, et dans "A vendre" avec ses 4 : le forcer dans
   // une seule section aurait cache la moitie de son contenu, et le scinder en
   // objets isoles aurait defait le regroupement.
-  const sections = SECTION_ORDER.map(st => {
+  const sections = useMemo(() => SECTION_ORDER.map(st => {
     const items = [];
     for (const it of gridItems) {
       if (it.kind === "object") {
@@ -1847,9 +1857,10 @@ export default function Objects() {
     // l'apercu montre les plus recents : les derniers vendus (date de vente), sinon les derniers crees
     const recent = [...objs].sort((x, y) => st === "sold" && (x.sold_date || y.sold_date)
       ? String(y.sold_date || "").localeCompare(String(x.sold_date || "")) || (y.id - x.id) : (y.id - x.id));
-    const thumbs = recent.map(o => apiThumb(apiUrl(`/objects/objects/${o.id}/image`), 128));
+    // l'en-tete n'en montre que trois : pas la peine de fabriquer une adresse par objet
+    const thumbs = recent.slice(0, 3).map(o => apiThumb(apiUrl(`/objects/objects/${o.id}/image`), 128));
     return { st, items, count: objs.length, cost, revenue, desired, thumbs };
-  }).filter(Boolean);
+  }).filter(Boolean), [gridItems, objSort]);   // eslint-disable-line react-hooks/exhaustive-deps
   // les chiffres de l'onglet Objets : ce qui attend une vente, ce qu'on en espere, ce qu'on a encaisse et gagne
   const objKpis = React.useMemo(() => {
     const av = objects.filter(o => objStatus(o) === "available"), sold = objects.filter(o => objStatus(o) === "sold");

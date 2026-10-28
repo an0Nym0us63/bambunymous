@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import HiddenMark from "../components/HiddenMark";
 import Cachettes from "../components/Cachettes";
@@ -9,10 +9,11 @@ import client from "../api/client";
 import HeaderAction from "../components/HeaderAction";
 import { useTrackDetail } from "../utils/track";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
-import { PrintDetail, GroupBottomSheet } from "./Prints";
-import { ObjectSheet, AccessorySheet } from "./Objects";
-import { FilamentSheetFromSpool } from "./Filaments";
-import Achievements from "./Achievements";
+// les fiches viennent des autres pages, chargees a l'ouverture seulement (28/10/2026 : importees en dur, la page
+// Stats embarquait Impressions, Objets, Filaments et Succes entieres avant son premier affichage)
+import { PrintDetail, GroupBottomSheet, ObjectSheet, AccessorySheet, FilamentSheetFromSpool } from "../components/LazySheets";
+import { importRetry } from "../utils/importRetry";
+const Achievements = React.lazy(() => importRetry(() => import("./Achievements")));
 import { FSheet, fBtn, fGrad } from "../components/FicheKit";
 
 const fmtH = s => {
@@ -261,6 +262,34 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
 const fmtMonths = d => d == null ? "jamais" : d < 30 ? `${d} j`
   : `${String(Math.round(d / 30 * 10) / 10).replace(".", ",")} mois`;
 
+// une ligne de bobine a secher, hors du composant (28/10/2026 : redefinie a chaque rendu, toutes remontees a chaque clic)
+function DryRow({ s, late, onOpen }) {
+return (
+  <div onClick={() => onOpen(s)} role="button" tabIndex={0}
+    style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 4px", cursor:"pointer",
+      borderBottom:"1px dashed var(--border)" }}>
+    <Dot hex={s.color} colors={s.colors_array} multicolor={s.multicolor_type} finish={finishOf(s)} size={14}/>
+    <div style={{ flex:1, minWidth:0 }}>
+      <div style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", overflow:"hidden",
+        textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</div>
+      <div style={{ fontSize:11.5, fontWeight:600, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+        {[s.brand, s.fila_type, `#${s.id}`, s.location].filter(Boolean).join(" · ")}
+      </div>
+    </div>
+    <div style={{ textAlign:"right", flexShrink:0 }}>
+      <div style={{ fontSize:12.5, fontWeight:900,
+        color: late ? "#0EA5E9" : "#f59e0b" }}>
+        {s.age_days == null ? "jamais séchée"
+          : late ? `+${fmtMonths(-s.remaining_days)} de retard` : `dans ${fmtMonths(s.remaining_days)}`}
+      </div>
+      <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)" }}>
+        {s.age_days != null ? `séchée il y a ${fmtMonths(s.age_days)} · ` : ""}délai {fmtMonths(s.limit_days)}
+      </div>
+    </div>
+  </div>
+);
+}
+
 function DryingStats() {
   const [d, setD] = useState(null);
   const [open, setOpen] = useState(null);
@@ -270,31 +299,6 @@ function DryingStats() {
   if (d.error) return <p style={{ color:"#ef4444", fontSize:13 }}>Impossible de charger l'état du séchage.</p>;
   const k = d.kpis;
   const maxF = Math.max(1, ...d.families.map(f => f.count));
-
-  const Row = ({ s, late }) => (
-    <div onClick={() => setOpen(s)} role="button" tabIndex={0}
-      style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 4px", cursor:"pointer",
-        borderBottom:"1px dashed var(--border)" }}>
-      <Dot hex={s.color} colors={s.colors_array} multicolor={s.multicolor_type} finish={finishOf(s)} size={14}/>
-      <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", overflow:"hidden",
-          textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</div>
-        <div style={{ fontSize:11.5, fontWeight:600, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-          {[s.brand, s.fila_type, `#${s.id}`, s.location].filter(Boolean).join(" · ")}
-        </div>
-      </div>
-      <div style={{ textAlign:"right", flexShrink:0 }}>
-        <div style={{ fontSize:12.5, fontWeight:900,
-          color: late ? "#0EA5E9" : "#f59e0b" }}>
-          {s.age_days == null ? "jamais séchée"
-            : late ? `+${fmtMonths(-s.remaining_days)} de retard` : `dans ${fmtMonths(s.remaining_days)}`}
-        </div>
-        <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)" }}>
-          {s.age_days != null ? `séchée il y a ${fmtMonths(s.age_days)} · ` : ""}délai {fmtMonths(s.limit_days)}
-        </div>
-      </div>
-    </div>
-  );
 
   const scroll = { padding:"4px 12px", maxHeight:300, overflowY:"auto" };
   const fmtKgs = g => g >= 1000 ? `${String(Math.round(g / 100) / 10).replace(".", ",")} kg` : `${g} g`;
@@ -349,7 +353,7 @@ function DryingStats() {
     {d.to_dry.length > 0 && (
       <Section title={`À sécher maintenant (${d.to_dry.length})`}>
         <div style={{ ...statCard("#0EA5E9"), ...scroll }}>
-          {d.to_dry.map(s => <Row key={s.id} s={s} late/>)}
+          {d.to_dry.map(s => <DryRow key={s.id} s={s} late onOpen={setOpen}/>)}
         </div>
       </Section>
     )}
@@ -357,7 +361,7 @@ function DryingStats() {
     {d.soon.length > 0 && (
       <Section title={`Bientôt — dans les ${d.soon_days} jours (${d.soon.length})`}>
         <div style={{ ...statCard("#f59e0b"), ...scroll }}>
-          {d.soon.map(s => <Row key={s.id} s={s}/>)}
+          {d.soon.map(s => <DryRow key={s.id} s={s} onOpen={setOpen}/>)}
         </div>
       </Section>
     )}
@@ -894,7 +898,10 @@ export default function Stats() {
       .then(r => setObjStats(r.data))
       .catch(() => setObjStats(null));
   }, [period]);
-  useEffect(() => { loadObjects(); }, [loadObjects]);
+  // les stats objets : lues a l'ouverture de leur onglet (28/10/2026 : au montage et a chaque periode, meme ailleurs)
+  const objWanted = useRef(false);
+  if (tab === "objects") objWanted.current = true;
+  useEffect(() => { if (objWanted.current) loadObjects(); }, [loadObjects, tab]);
 
   // Clic sur un accessoire (histogrammes accessoires) -> ouverture de sa fiche.
   const openAccessory = (id) => setAccId(id);
@@ -952,13 +959,15 @@ export default function Stats() {
       </div>
       {filterOpen && (
         <PeriodFilterSheet value={period}
-          onApply={(r) => { setPeriod(r); setFilterOpen(false); }}
+          onApply={(r) => { setPeriod(p => p.from === r.from && p.to === r.to ? p : r); setFilterOpen(false); }}
           onClose={() => setFilterOpen(false)}/>
       )}
     </>
   );
 
-  if (loading) return (
+  // « Chargement… » plein ecran seulement sans donnees : un changement de periode garde la page, a peine estompee
+  // (28/10/2026 : les onglets Sechage et Succes etaient demontes et refaisaient leurs appels a chaque periode)
+  if (loading && !data) return (
     <div className="page-wide" style={{ gap: 20 }}>
       {header}
       <p style={{ textAlign: "center", color: "var(--muted)", padding: 60 }}>Chargement…</p>
@@ -980,7 +989,7 @@ export default function Stats() {
     { id:"achievements", label:"Succès", ic:"🏆", c:"#F59E0B" }];
 
   return (
-    <div className="page-wide" style={{ gap: 20 }}>
+    <div className="page-wide" style={{ gap: 20, opacity: loading ? 0.6 : 1, transition: "opacity .2s" }}>
       {header}
 
       {/* Onglets : chacun sa couleur ; l'icone seule sur les inactifs quand la place manque */}
@@ -1214,7 +1223,7 @@ export default function Stats() {
 
       {tab === "drying" && <DryingStats/>}
 
-      {tab === "achievements" && <Achievements embedded/>}
+      {tab === "achievements" && <React.Suspense fallback={null}><Achievements embedded/></React.Suspense>}
 
       {tab === "objects" && (
         <ObjectsStats stats={objStats} onOpen={openDetail} onOpenObject={openObject} onOpenAccessory={openAccessory}/>
