@@ -546,11 +546,27 @@ def _connect(host: str, port: int, trust_local: bool = False, pin: str = "") -> 
         # pas de chaine de confiance possible pour un auto-signe : c'est l'empreinte, ci-dessous, qui fait foi
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-    if port in (143, 1143):
+    # deux facons d'ouvrir : clair puis STARTTLS, ou TLS direct ; l'ordre depend du port, et si la premiere echoue
+    # (serveur qui coupe net, « EOF », mauvais mode), l'autre est tentee, l'erreur finale dit a quelle etape ca casse
+    def via_starttls():
         M = imaplib.IMAP4(host, port, timeout=30)
         M.starttls(ctx)                    # jamais en clair : un STARTTLS refuse fait echouer la connexion
-    else:
-        M = imaplib.IMAP4_SSL(host, port, ssl_context=ctx, timeout=30)
+        return M
+
+    def via_tls():
+        return imaplib.IMAP4_SSL(host, port, ssl_context=ctx, timeout=30)
+
+    order = [("STARTTLS", via_starttls), ("TLS direct", via_tls)] if port in (143, 1143) else [("TLS direct", via_tls), ("STARTTLS", via_starttls)]
+    M, tried = None, []
+    for name, fn in order:
+        try:
+            M = fn()
+            break
+        except (OSError, imaplib.IMAP4.error) as e:
+            tried.append(f"{name} : {str(e)[:120] or e.__class__.__name__}")
+    if M is None:
+        raise RuntimeError(f"Impossible d'ouvrir la connexion IMAP vers {host}:{port} (" + " · ".join(tried)
+                           + "). Pour Proton Bridge : le Bridge doit accepter les connexions venant d'une autre machine que la sienne, et le port est celui affiché dans le Bridge (IMAP, 1143 par défaut).")
     fp = ""
     if pinned:
         der = M.sock.getpeercert(binary_form=True)
