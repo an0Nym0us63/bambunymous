@@ -10,6 +10,7 @@ arrive (ajoutee ou scannee), ou d'une coche a la main.
 from __future__ import annotations
 
 import asyncio
+import base64
 import email
 import email.header
 import email.utils
@@ -588,6 +589,35 @@ def _connect(host: str, port: int, trust_local: bool = False, pin: str = "") -> 
     return M, fp
 
 
+def _imap_folder(name: str) -> str:
+    """Le nom de dossier tel que le serveur l'attend (28/10/2026) : la boite de reception s'appelle toujours INBOX
+    (quel que soit son nom affiche : « Boite de reception », « Posteingang »…), et un nom accentue passe en UTF-7
+    modifie (RFC 3501), entre guillemets."""
+    n = (name or "").strip()
+    if not n or _fold(n) in ("inbox", "boite de reception", "reception", "posteingang", "bandeja de entrada", "posta in arrivo"):
+        return "INBOX"
+    try:
+        n.encode("ascii")
+        return f'"{n}"' if " " in n else n
+    except UnicodeEncodeError:
+        pass
+    out, buf = [], []
+    def flush():
+        if buf:
+            b64 = base64.b64encode("".join(buf).encode("utf-16-be")).decode("ascii").rstrip("=").replace("/", ",")
+            out.append("&" + b64 + "-")
+            buf.clear()
+    for ch in n:
+        if 0x20 <= ord(ch) <= 0x7E and ch != "&":
+            flush(); out.append(ch)
+        elif ch == "&":
+            flush(); out.append("&-")
+        else:
+            buf.append(ch)
+    flush()
+    return '"' + "".join(out) + '"'
+
+
 def _fetch_sync(cfg: dict, password: str, seen: set) -> tuple[list, list]:
     """Se connecte, cherche les mails de la boutique, rend (nouveaux mails analyses, erreurs). Un releve
     automatique ne regarde que depuis le dernier mail deja vu (UID IMAP superieur, 28/10/2026) : pas de retour dans
@@ -599,7 +629,7 @@ def _fetch_sync(cfg: dict, password: str, seen: set) -> tuple[list, list]:
     cfg["seen_pin"] = fp                   # epinglee par sync apres un releve reussi
     try:
         M.login(cfg["user"], password)
-        typ, _ = M.select(cfg["folder"] or "INBOX", readonly=True)
+        typ, _ = M.select(_imap_folder(cfg["folder"]), readonly=True)
         if typ != "OK":
             raise RuntimeError(f"Dossier « {cfg['folder']} » introuvable")
         senders = cfg.get("senders") or DEFAULT_SENDERS.split(",")
