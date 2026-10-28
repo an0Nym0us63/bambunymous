@@ -2624,7 +2624,9 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
         }}
         compareFields={[
           ["Matière",  f => f.material],
+          ["Sous-type", f => f.fila_type || null],
           ["Marque",   f => f.manufacturer],
+          ["Finition", f => { const x = FINISHES.find(([k]) => k === finishOf(f)); return x ? x[1] : null; }],
           ["Couleur",  f => f.color ? `#${f.color}` : null],
           ["Poids",    f => f.filament_weight_g ? `${f.filament_weight_g}g` : null],
           ["Prix",     f => isMoneyHidden() ? MONEY_MASK : (f.price ? `${f.price}€` : null)],
