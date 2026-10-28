@@ -10,9 +10,10 @@ const KINDS = [
   { k: "spins",   e: "🎡", label: "Tours de roue",      hint: "la maison, ou un compte de la famille qui a sa roue", unit: n => `tour${n > 1 ? "s" : ""}` },
   { k: "keys",    e: "🔑", label: "Clés",               hint: "la maison seulement", unit: n => `clé${n > 1 ? "s" : ""}` },
   { k: "tickets", e: "🎟️", label: "Tickets de palier", hint: "la maison seulement", unit: n => `ticket${n > 1 ? "s" : ""}` },
-  { k: "loupes",  e: "🔎", label: "Loupes",             hint: "tous les comptes", unit: n => `loupe${n > 1 ? "s" : ""}` },
+  { k: "loupes",  e: "🔎", label: "Loupes",             hint: "les comptes de la famille (la maison a des clés, pas de loupes)", unit: n => `loupe${n > 1 ? "s" : ""}` },
 ];
-const can = (a, k) => k === "loupes" || k === "surprise" ? true : k === "spins" ? !!a.wheel : !!a.main;
+// la maison : tours, cles, tickets ; un compte de la famille : tours (s'il a sa roue) et loupes ; la surprise : tous
+const can = (a, k) => k === "surprise" ? true : k === "spins" ? !!a.wheel : k === "loupes" ? !a.main : !!a.main;
 const pct = p => p == null ? "—" : `${(Math.round(p * 1000) / 10).toString().replace(".", ",")} %`;
 const ago = l => { if (!l) return "jamais comptée"; const m = Math.max(0, Math.round((Date.now() - new Date(/Z|[+-]\d\d:\d\d$/.test(l) ? l : l + "Z")) / 60000));
   return m < 60 ? `il y a ${m} min` : m < 1440 ? `il y a ${Math.floor(m / 60)} h` : `il y a ${Math.floor(m / 1440)} j`; };
@@ -120,7 +121,7 @@ export default function CoupDePouce() {
               {a.wheel && <span data-tip="Tours de roue">🎡 {a.spins ?? 0}</span>}
               {a.main && <span data-tip="Clés">🔑 {a.keys ?? 0}</span>}
               {a.main && <span data-tip="Tickets de palier">🎟️ {a.tickets ?? 0}</span>}
-              <span data-tip="Loupes">🔎 {a.loupes ?? 0}</span>
+              {!a.main && <span data-tip="Loupes">🔎 {a.loupes ?? 0}</span>}
               <span data-tip={`Chance de surprise à la prochaine ouverture · dernière ouverture ${ago(a.last)}`}>✨ {a.pending ? "en attente" : pct(a.surprise)}</span>
             </span>
           </button>); })}

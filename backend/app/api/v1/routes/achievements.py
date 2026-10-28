@@ -447,7 +447,8 @@ async def achievements_gift_accounts(username: str = Depends(require_main), db: 
     for x in users:
         main = x.id == main_id
         row = {"username": x.username, "main": main, "role": x.role, "wheel": main or x.username in fam,
-               "loupes": int((await A.loupes(x.username)).get("n") or 0)}
+               # les loupes sont aux comptes de la famille ; la maison a des cles a la place
+               "loupes": None if main else int((await A.loupes(x.username)).get("n") or 0)}
         if main:
             row.update(spins=(st.get("wheel") or {}).get("spins", 0), keys=(st.get("keys") or {}).get("balance", 0),
                        tickets=(st.get("wheel") or {}).get("tickets", 0))
@@ -489,6 +490,8 @@ async def achievements_gift(body: dict, username: str = Depends(require_main), d
                 r = await A.set_surprise_chance(to, n)
                 done.append({"to": to, "kind": kind, "n": n, "now": r.get("next"), "pending": r.get("pending")})
             elif kind == "loupes":
+                if main:
+                    raise ValueError("La maison n'a pas de loupes (elle a des clés)")
                 done.append({"to": to, "kind": kind, "n": int(n), "now": await A.add_loupes(to, int(n))})
             elif kind == "spins":
                 if main:
