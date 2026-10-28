@@ -6,6 +6,7 @@ import { colorBg, opaqueColors, finishOf } from "../utils/colors";
 import { createPortal } from "react-dom";
 import { FilamentSheetFromSpool } from "./LazySheets";
 import SpoolSVG from "./SpoolSVG";
+import { HeroSpool } from "./SpoolGhost";
 import { EXT_AMS_ID, amsName, slotLabel, isExternal, trayPct } from "../utils/ams";
 import AdminOnly from "./AdminOnly";
 import { showAlert } from "../utils/dialog";
@@ -730,10 +731,17 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
       {/* la bobine de l'emplacement en vedette */}
       <div style={{ position:"relative", overflow:"hidden", padding:"52px 18px 18px", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap",
         background:`radial-gradient(circle at 18% 45%, ${tint}55, transparent 60%), linear-gradient(135deg, ${tint}26, transparent 70%), var(--surface2)` }}>
-        <span style={{ position:"relative", display:"inline-flex", flexShrink:0, filter:`drop-shadow(0 8px 18px ${tint}66)`, opacity: isEmpty && !tray.drying_spool ? .35 : 1 }}>
-          <SpoolSVG colors={cols || ["#94a3b8"]} finish={isEmpty ? finishOf(tray.drying_spool) : finishOf(info, tray)} size={104} type={isEmpty ? multicolorType({}, tray.drying_spool) : multicolorType(tray, info)}/>
-          {/* Bobine posee pour sechage : hachuree (non inseree). */}
-          {isEmpty && tray.drying_spool && <HatchOverlay radius={52}/>}
+        {/* les autres exemplaires du filament en ombre (en stock a droite, en commande a gauche), comme sur la fiche bobine */}
+        <span style={{ display:"inline-flex", opacity: isEmpty && !tray.drying_spool ? .35 : 1 }}>
+          <HeroSpool colors={cols || ["#94a3b8"]} finish={isEmpty ? finishOf(tray.drying_spool) : finishOf(info, tray)} type={isEmpty ? multicolorType({}, tray.drying_spool) : multicolorType(tray, info)}
+            color={tint} size={104} stack={!isEmpty && info?.filament_spools > 1 ? info.filament_spools - 1 : 0} ordered={!isEmpty ? (info?.filament_ordered || 0) : 0}
+            stockWeight={!isEmpty && info?.filament_stock_g != null && info?.remaining_weight_g != null && info.filament_stock_g > info.remaining_weight_g ? fmtStock(info.filament_stock_g - info.remaining_weight_g) : null}>
+            <span style={{ position:"relative", display:"inline-flex" }}>
+              <SpoolSVG colors={cols || ["#94a3b8"]} finish={isEmpty ? finishOf(tray.drying_spool) : finishOf(info, tray)} size={104} type={isEmpty ? multicolorType({}, tray.drying_spool) : multicolorType(tray, info)}/>
+              {/* Bobine posee pour sechage : hachuree (non inseree). */}
+              {isEmpty && tray.drying_spool && <HatchOverlay radius={52}/>}
+            </span>
+          </HeroSpool>
         </span>
         <div style={{ flex:"1 1 190px", minWidth:0, display:"flex", flexDirection:"column", gap:6 }}>
           <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
