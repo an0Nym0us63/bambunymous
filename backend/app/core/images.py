@@ -90,7 +90,31 @@ class ImageCacheMiddleware:
                     return
                 etag = hdrs.get(b"etag", b"").decode("latin-1")
                 if want and ctype in _RESIZABLE and etag and scope["method"] == "GET":
-                    # la vignette : on attend le corps de l'original
+                    # la vignette deja faite, ou deja chez le navigateur : repondue ici, sans lire le corps de
+                    # l'original (28/10/2026 : chaque vignette de la page Impressions relisait son original entier,
+                    # meme pour un 304)
+                    key = hashlib.sha1(f"{scope['path']}|{etag}|{want}".encode()).hexdigest()
+                    tetag = f'"t{key[:20]}"'
+                    headers = _cache_headers([(k, v) for k, v in message.get("headers", [])
+                                              if k.lower() not in (b"content-type", b"content-length", b"etag", b"content-disposition")])
+                    if inm and tetag in [x.strip() for x in inm.split(",")]:
+                        state["mode"] = "drop"
+                        await send({"type": "http.response.start", "status": 304,
+                                    "headers": [(k, v) for k, v in headers if k.lower() in (b"cache-control", b"last-modified")] + [(b"etag", tetag.encode())]})
+                        await send({"type": "http.response.body", "body": b""})
+                        return
+                    cached = THUMB_DIR / key[:2] / f"{key}.webp"
+                    try:
+                        data = cached.read_bytes() if cached.is_file() else None
+                    except OSError:
+                        data = None
+                    if data:
+                        state["mode"] = "drop"
+                        await send({"type": "http.response.start", "status": 200, "headers": headers + [
+                            (b"content-type", b"image/webp"), (b"etag", tetag.encode()), (b"content-length", str(len(data)).encode())]})
+                        await send({"type": "http.response.body", "body": data})
+                        return
+                    # pas encore de vignette : on attend le corps de l'original pour la faire
                     state["start"], state["mode"], state["etag"] = message, "thumb", etag
                     return
                 headers = _cache_headers(message.get("headers", []))

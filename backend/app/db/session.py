@@ -710,9 +710,15 @@ async def _ensure_indexes():
     ajoutes apres coup doivent l'etre explicitement.
     """
     from sqlalchemy import text as _text
-    idx = [
-        ("idx_filament_usage_spool", "filament_usage", "spool_id"),
-    ]
+    # tous les index declares sur les modeles (28/10/2026) : une base nee avant leur ajout n'en avait aucun sur
+    # prints (date, statut, groupe, nom…), et la page Impressions triait et filtrait toute la table a chaque page
+    idx = []
+    for table in Base.metadata.sorted_tables:
+        for ix in table.indexes:
+            cols = ", ".join(c.name for c in ix.columns)
+            if cols:
+                idx.append((ix.name, table.name, cols))
+    idx.append(("idx_filament_usage_spool", "filament_usage", "spool_id"))
     try:
         async with engine.begin() as conn:
             for name, table, col in idx:

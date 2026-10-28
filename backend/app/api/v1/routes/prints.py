@@ -107,7 +107,6 @@ def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict]
     # des photos au niveau du groupe (choisie, ou deposees dans son dossier) : l'accueil ne relance pas
     # « pas encore de photo » pour une impression dont le groupe en a deja
     d["group_cover_photo"] = p.group.cover_photo if p.group else None
-    gd = _group_dir(p.group_id) if p.group_id else None
     # le 3MF d'origine MakerWorld deja garde pour ce profil (le tranche, lui, est model_3mf)
     try:
         from ....services.mw_source import print_file as _src
@@ -117,6 +116,7 @@ def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict]
     if gcache is not None and p.group_id in gcache:
         d["group_has_photos"] = gcache[p.group_id]
         return d
+    gd = _group_dir(p.group_id) if p.group_id else None       # le disque seulement si le cache ne sait pas
     d["group_has_photos"] = bool(gd and any(f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v")
                                             for f in gd.iterdir()))
     if gcache is not None and p.group_id:
@@ -141,14 +141,15 @@ async def _enrich_filament_usage(db, prints):
 
     # Filaments par couleur, pour les usages sans bobine (ou a bobine disparue) :
     # tout le catalogue n'est lu que s'il y en a un sur la page.
+    # (28/10/2026 : tout le catalogue etait charge en objets a chaque page ; seuls les filaments de ces couleurs-la)
     fil_by_color = {}
-    if any(u.color_hex and not (u.spool_id and spools.get(u.spool_id))
-           for p in prints for u in (p.filament_usage or [])):
-        all_fils = (await db.execute(select(Filament))).scalars().all()
-        for f in all_fils:
-            if f.color:
-                key = str(f.color).lstrip("#").lower()
-                fil_by_color[key] = f
+    need = {str(u.color_hex).lstrip("#").lower() for p in prints for u in (p.filament_usage or [])
+            if u.color_hex and not (u.spool_id and spools.get(u.spool_id))}
+    if need:
+        variants = {v for c in need for v in (c, c.upper(), f"#{c}", f"#{c.upper()}")}
+        for f in (await db.execute(select(Filament).where(Filament.color.in_(variants)))).scalars().all():
+            key = str(f.color).lstrip("#").lower()
+            fil_by_color.setdefault(key, f)
 
     for p in prints:
         for u in (p.filament_usage or []):
@@ -418,9 +419,9 @@ async def list_prints(
         for c in _period_clauses(date_from, date_to):
             q = q.where(c)
 
-        total = (await db.execute(
-            select(func.count()).select_from(q.subquery())
-        )).scalar()
+        # le total (affiche en tete) seulement pour la premiere page : chaque lot du defilement le recomptait sur
+        # toute la table filtree (28/10/2026) ; la suite sait d'elle-meme s'il reste des cartes
+        total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar() if offset == 0 else None
 
         # 1. Parcours leger (identifiants seuls) jusqu'a `limit` cartes
         idq = q.with_only_columns(Print.id, Print.group_id, maintain_column_froms=True)
@@ -471,7 +472,7 @@ async def list_prints(
                 snaps.setdefault(r.print_id, []).append(dict(r._mapping))
 
     from ....core.fastjson import json_response
-    return json_response({"total": total, "has_more": pos < total, "next_offset": pos,
+    return json_response({"total": total, "has_more": done, "next_offset": pos,
                           "prints": [_print_to_out(p, gc, snaps) for gc in ({},) for p in rows]})
 
 

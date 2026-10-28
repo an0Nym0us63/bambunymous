@@ -1197,10 +1197,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
     <div style={{ position: "relative", height: wide ? 300 : "min(36vh, 280px)", minHeight: 200, borderRadius: wide ? 20 : 0, overflow: "hidden",
       background: "var(--surface2)" }}>
       {/* le fond : l'image floutee et saturee, une lueur de la couleur de l'etat */}
-      <img src={apiThumb(apiUrl("/prints/" + p.id + "/image"), 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
+      <img src={thumbUrl(p, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
         objectFit: "cover", filter: "blur(26px) saturate(1.6)", opacity: 0.4, transform: "scale(1.3)" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
       <span aria-hidden="true" style={{ position: "absolute", inset: 0, background: `radial-gradient(60% 70% at 50% 38%, ${stC}33, transparent 72%)` }}/>
-      <img src={apiThumb(apiUrl("/prints/" + p.id + "/image"), 512)} alt="" className="bn-plate" style={{ position: "absolute", inset: "4% 8% 26%", width: "84%", height: "70%",
+      <img src={thumbUrl(p, 512)} alt="" className="bn-plate" style={{ position: "absolute", inset: "4% 8% 26%", width: "84%", height: "70%",
         objectFit: "contain", filter: "drop-shadow(0 14px 24px rgba(0,0,0,.35))" }}
         onError={e => { e.currentTarget.style.display = "none"; }}/>
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "34px 16px 12px",
@@ -1614,7 +1614,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     ],
   });
   const printMenu = (e, x) => openMenu(e, {
-    title: x.file_name || "Sans nom", subtitle: fmtDate(x.print_date), img: apiThumb(apiUrl("/prints/" + x.id + "/image"), 256),
+    title: x.file_name || "Sans nom", subtitle: fmtDate(x.print_date), img: thumbUrl(x, 256),
     items: [
       { icon: "📄", label: "Ouvrir la fiche", tone: "#3B82F6", onClick: () => setSelectedPrint(x) },
       isAdmin && { icon: "★", label: coverPrintId === x.id ? "Vignette du groupe" : "En faire la vignette du groupe", tone: "#F59E0B",
@@ -1638,7 +1638,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   const mosaic = [cover, ...prints.filter(x => x !== cover)].filter(Boolean).slice(0, 4);
   const hero = (
     <div style={{ position: "relative", height: wide ? 300 : "min(36vh, 280px)", minHeight: 200, borderRadius: wide ? 20 : 0, overflow: "hidden", background: "var(--surface2)" }}>
-      {cover && <img src={apiThumb(apiUrl("/prints/" + cover.id + "/image"), 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
+      {cover && <img src={thumbUrl(cover, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
         objectFit: "cover", filter: "blur(26px) saturate(1.6)", opacity: 0.4, transform: "scale(1.3)" }}/>}
       <span aria-hidden="true" style={{ position: "absolute", inset: 0, background: "radial-gradient(60% 70% at 50% 38%, #A78BFA33, transparent 72%)" }}/>
       <div style={{ position: "absolute", inset: "8% 6% 34%", display: "grid", gap: 8,
@@ -1650,9 +1650,9 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
             : { background: "linear-gradient(160deg, rgba(167,139,250,0.22), rgba(167,139,250,0.05))", border: "1px solid rgba(255,255,255,0.10)",
                 boxShadow: "0 10px 24px rgba(0,0,0,.35)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }) }}>
           {/* le halo de chaque carte, comme celui de la fiche d'une impression : son image floutee et saturee derriere */}
-          <img src={apiThumb(apiUrl("/prints/" + x.id + "/image"), 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
+          <img src={thumbUrl(x, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
             objectFit: "cover", filter: "blur(18px) saturate(1.8)", opacity: 0.55, transform: "scale(1.35)" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
-          <img src={apiThumb(apiUrl("/prints/" + x.id + "/image"), 384)} alt="" loading="lazy" decoding="async" style={{ position: "relative", width: "100%", height: "100%", objectFit: "contain" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
+          <img src={thumbUrl(x, 384)} alt="" loading="lazy" decoding="async" style={{ position: "relative", width: "100%", height: "100%", objectFit: "contain" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
         </div>)}
       </div>
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "34px 16px 12px",
@@ -1712,7 +1712,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
         style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 6px 6px 6px", borderRadius: 14, cursor: "pointer",
           background: `linear-gradient(90deg, color-mix(in srgb, ${c} 9%, transparent), transparent 70%), var(--surface2)`, border: "1px solid var(--border)" }}>
         <span style={{ position: "relative", flexShrink: 0 }}>
-          <img src={apiThumb(apiUrl("/prints/" + x.id + "/image"), 128)} alt="" loading="lazy" decoding="async" style={{ width: 52, height: 52, borderRadius: 11, objectFit: "cover", background: "var(--surface)", display: "block" }}
+          <img src={thumbUrl(x, 128)} alt="" loading="lazy" decoding="async" style={{ width: 52, height: 52, borderRadius: 11, objectFit: "cover", background: "var(--surface)", display: "block" }}
             onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
           {coverPrintId === x.id && <span data-tip="Vignette du groupe" style={{ position: "absolute", left: -4, top: -4, width: 18, height: 18, borderRadius: "50%",
             background: "#F59E0B", color: "#fff", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid var(--sheet-bg)" }}>★</span>}
@@ -1735,7 +1735,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       <div key={x.id} onClick={() => setSelectedPrint(x)} style={{ position: "relative", borderRadius: 14, overflow: "hidden", cursor: "pointer", background: "var(--surface2)",
         border: "1px solid var(--border)" }}>
         <div style={{ position: "relative", paddingTop: "78%" }}>
-          <img src={apiThumb(apiUrl("/prints/" + x.id + "/image"), 384)} alt="" loading="lazy" decoding="async" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+          <img src={thumbUrl(x, 384)} alt="" loading="lazy" decoding="async" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
             onError={e => { e.currentTarget.style.display = "none"; }}/>
           {coverPrintId === x.id && <span style={{ position: "absolute", left: 6, top: 6, width: 20, height: 20, borderRadius: "50%", background: "#F59E0B", color: "#fff",
             fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>★</span>}
@@ -1768,7 +1768,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
           <span style={{ display: "flex", flexShrink: 0 }}>{prints.slice(0, 6).map((x, i) => (
             <span key={x.id} style={{ position: "relative", width: 44, height: 44, marginLeft: i ? -14 : 0, borderRadius: 12, overflow: "hidden",
               border: "2px solid var(--surface2)", background: "var(--surface)", boxShadow: "0 4px 10px rgba(0,0,0,.18)", zIndex: 10 - i }}>
-              <img src={apiThumb(apiUrl("/prints/" + x.id + "/image"), 128)} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
+              <img src={thumbUrl(x, 128)} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
               <span style={{ position: "absolute", right: 2, bottom: 2, width: 9, height: 9, borderRadius: "50%", background: (V2_STATUS[x.status] || [0, "#94a3b8"])[1],
                 border: "1.5px solid var(--surface2)" }}/></span>))}
             {prints.length > 6 && <span style={{ width: 44, height: 44, marginLeft: -14, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center",
@@ -1876,7 +1876,8 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
     const ordered = i > 0 ? [ids[i], ...ids.slice(0, i), ...ids.slice(i + 1)] : ids;
     const byId = Object.fromEntries(prints.map(pr => [pr.id, pr]));
     // chaque case garde la teinte de son print, comme une vignette seule
-    return ordered.map(id => ({ url: apiUrl(`/prints/${id}/image`), tint: printTint(byId[id]) }));
+    // des vignettes (pas les originaux), versionnees ; « small » pour la pile de 46 px des rangees
+    return ordered.map(id => ({ url: thumbUrl(byId[id], 384), small: thumbUrl(byId[id], 128), tint: printTint(byId[id]) }));
   }, [prints, cover_print_id]);
 
   // Seul "en cours" est remonte sur la carte du groupe : un echec ou un partiel
@@ -1901,7 +1902,7 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
           border:"1px solid color-mix(in srgb, #A78BFA 30%, var(--border))",
           background:"linear-gradient(90deg, color-mix(in srgb, #A78BFA 12%, transparent), transparent 60%), var(--surface2)" }}>
           <span style={{ position:"relative", display:"flex", flexShrink:0, width:60, height:60 }}>
-            {mosaicUrls.slice(0, 3).map(({ url: u }, i) => <img key={u} src={u} alt="" draggable={false} style={{ position:"absolute", left: i * 9, top: i * 4,
+            {mosaicUrls.slice(0, 3).map(({ url: u, small }, i) => <img key={u} src={small || u} alt="" draggable={false} loading="lazy" decoding="async" style={{ position:"absolute", left: i * 9, top: i * 4,
               width:46, height:46, borderRadius:12, objectFit:"cover", background:"var(--surface)", border:"2px solid var(--surface2)", zIndex: 3 - i,
               boxShadow:"0 4px 10px rgba(0,0,0,.2)" }} onError={e => { e.currentTarget.style.visibility="hidden"; }}/>)}
             {gCheck}
@@ -2078,7 +2079,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
       <div onClick={handleClick} {...press} style={{ ...frame, display:"flex", alignItems:"center", gap:11, padding:7, borderRadius:16,
         border:"1px solid var(--border)", background:`linear-gradient(90deg, color-mix(in srgb, ${stC} 8%, transparent), transparent 60%), var(--surface2)` }}>
         <span style={{ position:"relative", flexShrink:0, width:60, height:60 }}>
-          <img src={apiThumb(apiUrl("/prints/" + p.id + "/image"), 128)} alt="" loading="lazy" decoding="async" draggable={false} style={{ width:60, height:60, borderRadius:13, objectFit:"cover",
+          <img src={thumbUrl(p, 128)} alt="" loading="lazy" decoding="async" draggable={false} style={{ width:60, height:60, borderRadius:13, objectFit:"cover",
             background:"var(--surface)", display:"block", WebkitTouchCallout:"none" }} onError={e => { e.currentTarget.style.visibility="hidden"; }}/>
           {check}
           <span style={{ position:"absolute", right:-3, bottom:-3, width:15, height:15, borderRadius:"50%", background:stC, border:"2px solid var(--sheet-bg)" }}/>
@@ -2103,7 +2104,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
       {/* la vignette, l'etat en pastille, ×N, ⭐ a evaluer, les filaments */}
       <div style={{ position:"relative", paddingTop:"78%", overflow:"hidden",
         background:`radial-gradient(75% 70% at 50% 45%, ${tint}2e, transparent 75%), linear-gradient(180deg, ${tint}1a, transparent 55%), var(--surface2)` }}>
-        <img src={apiThumb(apiUrl("/prints/" + p.id + "/image"), 384)} alt="" loading="lazy" decoding="async" draggable={false}
+        <img src={thumbUrl(p, 384)} alt="" loading="lazy" decoding="async" draggable={false}
           style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", WebkitTouchCallout:"none", WebkitUserDrag:"none" }}
           onError={e => { e.currentTarget.style.display="none"; }}/>
         {check}
@@ -2715,6 +2716,10 @@ function countDisplayItems(list) {
   return solo + groups.size;
 }
 
+// la vignette d'une impression, versionnee (28/10/2026) : avec ?v=, le navigateur la garde un an sans redemander ;
+// sans, il revalidait chaque vignette de la page a chaque ouverture (une requete par carte, 304 ou pas)
+const thumbUrl = (p, w) => `${apiThumb(apiUrl("/prints/" + p.id + "/image"), w)}&v=${encodeURIComponent(String(p.updated_at || p.print_date || "").slice(0, 19))}`;
+
 export default function Prints() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [prints, setPrints]   = useState([]);
@@ -3027,7 +3032,9 @@ export default function Prints() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { loadGroups(); }, [loadGroups]);
+  // la liste des groupes ne sert qu'au selecteur « Ajouter a un groupe » : lue a son ouverture (28/10/2026 :
+  // elle partait a chaque ouverture de la page), puis rafraichie apres les actions qui la changent
+  useEffect(() => { if (groupPickerOpen) loadGroups(); }, [groupPickerOpen, loadGroups]);
 
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
