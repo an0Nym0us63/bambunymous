@@ -6,6 +6,10 @@ import SpoolSVG from "../components/SpoolSVG";
 import { SlidersHorizontal } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
 import { notifSeenEvent } from "../components/NotifBell";
+import { PrintDetail } from "../components/LazySheets";
+import { openCreator } from "../components/MwCreatorPage";
+// la fiche d'un modele MakerWorld, chargee seulement si une notification l'ouvre (28/10/2026)
+const MakerWorldModelSheet = React.lazy(() => import("../components/MakerWorldModelSheet"));
 
 // Historique de MES notifications (15 jours) : celles que j'ai choisies, avec
 // leur image quand il y en a une (couverture MakerWorld, plateau d'une
@@ -70,8 +74,20 @@ export default function Notifications() {
       .then(({ data: d }) => setData(x => ({ ...x, items: [...x.items, ...d.items], more: d.more })))
       .catch(() => {}).finally(() => setMore(false));
   };
+  // ce qu'une notification ouvre SUR PLACE, sans quitter le journal (28/10/2026 : un nouveau modele d'un createur
+  // suivi envoyait sur l'onglet MakerWorld, qui ouvrait la fiche) : la fiche d'un modele, la page d'un createur, la
+  // fiche d'une impression ; le reste navigue comme avant
+  const [sheet, setSheet] = useState(null);         // { model } | { print }
   const open = it => {
     if (!it.link) return;
+    const q = /^\/prints\?(.*)$/.exec(it.link);
+    const ps = q ? new URLSearchParams(q[1]) : null;
+    if (ps?.get("model")) { setSheet({ model: ps.get("model") }); return; }
+    if (ps?.get("creator")) { openCreator({ uid: ps.get("creator") }); return; }
+    if (ps?.get("id")) {
+      client.get(`/prints/${ps.get("id")}`).then(({ data }) => setSheet({ print: data })).catch(() => navigate(it.link));
+      return;
+    }
     if (it.link.startsWith("/")) navigate(it.link);
     else window.open(it.link, "_blank", "noopener");
   };
@@ -88,6 +104,8 @@ export default function Notifications() {
 
   return (
     <div className="page-wide" style={{ "--page-max":"720px", gap:14 }}>
+      {sheet?.model && <React.Suspense fallback={null}><MakerWorldModelSheet designId={sheet.model} onClose={() => setSheet(null)}/></React.Suspense>}
+      {sheet?.print && <PrintDetail p={sheet.print} onClose={() => setSheet(null)}/>}
       <div style={{ display:"flex", alignItems:"center", gap:10 }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0, flex:1 }}>Notifications</h1>
         <button onClick={() => navigate("/settings?tab=notify")} title="Choisir mes notifications"
