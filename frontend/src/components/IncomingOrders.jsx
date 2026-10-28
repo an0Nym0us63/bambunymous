@@ -217,7 +217,7 @@ export default function IncomingOrders() {
   const [orders, setOrders] = useState(null);
   const [open, setOpen] = useState(false);     // repliee par defaut : la ligne de tete suffit, on deplie pour le detail
   // seulement ce qui attend encore (28/10/2026) : une commande finie (tout recu, livree, annulee) sort de la page Filaments ;
-  // l'historique se lit dans Parametres -> Comptes -> Commandes Bambu Lab
+  // l'historique se lit dans Parametres -> Connexions -> Commandes Bambu Lab
   const load = () => client.get("/filaments/incoming").then(r => setOrders((r.data.orders || []).filter(o => !o.hidden))).catch(() => setOrders([]));
   useEffect(() => { load(); }, []);
   const [sheet, setSheet] = useState(null);
@@ -254,7 +254,7 @@ export default function IncomingOrders() {
 }
 
 // l'historique (28/10/2026) : toutes les commandes lues, finies comprises, une ligne chacune, la fenetre au clic.
-// Dans Parametres -> Comptes, sous la carte des commandes Bambu Lab.
+// Dans Parametres -> Connexions, sous la carte des commandes Bambu Lab.
 export function OrdersHistory() {
   const [orders, setOrders] = useState(null);
   const [openList, setOpenList] = useState(false);

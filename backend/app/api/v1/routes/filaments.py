@@ -686,7 +686,7 @@ async def mark_labels_printed(
 @router.get("/incoming")
 async def filaments_incoming(all: bool = Query(False), _: str = Depends(get_current_user)):
     from ....services import mail_orders as MO
-    # all : l'historique (Parametres -> Comptes), commandes finies et cachees comprises
+    # all : l'historique (Parametres -> Connexions), commandes finies et cachees comprises
     return {"orders": await MO.incoming(include_done=all, include_hidden=all)}
 
 

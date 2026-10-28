@@ -2245,7 +2245,6 @@ export default function Settings() {
       {tab === "accounts" && (<div className="wide-flow">
       <MyAccountSection/>
       <TwoFactorCard/>
-      <AdminOnly><MailOrdersSettings card={card} cardTitle={cardTitle}/></AdminOnly>
       <UsersSection/>
       <AdminOnly><AchievementUsersSection/></AdminOnly>
       <ActivitySection/>
@@ -2255,6 +2254,8 @@ export default function Settings() {
       {tab === "links" && (<div className="wide-flow">
       <AdminOnly><MakerWorldSettings/></AdminOnly>
       <AdminOnly home mw><RateTemplatesSettings/></AdminOnly>
+      {/* la boite mail (commandes Bambu Lab) : un lien avec l'exterieur, comme MakerWorld (28/10/2026) */}
+      <AdminOnly><MailOrdersSettings card={card} cardTitle={cardTitle}/></AdminOnly>
       <FriendsCard/>
       </div>)}
 
