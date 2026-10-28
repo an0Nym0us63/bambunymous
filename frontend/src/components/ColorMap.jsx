@@ -17,10 +17,17 @@ export function ColorPairs({ detail = [], options = [], chosen = {}, scope = nul
   if (!detail.length) return null;
   const pick = (e, x) => {
     if (!scope || !onChoose) return;
-    const seen = new Set();
-    const items = options.filter(o => { const k = `${o.print}:${o.slot}`; if (seen.has(k)) return false; seen.add(k); return true; })
-      .map(o => ({ icon: <Sw c={o.color} size={16}/>, label: `${o.name || `Filament n°${o.slot}`}${o.kind ? ` — ${o.kind}` : ""}`,
-        hint: `${o.print_name}${o.grams ? ` · ${String(o.grams).replace(".", ",")} g` : ""}`,
+    // le meme filament (couleur, nom, marque et type) utilise par plusieurs impressions : une seule ligne, la plus
+    // recente, avec le nombre d'impressions et le total des grammes
+    const byFil = new Map();
+    for (const o of options) {
+      const k = `${o.color}|${o.name || ""}|${o.kind || ""}`;
+      const h = byFil.get(k);
+      if (h) { h.n += 1; h.grams += o.grams || 0; } else byFil.set(k, { ...o, n: 1, grams: o.grams || 0 });
+    }
+    const g = v => String(Math.round(v * 10) / 10).replace(".", ",");
+    const items = [...byFil.values()].map(o => ({ icon: <Sw c={o.color} size={16}/>, label: `${o.name || `Filament n°${o.slot}`}${o.kind ? ` — ${o.kind}` : ""}`,
+        hint: `${o.n > 1 ? `${o.n} impressions` : o.print_name}${o.grams ? ` · ${g(o.grams)} g` : ""}`,
         onClick: () => onChoose(x.from, { print: o.print, slot: o.slot }) }));
     openMenu(e, { title: `Couleur n°${x.e} du créateur : quelle bobine l'a remplacée ?`, items: [
       ...items, items.length ? "-" : null,
