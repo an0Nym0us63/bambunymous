@@ -1069,7 +1069,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
             multicolorType={spool.filament_multicolor_type} finish={finishOf(spool)} size={16} radius={4}/>}/>
           <FRow l="Code Bambu" v={spool.filament_profile_id} mono/>
           <FRow l="Code couleur Bambu" v={spool.filament_fila_color_code} mono/>
-          <FRow l="Stock du filament" v={stockFil != null ? fmtStock(stockFil) : null} d="toutes bobines"/>
+          <FRow l="Stock du filament" v={stockFil != null ? fmtStock(stockFil) : null} d={spool.ordered_siblings > 0 ? `toutes bobines · 📬 ${spool.ordered_siblings} en commande` : "toutes bobines"}/>
           <FRow l="Poids total" v={spool.filament_weight_g ? `${spool.filament_weight_g} g` : null}/>
           <FRow l="Prix catalogue" v={spool.filament_price ? `${moneyVal(Number(spool.filament_price), 2)} €` : null}/>
         </FCard>

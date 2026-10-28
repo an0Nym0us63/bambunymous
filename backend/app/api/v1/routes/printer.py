@@ -136,6 +136,8 @@ class SpoolInfoOut(BaseModel):
     filament_stock_g: Optional[float] = None
     # Nombre de bobines actives du filament (celle-ci comprise) : la fiche les dessine empilees, avec « +x ».
     filament_spools: Optional[int] = None
+    # Bobines du filament commandees, pas encore recues (mails de la boutique, 28/10/2026).
+    filament_ordered: Optional[int] = None
     # Pour la fiche « filament en cours » de l'accueil
     color_code: Optional[str] = None     # code couleur du catalogue Bambu (ex. 10600)
     name_en: Optional[str] = None
@@ -329,8 +331,8 @@ def _tray_spool_info(t, spools_map, stock_map=None):
         si.last_dried_at = str(sp.last_dried_at) if sp.last_dried_at else None
         si.needs_drying = needs_drying(sp, f)
         if stock_map is not None and f is not None:
-            g, n = stock_map.get(f.id, (None, None))
-            si.filament_stock_g, si.filament_spools = g, n
+            g, n, o = (list(stock_map.get(f.id, (None, None, 0))) + [0])[:3]
+            si.filament_stock_g, si.filament_spools, si.filament_ordered = g, n, o
     return si
 
 
@@ -450,9 +452,13 @@ async def printer_status(_: str = Depends(get_current_user)):
             from sqlalchemy import func as _func
             fil_ids = {f.id for _, f in _spools_map.values() if f is not None}
             if fil_ids:
-                _stock_map = {fid: (g, n) for fid, g, n in (await db.execute(
-                    _sel(_Spool.filament_id, _func.coalesce(_func.sum(_Spool.remaining_weight_g), 0), _func.count(_Spool.id))
-                    .where(_Spool.filament_id.in_(fil_ids), _Spool.archived.is_(False), _Spool.ordered.is_(False))
+                from sqlalchemy import case as _case
+                _here = _Spool.ordered.is_(False)
+                # restant et nombre des bobines en stock, et le nombre de celles en commande (pas en stock)
+                _stock_map = {fid: (float(g or 0), int(n or 0), int(o or 0)) for fid, g, n, o in (await db.execute(
+                    _sel(_Spool.filament_id, _func.sum(_case((_here, _func.coalesce(_Spool.remaining_weight_g, 0)), else_=0)),
+                         _func.sum(_case((_here, 1), else_=0)), _func.sum(_case((_Spool.ordered.is_(True), 1), else_=0)))
+                    .where(_Spool.filament_id.in_(fil_ids), _Spool.archived.is_(False))
                     .group_by(_Spool.filament_id)
                 )).all()}
     out = PrinterStatusOut(

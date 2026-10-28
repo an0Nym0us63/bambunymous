@@ -3604,6 +3604,7 @@ function Spool({ status, o, sz }) {
           <div style={{ flex: "1 1 180px", minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{chip(slot, "#8B5CF6")}{live && chip("● en cours", "#22c55e")}
               {more > 0 && chip(`🧵 +${more} en stock${moreG ? ` · ${fmtG(moreG)}` : ""}`, "#22C55E")}
+              {si.filament_ordered > 0 && chip(`📬 +${si.filament_ordered} en commande`, "#0EA5E9")}
               {si.needs_drying && chip("à sécher", "#0ea5e9")}{si.swatch === false && chip("échantillon à faire", "#f59e0b")}</div>
             <div style={{ fontSize: 26, fontWeight: 900, color: "var(--text)", lineHeight: 1.1 }}>{name}</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text2)" }}>{[type, si.brand].filter(Boolean).join(" · ")}</div>

@@ -794,7 +794,7 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
                   pour cela. */}
               <Row label="Emplacement"     value={info.location}/>
               <Row label="Poids restant"   value={info.remaining_weight_g != null ? `${Math.round(info.remaining_weight_g)} g` : null}/>
-              <Row label="Stock du filament" value={info.filament_stock_g != null ? `${fmtStock(info.filament_stock_g)} (toutes bobines)` : null}/>
+              <Row label="Stock du filament" value={info.filament_stock_g != null ? `${fmtStock(info.filament_stock_g)} (toutes bobines)${info.filament_ordered ? ` · 📬 ${info.filament_ordered} en commande` : ""}` : null}/>
               <Row label="Prix d'achat"    value={info.price_override ? `${Number(info.price_override).toFixed(2)} €` : null}/>
               <Row label="Tag NFC"         value={info.tag_number} mono/>
               <Row label="Première util."  value={info.first_used_at?.slice(0,10)}/>
