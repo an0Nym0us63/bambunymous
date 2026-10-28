@@ -694,6 +694,13 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
                 for n in ns:
                     dd = []
                     pal = await _used_palette(path_of(key), ids, did, prof if source == "3mf" else "", dd, plate=n, chosen=chosen)
+                    # ce que les impressions de ce plateau ne disent pas, la correspondance de toutes (celle de la carte)
+                    # le complete (28/10/2026 : la vue d'un plateau disait « rien » la ou la carte disait noir -> noir)
+                    if used_palette:
+                        pal = {**{a: b for a, b in used_palette.items() if a not in (pal or {})}, **(pal or {})}
+                        got = {x["from"] for x in dd if x.get("to")}
+                        dd = [x for x in dd if x.get("to")] + [x for x in used_detail or [] if x["from"] not in got]
+                        dd.sort(key=lambda x: x.get("e") or 0)
                     if pal:
                         used_plates[str(n)], used_details_plates[str(n)] = pal, dd
         except Exception:
