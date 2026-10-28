@@ -958,40 +958,49 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
                 logger.exception("[3D] plateaux devines")
     out: dict = {}
     detail: list = []
-    for pid, mwp, mwpl, m3, plate_id in prints:
+    # A plat (28/10/2026) : d'abord les impressions de ce profil (ou de profil inconnu), la plus recente en premier ;
+    # puis, pour les couleurs encore sans reponse, celles d'un autre profil du modele -- un filtre de profil trop
+    # strict (identifiant d'instance contre identifiant de profil, fiche pas a jour) laissait tout a « aucune »
+    rounds = ([], [])
+    for row in prints:
+        pid, mwp, mwpl, m3, plate_id = row
         pp = norm(_profile(mwp, mwpl))
-        if want and pp and pp != want:
-            continue                                  # une impression d'un autre profil du modele
-        if plate is not None and plate not in _print_plates(mwpl, plate_id, guesses.get(pid)):
-            continue                                  # une impression d'un autre plateau
-        used = used_by.get(pid) or {}
-        if not used:
-            continue
-        emap, sl_colors = {}, []
-        f = local_or_archive(m3) if m3 else None
-        if f and f.is_file():
-            try:
-                with zipfile.ZipFile(f) as zz:
-                    emap = _ext_map(origin, _ext_by_name(zz))
-                    sl_colors = [h6(c) for c in T._colors_of(zz)]
-            except (OSError, zipfile.BadZipFile):
-                emap, sl_colors = {}, []
-        # les filaments et poids d'origine face a cette impression : ceux de tous les plateaux qu'elle a faits (plusieurs
-        # plateaux regroupes en une impression, 28/10/2026 : ses grammes par filament les couvrent tous), sinon le
-        # plateau affiche ou son numero
-        pls = _print_plates(mwpl, plate_id, guesses.get(pid)) or ([plate] if plate is not None else [1])
-        agg: dict = {}
-        for n_ in pls:
-            for c, g in plate_fils.get(n_) or []:
-                agg[c] = agg.get(c, 0) + g
-        assigned = _match_filaments([h6(c) for c in colors], used, sliced_by.get(pid) or {}, sl_colors, emap,
-                                    grams_by.get(pid) or {}, list(agg.items()))
-        for e, (es, how) in sorted(assigned.items()):
-            a, b = h6(colors[e - 1]), used.get(es)
-            if b and len(a) == 6 and len(b) == 6 and a not in out:
-                out[a] = b
-                detail.append({"from": a, "to": b, "e": e, "es": es, "how": how, "print": pid,
-                               "finish": (fin_by.get(pid) or {}).get(es)})
+        rounds[1 if want and pp and pp != want else 0].append(row)
+    for tier, lst in enumerate(rounds):
+        for pid, mwp, mwpl, m3, plate_id in lst:
+            if plate is not None and plate not in _print_plates(mwpl, plate_id, guesses.get(pid)):
+                continue                              # une impression d'un autre plateau
+            used = used_by.get(pid) or {}
+            if not used:
+                logger.info(f"[3D] couleurs : impression {pid} sans filament note (pas de bobine ni de couleur)")
+                continue
+            emap, sl_colors = {}, []
+            f = local_or_archive(m3) if m3 else None
+            if f and f.is_file():
+                try:
+                    with zipfile.ZipFile(f) as zz:
+                        emap = _ext_map(origin, _ext_by_name(zz))
+                        sl_colors = [h6(c) for c in T._colors_of(zz)]
+                except (OSError, zipfile.BadZipFile):
+                    emap, sl_colors = {}, []
+            # les filaments et poids d'origine face a cette impression : ceux de tous les plateaux qu'elle a faits
+            # (plusieurs plateaux regroupes en une impression : ses grammes par filament les couvrent tous), sinon le
+            # plateau affiche ou son numero
+            pls = _print_plates(mwpl, plate_id, guesses.get(pid)) or ([plate] if plate is not None else [1])
+            agg: dict = {}
+            for n_ in pls:
+                for c, g in plate_fils.get(n_) or []:
+                    agg[c] = agg.get(c, 0) + g
+            assigned = _match_filaments([h6(c) for c in colors], used, sliced_by.get(pid) or {}, sl_colors, emap,
+                                        grams_by.get(pid) or {}, list(agg.items()))
+            logger.info(f"[3D] couleurs : impression {pid} (profil {_profile(mwp, mwpl) or '?'}{' ≠ ' + str(prof) if tier else ''}, "
+                        f"plateaux {pls}) filaments {used} -> {assigned}")
+            for e, (es, how) in sorted(assigned.items()):
+                a, b = h6(colors[e - 1]), used.get(es)
+                if b and len(a) == 6 and len(b) == 6 and a not in out:
+                    out[a] = b
+                    detail.append({"from": a, "to": b, "e": e, "es": es, "how": how, "print": pid,
+                                   "finish": (fin_by.get(pid) or {}).get(es), **({"other_profile": True} if tier else {})})
     # les correspondances choisies a la main (28/10/2026) passent avant la deduction : une bobine de ces
     # impressions, ou « aucune » ; un choix qui vise une impression absente d'ici est ignore (la deduction reste)
     o_cols = [h6(c) for c in colors]

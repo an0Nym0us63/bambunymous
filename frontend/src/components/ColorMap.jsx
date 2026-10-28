@@ -41,7 +41,7 @@ export function ColorPairs({ detail = [], options = [], chosen = {}, scope = nul
     {detail.map(x => {
       const tip = (x.to ? `Filament n°${x.e} du projet → n°${x.es} de l'impression (${HOW[x.how] || "par son numéro"})`
         : `Filament n°${x.e} : ${x.how === "choisi" ? "aucune, choisi à la main" : "aucune de ces impressions ne l'a utilisé"}`)
-        + (x.group ? " · choix fait sur le groupe" : "") + (scope ? " · touche pour choisir" : "");
+        + (x.other_profile ? " · impression d'un autre profil du modèle" : "") + (x.group ? " · choix fait sur le groupe" : "") + (scope ? " · touche pour choisir" : "");
       const hand = x.how === "choisi";
       return <span key={`${x.from}-${x.e}`} data-tip={tip} onClick={e => { e.stopPropagation(); pick(e, x); }} role={scope ? "button" : undefined}
         style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 7px", borderRadius: 12, cursor: scope ? "pointer" : "default",
