@@ -248,7 +248,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
         // lumiere derriere (28/10/2026) : un lithophane ne se lit qu'eclaire par l'arriere. En chaque pixel, l'epaisseur
         // de chaque couleur que la lumiere traverse (la somme des profondeurs des faces arriere moins celle des faces
         // avant, par melange additif : juste meme quand le rayon entre et sort plusieurs fois), puis la lumiere filtree
-        // couleur par couleur selon cette epaisseur : du blanc laisse passer 43 % par mm (0,8 mm clair, 3 mm sombre),
+        // couleur par couleur selon cette epaisseur : du blanc laisse passer 50 % par mm (0,8 mm clair, 3 mm sombre),
         // une couleur teinte d'autant, un noir bouche. Les couches CMJ enfouies sous le relief blanc ressortent ainsi.
         const litSetup = () => {
           const floatBlend = renderer.capabilities.isWebGL2 && renderer.extensions.has("EXT_float_blend");
@@ -282,13 +282,17 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
             blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.DstColorFactor, blendDst: THREE.ZeroFactor,
             vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
             fragmentShader: `uniform sampler2D tex; uniform vec3 col; varying vec2 vUv;
-              void main() { float t = max(0.0, texture2D(tex, vUv).r); gl_FragColor = vec4(pow(max(col, vec3(0.004)) * 0.43, vec3(t)), 1.0); }` });
+              void main() { float t = max(0.0, texture2D(tex, vUv).r);
+                // la teinte d'une couleur, accentuee (une fine couche colore deja bien), et l'ombre de l'epaisseur
+                gl_FragColor = vec4(pow(max(col, vec3(0.004)), vec3(t * 1.7)) * pow(0.5, t), 1.0); }` });
           // l'image : la lumiere filtree la ou il y a de la matiere, la nuit ailleurs
           const compMat = new THREE.ShaderMaterial({ uniforms: { all: { value: tAll.texture }, acc: { value: acc.texture } }, depthTest: false, depthWrite: false,
             vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
             fragmentShader: `uniform sampler2D all; uniform sampler2D acc; varying vec2 vUv;
               void main() { float t = texture2D(all, vUv).r; vec3 T = texture2D(acc, vUv).rgb;
-                vec3 c = t > 0.02 ? vec3(1.0, 0.95, 0.84) * 1.7 * T : vec3(0.006, 0.008, 0.016);
+                vec3 c = vec3(1.0, 0.96, 0.86) * 3.2 * T;
+                c = mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, 1.45);       // des couleurs plus franches
+                c = t > 0.02 ? max(c, 0.0) : vec3(0.006, 0.008, 0.016);
                 gl_FragColor = vec4(c, 1.0);
                 #include <colorspace_fragment>
               }` });
