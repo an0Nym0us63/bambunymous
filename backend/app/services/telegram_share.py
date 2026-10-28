@@ -88,6 +88,10 @@ async def save_destinations(items: list[dict]) -> list[dict]:
 
 
 # ── Connexion ───────────────────────────────────────────────────────────────
+def _import_telethon() -> None:
+    import telethon, telethon.sessions  # noqa: F401
+
+
 def _new_client(session: str, api_id: str, api_hash: str):
     from telethon import TelegramClient
     from telethon.sessions import StringSession
@@ -103,8 +107,10 @@ async def _connected_client():
     session, api_id, api_hash = await _get(K_SESSION), await _get(K_API_ID), await _get(K_API_HASH)
     if not (session and api_id and api_hash):
         raise ShareError("Compte Telegram non relié (Paramètres > Partage Telegram)")
-    # la creation (import de Telethon, session, crypto) prend 100 a 200 ms : dans un fil, la boucle continue
-    c = await asyncio.to_thread(_new_client, session, api_id, api_hash)
+    # l'import de Telethon (la partie lourde, 100 a 200 ms la premiere fois) se fait dans un fil ; le client, lui,
+    # se cree sur la boucle : il s'y attache a la creation (dans un fil : « no current event loop », 28/10/2026)
+    await asyncio.to_thread(_import_telethon)
+    c = _new_client(session, api_id, api_hash)
     await c.connect()
     if not await c.is_user_authorized():
         await c.disconnect()
