@@ -24,6 +24,7 @@ class MailOrder(Base):
     subject     = Column(String(256), nullable=True)
     items_json  = Column(Text, nullable=False, default="[]")
     shipments_json = Column(Text, nullable=True)             # les envois (Bambu expedie souvent en plusieurs colis)
+    totals_json = Column(Text, nullable=True)                # sous-total, remises de fin, envoi, total (28/10/2026)
     total       = Column(String(32), nullable=True)
     hidden      = Column(Boolean, default=False)
     done        = Column(Boolean, default=False)

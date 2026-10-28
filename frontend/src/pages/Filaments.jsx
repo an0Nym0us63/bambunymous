@@ -1176,8 +1176,6 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
       </p>
       {s.needs_drying && !s.ordered && <span data-tip="À sécher" style={{ position:"absolute", top:5, right:6, fontSize:10 }}>💧</span>}
       {/* commandee, pas encore recue (28/10/2026) : hors du stock jusqu'a l'arrivee, ou le scan ou l'ajout l'adopte */}
-      {s.ordered && <span data-tip="Commandée, pas encore reçue : le scan RFID ou l'ajout d'une bobine de ce filament l'adoptera"
-        style={{ position:"absolute", top:5, left:6, fontSize:9, fontWeight:900, padding:"1px 6px", borderRadius:10, background:"#0EA5E9", color:"#fff" }}>📬 commandée</span>}
 
 
       {/* La bobine, meme dessin qu'au slot AMS de l'accueil */}
@@ -1231,10 +1229,11 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
         {/* Emplacement en pastille pleine largeur : c'est l'info qu'on cherche
             quand on veut aller chercher la bobine physiquement. */}
         {s.location && (
-          <span style={{ fontSize:9, fontWeight:800, padding:"3px 6px", borderRadius:20,
-            background:"rgba(139,92,246,0.14)", color:"#8B5CF6", textAlign:"center",
+          <span data-tip={s.ordered ? "Commandée, pas encore reçue : le scan RFID ou l'ajout d'une bobine de ce filament l'adoptera" : undefined}
+            style={{ fontSize:9, fontWeight:800, padding:"3px 6px", borderRadius:20,
+            background: s.ordered ? "rgba(14,165,233,0.16)" : "rgba(139,92,246,0.14)", color: s.ordered ? "#0EA5E9" : "#8B5CF6", textAlign:"center",
             overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis" }}>
-            📍 {s.location}
+            {s.ordered ? "📬" : "📍"} {s.location}
           </span>
         )}
       </div>

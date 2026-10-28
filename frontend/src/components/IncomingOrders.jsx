@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import client from "../api/client";
 import { useIsAdmin } from "../store/auth";
 import { egg } from "../eggs";
+import { moneyVal } from "../utils/money";
 
 // « A venir » (28/10/2026) : les commandes Bambu Lab lues dans les mails dont des bobines ne sont pas encore
 // arrivees, en tete de l'onglet Stock. Une ligne par bobine commandee, avec sa couleur quand le catalogue l'a
@@ -37,6 +38,17 @@ function Marks({ it, size = 12 }) {
 }
 
 const lineName = it => it.kind === "filament" && it.name_fr ? `${it.fila_type || ""} · ${it.name_fr}` : it.title;
+// un montant du mail, avec sa devise (euro sauf mention) ; masque en lecture seule
+const eur = (v, cur = "€") => v == null ? null : `${moneyVal(v)} ${cur || "€"}`;
+// le prix d'une ligne (28/10/2026) : « 14,96 € l'unité → 13,40 € payée » quand la remise de fin de commande joue ; « offerte » pour un cadeau
+function LinePrice({ it, cur, size = 11.5 }) {
+  if (it.kind !== "filament" || it.price == null) return null;
+  if (it.gift || it.price === 0) return <span style={{ fontSize:size, fontWeight:800, color:"#22c55e" }}>🎁 offerte{it.list_price ? ` · ${eur(it.list_price / Math.max(1, it.qty || 1), cur)} valeur` : ""}</span>;
+  const b = it.base_unit, p = it.paid_unit;
+  return <span data-tip={`Prix de base (la fiche filament) : ${eur(b, cur)} la bobine${p != null && p !== b ? ` · payée ${eur(p, cur)} une fois la remise de fin de commande répartie (la bobine)` : ""}`}
+    style={{ fontSize:size, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap" }}>
+    {eur(b, cur)}{p != null && p !== b ? <> → <b style={{ color:"var(--text)" }}>{eur(p, cur)}</b></> : null}{(it.qty || 1) > 1 ? " /u" : ""}</span>;
+}
 
 // l'etat d'une ligne, en clair
 function lineState(it) {
@@ -97,6 +109,9 @@ export function OrderSheet({ id, order: given = null, onClose, onChanged }) {
           {o.ordered_at && <span>Commandée le {dayY(o.ordered_at)}</span>}
           {o.shipped_at && <span>Expédiée le {dayY(o.shipped_at)}{o.carrier ? ` · ${o.carrier}` : ""}{o.tracking_url && <> · <a href={o.tracking_url} target="_blank" rel="noreferrer" style={{ color:"#0EA5E9", fontWeight:700 }}>suivi ↗</a></>}</span>}
           {o.delivered_at && <span>Livrée le {dayY(o.delivered_at)}</span>}
+          {o.totals?.total != null && <span data-tip="Lu dans le mail de confirmation. La remise de fin de commande (abonnement, points…) est répartie au prorata sur le prix payé de chaque bobine ; la fiche filament garde le prix de base de la ligne.">
+            💶 {o.totals.subtotal != null && o.totals.subtotal !== o.totals.total ? <>sous-total {eur(o.totals.subtotal, o.totals.currency)}{o.totals.discount ? ` · remise ${eur(o.totals.discount, o.totals.currency)}` : ""}{o.totals.shipping ? ` · envoi ${eur(o.totals.shipping, o.totals.currency)}` : ""} · </> : null}
+            <b style={{ color:"var(--text)" }}>total {eur(o.totals.total, o.totals.currency)}</b></span>}
           {(o.shipments || []).map((sh, i) => <span key={i}>📦 Envoi du {dayY(sh.at)}{sh.carrier ? ` · ${sh.carrier}` : ""}{sh.tracking ? ` · ${sh.tracking}` : ""}
             {sh.url && <> · <a href={sh.url} target="_blank" rel="noreferrer" style={{ color:"#0EA5E9", fontWeight:700 }}>suivre ↗</a></>}
             {sh.items?.length ? ` : ${sh.items.join(", ")}` : ""}</span>)}
@@ -114,7 +129,7 @@ export function OrderSheet({ id, order: given = null, onClose, onChanged }) {
                 {/* le nom en entier, sur deux lignes s'il le faut (jamais coupe) ; les marques suivent le texte */}
                 <div style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", lineHeight:1.25, overflowWrap:"anywhere" }}>
                   {lineName(it)} <span style={{ whiteSpace:"nowrap", display:"inline-flex", gap:4, verticalAlign:"middle" }}><Marks it={it} size={13}/></span></div>
-                <div style={{ fontSize:11.5, fontWeight:700, color:c }}>{txt}</div>
+                <div style={{ fontSize:11.5, fontWeight:700, color:c, display:"flex", gap:8, flexWrap:"wrap", alignItems:"baseline" }}>{txt}<LinePrice it={it} cur={o.totals?.currency || it.currency}/></div>
               </span>
               <span style={{ fontWeight:900, fontVariantNumeric:"tabular-nums" }}>{it.received || 0}/{it.qty}</span>
               {isAdmin && left > 0 && (toCreate(it)
@@ -169,6 +184,7 @@ function OrderCard({ o, isAdmin, onOpen, onMark, onHide }) {
             <span>N° {o.order_no}</span>
             <span>· {o.stage === "shipping" && o.shipped_at ? `envoyée le ${day(o.shipped_at)}` : o.ordered_at ? `le ${day(o.ordered_at)}` : ""}</span>
             {o.tracking_url && <a href={o.tracking_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ fontWeight:800, color:"#0EA5E9" }}>suivi {o.carrier || ""} ↗</a>}
+            {o.totals?.total != null && <span>· {eur(o.totals.total, o.totals.currency)}</span>}
           </span>
         </span>
         <span style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
@@ -184,7 +200,8 @@ function OrderCard({ o, isAdmin, onOpen, onMark, onHide }) {
         {left.map(({ it, i }, k) => { const n = (it.qty || 0) - (it.received || 0), onWay = Math.max(0, (it.shipped || 0) - (it.received || 0)) > 0; return (
           <div key={i} style={{ display:"flex", alignItems:"center", gap:10, fontSize:12.5, padding:"6px 0", borderTop: k ? "1px solid color-mix(in srgb, var(--border) 60%, transparent)" : "none" }}>
             <MiniSpool hex={it.color_hex} sent={onWay}/>
-            <span style={{ flex:1, minWidth:0, lineHeight:1.2, overflowWrap:"anywhere", color:"var(--text)", fontWeight:600 }}>{lineName(it)}</span>
+            <span style={{ flex:1, minWidth:0, lineHeight:1.2, overflowWrap:"anywhere", color:"var(--text)", fontWeight:600, display:"flex", flexDirection:"column", gap:1 }}>{lineName(it)}
+              <LinePrice it={it} cur={o.totals?.currency || it.currency} size={10.5}/></span>
             <Marks it={it}/>
             <span style={{ fontWeight:900, fontVariantNumeric:"tabular-nums", color: n > 1 ? "var(--text)" : "var(--muted)" }}>×{n}</span>
             {isAdmin && <button type="button" onClick={stop(() => onMark(i))} data-tip="La bobine est là, sans passer par un ajout ou un scan"

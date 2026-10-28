@@ -496,9 +496,10 @@ async def _migrate_mail_orders():
     try:
         async with engine.begin() as conn:
             cols = [r[1] for r in (await conn.execute(_text("PRAGMA table_info(mail_orders)"))).all()]
-            if cols and "shipments_json" not in cols:
-                await conn.execute(_text("ALTER TABLE mail_orders ADD COLUMN shipments_json TEXT"))
-                print("[migration] colonne mail_orders.shipments_json ajoutee")
+            for col in ("shipments_json", "totals_json"):
+                if cols and col not in cols:
+                    await conn.execute(_text(f"ALTER TABLE mail_orders ADD COLUMN {col} TEXT"))
+                    print(f"[migration] colonne mail_orders.{col} ajoutee")
     except Exception as e:
         print(f"[migration] mail_orders ignoree : {e}")
 

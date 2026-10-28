@@ -252,14 +252,105 @@ def tracking(text: str, links: list) -> tuple[str | None, str | None, str | None
 _BAMBU_RE = re.compile(r"(?P<title>[A-Za-z][A-Za-z0-9+\- ]{1,40}?)\s*[×x]\s*(?P<qty>\d{1,3})\s+(?P<color>[^/\n()]{1,60}?)\s*\((?P<code>\d{5})\)\s*/\s*(?P<pack>[^/\n]{1,40})(?:/\s*(?P<w>[\d.,]+\s*k?g))?", re.I)
 
 
-def items_bambu(text: str) -> list[dict]:
+# un montant : « €14.96 EUR », « 14,96 € », « -€20.00 EUR », « -6.07 » (points, sans devise, en fin de ligne)
+_AMT_RE = re.compile(r"(?P<neg>-\s*)?(?:(?P<cur>€|\$|£)\s*(?P<a>\d[\d ]*(?:[.,]\d{1,2})?)|(?P<b>\d[\d ]*(?:[.,]\d{1,2})?)\s*(?P<cur2>€|EUR|\$|USD|£|GBP)|(?P<c>\d[\d ]*[.,]\d{2})(?=\s*$))")
+_GIFT_RE = re.compile(r"\b(regalo|cadeau|gift|gratuit|free gift|offert)\b", re.I)
+
+
+def _amounts(s: str) -> list[tuple[float, str | None]]:
     out = []
-    for m in _BAMBU_RE.finditer(text):
-        pack = _fold(m.group("pack"))[:30]
-        out.append({"title": f"{m.group('title').strip()} - {m.group('color').strip()}", "qty": int(m.group("qty")),
-                    "product": m.group("title").strip(), "color_name": m.group("color").strip(), "fila_color_code": m.group("code"),
-                    "refill": "recharge" in pack or "refill" in pack, "weight": (m.group("w") or "").replace(" ", "") or None})
+    for m in _AMT_RE.finditer(s):
+        raw = (m.group("a") or m.group("b") or m.group("c") or "").replace(" ", "").replace(",", ".")
+        try:
+            v = float(raw)
+        except ValueError:
+            continue
+        cur = m.group("cur") or m.group("cur2")
+        cur = {"EUR": "€", "USD": "$", "GBP": "£"}.get(cur, cur)
+        out.append((-v if m.group("neg") else v, cur))
     return out
+
+
+def items_bambu(text: str) -> list[dict]:
+    """Les lignes d'articles du mail Bambu, avec leur prix (28/10/2026) : apres la ligne « Produit x 1 / couleur
+    (code) / bobine / 1 kg » viennent une eventuelle remise de ligne (negative, ignoree), le prix paye pour la
+    ligne, puis parfois le prix barre ; un article marque cadeau (Regalo…) est a 0."""
+    out = []
+    ms = list(_BAMBU_RE.finditer(text))
+    for k, m in enumerate(ms):
+        pack = _fold(m.group("pack"))[:30]
+        title = m.group("title").strip()
+        before = text[max(0, m.start() - 80):m.start()]
+        gift = bool(_GIFT_RE.search(before)) or bool(_GIFT_RE.match(title))
+        title = _GIFT_RE.sub("", title).strip(" -·:")
+        window = text[m.end():ms[k + 1].start() if k + 1 < len(ms) else m.end() + 400]
+        window = re.split(r"(?im)^\s*(sous-total|subtotal|total|zwischensumme)", window)[0]
+        pos = [a for a in _amounts(window) if a[0] >= 0]
+        price = pos[0][0] if pos else None
+        listed = pos[1][0] if len(pos) > 1 and pos[1][0] > (price or 0) else None
+        cur = next((c for _, c in pos if c), None)
+        out.append({"title": f"{title} - {m.group('color').strip()}", "qty": int(m.group("qty")),
+                    "product": title, "color_name": m.group("color").strip(), "fila_color_code": m.group("code"),
+                    "refill": "recharge" in pack or "refill" in pack, "weight": (m.group("w") or "").replace(" ", "") or None,
+                    "price": price, "list_price": listed, "gift": gift, "currency": cur})
+    return out
+
+
+def totals(text: str) -> dict:
+    """Le bas du mail de confirmation : sous-total, remises de fin de commande (negatives : abonnement, points…),
+    frais d'envoi, total paye. Sert a repartir ce qui est remise ou frais sur les bobines."""
+    t = {"subtotal": None, "total": None, "shipping": None, "discount": 0.0, "currency": None}
+    ms = list(_BAMBU_RE.finditer(text))
+    tail = text[ms[-1].end():] if ms else text
+    for ln in tail.splitlines():
+        low = _fold(ln).strip()
+        if not low:
+            continue
+        am = _amounts(ln)
+        if not am:
+            continue
+        v, cur = am[0]
+        if cur and not t["currency"]:
+            t["currency"] = cur
+        if low.startswith(("sous-total", "subtotal", "zwischensumme", "sous total")):
+            t["subtotal"] = v
+        elif re.match(r"(total|montant total|paiement net|net payment|gesamt)\b", low) and t["total"] is None:
+            t["total"] = v
+        elif low.startswith(("expedition", "livraison", "shipping", "versand", "frais de port")):
+            t["shipping"] = v
+        elif v < 0 and not low.startswith(("impot", "tax", "tva", "vat")):
+            t["discount"] += v
+    t["discount"] = round(t["discount"], 2)
+    return t
+
+
+def paid_ratio(tot: dict | None) -> float:
+    """Ce que coute en vrai un euro du sous-total, une fois les remises de fin de commande (et frais) comptees :
+    total / sous-total. 1 quand on ne sait pas."""
+    if not tot or not tot.get("subtotal") or tot.get("total") is None:
+        return 1.0
+    try:
+        r = float(tot["total"]) / float(tot["subtotal"])
+    except (TypeError, ZeroDivisionError, ValueError):
+        return 1.0
+    return r if 0 < r < 5 else 1.0
+
+
+def paid_unit(it: dict, tot: dict | None) -> float | None:
+    """Le prix paye d'une bobine de cette ligne : le prix de ligne par unite, a la part de remise de fin pres."""
+    if it.get("price") is None:
+        return None
+    q = max(1, int(it.get("qty") or 1))
+    return round(float(it["price"]) / q * paid_ratio(tot), 2)
+
+
+def base_unit(it: dict) -> float | None:
+    """Le prix « de base » d'une bobine (la fiche filament) : le prix de ligne par unite ; pour un cadeau, le prix
+    barre s'il y en a un, sinon rien."""
+    q = max(1, int(it.get("qty") or 1))
+    if it.get("gift") or not it.get("price"):
+        return round(float(it["list_price"]) / q, 2) if it.get("list_price") else None
+    return round(float(it["price"]) / q, 2)
 
 
 def items_from_text(text: str) -> list[dict]:
@@ -574,6 +665,7 @@ async def _apply(m: dict, notify: bool = True) -> str:
     items = parsed if kind == "confirmed" else []
     if kind == "confirmed" and not items:
         return "ignored"
+    tot = totals(m["text"]) if kind == "confirmed" and items else None
     if items:
         items = await enrich_items(items)
         await _reconcile_existing(items, m["date"])
@@ -584,20 +676,37 @@ async def _apply(m: dict, notify: bool = True) -> str:
         store = mm.group(1).lower()
     async with AsyncSessionLocal() as db:
         o = (await db.execute(select(MailOrder).where(MailOrder.order_no == no))).scalar_one_or_none()
-        res = "updated"
+        res, touched = "updated", []
         if o is None:
             if kind != "confirmed":
                 # une expedition dont on n'a pas vu la confirmation : une commande sans lignes, pour le suivi
                 o = MailOrder(order_no=no, status=kind, items_json="[]", ordered_at=m["date"], store=store, subject=m["subject"][:250])
             else:
                 o = MailOrder(order_no=no, status="confirmed", items_json=json.dumps(items, ensure_ascii=False), ordered_at=m["date"],
-                              store=store, subject=m["subject"][:250])
+                              store=store, subject=m["subject"][:250], totals_json=json.dumps(tot) if tot else None)
             db.add(o)
             res = "created"
         else:
             if kind == "confirmed" and items and not json.loads(o.items_json or "[]"):
                 o.items_json = json.dumps(items, ensure_ascii=False)
                 o.ordered_at = o.ordered_at or m["date"]
+            elif kind == "confirmed" and items:
+                # une commande deja connue relue : les prix (lus depuis le 28/10/2026) completent les lignes qui n'en ont pas
+                cur = json.loads(o.items_json or "[]")
+                for p_ in items:
+                    tgt = next((i for i in cur if i.get("kind") == "filament" and i.get("price") is None
+                                and ((p_.get("fila_color_code") and p_["fila_color_code"] == i.get("fila_color_code"))
+                                     or _fold(p_["title"]) == _fold(i.get("title")))), None)
+                    if tgt is not None:
+                        for k in ("price", "list_price", "gift", "currency"):
+                            tgt[k] = p_.get(k)
+                        touched.append(tgt)
+                o.items_json = json.dumps(cur, ensure_ascii=False)
+            if tot and not o.totals_json:
+                o.totals_json = json.dumps(tot)
+            if touched:
+                # les bobines « en commande » deja creees pour ces lignes, et leur fiche sans prix, prennent les prix lus
+                await _price_ordered(db, touched, json.loads(o.totals_json) if o.totals_json else tot)
             rank = {"confirmed": 0, "shipped": 1, "delivered": 2, "cancelled": 3}
             if rank.get(kind, 0) >= rank.get(o.status, 0):
                 o.status = kind
@@ -656,7 +765,7 @@ async def _apply(m: dict, notify: bool = True) -> str:
 # ── A venir, et l'arrivee des bobines ─────────────────────────────────────────
 def _item_view(it: dict) -> dict:
     return {k: it.get(k) for k in ("title", "qty", "received", "kind", "fila_type", "name_fr", "color_hex", "filament_id", "refill",
-                                   "fila_color_code", "auto", "assumed", "confirmed", "shipped", "spools")}
+                                   "fila_color_code", "auto", "assumed", "confirmed", "shipped", "spools", "price", "list_price", "gift", "currency")}
 
 
 async def one(order_id: int) -> dict | None:
@@ -689,7 +798,11 @@ async def incoming(include_done: bool = False, include_hidden: bool = False) -> 
 def _views(rows) -> list[dict]:
     out = []
     for o in rows:
+        tot = json.loads(o.totals_json) if getattr(o, "totals_json", None) else None
         items = [_item_view(i) for i in json.loads(o.items_json or "[]")]
+        for i in items:
+            if i.get("kind") == "filament":
+                i["paid_unit"], i["base_unit"] = paid_unit(i, tot), base_unit(i)
         stage = "cancelled" if o.status == "cancelled" else "delivered" if (o.status == "delivered" or o.done) else \
             "shipping" if o.status == "shipped" else "ordered"
         out.append({"id": o.id, "order_no": o.order_no, "store": o.store, "status": o.status, "stage": stage, "ordered_at": o.ordered_at,
@@ -697,7 +810,8 @@ def _views(rows) -> list[dict]:
                     "done": bool(o.done), "hidden": bool(o.hidden), "items": items, "shipments": json.loads(o.shipments_json or "[]"),
                     "pending": sum(max(0, (i.get("qty") or 0) - (i.get("received") or 0)) for i in items if i.get("kind") == "filament"),
                     "ordered_spools": sum(len(i.get("spools") or []) for i in items),
-                    "to_confirm": sum(int(i.get("assumed") or 0) for i in items if not i.get("confirmed"))})
+                    "to_confirm": sum(int(i.get("assumed") or 0) for i in items if not i.get("confirmed")),
+                    "totals": tot})
     return out
 
 
@@ -791,6 +905,7 @@ async def create_spools(order_id: int, index: int | None = None) -> dict | None:
         if not o:
             return None
         items = json.loads(o.items_json or "[]")
+        tot = json.loads(o.totals_json) if o.totals_json else None
         for i, it in enumerate(items):
             if index is not None and i != index:
                 continue
@@ -801,13 +916,18 @@ async def create_spools(order_id: int, index: int | None = None) -> dict | None:
                 continue
             f, created = await _ensure_filament(db, it)
             n_f += int(created)
+            # les prix lus dans le mail (28/10/2026) : la fiche filament prend le prix de base si elle n'en a pas,
+            # la bobine le prix paye (remise de fin de commande repartie au prorata)
+            base, paid = base_unit(it), paid_unit(it, tot)
+            if base is not None and base > 0 and (created or not f.price):
+                f.price = base
             it["filament_id"] = f.id
             if not it.get("color_hex") and f.color:
                 it["color_hex"] = f.color
             ids = list(it.get("spools") or [])
             for _ in range(left):
                 sp = Spool(filament_id=f.id, ordered=True, location="En commande", remaining_weight_g=f.filament_weight_g or 1000.0,
-                           comment=f"Commande Bambu Lab {o.order_no}", last_dried_at=datetime.utcnow())
+                           comment=f"Commande Bambu Lab {o.order_no}", last_dried_at=datetime.utcnow(), price_override=paid)
                 db.add(sp)
                 await db.flush()
                 ids.append(sp.id)
@@ -816,6 +936,22 @@ async def create_spools(order_id: int, index: int | None = None) -> dict | None:
         o.items_json = json.dumps(items, ensure_ascii=False)
         await db.commit()
     return {"order": await one(order_id), "created_filaments": n_f, "created_spools": n_s}
+
+
+async def _price_ordered(db, items: list[dict], tot: dict | None) -> None:
+    """Les prix d'une commande relue (28/10/2026) poses apres coup : sur ses bobines encore « en commande » (le prix
+    paye) et sur leur fiche filament si elle n'a pas de prix (le prix de base)."""
+    from ..models.filament import Filament, Spool
+    for it in items:
+        base, paid = base_unit(it), paid_unit(it, tot)
+        for sid in it.get("spools") or []:
+            sp = await db.get(Spool, int(sid))
+            if sp and sp.ordered and sp.price_override is None and paid is not None:
+                sp.price_override = paid
+        if it.get("filament_id") and base:
+            f = await db.get(Filament, int(it["filament_id"]))
+            if f and not f.price:
+                f.price = base
 
 
 async def _adopt_ordered(db, it: dict) -> bool:
