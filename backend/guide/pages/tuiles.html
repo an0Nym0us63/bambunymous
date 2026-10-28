@@ -49,7 +49,7 @@
     <h3>Mise à jour et tuiles vides</h3>
     <ul>
       <li>Les chiffres des tuiles se rechargent toutes les deux minutes, et aussi dès que l'imprimante change d'état (lancement, préparation, pause, fin, échec, nouvelle impression) : une impression qui vient de finir apparaît aussitôt dans « Aujourd'hui », « Dernières impressions » ou « À faire ». Ce qui vient de l'imprimante (températures, avancement, AMS) suit l'imprimante en direct.</li>
-      <li>Une tuile qui n'a rien à montrer (pas de copain, pas de compte MakerWorld, aucun objet…) <b>disparaît</b> de l'accueil. En mode personnalisation, elle reste visible avec <span class="ui">Rien à montrer pour l'instant</span>, pour que tu puisses la déplacer ou la retirer.</li>
+      <li>Une tuile qui n'a rien à montrer <b>reste en place</b> et le dit en une phrase : <span class="ui">Imprimante injoignable</span> (Températures), <span class="ui">Pas d'AMS en vue</span> (Humidité des AMS, Couleurs chargées), <span class="ui">Pas encore d'impression</span> (Dernières impressions, Galerie), <span class="ui">Pas d'objet en vente</span> (Objets et ventes) ; en demi-rangée (mini), un simple « — ». Les autres tuiles sans matière (pas de copain, pas de compte MakerWorld…) <b>disparaissent</b> encore de l'accueil ; en mode personnalisation, elles restent visibles avec <span class="ui">Rien à montrer pour l'instant</span>, pour que tu puisses les déplacer ou les retirer.</li>
       <li>Formats utilisés : durées « 2 h 05 » ou « 45 min », heures de machine « 3,5 h », poids « 850 g » ou « 1,2 kg », heure de fin « 14:35 » suivie d'un petit <b>⁺¹</b> quand c'est le lendemain.</li>
     </ul>
   </section>
@@ -126,7 +126,7 @@
 
   <section id="tuiles-temps">
     <h3>Températures</h3>
-    <p><b>Ce qu'elle montre</b> : la température de chaque source, avec sa consigne : <span class="ui">Buse</span> (ou <span class="ui">Buse G</span> et <span class="ui">Buse D</span> sur une machine à deux buses, la buse active entourée et marquée d'un point), <span class="ui">Plateau</span>, et <span class="ui">Chambre</span> si la machine en a une. La tuile disparaît quand l'imprimante est déconnectée.</p>
+    <p><b>Ce qu'elle montre</b> : la température de chaque source, avec sa consigne : <span class="ui">Buse</span> (ou <span class="ui">Buse G</span> et <span class="ui">Buse D</span> sur une machine à deux buses, la buse active entourée et marquée d'un point), <span class="ui">Plateau</span>, et <span class="ui">Chambre</span> si la machine en a une. Quand l'imprimante est déconnectée, la tuile reste en place et dit <span class="ui">Imprimante injoignable</span>.</p>
     <p>En style « thermomètres » (le défaut), chaque source est un <b>thermomètre en verre</b>, sans carte autour : son tube se remplit d'un liquide qui ondule doucement, du froid (bleu) vers la chaleur (ambre, orange, rouge), avec des graduations ; la consigne est un repère fléché sur le tube. Sous le thermomètre, la température en dégradé (« 220° », « /220° » pour la consigne), le nom de la source et son état : <span class="ui">✓ à température</span>, <span class="ui">▲ chauffe</span>, <span class="ui">▼ redescend</span>, <span class="ui">▼ refroidit</span> ou <span class="ui">au repos</span>. La buse active rayonne d'un halo.</p>
     <p><b>Selon la taille</b> : dans une tuile basse, chaque thermomètre se met à gauche, la température et le <b>pictogramme</b> de la source à droite (buse G / D, plateau, chambre, comme dans l'en-tête du bloc Imprimante) ; sur une colonne étroite, l'état se résume à son symbole (▼, ✓…) ou à « repos » ; quand ce serait trop petit (une rangée en demi-colonne), tout passe en lignes compactes (icône, valeur).</p>
     <figure><img src="img/tuiles-temps.webp" alt="Tuile Températures en thermomètres de verre"><figcaption>Une rangée (pictogrammes et états) et deux rangées sur toute la colonne : la buse droite, active, rayonne.</figcaption></figure>
@@ -178,6 +178,7 @@
   <section id="tuiles-colors">
     <h3>Couleurs chargées</h3>
     <p><b>Ce qu'elle montre</b> : toutes les bobines en place dans les AMS (hors bobine externe), en carrés de couleur ; celle qui imprime est cerclée de bleu et pulse. Le haut de chaque carré s'assombrit à la mesure de ce qui est déjà utilisé, et son emplacement s'y écrit (« A2 ») quand il est assez grand. Avec de la hauteur : « 17 couleurs · 14 PLA · 3 PETG » et l'emplacement en cours (« ● A3 ») en tête, puis une rangée par AMS, son nom à gauche. Survole un carré pour sa bulle : emplacement, nom, marque, sous-type et ce qui reste.</p>
+    <p>Sans AMS, ou sans bobine en place : <span class="ui">Pas d'AMS en vue</span>.</p>
     <figure><img src="img/tuiles-colors.webp" alt="Tuile Couleurs chargées"><figcaption>Demi-colonne et toute la colonne sur 2 rangées : la bobine active (A3) est cerclée de bleu.</figcaption></figure>
     <p><b>Options</b> : aucune en dehors du titre et du fond.</p>
     <p><b>Au toucher</b> : des cases <span class="ui">Bobines chargées</span>, <span class="ui">Unités</span>, les trois matières les plus présentes et <span class="ui">En cours</span> ; puis chaque AMS avec son humidité, sa température et son séchage en cours, et chacune de ses bobines en carte teintée de sa couleur : son nom, le poids qui reste, son emplacement, sa marque et son sous-type en étiquettes (« bobine non associée » si elle n'est reliée à aucune bobine du stock), une barre et le pourcentage de reste. Pas de bouton <span class="ui">Ouvrir</span>.</p>
@@ -189,7 +190,7 @@
 
   <section id="tuiles-today">
     <h3>Aujourd'hui</h3>
-    <p><b>Ce qu'elle montre</b> : le nombre d'impressions du jour en gros, avec à gauche un <b>anneau de réussite</b> (part des impressions réussies : vert à 90 % et plus, orange à 70 %, rouge en dessous). Dessous : le poids, « x h de machine », le coût, et l'écart avec hier (flèche verte « +2 », rouge « -1 », ou « = hier »). Avec plus de place s'ajoutent, dans l'ordre : un face-à-face avec hier (barres <span class="ui">Impressions</span>, <span class="ui">Poids</span>, <span class="ui">Machine</span>, <span class="ui">Coût</span>), des cases <span class="ui">Réussies</span> / <span class="ui">Ratées</span> / <span class="ui">Coût</span>, et une bande de vignettes <span class="ui">IMPRIMÉES AUJOURD'HUI</span> (pastille verte réussie, rouge ratée).</p>
+    <p><b>Ce qu'elle montre</b> : le nombre d'impressions du jour en gros, avec à gauche un <b>anneau de réussite</b> (part des impressions réussies : vert à 90 % et plus, orange à 70 %, rouge en dessous). Dessous : le poids, « x h de machine », le coût, et l'écart avec hier (flèche verte « +2 », rouge « -1 », ou « = hier »). Avec plus de place s'ajoutent, dans l'ordre : un face-à-face avec hier (barres <span class="ui">Impressions</span>, <span class="ui">Poids</span>, <span class="ui">Machine</span>, <span class="ui">Coût</span>), des cases <span class="ui">Réussies</span> / <span class="ui">Ratées</span> / <span class="ui">Coût</span> (<span class="ui">Réussies</span> compte aussi les impressions réussies en partie, comme l'anneau ; <span class="ui">Ratées</span>, les échouées, annulées ou à refaire), et une bande de vignettes <span class="ui">IMPRIMÉES AUJOURD'HUI</span> (pastille verte réussie, rouge ratée).</p>
     <p><b>Quand rien n'est encore fini aujourd'hui</b> : si une impression tourne, l'anneau devient bleu et suit son avancement, avec <span class="ui">La première du jour arrive</span>, « Balancing bird · fin à 18:38 » et « Hier : 2 impressions · 5,3 h ». Sinon, une icône endormie et ses « z z Z », <span class="ui">Pas encore d'impression aujourd'hui</span>, et « Hier : … · l'imprimante se repose » (ou « Hier : rien non plus »).</p>
     <figure><img src="img/tuiles-today.webp" alt="Tuile Aujourd'hui pendant la première impression du jour"><figcaption>La première impression du jour est en cours : l'anneau suit son avancement.</figcaption></figure>
     <dl class="opts">
@@ -234,6 +235,7 @@
   <section id="tuiles-last">
     <h3>Dernières impressions</h3>
     <p><b>Ce qu'elle montre</b> : en tête, une grande carte : l'impression en cours (barre d'avancement, « 🖨️ en cours · 42 % », « fin à 14:35 · couche 120/300 »), sinon la dernière terminée (« ✓ réussie », « ✕ échouée » ou « ◐ en partie », « il y a 2 h · 1 h 05 · 130 g »). Dessous, une rangée fine par impression : un liseré de couleur à gauche (vert réussie, rouge échouée, orange en partie, bleu en cours), la vignette avec sa pastille d'état, « ×5 » pour un <a href="#impressions-groupes">groupe</a> (nom du groupe, durées, poids et coûts additionnés) et une petite caméra bleue s'il manque la photo ; le nom, l'état et quand ; à droite, la durée puis « poids · coût » quand la tuile est assez large. Sur deux rangées ou plus, une ligne de comptes en haut, comme pour « À faire » : « 6 dernières · 🖨️ 1 en cours · ✓ 5 réussies · ◐ 1 en partie · ✕ 1 échouée » (les seuls chiffres en demi-colonne). Quand la place le permet sans perdre de rangée, les impressions sont rangées par jour sous des intercalaires <span class="ui">AUJOURD'HUI</span>, <span class="ui">HIER</span>, <span class="ui">MARDI</span>… et chaque rangée donne l'heure ; sinon chaque rangée dit le jour et l'heure (« hier 09:44 », « mar. 23:33 »). La tuile s'adapte : basse, la grande carte seule ; en demi-colonne et haute, la carte devient une grande vignette pleine largeur ; plus haute, la carte se tasse et les rangées s'affinent pour en montrer le plus possible, et ce qui reste de place revient à la carte. Toucher la carte ou une rangée ouvre la fiche de l'impression ou du groupe ; le reste de la tuile ouvre la vue en grand. Le badge de l'en-tête (« ✓ 5/6 ») compte les réussies parmi les dernières.</p>
+    <p>Sans aucune impression (ni terminée, ni en cours) : <span class="ui">Pas encore d'impression</span>.</p>
     <figure><img src="img/tuiles-last.webp" alt="Tuile Dernières impressions"><figcaption>Sur 3 rangées : la ligne des comptes ; en demi-colonne, l'impression en cours en grand ; sur toute la colonne, la carte et une rangée par impression.</figcaption></figure>
     <dl class="opts">
       <dt><span class="ui">Depuis quand</span> (oui)</dt><dd>Le « il y a 2 h » de chaque rangée (l'heure quand elles sont rangées par jour).</dd>
@@ -247,6 +249,7 @@
   <section id="tuiles-gallery">
     <h3>Galerie</h3>
     <p><b>Ce qu'elle montre</b> : les dernières impressions en <b>mosaïque</b> qui remplit toute la tuile (la plus récente en grand quand il y a la place) ; une pastille verte ou rouge dit si elle a réussi, un cadre rouge marque une ratée, et le nom s'écrit sur l'image quand elle est assez grande. Survole une image pour son nom et sa date ; touche-la pour ouvrir la fiche de l'impression.</p>
+    <p>Sans aucune impression à montrer : <span class="ui">Pas encore d'impression</span>.</p>
     <figure><img src="img/tuiles-gallery.webp" alt="Tuile Galerie"><figcaption>Demi-colonne sur 2 rangées, et toute la colonne sur une rangée : les cadres rouges signalent les impressions ratées.</figcaption></figure>
     <dl class="opts">
       <dt><span class="ui">Vignettes au plus</span> : <span class="ui">4</span> / <span class="ui">8</span> (défaut) / <span class="ui">12</span> / <span class="ui">16</span></dt><dd>Le nombre maximum de vignettes.</dd>
@@ -316,7 +319,7 @@
 
   <section id="tuiles-humidity">
     <h3>Humidité des AMS</h3>
-    <p>La tuile disparaît si aucun AMS ne remonte son humidité (la bobine externe n'est pas comptée).</p>
+    <p>Si aucun AMS ne remonte son humidité (la bobine externe n'est pas comptée), la tuile reste en place et dit <span class="ui">Pas d'AMS en vue</span>.</p>
     <p><b>Ce qu'elle montre</b> : une <b>goutte d'eau</b> par AMS, remplie jusqu'à son taux d'humidité avec une petite vague animée, le pourcentage dedans et le nom dessous (AMS-A, HT-A…). Couleur : vert sous le seuil bas, ambre entre les deux seuils, rouge au-delà. Les gouttes sont rangées <b>comme la grille du bloc AMS</b> (qui est au-dessus de qui) quand elles y tiennent. Dessous, si la place le permet : « moyenne 27 % · le plus humide AMS-C ». Trop basse, la tuile passe en barres (nom, niveau, pourcentage).</p>
     <figure><img src="img/tuiles-humidity.webp" alt="Tuile Humidité des AMS en barres et en gouttes"><figcaption>Une rangée en demi-colonne (barres), et trois rangées sur toute la colonne (gouttes) : AMS-C est trop humide.</figcaption></figure>
     <dl class="opts">
@@ -463,7 +466,7 @@
 
   <section id="tuiles-sales">
     <h3>Objets et ventes</h3>
-    <p>La tuile n'apparaît que si tu as au moins un <a href="#objets">objet</a>.</p>
+    <p>Sans aucun <a href="#objets">objet</a>, la tuile reste en place et dit <span class="ui">Pas d'objet en vente</span>.</p>
     <p><b>Ce qu'elle montre</b> : « 5 à vendre » en gros, un anneau des objets vendus (leur nombre au centre) et « 4 vendus · 69 € · marge 60 € (648 %) ». Avec un peu de hauteur, les <b>ventes du mois</b> : « octobre : 2 ventes · 35,00 € · marge 30,26 € » (ou « aucune vente pour l'instant ») ; plus haute, les <b>recettes sur douze mois</b> en barres (le mois en cours en couleur pleine, survoler une barre donne le nombre de ventes et la somme) ; très haute, des cases <span class="ui">Chiffre d'affaires</span>, <span class="ui">Marge</span>, <span class="ui">Valeur du stock</span>.</p>
     <figure><img src="img/tuiles-sales.webp" alt="Tuile Objets et ventes"><figcaption>Demi-colonne sur 3 rangées et toute la colonne sur 2 rangées.</figcaption></figure>
     <dl class="opts">

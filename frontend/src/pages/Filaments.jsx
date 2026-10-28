@@ -924,6 +924,28 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
   const price = spool.price_override ?? spool.filament_price;
   const worth = price != null && total ? price * remaining / total : null;
   const eur = v => `${moneyVal(Number(v), 2)} €`;
+  // Son histoire (28/10/2026) : deja consomme, et le rythme depuis la premiere utilisation
+  const knownWeight = spool.remaining_weight_g != null;
+  const consumed = knownWeight ? Math.max(0, total - remaining) : null;
+  const consumedPct = consumed != null && total ? Math.round(consumed / total * 100) : null;
+  const usedDays = spool.first_used_at ? (Date.now() - new Date(spool.first_used_at).getTime()) / 86400000 : null;
+  // moins de deux semaines d'usage : une moyenne ne voudrait rien dire
+  const rythme = (() => {
+    if (usedDays == null || consumed == null) return null;
+    if (usedDays < 14) return { v: "trop tôt pour dire", d: "moins de deux semaines d'usage" };
+    const perWeek = consumed / usedDays * 7;
+    if (perWeek <= 0) return { v: "≈ 0 g/semaine", d: "rien consommé depuis la première utilisation" };
+    if (remaining <= 0) return { v: `≈ ${Math.round(perWeek)} g/semaine`, d: "bobine finie" };
+    const weeks = remaining / perWeek;
+    const fin = weeks < 1 ? "finie d'ici une semaine" : weeks < 10 ? `finie dans ~${Math.round(weeks)} semaines`
+      : weeks < 104 ? `finie dans ~${Math.round(weeks / 4.33)} mois` : `finie dans ~${Math.round(weeks / 52)} ans`;
+    return { v: `≈ ${Math.round(perWeek)} g/semaine`, d: fin };
+  })();
+  // comment l'AMS l'a reconnue, quand le serveur le dit (rfid / profile / color)
+  const FOUND = { rfid: ["⬡ Reconnue par RFID", "#22c55e", "La puce RFID Bambu Lab de la bobine est celle lue par l'AMS"],
+    profile: ["◈ Reconnue par profil", "#f59e0b", "Reconnue par le profil Bambu du filament (et la couleur la plus proche)"],
+    color: ["◈ Reconnue par couleur", "#f59e0b", "Reconnue par sa couleur, faute de puce"] };
+  const found = FOUND[spool.found_mode];
   const weigh = () => { setWeighKey(k => k + 1); setTimeout(() => document.getElementById(`weigh-${spool.id}`)?.scrollIntoView({ behavior:"smooth", block:"center" }), 60); };
 
   const dryChip = (aSecher || secherBientot) && (
@@ -966,6 +988,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           !spool.ordered && spool.location && fChip(`📍 ${spool.location}`, "#8B5CF6"),
           !spool.archived && spool.sibling_count > 0 && fChip(`🧵 +${spool.sibling_count} en stock${spool.sibling_weight_g ? ` · ${fmtStock(spool.sibling_weight_g)}` : ""}`, "#22C55E"),
           !spool.archived && spool.ordered_siblings > 0 && <span key="osib" data-tip="D'autres bobines de ce filament sont commandées, pas encore reçues">{fChip(`📬 +${spool.ordered_siblings} en commande`, "#0EA5E9")}</span>,
+          found && <span key="found" data-tip={found[2]}>{fChip(found[0], found[1])}</span>,
           dryChip, fChip(<><Palette size={11}/>{spool.filament_swatch ? "Échantillon" : "Sans échantillon"}</>, spool.filament_swatch ? "#22c55e" : "#94a3b8")]}
         sub={<>
           {spool.filament_translated_name && spool.filament_name && spool.filament_name !== spool.filament_translated_name &&
@@ -1013,8 +1036,11 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
             <FRow l="Emplacement" v={spool.location}/>
           </FCard>
           <FCard t="Son histoire" i="🗓️" c="#3B82F6">
+            <FRow l="Ajoutée le" v={dayFr(spool.created_at)} d={agoFr(spool.created_at)}/>
             <FRow l="Première utilisation" v={dayFr(spool.first_used_at) || "jamais"} d={agoFr(spool.first_used_at)}/>
             <FRow l="Dernière utilisation" v={dayFr(spool.last_used_at) || "jamais"} d={agoFr(spool.last_used_at)}/>
+            <FRow l="Déjà consommé" v={consumed != null ? `${Math.round(consumed)} g` : "poids inconnu"} d={consumedPct != null ? `${consumedPct} % de ${Math.round(total)} g` : null}/>
+            <FRow l="Rythme" v={rythme ? rythme.v : (spool.first_used_at ? null : "pas encore utilisée")} d={rythme?.d}/>
             <DryEditRow spoolId={spool.id} spoolName={name} current={spool.last_dried_at} aSecher={aSecher} onUpdated={onClose}/>
             <div style={FROW}>
               <span style={FLAB}>Utilisation</span>
@@ -1112,11 +1138,11 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
 
 // ── Vue Bobines ────────────────────────────────────────────────────────────
 // Les chiffres d'une liste, en tuiles (meme dessin que la page Impressions).
-const KPI_ICON = { bobines:"🧵", marques:"🏷️", "en stock":"⚖", valeur:"💶", archivées:"🗄", références:"🎨", types:"🧪", "à commander":"🛒" };
+const KPI_ICON = { bobines:"🧵", marques:"🏷️", "en stock":"⚖", valeur:"💶", "valeur d'achat":"💶", archivées:"🗄", références:"🎨", types:"🧪", "à commander":"🛒" };
 // Les filtres actifs : une etiquette chacun, ✕ pour l'enlever (comme la page Impressions).
 const STOCK_L = { instock:"En stock", unavailable:"Non disponible" };
-function FilterChips({ filters, setFilters, sort, setSort, defSort }) {
-  const label = Object.fromEntries(SPOOL_SORTS);
+function FilterChips({ filters, setFilters, sort, setSort, defSort, sorts = SPOOL_SORTS }) {
+  const label = Object.fromEntries(sorts);
   const drop = (k, v) => setFilters(f => ({ ...f, [k]: (f[k] || []).filter(x => x !== v) }));
   const chips = [
     ...(filters.mat || []).map(v => ["🧪", v, () => drop("mat", v)]),
@@ -1243,6 +1269,20 @@ const SPOOL_SORTS = [
   ["dried_old", "Séchage le plus ancien"],
   ["dried_new", "Séchage le plus récent"],
 ];
+// Les tris des onglets Filaments et Galerie (28/10/2026) : une reference n'a ni date d'utilisation
+// ni sechage, seuls les tris qui ont un sens pour elle sont proposes -- avant, la feuille montrait
+// les tris des bobines et plusieurs ne faisaient rien.
+const FIL_SORTS = [
+  ["hue",       "Teinte"],
+  ["name",      "Nom"],
+  ["brand",     "Marque"],
+  ["remaining", "Stock ↓"],
+  ["fullest",   "Stock ↑"],
+  ["recent",    "Ajouté récemment"],
+];
+// Ce que veut dire « En stock » selon l'onglet (sous la carte Disponibilite de la feuille)
+const STOCK_HINT_SPOOL = "En stock : il reste du filament dans la bobine.";
+const STOCK_HINT_FIL   = "En stock : au moins une bobine active de ce filament.";
 
 // Sous-type d'un élément, quel que soit le jeu de champs : les bobines portent
 // filament_*, le catalogue et la galerie non. Une seule fonction plutôt que la
@@ -1305,14 +1345,15 @@ function ChipGroup({ label, icon = null, c = "#3B82F6", options, selected, onTog
   );
 }
 
-function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose }) {
+function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose, sorts = SPOOL_SORTS, stockHint = null }) {
   useTrackDetail("Filtres et tri");
   // Tableaux et non chaînes : le multi-choix est tout l'objet de ce composant.
   const [fb, setFb] = useState(filters.brand || []);
   const [fm, setFm] = useState(filters.mat   || []);
   const [fs, setFs] = useState(filters.sub   || []);
   const [fst,setFst]= useState(filters.stock || "all"); // all/instock/unavailable
-  const [so, setSo] = useState(sort           || "recent");
+  // un tri garde d'une autre version, inconnu de cet onglet, retombe sur le premier propose (28/10/2026)
+  const [so, setSo] = useState(sorts.some(([id]) => id === sort) ? sort : sorts[0][0]);
 
   const toggle = (setter) => (v) =>
     setter(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]);
@@ -1359,7 +1400,7 @@ function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose 
           <div style={card("#8B5CF6")}>
             {head("↕", "Trier par", "#8B5CF6")}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(2, minmax(0, 1fr))", gap:6 }}>
-              {SPOOL_SORTS.map(([id,label]) => (
+              {sorts.map(([id,label]) => (
                 <button key={id} onClick={()=>setSo(id)}
                   style={{ padding:"8px 10px", borderRadius:12, fontSize:12, fontWeight:800, cursor:"pointer", textAlign:"left",
                     border: so===id ? "1px solid transparent" : "1px solid var(--border)",
@@ -1383,6 +1424,7 @@ function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose 
                 </button>
               ))}
             </div>
+            {stockHint && <p style={{ margin:"7px 2px 0", fontSize:11, fontWeight:600, color:"var(--muted)" }}>{stockHint}</p>}
           </div>
 
           {/* Filtres */}
@@ -1529,22 +1571,34 @@ function SpoolsView({ filaments, showArchived }) {
 
   // KPIs dynamiques (recalculés à chaque changement de spools filtrés)
   const kpis = useMemo(() => {
+    // Le prix d'une bobine : le sien, sinon celui du filament -- meme regle que la tuile 💶 de la
+    // fiche bobine (28/10/2026 : seul price_override comptait, une bobine au prix catalogue valait 0).
+    const prixDe = b => b.price_override ?? b.filament_price ?? null;
+    const achat = list => list.reduce((s, b) => s + (prixDe(b) || 0), 0);
     if (showArchived) {
-      const prixTotal = spools.reduce((s, b) => s + (b.price_override || 0), 0);
+      // une archivee est a 0 g : ce qu'elle vaut encore n'a pas de sens, ce qu'elle a coute, si
+      const prixTotal = achat(spools);
       return [
-        { label:"archivées", value: spools.length, accent:"#94a3b8" },
-        { label:"valeur",    value: prixTotal > 0 ? `${moneyVal(prixTotal, 0)} €` : null, accent:"#94a3b8" },
+        { label:"archivées",      value: spools.length, accent:"#94a3b8" },
+        { label:"valeur d'achat", value: prixTotal > 0 ? `${moneyVal(prixTotal, 0)} €` : null, accent:"#94a3b8" },
       ];
     }
     const here = spools.filter(b => !b.ordered), ordered = spools.length - here.length;
     const marques = new Set(here.map(b => b.filament_manufacturer).filter(Boolean)).size;
     const poids = here.reduce((s, b) => s + (b.remaining_weight_g ?? b.filament_weight_g ?? 0), 0);
-    const prix  = here.reduce((s, b) => s + (b.price_override || 0), 0);
+    // Valeur = ce qu'il reste de chaque bobine, a son prix (prix x restant / total) ; le total
+    // d'achat en infobulle, pour comparer.
+    const valeur = here.reduce((s, b) => {
+      const p = prixDe(b); if (p == null) return s;
+      const total = b.filament_weight_g || 1000, reste = b.remaining_weight_g ?? total;
+      return s + p * Math.max(0, Math.min(reste, total)) / total;
+    }, 0);
+    const prix = achat(here);
     return [
       { label:"bobines",  value: ordered ? `${here.length} +${ordered}` : here.length, accent:"#3b82f6" },
       { label:"marques",  value: marques || null, accent:"#8b5cf6" },
       { label:"en stock", value: poids > 0 ? `${(poids/1000).toFixed(2)} kg` : null, accent:"#f59e0b" },
-      { label:"valeur",   value: prix > 0 ? `${moneyVal(prix, 0)} €` : null, accent:"#22c55e" },
+      { label:"valeur",   value: prix > 0 ? <span data-tip={`Ce qu'il reste des bobines, à leur prix\nachetées pour ${moneyVal(prix, 0)} €`}>{moneyVal(valeur, 0)} €</span> : null, accent:"#22c55e" },
     ];
   }, [spools, showArchived]);
 
@@ -1564,6 +1618,7 @@ function SpoolsView({ filaments, showArchived }) {
           getFamily={getFamily}
           filters={filters}
           sort={sort}
+          stockHint={STOCK_HINT_SPOOL}
           onApply={(f,s)=>{ setFilters(f); setSort(s); setFilterOpen(false); }}
           onClose={()=>setFilterOpen(false)}
         />
@@ -2175,6 +2230,10 @@ function FilamentsView() {
     if (filters.brand?.length) res = res.filter(f => filters.brand.includes(itemBrand(f)));
     if (filters.mat?.length)   res = res.filter(f => filters.mat.includes(getFamilyF(f)));
     if (filters.sub?.length)   res = res.filter(f => filters.sub.includes(itemSub(f)));
+    // Disponibilite (28/10/2026) : la feuille la proposait, rien ne l'appliquait ici. En stock = au
+    // moins une bobine active, comme la tuile « en stock » et la galerie.
+    if (filters.stock === "instock")     res = res.filter(f => (f.active_spool_count||0) > 0);
+    if (filters.stock === "unavailable") res = res.filter(f => !(f.active_spool_count > 0));
     return [...res].sort((a,b) => {
       // Manquait ici : "Teinte" figurait dans la liste des tris mais aucune
       // branche ne le traitait, le tri retombait donc silencieusement sur le
@@ -2183,6 +2242,8 @@ function FilamentsView() {
       if (sort==="brand")     return (a.manufacturer||"").localeCompare(b.manufacturer||"");
       if (sort==="remaining") return (b.remaining_weight_total_g||0)-(a.remaining_weight_total_g||0);
       if (sort==="fullest")   return (a.remaining_weight_total_g||0)-(b.remaining_weight_total_g||0);
+      // la fiche la plus recemment creee d'abord (28/10/2026)
+      if (sort==="recent")    return new Date(b.created_at||b.updated_at||0)-new Date(a.created_at||a.updated_at||0);
       return (a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||"");
     });
   }, [allFilaments, q, filters, sort]);
@@ -2209,9 +2270,9 @@ function FilamentsView() {
       <KpiBar kpis={kpis} icons={KPI_ICON}/>
       <SearchRow q={q} setQ={setQ} placeholder="Nom, marque, code couleur…" active={activeFilters}
         onFilter={() => setFilterOpen(true)} addLabel="Filament" onAdd={() => setCreateOpen(true)}/>
-      <FilterChips filters={filters} setFilters={setFilters} sort={sort} setSort={setSort} defSort="name"/>
+      <FilterChips filters={filters} setFilters={setFilters} sort={sort} setSort={setSort} defSort="name" sorts={FIL_SORTS}/>
       {filterOpen && (
-        <FilterSortSheet allItems={allFilaments} getFamily={getFamilyF} filters={filters} sort={sort}
+        <FilterSortSheet allItems={allFilaments} getFamily={getFamilyF} filters={filters} sort={sort} sorts={FIL_SORTS} stockHint={STOCK_HINT_FIL}
           onApply={(f,s)=>{ setFilters(f); if(s) setSort(s); setFilterOpen(false); }}
           onClose={()=>setFilterOpen(false)}/>
       )}
@@ -2834,7 +2895,8 @@ export default function Filaments() {
       if (galSort === "brand")    return (a.manufacturer||"").localeCompare(b.manufacturer||"");
       if (galSort === "remaining") return (b.remaining_weight_total_g||0)-(a.remaining_weight_total_g||0);
       if (galSort === "fullest")   return (a.remaining_weight_total_g||0)-(b.remaining_weight_total_g||0);
-      if (galSort === "recent")   return new Date(b.updated_at||b.created_at||0)-new Date(a.updated_at||a.created_at||0);
+      // « Ajouté récemment » : la date de creation de la fiche (28/10/2026 ; avant, la modification)
+      if (galSort === "recent")   return new Date(b.created_at||b.updated_at||0)-new Date(a.created_at||a.updated_at||0);
       return 0;
     });
     return res;
@@ -2917,9 +2979,9 @@ export default function Filaments() {
         <>
           {/* Barre recherche + filtres partages Photos/Nuancier */}
           <SearchRow q={galQ} setQ={setGalQ} placeholder="Nom, marque, matériau…" active={galActiveFilters} onFilter={() => setGalFilterOpen(true)}/>
-          <FilterChips filters={galFilters} setFilters={setGalFilters} sort={galSort} setSort={setGalSort} defSort={GAL_DEF_SORT}/>
+          <FilterChips filters={galFilters} setFilters={setGalFilters} sort={galSort} setSort={setGalSort} defSort={GAL_DEF_SORT} sorts={FIL_SORTS}/>
           {galFilterOpen && (
-            <FilterSortSheet allItems={allFilaments} getFamily={getFamilyG} filters={galFilters} sort={galSort}
+            <FilterSortSheet allItems={allFilaments} getFamily={getFamilyG} filters={galFilters} sort={galSort} sorts={FIL_SORTS} stockHint={STOCK_HINT_FIL}
               onApply={(f,s)=>{ setGalFilters(f); if(s) setGalSort(s); setGalFilterOpen(false); }}
               onClose={()=>setGalFilterOpen(false)}/>
           )}

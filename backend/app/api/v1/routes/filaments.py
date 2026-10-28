@@ -101,6 +101,9 @@ class FilamentOut(BaseModel):
     ordered_spool_count: int = 0          # commandees, pas encore recues (28/10/2026)
     shipping_spool_count: int = 0         # dont deja en route (un envoi est parti)
     remaining_weight_total_g: float = 0   # somme du restant sur les bobines actives
+    # Dates de la fiche, pour le tri « Ajouté récemment » des onglets Filaments et Galerie (28/10/2026)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 class FilamentCreate(BaseModel):
     name: str
@@ -1388,6 +1391,7 @@ def _fil_out(f: Filament, agg: tuple | None = None) -> FilamentOut:
         label_printed_at=getattr(f, "label_printed_at", None),
         spool_count=n_all, active_spool_count=n_act, ordered_spool_count=n_ord,
         remaining_weight_total_g=round(left, 1),
+        created_at=getattr(f, "created_at", None), updated_at=getattr(f, "updated_at", None),
     )
 
 

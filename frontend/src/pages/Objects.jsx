@@ -11,7 +11,6 @@ import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 import { useTrackDetail } from "../utils/track";
-import { useKeyboardInset } from "../utils/keyboard";
 import { useLongPress, openMenu } from "../components/ContextMenu";
 import GroupMosaic from "../components/GroupMosaic";
 import { KpiBar, SearchRow, EmptyCard, PageTabs, fGrad, FSheet, FTile, FCard, FRow, fChip, fBtn, dayFr } from "../components/FicheKit";
@@ -635,7 +634,6 @@ const costLine = o => {
 // vente (prix + date) et annulation de vente.
 function ObjectEditSheet({ obj, onClose, onSaved }) {
   useTrackDetail("Objets · Modifier un objet");
-  const kb = useKeyboardInset();
   const [form, setForm] = React.useState({
     translated_name: obj.translated_name || obj.name || "",
     comment:         obj.comment || "",
@@ -692,7 +690,7 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
         <div style={{ marginTop:6 }}>{fChip(`${cur.icon} ${cur.label}`, cur.color)}</div>
       </div>
 
-        <div style={{ display:"flex", flexDirection:"column", gap:14, padding:"14px 16px 18px", paddingBottom: 18 + kb }}>
+        <div style={{ display:"flex", flexDirection:"column", gap:14, padding:"14px 16px 18px" }}>
           <div>
             <label style={lbl}>Nom</label>
             <input style={inp} value={form.translated_name} onChange={e=>set("translated_name",e.target.value)}/>
@@ -766,7 +764,6 @@ function AccessoryPicker({ accessories, onClose, onConfirm, multiplier = 1 }) {
   const [q, setQ] = React.useState("");
   const [sel, setSel] = React.useState(null);   // accessoire choisi
   const [qty, setQty] = React.useState(1);
-  const kb = useKeyboardInset();
 
   const filtered = React.useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -802,7 +799,7 @@ function AccessoryPicker({ accessories, onClose, onConfirm, multiplier = 1 }) {
           {sel ? sel.name : "Lequel ?"}</div>
         {mult > 1 && <div style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>Pour chacun des {mult} objets du groupe</div>}
       </div>
-      <div style={{ padding:"12px 16px 16px", paddingBottom: 16 + kb, display:"flex", flexDirection:"column", gap:10 }}>
+      <div style={{ padding:"12px 16px 16px", display:"flex", flexDirection:"column", gap:10 }}>
         {/* Recherche */}
         <div style={{ position:"relative" }}>
           <Search size={15} style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:"var(--muted)" }}/>
@@ -1353,7 +1350,6 @@ function AccessorySection({ sec, open, onToggle, children }) {
 // {group_name} (nouveau). Le parent gere l'action (rattachement, etc.).
 function ObjectGroupPickerSheet({ title, onClose, onPick }) {
   useTrackDetail("Objets · Choisir un groupe");
-  const kb = useKeyboardInset();
   const [q, setQ] = React.useState("");
   const [groups, setGroups] = React.useState([]);
   const [busy, setBusy] = React.useState(false);
@@ -1375,7 +1371,7 @@ function ObjectGroupPickerSheet({ title, onClose, onPick }) {
         <div style={{ fontSize:12, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#8B5CF6" }}>📁 Groupe d'objets</div>
         <div style={{ fontSize:20, fontWeight:900, color:"var(--text)", lineHeight:1.2 }}>{title}</div>
       </div>
-      <div style={{ padding:"12px 16px 18px", paddingBottom: 18 + kb, display:"flex", flexDirection:"column", gap:8 }}>
+      <div style={{ padding:"12px 16px 18px", display:"flex", flexDirection:"column", gap:8 }}>
         <input value={q} onChange={e => setQ(e.target.value)} autoFocus
           placeholder="Rechercher ou créer un groupe…"
           style={{ ...fInp, borderRadius:20, height:42 }}/>
@@ -1641,9 +1637,14 @@ function ObjectGroupSheet({ group, objects, allObjects, sectionStatus, onClose, 
 }
 
 // ── Object Group Tile ─────────────────────────────────────────────────────
-function ObjectGroupTile({ group, objects, sectionStatus, totalCount, onChanged }) {
+function ObjectGroupTile({ group, objects, sectionStatus, totalCount, onChanged, onSelectObj }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);
+  // (28/10/2026) Quand la page fournit onSelectObj, la fiche objet est portee
+  // par la page (meme chemin que les tuiles solo : rechargement a chaque
+  // changement et fiche qui survit au remontage de la tuile). Sinon la tuile
+  // garde sa propre fiche et previent le parent via onChanged, comme GroupBulkPanel.
+  const pickObj = (o) => { if (onSelectObj) onSelectObj(o); else setSelected(o); };
   // Dans une section d'etat, la tuile ne montre QUE les objets concernes : le
   // compte affiche est donc celui de la section, pas celui du groupe entier.
   const cfg = sectionStatus ? OBJ_STATUS[sectionStatus] : null;
@@ -1678,9 +1679,9 @@ function ObjectGroupTile({ group, objects, sectionStatus, totalCount, onChanged 
     </div>
     {open && <ObjectGroupSheet group={group} objects={objects}
       allObjects={group.items} sectionStatus={sectionStatus} onClose={() => setOpen(false)}
-      onSelectObj={o => setSelected(o)} onChanged={onChanged}/>}
+      onSelectObj={pickObj} onChanged={onChanged}/>}
     {selected && <ObjectSheet obj={selected} onClose={() => setSelected(null)}
-      onUpdated={(updated) => { if (updated) setSelected(updated); }}/>}
+      onUpdated={(updated) => { if (updated) setSelected(updated); onChanged?.(); }}/>}
   </>);
 }
 
@@ -1814,7 +1815,19 @@ export default function Objects() {
       out: items.filter(x => (x.quantity || 0) === 0).length,
       thumbs: items.filter(x => x.has_image).sort((x, y) => y.id - x.id).map(x => apiThumb(apiUrl(`/objects/accessories/${x.id}/image`), 128)),
     }));
-  }, [accessories]);
+  }, [seenAcc]);   // (28/10/2026) depend de la liste FILTREE : la recherche s'applique bien aux sections
+  // (28/10/2026) Pendant une recherche, deplier les sections qui contiennent un
+  // resultat : chercher un accessoire pour tomber sur des en-tetes fermes
+  // obligeait a tout rouvrir a la main. La recherche effacee, on revient a
+  // l'etat de depart (tout ferme), comme a l'ouverture de la page. Sans
+  // recherche en cours, un simple rechargement de la liste ne touche pas aux
+  // sections ouvertes (sinon modifier un accessoire refermait sa section).
+  const prevAccQn = React.useRef("");
+  React.useEffect(() => {
+    if (qn) setOpenAccSections(Object.fromEntries(accSections.map(sec => [sec.name || "_none", true])));
+    else if (prevAccQn.current) setOpenAccSections({});
+    prevAccQn.current = qn;
+  }, [qn, accSections]);
   const accKpis = React.useMemo(() => [
     { label:"articles", value:String(accessories.length), accent:"#14B8A6" },
     { label:"unités", value:String(accessories.reduce((a, x) => a + (x.quantity || 0), 0)), accent:"#06B6D4" },
@@ -1910,7 +1923,8 @@ export default function Objects() {
                   {sec.items.map(item => item.kind === "group"
                     ? <ObjectGroupTile key={`g${item.group_id}-${sec.st}`} group={item.group}
                         objects={item.objects} sectionStatus={sec.st}
-                        totalCount={item.group.items?.length} onChanged={loadObjects}/>
+                        totalCount={item.group.items?.length} onChanged={loadObjects}
+                        onSelectObj={setSelected}/>
                     : <ObjectCard key={item.obj.id} obj={item.obj}
                         onClick={() => setSelected(item.obj)}
                         selectMode={!!objSel}
@@ -1922,7 +1936,7 @@ export default function Objects() {
               ))}
             </div>
       ) : (
-        accessories.length === 0
+        seenAcc.length === 0   // (28/10/2026) liste filtree : "Aucun accessoire ne correspond" s'affiche vraiment
           ? <EmptyCard icon="🔩" text={q ? "Aucun accessoire ne correspond" : "Aucun accessoire : ajoute le premier avec « + Accessoire »"}/>
           : <div className="fold-grid">
               {accSections.map(sec => (

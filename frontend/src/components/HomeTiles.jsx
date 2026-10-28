@@ -157,6 +157,17 @@ function Tile({ icon, color, label, to, zoom, onClick, badge, children, mini = f
     </div>
   );
 }
+// une tuile qui n'a rien a montrer (28/10/2026) : elle reste en place et dit pourquoi en une phrase (avant, elle
+// rendait null et laissait un trou dans la grille) ; en mini (demi-rangee), un simple « — »
+function TileEmpty({ icon, color, label, to = undefined, sz, text }) {
+  return (
+    <Tile icon={icon} color={color} label={label} to={to} mini={sz?.h === 0.5} summary={<span style={{ color: "var(--muted)" }}>—</span>}>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "0 6px", minWidth: 0 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", lineHeight: 1.3 }}>{text}</span>
+      </div>
+    </Tile>
+  );
+}
 // la tuile en grand : par-dessus la page, son detail, et un lien vers sa page.
 // Un en-tete degrade a la couleur de la tuile ; sur telephone, un panneau qui monte du bas.
 function Zoom({ icon, color, label, to, onClose, children }) {
@@ -651,9 +662,9 @@ export function useTilesData(status = null, want = null) {
     const F = {
       today: () => {
         const now = new Date(), t = ymd(now), y = new Date(now); y.setDate(now.getDate() - 1);
-        put("today", Promise.all([get("/prints/kpis", { date_from: t }), get("/prints/kpis", { date_from: t, status: "SUCCESS" }),
-          get("/prints/kpis", { date_from: ymd(y), date_to: ymd(y) })])
-          .then(([all, ok, yd]) => ({ ...all, ok: ok.count, yesterday: yd })));
+        // /prints/kpis donne deja ok (reussies, dont en partie) et failed : plus de second appel filtre sur SUCCESS (28/10/2026)
+        put("today", Promise.all([get("/prints/kpis", { date_from: t }), get("/prints/kpis", { date_from: ymd(y), date_to: ymd(y) })])
+          .then(([all, yd]) => ({ ...all, yesterday: yd })));
       },
       prints: () => put("prints", get("/prints", { limit: 16 }).then(r => (r.prints || r.items || []).filter(p => p.status !== "IN_PROGRESS"))),
       // l'impression en cours, avec son vrai nom (celui de l'imprimante est souvent le nom du profil)
@@ -757,7 +768,7 @@ function Today({ v, p, o, sz, st, lp }) {
   return (
     <Tile icon={<CalendarClock size={15}/>} color="#3B82F6" label="Aujourd'hui" to="/prints"
       mini={sz.h === 0.5} summary={v ? <>{v.count}{rate != null && <span style={{ fontSize: 12, color: col }}>{Math.round(rate * 100)} %</span>}</> : "…"}
-      zoom={<>{hero(0)}<Stats items={v ? [["Réussies", v.ok ?? "—", "#16a34a"], ["Ratées", v.count != null && v.ok != null ? v.count - v.ok : null, v.count - v.ok ? "#dc2626" : undefined],
+      zoom={<>{hero(0)}<Stats items={v ? [["Réussies", v.ok ?? "—", "#16a34a"], ["Ratées", v.failed ?? "—", v.failed ? "#dc2626" : undefined],
         ["Poids", fmtG(v.weight_g)], ["Machine", fmtH(v.duration)], ["Coût", fmtEur(v.cost)]] : []}/>
         {versus && <><H2>Face à hier</H2>{versus}</>}
         {mine.length > 0 && <><H2>Imprimées aujourd'hui</H2><div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -765,7 +776,7 @@ function Today({ v, p, o, sz, st, lp }) {
             sub={[x.print_date && utc(x.print_date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }), x.duration_seconds && fmtDur(x.duration_seconds),
               x.total_weight_g && fmtG(x.total_weight_g)].filter(Boolean).join(" · ")} onClick={() => nav(`/prints?id=${x.id}`)}/>)}</div></>}</>}>
       {({ W, H }) => v && v.count === 0 ? <TodayEmpty st={st} y={v.yesterday} W={W} H={H} lp={lp}/> : <Stack min={W < 240 ? 150 : 96} head={hero(0)} blocks={[versus && { h: W < 240 ? 150 : 104, node: versus },
-        v && { opt: true, h: w => statsH(3, w), node: <Stats items={[["Réussies", v.ok ?? "—", "#16a34a"], ["Ratées", v.count - (v.ok || 0), v.count - (v.ok || 0) ? "#dc2626" : undefined],
+        v && { opt: true, h: w => statsH(3, w), node: <Stats items={[["Réussies", v.ok ?? "—", "#16a34a"], ["Ratées", v.failed ?? 0, v.failed ? "#dc2626" : undefined],
           ["Coût", fmtEur(v.cost)]]}/> },
         strip && { opt: true, h: 76, node: strip }]}/>}
     </Tile>
@@ -1212,7 +1223,7 @@ function Last({ p, o, sz, st, lp }) {
   const [open, setOpen] = useState(null);
   const live = isLive(st) && lp ? { ...lp, live: true } : null;
   const list = [...(live ? [live] : []), ...groupCards(p)];
-  if (!list.length) return null;
+  if (!list.length) return <TileEmpty icon={<History size={15}/>} color="#0EA5E9" label="Dernières impressions" to="/prints" sz={sz} text="Pas encore d'impression"/>;
   // la fiche s'ouvre sur place, par-dessus (celle du groupe pour un groupe), comme « À faire »
   const fiche = x => setOpen(x.members ? { group: x } : { print: x });
   const name = x => x.file_name || x.translated_name || `Impression #${x.id}`;
@@ -1828,7 +1839,7 @@ function Humidity({ status, o, sz }) {
   const raw = (status?.ams_list || []).filter(a => a.humidity > 0 && a.id !== 255 && a.id !== 254);
   const lay = amsArranged(raw, order);
   const list = lay.flat;
-  if (!list.length) return null;
+  if (!list.length) return <TileEmpty icon={<Droplets size={15}/>} color="#06B6D4" label="Humidité des AMS" to="/stats?tab=drying" sz={sz} text="Pas d'AMS en vue"/>;
   const [lo, hi] = o.thr === "strict" ? [20, 30] : o.thr === "loose" ? [40, 55] : [30, 40];
   const col = h => h < lo ? "#22c55e" : h < hi ? "#f59e0b" : "#ef4444";
   // la hauteur des gouttes rangees comme sur la tuile AMS (colonnes x lignes de cette grille) ; une goutte
@@ -2706,7 +2717,7 @@ export function TempPanel({ status, chamber = true, cardH = 190 }) {
       </div>; })}</div>;
 }
 function Temps({ status, o, sz }) {
-  if (!status?.connected) return null;
+  if (!status?.connected) return <TileEmpty icon={<Thermometer size={15}/>} color="#F97316" label="Températures" sz={sz} text="Imprimante injoignable"/>;
   const rows = tempRows(status, o);
   const hot = r => (r.v || 0) > 40;
   const thermo = (W, H) => { const g = thermoGrid(rows.length, W, H);
@@ -2863,7 +2874,7 @@ function MonthZoom({ v, name, hero, rate }) {
 const SALE_C = "#EC4899";
 const monthShort = ym => new Date(`${ym}-15T12:00:00`).toLocaleDateString("fr-FR", { month: "short" }).replace(".", "");
 function Sales({ v, o, sz }) {
-  if (!v || !v.total) return null;
+  if (!v || !v.total) return <TileEmpty icon={<ShoppingBag size={15}/>} color={SALE_C} label="Objets et ventes" to="/objects" sz={sz} text="Pas d'objet en vente"/>;
   const share = (v.total_sold ?? v.sold ?? 0) / Math.max(1, (v.total_sold ?? v.sold ?? 0) + (v.available || 0));
   const sold = v.total_sold ?? v.sold;
   const sub = [`${sold} vendu${sold > 1 ? "s" : ""}`, o.revenue && `${Math.round(v.revenue || 0)} €`,
@@ -3109,7 +3120,7 @@ function GalleryZoom({ all, nav }) {
 function Gallery({ g, o, sz }) {
   const nav = useNavigate();
   const all = (g || []).filter(p => !o.okOnly || okOf(p));
-  if (!all.length) return null;
+  if (!all.length) return <TileEmpty icon={<Images size={15}/>} color="#14B8A6" label="Galerie" to="/prints?tab=gallery" sz={sz} text="Pas encore d'impression"/>;
   const img = (p, s, extra = {}) => <img key={p.id} data-pk="" src={printImg(p.id)} alt="" title={p.file_name || p.translated_name}
     onClick={e => { e.stopPropagation(); nav(`/prints?id=${p.id}`); }} onError={e => { e.currentTarget.style.visibility = "hidden"; }}
     style={{ width: s, height: s, objectFit: "cover", borderRadius: o.round ? "50%" : Math.max(6, Math.round(s / 7)), background: "var(--surface2)", cursor: "pointer",
@@ -4136,7 +4147,7 @@ function Colors({ status, o, sz }) {
   const units = (status?.ams_list || []).filter(a => a.id !== 255 && a.id !== 254)
     .map(a => ({ a, trays: (a.trays || []).map(t => ({ ...t, ams: a })).filter(trayCol) })).filter(u => u.trays.length);
   const trays = units.flatMap(u => u.trays);
-  if (!trays.length) return null;
+  if (!trays.length) return <TileEmpty icon={<Palette size={15}/>} color="#EC4899" label="Couleurs chargées" sz={sz} text="Pas d'AMS en vue"/>;
   const on = t => t.ams.id === status?.active_ams_id && t.id === status?.active_tray_id;
   const cur = trays.find(on);
   const mats = Object.entries(trays.reduce((m, t) => { const k = t.spool_info?.material || t.filament_type || "?"; m[k] = (m[k] || 0) + 1; return m; }, {})).sort((a, b) => b[1] - a[1]);

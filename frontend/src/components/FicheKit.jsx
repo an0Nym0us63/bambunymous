@@ -1,11 +1,13 @@
 import React from "react";
 import { Search, SlidersHorizontal, Plus } from "lucide-react";
 import AdminOnly from "./AdminOnly";
+import { useKeyboardInset } from "../utils/keyboard";
 
 // Le langage des fiches et des pages de liste (25/10/2026) : sorti de la page Filaments pour etre partage
 // (Objets et accessoires le reprennent). La coque d'une fiche, ses tuiles de chiffres, ses cartes de faits,
 // et en tete de page les tuiles de chiffres, la recherche en pilule et les onglets en couleur.
-export const fRound = { width:34, height:34, borderRadius:"50%", border:"1px solid var(--border)", background:"color-mix(in srgb, var(--sheet-bg) 80%, transparent)",
+// cible tactile de 40 px (28/10/2026), la police reste a 15
+export const fRound = { width:40, height:40, borderRadius:"50%", border:"1px solid var(--border)", background:"color-mix(in srgb, var(--sheet-bg) 80%, transparent)",
   backdropFilter:"blur(6px)", color:"var(--text2)", cursor:"pointer", fontSize:15, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center" };
 export const fBtn = { padding:"11px 12px", borderRadius:12, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", fontSize:13.5,
   fontWeight:800, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 };
@@ -20,19 +22,30 @@ export const agoFr = iso => { if (!iso) return null; const d = Math.floor((Date.
   return d <= 0 ? "aujourd'hui" : d === 1 ? "hier" : d < 60 ? `il y a ${d} j` : `il y a ${Math.round(d / 30)} mois`; };
 
 // la coque : fond assombri, feuille (en bas au telephone, centree a l'ordinateur), barre du haut et barre d'actions
+// (28/10/2026) la feuille remonte au-dessus du clavier virtuel : la barre du bas (Enregistrer/Annuler) reste visible,
+// et le champ qui prend le focus est recentre dans la zone qui defile une fois le clavier sorti.
 export function FSheet({ onClose, top = null, bottom = null, children, z = 1000 }) {
   const wide = typeof window !== "undefined" && window.innerWidth >= 900;
+  const kb = useKeyboardInset();
+  const maxH = wide ? "90dvh" : "94dvh";
+  const onFocus = e => {
+    const t = e.target;
+    if (!t || !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || typeof t.scrollIntoView !== "function") return;
+    // petit delai : le clavier n'a pas encore fini de sortir au moment du focus
+    setTimeout(() => { if (document.activeElement === t) t.scrollIntoView({ block:"center", behavior:"smooth" }); }, 250);
+  };
   return (
     <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:z, display:"flex",
       alignItems: wide ? "center" : "flex-end", justifyContent:"center", padding: wide ? 20 : 0 }}>
       <div onClick={e => e.stopPropagation()} className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius: wide ? 24 : "22px 22px 0 0",
-        width:"100%", maxWidth: wide ? 760 : 600, maxHeight: wide ? "90dvh" : "94dvh", display:"flex", flexDirection:"column", overflow:"hidden" }}>
-        <div style={{ flex:1, minHeight:0, overflowY:"auto", position:"relative" }}>
+        width:"100%", maxWidth: wide ? 760 : 600, maxHeight: kb > 0 ? `calc(${maxH} - ${kb}px)` : maxH, display:"flex", flexDirection:"column", overflow:"hidden",
+        marginBottom: kb, transition:"margin-bottom .15s ease, max-height .15s ease" }}>
+        <div onFocus={onFocus} style={{ flex:1, minHeight:0, overflowY:"auto", position:"relative" }}>
           <div style={{ position:"sticky", top:0, zIndex:10, height:0 }}>
             {!wide && <div style={{ position:"absolute", top:8, left:"50%", transform:"translateX(-50%)", width:38, height:4, borderRadius:2, background:"rgba(148,163,184,.6)" }}/>}
             <div style={{ position:"absolute", top:10, right:12, display:"flex", gap:8 }}>
               {top}
-              <button onClick={onClose} aria-label="Fermer" style={fRound}>✕</button>
+              <button onClick={onClose} aria-label="Fermer" className="hit" style={fRound}>✕</button>
             </div>
           </div>
           {children}
@@ -113,12 +126,13 @@ export function SearchRow({ q, setQ, placeholder, active = 0, onFilter, addLabel
       <div style={{ position:"relative", flex:1, minWidth:0 }}>
         <Search size={15} style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder={placeholder}
-          style={{ width:"100%", height:40, padding:"0 34px 0 38px", boxSizing:"border-box", background:"var(--surface2)",
+          style={{ width:"100%", height:40, padding:"0 38px 0 38px", boxSizing:"border-box", background:"var(--surface2)",
             border:"1px solid var(--border)", borderRadius:20, fontSize:13, color:"var(--text)", outline:"none" }}/>
-        {q && <button onClick={() => setQ("")} aria-label="Effacer la recherche" style={{ position:"absolute", right:6, top:"50%", transform:"translateY(-50%)",
-          width:28, height:28, borderRadius:"50%", border:"none", background:"var(--surface)", color:"var(--muted)", cursor:"pointer" }}>✕</button>}
+        {/* bouton effacer de 32 px, zone tactile elargie par .hit (28/10/2026) */}
+        {q && <button onClick={() => setQ("")} aria-label="Effacer la recherche" className="hit" style={{ position:"absolute", right:4, top:"50%", transform:"translateY(-50%)",
+          width:32, height:32, borderRadius:"50%", border:"none", background:"var(--surface)", color:"var(--muted)", cursor:"pointer", fontSize:14 }}>✕</button>}
       </div>
-      {onFilter && <button onClick={onFilter} aria-label={filterTip} data-tip={filterTip} style={{ position:"relative", width:40, height:40, borderRadius:14, flexShrink:0,
+      {onFilter && <button onClick={onFilter} aria-label={filterTip} data-tip={filterTip} className="hit" style={{ position:"relative", width:40, height:40, borderRadius:14, flexShrink:0,
         cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", border:"1px solid var(--border)",
         background: active ? "rgba(59,130,246,0.14)" : "var(--surface2)", color: active ? "#3b82f6" : "var(--muted)" }}>
         <SlidersHorizontal size={16}/>

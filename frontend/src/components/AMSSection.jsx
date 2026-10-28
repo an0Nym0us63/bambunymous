@@ -214,7 +214,7 @@ export function amsRoute(ams, dual, fs) {
   if (dual && ams?.extruder_id >= 0) return { txt: ams.extruder_id === 1 ? "G" : "D", title: `Alimente la buse ${ams.extruder_id === 1 ? "gauche" : "droite"}`, color: "#0ea5e9" };
   return null;
 }
-function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLookup, slotsWidth, climate = true, pillH = null, dual = false, fs = null }) {
+function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, slotsWidth, climate = true, pillH = null, dual = false, fs = null }) {
   const route = amsRoute(ams, dual, fs);
   const dense = pillH != null;
   const isActive = ams.id === activeAmsId;
@@ -558,7 +558,7 @@ function DryPopup({ ams, onClose }) {
 
 // ── Détail AMS ─────────────────────────────────────────────────────────────
 // bare : seulement les bobines (la fenetre « Mes AMS » montre deja le climat et le sechage)
-function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, hideName = false, showNames = true, fitH = null, bare = false }) {
+function AMSDetail({ ams, activeAmsId, activeTrayId, onTrayClick, hideName = false, showNames = true, fitH = null, bare = false }) {
   const [dryOpen, setDryOpen] = React.useState(false);
   // la taille des bobines suit la largeur de la tuile
   const box = React.useRef(null);
@@ -1185,7 +1185,7 @@ function MapTraySheet({ tray, amsId, onClose, onMapped }) {
 // ── Section principale ─────────────────────────────────────────────────────
 export { AMSBox, AMSDetail, TrayBottomSheet, DryPopup, DryCard, amsName, EXT_AMS_ID };
 
-export default function AMSSection({ amsList, activeAmsId, activeTrayId, spoolLookup }) {
+export default function AMSSection({ amsList, activeAmsId, activeTrayId }) {
   // Dédupliquer par id au cas où le polling enverrait des doublons
   const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
   const [selectedId, setSelectedId] = useState(null);
@@ -1206,13 +1206,12 @@ export default function AMSSection({ amsList, activeAmsId, activeTrayId, spoolLo
             <AMSBox key={ams.id} ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
               isSelected={ams.id===displayId}
               onClick={() => setSelectedId(p => p===ams.id ? null : ams.id)}
-              spoolLookup={spoolLookup}
             />
           ))}
         </div>
       </div>
       {/* Détail */}
-      {displayAms && <AMSDetail ams={displayAms} activeAmsId={activeAmsId} activeTrayId={activeTrayId} spoolLookup={spoolLookup} onTrayClick={setSelectedTray}/>}
+      {displayAms && <AMSDetail ams={displayAms} activeAmsId={activeAmsId} activeTrayId={activeTrayId} onTrayClick={setSelectedTray}/>}
       {selectedTray && <TrayBottomSheet tray={selectedTray.tray} amsId={selectedTray.amsId} amsLabel={selectedTray.amsLabel}
         slotNo={selectedTray.slotNo} onClose={()=>setSelectedTray(null)}/>}
     </div>

@@ -138,7 +138,14 @@ function StatusBanner({ status, friend = null, switcher = null }) {
 
 
   if (!status) return <div className="card" style={{ height:56, animation:"pulse 2s infinite" }} />;
-  const cfg    = STATUS_CFG[status.status] ?? STATUS_CFG.IDLE;
+  // en pause (PAUSE / PAUSED), la tuile garde la barre, le %, le temps restant, les couches et l'heure de fin,
+  // comme le bandeau d'une rangee (PrinterStrip) ; avant, tout cela disparaissait des qu'elle ne tournait plus (28/10/2026)
+  const stKey  = String(status.status || "").toUpperCase();
+  const live   = LIVE_ST.includes(stKey);
+  const paused = stKey === "PAUSE" || stKey === "PAUSED";
+  const cfg    = STATUS_CFG[status.status] ?? (paused ? STATUS_CFG.PAUSE : STATUS_CFG.IDLE);
+  // la couleur de l'avancement : orange en pause (stateOf), sinon celle de l'etat
+  const accent = paused ? stateOf(status).color : cfg.color;
   const pct    = status.progress ?? 0;
   const remain = fmtTime(status.remaining_minutes);
   const finish = fmtFinishTime(status.remaining_minutes);
@@ -220,17 +227,17 @@ function StatusBanner({ status, friend = null, switcher = null }) {
           <div style={{ flex:1, minWidth:0, textAlign:"left" }}>
             <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 6px" }}>{stageLabel(status) || cfg.label}</p>
             {/* Barre de progression */}
-            {isRunning && pct > 0 && (
+            {live && pct > 0 && (
               <div style={{ marginBottom:6 }}>
                 <div style={{ height:9, borderRadius:5, background:"var(--border)", overflow:"hidden" }}>
                   <div style={{ height:"100%", width:`${pct}%`,
-                    background:`linear-gradient(90deg,${cfg.color},${cfg.color}cc)`,
-                    boxShadow:`0 0 8px ${cfg.color}99`,
+                    background:`linear-gradient(90deg,${accent},${accent}cc)`,
+                    boxShadow:`0 0 8px ${accent}99`,
                     borderRadius:5, transition:"width 1s" }}/>
                 </div>
               </div>
             )}
-            {isRunning && (
+            {live && (
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                 {remain && <span style={{ fontSize:11, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}><Clock size={10}/>{remain}</span>}
                 {status.total_layers > 0 && <span style={{ fontSize:11, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}><Layers size={10}/>{status.layer}/{status.total_layers}</span>}
@@ -238,17 +245,17 @@ function StatusBanner({ status, friend = null, switcher = null }) {
                   <span style={{ fontSize:11, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}>
                     <Calendar size={10}/>{finish.time}
                     {finish.dayDiff > 0 && (
-                      <sup style={{ fontSize:9, fontWeight:800, color:cfg.color, marginLeft:1 }}>+{finish.dayDiff}</sup>
+                      <sup style={{ fontSize:9, fontWeight:800, color:accent, marginLeft:1 }}>+{finish.dayDiff}</sup>
                     )}
                   </span>
                 )}
               </div>
             )}
           </div>
-          {(isRunning || switcher) && (
+          {(live || switcher) && (
             <span style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6, flexShrink:0 }}>
-              {isRunning && <span style={{ fontSize:24, fontWeight:800, fontFamily:"monospace",
-                color: friend ? FR_ACCENT : cfg.color, letterSpacing:"-0.02em" }}>{pct}%</span>}
+              {live && <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:24, fontWeight:800, fontFamily:"monospace",
+                color: friend ? FR_ACCENT : accent, letterSpacing:"-0.02em" }}>{paused && <Pause size={18}/>}{pct}%</span>}
               {switcher}
             </span>
           )}
@@ -763,14 +770,20 @@ const dryLeft = m => !m ? "" : m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60)
 // l'anneau de l'emplacement actif pulse ; il ne rebondit (sur place) que quand l'emplacement change pendant
 // qu'on regarde : pas a l'arrivee sur la page (bn-pop, qui glisse verticalement, se rejouait a chaque retour)
 let hubShownAt = 0;
-function HubSwatch({ t, active, h, radius = 6 }) {
+function HubSwatch({ t, active, h, radius = 6, onPick = null, label = null }) {
   const p = trayPct(t), c = trayHex(t), r = p != null ? p / 100 : null;
   // une bobine posee pour le sechage (emplacement vide) : sa couleur, hachuree, comme dans le detail de l'AMS
   const posee = !c && t?.empty && t.drying_spool;
   const [pop] = useState(() => active && Date.now() - hubShownAt > 1500);
+  const tip = posee ? `posée pour le séchage : ${posee.translated_name || posee.name}` : t?.empty ? "vide" : [t?.filament_type, r != null ? `${Math.round(r * 100)} %` : null].filter(Boolean).join(" · ");
+  // toucher la pastille ouvre la fiche de la bobine (28/10/2026) : un bouton, nomme pour le lecteur d'ecran,
+  // qui ne declenche pas le clic de l'unite derriere
+  const pick = onPick ? e => { e.stopPropagation(); onPick(t); } : undefined;
   return (
-    <span title={posee ? `posée pour le séchage : ${posee.translated_name || posee.name}` : t?.empty ? "vide" : [t?.filament_type, r != null ? `${Math.round(r * 100)} %` : null].filter(Boolean).join(" · ")}
-      style={{ position: "relative", display: "block", height: h, minWidth: 0, borderRadius: radius,
+    <span title={tip} role={onPick ? "button" : undefined} tabIndex={onPick ? 0 : undefined}
+      aria-label={onPick ? `${label ? `${label} · ` : ""}${tip || "emplacement"} · ouvrir la fiche` : undefined}
+      onClick={pick} onKeyDown={onPick ? e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(e); } } : undefined}
+      style={{ position: "relative", display: "block", height: h, minWidth: 0, borderRadius: radius, cursor: onPick ? "pointer" : undefined,
         ...(c ? trayBg(t, r != null && h >= 18 ? `linear-gradient(to bottom, rgba(0,0,0,0.30) ${(1 - r) * 100}%, transparent ${(1 - r) * 100}%)` : null, h)
           : posee ? { ...bgWithTop(colorBg(parseColorsList(posee.color, posee.colors_array), posee.multicolor_type, finishOf(posee), { size: h }),
               "repeating-linear-gradient(-45deg, rgba(255,255,255,0.45) 0 2px, transparent 2px 6px)"), opacity: 0.8 }
@@ -781,7 +794,7 @@ function HubSwatch({ t, active, h, radius = 6 }) {
   );
 }
 // une unite : son nom, ses badges (entree de l'aiguillage, sechage), ses emplacements
-function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = false, uw = 200, fs = null }) {
+function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = false, uw = 200, fs = null, onTray = null }) {
   const dry = isDrying(a), trays = a.trays || [];
   const route = a.switch_port ? amsRoute(a, true, fs).txt.replace(" ", "\u00A0") : null;
   // l'en-tete d'une unite : le nom, puis dans l'ordre ce qui tient — sechage, buse (aiguillage), humidite
@@ -815,7 +828,8 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
     <button type="button" onClick={click} style={{ ...box, display: "flex", alignItems: "center", gap: 5, padding: "0 6px" }}>
       <span style={{ fontSize: 9.5, fontWeight: 900, color: act ? "#3b82f6" : "var(--text2)", whiteSpace: "nowrap", flexShrink: 0 }}>{amsName(a.id).replace("AMS-", "")}</span>
       <span style={{ flex: 1, minWidth: 0, display: "grid", gridTemplateColumns: `repeat(${trays.length || 1}, minmax(0, 1fr))`, gap: 2 }}>
-        {trays.map(t => <HubSwatch key={`${t.id}${act && t.id === actTray ? "a" : ""}`} t={t} active={act && t.id === actTray} h={Math.max(8, h - 10)} radius={3}/>)}</span>
+        {trays.map(t => <HubSwatch key={`${t.id}${act && t.id === actTray ? "a" : ""}`} t={t} active={act && t.id === actTray} h={Math.max(8, h - 10)} radius={3}
+          onPick={onTray ? x => onTray(a, x) : null} label={slotLabel(a.id, t.id)}/>)}</span>
       {dry && <span title={`Séchage · ${dryLeft(a.dry_time)}`} style={{ width: 6, height: 6, borderRadius: "50%", background: "#f97316", flexShrink: 0,
         animation: "dryPulse 2.5s ease-in-out infinite" }}/>}
     </button>
@@ -857,7 +871,8 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
       <span style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 3 }}>
         <span style={{ height: Math.max(10, Math.min(big ? 56 : h >= 120 ? 46 : 32, h - head - (big ? (line2 ? 39 : 22) : 0) - (h >= 62 ? 26 : 12))), display: "grid",
           gridTemplateColumns: `repeat(${trays.length || 1}, minmax(0, 1fr))`, gap: big ? 6 : 3 }}>
-          {trays.map(t => <HubSwatch key={`${t.id}${act && t.id === actTray ? "a" : ""}`} t={t} active={act && t.id === actTray} h="100%" radius={big ? 9 : 6}/>)}</span>
+          {trays.map(t => <HubSwatch key={`${t.id}${act && t.id === actTray ? "a" : ""}`} t={t} active={act && t.id === actTray} h="100%" radius={big ? 9 : 6}
+            onPick={onTray ? x => onTray(a, x) : null} label={slotLabel(a.id, t.id)}/>)}</span>
         {h >= 62 && <span style={{ display: "grid", gridTemplateColumns: `repeat(${trays.length || 1}, minmax(0, 1fr))`, gap: big ? 6 : 3 }}>
           {trays.map(t => <span key={t.id} style={{ fontSize: pctFs, fontWeight: 800, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden",
             color: act && t.id === actTray ? "#3b82f6" : "var(--muted)" }}>{trayHex(t) ? (trayPct(t) != null ? `${trayPct(t)}${pctSign ? "%" : ""}` : t.filament_type || "") : "—"}</span>)}</span>}
@@ -866,7 +881,7 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
   );
 }
 // la grille des unites, comme ma disposition ; h : la hauteur dont elle dispose
-function HubGrid({ list, order, act, actTray, H, climate, onPick, big = false, sel = null, fs = null }) {
+function HubGrid({ list, order, act, actTray, H, climate, onPick, big = false, sel = null, fs = null, onTray = null }) {
   const ref = useRef(null);
   const [GW, setGW] = useState(0);
   useEffect(() => {
@@ -890,7 +905,7 @@ function HubGrid({ list, order, act, actTray, H, climate, onPick, big = false, s
       {cols.flatMap((col, ci) => col.map((a, ri) => a && (
         <div key={a.id} style={{ gridColumn: ci + 1, gridRow: ri + 1, minWidth: 0, display: "flex", justifyContent: "center" }}>
           <div style={{ width: `${Math.max(0.78, slotCount(a) / columnWeight(col)) * 100}%`, minWidth: 0 }}>
-            <HubUnit a={a} act={a.id === act} actTray={actTray} h={uh} climate={climate} onClick={onPick} big={big} sel={sel === a.id} fs={fs}
+            <HubUnit a={a} act={a.id === act} actTray={actTray} h={uh} climate={climate} onClick={onPick} big={big} sel={sel === a.id} fs={fs} onTray={onTray}
               uw={GW ? (GW - gap * (cols.length - 1)) * columnWeight(col) / cols.reduce((t, c) => t + columnWeight(c), 0) * Math.max(0.78, slotCount(a) / columnWeight(col)) : 200}/></div>
         </div>
       ))).filter(Boolean)}
@@ -913,7 +928,7 @@ function AmsEmpty({ st }) {
     {sub && <span style={{ fontSize: 11.5 }}>{sub}</span>}
   </div>;
 }
-function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
+function AmsHub({ st, fitH, o, rackTile, rackFull }) {
   const list = [...new Map((st?.ams_list || []).map(a => [a.id, a])).values()];
   const [order, setOrder] = useState(null);
   const [open, setOpen] = useState(null);          // l'unite ouverte dans la fenetre
@@ -950,6 +965,9 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
   const climate = o?.climate !== false;
   const routes = switchRoutes(st);
   const go = v => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* indisponible */ } };
+  // une pastille d'emplacement touchee (dans la tuile ou dans la fenetre) : la fenetre de son unite, et la fiche
+  // de la bobine par-dessus (28/10/2026) ; avant, il fallait ouvrir l'unite puis retrouver l'emplacement dans sa carte
+  const pickTray = (a, t) => { setOpen(a.id); setTray({ tray: t, amsId: a.id, amsLabel: amsName(a.id), slotNo: t.id + 1 }); };
   if (!list.length && !hasRack) return <AmsEmpty st={st}/>;
   const H = mh || fitH || 230;
   const low = H < 96;                               // une rangee : ni en-tete ni bascule
@@ -987,7 +1005,7 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
       {tab === "rack" ? rackFull : <>
         {/* la grille en grand : on y choisit l'unite */}
         <HubGrid list={list} order={order} act={act} actTray={actTray} H={Math.min(300, (cols => (cols[0]?.length || 1) * 128)(grilleAccueil(list, lireDisposition(order))))}
-          climate big sel={sel?.id} fs={routes} onPick={id => setOpen(id)}/>
+          climate big sel={sel?.id} fs={routes} onPick={id => setOpen(id)} onTray={pickTray}/>
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${W >= 520 ? 4 : 2}, minmax(0, 1fr))`, gap: 8 }}>
           {[["Bobines chargées", list.flatMap(a => a.trays || []).filter(t => trayHex(t)).length],
             ["En cours", actT ? slotLabel(act, actTray) : "—", "#3b82f6"],
@@ -1010,7 +1028,7 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
             {sel.temp > 0 && <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text2)" }}>🌡 {Number(sel.temp).toFixed(1).replace(".", ",")} °C</span>}
           </div>
           {isDrying(sel) && <DryCard ams={sel}/>}
-          <AMSDetail ams={sel} activeAmsId={act} activeTrayId={actTray} spoolLookup={spoolLookup} onTrayClick={setTray} hideName showNames bare/>
+          <AMSDetail ams={sel} activeAmsId={act} activeTrayId={actTray} onTrayClick={setTray} hideName showNames bare/>
         </div>}
       </>}
       {tray && createPortal(<div onClick={e => e.stopPropagation()}><TrayBottomSheet tray={tray.tray} amsId={tray.amsId} amsLabel={tray.amsLabel} slotNo={tray.slotNo}
@@ -1030,7 +1048,7 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
           const btn = e.target.closest("button");
           if (btn && !btn.title) { setTab("rack"); setOpen("all"); }
         }} style={{ flex: 1, minHeight: 0 }}>{rackTile}</div>
-        : <HubGrid list={list} order={order} act={act} actTray={actTray} H={H - (low ? 0 : 32)} climate={climate} fs={routes} onPick={id => setOpen(id)}/>}
+        : <HubGrid list={list} order={order} act={act} actTray={actTray} H={H - (low ? 0 : 32)} climate={climate} fs={routes} onPick={id => setOpen(id)} onTray={pickTray}/>}
       {popup}
     </div>
   );
@@ -1038,7 +1056,7 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
 
 // part : "overview" (les AMS ou le rack), "detail" (la fiche de l'AMS ou de la buse
 // choisie), ou rien (les deux, l'un sous l'autre)
-export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId, part = null,
+export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, activeNozzleId, part = null,
   org = "grid", climate = true, selector = true, names = true, fitH = null, dual = false, fs = null, forceView = null }) {
   const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
   const hasRack = (rack?.hotends ?? []).some(h => !h.empty && h.filament_id);
@@ -1152,7 +1170,7 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
       <AMSBox ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
         isSelected={detailKind === "ams" && selectedAms?.id === ams.id}
         onClick={() => setSelAms(ams.id)}
-        spoolLookup={spoolLookup} climate={climate} pillH={pillH} dual={dual} fs={fs}
+        climate={climate} pillH={pillH} dual={dual} fs={fs}
         slotsWidth={`${(slotCount(ams) / columnWeight(col)) * 100}%`}/>
     </div>
   ))).filter(Boolean);
@@ -1162,7 +1180,7 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
     <div key={ams.id} style={{ flex: `${slotCount(ams)} 1 ${slotCount(ams) * 26 + 14}px`, minWidth: 0 }}>
       <AMSBox ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
         isSelected={detailKind === "ams" && selectedAms?.id === ams.id}
-        onClick={() => setSelAms(ams.id)} spoolLookup={spoolLookup} climate={climate} pillH={pillH} dual={dual} fs={fs}/>
+        onClick={() => setSelAms(ams.id)} climate={climate} pillH={pillH} dual={dual} fs={fs}/>
     </div>
   ));
   // le detail porte son propre choix d'unite : des onglets avec les couleurs de chaque unite
@@ -1274,7 +1292,7 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
       {showDetail && detailKind === "ams" && selectedAms && part === "detail" && (!dense || fitH >= 150) && tabs}
       {showDetail && detailKind === "ams" && selectedAms && (
         <AMSDetail ams={selectedAms} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
-          spoolLookup={spoolLookup} onTrayClick={setSelectedTray} hideName={part === "detail" && !!tabs} showNames={names}
+          onTrayClick={setSelectedTray} hideName={part === "detail" && !!tabs} showNames={names}
           fitH={dense && part === "detail" ? fitH - (fitH >= 150 && tabs ? 40 : 0) : null}/>
       )}
       {showDetail && detailKind === "hotend" && selectedHotend?.slot && (
@@ -2173,7 +2191,6 @@ function Ant() {
 
 export default function Home() {
   const { status, startPolling, stopPolling } = usePrinter();
-  const [spoolLookup, setSpoolLookup] = useState({});
   const isRunning = status?.status === "RUNNING" || status?.status === "PAUSED";
   const [visKey, setVisKey] = useState(0);
   useEffect(() => {
@@ -2182,40 +2199,12 @@ export default function Home() {
     return () => document.removeEventListener("visibilitychange", fn);
   }, []);
 
-  const fetchSpoolLookup = useCallback(async () => {
-    try {
-      const [{ data: spools }, { data: filaments }] = await Promise.all([
-        client.get("/filaments/spools", { params: { archived: false } }),
-        client.get("/filaments/filaments"),
-      ]);
-      const filMap = {};
-      filaments.forEach(f => { filMap[f.id] = f; });
-      const map = {};
-      spools.forEach(s => {
-        const fil = filMap[s.filament_id] ?? {};
-        const info = {
-          filament_name: s.filament_translated_name || s.filament_name,  // FR prioritaire
-          filament_manufacturer: s.filament_manufacturer,
-          filament_material: s.filament_material,
-          filament_color: s.filament_color,
-          remaining_weight_g: s.remaining_weight_g,
-          filament_weight_g: fil.filament_weight_g ?? 1000,
-        };
-        if (s.tag_number) map[s.tag_number] = info;
-      });
-      setSpoolLookup(map);
-    } catch {}
-  }, []);
-
+  // plus de releve des bobines ici (28/10/2026) : les AMS lisent tray.spool_info, que le serveur joint deja
+  // a l'etat de l'imprimante ; l'ancien annuaire des bobines (deux appels par minute) n'etait lu par personne
   useEffect(() => {
     startPolling(3000);
-    // les bobines (nom, reste) : relues quand une bobine change dans l'AMS (effet ci-dessous),
-    // et une fois par minute pour le poids restant ; plus toutes les 5 s
-    const spoolInterval = setInterval(() => { if (!document.hidden) fetchSpoolLookup(); }, 60000);
-    return () => { stopPolling(); clearInterval(spoolInterval); };
+    return () => { stopPolling(); };
   }, []);
-  const traySig = (status?.ams_list || []).map(a => `${a.id}:${(a.trays || []).map(t => `${t.tag_uid || ""}${t.uuid || ""}${t.spool_id || ""}${t.color || ""}`).join(",")}`).join("|");
-  useEffect(() => { fetchSpoolLookup(); }, [traySig, fetchSpoolLookup]);
 
   // hauteur choisie : la place du corps de la tuile (sous son titre), pour condenser l'AMS
   const fitOf = item => typeof item?.h === "number" ? item.h * 128 - 30 - (item.o?._title === false ? 0 : 28) : null;
@@ -2226,7 +2215,6 @@ export default function Home() {
     activeAmsId={isRunning ? (st?.active_ams_id ?? -1) : -1}
     activeTrayId={isRunning ? (st?.active_tray_id ?? -1) : -1}
     rack={st?.hotend_rack}
-    spoolLookup={spoolLookup}
     activeNozzleId={st?.nozzles?.find(n => n.active)?.id ?? null}/> : null;
   // a demi-hauteur, l'AMS se resume a ses bacs : une pastille par bobine chargee
   const amsSummary = st => {
@@ -2267,7 +2255,7 @@ export default function Home() {
         return r ? <span style={{ fontSize: 13 }}>{n}/6{r.head_id >= 16 ? ` · buse ${r.head_id - 15} sur la tête` : ""}</span> : null; },
       render: (d, st, o, item) => <VortekTile st={st} low={item?.h === 1} fitH={fitOf(item)}/> },
     ams: { label: "AMS", w: [2], h: [2, 1, 3], summary: (d, st) => amsSummary(st), frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" },
-      render: (d, st, o, item) => <AmsHub st={st} spoolLookup={spoolLookup} fitH={fitOf(item)} o={o}
+      render: (d, st, o, item) => <AmsHub st={st} fitH={fitOf(item)} o={o}
         rackTile={st?.hotend_rack && <div style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ flex: 1, minWidth: 0 }}><RackState rack={st.hotend_rack} compact/></div>
             <HubBack/></div>

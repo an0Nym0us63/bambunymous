@@ -151,6 +151,11 @@ input, textarea, select, [contenteditable]:not([contenteditable="false"]) { care
 /* Position relative sur les sheets pour le bouton ✕ absolu */
 .sheet-inner { position: relative; }
 
+/* Zone tactile elargie des petits boutons icone-seule (28/10/2026) : le dessin ne bouge pas,
+   un ::after invisible deborde de 8 px tout autour pour recevoir le doigt. */
+.hit { position: relative; }
+.hit::after { content: ""; position: absolute; inset: -8px; border-radius: inherit; }
+
 /* MakerWorld : squelettes de chargement (pas de page vide) et petite roue. */
 @keyframes mwShimmer { 0% { background-position: -200px 0; } 100% { background-position: calc(200px + 100%) 0; } }
 .mw-skel {

@@ -2218,6 +2218,108 @@ function TimelapseTile({ url, label = "Timelapse", sub, onOpen, small }) {
     </div>);
 }
 
+// Bande de vignettes d'un onglet de la galerie. Definie au niveau module (28/10/2026) : declaree dans
+// SnapshotGallery, elle etait recreee a chaque rendu du parent, React demontait donc la bande (defilement
+// remis au debut, videos relancees) des qu'un etat changeait. Tout ce qu'elle lit du parent arrive en props.
+// onDeleteItem est recu mais inutilise (la corbeille passe par onDeleteUpload), garde pour ne pas changer l'appel.
+function SnapRow({ title, items, startIdx = 0, onAdd, onDeleteItem, canCover = false,
+                   isAdmin, coverPhoto, confirmDelPhoto, setConfirmDelPhoto, setAsCover,
+                   flatItems, setLightbox, handleDelete, setDeletedNames, onDeleteUpload }) {
+  const scrollRef = React.useRef(null);
+  if (!items.length && !onAdd) return null;
+  const scroll = (dir) => scrollRef.current?.scrollBy({ left: dir * 120, behavior: "smooth" });
+  return (
+    <div style={{ marginBottom:12 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <p style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", margin:0 }}>
+            {title} ({items.length})
+          </p>
+          {onAdd && (
+            <PhotoAddButton onPick={(f)=>onAdd(f)}/>
+          )}
+        </div>
+        {items.length > 2 && (
+          <div style={{ display:"flex", gap:4 }}>
+            <button onClick={()=>scroll(-1)} style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:"50%", width:22, height:22, cursor:"pointer", fontSize:14, color:"var(--text)", display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
+            <button onClick={()=>scroll(1)}  style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:"50%", width:22, height:22, cursor:"pointer", fontSize:14, color:"var(--text)", display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
+          </div>
+        )}
+      </div>
+      {/* pan-x pan-y : le glisse vertical fait defiler la fiche ; la fiche porte data-no-pull, le
+          tirer-pour-rafraichir ne se declenche donc pas depuis cette bande. */}
+      <div ref={scrollRef} style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6,
+        scrollbarWidth:"none", touchAction:"pan-x pan-y", overscrollBehaviorX:"contain" }}>
+        {items.map((item, i) => {
+          const isCover = item.name && item.name === coverPhoto;
+          const armed   = confirmDelPhoto === item.url;
+          return (
+          <div key={i} style={{ position:"relative", flexShrink:0 }}>
+            {/* Aucun handler tactile ici : le defilement reste 100% natif. */}
+            <div onClick={() => setLightbox(flatItems[startIdx + i])}
+              style={{ cursor:"pointer" }}>
+              {isVideoUrl(item.url) ? (
+                <video src={item.url} muted loop autoPlay playsInline preload="metadata"
+                  style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
+                    border: isCover ? "2px solid #22c55e" : "1px solid var(--border)", display:"block" }}/>
+              ) : (
+                <img src={item.url} alt={item.label}
+                  style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
+                    border: isCover ? "2px solid #22c55e" : "1px solid var(--border)",
+                    display:"block" }}
+                  onError={e => { e.currentTarget.style.display="none"; }}/>
+              )}
+            </div>
+            <span style={{ position:"absolute", bottom:4, left:4,
+              background:"rgba(0,0,0,0.65)", color:"white",
+              fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:4,
+              pointerEvents:"none" }}>
+              {item.label}
+            </span>
+            {/* Etoile a gauche, doree si principale et grise sinon. Reservee
+                aux vraies photos : les milestones sont des captures
+                automatiques, pas des cliches a mettre en avant. */}
+            {isAdmin && canCover && item.name && (
+              <button onClick={()=> !isCover && setAsCover(item.name)}
+                title={isCover ? "Photo principale" : "Définir comme photo principale"}
+                style={{ position:"absolute", top:4, left:4,
+                  width:22, height:22, borderRadius:"50%", border:"none",
+                  cursor: isCover ? "default" : "pointer",
+                  background:"rgba(0,0,0,0.6)", fontSize:11, lineHeight:1,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  filter: isCover ? "none" : "grayscale(1)", opacity: isCover ? 1 : 0.75 }}>⭐</button>
+            )}
+            {!isAdmin && isCover && (
+              <span style={{ position:"absolute", top:4, left:4, fontSize:11,
+                pointerEvents:"none" }}>⭐</span>
+            )}
+            {isAdmin && (
+              <div style={{ position:"absolute", top:4, right:4 }}>
+                <button
+                  onClick={() => {
+                    if (!armed) { setConfirmDelPhoto(item.url); return; }
+                    setConfirmDelPhoto(null);
+                    if (item.snap) handleDelete({ stopPropagation(){} }, item.snap);
+                    else { setDeletedNames(prev=>new Set([...prev,item.name])); onDeleteUpload?.(item.name); }
+                  }}
+                  onBlur={()=>setConfirmDelPhoto(null)}
+                  title={armed ? "Confirmer la suppression" : "Supprimer"}
+                  style={{ height:22, width: armed ? "auto" : 22, padding: armed ? "0 7px" : 0,
+                    borderRadius: armed ? 11 : "50%", border:"none", cursor:"pointer",
+                    background: armed ? "#ef4444" : "rgba(0,0,0,0.6)", color:"white",
+                    fontSize: armed ? 9 : 11, fontWeight:600, lineHeight:1,
+                    display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  {armed ? "Supprimer ?" : "🗑"}</button>
+              </div>
+            )}
+          </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], onDeleteUpload,
                            onCountChange, coverPhoto, onCoverChange }) {
   const [lightbox, setLightbox] = useState(null);
@@ -2300,102 +2402,6 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
   const techItems = [...(tl ? [{ url: tl.url, name: tl.filename, label: "Timelapse" }] : []), ...milestoneItems];
   const cur = tab || (photoItems.length || !techItems.length ? "souv" : "tech");
 
-  const Row = ({ title, items, startIdx = 0, onAdd, onDeleteItem, canCover = false }) => {
-    const scrollRef = React.useRef(null);
-    if (!items.length && !onAdd) return null;
-    const scroll = (dir) => scrollRef.current?.scrollBy({ left: dir * 120, behavior: "smooth" });
-    return (
-      <div style={{ marginBottom:12 }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <p style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", margin:0 }}>
-              {title} ({items.length})
-            </p>
-            {onAdd && (
-              <PhotoAddButton onPick={(f)=>onAdd(f)}/>
-            )}
-          </div>
-          {items.length > 2 && (
-            <div style={{ display:"flex", gap:4 }}>
-              <button onClick={()=>scroll(-1)} style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:"50%", width:22, height:22, cursor:"pointer", fontSize:14, color:"var(--text)", display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
-              <button onClick={()=>scroll(1)}  style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:"50%", width:22, height:22, cursor:"pointer", fontSize:14, color:"var(--text)", display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
-            </div>
-          )}
-        </div>
-        {/* pan-x pan-y : le glisse vertical fait defiler la fiche ; la fiche porte data-no-pull, le
-            tirer-pour-rafraichir ne se declenche donc pas depuis cette bande. */}
-        <div ref={scrollRef} style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6,
-          scrollbarWidth:"none", touchAction:"pan-x pan-y", overscrollBehaviorX:"contain" }}>
-          {items.map((item, i) => {
-            const isCover = item.name && item.name === coverPhoto;
-            const armed   = confirmDelPhoto === item.url;
-            return (
-            <div key={i} style={{ position:"relative", flexShrink:0 }}>
-              {/* Aucun handler tactile ici : le defilement reste 100% natif. */}
-              <div onClick={() => setLightbox(flatItems[startIdx + i])}
-                style={{ cursor:"pointer" }}>
-                {isVideoUrl(item.url) ? (
-                  <video src={item.url} muted loop autoPlay playsInline preload="metadata"
-                    style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
-                      border: isCover ? "2px solid #22c55e" : "1px solid var(--border)", display:"block" }}/>
-                ) : (
-                  <img src={item.url} alt={item.label}
-                    style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
-                      border: isCover ? "2px solid #22c55e" : "1px solid var(--border)",
-                      display:"block" }}
-                    onError={e => { e.currentTarget.style.display="none"; }}/>
-                )}
-              </div>
-              <span style={{ position:"absolute", bottom:4, left:4,
-                background:"rgba(0,0,0,0.65)", color:"white",
-                fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:4,
-                pointerEvents:"none" }}>
-                {item.label}
-              </span>
-              {/* Etoile a gauche, doree si principale et grise sinon. Reservee
-                  aux vraies photos : les milestones sont des captures
-                  automatiques, pas des cliches a mettre en avant. */}
-              {isAdmin && canCover && item.name && (
-                <button onClick={()=> !isCover && setAsCover(item.name)}
-                  title={isCover ? "Photo principale" : "Définir comme photo principale"}
-                  style={{ position:"absolute", top:4, left:4,
-                    width:22, height:22, borderRadius:"50%", border:"none",
-                    cursor: isCover ? "default" : "pointer",
-                    background:"rgba(0,0,0,0.6)", fontSize:11, lineHeight:1,
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    filter: isCover ? "none" : "grayscale(1)", opacity: isCover ? 1 : 0.75 }}>⭐</button>
-              )}
-              {!isAdmin && isCover && (
-                <span style={{ position:"absolute", top:4, left:4, fontSize:11,
-                  pointerEvents:"none" }}>⭐</span>
-              )}
-              {isAdmin && (
-                <div style={{ position:"absolute", top:4, right:4 }}>
-                  <button
-                    onClick={() => {
-                      if (!armed) { setConfirmDelPhoto(item.url); return; }
-                      setConfirmDelPhoto(null);
-                      if (item.snap) handleDelete({ stopPropagation(){} }, item.snap);
-                      else { setDeletedNames(prev=>new Set([...prev,item.name])); onDeleteUpload?.(item.name); }
-                    }}
-                    onBlur={()=>setConfirmDelPhoto(null)}
-                    title={armed ? "Confirmer la suppression" : "Supprimer"}
-                    style={{ height:22, width: armed ? "auto" : 22, padding: armed ? "0 7px" : 0,
-                      borderRadius: armed ? 11 : "50%", border:"none", cursor:"pointer",
-                      background: armed ? "#ef4444" : "rgba(0,0,0,0.6)", color:"white",
-                      fontSize: armed ? 9 : 11, fontWeight:600, lineHeight:1,
-                      display:"flex", alignItems:"center", justifyContent:"center" }}>
-                    {armed ? "Supprimer ?" : "🗑"}</button>
-                </div>
-              )}
-            </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
   const flatItems = cur === "souv" ? photoItems : techItems;   // la visionneuse reste dans l'onglet ouvert
   const lbIdx = lightbox ? flatItems.findIndex(i => i.url === lightbox.url) : -1;
   const moveLb = (dir) => {
@@ -2408,11 +2414,19 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
       <div className="card-sm" style={{ padding: "10px 12px 4px" }}>
         <MediaTabs tab={cur} setTab={setTab} souv={photoItems.length} tech={techItems.length}/>
         {cur === "souv"
-          ? <Row title="Photos et vidéos" items={photoItems} startIdx={0} canCover
-              onAdd={async(f)=>{ await onUpload?.(f); reloadDiskFiles(); }} onDeleteItem={onDeleteUpload}/>
+          ? <SnapRow title="Photos et vidéos" items={photoItems} startIdx={0} canCover
+              onAdd={async(f)=>{ await onUpload?.(f); reloadDiskFiles(); }} onDeleteItem={onDeleteUpload}
+              isAdmin={isAdmin} coverPhoto={coverPhoto} confirmDelPhoto={confirmDelPhoto}
+              setConfirmDelPhoto={setConfirmDelPhoto} setAsCover={setAsCover} flatItems={flatItems}
+              setLightbox={setLightbox} handleDelete={handleDelete} setDeletedNames={setDeletedNames}
+              onDeleteUpload={onDeleteUpload}/>
           : <>
             {tl && <div style={{ marginBottom: 12 }}><TimelapseTile url={tl.url} onOpen={() => setLightbox(techItems[0])}/></div>}
-            <Row title="Captures des couches" items={milestoneItems} startIdx={tl ? 1 : 0}/>
+            <SnapRow title="Captures des couches" items={milestoneItems} startIdx={tl ? 1 : 0}
+              isAdmin={isAdmin} coverPhoto={coverPhoto} confirmDelPhoto={confirmDelPhoto}
+              setConfirmDelPhoto={setConfirmDelPhoto} setAsCover={setAsCover} flatItems={flatItems}
+              setLightbox={setLightbox} handleDelete={handleDelete} setDeletedNames={setDeletedNames}
+              onDeleteUpload={onDeleteUpload}/>
             {!techItems.length && <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>
               Ni timelapse ni capture des couches pour cette impression.</p>}
           </>}
