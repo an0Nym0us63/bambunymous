@@ -36,7 +36,7 @@ function Dot({ a, size = 26 }) {
   const cols = parseColorsList(a.color, a.colors_array);
   return (
     <div style={{ ...box, boxShadow:"0 1px 3px rgba(0,0,0,0.18)" }}>
-      <div style={{ position:"absolute", inset:0, ...colorBg(cols, a.multicolor_type, finishOf(a)) }}/>
+      <div style={{ position:"absolute", inset:0, ...colorBg(cols, a.multicolor_type, finishOf(a), { size: 140 }) }}/>
       {/* le liseré PAR-DESSUS la couleur : sinon un filament blanc disparait sur le fond clair */}
       <div style={{ position:"absolute", inset:0, borderRadius:"inherit", pointerEvents:"none", boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.25)" }}/>
     </div>

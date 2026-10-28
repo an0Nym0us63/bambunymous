@@ -185,7 +185,7 @@ export default function PriceReview({ onClose }) {
                 style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
                   cursor: nSp ? "pointer" : "default" }}>
                 <span style={{ width:30, height:30, borderRadius:"50%", flexShrink:0, boxShadow:"inset 0 0 0 1px rgba(148,163,184,.5)",
-                  ...colorBg(colors, f.multicolor_type, finishOf(f)) }}/>
+                  ...colorBg(colors, f.multicolor_type, finishOf(f), { size: 30 }) }}/>
                 <div style={{ flex:1, minWidth:0 }}>
                   <p style={{ margin:0, fontSize:13.5, fontWeight:800, color:"var(--text)",
                     overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>

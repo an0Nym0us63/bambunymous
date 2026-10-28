@@ -414,7 +414,7 @@ function HumZoom({ list, col, o, lo, hi }) {
             <div style={{ height: "100%", width: `${Math.min(100, a.humidity)}%`, background: c }}/></div>
           {trays.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {trays.map(t => <span key={t.id} title={t.filament_type} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: "var(--text2)" }}>
-              <span style={{ width: 14, height: 14, borderRadius: 5, ...trayBg(t), border: "1px solid rgba(0,0,0,0.2)" }}/>{t.filament_type}</span>)}</div>}
+              <span style={{ width: 14, height: 14, borderRadius: 5, ...trayBg(t, null, 14), border: "1px solid rgba(0,0,0,0.2)" }}/>{t.filament_type}</span>)}</div>}
         </div>; })}
     </div>
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -476,7 +476,7 @@ function SpoolDot({ color, colors = null, multicolor = null, finish = null, pct,
           strokeWidth={sw} strokeDasharray={C} strokeDashoffset={C * (1 - v)}/>
       </svg>
       <span style={{ position: "absolute", inset: sw + 3, borderRadius: "50%", border: "1px solid rgba(0,0,0,0.15)", overflow: "hidden",
-        ...colorBg(parseColorsList(color, colors), multicolor, finish) }}/>
+        ...colorBg(parseColorsList(color, colors), multicolor, finish, { size: 140 }) }}/>
     </span>
   );
 }
@@ -1477,7 +1477,7 @@ function FilamentStock() {
       background: `linear-gradient(135deg, ${hexCss(f.color)}22, transparent 55%), var(--surface2)`,
       border: `1px solid ${f.st === "ok" ? "var(--border)" : `${c}55`}` }}>
       <span style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, border: "1px solid rgba(0,0,0,0.15)", overflow: "hidden",
-        ...colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type, finishOf(f)) }}/>
+        ...colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type, finishOf(f), { size: 38 }) }}/>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
           <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
@@ -1567,7 +1567,7 @@ function FilamentStock() {
                 {gr.items.length} filament{gr.items.length > 1 ? "s" : ""} · {n} bobine{n > 1 ? "s" : ""} · {fmtG(g)}</span>
               {/* les couleurs du groupe, en petites pastilles */}
               <span style={{ display: "inline-flex", gap: 2, flexWrap: "wrap" }}>{gr.items.slice(0, 14).map(f => <span key={f.id} style={{ width: 10, height: 10, borderRadius: "50%",
-                border: "1px solid rgba(0,0,0,0.2)", ...colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type) }}/>)}</span></span>
+                border: "1px solid rgba(0,0,0,0.2)", ...colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type, null, { size: 10 }) }}/>)}</span></span>
           </span>
         </button>}
         {!closed && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))", gap: 8 }}>{gr.items.map(row)}</div>}
@@ -3523,7 +3523,7 @@ function Spool({ status, o, sz }) {
           return <FactCards groups={[
             { t: "Le filament", i: "🎨", c: color, rows: [
               { l: "Couleur Bambu", v: si.color_code ? `n° ${si.color_code}` : null, d: si.name_en && si.name_en !== name ? si.name_en : null,
-                pre: <span style={{ width: 14, height: 14, borderRadius: 4, ...(trayBg(t) || { background: color }), border: "1px solid rgba(0,0,0,0.2)" }}/> },
+                pre: <span style={{ width: 14, height: 14, borderRadius: 4, ...(trayBg(t, null, 14) || { background: color }), border: "1px solid rgba(0,0,0,0.2)" }}/> },
               { l: "Échantillon", v: si.swatch == null ? null : si.swatch ? "fait" : "à faire", vc: si.swatch === false ? "#d97706" : "#16a34a" },
               { l: "Stock de ce filament", v: si.filament_stock_g != null ? fmtG(si.filament_stock_g) : null, d: si.to_order ? "à commander" : null } ] },
             { t: "Le budget", i: "💶", c: "#16a34a", rows: [
@@ -3721,7 +3721,7 @@ export function SwitchArt({ m, W, H }) {
             {x.slot.color && trayBg(x.slot.tr)
               // la case de la bobine : meme rendu que partout (couleur, transparence, finition)
               ? <foreignObject x="16" y={y + 27} width="14" height="14"><div style={{ width: 14, height: 14, boxSizing: "border-box", borderRadius: 4,
-                  border: "1px solid color-mix(in srgb, var(--muted) 60%, transparent)", ...trayBg(x.slot.tr) }}/></foreignObject>
+                  border: "1px solid color-mix(in srgb, var(--muted) 60%, transparent)", ...trayBg(x.slot.tr, null, 14) }}/></foreignObject>
               : <rect x="16" y={y + 27} width="14" height="14" rx="4" fill={x.slot.color || "transparent"} stroke="var(--muted)" strokeOpacity="0.6"
                 strokeDasharray={x.slot.color ? "none" : "2 2"}/>}
             <text x="35" y={y + 39} fontSize="12" fontWeight="800" fill="var(--text)">{cut(`${x.slot.label}${x.slot.type ? ` · ${x.slot.type}` : ""}`, 13)}</text></>
@@ -3807,7 +3807,7 @@ function FilaSwitch({ status, o, sz }) {
             {x.units.length ? x.units.map(a => <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text)", width: 50 }}>{amsLab(a)}</span>
               <span style={{ display: "inline-flex", gap: 4 }}>{(a.trays || []).map(t => <span key={t.id} title={t.filament_type}
-                style={{ width: 18, height: 18, borderRadius: 6, ...(trayBg(t) || { background: "transparent" }),
+                style={{ width: 18, height: 18, borderRadius: 6, ...(trayBg(t, null, 18) || { background: "transparent" }),
                   border: trayCol(t) ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)",
                   boxShadow: a.id === status.active_ams_id && t.id === status.active_tray_id ? `0 0 0 2px var(--surface), 0 0 0 4px ${m.hl}` : "none" }}/>)}</span>
               {a.humidity > 0 && <Muted size={11.5} style={{ marginLeft: "auto" }}>💧 {a.humidity} %</Muted>}</div>)
@@ -3963,7 +3963,7 @@ function HeadSide({ s, label, big = false }) {
       <span style={{ fontSize: big ? 22 : 16, fontWeight: 900, color: s.n.temp > 40 ? hot : "var(--text)", lineHeight: 1.05 }}>{Math.round(s.n.temp)}°</span>
       {s.n.target > 0 && <span style={{ fontSize: big ? 11.5 : 10, fontWeight: 800, color: "var(--muted)" }}>/{Math.round(s.n.target)}°</span>}</div>
     <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
-      <span style={{ width: big ? 13 : 10, height: big ? 13 : 10, borderRadius: 4, flexShrink: 0, ...(trayBg(s.tr) || { background: s.color || "transparent" }),
+      <span style={{ width: big ? 13 : 10, height: big ? 13 : 10, borderRadius: 4, flexShrink: 0, ...(trayBg(s.tr, null, big ? 13 : 10) || { background: s.color || "transparent" }),
         border: s.color ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)" }}/>
       <span style={{ fontSize: big ? 12 : 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {s.slot ? [s.slot, big ? (s.name || s.type) : s.type].filter(Boolean).join(" · ") : "aucun filament"}</span></div>
@@ -3988,7 +3988,7 @@ function Toolhead({ status, sz }) {
         const lines = <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: fs * 0.45 }}>
           {[["G", m.L], ["D", m.R]].map(([k, s]) => s && <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: fs, fontWeight: 800, minWidth: 0 }}>
             <span style={{ width: fs * 0.9, flexShrink: 0, color: s.printing ? "#16a34a" : "var(--muted)" }}>{k}</span>
-            <span style={{ width: sq, height: sq, borderRadius: 3, flexShrink: 0, ...(trayBg(s.tr) || { background: s.color || "transparent" }), border: s.color ? "1px solid rgba(0,0,0,0.2)" : "1.5px dashed var(--text2)" }}/>
+            <span style={{ width: sq, height: sq, borderRadius: 3, flexShrink: 0, ...(trayBg(s.tr, null, sq) || { background: s.color || "transparent" }), border: s.color ? "1px solid rgba(0,0,0,0.2)" : "1.5px dashed var(--text2)" }}/>
             <span style={{ width: fs * 2.7, flexShrink: 0, color: s.n.temp > 40 ? heat(s.n.temp) : "var(--text)" }}>{Math.round(s.n.temp)}°</span>
             {/* le filament : son nom, et dessous l'etat, l'emplacement, la matiere et la marque */}
             {(W >= 230 || (H >= 150 && W >= 140)) && <span style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
@@ -4024,7 +4024,7 @@ const lum = c => { const h = String(c || "").replace("#", ""); if (h.length < 6)
 function TraySwatch({ t, s, on, label = true }) {
   const c = trayCol(t), left = trayLeft(t), ink = lum(c) > 160 ? "rgba(15,23,42,0.75)" : "rgba(255,255,255,0.92)";
   return <span data-pk="" data-tip={trayTip(t)} style={{ position: "relative", width: s, height: s, flexShrink: 0, borderRadius: Math.round(s / 3.4), display: "block",
-    ...trayBg(t, left != null && s >= 22 ? `linear-gradient(to bottom, rgba(0,0,0,0.16) ${(1 - left) * 100}%, transparent ${(1 - left) * 100}%)` : null),
+    ...trayBg(t, left != null && s >= 22 ? `linear-gradient(to bottom, rgba(0,0,0,0.16) ${(1 - left) * 100}%, transparent ${(1 - left) * 100}%)` : null, s),
     border: "1px solid rgba(0,0,0,0.15)", boxShadow: on ? "0 0 0 2.5px var(--surface), 0 0 0 4.5px #3b82f6, 0 4px 14px rgba(59,130,246,0.45)" : "0 2px 6px rgba(0,0,0,0.12)",
     animation: on ? "bn-ring 2s ease-out infinite" : "none" }}>
     {label && s >= 30 && <span style={{ position: "absolute", left: 0, right: 0, bottom: Math.max(2, s * 0.06), textAlign: "center", fontSize: Math.max(9, Math.min(12, s * 0.22)),
@@ -4047,7 +4047,7 @@ function Colors({ status, o, sz }) {
   return (
     <Tile icon={<Palette size={15}/>} color="#EC4899" label="Couleurs chargées" zoom={<ColorsZoom units={units} on={on} mats={mats} cur={cur}/>}
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 3 }}>{trays.slice(0, 18).map(t => <span key={`${t.ams.id}-${t.id}`} data-tip={trayTip(t)}
-        style={{ width: 13, height: 13, borderRadius: 4, ...trayBg(t), border: "1px solid rgba(0,0,0,0.2)", outline: on(t) ? "2px solid #3b82f6" : "none", outlineOffset: 1 }}/>)}</span>}>
+        style={{ width: 13, height: 13, borderRadius: 4, ...trayBg(t, null, 13), border: "1px solid rgba(0,0,0,0.2)", outline: on(t) ? "2px solid #3b82f6" : "none", outlineOffset: 1 }}/>)}</span>}>
       {({ W, H }) => {
         const hh = H >= 120 ? 32 : 0;
         const room = H - hh;

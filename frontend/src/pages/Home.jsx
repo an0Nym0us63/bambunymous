@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
-import { trayBg, parseColorsList, finishOf, colorBg, bgWithTop } from "../utils/colors";
+import { trayBg, parseColorsList, finishOf, colorBg, bgWithTop, isDark } from "../utils/colors";
 import { stageLabel, stageIsPause } from "../utils/printStage";
 import { createPortal } from "react-dom";
 import { usePrinter } from "../store/printer";
@@ -585,7 +585,7 @@ function NozzleArt({ color, h = 54, dim = false, heat = null, finish = null }) {
     <defs>
       <linearGradient id={`nzm${id}`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#a3b1c2"/><stop offset=".35" stopColor="#e2e8f0"/><stop offset="1" stopColor="#8494a8"/></linearGradient>
       <linearGradient id={`nzb${id}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" style={{ stopColor: `color-mix(in srgb, ${c} 60%, #ffffff)` }}/><stop offset="1" stopColor={c}/></linearGradient>
-      {finish && !dim && <FinishDefs f={finish} id={`nzf${id}`}/>}
+      {finish && !dim && <FinishDefs f={finish} id={`nzf${id}`} size={w} units={26} dark={isDark(c)}/>}
       <linearGradient id={`nzt${id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" style={{ stopColor: dim ? "#cbd5e1" : tipA }}/><stop offset="1" style={{ stopColor: dim ? "#94a3b8" : tipB }}/></linearGradient>
     </defs>
     <ellipse cx="13" cy="50.5" rx="7" ry="1.6" fill="#0f172a" opacity=".12"/>
@@ -716,7 +716,7 @@ function VortekTile({ st, fitH = null, low = false }) {
         const light = c && (parseInt(c.slice(1, 3), 16) * 0.299 + parseInt(c.slice(3, 5), 16) * 0.587 + parseInt(c.slice(5, 7), 16) * 0.114) > 170;
         return <span key={num} style={{ height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900,
           color: c ? (light ? "#0f172a" : "#fff") : "var(--muted)",
-          ...(c ? colorBg([c], null, src.fila_finish) : { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0 2px, transparent 2px 6px)" }),
+          ...(c ? colorBg([c], null, src.fila_finish, { size: 26 }) : { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0 2px, transparent 2px 6px)" }),
           border: c ? "1px solid rgba(0,0,0,0.18)" : "1px dashed rgba(148,163,184,0.6)", outline: head ? "2px solid #3b82f6" : "none", outlineOffset: 1.5 }}>{num}</span>; })}
     </div></div>;
   const H = fitH ?? 260;
@@ -762,8 +762,8 @@ function HubSwatch({ t, active, h, radius = 6 }) {
   return (
     <span title={posee ? `posée pour le séchage : ${posee.translated_name || posee.name}` : t?.empty ? "vide" : [t?.filament_type, r != null ? `${Math.round(r * 100)} %` : null].filter(Boolean).join(" · ")}
       style={{ position: "relative", display: "block", height: h, minWidth: 0, borderRadius: radius,
-        ...(c ? trayBg(t, r != null && h >= 18 ? `linear-gradient(to bottom, rgba(0,0,0,0.30) ${(1 - r) * 100}%, transparent ${(1 - r) * 100}%)` : null)
-          : posee ? { ...bgWithTop(colorBg(parseColorsList(posee.color, posee.colors_array), posee.multicolor_type, finishOf(posee)),
+        ...(c ? trayBg(t, r != null && h >= 18 ? `linear-gradient(to bottom, rgba(0,0,0,0.30) ${(1 - r) * 100}%, transparent ${(1 - r) * 100}%)` : null, h)
+          : posee ? { ...bgWithTop(colorBg(parseColorsList(posee.color, posee.colors_array), posee.multicolor_type, finishOf(posee), { size: h }),
               "repeating-linear-gradient(-45deg, rgba(255,255,255,0.45) 0 2px, transparent 2px 6px)"), opacity: 0.8 }
           : { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0 2px, transparent 2px 6px)" }),
         border: c ? "1px solid rgba(0,0,0,0.18)" : "1px dashed rgba(148,163,184,0.6)",
@@ -954,7 +954,7 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
       <span style={{ flex: 1, minWidth: 0, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden" }}>
         {actT ? <><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#3b82f6", animation: "livePulse 2s infinite" }}/>
           <span style={{ color: "#3b82f6" }}>{slotLabel(act, actTray)}</span>
-          <span style={{ width: 11, height: 11, borderRadius: 4, ...(trayBg(actT) || { background: "var(--border)" }), border: "1px solid rgba(0,0,0,0.2)" }}/>
+          <span style={{ width: 11, height: 11, borderRadius: 4, ...(trayBg(actT, null, 11) || { background: "var(--border)" }), border: "1px solid rgba(0,0,0,0.2)" }}/>
           <span style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.15, overflow: "hidden" }}>
             <span style={{ color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis" }}>{actT.spool_info?.translated_name || actT.spool_info?.name || actT.filament_type}</span>
             {(actT.spool_info?.fila_type || actT.spool_info?.material || actT.spool_info?.brand) && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)",
@@ -1168,7 +1168,7 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
             color: on ? "#3b82f6" : "var(--text2)" }}>
             {amsName(a.id)}
             <span style={{ display: "inline-flex", gap: 2 }}>{(a.trays || []).map(t => <span key={t.id} style={{ width: 7, height: 7, borderRadius: 2,
-              ...(trayBg(t) || { background: "var(--border)" }) }}/>)}</span>
+              ...(trayBg(t, null, 7) || { background: "var(--border)" }) }}/>)}</span>
             {act && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#3b82f6", animation: "livePulse 2s infinite" }}/>}
           </button>
         );
@@ -1849,7 +1849,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
         {side && status?.connected && (
           <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end", flexShrink: 0 }}>
             {tray && !tray.empty && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>
-              <span style={{ width: 14, height: 14, borderRadius: "50%", ...(trayBg(tray) || { background: "#888888" }),
+              <span style={{ width: 14, height: 14, borderRadius: "50%", ...(trayBg(tray, null, 14) || { background: "#888888" }),
                 boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2)" }}/>{tray.filament_type || "?"}
               <span style={{ color: "var(--muted)", fontWeight: 700 }}>{slotLabel(status.active_ams_id, status.active_tray_id)}</span></span>}
             {temps(12, 10)}
@@ -2225,7 +2225,7 @@ export default function Home() {
     if (!trays.length) return null;
     return <span style={{ display: "inline-flex", gap: 3 }}>{trays.slice(0, 16).map((t, i) => <span key={i} data-pk="" title={t.empty ? "vide" : t.filament_type || ""}
       style={{ width: 14, height: 14, borderRadius: "50%", border: "1px solid rgba(0,0,0,0.2)",
-        ...(trayBg(t) || { background: "var(--surface2)" }) }}/>)}</span>;
+        ...(trayBg(t, null, 14) || { background: "var(--surface2)" }) }}/>)}</span>;
   };
   // les blocs de l'accueil, tuiles de la grille comme les autres (l'imprimante ne se masque pas)
   const blocks = {

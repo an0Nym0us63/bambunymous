@@ -135,10 +135,10 @@ function ColorPill({ tray, spoolInfo, active, h = 28 }) {
   // Toutes ses couleurs (bobine multicolore comprise) ; les hachures viennent
   // par-dessus, en calque (HatchOverlay).
   const bg = posee
-    ? { ...colorBg(parseColors({}, posee), multicolorType({}, posee), finishOf(posee)), opacity: 0.85 }
+    ? { ...colorBg(parseColors({}, posee), multicolorType({}, posee), finishOf(posee), { size: 60 }), opacity: 0.85 }
     : isEmpty
     ? { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.18) 0px, rgba(148,163,184,0.18) 2px, transparent 2px, transparent 6px)" }
-    : colorBg(colors, multicolorType(tray, spoolInfo), finishOf(spoolInfo, tray));
+    : colorBg(colors, multicolorType(tray, spoolInfo), finishOf(spoolInfo, tray), { size: 60 });
   const lum = luminance((c1||"").replace("#",""));
   const ringColor = active ? "#3b82f6" : isEmpty ? "rgba(148,163,184,0.2)" : lum > 200 ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.1)";
   return (

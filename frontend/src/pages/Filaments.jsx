@@ -75,7 +75,7 @@ function FinishPicker({ value, auto, colors, style, lStyle, onChange }) {
           options={[{ value:"none", label: auto ? "Aucune" : "Aucune · d'après le nom" },
             ...FINISHES.map(([k, l]) => ({ value:k, label: k === auto ? `${l} · d'après le nom` : l }))]}/></div>
       <span style={{ width:34, height:34, flexShrink:0, borderRadius:9, border:"1px solid var(--border)", overflow:"hidden",
-        ...colorBg(colors?.length ? colors : ["#9CA3AF"], null, value === "none" ? null : value) }}/>
+        ...colorBg(colors?.length ? colors : ["#9CA3AF"], null, value === "none" ? null : value, { size: 34 }) }}/>
     </div>
   </div>;
 }
@@ -85,7 +85,7 @@ function ColorSwatch({ color, colorsArray, multicolorType, finish = null, size=4
   return (
     <div style={{ width:size, height:size, borderRadius:radius, flexShrink:0,
       overflow:"hidden", boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.12)",
-      ...colorBg(colors, multicolorType, finish) }}/>
+      ...colorBg(colors, multicolorType, finish, { size: size }) }}/>
   );
 }
 
@@ -1776,7 +1776,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
                   <div style={{ display:"flex", gap:4, marginTop:6, alignItems:"center" }}>
                     {liveColors.map((c,i) => (
                       <div key={i} style={{ width:24, height:24, borderRadius:5,
-                        overflow:"hidden", border:"1px solid var(--border)", ...colorBg([c]) }}/>
+                        overflow:"hidden", border:"1px solid var(--border)", ...colorBg([c], null, null, { size: 24 }) }}/>
                     ))}
                     {liveColors.length === 1
                       ? <span style={{ fontSize:10, color:"var(--muted)", marginLeft:4 }}>Monochrome</span>
@@ -1888,7 +1888,7 @@ function FilamentCard({ f, onClick, extra = null, menu, onLong }) {
       style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative", borderRadius:18, minHeight:96,
         boxShadow:`0 10px 22px -14px ${hexToCss(f.color) || "#000"}`, border: pale ? "1px solid rgba(0,0,0,0.18)" : "1px solid transparent" }}>
       {/* fond couleur (damier de transparence géré par colorBg), un reflet en haut */}
-      <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type, finishOf(f)) }}/>
+      <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type, finishOf(f), { size: 140 }) }}/>
       <div style={{ position:"absolute", inset:0, background:"linear-gradient(160deg, rgba(255,255,255,0.22), transparent 45%, rgba(0,0,0,0.25))" }}/>
       {f.to_order && <span data-tip="À commander" style={{ ...glass, position:"absolute", top:7, right:7, background:"rgba(249,115,22,0.85)" }}>🛒</span>}
       <div style={{ position:"relative", padding:"10px 11px 32px", display:"flex", flexDirection:"column", gap:0 }}>
@@ -2495,7 +2495,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
                     <div style={{ display:"flex", gap:5, marginTop:8, alignItems:"center" }}>
                       {liveColors.map((c,i) => (
                         <div key={i} style={{ width:28, height:28, borderRadius:8,
-                          overflow:"hidden", boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.25)", ...colorBg([c]) }}/>
+                          overflow:"hidden", boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.25)", ...colorBg([c], null, null, { size: 28 }) }}/>
                       ))}
                       {liveColors.length === 1
                         ? <span style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", marginLeft:4 }}>Monochrome</span>
@@ -2620,7 +2620,7 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
         }}
         renderCover={f => {
           const colors = parseColorsList(f.color, f.colors_array);
-          return <div style={{ width:"100%", height:"100%", ...colorBg(colors, f.multicolor_type, finishOf(f)) }}/>;
+          return <div style={{ width:"100%", height:"100%", ...colorBg(colors, f.multicolor_type, finishOf(f), { size: 140 }) }}/>;
         }}
         compareFields={[
           ["Matière",  f => f.material],

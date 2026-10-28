@@ -99,7 +99,7 @@ function ColorDot({ hex, colors, multicolor, finish = null, size = 14, ring = "d
       ...style }}>
       {/* la couleur avec sa transparence (damier) et sa finition (silk, paillettes…) */}
       <div style={{ position:"absolute", inset:0,
-        ...colorBg(parseColorsList(hex, colors), multicolor, finish) }}/>
+        ...colorBg(parseColorsList(hex, colors), multicolor, finish, { size: 40 }) }}/>
     </div>
   );
 }

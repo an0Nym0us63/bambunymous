@@ -359,7 +359,7 @@ export function PlateColors({ items, plate, scope, canEdit, onNavigate }) {
   const dots = (
     <span style={{ display:"flex", gap:3, flexWrap:"wrap", alignItems:"center" }}>
       {rows.map((r, k) => <span key={k} title={`${r.f.type || ""} ${r.f.g ? `${r.f.g} g` : ""}${r.c ? ` → ${r.c.name}` : ""}`}
-        style={{ width:12, height:12, borderRadius:"50%", boxSizing:"border-box", ...(r.c ? colorBg(parseColorsList(r.c.color, r.c.colors_array), r.c.multicolor_type, finishOf(r.c)) : { background: r.f.color || "#888" }),
+        style={{ width:12, height:12, borderRadius:"50%", boxSizing:"border-box", ...(r.c ? colorBg(parseColorsList(r.c.color, r.c.colors_array), r.c.multicolor_type, finishOf(r.c), { size: 12 }) : { background: r.f.color || "#888" }),
           border: r.own ? "2px solid #3b82f6" : "1px solid rgba(255,255,255,0.3)" }}/>)}
       {canEdit && items?.length > 0 && <span style={{ fontSize:9.5, color:"#3b82f6", fontWeight:700, marginLeft:2 }}>🎨</span>}
     </span>
@@ -563,7 +563,7 @@ function RefBadge({ mt }) {
 }
 
 function Swatch({ color, f, size = 16, title }) {
-  const bg = f ? colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type, finishOf(f)) : { background: color || "#888" };
+  const bg = f ? colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type, finishOf(f), { size: 140 }) : { background: color || "#888" };
   return <span title={title} style={{ width:size, height:size, borderRadius:"50%", flexShrink:0, ...bg,
     border:"1px solid rgba(128,128,128,0.45)" }}/>;
 }

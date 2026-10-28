@@ -41,7 +41,7 @@ function Dot({ hex, colors, multicolor, finish = null, size = 12 }) {
     <div style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0,
       position: "relative", overflow: "hidden",
       boxShadow: "inset 0 0 0 1px rgba(128,128,128,0.35)" }}>
-      <div style={{ position: "absolute", inset: 0, ...(hex || colors ? colorBg(parseColorsList(hex, colors), multicolor, finish) : { background: bg }) }}/>
+      <div style={{ position: "absolute", inset: 0, ...(hex || colors ? colorBg(parseColorsList(hex, colors), multicolor, finish, { size: 140 }) : { background: bg }) }}/>
     </div>
   );
 }

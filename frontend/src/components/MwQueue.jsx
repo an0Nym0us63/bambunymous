@@ -466,7 +466,7 @@ export default function MwQueue() {
                     {r.filaments.map((f, i) => (
                       <span key={i} data-tip={`${f.type} ${Math.round(f.g)} g → ${f.chosen ? f.chosen.name + (f.chosen.in_ams ? " (AMS)" : "") : "rien en stock"}`}
                         style={{ width:16, height:16, borderRadius:"50%", flexShrink:0,
-                          ...(f.chosen ? colorBg(parseColorsList(f.chosen.color, f.chosen.colors_array), f.chosen.multicolor_type, finishOf(f.chosen)) : { background:f.color }),
+                          ...(f.chosen ? colorBg(parseColorsList(f.chosen.color, f.chosen.colors_array), f.chosen.multicolor_type, finishOf(f.chosen), { size: 16 }) : { background:f.color }),
                           border: !f.chosen ? "2px solid #ef4444" : f.chosen.enough_ams ? "2px solid #22c55e"
                             : f.chosen.enough_stock ? "2px solid #f59e0b" : "2px solid #ef4444" }}/>
                     ))}
@@ -608,7 +608,7 @@ function CollectionsPicker({ chosen, onClose, onSaved }) {
 const hexOf = f => { const c = parseColorsList(f.color, f.colors_array)?.[0]; return /^#[0-9a-f]{6}$/i.test(c || "") ? c : "#94A3B8"; };
 function Swatch({ f, size = 18 }) {
   return <span style={{ width:size, height:size, borderRadius:"50%", flexShrink:0, border:"1px solid rgba(128,128,128,0.45)",
-    boxShadow:`0 4px 10px -4px ${hexOf(f)}`, ...colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type, finishOf(f)) }}/>;
+    boxShadow:`0 4px 10px -4px ${hexOf(f)}`, ...colorBg(parseColorsList(f.color, f.colors_array), f.multicolor_type, finishOf(f), { size: size }) }}/>;
 }
 
 const msg = { fontSize:13, color:"var(--muted)", padding:"20px 4px", margin:0, lineHeight:1.5 };

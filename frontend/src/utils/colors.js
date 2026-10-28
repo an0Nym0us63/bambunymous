@@ -1,4 +1,4 @@
-import { finishImage } from "./finishTex";
+import { finishImage, tierOf, TIER_PX } from "./finishTex";
 /**
  * Rendu des couleurs de filament — source unique.
  *
@@ -108,9 +108,10 @@ export function autoFinishOf(...objs) {
 }
 
 // Les couches d'une finition, posees PAR-DESSUS la couleur : [image, taille, position]. « bar » : la version
-// legere, pour les barres de niveau (le niveau reste lisible).
+// legere, pour les barres de niveau (le niveau reste lisible). tier : le palier du motif selon la taille de la zone.
 const FULL = ["100% 100%", "0 0"];
-function finishLayers(f, bar) {
+function finishLayers(f, bar, tier = "md", dark = false) {
+  const px = `${TIER_PX[tier] || 64}px ${TIER_PX[tier] || 64}px`;
   switch (f) {
     case "silk": return bar
       ? [["linear-gradient(115deg,rgba(255,255,255,0) 22%,rgba(255,255,255,.4) 45%,rgba(255,255,255,0) 62%)", ...FULL]]
@@ -122,13 +123,13 @@ function finishLayers(f, bar) {
     // paillettes, galaxie, marbre, bois, carbone : le meme dessin que la vue 3D et les bobines (utils/finishTex),
     // au hasard -- une grille de points reguliere faisait un motif de tissu, pas du marbre
     case "sparkle": case "marble": case "wood": case "carbon": {
-      const img = finishImage(f);
-      return img ? [[`url(${img})`, bar ? "64px 64px" : "96px 96px", "0 0"]] : [];
+      const img = finishImage(f, tier, dark);
+      return img ? [[`url(${img})`, px, "0 0"]] : [];
     }
     case "galaxy": {
-      const img = finishImage(f);
+      const img = finishImage(f, tier);
       return img ? [...(bar ? [] : [["linear-gradient(125deg,rgba(255,255,255,0) 25%,rgba(200,190,255,.16) 45%,rgba(255,255,255,0) 65%)", ...FULL]]),
-        [`url(${img})`, bar ? "64px 64px" : "96px 96px", "0 0"]] : [];
+        [`url(${img})`, px, "0 0"]] : [];
     }
     case "glow": return bar
       ? [["linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.45),rgba(255,255,255,0))", ...FULL]]
@@ -140,23 +141,24 @@ function finishLayers(f, bar) {
 
 /**
  * Style de fond d'un filament : aplat, dégradé (gradient) ou tranches (coaxial). finish (finishOf) : sa finition,
- * posee par-dessus ; opts.bar : la version legere des barres de niveau.
+ * posee par-dessus ; opts.bar : la version legere des barres de niveau ; opts.size : la taille de la zone en px
+ * (le motif en est plus ou moins dense : une pastille, une case, une carte). Sans taille : moyen.
  */
 export function colorBg(colors, type, finish = null, opts = {}) {
   if (!colors?.length) return { backgroundColor: "var(--border)" };
-  const over = finish ? finishLayers(finish, !!opts.bar) : [];
+  const over = finish ? finishLayers(finish, !!opts.bar, opts.size != null ? tierOf(opts.size) : opts.bar ? "sm" : "md", isDark(colors[0])) : [];
   if (over.length) return _withFinish(colors, type, over, finish, opts);
   return _colorBg(colors, type);
 }
 
 // Le fond d'un emplacement d'AMS (la bobine associee d'abord, puis ce que dit l'AMS) : couleurs, transparence,
 // finition. `top` : une couche posee par-dessus (l'assombri de ce qui est consomme). null si vide ou sans couleur.
-export function trayBg(t, top = null) {
+export function trayBg(t, top = null, size = null) {
   if (!t || t.empty) return null;
   const si = t.spool_info || {};
   const colors = parseColorsList(si.color || si.filament_color || t.color, si.colors_array || t.colors_array);
   if (!colors.length) return null;
-  const st = colorBg(colors, si.multicolor_type || t.multicolor_type, finishOf(si, t));
+  const st = colorBg(colors, si.multicolor_type || t.multicolor_type, finishOf(si, t), size != null ? { size } : {});
   return top ? bgWithTop(st, top) : st;
 }
 
@@ -231,6 +233,14 @@ function _colorBg(colors, type) {
  * un remplissage translucide sur damier ne laisse plus voir le niveau ; on veut
  * la couleur pleine, sans damier.
  */
+// une couleur foncee ? (luminance percue sous 95 sur 255) : les motifs prennent leur variante claire
+export function isDark(c) {
+  const h = String(opaqueColors([c])[0] || "").replace(/^#/, "");
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return false;
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 < 95;
+}
+
 export function opaqueColors(colors) {
   return (colors || []).map((c) => {
     const s = String(c);
