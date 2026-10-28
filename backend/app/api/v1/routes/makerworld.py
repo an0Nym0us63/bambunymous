@@ -681,7 +681,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
     used_options, chosen = [], {}
     if used and source in ("3mf", "3mf_other") and key:
         try:
-            ids = [int(x) for x in used.split(",") if x.strip().isdigit()][:60]
+            ids = await _with_group(scope, [int(x) for x in used.split(",") if x.strip().isdigit()][:60], did)
             # les correspondances choisies a la main pour cette impression ou ce groupe (28/10/2026)
             chosen = await _color_choices(scope)
             used_options = await _used_options(ids)
@@ -904,7 +904,10 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
     h6 = lambda c: str(c or "").lstrip("#")[:6].upper()
     async with AsyncSessionLocal() as db:
         prints = (await db.execute(select(Print.id, Print.mw_profile_id, Print.mw_plates, Print.model_3mf, Print.plate_id)
-                                   .where(Print.id.in_(print_ids)).order_by(Print.id.desc()))).all()
+                                   .where(Print.id.in_(print_ids)))).all()
+        # dans l'ordre donne (l'impression de la fiche d'abord, puis les autres du groupe, les plus recentes en premier)
+        rank = {pid: k for k, pid in enumerate(print_ids)}
+        prints.sort(key=lambda r: rank.get(r[0], 10 ** 9))
         rows = (await db.execute(
             select(FU.print_id, FU.ams_slot, FU.color_hex, Filament.color, FU.grams_used, FU.filament_type,
                    Filament.fila_type, Filament.name, Filament.fila_finish)
@@ -1080,6 +1083,28 @@ async def _save_color_choice(scope: str, origin: str, choice: dict | None) -> di
     return d
 
 
+async def _with_group(scope: str, ids: list, did: str) -> list:
+    """Pour une impression d'un groupe (28/10/2026) : elle d'abord, puis les autres impressions du groupe sur ce
+    modele, les plus recentes en premier -- depuis sa fiche, la vue 3D montre tous les plateaux, et ce que les autres
+    impressions du groupe ont utilise vaut pour elle. Sinon, les ids tels quels."""
+    if not (scope or "").startswith("print:") or not ids:
+        return ids
+    from sqlalchemy import select
+    from ....db.session import AsyncSessionLocal
+    from ....models.print_history import Print
+    try:
+        pid = int(scope[6:])
+    except ValueError:
+        return ids
+    async with AsyncSessionLocal() as db:
+        gid = (await db.execute(select(Print.group_id).where(Print.id == pid))).scalar()
+        if not gid:
+            return ids
+        others = (await db.execute(select(Print.id).where(Print.group_id == gid, Print.design_id == str(did), Print.id != pid)
+                                   .order_by(Print.id.desc()).limit(60))).scalars().all()
+    return [pid] + [x for x in ids if x != pid and x not in others] + list(others)
+
+
 async def _used_options(print_ids: list) -> list:
     """Les filaments de ces impressions, a choisir : [{print, print_name, slot, color, name, finish, grams}]."""
     from sqlalchemy import select
@@ -1150,7 +1175,7 @@ async def mw_model_3d_colors(design_id: str, profile: str = "", print_id: int = 
     src = path_of(iid) if iid else None
     if not src or not src.is_file():
         return {"colors": [], "detail": [], "options": [], "chosen": {}, "scope": None}
-    ids = [int(x) for x in used.split(",") if x.strip().isdigit()][:60]
+    ids = await _with_group(scope, [int(x) for x in used.split(",") if x.strip().isdigit()][:60], did)
     chosen = await _color_choices(scope)
     detail: list = []
     try:
