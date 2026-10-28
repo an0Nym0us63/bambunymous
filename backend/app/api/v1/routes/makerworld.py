@@ -858,6 +858,15 @@ def _match_filaments(o_cols: list, used: dict, sliced: dict, sl_colors: list, em
             g_of[near[0][1]] = g
     o_rem = [(e, o_cols[e - 1], g_of.get(e)) for e in range(1, len(o_cols) + 1) if e not in assigned and len(o_cols[e - 1]) == 6]
     u_rem = [(es, sl.get(es) or c, grams.get(es)) for es, c in used.items() if es not in taken and len(sl.get(es) or c) == 6]
+    # les poids a l'echelle de l'impression (28/10/2026) : un modele reduit ou retranche autrement pese une fraction
+    # du plateau du createur, et toutes les couleurs etaient refusees ; on compare les proportions, pas les grammes
+    go, gu = [g for _e, _c, g in o_rem if g], [g for _e, _c, g in u_rem if g]
+    if go and gu:
+        r = (sum(gu) / sum(go)) if len(o_rem) == len(u_rem) else (max(gu) / max(go))
+        if 0.2 <= r <= 5:
+            o_rem = [(e, c, g * r if g else None) for e, c, g in o_rem]
+        else:
+            o_rem = [(e, c, None) for e, c, _g in o_rem]       # des poids sans rapport : la couleur seule decide
     for e, es in _assign(o_rem, u_rem):
         assigned[e] = (es, "couleur et poids")
     # 4) par elimination (28/10/2026) : s'il ne reste qu'un filament du createur (sur les plateaux de l'impression,
