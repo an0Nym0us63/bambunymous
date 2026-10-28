@@ -25,7 +25,8 @@ export function ColorPairs({ detail = [], options = [], chosen = {}, scope = nul
     openMenu(e, { title: `Couleur n°${x.e} du créateur : quelle bobine l'a remplacée ?`, items: [
       ...items, items.length ? "-" : null,
       { icon: "🚫", label: "Aucune", hint: "Cette couleur n'a pas été imprimée", onClick: () => onChoose(x.from, { none: true }) },
-      chosen?.[x.from] ? { icon: "✨", label: "Automatique", hint: "Revenir à la déduction de l'appli", onClick: () => onChoose(x.from, { auto: true }) } : null,
+      chosen?.[x.from] && !chosen[x.from].group ? { icon: "✨", label: "Automatique", hint: "Revenir à la déduction de l'appli", onClick: () => onChoose(x.from, { auto: true }) } : null,
+      chosen?.[x.from]?.group ? { icon: "👥", label: "Comme le groupe", hint: "Ce choix vient du groupe : retirer celui de cette impression", disabled: true } : null,
     ] });
   };
   return <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
@@ -33,13 +34,13 @@ export function ColorPairs({ detail = [], options = [], chosen = {}, scope = nul
     {detail.map(x => {
       const tip = (x.to ? `Filament n°${x.e} du projet → n°${x.es} de l'impression (${HOW[x.how] || "par son numéro"})`
         : `Filament n°${x.e} : ${x.how === "choisi" ? "aucune, choisi à la main" : "aucune de ces impressions ne l'a utilisé"}`)
-        + (scope ? " · touche pour choisir" : "");
+        + (x.group ? " · choix fait sur le groupe" : "") + (scope ? " · touche pour choisir" : "");
       const hand = x.how === "choisi";
       return <span key={`${x.from}-${x.e}`} data-tip={tip} onClick={e => { e.stopPropagation(); pick(e, x); }} role={scope ? "button" : undefined}
         style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 7px", borderRadius: 12, cursor: scope ? "pointer" : "default",
           background: hand ? "color-mix(in srgb, #0EA5E9 14%, var(--surface2))" : "var(--surface2)",
           border: hand ? "1px solid color-mix(in srgb, #0EA5E9 45%, transparent)" : "1px solid transparent" }}>
-        <Sw c={x.from}/><span>→</span><Sw c={x.to}/>{hand && <span style={{ fontSize: 10 }}>✋</span>}</span>;
+        <Sw c={x.from}/><span>→</span><Sw c={x.to}/>{hand && <span style={{ fontSize: 10 }}>{x.group ? "👥" : "✋"}</span>}</span>;
     })}
   </div>;
 }

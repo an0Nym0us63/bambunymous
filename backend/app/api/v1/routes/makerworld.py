@@ -990,9 +990,10 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
         if a not in o_cols or not isinstance(ch, dict):
             continue
         e = o_cols.index(a) + 1
+        grp = {"group": ch["group"]} if ch.get("group") else {}
         if ch.get("none"):
             out.pop(a, None)
-            detail = [d for d in detail if d["from"] != a] + [{"from": a, "to": None, "e": e, "how": "choisi"}]
+            detail = [d for d in detail if d["from"] != a] + [{"from": a, "to": None, "e": e, "how": "choisi", **grp}]
             continue
         try:
             cp, es = int(ch.get("print")), int(ch.get("slot"))
@@ -1002,7 +1003,7 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
         if b:
             out[a] = b
             detail = [d for d in detail if d["from"] != a] + [{"from": a, "to": b, "e": e, "es": es, "how": "choisi", "print": cp,
-                                                               "finish": (fin_by.get(cp) or {}).get(es)}]
+                                                               "finish": (fin_by.get(cp) or {}).get(es), **grp}]
     if detail_out is not None:
         detail_out.extend(detail)
         detail_out.extend({"from": h6(c), "to": None, "e": k + 1} for k, c in enumerate(colors)
@@ -1019,18 +1020,29 @@ _SCOPE = _re_scope.compile(r"(print|group):\d{1,9}")
 
 
 async def _color_choices(scope: str) -> dict:
+    """Les choix de cette portee. Pour une impression, ceux de son groupe valent aussi (marques "group": id), sauf
+    la ou l'impression a le sien (28/10/2026)."""
     import json as _json
     if not _SCOPE.fullmatch(scope or ""):
         return {}
+    from sqlalchemy import select
     from ....db.session import AsyncSessionLocal
+    from ....models.print_history import Print
     from ....services.settings_service import get_setting
+
+    def load(raw):
+        try:
+            d = _json.loads(raw) if raw else {}
+            return d if isinstance(d, dict) else {}
+        except ValueError:
+            return {}
     async with AsyncSessionLocal() as db:
-        raw = await get_setting(db, f"MW_COLORS:{scope}", "")
-    try:
-        d = _json.loads(raw) if raw else {}
-        return d if isinstance(d, dict) else {}
-    except ValueError:
-        return {}
+        own = load(await get_setting(db, f"MW_COLORS:{scope}", ""))
+        if not scope.startswith("print:"):
+            return own
+        gid = (await db.execute(select(Print.group_id).where(Print.id == int(scope[6:])))).scalar()
+        grp = load(await get_setting(db, f"MW_COLORS:group:{gid}", "")) if gid else {}
+    return {**{a: {**ch, "group": gid} for a, ch in grp.items() if isinstance(ch, dict)}, **own}
 
 
 async def _save_color_choice(scope: str, origin: str, choice: dict | None) -> dict:
@@ -1038,7 +1050,7 @@ async def _save_color_choice(scope: str, origin: str, choice: dict | None) -> di
     import json as _json
     from ....db.session import AsyncSessionLocal
     from ....services.settings_service import set_setting
-    d = await _color_choices(scope)
+    d = {k: v for k, v in (await _color_choices(scope)).items() if not (isinstance(v, dict) and v.get("group"))}
     a = str(origin or "").lstrip("#")[:6].upper()
     if choice is None:
         d.pop(a, None)
