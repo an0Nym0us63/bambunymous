@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import CardHelp from "./CardHelp";
+import SwitchCard from "./SwitchCard";
 import client from "../api/client";
 import { showAlert } from "../utils/dialog";
 
@@ -48,26 +48,18 @@ export default function MailOrdersSettings({ card, cardTitle }) {
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setBusy(false);
   };
-  const sw = (on, flip) => <button type="button" onClick={flip} role="switch" aria-checked={on}
-    style={{ width:46, height:26, borderRadius:20, border:"none", cursor:"pointer", position:"relative", flexShrink:0,
-      background: on ? "#3b82f6" : "var(--border)", transition:"background .2s" }}>
-    <span style={{ position:"absolute", top:3, left: on ? 23 : 3, width:20, height:20, borderRadius:"50%", background:"#fff",
-      transition:"left .2s", boxShadow:"0 1px 3px rgba(0,0,0,0.3)" }}/></button>;
   if (!s) return <div className="card" style={card}><div style={cardTitle}>📬 Commandes Bambu Lab (mail)</div>
     <p style={{ fontSize:12.5, color:"var(--muted)", margin:0 }}>Chargement…</p></div>;
   const last = s.last;
   return (
-    <div className="card" style={card}>
-      <div style={cardTitle}>📬 Commandes Bambu Lab (mail)</div>
-      <CardHelp title="Commandes Bambu Lab">
-        La boutique n'a pas d'API : l'appli lit ta boîte mail et repère les mails de la boutique (commande confirmée,
+    <SwitchCard card={card} cardTitle={cardTitle} title="📬 Commandes Bambu Lab (mail)" on={s.enabled} onToggle={() => save({ enabled: !s.enabled })}
+      hint={s.enabled ? `toutes les ${s.every_h} h` : "relevé auto coupé"} helpTitle="Commandes Bambu Lab"
+      help={<>La boutique n'a pas d'API : l'appli lit ta boîte mail et repère les mails de la boutique (commande confirmée,
         expédiée, livrée). Les bobines commandées apparaissent en <b>à venir</b> dans la page Filaments et dans les alertes,
-        et s'effacent quand la bobine arrive (ajoutée ou scannée). Pour Gmail : active la validation en deux étapes, puis
-        crée un <b>mot de passe d'application</b> (Compte Google → Sécurité) ; ce n'est jamais le mot de passe du compte.
-      </CardHelp>
+        et s'effacent quand la bobine arrive (ajoutée ou scannée). L'interrupteur du titre active le relevé automatique.
+        Pour Gmail : active la validation en deux étapes, puis crée un <b>mot de passe d'application</b> (Compte Google → Sécurité) ;
+        ce n'est jamais le mot de passe du compte.</>}>
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, fontSize:13.5, color:"var(--text2)" }}>
-          <span>Relever les mails automatiquement (toutes les {s.every_h} h)</span>{sw(s.enabled, () => save({ enabled: !s.enabled }))}</div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))", gap:8 }}>
           <div><span style={lbl}>Serveur IMAP</span><input value={f.host} onChange={set("host")} placeholder="imap.gmail.com" style={inp}/></div>
           <div><span style={lbl}>Port</span><input value={f.port} onChange={set("port")} inputMode="numeric" style={inp}/></div>
@@ -106,6 +98,6 @@ export default function MailOrdersSettings({ card, cardTitle }) {
             : <>{last.mails} mail{last.mails > 1 ? "s" : ""} lu{last.mails > 1 ? "s" : ""}, {last.created} commande{last.created > 1 ? "s" : ""} nouvelle{last.created > 1 ? "s" : ""}, {last.updated} mise{last.updated > 1 ? "s" : ""} à jour{last.ignored ? `, ${last.ignored} mail${last.ignored > 1 ? "s" : ""} sans commande` : ""}{last.errors?.length ? ` · ${last.errors.length} erreur(s)` : ""}</>}
         </div>}
       </div>
-    </div>
+    </SwitchCard>
   );
 }

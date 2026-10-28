@@ -17,6 +17,7 @@ import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY,
 import AdminOnly from "../components/AdminOnly";
 import TelegramSettings from "../components/TelegramSettings";
 import MailOrdersSettings from "../components/MailOrdersSettings";
+import SwitchCard from "../components/SwitchCard";
 import DryRulesCard from "../components/DryRulesCard";
 import SpoolTaresCard from "../components/SpoolTaresCard";
 import MakerWorldSettings from "../components/MakerWorldSettings";
@@ -143,13 +144,13 @@ function ArchiveSection() {
   const box = { padding:"8px 12px", borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)", fontSize:12, color:"var(--text2)", lineHeight:1.5 };
   const b = s?.last_backup, p = s?.last_purge, ok = s?.check?.ok;
   return (
-    <div className="card" style={card}>
-      <p style={cardTitle}>Sauvegarde et NAS</p>
-      <CardHelp title="Sauvegarde et NAS">
-        Copie dans le dossier du NAS monté sur le conteneur : « Impressions », avec « Groupes » (un dossier par groupe : sa fiche, ses photos,
+    <SwitchCard card={card} cardTitle={cardTitle} title="Sauvegarde et NAS" on={!!s?.nightly} onToggle={s ? () => put({ nightly: !s.nightly }) : null}
+      hint={s ? (s.nightly ? `chaque nuit à ${s.hour} h` : "pas de sauvegarde automatique") : null}
+      help={<>Copie dans le dossier du NAS monté sur le conteneur : « Impressions », avec « Groupes » (un dossier par groupe : sa fiche, ses photos,
         ses impressions) et « Impressions seules », rangées par modèle puis par date (3MF, Photos, Vidéos, Timelapse, Couches, avec une fiche) ;
         et « Système », la base (14 dernières copies), les photos des filaments, objets, accessoires, 3MF MakerWorld et catalogue Bambu.
-        Seul le nouveau est copié ; ce qui change de place ou de nom est déplacé, ce qui est supprimé dans l'appli part dans « _Supprimés ».</CardHelp>
+        Seul le nouveau est copié ; ce qui change de place ou de nom est déplacé, ce qui est supprimé dans l'appli part dans « _Supprimés ».
+        L'interrupteur du titre active la sauvegarde de chaque nuit.</>}>
       {err && <p style={{ color:"#ef4444", fontSize:12.5 }}>{err}</p>}
       {s && <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         <div style={{ ...box, borderColor: ok ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)" }}>
@@ -191,7 +192,7 @@ function ArchiveSection() {
             : <>{p.files} fichier{p.files > 1 ? "s" : ""} retiré{p.files > 1 ? "s" : ""} ({go(p.bytes)}){p.m_files ? `, ${p.m_files} fichier${p.m_files > 1 ? "s" : ""} de modèle (${go(p.m_bytes || 0)})` : ""}{p.kept_not_archived ? `, ${p.kept_not_archived} gardé${p.kept_not_archived > 1 ? "s" : ""} (pas encore sur le NAS)` : ""}</>}</div>}
         </div>
       </div>}
-    </div>
+    </SwitchCard>
   );
 }
 
@@ -2244,6 +2245,7 @@ export default function Settings() {
       {tab === "accounts" && (<div className="wide-flow">
       <MyAccountSection/>
       <TwoFactorCard/>
+      <AdminOnly><MailOrdersSettings card={card} cardTitle={cardTitle}/></AdminOnly>
       <UsersSection/>
       <AdminOnly><AchievementUsersSection/></AdminOnly>
       <ActivitySection/>
@@ -2284,7 +2286,6 @@ export default function Settings() {
       {tab === "share" && (
       <AdminOnly><div className="wide-flow">
         <TelegramSettings card={card} cardTitle={cardTitle}/>
-        <MailOrdersSettings card={card} cardTitle={cardTitle}/>
       </div></AdminOnly>
       )}
 
