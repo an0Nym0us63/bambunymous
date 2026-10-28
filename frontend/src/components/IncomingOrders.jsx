@@ -152,7 +152,10 @@ export default function IncomingOrders() {
             <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:12.5 }}>
               <span role="button" tabIndex={0} onClick={() => setSheet(o.id)} style={{ fontWeight:800, cursor:"pointer", textDecoration:"underline dotted" }}>Commande {o.order_no}</span>
               {o.to_confirm > 0 && <span style={{ padding:"1px 8px", borderRadius:12, fontSize:11, fontWeight:800, color:"#fff", background:"#f59e0b" }}>à confirmer</span>}
-              <span style={{ padding:"1px 8px", borderRadius:12, fontSize:11, fontWeight:800, color:"#fff", background:sc }}>{sl}{o.status === "shipped" && o.shipped_at ? ` le ${day(o.shipped_at)}` : o.ordered_at ? ` le ${day(o.ordered_at)}` : ""}</span>
+              {(() => { const fil = o.items.filter(i => i.kind === "filament"); const tot = fil.reduce((n, i) => n + (i.qty || 0), 0);
+                const sent = fil.reduce((n, i) => n + Math.min(i.qty || 0, i.shipped || 0), 0); const partial = o.status === "shipped" && tot && sent < tot;
+                return <span style={{ padding:"1px 8px", borderRadius:12, fontSize:11, fontWeight:800, color:"#fff", background:sc }}>
+                  {partial ? `envoi partiel · ${sent}/${tot} en route` : sl}{o.status === "shipped" && o.shipped_at ? ` · ${day(o.shipped_at)}` : o.ordered_at ? ` le ${day(o.ordered_at)}` : ""}</span>; })()}
               <Steps stage={o.stage}/>
               {o.tracking_url && <a href={o.tracking_url} target="_blank" rel="noreferrer" style={{ fontSize:11.5, fontWeight:700, color:"#0EA5E9" }}>suivi {o.carrier || ""} ↗</a>}
               <span style={{ flex:1 }}/>

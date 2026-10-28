@@ -486,8 +486,11 @@ async def order_mail(oid: int, kind: str, sent: list | None = None):
              "assumed": f"📬 Commande {no} : à confirmer"}.get(kind, f"📬 Commande {no}")
     lines = []
     if kind == "shipped" and sent:
+        # un envoi est souvent partiel (28/10/2026) : la notification ne cite que ses articles, et dit combien il en reste
+        total_n = sum(int(i.get("qty") or 1) for i in items if i.get("kind") == "filament")
         items = [i for i in items if (i.get("title") in sent) or (i.get("name_fr") and any(i["name_fr"] in t for t in sent))] or items
-        title = f"🚚 Commande {no} : un envoi en route"
+        n = sum(int(i.get("qty") or 1) for i in items if i.get("kind") == "filament")
+        title = f"🚚 Commande {no} : un envoi en route" + (f" ({n} sur {total_n})" if total_n and n < total_n else "")
     if kind == "assumed":
         # une vieille commande lue apres coup : ce que les bobines ajoutees expliquent, et ce qui est presume recu
         n_auto = sum(int(i.get("auto") or 0) for i in items)
