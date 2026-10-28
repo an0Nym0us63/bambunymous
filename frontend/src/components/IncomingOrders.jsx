@@ -45,7 +45,7 @@ function LinePrice({ it, cur, size = 11.5 }) {
   if (it.kind !== "filament" || it.price == null) return null;
   if (it.gift || it.price === 0) return <span style={{ fontSize:size, fontWeight:800, color:"#22c55e" }}>🎁 offerte{it.list_price ? ` · ${eur(it.list_price / Math.max(1, it.qty || 1), cur)} valeur` : ""}</span>;
   const b = it.base_unit, p = it.paid_unit;
-  return <span data-tip={`Prix de base (la fiche filament) : ${eur(b, cur)} la bobine${p != null && p !== b ? ` · payée ${eur(p, cur)} une fois la remise de fin de commande répartie (la bobine)` : ""}`}
+  return <span data-tip={`Prix de base (la fiche filament) : ${eur(b, cur)} la bobine, le prix barré du catalogue quand le mail le montre${p != null && p !== b ? ` · payée ${eur(p, cur)} (la bobine) : le prix remisé de la ligne, moins sa part de la remise de fin de commande` : ""}`}
     style={{ fontSize:size, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap" }}>
     {eur(b, cur)}{p != null && p !== b ? <> → <b style={{ color:"var(--text)" }}>{eur(p, cur)}</b></> : null}{(it.qty || 1) > 1 ? " /u" : ""}</span>;
 }
@@ -109,7 +109,7 @@ export function OrderSheet({ id, order: given = null, onClose, onChanged }) {
           {o.ordered_at && <span>Commandée le {dayY(o.ordered_at)}</span>}
           {o.shipped_at && <span>Expédiée le {dayY(o.shipped_at)}{o.carrier ? ` · ${o.carrier}` : ""}{o.tracking_url && <> · <a href={o.tracking_url} target="_blank" rel="noreferrer" style={{ color:"#0EA5E9", fontWeight:700 }}>suivi ↗</a></>}</span>}
           {o.delivered_at && <span>Livrée le {dayY(o.delivered_at)}</span>}
-          {o.totals?.total != null && <span data-tip="Lu dans le mail de confirmation. La remise de fin de commande (abonnement, points…) est répartie au prorata sur le prix payé de chaque bobine ; la fiche filament garde le prix de base de la ligne.">
+          {o.totals?.total != null && <span data-tip="Lu dans le mail de confirmation. La remise de fin de commande (abonnement, points…) est partagée à parts égales entre les bobines pour leur prix payé ; la fiche filament garde le prix de base (le prix barré du catalogue).">
             💶 {o.totals.subtotal != null && o.totals.subtotal !== o.totals.total ? <>sous-total {eur(o.totals.subtotal, o.totals.currency)}{o.totals.discount ? ` · remise ${eur(o.totals.discount, o.totals.currency)}` : ""}{o.totals.shipping ? ` · envoi ${eur(o.totals.shipping, o.totals.currency)}` : ""} · </> : null}
             <b style={{ color:"var(--text)" }}>total {eur(o.totals.total, o.totals.currency)}</b></span>}
           {(o.shipments || []).map((sh, i) => <span key={i}>📦 Envoi du {dayY(sh.at)}{sh.carrier ? ` · ${sh.carrier}` : ""}{sh.tracking ? ` · ${sh.tracking}` : ""}

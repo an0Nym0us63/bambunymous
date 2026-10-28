@@ -324,32 +324,40 @@ def totals(text: str) -> dict:
     return t
 
 
-def paid_ratio(tot: dict | None) -> float:
-    """Ce que coute en vrai un euro du sous-total, une fois les remises de fin de commande (et frais) comptees :
-    total / sous-total. 1 quand on ne sait pas."""
-    if not tot or not tot.get("subtotal") or tot.get("total") is None:
-        return 1.0
+def extra_per_unit(tot: dict | None, items: list[dict]) -> float:
+    """La remise (ou les frais) de fin de commande, partagee a parts egales entre les bobines payantes de la
+    commande : (total - sous-total) / nombre de bobines. 0 quand on ne sait pas."""
+    if not tot or tot.get("subtotal") is None or tot.get("total") is None:
+        return 0.0
+    n = sum(int(i.get("qty") or 0) for i in items if i.get("kind", "filament") == "filament" and (i.get("price") or 0) > 0)
+    if n <= 0:
+        return 0.0
     try:
-        r = float(tot["total"]) / float(tot["subtotal"])
-    except (TypeError, ZeroDivisionError, ValueError):
-        return 1.0
-    return r if 0 < r < 5 else 1.0
+        return (float(tot["total"]) - float(tot["subtotal"])) / n
+    except (TypeError, ValueError):
+        return 0.0
 
 
-def paid_unit(it: dict, tot: dict | None) -> float | None:
-    """Le prix paye d'une bobine de cette ligne : le prix de ligne par unite, a la part de remise de fin pres."""
+def paid_unit(it: dict, tot: dict | None, items: list[dict] | None = None) -> float | None:
+    """Le prix paye d'une bobine de cette ligne : le prix remise de la ligne par unite, moins sa part (a parts
+    egales) de la remise de fin de commande. Un cadeau reste a 0."""
     if it.get("price") is None:
         return None
     q = max(1, int(it.get("qty") or 1))
-    return round(float(it["price"]) / q * paid_ratio(tot), 2)
+    unit = float(it["price"]) / q
+    if unit <= 0:
+        return 0.0
+    return round(max(0.0, unit + extra_per_unit(tot, items if items is not None else [it])), 2)
 
 
 def base_unit(it: dict) -> float | None:
-    """Le prix « de base » d'une bobine (la fiche filament) : le prix de ligne par unite ; pour un cadeau, le prix
-    barre s'il y en a un, sinon rien."""
+    """Le prix « de base » d'une bobine (la fiche filament) : le prix barre du catalogue quand le mail le montre,
+    sinon le prix de la ligne, par unite ; un cadeau sans prix barre ne donne rien."""
     q = max(1, int(it.get("qty") or 1))
+    if it.get("list_price"):
+        return round(float(it["list_price"]) / q, 2)
     if it.get("gift") or not it.get("price"):
-        return round(float(it["list_price"]) / q, 2) if it.get("list_price") else None
+        return None
     return round(float(it["price"]) / q, 2)
 
 
@@ -706,7 +714,7 @@ async def _apply(m: dict, notify: bool = True) -> str:
                 o.totals_json = json.dumps(tot)
             if touched:
                 # les bobines « en commande » deja creees pour ces lignes, et leur fiche sans prix, prennent les prix lus
-                await _price_ordered(db, touched, json.loads(o.totals_json) if o.totals_json else tot)
+                await _price_ordered(db, touched, json.loads(o.totals_json) if o.totals_json else tot, cur)
             rank = {"confirmed": 0, "shipped": 1, "delivered": 2, "cancelled": 3}
             if rank.get(kind, 0) >= rank.get(o.status, 0):
                 o.status = kind
@@ -802,7 +810,7 @@ def _views(rows) -> list[dict]:
         items = [_item_view(i) for i in json.loads(o.items_json or "[]")]
         for i in items:
             if i.get("kind") == "filament":
-                i["paid_unit"], i["base_unit"] = paid_unit(i, tot), base_unit(i)
+                i["paid_unit"], i["base_unit"] = paid_unit(i, tot, items), base_unit(i)
         stage = "cancelled" if o.status == "cancelled" else "delivered" if (o.status == "delivered" or o.done) else \
             "shipping" if o.status == "shipped" else "ordered"
         out.append({"id": o.id, "order_no": o.order_no, "store": o.store, "status": o.status, "stage": stage, "ordered_at": o.ordered_at,
@@ -918,7 +926,7 @@ async def create_spools(order_id: int, index: int | None = None) -> dict | None:
             n_f += int(created)
             # les prix lus dans le mail (28/10/2026) : la fiche filament prend le prix de base si elle n'en a pas,
             # la bobine le prix paye (remise de fin de commande repartie au prorata)
-            base, paid = base_unit(it), paid_unit(it, tot)
+            base, paid = base_unit(it), paid_unit(it, tot, items)
             if base is not None and base > 0 and (created or not f.price):
                 f.price = base
             it["filament_id"] = f.id
@@ -938,12 +946,12 @@ async def create_spools(order_id: int, index: int | None = None) -> dict | None:
     return {"order": await one(order_id), "created_filaments": n_f, "created_spools": n_s}
 
 
-async def _price_ordered(db, items: list[dict], tot: dict | None) -> None:
+async def _price_ordered(db, items: list[dict], tot: dict | None, all_items: list[dict]) -> None:
     """Les prix d'une commande relue (28/10/2026) poses apres coup : sur ses bobines encore « en commande » (le prix
     paye) et sur leur fiche filament si elle n'a pas de prix (le prix de base)."""
     from ..models.filament import Filament, Spool
     for it in items:
-        base, paid = base_unit(it), paid_unit(it, tot)
+        base, paid = base_unit(it), paid_unit(it, tot, all_items)
         for sid in it.get("spools") or []:
             sp = await db.get(Spool, int(sid))
             if sp and sp.ordered and sp.price_override is None and paid is not None:
