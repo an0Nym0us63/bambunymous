@@ -99,6 +99,14 @@ def _purged_count(rel_dir: str) -> int:
         return 0
 
 
+def _purged_count_model(did) -> int:
+    try:
+        from ....services.archive import purged_count_model
+        return purged_count_model(did)
+    except Exception:
+        return 0
+
+
 def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict] = None) -> dict:
     d = {col.name: getattr(p, col.name) for col in p.__table__.columns}
     d["filament_usage"] = [_usage_to_dict(u) for u in (p.filament_usage or [])]
@@ -109,7 +117,7 @@ def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict]
     ]
     d["tags"] = [t.tag for t in (p.tags or [])]
     # ce qui n'est plus que sur le NAS (vide du local par une purge) : la fiche le signale
-    d["nas_only"] = _purged_count(f"prints/{p.id}")
+    d["nas_only"] = _purged_count(f"prints/{p.id}") + _purged_count_model(p.design_id)
     d["group_name"] = p.group.name if p.group else None
     d["group_cover_print_id"] = p.group.cover_print_id if p.group else None
     d["group_number_of_items"] = p.group.number_of_items if p.group else 1
@@ -671,18 +679,26 @@ def _group_dir(group_id: int) -> Optional[Path]:
 async def group_nas(group_id: int, _: str = Depends(get_current_user)):
     """Ce qui, pour les impressions d'un groupe, n'est plus que sur le NAS : par impression, avec le libelle de
     chaque fichier et si le NAS repond."""
-    from ....services.archive import nas_only
+    from ....services.archive import nas_only, nas_only_model
     async with AsyncSessionLocal() as db:
-        rows = (await db.execute(select(Print.id, Print.translated_name, Print.file_name, Print.print_date)
+        rows = (await db.execute(select(Print.id, Print.translated_name, Print.file_name, Print.print_date, Print.design_id)
                                  .where(Print.group_id == group_id).order_by(Print.print_date))).all()
-    out, total, present = [], 0, 0
-    for pid, tr, fn, pd in rows:
+    out, models, total, present = [], [], 0, 0
+    seen = set()
+    for pid, tr, fn, pd, did in rows:
         files = nas_only(f"prints/{pid}")
         if files:
             out.append({"id": pid, "name": tr or fn or f"Impression {pid}", "print_date": pd.isoformat() if pd else None, "files": files})
             total += len(files)
             present += sum(1 for f in files if f["present"])
-    return {"prints": out, "total": total, "reachable": present > 0 if total else None}
+        if did and str(did) not in seen:                   # les fichiers du modele, une fois par modele du groupe
+            seen.add(str(did))
+            mf = nas_only_model(did)
+            if mf:
+                models.append({"design_id": str(did), "files": mf})
+                total += len(mf)
+                present += sum(1 for f in mf if f["present"])
+    return {"prints": out, "models": models, "total": total, "reachable": present > 0 if total else None}
 
 
 @router.get("/groups/{group_id}/photos")
@@ -1802,9 +1818,13 @@ async def set_print_cover_photo(print_id: int, filename: str,
 @router.get("/{print_id}/nas")
 async def print_nas(print_id: int, _: str = Depends(get_current_user)):
     """Ce qui, pour cette impression, n'est plus que sur le NAS (vide du local par une purge), et si le NAS repond."""
-    from ....services.archive import nas_only
+    from ....services.archive import nas_only, nas_only_model
     files = nas_only(f"prints/{print_id}")
-    return {"files": files, "total": len(files), "reachable": any(f["present"] for f in files) if files else None}
+    async with AsyncSessionLocal() as db:
+        did = (await db.execute(select(Print.design_id).where(Print.id == print_id))).scalar()
+    model = nas_only_model(did) if did else []
+    alls = files + model
+    return {"files": files, "model": model, "total": len(alls), "reachable": any(f["present"] for f in alls) if alls else None}
 
 
 @router.get("/{print_id}/photos")

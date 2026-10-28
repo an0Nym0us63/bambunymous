@@ -43,8 +43,25 @@ def _dir() -> Path:
     return d()
 
 
-def path_of(iid: str) -> Path:
+def local_path_of(iid: str) -> Path:
+    """Ou le 3MF d'origine d'une instance se range en local (telechargement)."""
     return _dir() / f"{iid}.3mf"
+
+
+def path_of(iid: str) -> Path:
+    """Le 3MF d'origine d'une instance : en local, sinon sa copie sur le NAS (vide du local par une purge,
+    28/10/2026) ; sans aucun des deux, le chemin local (absent)."""
+    p = local_path_of(iid)
+    if p.is_file():
+        return p
+    try:
+        from .archive import archived_path
+        q = archived_path(f"lib:{iid}")
+        if q is not None:
+            return q
+    except Exception:
+        pass
+    return p
 
 
 _IDX = {"mt": None, "v": {}, "at": 0.0}
@@ -184,9 +201,10 @@ async def fetch(iid: str) -> Path:
     """Telecharge le 3MF d'une instance s'il n'est pas deja la. Leve mw_3mf.ExactError."""
     from .mw_3mf import ExactError, _download, parse_project, cached
     from .makerworld_account import token
-    dest = path_of(iid)
+    dest = path_of(iid)                           # en local ou sur le NAS : rien a telecharger
     if dest.is_file():
         return dest
+    dest = local_path_of(iid)                     # a telecharger : en local, jamais sur le NAS
     with _LOCK:
         if iid in _BUSY:
             raise ExactError("Déjà en cours de récupération")

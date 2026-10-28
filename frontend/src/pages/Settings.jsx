@@ -122,7 +122,11 @@ function ArchiveSection() {
   }, [s?.running]); // eslint-disable-line react-hooks/exhaustive-deps
   const put = async body => { try { const { data } = await client.put("/settings/archive", body); setS(data); } catch (e) { showAlert(e.response?.data?.detail || e.message); } };
   const run = async (what, body) => {
-    try { await client.post(`/settings/archive/${what}`, body || {}); setTimeout(load, 400); }
+    try {
+      const { data } = await client.post(`/settings/archive/${what}`, body || {});
+      if (what === "purge" && data?.m_files > 0) egg("grand_menage");
+      setTimeout(load, 400);
+    }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
   const go = (n) => n >= 1073741824 ? `${(n / 1073741824).toFixed(1).replace(".", ",")} Go` : n >= 1048576 ? `${(n / 1048576).toFixed(1).replace(".", ",")} Mo` : `${Math.round((n || 0) / 1024)} Ko`;
@@ -169,7 +173,9 @@ function ArchiveSection() {
           <span style={{ fontSize:13, fontWeight:800, color:"var(--text2)", display:"flex", alignItems:"center" }}>🧹 Vider le local
             <CardHelp inline title="Vider le local">
               Retire de l'appli les vidéos, timelapses, 3MF et captures des couches des impressions plus anciennes que
-              le délai, <b>seulement s'ils sont déjà sur le NAS</b>. Ils restent visibles : l'appli les relit sur le NAS.</CardHelp></span>
+              le délai, et les vues 3D, 3MF d'origine et documents des modèles dont la dernière impression est plus ancienne
+              que le délai, <b>seulement s'ils sont déjà sur le NAS</b>. Les photos restent toujours. Ce qui est retiré reste
+              visible : l'appli le relit sur le NAS.</CardHelp></span>
           <div style={row}><span>Plus anciennes que</span>
             <select value={s.purge_days} onChange={e => put({ purge_days: Number(e.target.value) })} style={{ padding:"4px 8px", borderRadius:8,
               border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)" }}>
@@ -181,7 +187,7 @@ function ArchiveSection() {
             {s.running === "purge" ? <RefreshCw size={14} style={{ animation:"spin 1s linear infinite" }}/> : "🧹"}
             {s.running === "purge" ? `Vidage… ${s.progress?.what || ""}` : "Vider le local maintenant"}</button>
           {p && <div style={box}>Dernier vidage ({p.trigger}) : {when(p.at)} · {p.error ? <b style={{ color:"#ef4444" }}>{p.error}</b>
-            : <>{p.files} fichier{p.files > 1 ? "s" : ""} retiré{p.files > 1 ? "s" : ""} ({go(p.bytes)}){p.kept_not_archived ? `, ${p.kept_not_archived} gardé${p.kept_not_archived > 1 ? "s" : ""} (pas encore sur le NAS)` : ""}</>}</div>}
+            : <>{p.files} fichier{p.files > 1 ? "s" : ""} retiré{p.files > 1 ? "s" : ""} ({go(p.bytes)}){p.m_files ? `, ${p.m_files} fichier${p.m_files > 1 ? "s" : ""} de modèle (${go(p.m_bytes || 0)})` : ""}{p.kept_not_archived ? `, ${p.kept_not_archived} gardé${p.kept_not_archived > 1 ? "s" : ""} (pas encore sur le NAS)` : ""}</>}</div>}
         </div>
       </div>}
     </div>

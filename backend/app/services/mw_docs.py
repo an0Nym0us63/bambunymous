@@ -41,12 +41,23 @@ def local_path(did, doc: dict) -> Path:
     return _root() / str(did) / f"{doc_id(doc['url'])}-{_safe(doc.get('name'))}"
 
 
-def kept(did, doc: dict) -> bool:
+def kept_path(did, doc: dict):
+    """Le document garde : en local, sinon sa copie sur le NAS (vide du local par une purge, 28/10/2026)."""
     try:
         p = local_path(did, doc)
-        return p.is_file() and p.stat().st_size > 0
+        if p.is_file() and p.stat().st_size > 0:
+            return p
     except OSError:
-        return False
+        pass
+    try:
+        from .archive import archived_path
+        return archived_path(f"doc:{did}:{doc_id(doc['url'])}")
+    except Exception:
+        return None
+
+
+def kept(did, doc: dict) -> bool:
+    return kept_path(did, doc) is not None
 
 
 def view(did, docs: list) -> list:
@@ -316,5 +327,5 @@ async def find(did: str, docid: str):
         m = await db.get(MW, str(did))
     for d in (extras_of(m.extras).get("docs") or []) if m is not None else []:
         if isinstance(d, dict) and d.get("url") and doc_id(d["url"]) == docid:
-            return d, (local_path(did, d) if kept(did, d) else None)
+            return d, kept_path(did, d)
     return None, None

@@ -283,6 +283,75 @@ def purged_count(rel_dir: str) -> int:
     return len(_purged_by_dir().get(rel_dir.rstrip("/"), ()))
 
 
+def archived_path(key: str) -> Path | None:
+    """La copie sur le NAS d'une entree de l'index (« lib:<instance> », « doc:<modele>:<id> »…), si elle y est."""
+    e = _index().get(key)
+    if not isinstance(e, dict) or not e.get("to"):
+        return None
+    q = Path(e.get("root") or DEFAULT_ROOT) / e["to"]
+    try:
+        return q if q.is_file() else None
+    except OSError:
+        return None
+
+
+# ── Ce qui, pour un MODELE MakerWorld, n'est plus que sur le NAS (28/10/2026) : vue 3D, 3MF d'origine, documents ──
+_MKIND = {"lib": ("📐", "3MF d'origine"), "3d": ("🧊", "Vue 3D"), "doc": ("📄", "Document")}
+
+
+def _iid_to_did() -> dict:
+    """instance -> modele, d'apres l'index des 3MF d'origine (« modele:profil » -> instance)."""
+    try:
+        from .mw_source import _index as _mw_index
+        return {v: k.split(":", 1)[0] for k, v in _mw_index().items() if isinstance(v, str)}
+    except Exception:
+        return {}
+
+
+_PURGED_M = {"ref": None, "n": -1, "by_did": {}}
+
+
+def _purged_by_model() -> dict:
+    idx = _index()
+    if _PURGED_M["ref"] is idx and _PURGED_M["n"] == len(idx):
+        return _PURGED_M["by_did"]
+    inv = _iid_to_did()
+    by: dict = {}
+    for k, e in idx.items():
+        if not isinstance(e, dict) or not e.get("purged"):
+            continue
+        kind, _, rest = k.partition(":")
+        if kind not in _MKIND:
+            continue
+        did = rest.split(":", 1)[0] if kind == "doc" else inv.get(rest)
+        if did:
+            by.setdefault(str(did), []).append((kind, k, e))
+    _PURGED_M.update(ref=idx, n=len(idx), by_did=by)
+    return by
+
+
+def nas_only_model(did) -> list[dict]:
+    """Les fichiers d'un modele (vue 3D, 3MF d'origine, documents) vides du local, avec s'ils repondent sur le NAS."""
+    out = []
+    for kind, key, e in _purged_by_model().get(str(did or ""), ()):
+        if e.get("src") and (DATA_DIR / e["src"]).exists():
+            continue                                  # revenu en local (repris du NAS, retelecharge)
+        q = Path(e.get("root") or DEFAULT_ROOT) / e["to"]
+        try:
+            present = (q / "plates.json").is_file() if kind == "3d" else q.is_file()
+        except OSError:
+            present = False
+        icon, label = _MKIND[kind]
+        name = e["to"].rsplit("/", 1)[-1]
+        out.append({"name": name, "icon": icon, "label": label if kind != "doc" else f"Document · {name}", "kind": kind,
+                    "size": e.get("size"), "at": e.get("at"), "present": present})
+    return out
+
+
+def purged_count_model(did) -> int:
+    return len(_purged_by_model().get(str(did or ""), ())) if did else 0
+
+
 def archived_names(rel_dir: str) -> list[str]:
     """Les fichiers d'un dossier (« prints/12 ») qui ne sont plus qu'en archive (vides du local)."""
     pre = rel_dir.rstrip("/") + "/"
@@ -568,7 +637,9 @@ def _docs_sync(root: Path, idx: dict, mws: dict, rep: dict) -> dict:
                     if _copy(src, root / rel):
                         rep["copied"] += 1
                         rep["bytes"] += src.stat().st_size
-                    idx[key] = {"to": rel, "root": str(root), "size": src.stat().st_size}
+                    idx[key] = {"to": rel, "root": str(root), "size": src.stat().st_size,
+                                "src": src.relative_to(DATA_DIR).as_posix(), "at": (prev or {}).get("at") if isinstance(prev, dict) else None}
+                    idx[key]["at"] = idx[key]["at"] or int(time.time())
                 if (root / rel).is_file():
                     lst.append((d, rel))
             except OSError as e:
@@ -631,7 +702,9 @@ def _3d_sync(root: Path, idx: dict, lib_plan: dict, rep: dict) -> None:
             src = path_of(key)
             idx[f"3d:{key}"] = {"to": dest, "root": str(root),
                                 "src_mt": src.stat().st_mtime if src.is_file() else None,
-                                "meta_mt": meta.stat().st_mtime}
+                                "meta_mt": meta.stat().st_mtime, "src": d.relative_to(DATA_DIR).as_posix(),
+                                "size": sum(f.stat().st_size for f in d.iterdir() if f.is_file() and f.suffix != ".part"),
+                                "at": (prev.get("at") if isinstance(prev, dict) else None) or int(time.time())}
         except OSError as e:
             rep["errors"] += 1
             logger.warning(f"[ARCHIVE] vue 3D {key} : {e}")
@@ -648,7 +721,7 @@ def restore_3d(key: str, out_dir: Path) -> bool:
     try:
         if not (d / "plates.json").is_file():
             return False
-        if src.is_file() and (e.get("src_mt") or 0) < src.stat().st_mtime:
+        if src.is_file() and DATA_DIR in src.parents and (e.get("src_mt") or 0) < src.stat().st_mtime:
             return False                              # le 3MF a change depuis : a reconvertir
         out_dir.mkdir(parents=True, exist_ok=True)
         for f in d.iterdir():
@@ -763,7 +836,9 @@ def _library_sync(root: Path, idx: dict, plan: dict, rep: dict) -> None:
             if _copy(src, root / rel):
                 rep["copied"] += 1
                 rep["bytes"] += src.stat().st_size
-            idx[f"lib:{iid}"] = {"to": rel, "root": str(root), "size": src.stat().st_size}
+            idx[f"lib:{iid}"] = {"to": rel, "root": str(root), "size": src.stat().st_size,
+                                 "src": src.relative_to(DATA_DIR).as_posix(),
+                                 "at": (prev.get("at") if isinstance(prev, dict) else None) or int(time.time())}
         except OSError as e:
             rep["errors"] += 1
             logger.warning(f"[ARCHIVE] 3MF d'origine {iid} : {e}")
@@ -1257,6 +1332,70 @@ def _purge_sync(old_ids: set, prog: dict) -> dict:
     return rep
 
 
+def _nas_ok(e: dict, local: Path) -> bool:
+    """La copie NAS d'un fichier est la, de la meme taille."""
+    try:
+        q = Path(e.get("root") or DEFAULT_ROOT) / e["to"]
+        return q.is_file() and q.stat().st_size == local.stat().st_size
+    except OSError:
+        return False
+
+
+def _purge_models_sync(limit_ts: float, last_print: dict, prog: dict) -> dict:
+    """Vide du local les fichiers de MODELE deja sur le NAS (28/10/2026) : vues 3D, 3MF d'origine, documents.
+    Le critere est la derniere impression du modele (plus ancienne que le delai) ; un modele jamais imprime, ou un
+    fichier sans modele connu, quand sa copie NAS a plus que le delai. L'appli relit ces fichiers sur le NAS (la vue
+    3D les reprend en local a la demande)."""
+    idx = _index()
+    inv = _iid_to_did()
+    rep = {"m_files": 0, "m_bytes": 0, "m_kept": 0}
+    # les entrees deja marquees sont revues aussi : un fichier revenu en local (vue 3D reprise du NAS, 3MF
+    # retelecharge) repart quand il est de nouveau vieux
+    keys = [k for k, e in idx.items() if isinstance(e, dict) and e.get("src") and k.partition(":")[0] in _MKIND]
+    for i, k in enumerate(keys):
+        e = idx[k]
+        kind, _, rest = k.partition(":")
+        prog.update(done=i, total=len(keys), what=f"fichiers de modèle {i + 1} / {len(keys)}")
+        did = rest.split(":", 1)[0] if kind == "doc" else inv.get(rest)
+        lp = last_print.get(str(did)) if did else None
+        if lp is not None:
+            old = lp < limit_ts
+        else:
+            old = bool(e.get("at")) and e["at"] < limit_ts
+        if not old:
+            continue
+        local = DATA_DIR / e["src"]
+        try:
+            if kind == "3d":
+                if not local.is_dir():
+                    continue
+                files = [f for f in local.iterdir() if f.is_file() and f.suffix != ".part"]
+                nas = Path(e.get("root") or DEFAULT_ROOT) / e["to"]
+                ok = bool(files) and all((nas / f.name).is_file() and (nas / f.name).stat().st_size == f.stat().st_size for f in files)
+                if not ok:
+                    rep["m_kept"] += 1
+                    continue
+                n = sum(f.stat().st_size for f in files)
+                shutil.rmtree(local)
+            else:
+                if not local.is_file():
+                    continue
+                if not _nas_ok(e, local):
+                    rep["m_kept"] += 1
+                    continue
+                n = local.stat().st_size
+                local.unlink()
+        except OSError as ex:
+            logger.warning(f"[ARCHIVE] vidage {k} : {ex}")
+            rep["m_kept"] += 1
+            continue
+        e["purged"] = True
+        rep["m_files"] += 1
+        rep["m_bytes"] += n
+    _index_save()
+    return rep
+
+
 async def purge(days: int | None = None, trigger: str = "manuel") -> dict:
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
@@ -1272,11 +1411,17 @@ async def purge(days: int | None = None, trigger: str = "manuel") -> dict:
         return rep
     days = int(days or s["purge_days"] or 30)
     limit = datetime.utcnow() - timedelta(days=days)
+    from sqlalchemy import func as _f
     async with AsyncSessionLocal() as db:
         ids = set((await db.execute(select(Print.id).where(Print.print_date < limit, Print.status != "IN_PROGRESS"))).scalars().all())
+        # la derniere impression de chaque modele (en secondes, pour les fichiers de modele)
+        last_print = {str(d): (dt.replace(tzinfo=None) - datetime(1970, 1, 1)).total_seconds()
+                      for d, dt in (await db.execute(select(Print.design_id, _f.max(Print.print_date))
+                                                     .where(Print.design_id.isnot(None)).group_by(Print.design_id))).all() if d and dt}
     _STATE["running"], _STATE["progress"] = "purge", {"done": 0, "total": len(ids), "what": ""}
     try:
         rep = await asyncio.to_thread(_purge_sync, ids, _STATE["progress"])
+        rep.update(await asyncio.to_thread(_purge_models_sync, (limit - datetime(1970, 1, 1)).total_seconds(), last_print, _STATE["progress"]))
         rep.update(at=datetime.utcnow().isoformat() + "Z", trigger=trigger, days=days, prints=len(ids))
     except Exception as e:
         logger.exception("[ARCHIVE] vidage")
