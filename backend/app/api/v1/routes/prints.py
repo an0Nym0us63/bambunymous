@@ -91,6 +91,14 @@ def _usage_to_dict(u) -> dict:
     return d
 
 
+def _purged_count(rel_dir: str) -> int:
+    try:
+        from ....services.archive import purged_count
+        return purged_count(rel_dir)
+    except Exception:
+        return 0
+
+
 def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict] = None) -> dict:
     d = {col.name: getattr(p, col.name) for col in p.__table__.columns}
     d["filament_usage"] = [_usage_to_dict(u) for u in (p.filament_usage or [])]
@@ -100,6 +108,8 @@ def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict]
         for s in (p.snapshots or [])
     ]
     d["tags"] = [t.tag for t in (p.tags or [])]
+    # ce qui n'est plus que sur le NAS (vide du local par une purge) : la fiche le signale
+    d["nas_only"] = _purged_count(f"prints/{p.id}")
     d["group_name"] = p.group.name if p.group else None
     d["group_cover_print_id"] = p.group.cover_print_id if p.group else None
     d["group_number_of_items"] = p.group.number_of_items if p.group else 1
@@ -655,6 +665,24 @@ def _group_dir(group_id: int) -> Optional[Path]:
     """Dossier photos d'un groupe — rangé sous son id BambuNymous à l'import (cf. zip_importer.py)."""
     d = DATA_DIR / "groups" / str(group_id)
     return d if d.exists() else None
+
+
+@router.get("/groups/{group_id}/nas")
+async def group_nas(group_id: int, _: str = Depends(get_current_user)):
+    """Ce qui, pour les impressions d'un groupe, n'est plus que sur le NAS : par impression, avec le libelle de
+    chaque fichier et si le NAS repond."""
+    from ....services.archive import nas_only
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Print.id, Print.translated_name, Print.file_name, Print.print_date)
+                                 .where(Print.group_id == group_id).order_by(Print.print_date))).all()
+    out, total, present = [], 0, 0
+    for pid, tr, fn, pd in rows:
+        files = nas_only(f"prints/{pid}")
+        if files:
+            out.append({"id": pid, "name": tr or fn or f"Impression {pid}", "print_date": pd.isoformat() if pd else None, "files": files})
+            total += len(files)
+            present += sum(1 for f in files if f["present"])
+    return {"prints": out, "total": total, "reachable": present > 0 if total else None}
 
 
 @router.get("/groups/{group_id}/photos")
@@ -1769,6 +1797,14 @@ async def set_print_cover_photo(print_id: int, filename: str,
         p.cover_photo = filename
         await db.commit()
     return {"ok": True, "cover_photo": filename}
+
+
+@router.get("/{print_id}/nas")
+async def print_nas(print_id: int, _: str = Depends(get_current_user)):
+    """Ce qui, pour cette impression, n'est plus que sur le NAS (vide du local par une purge), et si le NAS repond."""
+    from ....services.archive import nas_only
+    files = nas_only(f"prints/{print_id}")
+    return {"files": files, "total": len(files), "reachable": any(f["present"] for f in files) if files else None}
 
 
 @router.get("/{print_id}/photos")

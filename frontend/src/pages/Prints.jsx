@@ -36,6 +36,7 @@ import GroupMosaic from "../components/GroupMosaic";
 import ObjectCreateSheet from "../components/ObjectCreateSheet";
 import Select from "../components/Select";
 import { useLongPress, openMenu } from "../components/ContextMenu";
+import NasChip from "../components/NasChip";
 import ColorMap from "../components/ColorMap";
 
 // PARTIAL et TO_REDO viennent de Spoolnymous, qui gerait cinq statuts. Les
@@ -1223,6 +1224,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 900,
             color: "#fff", background: `linear-gradient(135deg, ${stC}, color-mix(in srgb, ${stC} 70%, #ffffff))`, boxShadow: `0 4px 14px ${stC}55` }}>{stI} {stL}</span>
+          {!visiting && <NasChip count={p.nas_only} url={`/prints/${p.id}/nas`}/>}
           {groupe && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 6px 2px 9px", borderRadius: 20, fontSize: 11.5, fontWeight: 800,
             color: "#a78bfa", background: "rgba(167,139,250,0.16)" }}>📁 {groupe}
             <AdminOnly><button onClick={handleUngroup} aria-label="Retirer du groupe" data-tip="Retirer du groupe" style={{ background: "none", border: "none",
@@ -1672,6 +1674,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
           <span style={{ display: "inline-flex", alignItems: "center", padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 900, color: "#fff",
             background: "linear-gradient(135deg, #A78BFA, #C4B5FD)", boxShadow: "0 4px 14px #A78BFA55" }}>{prints.length} impression{prints.length > 1 ? "s" : ""}</span>
+          {!groupVisiting && <NasChip count={prints.reduce((n, x) => n + (x.nas_only || 0), 0)} url={`/prints/groups/${groupId}/nas`} what="ce groupe"/>}
           {(groupRankedOff || prints.some(x => x.stats_excluded)) && <span data-tip={groupRankedOff ? "Tout le groupe est hors des classements de la page Stats (les totaux le comptent)"
             : "Ces impressions sont hors des classements de la page Stats (les totaux les comptent)"} style={{ display: "inline-flex", alignItems: "center", gap: 3,
             padding: "2px 9px", borderRadius: 20, fontSize: 11.5, fontWeight: 800, color: "#64748b", background: "color-mix(in srgb, #64748b 14%, transparent)" }}>
@@ -2123,6 +2126,9 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
           padding:"2px 8px", borderRadius:20, boxShadow:"0 2px 6px rgba(0,0,0,0.35)" }}>×{p.number_of_items}</span>}
         {p.status !== "SUCCESS" && <span style={{ position:"absolute", top:7, left:7, background:stC, color:"white", fontSize:10, fontWeight:900,
           padding:"2px 9px", borderRadius:20, boxShadow:`0 4px 12px ${stC}66`, visibility: selectMode ? "hidden" : "visible" }}>{stI} {stL}</span>}
+        {p.nas_only > 0 && <span data-tip={`${p.nas_only} fichier${p.nas_only > 1 ? "s" : ""} seulement sur le NAS (détail dans la fiche)`}
+          style={{ position:"absolute", bottom:7, left:7, fontSize:11, lineHeight:"18px", width:20, height:20, borderRadius:"50%", textAlign:"center",
+            background:"rgba(14,165,233,0.9)", color:"#fff", boxShadow:"0 2px 6px rgba(0,0,0,0.35)", visibility: selectMode ? "hidden" : "visible" }}>🗄️</span>}
         {rateMe && <span data-tip="À évaluer sur MakerWorld" style={{ position:"absolute", bottom:7, right:7, fontSize:11, fontWeight:900, color:"#fff",
           background:"linear-gradient(135deg, #F59E0B, #FBBF24)", borderRadius:20, padding:"1px 7px", boxShadow:"0 3px 10px rgba(245,158,11,.5)" }}>⭐</span>}
         {dots && <span style={{ position:"absolute", bottom:7, left:7 }}>{dots}</span>}

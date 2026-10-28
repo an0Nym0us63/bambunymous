@@ -224,6 +224,65 @@ def local_or_archive(rel: str) -> Path | None:
     return q if q.is_file() else None
 
 
+# Ce qui n'est plus que sur le NAS, par dossier (28/10/2026) : la fiche d'une impression ou d'un groupe le signale
+# d'une pastille, et le detail s'ouvre en popup. Le classement par dossier est refait quand l'index change.
+_PURGED = {"ref": None, "n": -1, "by_dir": {}}
+
+
+def _purged_by_dir() -> dict:
+    idx = _index()
+    if _PURGED["ref"] is idx and _PURGED["n"] == len(idx):
+        return _PURGED["by_dir"]
+    by: dict = {}
+    for k, e in idx.items():
+        if not isinstance(e, dict) or not e.get("purged") or ":" in k.split("/", 1)[0]:
+            continue
+        d, _, name = k.rpartition("/")
+        by.setdefault(d, []).append((name, e))
+    _PURGED.update(ref=idx, n=len(idx), by_dir=by)
+    return by
+
+
+def nas_label(name: str) -> tuple[str, str]:
+    """(icone, libelle lisible) d'un fichier du dossier d'une impression."""
+    low = name.lower()
+    ext = os.path.splitext(low)[1]
+    if low.startswith("snapshot-"):
+        trig = low[len("snapshot-"):].rsplit(".", 1)[0]
+        return "🎞️", f"Capture · {LAYERS.get(trig, trig)}"
+    if low == "video-timelapse.mp4":
+        return "⏩", "Timelapse"
+    if ext == ".3mf":
+        return "📐", "3MF tranché"
+    if ext in (".mp4", ".webm", ".mov", ".m4v", ".avi"):
+        return "🎬", "Vidéo"
+    if low.startswith("photo-"):
+        return "📷", "Photo"
+    return "📄", name
+
+
+def nas_only(rel_dir: str) -> list[dict]:
+    """Les fichiers d'un dossier qui ne sont plus qu'en archive, avec leur libelle, leur taille, et s'ils repondent
+    sur le NAS en ce moment (present : False = le NAS ne repond pas, ou le fichier a bouge)."""
+    out = []
+    for name, e in _purged_by_dir().get(rel_dir.rstrip("/"), ()):
+        if (DATA_DIR / rel_dir / name).exists():
+            continue
+        q = Path(e.get("root") or DEFAULT_ROOT) / e["to"]
+        try:
+            present = q.is_file()
+        except OSError:
+            present = False
+        icon, label = nas_label(name)
+        out.append({"name": name, "icon": icon, "label": label, "size": e.get("size"), "at": e.get("at"), "present": present})
+    return out
+
+
+def purged_count(rel_dir: str) -> int:
+    """Combien de fichiers d'un dossier ne sont plus que sur le NAS (sans toucher au disque : la liste)."""
+    return len(_purged_by_dir().get(rel_dir.rstrip("/"), ()))
+
+
 def archived_names(rel_dir: str) -> list[str]:
     """Les fichiers d'un dossier (« prints/12 ») qui ne sont plus qu'en archive (vides du local)."""
     pre = rel_dir.rstrip("/") + "/"
