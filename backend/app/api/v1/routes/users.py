@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .auth import require_admin, get_current_role, get_current_user
+from .auth import forget_auth, require_admin, get_current_role, get_current_user
 from ....db.session import get_db, ACTIVITY_RETENTION_DAYS
 from ....core.security import hash_password
 from ....models.user import User, ROLE_ADMIN, ROLE_READONLY, ROLES
@@ -246,10 +246,12 @@ async def update_user(
             invalidate = True      # le role est relu en base, mais on force
                                    # la reconnexion pour repartir au propre
         u.role = body.role
+        forget_auth()
     if body.active is not None:
         if u.active and not body.active:
             invalidate = True      # desactivation : coupe l'acces immediatement
         u.active = body.active
+        forget_auth()
     if body.mw_write is not None:
         u.mw_write = bool(body.mw_write)
     if body.secrets_visible is not None:
@@ -262,6 +264,7 @@ async def update_user(
 
     if invalidate:
         u.tokens_valid_from = datetime.utcnow()
+        forget_auth()
 
     await db.commit()
     await db.refresh(u)
@@ -351,5 +354,6 @@ async def delete_user(
         if not others:
             raise HTTPException(400, "Impossible : ce serait le dernier administrateur actif")
     await db.delete(u)
+    forget_auth()
     await db.commit()
     return {"ok": True}

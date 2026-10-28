@@ -93,7 +93,32 @@ async def _login(form, otp, db: AsyncSession):
     }
 
 
+# Le resultat de _resolve, garde 15 s par jeton (28/10/2026) : l'accueil relit l'imprimante toutes les 3 s et la
+# camera toutes les 1,5 s, et chaque requete relisait l'utilisateur en base. Un mot de passe change, un role
+# modifie ou un compte desactive prennent effet dans ces 15 s ; une modification de compte vide le cache aussitot.
+_AUTH_TTL = 15.0
+_AUTH_CACHE: dict = {}
+
+
+def forget_auth() -> None:
+    """A appeler quand un compte change (role, activation, mot de passe) : plus rien n'est tenu pour acquis."""
+    _AUTH_CACHE.clear()
+
+
 async def _resolve(token: str, db: AsyncSession) -> tuple[str, str]:
+    import time as _t
+    hit = _AUTH_CACHE.get(token)
+    now = _t.monotonic()
+    if hit and hit[0] > now:
+        return hit[1]
+    res = await _resolve_db(token, db)
+    if len(_AUTH_CACHE) > 500:
+        _AUTH_CACHE.clear()
+    _AUTH_CACHE[token] = (now + _AUTH_TTL, res)
+    return res
+
+
+async def _resolve_db(token: str, db: AsyncSession) -> tuple[str, str]:
     """
     Valide un jeton contre l'etat REEL du compte et rend (username, role).
 
@@ -309,6 +334,7 @@ async def change_password(
         # Toutes les sessions ouvertes tombent, y compris sur d'autres appareils :
         # c'est tout l'interet de changer un mot de passe.
         user.tokens_valid_from = datetime.utcnow()
+        forget_auth()
         await db.commit()
         # ... sauf celle-ci, sinon on se deconnecterait soi-meme en changeant son
         # propre mot de passe. Un jeton neuf est renvoye, le front le remplace.
