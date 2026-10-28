@@ -30,7 +30,9 @@ function _translucent(c) {
 }
 
 // La finition du filament (28/10/2026), dessinee sur le disque : les memes que les pastilles (utils/colors).
-export function FinishDefs({ f, id, size = 68, units = 80, dark = false }) {
+// tile : la tuile imposee, en unites du dessin (une zone etroite comme le corps d'une buse : la tuile a sa largeur,
+// pour que le motif y tienne en entier) ; tier : le palier impose
+export function FinishDefs({ f, id, size = 68, units = 80, dark = false, tile = null, tier = null }) {
   if (f === "silk") return <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
     <stop offset="20%" stopColor="#fff" stopOpacity="0"/><stop offset="45%" stopColor="#fff" stopOpacity=".55"/><stop offset="62%" stopColor="#fff" stopOpacity="0"/></linearGradient>;
   if (f === "metal") return <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
@@ -38,9 +40,9 @@ export function FinishDefs({ f, id, size = 68, units = 80, dark = false }) {
     <stop offset="60%" stopColor="#000" stopOpacity=".3"/><stop offset="85%" stopColor="#fff" stopOpacity=".35"/></linearGradient>;
   // paillettes, galaxie, marbre, carbone : le meme dessin que les pastilles et la vue 3D (utils/finishTex)
   // le palier suit la taille affichee ; la tuile est convertie en unites du dessin (viewBox de `units`)
-  const tier = tierOf(size), img = finishImage(f, tier, dark), tile = (TIER_PX[tier] || 64) * units / Math.max(1, size);
-  if (img) return <pattern id={id} patternUnits="userSpaceOnUse" width={tile} height={tile}>
-    <image href={img} width={tile} height={tile}/></pattern>;
+  const tr = tier || tierOf(size), img = finishImage(f, tr, dark), tl = tile || (TIER_PX[tr] || 64) * units / Math.max(1, size);
+  if (img) return <pattern id={id} patternUnits="userSpaceOnUse" width={tl} height={tl}>
+    <image href={img} width={tl} height={tl}/></pattern>;
   if (f === "glow") return <radialGradient id={id}>
     <stop offset="0%" stopColor="#f0ffe6" stopOpacity=".85"/><stop offset="35%" stopColor="#dcffc8" stopOpacity=".45"/><stop offset="70%" stopColor="#dcffc8" stopOpacity="0"/></radialGradient>;
   return null;

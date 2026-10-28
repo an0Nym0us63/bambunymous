@@ -591,7 +591,8 @@ function NozzleArt({ color, h = 54, dim = false, heat = null, finish = null, mul
         {mcols.map((x, i) => <stop key={i} offset={i / (mcols.length - 1)} stopColor={x}/>)}</linearGradient>}
       {mcols && multi.type !== "gradient" && <linearGradient id={`nzb${id}`} x1="0" y1="0" x2="1" y2="0">
         {mcols.flatMap((x, i) => [<stop key={`a${i}`} offset={i / mcols.length} stopColor={x}/>, <stop key={`b${i}`} offset={(i + 1) / mcols.length} stopColor={x}/>])}</linearGradient>}
-      {finish && !dim && <FinishDefs f={finish} id={`nzf${id}`} size={w} units={26} dark={isDark(c)}/>}
+      {/* le corps fait 13 unites de large : la tuile du motif prend cette largeur, au palier moyen (les grains restent fins) */}
+      {finish && !dim && <FinishDefs f={finish} id={`nzf${id}`} size={w} units={26} dark={isDark(c)} tile={13} tier={h >= 40 ? "md" : "sm"}/>}
       <linearGradient id={`nzt${id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" style={{ stopColor: dim ? "#cbd5e1" : tipA }}/><stop offset="1" style={{ stopColor: dim ? "#94a3b8" : tipB }}/></linearGradient>
     </defs>
     <ellipse cx="13" cy="50.5" rx="7" ry="1.6" fill="#0f172a" opacity=".12"/>

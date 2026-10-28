@@ -476,7 +476,7 @@ function SpoolDot({ color, colors = null, multicolor = null, finish = null, pct,
           strokeWidth={sw} strokeDasharray={C} strokeDashoffset={C * (1 - v)}/>
       </svg>
       <span style={{ position: "absolute", inset: sw + 3, borderRadius: "50%", border: "1px solid rgba(0,0,0,0.15)", overflow: "hidden",
-        ...colorBg(parseColorsList(color, colors), multicolor, finish, { size: 140 }) }}/>
+        ...colorBg(parseColorsList(color, colors), multicolor, finish, { size: size - 2 * (sw + 3) }) }}/>
     </span>
   );
 }

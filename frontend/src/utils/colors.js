@@ -148,7 +148,7 @@ export function colorBg(colors, type, finish = null, opts = {}) {
   if (!colors?.length) return { backgroundColor: "var(--border)" };
   const over = finish ? finishLayers(finish, !!opts.bar, opts.size != null ? tierOf(opts.size) : opts.bar ? "sm" : "md", isDark(colors[0])) : [];
   if (over.length) return _withFinish(colors, type, over, finish, opts);
-  return _colorBg(colors, type);
+  return _colorBg(colors, type, opts.size);
 }
 
 // Le fond d'un emplacement d'AMS (la bobine associee d'abord, puis ce que dit l'AMS) : couleurs, transparence,
@@ -176,7 +176,7 @@ export function bgWithTop(st, layer) {
 }
 
 function _withFinish(colors, type, over, finish, opts) {
-  const base = _colorBg(colors, type);
+  const base = _colorBg(colors, type, opts.size);
   // la couche couleur (et le damier) de base, a placer sous la finition
   const img = base.backgroundImage || (base.background ? base.background : `linear-gradient(${colors[0]},${colors[0]})`);
   const nBase = base.backgroundImage ? img.split(/,(?![^(]*\))/).length : 1;
@@ -193,8 +193,10 @@ function _withFinish(colors, type, over, finish, opts) {
   return style;
 }
 
-function _colorBg(colors, type) {
+function _colorBg(colors, type, size = null) {
   if (!colors?.length) return { backgroundColor: "var(--border)" };
+  // le damier a l'echelle : 8 px de carreau, 4 px sur une petite pastille (sinon deux carreaux, illisibles)
+  const ck = size != null && size <= 30 ? 4 : 8;
 
   // Couche couleur, exprimée comme IMAGE (linear-gradient) pour pouvoir être
   // superposée à un damier si besoin.
@@ -222,8 +224,8 @@ function _colorBg(colors, type) {
   return {
     backgroundColor: CHECKER.color,
     backgroundImage: `${layer},${CHECKER.image}`,
-    backgroundSize: `100% 100%,${CHECKER.size}`,
-    backgroundPosition: `0 0,${CHECKER.position}`,
+    backgroundSize: `100% 100%,${Array(4).fill(`${ck}px ${ck}px`).join(",")}`,
+    backgroundPosition: `0 0,0 0,0 ${ck / 2}px,${ck / 2}px -${ck / 2}px,-${ck / 2}px 0`,
     backgroundRepeat: "no-repeat,repeat,repeat,repeat,repeat",
   };
 }
