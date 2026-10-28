@@ -861,6 +861,24 @@ def _match_filaments(o_cols: list, used: dict, sliced: dict, sl_colors: list, em
     return assigned
 
 
+_GUESS_CACHE: dict = {}                         # (modele, impressions) -> (heure, devinettes) : une fois par vue, pas par plateau
+
+
+async def _plate_guesses(did: str, ids: list) -> dict:
+    """Le plateau devine de chaque impression (image et poids), garde une minute : la vue 3D d'un groupe le demande
+    pour chaque plateau du modele, et la devinette compare des silhouettes."""
+    import time as _t
+    key = (did, tuple(sorted(ids)))
+    hit = _GUESS_CACHE.get(key)
+    if hit and _t.time() - hit[0] < 60:
+        return hit[1]
+    from ....services.mw_plate_guess import guess as _pguess
+    g = (await _pguess(did, ids)).get("guesses") or {}
+    if len(_GUESS_CACHE) > 50:
+        _GUESS_CACHE.clear()
+    _GUESS_CACHE[key] = (_t.time(), g)
+    return g
+
 async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", detail_out: list | None = None,
                         plate: int | None = None) -> dict | None:
     """{couleur du 3MF d'origine (RRGGBB) : couleur utilisee} d'apres les filaments de ces impressions (la plus
@@ -933,8 +951,7 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
         need = [pid for pid, _mwp, mwpl, _m3, _pl in prints if _manual_plates(mwpl) is None]
         if need:
             try:
-                from ....services.mw_plate_guess import guess as _pguess
-                guesses = {int(k): v for k, v in ((await _pguess(did, need)).get("guesses") or {}).items()
+                guesses = {int(k): v for k, v in (await _plate_guesses(did, need)).items()
                            if not want or norm(v.get("profile")) == want}
             except Exception:
                 logger.exception("[3D] plateaux devines")
