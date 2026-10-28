@@ -262,7 +262,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
                   // la lueur suit legerement le relief (un peu plus forte de face) : les gravures restent devinables sans
                   // rien enlever a la lueur d'ensemble (28/10/2026)
                   "#include <emissivemap_fragment>\n  float ndv = abs(dot(normalize(normal), normalize(vViewPosition)));\n" +
-                  "  float rimF = pow(1.0 - ndv, 1.6);\n" +
+                  // le lisere passe par un lissage : sur des facettes planes, un seuil franc d'une face a l'autre fourmillait sous le halo
+                  "  float rimF = pow(smoothstep(0.08, 1.0, 1.0 - ndv), 1.6);\n" +
                   "  totalEmissiveRadiance = totalEmissiveRadiance * (0.82 + 0.18 * ndv) + emissive * rimF * rimK;");
               };
             }
@@ -287,9 +288,10 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         scene.traverse(o => { if (o.isMesh && o.userData.glow) glowMats.push(o.material); });
         const night = async on => {
           if (on && !composer) {
-            const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
+            const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }, { SMAAPass }] = await Promise.all([
               import("three/examples/jsm/postprocessing/EffectComposer.js"), import("three/examples/jsm/postprocessing/RenderPass.js"),
-              import("three/examples/jsm/postprocessing/UnrealBloomPass.js"), import("three/examples/jsm/postprocessing/OutputPass.js")]);
+              import("three/examples/jsm/postprocessing/UnrealBloomPass.js"), import("three/examples/jsm/postprocessing/OutputPass.js"),
+              import("three/examples/jsm/postprocessing/SMAAPass.js")]);
             // rendu multi-echantillonne (28/10/2026) : sans lui, le passage par le composeur perdait l'anticrenelage et les
             // aretes scintillaient dans le noir
             const rt = new THREE.WebGLRenderTarget(el.clientWidth, el.clientHeight, { samples: 4, type: THREE.HalfFloatType });
@@ -298,8 +300,12 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(el.clientWidth, el.clientHeight);
             composer.addPass(new RenderPass(scene, camera));
             // halo mesure (28/10/2026) : seuil plus haut et force moindre, pour que le halo entoure la piece sans gommer ses details
-            composer.addPass(new UnrealBloomPass(new THREE.Vector2(el.clientWidth, el.clientHeight), 0.45, 0.3, 0.3));
+            const pr0 = renderer.getPixelRatio();
+            // le halo calcule a la resolution reelle (et non en pixels CSS) : ses mipmaps grossiers faisaient fourmiller les
+            // aretes fines quand on tourne ; puis un lissage des aretes (SMAA) en sortie, par-dessus le multi-echantillonnage
+            composer.addPass(new UnrealBloomPass(new THREE.Vector2(el.clientWidth * pr0, el.clientHeight * pr0), 0.45, 0.3, 0.3));
             composer.addPass(new OutputPass());
+            composer.addPass(new SMAAPass(el.clientWidth * pr0, el.clientHeight * pr0));
             disposables.push(composer);
           }
           bloomOn = on;
