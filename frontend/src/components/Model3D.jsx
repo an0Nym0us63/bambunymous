@@ -38,7 +38,7 @@ const FINISH_MAT = {
   silk: { roughness: 0.32, metalness: 0.1, envMapIntensity: 0.22 },       // un brillant satine, pas un metal (un gris virait au blanc)
   metal: { roughness: 0.32, metalness: 1, envMapIntensity: 1.5 },
   matte: { roughness: 0.95, metalness: 0 },
-  carbon: { roughness: 0.38, metalness: 0.1, envMapIntensity: 0.6 },
+  carbon: { roughness: 0.55, metalness: 0.35, envMapIntensity: 0.6 },   // la trame module la brillance (voir plus bas)
   sparkle: { roughness: 0.35 },
   galaxy: { roughness: 0.35 },
 };
@@ -189,6 +189,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
               mesh = boxUV(THREE, geo); geo.dispose();
               if (emit) { mat.emissive = new THREE.Color(0xffffff); mat.emissiveMap = t; mat.emissiveIntensity = 0.9; }
               else mat.map = t;
+              // carbone (28/10/2026) : en couleur seule, la trame multipliait du noir et ne se voyait pas ; elle module
+              // aussi la rugosite (les brins brillent differemment) et affleure a peine en lumiere
+              if (fin === "carbon") { mat.roughnessMap = t; mat.emissive = new THREE.Color(0xffffff); mat.emissiveMap = t; mat.emissiveIntensity = 0.05; }
             }
             const piece = new THREE.Mesh(mesh, mat);
             if (fin === "glow") {
