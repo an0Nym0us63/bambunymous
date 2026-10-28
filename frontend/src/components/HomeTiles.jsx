@@ -130,9 +130,11 @@ function Tile({ icon, color, label, to, zoom, onClick, badge, children, mini = f
       {big}
     </div>
   );
+  // Entree / espace ouvrent la tuile seulement depuis la tuile elle-meme : depuis un champ dedans (une evaluation…),
+  // la touche remontait jusqu'ici et l'espace ne s'ecrivait plus (28/10/2026)
   return (
     <div className="card" role={act ? "button" : undefined} tabIndex={act ? 0 : undefined} onClick={act}
-      onKeyDown={e => { if (act && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); act(); } }}
+      onKeyDown={e => { if (act && e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); act(); } }}
       style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6, minWidth: 0, cursor: act ? "pointer" : "default",
         position: "relative", overflow: "hidden", height: "100%", boxSizing: "border-box" }}>
       <div className="tile-head" style={{ display: "flex", alignItems: "center", gap: 8, position: "relative", minWidth: 0 }}>

@@ -268,7 +268,7 @@ function Puzzle({ done }) {
           return (
             <div key={t} ref={el => { tiles.current[t] = el; }} role="button" tabIndex={g.play ? 0 : -1} aria-label={`Pièce ${t + 1}`}
               onPointerDown={e => down(e, t)} onPointerMove={e => move(e, t)} onPointerUp={e => up(e, t)} onPointerCancel={e => up(e, t, true)}
-              onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tap(t); } }}
+              onKeyDown={e => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); tap(t); } }}
               style={{ position: "absolute", left: (sl % 3) * tw + gap, top: Math.floor(sl / 3) * th + gap, width: tw - 2 * gap, height: th - 2 * gap,
                 overflow: "hidden", borderRadius: loose ? 8 : 0, cursor: g.play ? "grab" : "default", touchAction: "none", outline: "none",
                 transition: PUZZLE_T, background: "var(--bg, #0f1117)",
@@ -637,7 +637,7 @@ function Ballons({ done }) {
       </svg>
       {list.map(b => (
         <button key={b.id} ref={el => { bRefs.current[b.id] = el; }} aria-label="Ballon" onPointerDown={e => pop(e, b)}
-          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") pop(e, b); }}
+          onKeyDown={e => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) pop(e, b); }}
           style={{ position: "absolute", left: 0, top: 0, width: 52, height: 70, padding: 0, border: "none", background: "transparent",
             cursor: "crosshair", pointerEvents: g.play ? "auto" : "none", touchAction: "manipulation", transform: "translate(-200px,-200px)" }}>
           <Balloon c={b.c}/>
@@ -1634,7 +1634,7 @@ function Sablier({ done }) {
       ))}
       <div style={{ position: "absolute", left: geo.x, top: geo.y, width: 0, height: 0, animation: "pk-kit-pop .5s ease-out both" }}>
         <button aria-label="Sablier" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
-          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(1); } }}
+          onKeyDown={e => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); flip(1); } }}
           style={{ position: "absolute", left: -62, top: -100, width: 124, height: 200, padding: 0, border: "none", background: "transparent",
             cursor: held ? "grabbing" : "grab", touchAction: "none", pointerEvents: g.play ? "auto" : "none",
             transform: `rotate(${rot.toFixed(1)}deg)`,

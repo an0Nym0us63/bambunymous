@@ -1630,7 +1630,7 @@ function MiniMachine({ w, onOpen }) {
   const has = (w.spins || 0) > 0;
   return (
     <div role={can ? "button" : undefined} tabIndex={can ? 0 : undefined} onClick={can ? onOpen : undefined}
-      onKeyDown={e => { if (can && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpen(); } }}
+      onKeyDown={e => { if (can && e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpen(); } }}
       title={can ? "Ouvrir la machine à sous" : undefined}
       style={{ position:"relative", borderRadius:20, padding:"14px 16px 16px", cursor: can ? "pointer" : "default",
         background:"linear-gradient(180deg,#c81e1e,#7f1d1d)", border:"3px solid #f59e0b", marginRight:12,

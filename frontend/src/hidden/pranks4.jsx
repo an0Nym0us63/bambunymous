@@ -811,7 +811,7 @@ function PoissonAvril({ done }) {
       {stuck && (
         <div ref={bind("fish", stuck.c, stuck.fx, stuck.fy, -fw / 2, -fw * 0.28)} style={{ ...ANCHOR, transform: anchorAt(stuck.r, stuck.fx, stuck.fy, -fw / 2, -fw * 0.28) }}>
           <button ref={fishRef} type="button" aria-label="Poisson collé" onPointerDown={e => { e.stopPropagation(); peel(); }}
-            onKeyDown={e => { if (e.key === "Enter" || e.key === " ") peel(); }}
+            onKeyDown={e => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) peel(); }}
             style={{ position: "absolute", left: -8, top: -8, padding: 8, border: "none", background: "transparent", cursor: "pointer",
               pointerEvents: ph === "play" ? "auto" : "none", touchAction: "manipulation" }}>
             <div style={{ transformOrigin: "14% 35%", animation: ph === "play" ? "pk-poisson-avril-slap .5s ease-out .8s both, pk-poisson-avril-flap 1.6s ease-in-out 2s infinite"
@@ -975,7 +975,7 @@ function Paques({ done }) {
           </div>
           {(e.st === "hid" || e.st === "hid2") && ph === 1 && (
             <button type="button" aria-label="Œuf caché" onPointerDown={ev => { ev.stopPropagation(); pop(e.id, false); }}
-              onKeyDown={ev => { if (ev.key === "Enter" || ev.key === " ") pop(e.id, false); }}
+              onKeyDown={ev => { if (ev.target === ev.currentTarget && (ev.key === "Enter" || ev.key === " ")) pop(e.id, false); }}
               style={{ position: "absolute", left: EGG_W / 2 - 24, top: 60 - PEEK - 10, width: 48, height: PEEK + 26, padding: 0, border: "none",
                 background: "transparent", cursor: "pointer", pointerEvents: "auto", touchAction: "manipulation" }}/>
           )}
@@ -2223,7 +2223,7 @@ function Anniversaire({ done }) {
           const x = candleX(i) / 200 * cw, y = 10 / 124 * cw * 0.62, isOut = out.includes(i);
           return (
             <button key={i} type="button" aria-label="Bougie" onPointerDown={e => { e.stopPropagation(); blow(i); }}
-              onKeyDown={e => { if (e.key === "Enter" || e.key === " ") blow(i); }}
+              onKeyDown={e => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) blow(i); }}
               style={{ position: "absolute", left: x - 20, top: y - 44, width: 40, height: 56, padding: 0, border: "none", background: "transparent",
                 cursor: "pointer", pointerEvents: !isOut && ph === "play" ? "auto" : "none", touchAction: "manipulation" }}>
               {!isOut ? (
