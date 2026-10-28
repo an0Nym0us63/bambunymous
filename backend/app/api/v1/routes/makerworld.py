@@ -818,7 +818,8 @@ def _assign(origin: list, used: list) -> list:
     return [(o[0], u[0]) for o, u in pairs if ok(o, u)]
 
 
-def _match_filaments(o_cols: list, used: dict, sliced: dict, sl_colors: list, emap: dict, grams: dict, plate_fils: list) -> dict:
+def _match_filaments(o_cols: list, used: dict, sliced: dict, sl_colors: list, emap: dict, grams: dict, plate_fils: list,
+                     sure: bool = False) -> dict:
     """Chaque filament du projet d'origine (couleurs o_cols, numeros 1..n) -> (emplacement du projet imprime, methode).
     used : {emplacement : couleur de la bobine} ; sliced : {emplacement : couleur notee au tranchage} ; sl_colors : les
     filaments du projet imprime dans l'ordre (3MF tranche garde) ; emap : par les pieces de meme nom ; grams : les
@@ -832,7 +833,8 @@ def _match_filaments(o_cols: list, used: dict, sliced: dict, sl_colors: list, em
     3) le reste, par ressemblance de couleur (celle notee au tranchage, sinon la bobine) et de poids : les filaments
        du plateau d'origine, sinon tous, face aux emplacements pas encore pris. Un modele peint au pinceau n'a que
        le filament de ses pieces dans les noms (28/10/2026 : le perroquet, numeros renumerotes, couleurs melangees) ;
-    4) par elimination : un seul filament du createur et une seule bobine qui restent vont ensemble."""
+    4) par elimination, seulement quand les plateaux de l'impression sont confirmes a la main (sure) : un seul filament
+       du createur et une seule bobine qui restent vont ensemble."""
     import math
     assigned = {e: (es, "pièces") for e, es in emap.items() if es in used}
     sl = {es: c for es, c in sliced.items() if c}
@@ -856,25 +858,38 @@ def _match_filaments(o_cols: list, used: dict, sliced: dict, sl_colors: list, em
                       if len(col) == 6 and (k + 1) not in g_of)
         if near and near[0][0] <= 0.12:
             g_of[near[0][1]] = g
-    o_rem = [(e, o_cols[e - 1], g_of.get(e)) for e in range(1, len(o_cols) + 1) if e not in assigned and len(o_cols[e - 1]) == 6]
-    u_rem = [(es, sl.get(es) or c, grams.get(es)) for es, c in used.items() if es not in taken and len(sl.get(es) or c) == 6]
-    # les poids a l'echelle de l'impression (28/10/2026) : un modele reduit ou retranche autrement pese une fraction
-    # du plateau du createur, et toutes les couleurs etaient refusees ; on compare les proportions, pas les grammes
-    # (seulement a nombre egal de filaments des deux cotes : sinon les totaux ne se correspondent pas, et les grammes
-    # bruts gardent leur role de garde-fou)
-    go, gu = [g for _e, _c, g in o_rem if g], [g for _e, _c, g in u_rem if g]
-    if go and gu and len(o_rem) == len(u_rem) and len(go) == len(o_rem) and len(gu) == len(u_rem):
-        r = sum(gu) / sum(go)
-        if 0.2 <= r <= 5:
-            o_rem = [(e, c, g * r) for e, c, g in o_rem]
-    for e, es in _assign(o_rem, u_rem):
-        assigned[e] = (es, "couleur et poids")
+    # d'abord les filaments du createur presents sur les plateaux de l'impression (fiche MakerWorld), puis les autres
+    # pour ce qui reste (28/10/2026 : tous candidats d'un coup, la bobine bleue du plateau 2 allait au cyan d'un
+    # autre plateau, plus proche en teinte que le bleu du createur)
+    for stage in (0, 1):
+        o_rem = [(e, o_cols[e - 1], g_of.get(e)) for e in range(1, len(o_cols) + 1)
+                 if e not in assigned and len(o_cols[e - 1]) == 6 and (not g_of or (e in g_of) == (stage == 0))]
+        taken = {es for es, _h in assigned.values()}
+        u_rem = [(es, sl.get(es) or c, grams.get(es)) for es, c in used.items() if es not in taken and len(sl.get(es) or c) == 6]
+        if not o_rem or not u_rem:
+            if not g_of:
+                break
+            continue
+        # les poids a l'echelle de l'impression (28/10/2026) : un modele reduit ou retranche autrement pese une fraction
+        # du plateau du createur, et toutes les couleurs etaient refusees ; on compare les proportions, pas les grammes
+        # (seulement a nombre egal de filaments des deux cotes : sinon les totaux ne se correspondent pas, et les
+        # grammes bruts gardent leur role de garde-fou)
+        # (et a partir de deux filaments : un contre un, la proportion ne dit plus rien, les grammes bruts jugent)
+        go, gu = [g for _e, _c, g in o_rem if g], [g for _e, _c, g in u_rem if g]
+        if go and gu and len(o_rem) == len(u_rem) >= 2 and len(go) == len(o_rem) and len(gu) == len(u_rem):
+            r = sum(gu) / sum(go)
+            if 0.2 <= r <= 5:
+                o_rem = [(e, c, g * r) for e, c, g in o_rem]
+        for e, es in _assign(o_rem, u_rem):
+            assigned[e] = (es, "couleur et poids")
+        if not g_of:
+            break
     # 4) par elimination (28/10/2026) : s'il ne reste qu'un filament du createur (sur les plateaux de l'impression,
     #    quand on les connait) et qu'une bobine de l'impression, c'est elle -- meme d'une autre couleur ou matiere
     taken = {es for es, _h in assigned.values()}
     left_o = [e for e in range(1, len(o_cols) + 1) if e not in assigned and len(o_cols[e - 1]) == 6 and (not g_of or e in g_of)]
     left_u = [es for es, c in used.items() if es not in taken and len(c) == 6]
-    if len(left_o) == 1 and len(left_u) == 1:
+    if sure and len(left_o) == 1 and len(left_u) == 1:
         assigned[left_o[0]] = (left_u[0], "élimination")
     return assigned
 
@@ -1012,7 +1027,7 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
                 for c, g in plate_fils.get(n_) or []:
                     agg[c] = agg.get(c, 0) + g
             assigned = _match_filaments([h6(c) for c in colors], used, sliced_by.get(pid) or {}, sl_colors, emap,
-                                        grams_by.get(pid) or {}, list(agg.items()))
+                                        grams_by.get(pid) or {}, list(agg.items()), sure=_manual_plates(mwpl) is not None)
             logger.info(f"[3D] couleurs : impression {pid} (profil {_profile(mwp, mwpl) or '?'}{' ≠ ' + str(prof) if tier else ''}, "
                         f"plateaux {pls}) filaments {used} -> {assigned}")
             for e, (es, how) in sorted(assigned.items()):

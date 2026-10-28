@@ -85,6 +85,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
       const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1.6); scene.add(hemi);
       const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(150, 300, 200); scene.add(sun);
       const back = new THREE.DirectionalLight(0xffffff, 0.6); back.position.set(-200, 120, -150); scene.add(back);
+      // plateau masque : le dessous eclaire aussi (sinon il reste dans l'ombre du sol, comme s'il y etait encore)
+      const under = new THREE.DirectionalLight(0xffffff, 0); under.position.set(120, -300, 160); scene.add(under);
       // l'environnement des reflets, prepare seulement s'il sert
       let envTex = null;
       const envMap = async () => {
@@ -327,7 +329,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
           litOn = on;
           render();
         };
-        const bedShow = on => { grid.visible = on; render(); };
+        const bedShow = on => { grid.visible = on; under.intensity = on ? 0 : 1.3; hemi.groundColor.set(on ? 0x8a8f98 : 0xffffff); render(); };
         api.current = { fit, night, backlight, bedShow };
         const s = bb2.getSize(new THREE.Vector3());
         onState({ busy: false, error: null, size: glb ? [s.x, s.z, s.y] : [s.x, s.z, s.y], glow: glowMats.length > 0 });
