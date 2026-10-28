@@ -111,8 +111,9 @@ export function OrderSheet({ id, order: given = null, onClose, onChanged }) {
               <span style={{ width:18, height:18, borderRadius:"50%", flexShrink:0, border:"1px solid var(--border)",
                 background: it.color_hex ? `#${it.color_hex}` : "repeating-linear-gradient(45deg, var(--surface) 0 3px, var(--border) 3px 6px)" }}/>
               <span style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:6 }}>
-                  <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis" }}>{lineName(it)}</span><Marks it={it} size={13}/></div>
+                {/* le nom en entier, sur deux lignes s'il le faut (jamais coupe) ; les marques suivent le texte */}
+                <div style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", lineHeight:1.25, overflowWrap:"anywhere" }}>
+                  {lineName(it)} <span style={{ whiteSpace:"nowrap", display:"inline-flex", gap:4, verticalAlign:"middle" }}><Marks it={it} size={13}/></span></div>
                 <div style={{ fontSize:11.5, fontWeight:700, color:c }}>{txt}</div>
               </span>
               <span style={{ fontWeight:900, fontVariantNumeric:"tabular-nums" }}>{it.received || 0}/{it.qty}</span>
@@ -187,7 +188,7 @@ export default function IncomingOrders() {
                 <div key={i} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5 }}>
                   <span style={{ width:14, height:14, borderRadius:"50%", flexShrink:0, border:"1px solid var(--border)",
                     background: it.color_hex ? `#${it.color_hex}` : "repeating-linear-gradient(45deg, var(--surface) 0 3px, var(--border) 3px 6px)" }}/>
-                  <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{lineName(it)}</span>
+                  <span style={{ flex:1, minWidth:0, lineHeight:1.2, overflowWrap:"anywhere" }}>{lineName(it)}</span>
                   <Marks it={it}/>
                   <span style={{ fontWeight:800, fontVariantNumeric:"tabular-nums" }}>{it.received ? `${left}/${it.qty}` : `×${it.qty}`}</span>
                   {isAdmin && <button type="button" onClick={() => mark(o, i, true)} data-tip="La bobine est là, sans passer par un ajout ou un scan"
