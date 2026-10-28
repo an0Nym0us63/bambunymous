@@ -24,6 +24,20 @@ function Steps({ stage, size = 12 }) {
   </span>;
 }
 
+// les petits signes d'une ligne (28/10/2026, a la place de textes tronques) : recharge ou bobine, nouvelle couleur
+// sans fiche, dans un envoi en route
+function Marks({ it, size = 12 }) {
+  const rec = it.received || 0, sent = Math.max(0, (it.shipped || 0) - rec);
+  const m = { fontSize: size, lineHeight: 1, cursor: "default" };
+  return <span style={{ display:"inline-flex", alignItems:"center", gap:4, flexShrink:0 }}>
+    {it.refill ? <span data-tip="Recharge (sans support)" style={m}>♻️</span> : <span data-tip="Avec bobine" style={{ ...m, opacity:0.55 }}>🧵</span>}
+    {!it.filament_id && it.name_fr && <span data-tip="Nouvelle couleur : pas encore de fiche filament, elle naîtra au scan de la bobine" style={m}>✨</span>}
+    {sent > 0 && (it.qty || 0) > rec && <span data-tip="Dans un envoi en route" style={m}>🚚</span>}
+  </span>;
+}
+
+const lineName = it => it.kind === "filament" && it.name_fr ? `${it.fila_type || ""} · ${it.name_fr}` : it.title;
+
 // l'etat d'une ligne, en clair
 function lineState(it) {
   const qty = it.qty || 0, rec = it.received || 0, left = Math.max(0, qty - rec);
@@ -55,7 +69,7 @@ export function OrderSheet({ id, order: given = null, onClose, onChanged }) {
   return (
     <FSheet onClose={onClose} z={3000} bottom={isAdmin ? <>
       {o.to_confirm > 0 && <button onClick={() => act({ confirm: true })} disabled={busy} style={{ ...fBtn, flex:1, background:"#22c55e", color:"#fff", border:"none" }}>✓ Tout est bien là</button>}
-      <button onClick={() => act({ hide: !o.hidden })} disabled={busy} style={{ ...fBtn, flex: o.to_confirm > 0 ? 0 : 1 }}>{o.hidden ? "Remontrer" : "Cacher"}</button>
+      <button onClick={async () => { await act({ hide: !o.hidden }); if (!o.hidden) onClose(); }} disabled={busy} style={{ ...fBtn, flex: o.to_confirm > 0 ? 0 : 1 }}>{o.hidden ? "Remontrer" : "Cacher"}</button>
     </> : null}>
       <div style={{ padding:"18px 16px 12px" }}>
         <div style={{ fontSize:28 }}>📬</div>
@@ -83,9 +97,9 @@ export function OrderSheet({ id, order: given = null, onClose, onChanged }) {
               <span style={{ width:18, height:18, borderRadius:"50%", flexShrink:0, border:"1px solid var(--border)",
                 background: it.color_hex ? `#${it.color_hex}` : "repeating-linear-gradient(45deg, var(--surface) 0 3px, var(--border) 3px 6px)" }}/>
               <span style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {it.name_fr ? `${it.fila_type || ""} · ${it.name_fr}${it.refill ? " (recharge)" : ""}` : it.title}</div>
-                <div style={{ fontSize:11.5, fontWeight:700, color:c }}>{txt}{!it.filament_id && it.name_fr ? " · nouvelle couleur, pas encore de fiche" : ""}</div>
+                <div style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis" }}>{lineName(it)}</span><Marks it={it} size={13}/></div>
+                <div style={{ fontSize:11.5, fontWeight:700, color:c }}>{txt}</div>
               </span>
               <span style={{ fontWeight:900, fontVariantNumeric:"tabular-nums" }}>{it.received || 0}/{it.qty}</span>
               {isAdmin && (left ? <button onClick={() => act({ index: i, received: true })} disabled={busy} style={{ ...fBtn, padding:"6px 10px", fontSize:12 }}>reçu</button>
@@ -144,20 +158,20 @@ export default function IncomingOrders() {
               <span style={{ flex:1 }}/>
               {isAdmin && <button type="button" onClick={() => hide(o)} data-tip="Ne plus montrer cette commande" style={{ border:"none", background:"none", color:"var(--muted)", cursor:"pointer", fontSize:12 }}>✕</button>}
             </div>
+            {(() => { const got = o.items.filter(it => it.kind === "filament" && (it.received || 0) > 0).reduce((n, it) => n + (it.received || 0), 0);
+              return got > 0 ? <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:4 }}>✓ {got} bobine{got > 1 ? "s" : ""} déjà reçue{got > 1 ? "s" : ""} · le détail dans la commande</div> : null; })()}
             <div style={{ display:"flex", flexDirection:"column", gap:4, marginTop:6 }}>
-              {o.items.map((it, i) => { const left = Math.max(0, (it.qty || 0) - (it.received || 0)); const got = left === 0; return (
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, opacity: got ? 0.55 : 1 }}>
+              {/* seules les bobines encore attendues (28/10/2026) : ce qui est recu (bobine ajoutee ou scannee, ou coche) sort de la carte,
+                  la fenetre de la commande garde tout */}
+              {o.items.map((it, i) => ({ it, i })).filter(({ it }) => it.kind === "filament" && (it.qty || 0) - (it.received || 0) > 0).map(({ it, i }) => { const left = (it.qty || 0) - (it.received || 0); return (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5 }}>
                   <span style={{ width:14, height:14, borderRadius:"50%", flexShrink:0, border:"1px solid var(--border)",
                     background: it.color_hex ? `#${it.color_hex}` : "repeating-linear-gradient(45deg, var(--surface) 0 3px, var(--border) 3px 6px)" }}/>
-                  <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textDecoration: got ? "line-through" : "none" }}>
-                    {it.kind === "filament" && it.name_fr ? `${it.fila_type || ""} · ${it.name_fr}${it.refill ? " (recharge)" : ""}` : it.title}
-                    {it.kind === "filament" && !it.filament_id && it.name_fr && <span data-tip="Pas encore de fiche filament pour cette couleur : elle sera créée au scan de la bobine" style={{ marginLeft:6, fontSize:11, color:"var(--muted)" }}>·  nouvelle couleur</span>}
-                  </span>
-                  <span style={{ fontWeight:800, fontVariantNumeric:"tabular-nums" }}>{it.received ? `${it.received}/${it.qty}` : `×${it.qty}`}</span>
-                  {isAdmin && it.kind === "filament" && (got
-                    ? <button type="button" onClick={() => mark(o, i, false)} style={{ border:"none", background:"none", color:"var(--muted)", cursor:"pointer", fontSize:11, fontWeight:700 }}>annuler</button>
-                    : <button type="button" onClick={() => mark(o, i, true)} data-tip="La bobine est là, sans passer par un ajout ou un scan"
-                        style={{ border:"1px solid var(--border)", background:"var(--surface)", color:"var(--text)", cursor:"pointer", fontSize:11, fontWeight:800, padding:"2px 8px", borderRadius:10 }}>reçu</button>)}
+                  <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{lineName(it)}</span>
+                  <Marks it={it}/>
+                  <span style={{ fontWeight:800, fontVariantNumeric:"tabular-nums" }}>{it.received ? `${left}/${it.qty}` : `×${it.qty}`}</span>
+                  {isAdmin && <button type="button" onClick={() => mark(o, i, true)} data-tip="La bobine est là, sans passer par un ajout ou un scan"
+                        style={{ border:"1px solid var(--border)", background:"var(--surface)", color:"var(--text)", cursor:"pointer", fontSize:11, fontWeight:800, padding:"2px 8px", borderRadius:10 }}>reçu</button>}
                 </div>); })}
             </div>
           </div>); })}
