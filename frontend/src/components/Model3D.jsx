@@ -61,9 +61,11 @@ function boxUV(THREE, geo) {
   return g;
 }
 
-function Viewer({ url, glb, onState, palette = null, finishes = null, glow = false, bed = null }) {
+function Viewer({ url, glb, onState, palette = null, finishes = null, glow = false, bed = null, litho = false }) {
   const box = useRef(null);
   const [dark, setDark] = useState(false);
+  const [lit, setLit] = useState(false);
+  useEffect(() => { if (lit) egg("ombres_chinoises"); }, [lit]);
   const api = useRef(null);
   useEffect(() => {
     let dead = false, cleanup = () => {};
@@ -106,7 +108,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
       let raf = 0, running = false, dragging = false, stopAt = 0;
       // lumiere eteinte : rendu avec un vrai halo (bloom) autour de ce qui luit
       let composer = null, bloomOn = false;
-      const render = () => { if (bloomOn && composer) composer.render(); else renderer.render(scene, camera); };
+      // lumiere derriere (lithophane) : un rendu a part, par epaisseurs traversees
+      let lit = null, litOn = false;
+      const render = () => { if (litOn && lit) lit.render(); else if (bloomOn && composer) composer.render(); else renderer.render(scene, camera); };
       const loop = () => {
         const moving = controls.update();
         render();
@@ -117,7 +121,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
       controls.addEventListener("start", () => { dragging = true; kick(); });
       controls.addEventListener("end", () => { dragging = false; stopAt = performance.now() + 1200; });
       controls.addEventListener("change", kick);
-      const ro = new ResizeObserver(() => { renderer.setSize(el.clientWidth, el.clientHeight); composer?.setSize(el.clientWidth, el.clientHeight); camera.aspect = el.clientWidth / el.clientHeight; camera.updateProjectionMatrix(); render(); });
+      const ro = new ResizeObserver(() => { renderer.setSize(el.clientWidth, el.clientHeight); composer?.setSize(el.clientWidth, el.clientHeight); lit?.resize(); camera.aspect = el.clientWidth / el.clientHeight; camera.updateProjectionMatrix(); render(); });
       ro.observe(el);
       const disposables = [renderer];
       cleanup = () => { ro.disconnect(); cancelAnimationFrame(raf); controls.dispose();
@@ -241,7 +245,80 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
           glowMats.forEach(m => { m.emissiveIntensity = on ? m.userData.nightEmit : m.userData.dayEmit; if (m.userData.rim) m.userData.rim.value = on ? 0.6 : 2.2; });
           render();
         };
-        api.current = { fit, night };
+        // lumiere derriere (28/10/2026) : un lithophane ne se lit qu'eclaire par l'arriere. En chaque pixel, l'epaisseur
+        // de chaque couleur que la lumiere traverse (la somme des profondeurs des faces arriere moins celle des faces
+        // avant, par melange additif : juste meme quand le rayon entre et sort plusieurs fois), puis la lumiere filtree
+        // couleur par couleur selon cette epaisseur : du blanc laisse passer 43 % par mm (0,8 mm clair, 3 mm sombre),
+        // une couleur teinte d'autant, un noir bouche. Les couches CMJ enfouies sous le relief blanc ressortent ainsi.
+        const litSetup = () => {
+          const floatBlend = renderer.capabilities.isWebGL2 && renderer.extensions.has("EXT_float_blend");
+          const pr = renderer.getPixelRatio();
+          const mk = type => new THREE.WebGLRenderTarget(Math.round(el.clientWidth * pr), Math.round(el.clientHeight * pr),
+            { type, format: THREE.RGBAFormat, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+          const tAll = mk(floatBlend ? THREE.FloatType : THREE.HalfFloatType), tG = mk(floatBlend ? THREE.FloatType : THREE.HalfFloatType), acc = mk(THREE.HalfFloatType);
+          // la profondeur de chaque face, ajoutee (arriere) ou retiree (avant) ; comptee depuis le devant du modele,
+          // pour rester precise meme en demi-flottants
+          const near = { value: 0 };
+          const depthMat = sgn => new THREE.ShaderMaterial({ uniforms: { near, sgn: { value: sgn } }, side: sgn > 0 ? THREE.BackSide : THREE.FrontSide,
+            depthTest: false, depthWrite: false, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
+            vertexShader: `uniform float near; varying float vz;
+              void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vz = -mv.z - near; gl_Position = projectionMatrix * mv; }`,
+            fragmentShader: `uniform float sgn; varying float vz; void main() { gl_FragColor = vec4(sgn * vz, 0.0, 0.0, 0.0); }` });
+          const matF = depthMat(-1), matB = depthMat(1);
+          scene.updateMatrixWorld(true);
+          const groups = new Map();                       // couleur -> les faces de cette couleur, avant et arriere
+          scene.traverse(o => {
+            if (!o.isMesh || !o.geometry || !o.material?.color || o.parent === scene) return;
+            const k = o.material.color.getHex();
+            if (!groups.has(k)) groups.set(k, { col: o.material.color.clone(), sc: new THREE.Scene() });
+            for (const m of [matF, matB]) {
+              const c = new THREE.Mesh(o.geometry, m); c.matrixAutoUpdate = false; c.matrix.copy(o.matrixWorld); c.frustumCulled = false;
+              groups.get(k).sc.add(c);
+            }
+          });
+          const quad = new THREE.PlaneGeometry(2, 2), ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+          // la lumiere qui reste apres cette couleur, multipliee a ce qui est deja passe
+          const transMat = new THREE.ShaderMaterial({ uniforms: { tex: { value: null }, col: { value: new THREE.Color() } }, depthTest: false, depthWrite: false,
+            blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.DstColorFactor, blendDst: THREE.ZeroFactor,
+            vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+            fragmentShader: `uniform sampler2D tex; uniform vec3 col; varying vec2 vUv;
+              void main() { float t = max(0.0, texture2D(tex, vUv).r); gl_FragColor = vec4(pow(max(col, vec3(0.004)) * 0.43, vec3(t)), 1.0); }` });
+          // l'image : la lumiere filtree la ou il y a de la matiere, la nuit ailleurs
+          const compMat = new THREE.ShaderMaterial({ uniforms: { all: { value: tAll.texture }, acc: { value: acc.texture } }, depthTest: false, depthWrite: false,
+            vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+            fragmentShader: `uniform sampler2D all; uniform sampler2D acc; varying vec2 vUv;
+              void main() { float t = texture2D(all, vUv).r; vec3 T = texture2D(acc, vUv).rgb;
+                vec3 c = t > 0.02 ? vec3(1.0, 0.95, 0.84) * 1.7 * T : vec3(0.006, 0.008, 0.016);
+                gl_FragColor = vec4(c, 1.0);
+                #include <colorspace_fragment>
+              }` });
+          const qT = new THREE.Scene(); qT.add(new THREE.Mesh(quad, transMat));
+          const qC = new THREE.Scene(); qC.add(new THREE.Mesh(quad, compMat));
+          disposables.push(tAll, tG, acc, matF, matB, transMat, compMat, quad);
+          return {
+            resize: () => { const q = renderer.getPixelRatio(); for (const t of [tAll, tG, acc]) t.setSize(Math.round(el.clientWidth * q), Math.round(el.clientHeight * q)); },
+            render: () => {
+              const ac = renderer.autoClear; renderer.autoClear = false;
+              near.value = Math.max(0, camera.position.distanceTo(sph.center) - sph.radius);
+              renderer.setClearColor(0x000000, 0);
+              renderer.setRenderTarget(tAll); renderer.clear();
+              for (const g of groups.values()) renderer.render(g.sc, camera);
+              renderer.setRenderTarget(acc); renderer.setClearColor(0xffffff, 1); renderer.clear();
+              for (const g of groups.values()) {
+                renderer.setRenderTarget(tG); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(g.sc, camera);
+                renderer.setRenderTarget(acc); transMat.uniforms.tex.value = tG.texture; transMat.uniforms.col.value.copy(g.col); renderer.render(qT, ortho);
+              }
+              renderer.setRenderTarget(null); renderer.render(qC, ortho);
+              renderer.setClearColor(0x000000, 0); renderer.autoClear = ac;
+            },
+          };
+        };
+        const backlight = on => {
+          if (on && !lit) lit = litSetup();
+          litOn = on;
+          render();
+        };
+        api.current = { fit, night, backlight };
         const s = bb2.getSize(new THREE.Vector3());
         onState({ busy: false, error: null, size: glb ? [s.x, s.z, s.y] : [s.x, s.z, s.y], glow: glowMats.length > 0 });
       } catch (e) {
@@ -252,15 +329,22 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
   }, [url, glb]); // eslint-disable-line react-hooks/exhaustive-deps
   return <div style={{ position: "relative", width: "100%", height: "100%" }}>
     <div ref={box} style={{ position: "absolute", inset: 0, touchAction: "none", borderRadius: "inherit", transition: "background .4s",
-      background: dark ? "radial-gradient(circle at 50% 40%, #0b1020, #020308)" : "transparent" }}/>
-    {glow && <button type="button" onClick={() => { const v = !dark; setDark(v); api.current?.night(v); }}
-      data-tip={dark ? "Rallumer la lumière" : "Éteindre la lumière : le filament phosphorescent luit"}
-      style={{ position: "absolute", right: 56, bottom: 10, height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
-        background: dark ? "linear-gradient(135deg, #facc15, #f59e0b)" : "linear-gradient(135deg, #1e293b, #0f172a)", color: dark ? "#1e293b" : "#e2e8f0",
-        fontSize: 13, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{dark ? "💡 Rallumer" : "🌙 Éteindre"}</button>}
-    <button type="button" onClick={() => api.current?.fit()} data-tip="Recentrer la vue"
-      style={{ position: "absolute", right: 10, bottom: 10, width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
-        background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>⟲</button>
+      background: dark || lit ? "radial-gradient(circle at 50% 40%, #0b1020, #020308)" : "transparent" }}/>
+    <div style={{ position: "absolute", right: 10, bottom: 10, display: "flex", gap: 8 }}>
+      {litho && <button type="button" onClick={() => { const v = !lit; setLit(v); api.current?.backlight(v); }}
+        data-tip={lit ? "Éclairer par devant" : "Lumière derrière : l'image du lithophane apparaît, comme devant une lampe"}
+        style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
+          background: lit ? "linear-gradient(135deg, #fde68a, #f59e0b)" : "linear-gradient(135deg, #1e293b, #0f172a)", color: lit ? "#1e293b" : "#e2e8f0",
+          fontSize: 13, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{lit ? "☀️ Devant" : "🔦 Derrière"}</button>}
+      {glow && <button type="button" onClick={() => { const v = !dark; setDark(v); api.current?.night(v); }}
+        data-tip={dark ? "Rallumer la lumière" : "Éteindre la lumière : le filament phosphorescent luit"}
+        style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
+          background: dark ? "linear-gradient(135deg, #facc15, #f59e0b)" : "linear-gradient(135deg, #1e293b, #0f172a)", color: dark ? "#1e293b" : "#e2e8f0",
+          fontSize: 13, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{dark ? "💡 Rallumer" : "🌙 Éteindre"}</button>}
+      <button type="button" onClick={() => api.current?.fit()} data-tip="Recentrer la vue"
+        style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
+          background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>⟲</button>
+    </div>
   </div>;
 }
 
@@ -367,7 +451,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         <div style={{ position: "relative", height: "min(62dvh, 560px)", borderRadius: 18, overflow: "hidden", border: "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
           {p && <Viewer key={`${p.url}|${shown ? "alt" : "own"}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown}
-            finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes} glow={!!st.glow} bed={meta?.bed}/>}
+            finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes} glow={!!st.glow} bed={meta?.bed} litho={!!p.litho}/>}
           {alt && p && !isGlb(p.url) && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
             background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
             {[[true, "Couleurs d'origine"], [false, `Couleurs ${altLabel.toLowerCase()}`]].map(([o, l]) => <button key={l} type="button" onClick={() => setOwn(o)}

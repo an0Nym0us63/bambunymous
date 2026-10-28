@@ -22,7 +22,8 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 4                           # 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10)
+FORMAT_V = 5                           # 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+_LITHO = re.compile(r"litho|lithophan", re.I)
 MAX_TRIANGLES = 6_000_000              # au-dela, le plateau n'est pas converti (trop lourd pour un telephone)
 _TRI_PAINT = re.compile(rb'<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"([^>]*)>')
 _PAINT = re.compile(rb'paint_color="([0-9A-F]+)"')
@@ -556,6 +557,12 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     colors = _colors_of(z)
     zch = _z_changes(z, colors)
     plates, settings = _settings(z)
+    # les noms (titre du modele, objets et pieces), pour reconnaitre un lithophane
+    try:
+        names_txt = " ".join(re.findall(r'key="name" value="([^"]*)"', z.read("Metadata/model_settings.config").decode("utf-8", "replace")))
+    except KeyError:
+        names_txt = ""
+    names_txt += " " + " ".join(re.findall(r'<metadata name="Title">([^<]*)', root_xml[:20000]))
     # les couleurs d'un vieux 3MF sans reglages Bambu : les groupes de couleur du fichier
     groups = {m.group(1): m.group(2) for m in re.finditer(r'<m:colorgroup id="(\d+)">\s*<m:color color="([^"]+)"', root_xml)}
     build = []
@@ -667,7 +674,11 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         # compresse une fois pour toutes : servi tel quel (Content-Encoding: gzip), le telephone le recoit leger
         _step(key, 78 + 20 * (len(meta["plates"]) + 1) / max(1, len(work)) - 10 / max(1, len(work)), "Compression")
         _write(out_dir / f"plate_{n}.bin", _gzip(bytes(buf)))
+        # un lithophane (28/10/2026) : dit par son nom (plateau, modele, pieces « litho… »), ou une plaque mince
+        # (6 mm au plus) et large ; la vue propose alors la lumiere derriere
+        litho = bool(_LITHO.search(f"{pname} {names_txt}")) or (size[2] <= 6 and min(size[0], size[1]) >= 40)
         meta["plates"].append({"n": n, "name": pname, "triangles": total, "size_mm": [round(x, 1) for x in size],
+                               **({"litho": True} if litho else {}),
                                # les hauteurs de changement de filament, pour les dire sous la vue
                                **({"z_colors": [[round(zt, 2), str(c).lstrip("#").upper()[:6]] for zt, _, c, _ in zchg[1]]} if zchg else {})})
     _write(out_dir / "plates.json", json.dumps(meta).encode("utf-8"))
