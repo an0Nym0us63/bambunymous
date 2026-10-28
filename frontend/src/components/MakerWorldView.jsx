@@ -124,6 +124,11 @@ export default function MakerWorldView({ onSearch }) {
   const [dk, setDk] = useState(null);              // Decouvrir : fil choisi
   const [catsOpen, setCatsOpen] = useState(false); // Decouvrir : grille des categories depliee
   const [q, setQ] = useState("");                  // saisie de recherche
+  // le filtre des collections (28/10/2026) : tape, la grille se reduit aussitot (les collections, et les modeles de
+  // celle ouverte ou de « J'aime »), sans rien demander a MakerWorld
+  const [cq, setCq] = useState("");
+  const foldT = t => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const cqn = foldT(cq.trim());
   const [sq, setSq] = useState("");                // recherche lancee
   const [more, setMore] = useState(false);         // page suivante en cours
   const sentinel = useRef(null);                   // bas de grille : charge la page suivante
@@ -377,7 +382,10 @@ export default function MakerWorldView({ onSearch }) {
   const toRate = useToRate(tab === "favorites" && !coll && !friend);
   const [rateOpen, setRateOpen] = useState(false);
   const all = data?.items || [];
-  const items = all.filter(x => pf === "all" || (pf === "new" ? !x.printed : x.printed > 0));
+  const items = all.filter(x => (pf === "all" || (pf === "new" ? !x.printed : x.printed > 0))
+    && (!cqn || (tab !== "favorites" && tab !== "likes") || foldT(x.title).includes(cqn) || foldT(x.creator || x.author || "").includes(cqn)));
+  const colls = (data?.collections || []).filter(c => !cqn || foldT(c.title).includes(cqn));
+  const canFilter = (tab === "favorites" || tab === "likes") && !!data && !data.error && ((data.collections || []).length > 3 || all.length > 6);
   const mineOf = useMine(showModels ? all.map(x => x.design_id) : []);   // chez un copain : « deja chez moi ? »
   const myOf = useMyMw(showModels && !friend && status?.connected ? all.map(x => x.design_id) : []);   // chez moi : aime, dans mes collections
   const count = { all: all.length, printed: all.filter(x => x.printed > 0).length, new: all.filter(x => !x.printed).length };
@@ -417,7 +425,7 @@ export default function MakerWorldView({ onSearch }) {
               {TABS.filter(([k]) => k !== "creator" || status.connected).map(([k, l]) => {
                 const [ic, c] = SUB[k], on = tab === k;
                 return (
-                  <button key={k} onClick={() => { setTab(k); if (k !== "favorites") setColl(null); }}
+                  <button key={k} onClick={() => { setTab(k); setCq(""); if (k !== "favorites") setColl(null); }}
                     style={{ flex:"1 1 auto", minWidth:0, padding:"7px 3px", borderRadius:12, fontSize:"clamp(10.5px, 3.1vw, 12.5px)", fontWeight:800,
                       cursor:"pointer", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", border:"none",
                       display:"flex", alignItems:"center", justifyContent:"center", gap:4,
@@ -486,6 +494,17 @@ export default function MakerWorldView({ onSearch }) {
           {picker && creators && (
             <CreatorPicker creators={creators} picked={picked}
               onClose={() => setPicker(false)} onApply={ids => { setPicked(ids); setPicker(false); }}/>
+          )}
+          {canFilter && (
+            <div style={{ position:"relative", marginTop:10 }}>
+              <span style={{ position:"absolute", left:13, top:"50%", transform:"translateY(-50%)", fontSize:13, pointerEvents:"none" }}>🔎</span>
+              <input value={cq} onChange={e => setCq(e.target.value)} autoComplete="off" enterKeyHint="search" aria-label="Filtrer"
+                placeholder={coll ? `Filtrer dans « ${coll.title} »…` : tab === "likes" ? "Filtrer mes j'aime…" : "Filtrer mes collections…"}
+                style={{ width:"100%", height:38, boxSizing:"border-box", padding:"0 34px 0 36px", borderRadius:20, fontSize:13,
+                  background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)", outline:"none" }}/>
+              {cq && <button type="button" onClick={() => setCq("")} aria-label="Effacer" style={{ position:"absolute", right:6, top:"50%", transform:"translateY(-50%)",
+                width:26, height:26, borderRadius:"50%", border:"none", background:"var(--surface)", color:"var(--muted)", cursor:"pointer" }}>✕</button>}
+            </div>
           )}
           {tab === "discover" && (
             <form onSubmit={e => { e.preventDefault(); setSq(q.trim()); }}
@@ -566,10 +585,11 @@ export default function MakerWorldView({ onSearch }) {
             ) : data === null ? <Skeleton/>
             : data.error ? <p style={{ ...msg, color:"#f59e0b" }}>MakerWorld ne répond pas comme prévu : {data.error}</p>
             : !showModels ? (
-              (data.collections || []).length === 0 && !toRate?.items?.length ? <p style={msg}>Aucune collection.</p> : (
+              (data.collections || []).length === 0 && !toRate?.items?.length ? <p style={msg}>Aucune collection.</p>
+              : colls.length === 0 ? <p style={msg}>Aucune collection ne contient « {cq.trim()} ».</p> : (
                 <div style={grid}>
-                  {!friend && toRate?.items?.length > 0 && <ToRateTile data={toRate} card={card} onClick={() => setRateOpen(true)}/>}
-                  {(data.collections || []).map(c => (
+                  {!friend && !cqn && toRate?.items?.length > 0 && <ToRateTile data={toRate} card={card} onClick={() => setRateOpen(true)}/>}
+                  {colls.map(c => (
                     <Pressable as="button" key={c.id} onClick={() => openColl(c)} menu={() => collMenu(c)}
                       style={{ ...card, cursor:"pointer", padding:0, textAlign:"left", color:"var(--text)", position:"relative" }}>
                       <Mosaic covers={c.covers}/>
@@ -584,7 +604,7 @@ export default function MakerWorldView({ onSearch }) {
                   ))}
                 </div>
               )
-            ) : items.length === 0 ? <p style={msg}>{pf === "new" && all.length ? "Tout a déjà été imprimé 🎉"
+            ) : items.length === 0 ? <p style={msg}>{cqn && all.length ? `Rien ne contient « ${cq.trim()} ».` : pf === "new" && all.length ? "Tout a déjà été imprimé 🎉"
                 : pf === "printed" && all.length ? "Aucun n'a encore été imprimé."
                 : view === "search" ? "Aucun résultat." : view === "discover" ? "Rien dans ce fil pour l'instant."
                 : tab === "following" ? "Aucun modèle (ou aucun créateur suivi)." : "Rien dans cette liste."}</p>
