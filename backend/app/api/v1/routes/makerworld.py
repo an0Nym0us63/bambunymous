@@ -975,12 +975,16 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
                     sl_colors = [h6(c) for c in T._colors_of(zz)]
             except (OSError, zipfile.BadZipFile):
                 emap, sl_colors = {}, []
-        try:
-            pn = int(plate if plate is not None else (((_json.loads(mwpl) or {}).get("plates") or [None])[0] if mwpl else plate_id or 1))
-        except (TypeError, ValueError, AttributeError):
-            pn = 1
+        # les filaments et poids d'origine face a cette impression : ceux de tous les plateaux qu'elle a faits (plusieurs
+        # plateaux regroupes en une impression, 28/10/2026 : ses grammes par filament les couvrent tous), sinon le
+        # plateau affiche ou son numero
+        pls = _print_plates(mwpl, plate_id, guesses.get(pid)) or ([plate] if plate is not None else [1])
+        agg: dict = {}
+        for n_ in pls:
+            for c, g in plate_fils.get(n_) or []:
+                agg[c] = agg.get(c, 0) + g
         assigned = _match_filaments([h6(c) for c in colors], used, sliced_by.get(pid) or {}, sl_colors, emap,
-                                    grams_by.get(pid) or {}, plate_fils.get(pn) or [])
+                                    grams_by.get(pid) or {}, list(agg.items()))
         for e, (es, how) in sorted(assigned.items()):
             a, b = h6(colors[e - 1]), used.get(es)
             if b and len(a) == 6 and len(b) == 6 and a not in out:
