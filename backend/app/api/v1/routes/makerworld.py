@@ -832,6 +832,7 @@ def _match_filaments(o_cols: list, used: dict, sliced: dict, sl_colors: list, em
     3) le reste, par ressemblance de couleur (celle notee au tranchage, sinon la bobine) et de poids : les filaments
        du plateau d'origine, sinon tous, face aux emplacements pas encore pris. Un modele peint au pinceau n'a que
        le filament de ses pieces dans les noms (28/10/2026 : le perroquet, numeros renumerotes, couleurs melangees)."""
+    import math
     assigned = {e: (es, "pièces") for e, es in emap.items() if es in used}
     sl = {es: c for es, c in sliced.items() if c}
     for k, c in enumerate(sl_colors):
@@ -845,14 +846,16 @@ def _match_filaments(o_cols: list, used: dict, sliced: dict, sl_colors: list, em
         if es:
             assigned[e] = (es, "tranchage")
             taken.add(es)
+    # les poids des filaments d'origine sur ces plateaux (fiche MakerWorld), par couleur exacte sinon la plus proche ;
+    # tous les filaments du createur restent candidats (28/10/2026 : un gris note d'une autre nuance sur la fiche
+    # n'etait jamais candidat, et finissait « aucune impression ne l'a utilise »)
     g_of = {}
     for c, g in plate_fils:
-        for k, col in enumerate(o_cols):
-            if col == c and (k + 1) not in g_of:
-                g_of[k + 1] = g
-                break
-    cand = sorted(g_of) if g_of else list(range(1, len(o_cols) + 1))
-    o_rem = [(e, o_cols[e - 1], g_of.get(e)) for e in cand if e not in assigned and len(o_cols[e - 1]) == 6]
+        near = sorted((math.dist(_rgb(col), _rgb(c)) / 441.7, k + 1) for k, col in enumerate(o_cols)
+                      if len(col) == 6 and (k + 1) not in g_of)
+        if near and near[0][0] <= 0.12:
+            g_of[near[0][1]] = g
+    o_rem = [(e, o_cols[e - 1], g_of.get(e)) for e in range(1, len(o_cols) + 1) if e not in assigned and len(o_cols[e - 1]) == 6]
     u_rem = [(es, sl.get(es) or c, grams.get(es)) for es, c in used.items() if es not in taken and len(sl.get(es) or c) == 6]
     for e, es in _assign(o_rem, u_rem):
         assigned[e] = (es, "couleur et poids")
