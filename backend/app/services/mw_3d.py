@@ -22,7 +22,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 3                           # 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10)
+FORMAT_V = 4                           # 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10)
 MAX_TRIANGLES = 6_000_000              # au-dela, le plateau n'est pas converti (trop lourd pour un telephone)
 _TRI_PAINT = re.compile(rb'<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"([^>]*)>')
 _PAINT = re.compile(rb'paint_color="([0-9A-F]+)"')
@@ -314,6 +314,82 @@ def _colors_of(z: zipfile.ZipFile) -> list:
         return []
 
 
+def _z_changes(z: zipfile.ZipFile, colors: list) -> dict:
+    """Les changements de filament a une hauteur (28/10/2026), poses dans Bambu Studio (le « M600 » d'une
+    impression monocouleur qui change de couleur a telle couche) : Metadata/custom_gcode_per_layer.xml.
+    {plateau : (mode, [(hauteur, extrudeur ou None, couleur, type)])}, hauteurs croissantes ; type 0 : changement de
+    couleur (la couleur donnee, sinon celle du filament), 2 : changement d'outil (la couleur de ce filament)."""
+    try:
+        xml = z.read("Metadata/custom_gcode_per_layer.xml").decode("utf-8", "replace")
+    except KeyError:
+        return {}
+    out = {}
+    for m in re.finditer(r"<plate>(.*?)</plate>", xml, re.S):
+        body = m.group(1)
+        pid = re.search(r'<plate_info\s+id="(\d+)"', body)
+        mode = re.search(r'<mode\s+value="([^"]*)"', body)
+        lst = []
+        for lm in re.finditer(r"<layer\b([^>]*)/?>", body):
+            a = lm.group(1)
+            typ = _attr(a, "type")
+            gcode = (_attr(a, "gcode") or "").upper()
+            if typ not in ("0", "2") and "M600" not in gcode:
+                continue
+            kind = 2 if typ == "2" else 0
+            try:
+                zt = float(_attr(a, "top_z"))
+            except (TypeError, ValueError):
+                continue
+            ext = _attr(a, "extruder")
+            ext = int(ext) if ext and ext.isdigit() else None
+            col = (_attr(a, "color") or "").strip()
+            if kind == 2 or not col:
+                col = colors[ext - 1] if ext and 0 < ext <= len(colors) else col
+            if not col:
+                continue
+            lst.append((zt, ext, col, kind))
+        if pid and lst:
+            out[int(pid.group(1))] = ((mode.group(1) if mode else "SingleExtruder"), sorted(lst))
+    return out
+
+
+def _cut_z(v, t, zc: float) -> tuple:
+    """Coupe un maillage au plan z = zc : (sommets completes, triangles dessous, triangles dessus). Un triangle a
+    cheval est decoupe en trois (un d'un cote, deux de l'autre), aux points ou ses aretes croisent le plan."""
+    import numpy as np
+    if not len(t):
+        return v, t, t
+    zz = v[:, 2]
+    up = zz[t] >= zc                                    # (m, 3) : chaque sommet au-dessus ?
+    n_up = up.sum(axis=1)
+    below, above = t[n_up == 0], t[n_up == 3]
+    mixed = t[(n_up > 0) & (n_up < 3)]
+    if not len(mixed):
+        return v, below, above
+    mu = up[(n_up > 0) & (n_up < 3)]
+    # le sommet seul de son cote en premier (l'ordre tourne : le sens du triangle est garde)
+    lone_up = mu.sum(axis=1) == 1
+    lone = np.where(lone_up, mu.argmax(axis=1), (~mu).argmax(axis=1))
+    idx = (lone[:, None] + np.arange(3)[None, :]) % 3
+    tri = np.take_along_axis(mixed, idx, axis=1)
+    la, b, c = tri[:, 0], tri[:, 1], tri[:, 2]
+    pa, pb, pc = v[la], v[b], v[c]
+    def hit(p, q):
+        f = (zc - p[:, 2]) / np.where(q[:, 2] == p[:, 2], 1.0, q[:, 2] - p[:, 2])
+        return p + (q - p) * np.clip(f, 0.0, 1.0)[:, None]
+    p1, p2 = hit(pa, pb), hit(pa, pc)
+    base = len(v)
+    i1 = np.arange(len(tri)) + base
+    i2 = i1 + len(tri)
+    v2 = np.concatenate([v, p1, p2])
+    lone_tri = np.stack([la, i1, i2], axis=1)
+    quad = np.concatenate([np.stack([i1, b, c], axis=1), np.stack([i1, c, i2], axis=1)])
+    quad_up = np.concatenate([~lone_up, ~lone_up])
+    below = np.concatenate([below, lone_tri[~lone_up], quad[~quad_up]])
+    above = np.concatenate([above, lone_tri[lone_up], quad[quad_up]])
+    return v2, below, above
+
+
 def _settings(z: zipfile.ZipFile) -> tuple:
     """(plateaux [(n, nom, [(object_id, instance)])], objets {id: {extruder, parts: {part_id: (extruder, type)}}})."""
     try:
@@ -378,11 +454,22 @@ def origin_finishes(src: Path) -> dict:
     names = ps.get("filament_settings_id") or []
     types = ps.get("filament_type") or []
     out = {}
-    for k, c in enumerate(cols):
+    def put(c, k):
         h = str(c or "").lstrip("#").upper()
         f = finish_of(names[k] if k < len(names) else "", types[k] if k < len(types) else "", color=c)
         if f and len(h) >= 6 and h[:6] not in out:
             out[h[:6]] = f
+    for k, c in enumerate(cols):
+        put(c, k)
+    # les couleurs des changements de filament en hauteur : la finition du filament qui les imprime
+    try:
+        with zipfile.ZipFile(src) as z:
+            for _mode, lst in _z_changes(z, cols).values():
+                for _zt, ext, c, _kind in lst:
+                    if ext:
+                        put(c, ext - 1)
+    except Exception:
+        pass
     return out
 
 
@@ -467,6 +554,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
             files[p] = _objects(z.read(p)) if p in names else {}
         return files[p]
     colors = _colors_of(z)
+    zch = _z_changes(z, colors)
     plates, settings = _settings(z)
     # les couleurs d'un vieux 3MF sans reglages Bambu : les groupes de couleur du fichier
     groups = {m.group(1): m.group(2) for m in re.finditer(r'<m:colorgroup id="(\d+)">\s*<m:color color="([^"]+)"', root_xml)}
@@ -513,6 +601,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     for n, pname, lst in work:
         groups_out: dict = {}                           # couleur -> [sommets, triangles]
         total = 0
+        zchg = zch.get(n)                               # les changements de filament en hauteur de ce plateau
         for parts in lst:
             for ext, fcol, mt, body in parts:
                 # la part de cette piece dans l'avancement (lecture 5 -> 75 %), decoupee en etapes
@@ -531,17 +620,33 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                 vt = v + np.array(mt[9:], dtype=np.float64) if np.array_equal(rot, np.eye(3)) else v @ rot + np.array(mt[9:])
                 for ex, tt in by_ext.items():
                     col = colors[ex - 1] if 0 < ex <= len(colors) else fcol
-                    g = groups_out.setdefault(_hex_rgba(col), [[], [], 0])
-                    if len(by_ext) == 1:
+                    # les changements de filament a une hauteur qui touchent ces triangles : un changement
+                    # d'outil ou, avec un seul filament, tout changement ; a plusieurs, celui de ce filament
+                    cuts = [(zt, c) for zt, e, c, kind in zchg[1] if kind == 2 or zchg[0] == "SingleExtruder" or e in (None, ex)] \
+                        if zchg else []
+                    if not cuts and len(by_ext) == 1:
+                        g = groups_out.setdefault(_hex_rgba(col), [[], [], 0])
                         g[0].append(vt)
                         g[1].append(tt + g[2])
                         g[2] += len(vt)
                         continue
-                    # piece peinte : seuls les sommets de cette couleur, renumerotes
-                    used, inv = np.unique(tt.ravel(), return_inverse=True)
-                    g[0].append(vt[used])
-                    g[1].append(inv.reshape(-1, 3) + g[2])
-                    g[2] += len(used)
+                    # tranche par tranche, de bas en haut : chacune a la couleur en cours a cette hauteur
+                    vv, rest, slices = vt, tt, []
+                    for zt, c in cuts:
+                        vv, lower, rest = _cut_z(vv, rest, zt)
+                        slices.append((col, lower))
+                        col = c
+                    slices.append((col, rest))
+                    for c, tr in slices:
+                        if not len(tr):
+                            continue
+                        # seuls les sommets de cette couleur (piece peinte ou tranchee), renumerotes
+                        g = groups_out.setdefault(_hex_rgba(c), [[], [], 0])
+                        used, inv = np.unique(tr.ravel(), return_inverse=True)
+                        g[0].append(vv[used])
+                        g[1].append(inv.reshape(-1, 3) + g[2])
+                        g[2] += len(used)
+                    total += sum(len(tr) for _, tr in slices) - len(tt)     # les triangles coupes en font plus
         if not groups_out or total > MAX_TRIANGLES:
             # vide : un 3MF tranche ne garde souvent que les pieces du plateau imprime
             meta["plates"].append({"n": n, "name": pname, "triangles": total, "skipped": total > MAX_TRIANGLES,
@@ -562,7 +667,9 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         # compresse une fois pour toutes : servi tel quel (Content-Encoding: gzip), le telephone le recoit leger
         _step(key, 78 + 20 * (len(meta["plates"]) + 1) / max(1, len(work)) - 10 / max(1, len(work)), "Compression")
         _write(out_dir / f"plate_{n}.bin", _gzip(bytes(buf)))
-        meta["plates"].append({"n": n, "name": pname, "triangles": total, "size_mm": [round(x, 1) for x in size]})
+        meta["plates"].append({"n": n, "name": pname, "triangles": total, "size_mm": [round(x, 1) for x in size],
+                               # les hauteurs de changement de filament, pour les dire sous la vue
+                               **({"z_colors": [[round(zt, 2), str(c).lstrip("#").upper()[:6]] for zt, _, c, _ in zchg[1]]} if zchg else {})})
     _write(out_dir / "plates.json", json.dumps(meta).encode("utf-8"))
     return meta
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { finishCanvas } from "../utils/finishTex";
+import { egg } from "../eggs";
 import { FSheet } from "./FicheKit";
 import client from "../api/client";
 import MwImg from "./MwImg";
@@ -325,6 +326,10 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     return () => { alive = false; clearInterval(id); };
   }, [base, wait, meta, err]);
   const p = meta?.plates?.[plate];
+  // un plateau dont le filament change a une hauteur (le « M600 » pose dans Bambu Studio, 28/10/2026) : le
+  // serveur a coupe les pieces a ces hauteurs, chaque tranche a sa couleur ; on les dit sous la vue
+  const zc = p?.z_colors || [];
+  useEffect(() => { if (zc.length) egg("piece_montee"); }, [zc.length]);   // eslint-disable-line react-hooks/exhaustive-deps
   // les couleurs montrees : d'origine, ou celles des filaments retenus / utilises (par defaut, s'il y en a)
   // un plateau peut avoir ses propres choix (platePalettes : { numero : palette })
   // les couleurs utilisees du plateau affiche (un groupe : celles des impressions de CE plateau) ; sans
@@ -387,6 +392,11 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {meta.ms >= 1000 && <span data-tip="La première ouverture prépare le modèle ; les suivantes sont immédiates">· préparé en {(meta.ms / 1000).toFixed(1).replace(".", ",")} s</span>}
           {st.size && <span>· {mm(st.size[0])} × {mm(st.size[1])} × {mm(st.size[2])}</span>}
           {p?.triangles ? <span>· {p.triangles.toLocaleString("fr-FR")} triangles</span> : null}
+          {zc.length > 0 && <span data-tip="Changement de filament posé dans Bambu Studio à cette hauteur : au-dessus, les pièces prennent cette couleur"
+            style={{ display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>· changement de filament à
+            {zc.map(([z, c], i) => <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+              <span style={{ width: 12, height: 12, borderRadius: "50%", display: "inline-block", border: "1px solid var(--border)",
+                background: shown?.[c] ? `#${hex6(shown[c])}` : `#${c}` }}/>{String(z).replace(".", ",")} mm{i < zc.length - 1 ? "," : ""}</span>)}</span>}
           {meta.skipped?.length > 0 && <span>· plateau{meta.skipped.length > 1 ? "x" : ""} {meta.skipped.join(", ")} trop lourd{meta.skipped.length > 1 ? "s" : ""} pour être affiché</span>}
         </div>}
         {/* les couleurs utilisees : chaque couleur du createur et ce qui l'a remplacee (ou rien de trouve) */}
