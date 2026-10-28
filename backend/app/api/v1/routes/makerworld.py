@@ -831,7 +831,8 @@ def _match_filaments(o_cols: list, used: dict, sliced: dict, sl_colors: list, em
        sinon le seul qui l'a) ;
     3) le reste, par ressemblance de couleur (celle notee au tranchage, sinon la bobine) et de poids : les filaments
        du plateau d'origine, sinon tous, face aux emplacements pas encore pris. Un modele peint au pinceau n'a que
-       le filament de ses pieces dans les noms (28/10/2026 : le perroquet, numeros renumerotes, couleurs melangees)."""
+       le filament de ses pieces dans les noms (28/10/2026 : le perroquet, numeros renumerotes, couleurs melangees) ;
+    4) par elimination : un seul filament du createur et une seule bobine qui restent vont ensemble."""
     import math
     assigned = {e: (es, "pièces") for e, es in emap.items() if es in used}
     sl = {es: c for es, c in sliced.items() if c}
@@ -859,6 +860,13 @@ def _match_filaments(o_cols: list, used: dict, sliced: dict, sl_colors: list, em
     u_rem = [(es, sl.get(es) or c, grams.get(es)) for es, c in used.items() if es not in taken and len(sl.get(es) or c) == 6]
     for e, es in _assign(o_rem, u_rem):
         assigned[e] = (es, "couleur et poids")
+    # 4) par elimination (28/10/2026) : s'il ne reste qu'un filament du createur (sur les plateaux de l'impression,
+    #    quand on les connait) et qu'une bobine de l'impression, c'est elle -- meme d'une autre couleur ou matiere
+    taken = {es for es, _h in assigned.values()}
+    left_o = [e for e in range(1, len(o_cols) + 1) if e not in assigned and len(o_cols[e - 1]) == 6 and (not g_of or e in g_of)]
+    left_u = [es for es, c in used.items() if es not in taken and len(c) == 6]
+    if len(left_o) == 1 and len(left_u) == 1:
+        assigned[left_o[0]] = (left_u[0], "élimination")
     return assigned
 
 

@@ -7,7 +7,8 @@ import { egg } from "../eggs";
 // couleur notee au tranchage, couleur et poids), et, quand elle se trompe, le choix a la main parmi les filaments
 // de l'impression ou du groupe -- garde sur le serveur, pour la carte comme pour la vue 3D.
 const HOW = { "pièces": "trouvé par les pièces de même nom", tranchage: "même couleur notée au tranchage",
-  "couleur et poids": "la bobine la plus ressemblante, en couleur et en poids", choisi: "choisi à la main" };
+  "couleur et poids": "la bobine la plus ressemblante, en couleur et en poids", "élimination": "par élimination : la seule bobine qui restait",
+  choisi: "choisi à la main" };
 
 const Sw = ({ c, size = 14 }) => <span style={{ width: size, height: size, borderRadius: "50%", display: "inline-block", flexShrink: 0,
   border: "1px solid var(--border)", background: c ? `#${c}` : "repeating-linear-gradient(45deg, var(--surface2) 0 3px, var(--border) 3px 6px)" }}/>;
