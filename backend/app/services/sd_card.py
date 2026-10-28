@@ -254,11 +254,23 @@ def _pair(items: list[dict], rows: list) -> None:
         cand = [x for x in starts[bisect_left(start_keys, t - _td(seconds=lo_d)):bisect_right(start_keys, t + _td(seconds=lo_d))]
                 if abs((x[0] - t).total_seconds()) == lo_d]
         best = min(cand, key=lambda x: x[1])[2]
-        if best.print_date and abs((best.print_date - t).total_seconds()) <= 8 * 60:
+        if not (best.print_date and abs((best.print_date - t).total_seconds()) <= 8 * 60):
+            # le depart ne colle pas (chauffe ou calibration longue avant la video, horloge de l'imprimante
+            # recalee…) : par l'heure de FIN, celle du fichier (temps universel, fiable), face a la fin de
+            # chaque impression (28/10/2026 : dans un groupe, un seul print recevait son timelapse)
+            best = None
+            if it.get("end") and ends:
+                e = it["end"]
+                around = ends[bisect_left(end_keys, e - _td(minutes=12)):bisect_right(end_keys, e + _td(minutes=12))]
+                # parmi celles qui finissent a ce moment-la, la plus proche en fin, puis en depart
+                best = min(around, key=lambda x: (abs((x[0] - e).total_seconds()), abs((x[2].print_date - t).total_seconds())))[2] if around else None
+        if best:
             it["print"] = {"id": best.id, "name": best.translated_name or best.file_name or f"Impression #{best.id}",
                            "status": best.status,
                            # les autres noms, pour la recherche (l'original, le fichier)
                            "other": " ".join(x for x in (best.original_name, best.file_name) if x)}
+        else:
+            logger.info(f"[SD] timelapse {it.get('name')} : aucune impression a son depart ({t:%d/%m %H:%M}) ni a sa fin")
 
 
 def _attached(pid) -> bool:
