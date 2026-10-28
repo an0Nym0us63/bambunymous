@@ -66,6 +66,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
   const box = useRef(null);
   const [dark, setDark] = useState(false);
   const [lit, setLit] = useState(false);
+  const [bedOn, setBedOn] = useState(true);            // le plateau (grille) : masquable pour voir dessous
   useEffect(() => { if (lit) egg("ombres_chinoises"); }, [lit]);
   const api = useRef(null);
   useEffect(() => {
@@ -326,7 +327,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
           litOn = on;
           render();
         };
-        api.current = { fit, night, backlight };
+        const bedShow = on => { grid.visible = on; render(); };
+        api.current = { fit, night, backlight, bedShow };
         const s = bb2.getSize(new THREE.Vector3());
         onState({ busy: false, error: null, size: glb ? [s.x, s.z, s.y] : [s.x, s.z, s.y], glow: glowMats.length > 0 });
       } catch (e) {
@@ -344,6 +346,11 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, glow = fal
         style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: lit ? "linear-gradient(135deg, #fde68a, #f59e0b)" : "linear-gradient(135deg, #1e293b, #0f172a)", color: lit ? "#1e293b" : "#e2e8f0",
           fontSize: 13, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{lit ? "☀️ Devant" : "🔦 Derrière"}</button>}
+      <button type="button" onClick={() => { const v = !bedOn; setBedOn(v); api.current?.bedShow(v); }}
+        data-tip={bedOn ? "Masquer le plateau : voir le dessous sans la grille" : "Afficher le plateau"}
+        style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 15,
+          background: bedOn ? "var(--surface)" : "linear-gradient(135deg, #0EA5E9, #6366F1)", color: bedOn ? "var(--text2)" : "#fff",
+          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{bedOn ? "▦" : "▢"}</button>
       {glow && <button type="button" onClick={() => { const v = !dark; setDark(v); api.current?.night(v); }}
         data-tip={dark ? "Rallumer la lumière" : "Éteindre la lumière : le filament phosphorescent luit"}
         style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
