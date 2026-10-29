@@ -1147,7 +1147,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
   const scrollRef = useRef(null);
   const firstId = useRef(pProp.id);
   useEffect(() => {
-    if (pProp.total_cost_filament == null) client.get("/prints/" + pProp.id).then(r => setP(r.data)).catch(() => setP(pProp));
+    // une impression incomplete (30/10/2026 : celle d'une tuile de galerie n'a ni nom ni details) : relue en entier
+    if (pProp.total_cost_filament == null || pProp.file_name == null) client.get("/prints/" + pProp.id).then(r => setP(r.data)).catch(() => setP(pProp));
     else setP(pProp);
     if (firstId.current !== pProp.id) {
       // une autre impression dans la meme fiche (‹ › ou glisse) : etat propre, retour en haut
