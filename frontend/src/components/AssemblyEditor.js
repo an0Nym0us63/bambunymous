@@ -22,6 +22,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
 
   let mode = "move";                 // move | rotate | ground | mate
   let magnet = true, assist = true;
+  let rotStep = 0;                   // le cran des rotations a la poignee (0 : libre) ; Alt maintenu : tout libre
+  let alt = false;
   const sel = new Set();             // les pieces choisies
   let first = null;                  // coller : la premiere prise
   let pivot = null;                  // l'axe de contact apres un collage {p, axis, unit} (repere du support)
@@ -58,7 +60,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   let changes = 0, savedAt = 0;          // dirty : des changements depuis le dernier enregistrement
   const push = () => { undo.push(last); if (undo.length > 100) undo.shift(); redo.length = 0; last = snapshot(); changes++; onChange?.(state()); };
   const selName = () => sel.size === 0 ? null : sel.size === 1 ? [...sel][0].userData.name : `${sel.size} pièces${groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))) ? " (groupe)" : ""}`;
-  const state = () => ({ mode, magnet, assist, selected: selName(), count: sel.size, step: first ? 2 : 1, canUndo: undo.length > 0, canRedo: redo.length > 0,
+  const center = () => { if (!sel.size) return null; const c = boxOfAll([...sel]).getCenter(new THREE.Vector3()); return [c.x, c.y, c.z].map(v => Math.round(v * 10) / 10); };
+  const state = () => ({ mode, magnet, assist, rotStep, center: center(), selected: selName(), count: sel.size, step: first ? 2 : 1, canUndo: undo.length > 0, canRedo: redo.length > 0,
     pivot: !!pivot, dirty: changes !== savedAt,
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
     canUngroup: [...sel].some(g => groupOf(g)) });
@@ -225,7 +228,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     }
     if (t.lengthSq()) { apply(list, new THREE.Matrix4().makeTranslation(t.x, t.y, t.z)); placeHandle(); render(); }
   };
-  const applySnap = () => { tc.setTranslationSnap(magnet ? 1 : null); tc.setRotationSnap(magnet ? THREE.MathUtils.degToRad(15) : null); };
+  const applySnap = () => { tc.setTranslationSnap(magnet && !alt ? 1 : null); tc.setRotationSnap(rotStep && !alt ? THREE.MathUtils.degToRad(rotStep) : null); };
   applySnap();
 
   // coller A contre B
@@ -296,8 +299,45 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   };
   el.addEventListener("pointerdown", onDown);
   el.addEventListener("pointerup", onUp);
+  const rotateSel = (axis, deg) => {
+    if (!sel.size) return;
+    const c = boxOfAll([...sel]).getCenter(new THREE.Vector3());
+    const v = new THREE.Vector3(axis === "x" ? 1 : 0, axis === "y" ? 1 : 0, axis === "z" ? 1 : 0);
+    apply([...sel], about(c, new THREE.Quaternion().setFromAxisAngle(v, THREE.MathUtils.degToRad(deg))));
+    placeHandle(); push(); render();
+  };
+  // cadrer la vue sur la selection (ou sur tout)
+  const frame = () => {
+    const b = boxOfAll(sel.size ? [...sel] : all);
+    if (b.isEmpty()) return;
+    holder.updateMatrixWorld(true);
+    const wb = b.clone().applyMatrix4(holder.matrixWorld), sph = wb.getBoundingSphere(new THREE.Sphere());
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    const d = Math.max(sph.radius, 5) / Math.sin((camera.fov * Math.PI) / 360) * 1.2;
+    controls.target.copy(sph.center); camera.position.copy(sph.center).addScaledVector(dir, d);
+    camera.near = Math.max(0.1, d / 100); camera.far = d * 50; camera.updateProjectionMatrix(); controls.update(); render();
+  };
+  const onKeyUp = ev => { if (ev.key === "Alt" && alt) { alt = false; applySnap(); } };
   const onKey = ev => {
-    if (ev.target?.closest?.("input, textarea")) return;
+    if (ev.target?.closest?.("input, textarea, select")) return;
+    if (ev.key === "Alt") { if (!alt) { alt = true; applySnap(); } ev.preventDefault(); return; }
+    // les touches de Bambu Studio : M deplacer, R tourner, F poser sur une face ; C coller, Z cadrer
+    if (!ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+      const k = ev.key.toLowerCase();
+      if (k === "m") return api.setMode("move");
+      if (k === "r") return api.setMode("rotate");
+      if (k === "f") return api.setMode("ground");
+      if (k === "c") return api.setMode("mate");
+      if (k === "z") return frame();
+    }
+    if (mode === "rotate" && sel.size && ev.key.startsWith("Arrow") && !ev.ctrlKey && !ev.metaKey) {
+      // en mode Tourner, les fleches tournent : gauche/droite autour de Z, haut/bas autour de X ; 1° (Maj : 15°)
+      ev.preventDefault();
+      const d = ev.shiftKey ? 15 : 1;
+      if (ev.key === "ArrowLeft") rotateSel("z", d); else if (ev.key === "ArrowRight") rotateSel("z", -d);
+      else if (ev.key === "ArrowUp") rotateSel("x", d); else if (ev.key === "ArrowDown") rotateSel("x", -d);
+      return;
+    }
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z") { ev.preventDefault(); ev.shiftKey ? api.redo() : api.undo(); }
     else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "y") { ev.preventDefault(); api.redo(); }
     else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "g") { ev.preventDefault(); ev.shiftKey ? api.ungroup() : api.group(); }
@@ -313,10 +353,22 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     }
   };
   window.addEventListener("keydown", onKey);
+  window.addEventListener("keyup", onKeyUp);
+  const onBlur = () => { if (alt) { alt = false; applySnap(); } };
+  window.addEventListener("blur", onBlur);
 
   const api = {
     setMode: m => { mode = m; first = null; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
+    setRotStep: d => { rotStep = d; applySnap(); onChange?.(state()); },
+    rotate: rotateSel,
+    // placer le centre de la selection a une position exacte (mm, repere du 3MF : Z vers le haut)
+    moveTo: (x, y, z) => {
+      if (!sel.size) return;
+      const c = boxOfAll([...sel]).getCenter(new THREE.Vector3());
+      apply([...sel], new THREE.Matrix4().makeTranslation(x - c.x, y - c.y, z - c.z)); placeHandle(); push(); render();
+    },
+    frame,
     setAssist: on => { assist = on; onChange?.(state()); },
     group: () => {
       if (sel.size < 2) return;
@@ -341,6 +393,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       // pas tc.dispose() : en three 0.169 il appelle traverse, qui n'existe plus sur la poignee, et l'erreur cassait la
       // fermeture de la vue (page blanche, 29/10/2026) ; on la debranche et on libere son dessin a la main
       el.removeEventListener("pointerdown", onDown); el.removeEventListener("pointerup", onUp); window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", onBlur);
       try { tc.detach(); tc.disconnect(); } catch { /* deja debranchee */ }
       try { helper.traverse(o => { o.geometry?.dispose?.(); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m?.dispose?.()); }); } catch { /* rien */ }
       scene.remove(helper); holder.remove(handle);

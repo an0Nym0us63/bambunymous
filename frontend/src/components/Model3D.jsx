@@ -142,6 +142,10 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
       const camera = new THREE.PerspectiveCamera(40, el.clientWidth / el.clientHeight, 1, 5000);
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
+      // les gestes habituels (comme Bambu Studio, 29/10/2026) : clic gauche tourner, molette ou clic droit maintenus
+      // deplacer la vue, molette zoomer ; double-clic : la vue se centre sur le point vise
+      controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
+      controls.zoomToCursor = true;
       controls.dampingFactor = 0.15;                  // un elan court : la vue s'arrete vite d'elle-meme
       // une seule boucle, et seulement pendant que la vue bouge (27/10/2026) : avant, chaque image en demandait
       // deux (la suivante, et une de plus par l'evenement « change » que la mise a jour declenche elle-meme) ;
@@ -342,6 +346,16 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           controls.target.copy(sph.center); camera.near = Math.max(0.1, d / 100); camera.far = d * 20; camera.updateProjectionMatrix(); controls.update(); render();
         };
         fit();
+        const noMenu = e => e.preventDefault();
+        const focus = e => {
+          const r = el.getBoundingClientRect(), rc = new THREE.Raycaster();
+          rc.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+          const hit = rc.intersectObject(model, true)[0];
+          if (!hit) return;
+          camera.position.add(hit.point.clone().sub(controls.target)); controls.target.copy(hit.point); controls.update(); render();
+        };
+        renderer.domElement.addEventListener("contextmenu", noMenu);
+        renderer.domElement.addEventListener("dblclick", focus);
         // lumiere eteinte : seules les pieces phosphorescentes luisent (leur halo ressort dans le noir)
         const glowMats = [];
         scene.traverse(o => { if (o.isMesh && o.userData.glow) glowMats.push(o.material); });
@@ -515,15 +529,111 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
 
 // La barre de l'edition de la vue assemblee (29/10/2026, PC, en plein ecran)
 const EDIT_TIPS = {
-  move: "Clique une pièce (Ctrl / Maj : en ajouter ; Alt : une pièce d'un groupe seule), puis tire sur les flèches · clavier : flèches 1 mm (Maj : 10), Ctrl + ↑↓ : monter, descendre, Ctrl+A : tout",
-  rotate: "Clique une pièce (Ctrl / Maj : en ajouter), puis tourne la sélection par ses anneaux",
+  move: "Clique une pièce (Ctrl / Maj : en ajouter ; Alt : une pièce d'un groupe seule), puis tire sur les flèches (Alt maintenu : sans cran) · flèches 1 mm (Maj : 10), Ctrl + ↑↓ : monter · M R F C : modes, Z : cadrer",
+  rotate: "Clique une pièce, puis tourne-la par ses anneaux (Alt maintenu : sans cran) · flèches : 1° (Maj : 15°) · valeurs exactes à droite",
   ground: "Clique la face (ou l'arête) qui doit être posée au sol",
   mate1: "Clique la face ou l'arête de la pièce à déplacer (son groupe suit)",
   mate2: "Clique la face ou l'arête contre laquelle la coller",
   mate1a: "Assisté : clique une face de la pièce à déplacer, elle sera centrée et alignée sur l'autre",
 };
+// les valeurs exactes de la selection : position de son centre (mm) et rotation d'un angle choisi autour d'un axe
+function ExactPanel({ est, api }) {
+  const [pos, setPos] = useState(null);
+  const [deg, setDeg] = useState("90");
+  const c = est.center;
+  useEffect(() => { setPos(c ? c.map(String) : null); }, [c?.[0], c?.[1], c?.[2]]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!c || !pos) return null;
+  const inp = { width: 64, height: 28, padding: "0 6px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)",
+    fontSize: 12.5, fontWeight: 700, textAlign: "right" };
+  const go = () => { const v = pos.map(x => parseFloat(String(x).replace(",", "."))); if (v.every(Number.isFinite)) api?.moveTo(...v); };
+  const rb = { height: 28, padding: "0 8px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)",
+    fontSize: 12, fontWeight: 800, cursor: "pointer" };
+  const turn = (ax, sgn) => { const d = parseFloat(String(deg).replace(",", ".")); if (Number.isFinite(d) && d) api?.rotate(ax, sgn * d); };
+  return <div style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", zIndex: 3, padding: 10, borderRadius: 14, width: 230,
+    background: "color-mix(in srgb, var(--surface) 94%, transparent)", border: "1px solid var(--border)", boxShadow: "0 10px 30px rgba(0,0,0,.25)",
+    display: "flex", flexDirection: "column", gap: 8, fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>
+    <span style={{ fontWeight: 900, color: "var(--text)" }}>Position du centre (mm)</span>
+    {["X", "Y", "Z"].map((a, i) => <label key={a} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <span style={{ width: 14 }}>{a}</span>
+      <input value={pos[i]} onChange={e => setPos(p => p.map((x, j) => j === i ? e.target.value : x))} onKeyDown={e => { if (e.key === "Enter") go(); }}
+        onBlur={go} style={inp}/>
+    </label>)}
+    <span style={{ fontWeight: 900, color: "var(--text)", marginTop: 4 }}>Tourner de</span>
+    <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <input value={deg} onChange={e => setDeg(e.target.value)} style={inp}/> °
+    </label>
+    {["x", "y", "z"].map(a => <div key={a} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      <span style={{ width: 14 }}>{a.toUpperCase()}</span>
+      <button type="button" onClick={() => turn(a, 1)} style={rb}>⟲ +</button>
+      <button type="button" onClick={() => turn(a, -1)} style={rb}>⟳ −</button>
+    </div>)}
+  </div>;
+}
+
+// l'aide de l'edition : tous les gestes et raccourcis
+const EDIT_HELP = [
+  ["Regarder", [
+    ["Clic gauche glissé", "tourner autour du modèle"],
+    ["Clic molette ou clic droit glissé", "déplacer la vue"],
+    ["Molette", "zoomer (vers la souris)"],
+    ["Double-clic", "centrer la vue sur le point visé"],
+    ["Z", "cadrer la sélection (ou tout le modèle)"],
+  ]],
+  ["Choisir", [
+    ["Clic sur une pièce", "la choisir (ou tout son groupe)"],
+    ["Ctrl / Maj + clic", "en ajouter ou en retirer"],
+    ["Alt + clic", "une pièce seule dans un groupe"],
+    ["Ctrl + A", "tout choisir"],
+    ["Échap", "plus rien de choisi"],
+    ["🔗 Grouper (Ctrl + G)", "les pièces choisies bougent ensemble ; ⛓ Dégrouper (Ctrl + Maj + G)"],
+  ]],
+  ["Déplacer (M)", [
+    ["Flèches de la poignée", "tirer dans un axe ; le carré, dans un plan"],
+    ["← → ↑ ↓", "1 mm (Maj : 10 mm)"],
+    ["Ctrl + ↑ ↓", "monter, descendre"],
+    ["Panneau de droite", "la position exacte du centre (X, Y, Z en mm), puis Entrée"],
+  ]],
+  ["Tourner (R)", [
+    ["Anneaux de la poignée", "tourner autour d'un axe ; cran au choix (libre, 1°, 5°, 15°, 45°)"],
+    ["← →  /  ↑ ↓", "1° autour de Z / de X (Maj : 15°)"],
+    ["Panneau de droite", "tourner d'un angle exact autour de X, Y ou Z"],
+  ]],
+  ["Poser au sol (F)", [["Clic sur une face", "elle se pose à plat sur le sol ; une arête : mise à l'horizontale"]]],
+  ["Coller (C)", [
+    ["Face puis face", "la première pièce vient se plaquer contre l'autre"],
+    ["Arête puis arête", "les arêtes s'alignent"],
+    ["🪄 Assisté", "faces entières centrées et grands axes alignés ; arêtes milieu contre milieu"],
+    ["⟲ / ⟳ 90° 15°", "tourner ensuite la pièce collée autour du contact"],
+  ]],
+  ["Toujours", [
+    ["Alt maintenu en glissant", "sans aucun cran"],
+    ["🧷 Aimanter", "déplacement au mm ; lâchée à moins de 3 mm du sol ou d'une pièce, elle s'y colle"],
+    ["Ctrl + Z / Ctrl + Y", "annuler / refaire"],
+    ["💾 Enregistrer", "gardé dans BambuNymous, ton 3MF n'est pas touché ; ↺ Vue du 3MF pour revenir"],
+  ]],
+];
+function EditHelp({ onClose }) {
+  return <div onClick={onClose} style={{ position: "absolute", inset: 0, zIndex: 6, background: "rgba(2,6,23,.45)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(760px, calc(100% - 32px))", maxHeight: "calc(100% - 40px)", overflowY: "auto", padding: "16px 18px",
+      borderRadius: 16, background: "var(--sheet-bg)", border: "1px solid var(--border)", boxShadow: "0 20px 60px rgba(0,0,0,.4)", color: "var(--text2)" }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
+        <b style={{ flex: 1, fontSize: 16, color: "var(--text)" }}>Éditer l'assemblage</b>
+        <button type="button" onClick={onClose} style={{ border: "none", background: "none", color: "var(--muted)", fontSize: 18, cursor: "pointer" }}>✕</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "10px 18px" }}>
+        {EDIT_HELP.map(([t, rows]) => <div key={t}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: "#0EA5E9", textTransform: "uppercase", letterSpacing: ".05em", margin: "6px 0 4px" }}>{t}</div>
+          {rows.map(([k, v]) => <div key={k} style={{ display: "flex", gap: 8, fontSize: 12.5, lineHeight: 1.45, padding: "2px 0" }}>
+            <b style={{ color: "var(--text)", flex: "0 0 150px" }}>{k}</b><span>{v}</span></div>)}
+        </div>)}
+      </div>
+    </div>
+  </div>;
+}
+
 function EditBar({ est, api, onSave, onReset, onClose, saving }) {
   const [sure, setSure] = useState(false);
+  const [help, setHelp] = useState(false);
   if (!est) return null;
   const b = (on, extra = {}) => ({ height: 34, padding: "0 12px", borderRadius: 10, border: on ? "none" : "1px solid var(--border)", cursor: "pointer",
     fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap", color: on ? "#fff" : "var(--text2)",
@@ -538,6 +648,11 @@ function EditBar({ est, api, onSave, onReset, onClose, saving }) {
       <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>
       <button type="button" onClick={() => api?.setMagnet(!est.magnet)} style={b(est.magnet)}
         data-tip="Aimantation : pas de 1 mm et 15°, et une pièce lâchée près d'une autre ou du sol vient s'y coller">🧷 Aimanter</button>
+      <select value={est.rotStep} onChange={e => api?.setRotStep(Number(e.target.value))} data-tip="Le cran des rotations à la poignée (Alt maintenu : sans cran)"
+        style={{ height: 34, padding: "0 8px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)",
+          fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>
+        {[[0, "⟳ libre"], [1, "⟳ 1°"], [5, "⟳ 5°"], [15, "⟳ 15°"], [45, "⟳ 45°"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
       <button type="button" onClick={() => api?.setAssist(!est.assist)} style={b(est.assist)}
         data-tip="Collage assisté : les faces planes entières sont centrées l'une sur l'autre et leurs grands axes alignés (sinon : au point cliqué)">🪄 Assisté</button>
       {(est.canGroup || est.canUngroup) && <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>}
@@ -557,8 +672,11 @@ function EditBar({ est, api, onSave, onReset, onClose, saving }) {
           data-tip="Oublier l'assemblage enregistré : la vue redevient celle du 3MF">↺ Vue du 3MF</button>}
       <button type="button" disabled={saving} onClick={onSave} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}>
         {saving ? "…" : est.dirty ? "💾 Enregistrer" : "✓ Enregistré"}</button>
+      <button type="button" onClick={() => setHelp(true)} style={b(false)} data-tip="Tous les gestes et raccourcis">?</button>
       <button type="button" onClick={onClose} style={b(false)} data-tip="Fermer l'édition">✕</button>
     </div>
+    {help && <EditHelp onClose={() => setHelp(false)}/>}
+    {(est.mode === "move" || est.mode === "rotate") && <ExactPanel est={est} api={api}/>}
     <div style={{ position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)", zIndex: 3, padding: "7px 14px", borderRadius: 12, fontSize: 12.5,
       fontWeight: 700, color: "var(--text2)", background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)",
       maxWidth: "calc(100% - 140px)", textAlign: "center" }}>
