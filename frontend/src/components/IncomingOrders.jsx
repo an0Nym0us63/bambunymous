@@ -3,6 +3,7 @@ import client from "../api/client";
 import { useIsAdmin } from "../store/auth";
 import { egg } from "../eggs";
 import { moneyVal } from "../utils/money";
+import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 
 // « A venir » (28/10/2026) : les commandes Bambu Lab lues dans les mails dont des bobines ne sont pas encore
 // arrivees, en tete de l'onglet Stock. Une ligne par bobine commandee, avec sa couleur quand le catalogue l'a
@@ -133,8 +134,7 @@ export function OrderSheet({ id, order: given = null, onClose, onChanged }) {
         <div style={{ marginTop:12, display:"flex", flexDirection:"column", gap:6 }}>
           {fil.map(it => { const i = o.items.indexOf(it); const [txt, c] = lineState(it); const left = Math.max(0, (it.qty || 0) - (it.received || 0)); return (
             <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:12, background:"var(--surface2)", border:"1px solid var(--border)" }}>
-              <span style={{ width:18, height:18, borderRadius:"50%", flexShrink:0, border:"1px solid var(--border)",
-                background: it.color_hex ? `#${it.color_hex}` : "repeating-linear-gradient(45deg, var(--surface) 0 3px, var(--border) 3px 6px)" }}/>
+              <MiniSpool it={it}/>
               <span style={{ flex:1, minWidth:0 }}>
                 {/* le nom en entier, sur deux lignes s'il le faut (jamais coupe) ; les marques suivent le texte */}
                 <div style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", lineHeight:1.25, overflowWrap:"anywhere" }}>
@@ -157,12 +157,12 @@ export function OrderSheet({ id, order: given = null, onClose, onChanged }) {
 }
 
 // une bobine en miniature (la meme que sur la tuile Commandes) : la couleur du filament, hachuree si inconnue
-export function MiniSpool({ hex, size = 14, sent = false, style }) {
-  return <span aria-hidden="true" style={{ width:size, height:Math.round(size * 1.35), borderRadius:Math.round(size * 0.28), flexShrink:0, position:"relative",
-    background: hex ? `#${hex}` : "repeating-linear-gradient(45deg, var(--surface) 0 3px, var(--border) 3px 6px)",
-    boxShadow:`inset 0 0 0 1px rgba(0,0,0,0.18)${sent ? ", 0 0 0 2px #f59e0b" : ""}`, ...style }}>
-    <span style={{ position:"absolute", left:"22%", right:"22%", top:"44%", height:"12%", borderRadius:2, background:"rgba(255,255,255,0.55)", boxShadow:"0 0 0 1px rgba(0,0,0,0.12)" }}/>
-  </span>;
+// la pastille d'une ligne de commande : ronde, de la couleur du filament avec sa finition (silk, marbre, paillettes…),
+// comme partout dans l'appli ; hachuree si la couleur est inconnue (29/10/2026 : un rectangle plat barre d'un trait)
+export function MiniSpool({ it, hex = it?.color_hex, size = 18, style }) {
+  return <span aria-hidden="true" style={{ width:size, height:size, borderRadius:"50%", flexShrink:0, overflow:"hidden", border:"1px solid rgba(0,0,0,0.18)",
+    ...(hex ? colorBg(parseColorsList(hex), null, finishOf({ fila_type: it?.fila_type, name: it?.title, translated_name: it?.name_fr }))
+      : { background: "repeating-linear-gradient(45deg, var(--surface) 0 3px, var(--border) 3px 6px)" }), ...style }}/>;
 }
 
 const STAGE = { ordered: ["commandée", "#3b82f6", "📬"], shipping: ["en livraison", "#f59e0b", "🚚"], delivered: ["livrée", "#22c55e", "📦"], cancelled: ["annulée", "#94a3b8", "✕"] };
@@ -205,11 +205,14 @@ function OrderCard({ o, isAdmin, onOpen, onMark, onHide }) {
         </span>
       </div>
       {got > 0 && <div style={{ fontSize:11.5, fontWeight:700, color:"#22c55e", padding:"6px 12px 0" }}>✓ {got} bobine{got > 1 ? "s" : ""} déjà reçue{got > 1 ? "s" : ""}</div>}
-      <div style={{ padding:"6px 12px 10px", display:"flex", flexDirection:"column" }}>
+      {/* une petite carte par ligne, en grille : sur un grand ecran plusieurs colonnes, tout reste pres du nom (29/10/2026 :
+          une ligne pleine largeur rejetait quantite et « recu » a l'autre bout de l'ecran) */}
+      <div style={{ padding:"8px 12px 12px", display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(min(100%, 300px), 1fr))", gap:6 }}>
         {/* seules les bobines encore attendues ; ce qui est recu (ajoute, scanne ou coche) sort de la carte, la fenetre garde tout */}
-        {left.map(({ it, i }, k) => { const n = (it.qty || 0) - (it.received || 0), onWay = Math.max(0, (it.shipped || 0) - (it.received || 0)) > 0; return (
-          <div key={i} style={{ display:"flex", alignItems:"center", gap:10, fontSize:12.5, padding:"6px 0", borderTop: k ? "1px solid color-mix(in srgb, var(--border) 60%, transparent)" : "none" }}>
-            <MiniSpool hex={it.color_hex} sent={onWay}/>
+        {left.map(({ it, i }, k) => { const n = (it.qty || 0) - (it.received || 0); return (
+          <div key={i} style={{ display:"flex", alignItems:"center", gap:10, fontSize:12.5, padding:"7px 9px", minWidth:0, borderRadius:12,
+            background:"var(--surface2)", border:"1px solid color-mix(in srgb, var(--border) 70%, transparent)" }}>
+            <MiniSpool it={it}/>
             <span style={{ flex:1, minWidth:0, lineHeight:1.2, overflowWrap:"anywhere", color:"var(--text)", fontWeight:600, display:"flex", flexDirection:"column", gap:1 }}>{lineName(it)}
               <LinePrice it={it} cur={o.totals?.currency || it.currency} size={10.5}/></span>
             <Marks it={it}/>
