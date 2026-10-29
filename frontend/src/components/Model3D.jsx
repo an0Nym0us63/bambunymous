@@ -101,6 +101,19 @@ function boxUV(THREE, geo) {
 // rapport au 3MF) et la place enregistree de chacune ({cle : matrice 4x4}) ; editApi : l'edition (sur PC)
 // un exemplaire de plus d'une piece de la vue assemblee (30/10/2026) : ses maillages partages, ses matieres a lui (la
 // selection estompe les autres pieces matiere par matiere), a la meme place que la piece copiee
+// la boite des seules pieces montrees (30/10/2026 : three.js compte aussi les pieces masquees ou exclues ; une piece
+// exclue laissait sa place vide dans le cadrage et dans la vignette)
+function visibleBox(THREE, root) {
+  const box = new THREE.Box3(), b = new THREE.Box3();
+  root.updateMatrixWorld(true);
+  root.traverseVisible(o => {
+    if (!o.isMesh || !o.geometry) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    box.union(b.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld));
+  });
+  return box.isEmpty() ? new THREE.Box3().setFromObject(root) : box;
+}
+
 function copyPiece(THREE, src, n) {
   const g = new THREE.Group();
   for (const m of src.children) {
@@ -402,9 +415,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         if (dead) return;
         scene.add(model);
         // pose au centre du plateau, a sa hauteur ; la camera en vue de trois-quarts
-        const bb = new THREE.Box3().setFromObject(model), ctr = bb.getCenter(new THREE.Vector3());
+        const bb = visibleBox(THREE, model), ctr = bb.getCenter(new THREE.Vector3());
         model.position.set(-ctr.x, -bb.min.y, -ctr.z);
-        const bb2 = new THREE.Box3().setFromObject(model), sph = bb2.getBoundingSphere(new THREE.Sphere());
+        const bb2 = visibleBox(THREE, model), sph = bb2.getBoundingSphere(new THREE.Sphere());
         const fit = () => {
           const d = sph.radius / Math.sin((camera.fov * Math.PI) / 360) * 1.15;
           camera.position.set(sph.center.x + d * 0.6, sph.center.y + d * 0.55, sph.center.z + d * 0.6);
@@ -577,7 +590,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           const s3 = b.getSize(new THREE.Vector3());
           const gw = Math.max(64, Math.ceil(s3.x * 1.2 / 16) * 16), gd = Math.max(64, Math.ceil(s3.z * 1.2 / 16) * 16);
           grid.scale.set(gw / side, 1, gd / side);
-          const sp = new THREE.Box3().setFromObject(model).getBoundingSphere(new THREE.Sphere());
+          const sp = visibleBox(THREE, model).getBoundingSphere(new THREE.Sphere());
           sph.center.copy(sp.center); sph.radius = sp.radius;
           fit();
           onState({ busy: false, error: null, size: [s3.x, s3.z, s3.y], glow: glowMats.length > 0 });     // les dimensions sous la vue
@@ -592,7 +605,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           lit?.clearBg(true);
           renderer.setPixelRatio(1); renderer.setSize(size, size, false);
           camera.aspect = 1;
-          const sp = new THREE.Box3().setFromObject(model).getBoundingSphere(new THREE.Sphere());
+          const sp = visibleBox(THREE, model).getBoundingSphere(new THREE.Sphere());
           const dir = camera.position.clone().sub(controls.target).normalize();
           const d = sp.radius / Math.sin((camera.fov * Math.PI) / 360) * 1.08;
           camera.position.copy(sp.center).addScaledVector(dir, d); camera.lookAt(sp.center);
