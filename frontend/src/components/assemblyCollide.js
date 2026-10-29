@@ -1,4 +1,4 @@
-// Les collisions entre pieces de la vue assemblee (29/10/2026), pour l'emboitement et l'anti-collision : chaque piece a
+// Les collisions entre pieces de la vue assemblee (29/10/2026), pour l'anti-collision : chaque piece a
 // une copie allegee de son maillage (60 000 triangles au plus, sommets proches fusionnes) avec son arbre de recherche
 // (three-mesh-bvh), faits a la premiere demande et gardes. Deux pieces se touchent si leurs triangles se croisent.
 const MAX_TRIS = 60000;
