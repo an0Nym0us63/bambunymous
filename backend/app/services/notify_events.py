@@ -1132,7 +1132,9 @@ def _watch_more(st, cfg, status: str, prev: str, baseline: bool = False) -> None
         step = int(N.options_of(cfg, "print_progress")["step"])
         b = int((st.progress or 0) // step) * step
         last = _W["prog"].get(job)
-        if last is None or baseline:
+        # (un avancement qui redescend : le premier regard avait lu celui de l'impression precedente, encore dans l'etat
+        # au lancement -- 100 % -- et plus aucun palier ne partait ; on repart de la vraie valeur, 29/10/2026)
+        if last is None or baseline or (b < last and (b == 0 or last - b >= 2 * step)):
             _W["prog"][job] = b
         elif last < b < 100:
             _W["prog"][job] = b
