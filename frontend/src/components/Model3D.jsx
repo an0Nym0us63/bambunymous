@@ -131,7 +131,7 @@ function copyPiece(THREE, src, n) {
 
 function Viewer({ url, glb, onState, palette = null, finishes = null, multi = null, glow = false, bed = null, litho = false,
                   pieces = null, edit = null, editApi = null, pad = false, piecePalettes = null, editing = false, hue = null, bare = false,
-                  tdMap = null, onTd = null }) {
+                  tdMap = null, onTd = null, tdSlot = null }) {
   const [pans, setPans] = useState(false);
   const box = useRef(null);
   const [dark, setDark] = useState(false);
@@ -141,6 +141,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
   useEffect(() => { if (lit) egg("ombres_chinoises"); }, [lit]);
   // la transparence des couches d'un HueForge (30/10/2026) : une valeur par filament, reglable, gardee par couleur
   const [hueL, setHueL] = useState(null), [tdOpen, setTdOpen] = useState(false);
+  // un ecran etroit (telephone) : les boutons de la vue en icones seules (30/10/2026 : la rangee debordait)
+  const narrow = typeof window !== "undefined" && window.innerWidth < 600;
   // les valeurs gardees sur le modele arrivent parfois apres la vue : elles s'y appliquent alors
   useEffect(() => {
     if (!tdMap || !hueL) return;
@@ -796,9 +798,10 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           fontSize: 16, fontWeight: 800, background: on ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", color: on ? "#fff" : "var(--text2)",
           boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{l}</button>)}
     </div>}
-    {tdOpen && hueL && !lit && <div onPointerDown={e => e.stopPropagation()} style={{ position: "absolute", right: 10, bottom: 56, zIndex: 3, width: "min(300px, calc(100% - 20px))",
+    {tdOpen && hueL && !lit && (pan => (tdSlot ? createPortal(pan, tdSlot) : pan))(<div onPointerDown={e => e.stopPropagation()} style={{ zIndex: 3,
+      ...(tdSlot ? {} : { position: "absolute", right: 10, bottom: 56, width: "min(300px, calc(100% - 20px))", boxShadow: "0 10px 30px rgba(0,0,0,.25)" }),
       padding: "10px 12px", borderRadius: 14, background: "color-mix(in srgb, var(--surface) 94%, transparent)", border: "1px solid var(--border)",
-      boxShadow: "0 10px 30px rgba(0,0,0,.25)", backdropFilter: "blur(6px)", display: "flex", flexDirection: "column", gap: 8 }}>
+      backdropFilter: "blur(6px)", display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text)", flex: 1 }}>🎚 Transparence des couches</span>
         <button type="button" onClick={() => { hueL.forEach((l, i) => api.current?.setTd(i, l.def)); setHueL(hueL.map(l => ({ ...l, td: l.def })));
@@ -806,7 +809,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           data-tip="Revenir aux valeurs estimées d'après la clarté de chaque filament"
           style={{ border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)", borderRadius: 8, fontSize: 11, fontWeight: 800, padding: "3px 8px", cursor: "pointer" }}>Par défaut</button>
       </div>
-      <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.35 }}>L'épaisseur à laquelle chaque filament couvre presque tout ce qu'il y a dessous : plus petite, il couvre vite ; plus grande, il laisse voir la couleur d'en dessous.</div>
+      <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.35 }}>Petite valeur : le filament couvre vite ; grande : on voit la couleur d'en dessous.</div>
       {hueL.map((l, i) => <label key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>
         <span style={{ width: 14, height: 14, borderRadius: "50%", background: l.hex, border: "1px solid var(--border)", flexShrink: 0 }}/>
         <input type="range" min="0.1" max="3" step="0.05" value={l.td} style={{ flex: 1 }}
@@ -814,18 +817,18 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             onTd?.({ [hex6(l.hex)]: v }); egg("couches_fines"); }}/>
         <span style={{ width: 52, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{l.td.toFixed(2).replace(".", ",")} mm</span>
       </label>)}
-    </div>}
+    </div>)}
     <div style={{ position: "absolute", right: 10, bottom: 10, display: bare ? "none" : "flex", gap: 8 }}>
       {hueL && !lit && <button type="button" onClick={() => setTdOpen(o => !o)}
         data-tip="Régler la transparence de chaque filament de ce HueForge"
         style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 13, fontWeight: 800,
           background: tdOpen ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", color: tdOpen ? "#fff" : "var(--text2)",
-          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>🎚 Transparence</button>}
+          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }} aria-label="Transparence">{narrow ? "🎚" : "🎚 Transparence"}</button>}
       {litho && <button type="button" onClick={() => { const v = !lit; setLit(v); api.current?.backlight(v); }}
         data-tip={lit ? "Éclairer par devant" : "Lumière derrière : l'image du lithophane apparaît, comme devant une lampe"}
         style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: lit ? "linear-gradient(135deg, #fde68a, #f59e0b)" : "linear-gradient(135deg, #1e293b, #0f172a)", color: lit ? "#1e293b" : "#e2e8f0",
-          fontSize: 13, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{lit ? "☀️ Devant" : "🔦 Derrière"}</button>}
+          fontSize: 13, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }} aria-label={lit ? "Devant" : "Derrière"}>{lit ? (narrow ? "☀️" : "☀️ Devant") : (narrow ? "🔦" : "🔦 Derrière")}</button>}
       <button type="button" onClick={() => { const v = !bedOn; setBedOn(v); api.current?.bedShow(v); }}
         data-tip={bedOn ? "Masquer le plateau : voir le dessous sans la grille" : "Afficher le plateau"}
         style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 15,
@@ -835,7 +838,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         data-tip={dark ? "Rallumer la lumière" : "Éteindre la lumière : le filament phosphorescent luit"}
         style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: dark ? "linear-gradient(135deg, #facc15, #f59e0b)" : "linear-gradient(135deg, #1e293b, #0f172a)", color: dark ? "#1e293b" : "#e2e8f0",
-          fontSize: 13, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{dark ? "💡 Rallumer" : "🌙 Éteindre"}</button>}
+          fontSize: 13, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }} aria-label={dark ? "Rallumer" : "Éteindre"}>{dark ? (narrow ? "💡" : "💡 Rallumer") : (narrow ? "🌙" : "🌙 Éteindre")}</button>}
       {oriented && !editing && <button type="button" onClick={() => api.current?.untilt()} data-tip="Remettre le modèle comme à l'origine"
         style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>↺</button>}
@@ -843,7 +846,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         data-tip={floorPick ? "Annuler" : "Poser une face au sol : clique ensuite la face du modèle qui doit reposer sur le plateau (la vue seulement : rien n'est enregistré)"}
         style={{ height: 38, padding: "0 10px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 12.5, fontWeight: 800,
           background: floorPick ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", color: floorPick ? "#fff" : "var(--text2)",
-          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{floorPick ? "Clique la face…" : "⬇ Au sol"}</button>}
+          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }} aria-label="Au sol">{floorPick ? (narrow ? "Touche la face…" : "Clique la face…") : (narrow ? "⬇" : "⬇ Au sol")}</button>}
       <button type="button" onClick={() => api.current?.fit()} data-tip="Recentrer la vue"
         style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>⟲</button>
@@ -1464,6 +1467,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   // de plein ecran pour un element), et la barre d'edition en version tactile
   const editable = isAdmin && !fr && !!p?.assembled && !!p?.pieces && !!meta?.key;
   const [pfull, setPfull] = useState(false), [editErr, setEditErr] = useState(null), [starting, setStarting] = useState(false);
+  const [tdSlot, setTdSlot] = useState(null);         // sous la vue : le reglage de la transparence (il masquait l'image)
   // l'editeur prepare d'avance des que l'on peut editer : l'ouverture est alors immediate
   useEffect(() => {
     if (!editable) return;
@@ -1597,7 +1601,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             pieces={p.assembled ? p.pieces : null} edit={p.assembled && !(origView && !editing) ? edit : null} editApi={editApi} pad={full || editing} editing={editing}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
-            hue={p.litho && zc.length ? zc : null} bare={editing && !desktop} tdMap={td} onTd={fr ? null : saveTd}
+            hue={p.litho && zc.length ? zc : null} bare={editing && !desktop} tdMap={td} onTd={fr ? null : saveTd} tdSlot={full || pfull ? null : tdSlot}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}
           {starting && !editing && <div style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center",
             background: "color-mix(in srgb, var(--sheet-bg) 55%, transparent)" }}><Ring label="Ouverture de l'édition…"/></div>}
@@ -1660,6 +1664,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {(err || st.error || (st.broken && redo >= 1)) && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
             textAlign: "center", fontSize: 13, fontWeight: 700, color: "#ef4444" }}>{err || (st.error ? `Plateau illisible : ${st.error}` : "Plateau abîmé, même refait : rouvre la vue plus tard")}</div>}
         </div>
+        <div ref={setTdSlot} style={{ display: "contents" }}/>
         {editErr && !editing && <div style={{ alignSelf: "center", padding: "6px 12px", borderRadius: 10, fontSize: 12, fontWeight: 700, color: "#b91c1c",
           background: "color-mix(in srgb, #ef4444 12%, var(--surface))", border: "1px solid color-mix(in srgb, #ef4444 35%, transparent)" }}>
           L'édition n'a pas pu s'ouvrir : {editErr}</div>}
