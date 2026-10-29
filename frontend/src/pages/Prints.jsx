@@ -2052,8 +2052,7 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
               ★{nToRate > 1 ? ` ${nToRate}` : ""}</span>
           )}
           {aggCfg && (
-            <span style={{ position:"absolute", bottom:7, left:7, display:"inline-flex", alignItems:"center", gap:3, background:aggCfg.bg, color:"white",
-              fontSize:9, fontWeight:900, padding:"1px 7px", borderRadius:20 }}>
+            <span style={chipS(aggCfg.color, { bottom:7, left:7, display:"inline-flex", alignItems:"center", gap:3 })}>
               <AggIcon size={9}/> {aggCfg.label}
             </span>
           )}
@@ -2227,8 +2226,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
           onError={e => { e.currentTarget.style.display="none"; }}/>
         {check}
         {p.number_of_items > 1 && <span data-tip={`${p.number_of_items} pièces`} style={chipS("#2563EB", { top:7, right:7 })}>×{p.number_of_items}</span>}
-        {p.status !== "SUCCESS" && <span style={{ position:"absolute", top:7, left:7, background:stC, color:"white", fontSize:9, fontWeight:900,
-          padding:"1px 7px", borderRadius:20, boxShadow:`0 2px 6px ${stC}55`, visibility: selectMode ? "hidden" : "visible" }}>{stI} {stL}</span>}
+        {p.status !== "SUCCESS" && <span style={chipS(stC, { top:7, left:7, visibility: selectMode ? "hidden" : "visible" })}>{stI} {stL}</span>}
         {rateMe && <span data-tip="À évaluer sur MakerWorld" style={chipS("#D97706", { bottom:7, right:7 })}>★</span>}
       </div>
       <div style={{ padding:"5px 10px 9px" }}>
