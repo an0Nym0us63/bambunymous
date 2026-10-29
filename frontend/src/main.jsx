@@ -7,6 +7,7 @@ import { installPullRefreshGuard } from "./utils/pullRefreshGuard";
 import { installIosPullRefresh } from "./utils/iosPullRefresh";
 import { installDesktopHScroll } from "./utils/desktopHScroll";
 import { installChunkReload } from "./utils/importRetry";
+import { installDragClickGuard } from "./utils/dragClickGuard";
 
 // Coquille Android : les rangees horizontales n'arment plus le tirer-pour-rafraichir.
 installPullRefreshGuard();
@@ -20,6 +21,9 @@ installChunkReload();
 
 // A la souris : molette et glisser pour les rangees qui defilent de cote.
 installDesktopHScroll();
+
+// Selectionner un champ en glissant hors d'une fenetre ne la ferme plus.
+installDragClickGuard();
 
 // Init thème avant premier render (évite le flash)
 const savedTheme = localStorage.getItem("bambu-theme") || "dark";
