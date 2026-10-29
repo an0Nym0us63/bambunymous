@@ -16,7 +16,7 @@
 // contact (ou le long de l'arete), Maj + glisser la fait tourner autour du contact ; les pieces collees sur une piece
 // la suivent quand elle bouge ; « Decoller » la libere. Un collage est garde dans le repere de la piece support (B) :
 // le point et la normale du contact (et l'arete), enregistres avec l'assemblage.
-export async function createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder, pieces, render, onChange, groupsInit = [], jointsInit = [] }) {
+export async function createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder, pieces, render, onChange, groupsInit = [], jointsInit = [], autoGroup = false }) {
   const { TransformControls } = await import("three/examples/jsm/controls/TransformControls.js");
   const el = renderer.domElement;
   const ray = new THREE.Raycaster();
@@ -35,12 +35,22 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   let first = null;                  // coller : la premiere prise
   let pivot = null;                  // l'axe de contact apres un collage {p, axis, unit} (repere du support)
   // les groupes : des listes de pieces (gardes par leur cle)
-  let groups = (groupsInit || []).map(ks => ks.map(k => byKey.get(k)).filter(Boolean)).filter(g => g.length > 1);
+  // une cle d'avant le decoupage en morceaux (« objet:instance[:partie] ») designe tous ses morceaux
+  const byOld = k => byKey.has(k) ? [byKey.get(k)] : all.filter(g => String(g.userData.k || "").startsWith(`${k}:`));
+  let groups = (groupsInit || []).map(ks => ks.flatMap(byOld)).filter(g => g.length > 1);
+  // les morceaux d'une meme piece (« objet:instance:partie:morceau ») partent groupes : ils bougent d'un bloc, comme le
+  // createur les a faits ; Alt + clic en prend un seul, « Degrouper » les libere. Seulement tant que l'assemblage n'est
+  // pas enregistre au nouveau format : ensuite, ses groupes enregistres font foi.
+  if (autoGroup) {
+    const byPart = new Map();
+    for (const g of all) { const k = String(g.userData.k || "").split(":").slice(0, 3).join(":"); byPart.set(k, [...(byPart.get(k) || []), g]); }
+    for (const parts of byPart.values()) if (parts.length > 1 && !parts.some(g => groups.some(gr => gr.includes(g)))) groups.push(parts);
+  }
   const groupOf = g => groups.find(gr => gr.includes(g)) || null;
   const unitOf = g => groupOf(g) || [g];
   // les collages : {a : la piece collee, b : son support, kind, p, n, e : dans le repere de b}
   const V = a => (a ? new THREE.Vector3().fromArray(a) : null);
-  let joints = (jointsInit || []).map(j => ({ a: byKey.get(j.a), b: byKey.get(j.b), kind: j.kind === "edge" ? "edge" : "face", p: V(j.p), n: V(j.n), e: V(j.e) }))
+  let joints = (jointsInit || []).map(j => ({ a: byOld(j.a)[0], b: byOld(j.b)[0], kind: j.kind === "edge" ? "edge" : "face", p: V(j.p), n: V(j.n), e: V(j.e) }))
     .filter(j => j.a && j.b && j.p && j.n);
   const cloneJ = j => ({ ...j, p: j.p.clone(), n: j.n.clone(), e: j.e ? j.e.clone() : null });
   // une liste de pieces, et tout ce qui y est colle (de proche en proche, avec leurs groupes)

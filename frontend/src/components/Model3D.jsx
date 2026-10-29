@@ -326,7 +326,10 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               pg.children.forEach(m => { m.geometry.translate(-c.x, -c.y, -c.z); m.geometry.computeBoundingSphere(); });
               pg.userData.c = c.clone();
               pg.position.copy(c);
-              const S = saved[pg.userData.k], o = pg.userData.o || [0, 0, 0];
+              // une cle d'avant (29/10/2026 : « objet:instance », puis « objet:instance:partie », avant le decoupage en
+              // morceaux) : la place de la piece entiere vaut pour chacun de ses morceaux (ils bougeaient d'un bloc)
+              const kk = String(pg.userData.k || "").split(":");
+              const S = saved[pg.userData.k] || saved[kk.slice(0, 3).join(":")] || saved[kk.slice(0, 2).join(":")], o = pg.userData.o || [0, 0, 0];
               if (S) new THREE.Matrix4().fromArray(S).multiply(new THREE.Matrix4().makeTranslation(c.x - o[0], c.y - o[1], c.z - o[2]))
                 .decompose(pg.position, pg.quaternion, pg.scale);
               pg.updateMatrix();
@@ -479,7 +482,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           if (on && !editor) {
             const { createAssemblyEditor } = await import("./AssemblyEditor");
             editor = await createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder: ed.holder, pieces: ed.byPiece, render, onChange,
-              groupsInit: edit?.groups || [], jointsInit: edit?.joints || [] });
+              groupsInit: edit?.groups || [], jointsInit: edit?.joints || [],
+              // pas encore d'assemblage enregistre au format a morceaux (cles a quatre parties) : morceaux groupes par piece
+              autoGroup: !Object.keys(edit?.pieces || {}).some(k => k.split(":").length === 4) });
           } else if (!on && editor) { try { editor.dispose(); } catch { /* la vue se ferme quand meme */ } editor = null; }
           return editor;
         };
