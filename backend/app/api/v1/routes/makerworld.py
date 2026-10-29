@@ -710,7 +710,11 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             chosen = await _color_choices(scope)
             used_options = await _used_options(ids)
             used_detail = []
-            used_palette = await _used_palette(path_of(key), ids, did, prof if source == "3mf" else "", used_detail, chosen=chosen)
+            # les choix faits sur la fiche de chaque impression (30/10/2026) : sur un groupe, chaque plateau prend ceux des
+            # impressions qui l'ont fait (le gris du createur, choisi « or » sur la fiche de l'etoile, restait rouge)
+            pchoices = await _print_choices([i for i in ids if f"print:{i}" != scope])
+            used_palette = await _used_palette(path_of(key), ids, did, prof if source == "3mf" else "", used_detail, chosen=chosen,
+                                               print_choices=pchoices)
             # plateau par plateau (28/10/2026) : sur un groupe, chaque plateau prend les couleurs des impressions qui
             # l'ont fait, pas un melange de toutes ; un plateau que personne n'a imprime reste aux couleurs d'origine
             shown = T.plates_out(meta, key)[0] if meta else []
@@ -721,7 +725,8 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             if len(ns) > 1:
                 for n in ns:
                     dd = []
-                    pal = await _used_palette(path_of(key), ids, did, prof if source == "3mf" else "", dd, plate=n, chosen=chosen)
+                    pal = await _used_palette(path_of(key), ids, did, prof if source == "3mf" else "", dd, plate=n, chosen=chosen,
+                                              print_choices=pchoices)
                     # ce que les impressions de ce plateau ne disent pas, la correspondance de toutes (celle de la carte)
                     # le complete (28/10/2026 : la vue d'un plateau disait « rien » la ou la carte disait noir -> noir)
                     if used_palette:
@@ -1040,7 +1045,7 @@ def _sliced_info(f) -> tuple:
 
 
 async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", detail_out: list | None = None,
-                        plate: int | None = None, chosen: dict | None = None) -> dict | None:
+                        plate: int | None = None, chosen: dict | None = None, print_choices: dict | None = None) -> dict | None:
     """{couleur du 3MF d'origine (RRGGBB) : couleur utilisee} d'apres les filaments de ces impressions (la plus
     recente l'emporte). Seules comptent les impressions de ce profil (ou de profil inconnu). Chaque filament du
     projet d'origine est rapproche de celui du projet imprime par les pieces de meme nom (3MF tranche garde), a
@@ -1123,6 +1128,7 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
                 logger.exception("[3D] plateaux devines")
     out: dict = {}
     detail: list = []
+    kept: list = []                                  # les impressions qui comptent ici (ce plateau), dans l'ordre
     # A plat (28/10/2026) : d'abord les impressions de ce profil (ou de profil inconnu), la plus recente en premier ;
     # puis, pour les couleurs encore sans reponse, celles d'un autre profil du modele -- un filtre de profil trop
     # strict (identifiant d'instance contre identifiant de profil, fiche pas a jour) laissait tout a « aucune »
@@ -1154,6 +1160,21 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
                     emap, sl_colors = {}, []
             if plate is not None and plate not in _print_plates(mwpl, plate_id, guesses.get(pid)):
                 continue                              # une impression d'un autre plateau
+            kept.append(pid)
+            # une seule couleur d'origine sur ce plateau, et l'impression n'a use qu'un filament (30/10/2026 : l'etoile
+            # du calendrier, grise chez le createur, imprimee en or ; les donnees du projet l'appariaient a l'orange) :
+            # cette couleur, c'est ce filament, sans deduction
+            if plate is not None and len(used) == 1:
+                pcols = {h6(colors[e - 1]) for nm in plate_objs.get(plate) or [] for e in origin.get(nm) or []
+                         if 0 < e <= len(colors) and len(h6(colors[e - 1])) == 6}
+                if len(pcols) == 1:
+                    a, (es, b) = next(iter(pcols)), next(iter(used.items()))
+                    if a not in out and len(b) == 6:
+                        out[a] = b
+                        detail.append({"from": a, "to": b, "e": [h6(c) for c in colors].index(a) + 1, "es": es, "how": "seule couleur",
+                                       "print": pid, "finish": (fin_by.get(pid) or {}).get(es), "multi": (multi_by.get(pid) or {}).get(es),
+                                       **({"other_profile": True} if tier else {})})
+                    continue
             # les filaments et poids d'origine face a cette impression : ceux de tous les plateaux qu'elle a faits
             # (plusieurs plateaux regroupes en une impression : ses grammes par filament les couvrent tous), sinon le
             # plateau affiche ou son numero
@@ -1176,9 +1197,16 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
                                    "finish": (fin_by.get(pid) or {}).get(es), "multi": (multi_by.get(pid) or {}).get(es),
                                    **({"other_profile": True} if tier else {})})
     # les correspondances choisies a la main (28/10/2026) passent avant la deduction : une bobine de ces
-    # impressions, ou « aucune » ; un choix qui vise une impression absente d'ici est ignore (la deduction reste)
+    # impressions, ou « aucune » ; un choix qui vise une impression absente d'ici est ignore (la deduction reste).
+    # D'abord ceux faits sur la fiche des impressions qui comptent ici (la plus recente l'emporte), puis ceux de la portee
     o_cols = [h6(c) for c in colors]
-    for a, ch in (chosen or {}).items():
+    merged_choices: dict = {}
+    for pid in reversed(kept):
+        for a, ch in ((print_choices or {}).get(pid) or {}).items():
+            if isinstance(ch, dict) and not ch.get("group"):
+                merged_choices[h6(a)] = ch
+    merged_choices.update({h6(a): ch for a, ch in (chosen or {}).items()})
+    for a, ch in merged_choices.items():
         a = h6(a)
         if a not in o_cols or not isinstance(ch, dict):
             continue
@@ -1237,6 +1265,23 @@ async def _color_choices(scope: str) -> dict:
         gid = (await db.execute(select(Print.group_id).where(Print.id == int(scope[6:])))).scalar()
         grp = load(await get_setting(db, f"MW_COLORS:group:{gid}", "")) if gid else {}
     return {**{a: {**ch, "group": gid} for a, ch in grp.items() if isinstance(ch, dict)}, **own}
+
+
+async def _print_choices(ids: list) -> dict:
+    """{impression : ses choix (faits sur sa fiche)} pour ces impressions (30/10/2026)."""
+    import json as _json
+    from ....db.session import AsyncSessionLocal
+    from ....services.settings_service import get_setting
+    out = {}
+    async with AsyncSessionLocal() as db:
+        for i in ids[:60]:
+            try:
+                d = _json.loads(await get_setting(db, f"MW_COLORS:print:{int(i)}", "") or "{}")
+            except (ValueError, TypeError):
+                d = {}
+            if isinstance(d, dict) and d:
+                out[int(i)] = d
+    return out
 
 
 async def _save_color_choice(scope: str, origin: str, choice: dict | None) -> dict:
