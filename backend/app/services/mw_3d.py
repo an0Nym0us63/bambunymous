@@ -22,9 +22,11 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 9                           # 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 11                          # 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan", re.I)
-MAX_TRIANGLES = 6_000_000              # au-dela, le plateau n'est pas converti (trop lourd pour un telephone)
+MAX_TRIANGLES = 1_500_000              # au-dela, le plateau est simplifie (29/10/2026 ; avant : pas converti du tout) :
+                                       # un telephone l'affiche vite, et le fichier reste de quelques Mo
+READ_TRIANGLES = 40_000_000            # au-dela, on arrete de lire (memoire du serveur) : le plateau n'est pas montre
 _TRI_PAINT = re.compile(rb'<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"([^>]*)>')
 _PAINT = re.compile(rb'paint_color="([0-9A-F]+)"')
 _XYZ = re.compile(rb'\s[xyz]="([^"]+)"')
@@ -689,7 +691,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                 v, by_ext = _painted(v, t, paint, ext) if paint else (v, {ext: t})
                 say(a0 + (a1 - a0) * 0.85, "Mise en place")
                 total += sum(len(x) for x in by_ext.values())
-                if total > MAX_TRIANGLES:
+                if total > READ_TRIANGLES:
                     break
                 rot = np.array(mt[:9], dtype=np.float64).reshape(3, 3)
                 vt = v + np.array(mt[9:], dtype=np.float64) if np.array_equal(rot, np.eye(3)) else v @ rot + np.array(mt[9:])
@@ -733,10 +735,14 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         prog["done"] += _ZIP_SHARE * pw
 
     def write(n, pname, groups_out, total, pw, extra=None):
-        if not groups_out or total > MAX_TRIANGLES:
+        reduced = None
+        if groups_out and MAX_TRIANGLES < total <= READ_TRIANGLES:
+            say(pct(prog["done"]), "Simplification")
+            reduced, total = total, _decimate(groups_out, MAX_TRIANGLES)
+        if not groups_out or total > READ_TRIANGLES:
             zipped(pw)
             # vide : un 3MF tranche ne garde souvent que les pieces du plateau imprime
-            meta["plates"].append({"n": n, "name": pname, "triangles": total, "skipped": total > MAX_TRIANGLES,
+            meta["plates"].append({"n": n, "name": pname, "triangles": total, "skipped": total > READ_TRIANGLES,
                                    "empty": not groups_out, **(extra or {})})
             return None
         # recentre le plateau : au milieu en X et Y, pose sur z = 0
@@ -745,17 +751,13 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         hi = np.max([a.max(axis=0) for a in allv.values()], axis=0)
         shift = np.array([(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, lo[2]])
         size = [float(hi[0] - lo[0]), float(hi[1] - lo[1]), float(hi[2] - lo[2])]
-        buf = bytearray(struct.pack("<I", len(groups_out)))
-        for col, g in groups_out.items():
-            vv, tt = allv[col], np.concatenate(g[1])
-            buf += struct.pack("<III", col, len(vv), len(tt))
-            buf += (vv - shift).astype("<f4").tobytes()
-            buf += tt.astype("<u4").tobytes()
+        buf = _pack_bin({col: (allv[col] - shift, np.concatenate(g[1])) for col, g in groups_out.items()})
         # compresse une fois pour toutes : servi tel quel (Content-Encoding: gzip), le telephone le recoit leger
         say(pct(prog["done"]), "Compression")
         _write(out_dir / f"plate_{n}.bin", _gzip(bytes(buf)))
         zipped(pw)
-        rec = {"n": n, "name": pname, "triangles": total, "size_mm": [round(x, 1) for x in size], **(extra or {})}
+        rec = {"n": n, "name": pname, "triangles": total, "size_mm": [round(x, 1) for x in size], **(extra or {}),
+               **({"reduced_from": reduced} if reduced else {})}
         meta["plates"].append(rec)
         return rec, size
 
@@ -893,6 +895,61 @@ def _pack(own: dict, bb: list) -> bool:
         x += (hi[0] - lo[0]) + _GAP
         row_h = max(row_h, hi[1] - lo[1])
     return True
+
+
+BIN_MAGIC = 0x42335632                 # « 2V3B » : le format compact (29/10/2026) ; sans lui, l'ancien
+
+
+def _pack_bin(groups: dict) -> bytes:
+    """Un plateau en binaire compact (29/10/2026 : 26 Mo compresses pour un plateau de Billy, le telephone attendait
+    le telechargement). Les positions sur 16 bits dans la boite du plateau (un pas de 0,006 mm pour 40 cm), les
+    triangles en ecarts d'un indice au suivant ; chaque octet de rang a part (octets de poids faible ensemble...),
+    ce que gzip compresse bien mieux.
+    En-tete : u32 BIN_MAGIC, u32 nombre de groupes, f32 mini x,y,z, f32 pas x,y,z. Par groupe : u32 couleur RGBA,
+    u32 sommets, u32 triangles, puis 6 plans de sommets (x bas, x haut, y bas, y haut, z bas, z haut), puis 4 plans
+    des ecarts d'indices (int32, petit-boutiste)."""
+    import numpy as np
+    lo = np.min([v.min(axis=0) for v, _ in groups.values()], axis=0)
+    hi = np.max([v.max(axis=0) for v, _ in groups.values()], axis=0)
+    sc = np.where(hi - lo > 0, (hi - lo) / 65535, 1.0)
+    buf = bytearray(struct.pack("<II3f3f", BIN_MAGIC, len(groups), *lo.tolist(), *sc.tolist()))
+    for col, (v, t) in groups.items():
+        q = np.clip(np.round((v - lo) / sc), 0, 65535).astype("<u2")
+        d = np.diff(t.ravel().astype(np.int64), prepend=0).astype("<i4")
+        buf += struct.pack("<III", col, len(v), len(t))
+        buf += q.view(np.uint8).reshape(-1, 6).T.tobytes()
+        buf += d.view(np.uint8).reshape(-1, 4).T.tobytes()
+    return bytes(buf)
+
+
+def _decimate(groups_out: dict, target: int) -> int:
+    """Un plateau trop lourd pour un telephone (29/10/2026 : la vue assemblee de Billy, 6,8 millions de triangles,
+    n'etait pas montree) : les sommets tres proches sont fusionnes (une grille, de plus en plus large jusqu'a passer
+    sous target), les triangles devenus plats retires. La forme reste, les details fins s'estompent. Rend le nombre
+    de triangles restant ; groups_out est remplace sur place."""
+    import numpy as np
+    flat = {col: (np.concatenate(g[0]), np.concatenate(g[1])) for col, g in groups_out.items()}
+    lo = np.min([v.min(axis=0) for v, _ in flat.values()], axis=0)
+    hi = np.max([v.max(axis=0) for v, _ in flat.values()], axis=0)
+    cell = float(np.linalg.norm(hi - lo)) / 4000 or 0.01
+    out, total = {}, 0
+    for _ in range(12):
+        out, total = {}, 0
+        for col, (v, t) in flat.items():
+            q = np.floor((v - lo) / cell).astype(np.int64)
+            k = (q[:, 0] << 42) | (q[:, 1] << 21) | q[:, 2]
+            _, first, inv = np.unique(k, return_index=True, return_inverse=True)
+            nt = inv.reshape(-1)[t]
+            keep = (nt[:, 0] != nt[:, 1]) & (nt[:, 1] != nt[:, 2]) & (nt[:, 0] != nt[:, 2])
+            nt = nt[keep]
+            out[col] = (v[first], nt)
+            total += len(nt)
+        if total <= target:
+            break
+        cell *= 1.5
+    for col, (v, t) in out.items():
+        groups_out[col] = [[v], [t], len(v)]
+    return total
 
 
 def _write(p: Path, data: bytes) -> None:

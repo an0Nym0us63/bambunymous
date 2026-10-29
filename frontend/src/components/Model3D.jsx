@@ -13,9 +13,36 @@ import MwImg from "./MwImg";
 // ou a la souris, on zoome, on recentre. three.js n'est charge qu'ici, a l'ouverture.
 const BED = [256, 256];          // le plateau par defaut ; le serveur donne celui de mon imprimante (A1 mini, H2D...)
 
+// le format compact (29/10/2026, « 2V3B ») : positions sur 16 bits, indices en ecarts, octets ranges par rang
+const BIN_MAGIC = 0x42335632;
+function parseBinCompact(buf, dv) {
+  const n = dv.getUint32(4, true);
+  const lo = [dv.getFloat32(8, true), dv.getFloat32(12, true), dv.getFloat32(16, true)];
+  const sc = [dv.getFloat32(20, true), dv.getFloat32(24, true), dv.getFloat32(28, true)];
+  let o = 32;
+  const groups = [];
+  for (let k = 0; k < n; k++) {
+    const col = dv.getUint32(o, true), nv = dv.getUint32(o + 4, true), nt = dv.getUint32(o + 8, true); o += 12;
+    const q = new Uint8Array(buf, o, nv * 6); o += nv * 6;
+    const pos = new Float32Array(nv * 3);
+    for (let c = 0; c < 3; c++) {
+      const a = q.subarray(2 * c * nv, (2 * c + 1) * nv), b = q.subarray((2 * c + 1) * nv, (2 * c + 2) * nv), l = lo[c], s = sc[c];
+      for (let i = 0; i < nv; i++) pos[3 * i + c] = l + (a[i] | (b[i] << 8)) * s;
+    }
+    const m = nt * 3, p = new Uint8Array(buf, o, m * 4); o += m * 4;
+    const p0 = p.subarray(0, m), p1 = p.subarray(m, 2 * m), p2 = p.subarray(2 * m, 3 * m), p3 = p.subarray(3 * m, 4 * m);
+    const idx = new Uint32Array(m);
+    let acc = 0;
+    for (let i = 0; i < m; i++) { acc = (acc + (p0[i] | (p1[i] << 8) | (p2[i] << 16) | (p3[i] << 24))) | 0; idx[i] = acc; }
+    groups.push({ color: [(col >>> 24) & 255, (col >>> 16) & 255, (col >>> 8) & 255], pos, idx });
+  }
+  return groups;
+}
+
 function parseBin(buf) {
   const dv = new DataView(buf);
-  let o = 0;
+  if (buf.byteLength >= 32 && dv.getUint32(0, true) === BIN_MAGIC) return parseBinCompact(buf, dv);
+  let o = 0;      // l'ancien format (un copain dont le serveur n'est pas a jour)
   const n = dv.getUint32(o, true); o += 4;
   const groups = [];
   for (let k = 0; k < n; k++) {
