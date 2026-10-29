@@ -693,10 +693,12 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     def say(p_, label):
         _step(key, p_, f"{where['tag']} · {label}" if where["tag"] and nb > 1 else label)
 
-    def emit(lst, label="Lecture des pièces", zchg=None, own=None, piece_of=None):
+    def emit(lst, label="Lecture des pièces", zchg=None, own=None, piece_of=None, zplate=None):
         """Les pieces placees -> groupes par couleur. own : {objet place : ses sommets}, pour les deplacer apres ;
         piece_of : {objet place : son numero}, les groupes sont alors par (couleur, piece) (l'edition de la vue
-        assemblee deplace une piece a la fois)."""
+        assemblee deplace une piece a la fois). zplate : {(objet place, rang de la piece) : (changements en hauteur de
+        son plateau, sa place sur ce plateau)} : la vue assemblee coupe chaque piece a la hauteur ou elle change de
+        filament sur son plateau, puis la remet a sa place assemblee (30/10/2026)."""
         gk = (lambda col, ident, tag: (_hex_rgba(col), piece_of[(ident, tag[0])])) if piece_of else (lambda col, ident, tag: _hex_rgba(col))
         groups_out: dict = {}                           # couleur -> [sommets, triangles]
         total = 0
@@ -717,12 +719,20 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                     break
                 rot = np.array(mt[:9], dtype=np.float64).reshape(3, 3)
                 vt = v + np.array(mt[9:], dtype=np.float64) if np.array_equal(rot, np.eye(3)) else v @ rot + np.array(mt[9:])
+                zp = zplate.get((ident, tag[0])) if zplate else None
+                zc_, vcut, back = zchg, vt, None
+                if zp:
+                    # coupee la ou elle est sur son plateau, puis ramenee a sa place assemblee
+                    zc_, mp = zp
+                    rp, tp = np.array(mp[:9], dtype=np.float64).reshape(3, 3), np.array(mp[9:], dtype=np.float64)
+                    vcut = v @ rp + tp
+                    back = (np.linalg.inv(rp) @ rot, tp, np.array(mt[9:], dtype=np.float64))
                 for ex, tt in by_ext.items():
                     col = colors[ex - 1] if 0 < ex <= len(colors) else fcol
                     # les changements de filament a une hauteur qui touchent ces triangles : un changement
                     # d'outil ou, avec un seul filament, tout changement ; a plusieurs, celui de ce filament
-                    cuts = [(zt, c) for zt, e, c, kind in zchg[1] if kind == 2 or zchg[0] == "SingleExtruder" or e in (None, ex)] \
-                        if zchg else []
+                    cuts = [(zt, c) for zt, e, c, kind in zc_[1] if kind == 2 or zc_[0] == "SingleExtruder" or e in (None, ex)] \
+                        if zc_ else []
                     if not cuts and len(by_ext) == 1:
                         g = groups_out.setdefault(gk(col, ident, tag), [[], [], 0])
                         g[0].append(vt)
@@ -732,7 +742,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                         g[2] += len(vt)
                         continue
                     # tranche par tranche, de bas en haut : chacune a la couleur en cours a cette hauteur
-                    vv, rest, slices = vt, tt, []
+                    vv, rest, slices = vcut, tt, []
                     for zt, c in cuts:
                         vv, lower, rest = _cut_z(vv, rest, zt)
                         slices.append((col, lower))
@@ -744,7 +754,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                         # seuls les sommets de cette couleur (piece peinte ou tranchee), renumerotes
                         g = groups_out.setdefault(gk(c, ident, tag), [[], [], 0])
                         used, inv = np.unique(tr.ravel(), return_inverse=True)
-                        g[0].append(vv[used])
+                        g[0].append(vv[used] if back is None else (vv[used] - back[1]) @ back[0] + back[2])
                         if own is not None:
                             own.setdefault(ident, []).append(g[0][-1])
                         g[1].append(inv.reshape(-1, 3) + g[2])
@@ -817,7 +827,16 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         # propose de separer une piece, a la demande)
         plist = [(ident, p[4]) for ident, parts in asm_lst for p in parts]
         piece_of = {(ident, tag[0]): i for i, (ident, tag) in enumerate(plist)}
-        groups_out, total, pw = emit(asm_lst, own=own, piece_of=piece_of)
+        zplate = {}
+        for n_, _, inst in plates:
+            if not zch.get(n_):
+                continue
+            for oid, k in inst:
+                mts = items_by_obj.get(oid) or []
+                if k < len(mts):
+                    for part in parts_of(oid, mts[k]):
+                        zplate[((oid, k), part[4][0])] = (zch[n_], part[2])
+        groups_out, total, pw = emit(asm_lst, own=own, piece_of=piece_of, zplate=zplate)
         # toujours montree quand le 3MF en a une (29/10/2026 : le tri « vraie vue / copie des plateaux » en
         # cachait trop ; c'est a chacun de juger en la regardant) ; posee a la va-vite, elle est rangee
         # ou est chaque objet sur les plateaux (plateau, orientation) : pour reconnaitre un tas de pieces posees
@@ -830,7 +849,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                     on_plate[(oid, k)] = (n_, mts[k][:9])
         moved: dict = {}
         tidy = _tidy(own, {(oid, k): mt for oid, k, mt in asm}, on_plate, moved)
-        r = write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True, **({"tidied": True} if tidy else {})})
+        r = write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True, "z_asm": True, **({"tidied": True} if tidy else {})})
         if r:
             # les pieces, pour l'edition (29/10/2026) : leur cle (objet:instance), leur nom, et « o », le decalage de
             # leurs sommets affiches par rapport a leur place dans le 3MF (rangement, recentrage) : les positions
@@ -1034,11 +1053,20 @@ def _lock(key: str):
         return _LOCKS.setdefault(key, __import__("threading").Lock())
 
 
+def _fresh(meta: dict) -> bool:
+    """Une vue a jour : du format en cours ; une vue assemblee d'un 3MF a changements de filament en hauteur doit les
+    avoir pris (30/10/2026), les autres vues ne se refont pas pour autant."""
+    if not isinstance(meta, dict) or meta.get("v") != FORMAT_V:
+        return False
+    pl = meta.get("plates") or []
+    return not (any(p.get("z_colors") for p in pl) and any(p.get("assembled") and not p.get("z_asm") for p in pl))
+
+
 def ready(src: Path, key: str) -> bool:
     """Deja converti (et a jour) ?"""
     meta_f = _root() / key / "plates.json"
     try:
-        return meta_f.is_file() and meta_f.stat().st_mtime >= src.stat().st_mtime             and json.loads(meta_f.read_text(encoding="utf-8")).get("v") == FORMAT_V
+        return meta_f.is_file() and meta_f.stat().st_mtime >= src.stat().st_mtime             and _fresh(json.loads(meta_f.read_text(encoding="utf-8")))
     except (OSError, ValueError):
         return False
 
@@ -1056,7 +1084,7 @@ def _from_3mf(src: Path, key: str) -> dict | None:
     try:
         if meta_f.is_file() and meta_f.stat().st_mtime >= src.stat().st_mtime:
             meta = json.loads(meta_f.read_text(encoding="utf-8"))
-            if meta.get("v") == FORMAT_V:
+            if _fresh(meta):
                 return meta
         # perdu en local mais sauvegarde sur le NAS (et a jour) : repris, sans reconvertir
         if not meta_f.is_file():
@@ -1064,7 +1092,7 @@ def _from_3mf(src: Path, key: str) -> dict | None:
                 from .archive import restore_3d
                 if restore_3d(key, d) and meta_f.is_file():
                     meta = json.loads(meta_f.read_text(encoding="utf-8"))
-                    if meta.get("v") == FORMAT_V and any(p.get("size_mm") for p in meta.get("plates") or []):
+                    if _fresh(meta) and any(p.get("size_mm") for p in meta.get("plates") or []):
                         logger.info(f"[3D] {key} : repris du NAS")
                         return meta
             except Exception:
@@ -1248,7 +1276,7 @@ def _view_ok(src: Path, key: str) -> bool:
         e = _index().get(f"3d:{key}")
         if isinstance(e, dict) and e.get("to"):
             m = json.loads((Path(e.get("root") or DEFAULT_ROOT) / e["to"] / "plates.json").read_text(encoding="utf-8"))
-            return m.get("v") == FORMAT_V
+            return _fresh(m)
     except (OSError, ValueError, ImportError):
         pass
     return False
