@@ -109,9 +109,19 @@ export function OrderSheet({ id, order: given = null, onClose, onChanged }) {
           {o.ordered_at && <span>Commandée le {dayY(o.ordered_at)}</span>}
           {o.shipped_at && <span>Expédiée le {dayY(o.shipped_at)}{o.carrier ? ` · ${o.carrier}` : ""}{o.tracking_url && <> · <a href={o.tracking_url} target="_blank" rel="noreferrer" style={{ color:"#0EA5E9", fontWeight:700 }}>suivi ↗</a></>}</span>}
           {o.delivered_at && <span>Livrée le {dayY(o.delivered_at)}</span>}
-          {o.totals?.total != null && <span data-tip="Lu dans le mail de confirmation. La remise de fin de commande (abonnement, points…) est partagée à parts égales entre les bobines pour leur prix payé ; la fiche filament garde le prix de base (le prix barré du catalogue).">
+          {o.totals?.total != null && <span data-tip="Lu dans le mail de confirmation. Pour le prix payé de chaque bobine, les remises de fin de commande (abonnement, points…) sont partagées à parts égales entre les bobines ; les frais de port ne le sont que si tu le demandes (cases ci-dessous). La fiche filament garde le prix de base (le prix barré du catalogue).">
             💶 {o.totals.subtotal != null && o.totals.subtotal !== o.totals.total ? <>sous-total {eur(o.totals.subtotal, o.totals.currency)}{o.totals.discount ? ` · remise ${eur(o.totals.discount, o.totals.currency)}` : ""}{o.totals.shipping ? ` · envoi ${eur(o.totals.shipping, o.totals.currency)}` : ""} · </> : null}
             <b style={{ color:"var(--text)" }}>total {eur(o.totals.total, o.totals.currency)}</b></span>}
+          {/* la repartition sur les bobines (29/10/2026) : les remises oui par defaut, les frais de port non (ils vont souvent
+              avec autre chose de la commande) ; le choix est garde avec la commande et retarife ses bobines en commande */}
+          {isAdmin && o.totals && (o.totals.discount || o.totals.shipping) ? <span style={{ display:"flex", gap:12, flexWrap:"wrap", marginTop:2 }}>
+            {!!o.totals.discount && <label style={{ display:"inline-flex", alignItems:"center", gap:6, cursor:"pointer", color:"var(--text)" }}>
+              <input type="checkbox" checked={o.totals.spread_discount !== false} disabled={busy} onChange={e => act({ spread: { discount: e.target.checked } })}/>
+              répartir la remise ({eur(o.totals.discount, o.totals.currency)}) sur les bobines</label>}
+            {!!o.totals.shipping && <label style={{ display:"inline-flex", alignItems:"center", gap:6, cursor:"pointer", color:"var(--text)" }}>
+              <input type="checkbox" checked={!!o.totals.spread_shipping} disabled={busy} onChange={e => act({ spread: { shipping: e.target.checked } })}/>
+              répartir les frais de port ({eur(o.totals.shipping, o.totals.currency)})</label>}
+          </span> : null}
           {(o.shipments || []).map((sh, i) => <span key={i}>📦 Envoi du {dayY(sh.at)}{sh.carrier ? ` · ${sh.carrier}` : ""}{sh.tracking ? ` · ${sh.tracking}` : ""}
             {sh.url && <> · <a href={sh.url} target="_blank" rel="noreferrer" style={{ color:"#0EA5E9", fontWeight:700 }}>suivre ↗</a></>}
             {sh.items?.length ? ` : ${sh.items.join(", ")}` : ""}</span>)}

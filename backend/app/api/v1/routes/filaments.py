@@ -731,7 +731,8 @@ async def filaments_incoming_mark(order_id: int, body: dict = Body(default={}), 
     """Coche ou decoche une ligne (index, received), confirme les lignes presumees (confirm), ou cache la commande (hide)."""
     from ....services import mail_orders as MO
     b = body or {}
-    out = await MO.mark(order_id, b.get("index"), bool(b.get("received", True)), b.get("hide"), bool(b.get("confirm")))
+    out = await MO.mark(order_id, b.get("index"), bool(b.get("received", True)), b.get("hide"), bool(b.get("confirm")),
+                        b.get("spread") if isinstance(b.get("spread"), dict) else None)
     if out is None:
         raise HTTPException(404, "Commande inconnue")
     return {"orders": out, "order": next((o for o in out if o["id"] == order_id), None)}

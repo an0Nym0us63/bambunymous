@@ -339,17 +339,23 @@ def totals(text: str) -> dict:
 
 
 def extra_per_unit(tot: dict | None, items: list[dict]) -> float:
-    """La remise (ou les frais) de fin de commande, partagee a parts egales entre les bobines payantes de la
-    commande : (total - sous-total) / nombre de bobines. 0 quand on ne sait pas."""
-    if not tot or tot.get("subtotal") is None or tot.get("total") is None:
+    """Ce que chaque bobine payante prend de la fin de commande, a parts egales (28/10/2026) : les remises (abonnement,
+    points…) si « repartir les remises » (oui par defaut), les frais de port si « repartir les frais de port » (non par
+    defaut : ils vont souvent avec autre chose de la commande, une imprimante, un AMS). 0 quand on ne sait pas."""
+    if not tot:
         return 0.0
     n = sum(int(i.get("qty") or 0) for i in items if i.get("kind", "filament") == "filament" and (i.get("price") or 0) > 0)
     if n <= 0:
         return 0.0
+    extra = 0.0
     try:
-        return (float(tot["total"]) - float(tot["subtotal"])) / n
+        if tot.get("spread_discount", True) and tot.get("discount"):
+            extra += float(tot["discount"])             # negatif
+        if tot.get("spread_shipping", False) and tot.get("shipping"):
+            extra += float(tot["shipping"])
     except (TypeError, ValueError):
         return 0.0
+    return extra / n
 
 
 def paid_unit(it: dict, tot: dict | None, items: list[dict] | None = None) -> float | None:
@@ -1010,7 +1016,7 @@ def _views(rows, live: set[int] | None = None) -> list[dict]:
 
 
 async def mark(order_id: int, index: int | None = None, received: bool = True, hide: bool | None = None,
-               confirm: bool = False) -> dict | None:
+               confirm: bool = False, spread: dict | None = None) -> dict | None:
     """Coche (ou decoche) une ligne a la main ; hide : cache la commande ; confirm : les lignes presumees recues
     sont confirmees (ou, index donne et received False, la ligne repasse attendue)."""
     from ..db.session import AsyncSessionLocal
@@ -1036,6 +1042,23 @@ async def mark(order_id: int, index: int | None = None, received: bool = True, h
         o.items_json = json.dumps(items, ensure_ascii=False)
         if hide is not None:
             o.hidden = bool(hide)
+        if spread:
+            # repartition des remises / frais de port sur les bobines (28/10/2026) : gardee avec les totaux, et les
+            # bobines encore « en commande » reprennent le prix paye qui en decoule
+            tot = json.loads(o.totals_json) if o.totals_json else {}
+            for k in ("discount", "shipping"):
+                if k in spread:
+                    tot[f"spread_{k}"] = bool(spread[k])
+            o.totals_json = json.dumps(tot)
+            from ..models.filament import Spool
+            for it in items:
+                if it.get("kind") != "filament":
+                    continue
+                paid = paid_unit(it, tot, items)
+                for sid in it.get("spools") or []:
+                    sp = await db.get(Spool, int(sid))
+                    if sp and sp.ordered and paid is not None:
+                        sp.price_override = paid
         o.done = all((i.get("received") or 0) >= (i.get("qty") or 0) for i in items if i.get("kind") == "filament") if items else o.done
         if not o.done and o.status == "delivered" and not o.delivered_at:
             o.status = "shipped"                      # une ligne rouverte : la commande n'est plus « livree par anciennete »
