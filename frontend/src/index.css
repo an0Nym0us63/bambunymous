@@ -153,7 +153,8 @@ input, textarea, select, [contenteditable]:not([contenteditable="false"]) { care
 
 /* L'edition d'un assemblage au doigt (30/10/2026) : la vue passe en plein ecran par la page (position fixe) ; le
    « will-change: transform » de la fiche en ferait le repere au lieu de l'ecran, il est retire le temps de l'edition */
-body.bn-edit3d { overflow: hidden; }
+body.bn-edit3d { overflow: hidden; overscroll-behavior: none; }
+html:has(body.bn-edit3d) { overscroll-behavior: none; }
 body.bn-edit3d .sheet-inner { will-change: auto !important; transform: none !important; transition: none !important; }
 
 /* Zone tactile elargie des petits boutons icone-seule (28/10/2026) : le dessin ne bouge pas,

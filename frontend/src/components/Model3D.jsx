@@ -1468,7 +1468,30 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const editable = isAdmin && !fr && !!p?.assembled && !!p?.pieces && !!meta?.key;
   const [pfull, setPfull] = useState(false), [editErr, setEditErr] = useState(null), [starting, setStarting] = useState(false);
   const [tdSlot, setTdSlot] = useState(null);
-  useEffect(() => { if (editing && !desktop && !pfull) setPseudoFull(true); }, [editing, pfull]); // eslint-disable-line react-hooks/exhaustive-deps         // sous la vue : le reglage de la transparence (il masquait l'image)
+  useEffect(() => { if (editing && !desktop && !pfull) setPseudoFull(true); }, [editing, pfull]); // eslint-disable-line react-hooks/exhaustive-deps
+  // le geste retour pendant l'edition (30/10/2026 : un glisser depuis le bord quittait la page) : l'edition est une etape
+  // de l'historique ; le retour la ferme (ou demande quoi faire des changements), la page reste
+  const editRef = useRef({});
+  editRef.current = { editing, stop: () => stopEdit() };
+  useEffect(() => {
+    // la trace d'une page rechargee en pleine edition : effacee (sinon la fermeture reculerait d'une page)
+    if (window.history.state?.bnEdit3d) {
+      const { bnEdit3d, ...rest } = window.history.state;   // eslint-disable-line no-unused-vars
+      try { window.history.replaceState(rest, ""); } catch { /* rien */ }
+    }
+    const onPop = () => {
+      if (!editRef.current.editing || window.history.state?.bnEdit3d) return;
+      try { window.history.pushState({ ...(window.history.state || {}), bnEdit3d: 1 }, ""); } catch { /* rien */ }
+      editRef.current.stop();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const editPushed = useRef(false);
+  useEffect(() => {
+    if (editing) { editPushed.current = true; if (!window.history.state?.bnEdit3d) { try { window.history.pushState({ ...(window.history.state || {}), bnEdit3d: 1 }, ""); } catch { /* rien */ } } }
+    else if (editPushed.current) { editPushed.current = false; if (window.history.state?.bnEdit3d) window.history.back(); }
+  }, [editing]);         // sous la vue : le reglage de la transparence (il masquait l'image)
   // l'editeur prepare d'avance des que l'on peut editer : l'ouverture est alors immediate
   useEffect(() => {
     if (!editable) return;
@@ -1576,7 +1599,10 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const mm = v => `${Math.round(v)} mm`;
   return createPortal(
     <FSheet onClose={onClose} z={4600}>
-      <div style={{ padding: "48px 16px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+      {/* les gestes faits ici ne remontent pas a la fiche d'ou la vue s'ouvre (30/10/2026 : un glisser lateral pendant
+          l'edition passait a l'impression voisine) ; la vue est rendue ailleurs dans la page, mais React fait remonter */}
+      <div onTouchStart={e => e.stopPropagation()} onTouchMove={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()}
+        onTouchCancel={e => e.stopPropagation()} style={{ padding: "48px 16px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
           {meta?.profile_cover
             ? <MwImg src={meta.profile_cover} w={96} alt="" style={{ width: 48, height: 48, borderRadius: 13, objectFit: "cover", flexShrink: 0,
