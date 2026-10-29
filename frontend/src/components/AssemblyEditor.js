@@ -89,7 +89,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   tc.setSpace("world");
   // au doigt (30/10/2026) : une poignee plus grosse, qu'on attrape sans viser au pixel
   const coarse = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
-  tc.size = coarse ? 1.1 : 0.8;
+  tc.size = coarse ? 0.95 : 0.8;          // au doigt, la piece se tire aussi elle-meme (hors des fleches)
   const helper = tc.getHelper();
   scene.add(helper);
   let dragStart = null;              // la poignee et les pieces au debut du glisser
@@ -333,8 +333,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   // la poignee au centre de la selection
   const placeHandle = () => {
     if (!sel.size || !(mode === "move" || mode === "rotate") || jointOf([...sel])) { tc.detach(); return; }
-    // au doigt, pas de poignee pour deplacer (30/10/2026) : elle couvrait la piece ; on la tire elle-meme, ou les fleches
-    if (coarse && mode === "move") { tc.detach(); return; }
     const c = boxOfAll([...sel]).getCenter(new THREE.Vector3());
     handle.position.copy(c); handle.quaternion.identity(); handle.scale.set(1, 1, 1); handle.updateMatrix();
     tc.attach(handle); tc.setMode(mode === "move" ? "translate" : "rotate");

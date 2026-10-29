@@ -951,7 +951,7 @@ const EDIT_HELP = [
   ["Au doigt (téléphone, tablette)", [
     ["Un doigt glissé", "tourner autour du modèle ; deux doigts : zoomer (pincer) et déplacer la vue"],
     ["Toucher une pièce", "la choisir ; ➕ Multi (en bas) : chaque toucher en ajoute ou en retire une"],
-    ["Glisser une pièce choisie", "en mode Déplacer : elle suit le doigt, à plat sur le plateau ; ⇕ Hauteur : elle monte ou descend ; ◀ ▶ ▲ ▼ ⤒ ⤓ : un pas précis (0,5, 1, 5 ou 10 mm, touche le pas pour le changer), d'après l'écran"],
+    ["Glisser une pièce choisie", "en mode Déplacer : elle suit le doigt, à plat sur le plateau (ou tire une des flèches rouge, verte, bleue : dans cet axe) ; ⇕ Hauteur : elle monte ou descend ; ◀ ▶ ▲ ▼ ⤒ ⤓ : un pas précis (0,5, 1, 5 ou 10 mm, touche le pas pour le changer), d'après l'écran"],
     ["Toucher le vide", "plus rien de choisi"],
     ["Rail du bas", "les modes (glisser pour en voir plus), ➕ Multi, ▭ Rectangle, 📋 Pièces, ⌖ Cadrer (la sélection, ou tout), 📐 Valeurs exactes, ⚙ réglages, 🕘 versions ; au-dessus, les actions de la sélection"],
     ["En haut", "✕ fermer, ↶ ↷ annuler et refaire, ? cette aide, 💾 enregistrer ; la consigne du moment est juste dessous"],
@@ -1467,7 +1467,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   // de plein ecran pour un element), et la barre d'edition en version tactile
   const editable = isAdmin && !fr && !!p?.assembled && !!p?.pieces && !!meta?.key;
   const [pfull, setPfull] = useState(false), [editErr, setEditErr] = useState(null), [starting, setStarting] = useState(false);
-  const [tdSlot, setTdSlot] = useState(null);         // sous la vue : le reglage de la transparence (il masquait l'image)
+  const [tdSlot, setTdSlot] = useState(null);
+  useEffect(() => { if (editing && !desktop && !pfull) setPseudoFull(true); }, [editing, pfull]); // eslint-disable-line react-hooks/exhaustive-deps         // sous la vue : le reglage de la transparence (il masquait l'image)
   // l'editeur prepare d'avance des que l'on peut editer : l'ouverture est alors immediate
   useEffect(() => {
     if (!editable) return;
@@ -1513,14 +1514,14 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const [leaving, setLeaving] = useState(false);
   const closeEdit = async how => {                     // how : "save" | "discard" | undefined (rien a garder)
     setLeaving(false);
-    if (how === "save") await saveEdit();
-    await editApi.current?.editing(false);
-    setEditing(false); setEst(null);
-    if (how === "discard") setVkey(k => k + 1);        // la vue revient a la place enregistree
-    else editApi.current?.relayout();
+    if (how === "save") { try { await saveEdit(); } catch { /* l'enregistrement dit lui-meme son echec */ } }
+    // l'ecran d'abord (30/10/2026 : sur un telephone, on sortait du plein ecran en restant en edition), puis l'editeur
+    setEditing(false); setEst(null); setPseudoFull(false);
     try { navigator.keyboard?.unlock?.(); } catch { /* rien */ }
     if (document.fullscreenElement === wrap.current) document.exitFullscreen?.().catch(() => {});
-    if (pfull) setPseudoFull(false);
+    try { await editApi.current?.editing(false); } catch { /* la vue se ferme quand meme */ }
+    if (how === "discard") setVkey(k => k + 1);        // la vue revient a la place enregistree
+    else editApi.current?.relayout();
   };
   const stopEdit = () => { if (editApi.current?.editor?.state().dirty) setLeaving(true); else closeEdit(); };
   const startEdit = async () => {
@@ -1528,7 +1529,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     else if (document.fullscreenElement !== wrap.current) await wrap.current?.requestFullscreen?.().catch(() => {});
     // en plein ecran, Echap revient a l'edition (desselectionner) au lieu de quitter (30/10/2026) : le garder enfonce
     // quitte le plein ecran (Chrome, Edge)
-    try { await navigator.keyboard?.lock?.(["Escape"]); } catch { /* navigateur sans verrou du clavier */ }
+    // (pas au doigt : sans clavier ; et une demande qui ne repond jamais, vue sur Android, bloquait l'ouverture)
+    if (desktop) { try { await Promise.race([navigator.keyboard?.lock?.(["Escape"]), new Promise(r => setTimeout(r, 400))]); } catch { /* sans verrou */ } }
     // l'editeur qui ne demarre pas (30/10/2026 : sur un telephone, la vue restait en plein ecran, sans barre ni ✕) :
     // on revient a la vue, et la raison est dite sous la vue
     let ed = null, why = null;
@@ -1550,7 +1552,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     setEditErr(null);
     setEditing(true);
     // au doigt : la vue a pris tout l'ecran, elle se recadre sur le modele
-    if (!desktop) setTimeout(() => editApi.current?.editor?.frame?.(), 250);
+    if (!desktop) { setPseudoFull(true); setTimeout(() => editApi.current?.editor?.frame?.(), 250); }
   };
   useEffect(() => {
     const f = () => { const on = document.fullscreenElement === wrap.current; setFull(on); if (on) egg("grand_ecran"); if (!on && editing) stopEdit(); };
@@ -1623,7 +1625,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
                 setLeaving(false);
                 // Echap (ou la sortie du plein ecran) a ouvert cette question : on y retourne (30/10/2026)
                 if (desktop && document.fullscreenElement !== wrap.current) await wrap.current?.requestFullscreen?.().catch(() => {});
-                try { await navigator.keyboard?.lock?.(["Escape"]); } catch { /* sans verrou */ }
+                if (desktop) { try { await Promise.race([navigator.keyboard?.lock?.(["Escape"]), new Promise(r => setTimeout(r, 400))]); } catch { /* sans verrou */ } }
               }} style={{ height: 36, borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
                 color: "var(--text2)", background: "transparent" }}>↩ Continuer l'édition</button>
             </div>
