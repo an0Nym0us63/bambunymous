@@ -819,72 +819,118 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     groups: () => groups.map(gr => gr.map(g => g.userData.k)),
     splits: () => [...new Set(all.map(g => g.userData.from).filter(Boolean))],     // les pieces separees a la main
     // decoller la selection : son collage oublie, et la piece ecartee de 2 mm
-    // le meilleur ajustement (30/10/2026), apres un collage (face, points) : la surface de la piece pres du contact vient
-    // au plus pres de celle du support (chaque point vers le point le plus proche, puis le deplacement rigide qui les en
-    // rapproche le mieux, une trentaine de fois), puis elle recule le long du contact juste assez pour ne rien traverser.
-    // Leger : moins de mille points, l'arbre de recherche des pieces deja fait pour l'anti-collision
+    // le meilleur ajustement (30/10/2026), apres un collage (face, points) : les faces de la piece pres du contact viennent
+    // contre celles du support qui les regardent (une face ne s'apparie qu'a une face tournee vers elle : sur une surface
+    // texturee, le point le plus proche tombait sur le mauvais cote), en distance point-plan (la piece glisse jusqu'a
+    // epouser, au lieu de s'accrocher aux reliefs), une trentaine de fois ; puis elle recule le long du contact juste assez
+    // pour ne rien traverser. Si le resultat n'est pas meilleur, ou s'il faut trop reculer, la piece reste ou elle est.
+    // Leger : un millier de facettes, l'arbre de recherche des pieces deja fait pour l'anti-collision
     refine: async () => {
       const list = [...sel], j = jointOf(list);
       if (!j) { fitMsg = "Colle d'abord la pièce (Coller ou Points) : l'ajustement part de son collage"; onChange?.(state()); return; }
       const col = await getCollider();
       const moving = withKids(list), start = moving.map(g => { g.updateMatrix(); return [g, g.matrix.clone()]; });
       const sups = unitOf(j.b).filter(g => !moving.includes(g) && g.visible);
-      const { P, N } = contact(j);
+      const { P } = contact(j);
       const rho = Math.min(60, Math.max(8, boxOfAll(list).getSize(new THREE.Vector3()).length() * 0.5));
-      // les points de la piece pres du contact, la moitie la plus proche du support (son cote tourne vers lui)
-      const raw = [], v = new THREE.Vector3();
+      // les facettes de la piece pres du contact : leur centre et leur normale (repere du modele)
+      const facets = [];
+      const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
       for (const g of moving) for (const m of g.children) {
         if (!m.isMesh || !m.geometry?.attributes?.position) continue;
-        const pa = m.geometry.attributes.position.array, stepV = Math.max(1, Math.floor(pa.length / 3 / 8000));
-        for (let i = 0; i < pa.length; i += 3 * stepV) {
-          v.set(pa[i], pa[i + 1], pa[i + 2]).applyMatrix4(g.matrix);
-          if (v.distanceTo(P) <= rho) raw.push([v.clone(), v.clone().sub(P).dot(N)]);
+        const pa = m.geometry.attributes.position.array, ix = m.geometry.index ? m.geometry.index.array : null;
+        const nt = ix ? ix.length / 3 : pa.length / 9, every = Math.max(1, Math.floor(nt / 12000));
+        for (let t = 0; t < nt; t += every) {
+          const i0 = ix ? ix[t * 3] : t * 3, i1 = ix ? ix[t * 3 + 1] : t * 3 + 1, i2 = ix ? ix[t * 3 + 2] : t * 3 + 2;
+          a.fromArray(pa, i0 * 3).applyMatrix4(g.matrix); b.fromArray(pa, i1 * 3).applyMatrix4(g.matrix); c.fromArray(pa, i2 * 3).applyMatrix4(g.matrix);
+          const ctr = a.clone().add(b).add(c).divideScalar(3);
+          if (ctr.distanceTo(P) > rho) continue;
+          const n = b.clone().sub(a).cross(c.clone().sub(a));
+          if (n.lengthSq() < 1e-12) continue;
+          facets.push([ctr, n.normalize()]);
         }
       }
-      if (raw.length < 20) { fitMsg = "Trop peu de surface près du contact pour ajuster"; onChange?.(state()); return; }
-      raw.sort((a, b) => a[1] - b[1]);
-      let pts = raw.slice(0, Math.ceil(raw.length * 0.45)).map(r => r[0]);
-      if (pts.length > 800) { const k = pts.length / 800; pts = Array.from({ length: 800 }, (_, i) => pts[Math.floor(i * k)]); }
-      const geos = sups.map(g => { g.updateMatrix(); return { geo: col.geoOf(g), m: g.matrix.clone(), inv: g.matrix.clone().invert() }; });
+      if (facets.length < 20) { fitMsg = "Trop peu de surface près du contact pour ajuster"; onChange?.(state()); return; }
+      let F = facets;
+      if (F.length > 1200) { const k = F.length / 1200; F = Array.from({ length: 1200 }, (_, i) => facets[Math.floor(i * k)]); }
+      // le support : le point le plus proche et la normale de sa facette
+      const geos = sups.map(g => { g.updateMatrix(); return { geo: col.geoOf(g), m: g.matrix.clone(), inv: g.matrix.clone().invert(), nm: new THREE.Matrix3().getNormalMatrix(g.matrix) }; });
       const tg = {}, q = new THREE.Vector3();
       const near = w => {
-        let b = null;
+        let best = null;
         for (const s of geos) {
           const r = s.geo.boundsTree.closestPointToPoint(q.copy(w).applyMatrix4(s.inv), tg);
-          if (r && (!b || r.distance < b.d)) b = { d: r.distance, p: r.point.clone().applyMatrix4(s.m) };
+          if (!r || (best && r.distance >= best.d)) continue;
+          const pos = s.geo.attributes.position.array, ixx = s.geo.index.array, f = r.faceIndex;
+          a.fromArray(pos, ixx[f * 3] * 3); b.fromArray(pos, ixx[f * 3 + 1] * 3); c.fromArray(pos, ixx[f * 3 + 2] * 3);
+          const n = b.clone().sub(a).cross(c.clone().sub(a)).applyMatrix3(s.nm).normalize();
+          best = { d: r.distance, p: r.point.clone().applyMatrix4(s.m), n };
         }
-        return b;
+        return best;
       };
-      const gapOf = D => { const ds = pts.map(a => near(a.clone().applyMatrix4(D))?.d ?? 1e9).sort((x, y) => x - y); return ds[Math.floor(ds.length / 2)]; };
-      const before = gapOf(new THREE.Matrix4());
+      // les paires : une facette de la piece et la facette du support qui la regarde
+      const pairsOf = D => {
+        const nm = new THREE.Matrix3().getNormalMatrix(D), out = [];
+        for (const [p0, n0] of F) {
+          const w = p0.clone().applyMatrix4(D), nw = n0.clone().applyMatrix3(nm).normalize(), h = near(w);
+          if (h && h.d < rho * 0.5 && nw.dot(h.n) < -0.5) out.push([w, h.p, h.n, h.d]);
+        }
+        return out;
+      };
+      const contactOf = ps => ps.filter(p => p[3] <= 0.3).length;
       let D = new THREE.Matrix4();
+      const ps0 = pairsOf(D), before = ps0.length ? ps0.map(p => p[3]).sort((x, y) => x - y)[Math.floor(ps0.length / 2)] : Infinity, c0 = contactOf(ps0);
+      // une iteration point-plan : petite rotation (w) et translation (t) qui rapprochent chaque point du plan de son vis-a-vis
+      const solve6 = (A, g) => {
+        const M = A.map((r, i) => [...r, g[i]]);
+        for (let i = 0; i < 6; i++) {
+          let piv = i; for (let k = i + 1; k < 6; k++) if (Math.abs(M[k][i]) > Math.abs(M[piv][i])) piv = k;
+          [M[i], M[piv]] = [M[piv], M[i]];
+          if (Math.abs(M[i][i]) < 1e-12) return null;
+          for (let k = 0; k < 6; k++) if (k !== i) { const f = M[k][i] / M[i][i]; for (let l = i; l < 7; l++) M[k][l] -= f * M[i][l]; }
+        }
+        return M.map((r, i) => r[6] / r[i]);
+      };
       for (let it = 0; it < 30; it++) {
-        const pairs = [];
-        for (const a of pts) { const w = a.clone().applyMatrix4(D), c = near(w); if (c) pairs.push([w, c.p, c.d]); }
-        const ds = pairs.map(p => p[2]).sort((x, y) => x - y), med = ds[Math.floor(ds.length / 2)] || 0;
-        const keep = pairs.filter(p => p[2] <= Math.max(0.5, 2.5 * med));
-        if (keep.length < 10) break;
-        const H = horn(keep.map(p => [p[0], p[1]]), []);
-        D = H.clone().multiply(D);
-        if (new THREE.Vector3().setFromMatrixPosition(H).length() < 0.005 && it > 4) break;
+        const ps = pairsOf(D);
+        if (ps.length < 12) break;
+        const ds = ps.map(p => p[3]).sort((x, y) => x - y), med = ds[Math.floor(ds.length / 2)];
+        const keep = ps.filter(p => p[3] <= Math.max(0.4, 2.5 * med));
+        const cen = keep.reduce((s, p) => s.add(p[0]), new THREE.Vector3()).divideScalar(keep.length);
+        const A = Array.from({ length: 6 }, () => new Array(6).fill(0)), gv = new Array(6).fill(0);
+        for (const [w, bp, n] of keep) {
+          const r = w.clone().sub(cen), cr = r.clone().cross(n), J = [cr.x, cr.y, cr.z, n.x, n.y, n.z], res = bp.clone().sub(w).dot(n);
+          for (let i = 0; i < 6; i++) { gv[i] += J[i] * res; for (let k = 0; k < 6; k++) A[i][k] += J[i] * J[k]; }
+        }
+        for (let i = 0; i < 6; i++) A[i][i] += 1e-3 * keep.length;
+        const x = solve6(A, gv);
+        if (!x) break;
+        const wv = new THREE.Vector3(x[0], x[1], x[2]), ang = wv.length();
+        const R = ang > 1e-9 ? new THREE.Matrix4().makeRotationAxis(wv.clone().normalize(), Math.min(ang, 0.1)) : new THREE.Matrix4();
+        const step = new THREE.Matrix4().makeTranslation(cen.x + x[3], cen.y + x[4], cen.z + x[5]).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-cen.x, -cen.y, -cen.z));
+        D = step.multiply(D);
+        if (ang < 1e-4 && Math.hypot(x[3], x[4], x[5]) < 0.003 && it > 3) break;
+        if (it % 6 === 5) await new Promise(r => setTimeout(r, 0));
       }
-      // pas plus d'un quart de tour : au-dela, ce n'etait pas la bonne surface
+      const ps1 = pairsOf(D), after = ps1.length ? ps1.map(p => p[3]).sort((x, y) => x - y)[Math.floor(ps1.length / 2)] : Infinity, c1 = contactOf(ps1);
       const qd = new THREE.Quaternion().setFromRotationMatrix(D), turn = 2 * Math.acos(Math.min(1, Math.abs(qd.w))) * 180 / Math.PI;
-      const after = gapOf(D);
-      if (turn > 30 || !(after < before - 0.02)) { fitMsg = `Déjà au mieux (écart ${String(Math.round(before * 10) / 10).replace(".", ",")} mm) : rien à ajuster`; onChange?.(state()); return; }
-      // puis reculer le long du contact jusqu'a ne rien traverser (par sauts, puis au plus pres)
-      const at = b => start.map(([g, m0]) => [g, new THREE.Matrix4().makeTranslation(N.x * b, N.y * b, N.z * b).multiply(D).multiply(m0)]);
-      const hits = b => col.anyTouch(at(b), sups, 0);
+      const fmt = x => String(Math.round(x * 10) / 10).replace(".", ",");
+      if (turn > 30 || !(c1 > c0 || after < before - 0.05)) { fitMsg = `Déjà au mieux (écart ${fmt(before)} mm) : rien à ajuster`; onChange?.(state()); return; }
+      // reculer le long des normales du contact jusqu'a ne rien traverser (par sauts, puis au plus pres)
+      const out = ps1.reduce((s, p) => s.add(p[2]), new THREE.Vector3()).normalize();
+      const at = d => start.map(([g, m0]) => [g, new THREE.Matrix4().makeTranslation(out.x * d, out.y * d, out.z * d).multiply(D).multiply(m0)]);
+      const hits = d => col.anyTouch(at(d), sups, 0);
       let lo = 0, hi = 0;
       if (hits(0)) {
-        hi = 0.1;
-        while (hits(hi) && hi < 6) { lo = hi; hi *= 2; }
+        hi = 0.05;
+        while (hits(hi) && hi < 3) { lo = hi; hi *= 2; }
         for (let k = 0; k < 8; k++) { const mid = (lo + hi) / 2; if (hits(mid)) lo = mid; else hi = mid; }
       }
+      // trop reculer, c'est que la place trouvee n'est pas la bonne : on laisse la piece ou elle etait
+      if (hi > 1.5) { fitMsg = "Pas de meilleure place sans traverser l'autre pièce : la pièce reste où tu l'as collée"; onChange?.(state()); return; }
       for (const [g, m] of at(hi)) { m.decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); }
-      const f = x => String(Math.round(x * 10) / 10).replace(".", ",");
       egg("sur_mesure");
-      fitMsg = `Ajustée : écart ${f(before)} → ${f(after)} mm${hi > 0.05 ? ` · reculée de ${f(hi)} mm pour ne rien traverser` : ""}`;
+      fitMsg = `Ajustée : écart ${fmt(before)} → ${fmt(after)} mm · ${c1} points en contact (avant ${c0})${hi > 0.05 ? ` · reculée de ${fmt(hi)} mm pour ne rien traverser` : ""}`;
       showContact(); placeHandle(); push(); render();
     },
     unglue: () => {
