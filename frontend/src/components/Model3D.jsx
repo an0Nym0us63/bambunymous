@@ -565,7 +565,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           camera.lookAt(controls.target); camera.updateProjectionMatrix(); controls.update(); render();
           return blob;
         };
-        if (editApi) editApi.current = ed ? { editing, toSave, origin, relayout, snapshot, get editor() { return editor; } } : null;
+        // la vignette se prend sur tout plateau (30/10/2026) ; l'edition, sur la vue assemblee seulement
+        if (editApi) editApi.current = { editing, toSave, origin, relayout, snapshot, get editor() { return editor; } };
         disposables.push({ dispose: () => { try { editor?.dispose(); } catch { /* rien */ } if (editApi) editApi.current = null; } });
         api.current = { fit, night, backlight, bedShow, dragPans, zoom };
         const s = bb2.getSize(new THREE.Vector3());
@@ -723,7 +724,35 @@ function EditHelp({ onClose }) {
   </div>;
 }
 
-function EditBar({ est, api, onSave, onReset, onClose, saving }) {
+function EditVersions({ list, dirty, onPick, onClose }) {
+  const when = t => t ? new Date(t * 1000).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "?";
+  const why = v => v.other ? "Enregistré sur une autre vue de ce modèle" : v.why === "vue du 3MF" ? "Avant « Vue du 3MF »" : "Version remplacée";
+  return <div onClick={onClose} style={{ position: "absolute", inset: 0, zIndex: 6, background: "rgba(2,6,23,.45)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(460px, calc(100% - 32px))", maxHeight: "calc(100% - 40px)", overflowY: "auto", padding: "16px 18px",
+      borderRadius: 16, background: "var(--sheet-bg)", border: "1px solid var(--border)", boxShadow: "0 20px 60px rgba(0,0,0,.4)", color: "var(--text2)",
+      display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center" }}>
+        <b style={{ flex: 1, fontSize: 16, color: "var(--text)" }}>🕘 Assemblages enregistrés</b>
+        <button type="button" onClick={onClose} aria-label="Fermer" style={{ border: "none", background: "none", color: "var(--muted)", cursor: "pointer", fontSize: 16 }}>✕</button>
+      </div>
+      {list === "busy" ? <span style={{ fontSize: 13 }}>…</span>
+        : !list.length ? <span style={{ fontSize: 13 }}>Aucune autre version pour l'instant : chaque enregistrement gardera désormais la précédente.</span>
+        : <>
+          {dirty && <span style={{ fontSize: 12, color: "#d97706", fontWeight: 700 }}>Les changements non enregistrés seront perdus.</span>}
+          {list.map(v => <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)" }}>
+            <div style={{ flex: 1, minWidth: 0, fontSize: 12.5 }}>
+              <div style={{ fontWeight: 800, color: "var(--text)" }}>{when(v.at)} · {v.n} pièce{v.n > 1 ? "s" : ""}</div>
+              <div style={{ color: "var(--muted)", fontWeight: 600 }}>{why(v)}</div>
+            </div>
+            <button type="button" onClick={() => onPick(v.id)} style={{ height: 32, padding: "0 12px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 800,
+              color: "#fff", background: "linear-gradient(135deg, #0EA5E9, #6366F1)" }}>Reprendre</button>
+          </div>)}
+        </>}
+    </div>
+  </div>;
+}
+
+function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
   const [sure, setSure] = useState(false);
   const [help, setHelp] = useState(false);
   if (!est) return null;
@@ -783,6 +812,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving }) {
       {sure ? <button type="button" onClick={() => { setSure(false); onReset(); }} style={b(false, { color: "#ef4444" })}>Confirmer : vue du 3MF</button>
         : <button type="button" onClick={() => { setSure(true); setTimeout(() => setSure(false), 4000); }} style={b(false)}
           data-tip="Oublier l'assemblage enregistré : la vue redevient celle du 3MF">↺ Vue du 3MF</button>}
+      <button type="button" onClick={onVersions} style={b(false)} data-tip="Reprendre un assemblage enregistré avant (chaque version est gardée)">🕘 Versions</button>
       <button type="button" disabled={saving} onClick={onSave} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}>
         {saving ? "…" : est.dirty ? "💾 Enregistrer" : "✓ Enregistré"}</button>
       <button type="button" onClick={() => { setHelp(true); egg("mode_emploi"); }} style={b(false)} data-tip="Tous les gestes et raccourcis">?</button>
@@ -922,7 +952,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   // la vignette 3D (29/10/2026) : prise dans la vue assemblee, rangee avec l'impression ou le groupe d'ou la vue s'ouvre
   const [shot, setShot] = useState(null);                // null | "busy" | { kind, id, url, used }
   const shotTarget = /^(print|group):\d+$/.test(scope || "") ? { kind: scope.split(":")[0], id: scope.split(":")[1] } : (printId ? { kind: "print", id: String(printId) } : null);
-  const canShot = isAdmin && !currentFriend() && !!p?.assembled && !!shotTarget;
+  const canShot = isAdmin && !currentFriend() && !!p && !p.pending && !!shotTarget;
   const takeShot = async () => {
     setShot("busy");
     try {
@@ -942,11 +972,26 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const editable = desktop && isAdmin && !currentFriend() && !!p?.assembled && !!p?.pieces && !!meta?.key;
   const edit = savedEdit !== undefined ? savedEdit : meta?.assembly_edit;
   useEffect(() => { setSavedEdit(undefined); }, [meta?.key]);
+  // les assemblages a reprendre (30/10/2026) : versions passees de cette vue, et ceux d'autres vues du meme modele
+  const [versions, setVersions] = useState(null);       // null | "busy" | [{ id, at, n, why, other }]
+  const openVersions = async () => {
+    setVersions("busy");
+    try { const r = await client.get(`/makerworld/3d/edit/${meta.key}/versions`, { params: { did: designId } }); setVersions(r.data.versions || []); }
+    catch (e) { setVersions(null); showAlert(e.response?.data?.detail || e.message); }
+  };
+  const restoreVersion = async id => {
+    try {
+      const r = await client.post(`/makerworld/3d/edit/${meta.key}/restore`, { id });
+      setVersions(null);
+      if (editing) { await editApi.current?.editing(false); setEditing(false); setEst(null); }
+      setSavedEdit(r.data); setVkey(k => k + 1);      // la vue se refait avec l'assemblage repris
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
   const saveEdit = async () => {
     const pieces = editApi.current?.toSave();
     if (!pieces) return;
     setSaving(true);
-    try { const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces, groups: editApi.current?.editor?.groups() || [],
+    try { const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces, did: designId, groups: editApi.current?.editor?.groups() || [],
       joints: editApi.current?.editor?.joints() || [], splits: editApi.current?.editor?.splits() || [], v: 2 });
       setSavedEdit(r.data); editApi.current?.editor?.markSaved(); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
@@ -1007,7 +1052,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           border: full ? "none" : "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
           {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}|${vkey}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown}
-            pieces={p.assembled ? p.pieces : null} edit={p.assembled ? edit : null} editApi={p.assembled ? editApi : null} pad={full || editing}
+            pieces={p.assembled ? p.pieces : null} edit={p.assembled ? edit : null} editApi={editApi} pad={full || editing}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}
@@ -1022,7 +1067,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             </div>
             <button type="button" onClick={() => setShot(null)} aria-label="Fermer" style={{ alignSelf: "flex-start", border: "none", background: "none", color: "var(--muted)", cursor: "pointer" }}>✕</button>
           </div>}
-          {editing && <EditBar est={est} api={editApi.current?.editor} onSave={saveEdit} onReset={resetEdit} onClose={stopEdit} saving={saving}/>}
+          {editing && <EditBar est={est} api={editApi.current?.editor} onSave={saveEdit} onReset={resetEdit} onClose={stopEdit} saving={saving} onVersions={openVersions}/>}
+          {versions && <EditVersions list={versions} dirty={!!est?.dirty} onPick={restoreVersion} onClose={() => setVersions(null)}/>}
           {editing && leaving && <div style={{ position: "absolute", inset: 0, zIndex: 7, background: "rgba(2,6,23,.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ width: "min(420px, calc(100% - 32px))", padding: "18px 18px 14px", borderRadius: 16, background: "var(--sheet-bg)", border: "1px solid var(--border)",
               boxShadow: "0 20px 60px rgba(0,0,0,.4)", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1040,12 +1086,15 @@ export default function Model3D({ designId = null, profileId = null, printId = n
               data-tip={full ? "Quitter le plein écran" : "Plein écran"} style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)",
                 cursor: "pointer", background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{full ? "🗗" : "⛶"}</button>
             {canShot && <button type="button" disabled={shot === "busy"} onClick={takeShot}
-              data-tip={`Prendre la vue telle que tu la regardes comme vignette ${shotTarget.kind === "group" ? "du groupe" : "de l'impression"} (sans la grille)`}
+              data-tip={`Prendre la vue telle que tu la regardes (${p.assembled ? "l'assemblage" : "ce plateau"}) comme vignette ${shotTarget.kind === "group" ? "du groupe" : "de l'impression"}, sans la grille`}
               style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 13, fontWeight: 800,
                 background: "var(--surface)", color: "var(--text2)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{shot === "busy" ? "…" : "📸 Vignette"}</button>}
             {editable && <button type="button" onClick={startEdit} data-tip="Déplacer, tourner, poser au sol, coller les pièces (en plein écran)"
               style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff",
                 background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>✏️ Éditer l'assemblage</button>}
+            {editable && <button type="button" disabled={versions === "busy"} onClick={openVersions} data-tip="Reprendre un assemblage enregistré avant (chaque version est gardée)"
+              style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", background: "var(--surface)", color: "var(--text2)",
+                fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>🕘</button>}
           </div>}
           {!editing && alt && p && !p.pending && !isGlb(p.url) && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
             background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
@@ -1072,7 +1121,10 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {meta.ms >= 1000 && <span data-tip="La première ouverture prépare le modèle ; les suivantes sont immédiates">· préparé en {(meta.ms / 1000).toFixed(1).replace(".", ",")} s</span>}
           {st.size && !p?.pending && <span>· {mm(st.size[0])} × {mm(st.size[1])} × {mm(st.size[2])}</span>}
           {p?.triangles ? <span>· {p.triangles.toLocaleString("fr-FR")} triangles</span> : null}
-          {p?.tidied && <span data-tip="Dans le 3MF, les pièces étaient dispersées : celles qui se touchent restent ensemble, les autres sont rapprochées">· pièces rapprochées</span>}
+          {p?.assembled && edit?.pieces && <span style={{ color: edit.from_key ? "#d97706" : "#16a34a" }}
+            data-tip={edit.from_key ? "Enregistré sur une autre vue de ce modèle (un autre profil) : enregistre-le ici pour le garder" : "Ton assemblage enregistré"}>
+            · {edit.from_key ? "assemblage repris d'une autre vue du modèle" : "assemblage enregistré"}</span>}
+          {p?.tidied && !(p?.assembled && edit?.pieces) && <span data-tip="Dans le 3MF, les pièces étaient dispersées : celles qui se touchent restent ensemble, les autres sont rapprochées">· pièces rapprochées</span>}
           {zc.length > 0 && <span data-tip="Changement de filament posé dans Bambu Studio à cette hauteur : au-dessus, les pièces prennent cette couleur"
             style={{ display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>· changement de filament à
             {zc.map(([z, c], i) => <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>

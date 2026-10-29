@@ -1246,7 +1246,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         onClick: async () => { try { await client.post(`/makerworld/source3mf/print/${p.id}`); setP(prev => ({ ...prev, source_3mf: true })); toast("3MF d'origine récupéré"); }
           catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
       p.model_3mf && { icon: "⤓", label: "Télécharger le 3MF tranché", hint: "pour mon imprimante", tone: "#F59E0B", onClick: () => download3mf(p.id, "sliced") },
-      isAdmin && p.has_vue3d && { icon: p.thumb_3d ? "🖼" : "🧊", label: p.thumb_3d ? "Vignette : image du plateau" : "Vignette : vue 3D assemblée",
+      isAdmin && p.has_vue3d && { icon: p.thumb_3d ? "🖼" : "🧊", label: p.thumb_3d ? "Vignette : image du plateau" : "Vignette : vue 3D",
         hint: p.thumb_3d ? "Revenir à l'image du plateau" : "Celle prise dans la vue 3D", tone: "#0EA5E9",
         onClick: async () => { try { await client.put(`/prints/${p.id}/thumb`, { use3d: !p.thumb_3d }); setP(prev => ({ ...prev, thumb_3d: !prev.thumb_3d, updated_at: new Date().toISOString() }));
           window.dispatchEvent(new Event("bn-prints-changed")); } catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
@@ -1686,7 +1686,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       objQ && { icon: "📦", label: objQ.remaining > 0 ? "Créer des objets" : "Objets : tous créés", hint: `${objQ.used} / ${objQ.total} déjà créés`, tone: "#22C55E",
         onClick: () => setObjCreate(true) },
       { icon: "📤", label: "Dégrouper", hint: "Les impressions restent", tone: "#A78BFA", onClick: handleUngroup },
-      isAdmin && prints[0]?.group_has_vue3d && { icon: thumb3d ? "🧩" : "🧊", label: thumb3d ? "Vignette : mosaïque des impressions" : "Vignette : vue 3D assemblée",
+      isAdmin && prints[0]?.group_has_vue3d && { icon: thumb3d ? "🧩" : "🧊", label: thumb3d ? "Vignette : mosaïque des impressions" : "Vignette : vue 3D",
         hint: thumb3d ? "Revenir à la mosaïque" : "Celle prise dans la vue 3D, à la place de la mosaïque", tone: "#0EA5E9",
         onClick: async () => { try { await client.put(`/prints/groups/${groupId}/thumb`, { use3d: !thumb3d }); setPrints(ps => ps.map(x => ({ ...x, group_thumb_3d: !thumb3d })));
           onUpdated?.(); window.dispatchEvent(new Event("bn-prints-changed")); } catch (e) { showAlert(e.response?.data?.detail || e.message); } } },

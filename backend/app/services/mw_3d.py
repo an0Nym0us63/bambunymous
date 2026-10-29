@@ -1313,18 +1313,88 @@ def _edits_file(key: str) -> Path:
     return Path(settings.DATA_DIR) / "mw_3d_edits" / f"{key}.json"
 
 
-def load_edit(key: str) -> dict | None:
-    if not re.fullmatch(r"[A-Za-z0-9_]+", key or ""):
-        return None
+_KEY = re.compile(r"[A-Za-z0-9_]+")
+# chaque version enregistree est gardee (30/10/2026 : un assemblage enregistre s'est encore perdu) : la precedente part
+# dans _old/ a chaque enregistrement, et « Vue du 3MF » y range l'assemblage au lieu de l'effacer
+_KEEP = 40
+
+
+def _old_dir() -> Path:
+    from ..core.config import settings
+    return Path(settings.DATA_DIR) / "mw_3d_edits" / "_old"
+
+
+def _did_of(key: str) -> str | None:
+    """Le modele d'une vue : note dans l'edition, sinon l'index des 3MF (cle « modele:profil » -> vue)."""
     try:
-        return json.loads(_edits_file(key).read_text(encoding="utf-8"))
+        from .mw_source import _index
+        for k, v in _index().items():
+            if v == key:
+                return str(k).split(":")[0]
+    except Exception:
+        pass
+    return None
+
+
+def _read(f: Path) -> dict | None:
+    try:
+        d = json.loads(f.read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) and isinstance(d.get("pieces"), dict) else None
     except (OSError, ValueError):
         return None
 
 
-def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, joints: list | None = None, splits: list | None = None) -> dict:
+def _backup(key: str, why: str) -> None:
+    """L'edition actuelle de cette vue, copiee dans _old/ (jamais perdue) ; les plus anciennes au-dela de _KEEP partent."""
     import time
-    if not re.fullmatch(r"[A-Za-z0-9_]+", key or ""):
+    cur = _edits_file(key)
+    d = _read(cur)
+    if not d:
+        return
+    od = _old_dir()
+    od.mkdir(parents=True, exist_ok=True)
+    d = {**d, "key": key, "saved_as": why, "archived": time.time()}
+    _write(od / f"{key}.{int(time.time() * 1000)}.json", json.dumps(d).encode("utf-8"))
+    olds = sorted(od.glob(f"{key}.*.json"))
+    for f in olds[:-_KEEP]:
+        try:
+            f.unlink()
+        except OSError:
+            pass
+
+
+def load_edit(key: str, did: str | None = None, piece_keys: set | None = None) -> dict | None:
+    """L'assemblage edite de cette vue. A defaut, celui d'une autre vue du meme modele (un autre profil, une vue
+    rangee autrement) dont les pieces sont les memes : marque « from_key », a reenregistrer sous cette vue."""
+    if not _KEY.fullmatch(key or ""):
+        return None
+    d = _read(_edits_file(key))
+    if d or not did:
+        return d
+    best = None
+    try:
+        files = list(_edits_file(key).parent.glob("*.json"))
+    except OSError:
+        files = []
+    for f in files:
+        o = _read(f)
+        if not o or (o.get("did") or _did_of(f.stem)) != str(did):
+            continue
+        # les pieces comparees par objet et instance (« objet:instance ») : les cles plus fines ont change au fil des versions
+        ks, want = {":".join(k.split(":")[:2]) for k in o["pieces"]}, {":".join(str(k).split(":")[:2]) for k in piece_keys or ()}
+        if want and len(ks & want) < max(1, len(ks) * 0.8):
+            continue
+        if not best or (o.get("at") or 0) > (best.get("at") or 0):
+            best = {**o, "from_key": f.stem}
+    if best:
+        logger.info(f"[3D] assemblage de {key} repris de la vue {best['from_key']} (meme modele {did})")
+    return best
+
+
+def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, joints: list | None = None,
+              splits: list | None = None, did: str | None = None) -> dict:
+    import time
+    if not _KEY.fullmatch(key or ""):
         raise ValueError("Vue inconnue")
     clean = {}
     for k, m in (pieces or {}).items():
@@ -1343,16 +1413,65 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
            and num(j.get("p"), 3) and num(j.get("n"), 3)]
     # les pieces separees a la main (refaites en morceaux a l'ouverture), et la version de l'edition
     spl = [str(k) for k in (splits or []) if re.fullmatch(r"\d+:\d+:\d+", str(k))]
-    d = {"pieces": clean, "groups": [g for g in grp if len(g) > 1], "joints": jts, "splits": spl, "v": 2, "at": time.time(), "by": by}
+    did = str(did) if did and str(did).isdigit() else _did_of(key)
+    d = {"pieces": clean, "groups": [g for g in grp if len(g) > 1], "joints": jts, "splits": spl, "v": 2, "at": time.time(),
+         "by": by, **({"did": did} if did else {})}
+    _backup(key, "remplacee")
     f = _edits_file(key)
     f.parent.mkdir(parents=True, exist_ok=True)
     _write(f, json.dumps(d).encode("utf-8"))
+    logger.info(f"[3D] assemblage enregistre : vue {key}, {len(clean)} pieces (modele {did or '?'})")
     return d
 
 
 def drop_edit(key: str) -> None:
-    if re.fullmatch(r"[A-Za-z0-9_]+", key or ""):
+    """« Vue du 3MF » : l'assemblage n'est plus montre, mais il reste dans les versions (on peut le reprendre)."""
+    if _KEY.fullmatch(key or ""):
+        _backup(key, "vue du 3MF")
         try:
             _edits_file(key).unlink()
         except OSError:
             pass
+
+
+def edit_versions(key: str, did: str | None = None) -> list:
+    """Les assemblages que l'on peut reprendre pour cette vue : ses versions passees, et ceux des autres vues du meme
+    modele (le plus recent d'abord)."""
+    if not _KEY.fullmatch(key or ""):
+        return []
+    out = []
+    pats = [(_old_dir(), f"{key}.*.json")]
+    if did:
+        pats += [(_edits_file(key).parent, "*.json"), (_old_dir(), "*.json")]
+    seen = set()
+    for d0, pat in pats:
+        try:
+            files = list(d0.glob(pat))
+        except OSError:
+            continue
+        for f in files:
+            if f in seen or f == _edits_file(key):
+                continue
+            seen.add(f)
+            o = _read(f)
+            if not o:
+                continue
+            k = o.get("key") or f.stem.split(".")[0]
+            if k != key and (o.get("did") or _did_of(k)) != str(did or ""):
+                continue
+            out.append({"id": f"{'old/' if d0 == _old_dir() else ''}{f.stem}", "at": o.get("at"), "archived": o.get("archived"),
+                        "why": o.get("saved_as"), "n": len(o["pieces"]), "other": k != key})
+    out.sort(key=lambda x: -(x.get("at") or 0))
+    return out[:60]
+
+
+def restore_edit(key: str, vid: str, by: str = "") -> dict:
+    """Reprend une version (« old/<cle>.<ms> » ou « <autre cle> ») comme assemblage de cette vue."""
+    old = vid.startswith("old/")
+    stem = vid[4:] if old else vid
+    if not _KEY.fullmatch(key or "") or not re.fullmatch(r"[A-Za-z0-9_]+(\.\d+)?", stem):
+        raise ValueError("Version inconnue")
+    o = _read((_old_dir() if old else _edits_file(key).parent) / f"{stem}.json")
+    if not o:
+        raise ValueError("Version introuvable")
+    return save_edit(key, o["pieces"], by, o.get("groups"), o.get("joints"), o.get("splits"), o.get("did"))

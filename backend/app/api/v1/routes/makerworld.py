@@ -753,7 +753,9 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             "used_finishes": {d["from"]: d["finish"] for d in used_detail or [] if d.get("to") and d.get("finish")},
             "plates": T.plates_out(meta, key)[0], "skipped": T.plates_out(meta, key)[1],
             # la vue assemblee editee a la main (29/10/2026), et la cle de la vue pour l'enregistrer
-            "key": key, "assembly_edit": T.load_edit(key) if key and source != "makerworld" else None,
+            "key": key, "assembly_edit": T.load_edit(key, did, {x.get("k") for p in T.plates_out(meta, key)[0] for x in p.get("pieces") or []
+                                                                  if isinstance(x, dict) and x.get("k")} or None)
+            if key and source != "makerworld" else None,
             # des plateaux encore en preparation (« pending » sur eux) : la vue redemande jusqu'a la fin
             "pending": bool((meta or {}).get("pending"))}
 
@@ -1575,7 +1577,25 @@ async def mw_3d_edit_save(key: str, body: dict = Body({}), user: str = Depends(g
     from ....services import mw_3d as T
     try:
         return T.save_edit(key, body.get("pieces") or {}, str(user or ""), body.get("groups") or [], body.get("joints") or [],
-                           body.get("splits") or [])
+                           body.get("splits") or [], str(body.get("did") or "") or None)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/3d/edit/{key}/versions")
+async def mw_3d_edit_versions(key: str, did: str = "", _: str = Depends(require_admin)):
+    """Les assemblages a reprendre : versions passees de cette vue, et ceux des autres vues du meme modele (30/10/2026)."""
+    from ....services import mw_3d as T
+    return {"versions": T.edit_versions(key, did if did.isdigit() else None)}
+
+
+@router.post("/3d/edit/{key}/restore")
+async def mw_3d_edit_restore(key: str, body: dict = Body({}), user: str = Depends(get_current_user),
+                             _: str = Depends(require_admin)):
+    """Reprend une version comme assemblage de cette vue (l'actuel part lui-meme dans les versions)."""
+    from ....services import mw_3d as T
+    try:
+        return T.restore_edit(key, str(body.get("id") or ""), str(user or ""))
     except ValueError as e:
         raise HTTPException(400, str(e))
 
