@@ -1,7 +1,7 @@
 // Les collisions entre pieces de la vue assemblee (29/10/2026), pour l'anti-collision : chaque piece a
 // une copie allegee de son maillage (60 000 triangles au plus, sommets proches fusionnes) avec son arbre de recherche
 // (three-mesh-bvh), faits a la premiere demande et gardes. Deux pieces se touchent si leurs triangles se croisent.
-const MAX_TRIS = 60000;
+const MAX_TRIS = 250000;               // au-dela seulement, simplifie (30/10/2026 : simplifier 90 000 triangles prenait 6 s)
 
 export async function createCollider(THREE) {
   const { MeshBVH } = await import("three-mesh-bvh");
@@ -68,17 +68,19 @@ export async function createCollider(THREE) {
       return geo;
     }
     if (cache.has(piece)) return cache.get(piece);
-    const pos = [], idx = [];
-    let base = 0;
-    for (const m of piece.children) {
-      if (!m.isMesh || !m.geometry?.attributes?.position) continue;
-      const g = m.geometry, p = g.attributes.position.array, ix = g.index ? g.index.array : null;
-      for (let i = 0; i < p.length; i++) pos.push(p[i]);
-      if (ix) for (let i = 0; i < ix.length; i++) idx.push(ix[i] + base);
-      else for (let i = 0; i < p.length / 3; i++) idx.push(i + base);
-      base += p.length / 3;
+    // les morceaux reunis, en tableaux types d'un coup (sans pousser un a un)
+    const ms = piece.children.filter(m => m.isMesh && m.geometry?.attributes?.position);
+    let nv = 0, ni = 0;
+    for (const m of ms) { nv += m.geometry.attributes.position.array.length; ni += m.geometry.index ? m.geometry.index.array.length : m.geometry.attributes.position.array.length / 3; }
+    let P = new Float32Array(nv), I = new Uint32Array(ni);
+    let vo = 0, io = 0;
+    for (const m of ms) {
+      const p = m.geometry.attributes.position.array, ix = m.geometry.index ? m.geometry.index.array : null, base = vo / 3;
+      P.set(p, vo);
+      if (ix) for (let i = 0; i < ix.length; i++) I[io + i] = ix[i] + base;
+      else for (let i = 0; i < p.length / 3; i++) I[io + i] = i + base;
+      vo += p.length; io += ix ? ix.length : p.length / 3;
     }
-    let P = Float32Array.from(pos), I = Uint32Array.from(idx);
     if (I.length / 3 > MAX_TRIS) [P, I] = simplify(P, I, MAX_TRIS);
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(P, 3));

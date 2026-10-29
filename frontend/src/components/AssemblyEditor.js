@@ -208,6 +208,30 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     }
     if (area <= 0) return null;
     c.multiplyScalar(1 / area);
+    // une face a relief (un tricot, un grain) : la face stricte n'est qu'une bosse de quelques triangles (30/10/2026 :
+    // 9 mm² au lieu des 250 de la face d'une aile). On l'etend alors aux triangles voisins proches du plan moyen
+    // (a 1,2 mm pres, normales a moins de 50°), plan recalcule au fur et a mesure : la face entiere, et sa normale moyenne
+    let relaxed = false;
+    if (seen.size < 40) {
+      const nAvg = new THREE.Vector3(), cAvg = new THREE.Vector3();
+      const seen2 = new Set([t0]), st2 = [t0], pts2 = [];
+      let area2 = 0, k = 0;
+      const add = t => { const [ar, a, b, cc] = triNormal(pos, ix, t, n); nAvg.addScaledVector(n, ar); cAvg.addScaledVector(a.clone().add(b).add(cc).multiplyScalar(1 / 3), ar); area2 += ar; pts2.push(a, b, cc); };
+      add(t0);
+      const cosMax = Math.cos(THREE.MathUtils.degToRad(50)), m = new THREE.Vector3();
+      while (st2.length && seen2.size < 200000) {
+        const t = st2.pop();
+        const pn = nAvg.clone().normalize(), pc = cAvg.clone().divideScalar(area2 || 1);
+        for (let e = 0; e < 3; e++) {
+          const u = nb[t * 3 + e];
+          if (u < 0 || seen2.has(u)) continue;
+          const [, a, b, cc] = triNormal(pos, ix, u, m);
+          const ctr = a.clone().add(b).add(cc).multiplyScalar(1 / 3);
+          if (m.dot(pn) > cosMax && Math.abs(ctr.sub(pc).dot(pn)) < 1.2) { seen2.add(u); st2.push(u); add(u); k++; }
+        }
+      }
+      if (area2 > area * 3) { relaxed = true; area = area2; c.copy(cAvg).divideScalar(area2); n0.copy(nAvg).normalize(); pts.length = 0; for (const x of pts2) pts.push(x); seen.clear(); seen2.forEach(x => seen.add(x)); }
+    }
     // le grand axe : la direction la plus etendue dans le plan (analyse des points de la face, en 2D)
     const u = Math.abs(n0.z) < 0.9 ? new THREE.Vector3(0, 0, 1).cross(n0).normalize() : new THREE.Vector3(1, 0, 0).cross(n0).normalize();
     const v = n0.clone().cross(u);
@@ -216,7 +240,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const ang = 0.5 * Math.atan2(2 * sxy, sxx - syy);
     const axis = u.clone().multiplyScalar(Math.cos(ang)).addScaledVector(v, Math.sin(ang)).normalize();
     const elongated = Math.abs(sxx - syy) + Math.abs(sxy) > 0.08 * (sxx + syy);       // une face ronde ou carree : pas de grand axe sur
-    return { c, area, axis, n: n0, elongated, count: seen.size };
+    return { c, area, axis, n: n0, elongated, count: seen.size, relaxed };
   };
 
   // la prise sous la souris : la piece, et sa face ou son arete (en coordonnees du support)
@@ -224,6 +248,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const r = el.getBoundingClientRect();
     mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(mouse, camera);
+    return pickRay();
+  };
+  // la prise le long du rayon deja pose (la souris, ou un essai sur le banc)
+  const pickRay = () => {
     const hit = ray.intersectObjects(meshes(), false)[0];
     if (!hit) return null;
     const g = pieceOf(hit.object);
@@ -239,6 +267,18 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const p = holder.worldToLocal(hit.point.clone());
     const n = new THREE.Vector3().subVectors(vb, va).cross(new THREE.Vector3().subVectors(vc, va)).normalize();
     const size = boxOf(g).getSize(new THREE.Vector3()).length();
+    // la face entiere autour du clic (en mode assiste) ; une face a relief (tricot) : sa normale moyenne, et pas d'arete
+    // (les cretes du relief n'en sont pas)
+    let region = null;
+    if (assist && idx) {
+      const rg = regionOf(geo, hit.faceIndex);
+      if (rg) region = { c: rg.c.clone().applyMatrix4(M), area: rg.area, axis: rg.axis.clone().applyMatrix3(N).normalize(), elongated: rg.elongated, relaxed: rg.relaxed };
+      if (rg?.relaxed && rg.area > 20) {
+        const nr = rg.n.clone().applyMatrix3(N).normalize();
+        if (nr.dot(n) < 0) nr.negate();
+        return { group: g, kind: "face", p, n: nr, size, region };
+      }
+    }
     // l'arete la plus proche du clic, si le clic la frole et si c'est une vraie arete (angle marque avec sa voisine)
     if (idx) {
       const nb = neighbours(geo), ix = idx.array, t = hit.faceIndex;
@@ -255,11 +295,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
           return { group: g, kind: "edge", p: best.q, a: best.a, b: best.b, e: new THREE.Vector3().subVectors(best.b, best.a).normalize(), n, size };
         }
       }
-    }
-    let region = null;
-    if (assist && idx) {
-      const rg = regionOf(geo, hit.faceIndex);
-      if (rg) region = { c: rg.c.clone().applyMatrix4(M), area: rg.area, axis: rg.axis.clone().applyMatrix3(N).normalize(), elongated: rg.elongated };
     }
     return { group: g, kind: "face", p, n, size, region };
   };
@@ -831,9 +866,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       const col = await getCollider();
       const moving = withKids(list), start = moving.map(g => { g.updateMatrix(); return [g, g.matrix.clone()]; });
       const sups = unitOf(j.b).filter(g => !moving.includes(g) && g.visible);
-      const { P } = contact(j);
+      const { P, N: Nc } = contact(j);
       const rho = Math.min(60, Math.max(8, boxOfAll(list).getSize(new THREE.Vector3()).length() * 0.5));
-      // les facettes de la piece pres du contact : leur centre et leur normale (repere du modele)
+      // les facettes de la piece pres du contact, tournees vers le support (son dos, son relief exterieur ne comptent pas :
+      // ils s'accrochaient au relief de l'autre piece et l'emmenaient de travers) : leur centre et leur normale
       const facets = [];
       const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
       for (const g of moving) for (const m of g.children) {
@@ -847,14 +883,36 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
           if (ctr.distanceTo(P) > rho) continue;
           const n = b.clone().sub(a).cross(c.clone().sub(a));
           if (n.lengthSq() < 1e-12) continue;
-          facets.push([ctr, n.normalize()]);
+          n.normalize();
+          if (n.dot(Nc) > -0.3) continue;
+          facets.push([ctr, n]);
         }
       }
       if (facets.length < 20) { fitMsg = "Trop peu de surface près du contact pour ajuster"; onChange?.(state()); return; }
       let F = facets;
-      if (F.length > 1200) { const k = F.length / 1200; F = Array.from({ length: 1200 }, (_, i) => facets[Math.floor(i * k)]); }
-      // le support : le point le plus proche et la normale de sa facette
-      const geos = sups.map(g => { g.updateMatrix(); return { geo: col.geoOf(g), m: g.matrix.clone(), inv: g.matrix.clone().invert(), nm: new THREE.Matrix3().getNormalMatrix(g.matrix) }; });
+      if (F.length > 400) { const k = F.length / 400; F = Array.from({ length: 400 }, (_, i) => facets[Math.floor(i * k)]); }
+      // le support, seulement autour du contact (30/10/2026 : l'arbre de recherche d'un grand corps entier, 240 000
+      // triangles, prenait 4 s a construire ; la zone utile, quelques milliers, se fait en un instant)
+      const zone = boxOfAll(moving).expandByScalar(4), tb = new THREE.Box3();       // la place de la piece, a 4 mm pres
+      const cropped = sups.map(g => {
+        g.updateMatrix();
+        const pos = [];
+        for (const m of g.children) {
+          if (!m.isMesh || !m.geometry?.attributes?.position) continue;
+          const pa = m.geometry.attributes.position.array, ixx = m.geometry.index ? m.geometry.index.array : null, nt = ixx ? ixx.length / 3 : pa.length / 9;
+          for (let t = 0; t < nt; t++) {
+            const i0 = ixx ? ixx[t * 3] : t * 3, i1 = ixx ? ixx[t * 3 + 1] : t * 3 + 1, i2 = ixx ? ixx[t * 3 + 2] : t * 3 + 2;
+            a.fromArray(pa, i0 * 3).applyMatrix4(g.matrix); b.fromArray(pa, i1 * 3).applyMatrix4(g.matrix); c.fromArray(pa, i2 * 3).applyMatrix4(g.matrix);
+            if (zone.intersectsBox(tb.setFromPoints([a, b, c]))) pos.push(pa[i0 * 3], pa[i0 * 3 + 1], pa[i0 * 3 + 2], pa[i1 * 3], pa[i1 * 3 + 1], pa[i1 * 3 + 2], pa[i2 * 3], pa[i2 * 3 + 1], pa[i2 * 3 + 2]);
+          }
+        }
+        if (!pos.length) return null;
+        const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(Float32Array.from(pos), 3));
+        const q2 = new THREE.Group(); q2.add(new THREE.Mesh(geo)); q2.position.copy(g.position); q2.quaternion.copy(g.quaternion); q2.scale.copy(g.scale); q2.updateMatrix();
+        return q2;
+      }).filter(Boolean);
+      if (!cropped.length) { fitMsg = "Rien de l'autre pièce près du contact : rien à ajuster"; onChange?.(state()); return; }
+      const geos = cropped.map(g => ({ geo: col.geoOf(g), m: g.matrix.clone(), inv: g.matrix.clone().invert(), nm: new THREE.Matrix3().getNormalMatrix(g.matrix) }));
       const tg = {}, q = new THREE.Vector3();
       const near = w => {
         let best = null;
@@ -891,7 +949,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         }
         return M.map((r, i) => r[6] / r[i]);
       };
-      for (let it = 0; it < 30; it++) {
+      for (let it = 0; it < 20; it++) {
         const ps = pairsOf(D);
         if (ps.length < 12) break;
         const ds = ps.map(p => p[3]).sort((x, y) => x - y), med = ds[Math.floor(ds.length / 2)];
@@ -905,9 +963,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         for (let i = 0; i < 6; i++) A[i][i] += 1e-3 * keep.length;
         const x = solve6(A, gv);
         if (!x) break;
+        // des pas mesures (3° et 1 mm au plus par tour) : la piece glisse, elle ne saute pas
         const wv = new THREE.Vector3(x[0], x[1], x[2]), ang = wv.length();
-        const R = ang > 1e-9 ? new THREE.Matrix4().makeRotationAxis(wv.clone().normalize(), Math.min(ang, 0.1)) : new THREE.Matrix4();
-        const step = new THREE.Matrix4().makeTranslation(cen.x + x[3], cen.y + x[4], cen.z + x[5]).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-cen.x, -cen.y, -cen.z));
+        const R = ang > 1e-9 ? new THREE.Matrix4().makeRotationAxis(wv.clone().normalize(), Math.min(ang, 0.05)) : new THREE.Matrix4();
+        const tv = new THREE.Vector3(x[3], x[4], x[5]); if (tv.length() > 1) tv.setLength(1);
+        const step = new THREE.Matrix4().makeTranslation(cen.x + tv.x, cen.y + tv.y, cen.z + tv.z).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-cen.x, -cen.y, -cen.z));
         D = step.multiply(D);
         if (ang < 1e-4 && Math.hypot(x[3], x[4], x[5]) < 0.003 && it > 3) break;
         if (it % 6 === 5) await new Promise(r => setTimeout(r, 0));
@@ -919,12 +979,12 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       // reculer le long des normales du contact jusqu'a ne rien traverser (par sauts, puis au plus pres)
       const out = ps1.reduce((s, p) => s.add(p[2]), new THREE.Vector3()).normalize();
       const at = d => start.map(([g, m0]) => [g, new THREE.Matrix4().makeTranslation(out.x * d, out.y * d, out.z * d).multiply(D).multiply(m0)]);
-      const hits = d => col.anyTouch(at(d), sups, 0);
+      const hits = d => col.anyTouch(at(d), cropped, 0);
       let lo = 0, hi = 0;
       if (hits(0)) {
-        hi = 0.05;
-        while (hits(hi) && hi < 3) { lo = hi; hi *= 2; }
-        for (let k = 0; k < 8; k++) { const mid = (lo + hi) / 2; if (hits(mid)) lo = mid; else hi = mid; }
+        hi = 0.1;
+        while (hits(hi) && hi < 1.6) { lo = hi; hi *= 2; }
+        if (hi < 1.6) for (let k = 0; k < 5; k++) { const mid = (lo + hi) / 2; if (hits(mid)) lo = mid; else hi = mid; }
       }
       // trop reculer, c'est que la place trouvee n'est pas la bonne : on laisse la piece ou elle etait
       if (hi > 1.5) { fitMsg = "Pas de meilleure place sans traverser l'autre pièce : la pièce reste où tu l'as collée"; onChange?.(state()); return; }
@@ -961,5 +1021,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     },
   };
   onChange?.(state());
+  // banc d'essai seulement : une prise le long d'un rayon donne dans le repere du modele, et le collage
+  if (import.meta.env.DEV) api.__dev = {
+    pick: (o, d) => { holder.updateMatrixWorld(true); ray.set(o.clone().applyMatrix4(holder.matrixWorld), d.clone().transformDirection(holder.matrixWorld).normalize()); return pickRay(); },
+    mate: (A, B) => { const u = mate(A, B); if (u) { push(); setSel(u); } return u; },
+  };
   return api;
 }
