@@ -64,7 +64,8 @@ function Picker({ kind, id, shot, onDone, close }) {
               style={btn(false, { color: "#0EA5E9", borderColor: "#0EA5E9" })}>★ Choisie</button>
             : <button type="button" disabled={busy} onClick={() => toggle(s.n)} data-tip="L'ajouter à la vignette (plusieurs : une mosaïque)" style={btn(true)}>⭐ Vignette</button>}
           {shot && !saved && <button type="button" disabled={busy} onClick={() => put(s.n)} style={btn(false)}>↻ Remplacer</button>}
-          <button type="button" disabled={busy} onClick={() => drop(s.n)} style={btn(false, { color: "#ef4444" })}>{sure === s.n ? "Confirmer" : "🗑 Supprimer"}</button>
+          <button type="button" disabled={busy} onClick={() => drop(s.n)} style={sure === s.n ? btn(false, { color: "#fff", background: "#991b1b", borderColor: "#991b1b", boxShadow: "0 4px 12px -4px #991b1b" })
+            : btn(false, { color: "#ef4444" })}>{sure === s.n ? "⚠ Confirmer" : "🗑 Supprimer"}</button>
         </div>)}
       </div>}
       {d?.cover && sel.length > 1 && <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12.5, fontWeight: 700 }}>

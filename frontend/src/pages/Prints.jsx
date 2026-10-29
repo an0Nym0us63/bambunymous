@@ -3637,9 +3637,10 @@ export default function Prints() {
         </div>);
       })()}
 
-      {loading && <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>Chargement…</p>}
+      {/* la liste seulement (30/10/2026 : son chargement s'affichait au-dessus de la galerie) */}
+      {viewMode==="list" && loading && <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>Chargement…</p>}
 
-      {!loading && error && (
+      {viewMode==="list" && !loading && error && (
         <div style={{ margin:8, padding:"12px 16px", background:"rgba(239,68,68,0.1)",
           border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, color:"#ef4444", fontSize:13 }}>
           ⚠ {error}
