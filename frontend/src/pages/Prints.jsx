@@ -1023,6 +1023,12 @@ const whenFr = d => {
   const full = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: d.getFullYear() !== n0.getFullYear() ? "2-digit" : undefined });
   return [day.charAt(0).toUpperCase() + day.slice(1), `${t} · ${full}`];
 };
+// les pastilles posees sur les vignettes (30/10/2026) : discretes, en verre depoli, le texte a la couleur du sens (au
+// lieu d'aplats vifs qui mangeaient l'image)
+const chipS = (c, extra = {}) => ({ position: "absolute", fontSize: 9.5, fontWeight: 800, lineHeight: "16px", padding: "0 6px", borderRadius: 9,
+  color: `color-mix(in srgb, ${c} 70%, var(--text))`, background: "color-mix(in srgb, var(--surface) 82%, transparent)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
+  border: `1px solid color-mix(in srgb, ${c} 30%, transparent)`, boxShadow: "0 1px 4px rgba(0,0,0,.12)", whiteSpace: "nowrap", ...extra });
+
 const V2_STATUS = { SUCCESS: ["Réussie", "#22c55e", "✓"], PARTIAL: ["En partie", "#f59e0b", "◐"], FAILED: ["Échouée", "#ef4444", "✕"],
   IN_PROGRESS: ["En cours", "#3b82f6", "●"], CANCELLED: ["Annulée", "#94a3b8", "■"] };
 const v2grad = (a, b) => ({ backgroundImage: `linear-gradient(135deg, ${a}, ${b})`, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" });
@@ -2033,25 +2039,19 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
             <GroupMosaic photos={mosaicUrls} title={name}/>
           </div>
           <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, rgba(124,58,237,0.10), transparent 40%)" }}/>
-          <span style={{ position:"absolute", top:7, left:7, background:"linear-gradient(135deg, #8B5CF6, #A78BFA)", color:"white",
-            fontSize:10, fontWeight:900, padding:"2px 9px", borderRadius:20, boxShadow:"0 4px 12px rgba(124,58,237,.45)" }}>
-            📁 {prints.length} print{prints.length>1?"s":""}
+          <span data-tip={`${prints.length} impression${prints.length > 1 ? "s" : ""} dans ce groupe`} style={chipS("#7C3AED", { top:7, left:7 })}>
+            ▤ {prints.length}
           </span>
           {gCheck}
           {!selectMode && number_of_items > 1 && (
-            <span style={{ position:"absolute", top:7, right:7, background:"rgba(59,130,246,0.92)", color:"white",
-              fontSize:10, fontWeight:900, padding:"2px 8px", borderRadius:20 }}>×{number_of_items}</span>
+            <span data-tip={`${number_of_items} pièces`} style={chipS("#2563EB", { top:7, right:7 })}>×{number_of_items}</span>
           )}
           {nToRate > 0 && !selectMode && (
-            <span data-tip={`${nToRate} modèle${nToRate > 1 ? "s" : ""} à évaluer`} style={{ position:"absolute", bottom:7, right:7,
-              background:"linear-gradient(135deg, #F59E0B, #FBBF24)", color:"white", fontSize:10, fontWeight:900, padding:"2px 8px", borderRadius:20,
-              boxShadow:"0 3px 10px rgba(245,158,11,.5)" }}>
-              ⭐ {nToRate > 1 ? `${nToRate} à évaluer` : "À évaluer"}</span>
+            <span data-tip={`${nToRate} modèle${nToRate > 1 ? "s" : ""} à évaluer sur MakerWorld`} style={chipS("#D97706", { bottom:7, right:7 })}>
+              ★{nToRate > 1 ? ` ${nToRate}` : ""}</span>
           )}
           {aggCfg && (
-            <span style={{ position:"absolute", bottom:7, left:7, display:"inline-flex",
-              alignItems:"center", gap:4, background:aggCfg.bg, color:"white",
-              fontSize:10, fontWeight:900, padding:"2px 8px", borderRadius:20 }}>
+            <span style={chipS(aggCfg.color, { bottom:7, left:7, display:"inline-flex", alignItems:"center", gap:4 })}>
               <AggIcon size={10}/> {aggCfg.label}
             </span>
           )}
@@ -2216,12 +2216,9 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
           style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", WebkitTouchCallout:"none", WebkitUserDrag:"none" }}
           onError={e => { e.currentTarget.style.display="none"; }}/>
         {check}
-        {p.number_of_items > 1 && <span style={{ position:"absolute", top:7, right:7, background:"rgba(59,130,246,0.92)", color:"white", fontSize:10, fontWeight:900,
-          padding:"2px 8px", borderRadius:20, boxShadow:"0 2px 6px rgba(0,0,0,0.35)" }}>×{p.number_of_items}</span>}
-        {p.status !== "SUCCESS" && <span style={{ position:"absolute", top:7, left:7, background:stC, color:"white", fontSize:10, fontWeight:900,
-          padding:"2px 9px", borderRadius:20, boxShadow:`0 4px 12px ${stC}66`, visibility: selectMode ? "hidden" : "visible" }}>{stI} {stL}</span>}
-        {rateMe && <span data-tip="À évaluer sur MakerWorld" style={{ position:"absolute", bottom:7, right:7, fontSize:11, fontWeight:900, color:"#fff",
-          background:"linear-gradient(135deg, #F59E0B, #FBBF24)", borderRadius:20, padding:"1px 7px", boxShadow:"0 3px 10px rgba(245,158,11,.5)" }}>⭐</span>}
+        {p.number_of_items > 1 && <span data-tip={`${p.number_of_items} pièces`} style={chipS("#2563EB", { top:7, right:7 })}>×{p.number_of_items}</span>}
+        {p.status !== "SUCCESS" && <span data-tip={stL} style={chipS(stC, { top:7, left:7, visibility: selectMode ? "hidden" : "visible" })}>{stI} {stL}</span>}
+        {rateMe && <span data-tip="À évaluer sur MakerWorld" style={chipS("#D97706", { bottom:7, right:7 })}>★</span>}
         {dots && <span style={{ position:"absolute", bottom:7, left:7 }}>{dots}</span>}
       </div>
       <div style={{ padding:"8px 10px 9px" }}>
