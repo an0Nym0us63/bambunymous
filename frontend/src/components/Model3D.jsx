@@ -1514,6 +1514,9 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     // on revient a la vue, et la raison est dite sous la vue
     let ed = null, why = null;
     try {
+      // la vue se refait parfois juste apres son ouverture (les couleurs utilisees arrivent) : on l'attend un peu
+      // (30/10/2026 : sur un telephone, il fallait fermer et rouvrir pour editer)
+      for (let i = 0; i < 40 && !editApi.current?.editing; i++) await new Promise(r => setTimeout(r, 100));
       editApi.current?.untilt?.();                     // l'edition se fait le modele a sa place
       ed = await editApi.current?.editing(true, setEst);
     } catch (e) { why = e?.message || String(e); console.error("[3D] édition", e); }
