@@ -99,7 +99,8 @@ function boxUV(THREE, geo) {
 // pieces / edit (29/10/2026) : la vue assemblee, piece par piece (cle, nom, decalage « o » de ses sommets affiches par
 // rapport au 3MF) et la place enregistree de chacune ({cle : matrice 4x4}) ; editApi : l'edition (sur PC)
 function Viewer({ url, glb, onState, palette = null, finishes = null, multi = null, glow = false, bed = null, litho = false,
-                  pieces = null, edit = null, editApi = null }) {
+                  pieces = null, edit = null, editApi = null, pad = false }) {
+  const [pans, setPans] = useState(false);
   const box = useRef(null);
   const [dark, setDark] = useState(false);
   const [lit, setLit] = useState(false);
@@ -467,6 +468,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           render();
         };
         const bedShow = on => { grid.visible = on; under.intensity = on ? 0 : 1.3; hemi.groundColor.set(on ? 0x8a8f98 : 0xffffff); render(); };
+        // le pave (tablette au stylet, 29/10/2026) : le glisser tourne ou deplace la vue ; zoomer d'un cran
+        const dragPans = on => { controls.mouseButtons.LEFT = on ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE; controls.touches.ONE = on ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE; };
+        const zoom = f => { camera.position.sub(controls.target).multiplyScalar(f).add(controls.target); controls.update(); render(); };
         // l'edition de la vue assemblee (PC) : l'editeur, et les places a enregistrer (S = place * T(o - c))
         const ed = model.userData.edit;
         let editor = null;
@@ -475,7 +479,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           if (on && !editor) {
             const { createAssemblyEditor } = await import("./AssemblyEditor");
             editor = await createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder: ed.holder, pieces: ed.byPiece, render, onChange,
-              groupsInit: edit?.groups || [] });
+              groupsInit: edit?.groups || [], jointsInit: edit?.joints || [] });
           } else if (!on && editor) { try { editor.dispose(); } catch { /* la vue se ferme quand meme */ } editor = null; }
           return editor;
         };
@@ -492,7 +496,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         const origin = () => [...(ed?.byPiece.values() || [])].map(pg => new THREE.Matrix4().makeTranslation(pg.userData.c.x, pg.userData.c.y, pg.userData.c.z));
         if (editApi) editApi.current = ed ? { editing, toSave, origin, get editor() { return editor; } } : null;
         disposables.push({ dispose: () => { try { editor?.dispose(); } catch { /* rien */ } if (editApi) editApi.current = null; } });
-        api.current = { fit, night, backlight, bedShow };
+        api.current = { fit, night, backlight, bedShow, dragPans, zoom };
         const s = bb2.getSize(new THREE.Vector3());
         onState({ busy: false, error: null, size: glb ? [s.x, s.z, s.y] : [s.x, s.z, s.y], glow: glowMats.length > 0 });
       } catch (e) {
@@ -504,6 +508,13 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
   return <div style={{ position: "relative", width: "100%", height: "100%" }}>
     <div ref={box} style={{ position: "absolute", inset: 0, touchAction: "none", borderRadius: "inherit", transition: "background .4s",
       background: dark || lit ? "radial-gradient(circle at 50% 40%, #0b1020, #020308)" : "transparent" }}/>
+    {pad && <div style={{ position: "absolute", right: 10, bottom: 58, display: "flex", flexDirection: "column", gap: 6, zIndex: 2 }}>
+      {[[pans ? "✋" : "🔄", pans ? "Le glisser déplace la vue (toucher : tourner)" : "Le glisser tourne la vue (toucher : déplacer)", () => { const v = !pans; setPans(v); api.current?.dragPans(v); }, pans],
+        ["＋", "Zoomer", () => api.current?.zoom(0.8)], ["－", "Dézoomer", () => api.current?.zoom(1.25)]].map(([l, t, f, on]) =>
+        <button key={t} type="button" onClick={f} data-tip={t} style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
+          fontSize: 16, fontWeight: 800, background: on ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", color: on ? "#fff" : "var(--text2)",
+          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{l}</button>)}
+    </div>}
     <div style={{ position: "absolute", right: 10, bottom: 10, display: "flex", gap: 8 }}>
       {litho && <button type="button" onClick={() => { const v = !lit; setLit(v); api.current?.backlight(v); }}
         data-tip={lit ? "Éclairer par devant" : "Lumière derrière : l'image du lithophane apparaît, comme devant une lampe"}
@@ -578,6 +589,7 @@ const EDIT_HELP = [
     ["Molette", "zoomer (vers la souris)"],
     ["Double-clic", "centrer la vue sur le point visé"],
     ["Z", "cadrer la sélection (ou tout le modèle)"],
+    ["Pavé en bas à droite", "au stylet : 🔄 / ✋ ce que fait le glisser (tourner ou déplacer la vue), ＋ / － zoomer"],
   ]],
   ["Choisir", [
     ["Clic sur une pièce", "la choisir (ou tout son groupe)"],
@@ -585,6 +597,8 @@ const EDIT_HELP = [
     ["Alt + clic", "une pièce seule dans un groupe"],
     ["Ctrl + A", "tout choisir"],
     ["Échap", "plus rien de choisi"],
+    ["➕ Multi", "au stylet : chaque clic ajoute ou retire une pièce (comme Ctrl + clic)"],
+    ["H / Alt + H", "masquer la sélection (pour atteindre ce qu'elle cache) / tout réafficher"],
     ["🔗 Grouper (Ctrl + G)", "les pièces choisies bougent ensemble ; ⛓ Dégrouper (Ctrl + Maj + G)"],
   ]],
   ["Déplacer (M)", [
@@ -603,7 +617,11 @@ const EDIT_HELP = [
     ["Face puis face", "la première pièce vient se plaquer contre l'autre"],
     ["Arête puis arête", "les arêtes s'alignent"],
     ["🪄 Assisté", "faces entières centrées et grands axes alignés ; arêtes milieu contre milieu"],
-    ["⟲ / ⟳ 90° 15°", "tourner ensuite la pièce collée autour du contact"],
+    ["Glisser la pièce collée", "elle coulisse sur la face (ou le long de l'arête) sans se décoller"],
+    ["Maj + glisser", "elle tourne autour du contact (au cran choisi ; Alt : libre) ; au stylet : ⟳ Tourner collée"],
+    ["⟲ / ⟳ 90° 15°", "tourner d'un cran autour du contact"],
+    ["Les pièces collées", "suivent celle sur laquelle elles sont collées"],
+    ["✂ Décoller", "libérer la pièce (écartée de 2 mm)"],
   ]],
   ["Toujours", [
     ["Alt maintenu en glissant", "sans aucun cran"],
@@ -638,7 +656,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving }) {
   const b = (on, extra = {}) => ({ height: 34, padding: "0 12px", borderRadius: 10, border: on ? "none" : "1px solid var(--border)", cursor: "pointer",
     fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap", color: on ? "#fff" : "var(--text2)",
     background: on ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", ...extra });
-  const tip = est.mode === "mate" ? (est.step === 2 ? EDIT_TIPS.mate2 : est.assist ? EDIT_TIPS.mate1a : EDIT_TIPS.mate1) : EDIT_TIPS[est.mode];
+  const tip = est.glued && est.step !== 2 ? `Collée à ${est.glued.to} : glisse-la pour la faire coulisser ${est.glued.kind === "edge" ? "le long de l'arête" : "sur la face"}, Maj + glisser pour la tourner autour du contact · ✂ Décoller pour la libérer`
+    : est.mode === "mate" ? (est.step === 2 ? EDIT_TIPS.mate2 : est.assist ? EDIT_TIPS.mate1a : EDIT_TIPS.mate1) : EDIT_TIPS[est.mode];
   return <>
     <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 6, padding: 6, borderRadius: 14, zIndex: 3,
       background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(8px)",
@@ -653,10 +672,18 @@ function EditBar({ est, api, onSave, onReset, onClose, saving }) {
           fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>
         {[[0, "⟳ libre"], [1, "⟳ 1°"], [5, "⟳ 5°"], [15, "⟳ 15°"], [45, "⟳ 45°"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
+      <button type="button" onClick={() => api?.setMulti(!est.multi)} style={b(est.multi)}
+        data-tip="Choisir plusieurs pièces d'un clic chacune (comme Ctrl + clic, pour le stylet)">➕ Multi</button>
+      {est.glued && <button type="button" onClick={() => api?.setTurnGlued(!est.turnGlued)} style={b(est.turnGlued)}
+        data-tip="Le glisser de la pièce collée la fait tourner autour du contact (comme Maj + glisser, pour le stylet)">⟳ Tourner collée</button>}
       <button type="button" onClick={() => api?.setAssist(!est.assist)} style={b(est.assist)}
         data-tip="Collage assisté : les faces planes entières sont centrées l'une sur l'autre et leurs grands axes alignés (sinon : au point cliqué)">🪄 Assisté</button>
-      {(est.canGroup || est.canUngroup) && <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>}
+      {(est.canGroup || est.canUngroup || est.glued || est.count > 0 || est.hidden > 0) && <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>}
       {est.canGroup && <button type="button" onClick={() => api?.group()} style={b(false)} data-tip="Les pièces choisies bougent ensemble (Ctrl+G)">🔗 Grouper</button>}
+      {est.count > 0 && <button type="button" onClick={() => api?.hide()} style={b(false)} data-tip="Masquer la sélection pour atteindre ce qu'elle cache (H)">🙈 Masquer</button>}
+      {est.hidden > 0 && <button type="button" onClick={() => api?.showAll()} style={b(false)} data-tip="Réafficher tout (Alt+H)">👁 Tout afficher ({est.hidden})</button>}
+      {est.glued && <button type="button" onClick={() => api?.unglue()} style={b(false, { color: "#ef4444" })}
+        data-tip={`Collée à ${est.glued.to} : la libérer (écartée de 2 mm)`}>✂ Décoller</button>}
       {est.canUngroup && <button type="button" onClick={() => api?.ungroup()} style={b(false)} data-tip="Défaire le groupe (Ctrl+Maj+G)">⛓ Dégrouper</button>}
       {est.pivot && <>
         <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>
@@ -680,7 +707,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving }) {
     <div style={{ position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)", zIndex: 3, padding: "7px 14px", borderRadius: 12, fontSize: 12.5,
       fontWeight: 700, color: "var(--text2)", background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)",
       maxWidth: "calc(100% - 140px)", textAlign: "center" }}>
-      {est.selected && (est.mode === "move" || est.mode === "rotate") ? <b style={{ color: "#0EA5E9" }}>{est.selected} · </b> : null}{tip}
+      {est.liveAngle != null ? <b style={{ color: "#0EA5E9", fontSize: 15 }}>Rotation : {String(est.liveAngle).replace(".", ",")}°</b> : <>
+      {est.selected && (est.mode === "move" || est.mode === "rotate") ? <b style={{ color: "#0EA5E9" }}>{est.selected} · </b> : null}{tip}</>}
     </div>
   </>;
 }
@@ -808,7 +836,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     const pieces = editApi.current?.toSave();
     if (!pieces) return;
     setSaving(true);
-    try { const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces, groups: editApi.current?.editor?.groups() || [] });
+    try { const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces, groups: editApi.current?.editor?.groups() || [],
+      joints: editApi.current?.editor?.joints() || [] });
       setSavedEdit(r.data); editApi.current?.editor?.markSaved(); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setSaving(false); }
@@ -817,15 +846,18 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     try { await client.delete(`/makerworld/3d/edit/${meta.key}`); setSavedEdit(null); editApi.current?.editor?.reset(editApi.current.origin()); editApi.current?.editor?.markSaved(); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
-  const stopEdit = async () => {
-    const dirty = editApi.current?.editor?.state().dirty;
+  // quitter l'edition : avec des changements non enregistres, un choix explicite dans la vue (29/10/2026 : la
+  // question a deux boutons se validait trop vite) ; sinon on ferme
+  const [leaving, setLeaving] = useState(false);
+  const closeEdit = async how => {                     // how : "save" | "discard" | undefined (rien a garder)
+    setLeaving(false);
+    if (how === "save") await saveEdit();
     await editApi.current?.editing(false);
     setEditing(false); setEst(null);
-    if (dirty) {
-      if (await showConfirm("Enregistrer l'assemblage modifié ?")) await saveEdit();
-      else setVkey(k => k + 1);                       // la vue revient a la place enregistree
-    }
+    if (how === "discard") setVkey(k => k + 1);        // la vue revient a la place enregistree
+    if (document.fullscreenElement === wrap.current) document.exitFullscreen?.().catch(() => {});
   };
+  const stopEdit = () => { if (editApi.current?.editor?.state().dirty) setLeaving(true); else closeEdit(); };
   const startEdit = async () => {
     if (document.fullscreenElement !== wrap.current) await wrap.current?.requestFullscreen?.().catch(() => {});
     const ed = await editApi.current?.editing(true, setEst);
@@ -863,11 +895,23 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           border: full ? "none" : "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
           {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}|${vkey}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown}
-            pieces={p.assembled ? p.pieces : null} edit={p.assembled ? edit : null} editApi={p.assembled ? editApi : null}
+            pieces={p.assembled ? p.pieces : null} edit={p.assembled ? edit : null} editApi={p.assembled ? editApi : null} pad={full || editing}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}
-          {editing && <EditBar est={est} api={editApi.current?.editor} onSave={saveEdit} onReset={resetEdit} onClose={() => document.fullscreenElement ? document.exitFullscreen?.() : stopEdit()} saving={saving}/>}
+          {editing && <EditBar est={est} api={editApi.current?.editor} onSave={saveEdit} onReset={resetEdit} onClose={stopEdit} saving={saving}/>}
+          {editing && leaving && <div style={{ position: "absolute", inset: 0, zIndex: 7, background: "rgba(2,6,23,.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: "min(420px, calc(100% - 32px))", padding: "18px 18px 14px", borderRadius: 16, background: "var(--sheet-bg)", border: "1px solid var(--border)",
+              boxShadow: "0 20px 60px rgba(0,0,0,.4)", display: "flex", flexDirection: "column", gap: 10 }}>
+              <b style={{ fontSize: 15, color: "var(--text)" }}>L'assemblage a des changements non enregistrés</b>
+              <button type="button" onClick={() => closeEdit("save")} style={{ height: 40, borderRadius: 12, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 800,
+                color: "#fff", background: "linear-gradient(135deg, #16a34a, #0EA5E9)" }}>💾 Enregistrer et fermer</button>
+              <button type="button" onClick={() => closeEdit("discard")} style={{ height: 40, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
+                fontSize: 14, fontWeight: 800, color: "#ef4444", background: "var(--surface)" }}>Fermer sans enregistrer</button>
+              <button type="button" onClick={() => setLeaving(false)} style={{ height: 36, borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
+                color: "var(--text2)", background: "transparent" }}>↩ Continuer l'édition</button>
+            </div>
+          </div>}
           {desktop && p && !p.pending && !st.busy && !editing && <div style={{ position: "absolute", left: 10, bottom: 10, display: "flex", gap: 8, zIndex: 2 }}>
             <button type="button" onClick={() => full ? document.exitFullscreen?.() : wrap.current?.requestFullscreen?.().catch(() => {})}
               data-tip={full ? "Quitter le plein écran" : "Plein écran"} style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)",
