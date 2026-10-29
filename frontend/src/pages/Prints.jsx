@@ -2572,13 +2572,17 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
   // Ma galerie, lue ici pour compter aussi ses elements selon la recherche.
   const [mine, setMine] = useState(null);
   const [mineLoading, setMineLoading] = useState(true);
+  // les photos, ou les vues prises dans la vue 3D (30/10/2026) ; le choix est garde pour la prochaine visite
+  const [gKind, setGKind] = useState(() => { try { return localStorage.getItem("bn-gallery-kind") === "vue3d" ? "vue3d" : "photos"; } catch { return "photos"; } });
+  useEffect(() => { try { localStorage.setItem("bn-gallery-kind", gKind); } catch { /* rien */ } }, [gKind]);
   useEffect(() => {
     let cancelled = false;
-    client.get("/prints/gallery")
+    setMineLoading(true);
+    client.get("/prints/gallery", { params: gKind === "vue3d" ? { kind: "vue3d" } : {} })
       .then(r => { if (!cancelled) setMine(r.data); })
       .finally(() => { if (!cancelled) setMineLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [gKind]);
   const nMine = mine ? [...(mine.prints || []).map(p => p.title || p.file_name), ...(mine.groups || []).map(g => g.name)]
     .filter(t => !q || (t || "").toLowerCase().includes(q)).length : null;
   const tiny = typeof window !== "undefined" && window.innerWidth < 420;
@@ -2603,7 +2607,17 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
       </div>
     )}
     {who === "sd" && !currentFriend() ? <TimelapsesView search={search} onCount={setNTl}/>
-      : who === "friends" && hasFriends ? <FriendsGalleryView search={search} data={fdata}/> : <MyGalleryView search={search} sortF={sortF} data={mine} loading={mineLoading}/>}
+      : who === "friends" && hasFriends ? <FriendsGalleryView search={search} data={fdata}/> : <>
+        {!currentFriend() && <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>
+          <div style={{ display:"inline-flex", padding:2, gap:2, borderRadius:14, background:"var(--surface2)", border:"1px solid var(--border)" }}>
+            {[["photos", "📷 Photos", "Les photos des impressions"], ["vue3d", "🧊 Vues 3D", "Les vues prises dans la vue 3D (📸), à la place des photos"]].map(([k, l, tip]) =>
+              <button key={k} type="button" onClick={() => setGKind(k)} data-tip={tip} style={{ padding:"4px 11px", borderRadius:11, border:"none", cursor:"pointer",
+                fontSize:11.5, fontWeight:800, color: gKind === k ? "#fff" : "var(--muted)",
+                background: gKind === k ? "linear-gradient(135deg, #EC4899, #8B5CF6)" : "transparent" }}>{l}</button>)}
+          </div>
+        </div>}
+        <MyGalleryView search={search} sortF={sortF} data={mine} loading={mineLoading}/>
+      </>}
   </>);
 }
 

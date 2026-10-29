@@ -517,18 +517,21 @@ def gallery_touched() -> None:
 
 
 @router.get("/gallery")
-async def prints_gallery(_: str = Depends(get_current_user)):
+async def prints_gallery(kind: str = "photos", _: str = Depends(get_current_user)):
+    """kind : « photos » (les vraies photos), ou « vue3d » (les vues prises dans la vue 3D, 30/10/2026)."""
     from ....core.fastjson import json_response
     from ....db.session import data_version
-    key = (data_version("prints", "print_snapshots", "groups"), _GALLERY["disk"])
-    if _GALLERY["key"] == key and _GALLERY["out"] is not None:
-        return json_response(_GALLERY["out"])
-    out = await _build_gallery()
-    _GALLERY["key"], _GALLERY["out"] = key, out
+    kind = "vue3d" if kind == "vue3d" else "photos"
+    key = (data_version("prints", "print_snapshots", "groups"), _GALLERY["disk"], kind)
+    cached = _GALLERY.setdefault("by", {}).get(kind)
+    if cached and cached[0] == key:
+        return json_response(cached[1])
+    out = await _build_gallery(kind)
+    _GALLERY["by"][kind] = (key, out)
     return json_response(out)
 
 
-async def _build_gallery() -> dict:
+async def _build_gallery(kind: str = "photos") -> dict:
     """
     Galerie photo — INDÉPENDANTE de la pagination de /prints (parcourt tout
     l'historique, pas seulement la page courante). Ne retourne que les prints
@@ -564,6 +567,18 @@ async def _build_gallery() -> dict:
         return out
     import asyncio as _aio0
     vue3d_prints = await _aio0.to_thread(_vue3d_prints)
+
+    # la galerie des vues 3D : toutes les vues de chaque impression (celles de la vignette d'abord)
+    def _vue3d_all():
+        out = {}
+        base = DATA_DIR / "prints"
+        for r in rows:
+            sl = _v3slots(base / str(r.id))
+            if sl:
+                sel = _v3sel(r.thumb_3d, sl)
+                out[r.id] = [(_v3name(n), sl[n]) for n in sorted(sl, key=lambda n: (n not in sel, n))]
+        return out
+    vue3d_all = await _aio0.to_thread(_vue3d_all) if kind == "vue3d" else {}
     items, group_acc = [], {}
     for p in rows:
         p.group = grp.get(p.group_id) if p.group_id else None
@@ -573,12 +588,14 @@ async def _build_gallery() -> dict:
              "name": (fp or "").split("/")[-1], "label": "manual"}
             for fp, sid in snaps.get(p.id, ()) if fp
         ]
+        if kind == "vue3d":
+            photos = [{"url": f"/api/v1/prints/{p.id}/file/{nm}?v={v}", "name": nm, "label": "vue3d"} for nm, v in vue3d_all.get(p.id, ())]
         # pas de photo, mais une vignette prise dans la vue 3D assemblee : elle remonte (29/10/2026)
-        if not photos and p.id in vue3d_prints:
+        elif not photos and p.id in vue3d_prints:
             nm, v = vue3d_prints[p.id]
             photos = [{"url": f"/api/v1/prints/{p.id}/file/{nm}?v={v}", "name": nm, "label": "vue3d"}]
         # La vignette de la galerie est photos[0] : on remonte la photo choisie.
-        if p.cover_photo:
+        if p.cover_photo and kind != "vue3d":
             photos.sort(key=lambda ph: ph["name"] != p.cover_photo)
         if p.group_id:
             acc = group_acc.setdefault(p.group_id, {
@@ -632,6 +649,12 @@ async def _build_gallery() -> dict:
     on_disk = await _aio.to_thread(_scan, list(group_acc))
     for gid, acc in group_acc.items():
         files = on_disk.get(gid, ())
+        if kind == "vue3d":
+            # les vues du groupe lui-meme d'abord, puis celles de ses impressions
+            own = [{"url": f"/api/v1/prints/groups/{gid}/photo/{name}?v={mt}", "label": "vue3d", "name": name}
+                   for name, mt in sorted(files) if _V3RE.fullmatch(name) and "_mix" not in name]
+            acc["photos"] = own + acc["photos"]
+            continue
         for name, mt in files:
             if _V3RE.fullmatch(name):
                 continue
