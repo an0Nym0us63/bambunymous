@@ -102,10 +102,11 @@ async def for_filament(filament) -> dict:
     return await _each(job)
 
 
-async def gallery() -> dict:
+async def gallery(kind: str = "photos") -> dict:
     """Galeries de tous mes copains reunies (prints et groupes), du plus recent
-    au plus ancien, chaque element marque du copain."""
-    res = await _each(lambda f: _ask(f, "prints/gallery"))
+    au plus ancien, chaque element marque du copain. kind=vue3d : leurs vues 3D (un copain d'une version
+    d'avant renvoie ses photos)."""
+    res = await _each(lambda f: _ask(f, "prints/gallery", {"kind": "vue3d"} if kind == "vue3d" else None))
     items = []
     for fr in res["friends"]:
         if fr["status"] != "ok":

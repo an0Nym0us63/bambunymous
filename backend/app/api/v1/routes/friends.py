@@ -70,10 +70,10 @@ async def friends_shared_printing(_: str = Depends(get_current_user)):
 
 
 @router.get("/shared/gallery")
-async def friends_shared_gallery(_: str = Depends(get_current_user)):
-    """Galeries de mes copains, reunies."""
+async def friends_shared_gallery(kind: str = "photos", _: str = Depends(get_current_user)):
+    """Galeries de mes copains, reunies : leurs photos, ou leurs vues 3D (kind=vue3d, 30/10/2026)."""
     from ....services import friends_shared as FS
-    return await FS.gallery()
+    return await FS.gallery("vue3d" if kind == "vue3d" else "photos")
 
 
 @router.get("/shared/design/{design_id}")
