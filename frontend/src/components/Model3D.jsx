@@ -137,6 +137,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
   const [dark, setDark] = useState(false);
   const [lit, setLit] = useState(false);
   const [bedOn, setBedOn] = useState(true);            // le plateau (grille) : masquable pour voir dessous
+  const [floorPick, setFloorPick] = useState(false), [oriented, setOriented] = useState(false);   // une face posee au sol (la vue)
   useEffect(() => { if (lit) egg("ombres_chinoises"); }, [lit]);
   const api = useRef(null);
   useEffect(() => {
@@ -424,13 +425,13 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           controls.target.copy(sph.center); camera.near = Math.max(0.1, d / 100); camera.far = d * 20; camera.updateProjectionMatrix(); controls.update(); render();
         };
         fit();
-        // redresser / coucher le modele d'un quart de tour (30/10/2026) : la rotation de la vue tourne autour de la
-        // verticale et ne passe pas par-dessus ; un modele a plat (un calendrier, un panneau) se regardait mal de face.
-        // Pour la vue seulement (rien n'est enregistre) ; la vignette la prend telle qu'affichee
-        let tiltN = 0;
-        const tilt = () => {
-          tiltN = (tiltN + 1) % 4;
-          model.rotateOnWorldAxis(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+        // poser une face au sol (30/10/2026) : la rotation de la vue tourne autour de la verticale et ne passe pas
+        // par-dessus ; un modele a plat (un calendrier, un panneau) se regardait mal de face. « ⬇ Au sol », puis un clic
+        // sur la face qui doit reposer sur le plateau : le modele tourne pour s'y poser. La vue seulement (rien n'est
+        // enregistre) ; la vignette la prend telle qu'affichee ; « ↺ » le remet comme a l'origine
+        const q0 = model.quaternion.clone();
+        let pickFloor = false, downAt = null;
+        const replace = () => {
           model.updateMatrixWorld(true);
           const b = visibleBox(THREE, model), c = b.getCenter(new THREE.Vector3());
           model.position.x -= c.x; model.position.z -= c.z; model.position.y -= b.min.y;
@@ -439,7 +440,22 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           sph.center.copy(s.center); sph.radius = s.radius;
           fit();
         };
-        const untilt = () => { while (tiltN) tilt(); };
+        const floorMode = on => { pickFloor = on; renderer.domElement.style.cursor = on ? "crosshair" : ""; };
+        const onFloorDown = e => { downAt = pickFloor ? [e.clientX, e.clientY] : null; };
+        const onFloorUp = e => {
+          if (!pickFloor || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
+          const r = el.getBoundingClientRect(), rc = new THREE.Raycaster();
+          rc.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+          const hit = rc.intersectObject(model, true).find(h => h.face);
+          if (!hit) return;
+          const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
+          model.quaternion.premultiply(new THREE.Quaternion().setFromUnitVectors(n, new THREE.Vector3(0, -1, 0)));
+          replace();
+          floorMode(false); setFloorPick(false); setOriented(true);
+        };
+        renderer.domElement.addEventListener("pointerdown", onFloorDown);
+        renderer.domElement.addEventListener("pointerup", onFloorUp);
+        const untilt = () => { floorMode(false); setFloorPick(false); if (!model.quaternion.equals(q0)) { model.quaternion.copy(q0); replace(); } setOriented(false); };
         const noMenu = e => e.preventDefault();
         const focus = e => {
           const r = el.getBoundingClientRect(), rc = new THREE.Raycaster();
@@ -669,7 +685,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         // la vignette se prend sur tout plateau (30/10/2026) ; l'edition, sur la vue assemblee seulement
         if (editApi) editApi.current = { editing, toSave, origin, relayout, snapshot, untilt, get editor() { return editor; } };
         disposables.push({ dispose: () => { try { editor?.dispose(); } catch { /* rien */ } if (editApi) editApi.current = null; } });
-        api.current = { fit, night, backlight, bedShow, dragPans, zoom, tilt };
+        api.current = { fit, night, backlight, bedShow, dragPans, zoom, floorMode, untilt };
         const s = bb2.getSize(new THREE.Vector3());
         onState({ busy: false, error: null, size: glb ? [s.x, s.z, s.y] : [s.x, s.z, s.y], glow: glowMats.length > 0 });
       } catch (e) {
@@ -704,9 +720,14 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: dark ? "linear-gradient(135deg, #facc15, #f59e0b)" : "linear-gradient(135deg, #1e293b, #0f172a)", color: dark ? "#1e293b" : "#e2e8f0",
           fontSize: 13, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{dark ? "💡 Rallumer" : "🌙 Éteindre"}</button>}
-      <button type="button" onClick={() => api.current?.tilt()} data-tip="Redresser ou coucher le modèle d'un quart de tour, pour le regarder sous tous les angles (la vue seulement : rien n'est enregistré)"
+      {oriented && <button type="button" onClick={() => api.current?.untilt()} data-tip="Remettre le modèle comme à l'origine"
         style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
-          background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>⤾</button>
+          background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>↺</button>}
+      <button type="button" onClick={() => { const v = !floorPick; setFloorPick(v); api.current?.floorMode(v); }}
+        data-tip={floorPick ? "Annuler" : "Poser une face au sol : clique ensuite la face du modèle qui doit reposer sur le plateau (la vue seulement : rien n'est enregistré)"}
+        style={{ height: 38, padding: "0 10px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 12.5, fontWeight: 800,
+          background: floorPick ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", color: floorPick ? "#fff" : "var(--text2)",
+          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{floorPick ? "Clique la face…" : "⬇ Au sol"}</button>
       <button type="button" onClick={() => api.current?.fit()} data-tip="Recentrer la vue"
         style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>⟲</button>
