@@ -18,6 +18,10 @@
 // le point et la normale du contact (et l'arete), enregistres avec l'assemblage.
 import { egg } from "../eggs";
 
+// ce que l'editeur charge a part, demande d'avance (30/10/2026 : sur un telephone, le premier chargement prenait
+// quelques secondes sans rien montrer, on croyait l'edition en panne)
+export const preloadEditor = () => import("three/examples/jsm/controls/TransformControls.js").catch(() => {});
+
 export async function createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder, pieces, render, onChange, groupsInit = [], jointsInit = [], groupByObject = false,
                                                   copyPiece = null }) {
   const { TransformControls } = await import("three/examples/jsm/controls/TransformControls.js");

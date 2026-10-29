@@ -1463,7 +1463,12 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   // l'edition se fait aussi au doigt (30/10/2026) : sur un telephone, plein ecran par la page elle-meme (l'iPhone n'a pas
   // de plein ecran pour un element), et la barre d'edition en version tactile
   const editable = isAdmin && !fr && !!p?.assembled && !!p?.pieces && !!meta?.key;
-  const [pfull, setPfull] = useState(false), [editErr, setEditErr] = useState(null);
+  const [pfull, setPfull] = useState(false), [editErr, setEditErr] = useState(null), [starting, setStarting] = useState(false);
+  // l'editeur prepare d'avance des que l'on peut editer : l'ouverture est alors immediate
+  useEffect(() => {
+    if (!editable) return;
+    importRetry(() => import("./AssemblyEditor")).then(m => m.preloadEditor?.()).catch(() => {});
+  }, [editable]);
   const setPseudoFull = on => { setPfull(on); document.body.classList.toggle("bn-edit3d", on); };
   useEffect(() => () => document.body.classList.remove("bn-edit3d"), []);
   const edit = savedEdit !== undefined ? savedEdit : meta?.assembly_edit;
@@ -1523,6 +1528,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     // l'editeur qui ne demarre pas (30/10/2026 : sur un telephone, la vue restait en plein ecran, sans barre ni ✕) :
     // on revient a la vue, et la raison est dite sous la vue
     let ed = null, why = null;
+    setStarting(true);
     try {
       // la vue se refait parfois juste apres son ouverture (les couleurs utilisees arrivent) : on l'attend un peu
       // (30/10/2026 : sur un telephone, il fallait fermer et rouvrir pour editer)
@@ -1530,6 +1536,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
       editApi.current?.untilt?.();                     // l'edition se fait le modele a sa place
       ed = await editApi.current?.editing(true, setEst);
     } catch (e) { why = e?.message || String(e); console.error("[3D] édition", e); }
+    setStarting(false);
     if (!ed) {
       setEditErr(why || "la vue n'était pas prête, réessaie dans un instant");
       if (pfull || !desktop) setPseudoFull(false);
@@ -1592,8 +1599,10 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
             hue={p.litho && zc.length ? zc : null} bare={editing && !desktop} tdMap={td} onTd={fr ? null : saveTd}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}
-          {pfull && !editing && <button type="button" onClick={() => setPseudoFull(false)} aria-label="Quitter le plein écran"
-            style={{ position: "absolute", top: "calc(10px + env(safe-area-inset-top, 0px))", right: 10, zIndex: 5, width: 42, height: 42, borderRadius: 12,
+          {starting && !editing && <div style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center",
+            background: "color-mix(in srgb, var(--sheet-bg) 55%, transparent)" }}><Ring label="Ouverture de l'édition…"/></div>}
+          {pfull && !editing && !starting && <button type="button" onClick={() => setPseudoFull(false)} aria-label="Quitter le plein écran"
+            style={{ position: "absolute", bottom: "calc(10px + env(safe-area-inset-bottom, 0px))", left: 10, zIndex: 5, width: 42, height: 42, borderRadius: 12,
               border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)", fontSize: 16, cursor: "pointer" }}>✕</button>}
           {editing && <EditBar est={est} api={editApi.current?.editor} onSave={saveEdit} onReset={resetEdit} onClose={stopEdit} saving={saving} onVersions={openVersions}
             compact={!desktop}/>}
