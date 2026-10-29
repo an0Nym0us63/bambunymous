@@ -23,7 +23,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 15                          # 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 16                          # 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan", re.I)
 MAX_TRIANGLES = 1_500_000              # au-dela, le plateau est simplifie (29/10/2026 ; avant : pas converti du tout) :
                                        # un telephone l'affiche vite, et le fichier reste de quelques Mo
@@ -410,13 +410,16 @@ def _settings(z: zipfile.ZipFile) -> tuple:
         body = m.group(2)
         head = body.split("<part", 1)[0]
         ext = re.search(r'key="extruder" value="(\d+)"', head)
-        parts = {}
+        parts, pnames = {}, {}
         for p in re.finditer(r'<part id="(\d+)"([^>]*)>(.*?)</part>', body, re.S):
             e = re.search(r'key="extruder" value="(\d+)"', p.group(3))
             st = re.search(r'subtype="([^"]*)"', p.group(2))
             parts[p.group(1)] = (int(e.group(1)) if e else None, st.group(1) if st else "normal_part")
+            pn = re.search(r'key="name" value="([^"]*)"', p.group(3))
+            if pn:
+                pnames[p.group(1)] = _html.unescape(pn.group(1))
         nm = re.search(r'key="name" value="([^"]*)"', head)
-        objs[m.group(1)] = {"extruder": int(ext.group(1)) if ext else 1, "parts": parts,
+        objs[m.group(1)] = {"extruder": int(ext.group(1)) if ext else 1, "parts": parts, "pnames": pnames,
                             "name": _html.unescape(nm.group(1)) if nm else ""}
     plates = []
     # la vue d'assemblage (29/10/2026) : la place de chaque objet une fois assemble, que le createur peut poser dans
@@ -639,7 +642,8 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         vols = vols or {}
         out = []
         if "mesh" in o:
-            out.append((st["extruder"], groups.get(o.get("pid") or "", None), _mul(vols[0], mt) if 0 in vols else mt, o["mesh"]))
+            out.append((st["extruder"], groups.get(o.get("pid") or "", None), _mul(vols[0], mt) if 0 in vols else mt, o["mesh"],
+                        (0, st.get("name") or "")))
         for ci, c in enumerate(o.get("components") or []):
             pe, ptype = st["parts"].get(str(c["objectid"]), (None, "normal_part"))
             if ptype in _NOT_SHOWN:
@@ -647,7 +651,9 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
             sub = objs_in(c["path"]).get(str(c["objectid"])) or {}
             if "mesh" not in sub:
                 continue
-            out.append((pe or st["extruder"], groups.get(sub.get("pid") or "", None), _mul(vols.get(ci, c["transform"]), mt), sub["mesh"]))
+            # la piece (son rang dans l'objet et son nom) : l'edition de la vue assemblee la deplace seule
+            out.append((pe or st["extruder"], groups.get(sub.get("pid") or "", None), _mul(vols.get(ci, c["transform"]), mt), sub["mesh"],
+                        (ci, (st.get("pnames") or {}).get(str(c["objectid"])) or st.get("name") or "")))
         return out
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -691,12 +697,12 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         """Les pieces placees -> groupes par couleur. own : {objet place : ses sommets}, pour les deplacer apres ;
         piece_of : {objet place : son numero}, les groupes sont alors par (couleur, piece) (l'edition de la vue
         assemblee deplace une piece a la fois)."""
-        gk = (lambda col, ident: (_hex_rgba(col), piece_of[ident])) if piece_of else (lambda col, ident: _hex_rgba(col))
+        gk = (lambda col, ident, tag: (_hex_rgba(col), piece_of[(ident, tag[0])])) if piece_of else (lambda col, ident, tag: _hex_rgba(col))
         groups_out: dict = {}                           # couleur -> [sommets, triangles]
         total = 0
         start, pw = prog["done"], sum(len(p[3]) for _, parts in lst for p in parts)
         for ident, parts in lst:
-            for ext, fcol, mt, body in parts:
+            for ext, fcol, mt, body, tag in parts:
                 # la part de cette piece dans l'avancement, decoupee en etapes
                 a0, a1 = pct(prog["done"]), pct(prog["done"] + len(body))
                 prog["done"] += len(body)
@@ -718,7 +724,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                     cuts = [(zt, c) for zt, e, c, kind in zchg[1] if kind == 2 or zchg[0] == "SingleExtruder" or e in (None, ex)] \
                         if zchg else []
                     if not cuts and len(by_ext) == 1:
-                        g = groups_out.setdefault(gk(col, ident), [[], [], 0])
+                        g = groups_out.setdefault(gk(col, ident, tag), [[], [], 0])
                         g[0].append(vt)
                         if own is not None:
                             own.setdefault(ident, []).append(vt)
@@ -736,7 +742,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                         if not len(tr):
                             continue
                         # seuls les sommets de cette couleur (piece peinte ou tranchee), renumerotes
-                        g = groups_out.setdefault(gk(c, ident), [[], [], 0])
+                        g = groups_out.setdefault(gk(c, ident, tag), [[], [], 0])
                         used, inv = np.unique(tr.ravel(), return_inverse=True)
                         g[0].append(vv[used])
                         if own is not None:
@@ -806,7 +812,9 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     if asm_lst:
         where["tag"] = "Vue assemblée"
         own: dict = {}
-        piece_of = {ident: i for i, (ident, _) in enumerate(asm_lst)}
+        # une piece = une partie d'un objet (29/10/2026 : par objet, un plateau range en un seul objet bougeait d'un bloc)
+        plist = [(ident, p[4]) for ident, parts in asm_lst for p in parts]
+        piece_of = {(ident, tag[0]): i for i, (ident, tag) in enumerate(plist)}
         groups_out, total, pw = emit(asm_lst, own=own, piece_of=piece_of)
         # toujours montree quand le 3MF en a une (29/10/2026 : le tri « vraie vue / copie des plateaux » en
         # cachait trop ; c'est a chacun de juger en la regardant) ; posee a la va-vite, elle est rangee
@@ -826,9 +834,9 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
             # leurs sommets affiches par rapport a leur place dans le 3MF (rangement, recentrage) : les positions
             # editees sont gardees par rapport au 3MF, et restent justes si la vue est refaite autrement
             rec, _, shift = r
-            rec["pieces"] = [{"k": f"{oid}:{k}", "name": (settings.get(oid) or {}).get("name") or f"Objet {oid}",
+            rec["pieces"] = [{"k": f"{oid}:{k}:{tag[0]}", "name": tag[1] or f"Objet {oid}",
                               "o": [round(float(x), 4) for x in (moved.get((oid, k), np.zeros(3)) - shift)]}
-                             for (oid, k), _ in asm_lst]
+                             for (oid, k), tag in plist]
     elif asm:
         logger.info(f"[3D] {key or src.name} : vue d'assemblage ignoree (un seul objet, ou des objets absents du 3MF)")
     _write(out_dir / "plates.json", json.dumps(meta).encode("utf-8"))
@@ -1304,7 +1312,7 @@ def save_edit(key: str, pieces: dict, by: str = "") -> dict:
         raise ValueError("Vue inconnue")
     clean = {}
     for k, m in (pieces or {}).items():
-        if re.fullmatch(r"\d+:\d+", str(k)) and isinstance(m, list) and len(m) == 16 \
+        if re.fullmatch(r"\d+:\d+:\d+", str(k)) and isinstance(m, list) and len(m) == 16 \
                 and all(isinstance(x, (int, float)) and abs(x) < 1e6 for x in m):
             clean[str(k)] = [round(float(x), 6) for x in m]
     if not clean:
