@@ -22,7 +22,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 7                           # 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 8                           # 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan", re.I)
 MAX_TRIANGLES = 6_000_000              # au-dela, le plateau n'est pas converti (trop lourd pour un telephone)
 _TRI_PAINT = re.compile(rb'<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"([^>]*)>')
@@ -529,9 +529,34 @@ PARTIAL: dict = {}
 _RUNNING: dict = {}
 
 
+# dans le processus de conversion (29/10/2026), l'avancement et les plateaux deja prets passent par deux petits
+# fichiers a cote des plateaux (progress.json, partial.json) : le serveur les lit pour la vue qui attend
+_CHILD = {"on": False, "last": None}
+
+
+def _side(key: str, name: str, data) -> None:
+    try:
+        d = _root() / key
+        d.mkdir(parents=True, exist_ok=True)
+        _write(d / name, json.dumps(data).encode("utf-8"))
+    except OSError:
+        pass
+
+
+def _read_side(key: str, name: str):
+    try:
+        return json.loads((_root() / key / name).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
 def _step(key, pct, label: str) -> None:
     if key:
-        PROGRESS[key] = {"pct": None if pct is None else max(0, min(100, round(pct))), "label": label}
+        v = {"pct": None if pct is None else max(0, min(100, round(pct))), "label": label}
+        PROGRESS[key] = v
+        if _CHILD["on"] and v != _CHILD["last"]:
+            _CHILD["last"] = v
+            _side(key, "progress.json", v)
 
 
 def plates_out(meta: dict, key: str) -> tuple:
@@ -552,7 +577,7 @@ def plates_out(meta: dict, key: str) -> tuple:
 def progress_of(did: str) -> dict:
     """Ou en est la preparation de la vue 3D de ce modele ({} : rien en cours)."""
     key = WATCH.get(str(did))
-    return PROGRESS.get(key) or PROGRESS.get(f"did:{did}") or {}
+    return PROGRESS.get(key) or PROGRESS.get(f"did:{did}") or (_read_side(key, "progress.json") if key else None) or {}
 
 
 def convert(src: Path, out_dir: Path, key: str = None) -> dict:
@@ -647,8 +672,8 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     def say(p_, label):
         _step(key, p_, f"{where['tag']} · {label}" if where["tag"] and nb > 1 else label)
 
-    def emit(lst, label="Lecture des pièces", zchg=None):
-        """Les pieces placees -> groupes par couleur."""
+    def emit(lst, label="Lecture des pièces", zchg=None, own=None):
+        """Les pieces placees -> groupes par couleur. own : {objet place : ses sommets}, pour les deplacer apres."""
         groups_out: dict = {}                           # couleur -> [sommets, triangles]
         total = 0
         start, pw = prog["done"], sum(len(p[3]) for _, parts in lst for p in parts)
@@ -677,6 +702,8 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                     if not cuts and len(by_ext) == 1:
                         g = groups_out.setdefault(_hex_rgba(col), [[], [], 0])
                         g[0].append(vt)
+                        if own is not None:
+                            own.setdefault(ident, []).append(vt)
                         g[1].append(tt + g[2])
                         g[2] += len(vt)
                         continue
@@ -694,6 +721,8 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                         g = groups_out.setdefault(_hex_rgba(c), [[], [], 0])
                         used, inv = np.unique(tr.ravel(), return_inverse=True)
                         g[0].append(vv[used])
+                        if own is not None:
+                            own.setdefault(ident, []).append(g[0][-1])
                         g[1].append(inv.reshape(-1, 3) + g[2])
                         g[2] += len(used)
                     total += sum(len(tr) for _, tr in slices) - len(tt)     # les triangles coupes en font plus
@@ -738,6 +767,8 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         if asm_lst:
             rest.append({"n": ASSEMBLED_N, "name": "Assemblé", "assembled": True, "pending": True})
         PARTIAL[key] = {**meta, "pending": True, "plates": [dict(p) for p in meta["plates"]] + rest}
+        if _CHILD["on"]:
+            _side(key, "partial.json", PARTIAL[key])
 
     for i, (n, pname, lst) in enumerate(work):
         where["tag"] = f"Plateau {i + 1}/{len(work)}"
@@ -756,14 +787,71 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         publish(i)
     if asm_lst:
         where["tag"] = "Vue assemblée"
-        groups_out, total, pw = emit(asm_lst)
+        own: dict = {}
+        groups_out, total, pw = emit(asm_lst, own=own)
         # toujours montree quand le 3MF en a une (29/10/2026 : le tri « vraie vue / copie des plateaux » en
-        # cachait trop ; c'est a chacun de juger en la regardant)
-        write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True})
+        # cachait trop ; c'est a chacun de juger en la regardant) ; posee a la va-vite, elle est rangee
+        tidy = _tidy(own)
+        write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True, **({"tidied": True} if tidy else {})})
     elif asm:
         logger.info(f"[3D] {key or src.name} : vue d'assemblage ignoree (un seul objet, ou des objets absents du 3MF)")
     _write(out_dir / "plates.json", json.dumps(meta).encode("utf-8"))
     return meta
+
+
+_TOUCH = 1.0                           # mm : deux objets a moins que ca se touchent (vue assemblee)
+_GAP = 10.0                            # mm entre deux blocs ranges
+
+
+def _tidy(own: dict) -> bool:
+    """Une vue d'assemblage eparpillee (29/10/2026 : des pieces a 80 cm les unes des autres) : les objets qui se
+    touchent restent ensemble, comme le createur les a assembles ; les blocs a part sont poses au sol et ranges en
+    carre, rapproches. Un seul bloc : rien ne bouge. Deplace les sommets sur place ; rend vrai si c'est range."""
+    import numpy as np
+    ids = [i for i, arrs in own.items() if arrs]
+    if len(ids) < 2:
+        return False
+    box = {}
+    for i in ids:
+        lo = np.min([a.min(axis=0) for a in own[i] if len(a)], axis=0)
+        hi = np.max([a.max(axis=0) for a in own[i] if len(a)], axis=0)
+        box[i] = (lo, hi)
+    up = {i: i for i in ids}
+
+    def root(i):
+        while up[i] != i:
+            up[i] = up[up[i]]
+            i = up[i]
+        return i
+    for x in range(len(ids)):
+        for y in range(x + 1, len(ids)):
+            a, b = box[ids[x]], box[ids[y]]
+            if all(a[0][k] <= b[1][k] + _TOUCH and b[0][k] <= a[1][k] + _TOUCH for k in range(3)):
+                up[root(ids[x])] = root(ids[y])
+    blocks: dict = {}
+    for i in ids:
+        blocks.setdefault(root(i), []).append(i)
+    if len(blocks) < 2:
+        return False
+    bb = []
+    for members in blocks.values():
+        lo = np.min([box[i][0] for i in members], axis=0)
+        hi = np.max([box[i][1] for i in members], axis=0)
+        bb.append((members, lo, hi))
+    # les plus grands d'abord, en rangees d'un carre (autant de colonnes que la racine du nombre de blocs)
+    bb.sort(key=lambda b: -(b[2][0] - b[1][0]) * (b[2][1] - b[1][1]))
+    cols = int(np.ceil(np.sqrt(len(bb))))
+    x = y = row_h = 0.0
+    for k, (members, lo, hi) in enumerate(bb):
+        if k and k % cols == 0:
+            x, y, row_h = 0.0, y + row_h + _GAP, 0.0
+        off = np.array([x - lo[0], y - lo[1], -lo[2]])
+        for i in members:
+            for a in own[i]:
+                a += off
+        x += (hi[0] - lo[0]) + _GAP
+        row_h = max(row_h, hi[1] - lo[1])
+    return True
 
 
 def _write(p: Path, data: bytes) -> None:
@@ -836,6 +924,11 @@ def _from_3mf(src: Path, key: str) -> dict | None:
     finally:
         PROGRESS.pop(key, None)
         PARTIAL.pop(key, None)
+        for f in ("progress.json", "partial.json"):
+            try:
+                (d / f).unlink()
+            except OSError:
+                pass
 
 
 async def from_3mf_early(src: Path, key: str) -> dict | None:
@@ -845,14 +938,16 @@ async def from_3mf_early(src: Path, key: str) -> dict | None:
     t = _RUNNING.get(key)
     if t is None or t.done():
         if ready(src, key):
-            return await asyncio.to_thread(from_3mf, src, key)
-        t = _RUNNING[key] = asyncio.ensure_future(asyncio.to_thread(from_3mf, src, key))
+            return _read_side(key, "plates.json")
+        # dans un processus a part, lui aussi (29/10/2026) : dans le serveur, la conversion lui prenait la main,
+        # et l'envoi des plateaux deja prets comme l'avancement attendaient leur tour
+        t = _RUNNING[key] = asyncio.ensure_future(asyncio.to_thread(_in_child, src, key, "view"))
     while not t.done():
-        part = PARTIAL.get(key)
+        part = PARTIAL.get(key) or _read_side(key, "partial.json")
         if part and any(p.get("size_mm") for p in part.get("plates") or []):
             return part
-        await asyncio.wait({t}, timeout=0.3)
-    return t.result()
+        await asyncio.wait({t}, timeout=0.25)
+    return _read_side(key, "plates.json") if t.result() else None
 
 
 # ── Le secours : l'apercu 3D de MakerWorld ──────────────────────────────────────────────────────────────────
@@ -907,32 +1002,56 @@ def file_path(key: str, name: str) -> Path | None:
 # main de l'interpreteur, et dans un fil du serveur elle figeait toute l'appli (blocages de plusieurs secondes,
 # meme sur /progress, quand le changement de format a fait refaire toutes les vues). Un seul processus, de priorite
 # basse ; la vue ouverte par quelqu'un, elle, reste dans le serveur (son avancement s'affiche).
-_POOL = {"p": None}
+_POOL = {"bg": None, "view": None}         # le fond (priorite basse), et la vue ouverte (sans attendre le fond)
 
 
-def _child_convert(src: str, key: str) -> bool:
-    try:
-        os.nice(10)
-    except (AttributeError, OSError):
-        pass
+def _child_convert(src: str, key: str, low: bool) -> bool:
+    if low:
+        try:
+            os.nice(10)
+        except (AttributeError, OSError):
+            pass
+    _CHILD["on"], _CHILD["last"] = True, None
+    for f in ("progress.json", "partial.json"):        # ceux d'une conversion interrompue
+        try:
+            (_root() / key / f).unlink()
+        except OSError:
+            pass
     return _from_3mf(Path(src), key) is not None
 
 
-def _in_child(src: Path, key: str) -> bool:
-    """Convertit dans le processus de fond (garde le verrou du modele : la vue ouverte en meme temps attend la
-    meme conversion). Repli dans ce processus si le processus de fond ne demarre pas."""
+def _noop() -> bool:
+    import numpy  # noqa : charge d'avance ce que la conversion utilise
+    return True
+
+
+def _pool(name: str):
+    if _POOL[name] is None:
+        import concurrent.futures
+        import multiprocessing
+        _POOL[name] = concurrent.futures.ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context("spawn"))
+    return _POOL[name]
+
+
+def warm_view_pool() -> None:
+    """Demarre le processus de la vue ouverte des le lancement : la premiere vue n'attend pas son demarrage."""
+    try:
+        _pool("view").submit(_noop)
+    except Exception:
+        pass
+
+
+def _in_child(src: Path, key: str, pool: str = "bg") -> bool:
+    """Convertit dans un processus a part (garde le verrou du modele : la vue ouverte en meme temps attend la meme
+    conversion, et suit son avancement par ses fichiers). Repli dans ce processus s'il ne demarre pas."""
     with _lock(key):
         if ready(src, key):
             return True
         try:
-            if _POOL["p"] is None:
-                import concurrent.futures
-                import multiprocessing
-                _POOL["p"] = concurrent.futures.ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context("spawn"))
-            return _POOL["p"].submit(_child_convert, str(src), key).result()
+            return _pool(pool).submit(_child_convert, str(src), key, pool == "bg").result()
         except Exception as e:
-            logger.warning(f"[3D] processus de fond indisponible ({type(e).__name__}: {e}) : conversion sur place")
-            _POOL["p"] = None
+            logger.warning(f"[3D] processus de conversion indisponible ({type(e).__name__}: {e}) : conversion sur place")
+            _POOL[pool] = None
             return _from_3mf(src, key) is not None
 
 
@@ -951,6 +1070,8 @@ async def warm_loop(first_delay_s: int = 90, period_s: int = 12 * 3600) -> None:
     from ..core import tasks as _tasks
     import asyncio
     from .mw_source import _dir
+    await asyncio.sleep(5)
+    await asyncio.to_thread(warm_view_pool)
     await _tasks.sleep("mw_3d", first_delay_s)
     while True:
         try:

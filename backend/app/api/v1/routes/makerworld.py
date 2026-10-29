@@ -997,6 +997,38 @@ async def _plate_guesses(did: str, ids: list) -> dict:
     _GUESS_CACHE[key] = (_t.time(), g)
     return g
 
+_SRC_INFO: dict = {}
+
+
+def _src_info(src) -> tuple:
+    """(couleurs, filaments par nom de piece, objets par plateau) d'un 3MF d'origine, lus une fois (29/10/2026) : la
+    vue 3D les redemandait pour chaque plateau, a chaque relecture pendant la preparation."""
+    import zipfile
+    from ....services import mw_3d as T
+    k = (str(src), src.stat().st_mtime)
+    if k not in _SRC_INFO:
+        with zipfile.ZipFile(src) as z:
+            # {plateau : noms des objets}, pour reconnaitre le plateau imprime
+            _SRC_INFO[k] = (T._colors_of(z), _ext_by_name(z), _plate_objects(z))
+        while len(_SRC_INFO) > 64:
+            _SRC_INFO.pop(next(iter(_SRC_INFO)))
+    return _SRC_INFO[k]
+
+
+def _sliced_info(f) -> tuple:
+    """(filaments par nom de piece, couleurs, objets) du 3MF tranche d'une impression, lus une fois (parfois sur le
+    NAS : la vue 3D les relisait pour chaque plateau)."""
+    import zipfile
+    from ....services import mw_3d as T
+    k = ("s", str(f), f.stat().st_mtime)
+    if k not in _SRC_INFO:
+        with zipfile.ZipFile(f) as zz:
+            _SRC_INFO[k] = (_ext_by_name(zz), T._colors_of(zz), _sliced_objects(zz))
+        while len(_SRC_INFO) > 64:
+            _SRC_INFO.pop(next(iter(_SRC_INFO)))
+    return _SRC_INFO[k]
+
+
 async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", detail_out: list | None = None,
                         plate: int | None = None, chosen: dict | None = None) -> dict | None:
     """{couleur du 3MF d'origine (RRGGBB) : couleur utilisee} d'apres les filaments de ces impressions (la plus
@@ -1015,10 +1047,7 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
     from ....services.archive import local_or_archive
     if not print_ids or not src or not src.is_file():
         return None
-    with zipfile.ZipFile(src) as z:
-        colors = T._colors_of(z)
-        origin = _ext_by_name(z)
-        plate_objs = _plate_objects(z)              # {plateau : noms des objets}, pour reconnaitre le plateau imprime
+    colors, origin, plate_objs = _src_info(src)
     h6 = lambda c: str(c or "").lstrip("#")[:6].upper()
     async with AsyncSessionLocal() as db:
         prints = (await db.execute(select(Print.id, Print.mw_profile_id, Print.mw_plates, Print.model_3mf, Print.plate_id)
@@ -1102,15 +1131,15 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
             f = local_or_archive(m3) if m3 else None
             if f and f.is_file():
                 try:
-                    with zipfile.ZipFile(f) as zz:
-                        emap = _ext_map(origin, _ext_by_name(zz))
-                        sl_colors = [h6(c) for c in T._colors_of(zz)]
-                        # le plateau imprime, reconnu a ses objets (28/10/2026) : le fichier tranche nomme les objets
-                        # qu'il imprime, le 3MF d'origine sait sur quel plateau ils sont -- bien plus sur que l'image
-                        if _manual_plates(mwpl) is None and plate_objs:
-                            n_ = _plate_from_objects(plate_objs, _sliced_objects(zz))
-                            if n_:
-                                guesses[pid] = {"plate": n_, "sure": True, "by": "objets"}
+                    s_ext, s_cols, s_objs = _sliced_info(f)
+                    emap = _ext_map(origin, s_ext)
+                    sl_colors = [h6(c) for c in s_cols]
+                    # le plateau imprime, reconnu a ses objets (28/10/2026) : le fichier tranche nomme les objets
+                    # qu'il imprime, le 3MF d'origine sait sur quel plateau ils sont -- bien plus sur que l'image
+                    if _manual_plates(mwpl) is None and plate_objs:
+                        n_ = _plate_from_objects(plate_objs, s_objs)
+                        if n_:
+                            guesses[pid] = {"plate": n_, "sure": True, "by": "objets"}
                 except (OSError, zipfile.BadZipFile):
                     emap, sl_colors = {}, []
             if plate is not None and plate not in _print_plates(mwpl, plate_id, guesses.get(pid)):

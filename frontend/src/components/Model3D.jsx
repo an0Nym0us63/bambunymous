@@ -592,6 +592,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {meta.ms >= 1000 && <span data-tip="La première ouverture prépare le modèle ; les suivantes sont immédiates">· préparé en {(meta.ms / 1000).toFixed(1).replace(".", ",")} s</span>}
           {st.size && !p?.pending && <span>· {mm(st.size[0])} × {mm(st.size[1])} × {mm(st.size[2])}</span>}
           {p?.triangles ? <span>· {p.triangles.toLocaleString("fr-FR")} triangles</span> : null}
+          {p?.tidied && <span data-tip="Dans le 3MF, les pièces étaient dispersées : celles qui se touchent restent ensemble, les autres sont rapprochées">· pièces rapprochées</span>}
           {zc.length > 0 && <span data-tip="Changement de filament posé dans Bambu Studio à cette hauteur : au-dessus, les pièces prennent cette couleur"
             style={{ display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>· changement de filament à
             {zc.map(([z, c], i) => <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
