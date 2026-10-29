@@ -424,6 +424,22 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           controls.target.copy(sph.center); camera.near = Math.max(0.1, d / 100); camera.far = d * 20; camera.updateProjectionMatrix(); controls.update(); render();
         };
         fit();
+        // redresser / coucher le modele d'un quart de tour (30/10/2026) : la rotation de la vue tourne autour de la
+        // verticale et ne passe pas par-dessus ; un modele a plat (un calendrier, un panneau) se regardait mal de face.
+        // Pour la vue seulement (rien n'est enregistre) ; la vignette la prend telle qu'affichee
+        let tiltN = 0;
+        const tilt = () => {
+          tiltN = (tiltN + 1) % 4;
+          model.rotateOnWorldAxis(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+          model.updateMatrixWorld(true);
+          const b = visibleBox(THREE, model), c = b.getCenter(new THREE.Vector3());
+          model.position.x -= c.x; model.position.z -= c.z; model.position.y -= b.min.y;
+          model.updateMatrixWorld(true);
+          const s = visibleBox(THREE, model).getBoundingSphere(new THREE.Sphere());
+          sph.center.copy(s.center); sph.radius = s.radius;
+          fit();
+        };
+        const untilt = () => { while (tiltN) tilt(); };
         const noMenu = e => e.preventDefault();
         const focus = e => {
           const r = el.getBoundingClientRect(), rc = new THREE.Raycaster();
@@ -651,9 +667,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           return blob;
         };
         // la vignette se prend sur tout plateau (30/10/2026) ; l'edition, sur la vue assemblee seulement
-        if (editApi) editApi.current = { editing, toSave, origin, relayout, snapshot, get editor() { return editor; } };
+        if (editApi) editApi.current = { editing, toSave, origin, relayout, snapshot, untilt, get editor() { return editor; } };
         disposables.push({ dispose: () => { try { editor?.dispose(); } catch { /* rien */ } if (editApi) editApi.current = null; } });
-        api.current = { fit, night, backlight, bedShow, dragPans, zoom };
+        api.current = { fit, night, backlight, bedShow, dragPans, zoom, tilt };
         const s = bb2.getSize(new THREE.Vector3());
         onState({ busy: false, error: null, size: glb ? [s.x, s.z, s.y] : [s.x, s.z, s.y], glow: glowMats.length > 0 });
       } catch (e) {
@@ -688,6 +704,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: dark ? "linear-gradient(135deg, #facc15, #f59e0b)" : "linear-gradient(135deg, #1e293b, #0f172a)", color: dark ? "#1e293b" : "#e2e8f0",
           fontSize: 13, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{dark ? "💡 Rallumer" : "🌙 Éteindre"}</button>}
+      <button type="button" onClick={() => api.current?.tilt()} data-tip="Redresser ou coucher le modèle d'un quart de tour, pour le regarder sous tous les angles (la vue seulement : rien n'est enregistré)"
+        style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
+          background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>⤾</button>
       <button type="button" onClick={() => api.current?.fit()} data-tip="Recentrer la vue"
         style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>⟲</button>
@@ -1166,6 +1185,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     // en plein ecran, Echap revient a l'edition (desselectionner) au lieu de quitter (30/10/2026) : le garder enfonce
     // quitte le plein ecran (Chrome, Edge)
     try { await navigator.keyboard?.lock?.(["Escape"]); } catch { /* navigateur sans verrou du clavier */ }
+    editApi.current?.untilt?.();                       // l'edition se fait le modele a sa place
     const ed = await editApi.current?.editing(true, setEst);
     if (ed) setEditing(true);
   };

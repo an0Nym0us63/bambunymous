@@ -32,7 +32,8 @@ function Picker({ kind, id, shot, onDone, close }) {
   const img = on => ({ width: 112, height: 112, objectFit: "contain", borderRadius: 12, background: "var(--surface2)",
     border: on ? "2px solid #0EA5E9" : "1px solid var(--border)", boxSizing: "border-box" });
   const btn = (main, extra = {}) => ({ height: 28, borderRadius: 9, border: main ? "none" : "1px solid var(--border)", cursor: "pointer", fontSize: 11.5, fontWeight: 800,
-    color: main ? "#fff" : "var(--text2)", background: main ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", ...extra });
+    color: main ? "#fff" : "var(--text2)", background: main ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)",
+    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", padding: "0 6px", ...extra });
   const def = kind === "group" ? "Mosaïque des impressions" : "Image du plateau";
   return <div onClick={close} style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(2,6,23,.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
     <div onClick={e => e.stopPropagation()} style={{ width: "min(560px, calc(100% - 32px))", maxHeight: "calc(100% - 40px)", overflowY: "auto", padding: "16px 18px",
@@ -59,8 +60,8 @@ function Picker({ kind, id, shot, onDone, close }) {
         </div>
         {d.slots.map(s => <div key={s.n} style={tile}>
           <img src={apiUrl(s.url.replace(/^\/api\/v1/, ""))} alt="" style={img(sel.includes(s.n))}/>
-          {sel.includes(s.n) ? <button type="button" disabled={busy} onClick={() => toggle(s.n)} data-tip="La retirer de la vignette"
-              style={btn(false, { color: "#0EA5E9", borderColor: "#0EA5E9" })}>★ Dans la vignette</button>
+          {sel.includes(s.n) ? <button type="button" disabled={busy} onClick={() => toggle(s.n)} data-tip="Elle est dans la vignette : la retirer"
+              style={btn(false, { color: "#0EA5E9", borderColor: "#0EA5E9" })}>★ Choisie</button>
             : <button type="button" disabled={busy} onClick={() => toggle(s.n)} data-tip="L'ajouter à la vignette (plusieurs : une mosaïque)" style={btn(true)}>⭐ Vignette</button>}
           {shot && !saved && <button type="button" disabled={busy} onClick={() => put(s.n)} style={btn(false)}>↻ Remplacer</button>}
           <button type="button" disabled={busy} onClick={() => drop(s.n)} style={btn(false, { color: "#ef4444" })}>{sure === s.n ? "Confirmer" : "🗑 Supprimer"}</button>
