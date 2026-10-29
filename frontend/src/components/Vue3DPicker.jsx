@@ -22,7 +22,10 @@ function Picker({ kind, id, shot, onDone, close }) {
     const r = await client.post(`${base}/vue3d`, fd);
     setSaved(r.data.n);
   });
-  const choose = n => act(() => client.put(`${base}/thumb`, { slot: n }));
+  // plusieurs vues choisies : la vignette en fait une mosaique (30/10/2026) ; aucune : la vignette par defaut
+  const sel = d?.sel || [];
+  const toggle = n => act(() => client.put(`${base}/thumb`, { slots: sel.includes(n) ? sel.filter(x => x !== n) : [...sel, n] }));
+  const none = () => act(() => client.put(`${base}/thumb`, { slots: [] }));
   const drop = n => { if (sure !== n) { setSure(n); setTimeout(() => setSure(0), 4000); return; } setSure(0); act(() => client.delete(`${base}/vue3d/${n}`)); };
   const full = d && d.slots.length >= d.max;
   const tile = { position: "relative", width: 112, display: "flex", flexDirection: "column", gap: 6, alignItems: "stretch" };
@@ -49,21 +52,26 @@ function Picker({ kind, id, shot, onDone, close }) {
       </div>}
       {!d ? <span>…</span> : <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
         <div style={tile}>
-          <div style={{ ...img(!d.chosen), display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 8, fontSize: 12, fontWeight: 800 }}>
+          <div style={{ ...img(!sel.length), display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 8, fontSize: 12, fontWeight: 800 }}>
             {kind === "group" ? "🧩" : "🖼"}<br/>{def}</div>
-          {d.chosen ? <button type="button" disabled={busy} onClick={() => choose(0)} style={btn(false)}>Par défaut</button>
+          {sel.length ? <button type="button" disabled={busy} onClick={none} style={btn(false)}>Par défaut</button>
             : <span style={{ fontSize: 11.5, fontWeight: 800, color: "#0EA5E9", textAlign: "center" }}>★ Vignette</span>}
         </div>
         {d.slots.map(s => <div key={s.n} style={tile}>
-          <img src={apiUrl(s.url.replace(/^\/api\/v1/, ""))} alt="" style={img(d.chosen === s.n)}/>
-          {d.chosen === s.n ? <span style={{ fontSize: 11.5, fontWeight: 800, color: "#0EA5E9", textAlign: "center" }}>★ Vignette</span>
-            : <button type="button" disabled={busy} onClick={() => choose(s.n)} style={btn(true)}>⭐ Vignette</button>}
+          <img src={apiUrl(s.url.replace(/^\/api\/v1/, ""))} alt="" style={img(sel.includes(s.n))}/>
+          {sel.includes(s.n) ? <button type="button" disabled={busy} onClick={() => toggle(s.n)} data-tip="La retirer de la vignette"
+              style={btn(false, { color: "#0EA5E9", borderColor: "#0EA5E9" })}>★ Dans la vignette</button>
+            : <button type="button" disabled={busy} onClick={() => toggle(s.n)} data-tip="L'ajouter à la vignette (plusieurs : une mosaïque)" style={btn(true)}>⭐ Vignette</button>}
           {shot && !saved && <button type="button" disabled={busy} onClick={() => put(s.n)} style={btn(false)}>↻ Remplacer</button>}
           <button type="button" disabled={busy} onClick={() => drop(s.n)} style={btn(false, { color: "#ef4444" })}>{sure === s.n ? "Confirmer" : "🗑 Supprimer"}</button>
         </div>)}
       </div>}
+      {d?.cover && sel.length > 1 && <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12.5, fontWeight: 700 }}>
+        <img src={apiUrl(`${kind === "group" ? `/prints/groups/${id}/photo` : `/prints/${id}/file`}/${d.cover.name}`) + `?v=${d.cover.v}`} alt="" style={{ ...img(true), width: 72, height: 72 }}/>
+        <span>La vignette : une mosaïque des {sel.length} vues choisies</span>
+      </div>}
       {d && !d.slots.length && !shot && <span style={{ fontSize: 12.5 }}>Aucune vue : prends-en une avec 📸 dans la vue 3D.</span>}
-      <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Jusqu'à {d?.max || 4} vues, prises avec 📸 dans la vue 3D : un plateau ou l'assemblage, de jour, de nuit ou éclairé par derrière, telle qu'affichée.</span>
+      <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Jusqu'à {d?.max || 4} vues, prises avec 📸 dans la vue 3D : un plateau ou l'assemblage, de jour, de nuit ou éclairé par derrière, telle qu'affichée. Plusieurs choisies : la vignette en fait une mosaïque.</span>
     </div>
   </div>;
 }

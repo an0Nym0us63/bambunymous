@@ -1249,7 +1249,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       p.model_3mf && { icon: "⤓", label: "Télécharger le 3MF tranché", hint: "pour mon imprimante", tone: "#F59E0B", onClick: () => download3mf(p.id, "sliced") },
       isAdmin && p.has_vue3d && { icon: "🧊", label: "Vues 3D et vignette", hint: p.thumb_3d ? "Vignette : une vue 3D" : "Vignette : l'image du plateau", tone: "#0EA5E9",
         onClick: () => openVue3D({ kind: "print", id: p.id, onDone: async () => {
-          try { const r = await client.get(`/prints/${p.id}/vue3d`); setP(prev => ({ ...prev, thumb_3d: r.data.chosen, has_vue3d: r.data.slots.length > 0, updated_at: new Date().toISOString() })); }
+          try { const r = await client.get(`/prints/${p.id}/vue3d`); setP(prev => ({ ...prev, thumb_3d: r.data.sel.length ? 1 : 0, has_vue3d: r.data.slots.length > 0, updated_at: new Date().toISOString() })); }
           catch { /* rien */ } } }) },
       (p.job_id || p.design_id) && { icon: "#", label: "Identifiants", hint: "Travail, modèle MakerWorld", tone: "#64748B", onClick: () => setIdsOpen(true) },
       "-",
@@ -1689,9 +1689,9 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       { icon: "📤", label: "Dégrouper", hint: "Les impressions restent", tone: "#A78BFA", onClick: handleUngroup },
       isAdmin && prints[0]?.group_has_vue3d && { icon: "🧊", label: "Vues 3D et vignette", hint: thumb3d ? "Vignette : une vue 3D" : "Vignette : la mosaïque", tone: "#0EA5E9",
         onClick: () => openVue3D({ kind: "group", id: groupId, onDone: async () => {
-          try { const r = await client.get(`/prints/groups/${groupId}/vue3d`); const n = r.data.chosen, sl = r.data.slots.find(x => x.n === n);
-            setPrints(ps => ps.map(x => ({ ...x, group_thumb_3d: n, group_has_vue3d: r.data.slots.length > 0, group_vue3d_name: n ? (n === 1 ? "Vue3D.png" : `Vue3D_${n}.png`) : null,
-              group_vue3d_v: sl ? Number((sl.url.split("v=")[1] || "0")) : null })));
+          try { const r = await client.get(`/prints/groups/${groupId}/vue3d`), cv = r.data.cover;
+            setPrints(ps => ps.map(x => ({ ...x, group_thumb_3d: cv ? 1 : 0, group_has_vue3d: r.data.slots.length > 0, group_vue3d_name: cv?.name || null,
+              group_vue3d_v: cv?.v || null })));
             onUpdated?.(); } catch { /* rien */ } } }) },
       (prints.some(x => x.source_3mf) || prints.some(x => x.model_3mf)) && "-",
       prints.some(x => x.source_3mf) && { icon: "⤓", label: "Télécharger les 3MF d'origine", hint: "Un fichier s'ils sont identiques, sinon un zip",

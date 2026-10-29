@@ -460,20 +460,21 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
                 // la teinte d'une couleur, accentuee (une fine couche colore deja bien), et l'ombre de l'epaisseur
                 gl_FragColor = vec4(pow(max(col, vec3(0.004)), vec3(t * 1.7)) * pow(0.5, t), 1.0); }` });
           // l'image : la lumiere filtree la ou il y a de la matiere, la nuit ailleurs
-          const compMat = new THREE.ShaderMaterial({ uniforms: { all: { value: tAll.texture }, acc: { value: acc.texture } }, depthTest: false, depthWrite: false,
+          const compMat = new THREE.ShaderMaterial({ uniforms: { all: { value: tAll.texture }, acc: { value: acc.texture }, clearBg: { value: 0 } }, depthTest: false, depthWrite: false,
             vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
-            fragmentShader: `uniform sampler2D all; uniform sampler2D acc; varying vec2 vUv;
+            fragmentShader: `uniform sampler2D all; uniform sampler2D acc; uniform float clearBg; varying vec2 vUv;
               void main() { float t = texture2D(all, vUv).r; vec3 T = texture2D(acc, vUv).rgb;
                 vec3 c = vec3(1.0, 0.96, 0.86) * 3.2 * T;
                 c = mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, 1.45);       // des couleurs plus franches
                 c = t > 0.02 ? max(c, 0.0) : vec3(0.006, 0.008, 0.016);
-                gl_FragColor = vec4(c, 1.0);
+                gl_FragColor = vec4(c, t > 0.02 ? 1.0 : 1.0 - clearBg);       // fond vide pour une vignette (30/10/2026)
                 #include <colorspace_fragment>
               }` });
           const qT = new THREE.Scene(); qT.add(new THREE.Mesh(quad, transMat));
           const qC = new THREE.Scene(); qC.add(new THREE.Mesh(quad, compMat));
           disposables.push(tAll, tG, acc, matF, matB, transMat, compMat, quad);
           return {
+            clearBg: on => { compMat.uniforms.clearBg.value = on ? 1 : 0; },
             resize: () => { const q = renderer.getPixelRatio(); for (const t of [tAll, tG, acc]) t.setSize(Math.round(el.clientWidth * q), Math.round(el.clientHeight * q)); },
             render: () => {
               const ac = renderer.autoClear; renderer.autoClear = false;
@@ -486,7 +487,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
                 renderer.setRenderTarget(tG); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(g.sc, camera);
                 renderer.setRenderTarget(acc); transMat.uniforms.tex.value = tG.texture; transMat.uniforms.col.value.copy(g.col); renderer.render(qT, ortho);
               }
-              renderer.setRenderTarget(null); renderer.render(qC, ortho);
+              renderer.setRenderTarget(null);
+              if (compMat.uniforms.clearBg.value) { renderer.setClearColor(0x000000, 0); renderer.clear(); }
+              renderer.render(qC, ortho);
               renderer.setClearColor(0x000000, 0); renderer.autoClear = ac;
             },
           };
@@ -548,8 +551,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         const snapshot = async (size = 1024) => {
           const was = { grid: grid.visible, bg: scene.background, w: el.clientWidth, h: el.clientHeight, pr: renderer.getPixelRatio(),
             pos: camera.position.clone(), aspect: camera.aspect, near: camera.near, far: camera.far };
-          // la nuit garde son fond sombre (la lueur ne se voit pas sur du transparent) ; sinon, fond transparent
-          grid.visible = false; if (!bloomOn) scene.background = null;
+          // fond vide, de jour, de nuit comme eclaire par derriere (30/10/2026 : comme les autres vignettes)
+          grid.visible = false; scene.background = null;
+          lit?.clearBg(true);
           renderer.setPixelRatio(1); renderer.setSize(size, size, false);
           camera.aspect = 1;
           const sp = new THREE.Box3().setFromObject(model).getBoundingSphere(new THREE.Sphere());
@@ -564,6 +568,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           const blob = await new Promise(res => renderer.domElement.toBlob(res, "image/png"));
           // la vue reprend comme avant
           grid.visible = was.grid; scene.background = was.bg;
+          lit?.clearBg(false);
           renderer.setPixelRatio(was.pr); renderer.setSize(was.w, was.h);
           if (bloomOn && composer) composer.setSize(was.w, was.h);
           if (litOn && lit) lit.resize();

@@ -130,13 +130,13 @@ def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict]
     sl = _v3slots(DATA_DIR / "prints" / str(p.id))
     d["vue3d"] = [{"n": n, "v": v} for n, v in sorted(sl.items())]
     d["has_vue3d"] = bool(sl)
-    d["thumb_3d"] = p.thumb_3d if p.thumb_3d in sl else 0
+    d["thumb_3d"] = p.thumb_3d if _v3sel(p.thumb_3d, sl) else 0
     gsl = _v3slots(DATA_DIR / "groups" / str(p.group_id)) if p.group_id else {}
-    gn = p.group.thumb_3d if p.group and p.group.thumb_3d in gsl else 0
+    gname, gv = _v3cover(DATA_DIR / "groups" / str(p.group_id), p.group.thumb_3d) if p.group_id and p.group and gsl else (None, None)
     d["group_has_vue3d"] = bool(gsl)
-    d["group_thumb_3d"] = gn
-    d["group_vue3d_name"] = _v3name(gn) if gn else None
-    d["group_vue3d_v"] = gsl.get(gn)
+    d["group_thumb_3d"] = p.group.thumb_3d if gname else 0
+    d["group_vue3d_name"] = gname
+    d["group_vue3d_v"] = gv
     # le 3MF d'origine MakerWorld deja garde pour ce profil (le tranche, lui, est model_3mf)
     try:
         from ....services.mw_source import print_file as _src
@@ -559,8 +559,8 @@ async def _build_gallery() -> dict:
         for r in rows:
             sl = _v3slots(base / str(r.id))
             if sl:
-                n = r.thumb_3d if r.thumb_3d in sl else min(sl)
-                out[r.id] = (_v3name(n), sl[n])
+                nm, v = _v3cover(base / str(r.id), r.thumb_3d)
+                out[r.id] = (nm, v) if nm else (_v3name(min(sl)), sl[min(sl)])
         return out
     import asyncio as _aio0
     vue3d_prints = await _aio0.to_thread(_vue3d_prints)
@@ -638,7 +638,7 @@ async def _build_gallery() -> dict:
             acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{name}?v={mt}",
                                   "label": name, "name": name})
         # pas de photo, mais une vignette prise dans la vue 3D assemblee : elle remonte (29/10/2026)
-        v3s = sorted((name, mt) for name, mt in files if _V3RE.fullmatch(name))
+        v3s = sorted((name, mt) for name, mt in files if _V3RE.fullmatch(name) and "_mix" not in name)
         if not acc["photos"] and v3s:
             nm, v3 = v3s[0]
             acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{nm}?v={v3}", "label": "vue3d", "name": nm})
@@ -2077,12 +2077,12 @@ async def print_image(print_id: int):
     if not print_dir.exists():
         raise HTTPException(404)
     # la vignette choisie : la vue 3D assemblee, si elle a ete prise et preferee
-    sl = _v3slots(print_dir)
-    if sl:
+    if _v3slots(print_dir):
         async with AsyncSessionLocal() as db:
             pref = (await db.execute(select(Print.thumb_3d).where(Print.id == print_id))).scalar()
-        if pref in sl:
-            return FileResponse(str(print_dir / _v3name(pref)), media_type="image/png")
+        nm, _ = await asyncio.to_thread(_v3cover, print_dir, pref)
+        if nm:
+            return FileResponse(str(print_dir / nm), media_type="image/png")
     # plate.png en priorité, sinon première image trouvée
     for name in ("plate.png", "plate.jpg"):
         f = print_dir / name
@@ -2647,11 +2647,66 @@ async def group_3mf(group_id: int, kind: str = Query("sliced", pattern="^(sliced
 # Vue3D.png (la 1), Vue3D_2.png … Vue3D_4.png ; thumb_3d dit laquelle sert de vignette (0 : celle par defaut)
 VUE3D = "Vue3D.png"
 V3_MAX = 4
-_V3RE = re.compile(r"Vue3D(_[2-4])?\.png")
+_V3RE = re.compile(r"Vue3D(_[2-4]|_mix\d+)?\.png")
+# plusieurs vues choisies ensemble (30/10/2026) : thumb_3d = 16 + masque (bit n-1 pour la vue n) ; 1 a 4 : une seule
+V3_MULTI = 16
 
 
 def _v3name(n: int) -> str:
     return VUE3D if n == 1 else f"Vue3D_{n}.png"
+
+
+def _v3sel(val, sl: dict) -> list:
+    """Les vues choisies comme vignette, parmi celles gardees."""
+    val = int(val or 0)
+    ns = [n for n in range(1, V3_MAX + 1) if (val - V3_MULTI) >> (n - 1) & 1] if val >= V3_MULTI else [val]
+    return [n for n in ns if n in sl]
+
+
+def _v3val(ns: list) -> int:
+    ns = sorted({int(n) for n in ns if 1 <= int(n) <= V3_MAX})
+    if not ns:
+        return 0
+    return ns[0] if len(ns) == 1 else V3_MULTI + sum(1 << (n - 1) for n in ns)
+
+
+def _v3cover(folder: Path, val) -> tuple:
+    """(nom du fichier qui sert de vignette, sa date) ; (None, None) : la vignette par defaut. Plusieurs vues : une
+    mosaique faite ici (refaite quand une de ses vues change)."""
+    sl = _v3slots(folder)
+    ns = _v3sel(val, sl)
+    if not ns:
+        return None, None
+    if len(ns) == 1:
+        return _v3name(ns[0]), sl[ns[0]]
+    mask = sum(1 << (n - 1) for n in ns)
+    f = folder / f"Vue3D_mix{mask}.png"
+    try:
+        if f.stat().st_mtime >= max(sl[n] for n in ns):
+            return f.name, int(f.stat().st_mtime)
+    except OSError:
+        pass
+    try:
+        from PIL import Image
+        S = 1024
+        out = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+        # 2 : cote a cote ; 3 : deux en haut, une en bas ; 4 : en carre
+        boxes = {2: [(0, S // 4, S // 2), (S // 2, S // 4, S // 2)],
+                 3: [(0, 0, S // 2), (S // 2, 0, S // 2), (S // 4, S // 2, S // 2)]}.get(len(ns)) \
+            or [(0, 0, S // 2), (S // 2, 0, S // 2), (0, S // 2, S // 2), (S // 2, S // 2, S // 2)]
+        for n, (x, y, w) in zip(ns, boxes):
+            im = Image.open(folder / _v3name(n)).convert("RGBA")
+            im.thumbnail((w, w))
+            out.alpha_composite(im, (x + (w - im.width) // 2, y + (w - im.height) // 2))
+        for old in folder.glob("Vue3D_mix*.png"):
+            old.unlink(missing_ok=True)
+        tmp = folder / (f.name + ".part")
+        out.save(tmp, "PNG")
+        os.replace(tmp, f)
+        return f.name, int(f.stat().st_mtime)
+    except Exception as e:
+        logging.getLogger(__name__).info(f"[VUE3D] mosaique de {folder} : {e}")
+        return _v3name(ns[0]), sl[ns[0]]
 
 
 def _v3slots(folder: Path) -> dict:
@@ -2686,7 +2741,9 @@ async def _save_vue3d(folder: Path, file: UploadFile, slot: int = 0) -> int:
 def _v3list(kind: str, ident: int, folder: Path, chosen: int) -> dict:
     base = f"/api/v1/prints/{ident}/file" if kind == "print" else f"/api/v1/prints/groups/{ident}/photo"
     sl = _v3slots(folder)
-    return {"max": V3_MAX, "chosen": chosen if chosen in sl else 0,
+    sel = _v3sel(chosen, sl)
+    name, v = _v3cover(folder, chosen)
+    return {"max": V3_MAX, "chosen": sel[0] if sel else 0, "sel": sel, "cover": {"name": name, "v": v} if name else None,
             "slots": [{"n": n, "url": f"{base}/{_v3name(n)}?v={v}"} for n, v in sorted(sl.items())]}
 
 
@@ -2739,9 +2796,9 @@ async def print_vue3d_drop(print_id: int, n: int, _: str = Depends(require_admin
         p = await db.get(Print, print_id)
         if not p or not 1 <= n <= V3_MAX:
             raise HTTPException(404, "Vue introuvable")
-        (DATA_DIR / "prints" / str(print_id) / _v3name(n)).unlink(missing_ok=True)
-        if p.thumb_3d == n:
-            p.thumb_3d = 0
+        folder = DATA_DIR / "prints" / str(print_id)
+        (folder / _v3name(n)).unlink(missing_ok=True)
+        p.thumb_3d = _v3val(_v3sel(p.thumb_3d, _v3slots(folder)))
         p.updated_at = datetime.utcnow()
         await db.commit()
     gallery_touched()
@@ -2754,21 +2811,26 @@ async def group_vue3d_drop(group_id: int, n: int, _: str = Depends(require_admin
         g = await db.get(Group, group_id)
         if not g or not 1 <= n <= V3_MAX:
             raise HTTPException(404, "Vue introuvable")
-        (DATA_DIR / "groups" / str(group_id) / _v3name(n)).unlink(missing_ok=True)
-        if g.thumb_3d == n:
-            g.thumb_3d = 0
+        folder = DATA_DIR / "groups" / str(group_id)
+        (folder / _v3name(n)).unlink(missing_ok=True)
+        g.thumb_3d = _v3val(_v3sel(g.thumb_3d, _v3slots(folder)))
         await db.commit()
     gallery_touched()
     return {"ok": True}
 
 
 def _slot_of(body: dict, folder: Path) -> int:
-    """La vue choisie : « slot » (0 = la vignette par defaut) ; « use3d » (ancien appel) : la premiere."""
+    """Les vues choisies : « slots » (plusieurs : une mosaique ; vide : la vignette par defaut), ou « slot » (0 = par
+    defaut) ; « use3d » (ancien appel) : la premiere."""
     sl = _v3slots(folder)
-    n = int(body["slot"]) if str(body.get("slot", "")).lstrip("-").isdigit() else (min(sl) if sl and body.get("use3d") else 0)
-    if n and n not in sl:
+    if isinstance(body.get("slots"), list):
+        ns = [int(x) for x in body["slots"] if str(x).isdigit()]
+    else:
+        n = int(body["slot"]) if str(body.get("slot", "")).lstrip("-").isdigit() else (min(sl) if sl and body.get("use3d") else 0)
+        ns = [n] if n else []
+    if any(n not in sl for n in ns):
         raise HTTPException(400, "Prends d'abord cette vue dans la vue 3D")
-    return n
+    return _v3val(ns)
 
 
 @router.put("/{print_id}/thumb")
