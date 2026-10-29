@@ -1194,12 +1194,13 @@ async def warm_loop(first_delay_s: int = 90, period_s: int = 12 * 3600) -> None:
             WARM.update(running=bool(todo), done=0, total=len(todo), all=len(files), started=time.time(), finished=None,
                         current=None)
             for f in todo:
-                WARM["current"] = f"{len(files) - len(todo) + WARM['done']} vues prêtes sur {len(files)}"
+                WARM["current"] = f"{len(files) - len(todo) + WARM['done']} vues prêtes sur {len(files)} 3MF d'origine en local"
                 if not ready(f, f.stem):                # ouverte entre-temps : deja faite
                     await asyncio.to_thread(_in_child, f, f.stem)
                 WARM["done"] += 1
                 await asyncio.sleep(3)
-            WARM.update(running=False, finished=time.time(), current=f"{len(files)} vues prêtes sur {len(files)}")
+            WARM.update(running=False, finished=time.time(),
+                        current=f"{len(files)} vues prêtes sur {len(files)} 3MF d'origine en local (ceux du NAS : à l'ouverture)")
             if todo:
                 logger.info(f"[3D] {len(todo)} modele(s) prepare(s) pour la vue 3D")
         except Exception:
