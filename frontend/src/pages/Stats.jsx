@@ -758,7 +758,7 @@ function TopList({ title, prints, groups, valueKey, valueLabel, barColor = "#3b8
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8 }}>
         <p style={{ ...cardTitle, margin: 0 }}>{title}</p>
         <div style={{ display: "flex", gap: 2, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 20, padding: 2 }}>
-          {[["prints", "Prints"], ["groups", "Groupes"]].map(([id, label]) => {
+          {[["prints", "Impressions"], ["groups", "Groupes"]].map(([id, label]) => {
             const disabled = id === "groups" && !hasGroups;
             return (
               <button key={id} disabled={disabled} onClick={() => !disabled && setMode(id)}
@@ -963,7 +963,7 @@ export default function Stats() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tab, setTab] = useUrlTab("tab", "prints", ["prints", "filaments", "drying", "objects", "achievements"]);
-  useTrackDetail(`Stats · ${ {prints:"Prints", filaments:"Filaments",
+  useTrackDetail(`Stats · ${ {prints:"Impressions", filaments:"Filaments",
     objects:"Objets"}[tab] || tab }`);
   const [objStats, setObjStats] = useState(null);
   const [objDetail, setObjDetail] = useState(null);
@@ -1069,7 +1069,7 @@ export default function Stats() {
     </div>
   );
 
-  const tabs = [{ id:"prints", label:"Prints", ic:"🖨️", c:"#3B82F6" }, { id:"filaments", label:"Filaments", ic:"🧵", c:"#F97316" },
+  const tabs = [{ id:"prints", label:"Impressions", ic:"🖨️", c:"#3B82F6" }, { id:"filaments", label:"Filaments", ic:"🧵", c:"#F97316" },
     { id:"drying", label:"Séchage", ic:"💧", c:"#06B6D4" }, { id:"objects", label:"Objets", ic:"🎁", c:"#8B5CF6" },
     { id:"achievements", label:"Succès", ic:"🏆", c:"#F59E0B" }];
 

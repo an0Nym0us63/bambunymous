@@ -3315,7 +3315,7 @@ export default function Prints() {
         // nombres s'arrondissent (3938 h plutot que 3938h 30min).
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4, minmax(0, 1fr))", gap:6 }}>
           {[
-            ["🖨️ Prints", `${kpis.count}`, "#3B82F6", "#60A5FA"],
+            ["🖨️ Impressions", `${kpis.count}`, "#3B82F6", "#60A5FA"],
             ["⏱ Durée", kpis.duration > 0 ? (kpis.duration >= 100 * 3600 ? `${Math.round(kpis.duration / 3600)} h` : fmtDur(kpis.duration)) : "—", "#8B5CF6", "#C084FC"],
             ["⚖ Poids", kpis.weight_g > 0 ? `${(kpis.weight_g/1000).toFixed(kpis.weight_g >= 10000 ? 1 : 2).replace(".", ",")} kg` : "—", "#F59E0B", "#FBBF24"],
             ["💶 Coût", kpis.cost > 0 ? `${moneyVal(kpis.cost, kpis.cost >= 100 ? 0 : 2).replace(".", ",")} €` : "—", "#16A34A", "#4ADE80"],

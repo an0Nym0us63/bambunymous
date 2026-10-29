@@ -5,14 +5,14 @@
   <h2>Organisation de la page</h2>
   <p>La page a cinq onglets, chacun sa couleur et son icône. Ils tiennent sur une ligne même sur un petit téléphone : l'onglet actif montre son nom, les autres seulement leur icône.</p>
   <dl class="opts">
-    <dt>🖨️ Prints</dt><dd>Tes impressions : volume, réussite, temps, coûts, habitudes, évolution et classements. Onglet par défaut. Voir <a href="#stats-prints">Onglet Prints</a>.</dd>
+    <dt>🖨️ Impressions</dt><dd>Tes impressions : volume, réussite, temps, coûts, habitudes, évolution et classements. Onglet par défaut. Voir <a href="#stats-prints">Onglet Impressions</a>.</dd>
     <dt>🧵 Filaments</dt><dd>Ton stock de bobines et ta consommation. Voir <a href="#stats-filaments">Onglet Filaments</a>.</dd>
     <dt>💧 Séchage</dt><dd>L'état de séchage de tes bobines. Voir <a href="#stats-sechage">Onglet Séchage</a>.</dd>
     <dt>🎁 Objets</dt><dd>Ton inventaire d'objets, tes ventes, tes marges et tes accessoires. Voir <a href="#stats-objets">Onglet Objets</a>.</dd>
     <dt>🏆 Succès</dt><dd>Tes succès et la roue. Ils sont décrits dans le chapitre <a href="#succes">Succès</a>.</dd>
   </dl>
   <p>L'onglet choisi s'inscrit dans l'adresse de la page (<code>/stats?tab=filaments</code>, <code>?tab=drying</code>, <code>?tab=objects</code>, <code>?tab=achievements</code>) : tu peux mettre un onglet en favori.</p>
-  <figure class="phone"><img src="img/stats-telephone.webp" alt="Page Statistiques sur téléphone, onglet Prints"><figcaption>Sur téléphone, le bouton de période (« Tout ») est dans l'en-tête, à côté du titre.</figcaption></figure>
+  <figure class="phone"><img src="img/stats-telephone.webp" alt="Page Statistiques sur téléphone, onglet Impressions"><figcaption>Sur téléphone, le bouton de période (« Tout ») est dans l'en-tête, à côté du titre.</figcaption></figure>
   <p>Chaque onglet (sauf Succès) s'ouvre sur un <b>en-tête</b> : le chiffre qui compte en grand, quelques pastilles, et un anneau de taux (la réussite des impressions, les bobines à jour de séchage, les objets vendus). Viennent ensuite les sections, chacune avec son icône. Les chiffres sont présentés en <b>cartes</b> teintées de leur couleur (un libellé, une valeur, parfois une précision en dessous) et en graphiques (barres, anneaux). Les durées s'écrivent « 3h 12min », les poids « 1.23 kg » ou « 97.4 g », les montants « 12.34 € ». Un tiret « — » signifie qu'il n'y a pas de valeur.</p>
   <p>Certaines sections portent une pastille <span class="ui">🌐 toutes périodes</span> : elles ne dépendent pas de la période choisie.</p>
   <div class="note"><p>Pour un compte en <b>lecture seule</b> (sans prix), tous les montants sont remplacés par « — », la courbe « Coût » de l'évolution disparaît, et le classement « Les plus chers » n'est pas affiché. Un compte « Lecture seule + prix » voit tout.</p></div>
@@ -33,19 +33,19 @@
   <p>La période choisie est en bleu. Le ✕ ferme la feuille.</p>
   <h4>Ce que la période change</h4>
   <ul>
-    <li><b>Prints</b> : tout l'onglet.</li>
+    <li><b>Impressions</b> : tout l'onglet.</li>
     <li><b>Filaments</b> : tout sauf « Stock actuel » (ton stock est celui d'aujourd'hui).</li>
     <li><b>Séchage</b> : rien, c'est un état présent.</li>
     <li><b>Objets</b> : seulement les ventes et ce qui en découle (chiffre d'affaires, marges, ratios), selon la date de vente.</li>
   </ul>
-  <p>Dès qu'une période a une longueur (tout sauf « Tout » et « Jusqu'au … »), l'onglet Prints compare aussi avec la <b>période précédente de même longueur</b>, juste avant : voir les flèches de <a href="#stats-prints-impressions">tendance</a>.</p>
+  <p>Dès qu'une période a une longueur (tout sauf « Tout » et « Jusqu'au … »), l'onglet Impressions compare aussi avec la <b>période précédente de même longueur</b>, juste avant : voir les flèches de <a href="#stats-prints-impressions">tendance</a>.</p>
   <div class="tip"><p>La période n'est pas mémorisée : en rechargeant la page, elle revient à « Tout ».</p></div>
 </section>
 
 <section id="stats-prints">
-  <h2>Onglet Prints</h2>
+  <h2>Onglet Impressions</h2>
   <p>Il porte sur les impressions <b>terminées</b> : réussies, échouées, partielles et à refaire. Les impressions en cours et les impressions annulées ne comptent pas. S'il n'y en a aucune sur la période : « Aucune impression terminée sur cette période. »</p>
-  <figure><img src="img/stats-prints-haut.webp" alt="Onglet Prints sur ordinateur : impressions, moyennes, habitudes"><figcaption>Le haut de l'onglet Prints sur ordinateur.</figcaption></figure>
+  <figure><img src="img/stats-prints-haut.webp" alt="Onglet Impressions sur ordinateur : impressions, moyennes, habitudes"><figcaption>Le haut de l'onglet Impressions sur ordinateur.</figcaption></figure>
   <section id="stats-prints-impressions">
     <h3>Impressions et moyennes</h3>
     <dl class="opts">
@@ -109,7 +109,7 @@
       <dt>⚖ Les plus lourds</dt><dd>Par poids de filament.</dd>
       <dt>🎨 Le plus de couleurs</dt><dd>Par nombre de teintes réellement utilisées (au moins deux).</dd>
     </dl>
-    <p>Chaque classement a une bascule <span class="ui">Prints</span> / <span class="ui">Groupes</span> : en mode Groupes, ce sont tes <a href="#impressions">groupes d'impressions</a> qui sont classés (le préfixe « ×N » donne leur nombre d'impressions). « Groupes » est grisé si tu n'en as pas. Seules les impressions <b>réussies</b> entrent dans les classements. Une impression ou un groupe marqué <span class="ui">📊 hors classements</span> (dans sa fiche, menu ⋯ : utile pour un groupe d'échantillons ou de supports de bobine qui fausserait « le plus de couleurs » ou « les plus lourds ») n'y figure plus, mais reste compté dans tous les totaux, puisque son filament a bien été consommé. Touche une ligne pour ouvrir la fiche de l'impression ou du groupe.</p>
+    <p>Chaque classement a une bascule <span class="ui">Impressions</span> / <span class="ui">Groupes</span> : en mode Groupes, ce sont tes <a href="#impressions">groupes d'impressions</a> qui sont classés (le préfixe « ×N » donne leur nombre d'impressions). « Groupes » est grisé si tu n'en as pas. Seules les impressions <b>réussies</b> entrent dans les classements. Une impression ou un groupe marqué <span class="ui">📊 hors classements</span> (dans sa fiche, menu ⋯ : utile pour un groupe d'échantillons ou de supports de bobine qui fausserait « le plus de couleurs » ou « les plus lourds ») n'y figure plus, mais reste compté dans tous les totaux, puisque son filament a bien été consommé. Touche une ligne pour ouvrir la fiche de l'impression ou du groupe.</p>
   </section>
 </section>
 

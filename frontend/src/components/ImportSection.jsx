@@ -125,8 +125,8 @@ export default function ImportSection() {
 
 // ── Import ZIP fichiers Spoolnymous ─────────────────────────────────────────
 const ZIP_TYPES = [
-  { id:"prints",            label:"Prints (3MF + vignettes)",      hint:"prints/" },
-  { id:"uploads_prints",    label:"Snapshots prints",               hint:"uploads/prints/" },
+  { id:"prints",            label:"Impressions (3MF + vignettes)",      hint:"prints/" },
+  { id:"uploads_prints",    label:"Instantanés des impressions",               hint:"uploads/prints/" },
   { id:"uploads_groups",    label:"Photos groupes",                 hint:"uploads/groups/" },
   { id:"uploads_accessories", label:"Photos accessoires",             hint:"uploads/accessories/{id}/" },
 ];
