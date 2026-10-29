@@ -64,6 +64,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [pick, setPick] = useState(false);
   const [view3d, setView3d] = useState(null);       // le profil montre en 3D
   const [ready3d, setReady3d] = useState(null);     // chez un copain : sa vue existe-t-elle deja (29/10/2026) ?
+  // (lu ici, avant l'effet qui s'en sert : plus bas, la fiche plantait a l'ouverture -- page blanche)
+  const friend = useFriend((s) => s.friend); // profil dont le 3MF est en lecture
   useEffect(() => {
     if (!friend || !m || !id) { setReady3d(null); return; }
     let alive = true;
@@ -103,7 +105,6 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     setStudioBusy(false);
   };
   const startAssign = useMwAssign((s) => s.start);
-  const friend = useFriend((s) => s.friend); // profil dont le 3MF est en lecture
   const canPlan = useCanMw();                  // plan « A faire » : droit MakerWorld, jamais chez un copain
   const canHome = useCanMwHome();             // j'aime, boost, collections, Studio : sur MON compte, meme chez un copain
   const isAdmin = useIsAdmin();               // associer a un print
