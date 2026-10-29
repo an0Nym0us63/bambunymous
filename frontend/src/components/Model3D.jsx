@@ -537,14 +537,18 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             fragmentShader: `uniform sampler2D tex; uniform vec3 col; varying vec2 vUv;
               void main() { float t = max(0.0, texture2D(tex, vUv).r);
                 // la teinte d'une couleur, accentuee (une fine couche colore deja bien), et l'ombre de l'epaisseur
-                gl_FragColor = vec4(pow(max(col, vec3(0.004)), vec3(t * 1.7)) * pow(0.5, t), 1.0); }` });
+                // (30/10/2026 : plus lumineux ; 62 % par mm au lieu de 50, une teinte un peu moins appuyee)
+                gl_FragColor = vec4(pow(max(col, vec3(0.004)), vec3(t * 1.4)) * pow(0.62, t), 1.0); }` });
           // l'image : la lumiere filtree la ou il y a de la matiere, la nuit ailleurs
           const compMat = new THREE.ShaderMaterial({ uniforms: { all: { value: tAll.texture }, acc: { value: acc.texture }, clearBg: { value: 0 } }, depthTest: false, depthWrite: false,
             vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
             fragmentShader: `uniform sampler2D all; uniform sampler2D acc; uniform float clearBg; varying vec2 vUv;
               void main() { float t = texture2D(all, vUv).r; vec3 T = texture2D(acc, vUv).rgb;
-                vec3 c = vec3(1.0, 0.96, 0.86) * 3.2 * T;
-                c = mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, 1.45);       // des couleurs plus franches
+                // une courbe d'exposition (30/10/2026 : le rendu etait terne) : les demi-teintes eclaircies, les blancs sans
+                // ecrasement, puis des couleurs plus franches et un peu de contraste
+                vec3 c = vec3(1.0, 0.95, 0.84) * (1.0 - exp(-5.5 * T));
+                c = mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, 1.35);
+                c = clamp((c - 0.5) * 1.12 + 0.52, 0.0, 1.2);
                 c = t > 0.02 ? max(c, 0.0) : vec3(0.006, 0.008, 0.016);
                 gl_FragColor = vec4(c, t > 0.02 ? 1.0 : 1.0 - clearBg);       // fond vide pour une vignette (30/10/2026)
                 #include <colorspace_fragment>
@@ -653,7 +657,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           if (bloomOn || litOn) {
             // la nuit et la lumiere derriere passent par des rendus intermediaires qui remettent un fond opaque (30/10/2026 :
             // fond noir sur la vignette d'un lithophane) : l'image telle qu'affichee, puis un rendu simple qui dit ou est le
-            // modele ; tout le reste devient transparent (de nuit, la lueur autour des pieces est gardee)
+            // modele ; tout le reste devient transparent (30/10/2026 : la lueur gardee autour des pieces faisait un halo sale)
             const cv = document.createElement("canvas"); cv.width = size; cv.height = size;
             const cx = cv.getContext("2d", { willReadFrequently: true });
             cx.drawImage(renderer.domElement, 0, 0, size, size);
@@ -664,7 +668,6 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             const mask = cx.getImageData(0, 0, size, size).data, px = img.data;
             for (let i = 0; i < px.length; i += 4) {
               let a = mask[i + 3];
-              if (bloomOn) a = Math.max(a, Math.min(255, (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2] - 18) * 4));
               px[i + 3] = a;
             }
             cx.putImageData(img, 0, 0);

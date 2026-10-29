@@ -2620,8 +2620,8 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
                 background: gKind === k ? "linear-gradient(135deg, #EC4899, #8B5CF6)" : "transparent" }}>{l}</button>)}
           </div>
         </div>
-        {who === "friends" && hasFriends ? <FriendsGalleryView search={search} data={fdata}/>
-          : <MyGalleryView search={search} sortF={sortF} data={mine} loading={mineLoading}/>}
+        {who === "friends" && hasFriends ? <FriendsGalleryView search={search} data={fdata} kind={gKind}/>
+          : <MyGalleryView search={search} sortF={sortF} data={mine} loading={mineLoading} kind={gKind}/>}
       </>}
   </>);
 }
@@ -2749,7 +2749,7 @@ function TimelapsesView({ search, onCount }) {
   </>);
 }
 
-function FriendsGalleryView({ search, data }) {
+function FriendsGalleryView({ search, data, kind = "photos" }) {
   const items = useMemo(() => {
     let list = (data?.items || []).map(it => ({ ...it, title: it.kind === "group" ? it.name : (it.title || it.file_name),
       photos: (it.photos || []).map(ph => ({ ...ph, url: relayed(ph.url) })) }));
@@ -2780,7 +2780,8 @@ function FriendsGalleryView({ search, data }) {
       getPhotos={it => it.photos || []}
       getTitle={it => it.title || "Sans nom"}
       getSubtitle={it => `👀 ${it.friend_name}${it.kind === "group" ? ` · 📁 ${it.prints} prints` : it.print_date ? ` · ${fmtDate(it.print_date)}` : ""}`}
-      renderCover={it => <GroupMosaic photos={it.photos} title={it.title} cover={it.kind === "group" ? it.cover_photo : null}/>}
+      stage={kind === "vue3d"}
+      renderCover={kind === "vue3d" ? null : it => <GroupMosaic photos={it.photos} title={it.title} cover={it.kind === "group" ? it.cover_photo : null}/>}
       emptyLabel="Aucune photo chez tes copains"
       compareFields={[
         ["Chez", it => it.friend_name],
@@ -2791,7 +2792,7 @@ function FriendsGalleryView({ search, data }) {
   </>);
 }
 
-function MyGalleryView({ search, sortF = "recent", data, loading }) {
+function MyGalleryView({ search, sortF = "recent", data, loading, kind = "photos" }) {
   const [selectedPrint, setSelectedPrint] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
   // la liste ne change qu'avec les donnees, la recherche ou le tri (28/10/2026 : recreee a chaque rendu, la
@@ -2832,7 +2833,8 @@ function MyGalleryView({ search, sortF = "recent", data, loading }) {
          montrer qu'une revenait a cacher le reste. Pour un print, le serveur
          trie deja ses photos couverture en tete : la case dominante est donc
          la bonne sans avoir a lui passer cover_photo. */
-      renderCover={it => (
+      stage={kind === "vue3d"}
+      renderCover={kind === "vue3d" ? null : it => (
         <GroupMosaic photos={it.photos} title={it.title}
           cover={it.kind === "group" ? it.cover_photo : null}/>
       )}

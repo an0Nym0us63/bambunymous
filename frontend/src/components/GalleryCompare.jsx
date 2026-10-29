@@ -21,7 +21,7 @@ export default function GalleryCompare({
   onDeletePhoto, onSetPrimaryPhoto, onPhotosChanged,
   items, getId, getCoverImage, getPhotos, getTitle, getSubtitle, compareFields = [],
   maxCompare = 6, emptyLabel = "Aucun élément", pageSize = 30,
-  enableCompare = true, renderCover = null, swatchMode = false, swatchInfo = false, getTone = null, preselect = null,
+  enableCompare = true, renderCover = null, swatchMode = false, swatchInfo = false, getTone = null, preselect = null, stage = false,
   selectMode: selectModeProp = false, onSelectModeChange = null,
   onItemClick = null,
 }) {
@@ -142,8 +142,10 @@ export default function GalleryCompare({
               onTouchEnd={cancelPress}
               onContextMenu={e => e.preventDefault()}
               style={{ position:"relative", borderRadius: swatchMode ? 10 : 16, overflow:"hidden", cursor:"pointer",
-                aspectRatio: swatchInfo ? undefined : "1", background:"var(--surface2)",
-                display: swatchInfo ? "flex" : undefined, flexDirection:"column",
+                aspectRatio: swatchInfo || stage ? undefined : "1",
+                // les vues 3D (30/10/2026) : le modele entier sur un fond clair, le nom dessous, rien par-dessus
+                background: stage ? "radial-gradient(90% 70% at 50% 38%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" : "var(--surface2)",
+                display: swatchInfo || stage ? "flex" : undefined, flexDirection:"column",
                 border: checked ? "2px solid #3b82f6" : "2px solid transparent",
                 boxShadow: checked ? "0 0 0 3px rgba(59,130,246,0.3), 0 10px 24px -12px #3b82f6" : swatchMode ? "none" : "0 8px 20px -14px rgba(0,0,0,.6)",
                 transform: checked ? "scale(.97)" : "none", transition:"transform .15s, box-shadow .15s" }}>
@@ -171,6 +173,21 @@ export default function GalleryCompare({
                     )}
                   </div>
                 </>
+              ) : stage ? (
+                <>
+                  <div style={{ position:"relative", aspectRatio:"1" }}>
+                    {renderCover ? renderCover(item) : img && <img src={apiThumb(img, 384)} alt={getTitle(item)} loading="lazy" decoding="async"
+                      style={{ position:"absolute", left:"9%", top:"8%", width:"82%", height:"80%", objectFit:"contain", filter:"drop-shadow(0 10px 12px rgba(0,0,0,.22))" }}/>}
+                    <div style={{ position:"absolute", left:"22%", right:"22%", bottom:"5%", height:8, borderRadius:"50%",
+                      background:"radial-gradient(closest-side, rgba(0,0,0,.18), transparent)" }}/>
+                  </div>
+                  <div style={{ padding:"7px 10px 9px", borderTop:"1px solid var(--border)", background:"var(--surface)" }}>
+                    <p title={getTitle(item)} style={{ fontSize:"clamp(11.5px, 1.15vw, 13px)", color:"var(--text)", fontWeight:800, margin:0, lineHeight:1.25,
+                      overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{getTitle(item)}</p>
+                    {getSubtitle && <p style={{ fontSize:"clamp(9.5px, 0.95vw, 11px)", color:"var(--muted)", fontWeight:700, margin:"2px 0 0",
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getSubtitle(item)}</p>}
+                  </div>
+                </>
               ) : renderCover ? renderCover(item) : img ? (
                 <img src={apiThumb(img, 384)} alt={getTitle(item)} loading="lazy" decoding="async" style={{ width:"100%", height:"100%", objectFit:"cover" }}
                   onError={e => { e.currentTarget.style.display="none"; }}/>
@@ -188,10 +205,10 @@ export default function GalleryCompare({
                   boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.22)" }}/>
               )}
               {photos.length > 1 && !swatchMode && (
-                <span style={{ position:"absolute", top:6, right:6, background:"rgba(15,23,42,0.6)", color:"white",
-                  backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)",
+                <span style={{ position:"absolute", top:6, right:6, background: stage ? "color-mix(in srgb, #0EA5E9 18%, var(--surface))" : "rgba(15,23,42,0.6)",
+                  color: stage ? "#0284c7" : "white", backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)",
                   fontSize:10, fontWeight:800, padding:"2px 7px", borderRadius:20 }}>
-                  📷 {photos.length}
+                  {stage ? "🧊" : "📷"} {photos.length}
                 </span>
               )}
               {enableCompare && selectMode && (
@@ -205,7 +222,7 @@ export default function GalleryCompare({
               )}
               {/* Un nuancier montre des couleurs : pas de voile sombre ni de texte
                   par-dessus, qui fausseraient la lecture de la teinte. */}
-              {!swatchMode && (
+              {!swatchMode && !stage && (
                 <div style={{ position:"absolute", bottom:0, left:0, right:0,
                   background:"linear-gradient(transparent, rgba(2,6,23,0.85))", padding:"26px 9px 7px" }}>
                   <p style={{ fontSize:"clamp(11px, 1.15vw, 13px)", color:"white", fontWeight:800, margin:0, textShadow:"0 1px 4px rgba(0,0,0,.5)",
