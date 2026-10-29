@@ -365,6 +365,11 @@ async def _prints_without_mw(db) -> list[Alert]:
         )
         .order_by(Print.print_date.desc())
     )).scalars().all()
+    # « Aucun, il n'est pas sur MakerWorld » (fenetre des modeles manquants) : plus a signaler
+    from . import mw_relink
+    off = mw_relink.ignored_keys()
+    if off:
+        rows = [p for p in rows if mw_relink.unit_key(p) not in off]
     return [
         Alert(
             key=f"no_mw:print:{p.id}",

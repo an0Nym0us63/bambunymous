@@ -139,7 +139,8 @@ export default function MwRelinkSheet({ onClose, onChanged, z = 950 }) {
   const toScan = (by.todo || []).length;
   const act = (path, body) => client.post(`/makerworld/relink/${path}`, body || {}).then(load).catch(e => showAlert(e.response?.data?.detail || e.message));
   const done = () => { setOpen(null); load(); onChanged?.(); };
-  const prints = units.filter(u => u.status !== "linked").reduce((n, u) => n + u.count, 0);
+  const open_ = units.filter(u => u.status !== "linked" && u.status !== "ignored");   // les ignores ne comptent plus
+  const prints = open_.reduce((n, u) => n + u.count, 0);
 
   return createPortal(
     <div data-no-pull="" onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: z, padding: narrow ? 0 : 14, background: "rgba(2,6,23,0.55)",
@@ -158,7 +159,7 @@ export default function MwRelinkSheet({ onClose, onChanged, z = 950 }) {
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: "block", fontSize: narrow ? 17 : 19, fontWeight: 900, color: "var(--text)" }}>Modèles MakerWorld manquants</span>
               {d && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>
-                {units.filter(u => u.status !== "linked").length} modèles · {prints} impression{prints > 1 ? "s" : ""} sans fiche</span>}
+                {open_.length} modèles · {prints} impression{prints > 1 ? "s" : ""} sans fiche</span>}
             </span>
             <button onClick={load} aria-label="Relire" data-tip="Relire" style={{ width: 36, height: 36, borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)",
               color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><RefreshCw size={16}/></button>

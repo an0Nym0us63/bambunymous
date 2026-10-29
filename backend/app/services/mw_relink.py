@@ -240,6 +240,12 @@ async def unlink(key: str) -> int:
     return n
 
 
+def ignored_keys() -> set:
+    """Les « modeles » marques « aucun » : leurs impressions ne sont plus signalees dans les points d'attention."""
+    _load()
+    return {k for k, s in _UNITS.items() if s.get("status") == "ignored"}
+
+
 def dismiss(key: str, on: bool = True) -> None:
     """« Aucun de ceux-la » : ce modele n'est pas sur MakerWorld (ou on ne le cherche plus). Reversible."""
     _load()

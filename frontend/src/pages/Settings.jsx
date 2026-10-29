@@ -1255,7 +1255,7 @@ function MwRelinkSection() {
   const [open, setOpen] = React.useState(false);
   const load = () => client.get("/makerworld/relink").then(r => setD(r.data)).catch(() => {});
   React.useEffect(() => { load(); }, []);
-  const us = (d?.units || []).filter(u => u.status !== "linked");
+  const us = (d?.units || []).filter(u => u.status !== "linked" && u.status !== "ignored");
   const n = k => us.filter(u => u.status === k).length;
   const sc = d?.scan || {};
   const big = (v, l, c) => <div style={{ flex:"1 1 90px", padding:"8px 10px", borderRadius:12, background:"var(--surface2)", display:"flex", flexDirection:"column", gap:1 }}>
