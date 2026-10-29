@@ -1041,7 +1041,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
           <button key={m} type="button" onClick={() => api?.setMode(m)} style={b(est.mode === m)}
             data-tip={m === "pins" ? "Assembler par paires de points : 1 avec 1, 2 avec 2, 3 avec 3 (P)" : m === "ground" ? "Poser au sol : par une face, ou par 3 points (F)" : `(${k})`}>{l}</button>)}
         <button type="button" onClick={() => api?.setBoxMode(!est.boxMode)} style={b(!!est.boxMode)}
-          data-tip="Choisir au rectangle : glisse pour entourer les pièces (Ctrl : en ajouter) ; la vue ne tourne pas tant que c'est allumé">▭</button>
+          data-tip="Choisir au rectangle : glisse pour entourer les pièces (Ctrl : en ajouter) ; la vue ne tourne pas tant que c'est allumé">▭ Rectangle</button>
         {sep}
         <BarMenu b={b} label="⚙" tip="Réglages : aimantation, cran des rotations, choix multiple, collage assisté" items={[
           { label: "🧷 Aimanter", on: !!est.magnet, onClick: () => api?.setMagnet(!est.magnet), keep: true, tip: "Pas de 1 mm et 15°, et une pièce lâchée près d'une autre ou du sol vient s'y coller" },
