@@ -62,10 +62,6 @@ function parseBin(buf) {
 // un apercu MakerWorld (GLB) ou un plateau de l'appli : l'adresse porte une version (« plate_1.glb?v=… »)
 const isGlb = u => /\.glb(\?|$)/.test(String(u || ""));
 const hex6 = c => String(c || "").replace(/^#/, "").slice(0, 6).toUpperCase();
-// la transparence choisie pour chaque couleur de filament d'un HueForge (30/10/2026), gardee sur cet appareil
-const TD_KEY = "bn-hue-td";
-const tdSaved = () => { try { return JSON.parse(localStorage.getItem(TD_KEY) || "{}") || {}; } catch { return {}; } };
-const tdSave = o => { try { const m = { ...tdSaved(), ...o }; Object.keys(m).forEach(k => { if (m[k] == null) delete m[k]; }); localStorage.setItem(TD_KEY, JSON.stringify(m)); } catch { /* rien */ } };
 
 // le rendu d'une finition de filament (28/10/2026) : translucide, satine, metallique, mat, lumineux
 // reflets (silk, metal) : une piece eclairee servant d'environnement, sur ces seuls materiaux (les autres gardent
@@ -133,7 +129,8 @@ function copyPiece(THREE, src, n) {
 }
 
 function Viewer({ url, glb, onState, palette = null, finishes = null, multi = null, glow = false, bed = null, litho = false,
-                  pieces = null, edit = null, editApi = null, pad = false, piecePalettes = null, editing = false, hue = null, bare = false }) {
+                  pieces = null, edit = null, editApi = null, pad = false, piecePalettes = null, editing = false, hue = null, bare = false,
+                  tdMap = null, onTd = null }) {
   const [pans, setPans] = useState(false);
   const box = useRef(null);
   const [dark, setDark] = useState(false);
@@ -143,6 +140,17 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
   useEffect(() => { if (lit) egg("ombres_chinoises"); }, [lit]);
   // la transparence des couches d'un HueForge (30/10/2026) : une valeur par filament, reglable, gardee par couleur
   const [hueL, setHueL] = useState(null), [tdOpen, setTdOpen] = useState(false);
+  // les valeurs gardees sur le modele arrivent parfois apres la vue : elles s'y appliquent alors
+  useEffect(() => {
+    if (!tdMap || !hueL) return;
+    let changed = false;
+    const next = hueL.map((l, i) => {
+      const v = Number(tdMap[hex6(l.hex)]);
+      if (v > 0 && Math.abs(v - l.td) > 1e-6) { api.current?.setTd(i, v); changed = true; return { ...l, td: v }; }
+      return l;
+    });
+    if (changed) setHueL(next);
+  }, [tdMap, !!hueL]); // eslint-disable-line react-hooks/exhaustive-deps
   const api = useRef(null);
   useEffect(() => {
     let dead = false, cleanup = () => {};
@@ -261,8 +269,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               const td = c => 0.3 + 0.7 * (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b);
               const L = hue.slice(0, 8).map(([z, h]) => { const hx = String(h).toUpperCase(), c = mapC(hx);
                 return { z: Number(z), c, hex: `#${c.getHexString().toUpperCase()}`, def: td(c) }; });
-              const saved = tdSaved();
-              L.forEach(l => { l.td = Number(saved[l.hex]) > 0 ? Number(saved[l.hex]) : l.def; });
+              // la valeur gardee sur le modele (30/10/2026), sinon l'estimation
+              L.forEach(l => { const v = Number(tdMap?.[hex6(l.hex)]); l.td = v > 0 ? v : l.def; });
               const pad = n => [...Array(8)].map((_, i) => n(i));
               hueU = { hBase: { value: mapC(hexOf(base)) }, hN: { value: L.length },
                 hZ: { value: pad(i => (L[i] ? L[i].z : 1e9)) }, hC: { value: pad(i => (L[i] ? L[i].c : new THREE.Color())) },
@@ -792,7 +800,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text)", flex: 1 }}>🎚 Transparence des couches</span>
         <button type="button" onClick={() => { hueL.forEach((l, i) => api.current?.setTd(i, l.def)); setHueL(hueL.map(l => ({ ...l, td: l.def })));
-          tdSave(Object.fromEntries(hueL.map(l => [l.hex, null]))); }}
+          onTd?.(Object.fromEntries(hueL.map(l => [hex6(l.hex), null]))); }}
           data-tip="Revenir aux valeurs estimées d'après la clarté de chaque filament"
           style={{ border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)", borderRadius: 8, fontSize: 11, fontWeight: 800, padding: "3px 8px", cursor: "pointer" }}>Par défaut</button>
       </div>
@@ -801,7 +809,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         <span style={{ width: 14, height: 14, borderRadius: "50%", background: l.hex, border: "1px solid var(--border)", flexShrink: 0 }}/>
         <input type="range" min="0.1" max="3" step="0.05" value={l.td} style={{ flex: 1 }}
           onChange={e => { const v = Number(e.target.value); api.current?.setTd(i, v); setHueL(hueL.map((x, k) => (k === i ? { ...x, td: v } : x)));
-            tdSave({ [l.hex]: v }); egg("couches_fines"); }}/>
+            onTd?.({ [hex6(l.hex)]: v }); egg("couches_fines"); }}/>
         <span style={{ width: 52, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{l.td.toFixed(2).replace(".", ",")} mm</span>
       </label>)}
     </div>}
@@ -1351,6 +1359,22 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         else setErr(e?.response?.data?.detail || "Pas de modèle 3D pour celui-ci"); });
     return () => { alive = false; };
   }, [base, profileId, printId, wait, want3mf, redo, tick, again]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // la transparence des filaments d'un HueForge, gardee sur le modele (30/10/2026) : lue a l'ouverture, enregistree
+  // (un instant apres le dernier reglage) ; chez un copain, elle se lit seulement
+  const [td, setTd] = useState(null);
+  const tdTimer = useRef(null);
+  useEffect(() => {
+    let alive = true;
+    get(`${base}/td`).then(r => alive && setTd(r.data?.td || {})).catch(() => alive && setTd({}));
+    return () => { alive = false; clearTimeout(tdTimer.current); };
+  }, [base]); // eslint-disable-line react-hooks/exhaustive-deps
+  const saveTd = patch => setTd(m => {
+    const n = { ...(m || {}), ...patch };
+    Object.keys(n).forEach(k => { if (n[k] == null) delete n[k]; });
+    clearTimeout(tdTimer.current);
+    tdTimer.current = setTimeout(() => { client.put(`/makerworld/3d/${encodeURIComponent(designId)}/td`, { td: n }).catch(() => {}); }, 600);
+    return n;
+  });
   // des plateaux encore en preparation (29/10/2026) : la vue s'est ouverte sur les premiers, elle redemande la suite
   useEffect(() => {
     if (!meta?.pending) return undefined;
@@ -1539,7 +1563,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             pieces={p.assembled ? p.pieces : null} edit={p.assembled && !(origView && !editing) ? edit : null} editApi={editApi} pad={full || editing} editing={editing}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
-            hue={p.litho && zc.length ? zc : null} bare={editing && !desktop}
+            hue={p.litho && zc.length ? zc : null} bare={editing && !desktop} tdMap={td} onTd={fr ? null : saveTd}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}
           {editing && <EditBar est={est} api={editApi.current?.editor} onSave={saveEdit} onReset={resetEdit} onClose={stopEdit} saving={saving} onVersions={openVersions}
             compact={!desktop}/>}

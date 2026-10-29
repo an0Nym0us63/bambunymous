@@ -1420,6 +1420,48 @@ async def mw_model_3d_colors(design_id: str, profile: str = "", print_id: int = 
             "scope": scope if _SCOPE.fullmatch(scope or "") else None, "finishes": T.origin_finishes(src)}
 
 
+@router.get("/3d/{design_id}/td")
+async def mw_model_3d_td(design_id: str, _: str = Depends(get_current_user)):
+    """La transparence reglee pour chaque filament d'un HueForge (30/10/2026), gardee sur le modele :
+    {td: {couleur RRGGBB : epaisseur en mm a laquelle il couvre presque tout}}."""
+    import json as _json
+    from ....db.session import AsyncSessionLocal
+    from ....services.settings_service import get_setting
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        raise HTTPException(404, "Modèle inconnu")
+    async with AsyncSessionLocal() as db:
+        try:
+            d = _json.loads(await get_setting(db, f"MW_TD:{did}", "") or "{}")
+        except (TypeError, ValueError):
+            d = {}
+    return {"td": d if isinstance(d, dict) else {}}
+
+
+@router.put("/3d/{design_id}/td")
+async def mw_model_3d_td_set(design_id: str, body: dict = Body(...), _=Depends(require_own_account)):
+    """Garder la transparence de chaque filament de ce modele : {td: {RRGGBB : mm}} (la liste entiere ; vide : les
+    valeurs estimees reviennent)."""
+    import json as _json
+    from ....db.session import AsyncSessionLocal
+    from ....services.settings_service import set_setting
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        raise HTTPException(404, "Modèle inconnu")
+    out = {}
+    for k, v in (body.get("td") or {}).items():
+        h = str(k).lstrip("#")[:6].upper()
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if _re_scope.fullmatch(r"[0-9A-F]{6}", h) and 0.05 <= f <= 5:
+            out[h] = round(f, 3)
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, f"MW_TD:{did}", _json.dumps(out))
+    return {"td": out}
+
+
 @router.post("/3d/colors/set")
 async def mw_model_3d_colors_set(body: dict = Body(...), _=Depends(require_own_account)):
     """Choisir a la main ce qui remplace une couleur du createur : {scope, origin, print, slot} (cette bobine),
