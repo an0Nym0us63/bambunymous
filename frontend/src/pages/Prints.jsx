@@ -1023,6 +1023,10 @@ const whenFr = d => {
   const full = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: d.getFullYear() !== n0.getFullYear() ? "2-digit" : undefined });
   return [day.charAt(0).toUpperCase() + day.slice(1), `${t} · ${full}`];
 };
+// une version dans l'adresse d'une image : « & » si elle a deja des parametres (30/10/2026 : chez un copain, l'adresse
+// porte deja la cle d'acces ; « ?v= » la collait a la cle, refusee, et la vignette 3D d'un groupe restait vide)
+const withV = (url, v) => `${url}${url.includes("?") ? "&" : "?"}v=${v}`;
+
 // les pastilles posees sur les vignettes (30/10/2026) : petites, pastel, le texte a la couleur du sens (au lieu d'aplats
 // vifs qui mangeaient l'image)
 const chipS = (c, extra = {}) => ({ position: "absolute", fontSize: 9.5, fontWeight: 800, lineHeight: "16px", padding: "0 7px", borderRadius: 8,
@@ -1735,7 +1739,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   // l'en-tete : une mosaique des plateaux sur leur image floutee
   const cover = prints.find(x => x.id === coverPrintId) || prints[0];
   // la vignette 3D du groupe, choisie a la place de la mosaique (29/10/2026)
-  const v3u = thumb3d ? `${apiUrl(`/prints/groups/${groupId}/photo/${prints[0]?.group_vue3d_name || "Vue3D.png"}`)}?v=${prints[0]?.group_vue3d_v || 0}` : null;
+  const v3u = thumb3d ? withV(apiUrl(`/prints/groups/${groupId}/photo/${prints[0]?.group_vue3d_name || "Vue3D.png"}`), prints[0]?.group_vue3d_v || 0) : null;
   const mosaic = v3u ? [{ id: "vue3d", _src: w => apiThumb(v3u, w) }] : [cover, ...prints.filter(x => x !== cover)].filter(Boolean).slice(0, 4);
   const srcOf = (x, w) => (x._src ? x._src(w) : thumbUrl(x, w));
   const hero = (
@@ -1989,7 +1993,7 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
     // des vignettes (pas les originaux), versionnees ; « small » pour la pile de 46 px des rangees
     // la vignette 3D du groupe, choisie a la place de la mosaique (29/10/2026)
     if (prints[0]?.group_thumb_3d) {
-      const u = `${apiUrl(`/prints/groups/${groupId}/photo/${prints[0].group_vue3d_name || "Vue3D.png"}`)}?v=${prints[0].group_vue3d_v || 0}`;
+      const u = withV(apiUrl(`/prints/groups/${groupId}/photo/${prints[0].group_vue3d_name || "Vue3D.png"}`), prints[0].group_vue3d_v || 0);
       return [{ url: apiThumb(u, 384), small: apiThumb(u, 128), tint: printTint(prints[0]) }];
     }
     return ordered.map(id => ({ url: thumbUrl(byId[id], 384), small: thumbUrl(byId[id], 128), tint: printTint(byId[id]) }));

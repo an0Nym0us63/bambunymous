@@ -67,7 +67,7 @@ function Picker({ kind, id, shot, onDone, close }) {
         </div>)}
       </div>}
       {d?.cover && sel.length > 1 && <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12.5, fontWeight: 700 }}>
-        <img src={apiUrl(`${kind === "group" ? `/prints/groups/${id}/photo` : `/prints/${id}/file`}/${d.cover.name}`) + `?v=${d.cover.v}`} alt="" style={{ ...img(true), width: 72, height: 72 }}/>
+        <img src={(u => `${u}${u.includes("?") ? "&" : "?"}v=${d.cover.v}`)(apiUrl(`${kind === "group" ? `/prints/groups/${id}/photo` : `/prints/${id}/file`}/${d.cover.name}`))} alt="" style={{ ...img(true), width: 72, height: 72 }}/>
         <span>La vignette : une mosaïque des {sel.length} vues choisies</span>
       </div>}
       {d && !d.slots.length && !shot && <span style={{ fontSize: 12.5 }}>Aucune vue : prends-en une avec 📸 dans la vue 3D.</span>}
