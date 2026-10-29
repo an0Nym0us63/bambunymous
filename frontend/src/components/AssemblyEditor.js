@@ -96,7 +96,18 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   tc.addEventListener("dragging-changed", e => {
     controls.enabled = !e.value;
     if (e.value) { handle.updateMatrix(); dragStart = { h: handle.matrix.clone(), q: handle.quaternion.clone(), m: withKids([...sel]).map(g => [g, g.matrix.clone()]) }; }
-    else { dragStart = null; liveAngle = null; snapAfterDrag(); push(); }
+    else {
+      const j = jointOf([...sel]);
+      if (j && dragStart) {
+        // le point de contact suit la piece (dans le repere du support)
+        handle.updateMatrix();
+        const d = handle.matrix.clone().multiply(dragStart.h.clone().invert()), { P } = contact(j);
+        j.b.updateMatrix(); j.p.copy(P.applyMatrix4(d).applyMatrix4(j.b.matrix.clone().invert()));
+        showContact();
+        if (d.elements[12] || d.elements[13] || d.elements[14]) egg("glissade");
+      } else snapAfterDrag();
+      dragStart = null; liveAngle = null; push();
+    }
   });
   // la rotation a la poignee, demultipliee (29/10/2026) : three.js fait tourner de 20 radians par unite de glisser divisee
   // par la distance de la camera ; en millimetres, un centimetre de souris faisait un demi-tour. L'angle est ramene a
@@ -110,7 +121,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       // quaternion se replie et l'axe s'inversait, la piece sautait d'un sens a l'autre (30/10/2026)
       let a = THREE.MathUtils.radToDeg((tc.rotationAngle || 0) * ROT_GAIN);
       if (rotStep && !alt) a = Math.round(a / rotStep) * rotStep;
-      handle.quaternion.setFromAxisAngle(tc.rotationAxis.clone().normalize(), THREE.MathUtils.degToRad(a)).multiply(dragStart.q).normalize();
+      const rq = new THREE.Quaternion().setFromAxisAngle(tc.rotationAxis.clone().normalize(), THREE.MathUtils.degToRad(a));
+      if (tc.space === "local") handle.quaternion.copy(dragStart.q).multiply(rq).normalize();       // l'axe de la poignee (piece collee)
+      else handle.quaternion.copy(rq).multiply(dragStart.q).normalize();
       liveAngle = Math.round(a * 10) / 10;
       onChange?.(state());
     }
@@ -134,7 +147,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const selName = () => sel.size === 0 ? null : sel.size === 1 ? [...sel][0].userData.name : `${sel.size} pièces${groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))) ? " (groupe)" : ""}`;
   const center = () => { if (!sel.size) return null; const c = boxOfAll([...sel]).getCenter(new THREE.Vector3()); return [c.x, c.y, c.z].map(v => Math.round(v * 10) / 10); };
   const state = () => ({ mode, magnet, assist, rotStep, center: center(), selected: selName(), count: sel.size, step: first ? 2 : 1, canUndo: undo.length > 0, canRedo: redo.length > 0,
-    pivot: !!pivot, pairs: pairs.length, boxMode, ground3, groundPts: gPts.length, vertical, pinsA: pins.a.length, pinsB: pins.b.length,
+    pivot: !!pivot, pairs: pairs.length, twinPos: twinAlt && twinAlt.at === changes && twinAlt.fits.length > 1 ? `${twinAlt.i + 1}/${twinAlt.fits.length}` : null, boxMode, ground3, groundPts: gPts.length, vertical, pinsA: pins.a.length, pinsB: pins.b.length,
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
@@ -284,7 +297,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       if (rg?.relaxed && rg.area > 20) {
         const nr = rg.n.clone().applyMatrix3(N).normalize();
         if (nr.dot(n) < 0) nr.negate();
-        return { group: g, kind: "face", p, n: nr, size, region };
+        return { group: g, kind: "face", p, n: nr, size, region, mesh: hit.object, tri: hit.faceIndex };
       }
     }
     // l'arete la plus proche du clic, si le clic la frole et si c'est une vraie arete (angle marque avec sa voisine)
@@ -300,11 +313,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       if (u >= 0) {
         const n2 = new THREE.Vector3(); triNormal(pos, ix, u, n2); n2.applyMatrix3(N).normalize();
         if (n.angleTo(n2) > Math.PI / 6) {
-          return { group: g, kind: "edge", p: best.q, a: best.a, b: best.b, e: new THREE.Vector3().subVectors(best.b, best.a).normalize(), n, size };
+          return { group: g, kind: "edge", p: best.q, a: best.a, b: best.b, e: new THREE.Vector3().subVectors(best.b, best.a).normalize(), n, size, mesh: hit.object, tri: hit.faceIndex };
         }
       }
     }
-    return { group: g, kind: "face", p, n, size, region };
+    return { group: g, kind: "face", p, n, size, region, mesh: hit.object, tri: hit.faceIndex };
   };
 
   // applique M (repere du support) a des pieces
@@ -331,10 +344,37 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const drop = list => { apply(list, new THREE.Matrix4().makeTranslation(0, 0, floorZ() - minZ(list))); };
 
   // la poignee au centre de la selection
+  // une piece collee (30/10/2026) : la poignee se met dans le repere du contact, sans l'axe qui la decollerait : ses deux
+  // fleches font glisser la piece dans le plan de la face (son anneau la tourne autour de la normale) ; collee par une
+  // arete, une seule fleche, le long de l'arete, et un anneau autour d'elle
+  const contactFrame = j => {
+    const { P, N, E } = contact(j);
+    let x, z;
+    if (E) { x = E.clone().normalize(); z = N.clone().addScaledVector(x, -N.dot(x)); if (z.lengthSq() < 1e-9) z = new THREE.Vector3(0, 0, 1).cross(x); z.normalize(); }
+    else {
+      z = N.clone().normalize();
+      const ref = Math.abs(z.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+      x = ref.addScaledVector(z, -ref.dot(z)).normalize();
+    }
+    const y = z.clone().cross(x);
+    return { P, x, y, z, edge: !!E };
+  };
   const placeHandle = () => {
-    if (!sel.size || !(mode === "move" || mode === "rotate") || jointOf([...sel])) { tc.detach(); return; }
-    const c = boxOfAll([...sel]).getCenter(new THREE.Vector3());
-    handle.position.copy(c); handle.quaternion.identity(); handle.scale.set(1, 1, 1); handle.updateMatrix();
+    if (!sel.size || !(mode === "move" || mode === "rotate")) { tc.detach(); return; }
+    const c = boxOfAll([...sel]).getCenter(new THREE.Vector3()), j = jointOf([...sel]);
+    handle.scale.set(1, 1, 1);
+    if (j) {
+      const f = contactFrame(j);
+      handle.position.copy(c).addScaledVector(f.z, -c.clone().sub(f.P).dot(f.z));     // sur le plan du contact
+      handle.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(f.x, f.y, f.z));
+      tc.setSpace("local");
+      if (mode === "move") { tc.showX = true; tc.showY = !f.edge; tc.showZ = false; }
+      else { tc.showX = f.edge; tc.showY = false; tc.showZ = !f.edge; }
+    } else {
+      handle.position.copy(c); handle.quaternion.identity();
+      tc.setSpace("world"); tc.showX = tc.showY = tc.showZ = true;
+    }
+    handle.updateMatrix();
     tc.attach(handle); tc.setMode(mode === "move" ? "translate" : "rotate");
   };
   const shade = () => {
@@ -459,6 +499,90 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     apply(withKids(unit), horn(pts, dirs));
   };
 
+  // les faces jumelles (30/10/2026, assemblyTwins) : en Coller assiste, la face touchee sur la piece a coller fait chercher
+  // sur les autres pieces les faces de meme contour (la coupe d'en face), surlignees en vert avec leur ressemblance ; le
+  // second toucher, sur l'une d'elles ou seulement sur sa piece, pose la piece exactement dessus. Quand plusieurs angles
+  // vont aussi bien (une face carree, ronde), « ↻ Autre position » passe au suivant
+  let twinsLib = null, twinSearch = null, twinFor = null, twinAlt = null;
+  const twinMarks = new THREE.Group(); twinMarks.renderOrder = 998; holder.add(twinMarks);
+  const twinMat = new THREE.MeshBasicMaterial({ color: 0x22c55e, transparent: true, opacity: 0.5, depthTest: false, side: THREE.DoubleSide });
+  const clearTwins = () => {
+    twinMarks.children.slice().forEach(m => { m.geometry?.dispose(); if (m.material !== twinMat) { m.material.map?.dispose(); m.material.dispose(); } twinMarks.remove(m); });
+    twinSearch = null; twinFor = null;
+  };
+  const meshMat = (g, mesh) => { g.updateMatrix(); mesh.updateMatrix(); return g.matrix.clone().multiply(mesh.matrix); };
+  const drawTwins = list => {
+    const L = Math.max(10, boxOfAll(all.filter(g => g.visible)).getSize(new THREE.Vector3()).length());
+    for (const t of list) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(twinsLib.trianglesOf(t.mesh.geometry, t.reg, meshMat(t.g, t.mesh)), 3));
+      const m = new THREE.Mesh(geo, twinMat); m.renderOrder = 998;
+      m.position.copy(t.face.n).multiplyScalar(0.05);
+      twinMarks.add(m);
+      const s = label(String(Math.round(t.fits[0].score * 100)), "#16a34a");
+      s.position.copy(t.face.c).addScaledVector(t.face.n, L * 0.02); s.scale.setScalar(L * 0.03); twinMarks.add(s);
+    }
+    render();
+  };
+  const startTwins = A => {
+    clearTwins();
+    if (!assist || A.kind !== "face" || !A.mesh?.geometry?.index) return;
+    const unit = sel.has(A.group) ? [...sel] : unitOf(A.group), skip = new Set(withKids(unit));
+    const others = all.filter(g => g.visible && !skip.has(g));
+    if (!others.length) return;
+    fitMsg = "Recherche des faces jumelles…"; onChange?.(state());
+    const run = (async () => {
+      await new Promise(r => setTimeout(r, 0));                // la consigne s'affiche d'abord
+      if (!twinsLib) { const { createTwins } = await import("./assemblyTwins"); twinsLib = createTwins(THREE, neighbours); }
+      return twinsLib.search({ g: A.group, mesh: A.mesh, tri: A.tri }, others, meshMat);
+    })().catch(e => { console.error("[3D] faces jumelles", e); return null; });
+    twinSearch = run; twinFor = A;
+    run.then(r => {
+      if (twinFor !== A) return;                               // deja colle, ou une autre face touchee
+      // seules les nettes sont surlignees (une petite face ronde ressemble a beaucoup d'autres) ; les autres servent
+      // quand on touche leur piece
+      const best = r?.twins[0]?.fits[0].score || 0, shown = (r?.twins || []).filter(t => t.fits[0].score >= Math.max(0.88, best - 0.05));
+      const n = shown.length;
+      if (n) drawTwins(shown);
+      fitMsg = n ? `${n === 1 ? "Une face jumelle" : `${n} faces jumelles`} en vert (% de ressemblance) : touche ${n === 1 ? "sa pièce" : "celle qui va avec, ou juste sa pièce"}`
+        : r ? "Pas de face jumelle : touche l'endroit où la coller" : "Face courbe : touche l'endroit où la coller";
+      onChange?.(state());
+    });
+  };
+  // poser la piece sur sa jumelle, a la position choisie parmi les meilleures
+  const placeTwin = () => {
+    const s = twinAlt, f = s.fits[s.i];
+    for (const [g, m0] of s.start) { f.M.clone().multiply(m0).decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); }
+    const { c, n } = s.face;
+    pivot = { p: c.clone(), axis: n.clone(), unit: s.start.map(([g]) => g) };
+    s.g.updateMatrix();
+    const inv = s.g.matrix.clone().invert();
+    joints = joints.filter(j => !s.unit.includes(j.a));
+    joints.push({ a: s.a, b: s.g, kind: "face", p: c.clone().applyMatrix4(inv), n: n.clone().transformDirection(inv), e: null });
+    pairs = [pairOf({ group: s.a, kind: "face", n: n.clone().negate() }, { group: s.g, kind: "face", n }, c, c)];
+    push(); s.at = changes; setSel(s.unit);
+    const k = s.fits.length;
+    fitMsg = `Collée sur sa face jumelle · ${Math.round(f.score * 100)} % de recouvrement${k > 1 ? ` · position ${s.i + 1}/${k} : ↻ Autre position` : ""}`;
+    onChange?.(state()); render();
+  };
+  const mateTwin = (A, t) => {
+    const unit = sel.has(A.group) ? [...sel] : unitOf(A.group);
+    if (unit.includes(t.g) || withKids(unit).includes(t.g)) return false;
+    const best = t.fits[0].score;
+    twinAlt = { a: A.group, unit, g: t.g, face: t.face, i: 0, fits: t.fits.filter(f => f.score >= best - 0.08),
+      start: withKids(unit).map(g => { g.updateMatrix(); return [g, g.matrix.clone()]; }) };
+    placeTwin();
+    egg("faces_jumelles");
+    return unit;
+  };
+  // la jumelle visee par le second toucher : celle touchee, sinon la plus proche du toucher sur la piece touchee (ou son groupe)
+  const twinAt = (r, pick) => {
+    const on = r?.twins.filter(t => unitOf(pick.group).includes(t.g)) || [];
+    if (!on.length) return null;
+    const hit = pick.mesh && on.find(t => t.mesh === pick.mesh && twinsLib.regionOfTri(pick.mesh.geometry, pick.tri) === t.reg);
+    return hit || on.reduce((m, t) => (!m || t.face.c.distanceTo(pick.p) < m.face.c.distanceTo(pick.p) ? t : m), null);
+  };
+
   // le mode « Points » (30/10/2026) : des paires numerotees, 1 avec 1, 2 avec 2… Un clic sur la piece a deplacer (son
   // point n), puis un clic sur la cible (son point n), et ainsi de suite ; chaque point porte son numero (orange sur la
   // piece, vert sur la cible). « Assembler » fait coincider toutes les paires (les faces cliquees se regardent, a peine
@@ -535,6 +659,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const pick = pickAt(ev);
     // un clic sur la poignee ; ses zones invisibles debordent : dans le vide, le clic desselectionne quand meme (30/10/2026)
     if (tc.axis && pick) return;
+    tap(pick, ev);
+  };
+  // ce que fait un toucher, selon le mode (une prise : la piece, sa face ou son arete ; ou rien)
+  const tap = (pick, ev) => {
     if (mode === "move" || mode === "rotate") {
       if (!pick) { if (!ev.ctrlKey && !ev.shiftKey && !multi) setSel([]); return; }
       const unit = ev.altKey ? [pick.group] : unitOf(pick.group);
@@ -545,7 +673,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       return;
     }
     // un clic dans le vide desselectionne, quel que soit le mode (30/10/2026)
-    if (!pick) { if (!ev.ctrlKey && !ev.shiftKey && !multi) { first = null; clearMarks(); setSel([]); render(); onChange?.(state()); } return; }
+    if (!pick) { if (!ev.ctrlKey && !ev.shiftKey && !multi) { first = null; clearMarks(); clearTwins(); setSel([]); render(); onChange?.(state()); } return; }
     if (mode === "pins") {
       const toA = pins.a.length === pins.b.length;       // le prochain point : sur la piece a deplacer, ou sur la cible
       if (toA) {
@@ -621,9 +749,26 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       drop(unit); pivot = null; clearMarks(); showContact(); push(); render(); return;
     }
     if (mode === "mate") {
-      if (!first) { first = pick; clearMarks(); mark(pick); onChange?.(state()); return; }
+      if (!first) { first = pick; clearMarks(); mark(pick); onChange?.(state()); startTwins(pick); return; }
       const A = first;
       first = null; clearMarks();
+      const search = twinFor === A ? twinSearch : null;
+      twinFor = null;
+      if (search && !ev.shiftKey && !multi) {
+        // les jumelles (la recherche finit si elle tourne encore) ; sans jumelle sur la piece touchee : le collage d'avant
+        fitMsg = "Recherche des faces jumelles…"; onChange?.(state());
+        search.then(r => {
+          clearTwins(); fitMsg = null;
+          const t = twinAt(r, pick);
+          if (!(t && mateTwin(A, t))) {
+            const unit = mate(A, pick);
+            if (unit) { pairs = [pairOf(A, pick, pivot ? pivot.p : pick.p, pivot ? pivot.p : pick.p)]; push(); setSel(unit); }
+          }
+          render(); onChange?.(state());
+        });
+        return;
+      }
+      clearTwins();
       // une paire de plus pour la meme piece et le meme support (Maj, ou « Multi ») : toutes les paires a la fois
       const more = (ev.shiftKey || multi) && pairs.length && unitOf(pairs[0].ag).includes(A.group) && pick.group === pairs[0].bg;
       if (more) {
@@ -858,7 +1003,13 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     else if (ev.key === "Escape") {
       // Echap desselectionne, sans rien fermer d'autre (30/10/2026 : la fenetre de la fiche se fermait avec)
       ev.preventDefault(); ev.stopImmediatePropagation();
-      first = null; clearMarks(); setSel([]); render(); onChange?.(state());
+      first = null; clearMarks(); clearTwins(); setSel([]); render(); onChange?.(state());
+    }
+    else if (sel.size && ev.key.startsWith("Arrow") && jointOf([...sel])) {
+      // collee : les fleches la font glisser sur le contact, d'apres l'ecran
+      ev.preventDefault();
+      const k = ev.key;
+      api.nudge(k === "ArrowRight" ? 1 : k === "ArrowLeft" ? -1 : 0, k === "ArrowUp" ? 1 : k === "ArrowDown" ? -1 : 0, 0, ev.shiftKey ? 10 : 1);
     }
     else if (sel.size && ev.key.startsWith("Arrow")) {
       // les fleches : 1 mm (10 avec Maj) ; haut/bas avec Ctrl : monter/descendre
@@ -876,7 +1027,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
 
   const api = {
     setGround3: on => { ground3 = on; gPts = []; gUnit = []; drawGround(); onChange?.(state()); },
-    setMode: m => { if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
+    setMode: m => { if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
     setRotStep: d => { rotStep = d; applySnap(); onChange?.(state()); },
     setMulti: on => { multi = on; onChange?.(state()); },
@@ -884,11 +1035,28 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     setVertical: on => { vertical = on; onChange?.(state()); },
     // un pas de cote, en avant, en hauteur, d'apres l'ecran : droite / loin / haut (r, f, u : -1, 0 ou 1), de s mm ;
     // suivant l'axe du plateau le plus proche de la direction vue (un pas net, en X ou en Y)
+    // collee (30/10/2026) : dans le plan du contact seulement, suivant l'axe de la face le plus proche de la droite de
+    // l'ecran (◀ ▶) et du haut de l'ecran (▲ ▼) ; le point de contact suit
     nudge: (r, f, u, s = 1) => {
       if (!sel.size) return;
       holder.updateMatrixWorld(true);
       const inv = new THREE.Matrix3().setFromMatrix4(holder.matrixWorld).invert();
       const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).applyMatrix3(inv);
+      const j = jointOf([...sel]);
+      if (j) {
+        const fr = contactFrame(j), up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).applyMatrix3(inv);
+        const signed = (ax, v) => ax.clone().multiplyScalar(Math.sign(ax.dot(v)) || 1);
+        let ar, af;
+        if (fr.edge) { ar = signed(fr.x, right); af = signed(fr.x, up); }
+        else if (Math.abs(fr.x.dot(right)) >= Math.abs(fr.y.dot(right))) { ar = signed(fr.x, right); af = signed(fr.y, up); }
+        else { ar = signed(fr.y, right); af = signed(fr.x, up); }
+        const t = ar.multiplyScalar(r * s).addScaledVector(af, f * s);
+        if (t.lengthSq() < 1e-12) return;
+        apply(withKids([...sel]), new THREE.Matrix4().makeTranslation(t.x, t.y, t.z));
+        j.b.updateMatrix(); j.p.add(t.clone().applyMatrix3(new THREE.Matrix3().setFromMatrix4(j.b.matrix).invert()));
+        showContact(); placeHandle(); push(); render();
+        return;
+      }
       const fwd = camera.getWorldDirection(new THREE.Vector3()).applyMatrix3(inv);
       const axis = v => (Math.abs(v.x) >= Math.abs(v.y) ? new THREE.Vector3(Math.sign(v.x) || 1, 0, 0) : new THREE.Vector3(0, Math.sign(v.y) || 1, 0));
       const t = new THREE.Vector3().addScaledVector(axis(right), r * s).addScaledVector(axis(fwd), f * s);
@@ -897,6 +1065,12 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     },
     setTurnGlued: on => { turnGlued = on; onChange?.(state()); },
     pinsApply,
+    // la position suivante sur la meme face jumelle (tant que rien d'autre n'a bouge depuis)
+    twinNext: () => {
+      if (!twinAlt || twinAlt.at !== changes || twinAlt.fits.length < 2) return;
+      twinAlt.i = (twinAlt.i + 1) % twinAlt.fits.length;
+      placeTwin();
+    },
     pinsUndo: () => { if (pins.a.length > pins.b.length) pins.a.pop(); else pins.b.pop(); if (!pins.a.length) pins.A = null; if (!pins.b.length) pins.B = null; drawPins(); onChange?.(state()); },
     pinsClear: () => { pinsClear(); onChange?.(state()); },
     setGuard: async on => { guard = on; if (on) await getCollider(); onChange?.(state()); },
@@ -1261,6 +1435,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       try { helper.traverse(o => { o.geometry?.dispose?.(); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m?.dispose?.()); }); } catch { /* rien */ }
       scene.remove(helper); holder.remove(handle);
       clearMarks(); holder.remove(marks); markMat.dispose(); lineMat.dispose();
+      clearTwins(); holder.remove(twinMarks); twinMat.dispose();
       sel.clear(); shade(); all.forEach(g => { g.visible = true; });
       controls.enabled = true; render();
     },
@@ -1270,6 +1445,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   if (import.meta.env.DEV) api.__dev = {
     pick: (o, d) => { holder.updateMatrixWorld(true); ray.set(o.clone().applyMatrix4(holder.matrixWorld), d.clone().transformDirection(holder.matrixWorld).normalize()); return pickRay(); },
     mate: (A, B) => { const u = mate(A, B); if (u) { push(); setSel(u); } return u; },
+    tap: (pick, ev = {}) => tap(pick, ev),
+    twins: () => twinSearch,
   };
   return api;
 }

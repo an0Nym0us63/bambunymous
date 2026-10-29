@@ -861,7 +861,8 @@ const EDIT_TIPS = {
   ground: "Clique la face (ou l'arête) qui doit être posée au sol",
   mate1: "Clique la face ou l'arête de la pièce à déplacer (son groupe suit)",
   mate2: "Clique la face ou l'arête contre laquelle la coller",
-  mate1a: "Assisté : clique une face de la pièce à déplacer, elle sera centrée et alignée sur l'autre",
+  mate1a: "Assisté : clique la face de la pièce à déplacer qui doit se coller ; ses faces jumelles (même contour) s'allument en vert sur les autres pièces",
+  mate2a: "Clique la face jumelle en vert (ou juste sa pièce) : la pièce s'y pose exactement ; ailleurs, elle vient au point cliqué",
 };
 // le mode « Points » : ce qu'il faut cliquer ensuite
 const pinsTip = est => {
@@ -951,6 +952,7 @@ const EDIT_HELP = [
   ["Au doigt (téléphone, tablette)", [
     ["Un doigt glissé", "tourner autour du modèle ; deux doigts : zoomer (pincer) et déplacer la vue"],
     ["Toucher une pièce", "la choisir ; ➕ Multi (en bas) : chaque toucher en ajoute ou en retire une"],
+    ["Pièce collée", "◀ ▶ ▲ ▼ la font glisser sur le contact, sans la décoller (d'après l'écran) ; ses flèches aussi"],
     ["Glisser une pièce choisie", "en mode Déplacer : elle suit le doigt, à plat sur le plateau (ou tire une des flèches rouge, verte, bleue : dans cet axe) ; ⇕ Hauteur : elle monte ou descend ; ◀ ▶ ▲ ▼ ⤒ ⤓ : un pas précis (0,5, 1, 5 ou 10 mm, touche le pas pour le changer), d'après l'écran"],
     ["Toucher le vide", "plus rien de choisi"],
     ["Rail du bas", "les modes (glisser pour en voir plus), ➕ Multi, ▭ Rectangle, 📋 Pièces, ⌖ Cadrer (la sélection, ou tout), 📐 Valeurs exactes, ⚙ réglages, 🕘 versions ; au-dessus, les actions de la sélection"],
@@ -1006,6 +1008,8 @@ const EDIT_HELP = [
     ["Face puis face", "la première pièce vient se plaquer contre l'autre"],
     ["Arête puis arête", "les arêtes s'alignent"],
     ["🪄 Assisté", "faces entières centrées et grands axes alignés ; arêtes milieu contre milieu"],
+    ["Faces jumelles (assisté)", "la face cliquée fait chercher, sur les autres pièces, celles de même contour (la coupe d'en face, trous des tenons compris) : en vert, avec leur ressemblance en % ; un clic sur l'une, ou juste sur sa pièce, l'y pose exactement : faces l'une contre l'autre, contours superposés ; ↻ Autre position quand plusieurs sens vont aussi bien"],
+    ["Flèches de la poignée, pièce collée", "elle glisse dans le plan du contact (deux flèches ; une seule le long d'une arête), sans se décoller ; en mode Tourner, un anneau la tourne autour du contact ; ← → ↑ ↓ : 1 mm sur le contact (Maj : 10)"],
     ["Glisser la pièce collée", "elle coulisse sur la face (ou le long de l'arête) sans se décoller"],
     ["Maj + glisser", "elle tourne autour du contact (au cran choisi ; Alt : libre) ; au stylet : ⟳ Tourner collée"],
     ["⟲ / ⟳ 90° 15°", "tourner d'un cran autour du contact"],
@@ -1121,10 +1125,10 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
   const sep = <span style={{ width: 1, alignSelf: "stretch", background: "var(--border)", margin: "0 2px" }}/>;
   const bar = { display: "flex", gap: 6, padding: 6, borderRadius: 14, alignItems: "center", flexWrap: "wrap", justifyContent: "center",
     background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(8px)", boxShadow: "0 10px 30px rgba(0,0,0,.25)" };
-  const tip = est.glued && est.step !== 2 ? `Collée à ${est.glued.to} : glisse-la pour la faire coulisser ${est.glued.kind === "edge" ? "le long de l'arête" : "sur la face"}, Maj + glisser pour la tourner autour du contact · ✂ Décoller pour la libérer`
+  const tip = est.glued && est.step !== 2 ? `Collée à ${est.glued.to} : glisse-la (ou tire ses flèches, ou ← → ↑ ↓) pour la faire coulisser ${est.glued.kind === "edge" ? "le long de l'arête" : "sur la face"} sans la décoller, Maj + glisser (ou ⟳ Tourner) pour la tourner autour du contact · ✂ Décoller pour la libérer`
     : est.mode === "pins" ? pinsTip(est)
     : est.mode === "ground" && est.ground3 ? `⬇ Point ${Math.min(3, (est.groundPts || 0) + 1)} sur 3 : clique un point de la pièce qui doit toucher le plateau`
-    : est.mode === "mate" ? (est.step === 2 ? EDIT_TIPS.mate2 : est.pairs ? `Collée${est.pairs > 1 ? ` en ${est.pairs} points` : ""} : Maj + clic (ou ➕ Multi) sur un autre point, une face ou une arête de la pièce, puis sur sa cible, pour fixer l'orientation`
+    : est.mode === "mate" ? (est.step === 2 ? (est.assist ? EDIT_TIPS.mate2a : EDIT_TIPS.mate2) : est.pairs ? `Collée${est.pairs > 1 ? ` en ${est.pairs} points` : ""} : Maj + clic (ou ➕ Multi) sur un autre point, une face ou une arête de la pièce, puis sur sa cible, pour fixer l'orientation`
       : est.assist ? EDIT_TIPS.mate1a : EDIT_TIPS.mate1) : EDIT_TIPS[est.mode];
   const hasSel = est.count > 0;
   // la seconde ligne : les actions du mode, puis celles de la selection
@@ -1159,6 +1163,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
       ]}/>
       {est.glued && <>
         {sep}
+        {est.twinPos && <button type="button" onClick={() => api?.twinNext()} style={b(true)}
+          data-tip="Sur la même face jumelle, la position suivante qui va aussi bien (une face carrée, ronde, symétrique)">↻ Autre position {est.twinPos}</button>}
         <button type="button" onClick={() => api?.refine()} style={b(false)}
           data-tip="Chercher le meilleur ajustement : la pièce épouse au mieux l'autre surface près du contact, sans la traverser">🎯 Ajuster</button>
         <BarMenu b={b} up={compact} label="⟳ Contact" tip="Tourner autour du contact, glisser sans traverser" items={[
@@ -1192,7 +1198,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
     const lab = t => <span style={{ fontSize: 10.5, fontWeight: 800, whiteSpace: "nowrap" }}>{t}</span>;
     const sq = (on, extra = {}) => b(on, { width: 42, height: 40, padding: 0, fontSize: 16, ...extra });
     const togglePanel = k => setPanel(p => (p === k ? null : k));
-    const touchTip = est.glued && est.step !== 2 ? `Collée à ${est.glued.to} : fais-la glisser sur le contact ; ⟳ Contact pour la tourner autour, ✂ Décoller pour la libérer`
+    const touchTip = est.glued && est.step !== 2 ? `Collée à ${est.glued.to} : fais-la glisser sur le contact (du doigt, par ses flèches ou ◀ ▶ ▲ ▼) ; ⟳ Contact pour la tourner autour, ✂ Décoller pour la libérer`
       : est.mode === "move" ? (est.count ? `Fais glisser ${est.count > 1 ? "la sélection" : "la pièce"} du doigt${est.vertical ? " : elle monte ou descend" : " sur le plateau (⇕ Hauteur : la monter)"} ; ou les flèches, d'un pas précis`
         : "Touche une pièce (➕ Multi : en choisir plusieurs), puis fais-la glisser du doigt")
       : est.mode === "rotate" ? "Touche une pièce, puis tourne-la par ses anneaux ; 📐 Exact pour un angle précis"
@@ -1221,9 +1227,11 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
       {panel === "exact" && (est.mode === "move" || est.mode === "rotate") && <ExactPanel est={est} api={api} compact/>}
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 3, paddingBottom: "env(safe-area-inset-bottom, 0px)",
         background: "color-mix(in srgb, var(--surface) 92%, transparent)", borderTop: "1px solid var(--border)", backdropFilter: "blur(8px)" }}>
-        {est.mode === "move" && est.count > 0 && !est.glued && !est.splitPending && <div style={{ ...rail, borderBottom: "1px solid var(--border)" }}>
-          <button type="button" onClick={() => api?.setVertical(!est.vertical)} style={b(!!est.vertical, { height: 40 })}>⇕ Hauteur</button>
-          {[["◀", -1, 0, 0, "À gauche"], ["▶", 1, 0, 0, "À droite"], ["▲", 0, 1, 0, "Plus loin"], ["▼", 0, -1, 0, "Plus près"], ["⤒", 0, 0, 1, "Monter"], ["⤓", 0, 0, -1, "Descendre"]].map(([l, r, f, u, t]) =>
+        {est.mode === "move" && est.count > 0 && !est.splitPending && <div style={{ ...rail, borderBottom: "1px solid var(--border)" }}>
+          {/* collee : les fleches la font glisser sur la face, sans la decoller */}
+          {!est.glued && <button type="button" onClick={() => api?.setVertical(!est.vertical)} style={b(!!est.vertical, { height: 40 })}>⇕ Hauteur</button>}
+          {(est.glued ? [["◀", -1, 0, 0, "À gauche, sur le contact"], ["▶", 1, 0, 0, "À droite, sur le contact"], ["▲", 0, 1, 0, "Vers le haut de l'écran, sur le contact"], ["▼", 0, -1, 0, "Vers le bas de l'écran, sur le contact"]]
+            : [["◀", -1, 0, 0, "À gauche"], ["▶", 1, 0, 0, "À droite"], ["▲", 0, 1, 0, "Plus loin"], ["▼", 0, -1, 0, "Plus près"], ["⤒", 0, 0, 1, "Monter"], ["⤓", 0, 0, -1, "Descendre"]]).map(([l, r, f, u, t]) =>
             <button key={l} type="button" aria-label={t} onClick={() => api?.nudge(r, f, u, nstep)} style={sq(false, { fontSize: 17 })}>{l}</button>)}
           <button type="button" onClick={() => setNstep(s => ({ 0.5: 1, 1: 5, 5: 10, 10: 0.5 })[s] || 1)} style={b(false, { height: 40, minWidth: 64 })}
             aria-label="Le pas des flèches">{String(nstep).replace(".", ",")} mm</button>
