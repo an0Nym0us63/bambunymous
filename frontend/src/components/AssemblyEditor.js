@@ -618,42 +618,51 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const free = (ang, x, y, d, erode = 0) => !col.anyTouch(mats(ang, x, y, d), others, erode);
     let n = 0, total = 1;
     const tick = async () => { if (++n % 15) return; fitting = Math.min(99, Math.round(100 * n / total)); onChange?.(state()); await new Promise(res => setTimeout(res, 0)); };
-    // jusqu'ou la piece s'enfonce a cette place (recherche par moities)
+    // jusqu'ou la piece s'enfonce a cette place : pas a pas depuis le contact, jusqu'au premier choc, puis au plus pres
+    // (30/10/2026 : une recherche par moities sautait au fond ; une piece toute entiere plongee dans une autre ne croise
+    // plus aucune face, elle passait pour « libre » et finissait dans le support)
+    const dStep = Math.max(0.4, depthMax / 40);
     const depthAt = async (ang, x, y, erode) => {
-      let lo = 0, hi = depthMax;
-      if (free(ang, x, y, hi, erode)) return hi;
-      for (let k = 0; k < 12; k++) { await tick(); const mid = (lo + hi) / 2; if (free(ang, x, y, mid, erode)) lo = mid; else hi = mid; }
+      let lo = 0, hi = null;
+      for (let d = dStep; d <= depthMax + 1e-6; d += dStep) {
+        await tick();
+        if (free(ang, x, y, d, erode)) lo = d; else { hi = d; break; }
+      }
+      if (hi == null) return lo;
+      for (let k = 0; k < 6; k++) { const mid = (lo + hi) / 2; if (free(ang, x, y, mid, erode)) lo = mid; else hi = mid; }
       return lo;
     };
-    // les angles : tous les 15°, et de pres autour de la position actuelle
-    const angs = [0, -5, 5, -10, 10];
-    for (let a = 15; a < 360; a += 15) angs.push(a > 180 ? a - 360 : a);
+    // les angles : d'abord autour de la position actuelle ; tous les 15° seulement si rien n'entre ainsi (plus rapide)
+    const near = [0, -5, 5, -10, 10];
+    const around = [];
+    for (let a = 15; a < 360; a += 15) around.push(a > 180 ? a - 360 : a);
     const offs = [];
     for (let x = -R; x <= R + 1e-6; x += step) for (let y = -R; y <= R + 1e-6; y += step) if (Math.hypot(x, y) <= R) offs.push([x, y, Math.hypot(x, y)]);
     offs.sort((p, q) => p[2] - q[2]);
-    let best = null, tol = 0;
-    for (const extra of [0, 0.3, 0.8]) {
+    let best = null, tol = 0, spare = null;
+    for (const [extra, angs] of [[0, near], [0, around], [0.3, near], [0.8, near]]) {
       tol = extra;
       const erode = step * 0.6 + extra;
-      total = angs.length * offs.length * 1.3 + 40 * 12 + 900;
+      total = angs.length * offs.length * 1.3 + 15 * 40 + 900;
       // 1. a grands pas, la piece amincie : les places ou elle entre deja un peu (sondee a quelques mm de profondeur) ;
       // a defaut, celles ou elle repose au contact (au plus 3 par angle, les plus proches)
       const probe = Math.min(depthMax * 0.5, 3);
       let cands = [];
-      const near = [];
+      const touching = [];
       for (const ang of angs) {
         let k = 0;
         for (const [x, y, r] of offs) {
           await tick();
           if (free(ang, x, y, probe, erode)) cands.push({ ang, x, y, r });
-          else if (k < 3 && free(ang, x, y, 0, erode)) { near.push({ ang, x, y, r }); k++; }
+          else if (k < 3 && free(ang, x, y, 0, erode)) { touching.push({ ang, x, y, r }); k++; }
         }
       }
-      if (!cands.length) cands = near;
+      // rien n'entre : au passage suivant (plus d'angles, puis un peu de tolerance) ; au dernier, la place au contact
+      if (!cands.length && extra === 0.8) cands = touching;
       if (!cands.length) continue;
       // les plus prometteuses seulement (proches, peu tournees) : la profondeur se mesure ensuite pour chacune
       cands.sort((p, q) => p.r + 0.05 * Math.abs(p.ang) - q.r - 0.05 * Math.abs(q.ang));
-      cands = cands.slice(0, 40);
+      cands = cands.slice(0, 15);
       // 2. jusqu'ou chacune s'enfonce : la plus profonde l'emporte (a peu pres egales : la plus proche, sans tourner)
       for (const c of cands) c.d = await depthAt(c.ang, c.x, c.y, erode);
       const cost = c => -c.d + 0.02 * c.r + 0.01 * Math.abs(c.ang);
@@ -696,10 +705,12 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         const c = cands[0];
         if (free(c.ang, c.x, c.y, 0, extra)) best = { ...c, d: 0 };
       }
-      if (best) {
-        break;
-      }
+      // vraiment entree : c'est fini ; sinon, gardee en reserve, et on cherche plus loin (tous les angles, la tolerance)
+      if (best && best.d > 0.5) break;
+      if (best && (!spare || best.d > spare.d)) spare = { ...best, tol };
+      best = null;
     }
+    if (!best && spare) { best = spare; tol = spare.tol; }
     if (!best) { fitting = null; fitMsg = `Aucune place à moins de ${Math.round(R)} mm où ${j.b.userData.name || "le support"} ne soit pas traversé : rapproche la pièce de son logement, ou colle-la sur la face d'appui (l'épaulement), pas sur le bout du tenon`; onChange?.(state()); return; }
     const depth = best.d > 0.15 ? best.d - 0.1 : 0;
     for (const [g, m] of mats(best.ang, best.x, best.y, depth)) { m.decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); }
@@ -711,7 +722,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const f = v => String(Math.round(v * 10) / 10).replace(".", ",");
     const ang = Math.round(((best.ang % 360) + 540) % 360 - 180);
     egg("tenon_mortaise");
-    fitMsg = `${depth ? "Emboîtée" : `Aucun logement où elle entre à moins de ${Math.round(R)} mm : posée au contact`}${best.r > 0.05 ? ` · décalée de ${f(best.r)} mm` : ""}${ang ? ` · tournée de ${ang}°` : ""}${depth ? ` · enfoncée de ${f(depth)} mm` : ""}${tol ? ` · pièces sans jeu : ${f(tol)} mm de chevauchement toléré` : ""}`;
+    fitMsg = `${depth ? "Emboîtée" : `Aucun logement où elle entre à moins de ${Math.round(R)} mm : posée au contact`}${best.r > 0.05 ? ` · décalée de ${f(best.r)} mm` : ""}${ang ? ` · tournée de ${ang}°` : ""}${depth ? ` · enfoncée de ${f(depth)} mm` : ""}${tol && depth ? ` · pièces sans jeu : ${f(tol)} mm de chevauchement toléré` : ""}`;
     showContact(); placeHandle(); push(); render();
   };
   el.addEventListener("pointerdown", onSlideDown, true);

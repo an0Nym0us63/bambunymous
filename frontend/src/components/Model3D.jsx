@@ -191,7 +191,11 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
       const disposables = [renderer];
       cleanup = () => { ro.disconnect(); cancelAnimationFrame(raf); controls.dispose();
         scene.traverse(o => { o.geometry?.dispose?.(); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m?.dispose?.()); });
-        disposables.forEach(d => d.dispose?.()); renderer.domElement.remove(); };
+        disposables.forEach(d => d.dispose?.());
+        // le contexte WebGL rendu tout de suite (30/10/2026) : sinon chaque vue ouverte en gardait un jusqu'au ramasse-miettes,
+        // et le navigateur finissait par se plaindre d'en avoir trop
+        try { renderer.forceContextLoss(); } catch { /* deja perdu */ }
+        renderer.domElement.remove(); };
       try {
         const model = new THREE.Group();
         if (glb) {
@@ -606,7 +610,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             // fond noir sur la vignette d'un lithophane) : l'image telle qu'affichee, puis un rendu simple qui dit ou est le
             // modele ; tout le reste devient transparent (de nuit, la lueur autour des pieces est gardee)
             const cv = document.createElement("canvas"); cv.width = size; cv.height = size;
-            const cx = cv.getContext("2d");
+            const cx = cv.getContext("2d", { willReadFrequently: true });
             cx.drawImage(renderer.domElement, 0, 0, size, size);
             const img = cx.getImageData(0, 0, size, size);
             renderer.setRenderTarget(null); renderer.setClearColor(0x000000, 0); renderer.clear();
@@ -1198,7 +1202,12 @@ export default function Model3D({ designId = null, profileId = null, printId = n
                 color: "#fff", background: "linear-gradient(135deg, #16a34a, #0EA5E9)" }}>💾 Enregistrer et fermer</button>
               <button type="button" onClick={() => closeEdit("discard")} style={{ height: 40, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
                 fontSize: 14, fontWeight: 800, color: "#ef4444", background: "var(--surface)" }}>Fermer sans enregistrer</button>
-              <button type="button" onClick={() => setLeaving(false)} style={{ height: 36, borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
+              <button type="button" onClick={async () => {
+                setLeaving(false);
+                // Echap (ou la sortie du plein ecran) a ouvert cette question : on y retourne (30/10/2026)
+                if (document.fullscreenElement !== wrap.current) await wrap.current?.requestFullscreen?.().catch(() => {});
+                try { await navigator.keyboard?.lock?.(["Escape"]); } catch { /* sans verrou */ }
+              }} style={{ height: 36, borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
                 color: "var(--text2)", background: "transparent" }}>↩ Continuer l'édition</button>
             </div>
           </div>}
