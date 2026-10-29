@@ -22,7 +22,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 11                          # 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 12                          # 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan", re.I)
 MAX_TRIANGLES = 1_500_000              # au-dela, le plateau est simplifie (29/10/2026 ; avant : pas converti du tout) :
                                        # un telephone l'affiche vite, et le fichier reste de quelques Mo
@@ -801,7 +801,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                 mts = items_by_obj.get(oid) or []
                 if k < len(mts):
                     on_plate[(oid, k)] = (n_, mts[k][:9])
-        tidy = _tidy(own, {(oid, k): mt[:9] for oid, k, mt in asm}, on_plate)
+        tidy = _tidy(own, {(oid, k): mt for oid, k, mt in asm}, on_plate)
         write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True, **({"tidied": True} if tidy else {})})
     elif asm:
         logger.info(f"[3D] {key or src.name} : vue d'assemblage ignoree (un seul objet, ou des objets absents du 3MF)")
@@ -815,26 +815,35 @@ _GAP = 10.0                            # mm entre deux blocs ranges
 
 def _is_pile(ids, box, asm_rot: dict, on_plate: dict) -> bool:
     """Un tas, pas un assemblage (29/10/2026, un Bip Bip aux pieces posees l'une sur l'autre) : des pieces de
-    plateaux differents (imprimees a part), toutes posees au sol exactement comme imprimees (meme orientation que
-    sur leur plateau, aucune soulevee), et qui se recouvrent largement. Un vrai assemblage de pieces imprimees a
-    part en tourne ou en souleve au moins une ; des pieces d'un meme plateau qui se chevauchent (imprimees
-    ensemble, emboitees : le perroquet) n'en sont pas un."""
+    plateaux differents (imprimees a part), qui se recouvrent largement, et :
+      - soit toutes au sol (aucune soulevee) exactement comme imprimees (meme orientation que sur leur plateau) ;
+      - soit toutes deposees au meme point sans rotation (Bambu Studio les pose a l'origine quand le createur n'a
+        rien assemble : le Bip Bip, dont des pieces sont tournees sur leur plateau, d'autres posees sur une autre
+        piece) ; la, au moins la moitie des pieces doivent etre prises dans le tas (une tour de pieces empilees au
+        meme point se touche par les faces, sans se recouvrir).
+    Un vrai assemblage de pieces imprimees a part en tourne ou en souleve au moins une ; des pieces d'un meme
+    plateau qui se chevauchent (imprimees ensemble, emboitees : le perroquet) n'en sont pas un."""
     import numpy as np
     if len({on_plate.get(i, (None,))[0] for i in ids}) < 2:
         return False
-    for i in ids:
-        if i not in on_plate or i not in asm_rot or box[i][0][2] > 0.5:
-            return False
-        if not np.allclose(np.array(asm_rot[i]), np.array(on_plate[i][1]), atol=1e-3):
-            return False
+    if any(i not in on_plate or i not in asm_rot for i in ids):
+        return False
+    piled = set()
     for x in range(len(ids)):
         for y in range(x + 1, len(ids)):
             a, b = box[ids[x]], box[ids[y]]
             inter = np.clip(np.minimum(a[1], b[1]) - np.maximum(a[0], b[0]), 0, None)
             va, vb = np.prod(np.maximum(a[1] - a[0], 1e-6)), np.prod(np.maximum(b[1] - b[0], 1e-6))
             if np.prod(inter) > 0.3 * min(va, vb):
-                return True
-    return False
+                piled |= {ids[x], ids[y]}
+    if not piled:
+        return False
+    as_printed = all(box[i][0][2] <= 0.5 for i in ids) and \
+        all(np.allclose(np.array(asm_rot[i][:9]), np.array(on_plate[i][1]), atol=1e-3) for i in ids)
+    xy = np.array([asm_rot[i][9:11] for i in ids])
+    dumped = all(np.allclose(np.array(asm_rot[i][:9]), np.eye(3).ravel(), atol=1e-3) for i in ids) \
+        and bool(np.ptp(xy, axis=0).max() < 0.5) and len(piled) * 2 >= len(ids)
+    return bool(as_printed or dumped)
 
 
 def _tidy(own: dict, asm_rot: dict | None = None, on_plate: dict | None = None) -> bool:
