@@ -1023,11 +1023,12 @@ const whenFr = d => {
   const full = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: d.getFullYear() !== n0.getFullYear() ? "2-digit" : undefined });
   return [day.charAt(0).toUpperCase() + day.slice(1), `${t} · ${full}`];
 };
-// les pastilles posees sur les vignettes (30/10/2026) : discretes, en verre depoli, le texte a la couleur du sens (au
-// lieu d'aplats vifs qui mangeaient l'image)
-const chipS = (c, extra = {}) => ({ position: "absolute", fontSize: 9.5, fontWeight: 800, lineHeight: "16px", padding: "0 6px", borderRadius: 9,
-  color: `color-mix(in srgb, ${c} 70%, var(--text))`, background: "color-mix(in srgb, var(--surface) 82%, transparent)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
-  border: `1px solid color-mix(in srgb, ${c} 30%, transparent)`, boxShadow: "0 1px 4px rgba(0,0,0,.12)", whiteSpace: "nowrap", ...extra });
+// les pastilles posees sur les vignettes (30/10/2026) : petites, pastel, le texte a la couleur du sens (au lieu d'aplats
+// vifs qui mangeaient l'image)
+const chipS = (c, extra = {}) => ({ position: "absolute", fontSize: 9.5, fontWeight: 800, lineHeight: "16px", padding: "0 7px", borderRadius: 8,
+  // une petite pastille pastel : un fond teinte de la couleur, opaque, le texte dans sa couleur (30/10/2026 : le verre
+  // depoli blanc ne plaisait pas)
+  color: `color-mix(in srgb, ${c} 80%, var(--text))`, background: `color-mix(in srgb, ${c} 22%, var(--surface))`, whiteSpace: "nowrap", ...extra });
 
 const V2_STATUS = { SUCCESS: ["Réussie", "#22c55e", "✓"], PARTIAL: ["En partie", "#f59e0b", "◐"], FAILED: ["Échouée", "#ef4444", "✕"],
   IN_PROGRESS: ["En cours", "#3b82f6", "●"], CANCELLED: ["Annulée", "#94a3b8", "■"] };
