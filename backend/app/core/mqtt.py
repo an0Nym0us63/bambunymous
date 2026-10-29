@@ -304,14 +304,18 @@ class MQTTManager:
         if p.get("stat") not in (None, "") and p.get("stat") != getattr(state, "_stat_raw", None):
             logger.info(f"[DOOR] stat brut {getattr(state, '_stat_raw', None)} -> {p.get('stat')}")
             state._stat_raw = p.get("stat")
-        if p.get("stat") not in (None, ""):
+        # une X1 (X1, X1 Carbon, X1E) : sa porte est le bit 23 de home_flag, meme si elle envoie aussi « stat » (29/10/2026 :
+        # sur X1C, « stat » passait devant et donnait un etat faux) ; « stat » ne vaut que pour les series H2/P2/X2
+        x1 = str(state.serial or "")[:3] in ("00M", "00W", "03W")
+        if x1:
+            if p.get("home_flag") is not None:
+                try: _door = bool((int(p["home_flag"]) >> 23) & 1)
+                except (TypeError, ValueError): pass
+        elif p.get("stat") not in (None, ""):
             try:
                 _st = int(str(p["stat"]), 16)
                 _door, _top = bool(_st & 0x00800000), bool(_st & 0x01000000)
             except ValueError: pass
-        elif p.get("home_flag") is not None and str(state.serial or "")[:3] in ("00M", "03W"):
-            try: _door = bool((int(p["home_flag"]) >> 23) & 1)
-            except (TypeError, ValueError): pass
         if _door is not None and _door != state.door_open:
             if state.door_open is not None:
                 logger.info(f"[DOOR] porte {'ouverte' if _door else 'fermee'}")
