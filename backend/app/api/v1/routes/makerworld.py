@@ -652,7 +652,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
     if iid and not readonly:
         src = path_of(iid)
         T.WATCH[did] = src.stem
-        meta = await asyncio.to_thread(T.from_3mf, src, src.stem)
+        meta = await T.from_3mf_early(src, src.stem)       # des le premier plateau pret (29/10/2026)
         key = src.stem
     if not readonly and (not meta or not any(not p.get("skipped") for p in meta.get("plates") or [])):
         # l'apercu MakerWorld du meme profil ; a defaut, le 3MF garde d'un autre profil du modele
@@ -667,7 +667,8 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             src = path_of(known(did, ""))
             T.WATCH[did] = src.stem
             meta, source, key = await asyncio.to_thread(T.from_3mf, src, src.stem), "3mf_other", src.stem
-    T.WATCH.pop(did, None)
+    if not (meta or {}).get("pending"):                    # en cours : la vue suit encore l'avancement
+        T.WATCH.pop(did, None)
     T.PROGRESS.pop(f"did:{did}", None)
     if not meta or not meta.get("plates"):
         raise HTTPException(404, "Pas de modèle 3D pour celui-ci")
@@ -747,7 +748,9 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             # la finition de chaque couleur, pour le rendu : d'origine (profils filament du 3MF), et des bobines utilisees
             "finishes": T.origin_finishes(path_of(key)) if source in ("3mf", "3mf_other") and key else {},
             "used_finishes": {d["from"]: d["finish"] for d in used_detail or [] if d.get("to") and d.get("finish")},
-            "plates": T.plates_out(meta, key)[0], "skipped": T.plates_out(meta, key)[1]}
+            "plates": T.plates_out(meta, key)[0], "skipped": T.plates_out(meta, key)[1],
+            # des plateaux encore en preparation (« pending » sur eux) : la vue redemande jusqu'a la fin
+            "pending": bool((meta or {}).get("pending"))}
 
 
 def _ext_by_name(z) -> dict:

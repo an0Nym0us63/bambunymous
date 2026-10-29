@@ -524,6 +524,10 @@ def _gzip(data: bytes) -> bytes:
 # preparation lancee par une ouverture se suit par le modele (WATCH : modele -> cle du 3MF en cours).
 PROGRESS: dict = {}
 WATCH: dict = {}
+# la vue en cours de preparation (29/10/2026) : les plateaux deja prets, et ceux qui viennent (pending) ; la vue
+# s'ouvre des le premier, sans attendre les autres
+PARTIAL: dict = {}
+_RUNNING: dict = {}
 
 
 def _step(key, pct, label: str) -> None:
@@ -534,12 +538,15 @@ def _step(key, pct, label: str) -> None:
 def plates_out(meta: dict, key: str) -> tuple:
     """(plateaux a montrer avec leur adresse, numeros des plateaux trop lourds) : ni les vides, ni les trop lourds."""
     ext = "glb" if meta.get("glb") else "bin"
-    try:
-        ver = int((_root() / key / "plates.json").stat().st_mtime)
-    except OSError:
-        ver = 0
-    shown = [{**p, "url": f"/api/v1/makerworld/3d/file/{key}/plate_{p['n']}.{ext}?v={ver}"} for p in meta.get("plates") or []
-             if not p.get("skipped") and not p.get("empty") and (meta.get("glb") or p.get("size_mm"))]
+
+    def ver(n):
+        try:
+            return int((_root() / key / f"plate_{n}.{ext}").stat().st_mtime)
+        except OSError:
+            return 0
+    shown = [p if p.get("pending") else {**p, "url": f"/api/v1/makerworld/3d/file/{key}/plate_{p['n']}.{ext}?v={ver(p['n'])}"}
+             for p in meta.get("plates") or []
+             if p.get("pending") or (not p.get("skipped") and not p.get("empty") and (meta.get("glb") or p.get("size_mm")))]
     return shown, [p["n"] for p in meta.get("plates") or [] if p.get("skipped")]
 
 
@@ -731,6 +738,15 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         meta["plates"].append(rec)
         return rec, size
 
+    def publish(i):
+        """Ce qui est pret, et ce qui vient : la vue peut s'ouvrir sur les premiers plateaux."""
+        if not key:
+            return
+        rest = [{"n": n_, "name": pn_, "pending": True} for n_, pn_, _ in work[i + 1:]]
+        if asm_lst:
+            rest.append({"n": ASSEMBLED_N, "name": "Assemblé", "assembled": True, "pending": True})
+        PARTIAL[key] = {**meta, "pending": True, "plates": [dict(p) for p in meta["plates"]] + rest}
+
     for i, (n, pname, lst) in enumerate(work):
         where["tag"] = f"Plateau {i + 1}/{len(work)}"
         zchg = zch.get(n)                               # les changements de filament en hauteur de ce plateau
@@ -747,6 +763,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
             # les hauteurs de changement de filament, pour les dire sous la vue
             if zchg:
                 rec["z_colors"] = [[round(zt, 2), str(c).lstrip("#").upper()[:6]] for zt, _, c, _ in zchg[1]]
+        publish(i)
     if asm_lst:
         where["tag"] = "Vue assemblée"
         groups_out, total, bx, pw = emit(asm_lst)
@@ -755,6 +772,11 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         # des plateaux : celle-la n'apprend rien)
         if _assembled_differs(bx, boxes):
             write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True})
+        else:
+            zipped(pw)
+            logger.info(f"[3D] {key or src.name} : vue d'assemblage ecartee (copie des plateaux ou pieces eparpillees)")
+    elif asm:
+        logger.info(f"[3D] {key or src.name} : vue d'assemblage ignoree (un seul objet, ou des objets absents du 3MF)")
     _write(out_dir / "plates.json", json.dumps(meta).encode("utf-8"))
     return meta
 
@@ -860,6 +882,24 @@ def _from_3mf(src: Path, key: str) -> dict | None:
         return None
     finally:
         PROGRESS.pop(key, None)
+        PARTIAL.pop(key, None)
+
+
+async def from_3mf_early(src: Path, key: str) -> dict | None:
+    """Comme from_3mf, mais rend la main des qu'un plateau est pret (« pending » : la suite se prepare encore,
+    la vue redemande). La conversion continue en fond ; une seule a la fois par modele."""
+    import asyncio
+    t = _RUNNING.get(key)
+    if t is None or t.done():
+        if ready(src, key):
+            return await asyncio.to_thread(from_3mf, src, key)
+        t = _RUNNING[key] = asyncio.ensure_future(asyncio.to_thread(from_3mf, src, key))
+    while not t.done():
+        part = PARTIAL.get(key)
+        if part and any(p.get("size_mm") for p in part.get("plates") or []):
+            return part
+        await asyncio.wait({t}, timeout=0.3)
+    return t.result()
 
 
 # ── Le secours : l'apercu 3D de MakerWorld ──────────────────────────────────────────────────────────────────
@@ -910,13 +950,46 @@ def file_path(key: str, name: str) -> Path | None:
 
 
 # ── La conversion a l'avance (27/10/2026) : la vue 3D s'ouvre sans attendre la conversion ──
+# La conversion de fond dans un processus a part (29/10/2026) : lire des dizaines de Mo de XML en Python tient la
+# main de l'interpreteur, et dans un fil du serveur elle figeait toute l'appli (blocages de plusieurs secondes,
+# meme sur /progress, quand le changement de format a fait refaire toutes les vues). Un seul processus, de priorite
+# basse ; la vue ouverte par quelqu'un, elle, reste dans le serveur (son avancement s'affiche).
+_POOL = {"p": None}
+
+
+def _child_convert(src: str, key: str) -> bool:
+    try:
+        os.nice(10)
+    except (AttributeError, OSError):
+        pass
+    return _from_3mf(Path(src), key) is not None
+
+
+def _in_child(src: Path, key: str) -> bool:
+    """Convertit dans le processus de fond (garde le verrou du modele : la vue ouverte en meme temps attend la
+    meme conversion). Repli dans ce processus si le processus de fond ne demarre pas."""
+    with _lock(key):
+        if ready(src, key):
+            return True
+        try:
+            if _POOL["p"] is None:
+                import concurrent.futures
+                import multiprocessing
+                _POOL["p"] = concurrent.futures.ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context("spawn"))
+            return _POOL["p"].submit(_child_convert, str(src), key).result()
+        except Exception as e:
+            logger.warning(f"[3D] processus de fond indisponible ({type(e).__name__}: {e}) : conversion sur place")
+            _POOL["p"] = None
+            return _from_3mf(src, key) is not None
+
+
 async def prepare(iid: str) -> None:
     """Convertit en fond le 3MF d'origine d'une instance (juste apres sa recuperation)."""
     import asyncio
     from .mw_source import path_of
     src = path_of(iid)
     if src.is_file() and not ready(src, src.stem):
-        await asyncio.to_thread(from_3mf, src, src.stem)
+        await asyncio.to_thread(_in_child, src, src.stem)
 
 
 async def warm_loop(first_delay_s: int = 90, period_s: int = 12 * 3600) -> None:
@@ -933,7 +1006,7 @@ async def warm_loop(first_delay_s: int = 90, period_s: int = 12 * 3600) -> None:
             done = 0
             for f in files:
                 if not ready(f, f.stem):
-                    await asyncio.to_thread(from_3mf, f, f.stem)
+                    await asyncio.to_thread(_in_child, f, f.stem)
                     done += 1
                     await asyncio.sleep(3)
             if done:

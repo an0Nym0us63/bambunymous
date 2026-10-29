@@ -468,30 +468,49 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   // un plateau abime (le serveur a oublie la vue) : on redemande, la vue se refait -- une fois
   const [redo, setRedo] = useState(0);
   const [tick, setTick] = useState(0);                 // un choix de couleur a la main : la vue se relit
+  const [again, setAgain] = useState(0);               // la suite des plateaux en preparation
+  const plateRef = useRef(0);
+  const softRef = useRef(false);
+  plateRef.current = plate;
   useEffect(() => { if (st.broken && redo < 1) { setSt({ busy: true }); setRedo(r => r + 1); } }, [st.broken]);   // eslint-disable-line react-hooks/exhaustive-deps
   const base = `/makerworld/3d/${encodeURIComponent(designId)}`;
   useEffect(() => {
     if (wait) return;                    // le profil se deduit encore (fiche d'une impression)
     let alive = true;
-    setErr(null); setMeta(null);
+    // la relecture de la suite (plateaux en preparation) ne vide pas la vue deja ouverte
+    const soft = softRef.current;
+    softRef.current = false;
+    if (!soft) { setErr(null); setMeta(null); }
     // le profil montre par la fiche ; sans lui, le serveur lit celui de l'impression (imprimante, ou choisi a la main)
     client.get(base, { params: { profile: profileId || "", print_id: printId || 0, fetch: fetchSource || want3mf ? 1 : 0,
                                  used: (usedPrints || []).join(","), scope: scope || "" }, timeout: 180000 })
-      .then(({ data }) => { if (alive) { setMeta(data); setPlate(0); } })
-      .catch(e => alive && setErr(e?.response?.data?.detail || "Pas de modèle 3D pour celui-ci"));
+      .then(({ data }) => { if (alive) {
+        // une relecture pendant la preparation : on reste sur le plateau regarde
+        setMeta(old => { const was = old?.plates?.[plateRef.current]?.n;
+          const i = was == null ? 0 : Math.max(0, (data.plates || []).findIndex(x => x.n === was));
+          setPlate(i); return data; });
+      } })
+      .catch(e => { if (!alive) return; if (soft) setTimeout(() => { softRef.current = true; setAgain(a => a + 1); }, 3000);
+        else setErr(e?.response?.data?.detail || "Pas de modèle 3D pour celui-ci"); });
     return () => { alive = false; };
-  }, [base, profileId, printId, wait, want3mf, redo, tick]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [base, profileId, printId, wait, want3mf, redo, tick, again]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // des plateaux encore en preparation (29/10/2026) : la vue s'est ouverte sur les premiers, elle redemande la suite
+  useEffect(() => {
+    if (!meta?.pending) return undefined;
+    const t = setTimeout(() => { softRef.current = true; setAgain(a => a + 1); }, 1500);
+    return () => clearTimeout(t);
+  }, [meta]);
   // pendant la preparation, son avancement (le serveur le dit a part, la demande principale attend)
   const [prog, setProg] = useState(null);
   useEffect(() => {
-    if (wait || meta || err) { setProg(null); return; }
+    if (wait || (meta && !meta.pending) || err) { setProg(null); return; }
     let alive = true;
     const tick = () => client.get(`${base}/progress`, { params: { t: Date.now() } })
       .then(({ data }) => alive && setProg(data?.label ? data : null)).catch(() => {});
     const id = setInterval(tick, 500);
     tick();
     return () => { alive = false; clearInterval(id); };
-  }, [base, wait, meta, err]);
+  }, [base, wait, !!meta && !meta.pending, err]);   // eslint-disable-line react-hooks/exhaustive-deps
   // chez un copain (29/10/2026) : les fichiers de plateau viennent de chez lui, par le relais de mon serveur
   // (une adresse deja reecrite par le relais -- les reponses d'un copain le sont -- n'est pas reprefixee : le relais
   // refusait « friends/… » en 400)
@@ -540,23 +559,24 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         {meta?.plates?.length > 1 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {meta.plates.map((x, i) => <button key={x.n} type="button" onClick={() => setPlate(i)} style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer",
             fontSize: 12.5, fontWeight: 800, border: i === plate ? "none" : "1px solid var(--border)", color: i === plate ? "#fff" : "var(--text2)",
-            background: i === plate ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" }}>{x.assembled ? "🧩 Assemblé" : x.name ? `${x.n} · ${x.name}` : `Plateau ${x.n}`}</button>)}
+            background: i === plate ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" }}>{x.pending ? "⏳ " : ""}{x.assembled ? "🧩 Assemblé" : x.name ? `${x.n} · ${x.name}` : `Plateau ${x.n}`}</button>)}
         </div>}
         <div style={{ position: "relative", height: "min(62dvh, 560px)", borderRadius: 18, overflow: "hidden", border: "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
-          {p && <Viewer key={`${p.url}|${shown ? "alt" : "own"}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown}
+          {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}
-          {alt && p && !isGlb(p.url) && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
+          {alt && p && !p.pending && !isGlb(p.url) && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
             background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
             {[[true, "Couleurs d'origine"], [false, `Couleurs ${altLabel.toLowerCase()}`]].map(([o, l]) => <button key={l} type="button" onClick={() => setOwn(o)}
               style={{ padding: "5px 11px", borderRadius: 16, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800,
                 color: own === o ? "#fff" : "var(--text2)", background: own === o ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "transparent" }}>{l}</button>)}
           </div>}
-          {(!meta && !err) || (p && st.busy) ? <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+          {(!meta && !err) || p?.pending || (p && st.busy) ? <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
             pointerEvents: "none" }}>
-            <Ring pct={meta ? null : prog?.pct ?? null} label={meta ? "Chargement du plateau…" : prog?.label || "Préparation du modèle…"}/></div> : null}
+            <Ring pct={meta && !p?.pending ? null : prog?.pct ?? null}
+              label={p?.pending ? prog?.label || "Préparation de ce plateau…" : meta ? "Chargement du plateau…" : prog?.label || "Préparation du modèle…"}/></div> : null}
           {(err || st.error || (st.broken && redo >= 1)) && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
             textAlign: "center", fontSize: 13, fontWeight: 700, color: "#ef4444" }}>{err || (st.error ? `Plateau illisible : ${st.error}` : "Plateau abîmé, même refait : rouvre la vue plus tard")}</div>}
         </div>
@@ -570,7 +590,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
               background: "linear-gradient(135deg, #0EA5E9, #6366F1)" }}>🎨 Récupérer le 3MF d'origine (couleurs)</button>}
           {meta.fetch_error && <span style={{ color: "#ef4444" }}>· 3MF non récupéré : {meta.fetch_error}</span>}
           {meta.ms >= 1000 && <span data-tip="La première ouverture prépare le modèle ; les suivantes sont immédiates">· préparé en {(meta.ms / 1000).toFixed(1).replace(".", ",")} s</span>}
-          {st.size && <span>· {mm(st.size[0])} × {mm(st.size[1])} × {mm(st.size[2])}</span>}
+          {st.size && !p?.pending && <span>· {mm(st.size[0])} × {mm(st.size[1])} × {mm(st.size[2])}</span>}
           {p?.triangles ? <span>· {p.triangles.toLocaleString("fr-FR")} triangles</span> : null}
           {zc.length > 0 && <span data-tip="Changement de filament posé dans Bambu Studio à cette hauteur : au-dessus, les pièces prennent cette couleur"
             style={{ display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>· changement de filament à
