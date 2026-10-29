@@ -5,6 +5,7 @@ import { egg } from "../eggs";
 import { ColorPairs, chooseColor } from "./ColorMap";
 import { FSheet } from "./FicheKit";
 import client, { apiUrl } from "../api/client";
+import { importRetry } from "../utils/importRetry";
 import { currentFriend } from "../store/friend";
 import { useIsAdmin } from "../store/auth";
 import { showAlert, showConfirm } from "../utils/dialog";
@@ -679,7 +680,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         const editing = async (on, onChange) => {
           if (!ed) return null;
           if (on && !editor) {
-            const { createAssemblyEditor } = await import("./AssemblyEditor");
+            // l'appli restee ouverte pendant une mise a jour reclame un fichier qui n'existe plus : elle se recharge
+            const { createAssemblyEditor } = await importRetry(() => import("./AssemblyEditor"));
             editor = await createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder: ed.holder, pieces: ed.byPiece, render, onChange,
               groupsInit: edit?.groups || [], jointsInit: edit?.joints || [], copyPiece: (src, n) => copyPiece(THREE, src, n),
               // pas encore enregistre par cette version : les parties d'un meme objet partent groupees
@@ -1451,7 +1453,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   // l'edition se fait aussi au doigt (30/10/2026) : sur un telephone, plein ecran par la page elle-meme (l'iPhone n'a pas
   // de plein ecran pour un element), et la barre d'edition en version tactile
   const editable = isAdmin && !fr && !!p?.assembled && !!p?.pieces && !!meta?.key;
-  const [pfull, setPfull] = useState(false);
+  const [pfull, setPfull] = useState(false), [editErr, setEditErr] = useState(null);
   const setPseudoFull = on => { setPfull(on); document.body.classList.toggle("bn-edit3d", on); };
   useEffect(() => () => document.body.classList.remove("bn-edit3d"), []);
   const edit = savedEdit !== undefined ? savedEdit : meta?.assembly_edit;
@@ -1508,11 +1510,23 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     // en plein ecran, Echap revient a l'edition (desselectionner) au lieu de quitter (30/10/2026) : le garder enfonce
     // quitte le plein ecran (Chrome, Edge)
     try { await navigator.keyboard?.lock?.(["Escape"]); } catch { /* navigateur sans verrou du clavier */ }
-    editApi.current?.untilt?.();                       // l'edition se fait le modele a sa place
-    const ed = await editApi.current?.editing(true, setEst);
-    if (ed) setEditing(true);
+    // l'editeur qui ne demarre pas (30/10/2026 : sur un telephone, la vue restait en plein ecran, sans barre ni ✕) :
+    // on revient a la vue, et la raison est dite sous la vue
+    let ed = null, why = null;
+    try {
+      editApi.current?.untilt?.();                     // l'edition se fait le modele a sa place
+      ed = await editApi.current?.editing(true, setEst);
+    } catch (e) { why = e?.message || String(e); console.error("[3D] édition", e); }
+    if (!ed) {
+      setEditErr(why || "la vue n'était pas prête, réessaie dans un instant");
+      if (pfull || !desktop) setPseudoFull(false);
+      if (document.fullscreenElement === wrap.current) document.exitFullscreen?.().catch(() => {});
+      return;
+    }
+    setEditErr(null);
+    setEditing(true);
     // au doigt : la vue a pris tout l'ecran, elle se recadre sur le modele
-    if (ed && !desktop) setTimeout(() => editApi.current?.editor?.frame?.(), 250);
+    if (!desktop) setTimeout(() => editApi.current?.editor?.frame?.(), 250);
   };
   useEffect(() => {
     const f = () => { const on = document.fullscreenElement === wrap.current; setFull(on); if (on) egg("grand_ecran"); if (!on && editing) stopEdit(); };
@@ -1565,6 +1579,9 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
             hue={p.litho && zc.length ? zc : null} bare={editing && !desktop} tdMap={td} onTd={fr ? null : saveTd}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}
+          {pfull && !editing && <button type="button" onClick={() => setPseudoFull(false)} aria-label="Quitter le plein écran"
+            style={{ position: "absolute", top: "calc(10px + env(safe-area-inset-top, 0px))", right: 10, zIndex: 5, width: 42, height: 42, borderRadius: 12,
+              border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)", fontSize: 16, cursor: "pointer" }}>✕</button>}
           {editing && <EditBar est={est} api={editApi.current?.editor} onSave={saveEdit} onReset={resetEdit} onClose={stopEdit} saving={saving} onVersions={openVersions}
             compact={!desktop}/>}
           {versions && <EditVersions list={versions} dirty={!!est?.dirty} onPick={restoreVersion} onClose={() => setVersions(null)}/>}
@@ -1620,6 +1637,9 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {(err || st.error || (st.broken && redo >= 1)) && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
             textAlign: "center", fontSize: 13, fontWeight: 700, color: "#ef4444" }}>{err || (st.error ? `Plateau illisible : ${st.error}` : "Plateau abîmé, même refait : rouvre la vue plus tard")}</div>}
         </div>
+        {editErr && !editing && <div style={{ alignSelf: "center", padding: "6px 12px", borderRadius: 10, fontSize: 12, fontWeight: 700, color: "#b91c1c",
+          background: "color-mix(in srgb, #ef4444 12%, var(--surface))", border: "1px solid color-mix(in srgb, #ef4444 35%, transparent)" }}>
+          L'édition n'a pas pu s'ouvrir : {editErr}</div>}
         {!desktop && p && !p.pending && !st.busy && !editing && ((editable && !origView) || canShot) && <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
           {canShot && <button type="button" disabled={shot === "busy"} onClick={takeShot}
             style={{ height: 40, padding: "0 14px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 13, fontWeight: 800,
