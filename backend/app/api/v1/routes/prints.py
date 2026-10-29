@@ -2,7 +2,7 @@
 API REST — Historique des impressions.
 """
 import asyncio
-import os, shutil
+import os, re, shutil
 import html
 import logging
 from datetime import datetime
@@ -126,13 +126,17 @@ def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict]
     # « pas encore de photo » pour une impression dont le groupe en a deja
     d["group_cover_photo"] = p.group.cover_photo if p.group else None
     # la vignette prise dans la vue 3D assemblee (29/10/2026), et si elle remplace celle du plateau / la mosaique
-    d["has_vue3d"] = (DATA_DIR / "prints" / str(p.id) / VUE3D).is_file()
-    d["thumb_3d"] = bool(p.thumb_3d) and d["has_vue3d"]
-    gf = DATA_DIR / "groups" / str(p.group_id) / VUE3D if p.group_id else None
-    g_has = bool(gf) and gf.is_file()
-    d["group_has_vue3d"] = g_has
-    d["group_vue3d_v"] = int(gf.stat().st_mtime) if g_has else None
-    d["group_thumb_3d"] = bool(p.group and p.group.thumb_3d) and g_has
+    # jusqu'a 4 vues 3D (30/10/2026) : thumb_3d = le numero de celle choisie (0 : la vignette par defaut)
+    sl = _v3slots(DATA_DIR / "prints" / str(p.id))
+    d["vue3d"] = [{"n": n, "v": v} for n, v in sorted(sl.items())]
+    d["has_vue3d"] = bool(sl)
+    d["thumb_3d"] = p.thumb_3d if p.thumb_3d in sl else 0
+    gsl = _v3slots(DATA_DIR / "groups" / str(p.group_id)) if p.group_id else {}
+    gn = p.group.thumb_3d if p.group and p.group.thumb_3d in gsl else 0
+    d["group_has_vue3d"] = bool(gsl)
+    d["group_thumb_3d"] = gn
+    d["group_vue3d_name"] = _v3name(gn) if gn else None
+    d["group_vue3d_v"] = gsl.get(gn)
     # le 3MF d'origine MakerWorld deja garde pour ce profil (le tranche, lui, est model_3mf)
     try:
         from ....services.mw_source import print_file as _src
@@ -538,7 +542,7 @@ async def _build_gallery() -> dict:
     from ....models.print_history import PrintSnapshot as _Snap
     cols = (Print.id, Print.group_id, Print.file_name, Print.status, Print.print_date, Print.duration_seconds,
             Print.estimated_seconds, Print.total_weight_g, Print.total_cost_filament, Print.electric_cost,
-            Print.total_cost, Print.number_of_items, Print.cover_photo, Print.design_id)
+            Print.total_cost, Print.number_of_items, Print.cover_photo, Print.design_id, Print.thumb_3d)
     async with AsyncSessionLocal() as db:
         rows = [_NS(**r._mapping) for r in (await db.execute(select(*cols))).all()]
         snaps: dict = {}
@@ -553,11 +557,10 @@ async def _build_gallery() -> dict:
         out = {}
         base = DATA_DIR / "prints"
         for r in rows:
-            f = base / str(r.id) / VUE3D
-            try:
-                out[r.id] = int(f.stat().st_mtime)
-            except OSError:
-                pass
+            sl = _v3slots(base / str(r.id))
+            if sl:
+                n = r.thumb_3d if r.thumb_3d in sl else min(sl)
+                out[r.id] = (_v3name(n), sl[n])
         return out
     import asyncio as _aio0
     vue3d_prints = await _aio0.to_thread(_vue3d_prints)
@@ -572,7 +575,8 @@ async def _build_gallery() -> dict:
         ]
         # pas de photo, mais une vignette prise dans la vue 3D assemblee : elle remonte (29/10/2026)
         if not photos and p.id in vue3d_prints:
-            photos = [{"url": f"/api/v1/prints/{p.id}/file/{VUE3D}?v={vue3d_prints[p.id]}", "name": VUE3D, "label": "vue3d"}]
+            nm, v = vue3d_prints[p.id]
+            photos = [{"url": f"/api/v1/prints/{p.id}/file/{nm}?v={v}", "name": nm, "label": "vue3d"}]
         # La vignette de la galerie est photos[0] : on remonte la photo choisie.
         if p.cover_photo:
             photos.sort(key=lambda ph: ph["name"] != p.cover_photo)
@@ -629,14 +633,15 @@ async def _build_gallery() -> dict:
     for gid, acc in group_acc.items():
         files = on_disk.get(gid, ())
         for name, mt in files:
-            if name == VUE3D:
+            if _V3RE.fullmatch(name):
                 continue
             acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{name}?v={mt}",
                                   "label": name, "name": name})
         # pas de photo, mais une vignette prise dans la vue 3D assemblee : elle remonte (29/10/2026)
-        v3 = next((mt for name, mt in files if name == VUE3D), None)
-        if not acc["photos"] and v3 is not None:
-            acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{VUE3D}?v={v3}", "label": "vue3d", "name": VUE3D})
+        v3s = sorted((name, mt) for name, mt in files if _V3RE.fullmatch(name))
+        if not acc["photos"] and v3s:
+            nm, v3 = v3s[0]
+            acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{nm}?v={v3}", "label": "vue3d", "name": nm})
         # La vignette est photos[0]. Si une photo de couverture est definie pour
         # le groupe, on la remonte en tete -- meme principe que Print.cover_photo.
         cover = acc.get("cover_photo")
@@ -743,7 +748,7 @@ async def group_photos(group_id: int):
         return {"files": [], "cover_photo": cover}
     files = []
     for f in sorted(d.iterdir()):
-        if f.name != VUE3D and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v"):
+        if not _V3RE.fullmatch(f.name) and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v"):
             files.append({"name": f.name, "url": f"/api/v1/prints/groups/{group_id}/photo/{f.name}"})
     return {"files": files, "cover_photo": cover}
 
@@ -2072,11 +2077,12 @@ async def print_image(print_id: int):
     if not print_dir.exists():
         raise HTTPException(404)
     # la vignette choisie : la vue 3D assemblee, si elle a ete prise et preferee
-    if (print_dir / VUE3D).is_file():
+    sl = _v3slots(print_dir)
+    if sl:
         async with AsyncSessionLocal() as db:
             pref = (await db.execute(select(Print.thumb_3d).where(Print.id == print_id))).scalar()
-        if pref:
-            return FileResponse(str(print_dir / VUE3D), media_type="image/png")
+        if pref in sl:
+            return FileResponse(str(print_dir / _v3name(pref)), media_type="image/png")
     # plate.png en priorité, sinon première image trouvée
     for name in ("plate.png", "plate.jpg"):
         f = print_dir / name
@@ -2637,75 +2643,161 @@ async def group_3mf(group_id: int, kind: str = Query("sliced", pattern="^(sliced
                         background=BackgroundTask(lambda: Path(path).unlink(missing_ok=True)))
 
 
-# ── La vignette prise dans la vue 3D assemblee (29/10/2026) ──
+# ── Les vignettes prises dans la vue 3D (29/10/2026 ; jusqu'a 4 depuis le 30/10) ──
+# Vue3D.png (la 1), Vue3D_2.png … Vue3D_4.png ; thumb_3d dit laquelle sert de vignette (0 : celle par defaut)
 VUE3D = "Vue3D.png"
+V3_MAX = 4
+_V3RE = re.compile(r"Vue3D(_[2-4])?\.png")
 
 
-async def _save_vue3d(folder: Path, file: UploadFile) -> None:
+def _v3name(n: int) -> str:
+    return VUE3D if n == 1 else f"Vue3D_{n}.png"
+
+
+def _v3slots(folder: Path) -> dict:
+    """{numero: date} des vues 3D gardees dans ce dossier."""
+    out = {}
+    for n in range(1, V3_MAX + 1):
+        try:
+            out[n] = int((folder / _v3name(n)).stat().st_mtime)
+        except OSError:
+            pass
+    return out
+
+
+async def _save_vue3d(folder: Path, file: UploadFile, slot: int = 0) -> int:
+    """Range la vue : a la place demandee (elle remplace l'ancienne), sinon a la premiere libre. Rend son numero."""
     raw = await file.read()
     if len(raw) > 8 * 1024 * 1024 or not raw.startswith(b"\x89PNG"):
         raise HTTPException(400, "Image PNG attendue")
+    have = _v3slots(folder)
+    if not 1 <= slot <= V3_MAX:
+        slot = next((n for n in range(1, V3_MAX + 1) if n not in have), 0)
+        if not slot:
+            raise HTTPException(400, f"Déjà {V3_MAX} vues 3D : choisis celle à remplacer")
     folder.mkdir(parents=True, exist_ok=True)
-    tmp = folder / (VUE3D + ".part")
+    tmp = folder / (_v3name(slot) + ".part")
     tmp.write_bytes(raw)
-    os.replace(tmp, folder / VUE3D)
+    os.replace(tmp, folder / _v3name(slot))
     gallery_touched()
+    return slot
 
 
-@router.post("/{print_id}/vue3d")
-async def print_vue3d(print_id: int, file: UploadFile = File(...), _: str = Depends(require_admin)):
-    """Garde la vignette prise dans la vue 3D assemblee de cette impression."""
+def _v3list(kind: str, ident: int, folder: Path, chosen: int) -> dict:
+    base = f"/api/v1/prints/{ident}/file" if kind == "print" else f"/api/v1/prints/groups/{ident}/photo"
+    sl = _v3slots(folder)
+    return {"max": V3_MAX, "chosen": chosen if chosen in sl else 0,
+            "slots": [{"n": n, "url": f"{base}/{_v3name(n)}?v={v}"} for n, v in sorted(sl.items())]}
+
+
+@router.get("/{print_id}/vue3d")
+async def print_vue3d_list(print_id: int, _: str = Depends(get_current_user)):
+    """Les vues 3D gardees pour cette impression, et celle qui sert de vignette."""
     async with AsyncSessionLocal() as db:
         p = await db.get(Print, print_id)
         if not p:
             raise HTTPException(404, "Impression introuvable")
-        await _save_vue3d(DATA_DIR / "prints" / str(print_id), file)
-        p.updated_at = datetime.utcnow()                 # les vignettes en cache se renouvellent
-        await db.commit()
-    return {"ok": True}
+        return _v3list("print", print_id, DATA_DIR / "prints" / str(print_id), p.thumb_3d or 0)
 
 
-@router.post("/groups/{group_id}/vue3d")
-async def group_vue3d(group_id: int, file: UploadFile = File(...), _: str = Depends(require_admin)):
-    """Garde la vignette prise dans la vue 3D assemblee de ce groupe."""
-    async with AsyncSessionLocal() as db:
-        if not await db.get(Group, group_id):
-            raise HTTPException(404, "Groupe introuvable")
-    await _save_vue3d(DATA_DIR / "groups" / str(group_id), file)
-    return {"ok": True}
-
-
-@router.put("/{print_id}/thumb")
-async def print_thumb(print_id: int, body: dict = Body({}), _: str = Depends(require_admin)):
-    """La vignette de l'impression : la vue 3D (use3d) ou l'image du plateau."""
-    async with AsyncSessionLocal() as db:
-        p = await db.get(Print, print_id)
-        if not p:
-            raise HTTPException(404, "Impression introuvable")
-        on = bool(body.get("use3d"))
-        if on and not (DATA_DIR / "prints" / str(print_id) / VUE3D).is_file():
-            raise HTTPException(400, "Prends d'abord la vignette dans la vue 3D assemblée")
-        p.thumb_3d = 1 if on else 0
-        p.updated_at = datetime.utcnow()
-        await db.commit()
-    gallery_touched()
-    return {"ok": True, "thumb_3d": on}
-
-
-@router.put("/groups/{group_id}/thumb")
-async def group_thumb(group_id: int, body: dict = Body({}), _: str = Depends(require_admin)):
-    """La vignette du groupe : la vue 3D (use3d) ou la mosaique de ses impressions."""
+@router.get("/groups/{group_id}/vue3d")
+async def group_vue3d_list(group_id: int, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
         g = await db.get(Group, group_id)
         if not g:
             raise HTTPException(404, "Groupe introuvable")
-        on = bool(body.get("use3d"))
-        if on and not (DATA_DIR / "groups" / str(group_id) / VUE3D).is_file():
-            raise HTTPException(400, "Prends d'abord la vignette dans la vue 3D assemblée")
-        g.thumb_3d = 1 if on else 0
+        return _v3list("group", group_id, DATA_DIR / "groups" / str(group_id), g.thumb_3d or 0)
+
+
+@router.post("/{print_id}/vue3d")
+async def print_vue3d(print_id: int, file: UploadFile = File(...), slot: int = Form(0), _: str = Depends(require_admin)):
+    """Garde une vue prise dans la vue 3D de cette impression (slot : celle a remplacer)."""
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if not p:
+            raise HTTPException(404, "Impression introuvable")
+        n = await _save_vue3d(DATA_DIR / "prints" / str(print_id), file, slot)
+        p.updated_at = datetime.utcnow()                 # les vignettes en cache se renouvellent
+        await db.commit()
+    return {"ok": True, "n": n}
+
+
+@router.post("/groups/{group_id}/vue3d")
+async def group_vue3d(group_id: int, file: UploadFile = File(...), slot: int = Form(0), _: str = Depends(require_admin)):
+    """Garde une vue prise dans la vue 3D de ce groupe."""
+    async with AsyncSessionLocal() as db:
+        if not await db.get(Group, group_id):
+            raise HTTPException(404, "Groupe introuvable")
+    n = await _save_vue3d(DATA_DIR / "groups" / str(group_id), file, slot)
+    return {"ok": True, "n": n}
+
+
+@router.delete("/{print_id}/vue3d/{n}")
+async def print_vue3d_drop(print_id: int, n: int, _: str = Depends(require_admin)):
+    """Supprime une vue 3D ; si c'etait la vignette, l'impression revient a l'image du plateau."""
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if not p or not 1 <= n <= V3_MAX:
+            raise HTTPException(404, "Vue introuvable")
+        (DATA_DIR / "prints" / str(print_id) / _v3name(n)).unlink(missing_ok=True)
+        if p.thumb_3d == n:
+            p.thumb_3d = 0
+        p.updated_at = datetime.utcnow()
         await db.commit()
     gallery_touched()
-    return {"ok": True, "thumb_3d": on}
+    return {"ok": True}
+
+
+@router.delete("/groups/{group_id}/vue3d/{n}")
+async def group_vue3d_drop(group_id: int, n: int, _: str = Depends(require_admin)):
+    async with AsyncSessionLocal() as db:
+        g = await db.get(Group, group_id)
+        if not g or not 1 <= n <= V3_MAX:
+            raise HTTPException(404, "Vue introuvable")
+        (DATA_DIR / "groups" / str(group_id) / _v3name(n)).unlink(missing_ok=True)
+        if g.thumb_3d == n:
+            g.thumb_3d = 0
+        await db.commit()
+    gallery_touched()
+    return {"ok": True}
+
+
+def _slot_of(body: dict, folder: Path) -> int:
+    """La vue choisie : « slot » (0 = la vignette par defaut) ; « use3d » (ancien appel) : la premiere."""
+    sl = _v3slots(folder)
+    n = int(body["slot"]) if str(body.get("slot", "")).lstrip("-").isdigit() else (min(sl) if sl and body.get("use3d") else 0)
+    if n and n not in sl:
+        raise HTTPException(400, "Prends d'abord cette vue dans la vue 3D")
+    return n
+
+
+@router.put("/{print_id}/thumb")
+async def print_thumb(print_id: int, body: dict = Body({}), _: str = Depends(require_admin)):
+    """La vignette de l'impression : une de ses vues 3D (slot), ou l'image du plateau (0)."""
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if not p:
+            raise HTTPException(404, "Impression introuvable")
+        n = _slot_of(body, DATA_DIR / "prints" / str(print_id))
+        p.thumb_3d = n
+        p.updated_at = datetime.utcnow()
+        await db.commit()
+    gallery_touched()
+    return {"ok": True, "thumb_3d": n}
+
+
+@router.put("/groups/{group_id}/thumb")
+async def group_thumb(group_id: int, body: dict = Body({}), _: str = Depends(require_admin)):
+    """La vignette du groupe : une de ses vues 3D (slot), ou la mosaique de ses impressions (0)."""
+    async with AsyncSessionLocal() as db:
+        g = await db.get(Group, group_id)
+        if not g:
+            raise HTTPException(404, "Groupe introuvable")
+        n = _slot_of(body, DATA_DIR / "groups" / str(group_id))
+        g.thumb_3d = n
+        await db.commit()
+    gallery_touched()
+    return {"ok": True, "thumb_3d": n}
 
 
 @router.get("/{print_id}/3mf")

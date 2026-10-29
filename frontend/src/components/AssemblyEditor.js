@@ -348,8 +348,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const onUp = ev => {
     if (!down || Math.hypot(ev.clientX - down[0], ev.clientY - down[1]) > 4 || tc.dragging) { down = null; return; }   // un glisser : la vue tourne
     down = null;
-    if (tc.axis) return;                              // un clic sur la poignee
     const pick = pickAt(ev);
+    // un clic sur la poignee ; ses zones invisibles debordent : dans le vide, le clic desselectionne quand meme (30/10/2026)
+    if (tc.axis && pick) return;
     if (mode === "move" || mode === "rotate") {
       if (!pick) { if (!ev.ctrlKey && !ev.shiftKey && !multi) setSel([]); return; }
       const unit = ev.altKey ? [pick.group] : unitOf(pick.group);
@@ -359,7 +360,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       } else setSel(unit);
       return;
     }
-    if (!pick) return;
+    // un clic dans le vide desselectionne, quel que soit le mode (30/10/2026)
+    if (!pick) { if (!ev.ctrlKey && !ev.shiftKey && !multi) { first = null; clearMarks(); setSel([]); render(); onChange?.(state()); } return; }
     if (mode === "ground") {
       const unit = sel.has(pick.group) ? [...sel] : unitOf(pick.group), moving = withKids(unit);
       if (pick.kind === "face") apply(moving, about(pick.p, new THREE.Quaternion().setFromUnitVectors(pick.n, new THREE.Vector3(0, 0, -1))));
@@ -575,7 +577,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "y") { ev.preventDefault(); api.redo(); }
     else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "g") { ev.preventDefault(); ev.shiftKey ? api.ungroup() : api.group(); }
     else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "a") { ev.preventDefault(); setSel(all); }
-    else if (ev.key === "Escape") { first = null; clearMarks(); setSel([]); }
+    else if (ev.key === "Escape") {
+      // Echap desselectionne, sans rien fermer d'autre (30/10/2026 : la fenetre de la fiche se fermait avec)
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      first = null; clearMarks(); setSel([]); render(); onChange?.(state());
+    }
     else if (sel.size && ev.key.startsWith("Arrow")) {
       // les fleches : 1 mm (10 avec Maj) ; haut/bas avec Ctrl : monter/descendre
       ev.preventDefault();
@@ -585,7 +591,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       apply(withKids([...sel]), new THREE.Matrix4().makeTranslation(t.x, t.y, t.z)); placeHandle(); push(); render();
     }
   };
-  window.addEventListener("keydown", onKey);
+  window.addEventListener("keydown", onKey, true);   // avant les autres (Echap ne doit fermer que la selection)
   window.addEventListener("keyup", onKeyUp);
   const onBlur = () => { if (alt) { alt = false; applySnap(); } };
   window.addEventListener("blur", onBlur);
@@ -710,7 +716,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     dispose: () => {
       // pas tc.dispose() : en three 0.169 il appelle traverse, qui n'existe plus sur la poignee, et l'erreur cassait la
       // fermeture de la vue (page blanche, 29/10/2026) ; on la debranche et on libere son dessin a la main
-      el.removeEventListener("pointerdown", onDown); el.removeEventListener("pointerup", onUp); window.removeEventListener("keydown", onKey);
+      el.removeEventListener("pointerdown", onDown); el.removeEventListener("pointerup", onUp); window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", onBlur);
       el.removeEventListener("pointerdown", onSlideDown, true); window.removeEventListener("pointermove", onSlideMove); window.removeEventListener("pointerup", onSlideUp);
       holder.remove(ring); ring.geometry.dispose(); ringMat.dispose();

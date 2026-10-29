@@ -9,6 +9,7 @@ import { currentFriend } from "../store/friend";
 import { useIsAdmin } from "../store/auth";
 import { showAlert, showConfirm } from "../utils/dialog";
 import MwImg from "./MwImg";
+import { openVue3D } from "./Vue3DPicker";
 
 // La vue 3D d'un modele (27/10/2026) : son 3MF d'origine garde sur le serveur (converti la-bas, aux couleurs de
 // ses filaments), sinon l'apercu 3D de MakerWorld (sans couleurs). Un plateau a la fois ; on tourne au doigt
@@ -547,7 +548,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         const snapshot = async (size = 1024) => {
           const was = { grid: grid.visible, bg: scene.background, w: el.clientWidth, h: el.clientHeight, pr: renderer.getPixelRatio(),
             pos: camera.position.clone(), aspect: camera.aspect, near: camera.near, far: camera.far };
-          grid.visible = false; scene.background = null;
+          // la nuit garde son fond sombre (la lueur ne se voit pas sur du transparent) ; sinon, fond transparent
+          grid.visible = false; if (!bloomOn) scene.background = null;
           renderer.setPixelRatio(1); renderer.setSize(size, size, false);
           camera.aspect = 1;
           const sp = new THREE.Box3().setFromObject(model).getBoundingSphere(new THREE.Sphere());
@@ -556,11 +558,15 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           camera.position.copy(sp.center).addScaledVector(dir, d); camera.lookAt(sp.center);
           camera.near = Math.max(0.1, d / 100); camera.far = d * 20; camera.updateProjectionMatrix();
           renderer.setClearColor(0x000000, 0);
-          renderer.render(scene, camera);
+          if (bloomOn && composer) composer.setSize(size, size);
+          if (litOn && lit) lit.resize();
+          render();                                        // le rendu tel qu'affiche : nuit, lumiere derriere (lithophane)
           const blob = await new Promise(res => renderer.domElement.toBlob(res, "image/png"));
           // la vue reprend comme avant
           grid.visible = was.grid; scene.background = was.bg;
           renderer.setPixelRatio(was.pr); renderer.setSize(was.w, was.h);
+          if (bloomOn && composer) composer.setSize(was.w, was.h);
+          if (litOn && lit) lit.resize();
           camera.position.copy(was.pos); camera.aspect = was.aspect; camera.near = was.near; camera.far = was.far;
           camera.lookAt(controls.target); camera.updateProjectionMatrix(); controls.update(); render();
           return blob;
@@ -668,7 +674,7 @@ const EDIT_HELP = [
     ["Ctrl / Maj + clic", "en ajouter ou en retirer"],
     ["Alt + clic", "une pièce seule dans un groupe"],
     ["Ctrl + A", "tout choisir"],
-    ["Échap", "plus rien de choisi"],
+    ["Échap", "plus rien de choisi (la fenêtre reste ouverte) ; Échap maintenu quitte le plein écran"],
     ["➕ Multi", "au stylet : chaque clic ajoute ou retire une pièce (comme Ctrl + clic)"],
     ["H / Alt + H", "masquer la sélection (pour atteindre ce qu'elle cache) / tout réafficher"],
     ["✂ Séparer", "propose de séparer la pièce choisie en ses morceaux qui ne se touchent pas (colorés pour les voir) : ✓ pour valider, ✕ pour laisser ; ⊕ Réunir la remet d'un seul tenant"],
@@ -950,7 +956,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const [full, setFull] = useState(false), [editing, setEditing] = useState(false), [est, setEst] = useState(null);
   const [savedEdit, setSavedEdit] = useState(undefined), [saving, setSaving] = useState(false), [vkey, setVkey] = useState(0);
   // la vignette 3D (29/10/2026) : prise dans la vue assemblee, rangee avec l'impression ou le groupe d'ou la vue s'ouvre
-  const [shot, setShot] = useState(null);                // null | "busy" | { kind, id, url, used }
+  const [shot, setShot] = useState(null);                // null | "busy"
   const shotTarget = /^(print|group):\d+$/.test(scope || "") ? { kind: scope.split(":")[0], id: scope.split(":")[1] } : (printId ? { kind: "print", id: String(printId) } : null);
   const canShot = isAdmin && !currentFriend() && !!p && !p.pending && !!shotTarget;
   const takeShot = async () => {
@@ -958,16 +964,11 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     try {
       const blob = await editApi.current?.snapshot();
       if (!blob) throw new Error("Vue pas prête");
-      const fd = new FormData(); fd.append("file", blob, "Vue3D.png");
-      const base = shotTarget.kind === "group" ? `/prints/groups/${shotTarget.id}` : `/prints/${shotTarget.id}`;
-      await client.post(`${base}/vue3d`, fd);
-      setShot({ ...shotTarget, base, url: URL.createObjectURL(blob), used: false });
       egg("vignette_3d");
-    } catch (e) { setShot(null); showAlert(e.response?.data?.detail || e.message); }
-  };
-  const useShot = async () => {
-    try { await client.put(`${shot.base}/thumb`, { use3d: true }); setShot(s => ({ ...s, used: true })); window.dispatchEvent(new Event("bn-prints-changed")); }
-    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+      // a ranger : nouvelle vue (jusqu'a 4) ou a la place d'une autre, puis la choisir comme vignette (30/10/2026)
+      openVue3D({ ...shotTarget, shot: { blob, url: URL.createObjectURL(blob) } });
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    finally { setShot(null); }
   };
   const editable = desktop && isAdmin && !currentFriend() && !!p?.assembled && !!p?.pieces && !!meta?.key;
   const edit = savedEdit !== undefined ? savedEdit : meta?.assembly_edit;
@@ -1012,11 +1013,15 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     setEditing(false); setEst(null);
     if (how === "discard") setVkey(k => k + 1);        // la vue revient a la place enregistree
     else editApi.current?.relayout();
+    try { navigator.keyboard?.unlock?.(); } catch { /* rien */ }
     if (document.fullscreenElement === wrap.current) document.exitFullscreen?.().catch(() => {});
   };
   const stopEdit = () => { if (editApi.current?.editor?.state().dirty) setLeaving(true); else closeEdit(); };
   const startEdit = async () => {
     if (document.fullscreenElement !== wrap.current) await wrap.current?.requestFullscreen?.().catch(() => {});
+    // en plein ecran, Echap revient a l'edition (desselectionner) au lieu de quitter (30/10/2026) : le garder enfonce
+    // quitte le plein ecran (Chrome, Edge)
+    try { await navigator.keyboard?.lock?.(["Escape"]); } catch { /* navigateur sans verrou du clavier */ }
     const ed = await editApi.current?.editing(true, setEst);
     if (ed) setEditing(true);
   };
@@ -1056,17 +1061,6 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}
-          {shot && shot !== "busy" && <div style={{ position: "absolute", left: 10, top: 10, zIndex: 3, display: "flex", gap: 10, alignItems: "center", padding: 8,
-            borderRadius: 14, background: "color-mix(in srgb, var(--surface) 94%, transparent)", border: "1px solid var(--border)", boxShadow: "0 10px 30px rgba(0,0,0,.2)" }}>
-            <img src={shot.url} alt="" style={{ width: 64, height: 64, objectFit: "contain", borderRadius: 10, background: "var(--surface2)" }}/>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>
-              <span>Vignette 3D enregistrée</span>
-              {shot.used ? <span style={{ color: "#16a34a" }}>✓ C'est la vignette {shot.kind === "group" ? "du groupe" : "de l'impression"}</span>
-                : <button type="button" onClick={useShot} style={{ height: 30, padding: "0 10px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 800,
-                  color: "#fff", background: "linear-gradient(135deg, #0EA5E9, #6366F1)" }}>⭐ En faire la vignette</button>}
-            </div>
-            <button type="button" onClick={() => setShot(null)} aria-label="Fermer" style={{ alignSelf: "flex-start", border: "none", background: "none", color: "var(--muted)", cursor: "pointer" }}>✕</button>
-          </div>}
           {editing && <EditBar est={est} api={editApi.current?.editor} onSave={saveEdit} onReset={resetEdit} onClose={stopEdit} saving={saving} onVersions={openVersions}/>}
           {versions && <EditVersions list={versions} dirty={!!est?.dirty} onPick={restoreVersion} onClose={() => setVersions(null)}/>}
           {editing && leaving && <div style={{ position: "absolute", inset: 0, zIndex: 7, background: "rgba(2,6,23,.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>

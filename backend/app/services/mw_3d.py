@@ -24,7 +24,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 FORMAT_V = 18                          # 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
-_LITHO = re.compile(r"litho|lithophan", re.I)
+_LITHO = re.compile(r"litho|lithophan|hue ?forge", re.I)       # HueForge : une image en couches, a voir par derriere aussi (30/10)
 MAX_TRIANGLES = 1_500_000              # au-dela, le plateau est simplifie (29/10/2026 ; avant : pas converti du tout) :
                                        # un telephone l'affiche vite, et le fichier reste de quelques Mo
 READ_TRIANGLES = 40_000_000            # au-dela, on arrete de lire (memoire du serveur) : le plateau n'est pas montre

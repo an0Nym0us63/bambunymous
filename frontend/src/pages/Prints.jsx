@@ -11,6 +11,7 @@ import MakerWorldView from "../components/MakerWorldView";
 import MakerWorldCollectionsPicker from "../components/MakerWorldCollectionsPicker";
 import MwDocs from "../components/MwDocs";
 import Model3D from "../components/Model3D";
+import { openVue3D } from "../components/Vue3DPicker";
 import MakerWorldModelSheet, { prefetchModel } from "../components/MakerWorldModelSheet";
 import { openCreator } from "../components/MwCreatorPage";
 import { useToRateSet, RateButton, RateStar as RateStarBtn } from "../components/MwToRate";
@@ -1246,10 +1247,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         onClick: async () => { try { await client.post(`/makerworld/source3mf/print/${p.id}`); setP(prev => ({ ...prev, source_3mf: true })); toast("3MF d'origine récupéré"); }
           catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
       p.model_3mf && { icon: "⤓", label: "Télécharger le 3MF tranché", hint: "pour mon imprimante", tone: "#F59E0B", onClick: () => download3mf(p.id, "sliced") },
-      isAdmin && p.has_vue3d && { icon: p.thumb_3d ? "🖼" : "🧊", label: p.thumb_3d ? "Vignette : image du plateau" : "Vignette : vue 3D",
-        hint: p.thumb_3d ? "Revenir à l'image du plateau" : "Celle prise dans la vue 3D", tone: "#0EA5E9",
-        onClick: async () => { try { await client.put(`/prints/${p.id}/thumb`, { use3d: !p.thumb_3d }); setP(prev => ({ ...prev, thumb_3d: !prev.thumb_3d, updated_at: new Date().toISOString() }));
-          window.dispatchEvent(new Event("bn-prints-changed")); } catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
+      isAdmin && p.has_vue3d && { icon: "🧊", label: "Vues 3D et vignette", hint: p.thumb_3d ? "Vignette : une vue 3D" : "Vignette : l'image du plateau", tone: "#0EA5E9",
+        onClick: () => openVue3D({ kind: "print", id: p.id, onDone: async () => {
+          try { const r = await client.get(`/prints/${p.id}/vue3d`); setP(prev => ({ ...prev, thumb_3d: r.data.chosen, has_vue3d: r.data.slots.length > 0, updated_at: new Date().toISOString() })); }
+          catch { /* rien */ } } }) },
       (p.job_id || p.design_id) && { icon: "#", label: "Identifiants", hint: "Travail, modèle MakerWorld", tone: "#64748B", onClick: () => setIdsOpen(true) },
       "-",
       { icon: "🗑", label: "Supprimer…", danger: true, onClick: () => setShowDeleteConfirm(true) },
@@ -1686,10 +1687,12 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       objQ && { icon: "📦", label: objQ.remaining > 0 ? "Créer des objets" : "Objets : tous créés", hint: `${objQ.used} / ${objQ.total} déjà créés`, tone: "#22C55E",
         onClick: () => setObjCreate(true) },
       { icon: "📤", label: "Dégrouper", hint: "Les impressions restent", tone: "#A78BFA", onClick: handleUngroup },
-      isAdmin && prints[0]?.group_has_vue3d && { icon: thumb3d ? "🧩" : "🧊", label: thumb3d ? "Vignette : mosaïque des impressions" : "Vignette : vue 3D",
-        hint: thumb3d ? "Revenir à la mosaïque" : "Celle prise dans la vue 3D, à la place de la mosaïque", tone: "#0EA5E9",
-        onClick: async () => { try { await client.put(`/prints/groups/${groupId}/thumb`, { use3d: !thumb3d }); setPrints(ps => ps.map(x => ({ ...x, group_thumb_3d: !thumb3d })));
-          onUpdated?.(); window.dispatchEvent(new Event("bn-prints-changed")); } catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
+      isAdmin && prints[0]?.group_has_vue3d && { icon: "🧊", label: "Vues 3D et vignette", hint: thumb3d ? "Vignette : une vue 3D" : "Vignette : la mosaïque", tone: "#0EA5E9",
+        onClick: () => openVue3D({ kind: "group", id: groupId, onDone: async () => {
+          try { const r = await client.get(`/prints/groups/${groupId}/vue3d`); const n = r.data.chosen, sl = r.data.slots.find(x => x.n === n);
+            setPrints(ps => ps.map(x => ({ ...x, group_thumb_3d: n, group_has_vue3d: r.data.slots.length > 0, group_vue3d_name: n ? (n === 1 ? "Vue3D.png" : `Vue3D_${n}.png`) : null,
+              group_vue3d_v: sl ? Number((sl.url.split("v=")[1] || "0")) : null })));
+            onUpdated?.(); } catch { /* rien */ } } }) },
       (prints.some(x => x.source_3mf) || prints.some(x => x.model_3mf)) && "-",
       prints.some(x => x.source_3mf) && { icon: "⤓", label: "Télécharger les 3MF d'origine", hint: "Un fichier s'ils sont identiques, sinon un zip",
         tone: "#F97316", onClick: () => download3mf(groupId, "source", true) },
@@ -1725,7 +1728,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   // l'en-tete : une mosaique des plateaux sur leur image floutee
   const cover = prints.find(x => x.id === coverPrintId) || prints[0];
   // la vignette 3D du groupe, choisie a la place de la mosaique (29/10/2026)
-  const v3u = thumb3d ? `${apiUrl(`/prints/groups/${groupId}/photo/Vue3D.png`)}?v=${prints[0]?.group_vue3d_v || 0}` : null;
+  const v3u = thumb3d ? `${apiUrl(`/prints/groups/${groupId}/photo/${prints[0]?.group_vue3d_name || "Vue3D.png"}`)}?v=${prints[0]?.group_vue3d_v || 0}` : null;
   const mosaic = v3u ? [{ id: "vue3d", _src: w => apiThumb(v3u, w) }] : [cover, ...prints.filter(x => x !== cover)].filter(Boolean).slice(0, 4);
   const srcOf = (x, w) => (x._src ? x._src(w) : thumbUrl(x, w));
   const hero = (
@@ -1979,7 +1982,7 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
     // des vignettes (pas les originaux), versionnees ; « small » pour la pile de 46 px des rangees
     // la vignette 3D du groupe, choisie a la place de la mosaique (29/10/2026)
     if (prints[0]?.group_thumb_3d) {
-      const u = `${apiUrl(`/prints/groups/${groupId}/photo/Vue3D.png`)}?v=${prints[0].group_vue3d_v || 0}`;
+      const u = `${apiUrl(`/prints/groups/${groupId}/photo/${prints[0].group_vue3d_name || "Vue3D.png"}`)}?v=${prints[0].group_vue3d_v || 0}`;
       return [{ url: apiThumb(u, 384), small: apiThumb(u, 128), tint: printTint(prints[0]) }];
     }
     return ordered.map(id => ({ url: thumbUrl(byId[id], 384), small: thumbUrl(byId[id], 128), tint: printTint(byId[id]) }));
