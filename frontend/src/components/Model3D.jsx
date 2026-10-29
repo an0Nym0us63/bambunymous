@@ -129,7 +129,7 @@ function copyPiece(THREE, src, n) {
 }
 
 function Viewer({ url, glb, onState, palette = null, finishes = null, multi = null, glow = false, bed = null, litho = false,
-                  pieces = null, edit = null, editApi = null, pad = false, piecePalettes = null }) {
+                  pieces = null, edit = null, editApi = null, pad = false, piecePalettes = null, editing = false }) {
   const [pans, setPans] = useState(false);
   const box = useRef(null);
   const [dark, setDark] = useState(false);
@@ -719,14 +719,14 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: dark ? "linear-gradient(135deg, #facc15, #f59e0b)" : "linear-gradient(135deg, #1e293b, #0f172a)", color: dark ? "#1e293b" : "#e2e8f0",
           fontSize: 13, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{dark ? "💡 Rallumer" : "🌙 Éteindre"}</button>}
-      {oriented && <button type="button" onClick={() => api.current?.untilt()} data-tip="Remettre le modèle comme à l'origine"
+      {oriented && !editing && <button type="button" onClick={() => api.current?.untilt()} data-tip="Remettre le modèle comme à l'origine"
         style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>↺</button>}
-      <button type="button" onClick={() => { const v = !floorPick; setFloorPick(v); api.current?.floorMode(v); }}
+      {!editing && <button type="button" onClick={() => { const v = !floorPick; setFloorPick(v); api.current?.floorMode(v); }}
         data-tip={floorPick ? "Annuler" : "Poser une face au sol : clique ensuite la face du modèle qui doit reposer sur le plateau (la vue seulement : rien n'est enregistré)"}
         style={{ height: 38, padding: "0 10px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 12.5, fontWeight: 800,
           background: floorPick ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", color: floorPick ? "#fff" : "var(--text2)",
-          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{floorPick ? "Clique la face…" : "⬇ Au sol"}</button>
+          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{floorPick ? "Clique la face…" : "⬇ Au sol"}</button>}
       <button type="button" onClick={() => api.current?.fit()} data-tip="Recentrer la vue"
         style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>⟲</button>
@@ -860,7 +860,12 @@ const EDIT_HELP = [
     ["← →  /  ↑ ↓", "1° autour de Z / de X (Maj : 15°)"],
     ["Panneau de droite", "tourner d'un angle exact autour de X, Y ou Z"],
   ]],
-  ["Poser au sol (F)", [["Clic sur une face", "elle se pose à plat sur le sol ; une arête : mise à l'horizontale"]]],
+  ["Poser au sol (F)", [["Par une face : clic sur une face", "elle se pose à plat sur le sol ; une arête : mise à l'horizontale"],
+    ["Par 3 points : trois clics", "à peu près sur les trois appuis (les roues d'un tricycle) : le vrai point d'appui est cherché autour de chaque clic, et la pièce repose dessus"]]],
+  ["La barre", [
+    ["En haut", "les modes, ▭ (choisir au rectangle), ⚙ (aimanter, collage assisté, choix multiple, cran des rotations), ↶ ↷, 🕘 (versions, vue du 3MF), 💾, ?, ✕"],
+    ["Dessous", "selon le mode et la sélection : ses actions (points, pose au sol), 🔗 Grouper ▾, 🧩 Pièce ▾ (séparer, réunir, masquer), et pour une pièce collée 🎯 Ajuster, ⟳ Contact ▾, ✂ Décoller"],
+  ]],
   ["Points (P)", [
     ["Clic sur la pièce à déplacer", "son point 1 (orange, numéroté)"],
     ["Clic sur la cible", "là où doit venir le point 1 (vert, même numéro) ; puis 2 avec 2, 3 avec 3…"],
@@ -934,86 +939,137 @@ function EditVersions({ list, dirty, onPick, onClose }) {
   </div>;
 }
 
+// un menu deroulant de la barre d'edition : un bouton, puis ses choix (chacun avec son aide au survol)
+function BarMenu({ label, tip, items, active = false, b }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = e => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    window.addEventListener("pointerdown", close, true);
+    return () => window.removeEventListener("pointerdown", close, true);
+  }, [open]);
+  const list = items.filter(Boolean);
+  if (!list.length) return null;
+  return <div ref={ref} style={{ position: "relative" }}>
+    <button type="button" onClick={() => setOpen(o => !o)} style={b(active || open)} data-tip={tip}>{label} ▾</button>
+    {open && <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 6, minWidth: 220, padding: 6, borderRadius: 12,
+      background: "var(--sheet-bg)", border: "1px solid var(--border)", boxShadow: "0 14px 34px rgba(0,0,0,.3)", display: "flex", flexDirection: "column", gap: 3 }}>
+      {list.map((it, i) => it === "-" ? <div key={i} style={{ height: 1, background: "var(--border)", margin: "3px 2px" }}/>
+        : it.custom ? <div key={i}>{it.custom}</div>
+        : <button key={i} type="button" disabled={it.disabled} data-tip={it.tip}
+          onClick={() => { it.onClick(); if (!it.keep) setOpen(false); }}
+          style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: "7px 10px", borderRadius: 9, border: "none",
+            cursor: it.disabled ? "default" : "pointer", fontSize: 12.5, fontWeight: 700, opacity: it.disabled ? 0.45 : 1,
+            color: it.danger ? "#ef4444" : it.on ? "#0EA5E9" : "var(--text2)", background: it.on ? "color-mix(in srgb, #0EA5E9 14%, transparent)" : "transparent" }}>
+          <span style={{ flex: 1 }}>{it.label}</span>{it.on != null && <span style={{ fontSize: 11 }}>{it.on ? "✓" : ""}</span>}
+          {it.key && <span style={{ fontSize: 10.5, color: "var(--muted)", fontWeight: 600 }}>{it.key}</span>}
+        </button>)}
+    </div>}
+  </div>;
+}
+
+// La barre de l'edition (30/10/2026, rangee) : en haut, une seule ligne -- les modes, les reglages, annuler/refaire, les
+// versions, enregistrer, l'aide, fermer ; dessous, seulement avec une selection ou un mode qui en a, ses actions
 function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
   const [sure, setSure] = useState(false);
   const [help, setHelp] = useState(false);
   if (!est) return null;
-  const b = (on, extra = {}) => ({ height: 34, padding: "0 12px", borderRadius: 10, border: on ? "none" : "1px solid var(--border)", cursor: "pointer",
+  const b = (on, extra = {}) => ({ height: 34, padding: "0 11px", borderRadius: 10, border: on ? "none" : "1px solid var(--border)", cursor: "pointer",
     fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap", color: on ? "#fff" : "var(--text2)",
     background: on ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", ...extra });
+  const sep = <span style={{ width: 1, alignSelf: "stretch", background: "var(--border)", margin: "0 2px" }}/>;
+  const bar = { display: "flex", gap: 6, padding: 6, borderRadius: 14, alignItems: "center", flexWrap: "wrap", justifyContent: "center",
+    background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(8px)", boxShadow: "0 10px 30px rgba(0,0,0,.25)" };
   const tip = est.glued && est.step !== 2 ? `Collée à ${est.glued.to} : glisse-la pour la faire coulisser ${est.glued.kind === "edge" ? "le long de l'arête" : "sur la face"}, Maj + glisser pour la tourner autour du contact · ✂ Décoller pour la libérer`
     : est.mode === "pins" ? pinsTip(est)
+    : est.mode === "ground" && est.ground3 ? `⬇ Point ${Math.min(3, (est.groundPts || 0) + 1)} sur 3 : clique un point de la pièce qui doit toucher le plateau`
     : est.mode === "mate" ? (est.step === 2 ? EDIT_TIPS.mate2 : est.pairs ? `Collée${est.pairs > 1 ? ` en ${est.pairs} points` : ""} : Maj + clic (ou ➕ Multi) sur un autre point, une face ou une arête de la pièce, puis sur sa cible, pour fixer l'orientation`
       : est.assist ? EDIT_TIPS.mate1a : EDIT_TIPS.mate1) : EDIT_TIPS[est.mode];
+  const hasSel = est.count > 0;
+  // la seconde ligne : les actions du mode, puis celles de la selection
+  const modeRow = est.mode === "pins" ? <>
+      <button type="button" disabled={!est.pinsB} onClick={() => api?.pinsApply()} style={b(!!est.pinsB, { opacity: est.pinsB ? 1 : 0.45 })}
+        data-tip="Faire coïncider chaque point orange avec le point vert de même numéro (Entrée)">✓ Assembler{est.pinsB ? ` (${est.pinsB})` : ""}</button>
+      <button type="button" disabled={!est.pinsA} onClick={() => api?.pinsUndo()} style={b(false, { opacity: est.pinsA ? 1 : 0.45 })} data-tip="Retirer le dernier point">⌫ Point</button>
+      <button type="button" disabled={!est.pinsA} onClick={() => api?.pinsClear()} style={b(false, { opacity: est.pinsA ? 1 : 0.45 })} data-tip="Effacer tous les points">✕ Points</button>
+    </>
+    : est.mode === "ground" ? <>
+      <button type="button" onClick={() => api?.setGround3(false)} style={b(!est.ground3)} data-tip="Clique la face (ou l'arête) qui doit être posée au sol">Par une face</button>
+      <button type="button" onClick={() => api?.setGround3(true)} style={b(!!est.ground3)} data-tip="Clique trois points de la pièce qui doivent toucher le plateau : leur plan vient à plat sur le sol">Par 3 points{est.ground3 && est.groundPts ? ` (${est.groundPts}/3)` : ""}</button>
+      {est.ground3 && est.groundPts > 0 && <button type="button" onClick={() => api?.setGround3(true)} style={b(false)} data-tip="Recommencer les points">✕ Points</button>}
+    </> : null;
+  const splitRow = est.splitPending ? <>
+      <button type="button" onClick={() => api?.splitConfirm()} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}>✓ Séparer en {est.splitPending}</button>
+      <button type="button" onClick={() => api?.splitCancel()} style={b(false)}>✕ Ne pas séparer</button>
+    </> : null;
+  const selRow = hasSel && !est.splitPending ? <>
+      <span style={{ fontSize: 12, fontWeight: 800, color: "#0EA5E9", padding: "0 4px", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{est.selected}</span>
+      <BarMenu b={b} label="🔗 Grouper" tip="Faire bouger des pièces ensemble" items={[
+        est.canGroup && { label: "🔗 Grouper la sélection", key: "Ctrl+G", onClick: () => api?.group(), tip: "Les pièces choisies bougent ensemble" },
+        { label: "🔗 Grouper ce qui touche", onClick: () => api?.groupTouching(), tip: "La sélection et toutes les pièces qui la touchent, de proche en proche" },
+        est.canGroupGlued && { label: "🔗 Grouper le collé", onClick: () => api?.groupGlued(), tip: "La pièce et tout ce qui y est collé, de proche en proche" },
+        est.canUngroup && "-",
+        est.canUngroup && { label: "⛓ Dégrouper", key: "Ctrl+Maj+G", onClick: () => api?.ungroup() },
+      ]}/>
+      <BarMenu b={b} label="🧩 Pièce" tip="Séparer, réunir, masquer" items={[
+        est.canSplit && { label: "✂ Séparer", onClick: () => api?.splitPreview(), tip: "Pièces groupées : les rendre indépendantes ; une pièce seule : proposer ses morceaux" },
+        est.canReunite && { label: "⊕ Réunir", onClick: () => api?.reunite(), tip: "Remettre la pièce d'un seul tenant" },
+        { label: "🙈 Masquer", key: "H", onClick: () => api?.hide(), tip: "Pour atteindre ce qu'elle cache (la vue seulement)" },
+      ]}/>
+      {est.glued && <>
+        {sep}
+        <button type="button" onClick={() => api?.refine()} style={b(false)}
+          data-tip="Chercher le meilleur ajustement : la pièce épouse au mieux l'autre surface près du contact, sans la traverser">🎯 Ajuster</button>
+        <BarMenu b={b} label="⟳ Contact" tip="Tourner autour du contact, glisser sans traverser" items={[
+          ...(est.pivot ? [[-90, "⟲ 90°"], [-15, "⟲ 15°"], [15, "⟳ 15°"], [90, "⟳ 90°"]].map(([d, l]) =>
+            ({ label: `${l} autour du contact`, onClick: () => api?.turn(d), keep: true })) : []),
+          est.pivot && "-",
+          { label: "⟳ Le glisser tourne la pièce", on: !!est.turnGlued, onClick: () => api?.setTurnGlued(!est.turnGlued), keep: true, tip: "Comme Maj + glisser, pour le stylet" },
+          { label: "🛡 Anti-collision", on: !!est.guard, onClick: () => api?.setGuard(!est.guard), keep: true, tip: "En coulissant, la pièce s'arrête au contact de la matière" },
+        ]}/>
+        <button type="button" onClick={() => api?.unglue()} style={b(false, { color: "#ef4444" })} data-tip={`Collée à ${est.glued.to} : la libérer (écartée de 2 mm)`}>✂ Décoller</button>
+      </>}
+    </> : null;
+  const showAll = est.hidden > 0 ? <button type="button" onClick={() => api?.showAll()} style={b(false)} data-tip="Réafficher tout (Alt+H)">👁 Tout afficher ({est.hidden})</button> : null;
+  const second = modeRow || splitRow || selRow || showAll;
   return <>
-    <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 6, padding: 6, borderRadius: 14, zIndex: 3,
-      background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(8px)",
-      boxShadow: "0 10px 30px rgba(0,0,0,.25)", flexWrap: "wrap", justifyContent: "center", maxWidth: "calc(100% - 24px)" }}>
-      {[["move", "✥ Déplacer"], ["rotate", "⟳ Tourner"], ["ground", "⬇ Poser au sol"], ["mate", "🧲 Coller"], ["pins", "📍 Points"]].map(([m, l]) =>
-        <button key={m} type="button" onClick={() => api?.setMode(m)} style={b(est.mode === m)}
-          data-tip={m === "pins" ? "Assembler par paires de points : 1 avec 1, 2 avec 2, 3 avec 3 (P)" : undefined}>{l}</button>)}
-      {est.mode === "pins" && <>
-        <button type="button" disabled={!est.pinsB} onClick={() => api?.pinsApply()} style={b(!!est.pinsB, { opacity: est.pinsB ? 1 : 0.45 })}
-          data-tip="Faire coïncider chaque point orange avec le point vert de même numéro (Entrée)">✓ Assembler{est.pinsB ? ` (${est.pinsB})` : ""}</button>
-        <button type="button" disabled={!est.pinsA} onClick={() => api?.pinsUndo()} style={b(false, { opacity: est.pinsA ? 1 : 0.45 })} data-tip="Retirer le dernier point">⌫ Point</button>
-        <button type="button" disabled={!est.pinsA} onClick={() => api?.pinsClear()} style={b(false, { opacity: est.pinsA ? 1 : 0.45 })} data-tip="Effacer tous les points">✕ Points</button>
-      </>}
-      <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>
-      <button type="button" onClick={() => api?.setMagnet(!est.magnet)} style={b(est.magnet)}
-        data-tip="Aimantation : pas de 1 mm et 15°, et une pièce lâchée près d'une autre ou du sol vient s'y coller">🧷 Aimanter</button>
-      <select value={est.rotStep} onChange={e => api?.setRotStep(Number(e.target.value))} data-tip="Le cran des rotations à la poignée (Alt maintenu : sans cran)"
-        style={{ height: 34, padding: "0 8px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)",
-          fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>
-        {[[0, "⟳ libre"], [1, "⟳ 1°"], [5, "⟳ 5°"], [15, "⟳ 15°"], [45, "⟳ 45°"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-      </select>
-      <button type="button" onClick={() => api?.setMulti(!est.multi)} style={b(est.multi)}
-        data-tip="Choisir plusieurs pièces d'un clic chacune (comme Ctrl + clic, pour le stylet)">➕ Multi</button>
-      {est.glued && <button type="button" onClick={() => api?.setTurnGlued(!est.turnGlued)} style={b(est.turnGlued)}
-        data-tip="Le glisser de la pièce collée la fait tourner autour du contact (comme Maj + glisser, pour le stylet)">⟳ Tourner collée</button>}
-      <button type="button" onClick={() => api?.setAssist(!est.assist)} style={b(est.assist)}
-        data-tip="Collage assisté : les faces planes entières sont centrées l'une sur l'autre et leurs grands axes alignés (sinon : au point cliqué)">🪄 Assisté</button>
-      {!!(est.canGroup || est.canUngroup || est.glued || est.count > 0 || est.hidden > 0 || est.splitPending) && <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>}
-      {est.canGroup && <button type="button" onClick={() => api?.group()} style={b(false)} data-tip="Les pièces choisies bougent ensemble (Ctrl+G)">🔗 Grouper</button>}
-      <button type="button" onClick={() => api?.setBoxMode(!est.boxMode)} style={b(!!est.boxMode)}
-        data-tip="Choisir au rectangle : glisse pour entourer les pièces (Ctrl : en ajouter) ; la vue ne tourne pas tant que c'est allumé">▭ Rectangle</button>
-      {est.count > 0 && <button type="button" onClick={() => api?.groupTouching()} style={b(false)}
-        data-tip="Grouper la sélection avec toutes les pièces qui la touchent, de proche en proche">🔗 Grouper ce qui touche</button>}
-      {est.canGroupGlued && <button type="button" onClick={() => api?.groupGlued()} style={b(false)}
-        data-tip="Grouper cette pièce avec tout ce qui y est collé, de proche en proche (et ce sur quoi elle est collée)">🔗 Grouper le collé</button>}
-      {est.splitPending ? <>
-        <button type="button" onClick={() => api?.splitConfirm()} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}>✓ Séparer en {est.splitPending}</button>
-        <button type="button" onClick={() => api?.splitCancel()} style={b(false)}>✕ Ne pas séparer</button>
-      </> : <>
-        {est.canSplit && <button type="button" onClick={() => api?.splitPreview()} style={b(false)}
-          data-tip="Des pièces groupées (les parties d'un objet du 3MF) : les rendre indépendantes d'un clic. Une pièce seule : proposer ses morceaux qui ne se touchent pas, à valider ou non">✂ Séparer</button>}
-        {est.canReunite && <button type="button" onClick={() => api?.reunite()} style={b(false)} data-tip="Remettre la pièce d'un seul tenant">⊕ Réunir</button>}
-      </>}
-      {est.count > 0 && <button type="button" onClick={() => api?.hide()} style={b(false)} data-tip="Masquer la sélection pour atteindre ce qu'elle cache (H)">🙈 Masquer</button>}
-      {est.hidden > 0 && <button type="button" onClick={() => api?.showAll()} style={b(false)} data-tip="Réafficher tout (Alt+H)">👁 Tout afficher ({est.hidden})</button>}
-      {est.glued && <button type="button" onClick={() => api?.setGuard(!est.guard)} style={b(est.guard)}
-        data-tip="Anti-collision : en coulissant, la pièce s'arrête au contact de la matière">🛡 Anti-collision</button>}
-      {est.glued && <button type="button" onClick={() => api?.unglue()} style={b(false, { color: "#ef4444" })}
-        data-tip={`Collée à ${est.glued.to} : la libérer (écartée de 2 mm)`}>✂ Décoller</button>}
-      {est.glued && <button type="button" onClick={() => api?.refine()} style={b(false)}
-        data-tip="Chercher le meilleur ajustement : la pièce épouse au mieux l'autre surface près du contact, sans la traverser">🎯 Ajuster</button>}
-      {est.canUngroup && <button type="button" onClick={() => api?.ungroup()} style={b(false)} data-tip="Défaire le groupe (Ctrl+Maj+G)">⛓ Dégrouper</button>}
-      {est.pivot && <>
-        <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>
-        {[[-90, "⟲ 90°"], [-15, "⟲ 15°"], [15, "⟳ 15°"], [90, "⟳ 90°"]].map(([d, l]) =>
-          <button key={d} type="button" onClick={() => api?.turn(d)} style={b(false)} data-tip="Tourner la pièce collée autour du contact">{l}</button>)}
-      </>}
-      <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>
-      <button type="button" disabled={!est.canUndo} onClick={() => api?.undo()} style={b(false, { opacity: est.canUndo ? 1 : 0.4 })} data-tip="Annuler (Ctrl+Z)">↶</button>
-      <button type="button" disabled={!est.canRedo} onClick={() => api?.redo()} style={b(false, { opacity: est.canRedo ? 1 : 0.4 })} data-tip="Refaire (Ctrl+Y)">↷</button>
-      <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>
-      {sure ? <button type="button" onClick={() => { setSure(false); onReset(); }} style={b(false, { color: "#ef4444" })}>Confirmer : vue du 3MF</button>
-        : <button type="button" onClick={() => { setSure(true); setTimeout(() => setSure(false), 4000); }} style={b(false)}
-          data-tip="Oublier l'assemblage enregistré : la vue redevient celle du 3MF">↺ Vue du 3MF</button>}
-      <button type="button" onClick={onVersions} style={b(false)} data-tip="Reprendre un assemblage enregistré avant (chaque version est gardée)">🕘 Versions</button>
-      <button type="button" disabled={saving} onClick={onSave} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}>
-        {saving ? "…" : est.dirty ? "💾 Enregistrer" : "✓ Enregistré"}</button>
-      <button type="button" onClick={() => { setHelp(true); egg("mode_emploi"); }} style={b(false)} data-tip="Tous les gestes et raccourcis">?</button>
-      <button type="button" onClick={onClose} style={b(false)} data-tip="Fermer l'édition">✕</button>
+    <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 3, display: "flex", flexDirection: "column", alignItems: "center",
+      gap: 6, maxWidth: "calc(100% - 24px)" }}>
+      <div style={bar}>
+        {[["move", "✥ Déplacer", "M"], ["rotate", "⟳ Tourner", "R"], ["ground", "⬇ Poser au sol", "F"], ["mate", "🧲 Coller", "C"], ["pins", "📍 Points", "P"]].map(([m, l, k]) =>
+          <button key={m} type="button" onClick={() => api?.setMode(m)} style={b(est.mode === m)}
+            data-tip={m === "pins" ? "Assembler par paires de points : 1 avec 1, 2 avec 2, 3 avec 3 (P)" : m === "ground" ? "Poser au sol : par une face, ou par 3 points (F)" : `(${k})`}>{l}</button>)}
+        <button type="button" onClick={() => api?.setBoxMode(!est.boxMode)} style={b(!!est.boxMode)}
+          data-tip="Choisir au rectangle : glisse pour entourer les pièces (Ctrl : en ajouter) ; la vue ne tourne pas tant que c'est allumé">▭</button>
+        {sep}
+        <BarMenu b={b} label="⚙" tip="Réglages : aimantation, cran des rotations, choix multiple, collage assisté" items={[
+          { label: "🧷 Aimanter", on: !!est.magnet, onClick: () => api?.setMagnet(!est.magnet), keep: true, tip: "Pas de 1 mm et 15°, et une pièce lâchée près d'une autre ou du sol vient s'y coller" },
+          { label: "🪄 Collage assisté", on: !!est.assist, onClick: () => api?.setAssist(!est.assist), keep: true, tip: "Faces entières centrées et grands axes alignés (sinon : au point cliqué)" },
+          { label: "➕ Choix multiple", on: !!est.multi, onClick: () => api?.setMulti(!est.multi), keep: true, tip: "Chaque clic ajoute ou retire une pièce (comme Ctrl + clic, pour le stylet)" },
+          "-",
+          { custom: <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginRight: 2 }}>Cran des rotations</span>
+            {[[0, "libre"], [1, "1°"], [5, "5°"], [15, "15°"], [45, "45°"]].map(([v, l]) =>
+              <button key={v} type="button" onClick={() => api?.setRotStep(v)} style={{ padding: "3px 8px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800,
+                color: est.rotStep === v ? "#fff" : "var(--text2)", background: est.rotStep === v ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" }}>{l}</button>)}
+          </div> },
+        ]}/>
+        {sep}
+        <button type="button" disabled={!est.canUndo} onClick={() => api?.undo()} style={b(false, { opacity: est.canUndo ? 1 : 0.4 })} data-tip="Annuler (Ctrl+Z)">↶</button>
+        <button type="button" disabled={!est.canRedo} onClick={() => api?.redo()} style={b(false, { opacity: est.canRedo ? 1 : 0.4 })} data-tip="Refaire (Ctrl+Y)">↷</button>
+        {sep}
+        <BarMenu b={b} label="🕘" tip="Versions enregistrées, retour à la vue du 3MF" items={[
+          { label: "🕘 Versions enregistrées", onClick: onVersions, tip: "Reprendre un assemblage enregistré avant (chaque version est gardée)" },
+          sure ? { label: "Confirmer : revenir à la vue du 3MF", danger: true, onClick: () => { setSure(false); onReset(); } }
+            : { label: "↺ Vue du 3MF", keep: true, onClick: () => { setSure(true); setTimeout(() => setSure(false), 4000); }, tip: "Oublier l'assemblage enregistré (il reste dans les versions)" },
+        ]}/>
+        <button type="button" disabled={saving} onClick={onSave} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}>
+          {saving ? "…" : est.dirty ? "💾 Enregistrer" : "✓ Enregistré"}</button>
+        <button type="button" onClick={() => { setHelp(true); egg("mode_emploi"); }} style={b(false)} data-tip="Tous les gestes et raccourcis">?</button>
+        <button type="button" onClick={onClose} style={b(false)} data-tip="Fermer l'édition">✕</button>
+      </div>
+      {second && <div style={bar}>{modeRow}{splitRow}{selRow}{!selRow && !modeRow && !splitRow ? null : showAll && sep}{showAll}</div>}
     </div>
     {help && <EditHelp onClose={() => setHelp(false)}/>}
     {(est.mode === "move" || est.mode === "rotate") && <ExactPanel est={est} api={api}/>}
@@ -1022,7 +1078,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
       fontWeight: 700, color: "var(--text2)", background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)",
       maxWidth: "calc(100% - 140px)", textAlign: "center" }}>
       {est.splitPending ? <b style={{ color: "#0EA5E9" }}>{est.splitPending} morceaux, chacun de sa couleur : ✓ Séparer en {est.splitPending}, ou ✕ Ne pas séparer</b>
-        : est.fitMsg ? <b style={{ color: /^(Assemblée|Séparée|Collée|Ajustée|Groupée)/.test(est.fitMsg) ? "#16a34a" : "#d97706" }}>{est.fitMsg}</b>
+        : est.fitMsg ? <b style={{ color: /^(Assemblée|Séparée|Collée|Ajustée|Groupée|Posée)/.test(est.fitMsg) ? "#16a34a" : "#d97706" }}>{est.fitMsg}</b>
         : est.liveAngle != null ? <b style={{ color: "#0EA5E9", fontSize: 15 }}>Rotation : {String(est.liveAngle).replace(".", ",")}°</b> : <>
       {est.selected && (est.mode === "move" || est.mode === "rotate") ? <b style={{ color: "#0EA5E9" }}>{est.selected} · </b> : null}{tip}
       {est.count > 0 && <span style={{ display: "block", fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>Les autres pièces s'estompent : clic dans le vide ou Échap pour tout désélectionner</span>}</>}
@@ -1265,7 +1321,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           border: full ? "none" : "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
           {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}|${vkey}|${piecePal ? Object.keys(piecePal).length : 0}|${origView && !editing ? "orig" : ""}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown} piecePalettes={piecePal}
-            pieces={p.assembled ? p.pieces : null} edit={p.assembled && !(origView && !editing) ? edit : null} editApi={editApi} pad={full || editing}
+            pieces={p.assembled ? p.pieces : null} edit={p.assembled && !(origView && !editing) ? edit : null} editApi={editApi} pad={full || editing} editing={editing}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}

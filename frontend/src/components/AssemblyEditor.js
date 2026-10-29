@@ -128,7 +128,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const selName = () => sel.size === 0 ? null : sel.size === 1 ? [...sel][0].userData.name : `${sel.size} pièces${groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))) ? " (groupe)" : ""}`;
   const center = () => { if (!sel.size) return null; const c = boxOfAll([...sel]).getCenter(new THREE.Vector3()); return [c.x, c.y, c.z].map(v => Math.round(v * 10) / 10); };
   const state = () => ({ mode, magnet, assist, rotStep, center: center(), selected: selName(), count: sel.size, step: first ? 2 : 1, canUndo: undo.length > 0, canRedo: redo.length > 0,
-    pivot: !!pivot, pairs: pairs.length, boxMode, pinsA: pins.a.length, pinsB: pins.b.length,
+    pivot: !!pivot, pairs: pairs.length, boxMode, ground3, groundPts: gPts.length, pinsA: pins.a.length, pinsB: pins.b.length,
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
@@ -489,6 +489,15 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     onChange?.(state());
   };
 
+  let ground3 = false, gPts = [], gUnit = [];
+  const groundMarks = new THREE.Group(); groundMarks.renderOrder = 1000; holder.add(groundMarks);
+  const drawGround = () => {
+    groundMarks.children.slice().forEach(sp => { sp.material.map.dispose(); sp.material.dispose(); groundMarks.remove(sp); });
+    const L = Math.max(10, boxOfAll(all.filter(g => g.visible)).getSize(new THREE.Vector3()).length());
+    gPts.forEach((pt, i) => { const sp = label(String(i + 1), "#0EA5E9"); sp.position.copy(pt); sp.scale.setScalar(L * 0.025); groundMarks.add(sp); });
+    render();
+  };
+
   let down = null;
   const onDown = ev => { down = [ev.clientX, ev.clientY]; };
   const onUp = ev => {
@@ -522,6 +531,55 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         pins.b.push({ g: pick.group, p: toLocal(pick.group, pick.p), n: pick.n ? toLocal(pick.group, pick.n, true) : null });
       }
       fitMsg = null; drawPins(); onChange?.(state()); return;
+    }
+    if (mode === "ground" && ground3) {
+      // poser au sol par 3 points (30/10/2026) : trois points de la piece qui doivent toucher le plateau ; au troisieme,
+      // le plan qu'ils forment vient a plat sur le sol, la piece dessus
+      if (gPts.length && !gUnit.includes(pick.group)) { fitMsg = `Les 3 points se prennent sur la même pièce (${gUnit[0].userData.name})`; onChange?.(state()); return; }
+      if (!gPts.length) gUnit = sel.has(pick.group) ? [...sel] : unitOf(pick.group);
+      gPts.push(pick.p.clone());
+      drawGround();
+      if (gPts.length < 3) { fitMsg = null; onChange?.(state()); return; }
+      const [p1, p2, p3] = gPts, n = p2.clone().sub(p1).cross(p3.clone().sub(p1));
+      if (n.lengthSq() < 1e-6) { gPts = []; drawGround(); fitMsg = "Ces 3 points sont alignés : choisis-en trois qui forment un triangle"; onChange?.(state()); return; }
+      n.normalize();
+      // la normale tournee vers l'exterieur de la piece (vers le sol a venir)
+      const ctr = boxOfAll(gUnit).getCenter(new THREE.Vector3());
+      if (ctr.clone().sub(p1).dot(n) > 0) n.negate();
+      const moving = withKids(gUnit);
+      const pts = [p1.clone(), p2.clone(), p3.clone()];
+      const turn = (from, to, at) => { const M = about(at, new THREE.Quaternion().setFromUnitVectors(from, to)); apply(moving, M); pts.forEach(q => q.applyMatrix4(M)); };
+      turn(n, new THREE.Vector3(0, 0, -1), p1);
+      // indulgent (30/10/2026 : trois clics a peu pres sur les roues d'un tricycle) : autour de chaque clic, le point le
+      // plus bas de la piece est son vrai appui ; le plan de ces trois appuis vient a plat, deux ou trois fois de suite
+      const size = boxOfAll(gUnit).getSize(new THREE.Vector3()).length(), R = Math.max(3, size * 0.12);
+      const verts = () => {
+        const out = [], v = new THREE.Vector3();
+        for (const g of gUnit) {
+          g.updateMatrix();
+          for (const m of g.children) {
+            if (!m.isMesh || !m.geometry?.attributes?.position) continue;
+            const pa = m.geometry.attributes.position.array, st = Math.max(1, Math.floor(pa.length / 3 / 60000));
+            for (let i = 0; i < pa.length; i += 3 * st) out.push(v.set(pa[i], pa[i + 1], pa[i + 2]).applyMatrix4(g.matrix).clone());
+          }
+        }
+        return out;
+      };
+      for (let it = 0; it < 3; it++) {
+        const vs = verts();
+        const low = pts.map(q => vs.filter(v => Math.hypot(v.x - q.x, v.y - q.y) <= R).reduce((m, v) => (!m || v.z < m.z ? v : m), null) || q);
+        const m2 = low[1].clone().sub(low[0]).cross(low[2].clone().sub(low[0]));
+        if (m2.lengthSq() < 1e-6) break;
+        m2.normalize();
+        if (m2.z > 0) m2.negate();                       // vers le bas
+        if (m2.angleTo(new THREE.Vector3(0, 0, -1)) < 0.002) break;
+        turn(m2, new THREE.Vector3(0, 0, -1), low[0]);
+        pts.splice(0, 3, ...low.map(v => v.clone().applyMatrix4(about(low[0], new THREE.Quaternion().setFromUnitVectors(m2, new THREE.Vector3(0, 0, -1))))));
+      }
+      joints = joints.filter(j => !gUnit.includes(j.a));
+      drop(gUnit); const u = gUnit; gPts = []; gUnit = []; drawGround();
+      pivot = null; clearMarks(); showContact(); push(); setSel(u);
+      fitMsg = "Posée au sol sur ses 3 points"; onChange?.(state()); render(); return;
     }
     if (mode === "ground") {
       const unit = sel.has(pick.group) ? [...sel] : unitOf(pick.group), moving = withKids(unit);
@@ -737,7 +795,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   window.addEventListener("blur", onBlur);
 
   const api = {
-    setMode: m => { if (m !== "pins") pinsClear(); mode = m; first = null; if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
+    setGround3: on => { ground3 = on; gPts = []; gUnit = []; drawGround(); onChange?.(state()); },
+    setMode: m => { if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
     setRotStep: d => { rotStep = d; applySnap(); onChange?.(state()); },
     setMulti: on => { multi = on; onChange?.(state()); },
