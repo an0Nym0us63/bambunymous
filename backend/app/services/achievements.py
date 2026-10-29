@@ -152,10 +152,18 @@ CATALOG = [
     _a("mw_collections", "mw", "📚", "Collectionné", "Tes modèles ajoutés {n} fois à des collections", [1, 5, 10, 25, 50]),
     _a("mw_my_collections", "mw", "🗂️", "Curateur", "{n} collections MakerWorld à toi", [1]),
     _a("mw_follows", "mw", "👀", "Curieux", "Tu suis {n} créateurs", [5, 25, 50, 100, 250]),
+    _a("mw_relinked", "mw", "🕵️", "Détective", "{n} impressions orphelines rendues à leur modèle MakerWorld", [1],
+       lore="Une impression sans modèle, c'est une énigme. Un nom, quelques indices, et l'enquête aboutit."),
+    _a("views_3d", "mw", "🧊", "Galerie en relief", "{n} modèles prêts à voir en 3D", [10],
+       lore="Chaque 3MF gardé devient un modèle qu'on fait tourner du doigt, couleurs comprises."),
+    _a("asm_edited", "mw", "🧩", "Monteur", "{n} vues assemblées remaniées à ta façon", [1],
+       lore="Le créateur avait posé ses pièces en vrac : toi, tu les as remises à leur place."),
     # Copains
     _a("friends", "social", "🤝", "Bande de copains", "{n} copains reliés", [1, 3, 5, 10, 20]),
     # Photos
     _a("photos_manual", "photos", "📸", "Photographe", "{n} photos ajoutées à tes impressions", [1]),
+    _a("vue3d_thumbs", "photos", "🎞️", "Studio photo 3D", "{n} vignettes prises dans la vue 3D assemblée", [1],
+       lore="Pas besoin d'appareil : un bel angle, la grille qui s'efface, et la vignette est faite."),
     _a("photo_prints", "photos", "🖼️", "Album", "{n} impressions avec au moins une photo", [1]),
     _a("photos_camera", "photos", "📹", "Œil de la caméra", "{n} photos prises par la caméra de l'imprimante", [1]),
     _a("photos_max", "photos", "🎞️", "Séance photo", "{n} photos sur une même impression", [1]),
@@ -1615,6 +1623,39 @@ EGGS = {
     "daltonien": ('🎨', 'Œil du peintre', "Corriger à la main la couleur qui remplace celle du créateur, sur une impression ou un groupe",
                   "L'appli devine les couleurs de tes impressions. Quand elle se trompe, c'est toi qui as l'œil.",
                   "Tu as remis la bonne couleur à sa place. L'appli en prend note, et n'y reviendra plus."),
+    "vignette_3d": ('📷', 'Photo de famille', "Prendre une vignette dans la vue 3D assemblée",
+                    "Le plus bel angle d'un modèle mérite d'être gardé, sans la grille autour.",
+                    "Clic, c'est dans la boîte : ton modèle a sa photo officielle, prise sous son meilleur profil."),
+    "tenon_mortaise": ('🪵', 'Tenon et mortaise', "Emboîter une pièce avec l'assistant de la vue assemblée",
+                       "Une pièce qui cherche toute seule sa place, sans rien traverser.",
+                       "Clac. Elle a trouvé son logement toute seule, comme chez un menuisier."),
+    "puzzle_3d": ('🧩', 'Casse-tête', "Séparer une pièce en ses morceaux dans la vue assemblée",
+                  "Ce qui semblait d'un seul tenant cache parfois plusieurs morceaux.",
+                  "Un, deux, trois morceaux… La pièce t'a livré ses secrets."),
+    "glissade": ('🛷', 'Glissade', "Faire coulisser une pièce collée sans la décoller",
+                 "Collée, mais pas figée : une pièce peut glisser tout contre une autre.",
+                 "Elle a glissé tout du long sans jamais lâcher prise. Belle maîtrise."),
+    "grand_ecran": ('🎬', 'Grand écran', "Passer la vue 3D en plein écran",
+                    "Un modèle se regarde mieux en grand.",
+                    "Lumières éteintes, écran géant : place au spectacle."),
+    "case_depart": ('↩️', 'Retour à la case départ', "Revenir à la vue du 3MF après avoir remanié un assemblage",
+                    "Parfois, le créateur avait raison.",
+                    "Tout est revenu comme au premier jour. Sans rancune."),
+    "flair": ('👃', 'Flair', "Choisir toi-même le bon modèle MakerWorld parmi les candidats proposés",
+              "Quand l'appli hésite entre plusieurs modèles, c'est ton flair qui tranche.",
+              "Entre tous les candidats, tu as reconnu le bon. L'enquête est close."),
+    "introuvable": ('🫥', 'Introuvable', "Déclarer qu'un modèle n'est pas sur MakerWorld",
+                    "Certaines pièces n'ont jamais eu de fiche nulle part.",
+                    "Pas sur MakerWorld, et c'est très bien comme ça : on ne le cherchera plus."),
+    "demenageur": ('📦', 'Déménageur', "Télécharger d'un coup les 3MF d'un groupe",
+                   "Tout un groupe, tous ses fichiers, un seul geste.",
+                   "Un carton, tous les fichiers dedans : le déménagement s'est fait sans rien casser."),
+    "cache_cache": ('🙈', 'Cache-cache', "Masquer une pièce pour atteindre ce qu'elle cache",
+                    "Quand une pièce gêne, il suffit de ne plus la voir.",
+                    "Coucou ! La pièce a disparu le temps qu'il fallait."),
+    "mode_emploi": ('📖', "Mode d'emploi", "Ouvrir l'aide de l'édition de l'assemblage",
+                    "Tout est expliqué quelque part, encore faut-il ouvrir le bon livret.",
+                    "Tu as lu la notice. C'est plus rare qu'on ne croit."),
     "ombres_chinoises": ('🏮', 'Ombres chinoises', "Éclairer un lithophane par derrière dans la vue 3D",
                          "Une plaque toute blanche, un relief qui ne dit rien… jusqu'à ce qu'on mette une lampe derrière.",
                          "La lumière est passée au travers, et l'image est apparue. Comme à la fenêtre, le soir."),
@@ -2740,7 +2781,7 @@ HINTS = {
 
 
 LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_likes", "mw_level", "mw_collections",
-        "mw_my_collections",
+        "mw_my_collections", "mw_relinked", "views_3d", "asm_edited", "vue3d_thumbs",
         "mw_follows", "friends", "stock", "stock_kg", "stock_colors", "rfid", "multicolor_fils",
         "photos_manual", "photo_prints", "photos_camera", "photos_max", "covers", "visits", "visit_days", "details",
         "actions", "updates", "notifs", "dismissals", "print_groups", "paparazzi", "souvenirs", "videos", "video_prints",
@@ -2757,7 +2798,9 @@ LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_l
         "guide_minutes", "guide_sections", "guide_opens", "guide_searches"}
 # Lus au present ET retires si on defait ce qui les donne (l'etat de la disposition de l'accueil).
 # Regagne apres une perte, un palier revient sans notification ni cle (pas de cles a la chaine).
-REVOCABLE = {"home_multi", "home_minimal", "home_all", "home_pages"}
+REVOCABLE = {"home_multi", "home_minimal", "home_all", "home_pages",
+             # un modele rendu puis retire, un assemblage oublie (« Vue du 3MF »), une vue refaite plus tard
+             "mw_relinked", "asm_edited", "views_3d", "vue3d_thumbs"}
 for _x in CATALOG:
     _x["live"] = _x["id"] in LIVE
 # Seuils : six paliers (bronze -> legende), etendus a neuf (mythique, cosmique,
@@ -2897,6 +2940,11 @@ TIER_TABLE = {
     "mat_petg": [0.5, 1, 2, 4, 6, 9, 13, 20, 30],
     # MakerWorld : revus le 21/10/2026
     "mw_my_collections": [1, 3, 5, 8, 12, 16, 20, 30, 40],
+    # vue 3D, assemblage, modeles retrouves (29/10/2026)
+    "mw_relinked": [1, 5, 10, 25, 50, 100, 175, 275, 400],
+    "views_3d": [10, 25, 50, 100, 175, 275, 400, 550, 750],
+    "asm_edited": [1, 3, 5, 10, 15, 25, 40, 60, 90],
+    "vue3d_thumbs": [1, 3, 5, 10, 20, 35, 50, 75, 100],
     # Cles et roue (21/10/2026)
     "wheel_played": [1, 5, 10, 20, 35, 50, 75, 100, 150],
     "wheel_keys": [1, 5, 10, 20, 35, 50, 75, 100, 150],
@@ -4910,6 +4958,22 @@ def _fun(push, p, start, end, dur, loc, ok, ko, w, cols, us, key, st) -> None:
         push("luxury", end, 1)
 
 
+def _views_values() -> dict:
+    """Vue 3D, assemblage, modeles retrouves (29/10/2026) : lu sur le disque, au present."""
+    from pathlib import Path
+    from ..core.config import settings
+    from . import mw_relink
+    data = Path(settings.DATA_DIR)
+    mw_relink._load()
+    out = {"mw_relinked": sum(len(u.get("print_ids") or []) for u in mw_relink._UNITS.values() if u.get("status") == "linked")}
+    v3 = data / "mw_3d"
+    out["views_3d"] = sum(1 for d in v3.iterdir() if (d / "plates.json").is_file()) if v3.is_dir() else 0
+    ed = data / "mw_3d_edits"
+    out["asm_edited"] = sum(1 for _ in ed.glob("*.json")) if ed.is_dir() else 0
+    out["vue3d_thumbs"] = sum(1 for _ in (data / "prints").glob("*/Vue3D.png")) + sum(1 for _ in (data / "groups").glob("*/Vue3D.png"))
+    return out
+
+
 async def _live_values() -> dict:
     """Ce qui ne se lit qu'au present : profil MakerWorld, copains."""
     out = {}
@@ -4938,6 +5002,11 @@ async def _live_values() -> dict:
         out["friends"] = len(await list_friends())
     except Exception:
         pass
+    try:
+        import asyncio
+        out.update(await asyncio.to_thread(_views_values))
+    except Exception as e:
+        logger.info(f"[SUCCES] vues 3D illisibles : {e}")
     try:
         from . import home_stats
         out.update(await home_stats.values())

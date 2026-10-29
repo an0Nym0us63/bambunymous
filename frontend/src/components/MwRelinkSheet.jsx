@@ -4,6 +4,7 @@ import { RefreshCw, Search, X } from "lucide-react";
 import client from "../api/client";
 import { showAlert } from "../utils/dialog";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
+import { egg } from "../eggs";
 
 // Les impressions sans modele MakerWorld, regroupees par nom (29/10/2026) : une tuile par « modele ».
 // Le scan cherche chacun sur MakerWorld par son nom d'origine (ou le titre lu dans son 3MF) : un resultat net
@@ -42,7 +43,7 @@ function UnitDetail({ u, onClose, onDone, narrow, z }) {
     catch (e) { showAlert(e.response?.data?.detail || e.message); return null; }
     finally { setBusy(false); }
   };
-  const choose = async c => { if (await call("choose", { key: u.key, design_id: c.design_id })) onDone(); };
+  const choose = async c => { if (await call("choose", { key: u.key, design_id: c.design_id })) { egg("flair"); onDone(); } };
   const search = async () => { const d = q.trim() && await call("search", { key: u.key, q: q.trim() }); if (d) setCands(d.candidates || []); };
   const st = ST[u.status] || ST.todo;
   return createPortal(
@@ -99,7 +100,7 @@ function UnitDetail({ u, onClose, onDone, narrow, z }) {
                 </div>
               );
             })}
-          {u.status !== "linked" && <button disabled={busy} onClick={async () => { if (await call("ignore", { key: u.key, on: u.status !== "ignored" })) onDone(); }}
+          {u.status !== "linked" && <button disabled={busy} onClick={async () => { if (await call("ignore", { key: u.key, on: u.status !== "ignored" })) { if (u.status !== "ignored") egg("introuvable"); onDone(); } }}
             style={{ ...btn(false), alignSelf: "flex-start" }}>{u.status === "ignored" ? "↺ Remettre à trier" : "🚫 Aucun, il n'est pas sur MakerWorld"}</button>}
         </div>
       </div>

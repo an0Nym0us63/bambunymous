@@ -16,6 +16,8 @@
 // contact (ou le long de l'arete), Maj + glisser la fait tourner autour du contact ; les pieces collees sur une piece
 // la suivent quand elle bouge ; « Decoller » la libere. Un collage est garde dans le repere de la piece support (B) :
 // le point et la normale du contact (et l'arete), enregistres avec l'assemblage.
+import { egg } from "../eggs";
+
 export async function createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder, pieces, render, onChange, groupsInit = [], jointsInit = [], groupByObject = false }) {
   const { TransformControls } = await import("three/examples/jsm/controls/TransformControls.js");
   const el = renderer.domElement;
@@ -447,6 +449,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       s.j.p.add(s.d.clone().transformDirection(s.j.b.matrix.clone().invert()).multiplyScalar(s.d.length()));
     }
     liveAngle = null;
+    if (!s.rot && s.d.lengthSq()) egg("glissade");
     if (s.d.lengthSq() || s.ang) { showContact(); push(); } else onChange?.(state());
   };
   // emboiter la selection collee : la place la plus proche (decalage dans le plan du contact, quart de tour autour de
@@ -519,6 +522,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     j.p.add(t.clone().transformDirection(j.b.matrix.clone().invert()).multiplyScalar(t.length()));
     fitting = null;
     const f = v => String(Math.round(v * 10) / 10).replace(".", ",");
+    egg("tenon_mortaise");
     fitMsg = `Emboîtée${best.r > 0.05 ? ` · décalée de ${f(Math.hypot(best.x, best.y))} mm` : ""}${best.ang ? ` · tournée de ${best.ang}°` : ""}${depth ? ` · enfoncée de ${f(depth)} mm` : ""}`;
     showContact(); placeHandle(); push(); render();
   };
@@ -629,6 +633,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       groups = groups.map(gr => gr.flatMap(g => (g === pg ? parts : [g])));
       joints = joints.map(j => ({ ...j, a: j.a === pg ? parts[0] : j.a, b: j.b === pg ? parts[0] : j.b }));
       undo.length = 0; redo.length = 0; last = snapshot(); changes++;   // l'historique repart d'ici
+      egg("puzzle_3d");
       setSel(parts);
     },
     // remettre une piece separee d'un seul tenant
@@ -667,7 +672,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     },
     frame,
     // masquer la selection, pour atteindre ce qu'elle cache (la vue seulement : rien n'est enregistre) ; Alt+H : tout
-    hide: () => { if (!sel.size) return; [...sel].forEach(g => { g.visible = false; }); setSel([]); },
+    hide: () => { if (!sel.size) return; [...sel].forEach(g => { g.visible = false; }); setSel([]); egg("cache_cache"); },
     showAll: () => { all.forEach(g => { g.visible = true; }); render(); onChange?.(state()); },
     setAssist: on => { assist = on; onChange?.(state()); },
     group: () => {

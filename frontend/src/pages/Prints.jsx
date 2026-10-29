@@ -1113,6 +1113,7 @@ async function download3mf(pid, kind, group = false) {
     a.href = url; a.download = m ? decodeURIComponent(m[1]) : group ? `groupe-${pid}.zip` : `impression-${pid}.3mf`;
     a.dispatchEvent(new MouseEvent("click"));
     setTimeout(() => URL.revokeObjectURL(url), 5000);
+    if (group && /\.zip$/i.test(a.download)) egg("demenageur");
   } catch (e) { showAlert(e.response?.status === 404 ? "Ce 3MF n'est pas sur le serveur." : (e.message || "Téléchargement impossible")); }
 }
 

@@ -785,7 +785,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving }) {
           data-tip="Oublier l'assemblage enregistré : la vue redevient celle du 3MF">↺ Vue du 3MF</button>}
       <button type="button" disabled={saving} onClick={onSave} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}>
         {saving ? "…" : est.dirty ? "💾 Enregistrer" : "✓ Enregistré"}</button>
-      <button type="button" onClick={() => setHelp(true)} style={b(false)} data-tip="Tous les gestes et raccourcis">?</button>
+      <button type="button" onClick={() => { setHelp(true); egg("mode_emploi"); }} style={b(false)} data-tip="Tous les gestes et raccourcis">?</button>
       <button type="button" onClick={onClose} style={b(false)} data-tip="Fermer l'édition">✕</button>
     </div>
     {help && <EditHelp onClose={() => setHelp(false)}/>}
@@ -953,7 +953,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     finally { setSaving(false); }
   };
   const resetEdit = async () => {
-    try { await client.delete(`/makerworld/3d/edit/${meta.key}`); setSavedEdit(null); editApi.current?.editor?.reset(editApi.current.origin()); editApi.current?.editor?.markSaved();
+    try { await client.delete(`/makerworld/3d/edit/${meta.key}`); setSavedEdit(null); egg("case_depart"); editApi.current?.editor?.reset(editApi.current.origin()); editApi.current?.editor?.markSaved();
       editApi.current?.relayout(); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
@@ -976,7 +976,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     if (ed) setEditing(true);
   };
   useEffect(() => {
-    const f = () => { const on = document.fullscreenElement === wrap.current; setFull(on); if (!on && editing) stopEdit(); };
+    const f = () => { const on = document.fullscreenElement === wrap.current; setFull(on); if (on) egg("grand_ecran"); if (!on && editing) stopEdit(); };
     document.addEventListener("fullscreenchange", f);
     return () => document.removeEventListener("fullscreenchange", f);
   }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
