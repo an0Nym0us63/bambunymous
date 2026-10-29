@@ -686,6 +686,13 @@ const EDIT_TIPS = {
   mate2: "Clique la face ou l'arête contre laquelle la coller",
   mate1a: "Assisté : clique une face de la pièce à déplacer, elle sera centrée et alignée sur l'autre",
 };
+// le mode « Points » : ce qu'il faut cliquer ensuite
+const pinsTip = est => {
+  const n = est.pinsA, m = est.pinsB;
+  if (!n) return "📍 Point 1 : clique sur la pièce à déplacer (orange), puis son point 1 sur la cible (vert), puis 2 avec 2, 3 avec 3…";
+  if (n > m) return `📍 Point ${n} sur la cible${est.pinsTo ? ` (${est.pinsTo})` : ""} : là où doit venir le point ${n} orange`;
+  return `📍 ${m} paire${m > 1 ? "s" : ""} · point ${n + 1} sur ${est.pinsFrom}, ou ✓ Assembler (Entrée)${m < 3 ? " ; 3 paires fixent tout à fait l'orientation" : ""}`;
+};
 // les valeurs exactes de la selection : position de son centre (mm) et rotation d'un angle choisi autour d'un axe
 // la liste des pieces (30/10/2026), a gauche en edition : choisir, masquer un moment (👁), exclure de l'assemblage (🚫,
 // enregistre ; ↩ la remet), en ajouter un exemplaire (⧉ : une piece imprimee en plusieurs exemplaires), retirer un
@@ -778,7 +785,8 @@ const EDIT_HELP = [
     ["Échap", "plus rien de choisi (la fenêtre reste ouverte) ; Échap maintenu quitte le plein écran"],
     ["➕ Multi", "au stylet : chaque clic ajoute ou retire une pièce (comme Ctrl + clic)"],
     ["H / Alt + H", "masquer la sélection (pour atteindre ce qu'elle cache) / tout réafficher"],
-    ["✂ Séparer", "propose de séparer la pièce choisie en ses morceaux qui ne se touchent pas (colorés pour les voir) : ✓ pour valider, ✕ pour laisser ; ⊕ Réunir la remet d'un seul tenant"],
+    ["✂ Séparer", "sur des pièces groupées (les parties d'un objet du 3MF) : les rend indépendantes ; sur une pièce seule : propose ses morceaux qui ne se touchent pas (colorés) : ✓ pour valider, ✕ pour laisser ; ⊕ Réunir la remet d'un seul tenant"],
+    ["📋 Pièces (à gauche)", "choisir, 👁 masquer un moment, 🚫 exclure de l'assemblage (↩ Remettre), ⧉ un exemplaire de plus, ✕ le retirer"],
     ["🔗 Grouper (Ctrl + G)", "les pièces choisies bougent ensemble ; ⛓ Dégrouper (Ctrl + Maj + G)"],
   ]],
   ["Déplacer (M)", [
@@ -793,6 +801,12 @@ const EDIT_HELP = [
     ["Panneau de droite", "tourner d'un angle exact autour de X, Y ou Z"],
   ]],
   ["Poser au sol (F)", [["Clic sur une face", "elle se pose à plat sur le sol ; une arête : mise à l'horizontale"]]],
+  ["Points (P)", [
+    ["Clic sur la pièce à déplacer", "son point 1 (orange, numéroté)"],
+    ["Clic sur la cible", "là où doit venir le point 1 (vert, même numéro) ; puis 2 avec 2, 3 avec 3…"],
+    ["✓ Assembler (Entrée)", "chaque point orange vient sur le vert de même numéro, au mieux ; 3 paires fixent tout à fait l'orientation, la pièce reste collée à la cible"],
+    ["⌫ Point / ✕ Points", "retirer le dernier point / tout effacer"],
+  ]],
   ["Coller (C)", [
     ["Face puis face", "la première pièce vient se plaquer contre l'autre"],
     ["Arête puis arête", "les arêtes s'alignent"],
@@ -802,7 +816,8 @@ const EDIT_HELP = [
     ["⟲ / ⟳ 90° 15°", "tourner d'un cran autour du contact"],
     ["Les pièces collées", "suivent celle sur laquelle elles sont collées"],
     ["✂ Décoller", "libérer la pièce (écartée de 2 mm)"],
-    ["🧩 Emboîter (E)", "colle d'abord les deux faces qui se touchent une fois emboîtées (l'épaulement) ; l'assistant cherche tout près (décalage, quart de tour) la place où la pièce repose sans rien traverser, puis l'enfonce aussi loin que possible"],
+    ["🧩 Emboîter (E)", "colle d'abord les deux faces qui se touchent une fois emboîtées (l'épaulement) ; l'assistant essaie chaque angle et chaque décalage proche, garde la place où la pièce s'enfonce le plus sans rien traverser, la centre dans le jeu et l'enfonce"],
+    ["Maj + clic, après un collage", "une paire de plus (point, face ou arête de la pièce, puis sa cible) : l'orientation suit toutes les paires"],
     ["🛡 Anti-collision", "en coulissant, la pièce collée s'arrête au contact de la matière"],
   ]],
   ["Toujours", [
@@ -867,14 +882,22 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
     fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap", color: on ? "#fff" : "var(--text2)",
     background: on ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", ...extra });
   const tip = est.glued && est.step !== 2 ? `Collée à ${est.glued.to} : glisse-la pour la faire coulisser ${est.glued.kind === "edge" ? "le long de l'arête" : "sur la face"}, Maj + glisser pour la tourner autour du contact · ✂ Décoller pour la libérer`
+    : est.mode === "pins" ? pinsTip(est)
     : est.mode === "mate" ? (est.step === 2 ? EDIT_TIPS.mate2 : est.pairs ? `Collée${est.pairs > 1 ? ` en ${est.pairs} points` : ""} : Maj + clic (ou ➕ Multi) sur un autre point, une face ou une arête de la pièce, puis sur sa cible, pour fixer l'orientation`
       : est.assist ? EDIT_TIPS.mate1a : EDIT_TIPS.mate1) : EDIT_TIPS[est.mode];
   return <>
     <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 6, padding: 6, borderRadius: 14, zIndex: 3,
       background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(8px)",
       boxShadow: "0 10px 30px rgba(0,0,0,.25)", flexWrap: "wrap", justifyContent: "center", maxWidth: "calc(100% - 24px)" }}>
-      {[["move", "✥ Déplacer"], ["rotate", "⟳ Tourner"], ["ground", "⬇ Poser au sol"], ["mate", "🧲 Coller"]].map(([m, l]) =>
-        <button key={m} type="button" onClick={() => api?.setMode(m)} style={b(est.mode === m)}>{l}</button>)}
+      {[["move", "✥ Déplacer"], ["rotate", "⟳ Tourner"], ["ground", "⬇ Poser au sol"], ["mate", "🧲 Coller"], ["pins", "📍 Points"]].map(([m, l]) =>
+        <button key={m} type="button" onClick={() => api?.setMode(m)} style={b(est.mode === m)}
+          data-tip={m === "pins" ? "Assembler par paires de points : 1 avec 1, 2 avec 2, 3 avec 3 (P)" : undefined}>{l}</button>)}
+      {est.mode === "pins" && <>
+        <button type="button" disabled={!est.pinsB} onClick={() => api?.pinsApply()} style={b(!!est.pinsB, { opacity: est.pinsB ? 1 : 0.45 })}
+          data-tip="Faire coïncider chaque point orange avec le point vert de même numéro (Entrée)">✓ Assembler{est.pinsB ? ` (${est.pinsB})` : ""}</button>
+        <button type="button" disabled={!est.pinsA} onClick={() => api?.pinsUndo()} style={b(false, { opacity: est.pinsA ? 1 : 0.45 })} data-tip="Retirer le dernier point">⌫ Point</button>
+        <button type="button" disabled={!est.pinsA} onClick={() => api?.pinsClear()} style={b(false, { opacity: est.pinsA ? 1 : 0.45 })} data-tip="Effacer tous les points">✕ Points</button>
+      </>}
       <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>
       <button type="button" onClick={() => api?.setMagnet(!est.magnet)} style={b(est.magnet)}
         data-tip="Aimantation : pas de 1 mm et 15°, et une pièce lâchée près d'une autre ou du sol vient s'y coller">🧷 Aimanter</button>

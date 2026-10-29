@@ -128,7 +128,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const selName = () => sel.size === 0 ? null : sel.size === 1 ? [...sel][0].userData.name : `${sel.size} pièces${groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))) ? " (groupe)" : ""}`;
   const center = () => { if (!sel.size) return null; const c = boxOfAll([...sel]).getCenter(new THREE.Vector3()); return [c.x, c.y, c.z].map(v => Math.round(v * 10) / 10); };
   const state = () => ({ mode, magnet, assist, rotStep, center: center(), selected: selName(), count: sel.size, step: first ? 2 : 1, canUndo: undo.length > 0, canRedo: redo.length > 0,
-    pivot: !!pivot, pairs: pairs.length, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
+    pivot: !!pivot, pairs: pairs.length, pinsA: pins.a.length, pinsB: pins.b.length,
+    pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
     canUngroup: [...sel].some(g => groupOf(g)), multi, turnGlued, liveAngle, guard, fitting, fitMsg,
@@ -398,6 +399,58 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     apply(withKids(unit), horn(pts, dirs));
   };
 
+  // le mode « Points » (30/10/2026) : des paires numerotees, 1 avec 1, 2 avec 2… Un clic sur la piece a deplacer (son
+  // point n), puis un clic sur la cible (son point n), et ainsi de suite ; chaque point porte son numero (orange sur la
+  // piece, vert sur la cible). « Assembler » fait coincider toutes les paires (les faces cliquees se regardent, a peine
+  // pondere : ce sont les points qui decident)
+  const pins = { A: null, B: null, a: [], b: [] };         // a, b : [{ g, p, n }] (repere de la piece cliquee)
+  const pinMarks = new THREE.Group(); pinMarks.renderOrder = 1000; holder.add(pinMarks);
+  const label = (txt, color) => {
+    const c = document.createElement("canvas"); c.width = c.height = 64;
+    const x = c.getContext("2d");
+    x.fillStyle = color; x.beginPath(); x.arc(32, 32, 28, 0, Math.PI * 2); x.fill();
+    x.lineWidth = 4; x.strokeStyle = "#fff"; x.stroke();
+    x.fillStyle = "#fff"; x.font = "bold 34px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(txt, 32, 34);
+    const m = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true });
+    const s = new THREE.Sprite(m); s.renderOrder = 1000; return s;
+  };
+  const drawPins = () => {
+    pinMarks.children.slice().forEach(s => { s.material.map.dispose(); s.material.dispose(); pinMarks.remove(s); });
+    const L = Math.max(10, boxOfAll(all.filter(g => g.visible)).getSize(new THREE.Vector3()).length());
+    const put = (list, color) => list.forEach((q, i) => {
+      const s = label(String(i + 1), color);
+      s.position.copy(toWorld(q.g, q.p)); s.scale.setScalar(L * 0.025); pinMarks.add(s);
+    });
+    put(pins.a, "#f97316"); put(pins.b, "#16a34a");
+    render();
+  };
+  const pinsClear = () => { pins.A = null; pins.B = null; pins.a = []; pins.b = []; drawPins(); };
+  const pinsApply = () => {
+    const n = Math.min(pins.a.length, pins.b.length);
+    if (!n || !pins.A) return;
+    const unit = unitOf(pins.A);
+    const L = Math.max(10, boxOfAll(unit).getSize(new THREE.Vector3()).length());
+    const pts = [], dirs = [];
+    for (let i = 0; i < n; i++) {
+      const a = pins.a[i], b = pins.b[i];
+      pts.push([toWorld(a.g, a.p), toWorld(b.g, b.p)]);
+      // les faces cliquees se regardent, un peu seulement (avec un ou deux points, c'est ce qui fixe le reste)
+      if (a.n && b.n) dirs.push([toWorld(a.g, a.n, true), toWorld(b.g, b.n, true).negate(), L * L * (n >= 3 ? 0.02 : 0.2)]);
+    }
+    apply(withKids(unit), horn(pts, dirs));
+    // collee a la cible par la premiere paire (elle coulisse et tourne ensuite comme une piece collee)
+    const b0 = pins.b[0];
+    if (b0.n) {
+      joints = joints.filter(j => !unit.includes(j.a));
+      joints.push({ a: pins.a[0].g, b: b0.g, kind: "face", p: b0.p.clone(), n: b0.n.clone(), e: null });
+    }
+    const err = Math.max(...pts.map((_, i) => toWorld(pins.a[i].g, pins.a[i].p).distanceTo(toWorld(pins.b[i].g, pins.b[i].p))));
+    pinsClear(); push(); setSel(unit);
+    const f = v => String(Math.round(v * 10) / 10).replace(".", ",");
+    fitMsg = `Assemblée sur ${n} point${n > 1 ? "s" : ""}${n > 1 ? ` · écart le plus grand : ${f(err)} mm` : ""}${n < 3 ? " · 3 points fixent tout à fait l'orientation" : ""}`;
+    onChange?.(state());
+  };
+
   let down = null;
   const onDown = ev => { down = [ev.clientX, ev.clientY]; };
   const onUp = ev => {
@@ -417,6 +470,21 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     }
     // un clic dans le vide desselectionne, quel que soit le mode (30/10/2026)
     if (!pick) { if (!ev.ctrlKey && !ev.shiftKey && !multi) { first = null; clearMarks(); setSel([]); render(); onChange?.(state()); } return; }
+    if (mode === "pins") {
+      const toA = pins.a.length === pins.b.length;       // le prochain point : sur la piece a deplacer, ou sur la cible
+      if (toA) {
+        if (pins.A && !unitOf(pins.A).includes(pick.group)) { fitMsg = `Le point ${pins.a.length + 1} se met d'abord sur la pièce à déplacer (${pins.A.userData.name})`; onChange?.(state()); return; }
+        if (pins.B && unitOf(pins.B).includes(pick.group)) { fitMsg = "Ça, c'est la cible : clique d'abord la pièce à déplacer"; onChange?.(state()); return; }
+        pins.A = pins.A || pick.group;
+        pins.a.push({ g: pick.group, p: toLocal(pick.group, pick.p), n: pick.n ? toLocal(pick.group, pick.n, true) : null });
+      } else {
+        if (unitOf(pins.A).includes(pick.group)) { fitMsg = `Le point ${pins.b.length + 1} se met sur la cible, pas sur la pièce à déplacer`; onChange?.(state()); return; }
+        if (pins.B && !unitOf(pins.B).includes(pick.group)) { fitMsg = `Le point ${pins.b.length + 1} se met sur la même cible (${pins.B.userData.name})`; onChange?.(state()); return; }
+        pins.B = pins.B || pick.group;
+        pins.b.push({ g: pick.group, p: toLocal(pick.group, pick.p), n: pick.n ? toLocal(pick.group, pick.n, true) : null });
+      }
+      fitMsg = null; drawPins(); onChange?.(state()); return;
+    }
     if (mode === "ground") {
       const unit = sel.has(pick.group) ? [...sel] : unitOf(pick.group), moving = withKids(unit);
       if (pick.kind === "face") apply(moving, about(pick.p, new THREE.Quaternion().setFromUnitVectors(pick.n, new THREE.Vector3(0, 0, -1))));
@@ -679,9 +747,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       if (k === "r") return api.setMode("rotate");
       if (k === "f") return api.setMode("ground");
       if (k === "c") return api.setMode("mate");
+      if (k === "p") return api.setMode("pins");
       if (k === "z") return frame();
       if (k === "h") return api.hide();
       if (k === "e") return fit();
+      if (k === "enter" && mode === "pins") return pinsApply();
     }
     if (mode === "rotate" && sel.size && ev.key.startsWith("Arrow") && !ev.ctrlKey && !ev.metaKey) {
       // en mode Tourner, les fleches tournent : gauche/droite autour de Z, haut/bas autour de X ; 1° (Maj : 15°)
@@ -715,11 +785,14 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   window.addEventListener("blur", onBlur);
 
   const api = {
-    setMode: m => { mode = m; first = null; if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
+    setMode: m => { if (m !== "pins") pinsClear(); mode = m; first = null; if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
     setRotStep: d => { rotStep = d; applySnap(); onChange?.(state()); },
     setMulti: on => { multi = on; onChange?.(state()); },
     setTurnGlued: on => { turnGlued = on; onChange?.(state()); },
+    pinsApply,
+    pinsUndo: () => { if (pins.a.length > pins.b.length) pins.a.pop(); else pins.b.pop(); if (!pins.a.length) pins.A = null; if (!pins.b.length) pins.B = null; drawPins(); onChange?.(state()); },
+    pinsClear: () => { pinsClear(); onChange?.(state()); },
     setGuard: async on => { guard = on; if (on) await getCollider(); onChange?.(state()); },
     select: keys => setSel(keys.map(k => byKey.get(k)).filter(Boolean)),
     // separer la piece choisie : proposer (morceaux colores), puis valider ou non
