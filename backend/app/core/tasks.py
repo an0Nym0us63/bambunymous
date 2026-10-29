@@ -111,6 +111,11 @@ def jobs() -> list:
     except Exception:
         pass
     try:
+        from ..services import mw_relink
+        add("mw_relink", "Recherche des modèles MakerWorld manquants", mw_relink.status())
+    except Exception:
+        pass
+    try:
         from ..services import mw_docs
         add("mw_docs", "Rattrapage des documents MakerWorld", mw_docs.status())
     except Exception:

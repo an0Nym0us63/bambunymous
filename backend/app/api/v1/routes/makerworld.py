@@ -1463,3 +1463,64 @@ async def mw_source_budget(body: dict = Body({}), _: str = Depends(require_mw)):
     except (TypeError, ValueError):
         raise HTTPException(400, "Quota invalide")
     return {"cap": n, "used": len(S._downloads())}
+
+
+# ── Retrouver le modele MakerWorld des impressions qui n'en ont pas (29/10/2026) ──
+@router.get("/relink")
+async def mw_relink_list(_: str = Depends(require_admin)):
+    """Les « modeles » sans fiche MakerWorld (impressions regroupees par nom) et l'avancement du scan."""
+    from ....services import mw_relink as R
+    return {"units": await R.units(), "scan": R.status()}
+
+
+@router.post("/relink/start")
+async def mw_relink_start(body: dict = Body({}), _: str = Depends(require_admin)):
+    """Lance ou reprend le scan ; again : repasse aussi sur les modeles sans resultat."""
+    from ....services import mw_relink as R
+    return {"started": R.start(bool(body.get("again"))), "scan": R.status()}
+
+
+@router.post("/relink/stop")
+async def mw_relink_stop(_: str = Depends(require_admin)):
+    from ....services import mw_relink as R
+    R.stop()
+    return {"scan": R.status()}
+
+
+@router.post("/relink/choose")
+async def mw_relink_choose(body: dict = Body({}), _: str = Depends(require_admin)):
+    """Rattache le modele choisi a toutes les impressions de ce « modele »."""
+    from ....services import mw_relink as R
+    try:
+        n = await R.assign(str(body.get("key") or ""), str(body.get("design_id") or ""))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "count": n}
+
+
+@router.post("/relink/unlink")
+async def mw_relink_unlink(body: dict = Body({}), _: str = Depends(require_admin)):
+    """Defait un rattachement : ses impressions repassent sans modele, ses candidats restent a choisir."""
+    from ....services import mw_relink as R
+    return {"ok": True, "count": await R.unlink(str(body.get("key") or ""))}
+
+
+@router.post("/relink/ignore")
+async def mw_relink_ignore(body: dict = Body({}), _: str = Depends(require_admin)):
+    """« Aucun » : ce modele n'est pas sur MakerWorld (on : false le remet a trier)."""
+    from ....services import mw_relink as R
+    R.dismiss(str(body.get("key") or ""), body.get("on", True) is not False)
+    return {"ok": True}
+
+
+@router.post("/relink/search")
+async def mw_relink_search(body: dict = Body({}), _: str = Depends(require_admin)):
+    """Cherche a la main sous un autre nom ; les resultats deviennent ses candidats."""
+    from ....services import mw_relink as R
+    q = str(body.get("q") or "").strip()
+    if not q:
+        raise HTTPException(400, "Donne un nom à chercher")
+    try:
+        return {"candidates": await R.search_for(str(body.get("key") or ""), q)}
+    except ValueError as e:
+        raise HTTPException(502, str(e))

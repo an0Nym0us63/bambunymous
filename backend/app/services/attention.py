@@ -364,7 +364,6 @@ async def _prints_without_mw(db) -> list[Alert]:
             Print.status != "IN_PROGRESS",
         )
         .order_by(Print.print_date.desc())
-        .limit(30)
     )).scalars().all()
     return [
         Alert(

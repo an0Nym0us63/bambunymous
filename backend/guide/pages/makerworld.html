@@ -366,6 +366,19 @@
     <figure class="phone"><img src="img/makerworld-associer.webp" alt="Fenêtre Associer ce modèle à des impressions, liste des impressions sans modèle"><figcaption>Choisir les impressions à relier au modèle.</figcaption></figure>
     <p>Pour rattraper d'un coup les vieux prints, voir aussi <a href="#makerworld-reglages-historique">Historique cloud Bambu</a>.</p>
   </section>
+
+  <section id="makerworld-retrouver">
+    <h3>Retrouver les modèles manquants <span class="admin">admin</span></h3>
+    <p>Dans l'autre sens : partir des impressions sans modèle et laisser l'appli chercher. La fenêtre « Modèles MakerWorld manquants » s'ouvre depuis la catégorie <a href="#imprimante-attention-toutes">Impressions sans modèle MakerWorld</a> des alertes (<span class="ui">🔎 Retrouver leurs modèles sur MakerWorld</span>) ou depuis <a href="#parametres-outils-relink">Paramètres → Outils</a>.</p>
+    <ul>
+      <li>Les impressions y sont <b>regroupées par nom</b> (« - Plate 2 », « .3mf » retirés) : une tuile par modèle, avec sa vignette et son nombre d'impressions (×3).</li>
+      <li><span class="ui">🔎 Lancer le scan (N)</span> cherche chaque modèle sur MakerWorld, un à la fois (quelques secondes entre deux recherches), avec le titre écrit dans son 3MF quand il y est, puis son nom d'origine. Chaque résultat est noté par ressemblance des noms (en %).</li>
+      <li>Un résultat <b>net</b> (très proche et loin devant les autres) est rattaché tout seul, à toutes les impressions du groupe ; il passe dans <span class="ui">✓ Rattachés</span>. S'il y a un <b>doute</b>, le modèle attend dans <span class="ui">🤔 À choisir</span>, avec ses meilleurs candidats ; rien d'approchant : <span class="ui">∅ Rien trouvé</span>.</li>
+      <li>L'avancement s'affiche en direct (« 12 / 40 », le modèle en cours, rattachés / à choisir / sans résultat). <span class="ui">■ Arrêter</span> l'interrompt, <span class="ui">▶ Reprendre</span> repart où il en était ; un redémarrage du serveur pendant le scan le fait reprendre tout seul une minute après. Si MakerWorld demande de vérifier que tu n'es pas un robot, le scan s'arrête en le disant : reprends plus tard. <span class="ui">↻ Avec les « rien trouvé »</span> repasse aussi sur ceux qui n'avaient rien donné.</li>
+      <li>Touche une tuile : ses candidats (couverture, titre, créateur, nombre d'impressions, % de ressemblance). Toucher la couverture ouvre la fiche MakerWorld pour vérifier ; <span class="ui">C'est celui-là</span> rattache ce modèle. Le champ en haut cherche sous un autre nom. <span class="ui">🚫 Aucun, il n'est pas sur MakerWorld</span> le range dans <span class="ui">Ignorés</span> (<span class="ui">↺ Remettre à trier</span> pour revenir).</li>
+      <li>Un modèle rattaché (par le scan ou à la main) se retrouve dans <span class="ui">✓ Rattachés</span> : <span class="ui">Voir</span> sa fiche, ou <span class="ui">Défaire</span> si le scan s'est trompé (ses impressions repassent sans modèle, ses candidats restent à choisir).</li>
+    </ul>
+  </section>
 </section>
 
 <section id="makerworld-page-createur">

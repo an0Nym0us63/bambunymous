@@ -50,7 +50,7 @@ const fmtDur = s => { if (!s) return null; const h = Math.floor(s / 3600), m = M
   return h ? `${h} h${m ? ` ${String(m).padStart(2, "0")}` : ""}` : `${m} min`; };
 const fmtDate = iso => { try { return new Date(iso).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" }); } catch { return ""; } };
 
-export default function MakerWorldModelSheet({ designId, preview, onClose, onSearch }) {
+export default function MakerWorldModelSheet({ designId, preview, onClose, onSearch, z = 4200 }) {
   const [id, setId] = useState(designId);          // permet d'ouvrir un similaire sans empiler
   const [m, setM] = useState(null);
   const [more, setMore] = useState(false);         // descriptif deplie
@@ -299,7 +299,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     ["💬", m.comment_count, "Avis", "#06B6D4", "#67E8F9"]].filter(([, n]) => n != null) : [];
 
   return createPortal(
-    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4200, background:"rgba(0,0,0,0.7)",
+    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:z, background:"rgba(0,0,0,0.7)",
       display:"flex", alignItems: WIDE ? "center" : "flex-end", justifyContent:"center", padding: WIDE ? 20 : 0 }}>
       <div onClick={e => e.stopPropagation()} className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius: WIDE ? 24 : "22px 22px 0 0",
         width:"100%", maxWidth: WIDE ? 760 : 640, height: WIDE ? "90dvh" : "94dvh", display:"flex", flexDirection:"column", overflow:"hidden" }}>

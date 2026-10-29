@@ -163,6 +163,9 @@ async def lifespan(app: FastAPI):
     # 3MF d'origine MakerWorld : un rattrapage qui tournait a l'arret reprend tout seul
     from app.services.mw_source import resume_after_restart as _src_resume
     _bg(_src_resume())
+    # retrouver les modeles MakerWorld manquants : un scan qui tournait a l'arret reprend tout seul
+    from app.services.mw_relink import resume_after_restart as _relink_resume
+    _bg(_relink_resume())
     # Notifications de l'imprimante (pause, fin proche, HMS, sechage) : la
     # config est lue une fois pour l'ecouteur, qui ne touche pas a la base.
     from app.services import notify as _notify, notify_events as _nev

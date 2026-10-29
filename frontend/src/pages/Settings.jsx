@@ -27,6 +27,7 @@ import MyAppNotifications from "../components/MyAppNotifications";
 import AndroidApp from "../components/AndroidApp";
 import PerfSheet, { perfLabel, perfMs, perfTone, perfSlow, perfBad, perfSort, perfVal } from "../components/PerfSheet";
 import StorageSheet from "../components/StorageSheet";
+const MwRelinkSheet = React.lazy(() => import("../components/MwRelinkSheet"));
 import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
 import { refreshUpdates } from "../utils/updates";
@@ -1248,6 +1249,40 @@ function StorageSection() {
 // (toutes les 2 s tant qu'il tourne), on peut quitter la page et revenir
 // Les documents joints des modeles (27/10/2026) : notices, nomenclatures, solutions… gardes ici pour chaque modele
 // imprime ; le rattrapage relit les fiches deja connues (sans compte : ces documents sont publics).
+// les impressions sans modele MakerWorld : les retrouver par leur nom (29/10/2026)
+function MwRelinkSection() {
+  const [d, setD] = React.useState(null);
+  const [open, setOpen] = React.useState(false);
+  const load = () => client.get("/makerworld/relink").then(r => setD(r.data)).catch(() => {});
+  React.useEffect(() => { load(); }, []);
+  const us = (d?.units || []).filter(u => u.status !== "linked");
+  const n = k => us.filter(u => u.status === k).length;
+  const sc = d?.scan || {};
+  const big = (v, l, c) => <div style={{ flex:"1 1 90px", padding:"8px 10px", borderRadius:12, background:"var(--surface2)", display:"flex", flexDirection:"column", gap:1 }}>
+    <span style={{ fontSize:20, fontWeight:900, color:c }}>{v}</span>
+    <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)" }}>{l}</span></div>;
+  return (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Modèles MakerWorld manquants</h3>
+      <CardHelp title="Modèles MakerWorld manquants">
+        Les impressions lancées sans passer par MakerWorld (Bambu Studio, fichier sur la carte…) n'ont pas de fiche : ni photos du modèle, ni
+        plateaux, ni vue 3D. Elles sont regroupées par nom, et le scan cherche chacune sur MakerWorld avec son nom d'origine (ou le titre écrit
+        dans son 3MF). Un résultat net est rattaché tout seul ; s'il y a un doute, les candidats t'attendent dans « À choisir ». Le scan avance un
+        modèle à la fois, s'arrête si MakerWorld demande de vérifier qu'on n'est pas un robot, et reprend où il en était (même après un redémarrage).
+      </CardHelp>
+      {d && <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:12 }}>
+        {big(us.length, "modèles sans fiche", "var(--text)")}
+        {big(n("doubt"), "à choisir", "#F59E0B")}
+        {big(n("todo"), "à chercher", "#64748B")}
+      </div>}
+      {sc.running && <div style={{ fontSize:12, fontWeight:700, color:"var(--text2)", marginBottom:10 }}>⏳ Recherche en cours · {sc.done} / {sc.total}</div>}
+      <button onClick={() => setOpen(true)} style={{ padding:"8px 16px", borderRadius:10, border:"none", cursor:"pointer", fontSize:13, fontWeight:700, color:"#fff",
+        background:"linear-gradient(135deg, #0EA5E9, #6366F1)" }}>🔎 Ouvrir</button>
+      {open && <React.Suspense fallback={null}><MwRelinkSheet onClose={() => { setOpen(false); load(); }}/></React.Suspense>}
+    </div>
+  );
+}
+
 function MwDocsSection() {
   const [st, setSt] = React.useState(null);
   const load = () => client.get("/makerworld/docs/status").then(r => setSt(r.data)).catch(() => {});
@@ -2295,6 +2330,7 @@ export default function Settings() {
         <SdProbeSection/>
         <SourceBackfillSection/>
         <MwDocsSection/>
+        <MwRelinkSection/>
         <EnrichFromCatalogSection/>
         <RecalculateSection/>
         <DiagExportSection/>

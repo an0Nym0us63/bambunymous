@@ -7,6 +7,7 @@ import AdminOnly from "./AdminOnly";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import { FilamentSheet, FilamentSheetFromSpool, PrintDetail } from "./LazySheets";
 import { showAlert, showConfirm } from "../utils/dialog";
+const MwRelinkSheet = React.lazy(() => import("./MwRelinkSheet"));
 
 /**
  * Toutes les alertes, filtrables.
@@ -54,6 +55,7 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all",
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState(null);
   const [sheet, setSheet] = useState(null);   // fiche ouverte par-dessus la liste
+  const [relink, setRelink] = useState(false); // impressions sans modele MakerWorld : les retrouver
 
   // Meme comportement que sur l'accueil : la liste ne servait a rien si on ne
   // pouvait pas ouvrir ce qu'elle signale.
@@ -274,6 +276,13 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all",
                 <span style={{ fontSize:11, color:"var(--muted)" }}>›</span>
               </button>
             )}
+            {tab === "all" && a.category === "no_mw" && (cat === "no_mw" ? i === 0 : grouped && (i === 0 || rows[i - 1].category !== a.category)) && (
+              <AdminOnly><button type="button" onClick={() => setRelink(true)}
+                style={{ display:"flex", alignItems:"center", gap:8, width:"100%", margin:"4px 0 6px", padding:"9px 12px", borderRadius:10, border:"none",
+                  cursor:"pointer", color:"#fff", fontSize:12.5, fontWeight:800, textAlign:"left", background:"linear-gradient(135deg, #0EA5E9, #6366F1)" }}>
+                <span style={{ fontSize:15 }}>🔎</span><span style={{ flex:1 }}>Retrouver leurs modèles sur MakerWorld</span><span>›</span>
+              </button></AdminOnly>
+            )}
             <div style={{ display:"flex", alignItems:"center", gap:10,
               padding:"8px", borderRadius:8 }}>
               <div onClick={() => openAlert(a)}
@@ -363,6 +372,8 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all",
           onDelete={() => { setSheet(null); load(); onChanged?.(); }}
           onChanged={() => { load(); onChanged?.(); }}/>
       )}
+      {relink && <div onClick={e => e.stopPropagation()}><React.Suspense fallback={null}>
+        <MwRelinkSheet z={10000} onClose={() => setRelink(false)} onChanged={() => { load(); onChanged?.(); }}/></React.Suspense></div>}
   </>);
   if (inline) return <>{body}{sheets}</>;
   return createPortal(

@@ -7,6 +7,7 @@ import AllAlertsModal from "./AllAlertsModal";
 import { ChevronDown, ChevronRight, List } from "lucide-react";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import { FilamentSheet, FilamentSheetFromSpool, PrintDetail } from "./LazySheets";
+const MwRelinkSheet = React.lazy(() => import("./MwRelinkSheet"));
 
 /**
  * Visuel de l'alerte : la VIGNETTE pour une impression (une pastille de couleur
@@ -65,6 +66,7 @@ export default function AttentionSection({ bare = false, startOpen = null }) {
   const [cats, setCats] = useState(null);
   const [err, setErr]   = useState(null);
   const [menu, setMenu] = useState(null);   // alerte dont le menu est ouvert
+  const [relink, setRelink] = useState(false); // impressions sans modele MakerWorld : les retrouver
   // Repliee PAR DEFAUT : la section ne doit pas pousser l'imprimante hors de
   // l'ecran a chaque ouverture de l'accueil. On ne l'ouvre que si l'utilisateur
   // l'a explicitement depliee auparavant.
@@ -232,6 +234,9 @@ export default function AttentionSection({ bare = false, startOpen = null }) {
                 {(() => { const n = Math.min(c.shown ?? 3, c.alerts.length);
                   return c.total > n ? `${n} / ${c.total}` : c.total; })()}
               </span>
+              {c.category === "no_mw" && <AdminOnly><button type="button" onClick={() => setRelink(true)} data-tip="Les retrouver sur MakerWorld"
+                style={{ marginLeft: "auto", padding: "3px 10px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 800,
+                  color: "#fff", background: "linear-gradient(135deg, #0EA5E9, #6366F1)" }}>🔎 Retrouver</button></AdminOnly>}
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -310,6 +315,7 @@ export default function AttentionSection({ bare = false, startOpen = null }) {
           onDelete={() => { setSheet(null); load(); }}
           onChanged={() => load()}/>
       )}
+      {relink && <React.Suspense fallback={null}><MwRelinkSheet onClose={() => setRelink(false)} onChanged={load}/></React.Suspense>}
 
       {menu && (
         <div onClick={() => setMenu(null)}
