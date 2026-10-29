@@ -1617,7 +1617,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
               style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", background: "var(--surface)", color: "var(--text2)",
                 fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>🕘</button>}
           </div>}
-          {!editing && p?.assembled && edit?.pieces && <div style={{ position: "absolute", top: 10, right: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20, zIndex: 2,
+          {/* sur un telephone, sous le choix des couleurs (30/10/2026 : les deux se chevauchaient) */}
+          {!editing && p?.assembled && edit?.pieces && <div style={{ position: "absolute", top: !desktop && alt && !isGlb(p.url) ? 58 : 10, right: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20, zIndex: 2,
             background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
             {[[false, "Mon assemblage", "Ton assemblage enregistré"], [true, "Origine", "La vue assemblée telle que le 3MF la donne, avant tes modifications (pour comparer)"]].map(([o, l, tip]) =>
               <button key={l} type="button" onClick={() => setOrigView(o)} data-tip={tip}
