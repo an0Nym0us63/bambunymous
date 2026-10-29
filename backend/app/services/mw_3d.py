@@ -396,6 +396,18 @@ def _cut_z(v, t, zc: float) -> tuple:
     return v2, below, above
 
 
+def piece_plates(src) -> dict:
+    """Le plateau de chaque objet place de la vue assemblee ({"objet:instance": plateau}), lu dans les reglages du 3MF
+    (rien a convertir) : la vue assemblee colore chaque piece avec la correspondance de son plateau (30/10/2026 : le
+    meme gris du createur imprime en or sur un plateau, en rouge sur un autre)."""
+    try:
+        with zipfile.ZipFile(src) as z:
+            plates, _ = _settings(z)
+    except Exception:
+        return {}
+    return {f"{oid}:{k}": n for n, _name, inst in plates for oid, k in inst}
+
+
 def _settings(z: zipfile.ZipFile) -> tuple:
     """(plateaux [(n, nom, [(object_id, instance)])], objets {id: {extruder, parts: {part_id: (extruder, type)}}}) ;
     objets["__assemble__"] : la vue d'assemblage [(object_id, instance, transformation)]."""

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { finishCanvas } from "../utils/finishTex";
 import { egg } from "../eggs";
@@ -131,7 +131,7 @@ function copyPiece(THREE, src, n) {
 }
 
 function Viewer({ url, glb, onState, palette = null, finishes = null, multi = null, glow = false, bed = null, litho = false,
-                  pieces = null, edit = null, editApi = null, pad = false }) {
+                  pieces = null, edit = null, editApi = null, pad = false, piecePalettes = null }) {
   const [pans, setPans] = useState(false);
   const box = useRef(null);
   const [dark, setDark] = useState(false);
@@ -251,7 +251,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             // trainees de triangles la ou une face plate rejoint un arrondi ; et rien a calculer ni a garder en plus
             // recoloriee : la couleur du createur remplacee par celle du filament retenu (« À faire »)
             const own = g.color.map(x => x.toString(16).padStart(2, "0")).join("").toUpperCase();
-            const c = palette?.[own] ? new THREE.Color(`#${hex6(palette[own])}`) : new THREE.Color(`rgb(${g.color.join(",")})`);
+            const pal = (piecePalettes && g.piece != null && piecePalettes[pieces?.[g.piece]?.k]) || palette;   // celle du plateau de la piece
+            const c = pal?.[own] ? new THREE.Color(`#${hex6(pal[own])}`) : new THREE.Color(`rgb(${g.color.join(",")})`);
             // sa finition : celle du filament d'origine, ou celle de la bobine utilisee / choisie
             const fin = finishes?.[own];
             // les deux cotes des faces (29/10/2026) : la ou une zone peinte tres decoupee touche une zone qui l'est moins,
@@ -1216,6 +1217,19 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     return () => document.removeEventListener("fullscreenchange", f);
   }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
   const shown = alt && !own ? alt : null;
+  // la vue assemblee : chaque piece aux couleurs de SON plateau (30/10/2026 : le meme gris du createur, imprime en or sur
+  // un plateau et en rouge sur un autre, prenait partout la meme couleur) ; une couleur absente reste celle de l'ensemble
+  const piecePal = useMemo(() => {
+    if (!asm || !shown || !p?.pieces) return null;
+    const pp = meta?.piece_plates || {}, out = {};
+    for (const pc of Object.values(p.pieces)) {
+      const n = pp[String(pc.k || "").split(":").slice(0, 2).join(":")];
+      if (n == null) continue;
+      const pal = platePalettes ? platePalettes[n] : palette ? null : meta?.used_plates?.[String(n)];
+      if (pal) out[pc.k] = { ...shown, ...pal };
+    }
+    return Object.keys(out).length ? out : null;
+  }, [asm, shown, p?.pieces, meta?.piece_plates, meta?.used_plates, platePalettes, palette]); // eslint-disable-line react-hooks/exhaustive-deps
   const mm = v => `${Math.round(v)} mm`;
   return createPortal(
     <FSheet onClose={onClose} z={4600}>
@@ -1241,7 +1255,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         <div ref={wrap} style={{ position: "relative", height: full ? "100vh" : "min(62dvh, 560px)", borderRadius: full ? 0 : 18, overflow: "hidden",
           border: full ? "none" : "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
-          {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}|${vkey}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown}
+          {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}|${vkey}|${piecePal ? Object.keys(piecePal).length : 0}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown} piecePalettes={piecePal}
             pieces={p.assembled ? p.pieces : null} edit={p.assembled ? edit : null} editApi={editApi} pad={full || editing}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}

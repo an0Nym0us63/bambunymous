@@ -752,6 +752,9 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             "finishes": T.origin_finishes(path_of(key)) if source in ("3mf", "3mf_other") and key else {},
             "used_finishes": {d["from"]: d["finish"] for d in used_detail or [] if d.get("to") and d.get("finish")},
             "plates": T.plates_out(meta, key)[0], "skipped": T.plates_out(meta, key)[1],
+            # le plateau de chaque piece de la vue assemblee, pour ses couleurs (30/10/2026)
+            "piece_plates": T.piece_plates(path_of(key)) if key and source in ("3mf", "3mf_other")
+                            and any(p.get("assembled") for p in (meta or {}).get("plates") or []) else {},
             # la vue assemblee editee a la main (29/10/2026), et la cle de la vue pour l'enregistrer
             "key": key, "assembly_edit": T.load_edit(key, did, {x.get("k") for p in T.plates_out(meta, key)[0] for x in p.get("pieces") or []
                                                                   if isinstance(x, dict) and x.get("k")} or None)
