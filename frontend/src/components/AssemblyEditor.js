@@ -305,7 +305,24 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const apply = (list, M) => { for (const g of list) { g.updateMatrix(); M.clone().multiply(g.matrix).decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); } };
   const about = (p, q) => new THREE.Matrix4().makeTranslation(p.x, p.y, p.z).multiply(new THREE.Matrix4().makeRotationFromQuaternion(q))
     .multiply(new THREE.Matrix4().makeTranslation(-p.x, -p.y, -p.z));
-  const drop = list => { const b = boxOfAll(list); apply(list, new THREE.Matrix4().makeTranslation(0, 0, -b.min.z)); };
+  // le sol : le plateau tel que la vue le montre (30/10/2026 : c'etait la hauteur 0 du repere du modele, que la vue
+  // decale pour poser la piece la plus basse sur le plateau ; une piece « posee au sol » s'enfoncait sous la grille)
+  const floorZ = () => { holder.updateMatrixWorld(true); return holder.worldToLocal(new THREE.Vector3(0, 0, 0)).z; };
+  // le point le plus bas, sur les sommets (la boite d'une piece tournee deborde de la piece)
+  const minZ = list => {
+    let z = Infinity;
+    const v = new THREE.Vector3();
+    for (const g of list) {
+      g.updateMatrix();
+      for (const m of g.children) {
+        if (!m.isMesh || !m.geometry?.attributes?.position) continue;
+        const pa = m.geometry.attributes.position.array, st = Math.max(1, Math.floor(pa.length / 3 / 200000));
+        for (let i = 0; i < pa.length; i += 3 * st) z = Math.min(z, v.set(pa[i], pa[i + 1], pa[i + 2]).applyMatrix4(g.matrix).z);
+      }
+    }
+    return Number.isFinite(z) ? z : boxOfAll(list).min.z;
+  };
+  const drop = list => { apply(list, new THREE.Matrix4().makeTranslation(0, 0, floorZ() - minZ(list))); };
 
   // la poignee au centre de la selection
   const placeHandle = () => {
@@ -331,8 +348,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const SNAP = 3;
   const snapAfterDrag = () => {
     if (!magnet || !sel.size || mode !== "move") return;
-    const list = [...sel], b = boxOfAll(list), t = new THREE.Vector3();
-    if (Math.abs(b.min.z) < SNAP) t.z = -b.min.z;
+    const list = [...sel], b = boxOfAll(list), t = new THREE.Vector3(), fz = floorZ(), mz = minZ(list);
+    if (Math.abs(mz - fz) < SNAP) t.z = fz - mz;
     for (const o of all) {
       if (sel.has(o)) continue;
       const c = boxOf(o);
