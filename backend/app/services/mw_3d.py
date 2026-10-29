@@ -1306,7 +1306,7 @@ def load_edit(key: str) -> dict | None:
         return None
 
 
-def save_edit(key: str, pieces: dict, by: str = "") -> dict:
+def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None) -> dict:
     import time
     if not re.fullmatch(r"[A-Za-z0-9_]+", key or ""):
         raise ValueError("Vue inconnue")
@@ -1317,7 +1317,9 @@ def save_edit(key: str, pieces: dict, by: str = "") -> dict:
             clean[str(k)] = [round(float(x), 6) for x in m]
     if not clean:
         raise ValueError("Rien à enregistrer")
-    d = {"pieces": clean, "at": time.time(), "by": by}
+    # les groupes : des pieces qui bougent ensemble (listes de cles connues)
+    grp = [[str(k) for k in g if str(k) in clean] for g in (groups or []) if isinstance(g, list)]
+    d = {"pieces": clean, "groups": [g for g in grp if len(g) > 1], "at": time.time(), "by": by}
     f = _edits_file(key)
     f.parent.mkdir(parents=True, exist_ok=True)
     _write(f, json.dumps(d).encode("utf-8"))

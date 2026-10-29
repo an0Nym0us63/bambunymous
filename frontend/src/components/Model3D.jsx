@@ -460,8 +460,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           if (!ed) return null;
           if (on && !editor) {
             const { createAssemblyEditor } = await import("./AssemblyEditor");
-            editor = await createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder: ed.holder, pieces: ed.byPiece, render, onChange });
-          } else if (!on && editor) { editor.dispose(); editor = null; }
+            editor = await createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder: ed.holder, pieces: ed.byPiece, render, onChange,
+              groupsInit: edit?.groups || [] });
+          } else if (!on && editor) { try { editor.dispose(); } catch { /* la vue se ferme quand meme */ } editor = null; }
           return editor;
         };
         const toSave = () => {
@@ -476,7 +477,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         // la vue telle que le 3MF la donne (sans place enregistree)
         const origin = () => [...(ed?.byPiece.values() || [])].map(pg => new THREE.Matrix4().makeTranslation(pg.userData.c.x, pg.userData.c.y, pg.userData.c.z));
         if (editApi) editApi.current = ed ? { editing, toSave, origin, get editor() { return editor; } } : null;
-        disposables.push({ dispose: () => { editor?.dispose(); if (editApi) editApi.current = null; } });
+        disposables.push({ dispose: () => { try { editor?.dispose(); } catch { /* rien */ } if (editApi) editApi.current = null; } });
         api.current = { fit, night, backlight, bedShow };
         const s = bb2.getSize(new THREE.Vector3());
         onState({ busy: false, error: null, size: glb ? [s.x, s.z, s.y] : [s.x, s.z, s.y], glow: glowMats.length > 0 });
@@ -514,11 +515,12 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
 
 // La barre de l'edition de la vue assemblee (29/10/2026, PC, en plein ecran)
 const EDIT_TIPS = {
-  move: "Clique une pièce, puis tire sur ses flèches pour la déplacer · flèches du clavier : 1 mm (Maj : 10), Ctrl + ↑↓ : monter, descendre",
-  rotate: "Clique une pièce, puis tourne-la par ses anneaux",
+  move: "Clique une pièce (Ctrl / Maj : en ajouter ; Alt : une pièce d'un groupe seule), puis tire sur les flèches · clavier : flèches 1 mm (Maj : 10), Ctrl + ↑↓ : monter, descendre, Ctrl+A : tout",
+  rotate: "Clique une pièce (Ctrl / Maj : en ajouter), puis tourne la sélection par ses anneaux",
   ground: "Clique la face (ou l'arête) qui doit être posée au sol",
-  mate1: "Clique la face ou l'arête de la pièce à déplacer",
+  mate1: "Clique la face ou l'arête de la pièce à déplacer (son groupe suit)",
   mate2: "Clique la face ou l'arête contre laquelle la coller",
+  mate1a: "Assisté : clique une face de la pièce à déplacer, elle sera centrée et alignée sur l'autre",
 };
 function EditBar({ est, api, onSave, onReset, onClose, saving }) {
   const [sure, setSure] = useState(false);
@@ -526,7 +528,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving }) {
   const b = (on, extra = {}) => ({ height: 34, padding: "0 12px", borderRadius: 10, border: on ? "none" : "1px solid var(--border)", cursor: "pointer",
     fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap", color: on ? "#fff" : "var(--text2)",
     background: on ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", ...extra });
-  const tip = est.mode === "mate" ? (est.step === 2 ? EDIT_TIPS.mate2 : EDIT_TIPS.mate1) : EDIT_TIPS[est.mode];
+  const tip = est.mode === "mate" ? (est.step === 2 ? EDIT_TIPS.mate2 : est.assist ? EDIT_TIPS.mate1a : EDIT_TIPS.mate1) : EDIT_TIPS[est.mode];
   return <>
     <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 6, padding: 6, borderRadius: 14, zIndex: 3,
       background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(8px)",
@@ -536,6 +538,11 @@ function EditBar({ est, api, onSave, onReset, onClose, saving }) {
       <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>
       <button type="button" onClick={() => api?.setMagnet(!est.magnet)} style={b(est.magnet)}
         data-tip="Aimantation : pas de 1 mm et 15°, et une pièce lâchée près d'une autre ou du sol vient s'y coller">🧷 Aimanter</button>
+      <button type="button" onClick={() => api?.setAssist(!est.assist)} style={b(est.assist)}
+        data-tip="Collage assisté : les faces planes entières sont centrées l'une sur l'autre et leurs grands axes alignés (sinon : au point cliqué)">🪄 Assisté</button>
+      {(est.canGroup || est.canUngroup) && <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>}
+      {est.canGroup && <button type="button" onClick={() => api?.group()} style={b(false)} data-tip="Les pièces choisies bougent ensemble (Ctrl+G)">🔗 Grouper</button>}
+      {est.canUngroup && <button type="button" onClick={() => api?.ungroup()} style={b(false)} data-tip="Défaire le groupe (Ctrl+Maj+G)">⛓ Dégrouper</button>}
       {est.pivot && <>
         <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>
         {[[-90, "⟲ 90°"], [-15, "⟲ 15°"], [15, "⟳ 15°"], [90, "⟳ 90°"]].map(([d, l]) =>
@@ -683,7 +690,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     const pieces = editApi.current?.toSave();
     if (!pieces) return;
     setSaving(true);
-    try { const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces }); setSavedEdit(r.data); editApi.current?.editor?.markSaved(); }
+    try { const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces, groups: editApi.current?.editor?.groups() || [] });
+      setSavedEdit(r.data); editApi.current?.editor?.markSaved(); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setSaving(false); }
   };
