@@ -30,6 +30,7 @@ _PAINT = re.compile(rb'paint_color="([0-9A-F]+)"')
 _XYZ = re.compile(rb'\s[xyz]="([^"]+)"')
 _V123 = re.compile(rb'\sv[123]="(\d+)"')
 _NOT_SHOWN = {"modifier_part", "negative_part", "support_blocker", "support_enforcer"}
+_ZIP_SHARE = 0.15                      # la compression d'un plateau, en part de sa lecture (avancement)
 ASSEMBLED_N = 0                        # le « plateau » de la vue assemblee (29/10/2026) : apres les vrais plateaux
 _TOUCH = 0.3                           # mm : deux objets a moins que ca se touchent
 
@@ -627,25 +628,37 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         asm_lst = []
     weight = (sum(len(p[3]) for _, _, lst in work for _, parts in lst for p in parts)
               + sum(len(p[3]) for _, parts in asm_lst for p in parts)) or 1
+    # l'avancement (29/10/2026) : chaque plateau a sa part, a la taille de ses pieces, lecture puis compression ;
+    # la barre ne fait qu'avancer (avant, la compression d'un plateau la poussait a 80 % et le plateau suivant
+    # la ramenait a la lecture, vers 40 %)
+    total_w = weight * (1 + _ZIP_SHARE)
+    pct = lambda x: 3 + 95 * min(1.0, x / total_w)
     prog = {"done": 0}
     boxes: dict = {}                                    # (objet, instance) -> (plateau, mini, maxi) sur son plateau
+
+    nb = len(work) + (1 if asm_lst else 0)
+    where = {"tag": ""}                                 # « Plateau 2/6 » devant chaque etape
+
+    def say(p_, label):
+        _step(key, p_, f"{where['tag']} · {label}" if where["tag"] and nb > 1 else label)
 
     def emit(lst, label="Lecture des pièces", zchg=None):
         """Les pieces placees -> groupes par couleur, et la boite de chaque objet place (mini, maxi)."""
         groups_out: dict = {}                           # couleur -> [sommets, triangles]
         total = 0
         bx = {}
+        start, pw = prog["done"], sum(len(p[3]) for _, parts in lst for p in parts)
         for ident, parts in lst:
             for ext, fcol, mt, body in parts:
-                # la part de cette piece dans l'avancement (lecture 5 -> 75 %), decoupee en etapes
-                a0, a1 = 5 + 70 * prog["done"] / weight, 5 + 70 * (prog["done"] + len(body)) / weight
+                # la part de cette piece dans l'avancement, decoupee en etapes
+                a0, a1 = pct(prog["done"]), pct(prog["done"] + len(body))
                 prog["done"] += len(body)
-                _step(key, a0, label)
+                say(a0, label)
                 v, t, paint = _mesh(body)
                 if paint:
-                    _step(key, a0 + (a1 - a0) * 0.55, "Couleurs peintes")
+                    say(a0 + (a1 - a0) * 0.55, "Couleurs peintes")
                 v, by_ext = _painted(v, t, paint, ext) if paint else (v, {ext: t})
-                _step(key, a0 + (a1 - a0) * 0.85, "Mise en place")
+                say(a0 + (a1 - a0) * 0.85, "Mise en place")
                 total += sum(len(x) for x in by_ext.values())
                 if total > MAX_TRIANGLES:
                     break
@@ -685,10 +698,15 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                         g[1].append(inv.reshape(-1, 3) + g[2])
                         g[2] += len(used)
                     total += sum(len(tr) for _, tr in slices) - len(tt)     # les triangles coupes en font plus
-        return groups_out, total, bx
+        prog["done"] = start + pw                       # meme interrompu (trop lourd) : sa part est faite
+        return groups_out, total, bx, pw
 
-    def write(n, pname, groups_out, total, extra=None):
+    def zipped(pw):
+        prog["done"] += _ZIP_SHARE * pw
+
+    def write(n, pname, groups_out, total, pw, extra=None):
         if not groups_out or total > MAX_TRIANGLES:
+            zipped(pw)
             # vide : un 3MF tranche ne garde souvent que les pieces du plateau imprime
             meta["plates"].append({"n": n, "name": pname, "triangles": total, "skipped": total > MAX_TRIANGLES,
                                    "empty": not groups_out, **(extra or {})})
@@ -706,19 +724,20 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
             buf += (vv - shift).astype("<f4").tobytes()
             buf += tt.astype("<u4").tobytes()
         # compresse une fois pour toutes : servi tel quel (Content-Encoding: gzip), le telephone le recoit leger
-        nb = len(work) + (1 if asm_lst else 0)
-        _step(key, 78 + 20 * (len(meta["plates"]) + 1) / max(1, nb) - 10 / max(1, nb), "Compression")
+        say(pct(prog["done"]), "Compression")
         _write(out_dir / f"plate_{n}.bin", _gzip(bytes(buf)))
+        zipped(pw)
         rec = {"n": n, "name": pname, "triangles": total, "size_mm": [round(x, 1) for x in size], **(extra or {})}
         meta["plates"].append(rec)
         return rec, size
 
-    for n, pname, lst in work:
+    for i, (n, pname, lst) in enumerate(work):
+        where["tag"] = f"Plateau {i + 1}/{len(work)}"
         zchg = zch.get(n)                               # les changements de filament en hauteur de ce plateau
-        groups_out, total, bx = emit(lst, zchg=zchg)
+        groups_out, total, bx, pw = emit(lst, zchg=zchg)
         for ident, (lo_, hi_) in bx.items():
             boxes[ident] = (n, lo_, hi_)
-        r = write(n, pname, groups_out, total)
+        r = write(n, pname, groups_out, total, pw)
         if r:
             rec, size = r
             # un lithophane (28/10/2026) : dit par son nom (plateau, modele, pieces « litho… »), ou une plaque mince
@@ -729,12 +748,13 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
             if zchg:
                 rec["z_colors"] = [[round(zt, 2), str(c).lstrip("#").upper()[:6]] for zt, _, c, _ in zchg[1]]
     if asm_lst:
-        groups_out, total, bx = emit(asm_lst, label="Vue assemblée")
+        where["tag"] = "Vue assemblée"
+        groups_out, total, bx, pw = emit(asm_lst)
         # une vraie vue d'assemblage : des objets qui se touchent ou s'emboitent une fois assembles, alors que
         # sur les plateaux ils sont a part (Bambu Studio en ecrit une a chaque projet, souvent la simple copie
         # des plateaux : celle-la n'apprend rien)
         if _assembled_differs(bx, boxes):
-            write(ASSEMBLED_N, "Assemblé", groups_out, total, {"assembled": True})
+            write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True})
     _write(out_dir / "plates.json", json.dumps(meta).encode("utf-8"))
     return meta
 
