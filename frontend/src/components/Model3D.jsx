@@ -217,7 +217,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             const c = palette?.[own] ? new THREE.Color(`#${hex6(palette[own])}`) : new THREE.Color(`rgb(${g.color.join(",")})`);
             // sa finition : celle du filament d'origine, ou celle de la bobine utilisee / choisie
             const fin = finishes?.[own];
-            const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true, envMapIntensity: 0,
+            // les deux cotes des faces (29/10/2026) : la ou une zone peinte tres decoupee touche une zone qui l'est moins,
+            // des fissures d'un pixel laissaient voir le noir de l'interieur (des pointilles noirs sur la Nonne)
+            const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true, envMapIntensity: 0, side: THREE.DoubleSide,
               ...(FINISH_MAT[fin] || {}) });
             // un filament multicolore (28/10/2026), en simili, la finition posee par-dessus comme pour les autres :
             // le degrade evolue le long du filament consomme, donc surtout avec la hauteur d'impression, et un peu dans
@@ -627,6 +629,8 @@ const EDIT_HELP = [
     ["⟲ / ⟳ 90° 15°", "tourner d'un cran autour du contact"],
     ["Les pièces collées", "suivent celle sur laquelle elles sont collées"],
     ["✂ Décoller", "libérer la pièce (écartée de 2 mm)"],
+    ["🧩 Emboîter (E)", "colle d'abord les deux faces qui se touchent une fois emboîtées (l'épaulement) ; l'assistant cherche tout près (décalage, quart de tour) la place où la pièce repose sans rien traverser, puis l'enfonce aussi loin que possible"],
+    ["🛡 Anti-collision", "en coulissant, la pièce collée s'arrête au contact de la matière"],
   ]],
   ["Toujours", [
     ["Alt maintenu en glissant", "sans aucun cran"],
@@ -687,6 +691,10 @@ function EditBar({ est, api, onSave, onReset, onClose, saving }) {
       {est.canGroup && <button type="button" onClick={() => api?.group()} style={b(false)} data-tip="Les pièces choisies bougent ensemble (Ctrl+G)">🔗 Grouper</button>}
       {est.count > 0 && <button type="button" onClick={() => api?.hide()} style={b(false)} data-tip="Masquer la sélection pour atteindre ce qu'elle cache (H)">🙈 Masquer</button>}
       {est.hidden > 0 && <button type="button" onClick={() => api?.showAll()} style={b(false)} data-tip="Réafficher tout (Alt+H)">👁 Tout afficher ({est.hidden})</button>}
+      {est.glued && <button type="button" disabled={est.fitting != null} onClick={() => api?.fit()} style={b(true, { background: "linear-gradient(135deg, #f59e0b, #ef4444)" })}
+        data-tip="Chercher tout près la place où la pièce s'emboîte sans traverser la matière (E)">{est.fitting != null ? `🧩 ${est.fitting} %` : "🧩 Emboîter"}</button>}
+      {est.glued && <button type="button" onClick={() => api?.setGuard(!est.guard)} style={b(est.guard)}
+        data-tip="Anti-collision : en coulissant, la pièce s'arrête au contact de la matière">🛡 Anti-collision</button>}
       {est.glued && <button type="button" onClick={() => api?.unglue()} style={b(false, { color: "#ef4444" })}
         data-tip={`Collée à ${est.glued.to} : la libérer (écartée de 2 mm)`}>✂ Décoller</button>}
       {est.canUngroup && <button type="button" onClick={() => api?.ungroup()} style={b(false)} data-tip="Défaire le groupe (Ctrl+Maj+G)">⛓ Dégrouper</button>}
@@ -712,7 +720,9 @@ function EditBar({ est, api, onSave, onReset, onClose, saving }) {
     <div style={{ position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)", zIndex: 3, padding: "7px 14px", borderRadius: 12, fontSize: 12.5,
       fontWeight: 700, color: "var(--text2)", background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)",
       maxWidth: "calc(100% - 140px)", textAlign: "center" }}>
-      {est.liveAngle != null ? <b style={{ color: "#0EA5E9", fontSize: 15 }}>Rotation : {String(est.liveAngle).replace(".", ",")}°</b> : <>
+      {est.fitMsg ? <b style={{ color: /^Emboîtée/.test(est.fitMsg) ? "#16a34a" : "#d97706" }}>{est.fitMsg}</b>
+        : est.fitting != null ? <b style={{ color: "#f59e0b" }}>🧩 Recherche de l'emboîtement… {est.fitting} %</b>
+        : est.liveAngle != null ? <b style={{ color: "#0EA5E9", fontSize: 15 }}>Rotation : {String(est.liveAngle).replace(".", ",")}°</b> : <>
       {est.selected && (est.mode === "move" || est.mode === "rotate") ? <b style={{ color: "#0EA5E9" }}>{est.selected} · </b> : null}{tip}</>}
     </div>
   </>;

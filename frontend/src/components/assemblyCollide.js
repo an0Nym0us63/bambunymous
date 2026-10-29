@@ -1,0 +1,90 @@
+// Les collisions entre pieces de la vue assemblee (29/10/2026), pour l'emboitement et l'anti-collision : chaque piece a
+// une copie allegee de son maillage (60 000 triangles au plus, sommets proches fusionnes) avec son arbre de recherche
+// (three-mesh-bvh), faits a la premiere demande et gardes. Deux pieces se touchent si leurs triangles se croisent.
+const MAX_TRIS = 60000;
+
+export async function createCollider(THREE) {
+  const { MeshBVH } = await import("three-mesh-bvh");
+  const cache = new WeakMap(), thin = new WeakMap();
+
+  // le maillage d'une piece (ses morceaux de couleur reunis), dans son repere, allege au besoin ; erode : la surface
+  // rentree de tant de mm le long des normales (une piece « amincie », pour une premiere recherche a grands pas)
+  const geoOf = (piece, erode = 0) => {
+    if (erode) {
+      const m = thin.get(piece) || new Map();
+      thin.set(piece, m);
+      if (m.has(erode)) return m.get(erode);
+      const full = geoOf(piece);
+      const geo = full.clone();
+      geo.computeVertexNormals();
+      const p = geo.attributes.position.array, n = geo.attributes.normal.array;
+      for (let i = 0; i < p.length; i++) p[i] -= n[i] * erode;
+      geo.deleteAttribute("normal");
+      geo.boundsTree = new MeshBVH(geo);
+      geo.computeBoundingBox();
+      m.set(erode, geo);
+      return geo;
+    }
+    if (cache.has(piece)) return cache.get(piece);
+    const pos = [], idx = [];
+    let base = 0;
+    for (const m of piece.children) {
+      if (!m.isMesh || !m.geometry?.attributes?.position) continue;
+      const g = m.geometry, p = g.attributes.position.array, ix = g.index ? g.index.array : null;
+      for (let i = 0; i < p.length; i++) pos.push(p[i]);
+      if (ix) for (let i = 0; i < ix.length; i++) idx.push(ix[i] + base);
+      else for (let i = 0; i < p.length / 3; i++) idx.push(i + base);
+      base += p.length / 3;
+    }
+    let P = Float32Array.from(pos), I = Uint32Array.from(idx);
+    if (I.length / 3 > MAX_TRIS) [P, I] = simplify(P, I, MAX_TRIS);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(P, 3));
+    geo.setIndex(new THREE.BufferAttribute(I, 1));
+    geo.boundsTree = new MeshBVH(geo);
+    geo.computeBoundingBox();
+    cache.set(piece, geo);
+    return geo;
+  };
+
+  // fusion des sommets sur une grille, de plus en plus large jusqu'a passer sous le nombre vise
+  const simplify = (P, I, target) => {
+    let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], P[i + k]); hi[k] = Math.max(hi[k], P[i + k]); }
+    const diag = Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) || 1;
+    let cell = diag / 2000, outP = P, outI = I;
+    for (let it = 0; it < 12; it++) {
+      const map = new Map(), np = [], remap = new Uint32Array(P.length / 3);
+      for (let i = 0; i < P.length / 3; i++) {
+        const key = `${Math.floor((P[i * 3] - lo[0]) / cell)},${Math.floor((P[i * 3 + 1] - lo[1]) / cell)},${Math.floor((P[i * 3 + 2] - lo[2]) / cell)}`;
+        let j = map.get(key);
+        if (j === undefined) { j = np.length / 3; map.set(key, j); np.push(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]); }
+        remap[i] = j;
+      }
+      const ni = [];
+      for (let t = 0; t < I.length; t += 3) {
+        const a = remap[I[t]], b = remap[I[t + 1]], c = remap[I[t + 2]];
+        if (a !== b && b !== c && a !== c) ni.push(a, b, c);
+      }
+      outP = Float32Array.from(np); outI = Uint32Array.from(ni);
+      if (ni.length / 3 <= target) break;
+      cell *= 1.5;
+    }
+    return [outP, outI];
+  };
+
+  const inv = new THREE.Matrix4(), rel = new THREE.Matrix4(), boxA = new THREE.Box3(), boxB = new THREE.Box3();
+  // la piece a (a la place mA, repere du support) touche-t-elle la piece b (a sa place) ?
+  const touches = (a, mA, b, erode = 0) => {
+    const ga = geoOf(a, erode), gb = geoOf(b);
+    b.updateMatrix();
+    boxA.copy(ga.boundingBox).applyMatrix4(mA);
+    boxB.copy(gb.boundingBox).applyMatrix4(b.matrix);
+    if (!boxA.intersectsBox(boxB)) return false;
+    rel.copy(inv.copy(b.matrix).invert()).multiply(mA);
+    return gb.boundsTree.intersectsGeometry(ga, rel);
+  };
+  // des pieces deplacees ([piece, matrice]) touchent-elles une des autres ?
+  const anyTouch = (moving, others, erode = 0) => moving.some(([a, m]) => others.some(b => b.visible && touches(a, m, b, erode)));
+  return { geoOf, touches, anyTouch };
+}

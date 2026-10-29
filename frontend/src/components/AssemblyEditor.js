@@ -30,6 +30,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   // tablette au stylet (29/10/2026) : sans clavier, deux interrupteurs tiennent lieu de Ctrl (choisir plusieurs) et de
   // Maj (tourner la piece collee)
   let multi = false, turnGlued = false;
+  // l'anti-collision (29/10/2026) : une piece collee qu'on fait coulisser s'arrete au contact de la matiere ; et
+  // l'emboitement, qui cherche ou la piece entre sans rien traverser
+  let guard = false, fitting = null, fitMsg = null, collider = null;
+  const getCollider = async () => { if (!collider) { const { createCollider } = await import("./assemblyCollide"); collider = await createCollider(THREE); } return collider; };
   let alt = false;
   const sel = new Set();             // les pieces choisies
   let first = null;                  // coller : la premiere prise
@@ -120,7 +124,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const state = () => ({ mode, magnet, assist, rotStep, center: center(), selected: selName(), count: sel.size, step: first ? 2 : 1, canUndo: undo.length > 0, canRedo: redo.length > 0,
     pivot: !!pivot, dirty: changes !== savedAt,
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
-    canUngroup: [...sel].some(g => groupOf(g)), multi, turnGlued, liveAngle,
+    canUngroup: [...sel].some(g => groupOf(g)), multi, turnGlued, liveAngle, guard, fitting, fitMsg,
     hidden: all.filter(g => !g.visible).length,
     glued: (() => { const j = jointOf([...sel]); return j ? { to: j.b.userData.name, kind: j.kind } : null; })() });
 
@@ -265,7 +269,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const shade = () => {
     all.forEach(o => o.children.forEach(m => { if (m.isMesh && m.material) { const dim = sel.size > 0 && !sel.has(o); m.material.transparent = dim; m.material.opacity = dim ? 0.45 : 1; } }));
   };
-  const setSel = list => { sel.clear(); list.forEach(g => sel.add(g)); shade(); placeHandle(); showContact(); render(); onChange?.(state()); };
+  const setSel = list => { fitMsg = null; sel.clear(); list.forEach(g => sel.add(g)); shade(); placeHandle(); showContact(); render(); onChange?.(state()); };
   // le contact de la selection collee, marque d'un anneau
   const ringMat = new THREE.MeshBasicMaterial({ color: 0x22c55e, transparent: true, opacity: 0.9, depthTest: false, side: THREE.DoubleSide });
   const ring = new THREE.Mesh(new THREE.RingGeometry(2.2, 3.2, 32), ringMat); ring.renderOrder = 999; ring.visible = false; holder.add(ring);
@@ -420,6 +424,12 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       s.d.copy(d);
       M = new THREE.Matrix4().makeTranslation(d.x, d.y, d.z);
     }
+    if (guard && collider) {
+      // la position voulue traverse-t-elle une autre piece ? (le contact colle lui-meme ne compte pas : 0,05 mm de jeu)
+      const lift = s.E ? new THREE.Matrix4() : new THREE.Matrix4().makeTranslation(s.N.x * 0.05, s.N.y * 0.05, s.N.z * 0.05);
+      const cand = s.start.map(([g, m0]) => [g, lift.clone().multiply(M).multiply(m0)]);
+      if (collider.anyTouch(cand, all.filter(g => !s.start.some(([x]) => x === g)))) return;     // reste a la derniere place libre
+    }
     for (const [g, m0] of s.start) { M.clone().multiply(m0).decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); }
     render();
   };
@@ -435,6 +445,79 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     }
     liveAngle = null;
     if (s.d.lengthSq() || s.ang) { showContact(); push(); } else onChange?.(state());
+  };
+  // emboiter la selection collee : la place la plus proche (decalage dans le plan du contact, quart de tour autour de
+  // la normale) ou elle repose sur le contact sans traverser la matiere, puis aussi loin que possible vers l'interieur
+  const fit = async () => {
+    const list = [...sel], j = jointOf(list);
+    if (fitting) return;
+    if (!j || j.kind !== "face") { fitMsg = "Colle d'abord la pièce face contre face (les deux faces qui se touchent une fois emboîtées)"; onChange?.(state()); return; }
+    fitting = 0; fitMsg = null; onChange?.(state());
+    const col = await getCollider();
+    const moving = withKids(list), start = moving.map(g => [g, g.matrix.clone()]);
+    const others = all.filter(g => !moving.includes(g) && g.visible);
+    const { P, N } = contact(j);
+    const u = (Math.abs(N.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0)).cross(N).normalize(), w = N.clone().cross(u);
+    const sz = boxOfAll(list).getSize(new THREE.Vector3()).length();
+    const R = Math.min(20, Math.max(4, sz * 0.4)), step = Math.max(0.5, R / 20);
+    const mats = (ang, x, y, d) => {
+      const t = u.clone().multiplyScalar(x).addScaledVector(w, y).addScaledVector(N, 0.05 - d);
+      const M = new THREE.Matrix4().makeTranslation(t.x, t.y, t.z).multiply(about(P, new THREE.Quaternion().setFromAxisAngle(N, THREE.MathUtils.degToRad(ang))));
+      return start.map(([g, m0]) => [g, M.clone().multiply(m0)]);
+    };
+    const free = (ang, x, y, d, erode = 0) => !col.anyTouch(mats(ang, x, y, d), others, erode);
+    const tick = async (n, total) => { fitting = Math.min(99, Math.round(100 * n / total)); onChange?.(state()); await new Promise(res => setTimeout(res, 0)); };
+    let best = null;
+    if (free(0, 0, 0, 0)) best = { ang: 0, x: 0, y: 0, r: 0 };            // deja bien place
+    if (!best) {
+      // 1. a grands pas, la piece amincie (sa surface rentree d'un peu plus d'un demi-pas) : le pas peut tomber dans
+      // le jeu d'un emboitement (0,2 mm) ; la place libre la plus proche pour chaque quart de tour
+      const erode = step * 0.6;
+      const offs = [];
+      for (let x = -R; x <= R + 1e-6; x += step) for (let y = -R; y <= R + 1e-6; y += step) if (Math.hypot(x, y) <= R) offs.push([x, y, Math.hypot(x, y)]);
+      offs.sort((p, q) => p[2] - q[2]);
+      const coarse = [];
+      let n = 0;
+      for (const ang of [0, 90, 180, 270]) {
+        for (const [x, y, r] of offs) {
+          n++;
+          if (free(ang, x, y, 0, erode)) { coarse.push({ ang, x, y, r: r + (ang ? 0.01 : 0) }); break; }
+          if (n % 20 === 0) await tick(n, offs.length * 4 + 900);
+        }
+      }
+      coarse.sort((p, q) => (p.ang !== 0) - (q.ang !== 0) || p.r - q.r);     // sans tourner, si ca entre
+      // 2. au dixieme de mm, la vraie piece, autour de chaque place trouvee : le centre de la zone libre (le tenon
+      // centre dans son trou)
+      for (const c of coarse) {
+        const pts = [];
+        for (let dx = -step; dx <= step + 1e-6; dx += 0.1) for (let dy = -step; dy <= step + 1e-6; dy += 0.1) {
+          n++;
+          if (free(c.ang, c.x + dx, c.y + dy, 0)) pts.push([c.x + dx, c.y + dy]);
+          if (n % 20 === 0) await tick(n, offs.length * 4 + 900);
+        }
+        if (!pts.length) continue;
+        let cx = pts.reduce((v, p) => v + p[0], 0) / pts.length, cy = pts.reduce((v, p) => v + p[1], 0) / pts.length;
+        if (!free(c.ang, cx, cy, 0)) [cx, cy] = pts.reduce((m, p) => (Math.hypot(p[0] - cx, p[1] - cy) < Math.hypot(m[0] - cx, m[1] - cy) ? p : m));
+        best = { ang: c.ang, x: cx, y: cy, r: Math.hypot(cx, cy) };
+        break;
+      }
+    }
+    if (!best) { fitting = null; fitMsg = `Aucune place libre à moins de ${Math.round(R)} mm : rapproche la pièce de son logement`; onChange?.(state()); return; }
+    // puis aussi loin que possible vers l'interieur (une piece qui entre dans un logement)
+    const depthMax = boxOfAll(list).getSize(new THREE.Vector3()).dot(new THREE.Vector3(Math.abs(N.x), Math.abs(N.y), Math.abs(N.z)));
+    let lo = 0, hi = depthMax;
+    if (!free(best.ang, best.x, best.y, hi)) for (let k = 0; k < 14; k++) { const mid = (lo + hi) / 2; if (free(best.ang, best.x, best.y, mid)) lo = mid; else hi = mid; }
+    else lo = hi;
+    const depth = lo > 0.15 ? lo - 0.1 : 0;
+    for (const [g, m] of mats(best.ang, best.x, best.y, depth)) { m.decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); }
+    // le contact suit la piece (dans le repere du support)
+    j.b.updateMatrix();
+    const t = u.clone().multiplyScalar(best.x).addScaledVector(w, best.y).addScaledVector(N, 0.05 - depth);
+    j.p.add(t.clone().transformDirection(j.b.matrix.clone().invert()).multiplyScalar(t.length()));
+    fitting = null;
+    const f = v => String(Math.round(v * 10) / 10).replace(".", ",");
+    fitMsg = `Emboîtée${best.r > 0.05 ? ` · décalée de ${f(Math.hypot(best.x, best.y))} mm` : ""}${best.ang ? ` · tournée de ${best.ang}°` : ""}${depth ? ` · enfoncée de ${f(depth)} mm` : ""}`;
+    showContact(); placeHandle(); push(); render();
   };
   el.addEventListener("pointerdown", onSlideDown, true);
   window.addEventListener("pointermove", onSlideMove);
@@ -471,6 +554,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       if (k === "c") return api.setMode("mate");
       if (k === "z") return frame();
       if (k === "h") return api.hide();
+      if (k === "e") return fit();
     }
     if (mode === "rotate" && sel.size && ev.key.startsWith("Arrow") && !ev.ctrlKey && !ev.metaKey) {
       // en mode Tourner, les fleches tournent : gauche/droite autour de Z, haut/bas autour de X ; 1° (Maj : 15°)
@@ -505,6 +589,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     setRotStep: d => { rotStep = d; applySnap(); onChange?.(state()); },
     setMulti: on => { multi = on; onChange?.(state()); },
     setTurnGlued: on => { turnGlued = on; onChange?.(state()); },
+    setGuard: async on => { guard = on; if (on) await getCollider(); onChange?.(state()); },
+    select: keys => setSel(keys.map(k => byKey.get(k)).filter(Boolean)),
+    fit,
     rotate: rotateSel,
     // placer le centre de la selection a une position exacte (mm, repere du 3MF : Z vers le haut)
     moveTo: (x, y, z) => {
