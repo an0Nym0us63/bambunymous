@@ -495,6 +495,20 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       joints = joints.filter(j => !unit.includes(j.a));
       drop(unit); pivot = null; clearMarks(); showContact(); push(); render(); return;
     }
+    // le mode « Emboiter » (30/10/2026) : comme Coller, une face de la piece puis une face de l'autre ; les deux faces
+    // mises l'une contre l'autre, l'assistant cherche aussitot la place ou la piece s'emboite (decalee, tournee, enfoncee)
+    if (mode === "fit") {
+      if (!first) { first = pick; clearMarks(); mark(pick); onChange?.(state()); return; }
+      const A = first;
+      first = null; clearMarks();
+      // face contre face : un clic tombe pres d'une arete, on garde la face de la piece (sa normale)
+      const asFace = q => (q.kind === "face" ? q : { ...q, kind: "face", region: null });
+      const unit = mate(asFace(A), asFace(pick));
+      if (!unit) { fitMsg = "Clique une face d'une autre pièce"; onChange?.(state()); return; }
+      push(); setSel(unit); render();
+      fit();
+      return;
+    }
     if (mode === "mate") {
       if (!first) { first = pick; clearMarks(); mark(pick); onChange?.(state()); return; }
       const A = first;
@@ -682,12 +696,19 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       const probe = Math.min(depthMax * 0.5, 3);
       let cands = [];
       const touching = [];
+      // tenue : decalee d'un pas de cote, elle touche (de trois cotes au moins)
+      const heldAt = (ang, x, y, dz, er, mv) => [[mv, 0], [-mv, 0], [0, mv], [0, -mv]].filter(([a, b]) => !free(ang, x + a, y + b, dz, er)).length;
       for (const ang of angs) {
         let k = 0;
         for (const [x, y, r] of offs) {
           await tick();
           if (free(ang, x, y, probe, erode)) cands.push({ ang, x, y, r });
-          else if (k < 3 && free(ang, x, y, 0, erode)) { touching.push({ ang, x, y, r }); k++; }
+          else if (free(ang, x, y, 0, erode)) {
+            // posee au contact, entre des parois (30/10/2026 : collee sur le fond de son logement, elle y est deja a
+            // sa place ; seule une piece qui s'enfoncait plus loin que la face collee comptait)
+            if (heldAt(ang, x, y, 0, erode, 1 + erode) >= 3) cands.push({ ang, x, y, r, seat: true });
+            else if (k < 3) { touching.push({ ang, x, y, r }); k++; }
+          }
         }
       }
       // rien n'entre : au passage suivant (plus d'angles, puis un peu de tolerance) ; au dernier, la place au contact
@@ -698,17 +719,17 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       cands = cands.slice(0, 15);
       // 2. jusqu'ou chacune s'enfonce : la plus profonde l'emporte (a peu pres egales : la plus proche, sans tourner)
       for (const c of cands) c.d = await depthAt(c.ang, c.x, c.y, erode);
-      const cost = c => -c.d + 0.02 * c.r + 0.01 * Math.abs(c.ang);
+      const cost = c => (c.fit ? -100 : 0) - c.d - (c.seat ? 0.3 : 0) + 0.02 * c.r + 0.01 * Math.abs(c.ang);
       cands.sort((p, q) => cost(p) - cost(q));
       // 3. les meilleures, affinees avec la vraie piece (au chevauchement tolere) : a son angle puis a ±1, ±2, ±3°, les
       // decalages ou elle entre (sondee) sur une grille de 0,2 mm, puis de 0,05 mm autour de leur milieu ; on prend le
       // milieu de la zone libre (le tenon centre dans son trou) et on mesure jusqu'ou elle s'enfonce
       const pr = Math.min(probe, 1.5);
-      const zone = (ang, cx, cy, half, st) => {
+      const zone = (ang, cx, cy, half, st, h, er = extra) => {
         const pts = [];
         for (let dx = -half; dx <= half + 1e-6; dx += st) for (let dy = -half; dy <= half + 1e-6; dy += st) {
           n++;
-          if (free(ang, cx + dx, cy + dy, pr, extra)) pts.push([cx + dx, cy + dy]);
+          if (free(ang, cx + dx, cy + dy, h, er)) pts.push([cx + dx, cy + dy]);
         }
         if (!pts.length) return null;
         return [pts.reduce((v, p) => v + p[0], 0) / pts.length, pts.reduce((v, p) => v + p[1], 0) / pts.length];
@@ -718,20 +739,20 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         // au quart de degre pres d'abord : une piece sans presque de jeu (une colonne dans son logement) ne passe qu'a
         // une fraction de degre
         for (const da of [0, -0.25, 0.25, -0.5, 0.5, -1, 1, -1.5, 1.5, -2, 2, -3, 3]) {
-          const ang = c.ang + da;
+          const ang = c.ang + da, h = c.seat ? 0 : pr;
           await tick();
-          let m = zone(ang, c.x, c.y, step, 0.2);
+          // la zone libre d'abord avec la piece a peine amincie (une place de 0,2 mm passerait entre les mailles), puis
+          // son milieu au vingtieme de mm avec la vraie piece
+          let m = zone(ang, c.x, c.y, step, 0.2, h, extra + 0.25);
           if (!m) continue;
-          m = zone(ang, m[0], m[1], 0.3, 0.05) || m;
-          if (!free(ang, m[0], m[1], pr, extra)) continue;
-          const cur = { ang, x: m[0], y: m[1], r: Math.hypot(m[0], m[1]), d: await depthAt(ang, m[0], m[1], extra) };
-          // vraiment emboitee : enfoncee, elle est tenue de trois cotes au moins (decalee d'1 mm, elle touche) ; sinon elle
-          // n'a fait que glisser le long du support (posee au bord)
-          if (cur.d > 0.5) {
-            const dz = Math.max(0.2, cur.d - 0.3);           // pres du fond : un epaulement a mi-hauteur ne tient pas la piece
-            const held = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([a, b]) => !free(ang, m[0] + a, m[1] + b, dz, extra)).length;
-            if (held < 3) cur.d = 0;
-          }
+          m = zone(ang, m[0], m[1], 0.3, 0.05, h) || m;
+          if (!free(ang, m[0], m[1], h, extra)) continue;
+          const cur = { ang, x: m[0], y: m[1], r: Math.hypot(m[0], m[1]), d: await depthAt(ang, m[0], m[1], extra), seat: c.seat };
+          // vraiment emboitee : tenue de trois cotes au moins (decalee d'1 mm, elle touche), pres du fond (un epaulement a
+          // mi-hauteur ne tient pas la piece) ; sinon elle n'a fait que glisser le long du support (posee au bord)
+          const dz = cur.d > 0.5 ? Math.max(0.2, cur.d - 0.3) : 0;
+          cur.fit = heldAt(ang, m[0], m[1], dz, extra, 1) >= 3;
+          if (!cur.fit) cur.d = 0;
           // tous les angles proches sont compares : le plus profond l'emporte (30/10/2026 : le premier qui entrait un peu,
           // de travers, restait pose sur un epaulement)
           tried.push(cur);
@@ -740,8 +761,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       }
       // plusieurs angles entrent aussi loin : celui du milieu de la plage, le plus droit dans son logement (30/10/2026 : le
       // plus petit des angles qui passaient laissait la piece de travers d'un degre ou deux)
-      if (best && best.d > 0.5) {
-        const same = tried.filter(t => t.d >= best.d - 0.15 && Math.abs(t.ang - best.ang) <= 4).sort((p, q) => p.ang - q.ang);
+      if (best && best.fit) {
+        const same = tried.filter(t => t.fit && t.d >= best.d - 0.15 && Math.abs(t.ang - best.ang) <= 4).sort((p, q) => p.ang - q.ang);
         const mid = same[Math.floor((same.length - 1) / 2)];
         const angMid = (same[0].ang + same[same.length - 1].ang) / 2;
         best = same.reduce((m, t) => (Math.abs(t.ang - angMid) < Math.abs(m.ang - angMid) ? t : m), mid);
@@ -752,7 +773,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         if (free(c.ang, c.x, c.y, 0, extra)) best = { ...c, d: 0 };
       }
       // vraiment entree : c'est fini ; sinon, gardee en reserve, et on cherche plus loin (tous les angles, la tolerance)
-      if (best && best.d > 0.5) break;
+      if (best && best.fit) break;
       if (best && (!spare || best.d > spare.d)) spare = { ...best, tol };
       best = null;
     }
@@ -768,7 +789,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const f = v => String(Math.round(v * 10) / 10).replace(".", ",");
     const ang = Math.round((((best.ang % 360) + 540) % 360 - 180) * 10) / 10;
     egg("tenon_mortaise");
-    fitMsg = `${depth ? "Emboîtée" : `Aucun logement où elle entre à moins de ${Math.round(R)} mm : posée au contact`}${best.r > 0.05 ? ` · décalée de ${f(best.r)} mm` : ""}${ang ? ` · tournée de ${f(ang)}°` : ""}${depth ? ` · enfoncée de ${f(depth)} mm` : ""}${tol && depth ? ` · pièces sans jeu : ${f(tol)} mm de chevauchement toléré` : ""}`;
+    fitMsg = `${best.fit ? "Emboîtée" : `Aucun logement où elle tienne à moins de ${Math.round(R)} mm : posée au contact`}${best.r > 0.05 ? ` · décalée de ${f(best.r)} mm` : ""}${ang ? ` · tournée de ${f(ang)}°` : ""}${depth ? ` · enfoncée de ${f(depth)} mm` : best.fit ? " · à sa place, tenue par les parois" : ""}${tol && best.fit ? ` · pièces sans jeu : ${f(tol)} mm de chevauchement toléré` : ""}`;
     showContact(); placeHandle(); push(); render();
   };
   el.addEventListener("pointerdown", onSlideDown, true);
@@ -807,7 +828,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       if (k === "p") return api.setMode("pins");
       if (k === "z") return frame();
       if (k === "h") return api.hide();
-      if (k === "e") return fit();
+      if (k === "e") return jointOf([...sel]) ? fit() : api.setMode("fit");
       if (k === "enter" && mode === "pins") return pinsApply();
     }
     if (mode === "rotate" && sel.size && ev.key.startsWith("Arrow") && !ev.ctrlKey && !ev.metaKey) {

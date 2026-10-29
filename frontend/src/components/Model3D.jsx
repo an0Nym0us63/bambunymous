@@ -821,7 +821,8 @@ const EDIT_HELP = [
     ["⟲ / ⟳ 90° 15°", "tourner d'un cran autour du contact"],
     ["Les pièces collées", "suivent celle sur laquelle elles sont collées"],
     ["✂ Décoller", "libérer la pièce (écartée de 2 mm)"],
-    ["🧩 Emboîter (E)", "colle d'abord les deux faces qui se touchent une fois emboîtées (l'épaulement) ; l'assistant essaie chaque angle et chaque décalage proche, garde la place où la pièce s'enfonce le plus sans rien traverser, la centre dans le jeu et l'enfonce"],
+    ["🧩 Emboîter (mode, E)", "clique la face de la pièce qui entre, puis la face où elle s'emboîte (le fond ou le bord du logement) : les faces se mettent l'une contre l'autre, puis l'assistant décale et tourne la pièce autour du contact pour trouver la place sans collision où elle est tenue par les parois, la centre dans le jeu et l'enfonce si elle peut aller plus loin"],
+    ["🧩 Emboîter ici", "sur une pièce déjà collée : la même recherche, depuis son collage"],
     ["Maj + clic, après un collage", "une paire de plus (point, face ou arête de la pièce, puis sa cible) : l'orientation suit toutes les paires"],
     ["🛡 Anti-collision", "en coulissant, la pièce collée s'arrête au contact de la matière"],
   ]],
@@ -888,15 +889,17 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
     background: on ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", ...extra });
   const tip = est.glued && est.step !== 2 ? `Collée à ${est.glued.to} : glisse-la pour la faire coulisser ${est.glued.kind === "edge" ? "le long de l'arête" : "sur la face"}, Maj + glisser pour la tourner autour du contact · ✂ Décoller pour la libérer`
     : est.mode === "pins" ? pinsTip(est)
+    : est.mode === "fit" ? (est.step === 2 ? "🧩 Clique la face où elle doit s'emboîter (le fond ou le bord du logement)" : "🧩 Clique la face de la pièce qui entre (le dessous du tenon, de la colonne…)")
     : est.mode === "mate" ? (est.step === 2 ? EDIT_TIPS.mate2 : est.pairs ? `Collée${est.pairs > 1 ? ` en ${est.pairs} points` : ""} : Maj + clic (ou ➕ Multi) sur un autre point, une face ou une arête de la pièce, puis sur sa cible, pour fixer l'orientation`
       : est.assist ? EDIT_TIPS.mate1a : EDIT_TIPS.mate1) : EDIT_TIPS[est.mode];
   return <>
     <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 6, padding: 6, borderRadius: 14, zIndex: 3,
       background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(8px)",
       boxShadow: "0 10px 30px rgba(0,0,0,.25)", flexWrap: "wrap", justifyContent: "center", maxWidth: "calc(100% - 24px)" }}>
-      {[["move", "✥ Déplacer"], ["rotate", "⟳ Tourner"], ["ground", "⬇ Poser au sol"], ["mate", "🧲 Coller"], ["pins", "📍 Points"]].map(([m, l]) =>
+      {[["move", "✥ Déplacer"], ["rotate", "⟳ Tourner"], ["ground", "⬇ Poser au sol"], ["mate", "🧲 Coller"], ["fit", "🧩 Emboîter"], ["pins", "📍 Points"]].map(([m, l]) =>
         <button key={m} type="button" onClick={() => api?.setMode(m)} style={b(est.mode === m)}
-          data-tip={m === "pins" ? "Assembler par paires de points : 1 avec 1, 2 avec 2, 3 avec 3 (P)" : undefined}>{l}</button>)}
+          data-tip={m === "pins" ? "Assembler par paires de points : 1 avec 1, 2 avec 2, 3 avec 3 (P)"
+            : m === "fit" ? "Une face de la pièce, puis la face où elle s'emboîte : l'assistant cherche la place (E)" : undefined}>{l}</button>)}
       {est.mode === "pins" && <>
         <button type="button" disabled={!est.pinsB} onClick={() => api?.pinsApply()} style={b(!!est.pinsB, { opacity: est.pinsB ? 1 : 0.45 })}
           data-tip="Faire coïncider chaque point orange avec le point vert de même numéro (Entrée)">✓ Assembler{est.pinsB ? ` (${est.pinsB})` : ""}</button>
@@ -930,7 +933,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
       {est.count > 0 && <button type="button" onClick={() => api?.hide()} style={b(false)} data-tip="Masquer la sélection pour atteindre ce qu'elle cache (H)">🙈 Masquer</button>}
       {est.hidden > 0 && <button type="button" onClick={() => api?.showAll()} style={b(false)} data-tip="Réafficher tout (Alt+H)">👁 Tout afficher ({est.hidden})</button>}
       {est.glued && <button type="button" disabled={est.fitting != null} onClick={() => api?.fit()} style={b(true, { background: "linear-gradient(135deg, #f59e0b, #ef4444)" })}
-        data-tip="Chercher tout près la place où la pièce s'emboîte sans traverser la matière (E)">{est.fitting != null ? `🧩 ${est.fitting} %` : "🧩 Emboîter"}</button>}
+        data-tip="Chercher tout près la place où la pièce collée s'emboîte sans traverser la matière (E)">{est.fitting != null ? `🧩 ${est.fitting} %` : "🧩 Emboîter ici"}</button>}
       {est.glued && <button type="button" onClick={() => api?.setGuard(!est.guard)} style={b(est.guard)}
         data-tip="Anti-collision : en coulissant, la pièce s'arrête au contact de la matière">🛡 Anti-collision</button>}
       {est.glued && <button type="button" onClick={() => api?.unglue()} style={b(false, { color: "#ef4444" })}
