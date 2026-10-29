@@ -69,7 +69,8 @@ registerBeacon(() => { client.get("/users/activity/ping").catch(() => {}); });
 // Chez un copain, ses reponses contiennent des adresses « /api/v1/... »
 // (photos, fichiers) qui pointeraient chez moi : on les fait passer par le relais.
 const rewrite = (v) => {
-  if (typeof v === "string") return v.startsWith("/api/v1/") ? apiUrl(v.slice(7)) : v;
+  // (deja passee par le relais : laissee telle quelle, jamais « /friends/…/p/friends/… »)
+  if (typeof v === "string") return v.startsWith("/api/v1/") && !v.startsWith("/api/v1/friends/") ? apiUrl(v.slice(7)) : v;
   if (Array.isArray(v)) return v.map(rewrite);
   if (v && typeof v === "object") { for (const k of Object.keys(v)) v[k] = rewrite(v[k]); return v; }
   return v;

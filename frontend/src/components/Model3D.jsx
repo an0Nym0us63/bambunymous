@@ -493,7 +493,10 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     return () => { alive = false; clearInterval(id); };
   }, [base, wait, meta, err]);
   // chez un copain (29/10/2026) : les fichiers de plateau viennent de chez lui, par le relais de mon serveur
-  const viaFriend = u => currentFriend() && typeof u === "string" && u.startsWith("/api/v1/") ? apiUrl(u.slice(7)) : u;
+  // (une adresse deja reecrite par le relais -- les reponses d'un copain le sont -- n'est pas reprefixee : le relais
+  // refusait « friends/… » en 400)
+  const viaFriend = u => currentFriend() && typeof u === "string" && u.startsWith("/api/v1/") && !u.startsWith("/api/v1/friends/")
+    ? apiUrl(u.slice(7)) : u;
   const p0 = meta?.plates?.[plate];
   const p = p0 ? { ...p0, url: viaFriend(p0.url) } : p0;
   // un plateau dont le filament change a une hauteur (le « M600 » pose dans Bambu Studio, 28/10/2026) : le
