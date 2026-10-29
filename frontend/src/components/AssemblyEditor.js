@@ -128,7 +128,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const selName = () => sel.size === 0 ? null : sel.size === 1 ? [...sel][0].userData.name : `${sel.size} pièces${groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))) ? " (groupe)" : ""}`;
   const center = () => { if (!sel.size) return null; const c = boxOfAll([...sel]).getCenter(new THREE.Vector3()); return [c.x, c.y, c.z].map(v => Math.round(v * 10) / 10); };
   const state = () => ({ mode, magnet, assist, rotStep, center: center(), selected: selName(), count: sel.size, step: first ? 2 : 1, canUndo: undo.length > 0, canRedo: redo.length > 0,
-    pivot: !!pivot, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
+    pivot: !!pivot, pairs: pairs.length, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
     canUngroup: [...sel].some(g => groupOf(g)), multi, turnGlued, liveAngle, guard, fitting, fitMsg,
@@ -348,6 +348,56 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     return unit;
   };
 
+  // le collage a plusieurs points (30/10/2026) : apres un premier collage, d'autres paires (Maj + clic, ou « Multi ») :
+  // un point, une face ou une arete de la piece, puis sa cible sur le support. Chaque paire est gardee dans le repere de
+  // sa piece ; a chaque ajout, la place et l'orientation qui font coincider au mieux toutes les paires (points
+  // superposes, faces qui se regardent, aretes alignees) sont recalculees (methode de Horn, moindres carres)
+  let pairs = [];                    // [{ ag, bg, a, b, an, bn, ae, be, kind }] (repere de ag / de bg)
+  const toLocal = (g, v, dir) => { g.updateMatrix(); const inv = g.matrix.clone().invert(); return dir ? v.clone().transformDirection(inv) : v.clone().applyMatrix4(inv); };
+  const toWorld = (g, v, dir) => { g.updateMatrix(); return dir ? v.clone().transformDirection(g.matrix) : v.clone().applyMatrix4(g.matrix); };
+  const pairOf = (A, B, aPt, bPt) => ({ ag: A.group, bg: B.group, kind: A.kind === "edge" && B.kind === "edge" ? "edge" : A.kind === "face" && B.kind === "face" ? "face" : "point",
+    a: toLocal(A.group, aPt), b: toLocal(B.group, bPt), an: A.n ? toLocal(A.group, A.n, true) : null, bn: B.n ? toLocal(B.group, B.n, true) : null,
+    ae: A.e ? toLocal(A.group, A.e, true) : null, be: B.e ? toLocal(B.group, B.e, true) : null });
+  // la rotation R et la translation t qui menent au mieux les points a vers b (et les directions da vers db)
+  const horn = (pts, dirs) => {
+    const ca = new THREE.Vector3(), cb = new THREE.Vector3();
+    pts.forEach(([a, b]) => { ca.add(a); cb.add(b); }); ca.divideScalar(pts.length); cb.divideScalar(pts.length);
+    const S = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    const acc = (a, b, w) => { const A = [a.x, a.y, a.z], Bv = [b.x, b.y, b.z]; for (let i = 0; i < 3; i++) for (let k = 0; k < 3; k++) S[i][k] += w * A[i] * Bv[k]; };
+    pts.forEach(([a, b]) => acc(a.clone().sub(ca), b.clone().sub(cb), 1));
+    dirs.forEach(([a, b, w]) => acc(a, b, w));
+    const [[xx, xy, xz], [yx, yy, yz], [zx, zy, zz]] = S;
+    const N = [[xx + yy + zz, yz - zy, zx - xz, xy - yx], [yz - zy, xx - yy - zz, xy + yx, zx + xz],
+      [zx - xz, xy + yx, -xx + yy - zz, yz + zy], [xy - yx, zx + xz, yz + zy, -xx - yy + zz]];
+    // le plus grand vecteur propre, par puissances iterees (decale pour etre positif)
+    const sh = N.flat().reduce((s, v) => s + Math.abs(v), 0) + 1e-9;
+    let q = [1, 0, 0, 0];
+    for (let it = 0; it < 200; it++) {
+      const r = N.map((row, i) => row.reduce((s, v, k) => s + v * q[k], 0) + sh * q[i]);
+      const n = Math.hypot(...r) || 1;
+      q = r.map(v => v / n);
+    }
+    const Q = new THREE.Quaternion(q[1], q[2], q[3], q[0]).normalize();
+    const t = cb.clone().sub(ca.clone().applyQuaternion(Q));
+    return new THREE.Matrix4().makeRotationFromQuaternion(Q).setPosition(t);
+  };
+  const solvePairs = unit => {
+    const pts = [], dirs = [];
+    const L = Math.max(10, boxOfAll(unit).getSize(new THREE.Vector3()).length());
+    for (const p of pairs) {
+      const a = toWorld(p.ag, p.a), b = toWorld(p.bg, p.b);
+      pts.push([a, b]);
+      if (p.kind === "face" && p.an && p.bn) dirs.push([toWorld(p.ag, p.an, true), toWorld(p.bg, p.bn, true).negate(), L * L * 0.5]);
+      if (p.kind === "edge" && p.ae && p.be) {
+        const ea = toWorld(p.ag, p.ae, true), eb = toWorld(p.bg, p.be, true);
+        dirs.push([ea, ea.dot(eb) >= 0 ? eb : eb.negate(), L * L * 0.5]);
+      }
+    }
+    // une seule paire de points : rien a orienter ; deux points seuls : l'axe qui les joint, le reste garde
+    if (pts.length < 2 && !dirs.length) return;
+    apply(withKids(unit), horn(pts, dirs));
+  };
+
   let down = null;
   const onDown = ev => { down = [ev.clientX, ev.clientY]; };
   const onUp = ev => {
@@ -381,8 +431,23 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       if (!first) { first = pick; clearMarks(); mark(pick); onChange?.(state()); return; }
       const A = first;
       first = null; clearMarks();
+      // une paire de plus pour la meme piece et le meme support (Maj, ou « Multi ») : toutes les paires a la fois
+      const more = (ev.shiftKey || multi) && pairs.length && unitOf(pairs[0].ag).includes(A.group) && pick.group === pairs[0].bg;
+      if (more) {
+        pairs.push(pairOf(A, pick, A.p, pick.p));
+        const unit = unitOf(pairs[0].ag);
+        solvePairs(unit);
+        pivot = null; push(); setSel(unit);
+        fitMsg = `Collée en ${pairs.length} points : l'orientation suit toutes les paires (Maj + clic : une de plus)`;
+        render(); onChange?.(state());
+        return;
+      }
       const unit = mate(A, pick);
-      if (unit) { push(); setSel(unit); }
+      if (unit) {
+        // la premiere paire : le point de la piece, la ou il est venu (sur sa cible)
+        pairs = [pairOf(A, pick, pivot ? pivot.p : pick.p, pivot ? pivot.p : pick.p)];
+        push(); setSel(unit);
+      }
       render(); onChange?.(state());
     }
   };
@@ -650,7 +715,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   window.addEventListener("blur", onBlur);
 
   const api = {
-    setMode: m => { mode = m; first = null; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
+    setMode: m => { mode = m; first = null; if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
     setRotStep: d => { rotStep = d; applySnap(); onChange?.(state()); },
     setMulti: on => { multi = on; onChange?.(state()); },
