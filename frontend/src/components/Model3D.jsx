@@ -821,6 +821,7 @@ const EDIT_HELP = [
     ["⟲ / ⟳ 90° 15°", "tourner d'un cran autour du contact"],
     ["Les pièces collées", "suivent celle sur laquelle elles sont collées"],
     ["✂ Décoller", "libérer la pièce (écartée de 2 mm)"],
+    ["🎯 Ajuster", "après un collage (face ou points) : la pièce épouse au mieux la surface de l'autre près du contact, puis recule juste assez pour ne rien traverser"],
     ["Maj + clic, après un collage", "une paire de plus (point, face ou arête de la pièce, puis sa cible) : l'orientation suit toutes les paires"],
     ["🛡 Anti-collision", "en coulissant, la pièce collée s'arrête au contact de la matière"],
   ]],
@@ -932,6 +933,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
         data-tip="Anti-collision : en coulissant, la pièce s'arrête au contact de la matière">🛡 Anti-collision</button>}
       {est.glued && <button type="button" onClick={() => api?.unglue()} style={b(false, { color: "#ef4444" })}
         data-tip={`Collée à ${est.glued.to} : la libérer (écartée de 2 mm)`}>✂ Décoller</button>}
+      {est.glued && <button type="button" onClick={() => api?.refine()} style={b(false)}
+        data-tip="Chercher le meilleur ajustement : la pièce épouse au mieux l'autre surface près du contact, sans la traverser">🎯 Ajuster</button>}
       {est.canUngroup && <button type="button" onClick={() => api?.ungroup()} style={b(false)} data-tip="Défaire le groupe (Ctrl+Maj+G)">⛓ Dégrouper</button>}
       {est.pivot && <>
         <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>
@@ -958,7 +961,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
       fontWeight: 700, color: "var(--text2)", background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)",
       maxWidth: "calc(100% - 140px)", textAlign: "center" }}>
       {est.splitPending ? <b style={{ color: "#0EA5E9" }}>{est.splitPending} morceaux, chacun de sa couleur : ✓ Séparer en {est.splitPending}, ou ✕ Ne pas séparer</b>
-        : est.fitMsg ? <b style={{ color: /^(Assemblée|Séparée|Collée)/.test(est.fitMsg) ? "#16a34a" : "#d97706" }}>{est.fitMsg}</b>
+        : est.fitMsg ? <b style={{ color: /^(Assemblée|Séparée|Collée|Ajustée)/.test(est.fitMsg) ? "#16a34a" : "#d97706" }}>{est.fitMsg}</b>
         : est.liveAngle != null ? <b style={{ color: "#0EA5E9", fontSize: 15 }}>Rotation : {String(est.liveAngle).replace(".", ",")}°</b> : <>
       {est.selected && (est.mode === "move" || est.mode === "rotate") ? <b style={{ color: "#0EA5E9" }}>{est.selected} · </b> : null}{tip}
       {est.count > 0 && <span style={{ display: "block", fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>Les autres pièces s'estompent : clic dans le vide ou Échap pour tout désélectionner</span>}</>}
