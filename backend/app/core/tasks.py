@@ -111,6 +111,12 @@ def jobs() -> list:
     except Exception:
         pass
     try:
+        from ..services import mw_3d
+        if mw_3d.WARM.get("started"):
+            add("mw_3d_warm", "Préparation des vues 3D", mw_3d.WARM)
+    except Exception:
+        pass
+    try:
         from ..services import mw_relink
         add("mw_relink", "Recherche des modèles MakerWorld manquants", mw_relink.status())
     except Exception:

@@ -1105,6 +1105,11 @@ async def prepare(iid: str) -> None:
         await asyncio.to_thread(_in_child, src, src.stem)
 
 
+# l'avancement de la preparation de fond (29/10/2026), pour Parametres > Taches
+WARM: dict = {"running": False, "done": 0, "total": 0, "all": 0, "current": None, "started": None, "finished": None,
+              "stopped": None}
+
+
 async def warm_loop(first_delay_s: int = 90, period_s: int = 12 * 3600) -> None:
     """Les 3MF d'origine deja gardes, convertis un a un (quelques secondes entre deux), puis a chaque passage
     ceux qui manquent : la premiere ouverture d'une vue 3D n'a plus a attendre."""
@@ -1114,19 +1119,25 @@ async def warm_loop(first_delay_s: int = 90, period_s: int = 12 * 3600) -> None:
     await asyncio.sleep(5)
     await asyncio.to_thread(warm_view_pool)
     await _tasks.sleep("mw_3d", first_delay_s)
+    import time
     while True:
         try:
             # les plus recents d'abord (ceux qu'on a le plus de chances d'ouvrir)
             files = sorted(_dir().glob("*.3mf"), key=lambda f: f.stat().st_mtime, reverse=True)
-            done = 0
-            for f in files:
-                if not ready(f, f.stem):
+            todo = [f for f in files if not ready(f, f.stem)]
+            WARM.update(running=bool(todo), done=0, total=len(todo), all=len(files), started=time.time(), finished=None,
+                        current=None)
+            for f in todo:
+                WARM["current"] = f"{len(files) - len(todo) + WARM['done']} vues prêtes sur {len(files)}"
+                if not ready(f, f.stem):                # ouverte entre-temps : deja faite
                     await asyncio.to_thread(_in_child, f, f.stem)
-                    done += 1
-                    await asyncio.sleep(3)
-            if done:
-                logger.info(f"[3D] {done} modele(s) prepare(s) pour la vue 3D")
+                WARM["done"] += 1
+                await asyncio.sleep(3)
+            WARM.update(running=False, finished=time.time(), current=f"{len(files)} vues prêtes sur {len(files)}")
+            if todo:
+                logger.info(f"[3D] {len(todo)} modele(s) prepare(s) pour la vue 3D")
         except Exception:
+            WARM.update(running=False, stopped="Erreur, reprise au prochain passage")
             _tasks.error("mw_3d")
             logger.exception("[3D] preparation des vues 3D")
         await _tasks.sleep("mw_3d", period_s)
