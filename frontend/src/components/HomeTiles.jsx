@@ -3451,28 +3451,37 @@ function Orders({ list, o, sz }) {
     for (let k = 0; k < left; k++) units.push({ order: x, it: i, sent: k < sent, refill: !!i.refill });
   }
   const enRoute = units.filter(u => u.sent), waiting = units.filter(u => !u.sent);
-  // une bobine en miniature : un cylindre de la couleur du filament (hachure si inconnue), un liseré ambre quand elle roule
-  const spool = (u, k, sz) => <span key={k} role="button" aria-label={name(u.it)} data-tip={`${name(u.it)}${u.refill ? " (recharge)" : ""} · ${u.sent ? "en route" : "attendue"} · …${String(u.order.order_no).slice(-6)}`}
+  // les bobines identiques (meme ligne de commande, meme etape) en une pastille « ×n » : un rang lisible au lieu
+  // d'une suite de petits rectangles serres (29/10/2026)
+  const groupOf = list => { const g = [];
+    for (const u of list) { const k = `${u.order.id}|${u.it.id ?? name(u.it)}|${u.sent}`, x = g.find(y => y.k === k);
+      if (x) x.n++; else g.push({ k, ...u, n: 1 }); }
+    return g; };
+  // une pastille ronde de la couleur du filament, avec sa finition (hachure si inconnue) ; en route ou attendue : son etagere le dit
+  const spool = (u, k, sz) => <span key={k} role="button" aria-label={name(u.it)}
+    data-tip={`${u.n > 1 ? `${u.n} × ` : ""}${name(u.it)}${u.refill ? " (recharge)" : ""} · ${u.sent ? "en route" : "attendue"} · …${String(u.order.order_no).slice(-6)}`}
     onClick={e => { e.stopPropagation(); setOpen(u.order.id); }}
-    style={{ width: sz, height: Math.round(sz * 1.35), borderRadius: Math.round(sz * 0.28), flexShrink: 0, cursor: "pointer", position: "relative",
-      background: u.it.color_hex ? `#${u.it.color_hex}` : "repeating-linear-gradient(45deg, var(--surface) 0 3px, var(--border) 3px 6px)",
-      boxShadow: `inset 0 0 0 1px rgba(0,0,0,0.18)${u.sent ? ", 0 0 0 2px #f59e0b" : ""}`, opacity: u.sent ? 1 : 0.92 }}>
-    <span aria-hidden="true" style={{ position: "absolute", left: "22%", right: "22%", top: "44%", height: "12%", borderRadius: 2, background: "rgba(255,255,255,0.55)", boxShadow: "0 0 0 1px rgba(0,0,0,0.12)" }}/>
+    style={{ position: "relative", width: sz, height: sz, flexShrink: 0, cursor: "pointer" }}>
+    <span style={{ position: "absolute", inset: 0, borderRadius: "50%", overflow: "hidden", border: "1px solid rgba(0,0,0,0.18)",
+      ...(u.it.color_hex ? colorBg(parseColorsList(u.it.color_hex), null, finishOf({ fila_type: u.it.fila_type, name: u.it.title }))
+        : { background: "repeating-linear-gradient(45deg, var(--surface) 0 3px, var(--border) 3px 6px)" }) }}/>
+    {u.n > 1 && <b style={{ position: "absolute", right: -5, bottom: -5, minWidth: 16, height: 16, padding: "0 4px", boxSizing: "border-box", borderRadius: 8,
+      fontSize: 10, lineHeight: "16px", textAlign: "center", color: "#fff", background: "#0EA5E9", boxShadow: "0 0 0 2px var(--surface)" }}>×{u.n}</b>}
   </span>;
-  // une etagere : l'etape a gauche, les bobines en rang, « +n » quand la place manque
-  const shelf = (ic, label, list, sz, perRow, rows, key) => { const max = Math.max(1, perRow * rows), cut = list.length > max ? max - 1 : list.length;
-    return <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-      <span aria-hidden="true" data-tip={label} style={{ fontSize: 13, width: 18, textAlign: "center", flexShrink: 0 }}>{ic}</span>
-      <span style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center", minWidth: 0, flex: 1, overflow: "hidden", maxHeight: rows * (Math.round(sz * 1.35) + 3) }}>
-        {list.slice(0, cut).map((u, k) => spool(u, k, sz))}
-        {cut < list.length && <Muted size={11} style={{ fontWeight: 800 }}>+{list.length - cut}</Muted>}</span>
+  // une etagere : l'etape (en toutes lettres quand la place le permet), les pastilles en rang, « +n » quand la place manque
+  const shelf = (ic, label, list, sz, perRow, rows, key, wide = true) => { const g = groupOf(list), max = Math.max(1, perRow * rows), cut = g.length > max ? max - 1 : g.length;
+    return <div key={key} style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
+      <span style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>{ic}{wide ? ` ${label} · ${list.length}` : ` ${list.length}`}</span>
+      <span style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", minWidth: 0, overflow: "hidden", padding: "3px 6px 6px 3px",
+        maxHeight: rows * (sz + 8) + 6 }}>
+        {g.slice(0, cut).map((u, k) => spool(u, k, sz))}
+        {cut < g.length && <Muted size={11} style={{ fontWeight: 800 }}>+{g.slice(cut).reduce((t, x) => t + x.n, 0)}</Muted>}</span>
     </div>; };
   const head = big => <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
     <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
       <span data-pk="" style={{ fontSize: big ? 30 : 24, fontWeight: 900, lineHeight: 1.05, ...gradText("#0EA5E9", "#3B82F6") }}>{pending}</span>
       <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>bobine{pending > 1 ? "s" : ""} à venir</span></div>
-    {units.length > 0 && <Muted size={11}>{enRoute.length ? `🚚 ${enRoute.length} en route` : ""}{enRoute.length && waiting.length ? " · " : ""}{waiting.length ? `📬 ${waiting.length} attendue${waiting.length > 1 ? "s" : ""}` : ""}
-      {orders.length > 1 ? ` · ${orders.length} commandes` : ""}</Muted>}</div>;
+    {orders.length > 1 && <Muted size={11}>{orders.length} commandes</Muted>}</div>;
   // en grand : une carte par commande, avec ses bobines
   const card = x => { const [sl, sc, ic] = ORD_ST[x.stage] || ORD_ST.ordered; const us = units.filter(u => u.order === x);
     return <div key={x.id} role="button" onClick={e => { e.stopPropagation(); setOpen(x.id); }}
@@ -3484,8 +3493,8 @@ function Orders({ list, o, sz }) {
           <Muted size={11}> · …{String(x.order_no).slice(-6)}{x.shipped_at ? ` · envoyée le ${day(x.shipped_at)}` : x.ordered_at ? ` · le ${day(x.ordered_at)}` : ""}</Muted></span>
         <b data-pk="" style={{ minWidth: 24, textAlign: "center", fontSize: 12, fontWeight: 900, color: "#fff", background: sc, borderRadius: 10, padding: "1px 7px", flexShrink: 0 }}>{x.pending}</b>
       </div>
-      {us.some(u => u.sent) && shelf("🚚", "En route", us.filter(u => u.sent), 18, 40, 3, "s")}
-      {us.some(u => !u.sent) && shelf("📬", "Attendues", us.filter(u => !u.sent), 18, 40, 3, "w")}
+      {us.some(u => u.sent) && shelf("🚚", "En route", us.filter(u => u.sent), 24, 40, 3, "s")}
+      {us.some(u => !u.sent) && shelf("📬", "Attendues", us.filter(u => !u.sent), 24, 40, 3, "w")}
     </div>; };
   const zoom = <>
     {head(true)}
@@ -3500,16 +3509,16 @@ function Orders({ list, o, sz }) {
       {({ W, H }) => {
         if (!orders.length) return <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{head(false)}<Muted>Rien en route pour l'instant.</Muted></div>;
         // les etageres se partagent la hauteur qui reste sous l'en-tete ; les bobines grossissent quand la tuile est haute
-        const sz = Math.max(13, Math.min(22, Math.floor(W / 11))), rowH = Math.round(sz * 1.35) + 3;
-        const perRow = Math.max(3, Math.floor((W - 26) / (sz + 3)));
+        const sz = Math.max(18, Math.min(28, Math.floor(W / 10))), rowH = sz + 8;
+        const perRow = Math.max(3, Math.floor((W - 6) / (sz + 8)));
         const parts = [[enRoute, "🚚", "En route", "s"], [waiting, "📬", "Attendues", "w"]].filter(([l]) => l.length);
-        const total = Math.max(parts.length, Math.floor((H - 50 - 6 * (parts.length - 1)) / rowH));
-        const want = parts.map(([l]) => Math.ceil(l.length / perRow));
+        const total = Math.max(parts.length, Math.floor((H - 50 - 22 * parts.length) / rowH));
+        const want = parts.map(([l]) => Math.ceil(groupOf(l).length / perRow));
         let rows = want.slice();                               // chacune sa place, puis on rogne la plus haute s'il en manque
         while (rows.reduce((a, b) => a + b, 0) > total) { const i = rows.indexOf(Math.max(...rows)); if (rows[i] <= 1) break; rows[i]--; }
         return <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
           {head(false)}
-          {parts.map(([l, ic, lb, k], i) => shelf(ic, lb, l, sz, perRow, rows[i], k))}
+          {parts.map(([l, ic, lb, k], i) => shelf(ic, lb, l, sz, perRow, rows[i], k, W >= 180))}
         </div>;
       }}
     </Tile>
