@@ -531,24 +531,30 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           });
           const quad = new THREE.PlaneGeometry(2, 2), ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
           // la lumiere qui reste apres cette couleur, multipliee a ce qui est deja passe
-          const transMat = new THREE.ShaderMaterial({ uniforms: { tex: { value: null }, col: { value: new THREE.Color() } }, depthTest: false, depthWrite: false,
+          // les reglages de la lumiere (30/10/2026, d'apres la photo d'un lithophane CMJ eclaire) : par mm de matiere,
+          // chaque couleur absorbe ce qu'elle n'est pas, mais un filament reste translucide (plancher par canal) ; tout
+          // filament diffuse un peu (kW) ; la lampe est d'un blanc chaud
+          // (cales sur le Jack Skellington CMJ+blanc devant sa lampe, un peu moins intense : ombres rouge sombre, lune qui brille)
+          const tune = { floorC: { value: 0.42 }, kCol: { value: 1.5 }, kW: { value: 1.05 }, dark: { value: 4.0 },
+            light: { value: new THREE.Color(1.0, 0.5, 0.19) }, expo: { value: 7.0 }, sat: { value: 1.6 }, gam: { value: 1.4 } };
+          const transMat = new THREE.ShaderMaterial({ uniforms: { tex: { value: null }, col: { value: new THREE.Color() }, ...tune }, depthTest: false, depthWrite: false,
             blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.DstColorFactor, blendDst: THREE.ZeroFactor,
             vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
-            fragmentShader: `uniform sampler2D tex; uniform vec3 col; varying vec2 vUv;
+            fragmentShader: `uniform sampler2D tex; uniform vec3 col; uniform float floorC, kCol, kW, dark; varying vec2 vUv;
               void main() { float t = max(0.0, texture2D(tex, vUv).r);
-                // la teinte d'une couleur, accentuee (une fine couche colore deja bien), et l'ombre de l'epaisseur
-                // (30/10/2026 : plus lumineux ; 62 % par mm au lieu de 50, une teinte un peu moins appuyee)
-                gl_FragColor = vec4(pow(max(col, vec3(0.004)), vec3(t * 1.4)) * pow(0.62, t), 1.0); }` });
+                // Beer-Lambert par canal : l'absorption d'une couleur (un noir, lui, bouche), plus la diffusion commune
+                float mx = max(col.r, max(col.g, col.b));
+                vec3 a = -log(max(col / max(mx, 0.001), vec3(floorC))) * kCol + kW + (1.0 - smoothstep(0.08, 0.35, mx)) * dark;
+                gl_FragColor = vec4(exp(-a * t), 1.0); }` });
           // l'image : la lumiere filtree la ou il y a de la matiere, la nuit ailleurs
-          const compMat = new THREE.ShaderMaterial({ uniforms: { all: { value: tAll.texture }, acc: { value: acc.texture }, clearBg: { value: 0 } }, depthTest: false, depthWrite: false,
+          const compMat = new THREE.ShaderMaterial({ uniforms: { all: { value: tAll.texture }, acc: { value: acc.texture }, clearBg: { value: 0 }, ...tune }, depthTest: false, depthWrite: false,
             vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
-            fragmentShader: `uniform sampler2D all; uniform sampler2D acc; uniform float clearBg; varying vec2 vUv;
+            fragmentShader: `uniform sampler2D all; uniform sampler2D acc; uniform float clearBg, expo, sat, gam; uniform vec3 light; varying vec2 vUv;
               void main() { float t = texture2D(all, vUv).r; vec3 T = texture2D(acc, vUv).rgb;
-                // une courbe d'exposition (30/10/2026 : le rendu etait terne) : les demi-teintes eclaircies, les blancs sans
-                // ecrasement, puis des couleurs plus franches et un peu de contraste
-                vec3 c = vec3(1.0, 0.95, 0.84) * (1.0 - exp(-5.5 * T));
-                c = mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, 1.35);
-                c = clamp((c - 0.5) * 1.12 + 0.52, 0.0, 1.2);
+                // la lampe chaude au travers, puis une courbe d'exposition : le plus mince va au blanc chaud sans s'ecraser
+                vec3 c = (1.0 - exp(-expo * light * T)) / (1.0 - exp(-expo));
+                c = mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, sat);
+                c = pow(clamp(c, 0.0, 1.0), vec3(gam));
                 c = t > 0.02 ? max(c, 0.0) : vec3(0.006, 0.008, 0.016);
                 gl_FragColor = vec4(c, t > 0.02 ? 1.0 : 1.0 - clearBg);       // fond vide pour une vignette (30/10/2026)
                 #include <colorspace_fragment>
@@ -556,6 +562,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           const qT = new THREE.Scene(); qT.add(new THREE.Mesh(quad, transMat));
           const qC = new THREE.Scene(); qC.add(new THREE.Mesh(quad, compMat));
           disposables.push(tAll, tG, acc, matF, matB, transMat, compMat, quad);
+          if (import.meta.env.DEV) window.__lit = { tune, render: () => render() };
           return {
             clearBg: on => { compMat.uniforms.clearBg.value = on ? 1 : 0; },
             resize: () => { const q = renderer.getPixelRatio(); for (const t of [tAll, tG, acc]) t.setSize(Math.round(el.clientWidth * q), Math.round(el.clientHeight * q)); },
