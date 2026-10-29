@@ -2540,6 +2540,66 @@ async def recalc_print_costs(print_id: int, _: str = Depends(get_current_user)):
     return {"ok": True}
 
 
+@router.get("/groups/{group_id}/3mf")
+async def group_3mf(group_id: int, kind: str = Query("sliced", pattern="^(sliced|source)$"), _: str = Depends(get_current_user)):
+    """Les 3MF des impressions d'un groupe (29/10/2026) : un seul fichier s'ils sont tous identiques (meme profil
+    d'origine, ou meme fichier tranche), sinon un zip qui les reunit, un par fichier different."""
+    import hashlib
+    import re as _re
+    import tempfile
+    import zipfile
+    from starlette.background import BackgroundTask
+    from ....services.mw_source import print_file
+    from ....services.archive import local_or_archive
+    async with AsyncSessionLocal() as db:
+        g = await db.get(Group, group_id)
+        if not g:
+            raise HTTPException(404, "Groupe introuvable")
+        prints = (await db.execute(select(Print).where(Print.group_id == group_id).order_by(Print.print_date))).scalars().all()
+    suffix = " (MakerWorld)" if kind == "source" else " (tranché)"
+    clean = lambda t: _re.sub(r'[\\/:*?"<>|]+', "_", (t or "").strip())[:120]
+
+    def collect():
+        seen, out = {}, []
+        for p in prints:
+            f = print_file(p.design_id, p.mw_profile_id, p.mw_plates) if kind == "source" else \
+                (local_or_archive(p.model_3mf) if p.model_3mf else None)
+            if not f or not f.is_file():
+                continue
+            # le meme contenu (meme fichier, ou meme plateau tranche deux fois) : une seule fois
+            h = hashlib.sha1()
+            with open(f, "rb") as fh:
+                for chunk in iter(lambda: fh.read(1 << 20), b""):
+                    h.update(chunk)
+            k = h.hexdigest()
+            if k in seen:
+                continue
+            seen[k] = True
+            out.append((f, clean(p.translated_name or p.file_name or f"impression-{p.id}")))
+        return out
+    files = await asyncio.to_thread(collect)
+    if not files:
+        raise HTTPException(404, "Pas de 3MF pour ce groupe")
+    if len(files) == 1:
+        f, name = files[0]
+        return FileResponse(str(f), media_type="application/vnd.ms-package.3dmanufacturing-3dmodel+xml", filename=f"{name}{suffix}.3mf")
+
+    def build():
+        tmp = tempfile.NamedTemporaryFile(prefix="groupe-3mf-", suffix=".zip", dir=str(DATA_DIR / "cache"), delete=False)
+        used = {}
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as z:          # un 3MF est deja compresse
+            for f, name in files:
+                n = used.get(name, 0)
+                used[name] = n + 1
+                z.write(str(f), f"{name}{f' ({n + 1})' if n else ''}{suffix}.3mf")
+        tmp.close()
+        return tmp.name
+    (DATA_DIR / "cache").mkdir(parents=True, exist_ok=True)
+    path = await asyncio.to_thread(build)
+    return FileResponse(path, media_type="application/zip", filename=f"{clean(g.name) or 'groupe'}{suffix}.zip",
+                        background=BackgroundTask(lambda: Path(path).unlink(missing_ok=True)))
+
+
 @router.get("/{print_id}/3mf")
 async def print_3mf(print_id: int, kind: str = Query("sliced", pattern="^(sliced|source)$"), _: str = Depends(get_current_user)):
     """Le 3MF d'une impression : « sliced » celui tranche pour mon imprimante (garde au lancement),

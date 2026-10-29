@@ -1101,15 +1101,16 @@ function FilamentsV2({ filaments, onSpoolClick, onSpoolPick, onRestore, onUnmap 
     </div>);
 }
 
-// telecharger un 3MF d'une impression (« source » : d'origine MakerWorld, « sliced » : tranche)
-async function download3mf(pid, kind) {
+// telecharger un 3MF d'une impression (« source » : d'origine MakerWorld, « sliced » : tranche) ; group : ceux d'un
+// groupe (un seul fichier s'ils sont identiques, sinon un zip)
+async function download3mf(pid, kind, group = false) {
   try {
-    const r = await client.get(`/prints/${pid}/3mf`, { params: { kind }, responseType: "blob" });
+    const r = await client.get(group ? `/prints/groups/${pid}/3mf` : `/prints/${pid}/3mf`, { params: { kind }, responseType: "blob", timeout: 600000 });
     const cd = r.headers?.["content-disposition"] || "";
     const m = /filename\*=UTF-8''([^;]+)/i.exec(cd) || /filename="?([^";]+)"?/i.exec(cd);
     const url = URL.createObjectURL(r.data);
     const a = document.createElement("a");
-    a.href = url; a.download = m ? decodeURIComponent(m[1]) : `impression-${pid}.3mf`;
+    a.href = url; a.download = m ? decodeURIComponent(m[1]) : group ? `groupe-${pid}.zip` : `impression-${pid}.3mf`;
     a.dispatchEvent(new MouseEvent("click"));
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   } catch (e) { showAlert(e.response?.status === 404 ? "Ce 3MF n'est pas sur le serveur." : (e.message || "Téléchargement impossible")); }
@@ -1679,6 +1680,11 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       objQ && { icon: "📦", label: objQ.remaining > 0 ? "Créer des objets" : "Objets : tous créés", hint: `${objQ.used} / ${objQ.total} déjà créés`, tone: "#22C55E",
         onClick: () => setObjCreate(true) },
       { icon: "📤", label: "Dégrouper", hint: "Les impressions restent", tone: "#A78BFA", onClick: handleUngroup },
+      (prints.some(x => x.source_3mf) || prints.some(x => x.model_3mf)) && "-",
+      prints.some(x => x.source_3mf) && { icon: "⤓", label: "Télécharger les 3MF d'origine", hint: "Un fichier s'ils sont identiques, sinon un zip",
+        tone: "#F97316", onClick: () => download3mf(groupId, "source", true) },
+      prints.some(x => x.model_3mf) && { icon: "⤓", label: "Télécharger les 3MF tranchés", hint: "Un fichier s'ils sont identiques, sinon un zip",
+        tone: "#F59E0B", onClick: () => download3mf(groupId, "sliced", true) },
       isAdmin && { icon: "📊", label: groupRankedOff ? "Remettre le groupe dans les classements" : "Retirer le groupe des classements des stats",
         hint: groupRankedOff ? "Ses impressions comptent de nouveau dans les tops" : "Toutes ses impressions ; les totaux les comptent toujours",
         tone: "#64748B", onClick: toggleGroupRanked },
