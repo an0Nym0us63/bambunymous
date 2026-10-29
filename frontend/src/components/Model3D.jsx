@@ -531,29 +531,48 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           });
           const quad = new THREE.PlaneGeometry(2, 2), ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
           // la lumiere qui reste apres cette couleur, multipliee a ce qui est deja passe
-          // les reglages de la lumiere (30/10/2026, d'apres la photo d'un lithophane CMJ eclaire) : par mm de matiere,
-          // chaque couleur absorbe ce qu'elle n'est pas, mais un filament reste translucide (plancher par canal) ; tout
-          // filament diffuse un peu (kW) ; la lampe est d'un blanc chaud
-          // (cales sur le Jack Skellington CMJ+blanc devant sa lampe, un peu moins intense : ombres rouge sombre, lune qui brille)
-          const tune = { floorC: { value: 0.42 }, kCol: { value: 1.5 }, kW: { value: 1.05 }, dark: { value: 4.0 },
-            light: { value: new THREE.Color(1.0, 0.5, 0.19) }, expo: { value: 7.0 }, sat: { value: 1.6 }, gam: { value: 1.4 } };
+          // le rendu de l'image eclairee (30/10/2026, regle sur la photo du createur du Jack Skellington CMJ+blanc) : le
+          // passage de la lumiere par couleur, une lampe d'un blanc a peine chaud ; ensuite la lumiere diffusee dans le plastique (diff, en mm : les points du relief ne se voient plus en pixels),
+          // puis le resultat rendu le plus vif possible (exposition, saturation, contraste)
+          const tune = { floorC: { value: 0.42 }, kCol: { value: 1.5 }, kW: { value: 1.0 }, dark: { value: 4.0 }, wTint: { value: new THREE.Vector3(0.78, 1.0, 1.4) },
+            expo: { value: 6.5 }, sat: { value: 1.45 }, con: { value: 1.15 }, gam: { value: 1.25 },
+            light: { value: new THREE.Color(1.0, 0.9, 0.74) }, diff: { value: 0.35 }, pxmm: { value: 1 }, texel: { value: new THREE.Vector2(1, 1) } };
           const transMat = new THREE.ShaderMaterial({ uniforms: { tex: { value: null }, col: { value: new THREE.Color() }, ...tune }, depthTest: false, depthWrite: false,
             blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.DstColorFactor, blendDst: THREE.ZeroFactor,
             vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
-            fragmentShader: `uniform sampler2D tex; uniform vec3 col; uniform float floorC, kCol, kW, dark; varying vec2 vUv;
+            fragmentShader: `uniform sampler2D tex; uniform vec3 col; uniform float floorC, kCol, kW, dark; uniform vec3 wTint; varying vec2 vUv;
               void main() { float t = max(0.0, texture2D(tex, vUv).r);
-                // Beer-Lambert par canal : l'absorption d'une couleur (un noir, lui, bouche), plus la diffusion commune
+                // Beer-Lambert par canal : une couleur absorbe ce qu'elle n'est pas, sans tout boucher (un filament reste
+                // translucide : un cyan sous du jaune et du magenta donne un brun rouge, pas du bleu ; un noir, lui, bouche),
+                // plus l'ombre de l'epaisseur, commune a tous, plus forte dans le bleu (une lampe derriere du plastique epais
+                // vire a l'orange)
                 float mx = max(col.r, max(col.g, col.b));
-                vec3 a = -log(max(col / max(mx, 0.001), vec3(floorC))) * kCol + kW + (1.0 - smoothstep(0.08, 0.35, mx)) * dark;
+                vec3 a = -log(max(col / max(mx, 0.001), vec3(floorC))) * kCol + kW * wTint + (1.0 - smoothstep(0.08, 0.35, mx)) * dark;
                 gl_FragColor = vec4(exp(-a * t), 1.0); }` });
           // l'image : la lumiere filtree la ou il y a de la matiere, la nuit ailleurs
           const compMat = new THREE.ShaderMaterial({ uniforms: { all: { value: tAll.texture }, acc: { value: acc.texture }, clearBg: { value: 0 }, ...tune }, depthTest: false, depthWrite: false,
             vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
-            fragmentShader: `uniform sampler2D all; uniform sampler2D acc; uniform float clearBg, expo, sat, gam; uniform vec3 light; varying vec2 vUv;
-              void main() { float t = texture2D(all, vUv).r; vec3 T = texture2D(acc, vUv).rgb;
-                // la lampe chaude au travers, puis une courbe d'exposition : le plus mince va au blanc chaud sans s'ecraser
-                vec3 c = (1.0 - exp(-expo * light * T)) / (1.0 - exp(-expo));
+            fragmentShader: `uniform sampler2D all; uniform sampler2D acc; uniform float clearBg, expo, sat, con, gam, diff, pxmm; uniform vec3 light;
+              uniform vec2 texel; varying vec2 vUv;
+              void main() { float t = texture2D(all, vUv).r;
+                // la diffusion : une moyenne ponderee sur un disque de « diff » mm, la matiere seulement (le vide autour,
+                // blanc dans acc, ferait un halo)
+                float r = clamp(diff * pxmm, 0.0, 8.0);
+                vec3 T = texture2D(acc, vUv).rgb; float wsum = 1.0;
+                if (r > 0.6 && t > 0.02) {
+                  for (int i = 0; i < 16; i++) {
+                    float a = float(i) * 2.39996, d = sqrt((float(i) + 0.5) / 16.0);
+                    vec2 o = vec2(cos(a), sin(a)) * d * r * texel;
+                    float w = exp(-2.0 * d * d) * step(0.02, texture2D(all, vUv + o).r);
+                    T += texture2D(acc, vUv + o).rgb * w; wsum += w;
+                  }
+                }
+                T /= wsum;
+                // le plus vif possible : une exposition qui eclaire les demi-teintes sans ecraser les blancs, des couleurs
+                // franches, du contraste
+                vec3 c = light * (1.0 - exp(-expo * T)) / (1.0 - exp(-expo));
                 c = mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, sat);
+                c = (c - 0.5) * con + 0.5;
                 c = pow(clamp(c, 0.0, 1.0), vec3(gam));
                 c = t > 0.02 ? max(c, 0.0) : vec3(0.006, 0.008, 0.016);
                 gl_FragColor = vec4(c, t > 0.02 ? 1.0 : 1.0 - clearBg);       // fond vide pour une vignette (30/10/2026)
@@ -569,6 +588,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             render: () => {
               const ac = renderer.autoClear; renderer.autoClear = false;
               near.value = Math.max(0, camera.position.distanceTo(sph.center) - sph.radius);
+              tune.pxmm.value = tAll.height / (2 * camera.position.distanceTo(sph.center) * Math.tan(camera.fov * Math.PI / 360));
+              tune.texel.value.set(1 / tAll.width, 1 / tAll.height);
               renderer.setClearColor(0x000000, 0);
               renderer.setRenderTarget(tAll); renderer.clear();
               for (const g of groups.values()) renderer.render(g.sc, camera);
