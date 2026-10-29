@@ -23,7 +23,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 18                          # 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 19                          # 19 : couches en marches d'un lithophane lissees (30/10) ; 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan|hue ?forge", re.I)       # HueForge : une image en couches, a voir par derriere aussi (30/10)
 MAX_TRIANGLES = 1_500_000              # au-dela, le plateau est simplifie (29/10/2026 ; avant : pas converti du tout) :
                                        # un telephone l'affiche vite, et le fichier reste de quelques Mo
@@ -793,6 +793,19 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         allv = {col: np.concatenate(g[0]) for col, g in groups_out.items()}
         lo = np.min([a.min(axis=0) for a in allv.values()], axis=0)
         hi = np.max([a.max(axis=0) for a in allv.values()], axis=0)
+        # un lithophane (30/10/2026) : ses couches de couleur en marches (des colonnes a dessus plat, sur une grille)
+        # deviennent des surfaces continues ; vues par derriere, elles faisaient des pixels en escalier
+        if (bool(_LITHO.search(f"{pname} {names_txt}")) or (hi[2] - lo[2] <= 6 and min(hi[0] - lo[0], hi[1] - lo[1]) >= 40))                 and not any(isinstance(k, tuple) for k in groups_out):
+            for col, g in list(groups_out.items()):
+                try:
+                    sm = _smooth_terraces(allv[col], np.concatenate(g[1]))
+                except Exception as e:                  # une forme inattendue : laissee telle quelle
+                    logger.debug(f"[3D] lissage impossible : {e}")
+                    sm = None
+                if sm is not None:
+                    total += len(sm[1]) - sum(len(x) for x in g[1])
+                    groups_out[col] = [[sm[0]], [sm[1]], len(sm[0])]
+                    allv[col] = sm[0]
         shift = np.array([(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, lo[2]])
         size = [float(hi[0] - lo[0]), float(hi[1] - lo[1]), float(hi[2] - lo[2])]
         buf = _pack_bin({col: (allv[col] - shift, np.concatenate(g[1])) for col, g in groups_out.items()})
@@ -1005,6 +1018,91 @@ def _pack_bin(groups: dict) -> bytes:
         buf += q.view(np.uint8).reshape(-1, 6).T.tobytes()
         buf += d.view(np.uint8).reshape(-1, 4).T.tobytes()
     return bytes(buf)
+
+
+def _smooth_terraces(v, t):
+    """Une couche en marches d'un lithophane couleur (30/10/2026) : des colonnes a dessus et fond plats sur une grille
+    reguliere (les couches cyan, magenta, jaune d'un Jack Skellington : 0,44 mm, des hauteurs par pas de 0,1 mm, chaque
+    couche posee sur celle du dessous). Rend (sommets, triangles) de la meme couche en surfaces continues, dessus et
+    fond passant par le centre de chaque colonne (l'epaisseur varie donc en douceur d'une colonne a l'autre), ou None
+    si la piece n'est pas une telle couche (un relief deja continu, une piece ordinaire)."""
+    import numpy as np
+    a, b, c = v[t[:, 0]], v[t[:, 1]], v[t[:, 2]]
+    n = np.cross(b - a, c - a)
+    n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-12
+    up, dn, side = n[:, 2] > 0.9, n[:, 2] < -0.9, np.abs(n[:, 2]) < 0.1
+    if up.sum() < 64 or dn.sum() < 1 or (up | dn | side).mean() < 0.999:
+        return None
+    if len(np.unique(np.round(a[up, 2], 4))) > 64 or len(np.unique(np.round(a[dn, 2], 4))) > 64:
+        return None                                       # des hauteurs continues : deja lisse
+
+    def grid(x):
+        u = np.unique(np.round(x, 4))
+        d = np.diff(u)
+        if len(d) < 8:
+            return None
+        st = float(np.median(d))
+        if st <= 0 or np.mean(np.abs(d / st - np.round(d / st)) < 0.05) < 0.95:
+            return None
+        return st, float(u[0]), int(round((u[-1] - u[0]) / st))
+    gx, gy = grid(v[:, 0]), grid(v[:, 1])
+    if not gx or not gy:
+        return None
+    (sx, x0, nx), (sy, y0, ny) = gx, gy
+    if nx * ny > 4_000_000:
+        return None
+
+    def heights(mask, fn, init):
+        # chaque face plate, posee sur toutes les colonnes dont le centre tombe dedans (le fichier fusionne les zones
+        # d'une meme hauteur en grands rectangles : un triangle couvre souvent beaucoup de colonnes)
+        g = np.full((ny, nx), init)
+        A, Bv, C = a[mask], b[mask], c[mask]
+        z = (A[:, 2] + Bv[:, 2] + C[:, 2]) / 3
+        lo_ = np.minimum(np.minimum(A, Bv), C)
+        hi_ = np.maximum(np.maximum(A, Bv), C)
+        i0 = np.clip(np.ceil((lo_[:, 0] - x0) / sx - 0.5 - 1e-6).astype(int), 0, nx - 1)
+        i1 = np.clip(np.floor((hi_[:, 0] - x0) / sx - 0.5 + 1e-6).astype(int), 0, nx - 1)
+        j0 = np.clip(np.ceil((lo_[:, 1] - y0) / sy - 0.5 - 1e-6).astype(int), 0, ny - 1)
+        j1 = np.clip(np.floor((hi_[:, 1] - y0) / sy - 0.5 + 1e-6).astype(int), 0, ny - 1)
+        for k in np.nonzero((i1 >= i0) & (j1 >= j0))[0]:
+            ii, jj = np.meshgrid(np.arange(i0[k], i1[k] + 1), np.arange(j0[k], j1[k] + 1))
+            px, py = x0 + (ii + 0.5) * sx, y0 + (jj + 0.5) * sy
+            (ax, ay), (bx, by), (cx, cy) = A[k, :2], Bv[k, :2], C[k, :2]
+            d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+            if abs(d) < 1e-12:
+                continue
+            l1 = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / d
+            l2 = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / d
+            inside = (l1 >= -1e-6) & (l2 >= -1e-6) & (1 - l1 - l2 >= -1e-6)
+            if inside.any():
+                fn.at(g, (jj[inside], ii[inside]), z[k])
+        return g
+    T = heights(up, np.maximum, -np.inf)
+    B = heights(dn, np.minimum, np.inf)
+    empty = ~np.isfinite(T) | ~np.isfinite(B)
+    zmin = float(a[dn, 2].min())
+    T[empty] = zmin
+    B[empty] = zmin
+    # un sommet au centre de chaque colonne ; le bord gagne une demi-colonne d'epaisseur nulle (l'emprise reste la meme)
+    xs = np.concatenate([[x0], x0 + (np.arange(nx) + 0.5) * sx, [x0 + nx * sx]])
+    ys = np.concatenate([[y0], y0 + (np.arange(ny) + 0.5) * sy, [y0 + ny * sy]])
+    Bp = np.pad(B, 1, mode="edge")
+    Tp = np.pad(T, 1, mode="edge")
+    for sl in ((0, slice(None)), (-1, slice(None)), (slice(None), 0), (slice(None), -1)):
+        Tp[sl] = Bp[sl]
+    X, Y = np.meshgrid(xs, ys)
+    W, Hn = len(xs), len(ys)
+    top = np.stack([X.ravel(), Y.ravel(), Tp.ravel()], axis=1)
+    bot = np.stack([X.ravel(), Y.ravel(), Bp.ravel()], axis=1)
+    idx = np.arange(W * Hn).reshape(Hn, W)
+    q0, q1, q2, q3 = idx[:-1, :-1].ravel(), idx[:-1, 1:].ravel(), idx[1:, :-1].ravel(), idx[1:, 1:].ravel()
+    # les carres sans aucune epaisseur sont omis (le fond y touche le dessus)
+    th = (Tp - Bp) > 1e-6
+    keep = th[:-1, :-1].ravel() | th[:-1, 1:].ravel() | th[1:, :-1].ravel() | th[1:, 1:].ravel()
+    q0, q1, q2, q3 = q0[keep], q1[keep], q2[keep], q3[keep]
+    tt = np.concatenate([np.stack([q0, q1, q3], 1), np.stack([q0, q3, q2], 1)])
+    tb = np.concatenate([np.stack([q0, q3, q1], 1), np.stack([q0, q2, q3], 1)]) + len(top)
+    return np.concatenate([top, bot]).astype(v.dtype), np.concatenate([tt, tb]).astype(t.dtype)
 
 
 def _decimate(groups_out: dict, target: int) -> int:

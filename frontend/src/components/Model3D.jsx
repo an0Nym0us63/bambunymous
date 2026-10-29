@@ -535,9 +535,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           // en plus, la lumiere diffusee dans le plastique et un peu plus de peps (saturation et contraste). La diffusion
           // separe la lumiere de la couleur (30/10/2026) : le detail tient au relief blanc, garde assez net (diffL, la buse
           // ne fait pas plus fin) ;
-          // les couches de couleur d'un lithophane CMJ sont des « pixels » de 0,44 mm a 5-8 epaisseurs, que le blanc
-          // par-dessus fond a l'impression : la couleur se diffuse donc plus large (diffC)
-          const tune = { sat: { value: 1.5 }, con: { value: 1.2 }, diffL: { value: 0.5 }, diffC: { value: 1.4 }, pxmm: { value: 1 },
+          // la couleur, un peu plus large (diffC) ; les couches en marches d'un lithophane CMJ arrivent deja lissees
+          // par le serveur (_smooth_terraces), un flou plus fort n'est plus utile
+          const tune = { sat: { value: 1.5 }, con: { value: 1.2 }, diffL: { value: 0.2 }, diffC: { value: 0.5 }, pxmm: { value: 1 },
             texel: { value: new THREE.Vector2(1, 1) } };
           const transMat = new THREE.ShaderMaterial({ uniforms: { tex: { value: null }, col: { value: new THREE.Color() } }, depthTest: false, depthWrite: false,
             blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.DstColorFactor, blendDst: THREE.ZeroFactor,
