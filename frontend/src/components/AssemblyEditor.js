@@ -463,7 +463,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     fitting = 0; fitMsg = null; onChange?.(state());
     const col = await getCollider();
     const moving = withKids(list), start = moving.map(g => [g, g.matrix.clone()]);
-    const others = all.filter(g => !moving.includes(g) && g.visible);
+    // seulement la piece support (et son groupe) : une troisieme piece qui chevauche deja, ailleurs, empechait toute place
+    // libre (30/10/2026 : « aucune place libre a moins de 20 mm » a chaque fois)
+    const others = unitOf(j.b).filter(g => !moving.includes(g) && g.visible);
     const { P, N } = contact(j);
     const u = (Math.abs(N.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0)).cross(N).normalize(), w = N.clone().cross(u);
     const sz = boxOfAll(list).getSize(new THREE.Vector3()).length();
@@ -475,12 +477,16 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     };
     const free = (ang, x, y, d, erode = 0) => !col.anyTouch(mats(ang, x, y, d), others, erode);
     const tick = async (n, total) => { fitting = Math.min(99, Math.round(100 * n / total)); onChange?.(state()); await new Promise(res => setTimeout(res, 0)); };
-    let best = null;
+    let best = null, tol = 0;
     if (free(0, 0, 0, 0)) best = { ang: 0, x: 0, y: 0, r: 0 };            // deja bien place
-    if (!best) {
+    // des pieces dessinees sans jeu (le tenon de la taille exacte du trou) ne sont jamais « libres » : on tolere
+    // ensuite un leger chevauchement (la surface rentree de 0,3 puis 0,8 mm)
+    for (const extra of [0, 0.3, 0.8]) {
+      if (best) break;
+      tol = extra;
       // 1. a grands pas, la piece amincie (sa surface rentree d'un peu plus d'un demi-pas) : le pas peut tomber dans
       // le jeu d'un emboitement (0,2 mm) ; la place libre la plus proche pour chaque quart de tour
-      const erode = step * 0.6;
+      const erode = step * 0.6 + extra;
       const offs = [];
       for (let x = -R; x <= R + 1e-6; x += step) for (let y = -R; y <= R + 1e-6; y += step) if (Math.hypot(x, y) <= R) offs.push([x, y, Math.hypot(x, y)]);
       offs.sort((p, q) => p[2] - q[2]);
@@ -500,21 +506,21 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         const pts = [];
         for (let dx = -step; dx <= step + 1e-6; dx += 0.1) for (let dy = -step; dy <= step + 1e-6; dy += 0.1) {
           n++;
-          if (free(c.ang, c.x + dx, c.y + dy, 0)) pts.push([c.x + dx, c.y + dy]);
+          if (free(c.ang, c.x + dx, c.y + dy, 0, extra)) pts.push([c.x + dx, c.y + dy]);
           if (n % 20 === 0) await tick(n, offs.length * 4 + 900);
         }
         if (!pts.length) continue;
         let cx = pts.reduce((v, p) => v + p[0], 0) / pts.length, cy = pts.reduce((v, p) => v + p[1], 0) / pts.length;
-        if (!free(c.ang, cx, cy, 0)) [cx, cy] = pts.reduce((m, p) => (Math.hypot(p[0] - cx, p[1] - cy) < Math.hypot(m[0] - cx, m[1] - cy) ? p : m));
+        if (!free(c.ang, cx, cy, 0, extra)) [cx, cy] = pts.reduce((m, p) => (Math.hypot(p[0] - cx, p[1] - cy) < Math.hypot(m[0] - cx, m[1] - cy) ? p : m));
         best = { ang: c.ang, x: cx, y: cy, r: Math.hypot(cx, cy) };
         break;
       }
     }
-    if (!best) { fitting = null; fitMsg = `Aucune place libre à moins de ${Math.round(R)} mm : rapproche la pièce de son logement`; onChange?.(state()); return; }
+    if (!best) { fitting = null; fitMsg = `Aucune place à moins de ${Math.round(R)} mm où ${j.b.userData.name || "le support"} ne soit pas traversé : rapproche la pièce de son logement, ou colle-la sur la face d'appui (l'épaulement), pas sur le bout du tenon`; onChange?.(state()); return; }
     // puis aussi loin que possible vers l'interieur (une piece qui entre dans un logement)
     const depthMax = boxOfAll(list).getSize(new THREE.Vector3()).dot(new THREE.Vector3(Math.abs(N.x), Math.abs(N.y), Math.abs(N.z)));
     let lo = 0, hi = depthMax;
-    if (!free(best.ang, best.x, best.y, hi)) for (let k = 0; k < 14; k++) { const mid = (lo + hi) / 2; if (free(best.ang, best.x, best.y, mid)) lo = mid; else hi = mid; }
+    if (!free(best.ang, best.x, best.y, hi, tol)) for (let k = 0; k < 14; k++) { const mid = (lo + hi) / 2; if (free(best.ang, best.x, best.y, mid, tol)) lo = mid; else hi = mid; }
     else lo = hi;
     const depth = lo > 0.15 ? lo - 0.1 : 0;
     for (const [g, m] of mats(best.ang, best.x, best.y, depth)) { m.decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); }
@@ -525,7 +531,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     fitting = null;
     const f = v => String(Math.round(v * 10) / 10).replace(".", ",");
     egg("tenon_mortaise");
-    fitMsg = `Emboîtée${best.r > 0.05 ? ` · décalée de ${f(Math.hypot(best.x, best.y))} mm` : ""}${best.ang ? ` · tournée de ${best.ang}°` : ""}${depth ? ` · enfoncée de ${f(depth)} mm` : ""}`;
+    fitMsg = `Emboîtée${best.r > 0.05 ? ` · décalée de ${f(Math.hypot(best.x, best.y))} mm` : ""}${best.ang ? ` · tournée de ${best.ang}°` : ""}${depth ? ` · enfoncée de ${f(depth)} mm` : ""}${tol ? ` · pièces sans jeu : ${f(tol)} mm de chevauchement toléré` : ""}`;
     showContact(); placeHandle(); push(); render();
   };
   el.addEventListener("pointerdown", onSlideDown, true);
