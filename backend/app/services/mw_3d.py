@@ -22,7 +22,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 6                           # 6 : la vue assemblee (29/10) ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 7                           # 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan", re.I)
 MAX_TRIANGLES = 6_000_000              # au-dela, le plateau n'est pas converti (trop lourd pour un telephone)
 _TRI_PAINT = re.compile(rb'<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"([^>]*)>')
@@ -32,7 +32,6 @@ _V123 = re.compile(rb'\sv[123]="(\d+)"')
 _NOT_SHOWN = {"modifier_part", "negative_part", "support_blocker", "support_enforcer"}
 _ZIP_SHARE = 0.15                      # la compression d'un plateau, en part de sa lecture (avancement)
 ASSEMBLED_N = 0                        # le « plateau » de la vue assemblee (29/10/2026) : apres les vrais plateaux
-_TOUCH = 0.3                           # mm : deux objets a moins que ca se touchent
 
 
 def _root() -> Path:
@@ -641,7 +640,6 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     total_w = weight * (1 + _ZIP_SHARE)
     pct = lambda x: 3 + 95 * min(1.0, x / total_w)
     prog = {"done": 0}
-    boxes: dict = {}                                    # (objet, instance) -> (plateau, mini, maxi) sur son plateau
 
     nb = len(work) + (1 if asm_lst else 0)
     where = {"tag": ""}                                 # « Plateau 2/6 » devant chaque etape
@@ -650,10 +648,9 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         _step(key, p_, f"{where['tag']} · {label}" if where["tag"] and nb > 1 else label)
 
     def emit(lst, label="Lecture des pièces", zchg=None):
-        """Les pieces placees -> groupes par couleur, et la boite de chaque objet place (mini, maxi)."""
+        """Les pieces placees -> groupes par couleur."""
         groups_out: dict = {}                           # couleur -> [sommets, triangles]
         total = 0
-        bx = {}
         start, pw = prog["done"], sum(len(p[3]) for _, parts in lst for p in parts)
         for ident, parts in lst:
             for ext, fcol, mt, body in parts:
@@ -671,11 +668,6 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                     break
                 rot = np.array(mt[:9], dtype=np.float64).reshape(3, 3)
                 vt = v + np.array(mt[9:], dtype=np.float64) if np.array_equal(rot, np.eye(3)) else v @ rot + np.array(mt[9:])
-                if len(vt):
-                    lo_, hi_ = vt.min(axis=0), vt.max(axis=0)
-                    if ident in bx:
-                        lo_, hi_ = np.minimum(bx[ident][0], lo_), np.maximum(bx[ident][1], hi_)
-                    bx[ident] = (lo_, hi_)
                 for ex, tt in by_ext.items():
                     col = colors[ex - 1] if 0 < ex <= len(colors) else fcol
                     # les changements de filament a une hauteur qui touchent ces triangles : un changement
@@ -706,7 +698,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                         g[2] += len(used)
                     total += sum(len(tr) for _, tr in slices) - len(tt)     # les triangles coupes en font plus
         prog["done"] = start + pw                       # meme interrompu (trop lourd) : sa part est faite
-        return groups_out, total, bx, pw
+        return groups_out, total, pw
 
     def zipped(pw):
         prog["done"] += _ZIP_SHARE * pw
@@ -750,9 +742,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     for i, (n, pname, lst) in enumerate(work):
         where["tag"] = f"Plateau {i + 1}/{len(work)}"
         zchg = zch.get(n)                               # les changements de filament en hauteur de ce plateau
-        groups_out, total, bx, pw = emit(lst, zchg=zchg)
-        for ident, (lo_, hi_) in bx.items():
-            boxes[ident] = (n, lo_, hi_)
+        groups_out, total, pw = emit(lst, zchg=zchg)
         r = write(n, pname, groups_out, total, pw)
         if r:
             rec, size = r
@@ -766,51 +756,14 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         publish(i)
     if asm_lst:
         where["tag"] = "Vue assemblée"
-        groups_out, total, bx, pw = emit(asm_lst)
-        # une vraie vue d'assemblage : des objets qui se touchent ou s'emboitent une fois assembles, alors que
-        # sur les plateaux ils sont a part (Bambu Studio en ecrit une a chaque projet, souvent la simple copie
-        # des plateaux : celle-la n'apprend rien)
-        if _assembled_differs(bx, boxes):
-            write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True})
-        else:
-            zipped(pw)
-            logger.info(f"[3D] {key or src.name} : vue d'assemblage ecartee (copie des plateaux ou pieces eparpillees)")
+        groups_out, total, pw = emit(asm_lst)
+        # toujours montree quand le 3MF en a une (29/10/2026 : le tri « vraie vue / copie des plateaux » en
+        # cachait trop ; c'est a chacun de juger en la regardant)
+        write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True})
     elif asm:
         logger.info(f"[3D] {key or src.name} : vue d'assemblage ignoree (un seul objet, ou des objets absents du 3MF)")
     _write(out_dir / "plates.json", json.dumps(meta).encode("utf-8"))
     return meta
-
-
-def _assembled_differs(asm_boxes: dict, plate_boxes: dict) -> bool:
-    """Vrai pour une vraie vue d'assemblage : une fois assembles, la plupart des objets (au moins la moitie) forment
-    un seul bloc, en se touchant (boites qui se chevauchent a _TOUCH pres) la ou les plateaux les mettent a part
-    (plateaux differents, ou boites disjointes). Quelques pieces qui se frolent dans une vue eparpillee ne
-    suffisent pas (SKADIS, 29/10/2026 : six pieces dispersees sur 80 cm)."""
-    def touch(a, b):
-        return all(a[0][i] <= b[1][i] + _TOUCH and b[0][i] <= a[1][i] + _TOUCH for i in range(3))
-    ids = list(asm_boxes)
-    up = {i: i for i in ids}
-
-    def root(i):
-        while up[i] != i:
-            up[i] = up[up[i]]
-            i = up[i]
-        return i
-    new = False
-    for i in range(len(ids)):
-        for j in range(i + 1, len(ids)):
-            if not touch(asm_boxes[ids[i]], asm_boxes[ids[j]]):
-                continue
-            up[root(ids[i])] = root(ids[j])
-            pa, pb = plate_boxes.get(ids[i]), plate_boxes.get(ids[j])
-            if not pa or not pb or pa[0] != pb[0] or not touch(pa[1:], pb[1:]):
-                new = True
-    if not new:
-        return False
-    sizes: dict = {}
-    for i in ids:
-        sizes[root(i)] = sizes.get(root(i), 0) + 1
-    return max(sizes.values()) * 2 >= len(ids)
 
 
 def _write(p: Path, data: bytes) -> None:
