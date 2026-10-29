@@ -63,6 +63,15 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [comBusy, setComBusy] = useState(false);
   const [pick, setPick] = useState(false);
   const [view3d, setView3d] = useState(null);       // le profil montre en 3D
+  const [ready3d, setReady3d] = useState(null);     // chez un copain : sa vue existe-t-elle deja (29/10/2026) ?
+  useEffect(() => {
+    if (!friend || !m || !id) { setReady3d(null); return; }
+    let alive = true;
+    const prof = (m.profiles || []).find(p => p.default) || m.profiles?.[0] || {};
+    client.get(`/makerworld/3d/${encodeURIComponent(id)}`, { params: { peek: 1, profile: prof.instance_id || prof.profile_id || "" } })
+      .then(r => alive && setReady3d(!!r.data?.ready)).catch(() => alive && setReady3d(false));
+    return () => { alive = false; };
+  }, [friend, m, id]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [sharing, setSharing] = useState(false);     // le partage Telegram du modele
   const [sim, setSim] = useState(null);
   const [zoom, setZoom] = useState(null);          // galerie plein ecran { images, index }
@@ -770,9 +779,10 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                 return <button onClick={() => toast("⭐ " + why, "info", 3500)} aria-label="Évaluer" data-tip={why}
                   style={{ ...sq, ...dim("245,158,11") }}><span style={{ opacity:.5 }}>⭐</span></button>;
               })())}
-            {!friend && <button onClick={() => setView3d((m.profiles || []).find(p => p.instance_id === plan?.instance_id)
-              || (m.profiles || []).find(p => p.default) || m.profiles?.[0] || {})} aria-label="Voir en 3D" data-tip="Voir en 3D"
-              style={{ ...sq, background:"rgba(14,165,233,0.12)", borderColor:"rgba(14,165,233,0.4)" }}>🧊</button>}
+            {(!friend || ready3d !== null) && <button onClick={() => (!friend || ready3d) && setView3d((m.profiles || []).find(p => p.instance_id === plan?.instance_id)
+              || (m.profiles || []).find(p => p.default) || m.profiles?.[0] || {})} aria-label="Voir en 3D" disabled={friend && !ready3d}
+              data-tip={friend ? (ready3d ? "Voir en 3D (sa vue, déjà calculée chez lui)" : "Vue 3D pas encore calculée chez lui") : "Voir en 3D"}
+              style={{ ...sq, background:"rgba(14,165,233,0.12)", borderColor:"rgba(14,165,233,0.4)", opacity: friend && !ready3d ? 0.45 : 1, cursor: friend && !ready3d ? "not-allowed" : "pointer" }}>🧊</button>}
             <button onClick={menu} aria-label="Plus d'actions" style={sq}>⋯</button>
           </div>
         )}

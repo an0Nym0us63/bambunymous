@@ -579,6 +579,16 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false, ot
   const [view3d, setView3d] = useState(false);   // la vue 3D du modele
   const [shown, setShown] = useState(undefined);   // le profil montre par les plateaux {id, title, deduced} ; undefined : pas encore deduit
   const shownProf = shown === undefined ? undefined : shown?.id || null;
+  // chez un copain (29/10/2026) : la vue 3D ne se calcule pas chez lui a ma demande ; on regarde seulement si elle existe deja
+  const [ready3d, setReady3d] = useState(null);
+  useEffect(() => {
+    if (!visiting || !designId || shownProf === undefined) { setReady3d(null); return; }
+    let alive = true;
+    const pid = (prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id;
+    client.get(`/makerworld/3d/${encodeURIComponent(designId)}`, { params: { peek: 1, profile: shownProf || "", print_id: pid || 0 } })
+      .then(r => alive && setReady3d(!!r.data?.ready)).catch(() => alive && setReady3d(false));
+    return () => { alive = false; };
+  }, [visiting, designId, shownProf]);   // eslint-disable-line react-hooks/exhaustive-deps
   const hasFriends = useHasFriends();
   const shared = useShared(`/friends/shared/design/${encodeURIComponent(designId)}`, hasFriends && !!designId);
   const nShared = sharedCount(shared);           // section seulement s'il y a quelque chose chez eux
@@ -632,9 +642,10 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false, ot
             <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{shown.title}
               {shown.deduced && <span style={{ color:"var(--muted)", fontWeight:600 }}> · déduit</span>}</span></div>}
         </div>
-        {!visiting && <button onClick={e => { e.stopPropagation(); setView3d(true); }} aria-label="Voir en 3D" data-tip="Voir en 3D"
+        {(!visiting || ready3d !== null) && <button onClick={e => { e.stopPropagation(); if (!visiting || ready3d) setView3d(true); }} aria-label="Voir en 3D"
+          disabled={visiting && !ready3d} data-tip={visiting ? (ready3d ? "Voir en 3D (sa vue, déjà calculée chez lui)" : "Vue 3D pas encore calculée chez lui") : "Voir en 3D"}
           style={{ width:32, height:32, borderRadius:10, border:"1px solid rgba(14,165,233,0.4)", background:"rgba(14,165,233,0.1)",
-            cursor:"pointer", flexShrink:0, fontSize:14 }}>🧊</button>}
+            cursor: visiting && !ready3d ? "not-allowed" : "pointer", opacity: visiting && !ready3d ? 0.45 : 1, flexShrink:0, fontSize:14 }}>🧊</button>}
         <button onClick={e => { e.stopPropagation(); setSheet(designId); }} onPointerDown={() => prefetchModel(designId)} aria-label="Fiche du modèle"
           data-tip="Fiche du modèle" style={{ width:32, height:32, borderRadius:10, border:"1px solid var(--border)", background:"var(--surface)",
             color:"#3b82f6", cursor:"pointer", flexShrink:0, fontSize:14, fontWeight:900 }}>↗</button>

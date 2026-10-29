@@ -5,7 +5,7 @@ import logging
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile
 
-from .auth import get_current_user, require_admin, require_mw, require_own_account
+from .auth import get_current_user, oauth2_scheme, require_admin, require_mw, require_own_account
 from ....services import makerworld as mw
 from ....services import makerworld_account as acc
 
@@ -596,7 +596,8 @@ async def mw_model_3d_progress(design_id: str, _: str = Depends(get_current_user
 
 @router.get("/3d/{design_id}")
 async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_src: int = Query(0, alias="fetch"),
-                      used: str = "", scope: str = "", _: str = Depends(get_current_user)):
+                      used: str = "", scope: str = "", peek: int = 0, _: str = Depends(get_current_user),
+                      token: str = Depends(oauth2_scheme)):
     """Les plateaux a afficher en 3D : {source: "3mf" | "makerworld", plates: [{n, name, url, size_mm}], ms}.
     print_id : le profil de cette impression (celui de l'imprimante, ou celui choisi a la main avec ses plateaux,
     27/10/2026 : seul le premier etait lu, et une impression sans lui montrait le profil par defaut)."""
@@ -612,7 +613,25 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
     # le 3MF d'origine de CE profil ; sans profil connu, celui retenu pour le modele
     iid = known(did, prof) if prof else known(did, "")
     fetch_error = None
-    if prof and not iid:
+    # un copain qui visite (cle fk_), ou un simple coup d'oeil (peek) : rien n'est telecharge ni converti ici
+    # (29/10/2026) ; seule une vue deja calculee et a jour se montre, sinon « pas encore calculee chez lui »
+    readonly = bool(peek) or str(token or "").startswith("fk_")
+    if readonly:
+        import json as _json
+        meta = None
+        src = path_of(iid) if iid else None
+        if src is not None and src.is_file() and T.ready(src, src.stem):
+            try:
+                meta = _json.loads((T._root() / src.stem / "plates.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                meta = None
+        ok = bool(meta and any(not p.get("skipped") for p in meta.get("plates") or []))
+        if peek:
+            return {"ready": ok}
+        if not ok:
+            raise HTTPException(409, "Vue 3D pas encore calculée chez lui : il doit l'ouvrir une fois de son côté")
+        key, source = src.stem, "3mf"
+    if prof and not iid and not readonly:
         # le 3MF de ce profil peut etre garde sous une autre cle (rattrapage d'une impression au profil devine) ;
         # sinon, pour un modele imprime, on le recupere maintenant (une fois : il sert ensuite a tout)
         from ....services.mw_source import resolve, fetch, _index_put
@@ -628,13 +647,14 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
         except Exception as e:
             logger.info(f"[3D] 3MF du profil {prof} de {did} non recupere : {e}")
             fetch_error = str(e)[:200] if (print_id or get_src) else None
-    meta, source, key = None, "3mf", None
-    if iid:
+    if not readonly:
+        meta, source, key = None, "3mf", None
+    if iid and not readonly:
         src = path_of(iid)
         T.WATCH[did] = src.stem
         meta = await asyncio.to_thread(T.from_3mf, src, src.stem)
         key = src.stem
-    if not meta or not any(not p.get("skipped") for p in meta.get("plates") or []):
+    if not readonly and (not meta or not any(not p.get("skipped") for p in meta.get("plates") or [])):
         # l'apercu MakerWorld du meme profil ; a defaut, le 3MF garde d'un autre profil du modele
         source = "makerworld"
         try:

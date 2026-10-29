@@ -4,7 +4,8 @@ import { finishCanvas } from "../utils/finishTex";
 import { egg } from "../eggs";
 import { ColorPairs, chooseColor } from "./ColorMap";
 import { FSheet } from "./FicheKit";
-import client from "../api/client";
+import client, { apiUrl } from "../api/client";
+import { currentFriend } from "../store/friend";
 import MwImg from "./MwImg";
 
 // La vue 3D d'un modele (27/10/2026) : son 3MF d'origine garde sur le serveur (converti la-bas, aux couleurs de
@@ -491,7 +492,10 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     tick();
     return () => { alive = false; clearInterval(id); };
   }, [base, wait, meta, err]);
-  const p = meta?.plates?.[plate];
+  // chez un copain (29/10/2026) : les fichiers de plateau viennent de chez lui, par le relais de mon serveur
+  const viaFriend = u => currentFriend() && typeof u === "string" && u.startsWith("/api/v1/") ? apiUrl(u.slice(7)) : u;
+  const p0 = meta?.plates?.[plate];
+  const p = p0 ? { ...p0, url: viaFriend(p0.url) } : p0;
   // un plateau dont le filament change a une hauteur (le « M600 » pose dans Bambu Studio, 28/10/2026) : le
   // serveur a coupe les pieces a ces hauteurs, chaque tranche a sa couleur ; on les dit sous la vue
   const zc = p?.z_colors || [];
