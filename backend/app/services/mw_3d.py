@@ -22,7 +22,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 5                           # 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 6                           # 6 : la vue assemblee (29/10) ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan", re.I)
 MAX_TRIANGLES = 6_000_000              # au-dela, le plateau n'est pas converti (trop lourd pour un telephone)
 _TRI_PAINT = re.compile(rb'<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"([^>]*)>')
@@ -30,6 +30,8 @@ _PAINT = re.compile(rb'paint_color="([0-9A-F]+)"')
 _XYZ = re.compile(rb'\s[xyz]="([^"]+)"')
 _V123 = re.compile(rb'\sv[123]="(\d+)"')
 _NOT_SHOWN = {"modifier_part", "negative_part", "support_blocker", "support_enforcer"}
+ASSEMBLED_N = 0                        # le « plateau » de la vue assemblee (29/10/2026) : apres les vrais plateaux
+_TOUCH = 0.3                           # mm : deux objets a moins que ca se touchent
 
 
 def _root() -> Path:
@@ -392,7 +394,8 @@ def _cut_z(v, t, zc: float) -> tuple:
 
 
 def _settings(z: zipfile.ZipFile) -> tuple:
-    """(plateaux [(n, nom, [(object_id, instance)])], objets {id: {extruder, parts: {part_id: (extruder, type)}}})."""
+    """(plateaux [(n, nom, [(object_id, instance)])], objets {id: {extruder, parts: {part_id: (extruder, type)}}}) ;
+    objets["__assemble__"] : la vue d'assemblage [(object_id, instance, transformation)]."""
     try:
         xml = z.read("Metadata/model_settings.config").decode("utf-8", "replace")
     except KeyError:
@@ -411,6 +414,13 @@ def _settings(z: zipfile.ZipFile) -> tuple:
             parts[p.group(1)] = (int(e.group(1)) if e else None, st.group(1) if st else "normal_part")
         objs[m.group(1)] = {"extruder": int(ext.group(1)) if ext else 1, "parts": parts}
     plates = []
+    # la vue d'assemblage (29/10/2026) : la place de chaque objet une fois assemble, que le createur peut poser dans
+    # Bambu Studio (les lignes par piece, volume_id, ne servent pas ici : les pieces gardent leur place dans l'objet)
+    asm = []
+    for m in re.finditer(r"<assemble_item\b([^>]*)/?>", xml):
+        h = m.group(1)
+        if _attr(h, "volume_id") is None and _attr(h, "object_id") and str(_attr(h, "instance_id") or "").isdigit():
+            asm.append((_attr(h, "object_id"), int(_attr(h, "instance_id")), _matrix(_attr(h, "transform"))))
     for m in re.finditer(r"<plate>(.*?)</plate>", xml, re.S):
         body = m.group(1)
         n = re.search(r'key="plater_id" value="(\d+)"', body)
@@ -419,6 +429,7 @@ def _settings(z: zipfile.ZipFile) -> tuple:
             r'<model_instance>\s*<metadata key="object_id" value="(\d+)"/>\s*<metadata key="instance_id" value="(\d+)"/>', body)]
         if n:
             plates.append((int(n.group(1)), name.group(1) if name else "", inst))
+    objs["__assemble__"] = asm
     return sorted(plates), objs
 
 
@@ -557,6 +568,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     colors = _colors_of(z)
     zch = _z_changes(z, colors)
     plates, settings = _settings(z)
+    asm = settings.pop("__assemble__", []) if settings else []
     # les noms (titre du modele, objets et pieces), pour reconnaitre un lithophane
     try:
         names_txt = " ".join(re.findall(r'key="name" value="([^"]*)"', z.read("Metadata/model_settings.config").decode("utf-8", "replace")))
@@ -601,20 +613,34 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         for oid, k in inst:
             mts = items_by_obj.get(oid) or []
             if k < len(mts):
-                lst.append(parts_of(oid, mts[k]))
+                lst.append(((oid, k), parts_of(oid, mts[k])))
         work.append((n, pname, lst))
-    weight = sum(len(p[3]) for _, _, lst in work for parts in lst for p in parts) or 1
-    done = 0
-    for n, pname, lst in work:
+    # la vue assemblee, en dernier : chaque objet a sa place d'assemblage (les plateaux restent tels quels)
+    asm_lst = []
+    for oid, k, mt in asm:
+        parts = parts_of(oid, mt)
+        if not parts:                                   # un objet absent (3MF tranche : seulement le plateau imprime)
+            asm_lst = []
+            break
+        asm_lst.append(((oid, k), parts))
+    if len(asm_lst) < 2:                                # un seul objet : rien de plus que son plateau
+        asm_lst = []
+    weight = (sum(len(p[3]) for _, _, lst in work for _, parts in lst for p in parts)
+              + sum(len(p[3]) for _, parts in asm_lst for p in parts)) or 1
+    prog = {"done": 0}
+    boxes: dict = {}                                    # (objet, instance) -> (plateau, mini, maxi) sur son plateau
+
+    def emit(lst, label="Lecture des pièces", zchg=None):
+        """Les pieces placees -> groupes par couleur, et la boite de chaque objet place (mini, maxi)."""
         groups_out: dict = {}                           # couleur -> [sommets, triangles]
         total = 0
-        zchg = zch.get(n)                               # les changements de filament en hauteur de ce plateau
-        for parts in lst:
+        bx = {}
+        for ident, parts in lst:
             for ext, fcol, mt, body in parts:
                 # la part de cette piece dans l'avancement (lecture 5 -> 75 %), decoupee en etapes
-                a0, a1 = 5 + 70 * done / weight, 5 + 70 * (done + len(body)) / weight
-                done += len(body)
-                _step(key, a0, "Lecture des pièces")
+                a0, a1 = 5 + 70 * prog["done"] / weight, 5 + 70 * (prog["done"] + len(body)) / weight
+                prog["done"] += len(body)
+                _step(key, a0, label)
                 v, t, paint = _mesh(body)
                 if paint:
                     _step(key, a0 + (a1 - a0) * 0.55, "Couleurs peintes")
@@ -625,6 +651,11 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                     break
                 rot = np.array(mt[:9], dtype=np.float64).reshape(3, 3)
                 vt = v + np.array(mt[9:], dtype=np.float64) if np.array_equal(rot, np.eye(3)) else v @ rot + np.array(mt[9:])
+                if len(vt):
+                    lo_, hi_ = vt.min(axis=0), vt.max(axis=0)
+                    if ident in bx:
+                        lo_, hi_ = np.minimum(bx[ident][0], lo_), np.maximum(bx[ident][1], hi_)
+                    bx[ident] = (lo_, hi_)
                 for ex, tt in by_ext.items():
                     col = colors[ex - 1] if 0 < ex <= len(colors) else fcol
                     # les changements de filament a une hauteur qui touchent ces triangles : un changement
@@ -654,11 +685,14 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                         g[1].append(inv.reshape(-1, 3) + g[2])
                         g[2] += len(used)
                     total += sum(len(tr) for _, tr in slices) - len(tt)     # les triangles coupes en font plus
+        return groups_out, total, bx
+
+    def write(n, pname, groups_out, total, extra=None):
         if not groups_out or total > MAX_TRIANGLES:
             # vide : un 3MF tranche ne garde souvent que les pieces du plateau imprime
             meta["plates"].append({"n": n, "name": pname, "triangles": total, "skipped": total > MAX_TRIANGLES,
-                                   "empty": not groups_out})
-            continue
+                                   "empty": not groups_out, **(extra or {})})
+            return None
         # recentre le plateau : au milieu en X et Y, pose sur z = 0
         allv = {col: np.concatenate(g[0]) for col, g in groups_out.items()}
         lo = np.min([a.min(axis=0) for a in allv.values()], axis=0)
@@ -672,17 +706,69 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
             buf += (vv - shift).astype("<f4").tobytes()
             buf += tt.astype("<u4").tobytes()
         # compresse une fois pour toutes : servi tel quel (Content-Encoding: gzip), le telephone le recoit leger
-        _step(key, 78 + 20 * (len(meta["plates"]) + 1) / max(1, len(work)) - 10 / max(1, len(work)), "Compression")
+        nb = len(work) + (1 if asm_lst else 0)
+        _step(key, 78 + 20 * (len(meta["plates"]) + 1) / max(1, nb) - 10 / max(1, nb), "Compression")
         _write(out_dir / f"plate_{n}.bin", _gzip(bytes(buf)))
-        # un lithophane (28/10/2026) : dit par son nom (plateau, modele, pieces « litho… »), ou une plaque mince
-        # (6 mm au plus) et large ; la vue propose alors la lumiere derriere
-        litho = bool(_LITHO.search(f"{pname} {names_txt}")) or (size[2] <= 6 and min(size[0], size[1]) >= 40)
-        meta["plates"].append({"n": n, "name": pname, "triangles": total, "size_mm": [round(x, 1) for x in size],
-                               **({"litho": True} if litho else {}),
-                               # les hauteurs de changement de filament, pour les dire sous la vue
-                               **({"z_colors": [[round(zt, 2), str(c).lstrip("#").upper()[:6]] for zt, _, c, _ in zchg[1]]} if zchg else {})})
+        rec = {"n": n, "name": pname, "triangles": total, "size_mm": [round(x, 1) for x in size], **(extra or {})}
+        meta["plates"].append(rec)
+        return rec, size
+
+    for n, pname, lst in work:
+        zchg = zch.get(n)                               # les changements de filament en hauteur de ce plateau
+        groups_out, total, bx = emit(lst, zchg=zchg)
+        for ident, (lo_, hi_) in bx.items():
+            boxes[ident] = (n, lo_, hi_)
+        r = write(n, pname, groups_out, total)
+        if r:
+            rec, size = r
+            # un lithophane (28/10/2026) : dit par son nom (plateau, modele, pieces « litho… »), ou une plaque mince
+            # (6 mm au plus) et large ; la vue propose alors la lumiere derriere
+            if bool(_LITHO.search(f"{pname} {names_txt}")) or (size[2] <= 6 and min(size[0], size[1]) >= 40):
+                rec["litho"] = True
+            # les hauteurs de changement de filament, pour les dire sous la vue
+            if zchg:
+                rec["z_colors"] = [[round(zt, 2), str(c).lstrip("#").upper()[:6]] for zt, _, c, _ in zchg[1]]
+    if asm_lst:
+        groups_out, total, bx = emit(asm_lst, label="Vue assemblée")
+        # une vraie vue d'assemblage : des objets qui se touchent ou s'emboitent une fois assembles, alors que
+        # sur les plateaux ils sont a part (Bambu Studio en ecrit une a chaque projet, souvent la simple copie
+        # des plateaux : celle-la n'apprend rien)
+        if _assembled_differs(bx, boxes):
+            write(ASSEMBLED_N, "Assemblé", groups_out, total, {"assembled": True})
     _write(out_dir / "plates.json", json.dumps(meta).encode("utf-8"))
     return meta
+
+
+def _assembled_differs(asm_boxes: dict, plate_boxes: dict) -> bool:
+    """Vrai pour une vraie vue d'assemblage : une fois assembles, la plupart des objets (au moins la moitie) forment
+    un seul bloc, en se touchant (boites qui se chevauchent a _TOUCH pres) la ou les plateaux les mettent a part
+    (plateaux differents, ou boites disjointes). Quelques pieces qui se frolent dans une vue eparpillee ne
+    suffisent pas (SKADIS, 29/10/2026 : six pieces dispersees sur 80 cm)."""
+    def touch(a, b):
+        return all(a[0][i] <= b[1][i] + _TOUCH and b[0][i] <= a[1][i] + _TOUCH for i in range(3))
+    ids = list(asm_boxes)
+    up = {i: i for i in ids}
+
+    def root(i):
+        while up[i] != i:
+            up[i] = up[up[i]]
+            i = up[i]
+        return i
+    new = False
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            if not touch(asm_boxes[ids[i]], asm_boxes[ids[j]]):
+                continue
+            up[root(ids[i])] = root(ids[j])
+            pa, pb = plate_boxes.get(ids[i]), plate_boxes.get(ids[j])
+            if not pa or not pb or pa[0] != pb[0] or not touch(pa[1:], pb[1:]):
+                new = True
+    if not new:
+        return False
+    sizes: dict = {}
+    for i in ids:
+        sizes[root(i)] = sizes.get(root(i), 0) + 1
+    return max(sizes.values()) * 2 >= len(ids)
 
 
 def _write(p: Path, data: bytes) -> None:

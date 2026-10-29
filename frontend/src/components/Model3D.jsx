@@ -508,11 +508,15 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   // les couleurs utilisees du plateau affiche (un groupe : celles des impressions de CE plateau) ; sans
   // rattachement par plateau, celles de toutes les impressions
   const byPlate = meta?.used_plates && Object.keys(meta.used_plates).length > 0;
-  const usedPal = byPlate ? (p && meta.used_plates[String(p.n)]) || null : meta?.used_palette;
-  const usedDetail = byPlate ? (p && meta.used_details_plates?.[String(p.n)]) || [] : meta?.used_detail || [];
-  const usedFin = byPlate ? (p && meta.used_finishes_plates?.[String(p.n)]) || {} : meta?.used_finishes;
-  const usedMulti = byPlate ? (p && meta.used_multi_plates?.[String(p.n)]) || {} : meta?.used_multi;
-  const alt = (p && platePalettes?.[p.n]) || palette || usedPal || null;
+  // la vue assemblee (29/10/2026) : toutes les pieces, donc les choix (« À faire ») de tous les plateaux reunis
+  const asm = !!p?.assembled;
+  const merged = o => o && Object.values(o).reduce((a, x) => ({ ...(a || {}), ...(x || {}) }), null);
+  const ofPlate = (o, dflt) => (p && o?.[String(p.n)]) || dflt;     // le serveur donne aussi celle de l'assemble
+  const usedPal = byPlate ? ofPlate(meta.used_plates, null) : meta?.used_palette;
+  const usedDetail = byPlate ? ofPlate(meta.used_details_plates, []) : meta?.used_detail || [];
+  const usedFin = byPlate ? ofPlate(meta.used_finishes_plates, {}) : meta?.used_finishes;
+  const usedMulti = byPlate ? ofPlate(meta.used_multi_plates, {}) : meta?.used_multi;
+  const alt = (p && (asm ? merged(platePalettes) : platePalettes?.[p.n])) || palette || usedPal || null;
   const altLabel = altName || (palette || platePalettes ? "Retenues" : "Utilisées");
   const [own, setOwn] = useState(false);
   const shown = alt && !own ? alt : null;
@@ -536,13 +540,14 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         {meta?.plates?.length > 1 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {meta.plates.map((x, i) => <button key={x.n} type="button" onClick={() => setPlate(i)} style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer",
             fontSize: 12.5, fontWeight: 800, border: i === plate ? "none" : "1px solid var(--border)", color: i === plate ? "#fff" : "var(--text2)",
-            background: i === plate ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" }}>{x.name ? `${x.n} · ${x.name}` : `Plateau ${x.n}`}</button>)}
+            background: i === plate ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" }}>{x.assembled ? "🧩 Assemblé" : x.name ? `${x.n} · ${x.name}` : `Plateau ${x.n}`}</button>)}
         </div>}
         <div style={{ position: "relative", height: "min(62dvh, 560px)", borderRadius: 18, overflow: "hidden", border: "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
           {p && <Viewer key={`${p.url}|${shown ? "alt" : "own"}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
-            multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} bed={meta?.bed} litho={!!p.litho}/>}
+            multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
+            bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}
           {alt && p && !isGlb(p.url) && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
             background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
             {[[true, "Couleurs d'origine"], [false, `Couleurs ${altLabel.toLowerCase()}`]].map(([o, l]) => <button key={l} type="button" onClick={() => setOwn(o)}

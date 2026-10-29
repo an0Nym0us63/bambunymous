@@ -709,7 +709,11 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             used_palette = await _used_palette(path_of(key), ids, did, prof if source == "3mf" else "", used_detail, chosen=chosen)
             # plateau par plateau (28/10/2026) : sur un groupe, chaque plateau prend les couleurs des impressions qui
             # l'ont fait, pas un melange de toutes ; un plateau que personne n'a imprime reste aux couleurs d'origine
-            ns = [p["n"] for p in T.plates_out(meta, key)[0]] if meta else []
+            shown = T.plates_out(meta, key)[0] if meta else []
+            ns = [p["n"] for p in shown if not p.get("assembled")]
+            # la vue assemblee : toutes les pieces, donc la correspondance de toutes les impressions
+            if len(ns) > 1 and used_palette and any(p.get("assembled") for p in shown):
+                used_plates[str(T.ASSEMBLED_N)], used_details_plates[str(T.ASSEMBLED_N)] = used_palette, used_detail
             if len(ns) > 1:
                 for n in ns:
                     dd = []
