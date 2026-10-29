@@ -41,6 +41,8 @@ def _job(job_id: str) -> dict:
                 "print_id": None, "last_pct": -1.0,
                 "m50": False, "m99": False, "m100": False,
                 "l2": False, "l3": False, "last_layer": 0,
+                # vu passer par la couche 0 ou 1 : sans cela, pas de jalon de couche (voir on_progress)
+                "low": False,
                 "start_time": time.time(),
                 "paused": 0.0, "pause_since": None,
             }
@@ -529,7 +531,7 @@ def on_progress(job_id: str, pct: float, layer: int):
     # Régression forte = nouveau print
     if prev >= 5.0 and pct <= 1.0:
         with _LOCK:
-            st.update(last_pct=-1.0, m50=False, m99=False, m100=False, l2=False, l3=False)
+            st.update(last_pct=-1.0, m50=False, m99=False, m100=False, l2=False, l3=False, low=False)
         return
 
     with _LOCK: st["last_pct"] = max(prev, pct)
@@ -545,7 +547,13 @@ def on_progress(job_id: str, pct: float, layer: int):
     _fire("m99",  99.0,  "pct99")
     _fire("m100", 100.0, "pct100")
 
-    if layer:
+    # Les jalons de couche (cliche et notification de la 1re couche) ne partent que si l'impression a ete vue a la
+    # couche 0 ou 1 (29/10/2026) : pendant la preparation, l'imprimante renvoie encore la couche de l'impression
+    # precedente (« couche 210/210 » notifie au lancement) ; et apres un redemarrage du serveur en pleine impression,
+    # sans cliche garde (pas de camera), la notification repartait a chaque fois.
+    if layer is not None and 0 <= layer <= 1:
+        with _LOCK: st["low"] = True
+    if layer and st.get("low"):
         with _LOCK:
             st["last_layer"] = max(st.get("last_layer", 0), layer)
             if not st["l2"] and layer >= 2:
