@@ -104,13 +104,11 @@ function boxUV(THREE, geo) {
 // la boite des seules pieces montrees (30/10/2026 : three.js compte aussi les pieces masquees ou exclues ; une piece
 // exclue laissait sa place vide dans le cadrage et dans la vignette)
 function visibleBox(THREE, root) {
-  const box = new THREE.Box3(), b = new THREE.Box3();
+  // sur les sommets eux-memes (30/10/2026 : la boite de chaque piece, tournee, debordait de la piece ; un modele pose
+  // au sol par une face inclinee flottait au-dessus du plateau)
+  const box = new THREE.Box3();
   root.updateMatrixWorld(true);
-  root.traverseVisible(o => {
-    if (!o.isMesh || !o.geometry) return;
-    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
-    box.union(b.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld));
-  });
+  root.traverseVisible(o => { if (o.isMesh && o.geometry) box.expandByObject(o, true); });
   return box.isEmpty() ? new THREE.Box3().setFromObject(root) : box;
 }
 
