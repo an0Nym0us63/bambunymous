@@ -1117,7 +1117,7 @@ function Ring({ pct = null, label }) {
 // fetchSource : recuperer le 3MF d'origine s'il manque (« À faire »).
 export default function Model3D({ designId = null, profileId = null, printId = null, wait = false, title = "", onClose,
                                   palette = null, platePalettes = null, paletteFinishes = null, paletteMulti = null, altName = null, usedPrints = null,
-                                  fetchSource = false, scope = null }) {
+                                  fetchSource = false, scope = null, focus = false }) {
   const [meta, setMeta] = useState(null);
   const [err, setErr] = useState(null);
   const [plate, setPlate] = useState(0);
@@ -1145,6 +1145,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
                                  used: (usedPrints || []).join(","), scope: scope || "" }, timeout: 180000 })
       .then(({ data }) => { if (alive) {
         // une relecture pendant la preparation : on reste sur le plateau regarde
+        // focus (30/10/2026, la galerie des vues 3D) : seulement la vue assemblee, s'il y en a une
+        if (focus && (data.plates || []).some(x => x.assembled)) data = { ...data, plates: data.plates.filter(x => x.assembled) };
         setMeta(old => { const was = old?.plates?.[plateRef.current]?.n;
           const i = was == null ? 0 : Math.max(0, (data.plates || []).findIndex(x => x.n === was));
           setPlate(i); return data; });

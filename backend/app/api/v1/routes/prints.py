@@ -604,12 +604,13 @@ async def _build_gallery(kind: str = "photos") -> dict:
                 "number_of_items": (p.group.number_of_items if p.group else None) or 1,
                 "cover_print_id":  p.group.cover_print_id if p.group else None,
                 "cover_photo":     p.group.cover_photo if p.group else None,
-                "prints": 0, "photos": [], "_designs": set(),
+                "prints": 0, "photos": [], "_designs": set(), "print_ids": [],
                 "total_weight_g": 0.0, "total_cost_filament": 0.0,
                 "electric_cost": 0.0, "total_cost": 0.0, "duration_seconds": 0.0,
                 "latest_date": None,
             })
             acc["prints"]              += 1
+            acc["print_ids"].append(p.id)
             acc["photos"].extend(photos)
             if p.design_id:
                 acc["_designs"].add(str(p.design_id))
