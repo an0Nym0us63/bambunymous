@@ -2572,9 +2572,8 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
   // Ma galerie, lue ici pour compter aussi ses elements selon la recherche.
   const [mine, setMine] = useState(null);
   const [mineLoading, setMineLoading] = useState(true);
-  // les photos, ou les vues prises dans la vue 3D (30/10/2026) ; le choix est garde pour la prochaine visite
-  const [gKind, setGKind] = useState(() => { try { return localStorage.getItem("bn-gallery-kind") === "vue3d" ? "vue3d" : "photos"; } catch { return "photos"; } });
-  useEffect(() => { try { localStorage.setItem("bn-gallery-kind", gKind); } catch { /* rien */ } }, [gKind]);
+  // les photos, ou les vues prises dans la vue 3D (30/10/2026) ; toujours les photos a l'ouverture
+  const [gKind, setGKind] = useState("photos");
   useEffect(() => {
     let cancelled = false;
     setMineLoading(true);
