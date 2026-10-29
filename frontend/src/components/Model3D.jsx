@@ -600,7 +600,27 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           if (bloomOn && composer) composer.setSize(size, size);
           if (litOn && lit) lit.resize();
           render();                                        // le rendu tel qu'affiche : nuit, lumiere derriere (lithophane)
-          const blob = await new Promise(res => renderer.domElement.toBlob(res, "image/png"));
+          let blob;
+          if (bloomOn || litOn) {
+            // la nuit et la lumiere derriere passent par des rendus intermediaires qui remettent un fond opaque (30/10/2026 :
+            // fond noir sur la vignette d'un lithophane) : l'image telle qu'affichee, puis un rendu simple qui dit ou est le
+            // modele ; tout le reste devient transparent (de nuit, la lueur autour des pieces est gardee)
+            const cv = document.createElement("canvas"); cv.width = size; cv.height = size;
+            const cx = cv.getContext("2d");
+            cx.drawImage(renderer.domElement, 0, 0, size, size);
+            const img = cx.getImageData(0, 0, size, size);
+            renderer.setRenderTarget(null); renderer.setClearColor(0x000000, 0); renderer.clear();
+            renderer.render(scene, camera);
+            cx.clearRect(0, 0, size, size); cx.drawImage(renderer.domElement, 0, 0, size, size);
+            const mask = cx.getImageData(0, 0, size, size).data, px = img.data;
+            for (let i = 0; i < px.length; i += 4) {
+              let a = mask[i + 3];
+              if (bloomOn) a = Math.max(a, Math.min(255, (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2] - 18) * 4));
+              px[i + 3] = a;
+            }
+            cx.putImageData(img, 0, 0);
+            blob = await new Promise(res => cv.toBlob(res, "image/png"));
+          } else blob = await new Promise(res => renderer.domElement.toBlob(res, "image/png"));
           if (head) { scene.remove(head, head.target); head.dispose(); }
           // la vue reprend comme avant
           grid.visible = was.grid; scene.background = was.bg;
