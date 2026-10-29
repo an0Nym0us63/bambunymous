@@ -83,7 +83,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const handle = new THREE.Object3D(); holder.add(handle);
   const tc = new TransformControls(camera, el);
   tc.setSpace("world");
-  tc.size = 0.8;
+  // au doigt (30/10/2026) : une poignee plus grosse, qu'on attrape sans viser au pixel
+  const coarse = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
+  tc.size = coarse ? 1.35 : 0.8;
   const helper = tc.getHelper();
   scene.add(helper);
   let dragStart = null;              // la poignee et les pieces au debut du glisser
@@ -516,9 +518,15 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   };
 
   let down = null;
-  const onDown = ev => { down = [ev.clientX, ev.clientY]; };
+  // un tap se distingue d'un glisser (un doigt bouge plus qu'une souris) ; un geste a deux doigts (zoomer, deplacer la
+  // vue) n'est jamais un tap, meme quand un doigt se releve sans avoir bouge
+  let fingers = 0, several = false;
+  const onDown = ev => { fingers++; if (fingers > 1) several = true; down = [ev.clientX, ev.clientY]; };
+  const onCancel = () => { fingers = Math.max(0, fingers - 1); if (!fingers) several = false; down = null; };
   const onUp = ev => {
-    if (!down || Math.hypot(ev.clientX - down[0], ev.clientY - down[1]) > 4 || tc.dragging) { down = null; return; }   // un glisser : la vue tourne
+    fingers = Math.max(0, fingers - 1);
+    if (several) { if (!fingers) several = false; down = null; return; }
+    if (!down || Math.hypot(ev.clientX - down[0], ev.clientY - down[1]) > (coarse ? 10 : 4) || tc.dragging) { down = null; return; }   // un glisser : la vue tourne
     down = null;
     const pick = pickAt(ev);
     // un clic sur la poignee ; ses zones invisibles debordent : dans le vide, le clic desselectionne quand meme (30/10/2026)
@@ -670,6 +678,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   window.addEventListener("pointermove", onBoxMove);
   window.addEventListener("pointerup", onBoxUp);
   el.addEventListener("pointerdown", onDown);
+  el.addEventListener("pointercancel", onCancel);
   el.addEventListener("pointerup", onUp);
   let slide = null;
   const rayHolder = ev => {
@@ -759,7 +768,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     holder.updateMatrixWorld(true);
     const wb = b.clone().applyMatrix4(holder.matrixWorld), sph = wb.getBoundingSphere(new THREE.Sphere());
     const dir = camera.position.clone().sub(controls.target).normalize();
-    const d = Math.max(sph.radius, 5) / Math.sin((camera.fov * Math.PI) / 360) * 1.2;
+    const half = Math.min(camera.fov * Math.PI / 360, Math.atan(Math.tan(camera.fov * Math.PI / 360) * camera.aspect));   // en portrait : l'horizontal
+    const d = Math.max(sph.radius, 5) / Math.sin(half) * 1.2;
     controls.target.copy(sph.center); camera.position.copy(sph.center).addScaledVector(dir, d);
     camera.near = Math.max(0.1, d / 100); camera.far = d * 50; camera.updateProjectionMatrix(); controls.update(); render();
   };
@@ -1171,6 +1181,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       // pas tc.dispose() : en three 0.169 il appelle traverse, qui n'existe plus sur la poignee, et l'erreur cassait la
       // fermeture de la vue (page blanche, 29/10/2026) ; on la debranche et on libere son dessin a la main
       el.removeEventListener("pointerdown", onDown); el.removeEventListener("pointerup", onUp); window.removeEventListener("keydown", onKey, true);
+      el.removeEventListener("pointercancel", onCancel);
       el.removeEventListener("pointerdown", onBoxDown, true); window.removeEventListener("pointermove", onBoxMove); window.removeEventListener("pointerup", onBoxUp);
       boxDiv?.remove(); if (boxMode) controls.enabled = true;
       window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", onBlur);

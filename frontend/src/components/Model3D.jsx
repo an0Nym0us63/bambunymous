@@ -133,7 +133,7 @@ function copyPiece(THREE, src, n) {
 }
 
 function Viewer({ url, glb, onState, palette = null, finishes = null, multi = null, glow = false, bed = null, litho = false,
-                  pieces = null, edit = null, editApi = null, pad = false, piecePalettes = null, editing = false, hue = null }) {
+                  pieces = null, edit = null, editApi = null, pad = false, piecePalettes = null, editing = false, hue = null, bare = false }) {
   const [pans, setPans] = useState(false);
   const box = useRef(null);
   const [dark, setDark] = useState(false);
@@ -466,7 +466,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         model.position.set(-ctr.x, -bb.min.y, -ctr.z);
         const bb2 = visibleBox(THREE, model), sph = bb2.getBoundingSphere(new THREE.Sphere());
         const fit = () => {
-          const d = sph.radius / Math.sin((camera.fov * Math.PI) / 360) * 1.15;
+          // le plus etroit des deux angles de vue (30/10/2026 : sur un telephone en portrait, l'horizontal ; le modele sortait du cadre)
+          const half = Math.min(camera.fov * Math.PI / 360, Math.atan(Math.tan(camera.fov * Math.PI / 360) * camera.aspect));
+          const d = sph.radius / Math.sin(half) * 1.15;
           camera.position.set(sph.center.x + d * 0.6, sph.center.y + d * 0.55, sph.center.z + d * 0.6);
           controls.target.copy(sph.center); camera.near = Math.max(0.1, d / 100); camera.far = d * 20; camera.updateProjectionMatrix(); controls.update(); render();
         };
@@ -777,7 +779,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
   return <div style={{ position: "relative", width: "100%", height: "100%" }}>
     <div ref={box} style={{ position: "absolute", inset: 0, touchAction: "none", borderRadius: "inherit", transition: "background .4s",
       background: dark || lit ? "radial-gradient(circle at 50% 40%, #0b1020, #020308)" : "transparent" }}/>
-    {pad && <div style={{ position: "absolute", right: 10, bottom: 58, display: "flex", flexDirection: "column", gap: 6, zIndex: 2 }}>
+    {pad && !bare && <div style={{ position: "absolute", right: 10, bottom: 58, display: "flex", flexDirection: "column", gap: 6, zIndex: 2 }}>
       {[[pans ? "✋" : "🔄", pans ? "Le glisser déplace la vue (toucher : tourner)" : "Le glisser tourne la vue (toucher : déplacer)", () => { const v = !pans; setPans(v); api.current?.dragPans(v); }, pans],
         ["＋", "Zoomer", () => api.current?.zoom(0.8)], ["－", "Dézoomer", () => api.current?.zoom(1.25)]].map(([l, t, f, on]) =>
         <button key={t} type="button" onClick={f} data-tip={t} style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
@@ -803,7 +805,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         <span style={{ width: 52, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{l.td.toFixed(2).replace(".", ",")} mm</span>
       </label>)}
     </div>}
-    <div style={{ position: "absolute", right: 10, bottom: 10, display: "flex", gap: 8 }}>
+    <div style={{ position: "absolute", right: 10, bottom: 10, display: bare ? "none" : "flex", gap: 8 }}>
       {hueL && !lit && <button type="button" onClick={() => setTdOpen(o => !o)}
         data-tip="Régler la transparence de chaque filament de ce HueForge"
         style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 13, fontWeight: 800,
@@ -859,22 +861,23 @@ const pinsTip = est => {
 // la liste des pieces (30/10/2026), a gauche en edition : choisir, masquer un moment (👁), exclure de l'assemblage (🚫,
 // enregistre ; ↩ la remet), en ajouter un exemplaire (⧉ : une piece imprimee en plusieurs exemplaires), retirer un
 // exemplaire ajoute (✕)
-function PiecesPanel({ est, api }) {
-  const [open, setOpen] = useState(true);
+function PiecesPanel({ est, api, compact = false, onClose = null }) {
+  const [open0, setOpen] = useState(true);
+  const open = compact || open0;
   const list = est.list || [];
   const nEx = list.filter(x => x.excluded).length;
-  const ib = (extra = {}) => ({ width: 26, height: 26, borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)",
-    cursor: "pointer", fontSize: 12, flexShrink: 0, padding: 0, ...extra });
-  return <div style={{ position: "absolute", left: 12, top: 70, bottom: 12, zIndex: 3, width: open ? 250 : "auto", display: "flex", flexDirection: "column",
-    pointerEvents: "none" }}>
+  const ib = (extra = {}) => ({ width: compact ? 36 : 26, height: compact ? 36 : 26, borderRadius: compact ? 10 : 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)",
+    cursor: "pointer", fontSize: compact ? 15 : 12, flexShrink: 0, padding: 0, ...extra });
+  return <div style={{ position: "absolute", zIndex: 4, display: "flex", flexDirection: "column", pointerEvents: "none",
+    ...(compact ? { left: 8, right: 8, bottom: "calc(var(--bn-rail, 150px) + 8px)", maxHeight: "48%" } : { left: 12, top: 70, bottom: 12, width: open ? 250 : "auto" }) }}>
     <div style={{ pointerEvents: "auto", display: "flex", flexDirection: "column", minHeight: 0, maxHeight: "100%", borderRadius: 14, border: "1px solid var(--border)",
       background: "color-mix(in srgb, var(--sheet-bg) 94%, transparent)", boxShadow: "0 10px 30px rgba(0,0,0,.2)", overflow: "hidden" }}>
-      <button type="button" onClick={() => setOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", border: "none", background: "transparent",
+      <button type="button" onClick={() => (compact ? onClose?.() : setOpen(o => !o))} style={{ display: "flex", alignItems: "center", gap: 6, padding: compact ? "11px 12px" : "8px 10px", border: "none", background: "transparent",
         cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: "var(--text)", textAlign: "left" }}>
-        📋 Pièces ({list.length - nEx}{nEx ? ` · ${nEx} exclue${nEx > 1 ? "s" : ""}` : ""}) <span style={{ marginLeft: "auto", color: "var(--muted)" }}>{open ? "▾" : "▸"}</span>
+        📋 Pièces ({list.length - nEx}{nEx ? ` · ${nEx} exclue${nEx > 1 ? "s" : ""}` : ""}) <span style={{ marginLeft: "auto", color: "var(--muted)" }}>{compact ? "✕" : open ? "▾" : "▸"}</span>
       </button>
       {open && <div style={{ overflowY: "auto", padding: "0 6px 6px", display: "flex", flexDirection: "column", gap: 3 }}>
-        {list.map(x => <div key={x.k} style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 4px", borderRadius: 8,
+        {list.map(x => <div key={x.k} style={{ display: "flex", alignItems: "center", gap: compact ? 8 : 4, padding: compact ? "6px 6px" : "3px 4px", borderRadius: 8,
           background: x.sel ? "color-mix(in srgb, #0EA5E9 18%, transparent)" : "transparent", opacity: x.excluded ? 0.55 : 1 }}>
           <button type="button" disabled={x.excluded} onClick={() => api?.select([x.k])} data-tip={x.excluded ? "Exclue de l'assemblage" : "La choisir"}
             style={{ flex: 1, minWidth: 0, border: "none", background: "none", padding: "2px 2px", cursor: x.excluded ? "default" : "pointer", textAlign: "left",
@@ -896,7 +899,7 @@ function PiecesPanel({ est, api }) {
   </div>;
 }
 
-function ExactPanel({ est, api }) {
+function ExactPanel({ est, api, compact = false }) {
   const [pos, setPos] = useState(null);
   const [deg, setDeg] = useState("90");
   const c = est.center;
@@ -908,7 +911,8 @@ function ExactPanel({ est, api }) {
   const rb = { height: 28, padding: "0 8px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)",
     fontSize: 12, fontWeight: 800, cursor: "pointer" };
   const turn = (ax, sgn) => { const d = parseFloat(String(deg).replace(",", ".")); if (Number.isFinite(d) && d) api?.rotate(ax, sgn * d); };
-  return <div style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", zIndex: 3, padding: 10, borderRadius: 14, width: 230,
+  return <div style={{ position: "absolute", zIndex: 4, padding: 10, borderRadius: 14,
+    ...(compact ? { left: 8, right: 8, bottom: "calc(var(--bn-rail, 150px) + 8px)", maxHeight: "48%", overflowY: "auto" } : { right: 12, top: "50%", transform: "translateY(-50%)", width: 230 }),
     background: "color-mix(in srgb, var(--surface) 94%, transparent)", border: "1px solid var(--border)", boxShadow: "0 10px 30px rgba(0,0,0,.25)",
     display: "flex", flexDirection: "column", gap: 8, fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>
     <span style={{ fontWeight: 900, color: "var(--text)" }}>Position du centre (mm)</span>
@@ -931,6 +935,13 @@ function ExactPanel({ est, api }) {
 
 // l'aide de l'edition : tous les gestes et raccourcis
 const EDIT_HELP = [
+  ["Au doigt (téléphone, tablette)", [
+    ["Un doigt glissé", "tourner autour du modèle ; deux doigts : zoomer (pincer) et déplacer la vue"],
+    ["Toucher une pièce", "la choisir ; ➕ Multi (en bas) : chaque toucher en ajoute ou en retire une"],
+    ["Toucher le vide", "plus rien de choisi"],
+    ["Rail du bas", "les modes (glisser pour en voir plus), ➕ Multi, ▭ Rectangle, 📋 Pièces, ⌖ Cadrer (la sélection, ou tout), 📐 Valeurs exactes, ⚙ réglages, 🕘 versions ; au-dessus, les actions de la sélection"],
+    ["En haut", "✕ fermer, ↶ ↷ annuler et refaire, ? cette aide, 💾 enregistrer ; la consigne du moment est juste dessous"],
+  ]],
   ["Regarder", [
     ["Clic gauche glissé", "tourner autour du modèle"],
     ["Clic molette ou clic droit glissé", "déplacer la vue"],
@@ -1005,11 +1016,11 @@ function EditHelp({ onClose }) {
         <b style={{ flex: 1, fontSize: 16, color: "var(--text)" }}>Éditer l'assemblage</b>
         <button type="button" onClick={onClose} style={{ border: "none", background: "none", color: "var(--muted)", fontSize: 18, cursor: "pointer" }}>✕</button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "10px 18px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: "10px 18px" }}>
         {EDIT_HELP.map(([t, rows]) => <div key={t}>
           <div style={{ fontSize: 12, fontWeight: 900, color: "#0EA5E9", textTransform: "uppercase", letterSpacing: ".05em", margin: "6px 0 4px" }}>{t}</div>
           {rows.map(([k, v]) => <div key={k} style={{ display: "flex", gap: 8, fontSize: 12.5, lineHeight: 1.45, padding: "2px 0" }}>
-            <b style={{ color: "var(--text)", flex: "0 0 150px" }}>{k}</b><span>{v}</span></div>)}
+            <b style={{ color: "var(--text)", flex: "0 0 min(150px, 40%)" }}>{k}</b><span>{v}</span></div>)}
         </div>)}
       </div>
     </div>
@@ -1045,9 +1056,10 @@ function EditVersions({ list, dirty, onPick, onClose }) {
 }
 
 // un menu deroulant de la barre d'edition : un bouton, puis ses choix (chacun avec son aide au survol)
-function BarMenu({ label, tip, items, active = false, b }) {
+function BarMenu({ label, tip, items, active = false, b, up = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const [at, setAt] = useState(null);                 // au doigt : ou poser la liste (au-dessus du bouton, dans l'ecran)
   useEffect(() => {
     if (!open) return undefined;
     const close = e => { if (!ref.current?.contains(e.target)) setOpen(false); };
@@ -1057,8 +1069,15 @@ function BarMenu({ label, tip, items, active = false, b }) {
   const list = items.filter(Boolean);
   if (!list.length) return null;
   return <div ref={ref} style={{ position: "relative" }}>
-    <button type="button" onClick={() => setOpen(o => !o)} style={b(active || open)} data-tip={tip}>{label} ▾</button>
-    {open && <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 6, minWidth: 220, padding: 6, borderRadius: 12,
+    <button type="button" onClick={() => {
+      if (up && !open && ref.current) {
+        const r = ref.current.getBoundingClientRect();
+        setAt({ left: Math.max(8, Math.min(r.left, window.innerWidth - 248)), bottom: window.innerHeight - r.top + 6, max: r.top - 16 });
+      }
+      setOpen(o => !o);
+    }} style={b(active || open)} data-tip={tip}>{label}{up ? "" : " ▾"}</button>
+    {open && <div style={{ ...(up && at ? { position: "fixed", left: at.left, bottom: at.bottom, maxHeight: at.max, overflowY: "auto", width: 240 }
+        : { position: "absolute", top: "calc(100% + 6px)", left: 0, minWidth: 220 }), zIndex: 6, padding: 6, borderRadius: 12,
       background: "var(--sheet-bg)", border: "1px solid var(--border)", boxShadow: "0 14px 34px rgba(0,0,0,.3)", display: "flex", flexDirection: "column", gap: 3 }}>
       {list.map((it, i) => it === "-" ? <div key={i} style={{ height: 1, background: "var(--border)", margin: "3px 2px" }}/>
         : it.custom ? <div key={i}>{it.custom}</div>
@@ -1076,11 +1095,12 @@ function BarMenu({ label, tip, items, active = false, b }) {
 
 // La barre de l'edition (30/10/2026, rangee) : en haut, une seule ligne -- les modes, les reglages, annuler/refaire, les
 // versions, enregistrer, l'aide, fermer ; dessous, seulement avec une selection ou un mode qui en a, ses actions
-function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
+function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compact = false }) {
   const [sure, setSure] = useState(false);
   const [help, setHelp] = useState(false);
+  const [panel, setPanel] = useState(null);          // au doigt : le volet ouvert (« pieces », « exact »)
   if (!est) return null;
-  const b = (on, extra = {}) => ({ height: 34, padding: "0 11px", borderRadius: 10, border: on ? "none" : "1px solid var(--border)", cursor: "pointer",
+  const b = (on, extra = {}) => ({ height: compact ? 38 : 34, padding: "0 11px", borderRadius: 10, flexShrink: 0, border: on ? "none" : "1px solid var(--border)", cursor: "pointer",
     fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap", color: on ? "#fff" : "var(--text2)",
     background: on ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", ...extra });
   const sep = <span style={{ width: 1, alignSelf: "stretch", background: "var(--border)", margin: "0 2px" }}/>;
@@ -1138,6 +1158,81 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
     </> : null;
   const showAll = est.hidden > 0 ? <button type="button" onClick={() => api?.showAll()} style={b(false)} data-tip="Réafficher tout (Alt+H)">👁 Tout afficher ({est.hidden})</button> : null;
   const second = modeRow || splitRow || selRow || showAll;
+  const msg = est.splitPending ? <b style={{ color: "#0EA5E9" }}>{est.splitPending} morceaux, chacun de sa couleur : ✓ Séparer en {est.splitPending}, ou ✕ Ne pas séparer</b>
+    : est.fitMsg ? <b style={{ color: /^(Assemblée|Séparée|Collée|Ajustée|Groupée|Posée)/.test(est.fitMsg) ? "#16a34a" : "#d97706" }}>{est.fitMsg}</b>
+    : est.liveAngle != null ? <b style={{ color: "#0EA5E9", fontSize: 15 }}>Rotation : {String(est.liveAngle).replace(".", ",")}°</b> : null;
+  const verMenu = [
+    { label: "🕘 Versions enregistrées", onClick: onVersions, tip: "Reprendre un assemblage enregistré avant (chaque version est gardée)" },
+    sure ? { label: "Confirmer : revenir à la vue du 3MF", danger: true, onClick: () => { setSure(false); onReset(); } }
+      : { label: "↺ Vue du 3MF", keep: true, onClick: () => { setSure(true); setTimeout(() => setSure(false), 4000); }, tip: "Oublier l'assemblage enregistré (il reste dans les versions)" },
+  ];
+  // au doigt (30/10/2026) : en haut, fermer / annuler / refaire / aide / enregistrer et la consigne ; en bas, a portee du
+  // pouce, un rail d'outils qui defile (gros boutons), et au-dessus les actions de la selection ; les panneaux en volets
+  if (compact) {
+    const grad = "linear-gradient(135deg, #0EA5E9, #6366F1)";
+    const rail = { display: "flex", gap: 6, overflowX: "auto", padding: "6px 8px", scrollbarWidth: "none", WebkitOverflowScrolling: "touch", alignItems: "center" };
+    const tool = on => ({ flex: "0 0 auto", minWidth: 60, height: 54, padding: "0 6px", borderRadius: 12, border: on ? "none" : "1px solid var(--border)", display: "flex",
+      flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, fontSize: 18, lineHeight: 1.1, fontWeight: 800, cursor: "pointer",
+      color: on ? "#fff" : "var(--text2)", background: on ? grad : "var(--surface)" });
+    const lab = t => <span style={{ fontSize: 10.5, fontWeight: 800, whiteSpace: "nowrap" }}>{t}</span>;
+    const sq = (on, extra = {}) => b(on, { width: 42, height: 40, padding: 0, fontSize: 16, ...extra });
+    const togglePanel = k => setPanel(p => (p === k ? null : k));
+    const touchTip = est.glued && est.step !== 2 ? `Collée à ${est.glued.to} : fais-la glisser sur le contact ; ⟳ Contact pour la tourner autour, ✂ Décoller pour la libérer`
+      : est.mode === "move" ? "Touche une pièce (➕ Multi : en choisir plusieurs), puis tire sur ses flèches ; 📐 Exact pour une position au millimètre"
+      : est.mode === "rotate" ? "Touche une pièce, puis tourne-la par ses anneaux ; 📐 Exact pour un angle précis"
+      : String(tip || "").replace(/Maj \+ clic \(ou ➕ Multi\)/g, "➕ Multi").replace(/ \(Entrée\)/g, "")
+        .replace(/clique/g, "touche").replace(/Clique/g, "Touche").replace(/clic/g, "toucher");
+    return <>
+      <div style={{ position: "absolute", top: "calc(8px + env(safe-area-inset-top, 0px))", left: 8, right: 8, zIndex: 3, display: "flex", flexDirection: "column",
+        alignItems: "center", gap: 6, pointerEvents: "none" }}>
+        <div style={{ ...bar, flexWrap: "nowrap", width: "100%", boxSizing: "border-box", justifyContent: "space-between", pointerEvents: "auto" }}>
+          <button type="button" onClick={onClose} style={sq(false)} aria-label="Fermer l'édition">✕</button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button type="button" disabled={!est.canUndo} onClick={() => api?.undo()} style={sq(false, { opacity: est.canUndo ? 1 : 0.4 })} aria-label="Annuler">↶</button>
+            <button type="button" disabled={!est.canRedo} onClick={() => api?.redo()} style={sq(false, { opacity: est.canRedo ? 1 : 0.4 })} aria-label="Refaire">↷</button>
+            <button type="button" onClick={() => { setHelp(true); egg("mode_emploi"); }} style={sq(false)} aria-label="Aide">?</button>
+          </div>
+          <button type="button" disabled={saving} onClick={onSave} style={b(true, { height: 40, background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}>
+            {saving ? "…" : est.dirty ? "💾 Enregistrer" : "✓"}</button>
+        </div>
+        <div style={{ maxWidth: "100%", padding: "6px 12px", borderRadius: 12, fontSize: 12, fontWeight: 700, lineHeight: 1.35, textAlign: "center", color: "var(--text2)",
+          background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
+          {msg || <>{est.selected && (est.mode === "move" || est.mode === "rotate") ? <b style={{ color: "#0EA5E9" }}>{est.selected} · </b> : null}
+            {touchTip}</>}
+        </div>
+      </div>
+      {panel === "pieces" && <PiecesPanel est={est} api={api} compact onClose={() => setPanel(null)}/>}
+      {panel === "exact" && (est.mode === "move" || est.mode === "rotate") && <ExactPanel est={est} api={api} compact/>}
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 3, paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        background: "color-mix(in srgb, var(--surface) 92%, transparent)", borderTop: "1px solid var(--border)", backdropFilter: "blur(8px)" }}>
+        {second && <div style={{ ...rail, borderBottom: "1px solid var(--border)" }}>{modeRow}{splitRow}{selRow}{showAll}</div>}
+        <div style={rail}>
+          {[["move", "✥", "Déplacer"], ["rotate", "⟳", "Tourner"], ["ground", "⬇", "Au sol"], ["mate", "🧲", "Coller"], ["pins", "📍", "Points"]].map(([m, i, l]) =>
+            <button key={m} type="button" onClick={() => api?.setMode(m)} style={tool(est.mode === m)}>{i}{lab(l)}</button>)}
+          <span style={{ width: 1, alignSelf: "stretch", background: "var(--border)", flexShrink: 0 }}/>
+          <button type="button" onClick={() => api?.setMulti(!est.multi)} style={tool(!!est.multi)}>➕{lab("Multi")}</button>
+          <button type="button" onClick={() => api?.setBoxMode(!est.boxMode)} style={tool(!!est.boxMode)}>▭{lab("Rectangle")}</button>
+          <button type="button" onClick={() => togglePanel("pieces")} style={tool(panel === "pieces")}>📋{lab("Pièces")}</button>
+          <button type="button" onClick={() => api?.frame()} style={tool(false)}>⌖{lab("Cadrer")}</button>
+          {(est.mode === "move" || est.mode === "rotate") && est.count > 0 &&
+            <button type="button" onClick={() => togglePanel("exact")} style={tool(panel === "exact")}>📐{lab("Exact")}</button>}
+          <BarMenu up b={on => tool(on)} label={<>⚙{lab("Réglages")}</>} items={[
+            { label: "🧷 Aimanter", on: !!est.magnet, onClick: () => api?.setMagnet(!est.magnet), keep: true },
+            { label: "🪄 Collage assisté", on: !!est.assist, onClick: () => api?.setAssist(!est.assist), keep: true },
+            "-",
+            { custom: <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginRight: 2 }}>Cran des rotations</span>
+              {[[0, "libre"], [1, "1°"], [5, "5°"], [15, "15°"], [45, "45°"]].map(([v, l]) =>
+                <button key={v} type="button" onClick={() => api?.setRotStep(v)} style={{ padding: "6px 10px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 800,
+                  color: est.rotStep === v ? "#fff" : "var(--text2)", background: est.rotStep === v ? grad : "var(--surface2)" }}>{l}</button>)}
+            </div> },
+          ]}/>
+          <BarMenu up b={on => tool(on)} label={<>🕘{lab("Versions")}</>} items={verMenu}/>
+        </div>
+      </div>
+      {help && <EditHelp onClose={() => setHelp(false)}/>}
+    </>;
+  }
   return <>
     <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 3, display: "flex", flexDirection: "column", alignItems: "center",
       gap: 6, maxWidth: "calc(100% - 24px)" }}>
@@ -1164,11 +1259,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
         <button type="button" disabled={!est.canUndo} onClick={() => api?.undo()} style={b(false, { opacity: est.canUndo ? 1 : 0.4 })} data-tip="Annuler (Ctrl+Z)">↶</button>
         <button type="button" disabled={!est.canRedo} onClick={() => api?.redo()} style={b(false, { opacity: est.canRedo ? 1 : 0.4 })} data-tip="Refaire (Ctrl+Y)">↷</button>
         {sep}
-        <BarMenu b={b} label="🕘" tip="Versions enregistrées, retour à la vue du 3MF" items={[
-          { label: "🕘 Versions enregistrées", onClick: onVersions, tip: "Reprendre un assemblage enregistré avant (chaque version est gardée)" },
-          sure ? { label: "Confirmer : revenir à la vue du 3MF", danger: true, onClick: () => { setSure(false); onReset(); } }
-            : { label: "↺ Vue du 3MF", keep: true, onClick: () => { setSure(true); setTimeout(() => setSure(false), 4000); }, tip: "Oublier l'assemblage enregistré (il reste dans les versions)" },
-        ]}/>
+        <BarMenu b={b} label="🕘" tip="Versions enregistrées, retour à la vue du 3MF" items={verMenu}/>
         <button type="button" disabled={saving} onClick={onSave} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}>
           {saving ? "…" : est.dirty ? "💾 Enregistrer" : "✓ Enregistré"}</button>
         <button type="button" onClick={() => { setHelp(true); egg("mode_emploi"); }} style={b(false)} data-tip="Tous les gestes et raccourcis">?</button>
@@ -1333,7 +1424,12 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setShot(null); }
   };
-  const editable = desktop && isAdmin && !fr && !!p?.assembled && !!p?.pieces && !!meta?.key;
+  // l'edition se fait aussi au doigt (30/10/2026) : sur un telephone, plein ecran par la page elle-meme (l'iPhone n'a pas
+  // de plein ecran pour un element), et la barre d'edition en version tactile
+  const editable = isAdmin && !fr && !!p?.assembled && !!p?.pieces && !!meta?.key;
+  const [pfull, setPfull] = useState(false);
+  const setPseudoFull = on => { setPfull(on); document.body.classList.toggle("bn-edit3d", on); };
+  useEffect(() => () => document.body.classList.remove("bn-edit3d"), []);
   const edit = savedEdit !== undefined ? savedEdit : meta?.assembly_edit;
   useEffect(() => { setSavedEdit(undefined); }, [meta?.key]);
   // les assemblages a reprendre (30/10/2026) : versions passees de cette vue, et ceux d'autres vues du meme modele
@@ -1379,16 +1475,20 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     else editApi.current?.relayout();
     try { navigator.keyboard?.unlock?.(); } catch { /* rien */ }
     if (document.fullscreenElement === wrap.current) document.exitFullscreen?.().catch(() => {});
+    if (pfull) setPseudoFull(false);
   };
   const stopEdit = () => { if (editApi.current?.editor?.state().dirty) setLeaving(true); else closeEdit(); };
   const startEdit = async () => {
-    if (document.fullscreenElement !== wrap.current) await wrap.current?.requestFullscreen?.().catch(() => {});
+    if (!desktop) { setPseudoFull(true); egg("assemblage_de_poche"); }
+    else if (document.fullscreenElement !== wrap.current) await wrap.current?.requestFullscreen?.().catch(() => {});
     // en plein ecran, Echap revient a l'edition (desselectionner) au lieu de quitter (30/10/2026) : le garder enfonce
     // quitte le plein ecran (Chrome, Edge)
     try { await navigator.keyboard?.lock?.(["Escape"]); } catch { /* navigateur sans verrou du clavier */ }
     editApi.current?.untilt?.();                       // l'edition se fait le modele a sa place
     const ed = await editApi.current?.editing(true, setEst);
     if (ed) setEditing(true);
+    // au doigt : la vue a pris tout l'ecran, elle se recadre sur le modele
+    if (ed && !desktop) setTimeout(() => editApi.current?.editor?.frame?.(), 250);
   };
   useEffect(() => {
     const f = () => { const on = document.fullscreenElement === wrap.current; setFull(on); if (on) egg("grand_ecran"); if (!on && editing) stopEdit(); };
@@ -1431,16 +1531,18 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             fontSize: 12.5, fontWeight: 800, border: i === plate ? "none" : "1px solid var(--border)", color: i === plate ? "#fff" : "var(--text2)",
             background: i === plate ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" }}>{x.pending ? "⏳ " : ""}{x.assembled ? "🧩 Assemblé" : x.name ? `${x.n} · ${x.name}` : `Plateau ${x.n}`}</button>)}
         </div>}
-        <div ref={wrap} style={{ position: "relative", height: full ? "100vh" : "min(62dvh, 560px)", borderRadius: full ? 0 : 18, overflow: "hidden",
-          border: full ? "none" : "1px solid var(--border)",
+        <div ref={wrap} style={{ position: pfull ? "fixed" : "relative", ...(pfull ? { inset: 0, zIndex: 6000 } : {}),
+          height: pfull ? "100dvh" : full ? "100vh" : "min(62dvh, 560px)", borderRadius: full || pfull ? 0 : 18, overflow: "hidden",
+          border: full || pfull ? "none" : "1px solid var(--border)", ...(pfull ? { backgroundColor: "var(--sheet-bg)" } : {}),
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
           {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}|${vkey}|${piecePal ? Object.keys(piecePal).length : 0}|${origView && !editing ? "orig" : ""}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown} piecePalettes={piecePal}
             pieces={p.assembled ? p.pieces : null} edit={p.assembled && !(origView && !editing) ? edit : null} editApi={editApi} pad={full || editing} editing={editing}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
-            hue={p.litho && zc.length ? zc : null}
+            hue={p.litho && zc.length ? zc : null} bare={editing && !desktop}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}
-          {editing && <EditBar est={est} api={editApi.current?.editor} onSave={saveEdit} onReset={resetEdit} onClose={stopEdit} saving={saving} onVersions={openVersions}/>}
+          {editing && <EditBar est={est} api={editApi.current?.editor} onSave={saveEdit} onReset={resetEdit} onClose={stopEdit} saving={saving} onVersions={openVersions}
+            compact={!desktop}/>}
           {versions && <EditVersions list={versions} dirty={!!est?.dirty} onPick={restoreVersion} onClose={() => setVersions(null)}/>}
           {editing && leaving && <div style={{ position: "absolute", inset: 0, zIndex: 7, background: "rgba(2,6,23,.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ width: "min(420px, calc(100% - 32px))", padding: "18px 18px 14px", borderRadius: 16, background: "var(--sheet-bg)", border: "1px solid var(--border)",
@@ -1453,7 +1555,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
               <button type="button" onClick={async () => {
                 setLeaving(false);
                 // Echap (ou la sortie du plein ecran) a ouvert cette question : on y retourne (30/10/2026)
-                if (document.fullscreenElement !== wrap.current) await wrap.current?.requestFullscreen?.().catch(() => {});
+                if (desktop && document.fullscreenElement !== wrap.current) await wrap.current?.requestFullscreen?.().catch(() => {});
                 try { await navigator.keyboard?.lock?.(["Escape"]); } catch { /* sans verrou */ }
               }} style={{ height: 36, borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
                 color: "var(--text2)", background: "transparent" }}>↩ Continuer l'édition</button>
@@ -1494,6 +1596,16 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {(err || st.error || (st.broken && redo >= 1)) && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
             textAlign: "center", fontSize: 13, fontWeight: 700, color: "#ef4444" }}>{err || (st.error ? `Plateau illisible : ${st.error}` : "Plateau abîmé, même refait : rouvre la vue plus tard")}</div>}
         </div>
+        {!desktop && p && !p.pending && !st.busy && !editing && ((editable && !origView) || canShot) && <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+          {canShot && <button type="button" disabled={shot === "busy"} onClick={takeShot}
+            style={{ height: 40, padding: "0 14px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 13, fontWeight: 800,
+              background: "var(--surface)", color: "var(--text2)" }}>{shot === "busy" ? "…" : "📸 Vignette"}</button>}
+          {editable && !origView && <button type="button" onClick={startEdit}
+            style={{ height: 40, padding: "0 16px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff",
+              background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 6px 16px -8px #6366F1" }}>✏️ Éditer l'assemblage</button>}
+          {editable && <button type="button" disabled={versions === "busy"} onClick={openVersions} aria-label="Versions de l'assemblage"
+            style={{ width: 40, height: 40, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", background: "var(--surface)", color: "var(--text2)", fontSize: 16 }}>🕘</button>}
+        </div>}
         {onFiche && !editing && <button type="button" onClick={onFiche} data-tip={fr ? "La fiche, chez ton copain" : "La fiche de l'impression ou du groupe"}
           style={{ alignSelf: "center", padding: "8px 22px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff",
             background: "linear-gradient(135deg, #EC4899, #8B5CF6)", boxShadow: "0 8px 18px -10px #8B5CF6" }}>📄 Fiche</button>}
