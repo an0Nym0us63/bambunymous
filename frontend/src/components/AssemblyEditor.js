@@ -132,6 +132,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
+    // de la selection part au moins un collage (vers une piece hors d'elle) : « Grouper le colle » a un sens
+    canGroupGlued: sel.size > 0 && joints.some(j => sel.has(j.a) !== sel.has(j.b)),
     canUngroup: [...sel].some(g => groupOf(g)), multi, turnGlued, liveAngle, guard, fitMsg,
     hidden: all.filter(g => !g.visible && !g.userData.excluded && g !== pendingSplit?.pg).length,
     // la liste des pieces (30/10/2026) : pour exclure, remettre, multiplier
@@ -841,6 +843,24 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       groups.push(list); push();
     },
     ungroup: () => { groups = groups.filter(gr => !gr.some(g => sel.has(g))); push(); },
+    // grouper tout ce qui est colle (30/10/2026) : la selection, et de proche en proche ce qui y est colle ou ce sur quoi
+    // elle est collee (et leurs groupes) ; le tout devient un groupe, choisi
+    groupGlued: () => {
+      const set = new Set([...sel].flatMap(unitOf));
+      for (let grew = true; grew;) {
+        grew = false;
+        for (const j of joints) {
+          if (set.has(j.a) && !set.has(j.b)) { unitOf(j.b).forEach(g => set.add(g)); grew = true; }
+          if (set.has(j.b) && !set.has(j.a)) { unitOf(j.a).forEach(g => set.add(g)); grew = true; }
+        }
+      }
+      const list = [...set].filter(g => g.visible || !g.userData.excluded);
+      if (list.length < 2) { fitMsg = "Rien n'est collé à cette pièce"; onChange?.(state()); return; }
+      groups = groups.filter(gr => !gr.some(g => set.has(g)));
+      groups.push(list); push(); setSel(list);
+      fitMsg = `Groupée avec tout ce qui y est collé : ${list.length} pièces`;
+      onChange?.(state());
+    },
     undo: () => { if (!undo.length) return; redo.push(snapshot()); last = undo.pop(); restore(last); changes++; onChange?.(state()); },
     redo: () => { if (!redo.length) return; undo.push(snapshot()); last = redo.pop(); restore(last); changes++; onChange?.(state()); },
     markSaved: () => { savedAt = changes; onChange?.(state()); },

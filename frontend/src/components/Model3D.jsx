@@ -847,6 +847,7 @@ const EDIT_HELP = [
     ["✂ Séparer", "sur des pièces groupées (les parties d'un objet du 3MF) : les rend indépendantes ; sur une pièce seule : propose ses morceaux qui ne se touchent pas (colorés) : ✓ pour valider, ✕ pour laisser ; ⊕ Réunir la remet d'un seul tenant"],
     ["📋 Pièces (à gauche)", "choisir, 👁 masquer un moment, 🚫 exclure de l'assemblage (↩ Remettre), ⧉ un exemplaire de plus, ✕ le retirer"],
     ["🔗 Grouper (Ctrl + G)", "les pièces choisies bougent ensemble ; ⛓ Dégrouper (Ctrl + Maj + G)"],
+    ["🔗 Grouper le collé", "la pièce choisie et tout ce qui y est collé, de proche en proche, deviennent un groupe"],
   ]],
   ["Déplacer (M)", [
     ["Flèches de la poignée", "tirer dans un axe ; le carré, dans un plan"],
@@ -973,6 +974,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
         data-tip="Collage assisté : les faces planes entières sont centrées l'une sur l'autre et leurs grands axes alignés (sinon : au point cliqué)">🪄 Assisté</button>
       {!!(est.canGroup || est.canUngroup || est.glued || est.count > 0 || est.hidden > 0 || est.splitPending) && <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>}
       {est.canGroup && <button type="button" onClick={() => api?.group()} style={b(false)} data-tip="Les pièces choisies bougent ensemble (Ctrl+G)">🔗 Grouper</button>}
+      {est.canGroupGlued && <button type="button" onClick={() => api?.groupGlued()} style={b(false)}
+        data-tip="Grouper cette pièce avec tout ce qui y est collé, de proche en proche (et ce sur quoi elle est collée)">🔗 Grouper le collé</button>}
       {est.splitPending ? <>
         <button type="button" onClick={() => api?.splitConfirm()} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}>✓ Séparer en {est.splitPending}</button>
         <button type="button" onClick={() => api?.splitCancel()} style={b(false)}>✕ Ne pas séparer</button>
@@ -1015,7 +1018,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
       fontWeight: 700, color: "var(--text2)", background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)",
       maxWidth: "calc(100% - 140px)", textAlign: "center" }}>
       {est.splitPending ? <b style={{ color: "#0EA5E9" }}>{est.splitPending} morceaux, chacun de sa couleur : ✓ Séparer en {est.splitPending}, ou ✕ Ne pas séparer</b>
-        : est.fitMsg ? <b style={{ color: /^(Assemblée|Séparée|Collée|Ajustée)/.test(est.fitMsg) ? "#16a34a" : "#d97706" }}>{est.fitMsg}</b>
+        : est.fitMsg ? <b style={{ color: /^(Assemblée|Séparée|Collée|Ajustée|Groupée)/.test(est.fitMsg) ? "#16a34a" : "#d97706" }}>{est.fitMsg}</b>
         : est.liveAngle != null ? <b style={{ color: "#0EA5E9", fontSize: 15 }}>Rotation : {String(est.liveAngle).replace(".", ",")}°</b> : <>
       {est.selected && (est.mode === "move" || est.mode === "rotate") ? <b style={{ color: "#0EA5E9" }}>{est.selected} · </b> : null}{tip}
       {est.count > 0 && <span style={{ display: "block", fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>Les autres pièces s'estompent : clic dans le vide ou Échap pour tout désélectionner</span>}</>}
