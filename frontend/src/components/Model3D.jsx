@@ -6,6 +6,8 @@ import { ColorPairs, chooseColor } from "./ColorMap";
 import { FSheet } from "./FicheKit";
 import client, { apiUrl } from "../api/client";
 import { currentFriend } from "../store/friend";
+import { useIsAdmin } from "../store/auth";
+import { showAlert, showConfirm } from "../utils/dialog";
 import MwImg from "./MwImg";
 
 // La vue 3D d'un modele (27/10/2026) : son 3MF d'origine garde sur le serveur (converti la-bas, aux couleurs de
@@ -14,8 +16,8 @@ import MwImg from "./MwImg";
 const BED = [256, 256];          // le plateau par defaut ; le serveur donne celui de mon imprimante (A1 mini, H2D...)
 
 // le format compact (29/10/2026, « 2V3B ») : positions sur 16 bits, indices en ecarts, octets ranges par rang
-const BIN_MAGIC = 0x42335632;
-function parseBinCompact(buf, dv) {
+const BIN_MAGIC = 0x42335632, BIN_MAGIC_P = 0x50335632;      // _P : chaque groupe porte son numero de piece (vue assemblee)
+function parseBinCompact(buf, dv, withPiece) {
   const n = dv.getUint32(4, true);
   const lo = [dv.getFloat32(8, true), dv.getFloat32(12, true), dv.getFloat32(16, true)];
   const sc = [dv.getFloat32(20, true), dv.getFloat32(24, true), dv.getFloat32(28, true)];
@@ -23,6 +25,7 @@ function parseBinCompact(buf, dv) {
   const groups = [];
   for (let k = 0; k < n; k++) {
     const col = dv.getUint32(o, true), nv = dv.getUint32(o + 4, true), nt = dv.getUint32(o + 8, true); o += 12;
+    const piece = withPiece ? dv.getUint32(o, true) : null; if (withPiece) o += 4;
     const q = new Uint8Array(buf, o, nv * 6); o += nv * 6;
     const pos = new Float32Array(nv * 3);
     for (let c = 0; c < 3; c++) {
@@ -34,14 +37,15 @@ function parseBinCompact(buf, dv) {
     const idx = new Uint32Array(m);
     let acc = 0;
     for (let i = 0; i < m; i++) { acc = (acc + (p0[i] | (p1[i] << 8) | (p2[i] << 16) | (p3[i] << 24))) | 0; idx[i] = acc; }
-    groups.push({ color: [(col >>> 24) & 255, (col >>> 16) & 255, (col >>> 8) & 255], pos, idx });
+    groups.push({ color: [(col >>> 24) & 255, (col >>> 16) & 255, (col >>> 8) & 255], pos, idx, piece });
   }
   return groups;
 }
 
 function parseBin(buf) {
   const dv = new DataView(buf);
-  if (buf.byteLength >= 32 && dv.getUint32(0, true) === BIN_MAGIC) return parseBinCompact(buf, dv);
+  if (buf.byteLength >= 32 && dv.getUint32(0, true) === BIN_MAGIC) return parseBinCompact(buf, dv, false);
+  if (buf.byteLength >= 32 && dv.getUint32(0, true) === BIN_MAGIC_P) return parseBinCompact(buf, dv, true);
   let o = 0;      // l'ancien format (un copain dont le serveur n'est pas a jour)
   const n = dv.getUint32(o, true); o += 4;
   const groups = [];
@@ -92,7 +96,10 @@ function boxUV(THREE, geo) {
   return g;
 }
 
-function Viewer({ url, glb, onState, palette = null, finishes = null, multi = null, glow = false, bed = null, litho = false }) {
+// pieces / edit (29/10/2026) : la vue assemblee, piece par piece (cle, nom, decalage « o » de ses sommets affiches par
+// rapport au 3MF) et la place enregistree de chacune ({cle : matrice 4x4}) ; editApi : l'edition (sur PC)
+function Viewer({ url, glb, onState, palette = null, finishes = null, multi = null, glow = false, bed = null, litho = false,
+                  pieces = null, edit = null, editApi = null }) {
   const box = useRef(null);
   const [dark, setDark] = useState(false);
   const [lit, setLit] = useState(false);
@@ -192,6 +199,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           if (dead) return;
           const groups = parseBin(buf);
           const holder = new THREE.Group(); holder.rotation.x = -Math.PI / 2;     // le 3MF a Z vers le haut
+          // la vue assemblee, piece par piece : un groupe par piece (pour l'editer, et pour la place enregistree)
+          const byPiece = pieces && groups.some(g => g.piece != null) ? new Map() : null;
           for (const g of groups) {
             const geo = new THREE.BufferGeometry();
             geo.setAttribute("position", new THREE.BufferAttribute(g.pos, 3));
@@ -295,9 +304,31 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
                   "  totalEmissiveRadiance = totalEmissiveRadiance * (0.82 + 0.18 * ndv) + emissive * rimF * rimK;");
               };
             }
-            holder.add(piece);
+            if (byPiece) {
+              let pg = byPiece.get(g.piece);
+              if (!pg) { pg = new THREE.Group(); pg.userData = { pid: g.piece, ...(pieces[g.piece] || {}) }; byPiece.set(g.piece, pg); holder.add(pg); }
+              pg.add(piece);
+            } else holder.add(piece);
+          }
+          if (byPiece) {
+            // chaque piece centree sur son origine (la poignee de rotation tourne autour d'elle), puis a sa place :
+            // celle enregistree (matrice S : du 3MF a la place editee), sinon celle affichee
+            const saved = edit?.pieces || {};
+            for (const pg of byPiece.values()) {
+              const b = new THREE.Box3();
+              pg.children.forEach(m => { m.geometry.computeBoundingBox(); b.union(m.geometry.boundingBox); });
+              const c = b.getCenter(new THREE.Vector3());
+              pg.children.forEach(m => { m.geometry.translate(-c.x, -c.y, -c.z); m.geometry.computeBoundingSphere(); });
+              pg.userData.c = c.clone();
+              pg.position.copy(c);
+              const S = saved[pg.userData.k], o = pg.userData.o || [0, 0, 0];
+              if (S) new THREE.Matrix4().fromArray(S).multiply(new THREE.Matrix4().makeTranslation(c.x - o[0], c.y - o[1], c.z - o[2]))
+                .decompose(pg.position, pg.quaternion, pg.scale);
+              pg.updateMatrix();
+            }
           }
           model.add(holder);
+          if (byPiece) model.userData.edit = { holder, byPiece };
         }
         if (dead) return;
         scene.add(model);
@@ -422,6 +453,30 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           render();
         };
         const bedShow = on => { grid.visible = on; under.intensity = on ? 0 : 1.3; hemi.groundColor.set(on ? 0x8a8f98 : 0xffffff); render(); };
+        // l'edition de la vue assemblee (PC) : l'editeur, et les places a enregistrer (S = place * T(o - c))
+        const ed = model.userData.edit;
+        let editor = null;
+        const editing = async (on, onChange) => {
+          if (!ed) return null;
+          if (on && !editor) {
+            const { createAssemblyEditor } = await import("./AssemblyEditor");
+            editor = await createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder: ed.holder, pieces: ed.byPiece, render, onChange });
+          } else if (!on && editor) { editor.dispose(); editor = null; }
+          return editor;
+        };
+        const toSave = () => {
+          const out = {};
+          for (const pg of ed?.byPiece.values() || []) {
+            const c = pg.userData.c, o = pg.userData.o || [0, 0, 0];
+            pg.updateMatrix();
+            out[pg.userData.k] = pg.matrix.clone().multiply(new THREE.Matrix4().makeTranslation(o[0] - c.x, o[1] - c.y, o[2] - c.z)).toArray();
+          }
+          return out;
+        };
+        // la vue telle que le 3MF la donne (sans place enregistree)
+        const origin = () => [...(ed?.byPiece.values() || [])].map(pg => new THREE.Matrix4().makeTranslation(pg.userData.c.x, pg.userData.c.y, pg.userData.c.z));
+        if (editApi) editApi.current = ed ? { editing, toSave, origin, get editor() { return editor; } } : null;
+        disposables.push({ dispose: () => { editor?.dispose(); if (editApi) editApi.current = null; } });
         api.current = { fit, night, backlight, bedShow };
         const s = bb2.getSize(new THREE.Vector3());
         onState({ busy: false, error: null, size: glb ? [s.x, s.z, s.y] : [s.x, s.z, s.y], glow: glowMats.length > 0 });
@@ -455,6 +510,54 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>⟲</button>
     </div>
   </div>;
+}
+
+// La barre de l'edition de la vue assemblee (29/10/2026, PC, en plein ecran)
+const EDIT_TIPS = {
+  move: "Clique une pièce, puis tire sur ses flèches pour la déplacer · flèches du clavier : 1 mm (Maj : 10), Ctrl + ↑↓ : monter, descendre",
+  rotate: "Clique une pièce, puis tourne-la par ses anneaux",
+  ground: "Clique la face (ou l'arête) qui doit être posée au sol",
+  mate1: "Clique la face ou l'arête de la pièce à déplacer",
+  mate2: "Clique la face ou l'arête contre laquelle la coller",
+};
+function EditBar({ est, api, onSave, onReset, onClose, saving }) {
+  const [sure, setSure] = useState(false);
+  if (!est) return null;
+  const b = (on, extra = {}) => ({ height: 34, padding: "0 12px", borderRadius: 10, border: on ? "none" : "1px solid var(--border)", cursor: "pointer",
+    fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap", color: on ? "#fff" : "var(--text2)",
+    background: on ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", ...extra });
+  const tip = est.mode === "mate" ? (est.step === 2 ? EDIT_TIPS.mate2 : EDIT_TIPS.mate1) : EDIT_TIPS[est.mode];
+  return <>
+    <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 6, padding: 6, borderRadius: 14, zIndex: 3,
+      background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(8px)",
+      boxShadow: "0 10px 30px rgba(0,0,0,.25)", flexWrap: "wrap", justifyContent: "center", maxWidth: "calc(100% - 24px)" }}>
+      {[["move", "✥ Déplacer"], ["rotate", "⟳ Tourner"], ["ground", "⬇ Poser au sol"], ["mate", "🧲 Coller"]].map(([m, l]) =>
+        <button key={m} type="button" onClick={() => api?.setMode(m)} style={b(est.mode === m)}>{l}</button>)}
+      <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>
+      <button type="button" onClick={() => api?.setMagnet(!est.magnet)} style={b(est.magnet)}
+        data-tip="Aimantation : pas de 1 mm et 15°, et une pièce lâchée près d'une autre ou du sol vient s'y coller">🧷 Aimanter</button>
+      {est.pivot && <>
+        <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>
+        {[[-90, "⟲ 90°"], [-15, "⟲ 15°"], [15, "⟳ 15°"], [90, "⟳ 90°"]].map(([d, l]) =>
+          <button key={d} type="button" onClick={() => api?.turn(d)} style={b(false)} data-tip="Tourner la pièce collée autour du contact">{l}</button>)}
+      </>}
+      <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>
+      <button type="button" disabled={!est.canUndo} onClick={() => api?.undo()} style={b(false, { opacity: est.canUndo ? 1 : 0.4 })} data-tip="Annuler (Ctrl+Z)">↶</button>
+      <button type="button" disabled={!est.canRedo} onClick={() => api?.redo()} style={b(false, { opacity: est.canRedo ? 1 : 0.4 })} data-tip="Refaire (Ctrl+Y)">↷</button>
+      <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>
+      {sure ? <button type="button" onClick={() => { setSure(false); onReset(); }} style={b(false, { color: "#ef4444" })}>Confirmer : vue du 3MF</button>
+        : <button type="button" onClick={() => { setSure(true); setTimeout(() => setSure(false), 4000); }} style={b(false)}
+          data-tip="Oublier l'assemblage enregistré : la vue redevient celle du 3MF">↺ Vue du 3MF</button>}
+      <button type="button" disabled={saving} onClick={onSave} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}>
+        {saving ? "…" : est.dirty ? "💾 Enregistrer" : "✓ Enregistré"}</button>
+      <button type="button" onClick={onClose} style={b(false)} data-tip="Fermer l'édition">✕</button>
+    </div>
+    <div style={{ position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)", zIndex: 3, padding: "7px 14px", borderRadius: 12, fontSize: 12.5,
+      fontWeight: 700, color: "var(--text2)", background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)",
+      maxWidth: "calc(100% - 140px)", textAlign: "center" }}>
+      {est.selected && (est.mode === "move" || est.mode === "rotate") ? <b style={{ color: "#0EA5E9" }}>{est.selected} · </b> : null}{tip}
+    </div>
+  </>;
 }
 
 // Le cercle d'attente : l'avancement en %, ou un arc qui tourne quand il n'est pas mesurable
@@ -565,6 +668,48 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const alt = (p && (asm ? merged(platePalettes) : platePalettes?.[p.n])) || palette || usedPal || null;
   const altLabel = altName || (palette || platePalettes ? "Retenues" : "Utilisées");
   const [own, setOwn] = useState(false);
+  // plein ecran (PC) et edition de la vue assemblee (29/10/2026)
+  const isAdmin = useIsAdmin();
+  // un PC : une souris, ou un navigateur d'ordinateur (un portable tactile annonce parfois un ecran tactile), et de la place
+  const desktop = typeof window !== "undefined" && window.innerWidth >= 900
+    && (!!window.matchMedia?.("(pointer: fine)").matches || !/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent));
+  const wrap = useRef(null), editApi = useRef(null);
+  const [full, setFull] = useState(false), [editing, setEditing] = useState(false), [est, setEst] = useState(null);
+  const [savedEdit, setSavedEdit] = useState(undefined), [saving, setSaving] = useState(false), [vkey, setVkey] = useState(0);
+  const editable = desktop && isAdmin && !currentFriend() && !!p?.assembled && !!p?.pieces && !!meta?.key;
+  const edit = savedEdit !== undefined ? savedEdit : meta?.assembly_edit;
+  useEffect(() => { setSavedEdit(undefined); }, [meta?.key]);
+  const saveEdit = async () => {
+    const pieces = editApi.current?.toSave();
+    if (!pieces) return;
+    setSaving(true);
+    try { const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces }); setSavedEdit(r.data); editApi.current?.editor?.markSaved(); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    finally { setSaving(false); }
+  };
+  const resetEdit = async () => {
+    try { await client.delete(`/makerworld/3d/edit/${meta.key}`); setSavedEdit(null); editApi.current?.editor?.reset(editApi.current.origin()); editApi.current?.editor?.markSaved(); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
+  const stopEdit = async () => {
+    const dirty = editApi.current?.editor?.state().dirty;
+    await editApi.current?.editing(false);
+    setEditing(false); setEst(null);
+    if (dirty) {
+      if (await showConfirm("Enregistrer l'assemblage modifié ?")) await saveEdit();
+      else setVkey(k => k + 1);                       // la vue revient a la place enregistree
+    }
+  };
+  const startEdit = async () => {
+    if (document.fullscreenElement !== wrap.current) await wrap.current?.requestFullscreen?.().catch(() => {});
+    const ed = await editApi.current?.editing(true, setEst);
+    if (ed) setEditing(true);
+  };
+  useEffect(() => {
+    const f = () => { const on = document.fullscreenElement === wrap.current; setFull(on); if (!on && editing) stopEdit(); };
+    document.addEventListener("fullscreenchange", f);
+    return () => document.removeEventListener("fullscreenchange", f);
+  }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
   const shown = alt && !own ? alt : null;
   const mm = v => `${Math.round(v)} mm`;
   return createPortal(
@@ -588,13 +733,24 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             fontSize: 12.5, fontWeight: 800, border: i === plate ? "none" : "1px solid var(--border)", color: i === plate ? "#fff" : "var(--text2)",
             background: i === plate ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" }}>{x.pending ? "⏳ " : ""}{x.assembled ? "🧩 Assemblé" : x.name ? `${x.n} · ${x.name}` : `Plateau ${x.n}`}</button>)}
         </div>}
-        <div style={{ position: "relative", height: "min(62dvh, 560px)", borderRadius: 18, overflow: "hidden", border: "1px solid var(--border)",
+        <div ref={wrap} style={{ position: "relative", height: full ? "100vh" : "min(62dvh, 560px)", borderRadius: full ? 0 : 18, overflow: "hidden",
+          border: full ? "none" : "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
-          {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown}
+          {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}|${vkey}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown}
+            pieces={p.assembled ? p.pieces : null} edit={p.assembled ? edit : null} editApi={p.assembled ? editApi : null}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}
-          {alt && p && !p.pending && !isGlb(p.url) && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
+          {editing && <EditBar est={est} api={editApi.current?.editor} onSave={saveEdit} onReset={resetEdit} onClose={() => document.fullscreenElement ? document.exitFullscreen?.() : stopEdit()} saving={saving}/>}
+          {desktop && p && !p.pending && !st.busy && !editing && <div style={{ position: "absolute", left: 10, bottom: 10, display: "flex", gap: 8, zIndex: 2 }}>
+            <button type="button" onClick={() => full ? document.exitFullscreen?.() : wrap.current?.requestFullscreen?.().catch(() => {})}
+              data-tip={full ? "Quitter le plein écran" : "Plein écran"} style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)",
+                cursor: "pointer", background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{full ? "🗗" : "⛶"}</button>
+            {editable && <button type="button" onClick={startEdit} data-tip="Déplacer, tourner, poser au sol, coller les pièces (en plein écran)"
+              style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff",
+                background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>✏️ Éditer l'assemblage</button>}
+          </div>}
+          {!editing && alt && p && !p.pending && !isGlb(p.url) && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
             background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
             {[[true, "Couleurs d'origine"], [false, `Couleurs ${altLabel.toLowerCase()}`]].map(([o, l]) => <button key={l} type="button" onClick={() => setOwn(o)}
               style={{ padding: "5px 11px", borderRadius: 16, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800,

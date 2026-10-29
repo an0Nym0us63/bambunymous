@@ -12,6 +12,7 @@ Format binaire d'un plateau (petit-boutiste) : u32 nombre de groupes, puis pour 
 u32 nombre de sommets, u32 nombre de triangles, float32 x,y,z par sommet (mm, Z vers le haut, plateau recentre
 sur 0,0 et pose a z=0), uint32 trois indices par triangle.
 """
+import html as _html
 import json
 import os
 import logging
@@ -22,7 +23,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 14                          # 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 15                          # 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan", re.I)
 MAX_TRIANGLES = 1_500_000              # au-dela, le plateau est simplifie (29/10/2026 ; avant : pas converti du tout) :
                                        # un telephone l'affiche vite, et le fichier reste de quelques Mo
@@ -414,7 +415,9 @@ def _settings(z: zipfile.ZipFile) -> tuple:
             e = re.search(r'key="extruder" value="(\d+)"', p.group(3))
             st = re.search(r'subtype="([^"]*)"', p.group(2))
             parts[p.group(1)] = (int(e.group(1)) if e else None, st.group(1) if st else "normal_part")
-        objs[m.group(1)] = {"extruder": int(ext.group(1)) if ext else 1, "parts": parts}
+        nm = re.search(r'key="name" value="([^"]*)"', head)
+        objs[m.group(1)] = {"extruder": int(ext.group(1)) if ext else 1, "parts": parts,
+                            "name": _html.unescape(nm.group(1)) if nm else ""}
     plates = []
     # la vue d'assemblage (29/10/2026) : la place de chaque objet une fois assemble, que le createur peut poser dans
     # Bambu Studio (les lignes par piece, volume_id, ne servent pas ici : les pieces gardent leur place dans l'objet)
@@ -684,8 +687,11 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     def say(p_, label):
         _step(key, p_, f"{where['tag']} · {label}" if where["tag"] and nb > 1 else label)
 
-    def emit(lst, label="Lecture des pièces", zchg=None, own=None):
-        """Les pieces placees -> groupes par couleur. own : {objet place : ses sommets}, pour les deplacer apres."""
+    def emit(lst, label="Lecture des pièces", zchg=None, own=None, piece_of=None):
+        """Les pieces placees -> groupes par couleur. own : {objet place : ses sommets}, pour les deplacer apres ;
+        piece_of : {objet place : son numero}, les groupes sont alors par (couleur, piece) (l'edition de la vue
+        assemblee deplace une piece a la fois)."""
+        gk = (lambda col, ident: (_hex_rgba(col), piece_of[ident])) if piece_of else (lambda col, ident: _hex_rgba(col))
         groups_out: dict = {}                           # couleur -> [sommets, triangles]
         total = 0
         start, pw = prog["done"], sum(len(p[3]) for _, parts in lst for p in parts)
@@ -712,7 +718,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                     cuts = [(zt, c) for zt, e, c, kind in zchg[1] if kind == 2 or zchg[0] == "SingleExtruder" or e in (None, ex)] \
                         if zchg else []
                     if not cuts and len(by_ext) == 1:
-                        g = groups_out.setdefault(_hex_rgba(col), [[], [], 0])
+                        g = groups_out.setdefault(gk(col, ident), [[], [], 0])
                         g[0].append(vt)
                         if own is not None:
                             own.setdefault(ident, []).append(vt)
@@ -730,7 +736,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                         if not len(tr):
                             continue
                         # seuls les sommets de cette couleur (piece peinte ou tranchee), renumerotes
-                        g = groups_out.setdefault(_hex_rgba(c), [[], [], 0])
+                        g = groups_out.setdefault(gk(c, ident), [[], [], 0])
                         used, inv = np.unique(tr.ravel(), return_inverse=True)
                         g[0].append(vv[used])
                         if own is not None:
@@ -769,7 +775,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         rec = {"n": n, "name": pname, "triangles": total, "size_mm": [round(x, 1) for x in size], **(extra or {}),
                **({"reduced_from": reduced} if reduced else {})}
         meta["plates"].append(rec)
-        return rec, size
+        return rec, size, shift
 
     def publish(i):
         """Ce qui est pret, et ce qui vient : la vue peut s'ouvrir sur les premiers plateaux."""
@@ -788,7 +794,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         groups_out, total, pw = emit(lst, zchg=zchg)
         r = write(n, pname, groups_out, total, pw)
         if r:
-            rec, size = r
+            rec, size, _ = r
             # un lithophane (28/10/2026) : dit par son nom (plateau, modele, pieces « litho… »), ou une plaque mince
             # (6 mm au plus) et large ; la vue propose alors la lumiere derriere
             if bool(_LITHO.search(f"{pname} {names_txt}")) or (size[2] <= 6 and min(size[0], size[1]) >= 40):
@@ -800,7 +806,8 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     if asm_lst:
         where["tag"] = "Vue assemblée"
         own: dict = {}
-        groups_out, total, pw = emit(asm_lst, own=own)
+        piece_of = {ident: i for i, (ident, _) in enumerate(asm_lst)}
+        groups_out, total, pw = emit(asm_lst, own=own, piece_of=piece_of)
         # toujours montree quand le 3MF en a une (29/10/2026 : le tri « vraie vue / copie des plateaux » en
         # cachait trop ; c'est a chacun de juger en la regardant) ; posee a la va-vite, elle est rangee
         # ou est chaque objet sur les plateaux (plateau, orientation) : pour reconnaitre un tas de pieces posees
@@ -811,8 +818,17 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                 mts = items_by_obj.get(oid) or []
                 if k < len(mts):
                     on_plate[(oid, k)] = (n_, mts[k][:9])
-        tidy = _tidy(own, {(oid, k): mt for oid, k, mt in asm}, on_plate)
-        write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True, **({"tidied": True} if tidy else {})})
+        moved: dict = {}
+        tidy = _tidy(own, {(oid, k): mt for oid, k, mt in asm}, on_plate, moved)
+        r = write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True, **({"tidied": True} if tidy else {})})
+        if r:
+            # les pieces, pour l'edition (29/10/2026) : leur cle (objet:instance), leur nom, et « o », le decalage de
+            # leurs sommets affiches par rapport a leur place dans le 3MF (rangement, recentrage) : les positions
+            # editees sont gardees par rapport au 3MF, et restent justes si la vue est refaite autrement
+            rec, _, shift = r
+            rec["pieces"] = [{"k": f"{oid}:{k}", "name": (settings.get(oid) or {}).get("name") or f"Objet {oid}",
+                              "o": [round(float(x), 4) for x in (moved.get((oid, k), np.zeros(3)) - shift)]}
+                             for (oid, k), _ in asm_lst]
     elif asm:
         logger.info(f"[3D] {key or src.name} : vue d'assemblage ignoree (un seul objet, ou des objets absents du 3MF)")
     _write(out_dir / "plates.json", json.dumps(meta).encode("utf-8"))
@@ -856,7 +872,7 @@ def _is_pile(ids, box, asm_rot: dict, on_plate: dict) -> bool:
     return bool(as_printed or dumped)
 
 
-def _tidy(own: dict, asm_rot: dict | None = None, on_plate: dict | None = None) -> bool:
+def _tidy(own: dict, asm_rot: dict | None = None, on_plate: dict | None = None, moved: dict | None = None) -> bool:
     """Une vue d'assemblage eparpillee (29/10/2026 : des pieces a 80 cm les unes des autres) : les objets qui se
     touchent restent ensemble, comme le createur les a assembles ; les blocs a part sont poses au sol et ranges en
     carre, rapproches. Un seul bloc : rien ne bouge. Un tas de pieces posees l'une sur l'autre telles qu'imprimees
@@ -871,7 +887,7 @@ def _tidy(own: dict, asm_rot: dict | None = None, on_plate: dict | None = None) 
         hi = np.max([a.max(axis=0) for a in own[i] if len(a)], axis=0)
         box[i] = (lo, hi)
     if _is_pile(ids, box, asm_rot or {}, on_plate or {}):
-        return _pack(own, [([i], box[i][0], box[i][1]) for i in ids])
+        return _pack(own, [([i], box[i][0], box[i][1]) for i in ids], moved)
     up = {i: i for i in ids}
 
     def root(i):
@@ -894,10 +910,10 @@ def _tidy(own: dict, asm_rot: dict | None = None, on_plate: dict | None = None) 
         lo = np.min([box[i][0] for i in members], axis=0)
         hi = np.max([box[i][1] for i in members], axis=0)
         bb.append((members, lo, hi))
-    return _pack(own, bb)
+    return _pack(own, bb, moved)
 
 
-def _pack(own: dict, bb: list) -> bool:
+def _pack(own: dict, bb: list, moved: dict | None = None) -> bool:
     """Range des blocs [(objets, mini, maxi)] au sol, rapproches, en un ensemble a peu pres carre : des rangees
     remplies jusqu'a une largeur visee (la racine de la surface totale), les plus profonds d'abord (29/10/2026 : un
     nombre fixe de blocs par rangee laissait de grands vides entre Billy et une vis)."""
@@ -913,12 +929,15 @@ def _pack(own: dict, bb: list) -> bool:
         for i in members:
             for a in own[i]:
                 a += off
+            if moved is not None:
+                moved[i] = off
         x += (hi[0] - lo[0]) + _GAP
         row_h = max(row_h, hi[1] - lo[1])
     return True
 
 
 BIN_MAGIC = 0x42335632                 # « 2V3B » : le format compact (29/10/2026) ; sans lui, l'ancien
+BIN_MAGIC_P = 0x50335632               # « 2V3P » : le meme, chaque groupe portant son numero de piece (vue assemblee)
 
 
 def _pack_bin(groups: dict) -> bytes:
@@ -926,18 +945,22 @@ def _pack_bin(groups: dict) -> bytes:
     le telechargement). Les positions sur 16 bits dans la boite du plateau (un pas de 0,006 mm pour 40 cm), les
     triangles en ecarts d'un indice au suivant ; chaque octet de rang a part (octets de poids faible ensemble...),
     ce que gzip compresse bien mieux.
-    En-tete : u32 BIN_MAGIC, u32 nombre de groupes, f32 mini x,y,z, f32 pas x,y,z. Par groupe : u32 couleur RGBA,
-    u32 sommets, u32 triangles, puis 6 plans de sommets (x bas, x haut, y bas, y haut, z bas, z haut), puis 4 plans
+    En-tete : u32 BIN_MAGIC (ou BIN_MAGIC_P), u32 nombre de groupes, f32 mini x,y,z, f32 pas x,y,z. Par groupe : u32
+    couleur RGBA, u32 sommets, u32 triangles, (BIN_MAGIC_P : u32 numero de piece), puis 6 plans de sommets (x bas, x haut, y bas, y haut, z bas, z haut), puis 4 plans
     des ecarts d'indices (int32, petit-boutiste)."""
     import numpy as np
     lo = np.min([v.min(axis=0) for v, _ in groups.values()], axis=0)
     hi = np.max([v.max(axis=0) for v, _ in groups.values()], axis=0)
     sc = np.where(hi - lo > 0, (hi - lo) / 65535, 1.0)
-    buf = bytearray(struct.pack("<II3f3f", BIN_MAGIC, len(groups), *lo.tolist(), *sc.tolist()))
-    for col, (v, t) in groups.items():
+    pieces = any(isinstance(k, tuple) for k in groups)
+    buf = bytearray(struct.pack("<II3f3f", BIN_MAGIC_P if pieces else BIN_MAGIC, len(groups), *lo.tolist(), *sc.tolist()))
+    for key, (v, t) in groups.items():
+        col, piece = key if isinstance(key, tuple) else (key, 0)
         q = np.clip(np.round((v - lo) / sc), 0, 65535).astype("<u2")
         d = np.diff(t.ravel().astype(np.int64), prepend=0).astype("<i4")
         buf += struct.pack("<III", col, len(v), len(t))
+        if pieces:
+            buf += struct.pack("<I", piece)
         buf += q.view(np.uint8).reshape(-1, 6).T.tobytes()
         buf += d.view(np.uint8).reshape(-1, 4).T.tobytes()
     return bytes(buf)
@@ -1255,3 +1278,47 @@ async def warm_loop(first_delay_s: int = 90, period_s: int = 12 * 3600) -> None:
             _tasks.error("mw_3d")
             logger.exception("[3D] preparation des vues 3D")
         await _tasks.sleep("mw_3d", period_s)
+
+
+# ── L'assemblage edite dans l'appli (29/10/2026) ──
+# Par vue (cle du 3MF), la place de chaque piece de la vue assemblee, editee a la main sur PC : une matrice 4x4 (en
+# colonnes, comme three.js) qui mene les sommets de la piece, a leur place dans le 3MF, a leur place editee. Gardee a
+# part de la vue (une vue refaite ne la perd pas).
+def _edits_file(key: str) -> Path:
+    from ..core.config import settings
+    return Path(settings.DATA_DIR) / "mw_3d_edits" / f"{key}.json"
+
+
+def load_edit(key: str) -> dict | None:
+    if not re.fullmatch(r"[A-Za-z0-9_]+", key or ""):
+        return None
+    try:
+        return json.loads(_edits_file(key).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def save_edit(key: str, pieces: dict, by: str = "") -> dict:
+    import time
+    if not re.fullmatch(r"[A-Za-z0-9_]+", key or ""):
+        raise ValueError("Vue inconnue")
+    clean = {}
+    for k, m in (pieces or {}).items():
+        if re.fullmatch(r"\d+:\d+", str(k)) and isinstance(m, list) and len(m) == 16 \
+                and all(isinstance(x, (int, float)) and abs(x) < 1e6 for x in m):
+            clean[str(k)] = [round(float(x), 6) for x in m]
+    if not clean:
+        raise ValueError("Rien à enregistrer")
+    d = {"pieces": clean, "at": time.time(), "by": by}
+    f = _edits_file(key)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    _write(f, json.dumps(d).encode("utf-8"))
+    return d
+
+
+def drop_edit(key: str) -> None:
+    if re.fullmatch(r"[A-Za-z0-9_]+", key or ""):
+        try:
+            _edits_file(key).unlink()
+        except OSError:
+            pass

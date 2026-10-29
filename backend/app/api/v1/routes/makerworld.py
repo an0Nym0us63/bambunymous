@@ -749,6 +749,8 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             "finishes": T.origin_finishes(path_of(key)) if source in ("3mf", "3mf_other") and key else {},
             "used_finishes": {d["from"]: d["finish"] for d in used_detail or [] if d.get("to") and d.get("finish")},
             "plates": T.plates_out(meta, key)[0], "skipped": T.plates_out(meta, key)[1],
+            # la vue assemblee editee a la main (29/10/2026), et la cle de la vue pour l'enregistrer
+            "key": key, "assembly_edit": T.load_edit(key) if key and source != "makerworld" else None,
             # des plateaux encore en preparation (« pending » sur eux) : la vue redemande jusqu'a la fin
             "pending": bool((meta or {}).get("pending"))}
 
@@ -1560,3 +1562,23 @@ async def mw_relink_search(body: dict = Body({}), _: str = Depends(require_admin
         return {"candidates": await R.search_for(str(body.get("key") or ""), q)}
     except ValueError as e:
         raise HTTPException(502, str(e))
+
+
+# ── L'assemblage edite a la main (29/10/2026) ──
+@router.put("/3d/edit/{key}")
+async def mw_3d_edit_save(key: str, body: dict = Body({}), user: str = Depends(get_current_user),
+                          _: str = Depends(require_admin)):
+    """Enregistre la place de chaque piece de la vue assemblee de cette vue (matrices 4x4 par piece « objet:instance »)."""
+    from ....services import mw_3d as T
+    try:
+        return T.save_edit(key, body.get("pieces") or {}, str(user or ""))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.delete("/3d/edit/{key}")
+async def mw_3d_edit_drop(key: str, _: str = Depends(require_admin)):
+    """Revient a l'assemblage du 3MF."""
+    from ....services import mw_3d as T
+    T.drop_edit(key)
+    return {"ok": True}
