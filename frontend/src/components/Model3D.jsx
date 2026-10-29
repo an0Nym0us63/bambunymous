@@ -531,28 +531,22 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           });
           const quad = new THREE.PlaneGeometry(2, 2), ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
           // la lumiere qui reste apres cette couleur, multipliee a ce qui est deja passe
-          // le rendu de l'image eclairee (30/10/2026, regle sur la photo du createur du Jack Skellington CMJ+blanc) : le
-          // passage de la lumiere par couleur, une lampe d'un blanc a peine chaud ; ensuite la lumiere diffusee dans le plastique (diff, en mm : les points du relief ne se voient plus en pixels),
-          // puis le resultat rendu le plus vif possible (exposition, saturation, contraste)
-          const tune = { floorC: { value: 0.42 }, kCol: { value: 1.5 }, kW: { value: 1.0 }, dark: { value: 4.0 }, wTint: { value: new THREE.Vector3(0.78, 1.0, 1.4) },
-            expo: { value: 6.5 }, sat: { value: 1.45 }, con: { value: 1.15 }, gam: { value: 1.25 },
-            light: { value: new THREE.Color(1.0, 0.9, 0.74) }, diff: { value: 0.35 }, pxmm: { value: 1 }, texel: { value: new THREE.Vector2(1, 1) } };
-          const transMat = new THREE.ShaderMaterial({ uniforms: { tex: { value: null }, col: { value: new THREE.Color() }, ...tune }, depthTest: false, depthWrite: false,
+          // le rendu de l'image eclairee (30/10/2026) : le passage de la lumiere du 28/10, tel quel (les bonnes couleurs) ;
+          // en plus, la lumiere diffusee dans le plastique (diff, en mm : les points du relief ne se voient plus en pixels)
+          // et un peu plus de peps (saturation et contraste)
+          const tune = { sat: { value: 1.5 }, con: { value: 1.2 }, diff: { value: 0.35 }, pxmm: { value: 1 }, texel: { value: new THREE.Vector2(1, 1) } };
+          const transMat = new THREE.ShaderMaterial({ uniforms: { tex: { value: null }, col: { value: new THREE.Color() } }, depthTest: false, depthWrite: false,
             blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.DstColorFactor, blendDst: THREE.ZeroFactor,
             vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
-            fragmentShader: `uniform sampler2D tex; uniform vec3 col; uniform float floorC, kCol, kW, dark; uniform vec3 wTint; varying vec2 vUv;
+            fragmentShader: `uniform sampler2D tex; uniform vec3 col; varying vec2 vUv;
               void main() { float t = max(0.0, texture2D(tex, vUv).r);
-                // Beer-Lambert par canal : une couleur absorbe ce qu'elle n'est pas, sans tout boucher (un filament reste
-                // translucide : un cyan sous du jaune et du magenta donne un brun rouge, pas du bleu ; un noir, lui, bouche),
-                // plus l'ombre de l'epaisseur, commune a tous, plus forte dans le bleu (une lampe derriere du plastique epais
-                // vire a l'orange)
-                float mx = max(col.r, max(col.g, col.b));
-                vec3 a = -log(max(col / max(mx, 0.001), vec3(floorC))) * kCol + kW * wTint + (1.0 - smoothstep(0.08, 0.35, mx)) * dark;
-                gl_FragColor = vec4(exp(-a * t), 1.0); }` });
+                // la teinte d'une couleur, accentuee (une fine couche colore deja bien), et l'ombre de l'epaisseur
+                // (30/10/2026 : plus lumineux ; 62 % par mm au lieu de 50, une teinte un peu moins appuyee)
+                gl_FragColor = vec4(pow(max(col, vec3(0.004)), vec3(t * 1.4)) * pow(0.62, t), 1.0); }` });
           // l'image : la lumiere filtree la ou il y a de la matiere, la nuit ailleurs
           const compMat = new THREE.ShaderMaterial({ uniforms: { all: { value: tAll.texture }, acc: { value: acc.texture }, clearBg: { value: 0 }, ...tune }, depthTest: false, depthWrite: false,
             vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
-            fragmentShader: `uniform sampler2D all; uniform sampler2D acc; uniform float clearBg, expo, sat, con, gam, diff, pxmm; uniform vec3 light;
+            fragmentShader: `uniform sampler2D all; uniform sampler2D acc; uniform float clearBg, sat, con, diff, pxmm;
               uniform vec2 texel; varying vec2 vUv;
               void main() { float t = texture2D(all, vUv).r;
                 // la diffusion : une moyenne ponderee sur un disque de « diff » mm, la matiere seulement (le vide autour,
@@ -568,12 +562,11 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
                   }
                 }
                 T /= wsum;
-                // le plus vif possible : une exposition qui eclaire les demi-teintes sans ecraser les blancs, des couleurs
-                // franches, du contraste
-                vec3 c = light * (1.0 - exp(-expo * T)) / (1.0 - exp(-expo));
+                // une courbe d'exposition (30/10/2026 : le rendu etait terne) : les demi-teintes eclaircies, les blancs sans
+                // ecrasement, puis des couleurs plus franches et du contraste
+                vec3 c = vec3(1.0, 0.95, 0.84) * (1.0 - exp(-5.5 * T));
                 c = mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, sat);
-                c = (c - 0.5) * con + 0.5;
-                c = pow(clamp(c, 0.0, 1.0), vec3(gam));
+                c = clamp((c - 0.5) * con + 0.52, 0.0, 1.2);
                 c = t > 0.02 ? max(c, 0.0) : vec3(0.006, 0.008, 0.016);
                 gl_FragColor = vec4(c, t > 0.02 ? 1.0 : 1.0 - clearBg);       // fond vide pour une vignette (30/10/2026)
                 #include <colorspace_fragment>
