@@ -89,7 +89,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   let dragStart = null;              // la poignee et les pieces au debut du glisser
   tc.addEventListener("dragging-changed", e => {
     controls.enabled = !e.value;
-    if (e.value) { handle.updateMatrix(); dragStart = { h: handle.matrix.clone(), m: withKids([...sel]).map(g => [g, g.matrix.clone()]) }; }
+    if (e.value) { handle.updateMatrix(); dragStart = { h: handle.matrix.clone(), q: handle.quaternion.clone(), m: withKids([...sel]).map(g => [g, g.matrix.clone()]) }; }
     else { dragStart = null; liveAngle = null; snapAfterDrag(); push(); }
   });
   // la rotation a la poignee, demultipliee (29/10/2026) : three.js fait tourner de 20 radians par unite de glisser divisee
@@ -100,15 +100,13 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   tc.addEventListener("objectChange", () => {
     if (!dragStart) return;
     if (tc.mode === "rotate") {
-      const q = handle.quaternion, ang = 2 * Math.acos(Math.min(1, Math.abs(q.w)));
-      if (ang > 1e-6) {
-        const ax = new THREE.Vector3(q.x, q.y, q.z).normalize().multiplyScalar(Math.sign(q.w) || 1);
-        let a = THREE.MathUtils.radToDeg(ang * ROT_GAIN);
-        if (rotStep && !alt) a = Math.round(a / rotStep) * rotStep;
-        handle.quaternion.setFromAxisAngle(ax, THREE.MathUtils.degToRad(a));
-        liveAngle = Math.round(a * 10) / 10;
-        onChange?.(state());
-      }
+      // l'angle du geste lui-meme (continu, signe), pas celui relu sur la poignee : au-dela d'un demi-tour, un
+      // quaternion se replie et l'axe s'inversait, la piece sautait d'un sens a l'autre (30/10/2026)
+      let a = THREE.MathUtils.radToDeg((tc.rotationAngle || 0) * ROT_GAIN);
+      if (rotStep && !alt) a = Math.round(a / rotStep) * rotStep;
+      handle.quaternion.setFromAxisAngle(tc.rotationAxis.clone().normalize(), THREE.MathUtils.degToRad(a)).multiply(dragStart.q).normalize();
+      liveAngle = Math.round(a * 10) / 10;
+      onChange?.(state());
     }
     handle.updateMatrix();
     const d = handle.matrix.clone().multiply(dragStart.h.clone().invert());
@@ -310,7 +308,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     }
     if (t.lengthSq()) { apply(withKids(list), new THREE.Matrix4().makeTranslation(t.x, t.y, t.z)); placeHandle(); render(); }
   };
-  const applySnap = () => { tc.setTranslationSnap(magnet && !alt ? 1 : null); tc.setRotationSnap(rotStep && !alt ? THREE.MathUtils.degToRad(rotStep) : null); };
+  const applySnap = () => { tc.setTranslationSnap(magnet && !alt ? 1 : null); tc.setRotationSnap(null); };   // le cran des rotations : applique ici, apres la demultiplication
   applySnap();
 
   // coller A contre B
@@ -461,8 +459,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     if (!s.rot && s.d.lengthSq()) egg("glissade");
     if (s.d.lengthSq() || s.ang) { showContact(); push(); } else onChange?.(state());
   };
-  // emboiter la selection collee : la place la plus proche (decalage dans le plan du contact, quart de tour autour de
-  // la normale) ou elle repose sur le contact sans traverser la matiere, puis aussi loin que possible vers l'interieur
+  // l'emboitement (30/10/2026, refait) : autour du collage, la piece est essayee a chaque angle autour du contact (tous
+  // les 15°, et de pres autour de sa position) et a chaque decalage proche ; on garde la place ou elle s'enfonce le plus
+  // dans son support sans le traverser (un tenon entre dans son trou), puis on l'affine au dixieme de mm et au degre, et
+  // on la centre dans le jeu. Des pieces dessinees sans jeu passent avec un leger chevauchement tolere.
   const fit = async () => {
     const list = [...sel], j = jointOf(list);
     if (fitting) return;
@@ -470,66 +470,105 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     fitting = 0; fitMsg = null; onChange?.(state());
     const col = await getCollider();
     const moving = withKids(list), start = moving.map(g => [g, g.matrix.clone()]);
-    // seulement la piece support (et son groupe) : une troisieme piece qui chevauche deja, ailleurs, empechait toute place
-    // libre (30/10/2026 : « aucune place libre a moins de 20 mm » a chaque fois)
+    // seulement la piece support (et son groupe) : une troisieme piece qui chevauche deja, ailleurs, ne compte pas
     const others = unitOf(j.b).filter(g => !moving.includes(g) && g.visible);
     const { P, N } = contact(j);
     const u = (Math.abs(N.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0)).cross(N).normalize(), w = N.clone().cross(u);
-    const sz = boxOfAll(list).getSize(new THREE.Vector3()).length();
-    const R = Math.min(20, Math.max(4, sz * 0.4)), step = Math.max(0.5, R / 20);
+    const bsz = boxOfAll(list).getSize(new THREE.Vector3());
+    const R = Math.min(20, Math.max(4, bsz.length() * 0.4)), step = Math.max(0.5, R / 10);
+    const depthMax = bsz.dot(new THREE.Vector3(Math.abs(N.x), Math.abs(N.y), Math.abs(N.z)));
     const mats = (ang, x, y, d) => {
       const t = u.clone().multiplyScalar(x).addScaledVector(w, y).addScaledVector(N, 0.05 - d);
       const M = new THREE.Matrix4().makeTranslation(t.x, t.y, t.z).multiply(about(P, new THREE.Quaternion().setFromAxisAngle(N, THREE.MathUtils.degToRad(ang))));
       return start.map(([g, m0]) => [g, M.clone().multiply(m0)]);
     };
     const free = (ang, x, y, d, erode = 0) => !col.anyTouch(mats(ang, x, y, d), others, erode);
-    const tick = async (n, total) => { fitting = Math.min(99, Math.round(100 * n / total)); onChange?.(state()); await new Promise(res => setTimeout(res, 0)); };
+    let n = 0, total = 1;
+    const tick = async () => { if (++n % 15) return; fitting = Math.min(99, Math.round(100 * n / total)); onChange?.(state()); await new Promise(res => setTimeout(res, 0)); };
+    // jusqu'ou la piece s'enfonce a cette place (recherche par moities)
+    const depthAt = async (ang, x, y, erode) => {
+      let lo = 0, hi = depthMax;
+      if (free(ang, x, y, hi, erode)) return hi;
+      for (let k = 0; k < 12; k++) { await tick(); const mid = (lo + hi) / 2; if (free(ang, x, y, mid, erode)) lo = mid; else hi = mid; }
+      return lo;
+    };
+    // les angles : tous les 15°, et de pres autour de la position actuelle
+    const angs = [0, -5, 5, -10, 10];
+    for (let a = 15; a < 360; a += 15) angs.push(a > 180 ? a - 360 : a);
+    const offs = [];
+    for (let x = -R; x <= R + 1e-6; x += step) for (let y = -R; y <= R + 1e-6; y += step) if (Math.hypot(x, y) <= R) offs.push([x, y, Math.hypot(x, y)]);
+    offs.sort((p, q) => p[2] - q[2]);
     let best = null, tol = 0;
-    if (free(0, 0, 0, 0)) best = { ang: 0, x: 0, y: 0, r: 0 };            // deja bien place
-    // des pieces dessinees sans jeu (le tenon de la taille exacte du trou) ne sont jamais « libres » : on tolere
-    // ensuite un leger chevauchement (la surface rentree de 0,3 puis 0,8 mm)
     for (const extra of [0, 0.3, 0.8]) {
-      if (best) break;
       tol = extra;
-      // 1. a grands pas, la piece amincie (sa surface rentree d'un peu plus d'un demi-pas) : le pas peut tomber dans
-      // le jeu d'un emboitement (0,2 mm) ; la place libre la plus proche pour chaque quart de tour
       const erode = step * 0.6 + extra;
-      const offs = [];
-      for (let x = -R; x <= R + 1e-6; x += step) for (let y = -R; y <= R + 1e-6; y += step) if (Math.hypot(x, y) <= R) offs.push([x, y, Math.hypot(x, y)]);
-      offs.sort((p, q) => p[2] - q[2]);
-      const coarse = [];
-      let n = 0;
-      for (const ang of [0, 90, 180, 270]) {
+      total = angs.length * offs.length * 1.3 + 40 * 12 + 900;
+      // 1. a grands pas, la piece amincie : les places ou elle entre deja un peu (sondee a quelques mm de profondeur) ;
+      // a defaut, celles ou elle repose au contact (au plus 3 par angle, les plus proches)
+      const probe = Math.min(depthMax * 0.5, 3);
+      let cands = [];
+      const near = [];
+      for (const ang of angs) {
+        let k = 0;
         for (const [x, y, r] of offs) {
-          n++;
-          if (free(ang, x, y, 0, erode)) { coarse.push({ ang, x, y, r: r + (ang ? 0.01 : 0) }); break; }
-          if (n % 20 === 0) await tick(n, offs.length * 4 + 900);
+          await tick();
+          if (free(ang, x, y, probe, erode)) cands.push({ ang, x, y, r });
+          else if (k < 3 && free(ang, x, y, 0, erode)) { near.push({ ang, x, y, r }); k++; }
         }
       }
-      coarse.sort((p, q) => (p.ang !== 0) - (q.ang !== 0) || p.r - q.r);     // sans tourner, si ca entre
-      // 2. au dixieme de mm, la vraie piece, autour de chaque place trouvee : le centre de la zone libre (le tenon
-      // centre dans son trou)
-      for (const c of coarse) {
+      if (!cands.length) cands = near;
+      if (!cands.length) continue;
+      // les plus prometteuses seulement (proches, peu tournees) : la profondeur se mesure ensuite pour chacune
+      cands.sort((p, q) => p.r + 0.05 * Math.abs(p.ang) - q.r - 0.05 * Math.abs(q.ang));
+      cands = cands.slice(0, 40);
+      // 2. jusqu'ou chacune s'enfonce : la plus profonde l'emporte (a peu pres egales : la plus proche, sans tourner)
+      for (const c of cands) c.d = await depthAt(c.ang, c.x, c.y, erode);
+      const cost = c => -c.d + 0.02 * c.r + 0.01 * Math.abs(c.ang);
+      cands.sort((p, q) => cost(p) - cost(q));
+      // 3. les meilleures, affinees avec la vraie piece (au chevauchement tolere) : a son angle puis a ±1, ±2, ±3°, les
+      // decalages ou elle entre (sondee) sur une grille de 0,2 mm, puis de 0,05 mm autour de leur milieu ; on prend le
+      // milieu de la zone libre (le tenon centre dans son trou) et on mesure jusqu'ou elle s'enfonce
+      const pr = Math.min(probe, 1.5);
+      const zone = (ang, cx, cy, half, st) => {
         const pts = [];
-        for (let dx = -step; dx <= step + 1e-6; dx += 0.1) for (let dy = -step; dy <= step + 1e-6; dy += 0.1) {
+        for (let dx = -half; dx <= half + 1e-6; dx += st) for (let dy = -half; dy <= half + 1e-6; dy += st) {
           n++;
-          if (free(c.ang, c.x + dx, c.y + dy, 0, extra)) pts.push([c.x + dx, c.y + dy]);
-          if (n % 20 === 0) await tick(n, offs.length * 4 + 900);
+          if (free(ang, cx + dx, cy + dy, pr, extra)) pts.push([cx + dx, cy + dy]);
         }
-        if (!pts.length) continue;
-        let cx = pts.reduce((v, p) => v + p[0], 0) / pts.length, cy = pts.reduce((v, p) => v + p[1], 0) / pts.length;
-        if (!free(c.ang, cx, cy, 0, extra)) [cx, cy] = pts.reduce((m, p) => (Math.hypot(p[0] - cx, p[1] - cy) < Math.hypot(m[0] - cx, m[1] - cy) ? p : m));
-        best = { ang: c.ang, x: cx, y: cy, r: Math.hypot(cx, cy) };
+        if (!pts.length) return null;
+        return [pts.reduce((v, p) => v + p[0], 0) / pts.length, pts.reduce((v, p) => v + p[1], 0) / pts.length];
+      };
+      for (const c of cands.slice(0, 4)) {
+        for (const da of [0, -1, 1, -2, 2, -3, 3]) {
+          const ang = c.ang + da;
+          await tick();
+          let m = zone(ang, c.x, c.y, step, 0.2);
+          if (!m) continue;
+          m = zone(ang, m[0], m[1], 0.3, 0.05) || m;
+          if (!free(ang, m[0], m[1], pr, extra)) continue;
+          const cur = { ang, x: m[0], y: m[1], r: Math.hypot(m[0], m[1]), d: await depthAt(ang, m[0], m[1], extra) };
+          // vraiment emboitee : enfoncee, elle est tenue de trois cotes au moins (decalee d'1 mm, elle touche) ; sinon elle
+          // n'a fait que glisser le long du support (posee au bord)
+          if (cur.d > 0.5) {
+            const dz = cur.d * 0.5;
+            const held = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([a, b]) => !free(ang, m[0] + a, m[1] + b, dz, extra)).length;
+            if (held < 3) cur.d = 0;
+          }
+          if (!best || cost(cur) < cost(best)) best = cur;
+          break;
+        }
+      }
+      // rien n'entre, meme de peu, et plus de tolerance a essayer : la meilleure place au contact
+      if (!best && extra === 0.8) {
+        const c = cands[0];
+        if (free(c.ang, c.x, c.y, 0, extra)) best = { ...c, d: 0 };
+      }
+      if (best) {
         break;
       }
     }
     if (!best) { fitting = null; fitMsg = `Aucune place à moins de ${Math.round(R)} mm où ${j.b.userData.name || "le support"} ne soit pas traversé : rapproche la pièce de son logement, ou colle-la sur la face d'appui (l'épaulement), pas sur le bout du tenon`; onChange?.(state()); return; }
-    // puis aussi loin que possible vers l'interieur (une piece qui entre dans un logement)
-    const depthMax = boxOfAll(list).getSize(new THREE.Vector3()).dot(new THREE.Vector3(Math.abs(N.x), Math.abs(N.y), Math.abs(N.z)));
-    let lo = 0, hi = depthMax;
-    if (!free(best.ang, best.x, best.y, hi, tol)) for (let k = 0; k < 14; k++) { const mid = (lo + hi) / 2; if (free(best.ang, best.x, best.y, mid, tol)) lo = mid; else hi = mid; }
-    else lo = hi;
-    const depth = lo > 0.15 ? lo - 0.1 : 0;
+    const depth = best.d > 0.15 ? best.d - 0.1 : 0;
     for (const [g, m] of mats(best.ang, best.x, best.y, depth)) { m.decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); }
     // le contact suit la piece (dans le repere du support)
     j.b.updateMatrix();
@@ -537,8 +576,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     j.p.add(t.clone().transformDirection(j.b.matrix.clone().invert()).multiplyScalar(t.length()));
     fitting = null;
     const f = v => String(Math.round(v * 10) / 10).replace(".", ",");
+    const ang = Math.round(((best.ang % 360) + 540) % 360 - 180);
     egg("tenon_mortaise");
-    fitMsg = `Emboîtée${best.r > 0.05 ? ` · décalée de ${f(Math.hypot(best.x, best.y))} mm` : ""}${best.ang ? ` · tournée de ${best.ang}°` : ""}${depth ? ` · enfoncée de ${f(depth)} mm` : ""}${tol ? ` · pièces sans jeu : ${f(tol)} mm de chevauchement toléré` : ""}`;
+    fitMsg = `${depth ? "Emboîtée" : `Aucun logement où elle entre à moins de ${Math.round(R)} mm : posée au contact`}${best.r > 0.05 ? ` · décalée de ${f(best.r)} mm` : ""}${ang ? ` · tournée de ${ang}°` : ""}${depth ? ` · enfoncée de ${f(depth)} mm` : ""}${tol ? ` · pièces sans jeu : ${f(tol)} mm de chevauchement toléré` : ""}`;
     showContact(); placeHandle(); push(); render();
   };
   el.addEventListener("pointerdown", onSlideDown, true);

@@ -15,11 +15,53 @@ export async function createCollider(THREE) {
       thin.set(piece, m);
       if (m.has(erode)) return m.get(erode);
       const full = geoOf(piece);
-      const geo = full.clone();
-      geo.computeVertexNormals();
-      const p = geo.attributes.position.array, n = geo.attributes.normal.array;
-      for (let i = 0; i < p.length; i++) p[i] -= n[i] * erode;
-      geo.deleteAttribute("normal");
+      // les sommets soudes d'abord (30/10/2026) : un maillage dont chaque face a ses propres coins ne rentrait que face
+      // par face, ses aretes restaient en place et la piece « amincie » ne l'etait pas
+      const src = full.attributes.position.array, six = full.index.array, key = new Map(), wp = [], remap = new Uint32Array(src.length / 3);
+      for (let i = 0; i < src.length / 3; i++) {
+        const k = `${Math.round(src[i * 3] * 1e4)},${Math.round(src[i * 3 + 1] * 1e4)},${Math.round(src[i * 3 + 2] * 1e4)}`;
+        let j = key.get(k);
+        if (j === undefined) { j = wp.length / 3; key.set(k, j); wp.push(src[i * 3], src[i * 3 + 1], src[i * 3 + 2]); }
+        remap[i] = j;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(Float32Array.from(wp), 3));
+      geo.setIndex(new THREE.BufferAttribute(Uint32Array.from(six, i => remap[i]), 1));
+      // chaque sommet recule de sorte que chaque face qui le touche recule de « erode » (au sens des moindres carres sur
+      // les normales de ses faces) : une moyenne des normales laissait les aretes d'une collerette mince en place
+      const p = geo.attributes.position.array, ix = geo.index.array, nv = p.length / 3;
+      const M = new Float64Array(nv * 9), cnt = new Uint16Array(nv);
+      const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3(), nf = new THREE.Vector3();
+      for (let t = 0; t < ix.length; t += 3) {
+        A.fromArray(p, ix[t] * 3); B.fromArray(p, ix[t + 1] * 3); C.fromArray(p, ix[t + 2] * 3);
+        nf.subVectors(C, B).cross(A.clone().sub(B)).normalize();
+        if (!Number.isFinite(nf.x) || nf.lengthSq() < 0.5) continue;
+        const n3 = [nf.x, nf.y, nf.z];
+        for (const v of [ix[t], ix[t + 1], ix[t + 2]]) {
+          // une meme normale (faces coplanaires autour du sommet) ne compte qu'une fois par sommet, a peu pres
+          for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) M[v * 9 + r * 3 + c] += n3[r] * n3[c];
+          cnt[v]++;
+        }
+      }
+      const m3 = new THREE.Matrix3(), rhs = new THREE.Vector3(), d = new THREE.Vector3();
+      const nsum = new Float64Array(nv * 3);
+      for (let t = 0; t < ix.length; t += 3) {
+        A.fromArray(p, ix[t] * 3); B.fromArray(p, ix[t + 1] * 3); C.fromArray(p, ix[t + 2] * 3);
+        nf.subVectors(C, B).cross(A.clone().sub(B)).normalize();
+        if (!Number.isFinite(nf.x) || nf.lengthSq() < 0.5) continue;
+        for (const v of [ix[t], ix[t + 1], ix[t + 2]]) { nsum[v * 3] += nf.x; nsum[v * 3 + 1] += nf.y; nsum[v * 3 + 2] += nf.z; }
+      }
+      const out = new Float32Array(p.length);
+      for (let v = 0; v < nv; v++) {
+        const k = cnt[v] || 1, e = v * 9, lam = 1e-3 * k;
+        // (Σ n nᵀ + λI) d = e Σ n
+        m3.set(M[e] + lam, M[e + 1], M[e + 2], M[e + 3], M[e + 4] + lam, M[e + 5], M[e + 6], M[e + 7], M[e + 8] + lam);
+        rhs.set(nsum[v * 3], nsum[v * 3 + 1], nsum[v * 3 + 2]).multiplyScalar(erode);
+        if (m3.determinant() === 0) d.set(0, 0, 0); else d.copy(rhs).applyMatrix3(m3.invert());
+        if (d.length() > 3 * erode) d.setLength(3 * erode);
+        out[v * 3] = p[v * 3] - d.x; out[v * 3 + 1] = p[v * 3 + 1] - d.y; out[v * 3 + 2] = p[v * 3 + 2] - d.z;
+      }
+      geo.setAttribute("position", new THREE.BufferAttribute(out, 3));
       geo.boundsTree = new MeshBVH(geo);
       geo.computeBoundingBox();
       m.set(erode, geo);
