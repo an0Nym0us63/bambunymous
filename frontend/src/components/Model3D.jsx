@@ -129,7 +129,7 @@ function copyPiece(THREE, src, n) {
 }
 
 function Viewer({ url, glb, onState, palette = null, finishes = null, multi = null, glow = false, bed = null, litho = false,
-                  pieces = null, edit = null, editApi = null, pad = false, piecePalettes = null, editing = false }) {
+                  pieces = null, edit = null, editApi = null, pad = false, piecePalettes = null, editing = false, hue = null }) {
   const [pans, setPans] = useState(false);
   const box = useRef(null);
   const [dark, setDark] = useState(false);
@@ -239,6 +239,28 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           if (dead) return;
           const groups = parseBin(buf);
           const holder = new THREE.Group(); holder.rotation.x = -Math.PI / 2;     // le 3MF a Z vers le haut
+          // un HueForge (30/10/2026) : des couches fines et translucides, un filament par tranche de hauteur. Vue de face,
+          // la couleur d'un point depend de sa hauteur : le filament du fond, puis chaque tranche posee par-dessus le
+          // recouvre d'autant plus qu'elle est epaisse (une couche de blanc sur du noir : un gris sombre). Sans cela,
+          // chaque tranche sortait opaque : un titre en blanc fin sur noir, noir en vrai, sortait blanc
+          let hueU = null;
+          if (hue?.length && !pieces) {
+            const hexOf = g => g.color.map(x => x.toString(16).padStart(2, "0")).join("").toUpperCase();
+            const mapC = h => palette?.[h] ? new THREE.Color(`#${hex6(palette[h])}`) : new THREE.Color(`#${h}`);
+            let base = null, zmin = Infinity;
+            for (const g of groups) for (let i = 2; i < g.pos.length; i += 3) if (g.pos[i] < zmin) { zmin = g.pos[i]; base = g; }
+            if (base) {
+              // l'epaisseur ou un filament couvre presque tout (95 %) : d'apres sa clarte, comme les valeurs de HueForge
+              // (un noir couvre en 0,3 mm, un blanc en 1 mm)
+              const td = c => 0.3 + 0.7 * (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b);
+              const L = hue.slice(0, 8).map(([z, h]) => ({ z: Number(z), c: mapC(String(h).toUpperCase()) }));
+              const pad = n => [...Array(8)].map((_, i) => n(i));
+              hueU = { hBase: { value: mapC(hexOf(base)) }, hN: { value: L.length },
+                hZ: { value: pad(i => (L[i] ? L[i].z : 1e9)) }, hC: { value: pad(i => (L[i] ? L[i].c : new THREE.Color())) },
+                hT: { value: pad(i => (L[i] ? td(L[i].c) : 1)) } };
+              if (import.meta.env.DEV) window.__hue = { u: hueU, render: () => render() };
+            }
+          }
           // la vue assemblee, piece par piece : un groupe par piece (pour l'editer, et pour la place enregistree)
           const byPiece = pieces && groups.some(g => g.piece != null) ? new Map() : null;
           for (const g of groups) {
@@ -325,6 +347,21 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               // carbone (28/10/2026) : en couleur seule, la trame multipliait du noir et ne se voyait pas ; elle module
               // aussi la rugosite (les brins brillent differemment) et affleure a peine en lumiere
               if (fin === "carbon") { mat.roughnessMap = t; mat.emissive = new THREE.Color(0xffffff); mat.emissiveMap = t; mat.emissiveIntensity = 0.05; }
+            }
+            if (hueU) {
+              const prev = mat.onBeforeCompile;
+              mat.color.set(0xffffff);
+              mat.onBeforeCompile = sh => {
+                prev?.(sh);
+                Object.assign(sh.uniforms, hueU);
+                sh.vertexShader = "varying float vHz;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n  vHz = position.z;");
+                sh.fragmentShader = "varying float vHz; uniform vec3 hBase; uniform int hN; uniform float hZ[8]; uniform vec3 hC[8]; uniform float hT[8];\n" +
+                  sh.fragmentShader.replace("#include <color_fragment>", "#include <color_fragment>\n  { vec3 hc = hBase;\n" +
+                  "    for (int i = 0; i < 8; i++) { if (i >= hN) break;\n" +
+                  "      float top = i + 1 < hN ? hZ[i + 1] : 1e9; float th = clamp(vHz - hZ[i], 0.0, top - hZ[i]);\n" +
+                  "      hc = mix(hc, hC[i], 1.0 - exp(-3.0 * th / hT[i])); }\n" +
+                  "    diffuseColor.rgb *= hc; }");
+              };
             }
             const piece = new THREE.Mesh(mesh, mat);
             if (fin === "glow") {
@@ -1366,6 +1403,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             pieces={p.assembled ? p.pieces : null} edit={p.assembled && !(origView && !editing) ? edit : null} editApi={editApi} pad={full || editing} editing={editing}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
+            hue={p.litho && zc.length ? zc : null}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}
           {editing && <EditBar est={est} api={editApi.current?.editor} onSave={saveEdit} onReset={resetEdit} onClose={stopEdit} saving={saving} onVersions={openVersions}/>}
           {versions && <EditVersions list={versions} dirty={!!est?.dirty} onPick={restoreVersion} onClose={() => setVersions(null)}/>}
