@@ -215,7 +215,17 @@ async def assign(key: str, design_id: str, print_ids: list | None = None, auto: 
     _save()
     try:
         from .makerworld import launch
-        launch(did)                       # sa fiche, lue en arriere-plan
+        launch(did)                       # sa fiche, lue en arriere-plan (ses documents joints gardes avec)
+        # deja lue (pour une autre impression, un favori) : ses documents joints gardes quand meme (30/10/2026)
+        from . import mw_docs
+        from .makerworld import extras_of
+        from ..models.print_history import MakerWorldDesign as _MW
+        async with AsyncSessionLocal() as db:
+            m = await db.get(_MW, did)
+            ex = m.extras if m is not None and m.status == "ok" else None
+        if ex and extras_of(ex).get("docs"):
+            import asyncio as _aio
+            _aio.get_running_loop().run_in_executor(None, mw_docs.keep, did, extras_of(ex)["docs"])
     except Exception:
         pass
     logger.info(f"[MW-RELINK] « {key} » -> modele {did} ({n} impression(s){', automatique' if auto else ''})")

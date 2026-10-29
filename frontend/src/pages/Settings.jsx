@@ -1317,7 +1317,9 @@ function MwDocsSection() {
           {big(sm.with_docs, `modèle${sm.with_docs > 1 ? "s" : ""} en ont`, "#0EA5E9")}
           {big(sm.unread, "fiches à relire", sm.unread ? "#F97316" : "#64748B")}
         </div>
-        <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)" }}>{sm.read} fiches relues sur {sm.designs} modèles imprimés</div>
+        <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)" }}>{sm.read} fiches relues sur {sm.designs} modèles imprimés
+          {sm.missing > 0 && <span data-tip="Retirés de MakerWorld : plus de fiche à lire"> · {sm.missing} introuvable{sm.missing > 1 ? "s" : ""} sur MakerWorld</span>}
+          {sm.unread > 0 && <span data-tip="Jamais lus (dont les modèles rattachés après coup) ou en erreur : « Tout récupérer » les relit"> · {sm.unread} à relire</span>}</div>
         <div style={{ height:8, borderRadius:6, background:"var(--surface2)", overflow:"hidden" }}>
           <div style={{ height:"100%", width:`${pct}%`, borderRadius:6, background:"linear-gradient(90deg, #0EA5E9, #6366F1)", transition:"width .4s" }}/></div>
       </div>}

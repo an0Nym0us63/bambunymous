@@ -164,7 +164,10 @@ async def summary() -> dict:
     n_read, n_with, n_docs, n_kept = await asyncio.to_thread(count)
     unread = sum(1 for did in ids if rows.get(did, (None, None))[0] != "notfound" and
                  (rows.get(did, (None, None))[0] != "ok" or extras_stale(rows.get(did, (None, None))[1])))
-    return {"designs": len(ids), "read": n_read, "unread": unread, "with_docs": n_with, "docs": n_docs, "kept": n_kept}
+    # ce qui manque, dit (30/10/2026) : retire de MakerWorld, ou a relire (jamais lu, dont les modeles rattaches
+    # apres coup, ou en erreur)
+    missing = sum(1 for did in ids if rows.get(did, (None, None))[0] == "notfound")
+    return {"designs": len(ids), "read": n_read, "unread": unread, "missing": missing, "with_docs": n_with, "docs": n_docs, "kept": n_kept}
 
 
 def status() -> dict:
@@ -193,7 +196,7 @@ async def backfill() -> None:
             had = await asyncio.to_thread(_kept_files, did)        # ce qui etait deja garde, pour le compte rendu
             async with AsyncSessionLocal() as db:
                 m = await db.get(MW, did)
-                need = m is None or m.status == "error" or (m.status == "ok" and mw.extras_stale(m.extras))
+                need = m is None or m.status not in ("ok", "notfound") or (m.status == "ok" and mw.extras_stale(m.extras))
             if need:
                 r = await mw.refresh(limit=1, only=[did])     # garde aussi ses documents
                 JOB["read"] += r.get("read", 0)
