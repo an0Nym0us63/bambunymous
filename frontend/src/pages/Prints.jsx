@@ -2052,12 +2052,21 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
               ★{nToRate > 1 ? ` ${nToRate}` : ""}</span>
           )}
           {aggCfg && (
-            <span style={chipS(aggCfg.color, { bottom:7, left:7, display:"inline-flex", alignItems:"center", gap:4 })}>
-              <AggIcon size={10}/> {aggCfg.label}
+            <span style={{ position:"absolute", bottom:7, left:7, display:"inline-flex", alignItems:"center", gap:3, background:aggCfg.bg, color:"white",
+              fontSize:9, fontWeight:900, padding:"1px 7px", borderRadius:20 }}>
+              <AggIcon size={9}/> {aggCfg.label}
             </span>
           )}
         </div>
-        <div style={{ padding:"8px 10px 9px" }}>
+        <div style={{ padding:"5px 10px 9px" }}>
+          {/* les filaments de toutes ses impressions (une fois chaque couleur), sur la meme petite rangee que les tuiles d'impression */}
+          {(() => { const seen = new Set(), fu = [];
+            for (const x of prints) for (const f of x.filament_usage || []) { const k = String(f.color_hex || "").toLowerCase(); if (k && !seen.has(k)) { seen.add(k); fu.push(f); } }
+            return <div style={{ display:"flex", alignItems:"center", gap:3, height:10, marginBottom:3 }}>
+              {fu.slice(0, 8).map((f, i) => <ColorDot key={i} hex={f.color_hex} colors={f.filament_colors_array} multicolor={f.filament_multicolor_type} size={9} ring="none"
+                style={{ boxShadow:"0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent)" }}/>)}
+              {fu.length > 8 && <span style={{ fontSize:9, fontWeight:800, color:"var(--muted)" }}>+{fu.length - 8}</span>}
+            </div>; })()}
           <p style={{ fontWeight:800, fontSize:12.5, color:"#8B5CF6", margin:"0 0 3px",
             overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</p>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }}>
@@ -2218,22 +2227,24 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
           onError={e => { e.currentTarget.style.display="none"; }}/>
         {check}
         {p.number_of_items > 1 && <span data-tip={`${p.number_of_items} pièces`} style={chipS("#2563EB", { top:7, right:7 })}>×{p.number_of_items}</span>}
-        {p.status !== "SUCCESS" && <span data-tip={stL} style={chipS(stC, { top:7, left:7, visibility: selectMode ? "hidden" : "visible" })}>{stI} {stL}</span>}
+        {p.status !== "SUCCESS" && <span style={{ position:"absolute", top:7, left:7, background:stC, color:"white", fontSize:9, fontWeight:900,
+          padding:"1px 7px", borderRadius:20, boxShadow:`0 2px 6px ${stC}55`, visibility: selectMode ? "hidden" : "visible" }}>{stI} {stL}</span>}
         {rateMe && <span data-tip="À évaluer sur MakerWorld" style={chipS("#D97706", { bottom:7, right:7 })}>★</span>}
       </div>
-      <div style={{ padding:"8px 10px 9px" }}>
+      <div style={{ padding:"5px 10px 9px" }}>
+        {/* les filaments, sur leur propre petite rangee entre la vignette et le nom (30/10/2026 : ni sur l'image, ni sur la
+            ligne de la date, qu'ils coupaient) ; hauteur gardee meme sans filament, pour que les tuiles s'alignent */}
+        <div data-tip={p.filament_usage?.length ? p.filament_usage.map(f => f.filament_name || f.color_name || f.color_hex).filter(Boolean).join(", ") : undefined}
+          style={{ display:"flex", alignItems:"center", gap:3, height:10, marginBottom:3 }}>
+          {(p.filament_usage || []).slice(0, 8).map((f, i) => <ColorDot key={i} hex={f.color_hex} colors={f.filament_colors_array} multicolor={f.filament_multicolor_type} size={9} ring="none"
+            style={{ boxShadow:"0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent)" }}/>)}
+          {(p.filament_usage?.length || 0) > 8 && <span style={{ fontSize:9, fontWeight:800, color:"var(--muted)" }}>+{p.filament_usage.length - 8}</span>}
+        </div>
         <p style={{ fontWeight:800, fontSize:12.5, color:"var(--text)", margin:"0 0 3px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
           {p.file_name || "Sans nom"}
         </p>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }}>
-          <span data-tip={fmtDate(p.print_date)} style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", minWidth:0 }}>{day} {hour.split(" · ")[0]}</span>
-          {/* les filaments sous la vignette, plus dessus (30/10/2026) : petits, trois au plus, puis « +N » */}
-          {p.filament_usage?.length > 0 && <span data-tip={p.filament_usage.map(f => f.filament_name || f.color_name || f.color_hex).filter(Boolean).join(", ")}
-            style={{ display:"flex", alignItems:"center", gap:2, marginLeft:"auto", flexShrink:0 }}>
-            {p.filament_usage.slice(0, 3).map((f, i) => <ColorDot key={i} hex={f.color_hex} colors={f.filament_colors_array} multicolor={f.filament_multicolor_type} size={9} ring="none"
-              style={{ boxShadow:"0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent)" }}/>)}
-            {p.filament_usage.length > 3 && <span style={{ fontSize:9, fontWeight:800, color:"var(--muted)" }}>+{p.filament_usage.length - 3}</span>}
-          </span>}
+          <span data-tip={fmtDate(p.print_date)} style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{day} {hour.split(" · ")[0]}</span>
           {/* Repli sur estimated_seconds, comme la fiche */}
           {dur > 0 && <span style={{ fontSize:10.5, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap", flexShrink:0 }}>{durFr(dur)}</span>}
         </div>
