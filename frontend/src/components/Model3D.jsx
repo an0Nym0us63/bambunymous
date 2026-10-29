@@ -1140,6 +1140,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const alt = (p && (asm ? merged(platePalettes) : platePalettes?.[p.n])) || palette || usedPal || null;
   const altLabel = altName || (palette || platePalettes ? "Retenues" : "Utilisées");
   const [own, setOwn] = useState(false);
+  // comparer (30/10/2026) : la vue assemblee du 3MF d'origine, a cote de mon assemblage enregistre (la vue seulement)
+  const [origView, setOrigView] = useState(false);
   // plein ecran (PC) et edition de la vue assemblee (29/10/2026)
   const isAdmin = useIsAdmin();
   // un PC : une souris, ou un navigateur d'ordinateur (un portable tactile annonce parfois un ecran tactile), et de la place
@@ -1264,8 +1266,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         <div ref={wrap} style={{ position: "relative", height: full ? "100vh" : "min(62dvh, 560px)", borderRadius: full ? 0 : 18, overflow: "hidden",
           border: full ? "none" : "1px solid var(--border)",
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
-          {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}|${vkey}|${piecePal ? Object.keys(piecePal).length : 0}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown} piecePalettes={piecePal}
-            pieces={p.assembled ? p.pieces : null} edit={p.assembled ? edit : null} editApi={editApi} pad={full || editing}
+          {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}|${vkey}|${piecePal ? Object.keys(piecePal).length : 0}|${origView && !editing ? "orig" : ""}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown} piecePalettes={piecePal}
+            pieces={p.assembled ? p.pieces : null} edit={p.assembled && !(origView && !editing) ? edit : null} editApi={editApi} pad={full || editing}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}
@@ -1296,12 +1298,19 @@ export default function Model3D({ designId = null, profileId = null, printId = n
               data-tip={`Prendre la vue telle que tu la regardes (${p.assembled ? "l'assemblage" : "ce plateau"}) comme vignette ${shotTarget.kind === "group" ? "du groupe" : "de l'impression"}, sans la grille`}
               style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 13, fontWeight: 800,
                 background: "var(--surface)", color: "var(--text2)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{shot === "busy" ? "…" : "📸 Vignette"}</button>}
-            {editable && <button type="button" onClick={startEdit} data-tip="Déplacer, tourner, poser au sol, coller les pièces (en plein écran)"
+            {editable && !origView && <button type="button" onClick={startEdit} data-tip="Déplacer, tourner, poser au sol, coller les pièces (en plein écran)"
               style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff",
                 background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>✏️ Éditer l'assemblage</button>}
             {editable && <button type="button" disabled={versions === "busy"} onClick={openVersions} data-tip="Reprendre un assemblage enregistré avant (chaque version est gardée)"
               style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", background: "var(--surface)", color: "var(--text2)",
                 fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>🕘</button>}
+          </div>}
+          {!editing && p?.assembled && edit?.pieces && <div style={{ position: "absolute", top: 10, right: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20, zIndex: 2,
+            background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
+            {[[false, "Mon assemblage", "Ton assemblage enregistré"], [true, "Origine", "La vue assemblée telle que le 3MF la donne, avant tes modifications (pour comparer)"]].map(([o, l, tip]) =>
+              <button key={l} type="button" onClick={() => setOrigView(o)} data-tip={tip}
+                style={{ padding: "5px 11px", borderRadius: 16, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800,
+                  color: origView === o ? "#fff" : "var(--text2)", background: origView === o ? "linear-gradient(135deg, #16a34a, #0EA5E9)" : "transparent" }}>{l}</button>)}
           </div>}
           {!editing && alt && p && !p.pending && !isGlb(p.url) && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
             background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
