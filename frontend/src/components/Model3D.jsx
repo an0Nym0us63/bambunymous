@@ -532,9 +532,13 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           const quad = new THREE.PlaneGeometry(2, 2), ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
           // la lumiere qui reste apres cette couleur, multipliee a ce qui est deja passe
           // le rendu de l'image eclairee (30/10/2026) : le passage de la lumiere du 28/10, tel quel (les bonnes couleurs) ;
-          // en plus, la lumiere diffusee dans le plastique (diff, en mm : les points du relief ne se voient plus en pixels)
-          // et un peu plus de peps (saturation et contraste)
-          const tune = { sat: { value: 1.5 }, con: { value: 1.2 }, diff: { value: 0.35 }, pxmm: { value: 1 }, texel: { value: new THREE.Vector2(1, 1) } };
+          // en plus, la lumiere diffusee dans le plastique et un peu plus de peps (saturation et contraste). La diffusion
+          // separe la lumiere de la couleur (30/10/2026) : le detail tient au relief blanc, garde assez net (diffL, la buse
+          // ne fait pas plus fin) ;
+          // les couches de couleur d'un lithophane CMJ sont des « pixels » de 0,44 mm a 5-8 epaisseurs, que le blanc
+          // par-dessus fond a l'impression : la couleur se diffuse donc plus large (diffC)
+          const tune = { sat: { value: 1.5 }, con: { value: 1.2 }, diffL: { value: 0.5 }, diffC: { value: 1.4 }, pxmm: { value: 1 },
+            texel: { value: new THREE.Vector2(1, 1) } };
           const transMat = new THREE.ShaderMaterial({ uniforms: { tex: { value: null }, col: { value: new THREE.Color() } }, depthTest: false, depthWrite: false,
             blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.DstColorFactor, blendDst: THREE.ZeroFactor,
             vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
@@ -546,22 +550,27 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           // l'image : la lumiere filtree la ou il y a de la matiere, la nuit ailleurs
           const compMat = new THREE.ShaderMaterial({ uniforms: { all: { value: tAll.texture }, acc: { value: acc.texture }, clearBg: { value: 0 }, ...tune }, depthTest: false, depthWrite: false,
             vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
-            fragmentShader: `uniform sampler2D all; uniform sampler2D acc; uniform float clearBg, sat, con, diff, pxmm;
+            fragmentShader: `uniform sampler2D all; uniform sampler2D acc; uniform float clearBg, sat, con, diffL, diffC, pxmm;
               uniform vec2 texel; varying vec2 vUv;
               void main() { float t = texture2D(all, vUv).r;
-                // la diffusion : une moyenne ponderee sur un disque de « diff » mm, la matiere seulement (le vide autour,
-                // blanc dans acc, ferait un halo)
-                float r = clamp(diff * pxmm, 0.0, 8.0);
-                vec3 T = texture2D(acc, vUv).rgb; float wsum = 1.0;
-                if (r > 0.6 && t > 0.02) {
-                  for (int i = 0; i < 16; i++) {
-                    float a = float(i) * 2.39996, d = sqrt((float(i) + 0.5) / 16.0);
-                    vec2 o = vec2(cos(a), sin(a)) * d * r * texel;
-                    float w = exp(-2.0 * d * d) * step(0.02, texture2D(all, vUv + o).r);
-                    T += texture2D(acc, vUv + o).rgb * w; wsum += w;
+                // la diffusion, sur la matiere seulement (le vide autour, blanc dans acc, ferait un halo) : une moyenne large
+                // (la couleur) et une etroite (la lumiere), ponderees en gaussienne sur un meme disque
+                vec3 T0 = texture2D(acc, vUv).rgb, Tc = T0, Tl = T0; float wc = 1.0, wl = 1.0;
+                float rc = clamp(diffC * pxmm, 0.0, 40.0), rl = max(diffL * pxmm, 0.001);
+                if (rc > 0.75 && t > 0.02) {
+                  for (int i = 0; i < 40; i++) {
+                    float a = float(i) * 2.39996, d = sqrt((float(i) + 0.5) / 40.0);
+                    vec2 o = vec2(cos(a), sin(a)) * d * rc * texel;
+                    float m = step(0.02, texture2D(all, vUv + o).r);
+                    vec3 s = texture2D(acc, vUv + o).rgb;
+                    float px = d * rc, w1 = exp(-2.5 * d * d) * m, w2 = exp(-2.0 * (px / rl) * (px / rl)) * m;
+                    Tc += s * w1; wc += w1; Tl += s * w2; wl += w2;
                   }
                 }
-                T /= wsum;
+                Tc /= wc; Tl /= wl;
+                // la couleur diffusee, a la luminosite du detail
+                float lc = dot(Tc, vec3(0.2126, 0.7152, 0.0722)), ll = dot(Tl, vec3(0.2126, 0.7152, 0.0722));
+                vec3 T = Tc * (ll / max(lc, 1e-4));
                 // une courbe d'exposition (30/10/2026 : le rendu etait terne) : les demi-teintes eclaircies, les blancs sans
                 // ecrasement, puis des couleurs plus franches et du contraste
                 vec3 c = vec3(1.0, 0.95, 0.84) * (1.0 - exp(-5.5 * T));
