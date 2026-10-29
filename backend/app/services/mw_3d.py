@@ -22,7 +22,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 12                          # 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 14                          # 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan", re.I)
 MAX_TRIANGLES = 1_500_000              # au-dela, le plateau est simplifie (29/10/2026 ; avant : pas converti du tout) :
                                        # un telephone l'affiche vite, et le fichier reste de quelques Mo
@@ -418,10 +418,16 @@ def _settings(z: zipfile.ZipFile) -> tuple:
     plates = []
     # la vue d'assemblage (29/10/2026) : la place de chaque objet une fois assemble, que le createur peut poser dans
     # Bambu Studio (les lignes par piece, volume_id, ne servent pas ici : les pieces gardent leur place dans l'objet)
-    asm = []
+    asm, asm_vol = [], {}
     for m in re.finditer(r"<assemble_item\b([^>]*)/?>", xml):
         h = m.group(1)
-        if _attr(h, "volume_id") is None and _attr(h, "object_id") and str(_attr(h, "instance_id") or "").isdigit():
+        if not _attr(h, "object_id"):
+            continue
+        # la place de chaque piece dans son objet une fois assemble (29/10/2026 : sans elle, la tete de Billy restait
+        # au centre du corps) ; volume_id : le rang de la piece dans l'objet
+        if str(_attr(h, "volume_id") or "").isdigit():
+            asm_vol.setdefault(_attr(h, "object_id"), {})[int(_attr(h, "volume_id"))] = _matrix(_attr(h, "transform"))
+        elif str(_attr(h, "instance_id") or "").isdigit():
             asm.append((_attr(h, "object_id"), int(_attr(h, "instance_id")), _matrix(_attr(h, "transform"))))
     for m in re.finditer(r"<plate>(.*?)</plate>", xml, re.S):
         body = m.group(1)
@@ -432,6 +438,7 @@ def _settings(z: zipfile.ZipFile) -> tuple:
         if n:
             plates.append((int(n.group(1)), name.group(1) if name else "", inst))
     objs["__assemble__"] = asm
+    objs["__assemble_vol__"] = asm_vol
     return sorted(plates), objs
 
 
@@ -603,6 +610,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     zch = _z_changes(z, colors)
     plates, settings = _settings(z)
     asm = settings.pop("__assemble__", []) if settings else []
+    asm_vol = settings.pop("__assemble_vol__", {}) if settings else {}
     # les noms (titre du modele, objets et pieces), pour reconnaitre un lithophane
     try:
         names_txt = " ".join(re.findall(r'key="name" value="([^"]*)"', z.read("Metadata/model_settings.config").decode("utf-8", "replace")))
@@ -620,21 +628,23 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     if not plates:                                      # pas de plateaux decrits : tout sur un seul
         plates = [(1, "", [(oid, i) for oid, lst in items_by_obj.items() for i in range(len(lst))])]
 
-    def parts_of(oid, mt):
-        """(extrudeur, couleur de secours, transformation, maillage) de chaque piece visible d'un objet place."""
+    def parts_of(oid, mt, vols=None):
+        """(extrudeur, couleur de secours, transformation, maillage) de chaque piece visible d'un objet place.
+        vols : {rang de la piece : sa place dans l'objet}, celle de la vue assemblee (au lieu de celle du plateau)."""
         o = root_objs.get(oid) or {}
         st = settings.get(oid) or {"extruder": 1, "parts": {}}
+        vols = vols or {}
         out = []
         if "mesh" in o:
-            out.append((st["extruder"], groups.get(o.get("pid") or "", None), mt, o["mesh"]))
-        for c in o.get("components") or []:
+            out.append((st["extruder"], groups.get(o.get("pid") or "", None), _mul(vols[0], mt) if 0 in vols else mt, o["mesh"]))
+        for ci, c in enumerate(o.get("components") or []):
             pe, ptype = st["parts"].get(str(c["objectid"]), (None, "normal_part"))
             if ptype in _NOT_SHOWN:
                 continue
             sub = objs_in(c["path"]).get(str(c["objectid"])) or {}
             if "mesh" not in sub:
                 continue
-            out.append((pe or st["extruder"], groups.get(sub.get("pid") or "", None), _mul(c["transform"], mt), sub["mesh"]))
+            out.append((pe or st["extruder"], groups.get(sub.get("pid") or "", None), _mul(vols.get(ci, c["transform"]), mt), sub["mesh"]))
         return out
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -652,7 +662,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     # la vue assemblee, en dernier : chaque objet a sa place d'assemblage (les plateaux restent tels quels)
     asm_lst = []
     for oid, k, mt in asm:
-        parts = parts_of(oid, mt)
+        parts = parts_of(oid, mt, asm_vol.get(oid))
         if not parts:                                   # un objet absent (3MF tranche : seulement le plateau imprime)
             asm_lst = []
             break
@@ -888,14 +898,16 @@ def _tidy(own: dict, asm_rot: dict | None = None, on_plate: dict | None = None) 
 
 
 def _pack(own: dict, bb: list) -> bool:
-    """Range des blocs [(objets, mini, maxi)] au sol, en carre, rapproches."""
+    """Range des blocs [(objets, mini, maxi)] au sol, rapproches, en un ensemble a peu pres carre : des rangees
+    remplies jusqu'a une largeur visee (la racine de la surface totale), les plus profonds d'abord (29/10/2026 : un
+    nombre fixe de blocs par rangee laissait de grands vides entre Billy et une vis)."""
     import numpy as np
-    # les plus grands d'abord, en rangees d'un carre (autant de colonnes que la racine du nombre de blocs)
-    bb.sort(key=lambda b: -(b[2][0] - b[1][0]) * (b[2][1] - b[1][1]))
-    cols = int(np.ceil(np.sqrt(len(bb))))
+    bb.sort(key=lambda b: (-(b[2][1] - b[1][1]), -(b[2][0] - b[1][0])))
+    area = sum((b[2][0] - b[1][0] + _GAP) * (b[2][1] - b[1][1] + _GAP) for b in bb)
+    width = max(max(b[2][0] - b[1][0] for b in bb), float(np.sqrt(area)) * 1.1)
     x = y = row_h = 0.0
     for k, (members, lo, hi) in enumerate(bb):
-        if k and k % cols == 0:
+        if x and x + (hi[0] - lo[0]) > width:
             x, y, row_h = 0.0, y + row_h + _GAP, 0.0
         off = np.array([x - lo[0], y - lo[1], -lo[2]])
         for i in members:
@@ -1171,6 +1183,44 @@ async def prepare(iid: str) -> None:
         await asyncio.to_thread(_in_child, src, src.stem)
 
 
+def _all_sources() -> list:
+    """[(3MF d'origine, cle)] : ceux du serveur, puis ceux qui ne sont plus que sur le NAS (vides du local) ; le NAS
+    est un rangement comme un autre, que l'appli lit (29/10/2026). Les plus recents d'abord."""
+    from .mw_source import _dir
+    out, seen = [], set()
+    for f in sorted(_dir().glob("*.3mf"), key=lambda f: f.stat().st_mtime, reverse=True):
+        out.append((f, f.stem))
+        seen.add(f.stem)
+    try:
+        from .archive import _index, archived_path
+        nas = []
+        for k, e in list(_index().items()):
+            if k.startswith("lib:") and k[4:] not in seen and isinstance(e, dict):
+                q = archived_path(k)                      # NAS absent : rien de ce cote
+                if q is not None:
+                    nas.append((q, k[4:], e.get("at") or 0))
+        out += [(q, iid) for q, iid, _ in sorted(nas, key=lambda x: -x[2])]
+    except Exception:
+        logger.exception("[3D] 3MF d'origine du NAS")
+    return out
+
+
+def _view_ok(src: Path, key: str) -> bool:
+    """La vue est prete : en local, ou sa copie a jour sur le NAS (la vue la reprend a l'ouverture ; pas recopiee
+    en local d'avance, ce qui defairait le vidage)."""
+    if ready(src, key):
+        return True
+    try:
+        from .archive import _index, DEFAULT_ROOT
+        e = _index().get(f"3d:{key}")
+        if isinstance(e, dict) and e.get("to"):
+            m = json.loads((Path(e.get("root") or DEFAULT_ROOT) / e["to"] / "plates.json").read_text(encoding="utf-8"))
+            return m.get("v") == FORMAT_V
+    except (OSError, ValueError, ImportError):
+        pass
+    return False
+
+
 # l'avancement de la preparation de fond (29/10/2026), pour Parametres > Taches
 WARM: dict = {"running": False, "done": 0, "total": 0, "all": 0, "current": None, "started": None, "finished": None,
               "stopped": None}
@@ -1181,26 +1231,23 @@ async def warm_loop(first_delay_s: int = 90, period_s: int = 12 * 3600) -> None:
     ceux qui manquent : la premiere ouverture d'une vue 3D n'a plus a attendre."""
     from ..core import tasks as _tasks
     import asyncio
-    from .mw_source import _dir
     await asyncio.sleep(5)
     await asyncio.to_thread(warm_view_pool)
     await _tasks.sleep("mw_3d", first_delay_s)
     import time
     while True:
         try:
-            # les plus recents d'abord (ceux qu'on a le plus de chances d'ouvrir)
-            files = sorted(_dir().glob("*.3mf"), key=lambda f: f.stat().st_mtime, reverse=True)
-            todo = [f for f in files if not ready(f, f.stem)]
+            files = await asyncio.to_thread(_all_sources)
+            todo = [(f, k) for f, k in files if not _view_ok(f, k)]
             WARM.update(running=bool(todo), done=0, total=len(todo), all=len(files), started=time.time(), finished=None,
-                        current=None)
-            for f in todo:
-                WARM["current"] = f"{len(files) - len(todo) + WARM['done']} vues prêtes sur {len(files)} 3MF d'origine en local"
-                if not ready(f, f.stem):                # ouverte entre-temps : deja faite
-                    await asyncio.to_thread(_in_child, f, f.stem)
+                        current=None, stopped=None)
+            for f, k in todo:
+                WARM["current"] = f"{len(files) - len(todo) + WARM['done']} vues prêtes sur {len(files)} 3MF d'origine"
+                if not _view_ok(f, k):                  # ouverte entre-temps : deja faite
+                    await asyncio.to_thread(_in_child, f, k)
                 WARM["done"] += 1
                 await asyncio.sleep(3)
-            WARM.update(running=False, finished=time.time(),
-                        current=f"{len(files)} vues prêtes sur {len(files)} 3MF d'origine en local (ceux du NAS : à l'ouverture)")
+            WARM.update(running=False, finished=time.time(), current=f"{len(files)} vues prêtes sur {len(files)} 3MF d'origine")
             if todo:
                 logger.info(f"[3D] {len(todo)} modele(s) prepare(s) pour la vue 3D")
         except Exception:
