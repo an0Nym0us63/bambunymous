@@ -23,7 +23,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 17                          # 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 18                          # 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan", re.I)
 MAX_TRIANGLES = 1_500_000              # au-dela, le plateau est simplifie (29/10/2026 ; avant : pas converti du tout) :
                                        # un telephone l'affiche vite, et le fichier reste de quelques Mo
@@ -693,12 +693,11 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     def say(p_, label):
         _step(key, p_, f"{where['tag']} · {label}" if where["tag"] and nb > 1 else label)
 
-    def emit(lst, label="Lecture des pièces", zchg=None, own=None, piece_of=None, pieces_out=None):
+    def emit(lst, label="Lecture des pièces", zchg=None, own=None, piece_of=None):
         """Les pieces placees -> groupes par couleur. own : {objet place : ses sommets}, pour les deplacer apres ;
         piece_of : {objet place : son numero}, les groupes sont alors par (couleur, piece) (l'edition de la vue
         assemblee deplace une piece a la fois)."""
         gk = (lambda col, ident, tag: (_hex_rgba(col), piece_of[(ident, tag[0])])) if piece_of else (lambda col, ident, tag: _hex_rgba(col))
-        split = piece_of is not None and pieces_out is not None
         groups_out: dict = {}                           # couleur -> [sommets, triangles]
         total = 0
         start, pw = prog["done"], sum(len(p[3]) for _, parts in lst for p in parts)
@@ -718,26 +717,6 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                     break
                 rot = np.array(mt[:9], dtype=np.float64).reshape(3, 3)
                 vt = v + np.array(mt[9:], dtype=np.float64) if np.array_equal(rot, np.eye(3)) else v @ rot + np.array(mt[9:])
-                if split:
-                    # la vue assemblee (29/10/2026) : chaque morceau separe d'un maillage est une piece a part (un createur
-                    # fond souvent plusieurs pieces dans un seul fichier : l'oiseau en equilibre), comme « Separer en
-                    # objets » de Bambu Studio
-                    say(a0 + (a1 - a0) * 0.9, "Séparation des pièces")
-                    for ex, tt in by_ext.items():
-                        col = colors[ex - 1] if 0 < ex <= len(colors) else fcol
-                        for c, sub in _split_tris(v, t, tt, paint is not None):
-                            k = (ident, tag[0], c)
-                            if k not in piece_of:
-                                piece_of[k] = len(pieces_out)
-                                pieces_out.append((ident, tag, c))
-                            used, inv = np.unique(sub.ravel(), return_inverse=True)
-                            g = groups_out.setdefault((_hex_rgba(col), piece_of[k]), [[], [], 0])
-                            g[0].append(vt[used])
-                            g[1].append(inv.reshape(-1, 3) + g[2])
-                            g[2] += len(used)
-                            if own is not None:
-                                own.setdefault(ident, []).append(g[0][-1])
-                    continue
                 for ex, tt in by_ext.items():
                     col = colors[ex - 1] if 0 < ex <= len(colors) else fcol
                     # les changements de filament a une hauteur qui touchent ces triangles : un changement
@@ -833,10 +812,12 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     if asm_lst:
         where["tag"] = "Vue assemblée"
         own: dict = {}
-        # une piece = un morceau d'une partie d'un objet (29/10/2026 : par objet, un plateau range en un seul objet
-        # bougeait d'un bloc ; par partie, des pieces fondues dans un meme fichier aussi) ; numerotees a la lecture
-        plist, piece_of = [], {}
-        groups_out, total, pw = emit(asm_lst, own=own, piece_of=piece_of, pieces_out=plist)
+        # une piece = une partie d'un objet, comme dans Bambu Studio (29/10/2026 : par objet, un plateau range en un seul
+        # objet bougeait d'un bloc ; plus fin, le decoupage automatique en morceaux allait trop loin : c'est l'edition qui
+        # propose de separer une piece, a la demande)
+        plist = [(ident, p[4]) for ident, parts in asm_lst for p in parts]
+        piece_of = {(ident, tag[0]): i for i, (ident, tag) in enumerate(plist)}
+        groups_out, total, pw = emit(asm_lst, own=own, piece_of=piece_of)
         # toujours montree quand le 3MF en a une (29/10/2026 : le tri « vraie vue / copie des plateaux » en
         # cachait trop ; c'est a chacun de juger en la regardant) ; posee a la va-vite, elle est rangee
         # ou est chaque objet sur les plateaux (plateau, orientation) : pour reconnaitre un tas de pieces posees
@@ -855,13 +836,9 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
             # leurs sommets affiches par rapport a leur place dans le 3MF (rangement, recentrage) : les positions
             # editees sont gardees par rapport au 3MF, et restent justes si la vue est refaite autrement
             rec, _, shift = r
-            many = {}
-            for (oid, k), tag, c in plist:
-                many[(oid, k, tag[0])] = many.get((oid, k, tag[0]), 0) + 1
-            rec["pieces"] = [{"k": f"{oid}:{k}:{tag[0]}:{c}",
-                              "name": (tag[1] or f"Objet {oid}") + (f" · {c + 1}" if many[(oid, k, tag[0])] > 1 else ""),
+            rec["pieces"] = [{"k": f"{oid}:{k}:{tag[0]}", "name": tag[1] or f"Objet {oid}",
                               "o": [round(float(x), 4) for x in (moved.get((oid, k), np.zeros(3)) - shift)]}
-                             for (oid, k), tag, c in plist]
+                             for (oid, k), tag in plist]
     elif asm:
         logger.info(f"[3D] {key or src.name} : vue d'assemblage ignoree (un seul objet, ou des objets absents du 3MF)")
     _write(out_dir / "plates.json", json.dumps(meta).encode("utf-8"))
@@ -997,68 +974,6 @@ def _pack_bin(groups: dict) -> bytes:
         buf += q.view(np.uint8).reshape(-1, 6).T.tobytes()
         buf += d.view(np.uint8).reshape(-1, 4).T.tobytes()
     return bytes(buf)
-
-
-def _components(v, t):
-    """Le numero du morceau de chaque triangle d'un maillage : les morceaux qui ne se touchent pas (sommets soudes a
-    0,001 mm pres). Les miettes (moins de 0,3 % des triangles, et 30 au plus) vont au plus gros morceau. Numeros dans
-    l'ordre des tailles, le plus gros d'abord."""
-    import numpy as np
-    if len(t) == 0:
-        return np.zeros(0, dtype=np.int64)
-    _, canon = np.unique(np.round(v * 1000).astype(np.int64), axis=0, return_inverse=True)
-    canon = canon.reshape(-1)
-    tt = canon[t]
-    lab = np.arange(int(canon.max()) + 1)
-    a = np.concatenate([tt[:, 0], tt[:, 1]])
-    b = np.concatenate([tt[:, 1], tt[:, 2]])
-    for _ in range(200):                                # propagation du plus petit numero, avec raccourcis
-        m = np.minimum(lab[a], lab[b])
-        old = lab.copy()
-        np.minimum.at(lab, a, m)
-        np.minimum.at(lab, b, m)
-        for _ in range(4):
-            lab = lab[lab]
-        if np.array_equal(lab, old):
-            break
-    tl = lab[tt[:, 0]]
-    uniq, comp, counts = np.unique(tl, return_inverse=True, return_counts=True)
-    comp = comp.reshape(-1)
-    order = np.argsort(-counts)
-    rank = np.empty_like(order)
-    rank[order] = np.arange(len(order))
-    comp = rank[comp]
-    small = np.sort(counts)[::-1] < max(30, 0.003 * len(t))
-    if small.any():
-        comp[small[comp]] = 0
-        _, comp = np.unique(comp, return_inverse=True)
-    return comp.reshape(-1)
-
-
-def _split_tris(v, t, tt, painted: bool):
-    """[(numero du morceau, ses triangles)] des triangles tt (ceux d'un filament) d'un maillage (v, t) : par leurs
-    sommets ; peint, les triangles redecoupes sont rendus a leur morceau par sa boite."""
-    import numpy as np
-    comp = _components(v[: int(t.max()) + 1] if len(t) else v, t)
-    k = int(comp.max()) + 1 if len(comp) else 1
-    if k <= 1:
-        return [(0, tt)]
-    if not painted:
-        # les triangles d'un filament sont ceux du maillage (non peint : tt est t)
-        return [(c, tt[comp == c]) for c in range(k) if (comp == c).any()]
-    boxes = []
-    for c in range(k):
-        pts = v[t[comp == c].ravel()]
-        boxes.append((pts.min(axis=0) - 1e-3, pts.max(axis=0) + 1e-3))
-    cen = v[tt].mean(axis=1)
-    lab = np.zeros(len(tt), dtype=np.int64)
-    done = np.zeros(len(tt), dtype=bool)
-    for c in range(k - 1, -1, -1):                       # les petits d'abord : une boite de petit morceau est plus precise
-        lo, hi = boxes[c]
-        inside = ~done & np.all((cen >= lo) & (cen <= hi), axis=1)
-        lab[inside] = c
-        done |= inside
-    return [(c, tt[lab == c]) for c in range(k) if (lab == c).any()]
 
 
 def _decimate(groups_out: dict, target: int) -> int:
@@ -1413,7 +1328,7 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
         raise ValueError("Vue inconnue")
     clean = {}
     for k, m in (pieces or {}).items():
-        if re.fullmatch(r"\d+:\d+:\d+:\d+", str(k)) and isinstance(m, list) and len(m) == 16 \
+        if re.fullmatch(r"\d+:\d+:\d+(:\d+)?", str(k)) and isinstance(m, list) and len(m) == 16 \
                 and all(isinstance(x, (int, float)) and abs(x) < 1e6 for x in m):
             clean[str(k)] = [round(float(x), 6) for x in m]
     if not clean:

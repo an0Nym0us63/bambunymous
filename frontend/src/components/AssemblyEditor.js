@@ -16,13 +16,14 @@
 // contact (ou le long de l'arete), Maj + glisser la fait tourner autour du contact ; les pieces collees sur une piece
 // la suivent quand elle bouge ; « Decoller » la libere. Un collage est garde dans le repere de la piece support (B) :
 // le point et la normale du contact (et l'arete), enregistres avec l'assemblage.
-export async function createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder, pieces, render, onChange, groupsInit = [], jointsInit = [], autoGroup = false }) {
+export async function createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder, pieces, render, onChange, groupsInit = [], jointsInit = [] }) {
   const { TransformControls } = await import("three/examples/jsm/controls/TransformControls.js");
   const el = renderer.domElement;
   const ray = new THREE.Raycaster();
   const mouse = new THREE.Vector2();
-  const all = [...pieces.values()];
-  const byKey = new Map(all.map(g => [g.userData.k, g]));
+  let all = [...pieces.values()];
+  let byKey = new Map(all.map(g => [g.userData.k, g]));
+  const reindex = () => { all = [...pieces.values()]; byKey = new Map(all.map(g => [g.userData.k, g])); };
 
   let mode = "move";                 // move | rotate | ground | mate
   let magnet = true, assist = true;
@@ -42,14 +43,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   // une cle d'avant le decoupage en morceaux (« objet:instance[:partie] ») designe tous ses morceaux
   const byOld = k => byKey.has(k) ? [byKey.get(k)] : all.filter(g => String(g.userData.k || "").startsWith(`${k}:`));
   let groups = (groupsInit || []).map(ks => ks.flatMap(byOld)).filter(g => g.length > 1);
-  // les morceaux d'une meme piece (« objet:instance:partie:morceau ») partent groupes : ils bougent d'un bloc, comme le
-  // createur les a faits ; Alt + clic en prend un seul, « Degrouper » les libere. Seulement tant que l'assemblage n'est
-  // pas enregistre au nouveau format : ensuite, ses groupes enregistres font foi.
-  if (autoGroup) {
-    const byPart = new Map();
-    for (const g of all) { const k = String(g.userData.k || "").split(":").slice(0, 3).join(":"); byPart.set(k, [...(byPart.get(k) || []), g]); }
-    for (const parts of byPart.values()) if (parts.length > 1 && !parts.some(g => groups.some(gr => gr.includes(g)))) groups.push(parts);
-  }
   const groupOf = g => groups.find(gr => gr.includes(g)) || null;
   const unitOf = g => groupOf(g) || [g];
   // les collages : {a : la piece collee, b : son support, kind, p, n, e : dans le repere de b}
@@ -113,6 +106,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   tc.addEventListener("change", render);
 
   const undo = [], redo = [];
+  let pendingSplit = null;            // une separation proposee, pas encore validee
   const snapshot = () => ({ m: all.map(g => g.matrix.clone()), groups: groups.map(gr => [...gr]), joints: joints.map(cloneJ) });
   const restore = s => { all.forEach((g, i) => { s.m[i].decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); }); groups = s.groups.map(gr => [...gr]);
     joints = s.joints.map(cloneJ); placeHandle(); showContact(); render(); };
@@ -122,10 +116,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const selName = () => sel.size === 0 ? null : sel.size === 1 ? [...sel][0].userData.name : `${sel.size} pièces${groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))) ? " (groupe)" : ""}`;
   const center = () => { if (!sel.size) return null; const c = boxOfAll([...sel]).getCenter(new THREE.Vector3()); return [c.x, c.y, c.z].map(v => Math.round(v * 10) / 10); };
   const state = () => ({ mode, magnet, assist, rotStep, center: center(), selected: selName(), count: sel.size, step: first ? 2 : 1, canUndo: undo.length > 0, canRedo: redo.length > 0,
-    pivot: !!pivot, dirty: changes !== savedAt,
+    pivot: !!pivot, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
+    canSplit: sel.size === 1 && !pendingSplit, canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
     canUngroup: [...sel].some(g => groupOf(g)), multi, turnGlued, liveAngle, guard, fitting, fitMsg,
-    hidden: all.filter(g => !g.visible).length,
+    hidden: all.filter(g => !g.visible && g !== pendingSplit?.pg).length,
     glued: (() => { const j = jointOf([...sel]); return j ? { to: j.b.userData.name, kind: j.kind } : null; })() });
 
   // une marque de la prise (face : un disque ; arete : un trait)
@@ -591,6 +586,69 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     setTurnGlued: on => { turnGlued = on; onChange?.(state()); },
     setGuard: async on => { guard = on; if (on) await getCollider(); onChange?.(state()); },
     select: keys => setSel(keys.map(k => byKey.get(k)).filter(Boolean)),
+    // separer la piece choisie : proposer (morceaux colores), puis valider ou non
+    splitPreview: async () => {
+      if (sel.size !== 1 || pendingSplit) return;
+      const pg = [...sel][0];
+      const { splitPieceGeometry, buildSplitGroups } = await import("./assemblySplit");
+      const comps = splitPieceGeometry(THREE, pg);
+      if (!comps) { fitMsg = "Cette pièce est d'un seul tenant : rien à séparer"; onChange?.(state()); return; }
+      const groups = buildSplitGroups(THREE, pg, comps);
+      const tints = [0xef4444, 0x22c55e, 0x3b82f6, 0xf59e0b, 0xa855f7, 0x06b6d4, 0xec4899, 0x84cc16];
+      groups.forEach((g, i) => { holder.add(g); g.children.forEach(m => { m.material.emissive = new THREE.Color(tints[i % tints.length]); m.material.emissiveIntensity = 0.55; }); });
+      pg.visible = false;
+      pendingSplit = { pg, groups };
+      tc.detach(); render(); onChange?.(state());
+    },
+    splitCancel: () => {
+      if (!pendingSplit) return;
+      const { pg, groups } = pendingSplit;
+      groups.forEach(g => { holder.remove(g); g.children.forEach(m => { m.geometry.dispose(); m.material.dispose(); }); });
+      pg.visible = true; pendingSplit = null; placeHandle(); render(); onChange?.(state());
+    },
+    splitConfirm: () => {
+      if (!pendingSplit) return;
+      const { pg, groups: parts } = pendingSplit;
+      pendingSplit = null;
+      parts.forEach(g => g.children.forEach(m => {           // leur couleur d'origine
+        const src = pg.children.find(x => x.isMesh && x.material.color.equals(m.material.color));
+        m.material.emissive = src ? src.material.emissive.clone() : new THREE.Color(0); m.material.emissiveIntensity = src ? src.material.emissiveIntensity : 1;
+      }));
+      holder.remove(pg); pieces.delete(pg.userData.pid);
+      parts.forEach(g => pieces.set(g.userData.pid, g));
+      reindex();
+      // groupes et collages de la piece : repris par ses morceaux (le plus gros pour un collage)
+      groups = groups.map(gr => gr.flatMap(g => (g === pg ? parts : [g])));
+      joints = joints.map(j => ({ ...j, a: j.a === pg ? parts[0] : j.a, b: j.b === pg ? parts[0] : j.b }));
+      undo.length = 0; redo.length = 0; last = snapshot(); changes++;   // l'historique repart d'ici
+      setSel(parts);
+    },
+    // remettre une piece separee d'un seul tenant
+    reunite: () => {
+      const from = [...sel].map(g => g.userData.from).find(Boolean);
+      if (!from) return;
+      const parts = all.filter(g => g.userData.from === from);
+      const g0 = parts[0], whole = new THREE.Group();
+      const pc = g0.userData.parentC || new THREE.Vector3();
+      for (const g of parts) {
+        const cc = g.userData.c.clone().sub(pc);
+        for (const m of [...g.children]) { if (m.isMesh) { m.geometry.translate(cc.x, cc.y, cc.z); m.geometry.computeBoundingSphere(); whole.add(m); } }
+        holder.remove(g); pieces.delete(g.userData.pid);
+      }
+      const ud = { ...g0.userData, k: from, name: g0.userData.name.replace(/ · \d+$/, ""), pid: String(g0.userData.pid).replace(/:\d+$/, ""), c: pc.clone() };
+      delete ud.from; delete ud.parentC;
+      whole.userData = ud;
+      const cc0 = g0.userData.c.clone().sub(pc);
+      g0.updateMatrix();
+      g0.matrix.clone().multiply(new THREE.Matrix4().makeTranslation(-cc0.x, -cc0.y, -cc0.z)).decompose(whole.position, whole.quaternion, whole.scale);
+      whole.updateMatrix();
+      holder.add(whole); pieces.set(ud.pid, whole);
+      reindex();
+      groups = groups.map(gr => [...new Set(gr.map(g => (parts.includes(g) ? whole : g)))]).filter(gr => gr.length > 1);
+      joints = joints.map(j => ({ ...j, a: parts.includes(j.a) ? whole : j.a, b: parts.includes(j.b) ? whole : j.b })).filter(j => j.a !== j.b);
+      undo.length = 0; redo.length = 0; last = snapshot(); changes++;
+      setSel([whole]);
+    },
     fit,
     rotate: rotateSel,
     // placer le centre de la selection a une position exacte (mm, repere du 3MF : Z vers le haut)

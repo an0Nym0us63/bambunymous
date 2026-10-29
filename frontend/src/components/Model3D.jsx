@@ -321,20 +321,40 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             // chaque piece centree sur son origine (la poignee de rotation tourne autour d'elle), puis a sa place :
             // celle enregistree (matrice S : du 3MF a la place editee), sinon celle affichee
             const saved = edit?.pieces || {};
-            for (const pg of byPiece.values()) {
+            const { splitPieceGeometry, buildSplitGroups } = Object.keys(saved).some(k => k.split(":").length === 4) ? await import("./assemblySplit") : {};
+            for (const pg of [...byPiece.values()]) {
               const b = new THREE.Box3();
               pg.children.forEach(m => { m.geometry.computeBoundingBox(); b.union(m.geometry.boundingBox); });
               const c = b.getCenter(new THREE.Vector3());
               pg.children.forEach(m => { m.geometry.translate(-c.x, -c.y, -c.z); m.geometry.computeBoundingSphere(); });
               pg.userData.c = c.clone();
               pg.position.copy(c);
-              // une cle d'avant (29/10/2026 : « objet:instance », puis « objet:instance:partie », avant le decoupage en
-              // morceaux) : la place de la piece entiere vaut pour chacun de ses morceaux (ils bougeaient d'un bloc)
-              const kk = String(pg.userData.k || "").split(":");
-              const S = saved[pg.userData.k] || saved[kk.slice(0, 3).join(":")] || saved[kk.slice(0, 2).join(":")], o = pg.userData.o || [0, 0, 0];
-              if (S) new THREE.Matrix4().fromArray(S).multiply(new THREE.Matrix4().makeTranslation(c.x - o[0], c.y - o[1], c.z - o[2]))
-                .decompose(pg.position, pg.quaternion, pg.scale);
               pg.updateMatrix();
+              const o = pg.userData.o || [0, 0, 0];
+              const place = (g, S) => {
+                const cg = g.userData.c;
+                new THREE.Matrix4().fromArray(S).multiply(new THREE.Matrix4().makeTranslation(cg.x - o[0], cg.y - o[1], cg.z - o[2])).decompose(g.position, g.quaternion, g.scale);
+                g.updateMatrix();
+              };
+              // une piece separee a la main (« objet:instance:partie:morceau ») : refaite en ses morceaux, chacun a sa place
+              const pre = `${pg.userData.k}:`;
+              if (splitPieceGeometry && Object.keys(saved).some(k => k.startsWith(pre))) {
+                const comps = splitPieceGeometry(THREE, pg);
+                if (comps) {
+                  const parts = buildSplitGroups(THREE, pg, comps);
+                  holder.remove(pg); byPiece.delete(pg.userData.pid);
+                  for (const g of parts) {
+                    holder.add(g); byPiece.set(g.userData.pid, g);
+                    const S = saved[g.userData.k] || saved[pg.userData.k];
+                    if (S) place(g, S);
+                  }
+                  continue;
+                }
+              }
+              // une cle d'avant (« objet:instance ») : la place de l'objet entier vaut pour ses parties
+              const kk = String(pg.userData.k || "").split(":");
+              const S = saved[pg.userData.k] || saved[`${pg.userData.k}:0`] || saved[kk.slice(0, 2).join(":")];
+              if (S) place(pg, S);
             }
           }
           model.add(holder);
@@ -484,9 +504,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           if (on && !editor) {
             const { createAssemblyEditor } = await import("./AssemblyEditor");
             editor = await createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder: ed.holder, pieces: ed.byPiece, render, onChange,
-              groupsInit: edit?.groups || [], jointsInit: edit?.joints || [],
-              // pas encore d'assemblage enregistre au format a morceaux (cles a quatre parties) : morceaux groupes par piece
-              autoGroup: !Object.keys(edit?.pieces || {}).some(k => k.split(":").length === 4) });
+              groupsInit: edit?.groups || [], jointsInit: edit?.joints || [] });
           } else if (!on && editor) { try { editor.dispose(); } catch { /* la vue se ferme quand meme */ } editor = null; }
           return editor;
         };
@@ -501,7 +519,25 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         };
         // la vue telle que le 3MF la donne (sans place enregistree)
         const origin = () => [...(ed?.byPiece.values() || [])].map(pg => new THREE.Matrix4().makeTranslation(pg.userData.c.x, pg.userData.c.y, pg.userData.c.z));
-        if (editApi) editApi.current = ed ? { editing, toSave, origin, get editor() { return editor; } } : null;
+        // la vue remise en place apres un changement d'assemblage (29/10/2026 : apres « Vue du 3MF », la grille et le cadrage
+        // gardaient la taille d'avant jusqu'a la reouverture) : le modele recentre et pose, la grille a sa taille, la vue cadree
+        const relayout = () => {
+          if (!ed) return;
+          const b = new THREE.Box3();
+          for (const pg of ed.byPiece.values()) { if (pg.visible) b.expandByObject(pg); }
+          if (b.isEmpty()) return;
+          const c = b.getCenter(new THREE.Vector3());
+          model.position.x -= c.x; model.position.z -= c.z; model.position.y -= b.min.y;
+          model.updateMatrixWorld(true);
+          const s3 = b.getSize(new THREE.Vector3());
+          const gw = Math.max(64, Math.ceil(s3.x * 1.2 / 16) * 16), gd = Math.max(64, Math.ceil(s3.z * 1.2 / 16) * 16);
+          grid.scale.set(gw / side, 1, gd / side);
+          const sp = new THREE.Box3().setFromObject(model).getBoundingSphere(new THREE.Sphere());
+          sph.center.copy(sp.center); sph.radius = sp.radius;
+          fit();
+          onState({ busy: false, error: null, size: [s3.x, s3.z, s3.y], glow: glowMats.length > 0 });     // les dimensions sous la vue
+        };
+        if (editApi) editApi.current = ed ? { editing, toSave, origin, relayout, get editor() { return editor; } } : null;
         disposables.push({ dispose: () => { try { editor?.dispose(); } catch { /* rien */ } if (editApi) editApi.current = null; } });
         api.current = { fit, night, backlight, bedShow, dragPans, zoom };
         const s = bb2.getSize(new THREE.Vector3());
@@ -606,6 +642,7 @@ const EDIT_HELP = [
     ["Échap", "plus rien de choisi"],
     ["➕ Multi", "au stylet : chaque clic ajoute ou retire une pièce (comme Ctrl + clic)"],
     ["H / Alt + H", "masquer la sélection (pour atteindre ce qu'elle cache) / tout réafficher"],
+    ["✂ Séparer", "propose de séparer la pièce choisie en ses morceaux qui ne se touchent pas (colorés pour les voir) : ✓ pour valider, ✕ pour laisser ; ⊕ Réunir la remet d'un seul tenant"],
     ["🔗 Grouper (Ctrl + G)", "les pièces choisies bougent ensemble ; ⛓ Dégrouper (Ctrl + Maj + G)"],
   ]],
   ["Déplacer (M)", [
@@ -687,8 +724,16 @@ function EditBar({ est, api, onSave, onReset, onClose, saving }) {
         data-tip="Le glisser de la pièce collée la fait tourner autour du contact (comme Maj + glisser, pour le stylet)">⟳ Tourner collée</button>}
       <button type="button" onClick={() => api?.setAssist(!est.assist)} style={b(est.assist)}
         data-tip="Collage assisté : les faces planes entières sont centrées l'une sur l'autre et leurs grands axes alignés (sinon : au point cliqué)">🪄 Assisté</button>
-      {(est.canGroup || est.canUngroup || est.glued || est.count > 0 || est.hidden > 0) && <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>}
+      {!!(est.canGroup || est.canUngroup || est.glued || est.count > 0 || est.hidden > 0 || est.splitPending) && <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>}
       {est.canGroup && <button type="button" onClick={() => api?.group()} style={b(false)} data-tip="Les pièces choisies bougent ensemble (Ctrl+G)">🔗 Grouper</button>}
+      {est.splitPending ? <>
+        <button type="button" onClick={() => api?.splitConfirm()} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}>✓ Séparer en {est.splitPending}</button>
+        <button type="button" onClick={() => api?.splitCancel()} style={b(false)}>✕ Ne pas séparer</button>
+      </> : <>
+        {est.canSplit && <button type="button" onClick={() => api?.splitPreview()} style={b(false)}
+          data-tip="Proposer de séparer cette pièce en ses morceaux qui ne se touchent pas : tu vois les morceaux, puis tu valides ou non">✂ Séparer</button>}
+        {est.canReunite && <button type="button" onClick={() => api?.reunite()} style={b(false)} data-tip="Remettre la pièce d'un seul tenant">⊕ Réunir</button>}
+      </>}
       {est.count > 0 && <button type="button" onClick={() => api?.hide()} style={b(false)} data-tip="Masquer la sélection pour atteindre ce qu'elle cache (H)">🙈 Masquer</button>}
       {est.hidden > 0 && <button type="button" onClick={() => api?.showAll()} style={b(false)} data-tip="Réafficher tout (Alt+H)">👁 Tout afficher ({est.hidden})</button>}
       {est.glued && <button type="button" disabled={est.fitting != null} onClick={() => api?.fit()} style={b(true, { background: "linear-gradient(135deg, #f59e0b, #ef4444)" })}
@@ -720,7 +765,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving }) {
     <div style={{ position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)", zIndex: 3, padding: "7px 14px", borderRadius: 12, fontSize: 12.5,
       fontWeight: 700, color: "var(--text2)", background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)",
       maxWidth: "calc(100% - 140px)", textAlign: "center" }}>
-      {est.fitMsg ? <b style={{ color: /^Emboîtée/.test(est.fitMsg) ? "#16a34a" : "#d97706" }}>{est.fitMsg}</b>
+      {est.splitPending ? <b style={{ color: "#0EA5E9" }}>{est.splitPending} morceaux, chacun de sa couleur : ✓ Séparer en {est.splitPending}, ou ✕ Ne pas séparer</b>
+        : est.fitMsg ? <b style={{ color: /^Emboîtée/.test(est.fitMsg) ? "#16a34a" : "#d97706" }}>{est.fitMsg}</b>
         : est.fitting != null ? <b style={{ color: "#f59e0b" }}>🧩 Recherche de l'emboîtement… {est.fitting} %</b>
         : est.liveAngle != null ? <b style={{ color: "#0EA5E9", fontSize: 15 }}>Rotation : {String(est.liveAngle).replace(".", ",")}°</b> : <>
       {est.selected && (est.mode === "move" || est.mode === "rotate") ? <b style={{ color: "#0EA5E9" }}>{est.selected} · </b> : null}{tip}</>}
@@ -858,7 +904,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     finally { setSaving(false); }
   };
   const resetEdit = async () => {
-    try { await client.delete(`/makerworld/3d/edit/${meta.key}`); setSavedEdit(null); editApi.current?.editor?.reset(editApi.current.origin()); editApi.current?.editor?.markSaved(); }
+    try { await client.delete(`/makerworld/3d/edit/${meta.key}`); setSavedEdit(null); editApi.current?.editor?.reset(editApi.current.origin()); editApi.current?.editor?.markSaved();
+      editApi.current?.relayout(); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
   // quitter l'edition : avec des changements non enregistres, un choix explicite dans la vue (29/10/2026 : la
@@ -870,6 +917,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     await editApi.current?.editing(false);
     setEditing(false); setEst(null);
     if (how === "discard") setVkey(k => k + 1);        // la vue revient a la place enregistree
+    else editApi.current?.relayout();
     if (document.fullscreenElement === wrap.current) document.exitFullscreen?.().catch(() => {});
   };
   const stopEdit = () => { if (editApi.current?.editor?.state().dirty) setLeaving(true); else closeEdit(); };
