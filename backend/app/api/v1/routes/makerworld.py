@@ -1574,7 +1574,8 @@ async def mw_3d_edit_save(key: str, body: dict = Body({}), user: str = Depends(g
     """Enregistre la place de chaque piece de la vue assemblee de cette vue (matrices 4x4 par piece « objet:instance »)."""
     from ....services import mw_3d as T
     try:
-        return T.save_edit(key, body.get("pieces") or {}, str(user or ""), body.get("groups") or [], body.get("joints") or [])
+        return T.save_edit(key, body.get("pieces") or {}, str(user or ""), body.get("groups") or [], body.get("joints") or [],
+                           body.get("splits") or [])
     except ValueError as e:
         raise HTTPException(400, str(e))
 

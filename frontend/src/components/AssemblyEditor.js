@@ -16,7 +16,7 @@
 // contact (ou le long de l'arete), Maj + glisser la fait tourner autour du contact ; les pieces collees sur une piece
 // la suivent quand elle bouge ; « Decoller » la libere. Un collage est garde dans le repere de la piece support (B) :
 // le point et la normale du contact (et l'arete), enregistres avec l'assemblage.
-export async function createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder, pieces, render, onChange, groupsInit = [], jointsInit = [] }) {
+export async function createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder, pieces, render, onChange, groupsInit = [], jointsInit = [], groupByObject = false }) {
   const { TransformControls } = await import("three/examples/jsm/controls/TransformControls.js");
   const el = renderer.domElement;
   const ray = new THREE.Raycaster();
@@ -43,6 +43,14 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   // une cle d'avant le decoupage en morceaux (« objet:instance[:partie] ») designe tous ses morceaux
   const byOld = k => byKey.has(k) ? [byKey.get(k)] : all.filter(g => String(g.userData.k || "").startsWith(`${k}:`));
   let groups = (groupsInit || []).map(ks => ks.flatMap(byOld)).filter(g => g.length > 1);
+  // les parties d'un meme objet (« objet:instance:partie ») bougent ensemble, comme dans Bambu Studio : le visage avec ses
+  // yeux et sa bouche ; Alt + clic en prend une seule, « Degrouper » les libere (tant que l'assemblage n'a pas ete
+  // enregistre par cette version : ensuite, ses groupes font foi)
+  if (groupByObject) {
+    const byObj = new Map();
+    for (const g of all) { const k = String(g.userData.k || "").split(":").slice(0, 2).join(":"); byObj.set(k, [...(byObj.get(k) || []), g]); }
+    for (const parts of byObj.values()) if (parts.length > 1 && !parts.some(g => groups.some(gr => gr.includes(g)))) groups.push(parts);
+  }
   const groupOf = g => groups.find(gr => gr.includes(g)) || null;
   const unitOf = g => groupOf(g) || [g];
   // les collages : {a : la piece collee, b : son support, kind, p, n, e : dans le repere de b}
@@ -262,7 +270,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     tc.attach(handle); tc.setMode(mode === "move" ? "translate" : "rotate");
   };
   const shade = () => {
-    all.forEach(o => o.children.forEach(m => { if (m.isMesh && m.material) { const dim = sel.size > 0 && !sel.has(o); m.material.transparent = dim; m.material.opacity = dim ? 0.45 : 1; } }));
+    all.forEach(o => o.children.forEach(m => { if (m.isMesh && m.material) { const dim = sel.size > 0 && !sel.has(o); m.material.transparent = dim; m.material.opacity = dim ? 0.65 : 1; } }));
   };
   const setSel = list => { fitMsg = null; sel.clear(); list.forEach(g => sel.add(g)); shade(); placeHandle(); showContact(); render(); onChange?.(state()); };
   // le contact de la selection collee, marque d'un anneau
@@ -680,6 +688,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     },
     reset: matrices => { all.forEach((g, i) => { matrices[i].decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); }); groups = []; joints = []; setSel([]); push(); },
     groups: () => groups.map(gr => gr.map(g => g.userData.k)),
+    splits: () => [...new Set(all.map(g => g.userData.from).filter(Boolean))],     // les pieces separees a la main
     // decoller la selection : son collage oublie, et la piece ecartee de 2 mm
     unglue: () => {
       const list = [...sel], j = jointOf(list);

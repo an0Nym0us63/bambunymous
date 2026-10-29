@@ -1322,7 +1322,7 @@ def load_edit(key: str) -> dict | None:
         return None
 
 
-def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, joints: list | None = None) -> dict:
+def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, joints: list | None = None, splits: list | None = None) -> dict:
     import time
     if not re.fullmatch(r"[A-Za-z0-9_]+", key or ""):
         raise ValueError("Vue inconnue")
@@ -1341,7 +1341,9 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
             **({"e": j["e"]} if num(j.get("e"), 3) else {})}
            for j in (joints or []) if isinstance(j, dict) and str(j.get("a")) in clean and str(j.get("b")) in clean
            and num(j.get("p"), 3) and num(j.get("n"), 3)]
-    d = {"pieces": clean, "groups": [g for g in grp if len(g) > 1], "joints": jts, "at": time.time(), "by": by}
+    # les pieces separees a la main (refaites en morceaux a l'ouverture), et la version de l'edition
+    spl = [str(k) for k in (splits or []) if re.fullmatch(r"\d+:\d+:\d+", str(k))]
+    d = {"pieces": clean, "groups": [g for g in grp if len(g) > 1], "joints": jts, "splits": spl, "v": 2, "at": time.time(), "by": by}
     f = _edits_file(key)
     f.parent.mkdir(parents=True, exist_ok=True)
     _write(f, json.dumps(d).encode("utf-8"))

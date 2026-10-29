@@ -321,7 +321,10 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             // chaque piece centree sur son origine (la poignee de rotation tourne autour d'elle), puis a sa place :
             // celle enregistree (matrice S : du 3MF a la place editee), sinon celle affichee
             const saved = edit?.pieces || {};
-            const { splitPieceGeometry, buildSplitGroups } = Object.keys(saved).some(k => k.split(":").length === 4) ? await import("./assemblySplit") : {};
+            // seules les pieces que l'on a separees soi-meme (« Separer ») sont refaites en morceaux (29/10/2026 : les
+            // morceaux du decoupage automatique d'un moment ne se renumerotaient pas pareil, et s'eparpillaient)
+            const splits = new Set(edit?.splits || []);
+            const { splitPieceGeometry, buildSplitGroups } = splits.size ? await import("./assemblySplit") : {};
             for (const pg of [...byPiece.values()]) {
               const b = new THREE.Box3();
               pg.children.forEach(m => { m.geometry.computeBoundingBox(); b.union(m.geometry.boundingBox); });
@@ -338,7 +341,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               };
               // une piece separee a la main (« objet:instance:partie:morceau ») : refaite en ses morceaux, chacun a sa place
               const pre = `${pg.userData.k}:`;
-              if (splitPieceGeometry && Object.keys(saved).some(k => k.startsWith(pre))) {
+              if (splitPieceGeometry && splits.has(pg.userData.k) && Object.keys(saved).some(k => k.startsWith(pre))) {
                 const comps = splitPieceGeometry(THREE, pg);
                 if (comps) {
                   const parts = buildSplitGroups(THREE, pg, comps);
@@ -504,7 +507,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           if (on && !editor) {
             const { createAssemblyEditor } = await import("./AssemblyEditor");
             editor = await createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder: ed.holder, pieces: ed.byPiece, render, onChange,
-              groupsInit: edit?.groups || [], jointsInit: edit?.joints || [] });
+              groupsInit: edit?.groups || [], jointsInit: edit?.joints || [],
+              // pas encore enregistre par cette version : les parties d'un meme objet partent groupees
+              groupByObject: edit?.v !== 2 });
           } else if (!on && editor) { try { editor.dispose(); } catch { /* la vue se ferme quand meme */ } editor = null; }
           return editor;
         };
@@ -769,7 +774,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving }) {
         : est.fitMsg ? <b style={{ color: /^Emboîtée/.test(est.fitMsg) ? "#16a34a" : "#d97706" }}>{est.fitMsg}</b>
         : est.fitting != null ? <b style={{ color: "#f59e0b" }}>🧩 Recherche de l'emboîtement… {est.fitting} %</b>
         : est.liveAngle != null ? <b style={{ color: "#0EA5E9", fontSize: 15 }}>Rotation : {String(est.liveAngle).replace(".", ",")}°</b> : <>
-      {est.selected && (est.mode === "move" || est.mode === "rotate") ? <b style={{ color: "#0EA5E9" }}>{est.selected} · </b> : null}{tip}</>}
+      {est.selected && (est.mode === "move" || est.mode === "rotate") ? <b style={{ color: "#0EA5E9" }}>{est.selected} · </b> : null}{tip}
+      {est.count > 0 && <span style={{ display: "block", fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>Les autres pièces s'estompent : clic dans le vide ou Échap pour tout désélectionner</span>}</>}
     </div>
   </>;
 }
@@ -898,7 +904,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     if (!pieces) return;
     setSaving(true);
     try { const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces, groups: editApi.current?.editor?.groups() || [],
-      joints: editApi.current?.editor?.joints() || [] });
+      joints: editApi.current?.editor?.joints() || [], splits: editApi.current?.editor?.splits() || [], v: 2 });
       setSavedEdit(r.data); editApi.current?.editor?.markSaved(); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setSaving(false); }
