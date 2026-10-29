@@ -593,10 +593,15 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           camera.position.copy(sp.center).addScaledVector(dir, d); camera.lookAt(sp.center);
           camera.near = Math.max(0.1, d / 100); camera.far = d * 20; camera.updateProjectionMatrix();
           renderer.setClearColor(0x000000, 0);
+          // de jour, une lumiere qui vient de l'appareil (30/10/2026) : une vue prise par-dessous ou de dos n'est plus
+          // dans l'ombre ; retiree apres la prise
+          const head = !bloomOn && !litOn ? new THREE.DirectionalLight(0xffffff, 1.3) : null;
+          if (head) { head.position.copy(camera.position); head.target.position.copy(sp.center); scene.add(head, head.target); }
           if (bloomOn && composer) composer.setSize(size, size);
           if (litOn && lit) lit.resize();
           render();                                        // le rendu tel qu'affiche : nuit, lumiere derriere (lithophane)
           const blob = await new Promise(res => renderer.domElement.toBlob(res, "image/png"));
+          if (head) { scene.remove(head, head.target); head.dispose(); }
           // la vue reprend comme avant
           grid.visible = was.grid; scene.background = was.bg;
           lit?.clearBg(false);
@@ -870,7 +875,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
         <button type="button" onClick={() => api?.splitCancel()} style={b(false)}>✕ Ne pas séparer</button>
       </> : <>
         {est.canSplit && <button type="button" onClick={() => api?.splitPreview()} style={b(false)}
-          data-tip="Proposer de séparer cette pièce en ses morceaux qui ne se touchent pas : tu vois les morceaux, puis tu valides ou non">✂ Séparer</button>}
+          data-tip="Des pièces groupées (les parties d'un objet du 3MF) : les rendre indépendantes d'un clic. Une pièce seule : proposer ses morceaux qui ne se touchent pas, à valider ou non">✂ Séparer</button>}
         {est.canReunite && <button type="button" onClick={() => api?.reunite()} style={b(false)} data-tip="Remettre la pièce d'un seul tenant">⊕ Réunir</button>}
       </>}
       {est.count > 0 && <button type="button" onClick={() => api?.hide()} style={b(false)} data-tip="Masquer la sélection pour atteindre ce qu'elle cache (H)">🙈 Masquer</button>}

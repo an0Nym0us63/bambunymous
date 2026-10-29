@@ -129,7 +129,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const center = () => { if (!sel.size) return null; const c = boxOfAll([...sel]).getCenter(new THREE.Vector3()); return [c.x, c.y, c.z].map(v => Math.round(v * 10) / 10); };
   const state = () => ({ mode, magnet, assist, rotStep, center: center(), selected: selName(), count: sel.size, step: first ? 2 : 1, canUndo: undo.length > 0, canRedo: redo.length > 0,
     pivot: !!pivot, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
-    canSplit: sel.size === 1 && !pendingSplit, canReunite: [...sel].some(g => g.userData.from),
+    canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
     canUngroup: [...sel].some(g => groupOf(g)), multi, turnGlued, liveAngle, guard, fitting, fitMsg,
     hidden: all.filter(g => !g.visible && !g.userData.excluded && g !== pendingSplit?.pg).length,
@@ -659,16 +659,29 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     select: keys => setSel(keys.map(k => byKey.get(k)).filter(Boolean)),
     // separer la piece choisie : proposer (morceaux colores), puis valider ou non
     splitPreview: async () => {
-      if (sel.size !== 1 || pendingSplit) return;
+      if (pendingSplit) return;
+      // des pieces groupees (les parties d'un objet du 3MF, un groupe fait a la main) : la separation les rend
+      // independantes d'un coup (30/10/2026 : « Separer » ne faisait rien sur un groupe)
+      const grouped = [...sel].filter(g => groupOf(g));
+      if (grouped.length) {
+        const list = [...new Set(grouped.flatMap(g => groupOf(g)))];
+        groups = groups.filter(gr => !gr.some(g => sel.has(g)));
+        push();
+        setSel(list);                                     // choisir efface le message : il vient apres
+        fitMsg = `Séparée en ${list.length} pièces du 3MF : chacune se choisit et se déplace seule (✂ sur une seule pour la couper en morceaux)`;
+        onChange?.(state());
+        return;
+      }
+      if (sel.size !== 1) return;
       const pg = [...sel][0];
       const { splitPieceGeometry, buildSplitGroups } = await import("./assemblySplit");
       const comps = splitPieceGeometry(THREE, pg);
       if (!comps) { fitMsg = "Cette pièce est d'un seul tenant : rien à séparer"; onChange?.(state()); return; }
-      const groups = buildSplitGroups(THREE, pg, comps);
+      const pieceParts = buildSplitGroups(THREE, pg, comps);
       const tints = [0xef4444, 0x22c55e, 0x3b82f6, 0xf59e0b, 0xa855f7, 0x06b6d4, 0xec4899, 0x84cc16];
-      groups.forEach((g, i) => { holder.add(g); g.children.forEach(m => { m.material.emissive = new THREE.Color(tints[i % tints.length]); m.material.emissiveIntensity = 0.55; }); });
+      pieceParts.forEach((g, i) => { holder.add(g); g.children.forEach(m => { m.material.emissive = new THREE.Color(tints[i % tints.length]); m.material.emissiveIntensity = 0.55; }); });
       pg.visible = false;
-      pendingSplit = { pg, groups };
+      pendingSplit = { pg, groups: pieceParts };
       tc.detach(); render(); onChange?.(state());
     },
     splitCancel: () => {
