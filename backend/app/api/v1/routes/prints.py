@@ -604,7 +604,7 @@ async def _build_gallery(kind: str = "photos") -> dict:
                 "number_of_items": (p.group.number_of_items if p.group else None) or 1,
                 "cover_print_id":  p.group.cover_print_id if p.group else None,
                 "cover_photo":     p.group.cover_photo if p.group else None,
-                "prints": 0, "photos": [], "_designs": set(), "print_ids": [],
+                "prints": 0, "photos": [], "_designs": set(), "_dcount": {}, "print_ids": [],
                 "total_weight_g": 0.0, "total_cost_filament": 0.0,
                 "electric_cost": 0.0, "total_cost": 0.0, "duration_seconds": 0.0,
                 "latest_date": None,
@@ -614,6 +614,7 @@ async def _build_gallery(kind: str = "photos") -> dict:
             acc["photos"].extend(photos)
             if p.design_id:
                 acc["_designs"].add(str(p.design_id))
+                acc["_dcount"][str(p.design_id)] = acc["_dcount"].get(str(p.design_id), 0) + 1
             acc["total_weight_g"]      += p.total_weight_g or 0
             acc["total_cost_filament"] += p.total_cost_filament or 0
             acc["electric_cost"]       += p.electric_cost or 0
@@ -676,8 +677,10 @@ async def _build_gallery(kind: str = "photos") -> dict:
         # cover_photo est CONSERVE dans la reponse : la mosaique s'en sert pour
         # donner la place dominante a la photo choisie. Il etait filtre quand il
         # ne servait qu'au tri interne.
-        {**{k: v for k, v in g.items() if k != "_designs"},
+        {**{k: v for k, v in g.items() if k not in ("_designs", "_dcount")},
          "design_id": next(iter(g["_designs"])) if len(g["_designs"]) == 1 else None,
+         # la vue 3D d'un groupe de plusieurs modeles (30/10/2026) : celui qu'il a le plus imprime
+         "design_3d": max(g["_dcount"], key=g["_dcount"].get) if g["_dcount"] else None,
          "cost_per_item": round(g["total_cost"] / g["number_of_items"], 2) if g.get("number_of_items", 1) > 1 else None}
         for g in group_acc.values() if g["photos"]
     ]

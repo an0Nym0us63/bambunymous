@@ -2750,6 +2750,7 @@ function TimelapsesView({ search, onCount }) {
 }
 
 function FriendsGalleryView({ search, data, kind = "photos" }) {
+  const [view3d, setView3d] = useState(null);
   const items = useMemo(() => {
     let list = (data?.items || []).map(it => ({ ...it, title: it.kind === "group" ? it.name : (it.title || it.file_name),
       photos: (it.photos || []).map(ph => ({ ...ph, url: relayed(ph.url) })) }));
@@ -2770,10 +2771,9 @@ function FriendsGalleryView({ search, data, kind = "photos" }) {
     <GalleryCompare
       items={items}
       // « Fiche » (25/10/2026) : chez le copain, en lecture seule, sur la fiche de cette impression ou de ce groupe
-      onItemClick={async it => {
-        let f = { id: it.friend_id, name: it.friend_name };
-        try { const { data: d } = await client.get("/friends"); f = (d.friends || []).find(x => String(x.id) === String(it.friend_id)) || f; } catch { /* le nom suffit */ }
-        useFriend.getState().visitAt(f, it.kind === "group" ? `/prints?group=${it.id}` : `/prints?id=${it.id}`);
+      onItemClick={it => {
+        if (kind === "vue3d") { if (!(it.design_id || it.design_3d)) return false; setView3d(it); return true; }
+        openFriendFiche(it);
       }}
       getId={it => `${it.friend_id}-${it.kind}-${it.id}`}
       getCoverImage={it => it.photos?.[0]?.url || null}
@@ -2789,7 +2789,18 @@ function FriendsGalleryView({ search, data, kind = "photos" }) {
         ["Poids", it => it.total_weight_g ? `${it.total_weight_g.toFixed(0)}g` : null],
       ]}
     />
+    {view3d && <Model3D designId={view3d.design_id || view3d.design_3d} title={view3d.title} focus friend={{ id: view3d.friend_id }}
+      printId={view3d.kind === "print" ? view3d.id : view3d.print_ids?.[0] || null}
+      usedPrints={view3d.kind === "print" ? [view3d.id] : view3d.print_ids || []}
+      scope={`${view3d.kind}:${view3d.id}`} onClose={() => setView3d(null)} onFiche={() => openFriendFiche(view3d)}/>}
   </>);
+}
+
+// « Fiche » (25/10/2026) : chez le copain, en lecture seule, sur la fiche de cette impression ou de ce groupe
+async function openFriendFiche(it) {
+        let f = { id: it.friend_id, name: it.friend_name };
+        try { const { data: d } = await client.get("/friends"); f = (d.friends || []).find(x => String(x.id) === String(it.friend_id)) || f; } catch { /* le nom suffit */ }
+        useFriend.getState().visitAt(f, it.kind === "group" ? `/prints?group=${it.id}` : `/prints?id=${it.id}`);
 }
 
 function MyGalleryView({ search, sortF = "recent", data, loading, kind = "photos" }) {
@@ -2842,7 +2853,7 @@ function MyGalleryView({ search, sortF = "recent", data, loading, kind = "photos
       )}
       emptyLabel="Aucune photo disponible"
       onItemClick={it => {
-        if (kind === "vue3d" && it.design_id) { setView3d(it); return; }
+        if (kind === "vue3d") { if (!(it.design_id || it.design_3d)) return false; setView3d(it); return true; }
         if (it.kind==="group") setSelectedGroup(it);
         else setSelectedPrint(it);
       }}
@@ -2857,7 +2868,8 @@ function MyGalleryView({ search, sortF = "recent", data, loading, kind = "photos
       <PrintDetail p={selectedPrint} onClose={()=>setSelectedPrint(null)}
         onDelete={()=>setSelectedPrint(null)} onChanged={()=>{}}/>
     )}
-    {view3d && <Model3D designId={view3d.design_id} title={view3d.title} focus
+    {view3d && <Model3D designId={view3d.design_id || view3d.design_3d} title={view3d.title} focus
+      onFiche={() => { const it = view3d; setView3d(null); if (it.kind === "group") setSelectedGroup(it); else setSelectedPrint(it); }}
       printId={view3d.kind === "print" ? view3d.id : view3d.print_ids?.[0] || null}
       usedPrints={view3d.kind === "print" ? [view3d.id] : view3d.print_ids || []}
       scope={`${view3d.kind}:${view3d.id}`} onClose={() => setView3d(null)}/>}

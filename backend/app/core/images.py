@@ -8,6 +8,9 @@ groupes) : tout ce qui repond une image en profite, y compris les routes a venir
   cote fait ``w`` px (une tuile carree en « cover » reste nette), gardee sur disque
   sous l'empreinte (ETag) du fichier d'origine : un fichier remplace donne une
   nouvelle vignette. Une photo de telephone de plusieurs Mo devient ~20 Ko.
+- ``&trim=1`` (30/10/2026, la galerie des vues 3D) : une image transparente est d'abord rognee a ce qu'elle
+  montre (le vide autour du modele retire), son plus grand cote fait alors ``w`` px : posee en bas de la
+  tuile, la vue touche le sol au lieu de flotter.
 - Cache : ``?v=`` dans l'adresse (version du fichier) -> gardee un an ; sinon
   « no-cache » : le navigateur garde l'image et redemande seulement si elle a
   change (304, sans le corps). Avant, tout /api/ etait « no-store » : chaque
@@ -35,24 +38,32 @@ def _bucket(w: int) -> int:
     return _WIDTHS[-1]
 
 
-def _resize(raw: bytes, w: int):
+def _resize(raw: bytes, w: int, trim: bool = False):
     """La vignette WebP, ou None quand l'original est deja assez petit (ou illisible)."""
     from PIL import Image, ImageOps
     try:
         im = Image.open(io.BytesIO(raw))
         if getattr(im, "is_animated", False):
             return None
-        if min(im.size) <= w * 1.15:
+        trimmed = False
+        if trim and "A" in im.getbands():
+            box = im.getchannel("A").point(lambda a: 255 if a > 8 else 0).getbbox()
+            if box and box != (0, 0, im.width, im.height):
+                m = max(2, round(max(box[2] - box[0], box[3] - box[1]) * 0.02))
+                im = im.crop((max(0, box[0] - m), max(0, box[1] - m), min(im.width, box[2] + m), min(im.height, box[3] + m)))
+                trimmed = True
+        side = max(im.size) if trimmed else min(im.size)
+        if side <= w * 1.15 and not trimmed:
             return None
         im = ImageOps.exif_transpose(im)
-        r = w / min(im.size)
+        r = min(1.0, w / side) if trimmed else w / side
         im = im.resize((max(1, round(im.width * r)), max(1, round(im.height * r))), Image.LANCZOS)
         if im.mode not in ("RGB", "RGBA"):
             im = im.convert("RGBA" if "A" in im.getbands() or im.mode == "P" else "RGB")
         out = io.BytesIO()
         im.save(out, "WEBP", quality=80, method=4)
         data = out.getvalue()
-        return data if len(data) < len(raw) else None
+        return data if trimmed or len(data) < len(raw) else None
     except Exception as e:
         log.debug(f"[THUMB] vignette impossible : {e}")
         return None
@@ -73,6 +84,7 @@ class ImageCacheMiddleware:
         except (ValueError, IndexError):
             want = 0
         versioned = "v" in qs
+        trim = bool(want) and qs.get("trim", ["0"])[0] == "1"
         inm = next((v.decode("latin-1") for k, v in scope.get("headers", []) if k == b"if-none-match"), None)
         state = {"start": None, "mode": "pass", "body": []}
 
@@ -93,7 +105,7 @@ class ImageCacheMiddleware:
                     # la vignette deja faite, ou deja chez le navigateur : repondue ici, sans lire le corps de
                     # l'original (28/10/2026 : chaque vignette de la page Impressions relisait son original entier,
                     # meme pour un 304)
-                    key = hashlib.sha1(f"{scope['path']}|{etag}|{want}".encode()).hexdigest()
+                    key = hashlib.sha1(f"{scope['path']}|{etag}|{want}{'|trim' if trim else ''}".encode()).hexdigest()
                     tetag = f'"t{key[:20]}"'
                     headers = _cache_headers([(k, v) for k, v in message.get("headers", [])
                                               if k.lower() not in (b"content-type", b"content-length", b"etag", b"content-disposition")])
@@ -132,15 +144,15 @@ class ImageCacheMiddleware:
                 if state["mode"] == "thumb":
                     state["body"].append(message.get("body", b""))
                     if not message.get("more_body"):
-                        await self._thumb(scope, send, state, want, versioned, inm, _cache_headers)
+                        await self._thumb(scope, send, state, want, versioned, inm, _cache_headers, trim)
                     return
             await send(message)
 
         await self.app(scope, receive, _send)
 
-    async def _thumb(self, scope, send, state, want, versioned, inm, cache_headers):
+    async def _thumb(self, scope, send, state, want, versioned, inm, cache_headers, trim=False):
         start, raw = state["start"], b"".join(state["body"])
-        key = hashlib.sha1(f"{scope['path']}|{state['etag']}|{want}".encode()).hexdigest()
+        key = hashlib.sha1(f"{scope['path']}|{state['etag']}|{want}{'|trim' if trim else ''}".encode()).hexdigest()
         path = THUMB_DIR / key[:2] / f"{key}.webp"
         data = None
         try:
@@ -149,7 +161,7 @@ class ImageCacheMiddleware:
         except OSError:
             data = None
         if data is None:
-            data = await asyncio.to_thread(_resize, raw, want)
+            data = await asyncio.to_thread(_resize, raw, want, trim)
             if data:
                 try:
                     path.parent.mkdir(parents=True, exist_ok=True)

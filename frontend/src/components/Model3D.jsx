@@ -1117,7 +1117,10 @@ function Ring({ pct = null, label }) {
 // fetchSource : recuperer le 3MF d'origine s'il manque (« À faire »).
 export default function Model3D({ designId = null, profileId = null, printId = null, wait = false, title = "", onClose,
                                   palette = null, platePalettes = null, paletteFinishes = null, paletteMulti = null, altName = null, usedPrints = null,
-                                  fetchSource = false, scope = null, focus = false }) {
+                                  fetchSource = false, scope = null, focus = false, friend = null, onFiche = null }) {
+  // chez un copain sans y etre (30/10/2026, la galerie des copains) : ses donnees par le relais, en lecture seule
+  const fr = friend || currentFriend();
+  const get = (u, cfg) => client.get(friend ? `/friends/${friend.id}/p${u}` : u, cfg);
   const [meta, setMeta] = useState(null);
   const [err, setErr] = useState(null);
   const [plate, setPlate] = useState(0);
@@ -1141,7 +1144,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     softRef.current = false;
     if (!soft) { setErr(null); setMeta(null); }
     // le profil montre par la fiche ; sans lui, le serveur lit celui de l'impression (imprimante, ou choisi a la main)
-    client.get(base, { params: { profile: profileId || "", print_id: printId || 0, fetch: fetchSource || want3mf ? 1 : 0,
+    get(base, { params: { profile: profileId || "", print_id: printId || 0, fetch: fetchSource || want3mf ? 1 : 0,
                                  used: (usedPrints || []).join(","), scope: scope || "" }, timeout: 180000 })
       .then(({ data }) => { if (alive) {
         // une relecture pendant la preparation : on reste sur le plateau regarde
@@ -1166,7 +1169,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   useEffect(() => {
     if (wait || (meta && !meta.pending) || err) { setProg(null); return; }
     let alive = true;
-    const tick = () => client.get(`${base}/progress`, { params: { t: Date.now() } })
+    const tick = () => get(`${base}/progress`, { params: { t: Date.now() } })
       .then(({ data }) => alive && setProg(data?.label ? data : null)).catch(() => {});
     const id = setInterval(tick, 500);
     tick();
@@ -1175,8 +1178,12 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   // chez un copain (29/10/2026) : les fichiers de plateau viennent de chez lui, par le relais de mon serveur
   // (une adresse deja reecrite par le relais -- les reponses d'un copain le sont -- n'est pas reprefixee : le relais
   // refusait « friends/… » en 400)
-  const viaFriend = u => currentFriend() && typeof u === "string" && u.startsWith("/api/v1/") && !u.startsWith("/api/v1/friends/")
-    ? apiUrl(u.slice(7)) : u;
+  const viaFriend = u => {
+    if (!fr || typeof u !== "string" || !u.startsWith("/api/v1/") || u.startsWith("/api/v1/friends/")) return u;
+    if (!friend) return apiUrl(u.slice(7));
+    const path = u.slice(7), t = localStorage.getItem("token") || "";
+    return `/api/v1/friends/${friend.id}/p${path}${path.includes("?") ? "&" : "?"}_t=${encodeURIComponent(t)}`;
+  };
   const p0 = meta?.plates?.[plate];
   const p = p0 ? { ...p0, url: viaFriend(p0.url) } : p0;
   // un plateau dont le filament change a une hauteur (le « M600 » pose dans Bambu Studio, 28/10/2026) : le
@@ -1212,7 +1219,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   // la vignette 3D (29/10/2026) : prise dans la vue assemblee, rangee avec l'impression ou le groupe d'ou la vue s'ouvre
   const [shot, setShot] = useState(null);                // null | "busy"
   const shotTarget = /^(print|group):\d+$/.test(scope || "") ? { kind: scope.split(":")[0], id: scope.split(":")[1] } : (printId ? { kind: "print", id: String(printId) } : null);
-  const canShot = isAdmin && !currentFriend() && !!p && !p.pending && !!shotTarget;
+  const canShot = isAdmin && !fr && !!p && !p.pending && !!shotTarget;
   const takeShot = async () => {
     setShot("busy");
     try {
@@ -1224,7 +1231,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setShot(null); }
   };
-  const editable = desktop && isAdmin && !currentFriend() && !!p?.assembled && !!p?.pieces && !!meta?.key;
+  const editable = desktop && isAdmin && !fr && !!p?.assembled && !!p?.pieces && !!meta?.key;
   const edit = savedEdit !== undefined ? savedEdit : meta?.assembly_edit;
   useEffect(() => { setSavedEdit(undefined); }, [meta?.key]);
   // les assemblages a reprendre (30/10/2026) : versions passees de cette vue, et ceux d'autres vues du meme modele
@@ -1384,6 +1391,9 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {(err || st.error || (st.broken && redo >= 1)) && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
             textAlign: "center", fontSize: 13, fontWeight: 700, color: "#ef4444" }}>{err || (st.error ? `Plateau illisible : ${st.error}` : "Plateau abîmé, même refait : rouvre la vue plus tard")}</div>}
         </div>
+        {onFiche && !editing && <button type="button" onClick={onFiche} data-tip={fr ? "La fiche, chez ton copain" : "La fiche de l'impression ou du groupe"}
+          style={{ alignSelf: "center", padding: "8px 22px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff",
+            background: "linear-gradient(135deg, #EC4899, #8B5CF6)", boxShadow: "0 8px 18px -10px #8B5CF6" }}>📄 Fiche</button>}
         {meta && <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
           <span>{meta.source === "3mf" && shown ? `3MF d'origine, aux couleurs des filaments ${altLabel.toLowerCase()}`
             : meta.source === "3mf" ? "3MF d'origine, aux couleurs de ses filaments"
@@ -1410,7 +1420,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         {/* les couleurs utilisees : chaque couleur du createur et ce qui l'a remplacee (ou rien de trouve) ; avec une
             portee (impression ou groupe), toucher une paire pour choisir soi-meme */}
         {shown && !palette && usedDetail.length > 0 && <ColorPairs detail={usedDetail} options={meta?.used_options || []} chosen={meta?.chosen || {}}
-          scope={meta?.scope || null} onChoose={async (o, body) => { try { await chooseColor(meta.scope, o, body); } catch { /* rien */ } setTick(t => t + 1); }}/>}
+          scope={fr ? null : meta?.scope || null} onChoose={async (o, body) => { try { await chooseColor(meta.scope, o, body); } catch { /* rien */ } setTick(t => t + 1); }}/>}
         <p style={{ margin: 0, fontSize: 11.5, color: "var(--muted)" }}>Un doigt pour tourner, deux pour zoomer et déplacer ; ⟲ recentre.</p>
       </div>
     </FSheet>,

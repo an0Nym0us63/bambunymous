@@ -133,7 +133,9 @@ export default function GalleryCompare({
           return (
             <div key={id}
               onClick={() => { if (pressFired.current) { pressFired.current = false; return; }
-                if (selectMode && enableCompare) toggle(item); else if (hasPhotos && !selectMode) openCarousel(item, 0); else if (onItemClick && !selectMode) onItemClick(item); }}
+                if (selectMode && enableCompare) { toggle(item); return; }
+                if (stage && onItemClick && onItemClick(item) !== false) return;      // les vues 3D : la page ouvre la 3D
+                if (hasPhotos) openCarousel(item, 0); else if (onItemClick && !stage) onItemClick(item); }}
               onMouseDown={e => enableCompare && startPress(item, e.clientX, e.clientY)}
               onMouseMove={e => movePress(e.clientX, e.clientY)}
               onMouseUp={cancelPress} onMouseLeave={cancelPress}
@@ -143,8 +145,8 @@ export default function GalleryCompare({
               onContextMenu={e => e.preventDefault()}
               style={{ position:"relative", borderRadius: swatchMode ? 10 : 16, overflow:"hidden", cursor:"pointer",
                 aspectRatio: swatchInfo || stage ? undefined : "1",
-                // les vues 3D (30/10/2026) : le modele entier sur un fond clair, le nom dessous, rien par-dessus
-                background: stage ? "radial-gradient(90% 70% at 50% 38%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" : "var(--surface2)",
+                // les vues 3D (30/10/2026) : le modele pose sur un sol de studio, le nom dessous, rien par-dessus
+                background: stage ? "var(--surface)" : "var(--surface2)",
                 display: swatchInfo || stage ? "flex" : undefined, flexDirection:"column",
                 border: checked ? "2px solid #3b82f6" : "2px solid transparent",
                 boxShadow: checked ? "0 0 0 3px rgba(59,130,246,0.3), 0 10px 24px -12px #3b82f6" : swatchMode ? "none" : "0 8px 20px -14px rgba(0,0,0,.6)",
@@ -175,18 +177,22 @@ export default function GalleryCompare({
                 </>
               ) : stage ? (
                 <>
-                  <div style={{ position:"relative", aspectRatio:"1" }}>
-                    {renderCover ? renderCover(item) : img && <img src={apiThumb(img, 384)} alt={getTitle(item)} loading="lazy" decoding="async"
-                      style={{ position:"absolute", left:"9%", top:"8%", width:"82%", height:"80%", objectFit:"contain", filter:"drop-shadow(0 10px 12px rgba(0,0,0,.22))" }}/>}
-                    <div style={{ position:"absolute", left:"22%", right:"22%", bottom:"5%", height:8, borderRadius:"50%",
-                      background:"radial-gradient(closest-side, rgba(0,0,0,.18), transparent)" }}/>
+                  <div className="bn-stage" style={{ position:"relative", aspectRatio:"1", overflow:"hidden",
+                    // le studio : un fond qui s'eclaire vers le haut, un sol plus sombre, la ligne d'horizon fondue
+                    background:"radial-gradient(65% 50% at 50% 34%, color-mix(in srgb, #38BDF8 24%, transparent), transparent 75%),"
+                      + "linear-gradient(180deg, color-mix(in srgb, #0EA5E9 8%, var(--surface2)) 0%, var(--surface2) 68%, color-mix(in srgb, #0f172a 9%, var(--surface2)) 68.5%, color-mix(in srgb, #0f172a 4%, var(--surface2)) 100%)" }}>
+                    {/* l'ombre de contact, sous la base : la vue touche le sol (elle flottait) */}
+                    <div style={{ position:"absolute", left:"18%", right:"18%", bottom:"9%", height:"9%", borderRadius:"50%",
+                      background:"radial-gradient(closest-side, rgba(0,0,0,.30), rgba(0,0,0,.08) 60%, transparent)" }}/>
+                    {renderCover ? renderCover(item) : img && <img className="bn-stage-img" src={`${apiThumb(img, 384)}&trim=1`} alt={getTitle(item)} loading="lazy" decoding="async"
+                      style={{ position:"absolute", left:"6%", top:"5%", width:"88%", height:"83%", objectFit:"contain", objectPosition:"50% 100%",
+                        filter:"drop-shadow(0 3px 3px rgba(0,0,0,.25))", transformOrigin:"50% 100%", transition:"transform .25s" }}/>}
                   </div>
-                  <div style={{ padding:"7px 10px 9px", borderTop:"1px solid var(--border)", background:"var(--surface)" }}>
+                  <div style={{ padding:"7px 10px 8px", borderTop:"1px solid var(--border)" }}>
                     <p title={getTitle(item)} style={{ fontSize:"clamp(11.5px, 1.15vw, 13px)", color:"var(--text)", fontWeight:800, margin:0, lineHeight:1.25,
                       overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{getTitle(item)}</p>
-                    {getSubtitle && <p style={{ fontSize:"clamp(9.5px, 0.95vw, 11px)", color:"var(--muted)", fontWeight:700, margin:"2px 0 0",
-                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getSubtitle(item)}</p>}
                   </div>
+                  <style>{".bn-stage:hover .bn-stage-img{transform:scale(1.05)}"}</style>
                 </>
               ) : renderCover ? renderCover(item) : img ? (
                 <img src={apiThumb(img, 384)} alt={getTitle(item)} loading="lazy" decoding="async" style={{ width:"100%", height:"100%", objectFit:"cover" }}
