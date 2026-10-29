@@ -542,7 +542,30 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           fit();
           onState({ busy: false, error: null, size: [s3.x, s3.z, s3.y], glow: glowMats.length > 0 });     // les dimensions sous la vue
         };
-        if (editApi) editApi.current = ed ? { editing, toSave, origin, relayout, get editor() { return editor; } } : null;
+        // une vignette de la vue (29/10/2026) : carree, depuis l'angle ou l'on regarde, cadree sur le modele, sans la
+        // grille du plateau, sur fond transparent ; rend une image PNG (Blob)
+        const snapshot = async (size = 1024) => {
+          const was = { grid: grid.visible, bg: scene.background, w: el.clientWidth, h: el.clientHeight, pr: renderer.getPixelRatio(),
+            pos: camera.position.clone(), aspect: camera.aspect, near: camera.near, far: camera.far };
+          grid.visible = false; scene.background = null;
+          renderer.setPixelRatio(1); renderer.setSize(size, size, false);
+          camera.aspect = 1;
+          const sp = new THREE.Box3().setFromObject(model).getBoundingSphere(new THREE.Sphere());
+          const dir = camera.position.clone().sub(controls.target).normalize();
+          const d = sp.radius / Math.sin((camera.fov * Math.PI) / 360) * 1.08;
+          camera.position.copy(sp.center).addScaledVector(dir, d); camera.lookAt(sp.center);
+          camera.near = Math.max(0.1, d / 100); camera.far = d * 20; camera.updateProjectionMatrix();
+          renderer.setClearColor(0x000000, 0);
+          renderer.render(scene, camera);
+          const blob = await new Promise(res => renderer.domElement.toBlob(res, "image/png"));
+          // la vue reprend comme avant
+          grid.visible = was.grid; scene.background = was.bg;
+          renderer.setPixelRatio(was.pr); renderer.setSize(was.w, was.h);
+          camera.position.copy(was.pos); camera.aspect = was.aspect; camera.near = was.near; camera.far = was.far;
+          camera.lookAt(controls.target); camera.updateProjectionMatrix(); controls.update(); render();
+          return blob;
+        };
+        if (editApi) editApi.current = ed ? { editing, toSave, origin, relayout, snapshot, get editor() { return editor; } } : null;
         disposables.push({ dispose: () => { try { editor?.dispose(); } catch { /* rien */ } if (editApi) editApi.current = null; } });
         api.current = { fit, night, backlight, bedShow, dragPans, zoom };
         const s = bb2.getSize(new THREE.Vector3());
@@ -896,6 +919,26 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const wrap = useRef(null), editApi = useRef(null);
   const [full, setFull] = useState(false), [editing, setEditing] = useState(false), [est, setEst] = useState(null);
   const [savedEdit, setSavedEdit] = useState(undefined), [saving, setSaving] = useState(false), [vkey, setVkey] = useState(0);
+  // la vignette 3D (29/10/2026) : prise dans la vue assemblee, rangee avec l'impression ou le groupe d'ou la vue s'ouvre
+  const [shot, setShot] = useState(null);                // null | "busy" | { kind, id, url, used }
+  const shotTarget = /^(print|group):\d+$/.test(scope || "") ? { kind: scope.split(":")[0], id: scope.split(":")[1] } : (printId ? { kind: "print", id: String(printId) } : null);
+  const canShot = isAdmin && !currentFriend() && !!p?.assembled && !!shotTarget;
+  const takeShot = async () => {
+    setShot("busy");
+    try {
+      const blob = await editApi.current?.snapshot();
+      if (!blob) throw new Error("Vue pas prête");
+      const fd = new FormData(); fd.append("file", blob, "Vue3D.png");
+      const base = shotTarget.kind === "group" ? `/prints/groups/${shotTarget.id}` : `/prints/${shotTarget.id}`;
+      await client.post(`${base}/vue3d`, fd);
+      setShot({ ...shotTarget, base, url: URL.createObjectURL(blob), used: false });
+      egg("vignette_3d");
+    } catch (e) { setShot(null); showAlert(e.response?.data?.detail || e.message); }
+  };
+  const useShot = async () => {
+    try { await client.put(`${shot.base}/thumb`, { use3d: true }); setShot(s => ({ ...s, used: true })); window.dispatchEvent(new Event("bn-prints-changed")); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
   const editable = desktop && isAdmin && !currentFriend() && !!p?.assembled && !!p?.pieces && !!meta?.key;
   const edit = savedEdit !== undefined ? savedEdit : meta?.assembly_edit;
   useEffect(() => { setSavedEdit(undefined); }, [meta?.key]);
@@ -968,6 +1011,17 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}
+          {shot && shot !== "busy" && <div style={{ position: "absolute", left: 10, top: 10, zIndex: 3, display: "flex", gap: 10, alignItems: "center", padding: 8,
+            borderRadius: 14, background: "color-mix(in srgb, var(--surface) 94%, transparent)", border: "1px solid var(--border)", boxShadow: "0 10px 30px rgba(0,0,0,.2)" }}>
+            <img src={shot.url} alt="" style={{ width: 64, height: 64, objectFit: "contain", borderRadius: 10, background: "var(--surface2)" }}/>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>
+              <span>Vignette 3D enregistrée</span>
+              {shot.used ? <span style={{ color: "#16a34a" }}>✓ C'est la vignette {shot.kind === "group" ? "du groupe" : "de l'impression"}</span>
+                : <button type="button" onClick={useShot} style={{ height: 30, padding: "0 10px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 800,
+                  color: "#fff", background: "linear-gradient(135deg, #0EA5E9, #6366F1)" }}>⭐ En faire la vignette</button>}
+            </div>
+            <button type="button" onClick={() => setShot(null)} aria-label="Fermer" style={{ alignSelf: "flex-start", border: "none", background: "none", color: "var(--muted)", cursor: "pointer" }}>✕</button>
+          </div>}
           {editing && <EditBar est={est} api={editApi.current?.editor} onSave={saveEdit} onReset={resetEdit} onClose={stopEdit} saving={saving}/>}
           {editing && leaving && <div style={{ position: "absolute", inset: 0, zIndex: 7, background: "rgba(2,6,23,.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ width: "min(420px, calc(100% - 32px))", padding: "18px 18px 14px", borderRadius: 16, background: "var(--sheet-bg)", border: "1px solid var(--border)",
@@ -985,6 +1039,10 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             <button type="button" onClick={() => full ? document.exitFullscreen?.() : wrap.current?.requestFullscreen?.().catch(() => {})}
               data-tip={full ? "Quitter le plein écran" : "Plein écran"} style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)",
                 cursor: "pointer", background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{full ? "🗗" : "⛶"}</button>
+            {canShot && <button type="button" disabled={shot === "busy"} onClick={takeShot}
+              data-tip={`Prendre la vue telle que tu la regardes comme vignette ${shotTarget.kind === "group" ? "du groupe" : "de l'impression"} (sans la grille)`}
+              style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 13, fontWeight: 800,
+                background: "var(--surface)", color: "var(--text2)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{shot === "busy" ? "…" : "📸 Vignette"}</button>}
             {editable && <button type="button" onClick={startEdit} data-tip="Déplacer, tourner, poser au sol, coller les pièces (en plein écran)"
               style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff",
                 background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>✏️ Éditer l'assemblage</button>}

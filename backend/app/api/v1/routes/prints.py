@@ -125,6 +125,14 @@ def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict]
     # des photos au niveau du groupe (choisie, ou deposees dans son dossier) : l'accueil ne relance pas
     # « pas encore de photo » pour une impression dont le groupe en a deja
     d["group_cover_photo"] = p.group.cover_photo if p.group else None
+    # la vignette prise dans la vue 3D assemblee (29/10/2026), et si elle remplace celle du plateau / la mosaique
+    d["has_vue3d"] = (DATA_DIR / "prints" / str(p.id) / VUE3D).is_file()
+    d["thumb_3d"] = bool(p.thumb_3d) and d["has_vue3d"]
+    gf = DATA_DIR / "groups" / str(p.group_id) / VUE3D if p.group_id else None
+    g_has = bool(gf) and gf.is_file()
+    d["group_has_vue3d"] = g_has
+    d["group_vue3d_v"] = int(gf.stat().st_mtime) if g_has else None
+    d["group_thumb_3d"] = bool(p.group and p.group.thumb_3d) and g_has
     # le 3MF d'origine MakerWorld deja garde pour ce profil (le tranche, lui, est model_3mf)
     try:
         from ....services.mw_source import print_file as _src
@@ -540,6 +548,19 @@ async def _build_gallery() -> dict:
         grp = {r.id: r for r in (await db.execute(select(Group.id, Group.name, Group.number_of_items, Group.cover_print_id,
                                                          Group.cover_photo))).all()}
 
+    # les impressions qui ont une vignette 3D (lu d'un coup, hors de la boucle des reponses)
+    def _vue3d_prints():
+        out = {}
+        base = DATA_DIR / "prints"
+        for r in rows:
+            f = base / str(r.id) / VUE3D
+            try:
+                out[r.id] = int(f.stat().st_mtime)
+            except OSError:
+                pass
+        return out
+    import asyncio as _aio0
+    vue3d_prints = await _aio0.to_thread(_vue3d_prints)
     items, group_acc = [], {}
     for p in rows:
         p.group = grp.get(p.group_id) if p.group_id else None
@@ -549,6 +570,9 @@ async def _build_gallery() -> dict:
              "name": (fp or "").split("/")[-1], "label": "manual"}
             for fp, sid in snaps.get(p.id, ()) if fp
         ]
+        # pas de photo, mais une vignette prise dans la vue 3D assemblee : elle remonte (29/10/2026)
+        if not photos and p.id in vue3d_prints:
+            photos = [{"url": f"/api/v1/prints/{p.id}/file/{VUE3D}?v={vue3d_prints[p.id]}", "name": VUE3D, "label": "vue3d"}]
         # La vignette de la galerie est photos[0] : on remonte la photo choisie.
         if p.cover_photo:
             photos.sort(key=lambda ph: ph["name"] != p.cover_photo)
@@ -603,9 +627,16 @@ async def _build_gallery() -> dict:
     import asyncio as _aio
     on_disk = await _aio.to_thread(_scan, list(group_acc))
     for gid, acc in group_acc.items():
-        for name, mt in on_disk.get(gid, ()):
+        files = on_disk.get(gid, ())
+        for name, mt in files:
+            if name == VUE3D:
+                continue
             acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{name}?v={mt}",
                                   "label": name, "name": name})
+        # pas de photo, mais une vignette prise dans la vue 3D assemblee : elle remonte (29/10/2026)
+        v3 = next((mt for name, mt in files if name == VUE3D), None)
+        if not acc["photos"] and v3 is not None:
+            acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{VUE3D}?v={v3}", "label": "vue3d", "name": VUE3D})
         # La vignette est photos[0]. Si une photo de couverture est definie pour
         # le groupe, on la remonte en tete -- meme principe que Print.cover_photo.
         cover = acc.get("cover_photo")
@@ -712,7 +743,7 @@ async def group_photos(group_id: int):
         return {"files": [], "cover_photo": cover}
     files = []
     for f in sorted(d.iterdir()):
-        if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v"):
+        if f.name != VUE3D and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v"):
             files.append({"name": f.name, "url": f"/api/v1/prints/groups/{group_id}/photo/{f.name}"})
     return {"files": files, "cover_photo": cover}
 
@@ -2040,6 +2071,12 @@ async def print_image(print_id: int):
     print_dir = DATA_DIR / "prints" / str(print_id)
     if not print_dir.exists():
         raise HTTPException(404)
+    # la vignette choisie : la vue 3D assemblee, si elle a ete prise et preferee
+    if (print_dir / VUE3D).is_file():
+        async with AsyncSessionLocal() as db:
+            pref = (await db.execute(select(Print.thumb_3d).where(Print.id == print_id))).scalar()
+        if pref:
+            return FileResponse(str(print_dir / VUE3D), media_type="image/png")
     # plate.png en priorité, sinon première image trouvée
     for name in ("plate.png", "plate.jpg"):
         f = print_dir / name
@@ -2598,6 +2635,77 @@ async def group_3mf(group_id: int, kind: str = Query("sliced", pattern="^(sliced
     path = await asyncio.to_thread(build)
     return FileResponse(path, media_type="application/zip", filename=f"{clean(g.name) or 'groupe'}{suffix}.zip",
                         background=BackgroundTask(lambda: Path(path).unlink(missing_ok=True)))
+
+
+# ── La vignette prise dans la vue 3D assemblee (29/10/2026) ──
+VUE3D = "Vue3D.png"
+
+
+async def _save_vue3d(folder: Path, file: UploadFile) -> None:
+    raw = await file.read()
+    if len(raw) > 8 * 1024 * 1024 or not raw.startswith(b"\x89PNG"):
+        raise HTTPException(400, "Image PNG attendue")
+    folder.mkdir(parents=True, exist_ok=True)
+    tmp = folder / (VUE3D + ".part")
+    tmp.write_bytes(raw)
+    os.replace(tmp, folder / VUE3D)
+    gallery_touched()
+
+
+@router.post("/{print_id}/vue3d")
+async def print_vue3d(print_id: int, file: UploadFile = File(...), _: str = Depends(require_admin)):
+    """Garde la vignette prise dans la vue 3D assemblee de cette impression."""
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if not p:
+            raise HTTPException(404, "Impression introuvable")
+        await _save_vue3d(DATA_DIR / "prints" / str(print_id), file)
+        p.updated_at = datetime.utcnow()                 # les vignettes en cache se renouvellent
+        await db.commit()
+    return {"ok": True}
+
+
+@router.post("/groups/{group_id}/vue3d")
+async def group_vue3d(group_id: int, file: UploadFile = File(...), _: str = Depends(require_admin)):
+    """Garde la vignette prise dans la vue 3D assemblee de ce groupe."""
+    async with AsyncSessionLocal() as db:
+        if not await db.get(Group, group_id):
+            raise HTTPException(404, "Groupe introuvable")
+    await _save_vue3d(DATA_DIR / "groups" / str(group_id), file)
+    return {"ok": True}
+
+
+@router.put("/{print_id}/thumb")
+async def print_thumb(print_id: int, body: dict = Body({}), _: str = Depends(require_admin)):
+    """La vignette de l'impression : la vue 3D (use3d) ou l'image du plateau."""
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if not p:
+            raise HTTPException(404, "Impression introuvable")
+        on = bool(body.get("use3d"))
+        if on and not (DATA_DIR / "prints" / str(print_id) / VUE3D).is_file():
+            raise HTTPException(400, "Prends d'abord la vignette dans la vue 3D assemblée")
+        p.thumb_3d = 1 if on else 0
+        p.updated_at = datetime.utcnow()
+        await db.commit()
+    gallery_touched()
+    return {"ok": True, "thumb_3d": on}
+
+
+@router.put("/groups/{group_id}/thumb")
+async def group_thumb(group_id: int, body: dict = Body({}), _: str = Depends(require_admin)):
+    """La vignette du groupe : la vue 3D (use3d) ou la mosaique de ses impressions."""
+    async with AsyncSessionLocal() as db:
+        g = await db.get(Group, group_id)
+        if not g:
+            raise HTTPException(404, "Groupe introuvable")
+        on = bool(body.get("use3d"))
+        if on and not (DATA_DIR / "groups" / str(group_id) / VUE3D).is_file():
+            raise HTTPException(400, "Prends d'abord la vignette dans la vue 3D assemblée")
+        g.thumb_3d = 1 if on else 0
+        await db.commit()
+    gallery_touched()
+    return {"ok": True, "thumb_3d": on}
 
 
 @router.get("/{print_id}/3mf")

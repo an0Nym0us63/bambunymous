@@ -73,6 +73,8 @@ class Print(Base):
     group_id            = Column(Integer, ForeignKey("groups.id", ondelete="SET NULL"), nullable=True)
     # hors des classements de la page Stats (echantillons, supports de bobine…), compte dans les totaux
     stats_excluded      = Column(Integer, default=0)
+    # la vignette : celle de la vue 3D assemblee (Vue3D.png, prise dans la vue 3D) plutot que l'image du plateau
+    thumb_3d            = Column(Integer, default=0)
 
     created_at          = Column(DateTime, default=datetime.utcnow)
     updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -168,6 +170,7 @@ class Group(Base):
     cover_print_id   = Column(Integer, nullable=True)  # print de référence pour la vignette
     cover_photo      = Column(String(256), nullable=True)  # nom de fichier de la photo choisie comme vignette de galerie
     stats_excluded   = Column(Integer, default=0)          # toutes ses impressions hors des classements des stats
+    thumb_3d         = Column(Integer, default=0)          # sa vignette : la vue 3D assemblee plutot que la mosaique
     created_at   = Column(DateTime, default=datetime.utcnow)
 
     prints = relationship("Print", back_populates="group")

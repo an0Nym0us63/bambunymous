@@ -1245,6 +1245,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         onClick: async () => { try { await client.post(`/makerworld/source3mf/print/${p.id}`); setP(prev => ({ ...prev, source_3mf: true })); toast("3MF d'origine récupéré"); }
           catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
       p.model_3mf && { icon: "⤓", label: "Télécharger le 3MF tranché", hint: "pour mon imprimante", tone: "#F59E0B", onClick: () => download3mf(p.id, "sliced") },
+      isAdmin && p.has_vue3d && { icon: p.thumb_3d ? "🖼" : "🧊", label: p.thumb_3d ? "Vignette : image du plateau" : "Vignette : vue 3D assemblée",
+        hint: p.thumb_3d ? "Revenir à l'image du plateau" : "Celle prise dans la vue 3D", tone: "#0EA5E9",
+        onClick: async () => { try { await client.put(`/prints/${p.id}/thumb`, { use3d: !p.thumb_3d }); setP(prev => ({ ...prev, thumb_3d: !prev.thumb_3d, updated_at: new Date().toISOString() }));
+          window.dispatchEvent(new Event("bn-prints-changed")); } catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
       (p.job_id || p.design_id) && { icon: "#", label: "Identifiants", hint: "Travail, modèle MakerWorld", tone: "#64748B", onClick: () => setIdsOpen(true) },
       "-",
       { icon: "🗑", label: "Supprimer…", danger: true, onClick: () => setShowDeleteConfirm(true) },
@@ -1672,6 +1676,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     if (!(await showConfirm(`Retirer "${x.file_name || "ce print"}" du groupe ?`))) return;
     try { await client.post("/prints/" + x.id + "/group", {}); setPrints(ps => ps.filter(y => y.id !== x.id)); onUpdated?.(); } catch { /* rien */ }
   };
+  const thumb3d = !!prints[0]?.group_thumb_3d;
   const more = e => openMenu(e, {
     title, subtitle: `${prints.length} impression${prints.length > 1 ? "s" : ""}`, color: "#A78BFA",
     items: [
@@ -1680,6 +1685,10 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       objQ && { icon: "📦", label: objQ.remaining > 0 ? "Créer des objets" : "Objets : tous créés", hint: `${objQ.used} / ${objQ.total} déjà créés`, tone: "#22C55E",
         onClick: () => setObjCreate(true) },
       { icon: "📤", label: "Dégrouper", hint: "Les impressions restent", tone: "#A78BFA", onClick: handleUngroup },
+      isAdmin && prints[0]?.group_has_vue3d && { icon: thumb3d ? "🧩" : "🧊", label: thumb3d ? "Vignette : mosaïque des impressions" : "Vignette : vue 3D assemblée",
+        hint: thumb3d ? "Revenir à la mosaïque" : "Celle prise dans la vue 3D, à la place de la mosaïque", tone: "#0EA5E9",
+        onClick: async () => { try { await client.put(`/prints/groups/${groupId}/thumb`, { use3d: !thumb3d }); setPrints(ps => ps.map(x => ({ ...x, group_thumb_3d: !thumb3d })));
+          onUpdated?.(); window.dispatchEvent(new Event("bn-prints-changed")); } catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
       (prints.some(x => x.source_3mf) || prints.some(x => x.model_3mf)) && "-",
       prints.some(x => x.source_3mf) && { icon: "⤓", label: "Télécharger les 3MF d'origine", hint: "Un fichier s'ils sont identiques, sinon un zip",
         tone: "#F97316", onClick: () => download3mf(groupId, "source", true) },
@@ -1714,7 +1723,10 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     </button>);
   // l'en-tete : une mosaique des plateaux sur leur image floutee
   const cover = prints.find(x => x.id === coverPrintId) || prints[0];
-  const mosaic = [cover, ...prints.filter(x => x !== cover)].filter(Boolean).slice(0, 4);
+  // la vignette 3D du groupe, choisie a la place de la mosaique (29/10/2026)
+  const v3u = thumb3d ? `${apiUrl(`/prints/groups/${groupId}/photo/Vue3D.png`)}?v=${prints[0]?.group_vue3d_v || 0}` : null;
+  const mosaic = v3u ? [{ id: "vue3d", _src: w => apiThumb(v3u, w) }] : [cover, ...prints.filter(x => x !== cover)].filter(Boolean).slice(0, 4);
+  const srcOf = (x, w) => (x._src ? x._src(w) : thumbUrl(x, w));
   const hero = (
     <div style={{ position: "relative", height: wide ? 300 : "min(36vh, 280px)", minHeight: 200, borderRadius: wide ? 20 : 0, overflow: "hidden", background: "var(--surface2)" }}>
       {cover && <img src={thumbUrl(cover, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
@@ -1729,9 +1741,9 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
             : { background: "linear-gradient(160deg, rgba(167,139,250,0.22), rgba(167,139,250,0.05))", border: "1px solid rgba(255,255,255,0.10)",
                 boxShadow: "0 10px 24px rgba(0,0,0,.35)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }) }}>
           {/* le halo de chaque carte, comme celui de la fiche d'une impression : son image floutee et saturee derriere */}
-          <img src={thumbUrl(x, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
+          <img src={srcOf(x, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
             objectFit: "cover", filter: "blur(18px) saturate(1.8)", opacity: 0.55, transform: "scale(1.35)" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
-          <img src={thumbUrl(x, 384)} alt="" loading="lazy" decoding="async" style={{ position: "relative", width: "100%", height: "100%", objectFit: "contain" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
+          <img src={srcOf(x, 384)} alt="" loading="lazy" decoding="async" style={{ position: "relative", width: "100%", height: "100%", objectFit: "contain" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
         </div>)}
       </div>
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "34px 16px 12px",
@@ -1964,8 +1976,13 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
     const byId = Object.fromEntries(prints.map(pr => [pr.id, pr]));
     // chaque case garde la teinte de son print, comme une vignette seule
     // des vignettes (pas les originaux), versionnees ; « small » pour la pile de 46 px des rangees
+    // la vignette 3D du groupe, choisie a la place de la mosaique (29/10/2026)
+    if (prints[0]?.group_thumb_3d) {
+      const u = `${apiUrl(`/prints/groups/${groupId}/photo/Vue3D.png`)}?v=${prints[0].group_vue3d_v || 0}`;
+      return [{ url: apiThumb(u, 384), small: apiThumb(u, 128), tint: printTint(prints[0]) }];
+    }
     return ordered.map(id => ({ url: thumbUrl(byId[id], 384), small: thumbUrl(byId[id], 128), tint: printTint(byId[id]) }));
-  }, [prints, cover_print_id]);
+  }, [prints, cover_print_id, groupId]);
 
   // Seul "en cours" est remonte sur la carte du groupe : un echec ou un partiel
   // isole ne doit pas faire paraitre en echec un groupe globalement reussi ;

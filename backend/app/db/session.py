@@ -194,6 +194,8 @@ async def _migrate():
         ("users",     "secrets_visible",      "INTEGER DEFAULT 0"),
         ("groups",    "cover_photo",          "TEXT"),
         ("groups",    "stats_excluded",       "INTEGER DEFAULT 0"),
+        ("groups",    "thumb_3d",             "INTEGER DEFAULT 0"),
+        ("prints",    "thumb_3d",             "INTEGER DEFAULT 0"),
         ("prints",    "stats_excluded",       "INTEGER DEFAULT 0"),
         ("prints",    "translated_name",      "TEXT"),
         ("prints",    "translated_by",        "TEXT"),
