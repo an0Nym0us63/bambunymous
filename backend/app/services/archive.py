@@ -53,7 +53,8 @@ DEL = f"{PR}/_Supprimés"                    # ce qui a disparu de l'appli (jama
 PH = "Photos du groupe"
 STATUS = {"SUCCESS": "réussie", "FAILED": "échouée", "PARTIAL": "partielle", "TO_REDO": "à refaire"}
 # le reste des donnees, recopie tel quel dans « Système »
-SYSTEM_DIRS = [("bambu_catalog", "Catalogue Bambu")]
+# les assemblages edites de la vue 3D et leurs versions (30/10/2026) : faits a la main, a garder
+SYSTEM_DIRS = [("bambu_catalog", "Catalogue Bambu"), ("mw_3d_edits", "Assemblages 3D")]
 # les photos des filaments, objets et accessoires : un dossier par element, a son nom (voir _named_sync)
 SYS_NAMED = [("filaments", "Photos des filaments"), ("objects", "Objets"), ("accessories", "Accessoires")]
 SYS_DEL = f"{SYS}/_Supprimés"
@@ -181,6 +182,12 @@ def human_name(rel_name: str, model: str) -> str | None:
         return f"Vidéos/Vidéo {int(m.group(1)):02d}{ext}"
     if low.startswith("plate"):
         return f"Plateau{ext}"
+    # les vues prises dans la vue 3D (30/10/2026) ; leur mosaique se refait, elle ne se copie pas
+    m = re.fullmatch(r"vue3d(?:_(\d))?\.png", low)
+    if m:
+        return f"Vues 3D/Vue {m.group(1) or 1}.png"
+    if low.startswith("vue3d_mix"):
+        return None
     if ext == ".3mf":
         return f"3MF/{model} - tranché.3mf"
     if ext in (".mp4", ".webm", ".mov", ".m4v"):
@@ -1197,6 +1204,8 @@ def _backup_sync(root: Path, prints, mws, groups, all_ids: set, prog: dict, name
                       and k.split("/", 2)[2] not in local]:
                 _set_aside(root, idx, k, rep)
         for f in local.values():
+            if f.name.startswith("Vue3D_mix"):              # la mosaique des vues 3D : refaite a la demande
+                continue
             to = f"{gph}/{f.name}"
             try:
                 if _copy(f, root / to):

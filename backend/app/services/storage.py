@@ -29,6 +29,8 @@ CATS = [
     ("db", "Base de données", "#6366F1"),
     ("catalog", "Catalogue et données MakerWorld", "#A855F7"),
     ("sd_cache", "Cache des timelapses de l'imprimante", "#F43F5E"),
+    ("vue3d", "Vignettes prises dans la vue 3D", "#0EA5E9"),
+    ("asm", "Assemblages 3D édités (et leurs versions)", "#10B981"),
     ("mw_3d", "Vues 3D (préparées, aussi sur le NAS)", "#0891B2"),
     ("tmp", "Fichiers temporaires", "#94A3B8"),
     ("other", "Autres", "#64748B"),
@@ -46,6 +48,10 @@ def _cat(parts: tuple, name: str) -> str:
         return "sd_cache"
     if ext in VID:
         return "videos"
+    if top in ("prints", "groups") and low.startswith("vue3d"):    # vues prises dans la vue 3D, leur mosaique (30/10)
+        return "vue3d"
+    if top == "mw_3d_edits":                    # assemblages edites et leurs versions (30/10/2026)
+        return "asm"
     if top == "prints":
         if ext == ".3mf":
             return "tmf"
@@ -117,7 +123,7 @@ _NAS_CACHE: dict = {"at": 0.0, "v": None}
 NAS_CATS = [c for c in CATS[:-2] if c[0] not in ("sd_cache",)] + [("fiches", "Fiches des impressions et des groupes", "#0EA5E9"),
                         ("deleted", "Mis de côté (_Supprimés)", "#A1A1AA"), ("other", "Autres", "#64748B")]
 SYS_SUBS = {"Base de données": "db", "Photos des filaments": "filaments", "Objets": "objects",
-            "Accessoires": "accessories", "Catalogue Bambu": "catalog"}
+            "Accessoires": "accessories", "Catalogue Bambu": "catalog", "Assemblages 3D": "asm"}
 
 
 def _nas_cat(parts: tuple, name: str) -> str:
@@ -141,6 +147,8 @@ def _nas_cat(parts: tuple, name: str) -> str:
     if top == "Impressions":
         if len(parts) > 2 and parts[1] == "_Supprimés":
             return "deleted"
+        if "Vues 3D" in parts[:-1] or name.startswith("Vue3D"):
+            return "vue3d"
         if "Photos du groupe" in parts:
             return "groups"
         if ext in VID:
