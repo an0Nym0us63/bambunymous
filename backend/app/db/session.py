@@ -166,6 +166,7 @@ async def init_db():
     await _migrate_label_printed()
     await _migrate_object_status()
     await _cleanup_bogus_translations()
+    await _unescape_names()
     await _migrate_activity_kind()
     await _migrate_print_job_id_unique()
     await _purge_activity_log()
@@ -290,6 +291,34 @@ async def _cleanup_bogus_translations():
                 print(f"[migration] {res.rowcount} traductions erronees effacees")
     except Exception as e:
         print(f"[migration] nettoyage traductions: {e}")
+
+
+# les noms gardes avec des entites HTML (« Akaki&apos;s Picnic », 29/10/2026) : remis en caracteres. Ne lit que
+# les lignes qui contiennent « &…; » : a chaque demarrage, presque rien a faire.
+_ENT_COLS = [("prints", ("file_name", "original_name", "task_name", "translated_name")), ("groups", ("name",)),
+             ("objects", ("name", "translated_name")), ("object_groups", ("name",)),
+             ("makerworld_designs", ("title", "title_fr", "creator_name"))]
+
+
+async def _unescape_names():
+    from sqlalchemy import text as _text
+    from ..core.text import unent
+    n = 0
+    for table, cols in _ENT_COLS:
+        key = "design_id" if table == "makerworld_designs" else "id"
+        for col in cols:
+            try:
+                async with engine.begin() as conn:
+                    rows = (await conn.execute(_text(f"SELECT {key}, {col} FROM {table} WHERE {col} LIKE '%&%;%'"))).all()
+                    for k, v in rows:
+                        t = unent(v)
+                        if t != v:
+                            await conn.execute(_text(f"UPDATE {table} SET {col} = :v WHERE {key} = :k"), {"v": t, "k": k})
+                            n += 1
+            except Exception as e:
+                print(f"[migration] entites de {table}.{col}: {e}")
+    if n:
+        print(f"[migration] {n} nom(s) aux entites HTML remis en caracteres")
 
 
 async def _migrate_object_status():

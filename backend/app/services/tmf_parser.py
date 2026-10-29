@@ -53,7 +53,8 @@ def _validate_3mf(data: bytes) -> None:
 
 
 def _clean_name(raw: str) -> str:
-    name, _ = os.path.splitext(raw)
+    from ..core.text import unent
+    name, _ = os.path.splitext(unent(raw or ""))
     name = name.replace("_", " ").replace("–", " ")
     name = re.sub(r"\b(v|rev|final)\d*\b", "", name, flags=re.IGNORECASE)
     name = re.sub(r"\s+", " ", name).strip()

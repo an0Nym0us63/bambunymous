@@ -16,6 +16,7 @@ from ..models.filament import Spool
 from ..db.session import AsyncSessionLocal
 from ..services.settings_service import get_setting
 from ..services.tmf_parser import extract_3mf, _clean_name
+from ..core.text import unent
 
 logger = logging.getLogger(__name__)
 DATA_DIR = Path("/data")
@@ -290,15 +291,15 @@ async def _create_print_locked(job_id: str, url: str, taskname: str,
         p = Print(
             job_id=str(job_id),
             print_date=datetime.utcnow(),
-            file_name=_clean_name(taskname) or taskname,
-            original_name=taskname,
+            file_name=_clean_name(taskname) or unent(taskname),
+            original_name=unent(taskname),
             print_type=print_type,
             status="IN_PROGRESS",
             design_id=_clean_design_id(design_id),
             mw_profile_id=_current_profile(design_id),
             # Persistes pour pouvoir REPRENDRE l'enrichissement apres un
             # redemarrage : le thread _enrich meurt avec le process.
-            task_name=taskname or None,
+            task_name=unent(taskname) or None,
             model_url=url or None,
         )
         db.add(p); await db.flush()

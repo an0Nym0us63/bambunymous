@@ -75,7 +75,8 @@ def _plain(t: str) -> str:
 
 def clean_name(t: str) -> str:
     """Le nom d'une impression sans ce qui ne dit rien du modele (« - Plate 2 », « .3mf », « _ »)."""
-    t = str(t or "").strip()
+    from ..core.text import unent
+    t = unent(str(t or "")).strip()
     t = re.sub(r"(\.gcode)?(\.3mf)$", "", t, flags=re.I)
     t = re.sub(r"[\s_\-]*(plate|plateau)[\s_\-]*\d+\s*$", "", t, flags=re.I)
     t = t.replace("_", " ")

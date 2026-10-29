@@ -104,7 +104,8 @@ def _parse_design(code, d) -> dict:
     tags += [t for t in lst(d.get("tagsTranslated")) if isinstance(t, str) and t.strip() and t not in tags]
     num = lambda v: v if isinstance(v, int) and not isinstance(v, bool) else None
     # Texte seulement : une API qui change de forme ne doit rien faire lever.
-    txt = lambda v, n: (v.strip()[:n] or None) if isinstance(v, str) else None
+    from ..core.text import unent
+    txt = lambda v, n: (unent(v).strip()[:n] or None) if isinstance(v, str) else None
     return {
         "status": "ok",
         "title": txt(d.get("title"), 512) or txt(d.get("titleTranslated"), 512),
@@ -312,7 +313,8 @@ def _hit(h) -> dict:
     if not isinstance(h, dict) or not str(h.get("id") or "").isdigit():
         return None
     cr = h.get("designCreator") if isinstance(h.get("designCreator"), dict) else {}
-    s = lambda v: v if isinstance(v, str) else None
+    from ..core.text import unent
+    s = lambda v: unent(v) if isinstance(v, str) else None
     return {"design_id": str(h["id"]), "title": s(h.get("title")), "title_fr": s(h.get("titleTranslated")),
             "cover_url": s(h.get("cover")),
             "creator_name": s(cr.get("name")),
