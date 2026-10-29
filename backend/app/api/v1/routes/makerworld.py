@@ -619,10 +619,12 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
     if readonly:
         import json as _json
         meta = None
+        # la vue est rangee sous l'identifiant du profil, jamais sous le nom du fichier : un 3MF vide sur le NAS y
+        # porte le titre du modele, refuse par la route des plateaux (404, 29/10/2026)
         src = path_of(iid) if iid else None
-        if src is not None and src.is_file() and T.ready(src, src.stem):
+        if src is not None and src.is_file() and T.ready(src, iid):
             try:
-                meta = _json.loads((T._root() / src.stem / "plates.json").read_text(encoding="utf-8"))
+                meta = _json.loads((T._root() / iid / "plates.json").read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 meta = None
         ok = bool(meta and any(not p.get("skipped") for p in meta.get("plates") or []))
@@ -630,7 +632,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             return {"ready": ok}
         if not ok:
             raise HTTPException(409, "Vue 3D pas encore calculée chez lui : il doit l'ouvrir une fois de son côté")
-        key, source = src.stem, "3mf"
+        key, source = iid, "3mf"
     if prof and not iid and not readonly:
         # le 3MF de ce profil peut etre garde sous une autre cle (rattrapage d'une impression au profil devine) ;
         # sinon, pour un modele imprime, on le recupere maintenant (une fois : il sert ensuite a tout)
@@ -651,9 +653,9 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
         meta, source, key = None, "3mf", None
     if iid and not readonly:
         src = path_of(iid)
-        T.WATCH[did] = src.stem
-        meta = await T.from_3mf_early(src, src.stem)       # des le premier plateau pret (29/10/2026)
-        key = src.stem
+        T.WATCH[did] = iid
+        meta = await T.from_3mf_early(src, iid)             # des le premier plateau pret (29/10/2026)
+        key = iid
     if not readonly and (not meta or not any(not p.get("skipped") for p in meta.get("plates") or [])):
         # l'apercu MakerWorld du meme profil ; a defaut, le 3MF garde d'un autre profil du modele
         source = "makerworld"
@@ -664,9 +666,10 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             meta = None
         key = (meta or {}).get("key")
         if not meta and prof and known(did, ""):
-            src = path_of(known(did, ""))
-            T.WATCH[did] = src.stem
-            meta, source, key = await asyncio.to_thread(T.from_3mf, src, src.stem), "3mf_other", src.stem
+            k2 = known(did, "")
+            src = path_of(k2)
+            T.WATCH[did] = k2
+            meta, source, key = await asyncio.to_thread(T.from_3mf, src, k2), "3mf_other", k2
     if not (meta or {}).get("pending"):                    # en cours : la vue suit encore l'avancement
         T.WATCH.pop(did, None)
     T.PROGRESS.pop(f"did:{did}", None)

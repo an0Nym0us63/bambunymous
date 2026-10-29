@@ -1297,8 +1297,8 @@ async def prepare(iid: str) -> None:
     import asyncio
     from .mw_source import path_of
     src = path_of(iid)
-    if src.is_file() and not ready(src, src.stem):
-        await asyncio.to_thread(_in_child, src, src.stem)
+    if src.is_file() and not ready(src, iid):
+        await asyncio.to_thread(_in_child, src, iid)
 
 
 def _all_sources() -> list:
@@ -1339,6 +1339,19 @@ def _view_ok(src: Path, key: str) -> bool:
     return False
 
 
+def _drop_bad_dirs() -> None:
+    """Les vues rangees par erreur sous le nom d'un fichier du NAS (titre du modele, 29/10/2026) : jamais servies (la
+    route des plateaux refuse ces noms), on les retire ; la vue se refait sous l'identifiant du profil."""
+    import shutil
+    try:
+        for d in _root().iterdir():
+            if d.is_dir() and not re.fullmatch(r"[A-Za-z0-9_]+", d.name):
+                shutil.rmtree(d, ignore_errors=True)
+                logger.info(f"[3D] vue mal rangee retiree : {d.name}")
+    except OSError:
+        pass
+
+
 # l'avancement de la preparation de fond (29/10/2026), pour Parametres > Taches
 WARM: dict = {"running": False, "done": 0, "total": 0, "all": 0, "current": None, "started": None, "finished": None,
               "stopped": None}
@@ -1351,6 +1364,7 @@ async def warm_loop(first_delay_s: int = 90, period_s: int = 12 * 3600) -> None:
     import asyncio
     await asyncio.sleep(5)
     await asyncio.to_thread(warm_view_pool)
+    await asyncio.to_thread(_drop_bad_dirs)
     await _tasks.sleep("mw_3d", first_delay_s)
     import time
     while True:
