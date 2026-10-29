@@ -549,6 +549,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               groupsInit: edit?.groups || [], jointsInit: edit?.joints || [], copyPiece: (src, n) => copyPiece(THREE, src, n),
               // pas encore enregistre par cette version : les parties d'un meme objet partent groupees
               groupByObject: edit?.v !== 2 });
+            if (import.meta.env.DEV) window.__asmEditor = { editor, holder: ed.holder, pieces: ed.byPiece, THREE };   // banc d'essai seulement
           } else if (!on && editor) { try { editor.dispose(); } catch { /* la vue se ferme quand meme */ } editor = null; }
           return editor;
         };

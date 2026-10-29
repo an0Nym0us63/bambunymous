@@ -604,18 +604,51 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const col = await getCollider();
     const moving = withKids(list), start = moving.map(g => [g, g.matrix.clone()]);
     // seulement la piece support (et son groupe) : une troisieme piece qui chevauche deja, ailleurs, ne compte pas
-    const others = unitOf(j.b).filter(g => !moving.includes(g) && g.visible);
+    const sups = unitOf(j.b).filter(g => !moving.includes(g) && g.visible);
     const { P, N } = contact(j);
     const u = (Math.abs(N.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0)).cross(N).normalize(), w = N.clone().cross(u);
     const bsz = boxOfAll(list).getSize(new THREE.Vector3());
     const R = Math.min(20, Math.max(4, bsz.length() * 0.4)), step = Math.max(0.5, R / 10);
-    const depthMax = bsz.dot(new THREE.Vector3(Math.abs(N.x), Math.abs(N.y), Math.abs(N.z)));
+    const absN = new THREE.Vector3(Math.abs(N.x), Math.abs(N.y), Math.abs(N.z));
+    // pas plus profond que le support n'est epais (une colonne de 19 cm ne descend pas de 19 cm dans un socle de 3)
+    const depthMax = Math.min(bsz.dot(absN), boxOfAll(sups).getSize(new THREE.Vector3()).dot(absN) + 2);
+    // les recherches se font sur la partie utile des pieces, a pleine resolution (30/10/2026 : un grand support entier
+    // etait simplifie, ses parois bougeaient de quelques dixiemes, plus que le jeu d'un emboitement) : du support, ce qui
+    // est autour de la piece ; de la piece, ce qui peut descendre dans le support
+    const cropOf = (g, keepTri) => {
+      g.updateMatrix();
+      const pos = [], a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+      for (const m of g.children) {
+        if (!m.isMesh || !m.geometry?.attributes?.position) continue;
+        const p = m.geometry.attributes.position.array, ix = m.geometry.index ? m.geometry.index.array : null;
+        const nt = ix ? ix.length / 3 : p.length / 9;
+        for (let t = 0; t < nt; t++) {
+          const i0 = ix ? ix[t * 3] : t * 3, i1 = ix ? ix[t * 3 + 1] : t * 3 + 1, i2 = ix ? ix[t * 3 + 2] : t * 3 + 2;
+          a.set(p[i0 * 3], p[i0 * 3 + 1], p[i0 * 3 + 2]).applyMatrix4(g.matrix);
+          b.set(p[i1 * 3], p[i1 * 3 + 1], p[i1 * 3 + 2]).applyMatrix4(g.matrix);
+          c.set(p[i2 * 3], p[i2 * 3 + 1], p[i2 * 3 + 2]).applyMatrix4(g.matrix);
+          if (keepTri(a, b, c)) pos.push(p[i0 * 3], p[i0 * 3 + 1], p[i0 * 3 + 2], p[i1 * 3], p[i1 * 3 + 1], p[i1 * 3 + 2], p[i2 * 3], p[i2 * 3 + 1], p[i2 * 3 + 2]);
+        }
+      }
+      if (!pos.length) return null;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(Float32Array.from(pos), 3));
+      const q = new THREE.Group(); q.add(new THREE.Mesh(geo));
+      q.position.copy(g.position); q.quaternion.copy(g.quaternion); q.scale.copy(g.scale); q.updateMatrix();
+      return q;
+    };
+    const zone = boxOfAll(list).expandByScalar(R + 2);
+    zone.union(zone.clone().translate(N.clone().multiplyScalar(-depthMax - 2)));
+    const tb = new THREE.Box3();
+    const others = sups.map(g => cropOf(g, (a, b, c) => zone.intersectsBox(tb.setFromPoints([a, b, c])))).filter(Boolean);
+    const low = v => v.clone().sub(P).dot(N) <= depthMax + 2;
+    const movingC = moving.map(g => cropOf(g, (a, b, c) => low(a) || low(b) || low(c)) || g);
     const mats = (ang, x, y, d) => {
       const t = u.clone().multiplyScalar(x).addScaledVector(w, y).addScaledVector(N, 0.05 - d);
       const M = new THREE.Matrix4().makeTranslation(t.x, t.y, t.z).multiply(about(P, new THREE.Quaternion().setFromAxisAngle(N, THREE.MathUtils.degToRad(ang))));
       return start.map(([g, m0]) => [g, M.clone().multiply(m0)]);
     };
-    const free = (ang, x, y, d, erode = 0) => !col.anyTouch(mats(ang, x, y, d), others, erode);
+    const free = (ang, x, y, d, erode = 0) => !col.anyTouch(mats(ang, x, y, d).map(([, m], i) => [movingC[i], m]), others, erode);
     let n = 0, total = 1;
     const tick = async () => { if (++n % 15) return; fitting = Math.min(99, Math.round(100 * n / total)); onChange?.(state()); await new Promise(res => setTimeout(res, 0)); };
     // jusqu'ou la piece s'enfonce a cette place : pas a pas depuis le contact, jusqu'au premier choc, puis au plus pres
@@ -680,8 +713,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         if (!pts.length) return null;
         return [pts.reduce((v, p) => v + p[0], 0) / pts.length, pts.reduce((v, p) => v + p[1], 0) / pts.length];
       };
+      const tried = [];
       for (const c of cands.slice(0, 4)) {
-        for (const da of [0, -1, 1, -2, 2, -3, 3]) {
+        // au quart de degre pres d'abord : une piece sans presque de jeu (une colonne dans son logement) ne passe qu'a
+        // une fraction de degre
+        for (const da of [0, -0.25, 0.25, -0.5, 0.5, -1, 1, -1.5, 1.5, -2, 2, -3, 3]) {
           const ang = c.ang + da;
           await tick();
           let m = zone(ang, c.x, c.y, step, 0.2);
@@ -692,13 +728,23 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
           // vraiment emboitee : enfoncee, elle est tenue de trois cotes au moins (decalee d'1 mm, elle touche) ; sinon elle
           // n'a fait que glisser le long du support (posee au bord)
           if (cur.d > 0.5) {
-            const dz = cur.d * 0.5;
+            const dz = Math.max(0.2, cur.d - 0.3);           // pres du fond : un epaulement a mi-hauteur ne tient pas la piece
             const held = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([a, b]) => !free(ang, m[0] + a, m[1] + b, dz, extra)).length;
             if (held < 3) cur.d = 0;
           }
+          // tous les angles proches sont compares : le plus profond l'emporte (30/10/2026 : le premier qui entrait un peu,
+          // de travers, restait pose sur un epaulement)
+          tried.push(cur);
           if (!best || cost(cur) < cost(best)) best = cur;
-          break;
         }
+      }
+      // plusieurs angles entrent aussi loin : celui du milieu de la plage, le plus droit dans son logement (30/10/2026 : le
+      // plus petit des angles qui passaient laissait la piece de travers d'un degre ou deux)
+      if (best && best.d > 0.5) {
+        const same = tried.filter(t => t.d >= best.d - 0.15 && Math.abs(t.ang - best.ang) <= 4).sort((p, q) => p.ang - q.ang);
+        const mid = same[Math.floor((same.length - 1) / 2)];
+        const angMid = (same[0].ang + same[same.length - 1].ang) / 2;
+        best = same.reduce((m, t) => (Math.abs(t.ang - angMid) < Math.abs(m.ang - angMid) ? t : m), mid);
       }
       // rien n'entre, meme de peu, et plus de tolerance a essayer : la meilleure place au contact
       if (!best && extra === 0.8) {
@@ -720,9 +766,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     j.p.add(t.clone().transformDirection(j.b.matrix.clone().invert()).multiplyScalar(t.length()));
     fitting = null;
     const f = v => String(Math.round(v * 10) / 10).replace(".", ",");
-    const ang = Math.round(((best.ang % 360) + 540) % 360 - 180);
+    const ang = Math.round((((best.ang % 360) + 540) % 360 - 180) * 10) / 10;
     egg("tenon_mortaise");
-    fitMsg = `${depth ? "Emboîtée" : `Aucun logement où elle entre à moins de ${Math.round(R)} mm : posée au contact`}${best.r > 0.05 ? ` · décalée de ${f(best.r)} mm` : ""}${ang ? ` · tournée de ${ang}°` : ""}${depth ? ` · enfoncée de ${f(depth)} mm` : ""}${tol && depth ? ` · pièces sans jeu : ${f(tol)} mm de chevauchement toléré` : ""}`;
+    fitMsg = `${depth ? "Emboîtée" : `Aucun logement où elle entre à moins de ${Math.round(R)} mm : posée au contact`}${best.r > 0.05 ? ` · décalée de ${f(best.r)} mm` : ""}${ang ? ` · tournée de ${f(ang)}°` : ""}${depth ? ` · enfoncée de ${f(depth)} mm` : ""}${tol && depth ? ` · pièces sans jeu : ${f(tol)} mm de chevauchement toléré` : ""}`;
     showContact(); placeHandle(); push(); render();
   };
   el.addEventListener("pointerdown", onSlideDown, true);
