@@ -948,6 +948,7 @@ const EDIT_HELP = [
   ["Au doigt (téléphone, tablette)", [
     ["Un doigt glissé", "tourner autour du modèle ; deux doigts : zoomer (pincer) et déplacer la vue"],
     ["Toucher une pièce", "la choisir ; ➕ Multi (en bas) : chaque toucher en ajoute ou en retire une"],
+    ["Glisser une pièce choisie", "en mode Déplacer : elle suit le doigt, à plat sur le plateau ; ⇕ Hauteur : elle monte ou descend ; ◀ ▶ ▲ ▼ ⤒ ⤓ : un pas précis (0,5, 1, 5 ou 10 mm, touche le pas pour le changer), d'après l'écran"],
     ["Toucher le vide", "plus rien de choisi"],
     ["Rail du bas", "les modes (glisser pour en voir plus), ➕ Multi, ▭ Rectangle, 📋 Pièces, ⌖ Cadrer (la sélection, ou tout), 📐 Valeurs exactes, ⚙ réglages, 🕘 versions ; au-dessus, les actions de la sélection"],
     ["En haut", "✕ fermer, ↶ ↷ annuler et refaire, ? cette aide, 💾 enregistrer ; la consigne du moment est juste dessous"],
@@ -1085,7 +1086,7 @@ function BarMenu({ label, tip, items, active = false, b, up = false }) {
         setAt({ left: Math.max(8, Math.min(r.left, window.innerWidth - 248)), bottom: window.innerHeight - r.top + 6, max: r.top - 16 });
       }
       setOpen(o => !o);
-    }} style={b(active || open)} data-tip={tip}>{label}{up ? "" : " ▾"}</button>
+    }} style={b(active || open)} data-tip={tip}>{label}{typeof label !== "string" ? "" : up ? " ▴" : " ▾"}</button>
     {open && <div style={{ ...(up && at ? { position: "fixed", left: at.left, bottom: at.bottom, maxHeight: at.max, overflowY: "auto", width: 240 }
         : { position: "absolute", top: "calc(100% + 6px)", left: 0, minWidth: 220 }), zIndex: 6, padding: 6, borderRadius: 12,
       background: "var(--sheet-bg)", border: "1px solid var(--border)", boxShadow: "0 14px 34px rgba(0,0,0,.3)", display: "flex", flexDirection: "column", gap: 3 }}>
@@ -1109,6 +1110,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
   const [sure, setSure] = useState(false);
   const [help, setHelp] = useState(false);
   const [panel, setPanel] = useState(null);          // au doigt : le volet ouvert (« pieces », « exact »)
+  const [nstep, setNstep] = useState(1);              // au doigt : le pas des fleches (mm)
   if (!est) return null;
   const b = (on, extra = {}) => ({ height: compact ? 38 : 34, padding: "0 11px", borderRadius: 10, flexShrink: 0, border: on ? "none" : "1px solid var(--border)", cursor: "pointer",
     fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap", color: on ? "#fff" : "var(--text2)",
@@ -1140,14 +1142,14 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
     </> : null;
   const selRow = hasSel && !est.splitPending ? <>
       <span style={{ fontSize: 12, fontWeight: 800, color: "#0EA5E9", padding: "0 4px", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{est.selected}</span>
-      <BarMenu b={b} label="🔗 Grouper" tip="Faire bouger des pièces ensemble" items={[
+      <BarMenu b={b} up={compact} label="🔗 Grouper" tip="Faire bouger des pièces ensemble" items={[
         est.canGroup && { label: "🔗 Grouper la sélection", key: "Ctrl+G", onClick: () => api?.group(), tip: "Les pièces choisies bougent ensemble" },
         { label: "🔗 Grouper ce qui touche", onClick: () => api?.groupTouching(), tip: "La sélection et toutes les pièces qui la touchent, de proche en proche" },
         est.canGroupGlued && { label: "🔗 Grouper le collé", onClick: () => api?.groupGlued(), tip: "La pièce et tout ce qui y est collé, de proche en proche" },
         est.canUngroup && "-",
         est.canUngroup && { label: "⛓ Dégrouper", key: "Ctrl+Maj+G", onClick: () => api?.ungroup() },
       ]}/>
-      <BarMenu b={b} label="🧩 Pièce" tip="Séparer, réunir, masquer" items={[
+      <BarMenu b={b} up={compact} label="🧩 Pièce" tip="Séparer, réunir, masquer" items={[
         est.canSplit && { label: "✂ Séparer", onClick: () => api?.splitPreview(), tip: "Pièces groupées : les rendre indépendantes ; une pièce seule : proposer ses morceaux" },
         est.canReunite && { label: "⊕ Réunir", onClick: () => api?.reunite(), tip: "Remettre la pièce d'un seul tenant" },
         { label: "🙈 Masquer", key: "H", onClick: () => api?.hide(), tip: "Pour atteindre ce qu'elle cache (la vue seulement)" },
@@ -1156,7 +1158,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         {sep}
         <button type="button" onClick={() => api?.refine()} style={b(false)}
           data-tip="Chercher le meilleur ajustement : la pièce épouse au mieux l'autre surface près du contact, sans la traverser">🎯 Ajuster</button>
-        <BarMenu b={b} label="⟳ Contact" tip="Tourner autour du contact, glisser sans traverser" items={[
+        <BarMenu b={b} up={compact} label="⟳ Contact" tip="Tourner autour du contact, glisser sans traverser" items={[
           ...(est.pivot ? [[-90, "⟲ 90°"], [-15, "⟲ 15°"], [15, "⟳ 15°"], [90, "⟳ 90°"]].map(([d, l]) =>
             ({ label: `${l} autour du contact`, onClick: () => api?.turn(d), keep: true })) : []),
           est.pivot && "-",
@@ -1188,7 +1190,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
     const sq = (on, extra = {}) => b(on, { width: 42, height: 40, padding: 0, fontSize: 16, ...extra });
     const togglePanel = k => setPanel(p => (p === k ? null : k));
     const touchTip = est.glued && est.step !== 2 ? `Collée à ${est.glued.to} : fais-la glisser sur le contact ; ⟳ Contact pour la tourner autour, ✂ Décoller pour la libérer`
-      : est.mode === "move" ? "Touche une pièce (➕ Multi : en choisir plusieurs), puis tire sur ses flèches ; 📐 Exact pour une position au millimètre"
+      : est.mode === "move" ? (est.count ? `Fais glisser ${est.count > 1 ? "la sélection" : "la pièce"} du doigt${est.vertical ? " : elle monte ou descend" : " sur le plateau (⇕ Hauteur : la monter)"} ; ou les flèches, d'un pas précis`
+        : "Touche une pièce (➕ Multi : en choisir plusieurs), puis fais-la glisser du doigt")
       : est.mode === "rotate" ? "Touche une pièce, puis tourne-la par ses anneaux ; 📐 Exact pour un angle précis"
       : String(tip || "").replace(/Maj \+ clic \(ou ➕ Multi\)/g, "➕ Multi").replace(/ \(Entrée\)/g, "")
         .replace(/clique/g, "touche").replace(/Clique/g, "Touche").replace(/clic/g, "toucher");
@@ -1215,6 +1218,13 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
       {panel === "exact" && (est.mode === "move" || est.mode === "rotate") && <ExactPanel est={est} api={api} compact/>}
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 3, paddingBottom: "env(safe-area-inset-bottom, 0px)",
         background: "color-mix(in srgb, var(--surface) 92%, transparent)", borderTop: "1px solid var(--border)", backdropFilter: "blur(8px)" }}>
+        {est.mode === "move" && est.count > 0 && !est.glued && !est.splitPending && <div style={{ ...rail, borderBottom: "1px solid var(--border)" }}>
+          <button type="button" onClick={() => api?.setVertical(!est.vertical)} style={b(!!est.vertical, { height: 40 })}>⇕ Hauteur</button>
+          {[["◀", -1, 0, 0, "À gauche"], ["▶", 1, 0, 0, "À droite"], ["▲", 0, 1, 0, "Plus loin"], ["▼", 0, -1, 0, "Plus près"], ["⤒", 0, 0, 1, "Monter"], ["⤓", 0, 0, -1, "Descendre"]].map(([l, r, f, u, t]) =>
+            <button key={l} type="button" aria-label={t} onClick={() => api?.nudge(r, f, u, nstep)} style={sq(false, { fontSize: 17 })}>{l}</button>)}
+          <button type="button" onClick={() => setNstep(s => ({ 0.5: 1, 1: 5, 5: 10, 10: 0.5 })[s] || 1)} style={b(false, { height: 40, minWidth: 64 })}
+            aria-label="Le pas des flèches">{String(nstep).replace(".", ",")} mm</button>
+        </div>}
         {second && <div style={{ ...rail, borderBottom: "1px solid var(--border)" }}>{modeRow}{splitRow}{selRow}{showAll}</div>}
         <div style={rail}>
           {[["move", "✥", "Déplacer"], ["rotate", "⟳", "Tourner"], ["ground", "⬇", "Au sol"], ["mate", "🧲", "Coller"], ["pins", "📍", "Points"]].map(([m, i, l]) =>

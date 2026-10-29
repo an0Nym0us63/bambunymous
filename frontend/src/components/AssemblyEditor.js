@@ -85,7 +85,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   tc.setSpace("world");
   // au doigt (30/10/2026) : une poignee plus grosse, qu'on attrape sans viser au pixel
   const coarse = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
-  tc.size = coarse ? 1.35 : 0.8;
+  tc.size = coarse ? 1.1 : 0.8;
   const helper = tc.getHelper();
   scene.add(helper);
   let dragStart = null;              // la poignee et les pieces au debut du glisser
@@ -130,7 +130,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const selName = () => sel.size === 0 ? null : sel.size === 1 ? [...sel][0].userData.name : `${sel.size} pièces${groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))) ? " (groupe)" : ""}`;
   const center = () => { if (!sel.size) return null; const c = boxOfAll([...sel]).getCenter(new THREE.Vector3()); return [c.x, c.y, c.z].map(v => Math.round(v * 10) / 10); };
   const state = () => ({ mode, magnet, assist, rotStep, center: center(), selected: selName(), count: sel.size, step: first ? 2 : 1, canUndo: undo.length > 0, canRedo: redo.length > 0,
-    pivot: !!pivot, pairs: pairs.length, boxMode, ground3, groundPts: gPts.length, pinsA: pins.a.length, pinsB: pins.b.length,
+    pivot: !!pivot, pairs: pairs.length, boxMode, ground3, groundPts: gPts.length, vertical, pinsA: pins.a.length, pinsB: pins.b.length,
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
@@ -329,6 +329,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   // la poignee au centre de la selection
   const placeHandle = () => {
     if (!sel.size || !(mode === "move" || mode === "rotate") || jointOf([...sel])) { tc.detach(); return; }
+    // au doigt, pas de poignee pour deplacer (30/10/2026) : elle couvrait la piece ; on la tire elle-meme, ou les fleches
+    if (coarse && mode === "move") { tc.detach(); return; }
     const c = boxOfAll([...sel]).getCenter(new THREE.Vector3());
     handle.position.copy(c); handle.quaternion.identity(); handle.scale.set(1, 1, 1); handle.updateMatrix();
     tc.attach(handle); tc.setMode(mode === "move" ? "translate" : "rotate");
@@ -679,6 +681,55 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   window.addEventListener("pointerup", onBoxUp);
   el.addEventListener("pointerdown", onDown);
   el.addEventListener("pointercancel", onCancel);
+
+  // au doigt, deplacer en tirant la piece elle-meme (30/10/2026 : viser les fleches de la poignee etait penible) : en
+  // mode Deplacer, un doigt pose sur une piece choisie la fait glisser a plat sur le plateau (« ⇕ Hauteur » : la monte
+  // ou la descend) ; ailleurs, le doigt tourne la vue comme avant, deux doigts zooment et deplacent la vue
+  let fdrag = null, vertical = false;
+  const planeAt = (ev, plane) => {
+    const r = el.getBoundingClientRect();
+    mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(mouse, camera);
+    holder.updateMatrixWorld(true);
+    return ray.ray.clone().applyMatrix4(holder.matrixWorld.clone().invert()).intersectPlane(plane, new THREE.Vector3());
+  };
+  const onDragStart = ev => {
+    if (!coarse || mode !== "move" || !sel.size || tc.dragging || tc.axis || fingers > 1 || boxMode) return;
+    if (jointOf([...sel])) return;                    // collee : elle glisse sur son contact par la poignee
+    const pick = pickAt(ev);
+    if (!pick || !sel.has(pick.group)) return;
+    let n = new THREE.Vector3(0, 0, 1);
+    if (vertical) {                                   // un plan debout, face a l'appareil
+      n = holder.worldToLocal(camera.position.clone()).sub(pick.p); n.z = 0;
+      n = n.lengthSq() > 1e-9 ? n.normalize() : new THREE.Vector3(0, 1, 0);
+    }
+    fdrag = { plane: new THREE.Plane().setFromNormalAndCoplanarPoint(n, pick.p), from: pick.p.clone(), done: new THREE.Vector3(), id: ev.pointerId, moved: false };
+    controls.enabled = false;
+  };
+  const endDrag = () => {
+    if (!fdrag) return;
+    const moved = fdrag.moved;
+    fdrag = null; controls.enabled = !boxMode;
+    if (moved) { placeHandle(); push(); render(); }
+  };
+  const onDragMove = ev => {
+    if (!fdrag || ev.pointerId !== fdrag.id) return;
+    if (fingers > 1) { endDrag(); return; }           // un second doigt : c'est la vue qu'on veut bouger
+    const q = planeAt(ev, fdrag.plane);
+    if (!q) return;
+    const want = q.sub(fdrag.from);
+    if (vertical) { want.x = 0; want.y = 0; } else want.z = 0;
+    if (magnet) want.set(Math.round(want.x), Math.round(want.y), Math.round(want.z));
+    const step = want.clone().sub(fdrag.done);
+    if (step.lengthSq() < 1e-8) return;
+    apply(withKids([...sel]), new THREE.Matrix4().makeTranslation(step.x, step.y, step.z));
+    fdrag.done.copy(want); fdrag.moved = true; placeHandle(); render();
+  };
+  const onDragEnd = ev => { if (fdrag && ev.pointerId === fdrag.id) endDrag(); };
+  el.addEventListener("pointerdown", onDragStart);
+  window.addEventListener("pointermove", onDragMove);
+  window.addEventListener("pointerup", onDragEnd);
+  window.addEventListener("pointercancel", onDragEnd);
   el.addEventListener("pointerup", onUp);
   let slide = null;
   const rayHolder = ev => {
@@ -827,6 +878,21 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
     setRotStep: d => { rotStep = d; applySnap(); onChange?.(state()); },
     setMulti: on => { multi = on; onChange?.(state()); },
+    // au doigt : glisser monte ou descend la piece au lieu de la faire glisser a plat
+    setVertical: on => { vertical = on; onChange?.(state()); },
+    // un pas de cote, en avant, en hauteur, d'apres l'ecran : droite / loin / haut (r, f, u : -1, 0 ou 1), de s mm ;
+    // suivant l'axe du plateau le plus proche de la direction vue (un pas net, en X ou en Y)
+    nudge: (r, f, u, s = 1) => {
+      if (!sel.size) return;
+      holder.updateMatrixWorld(true);
+      const inv = new THREE.Matrix3().setFromMatrix4(holder.matrixWorld).invert();
+      const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).applyMatrix3(inv);
+      const fwd = camera.getWorldDirection(new THREE.Vector3()).applyMatrix3(inv);
+      const axis = v => (Math.abs(v.x) >= Math.abs(v.y) ? new THREE.Vector3(Math.sign(v.x) || 1, 0, 0) : new THREE.Vector3(0, Math.sign(v.y) || 1, 0));
+      const t = new THREE.Vector3().addScaledVector(axis(right), r * s).addScaledVector(axis(fwd), f * s);
+      t.z += u * s;
+      apply(withKids([...sel]), new THREE.Matrix4().makeTranslation(t.x, t.y, t.z)); placeHandle(); push(); render();
+    },
     setTurnGlued: on => { turnGlued = on; onChange?.(state()); },
     pinsApply,
     pinsUndo: () => { if (pins.a.length > pins.b.length) pins.a.pop(); else pins.b.pop(); if (!pins.a.length) pins.A = null; if (!pins.b.length) pins.B = null; drawPins(); onChange?.(state()); },
@@ -1182,6 +1248,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       // fermeture de la vue (page blanche, 29/10/2026) ; on la debranche et on libere son dessin a la main
       el.removeEventListener("pointerdown", onDown); el.removeEventListener("pointerup", onUp); window.removeEventListener("keydown", onKey, true);
       el.removeEventListener("pointercancel", onCancel);
+      el.removeEventListener("pointerdown", onDragStart); window.removeEventListener("pointermove", onDragMove);
+      window.removeEventListener("pointerup", onDragEnd); window.removeEventListener("pointercancel", onDragEnd);
       el.removeEventListener("pointerdown", onBoxDown, true); window.removeEventListener("pointermove", onBoxMove); window.removeEventListener("pointerup", onBoxUp);
       boxDiv?.remove(); if (boxMode) controls.enabled = true;
       window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", onBlur);
