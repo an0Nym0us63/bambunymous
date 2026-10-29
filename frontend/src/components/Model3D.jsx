@@ -848,6 +848,8 @@ const EDIT_HELP = [
     ["📋 Pièces (à gauche)", "choisir, 👁 masquer un moment, 🚫 exclure de l'assemblage (↩ Remettre), ⧉ un exemplaire de plus, ✕ le retirer"],
     ["🔗 Grouper (Ctrl + G)", "les pièces choisies bougent ensemble ; ⛓ Dégrouper (Ctrl + Maj + G)"],
     ["🔗 Grouper le collé", "la pièce choisie et tout ce qui y est collé, de proche en proche, deviennent un groupe"],
+    ["🔗 Grouper ce qui touche", "la sélection et toutes les pièces qui la touchent (à 0,3 mm près), de proche en proche, deviennent un groupe"],
+    ["▭ Rectangle", "glisser trace un rectangle : les pièces dont le centre y tombe sont choisies (Ctrl : en ajouter) ; la vue ne tourne pas tant que c'est allumé"],
   ]],
   ["Déplacer (M)", [
     ["Flèches de la poignée", "tirer dans un axe ; le carré, dans un plan"],
@@ -974,6 +976,10 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
         data-tip="Collage assisté : les faces planes entières sont centrées l'une sur l'autre et leurs grands axes alignés (sinon : au point cliqué)">🪄 Assisté</button>
       {!!(est.canGroup || est.canUngroup || est.glued || est.count > 0 || est.hidden > 0 || est.splitPending) && <span style={{ width: 1, background: "var(--border)", margin: "0 2px" }}/>}
       {est.canGroup && <button type="button" onClick={() => api?.group()} style={b(false)} data-tip="Les pièces choisies bougent ensemble (Ctrl+G)">🔗 Grouper</button>}
+      <button type="button" onClick={() => api?.setBoxMode(!est.boxMode)} style={b(!!est.boxMode)}
+        data-tip="Choisir au rectangle : glisse pour entourer les pièces (Ctrl : en ajouter) ; la vue ne tourne pas tant que c'est allumé">▭ Rectangle</button>
+      {est.count > 0 && <button type="button" onClick={() => api?.groupTouching()} style={b(false)}
+        data-tip="Grouper la sélection avec toutes les pièces qui la touchent, de proche en proche">🔗 Grouper ce qui touche</button>}
       {est.canGroupGlued && <button type="button" onClick={() => api?.groupGlued()} style={b(false)}
         data-tip="Grouper cette pièce avec tout ce qui y est collé, de proche en proche (et ce sur quoi elle est collée)">🔗 Grouper le collé</button>}
       {est.splitPending ? <>

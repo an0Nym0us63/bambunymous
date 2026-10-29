@@ -128,7 +128,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const selName = () => sel.size === 0 ? null : sel.size === 1 ? [...sel][0].userData.name : `${sel.size} pièces${groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))) ? " (groupe)" : ""}`;
   const center = () => { if (!sel.size) return null; const c = boxOfAll([...sel]).getCenter(new THREE.Vector3()); return [c.x, c.y, c.z].map(v => Math.round(v * 10) / 10); };
   const state = () => ({ mode, magnet, assist, rotStep, center: center(), selected: selName(), count: sel.size, step: first ? 2 : 1, canUndo: undo.length > 0, canRedo: redo.length > 0,
-    pivot: !!pivot, pairs: pairs.length, pinsA: pins.a.length, pinsB: pins.b.length,
+    pivot: !!pivot, pairs: pairs.length, boxMode, pinsA: pins.a.length, pinsB: pins.b.length,
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
@@ -557,6 +557,43 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       render(); onChange?.(state());
     }
   };
+  // la selection au rectangle (30/10/2026) : en mode « ▭ Rectangle », un glisser trace un rectangle et choisit les pieces
+  // dont le centre y tombe (Ctrl / Maj, ou « Multi » : les ajouter a la selection) ; la vue ne tourne pas pendant ce mode
+  let boxMode = false, boxStart = null, boxDiv = null;
+  const host = el.parentElement;
+  const onBoxDown = ev => {
+    if (!boxMode || ev.button !== 0) return;
+    ev.stopImmediatePropagation(); ev.preventDefault();
+    const r = el.getBoundingClientRect();
+    boxStart = [ev.clientX, ev.clientY, r];
+    boxDiv = document.createElement("div");
+    boxDiv.style.cssText = "position:absolute;border:1.5px dashed #0EA5E9;background:rgba(14,165,233,.12);pointer-events:none;z-index:5;border-radius:4px";
+    host.appendChild(boxDiv);
+  };
+  const onBoxMove = ev => {
+    if (!boxStart || !boxDiv) return;
+    const [x0, y0, r] = boxStart, hr = host.getBoundingClientRect();
+    const x1 = Math.min(x0, ev.clientX), y1 = Math.min(y0, ev.clientY), x2 = Math.max(x0, ev.clientX), y2 = Math.max(y0, ev.clientY);
+    Object.assign(boxDiv.style, { left: `${x1 - hr.left}px`, top: `${y1 - hr.top}px`, width: `${x2 - x1}px`, height: `${y2 - y1}px` });
+    void r;
+  };
+  const onBoxUp = ev => {
+    if (!boxStart) return;
+    const [x0, y0, r] = boxStart;
+    boxStart = null; boxDiv?.remove(); boxDiv = null;
+    const x1 = Math.min(x0, ev.clientX), y1 = Math.min(y0, ev.clientY), x2 = Math.max(x0, ev.clientX), y2 = Math.max(y0, ev.clientY);
+    if (x2 - x1 < 4 && y2 - y1 < 4) { if (!ev.ctrlKey && !ev.shiftKey && !multi) setSel([]); return; }
+    holder.updateMatrixWorld(true);
+    const inside = all.filter(g => g.visible).filter(g => {
+      const c = boxOf(g).getCenter(new THREE.Vector3()).applyMatrix4(holder.matrixWorld).project(camera);
+      const sx = r.left + (c.x + 1) / 2 * r.width, sy = r.top + (1 - c.y) / 2 * r.height;
+      return c.z < 1 && sx >= x1 && sx <= x2 && sy >= y1 && sy <= y2;
+    });
+    setSel(ev.ctrlKey || ev.shiftKey || multi ? [...new Set([...sel, ...inside])] : inside);
+  };
+  el.addEventListener("pointerdown", onBoxDown, true);
+  window.addEventListener("pointermove", onBoxMove);
+  window.addEventListener("pointerup", onBoxUp);
   el.addEventListener("pointerdown", onDown);
   el.addEventListener("pointerup", onUp);
   let slide = null;
@@ -843,6 +880,35 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       groups.push(list); push();
     },
     ungroup: () => { groups = groups.filter(gr => !gr.some(g => sel.has(g))); push(); },
+    setBoxMode: on => { boxMode = on; controls.enabled = !on; el.style.cursor = on ? "crosshair" : ""; onChange?.(state()); },
+    // grouper ce qui se touche (30/10/2026) : la selection, et de proche en proche les pieces qui la touchent (a 0,3 mm
+    // pres : la piece est a peine gonflee pour le test) ; le tout devient un groupe
+    groupTouching: async () => {
+      if (!sel.size) return;
+      fitMsg = "Recherche des pièces qui se touchent…"; onChange?.(state());
+      await new Promise(r => setTimeout(r, 0));
+      const col = await getCollider();
+      const tris = g => g.children.reduce((t, m) => t + (m.geometry?.attributes?.position?.count || 0), 0);
+      const set = new Set([...sel].flatMap(unitOf)), todo = [...set];
+      const others = () => all.filter(g => g.visible && !set.has(g));
+      while (todo.length) {
+        const a = todo.pop(), ba = boxOf(a).expandByScalar(0.5);
+        for (const b of others()) {
+          if (!ba.intersectsBox(boxOf(b))) continue;
+          // la plus petite des deux, gonflee, contre l'autre telle quelle
+          const [p, q] = tris(a) <= tris(b) ? [a, b] : [b, a];
+          p.updateMatrix(); q.updateMatrix();
+          if (col.touches(p, p.matrix, q, -0.3)) { unitOf(b).forEach(g => { set.add(g); todo.push(g); }); }
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+      const list = [...set];
+      if (list.length < 2) { fitMsg = "Aucune pièce ne touche celle-ci"; onChange?.(state()); return; }
+      groups = groups.filter(gr => !gr.some(g => set.has(g)));
+      groups.push(list); push(); setSel(list);
+      fitMsg = `Groupée avec tout ce qui la touche : ${list.length} pièces`;
+      onChange?.(state());
+    },
     // grouper tout ce qui est colle (30/10/2026) : la selection, et de proche en proche ce qui y est colle ou ce sur quoi
     // elle est collee (et leurs groupes) ; le tout devient un groupe, choisi
     groupGlued: () => {
@@ -1029,6 +1095,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       // pas tc.dispose() : en three 0.169 il appelle traverse, qui n'existe plus sur la poignee, et l'erreur cassait la
       // fermeture de la vue (page blanche, 29/10/2026) ; on la debranche et on libere son dessin a la main
       el.removeEventListener("pointerdown", onDown); el.removeEventListener("pointerup", onUp); window.removeEventListener("keydown", onKey, true);
+      el.removeEventListener("pointerdown", onBoxDown, true); window.removeEventListener("pointermove", onBoxMove); window.removeEventListener("pointerup", onBoxUp);
+      boxDiv?.remove(); if (boxMode) controls.enabled = true;
       window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", onBlur);
       el.removeEventListener("pointerdown", onSlideDown, true); window.removeEventListener("pointermove", onSlideMove); window.removeEventListener("pointerup", onSlideUp);
       holder.remove(ring); ring.geometry.dispose(); ringMat.dispose();

@@ -58,7 +58,7 @@ export async function createCollider(THREE) {
         m3.set(M[e] + lam, M[e + 1], M[e + 2], M[e + 3], M[e + 4] + lam, M[e + 5], M[e + 6], M[e + 7], M[e + 8] + lam);
         rhs.set(nsum[v * 3], nsum[v * 3 + 1], nsum[v * 3 + 2]).multiplyScalar(erode);
         if (m3.determinant() === 0) d.set(0, 0, 0); else d.copy(rhs).applyMatrix3(m3.invert());
-        if (d.length() > 3 * erode) d.setLength(3 * erode);
+        if (d.length() > 3 * Math.abs(erode)) d.setLength(3 * Math.abs(erode));     // (negatif : la piece gonflee)
         out[v * 3] = p[v * 3] - d.x; out[v * 3 + 1] = p[v * 3 + 1] - d.y; out[v * 3 + 2] = p[v * 3 + 2] - d.z;
       }
       geo.setAttribute("position", new THREE.BufferAttribute(out, 3));
