@@ -316,7 +316,11 @@ def totals(text: str) -> dict:
     t = {"subtotal": None, "total": None, "shipping": None, "discount": 0.0, "currency": None}
     ms = list(_BAMBU_RE.finditer(text))
     tail = text[ms[-1].end():] if ms else text
-    for ln in tail.splitlines():
+    # seules les lignes a partir du sous-total comptent (29/10/2026) : la remise de ligne du dernier article
+    # (« Offre d'add-ons -9 € », deja dans son prix) vient apres le texte de l'article et passait pour une remise de fin
+    lines = tail.splitlines()
+    start = next((i for i, ln in enumerate(lines) if _fold(ln).strip().startswith(("sous-total", "subtotal", "zwischensumme", "sous total"))), 0)
+    for ln in lines[start:]:
         low = _fold(ln).strip()
         if not low:
             continue
@@ -863,8 +867,18 @@ async def _apply(m: dict, notify: bool = True) -> str:
                             tgt[k] = p_.get(k)
                         touched.append(tgt)
                 o.items_json = json.dumps(cur, ensure_ascii=False)
-            if tot and not o.totals_json:
-                o.totals_json = json.dumps(tot)
+            if tot:
+                # une relecture remet les totaux a jour (29/10/2026 : une remise de ligne avait ete comptee en remise de
+                # fin), en gardant les choix de repartition ; les bobines encore en commande suivent
+                old_t = json.loads(o.totals_json) if o.totals_json else {}
+                merged = dict(tot, **{k: v for k, v in old_t.items() if k.startswith("spread_")})
+                if merged != old_t:
+                    o.totals_json = json.dumps(merged)
+                    cur = json.loads(o.items_json or "[]")
+                    for it in cur:
+                        if it.get("kind") == "filament" and it.get("spools"):
+                            touched.append(it) if it not in touched else None
+                    o.items_json = json.dumps(cur, ensure_ascii=False)
             if touched:
                 # les bobines « en commande » deja creees pour ces lignes, et leur fiche sans prix, prennent les prix lus
                 await _price_ordered(db, touched, json.loads(o.totals_json) if o.totals_json else tot, cur)
@@ -1170,8 +1184,8 @@ async def _price_ordered(db, items: list[dict], tot: dict | None, all_items: lis
         base, paid = base_unit(it), paid_unit(it, tot, all_items)
         for sid in it.get("spools") or []:
             sp = await db.get(Spool, int(sid))
-            if sp and sp.ordered and sp.price_override is None and paid is not None:
-                sp.price_override = paid
+            if sp and sp.ordered and paid is not None:
+                sp.price_override = paid                  # une bobine pas encore recue suit toujours le dernier calcul
         if it.get("filament_id") and base:
             f = await db.get(Filament, int(it["filament_id"]))
             if f and not f.price:
