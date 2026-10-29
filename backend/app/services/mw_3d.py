@@ -22,7 +22,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 8                           # 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 9                           # 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan", re.I)
 MAX_TRIANGLES = 6_000_000              # au-dela, le plateau n'est pas converti (trop lourd pour un telephone)
 _TRI_PAINT = re.compile(rb'<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"([^>]*)>')
@@ -791,7 +791,15 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         groups_out, total, pw = emit(asm_lst, own=own)
         # toujours montree quand le 3MF en a une (29/10/2026 : le tri « vraie vue / copie des plateaux » en
         # cachait trop ; c'est a chacun de juger en la regardant) ; posee a la va-vite, elle est rangee
-        tidy = _tidy(own)
+        # ou est chaque objet sur les plateaux (plateau, orientation) : pour reconnaitre un tas de pieces posees
+        # telles qu'imprimees
+        on_plate = {}
+        for n_, _, inst in plates:
+            for oid, k in inst:
+                mts = items_by_obj.get(oid) or []
+                if k < len(mts):
+                    on_plate[(oid, k)] = (n_, mts[k][:9])
+        tidy = _tidy(own, {(oid, k): mt[:9] for oid, k, mt in asm}, on_plate)
         write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True, **({"tidied": True} if tidy else {})})
     elif asm:
         logger.info(f"[3D] {key or src.name} : vue d'assemblage ignoree (un seul objet, ou des objets absents du 3MF)")
@@ -803,10 +811,35 @@ _TOUCH = 1.0                           # mm : deux objets a moins que ca se touc
 _GAP = 10.0                            # mm entre deux blocs ranges
 
 
-def _tidy(own: dict) -> bool:
+def _is_pile(ids, box, asm_rot: dict, on_plate: dict) -> bool:
+    """Un tas, pas un assemblage (29/10/2026, un Bip Bip aux pieces posees l'une sur l'autre) : des pieces de
+    plateaux differents (imprimees a part), toutes posees au sol exactement comme imprimees (meme orientation que
+    sur leur plateau, aucune soulevee), et qui se recouvrent largement. Un vrai assemblage de pieces imprimees a
+    part en tourne ou en souleve au moins une ; des pieces d'un meme plateau qui se chevauchent (imprimees
+    ensemble, emboitees : le perroquet) n'en sont pas un."""
+    import numpy as np
+    if len({on_plate.get(i, (None,))[0] for i in ids}) < 2:
+        return False
+    for i in ids:
+        if i not in on_plate or i not in asm_rot or box[i][0][2] > 0.5:
+            return False
+        if not np.allclose(np.array(asm_rot[i]), np.array(on_plate[i][1]), atol=1e-3):
+            return False
+    for x in range(len(ids)):
+        for y in range(x + 1, len(ids)):
+            a, b = box[ids[x]], box[ids[y]]
+            inter = np.clip(np.minimum(a[1], b[1]) - np.maximum(a[0], b[0]), 0, None)
+            va, vb = np.prod(np.maximum(a[1] - a[0], 1e-6)), np.prod(np.maximum(b[1] - b[0], 1e-6))
+            if np.prod(inter) > 0.3 * min(va, vb):
+                return True
+    return False
+
+
+def _tidy(own: dict, asm_rot: dict | None = None, on_plate: dict | None = None) -> bool:
     """Une vue d'assemblage eparpillee (29/10/2026 : des pieces a 80 cm les unes des autres) : les objets qui se
     touchent restent ensemble, comme le createur les a assembles ; les blocs a part sont poses au sol et ranges en
-    carre, rapproches. Un seul bloc : rien ne bouge. Deplace les sommets sur place ; rend vrai si c'est range."""
+    carre, rapproches. Un seul bloc : rien ne bouge. Un tas de pieces posees l'une sur l'autre telles qu'imprimees
+    (_is_pile) : chacune est rangee a part. Deplace les sommets sur place ; rend vrai si c'est range."""
     import numpy as np
     ids = [i for i, arrs in own.items() if arrs]
     if len(ids) < 2:
@@ -816,6 +849,8 @@ def _tidy(own: dict) -> bool:
         lo = np.min([a.min(axis=0) for a in own[i] if len(a)], axis=0)
         hi = np.max([a.max(axis=0) for a in own[i] if len(a)], axis=0)
         box[i] = (lo, hi)
+    if _is_pile(ids, box, asm_rot or {}, on_plate or {}):
+        return _pack(own, [([i], box[i][0], box[i][1]) for i in ids])
     up = {i: i for i in ids}
 
     def root(i):
@@ -838,6 +873,12 @@ def _tidy(own: dict) -> bool:
         lo = np.min([box[i][0] for i in members], axis=0)
         hi = np.max([box[i][1] for i in members], axis=0)
         bb.append((members, lo, hi))
+    return _pack(own, bb)
+
+
+def _pack(own: dict, bb: list) -> bool:
+    """Range des blocs [(objets, mini, maxi)] au sol, en carre, rapproches."""
+    import numpy as np
     # les plus grands d'abord, en rangees d'un carre (autant de colonnes que la racine du nombre de blocs)
     bb.sort(key=lambda b: -(b[2][0] - b[1][0]) * (b[2][1] - b[1][1]))
     cols = int(np.ceil(np.sqrt(len(bb))))
