@@ -62,6 +62,10 @@ function parseBin(buf) {
 // un apercu MakerWorld (GLB) ou un plateau de l'appli : l'adresse porte une version (« plate_1.glb?v=… »)
 const isGlb = u => /\.glb(\?|$)/.test(String(u || ""));
 const hex6 = c => String(c || "").replace(/^#/, "").slice(0, 6).toUpperCase();
+// la transparence choisie pour chaque couleur de filament d'un HueForge (30/10/2026), gardee sur cet appareil
+const TD_KEY = "bn-hue-td";
+const tdSaved = () => { try { return JSON.parse(localStorage.getItem(TD_KEY) || "{}") || {}; } catch { return {}; } };
+const tdSave = o => { try { const m = { ...tdSaved(), ...o }; Object.keys(m).forEach(k => { if (m[k] == null) delete m[k]; }); localStorage.setItem(TD_KEY, JSON.stringify(m)); } catch { /* rien */ } };
 
 // le rendu d'une finition de filament (28/10/2026) : translucide, satine, metallique, mat, lumineux
 // reflets (silk, metal) : une piece eclairee servant d'environnement, sur ces seuls materiaux (les autres gardent
@@ -137,6 +141,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
   const [bedOn, setBedOn] = useState(true);            // le plateau (grille) : masquable pour voir dessous
   const [floorPick, setFloorPick] = useState(false), [oriented, setOriented] = useState(false);   // une face posee au sol (la vue)
   useEffect(() => { if (lit) egg("ombres_chinoises"); }, [lit]);
+  // la transparence des couches d'un HueForge (30/10/2026) : une valeur par filament, reglable, gardee par couleur
+  const [hueL, setHueL] = useState(null), [tdOpen, setTdOpen] = useState(false);
   const api = useRef(null);
   useEffect(() => {
     let dead = false, cleanup = () => {};
@@ -210,6 +216,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         renderer.domElement.remove(); };
       try {
         const model = new THREE.Group();
+        let hueU = null;                                  // les couches d'un HueForge (reglables : setTd)
         if (glb) {
           const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
           const { DRACOLoader } = await import("three/examples/jsm/loaders/DRACOLoader.js");
@@ -243,7 +250,6 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           // la couleur d'un point depend de sa hauteur : le filament du fond, puis chaque tranche posee par-dessus le
           // recouvre d'autant plus qu'elle est epaisse (une couche de blanc sur du noir : un gris sombre). Sans cela,
           // chaque tranche sortait opaque : un titre en blanc fin sur noir, noir en vrai, sortait blanc
-          let hueU = null;
           if (hue?.length && !pieces) {
             const hexOf = g => g.color.map(x => x.toString(16).padStart(2, "0")).join("").toUpperCase();
             const mapC = h => palette?.[h] ? new THREE.Color(`#${hex6(palette[h])}`) : new THREE.Color(`#${h}`);
@@ -253,11 +259,15 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               // l'epaisseur ou un filament couvre presque tout (95 %) : d'apres sa clarte, comme les valeurs de HueForge
               // (un noir couvre en 0,3 mm, un blanc en 1 mm)
               const td = c => 0.3 + 0.7 * (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b);
-              const L = hue.slice(0, 8).map(([z, h]) => ({ z: Number(z), c: mapC(String(h).toUpperCase()) }));
+              const L = hue.slice(0, 8).map(([z, h]) => { const hx = String(h).toUpperCase(), c = mapC(hx);
+                return { z: Number(z), c, hex: `#${c.getHexString().toUpperCase()}`, def: td(c) }; });
+              const saved = tdSaved();
+              L.forEach(l => { l.td = Number(saved[l.hex]) > 0 ? Number(saved[l.hex]) : l.def; });
               const pad = n => [...Array(8)].map((_, i) => n(i));
               hueU = { hBase: { value: mapC(hexOf(base)) }, hN: { value: L.length },
                 hZ: { value: pad(i => (L[i] ? L[i].z : 1e9)) }, hC: { value: pad(i => (L[i] ? L[i].c : new THREE.Color())) },
-                hT: { value: pad(i => (L[i] ? td(L[i].c) : 1)) } };
+                hT: { value: pad(i => (L[i] ? L[i].td : 1)) } };
+              setHueL(L.map(l => ({ hex: l.hex, td: l.td, def: l.def })));
               if (import.meta.env.DEV) window.__hue = { u: hueU, render: () => render() };
             }
           }
@@ -754,7 +764,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         // la vignette se prend sur tout plateau (30/10/2026) ; l'edition, sur la vue assemblee seulement
         if (editApi) editApi.current = { editing, toSave, origin, relayout, snapshot, untilt, get editor() { return editor; } };
         disposables.push({ dispose: () => { try { editor?.dispose(); } catch { /* rien */ } if (editApi) editApi.current = null; } });
-        api.current = { fit, night, backlight, bedShow, dragPans, zoom, floorMode, untilt };
+        const setTd = (i, v) => { if (hueU) { hueU.hT.value[i] = v; render(); } };
+        api.current = { fit, night, backlight, bedShow, dragPans, zoom, floorMode, untilt, setTd };
         const s = bb2.getSize(new THREE.Vector3());
         onState({ busy: false, error: null, size: glb ? [s.x, s.z, s.y] : [s.x, s.z, s.y], glow: glowMats.length > 0 });
       } catch (e) {
@@ -773,7 +784,31 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           fontSize: 16, fontWeight: 800, background: on ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", color: on ? "#fff" : "var(--text2)",
           boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{l}</button>)}
     </div>}
+    {tdOpen && hueL && !lit && <div onPointerDown={e => e.stopPropagation()} style={{ position: "absolute", right: 10, bottom: 56, zIndex: 3, width: "min(300px, calc(100% - 20px))",
+      padding: "10px 12px", borderRadius: 14, background: "color-mix(in srgb, var(--surface) 94%, transparent)", border: "1px solid var(--border)",
+      boxShadow: "0 10px 30px rgba(0,0,0,.25)", backdropFilter: "blur(6px)", display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text)", flex: 1 }}>🎚 Transparence des couches</span>
+        <button type="button" onClick={() => { hueL.forEach((l, i) => api.current?.setTd(i, l.def)); setHueL(hueL.map(l => ({ ...l, td: l.def })));
+          tdSave(Object.fromEntries(hueL.map(l => [l.hex, null]))); }}
+          data-tip="Revenir aux valeurs estimées d'après la clarté de chaque filament"
+          style={{ border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)", borderRadius: 8, fontSize: 11, fontWeight: 800, padding: "3px 8px", cursor: "pointer" }}>Par défaut</button>
+      </div>
+      <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.35 }}>L'épaisseur à laquelle chaque filament couvre presque tout ce qu'il y a dessous : plus petite, il couvre vite ; plus grande, il laisse voir la couleur d'en dessous.</div>
+      {hueL.map((l, i) => <label key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>
+        <span style={{ width: 14, height: 14, borderRadius: "50%", background: l.hex, border: "1px solid var(--border)", flexShrink: 0 }}/>
+        <input type="range" min="0.1" max="3" step="0.05" value={l.td} style={{ flex: 1 }}
+          onChange={e => { const v = Number(e.target.value); api.current?.setTd(i, v); setHueL(hueL.map((x, k) => (k === i ? { ...x, td: v } : x)));
+            tdSave({ [l.hex]: v }); egg("couches_fines"); }}/>
+        <span style={{ width: 52, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{l.td.toFixed(2).replace(".", ",")} mm</span>
+      </label>)}
+    </div>}
     <div style={{ position: "absolute", right: 10, bottom: 10, display: "flex", gap: 8 }}>
+      {hueL && !lit && <button type="button" onClick={() => setTdOpen(o => !o)}
+        data-tip="Régler la transparence de chaque filament de ce HueForge"
+        style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 13, fontWeight: 800,
+          background: tdOpen ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", color: tdOpen ? "#fff" : "var(--text2)",
+          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>🎚 Transparence</button>}
       {litho && <button type="button" onClick={() => { const v = !lit; setLit(v); api.current?.backlight(v); }}
         data-tip={lit ? "Éclairer par devant" : "Lumière derrière : l'image du lithophane apparaît, comme devant une lampe"}
         style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
