@@ -1420,13 +1420,14 @@ def load_edit(key: str, did: str | None = None, piece_keys: set | None = None) -
 
 
 def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, joints: list | None = None,
-              splits: list | None = None, did: str | None = None) -> dict:
+              splits: list | None = None, did: str | None = None, excluded: list | None = None) -> dict:
     import time
     if not _KEY.fullmatch(key or ""):
         raise ValueError("Vue inconnue")
     clean = {}
     for k, m in (pieces or {}).items():
-        if re.fullmatch(r"\d+:\d+:\d+(:\d+)?", str(k)) and isinstance(m, list) and len(m) == 16 \
+        # « #n » : un exemplaire ajoute de la piece (30/10/2026)
+        if re.fullmatch(r"\d+:\d+:\d+(:\d+)?(#\d{1,3})?", str(k)) and isinstance(m, list) and len(m) == 16 \
                 and all(isinstance(x, (int, float)) and abs(x) < 1e6 for x in m):
             clean[str(k)] = [round(float(x), 6) for x in m]
     if not clean:
@@ -1442,8 +1443,10 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
     # les pieces separees a la main (refaites en morceaux a l'ouverture), et la version de l'edition
     spl = [str(k) for k in (splits or []) if re.fullmatch(r"\d+:\d+:\d+", str(k))]
     did = str(did) if did and str(did).isdigit() else _did_of(key)
-    d = {"pieces": clean, "groups": [g for g in grp if len(g) > 1], "joints": jts, "splits": spl, "v": 2, "at": time.time(),
-         "by": by, **({"did": did} if did else {})}
+    # les pieces exclues de l'assemblage (30/10/2026) : plus montrees, remises depuis la liste des pieces
+    exc = [str(k) for k in (excluded or []) if str(k) in clean]
+    d = {"pieces": clean, "groups": [g for g in grp if len(g) > 1], "joints": jts, "splits": spl, "excluded": exc, "v": 2,
+         "at": time.time(), "by": by, **({"did": did} if did else {})}
     _backup(key, "remplacee")
     f = _edits_file(key)
     f.parent.mkdir(parents=True, exist_ok=True)
@@ -1502,4 +1505,4 @@ def restore_edit(key: str, vid: str, by: str = "") -> dict:
     o = _read((_old_dir() if old else _edits_file(key).parent) / f"{stem}.json")
     if not o:
         raise ValueError("Version introuvable")
-    return save_edit(key, o["pieces"], by, o.get("groups"), o.get("joints"), o.get("splits"), o.get("did"))
+    return save_edit(key, o["pieces"], by, o.get("groups"), o.get("joints"), o.get("splits"), o.get("did"), o.get("excluded"))

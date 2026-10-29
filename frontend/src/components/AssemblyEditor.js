@@ -18,7 +18,8 @@
 // le point et la normale du contact (et l'arete), enregistres avec l'assemblage.
 import { egg } from "../eggs";
 
-export async function createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder, pieces, render, onChange, groupsInit = [], jointsInit = [], groupByObject = false }) {
+export async function createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder, pieces, render, onChange, groupsInit = [], jointsInit = [], groupByObject = false,
+                                                  copyPiece = null }) {
   const { TransformControls } = await import("three/examples/jsm/controls/TransformControls.js");
   const el = renderer.domElement;
   const ray = new THREE.Raycaster();
@@ -117,9 +118,12 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
 
   const undo = [], redo = [];
   let pendingSplit = null;            // une separation proposee, pas encore validee
-  const snapshot = () => ({ m: all.map(g => g.matrix.clone()), groups: groups.map(gr => [...gr]), joints: joints.map(cloneJ) });
-  const restore = s => { all.forEach((g, i) => { s.m[i].decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); }); groups = s.groups.map(gr => [...gr]);
+  const snapshot = () => ({ m: all.map(g => g.matrix.clone()), groups: groups.map(gr => [...gr]), joints: joints.map(cloneJ), ex: all.map(g => !!g.userData.excluded) });
+  const restore = s => { all.forEach((g, i) => { s.m[i].decompose(g.position, g.quaternion, g.scale); g.updateMatrix();
+    if (s.ex) { g.userData.excluded = s.ex[i]; g.visible = !s.ex[i]; } }); groups = s.groups.map(gr => [...gr]);
     joints = s.joints.map(cloneJ); placeHandle(); showContact(); render(); };
+  // l'historique repart d'ici (une piece ajoutee ou retiree : les etats d'avant n'ont pas le meme nombre de pieces)
+  const resetHistory = () => { undo.length = 0; redo.length = 0; last = snapshot(); changes++; };
   let last = snapshot();
   let changes = 0, savedAt = 0;          // dirty : des changements depuis le dernier enregistrement
   const push = () => { undo.push(last); if (undo.length > 100) undo.shift(); redo.length = 0; last = snapshot(); changes++; onChange?.(state()); };
@@ -130,7 +134,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     canSplit: sel.size === 1 && !pendingSplit, canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
     canUngroup: [...sel].some(g => groupOf(g)), multi, turnGlued, liveAngle, guard, fitting, fitMsg,
-    hidden: all.filter(g => !g.visible && g !== pendingSplit?.pg).length,
+    hidden: all.filter(g => !g.visible && !g.userData.excluded && g !== pendingSplit?.pg).length,
+    // la liste des pieces (30/10/2026) : pour exclure, remettre, multiplier
+    list: all.filter(g => g !== pendingSplit?.pg).map(g => ({ k: g.userData.k, name: g.userData.name, sel: sel.has(g), shown: g.visible,
+      excluded: !!g.userData.excluded, copy: !!g.userData.copyOf })),
     glued: (() => { const j = jointOf([...sel]); return j ? { to: j.b.userData.name, kind: j.kind } : null; })() });
 
   // une marque de la prise (face : un disque ; arete : un trait)
@@ -685,7 +692,44 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     frame,
     // masquer la selection, pour atteindre ce qu'elle cache (la vue seulement : rien n'est enregistre) ; Alt+H : tout
     hide: () => { if (!sel.size) return; [...sel].forEach(g => { g.visible = false; }); setSel([]); egg("cache_cache"); },
-    showAll: () => { all.forEach(g => { g.visible = true; }); render(); onChange?.(state()); },
+    showAll: () => { all.forEach(g => { if (!g.userData.excluded) g.visible = true; }); render(); onChange?.(state()); },
+    // exclure de l'assemblage (30/10/2026) : la piece n'est plus montree, meme hors edition ; enregistre, et remise depuis
+    // la liste des pieces
+    exclude: keys => {
+      const list = keys ? keys.map(k => byKey.get(k)).filter(Boolean) : [...sel];
+      if (!list.length) return;
+      list.forEach(g => { g.userData.excluded = true; g.visible = false; });
+      joints = joints.filter(j => !list.includes(j.a) && !list.includes(j.b));
+      setSel([...sel].filter(g => !list.includes(g))); push();
+    },
+    include: k => { const g = byKey.get(k); if (!g) return; g.userData.excluded = false; g.visible = true; push(); setSel([g]); },
+    // masquer / montrer une piece depuis la liste (la vue seulement)
+    toggleShown: k => { const g = byKey.get(k); if (!g || g.userData.excluded) return; g.visible = !g.visible; if (!g.visible) sel.delete(g); shade(); placeHandle(); render(); onChange?.(state()); },
+    // un exemplaire de plus (30/10/2026 : une piece imprimee en 3 exemplaires), pose a cote ; il se deplace, se colle,
+    // s'enregistre comme les autres
+    copy: k => {
+      const src = k ? byKey.get(k) : [...sel][0];
+      if (!src || !copyPiece) return;
+      const base = src.userData.copyOf || src.userData.k;
+      const used = new Set(all.map(g => g.userData.k));
+      let n = 1;
+      while (used.has(`${base}#${n}`)) n++;
+      const g = copyPiece(src, n);
+      const w = boxOf(src).getSize(new THREE.Vector3());
+      g.position.x += w.x + 5; g.updateMatrix();
+      holder.add(g); pieces.set(g.userData.pid, g); reindex();
+      resetHistory(); setSel([g]); drop([g]); placeHandle(); render(); onChange?.(state());
+    },
+    // retirer un exemplaire ajoute (les pieces du 3MF, elles, s'excluent)
+    uncopy: k => {
+      const g = byKey.get(k);
+      if (!g || !g.userData.copyOf) return;
+      holder.remove(g); pieces.delete(g.userData.pid); reindex();
+      groups = groups.map(gr => gr.filter(x => x !== g)).filter(gr => gr.length > 1);
+      joints = joints.filter(j => j.a !== g && j.b !== g);
+      sel.delete(g); resetHistory(); setSel([...sel]);
+    },
+    excluded: () => all.filter(g => g.userData.excluded).map(g => g.userData.k),
     setAssist: on => { assist = on; onChange?.(state()); },
     group: () => {
       if (sel.size < 2) return;

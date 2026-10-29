@@ -99,6 +99,24 @@ function boxUV(THREE, geo) {
 
 // pieces / edit (29/10/2026) : la vue assemblee, piece par piece (cle, nom, decalage « o » de ses sommets affiches par
 // rapport au 3MF) et la place enregistree de chacune ({cle : matrice 4x4}) ; editApi : l'edition (sur PC)
+// un exemplaire de plus d'une piece de la vue assemblee (30/10/2026) : ses maillages partages, ses matieres a lui (la
+// selection estompe les autres pieces matiere par matiere), a la meme place que la piece copiee
+function copyPiece(THREE, src, n) {
+  const g = new THREE.Group();
+  for (const m of src.children) {
+    if (!m.isMesh) continue;
+    const c = new THREE.Mesh(m.geometry, m.material.clone());
+    c.position.copy(m.position); c.quaternion.copy(m.quaternion); c.scale.copy(m.scale); c.userData = { ...m.userData };
+    c.castShadow = m.castShadow; c.receiveShadow = m.receiveShadow; c.renderOrder = m.renderOrder;
+    g.add(c);
+  }
+  const base = src.userData.copyOf || src.userData.k, bpid = String(src.userData.pid).replace(/#\d+$/, "");
+  const name = String(src.userData.name || "Pièce").replace(/ · exemplaire \d+$/, "");
+  g.userData = { ...src.userData, k: `${base}#${n}`, pid: `${bpid}#${n}`, name: `${name} · exemplaire ${n + 1}`, copyOf: base, excluded: false };
+  src.updateMatrix(); src.matrix.decompose(g.position, g.quaternion, g.scale); g.updateMatrix();
+  return g;
+}
+
 function Viewer({ url, glb, onState, palette = null, finishes = null, multi = null, glow = false, bed = null, litho = false,
                   pieces = null, edit = null, editApi = null, pad = false }) {
   const [pans, setPans] = useState(false);
@@ -360,6 +378,19 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               const S = saved[pg.userData.k] || saved[`${pg.userData.k}:0`] || saved[kk.slice(0, 2).join(":")];
               if (S) place(pg, S);
             }
+            // les exemplaires ajoutes (« cle#n ») et les pieces exclues de l'assemblage (30/10/2026)
+            const byK = new Map([...byPiece.values()].map(g => [g.userData.k, g]));
+            for (const [k, S] of Object.entries(saved)) {
+              const m = /^(.+)#(\d+)$/.exec(k), src = m && byK.get(m[1]);
+              if (!src) continue;
+              const g = copyPiece(THREE, src, Number(m[2]));
+              const cg = g.userData.c, o = g.userData.o || [0, 0, 0];
+              new THREE.Matrix4().fromArray(S).multiply(new THREE.Matrix4().makeTranslation(cg.x - o[0], cg.y - o[1], cg.z - o[2])).decompose(g.position, g.quaternion, g.scale);
+              g.updateMatrix();
+              holder.add(g); byPiece.set(g.userData.pid, g);
+            }
+            const out = new Set(edit?.excluded || []);
+            for (const g of byPiece.values()) if (out.has(g.userData.k)) { g.userData.excluded = true; g.visible = false; }
           }
           model.add(holder);
           if (byPiece) model.userData.edit = { holder, byPiece };
@@ -511,7 +542,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           if (on && !editor) {
             const { createAssemblyEditor } = await import("./AssemblyEditor");
             editor = await createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder: ed.holder, pieces: ed.byPiece, render, onChange,
-              groupsInit: edit?.groups || [], jointsInit: edit?.joints || [],
+              groupsInit: edit?.groups || [], jointsInit: edit?.joints || [], copyPiece: (src, n) => copyPiece(THREE, src, n),
               // pas encore enregistre par cette version : les parties d'un meme objet partent groupees
               groupByObject: edit?.v !== 2 });
           } else if (!on && editor) { try { editor.dispose(); } catch { /* la vue se ferme quand meme */ } editor = null; }
@@ -631,6 +662,46 @@ const EDIT_TIPS = {
   mate1a: "Assisté : clique une face de la pièce à déplacer, elle sera centrée et alignée sur l'autre",
 };
 // les valeurs exactes de la selection : position de son centre (mm) et rotation d'un angle choisi autour d'un axe
+// la liste des pieces (30/10/2026), a gauche en edition : choisir, masquer un moment (👁), exclure de l'assemblage (🚫,
+// enregistre ; ↩ la remet), en ajouter un exemplaire (⧉ : une piece imprimee en plusieurs exemplaires), retirer un
+// exemplaire ajoute (✕)
+function PiecesPanel({ est, api }) {
+  const [open, setOpen] = useState(true);
+  const list = est.list || [];
+  const nEx = list.filter(x => x.excluded).length;
+  const ib = (extra = {}) => ({ width: 26, height: 26, borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)",
+    cursor: "pointer", fontSize: 12, flexShrink: 0, padding: 0, ...extra });
+  return <div style={{ position: "absolute", left: 12, top: 70, bottom: 12, zIndex: 3, width: open ? 250 : "auto", display: "flex", flexDirection: "column",
+    pointerEvents: "none" }}>
+    <div style={{ pointerEvents: "auto", display: "flex", flexDirection: "column", minHeight: 0, maxHeight: "100%", borderRadius: 14, border: "1px solid var(--border)",
+      background: "color-mix(in srgb, var(--sheet-bg) 94%, transparent)", boxShadow: "0 10px 30px rgba(0,0,0,.2)", overflow: "hidden" }}>
+      <button type="button" onClick={() => setOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", border: "none", background: "transparent",
+        cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: "var(--text)", textAlign: "left" }}>
+        📋 Pièces ({list.length - nEx}{nEx ? ` · ${nEx} exclue${nEx > 1 ? "s" : ""}` : ""}) <span style={{ marginLeft: "auto", color: "var(--muted)" }}>{open ? "▾" : "▸"}</span>
+      </button>
+      {open && <div style={{ overflowY: "auto", padding: "0 6px 6px", display: "flex", flexDirection: "column", gap: 3 }}>
+        {list.map(x => <div key={x.k} style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 4px", borderRadius: 8,
+          background: x.sel ? "color-mix(in srgb, #0EA5E9 18%, transparent)" : "transparent", opacity: x.excluded ? 0.55 : 1 }}>
+          <button type="button" disabled={x.excluded} onClick={() => api?.select([x.k])} data-tip={x.excluded ? "Exclue de l'assemblage" : "La choisir"}
+            style={{ flex: 1, minWidth: 0, border: "none", background: "none", padding: "2px 2px", cursor: x.excluded ? "default" : "pointer", textAlign: "left",
+              fontSize: 12, fontWeight: x.sel ? 800 : 600, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              textDecoration: x.excluded ? "line-through" : "none" }}>{x.name}</button>
+          {x.excluded
+            ? <button type="button" onClick={() => api?.include(x.k)} style={ib({ width: "auto", padding: "0 8px", fontWeight: 800 })} data-tip="La remettre dans l'assemblage">↩ Remettre</button>
+            : <>
+              <button type="button" onClick={() => api?.toggleShown(x.k)} style={ib({ opacity: x.shown ? 1 : 0.5 })}
+                data-tip={x.shown ? "La masquer un moment (la vue seulement)" : "La montrer"}>{x.shown ? "👁" : "🙈"}</button>
+              <button type="button" onClick={() => api?.copy(x.k)} style={ib()} data-tip="Un exemplaire de plus, posé à côté">⧉</button>
+              {x.copy
+                ? <button type="button" onClick={() => api?.uncopy(x.k)} style={ib({ color: "#ef4444" })} data-tip="Retirer cet exemplaire">✕</button>
+                : <button type="button" onClick={() => api?.exclude([x.k])} style={ib({ color: "#ef4444" })} data-tip="L'exclure de l'assemblage (enregistré ; ↩ la remet)">🚫</button>}
+            </>}
+        </div>)}
+      </div>}
+    </div>
+  </div>;
+}
+
 function ExactPanel({ est, api }) {
   const [pos, setPos] = useState(null);
   const [deg, setDeg] = useState("90");
@@ -831,6 +902,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions }) {
     </div>
     {help && <EditHelp onClose={() => setHelp(false)}/>}
     {(est.mode === "move" || est.mode === "rotate") && <ExactPanel est={est} api={api}/>}
+    <PiecesPanel est={est} api={api}/>
     <div style={{ position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)", zIndex: 3, padding: "7px 14px", borderRadius: 12, fontSize: 12.5,
       fontWeight: 700, color: "var(--text2)", background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)",
       maxWidth: "calc(100% - 140px)", textAlign: "center" }}>
@@ -997,7 +1069,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     const pieces = editApi.current?.toSave();
     if (!pieces) return;
     setSaving(true);
-    try { const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces, did: designId, groups: editApi.current?.editor?.groups() || [],
+    try { const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces, did: designId, excluded: editApi.current?.editor?.excluded() || [],
+      groups: editApi.current?.editor?.groups() || [],
       joints: editApi.current?.editor?.joints() || [], splits: editApi.current?.editor?.splits() || [], v: 2 });
       setSavedEdit(r.data); editApi.current?.editor?.markSaved(); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
