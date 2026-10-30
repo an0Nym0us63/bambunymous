@@ -300,11 +300,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             const fin = finishes?.[own];
             // les deux cotes des faces (29/10/2026) : la ou une zone peinte tres decoupee touche une zone qui l'est moins,
             // des fissures d'un pixel laissaient voir le noir de l'interieur (des pointilles noirs sur la Nonne)
-            // un filament tres sombre (noir) : un gris charbon a peine plus clair, et un peu plus brillant, pour que le relief
-            // se lise (30/10/2026 : une piece noire n'etait qu'une silhouette, a l'edition comme sur les vignettes)
-            const hsl = c.getHSL({}), dark = hsl.l < 0.14;
-            if (dark) c.setHSL(hsl.h, hsl.s, 0.14);
-            const mat = new THREE.MeshStandardMaterial({ color: c, roughness: dark ? 0.36 : 0.5, metalness: 0.05, flatShading: true, envMapIntensity: 0, side: THREE.DoubleSide,
+            const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true, envMapIntensity: 0, side: THREE.DoubleSide,
               ...(FINISH_MAT[fin] || {}) });
             // un filament multicolore (28/10/2026), en simili, la finition posee par-dessus comme pour les autres :
             // le degrade evolue le long du filament consomme, donc surtout avec la hauteur d'impression, et un peu dans
