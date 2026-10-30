@@ -726,7 +726,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               groupsInit: cur?.groups || [], jointsInit: cur?.joints || [], copyPiece: (src, n) => copyPiece(THREE, src, n), cutsInit: cur?.cuts || {},
               // pas encore enregistre par cette version : les parties d'un meme objet partent groupees
               groupByObject: cur?.v !== 2 });
-            if (import.meta.env.DEV) window.__asmEditor = { editor, holder: ed.holder, pieces: ed.byPiece, THREE };   // banc d'essai seulement
+            if (import.meta.env.DEV) window.__asmEditor = { editor, holder: ed.holder, pieces: ed.byPiece, THREE, camera };   // banc d'essai seulement
           } else if (!on && editor) { try { editor.dispose(); } catch { /* la vue se ferme quand meme */ } editor = null; }
           return editor;
         };
@@ -1101,6 +1101,8 @@ const EDIT_HELP = [
   ["Coller (C)", [
     ["Face puis face", "la première pièce vient se plaquer contre l'autre"],
     ["Arête puis arête", "les arêtes s'alignent"],
+    ["〰 Ondulée", "allumé (dans la barre du mode Coller), un clic prend toute une surface ondulée ou plissée, jusqu'à ses arêtes vives, surlignée en bleu ; deux surfaces ondulées collées l'une sur l'autre s'emboîtent aussitôt (🧩), plis dans plis"],
+    ["Près d'une arête", "une petite liste propose la face touchée, l'arête (même courbe, suivie d'un bout à l'autre) et la face d'en face : survoler une ligne la surligne en bleu, la toucher la prend (de même en Poser au sol)"],
     ["🪄 Assisté", "faces entières centrées et grands axes alignés ; arêtes milieu contre milieu"],
     ["Faces jumelles (assisté)", "la face cliquée fait chercher, sur les autres pièces, celles de même contour (la coupe d'en face, trous des tenons compris) : en vert, avec leur ressemblance en % ; un clic sur l'une, ou juste sur sa pièce, l'y pose exactement : faces l'une contre l'autre, contours superposés ; ↻ Autre position quand plusieurs sens vont aussi bien"],
     ["Flèches de la poignée, pièce collée", "elle glisse dans le plan du contact (deux flèches ; une seule le long d'une arête), sans se décoller ; en mode Tourner, un anneau la tourne autour du contact ; ← → ↑ ↓ : 1 mm sur le contact (Maj : 10)"],
@@ -1206,6 +1208,24 @@ function BarMenu({ label, tip, items, active = false, b, up = false }) {
   </div>;
 }
 
+// le choix face / arete (30/10/2026) : pres d'une arete, la face touchee, l'arete et la face d'en face, au choix ;
+// chacune surlignee au survol (ou au premier toucher sur un ecran tactile)
+function ChoicePopup({ est, api }) {
+  const c = est.choice;
+  if (!c) return null;
+  const W = 220, x = Math.min(c.x + 12, window.innerWidth - W - 8), y = Math.min(c.y + 12, window.innerHeight - 40 * c.items.length - 60);
+  return <div onPointerDown={e => e.stopPropagation()} style={{ position: "fixed", left: Math.max(8, x), top: Math.max(8, y), zIndex: 60, width: W, padding: 6, borderRadius: 12,
+    background: "color-mix(in srgb, var(--surface) 96%, transparent)", border: "1px solid var(--border)", boxShadow: "0 12px 30px rgba(0,0,0,.3)", backdropFilter: "blur(8px)" }}>
+    <div style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", padding: "2px 6px 6px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      Que prendre ici ?{c.piece ? ` · ${c.piece}` : ""}</div>
+    {c.items.map((l, i) => <button key={i} type="button" onMouseEnter={() => api?.choiceHover(i)} onFocus={() => api?.choiceHover(i)} onClick={() => api?.choicePick(i)}
+      style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 10px", margin: "2px 0", borderRadius: 9, border: "none", cursor: "pointer",
+        fontSize: 13, fontWeight: 800, color: "var(--text)", background: "var(--surface2)" }}>{l}</button>)}
+    <button type="button" onClick={() => api?.choiceCancel()} style={{ display: "block", width: "100%", padding: "6px", marginTop: 4, borderRadius: 9, border: "none",
+      cursor: "pointer", fontSize: 12, fontWeight: 700, color: "var(--muted)", background: "transparent" }}>Annuler</button>
+  </div>;
+}
+
 // La barre de l'edition (30/10/2026, rangee) : en haut, une seule ligne -- les modes, les reglages, annuler/refaire, les
 // versions, enregistrer, l'aide, fermer ; dessous, seulement avec une selection ou un mode qui en a, ses actions
 function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compact = false }) {
@@ -1242,6 +1262,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
       {est.count === 1 && <button type="button" onClick={() => api?.detachSupports()} style={b(false)}
         data-tip="Repère les supports intégrés au modèle (parois et plaques fines) et les sépare de la pièce, sans trait à tracer">🪄 Détacher les supports</button>}
     </>)
+    : est.mode === "mate" ? <button type="button" onClick={() => api?.setWavy(!est.wavy)} style={b(!!est.wavy)}
+      data-tip="Surfaces ondulées : un clic prend toute la surface plissée (jusqu'à ses arêtes vives) ; deux surfaces ondulées collées l'une sur l'autre s'emboîtent d'elles-mêmes">〰 Ondulée</button>
     : est.mode === "pins" ? <>
       <button type="button" disabled={!est.pinsB} onClick={() => api?.pinsApply()} style={b(!!est.pinsB, { opacity: est.pinsB ? 1 : 0.45 })}
         data-tip="Faire coïncider chaque point orange avec le point vert de même numéro (Entrée)">✓ Assembler{est.pinsB ? ` (${est.pinsB})` : ""}</button>
@@ -1386,6 +1408,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         </div>
       </div>
       {help && <EditHelp onClose={() => setHelp(false)}/>}
+      <ChoicePopup est={est} api={api}/>
     </>;
   }
   return <>
@@ -1432,6 +1455,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
     {help && <EditHelp onClose={() => setHelp(false)}/>}
     {(est.mode === "move" || est.mode === "rotate") && <ExactPanel est={est} api={api}/>}
     <PiecesPanel est={est} api={api}/>
+    <ChoicePopup est={est} api={api}/>
     <div style={{ position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)", zIndex: 3, padding: "7px 14px", borderRadius: 12, fontSize: 12.5,
       fontWeight: 700, color: "var(--text2)", background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)",
       maxWidth: "calc(100% - 140px)", textAlign: "center" }}>

@@ -556,7 +556,7 @@ async def _build_gallery(kind: str = "photos") -> dict:
                                               .order_by(_Snap.print_id, _Snap.id))).all():
             snaps.setdefault(pid, []).append((fp, sid))
         grp = {r.id: r for r in (await db.execute(select(Group.id, Group.name, Group.number_of_items, Group.cover_print_id,
-                                                         Group.cover_photo))).all()}
+                                                         Group.cover_photo, Group.thumb_3d))).all()}
 
     # les impressions qui ont une vignette 3D (lu d'un coup, hors de la boucle des reponses)
     def _vue3d_prints():
@@ -579,7 +579,7 @@ async def _build_gallery(kind: str = "photos") -> dict:
             sl = _v3slots(base / str(r.id))
             if sl:
                 sel = _v3sel(r.thumb_3d, sl)
-                out[r.id] = [(_v3name(n), sl[n]) for n in sorted(sl, key=lambda n: (n not in sel, n))]
+                out[r.id] = [(_v3name(n), sl[n], n in sel) for n in sorted(sl, key=lambda n: (n not in sel, n))]
         return out
     vue3d_all = await _aio0.to_thread(_vue3d_all) if kind == "vue3d" else {}
     items, group_acc = [], {}
@@ -592,7 +592,8 @@ async def _build_gallery(kind: str = "photos") -> dict:
             for fp, sid in snaps.get(p.id, ()) if fp
         ]
         if kind == "vue3d":
-            photos = [{"url": f"/api/v1/prints/{p.id}/file/{nm}?v={v}", "name": nm, "label": "vue3d"} for nm, v in vue3d_all.get(p.id, ())]
+            # sel : retenue comme vignette (30/10/2026 : la tuile ne fait defiler que celles-la)
+            photos = [{"url": f"/api/v1/prints/{p.id}/file/{nm}?v={v}", "name": nm, "label": "vue3d", "sel": se} for nm, v, se in vue3d_all.get(p.id, ())]
         # pas de photo, mais une vignette prise dans la vue 3D assemblee : elle remonte (29/10/2026)
         elif not photos and p.id in vue3d_prints:
             nm, v = vue3d_prints[p.id]
@@ -656,8 +657,11 @@ async def _build_gallery(kind: str = "photos") -> dict:
         files = on_disk.get(gid, ())
         if kind == "vue3d":
             # les vues du groupe lui-meme d'abord, puis celles de ses impressions
-            own = [{"url": f"/api/v1/prints/groups/{gid}/photo/{name}?v={mt}", "label": "vue3d", "name": name}
+            gsel = set(_v3sel(getattr(grp.get(gid), "thumb_3d", 0) or 0, {n: 1 for n in range(1, V3_MAX + 1)}))
+            v3n = lambda nm: 1 if nm == VUE3D else int(nm.split("_")[1].split(".")[0])
+            own = [{"url": f"/api/v1/prints/groups/{gid}/photo/{name}?v={mt}", "label": "vue3d", "name": name, "sel": v3n(name) in gsel}
                    for name, mt in sorted(files) if _V3RE.fullmatch(name) and "_mix" not in name]
+            own.sort(key=lambda ph: not ph["sel"])
             acc["photos"] = own + acc["photos"]
             continue
         for name, mt in files:
