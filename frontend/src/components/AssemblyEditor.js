@@ -160,7 +160,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pivot: !!pivot, pairs: pairs.length, twinPos: twinAlt && twinAlt.at === changes && twinAlt.fits.length > 1 ? `${twinAlt.i + 1}/${twinAlt.fits.length}` : null, boxMode, ground3, groundPts: gPts.length, vertical, pinsA: pins.a.length, pinsB: pins.b.length,
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
-    cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, addPin,
+    cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, addPin, autoFit,
     choice: choice ? { x: choice.x, y: choice.y, items: choice.cands.map(altLabel), piece: choice.cands[0]?.group?.userData.name || "" } : null,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
@@ -680,9 +680,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     }
     return hits >= Math.ceil(pts.length / 2);
   };
-  const fitOnContact = async mode => {
+  // quiet : lance seul apres un collage -- rien n'est dit s'il n'y a rien a gagner ; rend vrai si la piece a bouge
+  const fitOnContact = async (mode, quiet = false) => {
     const list = [...sel], j = jointOf(list);
-    const say = m => { fitMsg = m; onChange?.(state()); };
+    const said = fitMsg;
+    const say = m => { fitMsg = quiet && m !== null ? (said || fitMsg) : m; onChange?.(state()); return false; };
     if (!j) return say(mode === "align" ? "Colle d'abord la pièce sur la face où l'aligner (🧲 Coller), puis 📐 Aligner"
       : "Colle d'abord la pièce sur celle où elle doit s'emboîter (🧲 Coller), puis 🧩 Emboîter");
     say(mode === "align" ? "Recherche de la place où la pièce déborde le moins…" : "Recherche de la place où la pièce s'emboîte…");
@@ -694,7 +696,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       const r = await nestPlace({ THREE, collider: col, moving, base: unitOf(j.b).filter(g => g.visible && !moving.includes(g)), P, N, mode });
       if (!r) return say(mode === "align" ? "Pas de place où elle repose à plat sur cette face, autour de là où elle est collée (une face courbe : 🎯 Ajuster)"
         : "Pas de place trouvée autour de là où elle est collée : la pièce déborde de son support partout");
-      const still = r.moved < 0.05 && Math.abs(r.turned) < 0.1 && Math.abs(r.sink) < 0.05;
+      const still = (r.moved < 0.05 && Math.abs(r.turned) < 0.1 && Math.abs(r.sink) < 0.05) || (quiet && mode === "align" && r.cov1 < r.cov0 + 0.05);
       if (still) return say(mode === "align" ? "Déjà alignée au mieux" : "Déjà à la meilleure place : elle ne descend pas plus bas autour de là où elle est collée");
       apply(moving, r.M);
       j.b.updateMatrix();
@@ -704,10 +706,18 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       egg(mode === "align" ? "aligne" : "emboite");
       const mm = x => String(Math.round(x * 10) / 10).replace(".", ",");
       const moved = `déplacée de ${mm(r.moved)} mm${Math.abs(r.turned) >= 0.5 ? `, tournée de ${Math.round(r.turned)}°` : ""}`;
-      say(mode === "align" ? `Alignée : ${Math.round(r.cov1 * 100)} % de sa face d'appui sur la face (avant ${Math.round(r.cov0 * 100)} %), centrée, ${moved}`
-        : `Emboîtée : ${r.sink >= 0.05 ? `${mm(r.sink)} mm plus bas` : "même hauteur"}, ${moved}`);
-    } catch (e) { console.error("[3D] emboiter / aligner", e); say("La recherche a échoué"); }
+      fitMsg = (quiet ? "Collée, puis " : "") + (mode === "align" ? `alignée : ${Math.round(r.cov1 * 100)} % de sa face d'appui sur la face (avant ${Math.round(r.cov0 * 100)} %), centrée, ${moved}`
+        : `emboîtée : ${r.sink >= 0.05 ? `${mm(r.sink)} mm plus bas` : "même hauteur"}, ${moved}`);
+      if (!quiet) fitMsg = fitMsg[0].toUpperCase() + fitMsg.slice(1);
+      onChange?.(state());
+      return true;
+    } catch (e) { console.error("[3D] emboiter / aligner", e); return say("La recherche a échoué"); }
   };
+  // apres un collage au jugé (sans face jumelle) : la piece s'emboite dans le creux autour, sinon s'aligne sur la forme
+  // de la face (30/10/2026 : on la collait dans son trou, puis il fallait la deplacer et la tourner a la main)
+  let autoFit = true;
+  try { autoFit = localStorage.getItem("bn.asm.autofit") !== "0"; } catch { /* rien */ }
+  const settle = async () => { if (!autoFit) return; if (!(await fitOnContact("nest", true))) await fitOnContact("align", true); };
   // un point de colle de plus, le premier collage tenu : la piece tourne autour de la normale du contact et glisse dans
   // son plan, jusqu'a ce que la nouvelle prise vienne sur sa cible -- deux aretes : alignees (et l'une sur l'autre), deux
   // faces : face a face (et l'une contre l'autre), des points : superposes (a partir de deux, au mieux pour tous)
@@ -1026,7 +1036,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
             // des jumelles proposees, et touche ailleurs : la piece vient la ou l'on a touche (sa face centree sur ce
             // point), et non sur toute la face touchee (30/10/2026)
             const unit = mate(A, r?.twins?.some(x => x.shown) ? { ...pick, region: null, at: true } : pick);
-            if (unit) { pairs = [pairOf(A, pick, pivot ? pivot.p : pick.p, pivot ? pivot.p : pick.p)]; push(); setSel(unit); }
+            if (unit) { pairs = [pairOf(A, pick, pivot ? pivot.p : pick.p, pivot ? pivot.p : pick.p)]; push(); setSel(unit); settle(); }
           }
           render(); onChange?.(state());
         });
@@ -1049,6 +1059,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         // la premiere paire : le point de la piece, la ou il est venu (sur sa cible)
         pairs = [pairOf(A, pick, pivot ? pivot.p : pick.p, pivot ? pivot.p : pick.p)];
         push(); setSel(unit);
+        settle();
       }
       render(); onChange?.(state());
     }
@@ -1698,6 +1709,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     choiceHover: i => { if (!choice) return; showAlt(choice.cands[i]); choice.keep.forEach(mark); },
     choicePick: i => { const c = choice; if (!c) return; choice = null; clearMarks(); c.keep.forEach(mark); tap(c.cands[i], c.ev); onChange?.(state()); },
     choiceCancel: () => { const c = choice; choice = null; clearMarks(); c?.keep.forEach(mark); render(); onChange?.(state()); },
+    setAutoFit: on => { autoFit = on; try { localStorage.setItem("bn.asm.autofit", on ? "1" : "0"); } catch { /* rien */ } onChange?.(state()); },
     setAddPin: on => {
       if (on && mode !== "mate") api.setMode("mate");
       addPin = on; first = null; keepPins = []; clearMarks(); clearTwins(); render();
