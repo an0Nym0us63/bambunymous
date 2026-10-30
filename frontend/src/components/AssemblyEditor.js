@@ -185,11 +185,13 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const clearMarks = () => { marks.children.slice().forEach(m => { m.geometry.dispose(); marks.remove(m); }); };
   const mark = pick => {
     if (pick.kind === "edge") {
-      marks.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([pick.a, pick.b]), lineMat));
+      // l'arete entiere, meme courbe (avant : le seul segment du triangle touche)
+      const pts = pick.hl?.chain ? pick.hl.chain.map(v => v.clone().applyMatrix4(pick.hl.M)) : [pick.a, pick.b];
+      marks.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
     } else {
       const r = Math.max(1.5, Math.min(pick.size * 0.06, pick.region ? Math.sqrt(pick.region.area) * 0.4 : 1e9));
       const disc = new THREE.Mesh(new THREE.CircleGeometry(r, 24), markMat);
-      disc.position.copy(pick.region ? pick.region.c : pick.p).addScaledVector(pick.n, 0.05);
+      disc.position.copy(pick.p).addScaledVector(pick.n, 0.05);      // la ou l'on a clique : c'est la que la piece se cale
       disc.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), pick.n);
       marks.add(disc);
     }
@@ -354,6 +356,48 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const p = holder.worldToLocal(hit.point.clone());
     const n = new THREE.Vector3().subVectors(vb, va).cross(new THREE.Vector3().subVectors(vc, va)).normalize();
     const size = boxOf(g).getSize(new THREE.Vector3()).length();
+    // « ╱ Arete » allumee : l'arete vive (plus de 30° entre ses deux faces) la plus proche du clic, cherchee dans les
+    // triangles autour (une quinzaine de pixels) -- pas seulement les trois cotes du triangle touche, souvent une
+    // diagonale a plat (30/10/2026 : en mode arete, une face etait encore prise) ; aucune pres du clic : la face
+    if (idx && edgeMode) {
+      const nb = neighbours(geo), ix = idx.array;
+      const pxmm = hit.distance * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.max(1, el.clientHeight);
+      const R = Math.max(0.5, (coarse ? 26 : 16) * pxmm);
+      const vx = k => new THREE.Vector3().fromBufferAttribute(pos, ix[k]).applyMatrix4(M);
+      const nOf = t => { const v = new THREE.Vector3(); triNormal(pos, ix, t, v); return v.applyMatrix3(N).normalize(); };
+      const seen = new Set([hit.faceIndex]), st = [hit.faceIndex], ln = new THREE.Line3(), q = new THREE.Vector3();
+      const cands = [];
+      while (st.length && seen.size < 4000) {
+        const t = st.pop(), nt = nOf(t);
+        for (let e = 0; e < 3; e++) {
+          const a = vx(t * 3 + e), b = vx(t * 3 + (e + 1) % 3);
+          ln.set(a, b); ln.closestPointToPoint(p, true, q);
+          const d = q.distanceTo(p);
+          if (d > R) continue;
+          const u = nb[t * 3 + e];
+          if (u < 0 || nt.angleTo(nOf(u)) > Math.PI / 6) {
+            cands.push({ d, a, b, q: q.clone(), t, n: nt, ia: ix[t * 3 + e], ib: ix[t * 3 + (e + 1) % 3] });
+          }
+          if (u >= 0 && !seen.has(u)) { seen.add(u); st.push(u); }
+        }
+      }
+      // parmi les plus proches, une vraie arete (2 mm de long au moins) plutot qu'un pli du maillage d'une surface
+      // arrondie ; sinon la plus longue
+      cands.sort((x, y) => x.d - y.d);
+      let best = null, ch = null;
+      for (const c of cands.slice(0, 8)) {
+        const cc = creaseChain(geo, c.ia, c.ib);
+        if (cc.len >= 2) { best = c; ch = cc; break; }
+        if (!ch || cc.len > ch.len) { best = c; ch = cc; }
+      }
+      if (best) {
+        // l'arete entiere (la suite des segments dans le prolongement) : ses bouts, pour un collage milieu contre milieu
+        let { a, b } = best;
+        if (!ch.curved && ch.pts.length > 2) { a = ch.pts[0].clone().applyMatrix4(M); b = ch.pts[ch.pts.length - 1].clone().applyMatrix4(M); }
+        return { group: g, kind: "edge", p: best.q, a, b, e: new THREE.Vector3().subVectors(b, a).normalize(), n: best.n, size, mesh: hit.object, tri: best.t,
+          hl: { geo, M, chain: ch.pts, len: ch.len, curved: ch.curved } };
+      }
+    }
     // la face entiere autour du clic (en mode assiste) ; une face a relief (tricot) : sa normale moyenne, et pas d'arete
     // (les cretes du relief n'en sont pas)
     let region = null;
@@ -423,25 +467,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       }
     }
     const withAlts = pk => (alts && alts.length > 1 ? Object.assign(pk, { alts }) : pk);
-    // « ╱ Arete » allumee (30/10/2026) : l'arete vive la plus proche du clic (une quinzaine de pixels) ; eteinte, toujours
-    // la face -- avant, une arete etait prise ou non selon qu'on la frolait, sans savoir laquelle on aurait
-    if (idx && edgeMode) {
-      const nb = neighbours(geo), ix = idx.array, t = hit.faceIndex;
-      const edges = [[0, va, vb], [1, vb, vc], [2, vc, va]];
-      const pxmm = hit.distance * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.max(1, el.clientHeight);
-      let best = null;
-      for (const [e, a, b] of edges) {
-        const q = new THREE.Line3(a, b).closestPointToPoint(p, true, new THREE.Vector3()), d = q.distanceTo(p);
-        if (d < Math.max(0.5, (coarse ? 26 : 16) * pxmm) && (!best || d < best.d)) best = { d, e, a, b, q };
-      }
-      const u = best ? nb[t * 3 + best.e] : -1;
-      if (u >= 0) {
-        const n2 = new THREE.Vector3(); triNormal(pos, ix, u, n2); n2.applyMatrix3(N).normalize();
-        if (n.angleTo(n2) > Math.PI / 6) {
-          return withAlts({ group: g, kind: "edge", p: best.q, a: best.a, b: best.b, e: new THREE.Vector3().subVectors(best.b, best.a).normalize(), n, size, mesh: hit.object, tri: hit.faceIndex });
-        }
-      }
-    }
     return withAlts({ group: g, kind: "face", p, n, size, region, mesh: hit.object, tri: hit.faceIndex });
   };
   const altMat = new THREE.MeshBasicMaterial({ color: 0x0ea5e9, transparent: true, opacity: 0.55, depthTest: false, side: THREE.DoubleSide });
