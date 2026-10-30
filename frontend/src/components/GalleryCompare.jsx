@@ -217,8 +217,9 @@ export default function GalleryCompare({
                   </div>
                   <style>{".bn-stage:hover .bn-stage-img{transform:scale(1.05)}"
                     // une piece toute blanche se perdait sur le fond clair du studio : un fond plus soutenu (30/10/2026)
-                    + ".bn-stage[data-light='1']{background:radial-gradient(65% 50% at 50% 34%, color-mix(in srgb, #64748B 38%, transparent), transparent 75%),"
-                    + "linear-gradient(180deg, color-mix(in srgb, #475569 30%, var(--surface2)) 0%, color-mix(in srgb, #334155 26%, var(--surface2)) 68%, color-mix(in srgb, #0f172a 32%, var(--surface2)) 68.5%, color-mix(in srgb, #0f172a 22%, var(--surface2)) 100%) !important}"}</style>
+                    // (30/10/2026 : indigo plutot que gris, comme les vignettes ; le sol garde son horizon)
+                    + ".bn-stage[data-light='1']{background:radial-gradient(65% 50% at 50% 30%, rgba(255,255,255,.28), transparent 72%),"
+                    + "linear-gradient(180deg, color-mix(in srgb, #818CF8 62%, var(--surface2)) 0%, color-mix(in srgb, #6366F1 70%, var(--surface2)) 68%, color-mix(in srgb, #4338CA 78%, var(--surface2)) 68.5%, color-mix(in srgb, #4338CA 70%, var(--surface2)) 100%) !important}"}</style>
                 </>
               ) : renderCover ? renderCover(item) : img ? (
                 <img src={apiThumb(img, 384)} alt={getTitle(item)} loading="lazy" decoding="async" style={{ width:"100%", height:"100%", objectFit:"cover" }}
