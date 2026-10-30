@@ -14,9 +14,9 @@ const lightCss = () => {
   if (lightDone || typeof document === "undefined") return;
   lightDone = true;
   const st = document.createElement("style");
-  // un studio indigo (30/10/2026 : le gris brut etait terne), la couleur de l'appli, eclaire en haut
-  st.textContent = "[data-fit-light='1']{background:radial-gradient(75% 60% at 50% 30%, rgba(255,255,255,.28), transparent 72%),"
-    + "linear-gradient(170deg, color-mix(in srgb, #818CF8 62%, var(--surface2)) 0%, color-mix(in srgb, #6366F1 70%, var(--surface2)) 60%, color-mix(in srgb, #4338CA 72%, var(--surface2)) 100%) !important}";
+  // un studio indigo pastel (30/10/2026 : le gris brut etait terne, l'indigo franc trop vif), eclaire en haut
+  st.textContent = "[data-fit-light='1']{background:radial-gradient(75% 60% at 50% 30%, rgba(255,255,255,.3), transparent 72%),"
+    + "linear-gradient(170deg, color-mix(in srgb, #A5B4FC 50%, var(--surface2)) 0%, color-mix(in srgb, #818CF8 52%, var(--surface2)) 100%) !important}";
   document.head.appendChild(st);
 };
 
