@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { apiThumb } from "../api/client";
+import FitThumb from "./FitThumb";
 
 /**
  * Vignette d'un groupe : mosaique de ses photos plutot qu'une seule.
@@ -100,9 +101,9 @@ export default function GroupMosaic({ photos = [], title = "", cover = null }) {
           gridArea: areas ? ["a","b","c"][i] : undefined,
           background: tintOf[u] ? `radial-gradient(75% 70% at 50% 45%, ${tintOf[u]}2e, transparent 75%), linear-gradient(180deg, ${tintOf[u]}1a, transparent 55%), var(--surface2)`
             : "var(--surface2)" }}>
-          <img src={apiThumb(u, cells === 1 ? 384 : (cells === 2 || i === 0) ? 256 : 192)} alt="" loading="lazy" decoding="async"
-            style={{ width:"100%", height:"100%", objectFit: cells === 1 ? "contain" : "cover", display:"block",
-              transition:"opacity 0.4s" }}
+          {/* chaque objet cadre sur sa case, entier (FitThumb, 30/10/2026) */}
+          <FitThumb src={apiThumb(u, cells === 1 ? 384 : (cells === 2 || i === 0) ? 256 : 192)} loading="lazy" decoding="async"
+            photoFit={cells === 1 ? "contain" : "cover"} style={{ width:"100%", height:"100%", display:"block", transition:"opacity 0.4s" }}
             onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
         </div>
       ))}

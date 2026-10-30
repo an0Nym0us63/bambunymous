@@ -40,6 +40,7 @@ import Select from "../components/Select";
 import { useLongPress, openMenu } from "../components/ContextMenu";
 import NasChip from "../components/NasChip";
 import ColorMap from "../components/ColorMap";
+import FitThumb from "../components/FitThumb";
 
 // PARTIAL et TO_REDO viennent de Spoolnymous, qui gerait cinq statuts. Les
 // prints importes les portent toujours, mais l'application ne les connaissait
@@ -2226,10 +2227,10 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
       {/* la vignette, l'etat en pastille, ×N, ⭐ a evaluer, les filaments */}
       <div style={{ position:"relative", paddingTop:"78%", overflow:"hidden",
         background:`radial-gradient(75% 70% at 50% 45%, ${tint}2e, transparent 75%), linear-gradient(180deg, ${tint}1a, transparent 55%), var(--surface2)` }}>
-        {/* l'image entiere, un peu dezoomee, plutot que rognee en bas (30/10/2026) ; la tuile garde la hauteur de celles
-            des groupes, pour que les textes s'alignent */}
-        <img src={thumbUrl(p, 384)} alt="" loading="lazy" decoding="async" draggable={false}
-          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"contain", WebkitTouchCallout:"none", WebkitUserDrag:"none" }}
+        {/* l'objet entier, jamais rogne, cadre pour occuper sa case (FitThumb) ; la tuile garde la hauteur de celles des
+            groupes, pour que les textes s'alignent */}
+        <FitThumb src={thumbUrl(p, 384)} loading="lazy" decoding="async" draggable={false}
+          style={{ position:"absolute", inset:0, width:"100%", height:"100%", WebkitTouchCallout:"none", WebkitUserDrag:"none" }}
           onError={e => { e.currentTarget.style.display="none"; }}/>
         {check}
         {p.number_of_items > 1 && <span data-tip={`${p.number_of_items} pièces`} style={chipS("#2563EB", { top:7, right:7 })}>×{p.number_of_items}</span>}
