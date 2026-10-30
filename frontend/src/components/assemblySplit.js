@@ -44,24 +44,26 @@ export function splitPieceGeometry(THREE, pg, cuts = null, info = null) {
   for (let t = 0; t < tris.length; t += 5) { const r = root(tris[t + 2]); count.set(r, (count.get(r) || 0) + 1); }
   const total = tris.length / 5;
   const order = [...count.entries()].sort((a, b) => b[1] - a[1]);
-  let big;
-  if (cut) {
-    // apres une coupe, une miette se juge a sa taille et non a ses triangles : un support droit n'en a qu'une douzaine
-    const pos = new Float64Array(weld.size * 3);
+  // la boite de chaque morceau (sa taille, et ou il est)
+  const pos = new Float64Array(weld.size * 3);
+  {
     let i = 0;
     for (const k of weld.keys()) { const [x, y, z] = k.split("/")[0].split(",").map(Number); pos[i * 3] = x / 1000; pos[i * 3 + 1] = y / 1000; pos[i * 3 + 2] = z / 1000; i++; }
-    const box = new Map(), whole = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
-    const grow = (b, v) => { for (let a = 0; a < 3; a++) { b[a] = Math.min(b[a], pos[v * 3 + a]); b[a + 3] = Math.max(b[a + 3], pos[v * 3 + a]); } };
-    for (let t = 0; t < tris.length; t += 5) {
-      const r = root(tris[t + 2]);
-      let b = box.get(r);
-      if (!b) { b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]; box.set(r, b); }
-      for (let e = 2; e < 5; e++) { grow(b, tris[t + e]); grow(whole, tris[t + e]); }
-    }
-    const diag = b => Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
-    const min = Math.max(0.6, 0.015 * diag(whole));
-    big = order.filter(([r], j) => j === 0 || diag(box.get(r)) >= min);
-  } else big = order.filter(([, c]) => c >= Math.max(30, 0.003 * total));
+  }
+  const box = new Map(), whole = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  const grow = (b, v) => { for (let a = 0; a < 3; a++) { b[a] = Math.min(b[a], pos[v * 3 + a]); b[a + 3] = Math.max(b[a + 3], pos[v * 3 + a]); } };
+  for (let t = 0; t < tris.length; t += 5) {
+    const r = root(tris[t + 2]);
+    let b = box.get(r);
+    if (!b) { b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]; box.set(r, b); }
+    for (let e = 2; e < 5; e++) { grow(b, tris[t + e]); grow(whole, tris[t + e]); }
+  }
+  const diag = b => Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+  let big;
+  // apres une coupe, une miette se juge a sa taille et non a ses triangles : un support droit n'en a qu'une douzaine ;
+  // sans coupe aussi (30/10/2026 : un cube, 12 triangles, passait pour une miette et partait avec une autre piece)
+  if (cut) big = order.filter(([r], j) => j === 0 || diag(box.get(r)) >= Math.max(0.6, 0.015 * diag(whole)));
+  else big = order.filter(([r, c]) => c >= Math.max(30, 0.003 * total) || diag(box.get(r)) >= Math.max(2, 0.05 * diag(whole)));
   // la marque d'un morceau (coupe : 0 ; support detache : 1 ; gomme : 2) : celle de la plupart de ses triangles. Une
   // miette va au plus gros morceau de meme marque, sinon toutes celles d'une marque font un morceau a elles (30/10/2026 :
   // les bouts gommes, minuscules, retournaient a la piece)
@@ -82,11 +84,30 @@ export function splitPieceGeometry(THREE, pg, cuts = null, info = null) {
   if (big.length < 2) return null;
   const rank = new Map(big.map(([r], i) => [r, i]));
   const firstOf = [0, 1, 2].map(m => big.findIndex(([r]) => (typeof r === "string" ? Number(r.slice(1)) : mk(r)) === m));
+  // une miette : au morceau le plus proche de meme marque (30/10/2026 : au plus gros, elle pouvait partir avec un
+  // morceau a l'autre bout de la piece) ; sa marque sans morceau a elle : celui qui les reunit
+  const ctr = b => [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2];
+  const near = new Map();
+  const crumbTo = r => {
+    if (near.has(r)) return near.get(r);
+    const m = mk(r), c = ctr(box.get(r));
+    let best = -1, bd = Infinity;
+    big.forEach(([q], j) => {
+      if (typeof q === "string" || mk(q) !== m) return;
+      const b = box.get(q);
+      // la distance a la boite du morceau (0 dedans)
+      const d = Math.hypot(...[0, 1, 2].map(a => Math.max(b[a] - c[a], 0, c[a] - b[a + 3])));
+      if (d < bd) { bd = d; best = j; }
+    });
+    const j = best >= 0 ? best : Math.max(0, firstOf[m]);
+    near.set(r, j);
+    return j;
+  };
   // les triangles de chaque morceau, par maillage d'origine
   const per = big.map(() => meshes.map(() => []));
   for (let t = 0; t < tris.length; t += 5) {
     const r = root(tris[t + 2]);
-    const n = rank.has(r) ? rank.get(r) : Math.max(0, firstOf[mk(r)]);    // une miette : au plus gros morceau de sa marque
+    const n = rank.has(r) ? rank.get(r) : crumbTo(r);
     per[n][tris[t]].push(tris[t + 1]);
   }
   const out = per.map((byMesh, j) => ({
