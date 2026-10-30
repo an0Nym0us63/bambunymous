@@ -478,9 +478,15 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
                 holder.remove(pg); byPiece.delete(pg.userData.pid);
                 for (const g of parts) {
                   holder.add(g); byPiece.set(g.userData.pid, g);
-                  // sa place, ou a defaut celle du morceau dont il vient
+                  // sa place, ou a defaut celle du morceau dont il vient ; un morceau sans place a lui (30/10/2026 : un
+                  // petit bloc -- une plaque, un socle -- suivait avant le plus gros morceau, le premier ; il en est un
+                  // a part depuis, et retombait a plat a sa place du 3MF) : celle du premier morceau d'abord
                   let k = g.userData.k, S = null;
-                  while (!S && k) { S = saved[k]; k = k.split(":").length > 3 ? k.replace(/:\d+$/, "") : null; }
+                  while (!S && k) {
+                    S = saved[k];
+                    if (!S && /:[1-9]\d*$/.test(k) && k.split(":").length > 3) S = saved[k.replace(/:\d+$/, ":0")];
+                    k = k.split(":").length > 3 ? k.replace(/:\d+$/, "") : null;
+                  }
                   if (S) place(g, S);
                 }
                 continue;
