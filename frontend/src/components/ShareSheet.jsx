@@ -72,7 +72,10 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
   useTrackDetail(`Partage Telegram · ${KIND_NAME[kind] || kind} #${id}`);
   const timer = useRef(null);
 
-  const load = (msg) => client.get(`/share/${kind}/${id}/preview`, { params: { message: msg, tz: TZ } })
+  // la carte des filaments cochee ou non : la legende ne liste les filaments que sans elle (31/10/2026)
+  const cardRef = useRef(null);
+  const load = (msg) => client.get(`/share/${kind}/${id}/preview`,
+    { params: { message: msg, tz: TZ, ...(cardRef.current === false ? { card: 0 } : {}) } })
     .then(r => {
       setPreview(r.data);
       setPick(cur => cur || r.data.default_ids || []);
@@ -92,6 +95,13 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
     window.addEventListener(PHOTOS_CHANGED, again);
     return () => window.removeEventListener(PHOTOS_CHANGED, again);
   }, [kind, id, message]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cardOn = pick ? pick.includes("filaments") : null;
+  useEffect(() => {
+    if (cardOn === null || cardRef.current === cardOn) return;
+    const first = cardRef.current === null;
+    cardRef.current = cardOn;
+    if (!first) load(message);
+  }, [cardOn]); // eslint-disable-line react-hooks/exhaustive-deps
   // L'apercu suit le message, sans requete a chaque touche.
   useEffect(() => {
     clearTimeout(timer.current);

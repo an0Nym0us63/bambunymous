@@ -66,10 +66,13 @@ def _kind(kind: str) -> str:
 
 
 @router.get("/{kind}/{obj_id}/preview")
-async def share_preview(kind: str, obj_id: int, message: str = "", tz: int | None = None,
+async def share_preview(kind: str, obj_id: int, message: str = "", tz: int | None = None, card: int | None = None,
                         _: str = Depends(require_admin)):
-    """Exactement ce qui partira : la legende et les medias."""
+    """Exactement ce qui partira : la legende et les medias. card=0 : la carte des filaments decochee dans la
+    fenetre, la legende reprend alors leur liste."""
     share = await _call(tg.build_share(_kind(kind), obj_id, tz))
+    if card == 0:
+        share["card"] = None
     return {"title": share["title"], "caption_html": tg.render_caption(share, message),
             "media": (["camera"] if share["live"] else []) + [f"makerworld-{k}" for k, _u in enumerate(share.get("remote") or [])] + [p.name for p in share["media"]] + (["filaments.jpg"] if share.get("card") else []),
             "live": bool(share["live"]),

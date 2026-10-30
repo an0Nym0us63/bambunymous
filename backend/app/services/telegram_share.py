@@ -845,7 +845,8 @@ def render_caption(share: dict, message: str = "") -> str:
         parts.append(" · ".join(bits))
     if share["stats"]:
         parts.append(" · ".join(share["stats"]))
-    if share["filaments"]:
+    # la carte des filaments jointe (31/10/2026) : elle les montre tous, la legende ne les repete pas
+    if share["filaments"] and not share.get("card"):
         parts.append("🎨 Filaments\n" + "\n".join(share["filaments"]))
     for url in share["links"][:3]:
         parts.append(f'🔗 <a href="{url}">Voir sur MakerWorld</a>')
