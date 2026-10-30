@@ -760,23 +760,10 @@ const manualPlates = (raw) => { try { const m = JSON.parse(raw || "null"); retur
 // les corrections faites sur la page, avant relecture des prints : partagees par la carte depliee et son double
 // cache (carte repliee), sinon replier la carte oubliait le profil qu'on venait de retenir
 const PLATES_OVER = {};
-function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, modelTitle, modelTitleFr, others = [], onLinked = null }) {
-  const [over, setOver] = useState(() => ({ ...PLATES_OVER }));          // corrections faites ici, avant relecture
-  const [imgGuess, setImgGuess] = useState({});        // plateau probable par print (silhouette de son apercu)
-  const guessIds = printsIn.filter(pr => !manualPlates(pr.mw_plates) && pr.status !== "FAILED" && pr.status !== "CANCELLED")
-    .map(pr => pr.id).join(",");
-  const [guessed, setGuessed] = useState(false);       // reconnaissance a l'image terminee (le profil deduit est final)
-  useEffect(() => {
-    if (!designId || !guessIds) { setGuessed(true); return; }
-    let alive = true;
-    client.get(`/makerworld/model/${designId}/plate-guess`, { params: { ids: guessIds } })
-      .then(({ data }) => alive && setImgGuess(data.guesses || {})).catch(() => {})
-      .finally(() => alive && setGuessed(true));
-    return () => { alive = false; };
-  }, [designId, guessIds]);
-  const isAdmin = useIsAdmin();
-  const visiting = useFriend((s) => s.friend);
-  const prints = printsIn.map(pr => pr.id in over ? { ...pr, mw_plates: over[pr.id] } : pr);
+// Le profil MakerWorld d'impressions (31/10/2026, sorti de MakerWorldPlates) : celui qu'elles disent (sure), sinon
+// deduit de leurs indices. Partage par la carte MakerWorld d'une fiche et par la galerie des vues 3D, pour que les
+// deux ouvrent la meme vue assemblee.
+function guessProfile(profiles, prints, imgGuess, modelTitle, modelTitleFr) {
   const avec = profiles.filter(x => x.plates?.length);
   // l'imprimante donne parfois l'identifiant d'instance du profil a la place du sien : ramene au profil
   // (27/10/2026 : sans cela le profil imprime passait pour inconnu, et on le devinait -- mal)
@@ -831,6 +818,27 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
     : null;
   const guess = sure || (avec.length === 1 ? avec[0]
     : deduced && deduced.sc > 0 ? deduced.x : avec.find(x => x.default) || avec[0]);
+  return { avec, sure, guess, profOf };
+}
+
+function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, modelTitle, modelTitleFr, others = [], onLinked = null }) {
+  const [over, setOver] = useState(() => ({ ...PLATES_OVER }));          // corrections faites ici, avant relecture
+  const [imgGuess, setImgGuess] = useState({});        // plateau probable par print (silhouette de son apercu)
+  const guessIds = printsIn.filter(pr => !manualPlates(pr.mw_plates) && pr.status !== "FAILED" && pr.status !== "CANCELLED")
+    .map(pr => pr.id).join(",");
+  const [guessed, setGuessed] = useState(false);       // reconnaissance a l'image terminee (le profil deduit est final)
+  useEffect(() => {
+    if (!designId || !guessIds) { setGuessed(true); return; }
+    let alive = true;
+    client.get(`/makerworld/model/${designId}/plate-guess`, { params: { ids: guessIds } })
+      .then(({ data }) => alive && setImgGuess(data.guesses || {})).catch(() => {})
+      .finally(() => alive && setGuessed(true));
+    return () => { alive = false; };
+  }, [designId, guessIds]);
+  const isAdmin = useIsAdmin();
+  const visiting = useFriend((s) => s.friend);
+  const prints = printsIn.map(pr => pr.id in over ? { ...pr, mw_plates: over[pr.id] } : pr);
+  const { avec, sure, guess, profOf } = guessProfile(profiles, prints, imgGuess, modelTitle, modelTitleFr);
   const [pid, setPid] = useState(null);
   // le profil montre ici, pour la vue 3D de la carte
   const shownP = prints.length ? avec.find(x => x.profile_id === pid) || guess || null : null;
@@ -2889,21 +2897,54 @@ async function openFriendFiche(it) {
         useFriend.getState().visitAt(f, it.kind === "group" ? `/prints?group=${it.id}` : `/prints?id=${it.id}`);
 }
 
+// La vue 3D ouverte depuis la galerie (31/10/2026) : le meme profil et la meme impression que la carte MakerWorld de
+// la fiche (« sur pas mal de modeles, la galerie n'ouvre pas la meme vue assemblee ») -- ses impressions de ce
+// modele, le profil qu'elles disent ou qu'on en deduit, et pour un groupe l'assemblage le plus recent tant que le
+// profil n'est que deduit. undefined tant que ce n'est pas lu.
+function useFicheProfile(designId, printIds, group) {
+  const [res, setRes] = useState(undefined);
+  const key = (printIds || []).join(",");
+  useEffect(() => {
+    setRes(undefined);
+    if (!designId) return;
+    let alive = true;
+    (async () => {
+      const did = String(designId);
+      const mwOf = async again => {
+        const { data } = await client.get(`/prints/makerworld/${encodeURIComponent(did)}`);
+        if (data.status === "pending" && again) { await new Promise(r => setTimeout(r, 4000)); return mwOf(false); }
+        return data.makerworld || null;
+      };
+      const [mw, prs] = await Promise.all([mwOf(true).catch(() => null),
+        Promise.all((printIds || []).slice(0, 30).map(id => client.get(`/prints/${id}`).then(r => r.data).catch(() => null)))]);
+      const prints = prs.filter(x => x && String(x.design_id || "").trim() === did)
+        .map(pr => pr.id in PLATES_OVER ? { ...pr, mw_plates: PLATES_OVER[pr.id] } : pr);
+      const ids = prints.filter(pr => !manualPlates(pr.mw_plates) && pr.status !== "FAILED" && pr.status !== "CANCELLED").map(pr => pr.id);
+      const imgGuess = ids.length ? await client.get(`/makerworld/model/${did}/plate-guess`, { params: { ids: ids.join(",") } })
+        .then(r => r.data.guesses || {}).catch(() => ({})) : {};
+      const { sure, guess } = guessProfile(mw?.profiles || [], prints, imgGuess, mw?.title, mw?.title_fr);
+      const shown = prints.length && guess ? { id: guess.profile_id, deduced: !sure } : null;
+      let asm = null;
+      if (group && shown?.deduced !== false)
+        asm = await client.get(`/makerworld/3d/shared-edits/${encodeURIComponent(did)}`)
+          .then(r => r.data?.edits?.find(e => e.profile)?.profile || null).catch(() => null);
+      if (!alive) return;
+      setRes({ profile: asm || shown?.id || null,
+        printId: (prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id || (printIds || [])[0] || null,
+        used: prints.length ? prints.map(x => x.id) : printIds || [] });
+    })();
+    return () => { alive = false; };
+  }, [designId, key, group]);   // eslint-disable-line react-hooks/exhaustive-deps
+  return res;
+}
+
 function MyGalleryView({ search, sortF = "recent", data, loading, kind = "photos" }) {
   const [selectedPrint, setSelectedPrint] = useState(null);
   // la galerie des vues 3D (30/10/2026) : un clic ouvre le modele en 3D, sur sa vue assemblee (ou son plateau s'il n'en a qu'un)
   const [view3d, setView3d] = useState(null);
-  // son profil : celui de l'assemblage le plus recent du modele (30/10/2026 : sans profil, le serveur en devinait un
-  // autre que la fiche et ouvrait l'apercu MakerWorld) ; sans assemblage, celui de l'impression (le serveur le lit)
-  const [asmProf, setAsmProf] = useState(undefined);
-  useEffect(() => {
-    const did = view3d && (view3d.design_id || view3d.design_3d);
-    if (!did) { setAsmProf(undefined); return; }
-    let alive = true;
-    client.get(`/makerworld/3d/shared-edits/${encodeURIComponent(did)}`)
-      .then(r => alive && setAsmProf(r.data?.edits?.find(e => e.profile)?.profile || null)).catch(() => alive && setAsmProf(null));
-    return () => { alive = false; };
-  }, [view3d]);
+  // son profil et son impression : ceux que choisit la carte MakerWorld de sa fiche (31/10/2026)
+  const fp = useFicheProfile(view3d && (view3d.design_id || view3d.design_3d),
+    view3d ? (view3d.kind === "print" ? [view3d.id] : view3d.print_ids || []) : null, view3d?.kind === "group");
   const [selectedGroup, setSelectedGroup] = useState(null);
   // la liste ne change qu'avec les donnees, la recherche ou le tri (28/10/2026 : recreee a chaque rendu, la
   // grille repartait a ses 30 premieres tuiles a chaque ouverture de fiche ou de visionneuse)
@@ -2966,10 +3007,10 @@ function MyGalleryView({ search, sortF = "recent", data, loading, kind = "photos
         onDelete={()=>setSelectedPrint(null)} onChanged={()=>{}}/>
     )}
     {view3d && <Model3D designId={view3d.design_id || view3d.design_3d} title={view3d.title} focus
-      profileId={view3d.mw_profile_id || asmProf || null} wait={!view3d.mw_profile_id && asmProf === undefined}
+      profileId={fp?.profile || null} wait={fp === undefined}
       onFiche={() => { const it = view3d; setView3d(null); if (it.kind === "group") setSelectedGroup(it); else setSelectedPrint(it); }}
-      printId={view3d.kind === "print" ? view3d.id : view3d.print_ids?.[0] || null}
-      usedPrints={view3d.kind === "print" ? [view3d.id] : view3d.print_ids || []}
+      printId={fp?.printId || (view3d.kind === "print" ? view3d.id : view3d.print_ids?.[0] || null)}
+      usedPrints={fp?.used || (view3d.kind === "print" ? [view3d.id] : view3d.print_ids || [])}
       scope={`${view3d.kind}:${view3d.id}`} onClose={() => setView3d(null)}/>}
     {selectedGroup && (
       <GroupBottomSheet
