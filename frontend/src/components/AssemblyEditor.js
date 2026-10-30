@@ -100,7 +100,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   let dragStart = null;              // la poignee et les pieces au debut du glisser
   tc.addEventListener("dragging-changed", e => {
     controls.enabled = !e.value;
-    if (e.value) { handle.updateMatrix(); dragStart = { h: handle.matrix.clone(), q: handle.quaternion.clone(), m: withKids([...sel]).map(g => [g, g.matrix.clone()]) }; }
+    if (e.value) { handle.updateMatrix(); dragStart = { h: handle.matrix.clone(), q: handle.quaternion.clone(), m: withKids([...sel]).map(g => [g, g.matrix.clone()]) }; dragStart.ok = dragStart.h.clone(); }
     else {
       const j = jointOf([...sel]);
       if (j && dragStart) {
@@ -133,7 +133,16 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       onChange?.(state());
     }
     handle.updateMatrix();
-    const d = handle.matrix.clone().multiply(dragStart.h.clone().invert());
+    let d = handle.matrix.clone().multiply(dragStart.h.clone().invert());
+    // l'anticollision : la ou elle traverserait une autre piece, elle reste a sa derniere place libre
+    if (guard && collider) {
+      const list = dragStart.m.map(([g]) => g), others = all.filter(g => g.visible && !list.includes(g));
+      if (dragStart.free === undefined) dragStart.free = !collider.anyTouch(dragStart.m, others, 0.3);
+      if (dragStart.free && collider.anyTouch(dragStart.m.map(([g, m0]) => [g, d.clone().multiply(m0)]), others, 0.3)) {
+        d = dragStart.ok.clone().multiply(dragStart.h.clone().invert());
+        dragStart.ok.decompose(handle.position, handle.quaternion, handle.scale); handle.updateMatrix();
+      } else dragStart.ok = handle.matrix.clone();
+    }
     for (const [g, m0] of dragStart.m) { d.clone().multiply(m0).decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); }
   });
   tc.addEventListener("change", render);
@@ -161,6 +170,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
     cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, addPin, edgeMode,
+    pickFor, lineAxis: !!lineAxis,
     twinBusy, canTwins: mode === "mate" && !!first && first.kind === "face" && !addPin && !twinDone,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
@@ -486,7 +496,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     // « ╱ Arete » allumee : l'arete vive (plus de 30° entre ses deux faces) la plus proche du clic, cherchee dans les
     // triangles autour (une quinzaine de pixels) -- pas seulement les trois cotes du triangle touche, souvent une
     // diagonale a plat (30/10/2026 : en mode arete, une face etait encore prise) ; aucune pres du clic : la face
-    if (idx && edgeMode) {
+    if (idx && (edgeMode || pickFor === "line" || pickFor === "axis")) {
       const nb = neighbours(geo), ix = idx.array;
       const pxmm = hit.distance * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.max(1, el.clientHeight);
       const R = Math.max(0.5, (coarse ? 26 : 16) * pxmm);
@@ -590,6 +600,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       tc.setSpace("local");
       if (mode === "move") { tc.showX = true; tc.showY = !f.edge; tc.showZ = false; }
       else { tc.showX = f.edge; tc.showY = false; tc.showZ = !f.edge; }
+    } else if (lineAxis) {
+      // le long d'une ligne choisie (et autour d'elle, en Tourner) : la fleche rouge suit la ligne
+      handle.position.copy(c);
+      handle.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), lineAxis);
+      tc.setSpace("local"); tc.showX = true; tc.showY = tc.showZ = false;
     } else {
       handle.position.copy(c); handle.quaternion.identity();
       tc.setSpace("world"); tc.showX = tc.showY = tc.showZ = true;
@@ -1058,7 +1073,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   let hoverRaf = 0, hoverKey = null;
   const clearHover = () => { hoverMarks.children.slice().forEach(m => { m.geometry.dispose(); hoverMarks.remove(m); }); hoverKey = null; };
   const onHover = ev => {
-    if (!(mode === "mate" || (mode === "ground" && !ground3)) || ev.buttons || tc.dragging || ev.pointerType === "touch" || hoverRaf) return;
+    if (!(pickFor || mode === "mate" || (mode === "ground" && !ground3)) || ev.buttons || tc.dragging || ev.pointerType === "touch" || hoverRaf) return;
     const x = ev.clientX, y = ev.clientY;
     hoverRaf = requestAnimationFrame(() => {
       hoverRaf = 0;
@@ -1085,7 +1100,124 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     tap(pick, ev);
   };
   // ce que fait un toucher, selon le mode (une prise : la piece, sa face ou son arete ; ou rien)
+  // ── les outils du 30/10/2026 ──
+  // pickFor : le prochain clic sert a un outil (« line » : la ligne ou glisser, « axis » : redresser sur un axe,
+  // « view » : la vue face a une face, « nest » / « align » : la piece ou emboiter / aligner la selection, sans collage)
+  let pickFor = null, lineAxis = null;
+  const AXES = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(a => new THREE.Vector3(...a));
+  // l'anticollision : un deplacement qui ferait traverser une autre piece n'a pas lieu (une piece qui en touche deja une
+  // n'est pas bloquee : elle doit pouvoir en sortir)
+  const blocked = (list, M) => {
+    if (!guard || !collider) return false;
+    const others = all.filter(g => g.visible && !list.includes(g));
+    if (collider.anyTouch(list.map(g => { g.updateMatrix(); return [g, g.matrix.clone()]; }), others, 0.3)) return false;
+    return collider.anyTouch(list.map(g => [g, M.clone().multiply(g.matrix)]), others, 0.3);
+  };
+  // la camera dans l'axe (repere du 3MF, Z en haut), ou face a une direction donnee
+  const lookAlong = (dirLocal, at = null) => {
+    holder.updateMatrixWorld(true);
+    const d = dirLocal.clone().transformDirection(holder.matrixWorld).normalize();
+    const target = at ? holder.localToWorld(at.clone()) : controls.target.clone();
+    const dist = camera.position.distanceTo(controls.target);
+    if (Math.abs(d.dot(camera.up)) > 0.999) d.addScaledVector(new THREE.Vector3(0, 0, 1), 0.002).normalize();   // pas pile dans l'axe du haut
+    controls.target.copy(target); camera.position.copy(target).addScaledVector(d, dist);
+    camera.lookAt(target); controls.update(); render();
+  };
+  const viewAxis = name => {
+    const sgn = name.startsWith("-") ? -1 : 1, i = "xyz".indexOf(name.replace("-", ""));
+    if (i >= 0) lookAlong(AXES[i].clone().multiplyScalar(sgn));
+  };
+  // l'axe du 3MF le plus proche d'une direction (signe compris)
+  const nearestAxis = d => {
+    let best = AXES[0], bd = -1;
+    for (const a of AXES) { const c = Math.abs(d.dot(a)); if (c > bd) { bd = c; best = a.clone().multiplyScalar(Math.sign(d.dot(a)) || 1); } }
+    return best;
+  };
+  // emboiter / aligner sur une piece choisie, sans collage : la selection vient au contact de cette piece (dans l'axe
+  // du 3MF qui les separe le plus), y est collee, puis emboitee ou alignee
+  const pairFit = async (mode, B) => {
+    const unit = [...sel], moving = withKids(unit), base = unitOf(B);
+    if (!unit.length) return;
+    if (moving.includes(B)) { fitMsg = "Touche une autre pièce que celle choisie"; onChange?.(state()); return; }
+    const col = await getCollider();
+    const ba = boxOfAll(moving), bb = boxOfAll(base), sa = ba.getSize(new THREE.Vector3()), sb = bb.getSize(new THREE.Vector3());
+    const dv = ba.getCenter(new THREE.Vector3()).sub(bb.getCenter(new THREE.Vector3()));
+    let N = AXES[2].clone(), r = -1;
+    AXES.forEach((a, i) => { const k = "xyz"[i], q = Math.abs(dv[k]) / Math.max(1, (sa[k] + sb[k]) / 2); if (q > r) { r = q; N = a.clone().multiplyScalar(Math.sign(dv[k]) || 1); } });
+    const touch = t => col.anyTouch(moving.map(g => { g.updateMatrix(); return [g, new THREE.Matrix4().makeTranslation(-N.x * t, -N.y * t, -N.z * t).multiply(g.matrix)]; }), base);
+    // deja dedans : d'abord ressortie le long de N
+    let t0 = 0;
+    const span = Math.abs(dv.dot(N)) + sa.length() + sb.length();
+    if (touch(0)) { let k = 0; while (k < 400 && touch(-t0)) { t0 += Math.max(0.5, span / 200); k++; } t0 = -t0; }
+    // puis rapprochee jusqu'au premier contact (a 0,05 mm pres)
+    const step = Math.max(0.5, span / 300);
+    let lo = t0, hi = null;
+    for (let t = t0; t <= span; t += step) { if (touch(t)) { hi = t; break; } lo = t; }
+    if (hi === null) { fitMsg = `Pas de contact avec ${B.userData.name} dans cette direction : rapproche-la d'abord`; onChange?.(state()); return; }
+    for (let k = 0; k < 14; k++) { const m = (lo + hi) / 2; if (touch(m)) hi = m; else lo = m; }
+    apply(moving, new THREE.Matrix4().makeTranslation(-N.x * lo, -N.y * lo, -N.z * lo));
+    // le point de contact : sous le centre de la piece, sur l'autre
+    holder.updateMatrixWorld(true);
+    const c = boxOfAll(moving).getCenter(new THREE.Vector3());
+    const rc = new THREE.Raycaster(holder.localToWorld(c.clone()), N.clone().negate().transformDirection(holder.matrixWorld).normalize());
+    const hit = rc.intersectObjects(base.flatMap(g => g.children.filter(m => m.isMesh)), false)[0];
+    const P = hit ? holder.worldToLocal(hit.point.clone()) : c.clone().addScaledVector(N, -sa.dot(new THREE.Vector3(Math.abs(N.x), Math.abs(N.y), Math.abs(N.z))) / 2);
+    B.updateMatrix();
+    const inv = B.matrix.clone().invert();
+    joints = joints.filter(j => !unit.includes(j.a));
+    joints.push({ a: unit[0], b: B, kind: "face", p: P.clone().applyMatrix4(inv), n: N.clone().transformDirection(inv), e: null });
+    pivot = { p: P.clone(), axis: N.clone(), unit: moving };
+    push(); setSel(unit);
+    const moved = await fitOnContact(mode);
+    if (!moved) { fitMsg = `Posée contre ${B.userData.name} et collée${fitMsg ? ` — ${fitMsg}` : ""}`; onChange?.(state()); }
+  };
+  // ce que fait le clic d'un outil
+  const pickTool = pick => {
+    const what = pickFor;
+    pickFor = null; clearHover();
+    if (!pick) { fitMsg = null; onChange?.(state()); return; }
+    const dir = pick.kind === "edge" ? pick.e.clone() : pick.n.clone();
+    if (what === "view") { lookAlong(pick.kind === "edge" ? pick.n : pick.n, pick.p); fitMsg = null; onChange?.(state()); return; }
+    if (what === "line") {
+      lineAxis = dir.normalize();
+      fitMsg = `Le long ${pick.kind === "edge" ? "de l'arête" : "de la normale de la face"} : tire la flèche (✕ Ligne libre pour revenir)`;
+      placeHandle(); render(); onChange?.(state()); return;
+    }
+    if (what === "axis") {
+      const unit = sel.has(pick.group) ? [...sel] : unitOf(pick.group), moving = withKids(unit);
+      const to = nearestAxis(dir);
+      apply(moving, about(boxOfAll(moving).getCenter(new THREE.Vector3()), new THREE.Quaternion().setFromUnitVectors(dir.normalize(), to)));
+      joints = joints.filter(j => !unit.includes(j.a));
+      const ax = to.x ? "X" : to.y ? "Y" : "Z";
+      push(); setSel(unit);
+      fitMsg = `Redressée : ${pick.kind === "edge" ? "l'arête" : "la face (sa normale)"} dans l'axe ${ax}`;
+      onChange?.(state()); return;
+    }
+    if (what === "nest" || what === "align") { pairFit(what, pick.group); return; }
+    onChange?.(state());
+  };
+  // sortir une piece de celles qu'elle traverse : le plus petit pas qui la libere, dans l'un des six axes
+  const freeOut = async () => {
+    const unit = [...sel], moving = withKids(unit);
+    if (!unit.length) return;
+    const col = await getCollider(), others = all.filter(g => g.visible && !moving.includes(g));
+    const at = (d, t) => col.anyTouch(moving.map(g => { g.updateMatrix(); return [g, new THREE.Matrix4().makeTranslation(d.x * t, d.y * t, d.z * t).multiply(g.matrix)]; }), others, 0.3);
+    if (!at(AXES[0], 0)) { fitMsg = "Elle ne traverse aucune autre pièce"; onChange?.(state()); return; }
+    const L = boxOfAll(moving).getSize(new THREE.Vector3()).length() + 2;
+    let best = null;
+    for (const a of AXES) for (const sg of [1, -1]) {
+      const d = a.clone().multiplyScalar(sg);
+      for (let t = 0.25; t <= L && (!best || t < best.t); t += Math.max(0.25, L / 400)) if (!at(d, t)) { best = { d, t }; break; }
+    }
+    if (!best) { fitMsg = "Pas de sortie trouvée"; onChange?.(state()); return; }
+    const t = best.t + 0.1;
+    apply(moving, new THREE.Matrix4().makeTranslation(best.d.x * t, best.d.y * t, best.d.z * t));
+    joints = joints.filter(j => !unit.includes(j.a));
+    push(); setSel(unit);
+    fitMsg = `Dégagée de ${String(Math.round(t * 10) / 10).replace(".", ",")} mm`; onChange?.(state());
+  };
   const tap = (pick, ev) => {
+    if (pickFor) { pickTool(pick); return; }
     if (mode === "cut") { if (!pendingCut) setSel(pick ? [pick.group] : []); return; }
     if (mode === "move" || mode === "rotate") {
       if (!pick) { if (!ev.ctrlKey && !ev.shiftKey && !multi) setSel([]); return; }
@@ -1302,6 +1434,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     stepRound(want);
     const step = want.clone().sub(fdrag.done);
     if (step.lengthSq() < 1e-8) return;
+    if (blocked(withKids([...sel]), new THREE.Matrix4().makeTranslation(step.x, step.y, step.z))) return;
     apply(withKids([...sel]), new THREE.Matrix4().makeTranslation(step.x, step.y, step.z));
     fdrag.done.copy(want); fdrag.moved = true; placeHandle(); render();
   };
@@ -1752,6 +1885,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       const s = ev.shiftKey ? 10 : 1, t = new THREE.Vector3();
       if (ev.ctrlKey || ev.metaKey) t.z = ev.key === "ArrowUp" ? s : ev.key === "ArrowDown" ? -s : 0;
       else { t.x = ev.key === "ArrowRight" ? s : ev.key === "ArrowLeft" ? -s : 0; t.y = ev.key === "ArrowUp" ? s : ev.key === "ArrowDown" ? -s : 0; }
+      if (blocked(withKids([...sel]), new THREE.Matrix4().makeTranslation(t.x, t.y, t.z))) { fitMsg = "🛡 Bloquée : elle traverserait une autre pièce"; onChange?.(state()); return; }
       apply(withKids([...sel]), new THREE.Matrix4().makeTranslation(t.x, t.y, t.z)); placeHandle(); push(); render();
     }
   };
@@ -1762,7 +1896,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
 
   const api = {
     setGround3: on => { ground3 = on; gPts = []; gUnit = []; drawGround(); onChange?.(state()); },
-    setMode: m => { if (m !== "mate") { addPin = false; keepPins = []; } if (m !== "cut") { cutCancel(); dropStroke(); clearRub(); } knifeView(m === "cut"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
+    setMode: m => { pickFor = null; if (m !== "mate") { addPin = false; keepPins = []; } if (m !== "cut") { cutCancel(); dropStroke(); clearRub(); } knifeView(m === "cut"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
     setRotStep: d => { rotStep = d; applySnap(); onChange?.(state()); },
     setMoveStep: d => { moveStep = d; try { localStorage.setItem("bn.asm.moveStep", String(d)); } catch { /* rien */ } applySnap(); onChange?.(state()); },
@@ -1797,6 +1931,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       const axis = v => (Math.abs(v.x) >= Math.abs(v.y) ? new THREE.Vector3(Math.sign(v.x) || 1, 0, 0) : new THREE.Vector3(0, Math.sign(v.y) || 1, 0));
       const t = new THREE.Vector3().addScaledVector(axis(right), r * s).addScaledVector(axis(fwd), f * s);
       t.z += u * s;
+      if (blocked(withKids([...sel]), new THREE.Matrix4().makeTranslation(t.x, t.y, t.z))) { fitMsg = "🛡 Bloquée : elle traverserait une autre pièce"; onChange?.(state()); return; }
       apply(withKids([...sel]), new THREE.Matrix4().makeTranslation(t.x, t.y, t.z)); placeHandle(); push(); render();
     },
     setTurnGlued: on => { turnGlued = on; onChange?.(state()); },
@@ -1864,6 +1999,13 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     },
     cutConfirm, cutCancel,
     // le choix face / arete : survoler une ligne la surligne, la toucher la prend
+    viewAxis,
+    pickTool: what => { pickFor = pickFor === what ? null : what; first = null; clearMarks();
+      fitMsg = !pickFor ? null : { line: "Touche une arête (la ligne) ou une face (sa normale) : la pièce glissera le long", axis: "Touche l'arête ou la face de la pièce à mettre dans l'axe X, Y ou Z le plus proche",
+        view: "Touche une face : la vue se place juste en face", nest: "Touche la pièce où l'emboîter", align: "Touche la pièce sur laquelle l'aligner" }[what];
+      render(); onChange?.(state()); },
+    clearLine: () => { lineAxis = null; fitMsg = null; placeHandle(); render(); onChange?.(state()); },
+    freeOut,
     findTwins: () => { if (first && first.kind === "face" && !twinBusy) startTwins(first); },
     stopTwins: () => { if (twinBusy) { twinStop = true; onChange?.(state()); } },
     setEdgeMode: on => { edgeMode = on; onChange?.(state()); },

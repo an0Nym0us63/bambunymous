@@ -1072,11 +1072,17 @@ const EDIT_HELP = [
     ["← → ↑ ↓", "1 mm (Maj : 10 mm)"],
     ["Ctrl + ↑ ↓", "monter, descendre"],
     ["Panneau de droite", "la position exacte du centre (X, Y, Z en mm), puis Entrée"],
+    ["╱ Le long d'une ligne", "touche une arête (ou une face : sa normale) ; la flèche rouge suit alors cette ligne, quelle qu'elle soit ; ✕ Ligne libre revient aux axes"],
+    ["⟂ Redresser sur un axe", "touche une arête ou une face de la pièce : elle tourne pour la mettre dans l'axe X, Y ou Z le plus proche"],
+    ["🧩 Emboîter sur… / 📐 Aligner sur…", "sans collage : choisis la pièce, puis touche celle où la poser ; elle vient au contact (dans l'axe qui les sépare le plus), s'y colle et s'emboîte ou s'aligne"],
+    ["🛡 Anti-collision (⚙)", "déplacée à la poignée, au doigt ou aux flèches, la pièce s'arrête au contact d'une autre au lieu de la traverser ; 🧩 Pièce ▾ ↥ Dégager sort une pièce coincée par le plus court chemin"],
+    ["🎥 Vue", "de dessus, de dessous, de face, de derrière, de gauche, de droite, ou ⊥ face à une face que tu touches"],
   ]],
   ["Tourner (R)", [
     ["Anneaux de la poignée", "tourner autour d'un axe ; cran au choix (libre, 1°, 5°, 15°, 45°)"],
     ["← →  /  ↑ ↓", "1° autour de Z / de X (Maj : 15°)"],
     ["Panneau de droite", "tourner d'un angle exact autour de X, Y ou Z"],
+    ["╱ Autour d'une ligne", "touche une arête (ou une face : sa normale) : l'anneau rouge tourne autour de cette ligne"],
   ]],
   ["Poser au sol (F)", [["Par une face : clic sur une face", "elle se pose à plat sur le sol ; une arête : mise à l'horizontale"],
     ["Par 3 points : trois clics", "à peu près sur les trois appuis (les roues d'un tricycle) : le vrai point d'appui est cherché autour de chaque clic, et la pièce repose dessus"]]],
@@ -1265,6 +1271,13 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
       <button type="button" disabled={!est.pinsA} onClick={() => api?.pinsUndo()} style={b(false, { opacity: est.pinsA ? 1 : 0.45 })} data-tip="Retirer le dernier point">⌫ Point</button>
       <button type="button" disabled={!est.pinsA} onClick={() => api?.pinsClear()} style={b(false, { opacity: est.pinsA ? 1 : 0.45 })} data-tip="Effacer tous les points">✕ Points</button>
     </>
+    : (est.mode === "move" || est.mode === "rotate") && hasSel ? <>
+      {est.lineAxis ? <button type="button" onClick={() => api?.clearLine()} style={b(true)} data-tip="Revenir aux axes X, Y, Z">✕ Ligne libre</button>
+        : <button type="button" onClick={() => api?.pickTool("line")} style={b(est.pickFor === "line")}
+          data-tip={est.mode === "move" ? "Glisser la pièce le long d'une ligne : touche une arête, ou une face (sa normale)" : "Tourner autour d'une ligne : touche une arête, ou une face (sa normale)"}>╱ {est.mode === "move" ? "Le long d'une ligne" : "Autour d'une ligne"}</button>}
+      <button type="button" onClick={() => api?.pickTool("axis")} style={b(est.pickFor === "axis")}
+        data-tip="Touche une arête ou une face de la pièce : elle tourne pour la mettre dans l'axe X, Y ou Z le plus proche">⟂ Redresser sur un axe</button>
+    </>
     : est.mode === "ground" ? <>
       <button type="button" onClick={() => api?.setGround3(false)} style={b(!est.ground3)} data-tip="Clique la face (ou l'arête) qui doit être posée au sol">Par une face</button>
       <button type="button" onClick={() => api?.setEdgeMode(!est.edgeMode)} style={b(!!est.edgeMode)}
@@ -1290,7 +1303,14 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         est.count === 1 && { label: "🪄 Détacher les supports", onClick: () => api?.detachSupports(), tip: "Repère les supports intégrés au modèle (parois et plaques fines) et les sépare de la pièce" },
         est.canReunite && { label: "⊕ Réunir", onClick: () => api?.reunite(), tip: "Remettre la pièce d'un seul tenant" },
         { label: "🙈 Masquer", key: "H", onClick: () => api?.hide(), tip: "Pour atteindre ce qu'elle cache (la vue seulement)" },
+        { label: "↥ Dégager", onClick: () => api?.freeOut(), tip: "Elle traverse une autre pièce : la sortir par le plus court chemin" },
       ]}/>
+      {!est.glued && <>
+        <button type="button" onClick={() => api?.pickTool("nest")} style={b(est.pickFor === "nest")}
+          data-tip="Sans collage : touche ensuite la pièce où l'emboîter ; elle vient au contact, s'y colle et s'emboîte">🧩 Emboîter sur…</button>
+        <button type="button" onClick={() => api?.pickTool("align")} style={b(est.pickFor === "align")}
+          data-tip="Sans collage : touche ensuite la pièce sur laquelle l'aligner ; elle vient au contact, s'y colle et s'aligne">📐 Aligner sur…</button>
+      </>}
       {est.glued && <>
         {sep}
         {est.twinPos && <button type="button" onClick={() => api?.twinNext()} style={b(true)}
@@ -1387,7 +1407,15 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
           <button type="button" onClick={() => api?.frame()} style={tool(false)}>⌖{lab("Cadrer")}</button>
           {(est.mode === "move" || est.mode === "rotate") && est.count > 0 &&
             <button type="button" onClick={() => togglePanel("exact")} style={tool(panel === "exact")}>📐{lab("Exact")}</button>}
+          <BarMenu up b={on => tool(on)} label={<>🎥{lab("Vue")}</>} items={[
+            { label: "⬇ De dessus", onClick: () => api?.viewAxis("z") }, { label: "⬆ De dessous", onClick: () => api?.viewAxis("-z") },
+            { label: "De face", onClick: () => api?.viewAxis("-y") }, { label: "De derrière", onClick: () => api?.viewAxis("y") },
+            { label: "De gauche", onClick: () => api?.viewAxis("-x") }, { label: "De droite", onClick: () => api?.viewAxis("x") },
+            "-",
+            { label: "⊥ Face à une face…", onClick: () => api?.pickTool("view"), tip: "Touche ensuite une face : la vue se place juste en face" },
+          ]}/>
           <BarMenu up b={on => tool(on)} label={<>⚙{lab("Réglages")}</>} items={[
+            { label: "🛡 Anti-collision", on: !!est.guard, onClick: () => api?.setGuard(!est.guard), keep: true },
             { label: "🧷 Aimanter", on: !!est.magnet, onClick: () => api?.setMagnet(!est.magnet), keep: true },
             { label: "🪄 Collage assisté", on: !!est.assist, onClick: () => api?.setAssist(!est.assist), keep: true },
             "-",
@@ -1421,7 +1449,15 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         <button type="button" onClick={() => api?.setBoxMode(!est.boxMode)} style={b(!!est.boxMode)}
           data-tip="Choisir au rectangle : glisse pour entourer les pièces (Ctrl : en ajouter) ; la vue ne tourne pas tant que c'est allumé">▭ Rectangle</button>
         {sep}
+        <BarMenu b={b} label="🎥 Vue" tip="Placer la vue : de dessus, de face, de côté, ou face à une face" items={[
+            { label: "⬇ De dessus", onClick: () => api?.viewAxis("z") }, { label: "⬆ De dessous", onClick: () => api?.viewAxis("-z") },
+            { label: "De face", onClick: () => api?.viewAxis("-y") }, { label: "De derrière", onClick: () => api?.viewAxis("y") },
+            { label: "De gauche", onClick: () => api?.viewAxis("-x") }, { label: "De droite", onClick: () => api?.viewAxis("x") },
+            "-",
+            { label: "⊥ Face à une face…", onClick: () => api?.pickTool("view"), tip: "Touche ensuite une face : la vue se place juste en face" },
+          ]}/>
         <BarMenu b={b} label="⚙" tip="Réglages : aimantation, cran des rotations, choix multiple, collage assisté" items={[
+          { label: "🛡 Anti-collision", on: !!est.guard, onClick: () => api?.setGuard(!est.guard), keep: true, tip: "Déplacée (poignée, doigt, flèches) ou coulissée, la pièce s'arrête au contact d'une autre au lieu de la traverser" },
           { label: "🧷 Aimanter", on: !!est.magnet, onClick: () => api?.setMagnet(!est.magnet), keep: true, tip: "Une pièce lâchée à moins de 3 mm d'une autre ou du sol vient s'y coller (le pas des déplacements se règle à part, plus bas)" },
           { label: "🪄 Collage assisté", on: !!est.assist, onClick: () => api?.setAssist(!est.assist), keep: true, tip: "Faces entières centrées et grands axes alignés (sinon : au point cliqué)" },
           { label: "➕ Choix multiple", on: !!est.multi, onClick: () => api?.setMulti(!est.multi), keep: true, tip: "Chaque clic ajoute ou retire une pièce (comme Ctrl + clic, pour le stylet)" },
