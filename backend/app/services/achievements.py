@@ -5952,9 +5952,32 @@ async def set_family(secrets=None, wheel=None) -> dict:
     return d
 
 
+def loupe_level(loupes: dict | None, aid: str) -> int:
+    """L'etape ou ce compte a pousse un secret a la loupe (0 a 5, comme les cles) ; avant le 30/10/2026, seuls
+    l'indice (« used ») et le descriptif (« desc ») se prenaient a la loupe."""
+    lp = loupes or {}
+    return max(int((lp.get("rv") or {}).get(aid) or 0), 4 if aid in (lp.get("used") or {}) else 0,
+               5 if aid in (lp.get("desc") or {}) else 0)
+
+
+def _loupe_shown(it: dict, a: dict, rv: int) -> dict:
+    """Un secret pas encore gagne, montre jusqu'a l'etape rv (la categorie, la vignette, le titre, l'indice, le
+    descriptif), avec la prochaine etape a la loupe et son prix."""
+    nxt = loupe_step(rv)
+    return {**it, "reveal": rv, "key_use": None, "loupable": True,
+            "sub": (a.get("sub") or SUB_OF.get(a["id"])) if rv >= 1 else it.get("sub"),
+            "emoji": a["emoji"] if rv >= 2 else it.get("emoji"),
+            "name": a["name"] if rv >= 3 else it.get("name"),
+            "hint": hint_of(a) if rv >= 4 else None,
+            "desc": describe(a, a["tiers"][0]) if rv >= 5 else it.get("desc"),
+            "loupe": rv >= 4, "loupe_desc": rv >= 5,
+            "loupe_next": {"label": nxt[1], "cost": nxt[2]} if nxt else None}
+
+
 def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> dict:
     """La page vue par un compte de la famille : ses secrets a lui (entiers), ceux de la maison
-    qu'il n'a pas encore « a portee » (titre, medaille, categorie ; ni descriptif, ni histoire)."""
+    qu'il n'a pas encore « a portee » (titre, medaille, categorie ; ni descriptif, ni histoire). Les loupes
+    devoilent un secret pas encore gagne par etapes, comme les cles (30/10/2026)."""
     medals = dict(v["medals"])
     score = v["score"]
     items = []
@@ -5963,13 +5986,7 @@ def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> 
         if aid not in FAMILY_IDS:
             if aid in HOUSE_SECRET_IDS and it["level"] < 0:
                 # un secret de la maison qu'elle n'a pas encore : la loupe y vaut aussi
-                lit = aid in ((loupes or {}).get("used") or {})
-                dlit = lit and aid in ((loupes or {}).get("desc") or {})
-                a = BY_ID[aid]
-                it = {**it, "loupable": True, "loupe": bool(lit), "loupe_desc": bool(dlit),
-                      "hint": hint_of(a) if lit else it.get("hint"),
-                      "reveal": max(it.get("reveal") or 0, (1 if lit else 0) + (1 if dlit else 0)),
-                      **({"desc": describe(a, a["tiers"][0])} if dlit else {})}
+                it = _loupe_shown(it, BY_ID[aid], max(int(it.get("reveal") or 0), loupe_level(loupes, aid)))
             items.append(it)
             continue
         a, k = BY_ID[aid], aid[4:]
@@ -5989,21 +6006,14 @@ def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> 
         elif it["level"] >= 0:
             medals[t0["id"]] = max(0, medals.get(t0["id"], 0) - 1)
             score -= t0["score"]
-            lit = aid in ((loupes or {}).get("used") or {})        # indice debloque a la loupe
-            dlit = lit and aid in ((loupes or {}).get("desc") or {})  # puis le descriptif (trois loupes)
-            items.append({**base, "level": -1, "reveal": max(it.get("reveal") or 0, FREE_FROM_FRIENDS + (1 if lit else 0) + (1 if dlit else 0)),
-                          "hint": hint_of(a) if lit else None, "loupe": bool(lit), "loupe_desc": bool(dlit),
-                          "masked": True, "desc": describe(a, a["tiers"][0]) if dlit else "Descriptif caché", "lore": None, "house": house,
-                          "tiers": [{**it["tiers"][0], "at": None}]})
+            # la maison l'a : la categorie, la vignette et le titre offerts, la loupe fait le reste
+            rv = max(FREE_FROM_FRIENDS, loupe_level(loupes, aid))
+            items.append({**_loupe_shown({**base, "level": -1, "masked": True, "desc": "Descriptif caché", "lore": None, "house": house,
+                                          "tiers": [{**it["tiers"][0], "at": None}]}, a, rv)})
         else:
             # pas encore a la maison : ni les cles qu'elle y a mises (rien a voir pour lui) ; la loupe, elle, marche
             # aussi (30/10/2026 : elle ne valait que pour les secrets que la maison avait deja)
-            lit = aid in ((loupes or {}).get("used") or {})
-            dlit = lit and aid in ((loupes or {}).get("desc") or {})
-            items.append({**it, "key_use": None, "loupable": True, "loupe": bool(lit), "loupe_desc": bool(dlit),
-                          "hint": hint_of(a) if lit else it.get("hint"),
-                          "reveal": max(it.get("reveal") or 0, (1 if lit else 0) + (1 if dlit else 0)),
-                          **({"desc": describe(a, a["tiers"][0])} if dlit else {})})
+            items.append(_loupe_shown(it, a, max(int(it.get("reveal") or 0), loupe_level(loupes, aid))))
     found = sum(1 for aid in FAMILY_IDS if aid[4:] in mine)
     return {**v, "items": items, "medals": medals, "score": score,
             "family": {"house": house, "found": found, "total": len(FAMILY_IDS),
@@ -6017,7 +6027,14 @@ def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> 
 # secret qu'il n'a pas (que la maison l'ait trouve ou non, depuis le 30/10/2026). Deux par jour, gardees jusqu'a trois. Une loupe pour l'indice ; puis,
 # l'indice en main, trois loupes pour le descriptif (26/10/2026).
 LOUPES_DAY, LOUPES_MAX = 1, 10           # (2 et 3 avant le 26/10/2026)
-LOUPES_DESC = 3
+LOUPES_DESC = 2                          # (3 avant le 30/10/2026)
+# l'echelle de la loupe (30/10/2026) : la categorie, la vignette et le titre d'un coup (1), l'indice (1), le descriptif (2)
+LOUPE_STEPS = [(3, "la catégorie, la vignette et le titre", 1), (4, "l'indice", 1), (5, "le descriptif", LOUPES_DESC)]
+
+
+def loupe_step(rv: int):
+    """La prochaine etape a la loupe depuis l'etape rv : (etape atteinte, ce qu'elle devoile, prix), ou None."""
+    return next((s for s in LOUPE_STEPS if s[0] > rv), None)
 
 
 async def loupes(username: str) -> dict:
@@ -6173,7 +6190,7 @@ async def add_loupes(username: str, n: int) -> int:
     return me["n"]
 
 
-async def use_loupe(username: str, aid: str, what: str = "hint") -> dict:
+async def use_loupe(username: str, aid: str, what: str = "next") -> dict:
     """Une loupe sur un secret que ce compte n'a pas encore (que la maison l'ait trouve ou non, 30/10/2026) : son
     indice. Ou, l'indice deja revele, trois loupes pour son descriptif (what="desc")."""
     from ..db.session import AsyncSessionLocal
@@ -6187,6 +6204,37 @@ async def use_loupe(username: str, aid: str, what: str = "hint") -> dict:
     else:
         raise ValueError("Pas de loupe pour ce secret")
     me = await loupes(username)
+    # l'etape suivante (30/10/2026) : la categorie, la vignette, le titre, l'indice (1 loupe chacun), le descriptif (3),
+    # a partir de ce qui est deja devoile (les cles de la maison, un copain, la maison qui l'a deja)
+    if what == "next":
+        a = BY_ID[aid]
+        st = await _state_get() or {}
+        base = _reveal_level(st, aid)
+        if aid in FAMILY_IDS and aid[4:] in await eggs_found():
+            base = max(base, FREE_FROM_FRIENDS)
+        cur = max(base, loupe_level(me, aid))
+        step = loupe_step(cur)
+        if not step:
+            return {"ok": True, "reveal": cur, "loupes": me.get("n", 0)}
+        to, label, cost = step
+        if int(me.get("n") or 0) < cost:
+            raise ValueError(f"Il faut {cost} loupes pour {label} (tu en as {int(me.get('n') or 0)})"
+                             if cost > 1 else "Plus de loupe aujourd'hui : une de plus demain, et la roue en donne")
+        now = datetime.utcnow().isoformat()
+        me = {**me, "n": int(me["n"]) - cost, "rv": {**(me.get("rv") or {}), aid: to}}
+        if to >= 4:
+            me["used"] = {**(me.get("used") or {}), aid: (me.get("used") or {}).get(aid) or now}
+        if to >= 5:
+            me["desc"] = {**(me.get("desc") or {}), aid: now}
+        async with AsyncSessionLocal() as db:
+            try:
+                d = json.loads(await get_setting(db, KEY + "_LOUPES", "") or "{}")
+            except ValueError:
+                d = {}
+            d = d if isinstance(d, dict) else {}
+            d[username] = me
+            await set_setting(db, KEY + "_LOUPES", json.dumps(d))
+        return {"ok": True, "reveal": to, "loupes": me["n"]}
     if what == "desc":
         a = BY_ID[aid]
         if aid not in (me.get("used") or {}):

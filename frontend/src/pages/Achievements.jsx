@@ -123,9 +123,9 @@ export default function Achievements({ embedded = false }) {
   // cles et tickets : le compte principal seul ; la roue : lui, ou un compte a qui il l'a permise
   const canSpend = isAdmin && !atFriend && !!data?.keys && data?.me?.main !== false;
   // famille : une loupe sur un secret qu'il n'a pas (son indice), la maison l'ait ou non
-  const loupe = async (aid, what = "hint") => {
+  const loupe = async (aid, what = "next") => {
     setKeyErr(null);
-    try { await client.post(`/achievements/loupe/${aid}`, null, { params: what === "desc" ? { what } : {} }); await load(); }
+    try { await client.post(`/achievements/loupe/${aid}`, null, { params: { what } }); await load(); }
     catch (e) { setKeyErr(e.response?.data?.detail || e.message); }
   };
   // un compte de la famille a SA roue (ses tours, des loupes) ; sinon celle de la maison, si elle est permise
@@ -420,8 +420,8 @@ export default function Achievements({ embedded = false }) {
                   <div style={{ display:"flex", flexDirection:"column", gap:4, padding:"8px 10px", borderRadius:10, fontSize:11.5,
                     lineHeight:1.45, color:"var(--text2)", background:"rgba(245,158,11,0.08)", border:"1px dashed rgba(245,158,11,0.5)" }}>
                     {data.family && <span><b style={{ color:"#EC4899" }}>🥚 Tes trouvailles : {data.family.found} / {data.family.total}</b>
-                      {" · "}<b style={{ color:"#0EA5E9" }}>🔍 {data.family.loupes} loupe{data.family.loupes > 1 ? "s" : ""}</b> : une révèle l'indice d'un secret
-                      que tu n'as pas encore ({data.family.house} l'ait trouvé ou non), puis {data.family.loupes_desc || 3} son descriptif ({data.family.loupes_day} de plus chaque jour, {data.family.loupes_max} au plus).
+                      {" · "}<b style={{ color:"#0EA5E9" }}>🔍 {data.family.loupes} loupe{data.family.loupes > 1 ? "s" : ""}</b> : sur un secret que tu n'as pas encore ({data.family.house} l'ait trouvé ou non), une dévoile la catégorie, la vignette et le titre,
+                      une l'indice, puis {data.family.loupes_desc || 2} le descriptif ({data.family.loupes_day} de plus chaque jour, {data.family.loupes_max} au plus).
                       Easter eggs, cachettes, Android, farces, fêtes et pages cachées : ici, ce sont les tiennes. Le reste des succès est celui
                       de la maison.</span>}
                     {near > 0 && !atFriend && <span><b style={{ color:"#F59E0B" }}>👀 À portée</b> : pas encore à toi, mais {data.family
@@ -1447,7 +1447,7 @@ function TreasureRow({ keys, onRules, onWheel, onSpent, loupes = null }) {
       <div style={{ display:"grid", gridTemplateColumns:`repeat(${1 + (w && !loupes ? 1 : 0) + (w ? 1 : 0)}, minmax(0, 1fr))`, gap:8 }}>
         {loupes ? (
           <div style={{ ...box("rgba(14,165,233,.35)", "rgba(14,165,233,.45)") }}>
-            <button type="button" onClick={onRules} aria-label="Les loupes, comment ça marche" title="Une loupe révèle l'indice d'un secret que tu n'as pas encore, que la maison l'ait trouvé ou non ; l'indice en main, trois loupes dévoilent son descriptif. Une de plus chaque jour, dix au plus ; la roue en donne aussi, au-delà."
+            <button type="button" onClick={onRules} aria-label="Les loupes, comment ça marche" title="Sur un secret que tu n'as pas encore, que la maison l'ait trouvé ou non : une loupe dévoile la catégorie, la vignette et le titre, une l'indice, deux le descriptif. Une de plus chaque jour, dix au plus ; la roue en donne aussi, au-delà."
               style={{ position:"absolute", top:4, right:4, width:18, height:18, borderRadius:"50%", border:"none", cursor:"pointer", fontSize:10.5, fontWeight:900,
                 color:"var(--muted)", background:"var(--surface)", boxShadow:"inset 0 0 0 1px var(--border)" }}>?</button>
             <span style={iconSlot}><span style={{ fontSize:24, lineHeight:1, animation:"bn-float 3.5s ease-in-out infinite" }}>🔍</span></span>
@@ -1852,24 +1852,20 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
       {sheet && unique && !got && it.hint && (
         <p style={{ margin:0, fontSize:12.5, color:"var(--text2)", fontStyle:"italic" }}>💡 Indice : {it.hint}</p>
       )}
-      {/* famille : une loupe revele l'indice d'un secret qu'il n'a pas (la maison l'ait ou non) */}
-      {sheet && unique && !got && (it.house || it.loupable) && !it.hint && loupes != null && (
-        <button type="button" onClick={onLoupe} disabled={!loupes}
+      {/* famille : la loupe devoile un secret pas encore gagne par etapes (30/10/2026) : la categorie, la vignette et le
+          titre, puis l'indice, puis le descriptif ; le bouton dit la suivante et son prix */}
+      {sheet && unique && !got && (it.house || it.loupable) && it.loupe_next && loupes != null && (
+        <button type="button" onClick={() => onLoupe("next")} disabled={loupes < it.loupe_next.cost}
           style={{ alignSelf:"flex-start", display:"inline-flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:20, border:"none",
-            cursor: loupes ? "pointer" : "default", fontWeight:800, fontSize:12.5, color:"#fff", opacity: loupes ? 1 : 0.55,
-            background:"linear-gradient(135deg, #0EA5E9, #6366F1)" }}>
-          🔍 {loupes ? `Révéler l'indice (il te reste ${loupes} loupe${loupes > 1 ? "s" : ""})` : "Plus de loupe aujourd'hui : deux de plus demain"}</button>
+            cursor: loupes >= it.loupe_next.cost ? "pointer" : "default", fontWeight:800, fontSize:12.5, color:"#fff",
+            opacity: loupes >= it.loupe_next.cost ? 1 : 0.55,
+            background: it.loupe_next.cost > 1 ? "linear-gradient(135deg, #6366F1, #A855F7)" : "linear-gradient(135deg, #0EA5E9, #6366F1)" }}>
+          {"🔍".repeat(it.loupe_next.cost)} {loupes >= it.loupe_next.cost
+            ? `Révéler ${it.loupe_next.label} (${it.loupe_next.cost} loupe${it.loupe_next.cost > 1 ? "s" : ""}, il t'en reste ${loupes})`
+            : !loupes ? "Plus de loupe aujourd'hui : une de plus demain"
+            : `${it.loupe_next.label[0].toUpperCase()}${it.loupe_next.label.slice(1)} : ${it.loupe_next.cost} loupes (tu en as ${loupes})`}</button>
       )}
       {sheet && loupeErr && <p style={{ margin:0, fontSize:12.5, fontWeight:700, color:"#ef4444" }}>{loupeErr}</p>}
-      {/* famille : l'indice en main, trois loupes devoilent le descriptif */}
-      {sheet && unique && !got && (it.house || it.loupable) && it.hint && !it.loupe_desc && loupes != null && (
-        <button type="button" onClick={() => onLoupe("desc")} disabled={loupes < loupesDesc}
-          style={{ alignSelf:"flex-start", display:"inline-flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:20, border:"none",
-            cursor: loupes >= loupesDesc ? "pointer" : "default", fontWeight:800, fontSize:12.5, color:"#fff", opacity: loupes >= loupesDesc ? 1 : 0.55,
-            background:"linear-gradient(135deg, #6366F1, #A855F7)" }}>
-          {"🔍".repeat(loupesDesc)} {loupes >= loupesDesc ? `Voir le descriptif (${loupesDesc} loupes, il t'en reste ${loupes})`
-            : `Le descriptif : ${loupesDesc} loupes (tu en as ${loupes})`}</button>
-      )}
       {sheet && unique && !got && it.gift_from?.length > 0 && (
         <p style={{ margin:0, fontSize:12.5, fontWeight:700, color:"#8B5CF6" }}>
           🎁 Catégorie, vignette et titre offerts grâce à {it.gift_from.join(", ")}</p>
@@ -2041,8 +2037,9 @@ function Rules({ data, onClose }) {
         {/* un compte de la famille : ses loupes et sa roue a lui (sans cles ni tickets ; sans ce cas, la fenetre plantait) */}
         {data.family && <>
           <H>🔍 Tes loupes</H>
-          <P>Une loupe révèle l'<b>indice</b> d'un secret que tu n'as pas encore, que {data.family.house || "la maison"} l'ait déjà trouvé ou non (et d'un secret de la maison, tant qu'elle ne l'a pas). L'indice en main,
-            {" "}<b>{data.family.loupes_desc || 3} loupes</b> dévoilent aussi son descriptif. Tu en reçois {data.family.loupes_day || 1} par jour,
+          <P>Les loupes dévoilent un secret que tu n'as pas encore, que {data.family.house || "la maison"} l'ait déjà trouvé ou non (et un secret de la maison, tant qu'elle ne l'a pas), par étapes comme les clés :
+            {" "}<b>1 loupe</b> pour la catégorie, la vignette et le titre, <b>1</b> pour l'indice, <b>{data.family.loupes_desc || 2}</b> pour le descriptif
+            {" "}(ce que les clés de la maison ou un copain ont déjà dévoilé est acquis ; un secret que {data.family.house || "la maison"} a déjà commence à l'indice). Tu en reçois {data.family.loupes_day || 1} par jour,
             {" "}jusqu'à {data.family.loupes_max || 10} ; celles gagnées à ta roue s'ajoutent, même au-delà.</P>
         </>}
         {data.family && k?.wheel && <>

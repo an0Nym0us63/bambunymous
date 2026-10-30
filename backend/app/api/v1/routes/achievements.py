@@ -334,14 +334,14 @@ async def achievements_family_board(acc=Depends(require_own_account), db: AsyncS
 
 
 @router.post("/loupe/{aid}")
-async def achievements_loupe(aid: str, what: str = "hint", acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
+async def achievements_loupe(aid: str, what: str = "next", acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
     """Un compte de la famille revele l'indice d'un secret qu'il n'a pas (une loupe), puis son descriptif
     (what=desc, trois loupes). Deux loupes par jour, trois au plus."""
     from ....services import achievements as A
     if not (await _me(acc[0], db))["family"]:
         raise HTTPException(403, "Les loupes sont pour les comptes de la famille")
     try:
-        return await A.use_loupe(acc[0], aid, "desc" if what == "desc" else "hint")
+        return await A.use_loupe(acc[0], aid, what if what in ("next", "desc") else "hint")
     except ValueError as e:
         raise HTTPException(400, str(e))
 
