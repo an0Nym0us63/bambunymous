@@ -5983,8 +5983,14 @@ def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> 
                           "masked": True, "desc": describe(a, a["tiers"][0]) if dlit else "Descriptif caché", "lore": None, "house": house,
                           "tiers": [{**it["tiers"][0], "at": None}]})
         else:
-            # pas encore a la maison : ni les cles qu'elle y a mises (rien a voir pour lui), ni loupe possible
-            items.append({**it, "key_use": None, "no_loupe": aid in FAMILY_IDS and it["level"] < 0} if aid in FAMILY_IDS else it)
+            # pas encore a la maison : ni les cles qu'elle y a mises (rien a voir pour lui) ; la loupe, elle, marche
+            # aussi (30/10/2026 : elle ne valait que pour les secrets que la maison avait deja)
+            lit = aid in ((loupes or {}).get("used") or {})
+            dlit = lit and aid in ((loupes or {}).get("desc") or {})
+            items.append({**it, "key_use": None, "loupable": True, "loupe": bool(lit), "loupe_desc": bool(dlit),
+                          "hint": hint_of(a) if lit else it.get("hint"),
+                          "reveal": max(it.get("reveal") or 0, (1 if lit else 0) + (1 if dlit else 0)),
+                          **({"desc": describe(a, a["tiers"][0])} if dlit else {})})
     found = sum(1 for aid in FAMILY_IDS if aid[4:] in mine)
     return {**v, "items": items, "medals": medals, "score": score,
             "family": {"house": house, "found": found, "total": len(FAMILY_IDS),
@@ -5995,7 +6001,7 @@ def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> 
 
 
 # Les loupes de la famille (24/10/2026) : sans cles ni tickets, un compte de la famille revele l'indice d'un
-# secret que la maison a deja trouve. Deux par jour, gardees jusqu'a trois. Une loupe pour l'indice ; puis,
+# secret qu'il n'a pas (que la maison l'ait trouve ou non, depuis le 30/10/2026). Deux par jour, gardees jusqu'a trois. Une loupe pour l'indice ; puis,
 # l'indice en main, trois loupes pour le descriptif (26/10/2026).
 LOUPES_DAY, LOUPES_MAX = 1, 10           # (2 et 3 avant le 26/10/2026)
 LOUPES_DESC = 3
@@ -6155,16 +6161,14 @@ async def add_loupes(username: str, n: int) -> int:
 
 
 async def use_loupe(username: str, aid: str, what: str = "hint") -> dict:
-    """Une loupe sur un secret que la maison a et que ce compte n'a pas encore : son indice. Ou, l'indice deja
-    revele, trois loupes pour son descriptif (what="desc")."""
+    """Une loupe sur un secret que ce compte n'a pas encore (que la maison l'ait trouve ou non, 30/10/2026) : son
+    indice. Ou, l'indice deja revele, trois loupes pour son descriptif (what="desc")."""
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting, set_setting
     if aid not in FAMILY_IDS:
         raise ValueError("Pas de loupe pour ce secret")
     if aid[4:] in ((await _eggs_by()).get(username) or {}):
         raise ValueError("Tu l'as déjà")
-    if aid[4:] not in await eggs_found():
-        raise ValueError("La maison ne l'a pas encore : pas d'indice à montrer")
     me = await loupes(username)
     if what == "desc":
         a = BY_ID[aid]

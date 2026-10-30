@@ -335,7 +335,7 @@ async def achievements_family_board(acc=Depends(require_own_account), db: AsyncS
 
 @router.post("/loupe/{aid}")
 async def achievements_loupe(aid: str, what: str = "hint", acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
-    """Un compte de la famille revele l'indice d'un secret que la maison a deja (une loupe), puis son descriptif
+    """Un compte de la famille revele l'indice d'un secret qu'il n'a pas (une loupe), puis son descriptif
     (what=desc, trois loupes). Deux loupes par jour, trois au plus."""
     from ....services import achievements as A
     if not (await _me(acc[0], db))["family"]:
