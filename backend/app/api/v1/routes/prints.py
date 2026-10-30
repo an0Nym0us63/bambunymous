@@ -137,6 +137,9 @@ def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict]
     d["group_thumb_3d"] = p.group.thumb_3d if gname else 0
     d["group_vue3d_name"] = gname
     d["group_vue3d_v"] = gv
+    # les vues choisies une a une (30/10/2026) : plusieurs, la tuile les fait defiler au lieu de montrer leur mosaique
+    d["vue3d_sel"] = [{"name": _v3name(n), "v": sl[n]} for n in _v3sel(p.thumb_3d, sl)] if sl else []
+    d["group_vue3d_sel"] = [{"name": _v3name(n), "v": gsl[n]} for n in _v3sel(p.group.thumb_3d, gsl)] if gsl and p.group else []
     # le 3MF d'origine MakerWorld deja garde pour ce profil (le tranche, lui, est model_3mf)
     try:
         from ....services.mw_source import print_file as _src

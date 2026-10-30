@@ -4,6 +4,7 @@ import { X, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import AdminOnly from "./AdminOnly";
 import Lightbox from "./Lightbox";
 import { showAlert, showConfirm } from "../utils/dialog";
+import CycleImg from "./CycleImg";
 const isVideoUrl = (u) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u || "");
 
 /**
@@ -184,9 +185,14 @@ export default function GalleryCompare({
                     {/* l'ombre de contact, sous la base : la vue touche le sol (elle flottait) */}
                     <div style={{ position:"absolute", left:"18%", right:"18%", bottom:"9%", height:"9%", borderRadius:"50%",
                       background:"radial-gradient(closest-side, rgba(0,0,0,.30), rgba(0,0,0,.08) 60%, transparent)" }}/>
-                    {renderCover ? renderCover(item) : img && <img className="bn-stage-img" src={`${apiThumb(img, 384)}&trim=1`} alt={getTitle(item)} loading="lazy" decoding="async"
-                      style={{ position:"absolute", left:"6%", top:"5%", width:"88%", height:"83%", objectFit:"contain", objectPosition:"50% 100%",
-                        filter:"drop-shadow(0 3px 3px rgba(0,0,0,.25))", transformOrigin:"50% 100%", transition:"transform .25s" }}/>}
+                    {/* toutes les vues de l'impression, l'une apres l'autre en fondu (30/10/2026) */}
+                    {renderCover ? renderCover(item) : (() => {
+                      const urls = [...new Set(((getPhotos && getPhotos(item)) || []).map(ph => ph?.url || ph).filter(Boolean))];
+                      const one = (u, on = true) => <img className="bn-stage-img" src={`${apiThumb(u, 384)}&trim=1`} alt={getTitle(item)} loading="lazy" decoding="async"
+                        style={{ position:"absolute", left:"6%", top:"5%", width:"88%", height:"83%", objectFit:"contain", objectPosition:"50% 100%",
+                          filter:"drop-shadow(0 3px 3px rgba(0,0,0,.25))", transformOrigin:"50% 100%", transition:"transform .25s, opacity .8s ease", opacity: on ? 1 : 0 }}/>;
+                      return urls.length > 1 ? <CycleImg urls={urls} render={one}/> : img && one(img);
+                    })()}
                   </div>
                   <div style={{ padding:"7px 10px 8px", borderTop:"1px solid var(--border)" }}>
                     <p title={getTitle(item)} style={{ fontSize:"clamp(11.5px, 1.15vw, 13px)", color:"var(--text)", fontWeight:800, margin:0, lineHeight:1.25,

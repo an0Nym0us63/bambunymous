@@ -41,6 +41,7 @@ import { useLongPress, openMenu } from "../components/ContextMenu";
 import NasChip from "../components/NasChip";
 import ColorMap from "../components/ColorMap";
 import FitThumb from "../components/FitThumb";
+import CycleImg from "../components/CycleImg";
 
 // PARTIAL et TO_REDO viennent de Spoolnymous, qui gerait cinq statuts. Les
 // prints importes les portent toujours, mais l'application ne les connaissait
@@ -2043,7 +2044,12 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
         border:"1px solid color-mix(in srgb, #A78BFA 30%, var(--border))", background:"var(--surface2)", boxShadow:"0 8px 22px -16px rgba(124,58,237,.6)" }}>
         <div style={{ position:"relative", paddingTop:"78%", background:"var(--surface)", overflow:"hidden" }}>
           <div style={{ position:"absolute", inset:0 }}>
-            <GroupMosaic photos={mosaicUrls} title={name}/>
+            {/* plusieurs vues 3D choisies : l'une apres l'autre, chacune en grand (30/10/2026), plutot que leur mosaique */}
+            {prints[0]?.group_thumb_3d && prints[0]?.group_vue3d_sel?.length > 1
+              ? <CycleImg urls={prints[0].group_vue3d_sel.map(s => apiThumb(withV(apiUrl(`/prints/groups/${groupId}/photo/${s.name}`), s.v), 384))}
+                  render={(u, on) => <FitThumb src={u} loading="lazy" decoding="async" draggable={false}
+              style={{ position:"absolute", inset:0, width:"100%", height:"100%", opacity: on ? 1 : 0, transition:"opacity .8s ease" }}/>}/>
+              : <GroupMosaic photos={mosaicUrls} title={name}/>}
           </div>
           <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, rgba(124,58,237,0.10), transparent 40%)" }}/>
           <span data-tip={`${prints.length} impression${prints.length > 1 ? "s" : ""} dans ce groupe`} style={chipS("#7C3AED", { top:7, left:7 })}>
@@ -2229,9 +2235,14 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
         background:`radial-gradient(75% 70% at 50% 45%, ${tint}2e, transparent 75%), linear-gradient(180deg, ${tint}1a, transparent 55%), var(--surface2)` }}>
         {/* l'objet entier, jamais rogne, cadre pour occuper sa case (FitThumb) ; la tuile garde la hauteur de celles des
             groupes, pour que les textes s'alignent */}
-        <FitThumb src={thumbUrl(p, 384)} loading="lazy" decoding="async" draggable={false}
-          style={{ position:"absolute", inset:0, width:"100%", height:"100%", WebkitTouchCallout:"none", WebkitUserDrag:"none" }}
-          onError={e => { e.currentTarget.style.display="none"; }}/>
+        {/* plusieurs vues 3D choisies : l'une apres l'autre, chacune en grand (30/10/2026), plutot que leur mosaique */}
+        {p.thumb_3d && p.vue3d_sel?.length > 1
+          ? <CycleImg urls={p.vue3d_sel.map(s => apiThumb(withV(apiUrl(`/prints/${p.id}/file/${s.name}`), s.v), 384))}
+              render={(u, on) => <FitThumb src={u} loading="lazy" decoding="async" draggable={false}
+              style={{ position:"absolute", inset:0, width:"100%", height:"100%", opacity: on ? 1 : 0, transition:"opacity .8s ease" }}/>}/>
+          : <FitThumb src={thumbUrl(p, 384)} loading="lazy" decoding="async" draggable={false}
+              style={{ position:"absolute", inset:0, width:"100%", height:"100%", WebkitTouchCallout:"none", WebkitUserDrag:"none" }}
+              onError={e => { e.currentTarget.style.display="none"; }}/>}
         {check}
         {p.number_of_items > 1 && <span data-tip={`${p.number_of_items} pièces`} style={chipS("#2563EB", { top:7, right:7 })}>×{p.number_of_items}</span>}
         {p.status !== "SUCCESS" && <span style={chipS(stC, { top:7, left:7, visibility: selectMode ? "hidden" : "visible" })}>{stI} {stL}</span>}
