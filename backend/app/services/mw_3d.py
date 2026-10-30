@@ -23,7 +23,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 23                          # 23 : une piece redimensionnee volontairement n est plus prise pour une place abimee (30/10) ; 22 : place d'assemblage abimee d'une piece en miroir reprise (30/10) ; 21 : triangles d'une piece en miroir remis dans le bon sens (30/10) ; 20 : pieces en miroir gardees en miroir dans la vue assemblee (30/10) ; 19 : couches en marches d'un lithophane lissees (30/10) ; 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 24                          # 24 : une piece a l'echelle de son plateau dans la vue assemblee (30/10) ; 23 : une piece redimensionnee volontairement n est plus prise pour une place abimee (30/10) ; 22 : place d'assemblage abimee d'une piece en miroir reprise (30/10) ; 21 : triangles d'une piece en miroir remis dans le bon sens (30/10) ; 20 : pieces en miroir gardees en miroir dans la vue assemblee (30/10) ; 19 : couches en marches d'un lithophane lissees (30/10) ; 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan|hue ?forge", re.I)       # HueForge : une image en couches, a voir par derriere aussi (30/10)
 MAX_TRIANGLES = 1_500_000              # au-dela, le plateau est simplifie (29/10/2026 ; avant : pas converti du tout) :
                                        # un telephone l'affiche vite, et le fichier reste de quelques Mo
@@ -707,6 +707,17 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                 u_, s_, _ = np.linalg.svd(lp)
                 mt = [float(x) for x in (u_ @ np.diag(s_) @ u_.T).ravel()] + list(mt[9:])
                 logger.info(f"[3D] {key} : place d'assemblage abimee de l'objet {oid}, reprise sans rotation")
+            else:
+                # une echelle d'assemblage perimee (30/10/2026, les cheveux d'Embarras : 2,71 dans la vue assemblee, 1 sur
+                # le plateau, 69 mm au lieu de 25 sur un visage de 44) : la piece se montre telle qu'imprimee, a la taille
+                # de son plateau, tournee comme sa place d'assemblage le dit
+                ka = abs(np.linalg.det(la)) ** (1 / 3)
+                kp = dp ** (1 / 3)
+                if kp > 1e-9 and abs(ka / kp - 1) > 0.05:
+                    ua, _, va = np.linalg.svd(la)
+                    up, sp, _ = np.linalg.svd(lp)
+                    mt = [float(x) for x in ((up @ np.diag(sp) @ up.T) @ (ua @ va)).ravel()] + list(mt[9:])
+                    logger.info(f"[3D] {key} : objet {oid} a l'echelle {ka:.2f} dans la vue assemblee, {kp:.2f} sur son plateau : celle du plateau")
         if pm and det(pm) < 0 < det(mt):
             mt = _mul([-1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0], mt)
         parts = parts_of(oid, mt, asm_vol.get(oid))
