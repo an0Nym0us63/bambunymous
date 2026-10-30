@@ -139,6 +139,14 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
   const [dark, setDark] = useState(false);
   const [lit, setLit] = useState(false);
   const [bedOn, setBedOn] = useState(true);            // le plateau (grille) : masquable pour voir dessous
+  // la lampe placee a la main : sa direction (d'apres la vue) et sa force, gardees sur l'appareil
+  const [lamp, setLampS] = useState(() => { try { return { az: 35, el: 25, k: 0, ...JSON.parse(localStorage.getItem("bn.3d.lamp") || "{}") }; } catch { return { az: 35, el: 25, k: 0 }; } });
+  const [lampOpen, setLampOpen] = useState(false);
+  const lampNow = useRef(lamp);
+  const putLamp = v => {
+    lampNow.current = v; setLampS(v); api.current?.setLamp(v);
+    try { localStorage.setItem("bn.3d.lamp", JSON.stringify(v)); } catch { /* rien */ }
+  };
   const [floorPick, setFloorPick] = useState(false), [oriented, setOriented] = useState(false);   // une face posee au sol (la vue)
   useEffect(() => { if (lit) egg("ombres_chinoises"); }, [lit]);
   // la transparence des couches d'un HueForge (30/10/2026) : une valeur par filament, reglable, gardee par couleur
@@ -191,6 +199,16 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
       const grid = new THREE.GridHelper(side, Math.round(side / 16), 0x94a3b8, 0xcbd5e1); grid.material.transparent = true; grid.material.opacity = 0.45;
       grid.scale.set(bw / side, 1, bd / side); scene.add(grid);
       const camera = new THREE.PerspectiveCamera(40, el.clientWidth / el.clientHeight, 1, 5000);
+      // la lampe (30/10/2026) : une lumiere qu'on place soi-meme, fixee a la vue (elle tourne avec l'oeil) : de face, de
+      // cote, rasante, pour lire le relief d'une piece sombre ; eteinte par defaut. Prise aussi par la vignette 📸
+      const lamp = new THREE.DirectionalLight(0xffffff, 0);
+      camera.add(lamp); camera.add(lamp.target); lamp.target.position.set(0, 0, -1); scene.add(camera);
+      const setLamp = ({ az = 0, el: e = 0, k = 0 } = {}) => {
+        const a = THREE.MathUtils.degToRad(az), b = THREE.MathUtils.degToRad(e);
+        lamp.position.set(Math.sin(a) * Math.cos(b), Math.sin(b), Math.cos(a) * Math.cos(b));
+        lamp.intensity = k;
+        render();
+      };
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
       // les gestes habituels (comme Bambu Studio, 29/10/2026) : clic gauche tourner, molette ou clic droit maintenus
@@ -782,7 +800,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         if (editApi) editApi.current = { editing, toSave, origin, relayout, snapshot, untilt, get editor() { return editor; } };
         disposables.push({ dispose: () => { try { editor?.dispose(); } catch { /* rien */ } if (editApi) editApi.current = null; } });
         const setTd = (i, v) => { if (hueU) { hueU.hT.value[i] = v; render(); } };
-        api.current = { fit, night, backlight, bedShow, dragPans, zoom, floorMode, untilt, setTd };
+        api.current = { fit, night, backlight, bedShow, dragPans, zoom, floorMode, untilt, setTd, setLamp };
+        setLamp(lampNow.current);
         const s = bb2.getSize(new THREE.Vector3());
         onState({ busy: false, error: null, size: glb ? [s.x, s.z, s.y] : [s.x, s.z, s.y], glow: glowMats.length > 0 });
       } catch (e) {
@@ -801,6 +820,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           fontSize: 16, fontWeight: 800, background: on ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", color: on ? "#fff" : "var(--text2)",
           boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{l}</button>)}
     </div>}
+    {lampOpen && !lit && !bare && <LampPanel lamp={lamp} onChange={putLamp} onClose={() => setLampOpen(false)}/>}
     {tdOpen && hueL && !lit && (pan => (tdSlot ? createPortal(pan, tdSlot) : pan))(<div onPointerDown={e => e.stopPropagation()} style={{ zIndex: 3,
       ...(tdSlot ? {} : { position: "absolute", right: 10, bottom: 56, width: "min(300px, calc(100% - 20px))", boxShadow: "0 10px 30px rgba(0,0,0,.25)" }),
       padding: "10px 12px", borderRadius: 14, background: "color-mix(in srgb, var(--surface) 94%, transparent)", border: "1px solid var(--border)",
@@ -832,6 +852,11 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: lit ? "linear-gradient(135deg, #fde68a, #f59e0b)" : "linear-gradient(135deg, #1e293b, #0f172a)", color: lit ? "#1e293b" : "#e2e8f0",
           fontSize: 13, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }} aria-label={lit ? "Devant" : "Derrière"}>{lit ? (narrow ? "☀️" : "☀️ Devant") : (narrow ? "🔦" : "🔦 Derrière")}</button>}
+      {!lit && <button type="button" onClick={() => { setLampOpen(o => !o); if (!lamp.k) putLamp({ ...lamp, k: 1.4 }); egg("eclairagiste"); }}
+        data-tip="Une lampe à placer soi-même (de face, de côté, rasante) : pour lire le relief d'une pièce sombre"
+        style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 15,
+          background: lamp.k ? "linear-gradient(135deg, #fde68a, #f59e0b)" : "var(--surface)", color: lamp.k ? "#1e293b" : "var(--text2)",
+          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }} aria-label="Lampe">💡</button>}
       <button type="button" onClick={() => { const v = !bedOn; setBedOn(v); api.current?.bedShow(v); }}
         data-tip={bedOn ? "Masquer le plateau : voir le dessous sans la grille" : "Afficher le plateau"}
         style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 15,
@@ -854,6 +879,42 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>⟲</button>
     </div>
+  </div>;
+}
+
+// La lampe (30/10/2026) : un disque ou l'on tire le point lumineux (au centre : de face ; au bord : de cote, rasante ;
+// en haut : d'au-dessus), et sa force
+function LampPanel({ lamp, onChange, onClose }) {
+  const R = 54;
+  const pos = { x: lamp.az / 90 * R, y: -lamp.el / 90 * R };
+  const pick = e => {
+    const r = e.currentTarget.getBoundingClientRect();
+    let x = e.clientX - r.left - R, y = e.clientY - r.top - R;
+    const l = Math.hypot(x, y);
+    if (l > R) { x *= R / l; y *= R / l; }
+    onChange({ ...lamp, az: Math.round(x / R * 90), el: Math.round(-y / R * 90), k: lamp.k || 1.4 });
+  };
+  return <div onPointerDown={e => e.stopPropagation()} style={{ position: "absolute", right: 10, bottom: 56, zIndex: 3, width: 220, padding: "10px 12px", borderRadius: 14,
+    background: "color-mix(in srgb, var(--surface) 94%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)",
+    boxShadow: "0 10px 30px rgba(0,0,0,.25)", display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+    <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 6 }}>
+      <span style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text)", flex: 1 }}>💡 Lampe</span>
+      <button type="button" onClick={() => onChange({ ...lamp, k: 0 })} style={{ border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)",
+        borderRadius: 8, fontSize: 11, fontWeight: 800, padding: "3px 8px", cursor: "pointer" }}>Éteindre</button>
+      <button type="button" onClick={onClose} aria-label="Fermer" style={{ border: "none", background: "transparent", color: "var(--muted)", fontSize: 15, cursor: "pointer" }}>✕</button>
+    </div>
+    <div onPointerDown={e => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* rien */ } pick(e); }} onPointerMove={e => { if (e.buttons) pick(e); }}
+      data-tip="Tire le point : d'où vient la lumière, vu de l'écran"
+      style={{ position: "relative", width: R * 2, height: R * 2, borderRadius: "50%", cursor: "crosshair", touchAction: "none",
+        background: "radial-gradient(circle at 50% 50%, var(--surface2), color-mix(in srgb, var(--border) 60%, transparent))", border: "1px solid var(--border)" }}>
+      <span style={{ position: "absolute", left: R - 3, top: R - 3, width: 6, height: 6, borderRadius: "50%", background: "var(--muted)", opacity: 0.6 }}/>
+      <span style={{ position: "absolute", left: R + pos.x - 9, top: R + pos.y - 9, width: 18, height: 18, borderRadius: "50%",
+        background: lamp.k ? "radial-gradient(circle, #fff7cc, #f59e0b)" : "var(--muted)", boxShadow: lamp.k ? "0 0 12px #f59e0b" : "none", pointerEvents: "none" }}/>
+    </div>
+    <label style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>
+      Force
+      <input type="range" min="0" max="4" step="0.1" value={lamp.k} style={{ flex: 1 }} onChange={e => onChange({ ...lamp, k: Number(e.target.value) })}/>
+    </label>
   </div>;
 }
 
