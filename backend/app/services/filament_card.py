@@ -234,56 +234,155 @@ def _lines(draw, text: str, font, width: int, most: int = 2) -> list:
     return [_fit(draw, l, font, width) for l in out]
 
 
+def spool(colors: list, mtype: Optional[str], finish: Optional[str], size: int) -> Image.Image:
+    """Une bobine vue de face (31/10/2026, « c'est bien mais c'est moche ») : le fil enroule (sa couleur et sa
+    finition, en relief, avec ses spires et un reflet), le moyeu sombre et ajoure, la joue en plastique fume."""
+    S = size * 2                                                   # dessinee en double, reduite : bords lisses
+    ys, xs = np.mgrid[0:S, 0:S].astype(np.float32)
+    dx, dy = (xs + 0.5 - S / 2) / (S / 2), (ys + 0.5 - S / 2) / (S / 2)
+    r = np.hypot(dx, dy)
+    ux, uy = dx / np.maximum(r, 1e-6), dy / np.maximum(r, 1e-6)
+    out = np.zeros((S, S, 4), np.float32)
+    px = 1.5 / (S / 2)
+
+    def aa(edge):                                                  # couverture lissee d'un bord
+        return np.clip(edge / px + 0.5, 0, 1)
+
+    L = np.array([-0.45, -0.62, 0.64], np.float32)
+    L /= np.linalg.norm(L)
+    Hh = L + np.array([0, 0, 1], np.float32)
+    Hh /= np.linalg.norm(Hh)
+    # la joue : un disque de plastique fume, son bord eclaire en haut a gauche
+    lit = np.clip(-(ux * 0.55 + uy * 0.83), 0, 1)
+    rim = np.clip(1 - np.abs(r - 0.975) / 0.025, 0, 1)
+    base = np.stack([np.full_like(r, 22), np.full_like(r, 26), np.full_like(r, 36)], -1) / 255
+    base = base * (0.85 + 0.3 * (1 - r))[..., None] + (rim * (0.25 + 0.5 * lit))[..., None]
+    out[..., :3], out[..., 3] = base, aa(1.0 - r) * 0.96
+    # le fil enroule
+    R0, R1 = 0.41, 0.925
+    t = np.clip((r - R0) / (R1 - R0), 0, 1)
+    band = aa(r - R0) * aa(R1 - r)
+    # un translucide (31/10/2026) : sans damier, la couleur laisse voir la joue fumee, comme du verre teinte
+    glass = min(c[3] for c in colors) / 255 if any(c[3] < 255 for c in colors) else 1.0
+    tex = np.asarray(swatch([c[:3] + (255,) for c in colors], mtype, finish, S).convert("RGB"), np.float32) / 255
+    nr, nz = -np.cos(np.pi * t) * 0.85, np.sin(np.pi * t) + 0.15
+    nx, ny = ux * nr, uy * nr
+    nn = np.sqrt(nx * nx + ny * ny + nz * nz)
+    nx, ny, nz = nx / nn, ny / nn, nz / nn
+    diff = np.clip(nx * L[0] + ny * L[1] + nz * L[2], 0, 1)
+    spec = np.clip(nx * Hh[0] + ny * Hh[1] + nz * Hh[2], 0, 1) ** 48
+    spires = 1 - 0.09 * (0.5 + 0.5 * np.sin(r * (S / 2) * 2 * np.pi / 3.2))   # une spire tous les ~1,6 px
+    shine = {"silk": 0.85, "metal": 0.9, "glow": 0.3, "matte": 0.12}.get(finish, 0.45) if glass >= 1 else 0.95
+    fil = tex * (0.32 + 0.82 * diff)[..., None] * spires[..., None] + (spec * shine)[..., None]
+    fil = fil * (0.7 + 0.3 * np.clip(np.sin(np.pi * t), 0, 1) ** 0.5)[..., None]   # les creux contre les joues
+    cover = band * (1.0 if glass >= 1 else 0.35 + 0.5 * glass)
+    out[..., :3] = out[..., :3] * (1 - cover[..., None]) + fil * cover[..., None]
+    if glass < 1:                                                  # le reflet du verre, par-dessus
+        out[..., :3] += (spec * band * 0.6)[..., None]
+    out[..., 3] = np.maximum(out[..., 3], band)
+    # le moyeu : sombre, une levre claire, une gorge, quatre jours et le trou central
+    hub = aa(R0 - 0.012 - r)
+    hcol = np.stack([np.full_like(r, 48), np.full_like(r, 54), np.full_like(r, 66)], -1) / 255
+    hcol = hcol * (0.9 + 0.18 * np.clip(-(dx * 0.55 + dy * 0.83), -1, 1))[..., None]
+    lip = np.clip(1 - np.abs(r - (R0 - 0.03)) / 0.014, 0, 1)
+    groove = np.clip(1 - np.abs(r - 0.2) / 0.01, 0, 1)
+    hcol = hcol + (lip * 0.22 * (0.4 + lit))[..., None] - (groove * 0.12)[..., None]
+    out[..., :3] = out[..., :3] * (1 - hub[..., None]) + hcol * hub[..., None]
+    holes = aa(0.085 - r)
+    for k in range(4):
+        a = math.pi / 4 + k * math.pi / 2
+        hx, hy = math.cos(a) * 0.29, math.sin(a) * 0.29
+        holes = np.maximum(holes, aa(0.062 - np.hypot(dx - hx, dy - hy)))
+    out[..., 3] *= 1 - holes
+    img = Image.fromarray((np.clip(out, 0, 1) * 255 + 0.5).astype(np.uint8), "RGBA")
+    return img.resize((size, size), Image.LANCZOS)
+
+
+def _text_on(c) -> tuple:
+    return (15, 23, 42) if (c[0] * 299 + c[1] * 587 + c[2] * 114) / 1000 > 150 else (255, 255, 255)
+
+
 def render(rows: list) -> Optional[bytes]:
     """rows : [{name, sub, weight, colors, mtype, finish}] -> JPEG ; None sans filament colore.
-    Une case par filament, en grille presque carree (Telegram recadre les images d'un album en mosaique)."""
+    Une bobine par filament sur fond sombre teinte de leurs couleurs, en grille presque carree (Telegram recadre
+    les images d'un album en mosaique)."""
     rows = [r for r in rows if r.get("colors")]                    # tous : il ne doit en manquer aucun
     if not rows:
         return None
     n = len(rows)
-    cols = 1 if n == 1 else 2 if n <= 4 else 3 if n <= 9 else 4
-    gap = 28
-    cw = (W - 2 * PAD - (cols - 1) * gap) // cols
-    sw = cw if n > 1 else min(cw, 640)
-    f_name, f_sub, f_w = _font((42, 42, 32, 26)[cols - 1], True), _font((28, 28, 23, 19)[cols - 1]), _font((36, 36, 28, 23)[cols - 1], True)
+    cols = 1 if n == 1 else 2 if n in (2, 4) else 3 if n <= 9 else 4
+    gap, pad, head = 24, 40, 92
+    cw = (W - 2 * pad - (cols - 1) * gap) // cols
+    sp = min(560, int(cw * (0.62 if n == 1 else 0.8)))
+    k = (1.0, 1.0, 0.8, 0.66)[cols - 1]
+    f_name, f_sub, f_w = _font(int(40 * k), True), _font(int(25 * k)), _font(int(30 * k), True)
+    f_head, f_cnt = _font(26, True), _font(26)
     tmp = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    lh = lambda f: f.getbbox("Ag")[3] + 8
-    # la place des textes : ce que prend le plus long (un nom sur deux lignes, des details)
-    tw0 = min(cw, 640) if n == 1 else cw
-    nl = max(len(_lines(tmp, r["name"], f_name, tw0)) for r in rows)
-    text_h = nl * lh(f_name) + (lh(f_sub) if any(r.get("sub") for r in rows) else 0) + lh(f_w) + 14
+
+    def lh(f):
+        return f.getbbox("Ag")[3] + 6
+
+    tw = cw - 32
+    nl = max(len(_lines(tmp, r["name"], f_name, tw)) for r in rows)
+    has_sub = any(r.get("sub") for r in rows)
+    pill_h = lh(f_w) + 14
+    cell_h = 28 + sp + 22 + nl * lh(f_name) + (lh(f_sub) if has_sub else 0) + 12 + pill_h + 26
     nrows = math.ceil(n / cols)
-    H = PAD * 2 + nrows * (sw + 18 + text_h) + (nrows - 1) * gap
-    im = Image.new("RGB", (W, H), BG)
-    d = ImageDraw.Draw(im)
+    H = head + pad + nrows * cell_h + (nrows - 1) * gap
+    # le fond : un degrade nuit, et une lueur de la couleur de chaque filament derriere sa bobine
+    ys, xs = np.mgrid[0:H, 0:W].astype(np.float32)
+    g = (xs / W * 0.4 + ys / H * 0.6)[..., None]
+    bg = np.array([11, 14, 28], np.float32) * (1 - g) + np.array([30, 22, 52], np.float32) * g
+    im = Image.fromarray(bg.astype(np.uint8), "RGB").convert("RGBA")
+    glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    gd = ImageDraw.Draw(glow)
+    cells = []
     for i, r in enumerate(rows):
-        cx, cy = PAD + (i % cols) * (cw + gap), PAD + (i // cols) * (sw + 18 + text_h + gap)
-        x0 = cx + (cw - sw) // 2
-        tx, tw = (x0, sw) if n == 1 else (cx, cw)
-        sq = swatch(r["colors"], r.get("mtype"), r.get("finish"), sw)
-        rad = sw // 7
-        mask = Image.new("L", (sw * 3, sw * 3), 0)                      # coins arrondis, lisses (trace a x3)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, sw * 3 - 1, sw * 3 - 1), rad * 3, fill=255)
-        mask = mask.resize((sw, sw), Image.LANCZOS)
-        if r.get("finish") == "glow":                                  # le phosphorescent : un halo autour
-            halo = Image.new("RGBA", (sw + 80, sw + 80), (0, 0, 0, 0))
-            halo.paste(r["colors"][0][:3] + (170,), (40, 40), mask)
-            im.paste(halo.filter(ImageFilter.GaussianBlur(16)), (x0 - 40, cy - 40), halo.filter(ImageFilter.GaussianBlur(16)))
-        shadow = Image.new("RGBA", (sw + 40, sw + 40), (0, 0, 0, 0))
-        shadow.paste((30, 41, 59, 60), (20, 26), mask)
-        shadow = shadow.filter(ImageFilter.GaussianBlur(9))
-        im.paste(shadow, (x0 - 20, cy - 20), shadow)
-        im.paste(sq.convert("RGB"), (x0, cy), mask)
-        d.rounded_rectangle((x0, cy, x0 + sw - 1, cy + sw - 1), rad, outline=(203, 213, 225), width=2)
-        y = cy + sw + 18
+        row_i, col_i = divmod(i, cols)
+        in_row = min(cols, n - row_i * cols)                       # la derniere rangee, centree
+        x0 = (W - (in_row * cw + (in_row - 1) * gap)) // 2 + col_i * (cw + gap)
+        y0 = head + row_i * (cell_h + gap)
+        cells.append((x0, y0))
+        c = r["colors"][0][:3]
+        cx, cy, rr = x0 + cw / 2, y0 + 28 + sp / 2, sp * 0.62
+        gd.ellipse((cx - rr, cy - rr, cx + rr, cy + rr), fill=c + (120 if r.get("finish") == "glow" else 80,))
+    im.alpha_composite(glow.filter(ImageFilter.GaussianBlur(max(40, cw // 5))))
+    for (x0, y0), r in zip(cells, rows):
+        # la carte de verre
+        panel = Image.new("RGBA", (cw, cell_h), (0, 0, 0, 0))
+        ImageDraw.Draw(panel).rounded_rectangle((0, 0, cw - 1, cell_h - 1), 28, fill=(255, 255, 255, 14),
+                                                outline=(255, 255, 255, 34), width=2)
+        im.alpha_composite(panel, (x0, y0))
+        # la bobine, et son ombre
+        sx, sy = x0 + (cw - sp) // 2, y0 + 28
+        sh = Image.new("RGBA", (sp + 80, sp + 80), (0, 0, 0, 0))
+        ImageDraw.Draw(sh).ellipse((40, 52, 40 + sp, 52 + sp), fill=(0, 0, 0, 150))
+        im.alpha_composite(sh.filter(ImageFilter.GaussianBlur(14)), (sx - 40, sy - 40))
+        im.alpha_composite(spool(r["colors"], r.get("mtype"), r.get("finish"), sp), (sx, sy))
+    # les textes et les traits, sur l'image en RGB : Pillow n'y melange la transparence que la
+    im = im.convert("RGB")
+    d = ImageDraw.Draw(im, "RGBA")
+    d.text((pad, 44), "FILAMENTS", font=f_head, fill=(203, 213, 225), anchor="lm")
+    if n > 1:
+        hw = d.textlength("FILAMENTS", font=f_head)
+        d.text((pad + hw + 14, 44), f"·  {n} couleurs", font=f_cnt, fill=(148, 163, 184), anchor="lm")
+    d.line((pad, 74, W - pad, 74), fill=(255, 255, 255, 28), width=2)
+    for (x0, y0), r in zip(cells, rows):
+        sy = y0 + 28
+        # les textes, centres
+        cx, y = x0 + cw // 2, sy + sp + 22
         for line in _lines(d, r["name"], f_name, tw):
-            d.text((tx, y), line, font=f_name, fill=TEXT)
+            d.text((cx, y), line, font=f_name, fill=(248, 250, 252), anchor="mt")
             y += lh(f_name)
         if r.get("sub"):
-            d.text((tx, y), _fit(d, r["sub"], f_sub, tw), font=f_sub, fill=MUTED)
-            y += lh(f_sub)
+            d.text((cx, y), _fit(d, r["sub"], f_sub, tw), font=f_sub, fill=(148, 163, 184), anchor="mt")
+        y = y0 + cell_h - 26 - pill_h
         if r.get("weight"):
-            d.text((tx, y + 4), r["weight"], font=f_w, fill=TEXT)
+            c = r["colors"][0][:3]
+            pw = int(d.textlength(r["weight"], font=f_w)) + 40
+            d.rounded_rectangle((cx - pw // 2, y, cx + pw // 2, y + pill_h), pill_h // 2, fill=c + (255,),
+                                outline=(255, 255, 255, 60), width=2)
+            d.text((cx, y + pill_h / 2), r["weight"], font=f_w, fill=_text_on(c), anchor="mm")
     buf = io.BytesIO()
     im.save(buf, "JPEG", quality=92, subsampling=0)
     return buf.getvalue()
