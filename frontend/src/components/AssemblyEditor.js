@@ -221,6 +221,115 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const area = out.length() / 2; out.normalize();
     return [area, a, b, c];
   };
+  // « ⊞ Tout a plat, ecarte » (30/10/2026) : pour commencer un assemblage, chaque piece (ou groupe) posee sur sa plus
+  // grande face d'appui, tournee pour tenir le moins de place, puis toutes rangees en rangees sur le plateau, ecartees.
+  // Les collages sont defaits (↶ revient a l'assemblage)
+  // les points d'une piece dans le repere du support (au plus ~n, regulierement pris)
+  const ptsOf = (unit, n) => {
+    let nv = 0;
+    for (const g of unit) for (const m of g.children) if (m.isMesh && m.geometry?.attributes?.position) nv += m.geometry.attributes.position.count;
+    const st = Math.max(1, Math.ceil(nv / n)), out = [], v = new THREE.Vector3();
+    for (const g of unit) { g.updateMatrix(); for (const m of g.children) {
+      if (!m.isMesh || !m.geometry?.attributes?.position) continue;
+      const pa = m.geometry.attributes.position.array, M = g.matrix.clone().multiply(m.matrix);
+      for (let i = 0; i < pa.length; i += 3 * st) { v.set(pa[i], pa[i + 1], pa[i + 2]).applyMatrix4(M); out.push(v.x, v.y, v.z); }
+    } }
+    return out;
+  };
+  const flatOf = unit => {
+    // les triangles (normale, surface, centre), au plus ~20 000 regardes, dans le repere du support
+    let nt = 0;
+    for (const g of unit) { g.updateMatrix(); for (const m of g.children) if (m.isMesh && m.geometry?.attributes?.position) nt += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3; }
+    const st = Math.max(1, Math.ceil(nt / 20000)), T = [];
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3(), e = new THREE.Vector3();
+    for (const g of unit) for (const m of g.children) {
+      if (!m.isMesh || !m.geometry?.attributes?.position) continue;
+      const M = g.matrix.clone().multiply(m.matrix), pos = m.geometry.attributes.position, ix = m.geometry.index?.array;
+      const k = ix ? ix.length / 3 : pos.count / 3;
+      for (let t = 0; t < k; t += st) {
+        a.fromBufferAttribute(pos, ix ? ix[t * 3] : t * 3).applyMatrix4(M); b.fromBufferAttribute(pos, ix ? ix[t * 3 + 1] : t * 3 + 1).applyMatrix4(M);
+        c.fromBufferAttribute(pos, ix ? ix[t * 3 + 2] : t * 3 + 2).applyMatrix4(M);
+        n.subVectors(b, a).cross(e.subVectors(c, a));
+        const ar = n.length() / 2;
+        if (ar < 1e-9) continue;
+        n.normalize();
+        T.push(n.x, n.y, n.z, ar * st, (a.x + b.x + c.x) / 3, (a.y + b.y + c.y) / 3, (a.z + b.z + c.z) / 3);
+      }
+    }
+    if (!T.length) return null;
+    const P = ptsOf(unit, 20000);
+    // les directions des grandes faces planes (normales regroupees a ~2° pres), les plus etendues d'abord
+    const bins = new Map();
+    for (let i = 0; i < T.length; i += 7) {
+      const key = `${Math.round(T[i] * 25)},${Math.round(T[i + 1] * 25)},${Math.round(T[i + 2] * 25)}`;
+      const e = bins.get(key) || { s: new THREE.Vector3(), ar: 0 };
+      e.s.x += T[i] * T[i + 3]; e.s.y += T[i + 1] * T[i + 3]; e.s.z += T[i + 2] * T[i + 3]; e.ar += T[i + 3]; bins.set(key, e);
+    }
+    const cands = [...bins.values()].sort((x, y) => y.ar - x.ar).slice(0, 10).map(e => e.s.normalize());
+    // l'appui d'une direction : la surface des triangles tournes vers elle, au plus loin dans cette direction (0,3 mm)
+    const support = d => {
+      let far = -Infinity;
+      for (let i = 0; i < P.length; i += 3) far = Math.max(far, P[i] * d.x + P[i + 1] * d.y + P[i + 2] * d.z);
+      let s = 0;
+      for (let i = 0; i < T.length; i += 7) if (T[i] * d.x + T[i + 1] * d.y + T[i + 2] * d.z > 0.995 && T[i + 4] * d.x + T[i + 5] * d.y + T[i + 6] * d.z > far - 0.3) s += T[i + 3];
+      return s;
+    };
+    let best = new THREE.Vector3(0, 0, -1), bs = support(best) * 1.05;   // telle qu'elle est, si a peu pres aussi bien
+    for (const d of cands) { const s = support(d); if (s > bs) { bs = s; best = d; } }
+    return best;
+  };
+  const layFlat = () => {
+    const units = [];
+    for (const g of all) if (g.visible && !g.userData.excluded && !units.some(u => u.includes(g))) units.push(unitOf(g).filter(x => x.visible && !x.userData.excluded));
+    if (!units.length) return;
+    const c0 = boxOfAll(units.flat()).getCenter(new THREE.Vector3());
+    joints = [];
+    const z = new THREE.Vector3(0, 0, -1), up = new THREE.Vector3(0, 0, 1);
+    // l'emprise au sol d'une piece : ses points (la boite d'une piece tournee deborde de la piece)
+    const foot = u => {
+      const p = ptsOf(u, 6000), b = [Infinity, Infinity, -Infinity, -Infinity];
+      for (let i = 0; i < p.length; i += 3) { b[0] = Math.min(b[0], p[i]); b[1] = Math.min(b[1], p[i + 1]); b[2] = Math.max(b[2], p[i]); b[3] = Math.max(b[3], p[i + 1]); }
+      return b;
+    };
+    const boxes = units.map(u => {
+      const d = flatOf(u);
+      if (d && d.dot(z) < 0.9999) apply(u, about(boxOfAll(u).getCenter(new THREE.Vector3()), new THREE.Quaternion().setFromUnitVectors(d, z)));
+      // tournee a plat pour tenir le moins de place (la plus petite emprise, tous les 5°), le grand cote en X
+      const p = ptsOf(u, 3000);
+      let ba = 0, bArea = Infinity;
+      for (let k = 0; k < 18; k++) {
+        const th = k * Math.PI / 36, cs = Math.cos(th), sn = Math.sin(th);
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (let i = 0; i < p.length; i += 3) { const x = cs * p[i] - sn * p[i + 1], y = sn * p[i] + cs * p[i + 1]; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+        const area = (x1 - x0) * (y1 - y0);
+        if (area < bArea - 1e-6) { bArea = area; ba = (x1 - x0) >= (y1 - y0) ? th : th + Math.PI / 2; }
+      }
+      if (ba) apply(u, about(boxOfAll(u).getCenter(new THREE.Vector3()), new THREE.Quaternion().setFromAxisAngle(up, ba)));
+      drop(u);
+      return foot(u);
+    });
+    // en rangees, les plus profondes d'abord, a 8 mm les unes des autres
+    const gap = 8, sx = i => boxes[i][2] - boxes[i][0], sy = i => boxes[i][3] - boxes[i][1];
+    const order = units.map((u, i) => i).sort((i, j) => sy(j) - sy(i));
+    const W = Math.max(...order.map(sx), Math.sqrt(order.reduce((s, i) => s + (sx(i) + gap) * (sy(i) + gap), 0)) * 1.3);
+    let x = 0, y = 0, row = 0;
+    const at = [];
+    for (const i of order) {
+      if (x > 0 && x + sx(i) > W) { x = 0; y += row + gap; row = 0; }
+      at[i] = [x, y];
+      x += sx(i) + gap; row = Math.max(row, sy(i));
+    }
+    let X1 = 0, Y1 = 0;
+    order.forEach(i => { X1 = Math.max(X1, at[i][0] + sx(i)); Y1 = Math.max(Y1, at[i][1] + sy(i)); });
+    order.forEach(i => {
+      const tx = c0.x - X1 / 2 + at[i][0] - boxes[i][0], ty = c0.y + Y1 / 2 - at[i][1] - sy(i) - boxes[i][1];
+      apply(units[i], new THREE.Matrix4().makeTranslation(tx, ty, 0));
+    });
+    pivot = null; clearMarks(); showContact(); push(); setSel([]);
+    fitMsg = `Posées à plat, écartées : ${units.length} pièce${units.length > 1 ? "s" : ""} (↶ revient à l'assemblage)`;
+    egg("a_plat");
+    render(); onChange?.(state()); frame();
+  };
   // la face plane entiere autour d'un triangle (triangles voisins presque paralleles) : son centre, sa surface, son
   // grand axe (dans le repere du maillage)
   const regionOf = (geo, t0) => {
@@ -1764,6 +1873,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     },
     frame,
     // masquer la selection, pour atteindre ce qu'elle cache (la vue seulement : rien n'est enregistre) ; Alt+H : tout
+    layFlat: () => layFlat(),
     hide: () => { if (!sel.size) return; [...sel].forEach(g => { g.visible = false; }); setSel([]); egg("cache_cache"); },
     showAll: () => { all.forEach(g => { if (!g.userData.excluded) g.visible = true; }); render(); onChange?.(state()); },
     // exclure de l'assemblage (30/10/2026) : la piece n'est plus montree, meme hors edition ; enregistre, et remise depuis

@@ -1121,6 +1121,7 @@ const EDIT_HELP = [
     ["🧷 Aimanter", "lâchée à moins de 3 mm du sol ou d'une pièce, elle s'y colle"],
     ["Cran des déplacements (⚙)", "libre par défaut ; 0,1, 0,5, 1 ou 5 mm pour avancer par pas (gardé sur l'appareil) ; Alt maintenu : libre"],
     ["Ctrl + Z / Ctrl + Y", "annuler / refaire"],
+    ["⊞ Tout à plat, écarté (🕘)", "pour commencer : chaque pièce (ou groupe) posée sur sa plus grande face, tournée pour tenir le moins de place, puis toutes rangées et écartées sur le plateau ; les collages sont défaits, ↶ revient"],
     ["💾 Enregistrer", "gardé dans BambuNymous, ton 3MF n'est pas touché ; ↺ Vue du 3MF pour revenir"],
   ]],
 ];
@@ -1312,6 +1313,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
     : est.fitMsg ? <b style={{ color: /^(Assemblée|Séparée|Collée|Ajustée|Groupée|Posée|Coupée)/.test(est.fitMsg) ? "#16a34a" : "#d97706" }}>{est.fitMsg}</b>
     : est.liveAngle != null ? <b style={{ color: "#0EA5E9", fontSize: 15 }}>Rotation : {String(est.liveAngle).replace(".", ",")}°</b> : null;
   const verMenu = [
+    { label: "⊞ Tout à plat, écarté", onClick: () => api?.layFlat(), tip: "Pour commencer : chaque pièce posée sur sa plus grande face, toutes écartées sur le plateau (les collages sont défaits ; ↶ revient)" },
     { label: "🕘 Versions enregistrées", onClick: onVersions, tip: "Reprendre un assemblage enregistré avant (chaque version est gardée)" },
     sure ? { label: "Confirmer : revenir à la vue du 3MF", danger: true, onClick: () => { setSure(false); onReset(); } }
       : { label: "↺ Vue du 3MF", keep: true, onClick: () => { setSure(true); setTimeout(() => setSure(false), 4000); }, tip: "Oublier l'assemblage enregistré (il reste dans les versions)" },
