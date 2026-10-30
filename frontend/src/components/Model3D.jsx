@@ -1670,7 +1670,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           height: pfull ? "100dvh" : full ? "100vh" : "min(62dvh, 560px)", borderRadius: full || pfull ? 0 : 18, overflow: "hidden",
           border: full || pfull ? "none" : "1px solid var(--border)", ...(pfull ? { backgroundColor: "var(--sheet-bg)" } : {}),
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
-          {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}|${vkey}|${piecePal ? Object.keys(piecePal).length : 0}|${editing ? "" : viewSel}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown} piecePalettes={piecePal}
+          {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}|${vkey}|${piecePal ? Object.keys(piecePal).length : 0}|${editing || viewSel === "mine" ? "" : viewSel}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown} piecePalettes={piecePal}
             pieces={p.assembled ? p.pieces : null} edit={p.assembled && !(origView && !editing) ? (frPick && !editing ? frPick.edit : edit) : null} editApi={editApi} pad={full || editing} editing={editing}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
