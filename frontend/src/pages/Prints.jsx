@@ -2893,6 +2893,17 @@ function MyGalleryView({ search, sortF = "recent", data, loading, kind = "photos
   const [selectedPrint, setSelectedPrint] = useState(null);
   // la galerie des vues 3D (30/10/2026) : un clic ouvre le modele en 3D, sur sa vue assemblee (ou son plateau s'il n'en a qu'un)
   const [view3d, setView3d] = useState(null);
+  // son profil : celui de l'assemblage le plus recent du modele (30/10/2026 : sans profil, le serveur en devinait un
+  // autre que la fiche et ouvrait l'apercu MakerWorld) ; sans assemblage, celui de l'impression (le serveur le lit)
+  const [asmProf, setAsmProf] = useState(undefined);
+  useEffect(() => {
+    const did = view3d && (view3d.design_id || view3d.design_3d);
+    if (!did) { setAsmProf(undefined); return; }
+    let alive = true;
+    client.get(`/makerworld/3d/shared-edits/${encodeURIComponent(did)}`)
+      .then(r => alive && setAsmProf(r.data?.edits?.find(e => e.profile)?.profile || null)).catch(() => alive && setAsmProf(null));
+    return () => { alive = false; };
+  }, [view3d]);
   const [selectedGroup, setSelectedGroup] = useState(null);
   // la liste ne change qu'avec les donnees, la recherche ou le tri (28/10/2026 : recreee a chaque rendu, la
   // grille repartait a ses 30 premieres tuiles a chaque ouverture de fiche ou de visionneuse)
@@ -2955,6 +2966,7 @@ function MyGalleryView({ search, sortF = "recent", data, loading, kind = "photos
         onDelete={()=>setSelectedPrint(null)} onChanged={()=>{}}/>
     )}
     {view3d && <Model3D designId={view3d.design_id || view3d.design_3d} title={view3d.title} focus
+      profileId={view3d.mw_profile_id || asmProf || null} wait={!view3d.mw_profile_id && asmProf === undefined}
       onFiche={() => { const it = view3d; setView3d(null); if (it.kind === "group") setSelectedGroup(it); else setSelectedPrint(it); }}
       printId={view3d.kind === "print" ? view3d.id : view3d.print_ids?.[0] || null}
       usedPrints={view3d.kind === "print" ? [view3d.id] : view3d.print_ids || []}

@@ -534,6 +534,14 @@ async def prints_gallery(kind: str = "photos", _: str = Depends(get_current_user
     return json_response(out)
 
 
+def _mw_profile(pid, plates):
+    from ....services.mw_source import _profile
+    try:
+        return _profile(pid, plates)
+    except Exception:
+        return None
+
+
 async def _build_gallery(kind: str = "photos") -> dict:
     """
     Galerie photo — INDÉPENDANTE de la pagination de /prints (parcourt tout
@@ -548,7 +556,8 @@ async def _build_gallery(kind: str = "photos") -> dict:
     from ....models.print_history import PrintSnapshot as _Snap
     cols = (Print.id, Print.group_id, Print.file_name, Print.status, Print.print_date, Print.duration_seconds,
             Print.estimated_seconds, Print.total_weight_g, Print.total_cost_filament, Print.electric_cost,
-            Print.total_cost, Print.number_of_items, Print.cover_photo, Print.design_id, Print.thumb_3d)
+            Print.total_cost, Print.number_of_items, Print.cover_photo, Print.design_id, Print.thumb_3d,
+            Print.mw_profile_id, Print.mw_plates)
     async with AsyncSessionLocal() as db:
         rows = [_NS(**r._mapping) for r in (await db.execute(select(*cols))).all()]
         snaps: dict = {}
@@ -638,6 +647,8 @@ async def _build_gallery(kind: str = "photos") -> dict:
                 "cost_per_item": round(tc / nb, 2) if nb > 1 else None,
                 "photos": photos,
                 "design_id": str(p.design_id) if p.design_id else None,
+                # le profil connu de l'impression (imprimante, ou choisi a la main) : la vue 3D de la galerie s'ouvre dessus
+                "mw_profile_id": _mw_profile(p.mw_profile_id, p.mw_plates) or None,
             })
 
     # Photos uploadées directement dans le dossier du groupe (pas via un print précis) : le disque est lu

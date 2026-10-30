@@ -608,10 +608,18 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
     if not did.isdigit():
         raise HTTPException(404, "Modèle inconnu")
     # le profil affiche par la fiche (deduit, ou choisi dans la liste) passe avant celui lu sur l'impression
-    prof = await _prof_of(did, profile, print_id)
+    how = []
+    prof = await _prof_of(did, profile, print_id, how)
     t0 = _t.perf_counter()
     # le 3MF d'origine de CE profil ; sans profil connu, celui retenu pour le modele
     iid = known(did, prof) if prof else known(did, "")
+    if not iid and how:
+        # un profil seulement devine (ni donne, ni lu sur l'impression) dont le 3MF n'est pas la : le 3MF deja garde
+        # pour ce modele plutot que l'apercu MakerWorld (30/10/2026 : la galerie des vues 3D, qui ne donne pas de
+        # profil, ouvrait l'apercu quand la fiche, elle, montrait le 3MF)
+        from ....services.mw_source import _index, _IDX
+        _index()
+        iid = known(did, "") or next((v for k, v in list(_IDX["v"].items()) if k.startswith(f"{did}:") and path_of(v).is_file()), None)
     fetch_error = None
     # un copain qui visite (cle fk_), ou un simple coup d'oeil (peek) : rien n'est telecharge ni converti ici
     # (29/10/2026) ; seule une vue deja calculee et a jour se montre, sinon « pas encore calculee chez lui »
@@ -1353,7 +1361,7 @@ async def _used_options(print_ids: list) -> list:
     return out
 
 
-async def _prof_of(did: str, profile: str, print_id: int) -> str:
+async def _prof_of(did: str, profile: str, print_id: int, how: list | None = None) -> str:
     """Le profil a montrer : celui donne par la fiche, sinon celui de l'impression (imprimante, ou choisi a la main
     avec ses plateaux), sinon celui que j'ai imprime, deduit de mes impressions (comme la carte et la fiche)."""
     from ....services.mw_source import _profile
@@ -1370,6 +1378,8 @@ async def _prof_of(did: str, profile: str, print_id: int) -> str:
         try:
             from ....services.mw_plate_guess import printed_profile
             prof = (await printed_profile(did))["profile"] or ""
+            if how is not None and prof:
+                how.append("devine")
         except Exception:
             logger.exception("[3D] profil imprime")
     return prof
