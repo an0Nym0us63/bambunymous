@@ -1027,6 +1027,46 @@ const whenFr = d => {
 };
 // une version dans l'adresse d'une image : « & » si elle a deja des parametres (30/10/2026 : chez un copain, l'adresse
 // porte deja la cle d'acces ; « ?v= » la collait a la cle, refusee, et la vignette 3D d'un groupe restait vide)
+// Lier toutes les impressions d'un groupe a un meme modele MakerWorld (30/10/2026) : son ID, ou son adresse collee
+// (« makerworld.com/…/models/123456… ») ; les ID deja portes par des impressions du groupe sont proposes
+function GroupMwLink({ prints, onClose, onDone }) {
+  const known = [...prints.reduce((m, x) => { const d = String(x.design_id || "").trim(); if (d) m.set(d, (m.get(d) || 0) + 1); return m; }, new Map())]
+    .sort((a, b) => b[1] - a[1]);
+  const [val, setVal] = useState(known[0]?.[0] || "");
+  const [busy, setBusy] = useState(false);
+  const id = (String(val).match(/models\/(\d+)/) || String(val).match(/^\s*(\d+)\s*$/) || [])[1] || "";
+  const todo = prints.filter(x => String(x.design_id || "").trim() !== id);
+  const go = async () => {
+    if (!id) return;
+    setBusy(true);
+    try {
+      for (const x of todo) await client.patch(`/prints/${x.id}`, { design_id: id });
+      onDone();
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); setBusy(false); }
+  };
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1300, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(420px, 100%)", background: "var(--sheet-bg)", border: "1px solid var(--border)", borderRadius: 16, padding: 16,
+      display: "flex", flexDirection: "column", gap: 10, boxShadow: "0 20px 50px rgba(0,0,0,.35)" }}>
+      <div style={{ fontSize: 15, fontWeight: 900, color: "var(--text)" }}>🔗 Lier toutes au modèle MakerWorld</div>
+      <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.4 }}>L'ID du modèle, ou son adresse MakerWorld collée telle quelle : toutes les impressions du groupe le prennent.</div>
+      <input autoFocus value={val} onChange={e => setVal(e.target.value)} onKeyDown={e => { if (e.key === "Enter") go(); }} placeholder="ex : 123456, ou https://makerworld.com/…/models/123456…"
+        style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 14 }}/>
+      {known.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {known.map(([d, n]) => <button key={d} type="button" onClick={() => setVal(d)} style={{ padding: "5px 10px", borderRadius: 999, cursor: "pointer", fontSize: 12, fontWeight: 800,
+          border: d === id ? "none" : "1px solid var(--border)", color: d === id ? "#fff" : "var(--text2)", background: d === id ? "#00AE42" : "var(--surface2)" }}>
+          {d} · {n} impression{n > 1 ? "s" : ""}</button>)}
+      </div>}
+      <div style={{ fontSize: 12, color: id ? "var(--text2)" : "#d97706", fontWeight: 700 }}>
+        {!id ? "Un ID (des chiffres) ou une adresse de modèle MakerWorld" : todo.length ? `${todo.length} impression${todo.length > 1 ? "s" : ""} sur ${prints.length} à lier au modèle ${id}` : `Toutes sont déjà liées au modèle ${id}`}</div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button type="button" onClick={onClose} style={{ padding: "9px 14px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)", fontWeight: 800, cursor: "pointer" }}>Annuler</button>
+        <button type="button" disabled={!id || !todo.length || busy} onClick={go} style={{ padding: "9px 14px", borderRadius: 10, border: "none", fontWeight: 800, cursor: "pointer",
+          color: "#fff", background: "linear-gradient(135deg, #00AE42, #0EA5E9)", opacity: !id || !todo.length || busy ? 0.5 : 1 }}>{busy ? "…" : "🔗 Lier"}</button>
+      </div>
+    </div>
+  </div>;
+}
+
 const withV = (url, v) => `${url}${url.includes("?") ? "&" : "?"}v=${v}`;
 
 // les pastilles posees sur les vignettes (30/10/2026) : petites, pastel, le texte a la couleur du sens (au lieu d'aplats
@@ -1618,6 +1658,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   const isAdmin = useIsAdmin();
   const groupVisiting = useFriend(s => s.friend);
   const [prints, setPrints] = useState([]);
+  const [mwAll, setMwAll] = useState(false);          // « Lier toutes au modele MakerWorld »
   const [sharing, setSharing] = useState(false);
   const [nbItems, setNbItems] = useState(nbItemsProp || 1);
   const [editNb, setEditNb] = useState(false);
@@ -1701,6 +1742,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       objQ && { icon: "📦", label: objQ.remaining > 0 ? "Créer des objets" : "Objets : tous créés", hint: `${objQ.used} / ${objQ.total} déjà créés`, tone: "#22C55E",
         onClick: () => setObjCreate(true) },
       { icon: "📤", label: "Dégrouper", hint: "Les impressions restent", tone: "#A78BFA", onClick: handleUngroup },
+      isAdmin && { icon: "🔗", label: "Lier toutes au modèle MakerWorld", hint: "Le même ID MakerWorld pour toutes les impressions du groupe", tone: "#00AE42",
+        onClick: () => setMwAll(true) },
       isAdmin && prints[0]?.group_has_vue3d && { icon: "🧊", label: "Vues 3D et vignette", hint: thumb3d ? "Vignette : une vue 3D" : "Vignette : la mosaïque", tone: "#0EA5E9",
         onClick: () => openVue3D({ kind: "group", id: groupId, onDone: async () => {
           try { const r = await client.get(`/prints/groups/${groupId}/vue3d`), cv = r.data.cover;
@@ -1939,6 +1982,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       {objCreate && <ObjectCreateSheet parentType="group" parentId={groupId} defaultName={title} costFabrication={totalCost / nbItems}
         onDone={() => { setObjRefresh(k => k + 1); onUpdated?.(); }} onClose={() => setObjCreate(false)}/>}
       {sharing && <ShareSheet kind="group" id={groupId} onClose={() => setSharing(false)}/>}
+      {mwAll && <GroupMwLink prints={prints} onClose={() => setMwAll(false)} onDone={() => { setMwAll(false); loadPrints(); onUpdated?.(); }}/>}
       {unmapping && <UnmapFilamentConfirm f={unmapping} printId={unmapping.print_id} onClose={() => setUnmapping(null)} onDone={() => { setUnmapping(null); loadPrints(); onUpdated?.(); }}/>}
       {editGroup && <GroupEditSheet groupId={groupId} name={title} onClose={() => setEditGroup(false)} onSaved={() => { setEditGroup(false); loadPrints(); onUpdated?.(); }}/>}
       {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={() => setSelSpool(null)} zIndex={2000}/>}
