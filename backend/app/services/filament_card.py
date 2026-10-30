@@ -237,18 +237,21 @@ def _lines(draw, text: str, font, width: int, most: int = 2) -> list:
 def render(rows: list) -> Optional[bytes]:
     """rows : [{name, sub, weight, colors, mtype, finish}] -> JPEG ; None sans filament colore.
     Une case par filament, en grille presque carree (Telegram recadre les images d'un album en mosaique)."""
-    rows = [r for r in rows if r.get("colors")][:6]
+    rows = [r for r in rows if r.get("colors")]                    # tous : il ne doit en manquer aucun
     if not rows:
         return None
     n = len(rows)
-    cols = 1 if n == 1 else 2 if n <= 4 else 3
+    cols = 1 if n == 1 else 2 if n <= 4 else 3 if n <= 9 else 4
     gap = 28
     cw = (W - 2 * PAD - (cols - 1) * gap) // cols
     sw = cw if n > 1 else min(cw, 640)
-    f_name, f_sub, f_w = _font(42 if cols < 3 else 32, True), _font(28 if cols < 3 else 23), _font(36 if cols < 3 else 28, True)
+    f_name, f_sub, f_w = _font((42, 42, 32, 26)[cols - 1], True), _font((28, 28, 23, 19)[cols - 1]), _font((36, 36, 28, 23)[cols - 1], True)
     tmp = ImageDraw.Draw(Image.new("RGB", (1, 1)))
     lh = lambda f: f.getbbox("Ag")[3] + 8
-    text_h = 2 * lh(f_name) + lh(f_sub) + lh(f_w) + 14
+    # la place des textes : ce que prend le plus long (un nom sur deux lignes, des details)
+    tw0 = min(cw, 640) if n == 1 else cw
+    nl = max(len(_lines(tmp, r["name"], f_name, tw0)) for r in rows)
+    text_h = nl * lh(f_name) + (lh(f_sub) if any(r.get("sub") for r in rows) else 0) + lh(f_w) + 14
     nrows = math.ceil(n / cols)
     H = PAD * 2 + nrows * (sw + 18 + text_h) + (nrows - 1) * gap
     im = Image.new("RGB", (W, H), BG)

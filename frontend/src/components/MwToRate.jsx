@@ -346,7 +346,8 @@ function RateForm({ x, targets, onDone }) {
           {picked.size ? `Photos jointes (${picked.size}) : touche pour retirer ou ajouter` : "Sans photo, c'est possible aussi"}</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           {(x.photos || []).map(u => (
-            <img key={u} src={u} alt="" onClick={() => toggle(u)} style={{ width: 58, height: 58, borderRadius: 12, objectFit: "cover",
+            <img key={u} src={u} alt="" onClick={() => toggle(u)}
+              data-tip={u.includes("/rate-card/") ? "La carte des filaments : leurs vraies couleurs et finitions, avec le poids de chacun" : undefined} style={{ width: 58, height: 58, borderRadius: 12, objectFit: "cover",
               cursor: "pointer", border: picked.has(u) ? "2px solid #f59e0b" : "2px solid transparent", opacity: picked.has(u) ? 1 : 0.4 }}/>
           ))}
           {extras.map(e => (

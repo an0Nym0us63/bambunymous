@@ -8,6 +8,7 @@ Sans compte connecté, la liste montre toutes les impressions (rien d'exclu).
 """
 import asyncio
 import logging
+import re
 import time
 
 logger = logging.getLogger(__name__)
@@ -165,6 +166,37 @@ async def rate_status(design_id: str, fresh: bool = False) -> dict:
     return {"state": "to_rate" if done else "no_print", "done": done}
 
 
+def imgs_of(g) -> list:
+    return [u for u in (g.get("photos") or []) if u.split("?")[0].lower().endswith(tuple(_MIME))]
+
+
+def card_url(print_id) -> str:
+    return f"/api/v1/makerworld/rate-card/{int(print_id)}.jpg"
+
+
+_cards: dict = {}
+
+
+async def card_jpeg(print_id: int):
+    """La carte des filaments d'une impression (telegram_share), en JPEG ; None sans filament colore."""
+    from sqlalchemy.orm import selectinload
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    from . import filament_card
+    from .telegram_share import filaments_used, card_rows
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, int(print_id), options=[selectinload(Print.filament_usage)])
+        rows = card_rows(await filaments_used(db, [p])) if p else []
+    if not rows:
+        return None
+    k = repr(rows)
+    if k not in _cards:
+        if len(_cards) > 30:
+            _cards.clear()
+        _cards[k] = await asyncio.to_thread(filament_card.render, rows)
+    return _cards[k]
+
+
 async def to_rate(fresh: bool = False) -> dict:
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
@@ -178,7 +210,7 @@ async def to_rate(fresh: bool = False) -> dict:
     my_uid, mine = await own_designs()
     async with AsyncSessionLocal() as db:
         prints = (await db.execute(
-            select(Print).options(selectinload(Print.snapshots), selectinload(Print.group))
+            select(Print).options(selectinload(Print.snapshots), selectinload(Print.group), selectinload(Print.filament_usage))
             .where(Print.design_id.isnot(None), Print.status.in_(DONE_STATUSES))
             .order_by(Print.print_date.desc()))).scalars().all()
         prints = [p for p in prints if str(p.design_id or "").strip().isdigit()]
@@ -213,8 +245,12 @@ async def to_rate(fresh: bool = False) -> dict:
                                "photos": [], "photo_source": None, "print_ids": []}
         it["printed"] += 1
         it["print_ids"].append(p.id)
+        # la carte des filaments (30/10/2026) : celle de l'impression dont viennent les photos, sinon la plus recente
+        colored = any(u.color_hex and (u.grams_used or 0) > 0 for u in p.filament_usage)
+        if colored and ("card_print" not in it or (not it["photos"] and imgs_of(g))):
+            it["card_print"] = p.id
         # Photos : celles du print le plus recent qui en a ; sinon celles de son groupe.
-        imgs = [u for u in (g.get("photos") or []) if u.split("?")[0].lower().endswith(tuple(_MIME))]
+        imgs = imgs_of(g)
         if not it["photos"] and imgs:
             it["photos"], it["photo_source"] = imgs[:8], g.get("photo_source")
             it["print_name"] = g.get("name")
@@ -246,6 +282,10 @@ async def to_rate(fresh: bool = False) -> dict:
     vals = [x for x in items.values() if x.get("awaited")] if rated is not None else list(items.values())
     out = sorted(vals, key=lambda x: x["last_date"] or "", reverse=True)
     out.sort(key=lambda x: not x["photos"])                 # avec photos d'abord, puis les plus recents
+    for x in out:                                           # la carte en dernier, dans la limite des photos
+        pid = x.pop("card_print", None)
+        if pid:
+            x["photos"] = x["photos"][:MAX_PHOTOS - 1] + [card_url(pid)]
     return {"items": out, "rated_known": rated is not None, "stats": stats}
 
 
@@ -438,6 +478,17 @@ async def _submit(design_id: str, rating_id: str, score: int, content: str, phot
         raise AccountError("Texte trop long (2000 caractères au plus)")
     files = []
     for u in (photos or [])[:MAX_PHOTOS]:
+        c = re.fullmatch(r"/api/v1/makerworld/rate-card/(\d+)\.jpg", u or "")
+        if c:                                     # la carte des filaments : dessinee pour l'envoi
+            import uuid
+            jpg = await card_jpeg(int(c.group(1)))
+            if not jpg:
+                continue
+            _tmp_dir().mkdir(parents=True, exist_ok=True)
+            f = _tmp_dir() / f"{uuid.uuid4().hex}.jpg"
+            f.write_bytes(jpg)
+            files.append(f)
+            continue
         f = _local_photo(u)
         if not f:
             raise AccountError(f"Photo introuvable ou format non pris en charge : {(u or '').split('/')[-1]}")

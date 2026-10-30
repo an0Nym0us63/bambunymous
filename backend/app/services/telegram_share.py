@@ -502,6 +502,47 @@ def _card_info(f=None, u=None) -> dict:
             "finish": None if fin in ("none", "translucent") else fin}
 
 
+async def filaments_used(db, prints) -> list:
+    """Les filaments d'impressions (filament_usage charge) : [(libelle, grammes, couleur, infos de la carte)], du
+    plus utilise au moins utilise, TOUS (30/10/2026 : la legende et la carte s'arretaient a 6). Nom du filament de
+    la bobine, sinon la matiere ; deux filaments sans bobine de couleurs differentes restent deux lignes."""
+    from sqlalchemy import select
+    from ..models.filament import Spool, Filament
+    spool_ids = {u.spool_id for p in prints for u in p.filament_usage if u.spool_id}
+    names = {}
+    if spool_ids:
+        rows = (await db.execute(
+            select(Spool.id, Filament).join(Filament, Filament.id == Spool.filament_id)
+            .where(Spool.id.in_(spool_ids))
+        )).all()
+        names = {sid: (f"{f.translated_name or f.name} ("
+                       # code couleur Bambu (ex. 10502) quand on le connait : c'est
+                       # lui qu'on cherche pour racheter la meme bobine
+                       + " · ".join(filter(None, [f.manufacturer, f.fila_type or f.material,
+                                                  (f.fila_color_code or "").strip() or None])) + ")",
+                       f.color, _card_info(f))
+                 for sid, f in rows}
+    fil, finfo = {}, {}
+    for p in prints:
+        for u in p.filament_usage:
+            got = names.get(u.spool_id)
+            if got:
+                label, col, info = got
+                key = label
+            else:
+                label, col, info = u.filament_type or "Filament", u.color_hex, _card_info(None, u)
+                key = (label, str(col or "").lstrip("#")[:6].upper())
+            g0, c0, _l = fil.get(key, (0, None, label))
+            fil[key] = (g0 + (u.grams_used or 0), c0 or col, label)
+            finfo.setdefault(key, info)
+    return [(lab, g, c, finfo[k]) for k, (g, c, lab) in sorted(fil.items(), key=lambda kv: -kv[1][0]) if g > 0]
+
+
+def card_rows(used: list) -> list:
+    """Les lignes de la carte des filaments (filament_card.render) : celles qui ont une couleur."""
+    return [{**info, "weight": _weight(g) or "0 g"} for _l, g, _c, info in used if info.get("colors")]
+
+
 def card_preview(card: list) -> str:
     """La carte en petit (data URL), pour la vignette de la fenetre de partage ; gardee pour les apercus suivants."""
     import base64
@@ -616,28 +657,7 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
         else:
             raise ShareError("Type inconnu")
 
-        # Filaments utilises : nom du filament de la bobine, sinon matiere.
-        spool_ids = {u.spool_id for p in prints for u in p.filament_usage if u.spool_id}
-        names = {}
-        if spool_ids:
-            rows = (await db.execute(
-                select(Spool.id, Filament).join(Filament, Filament.id == Spool.filament_id)
-                .where(Spool.id.in_(spool_ids))
-            )).all()
-            names = {sid: (f"{f.translated_name or f.name} ("
-                           # code couleur Bambu (ex. 10502) quand on le connait : c'est
-                           # lui qu'on cherche pour racheter la meme bobine
-                           + " · ".join(filter(None, [f.manufacturer, f.fila_type or f.material,
-                                                      (f.fila_color_code or "").strip() or None])) + ")",
-                           f.color, _card_info(f))
-                     for sid, f in rows}
-        fil, finfo = {}, {}
-        for p in prints:
-            for u in p.filament_usage:
-                key, col, info = names.get(u.spool_id) or (u.filament_type or "Filament", u.color_hex, _card_info(None, u))
-                g0, c0 = fil.get(key, (0, None))
-                fil[key] = (g0 + (u.grams_used or 0), c0 or col)
-                finfo.setdefault(key, info)
+        used = await filaments_used(db, prints)
 
     # Memes replis que la fiche (Prints.jsx) pour qu'impression seule et groupe
     # disent la meme chose : duree reelle, sinon l'estimation (en cours,
@@ -659,10 +679,9 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
         stats.append(f"⚖️ {_weight(weight)}")
     if dates:
         stats.append(f"📅 {max(dates).strftime('%d/%m/%Y')}")
-    used = [(k, g, c) for k, (g, c) in sorted(fil.items(), key=lambda kv: -kv[1][0]) if g > 0][:6]
-    fil_lines = [f"{color_dot(c)} {html.escape(k)} — {_weight(g) or '0 g'}" for k, g, c in used]
+    fil_lines = [f"{color_dot(c)} {html.escape(k)} — {_weight(g) or '0 g'}" for k, g, c, _i in used]
     # la carte des filaments (30/10/2026) : les memes, dans le meme ordre, en vraies couleurs
-    card = [{**finfo[k], "weight": _weight(g) or "0 g"} for k, g, _c in used if finfo.get(k, {}).get("colors")]
+    card = card_rows(used)
 
     live = _live(prints, tz_offset_min)
     if live:
@@ -833,8 +852,15 @@ def render_caption(share: dict, message: str = "") -> str:
         # en tete, il passait inapercu sous les photos.
         parts.append(f"<blockquote>💬 {html.escape(message.strip())}</blockquote>")
     text = "\n\n".join(parts)
-    if len(text) > CAPTION_MAX and share["filaments"]:   # on raccourcit d'abord la liste
-        return render_caption({**share, "filaments": share["filaments"][:-1]}, message)
+    if len(text) > CAPTION_MAX and share["filaments"]:
+        # trop long pour une legende (1024 caracteres) : les derniers filaments se resument en une ligne, jamais
+        # en silence ; la carte jointe les montre tous
+        fl = share["filaments"]
+        hidden = share.get("fil_hidden", 0) + 1
+        keep = [l for l in fl if not l.startswith("➕ ")][:-1]
+        if keep:
+            more = f"➕ et {hidden} autre{'s' if hidden > 1 else ''}" + (" (tous sur la carte des filaments)" if share.get("card") else "")
+            return render_caption({**share, "filaments": keep + [more], "fil_hidden": hidden}, message)
     if len(text) > CAPTION_MAX:                          # puis le message lui-meme
         over = len(text) - CAPTION_MAX + 1
         return render_caption(share, message.strip()[:-over] + "…")
