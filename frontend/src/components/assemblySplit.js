@@ -232,7 +232,9 @@ export function supportTris(pos, ix, only = null) {
     if (rr.area < 0.05 || rr.n < 2) continue;
     for (const { r, q, gap } of slabs) {
       const cs = Math.abs(rr.nx * r.nx + rr.ny * r.ny + rr.nz * r.nz);
-      if (cs > 0.25 && cs < 0.999) continue;
+      // exactement d'equerre ou a plat (une piece modelisee) ; la peau courbe de la piece qui traverse la paroi ne l'est
+      // jamais tout a fait (30/10/2026 : a 15° pres, des lamelles de la queue partaient avec les parois)
+      if (cs > 0.02 && cs < 0.999) continue;
       let ok = true;
       for (const t of ts) {
         for (let e = 0; e < 3 && ok; e++) {
