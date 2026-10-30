@@ -29,6 +29,7 @@ import { EmptyCard, FCard, FLAB, FROW, FRow, FSheet, FTile, FVAL, PageTabs, Sear
 import GalleryCompare from "../components/GalleryCompare";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 import { FriendsPrints, useHasFriends, useShared, sharedCount } from "../components/Friends";
+import { FitBox } from "../components/FitThumb";
 
 const MATERIALS = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","BVOH","PLA-CF","PETG-CF","PA-CF","PPS"];
 
@@ -1130,8 +1131,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
               return <button key={i} onClick={() => openDetail(u.print_id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:14,
                 border:"1px solid var(--border)", cursor:"pointer", textAlign:"left", font:"inherit", color:"inherit",
                 background:`linear-gradient(135deg, ${main}14, transparent 55%), var(--surface2)` }}>
-                <img src={apiThumb(apiUrl(`/prints/${u.print_id}/image`), 128)} alt="" loading="lazy" decoding="async" style={{ width:46, height:46, objectFit:"cover", borderRadius:10, flexShrink:0, background:"var(--surface)" }}
-                  onError={e => e.currentTarget.style.visibility = "hidden"}/>
+                <FitBox src={apiThumb(apiUrl(`/prints/${u.print_id}/image`), 128)} loading="lazy" decoding="async" style={{ width:46, height:46, borderRadius:10, flexShrink:0, background:"var(--surface)" }}/>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:13, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{u.file_name || "Print #" + u.print_id}</div>
                   <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>

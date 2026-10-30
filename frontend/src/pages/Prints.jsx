@@ -42,6 +42,7 @@ import NasChip from "../components/NasChip";
 import ColorMap from "../components/ColorMap";
 import FitThumb from "../components/FitThumb";
 import CycleImg from "../components/CycleImg";
+import { FitBox } from "../components/FitThumb";
 
 // PARTIAL et TO_REDO viennent de Spoolnymous, qui gerait cinq statuts. Les
 // prints importes les portent toujours, mais l'application ne les connaissait
@@ -1865,8 +1866,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
         style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 6px 6px 6px", borderRadius: 14, cursor: "pointer",
           background: `linear-gradient(90deg, color-mix(in srgb, ${c} 9%, transparent), transparent 70%), var(--surface2)`, border: "1px solid var(--border)" }}>
         <span style={{ position: "relative", flexShrink: 0 }}>
-          <img src={thumbUrl(x, 128)} alt="" loading="lazy" decoding="async" style={{ width: 52, height: 52, borderRadius: 11, objectFit: "cover", background: "var(--surface)", display: "block" }}
-            onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
+          <FitBox src={thumbUrl(x, 128)} loading="lazy" decoding="async" style={{ width: 52, height: 52, borderRadius: 11, background: "var(--surface)" }}/>
           {coverPrintId === x.id && <span data-tip="Vignette du groupe" style={{ position: "absolute", left: -4, top: -4, width: 18, height: 18, borderRadius: "50%",
             background: "#F59E0B", color: "#fff", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid var(--sheet-bg)" }}>★</span>}
           <span style={{ position: "absolute", right: -3, bottom: -3, width: 14, height: 14, borderRadius: "50%", background: c, border: "2px solid var(--sheet-bg)" }}/>
@@ -1888,8 +1888,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       <div key={x.id} onClick={() => setSelectedPrint(x)} style={{ position: "relative", borderRadius: 14, overflow: "hidden", cursor: "pointer", background: "var(--surface2)",
         border: "1px solid var(--border)" }}>
         <div style={{ position: "relative", paddingTop: "78%" }}>
-          <img src={thumbUrl(x, 384)} alt="" loading="lazy" decoding="async" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
-            onError={e => { e.currentTarget.style.display = "none"; }}/>
+          <FitBox src={thumbUrl(x, 384)} loading="lazy" decoding="async" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", }}/>
           {coverPrintId === x.id && <span style={{ position: "absolute", left: 6, top: 6, width: 20, height: 20, borderRadius: "50%", background: "#F59E0B", color: "#fff",
             fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>★</span>}
           <span style={{ position: "absolute", right: 6, bottom: 6, width: 12, height: 12, borderRadius: "50%", background: c, border: "2px solid var(--sheet-bg)" }}/>
@@ -1921,7 +1920,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
           <span style={{ display: "flex", flexShrink: 0 }}>{prints.slice(0, 6).map((x, i) => (
             <span key={x.id} style={{ position: "relative", width: 44, height: 44, marginLeft: i ? -14 : 0, borderRadius: 12, overflow: "hidden",
               border: "2px solid var(--surface2)", background: "var(--surface)", boxShadow: "0 4px 10px rgba(0,0,0,.18)", zIndex: 10 - i }}>
-              <img src={thumbUrl(x, 128)} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
+              <FitBox src={thumbUrl(x, 128)} loading="lazy" decoding="async" style={{ width: "100%", height: "100%", }}/>
               <span style={{ position: "absolute", right: 2, bottom: 2, width: 9, height: 9, borderRadius: "50%", background: (V2_STATUS[x.status] || [0, "#94a3b8"])[1],
                 border: "1.5px solid var(--surface2)" }}/></span>))}
             {prints.length > 6 && <span style={{ width: 44, height: 44, marginLeft: -14, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center",
@@ -2252,8 +2251,8 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
       <div onClick={handleClick} {...press} style={{ ...frame, display:"flex", alignItems:"center", gap:11, padding:7, borderRadius:16,
         border:"1px solid var(--border)", background:`linear-gradient(90deg, color-mix(in srgb, ${stC} 8%, transparent), transparent 60%), var(--surface2)` }}>
         <span style={{ position:"relative", flexShrink:0, width:60, height:60 }}>
-          <img src={thumbUrl(p, 128)} alt="" loading="lazy" decoding="async" draggable={false} style={{ width:60, height:60, borderRadius:13, objectFit:"cover",
-            background:"var(--surface)", display:"block", WebkitTouchCallout:"none" }} onError={e => { e.currentTarget.style.visibility="hidden"; }}/>
+          <FitBox src={thumbUrl(p, 128)} loading="lazy" decoding="async" draggable={false} style={{ width:60, height:60, borderRadius:13,
+            background:"var(--surface)", WebkitTouchCallout:"none" }}/>
           {check}
           <span style={{ position:"absolute", right:-3, bottom:-3, width:15, height:15, borderRadius:"50%", background:stC, border:"2px solid var(--sheet-bg)" }}/>
           {p.number_of_items > 1 && <span style={{ position:"absolute", left:-4, top:-4, fontSize:9.5, fontWeight:900, color:"#fff", background:"#3b82f6", borderRadius:8,

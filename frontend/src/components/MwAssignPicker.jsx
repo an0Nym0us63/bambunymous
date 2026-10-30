@@ -4,6 +4,7 @@ import client, { apiUrl, apiThumb } from "../api/client";
 import { useMwAssign } from "../store/mwAssign";
 import { toast } from "../store/toast";
 import { mwImg } from "./MwImg";
+import { FitBox } from "./FitThumb";
 
 // Associer un modele MakerWorld a des impressions : une fenetre de recherche,
 // liste A PLAT (une impression d'un groupe se choisit seule), chaque ligne dit
@@ -16,8 +17,8 @@ const fmtDate = iso => {
 function Thumb({ id }) {
   const [ok, setOk] = useState(true);
   return ok
-    ? <img src={apiThumb(apiUrl(`/prints/${id}/image`), 128)} alt="" loading="lazy" onError={() => setOk(false)}
-        style={{ width:44, height:44, borderRadius:8, objectFit:"cover", flexShrink:0, background:"var(--surface2)" }}/>
+    ? <FitBox src={apiThumb(apiUrl(`/prints/${id}/image`), 128)} loading="lazy" onError={() => setOk(false)}
+        style={{ width:44, height:44, borderRadius:8, flexShrink:0, background:"var(--surface2)" }}/>
     : <span style={{ width:44, height:44, borderRadius:8, flexShrink:0, background:"var(--surface2)", display:"flex",
         alignItems:"center", justifyContent:"center", fontSize:18 }}>🖨️</span>;
 }

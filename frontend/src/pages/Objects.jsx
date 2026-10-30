@@ -16,6 +16,7 @@ import GroupMosaic from "../components/GroupMosaic";
 import { KpiBar, SearchRow, EmptyCard, PageTabs, fGrad, FSheet, FTile, FCard, FRow, fChip, fBtn, dayFr } from "../components/FicheKit";
 import { useIsAdmin } from "../store/auth";
 import { create } from "zustand";
+import { FitBox } from "../components/FitThumb";
 
 // Les montants sont masques pour les comptes en lecture seule.
 function fmtPrice(v) {
@@ -530,7 +531,7 @@ function AccThumb({ id, size = 34 }) {
   const [ok, setOk] = useState(true);
   return <span style={{ width:size, height:size, borderRadius:10, overflow:"hidden", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
     background:"radial-gradient(circle, rgba(20,184,166,0.25), transparent 75%), var(--surface)", border:"1px solid var(--border)" }}>
-    {ok ? <img src={apiThumb(apiUrl(`/objects/accessories/${id}/image`), 128)} alt="" loading="lazy" decoding="async" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={() => setOk(false)}/>
+    {ok ? <FitBox src={apiThumb(apiUrl(`/objects/accessories/${id}/image`), 128)} loading="lazy" decoding="async" style={{ width:"100%", height:"100%", }} onError={() => setOk(false)}/>
       : <Package size={size * 0.5} style={{ color:"#14B8A6" }}/>}</span>;
 }
 
@@ -603,7 +604,7 @@ function ObjThumb({ id, size = 34 }) {
   const [ok, setOk] = useState(true);
   return <span style={{ width:size, height:size, borderRadius:10, overflow:"hidden", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
     background:"radial-gradient(circle, rgba(139,92,246,0.25), transparent 75%), var(--surface)", border:"1px solid var(--border)", fontSize:size * 0.45 }}>
-    {ok ? <img src={apiThumb(apiUrl(`/objects/objects/${id}/image`), 128)} alt="" loading="lazy" decoding="async" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={() => setOk(false)}/> : "🎁"}</span>;
+    {ok ? <FitBox src={apiThumb(apiUrl(`/objects/objects/${id}/image`), 128)} loading="lazy" decoding="async" style={{ width:"100%", height:"100%", }} onError={() => setOk(false)}/> : "🎁"}</span>;
 }
 
 // Les petits morceaux communs aux cartes de la page
@@ -1094,7 +1095,7 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
         background:`radial-gradient(circle at 18% 45%, ${c}55, transparent 60%), linear-gradient(135deg, ${c}26, transparent 70%), var(--surface2)` }}>
         <div style={{ width:124, height:124, borderRadius:22, overflow:"hidden", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
           background:`radial-gradient(circle, ${c}33, transparent 70%), var(--surface)`, boxShadow:`0 12px 28px -12px ${c}`, border:"1px solid rgba(255,255,255,.12)" }}>
-          {imgOk ? <img src={apiThumb(apiUrl(`/objects/objects/${obj.id}/image`), 256)} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }}
+          {imgOk ? <FitBox src={apiThumb(apiUrl(`/objects/objects/${obj.id}/image`), 256)} style={{ width:"100%", height:"100%", }}
               onError={() => setImgOk(false)}/>
             : <span style={{ fontSize:52, opacity:.6 }}>{cfg.icon}</span>}
         </div>
@@ -1542,8 +1543,8 @@ function ObjectCard({ obj, onClick, onLongPress, selectMode, selected, onToggleS
       {selectMode && <SelDot on={selected}/>}
       <div style={{ position:"relative", aspectRatio:"1 / 0.85", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden",
         background:`radial-gradient(75% 70% at 50% 45%, color-mix(in srgb, ${c} 20%, transparent), transparent 75%), var(--surface)` }}>
-        {imgOk ? <img src={apiThumb(apiUrl(`/objects/objects/${obj.id}/image`), 384)} alt="" loading="lazy" decoding="async"
-            style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={() => setImgOk(false)}/>
+        {imgOk ? <FitBox src={apiThumb(apiUrl(`/objects/objects/${obj.id}/image`), 384)} loading="lazy" decoding="async"
+            style={{ width:"100%", height:"100%", }} onError={() => setImgOk(false)}/>
           : <span style={{ fontSize:40, opacity:.55 }}>{cfg.icon}</span>}
         <span style={{ ...pill, position:"absolute", top:7, left:7, color:"#fff",
           background:`linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 65%, #ffffff))` }}>{cfg.label}</span>

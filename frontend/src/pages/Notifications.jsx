@@ -8,6 +8,7 @@ import client, { apiUrl, apiThumb } from "../api/client";
 import { notifSeenEvent } from "../components/NotifBell";
 import { PrintDetail } from "../components/LazySheets";
 import { openCreator } from "../components/MwCreatorPage";
+import { FitBox } from "../components/FitThumb";
 // la fiche d'un modele MakerWorld, chargee seulement si une notification l'ouvre (28/10/2026)
 const MakerWorldModelSheet = React.lazy(() => import("../components/MakerWorldModelSheet"));
 const OrderSheet = React.lazy(() => import("../components/IncomingOrders").then(m => ({ default: m.OrderSheet })));
@@ -199,8 +200,7 @@ function BigIcon({ thumb, it }) {
   }
   const [broken, setBroken] = useState(false);
   if (thumb && !broken) return (
-    <img src={thumb} alt="" loading="lazy" onError={() => setBroken(true)} style={{ width:46, height:46, borderRadius:12,
-      objectFit:"cover", flexShrink:0, background:"var(--surface2)" }}/>
+    <FitBox src={thumb} loading="lazy" onError={() => setBroken(true)} style={{ width:46, height:46, borderRadius:12, flexShrink:0, background:"var(--surface2)" }}/>
   );
   const c = it.section_color || "#4F46E5";
   return (
