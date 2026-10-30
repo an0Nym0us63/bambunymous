@@ -564,6 +564,34 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     }
     return hits >= Math.ceil(pts.length / 2);
   };
+  const fitOnContact = async mode => {
+    const list = [...sel], j = jointOf(list);
+    const say = m => { fitMsg = m; onChange?.(state()); };
+    if (!j) return say(mode === "align" ? "Colle d'abord la pièce sur la face où l'aligner (🧲 Coller), puis 📐 Aligner"
+      : "Colle d'abord la pièce sur celle où elle doit s'emboîter (🧲 Coller), puis 🧩 Emboîter");
+    say(mode === "align" ? "Recherche de la place où la pièce déborde le moins…" : "Recherche de la place où la pièce s'emboîte…");
+    await new Promise(r => setTimeout(r, 30));
+    try {
+      const col = await getCollider();
+      const { nestPlace } = await import("./assemblyNest");
+      const moving = withKids(list), { P, N } = contact(j);
+      const r = await nestPlace({ THREE, collider: col, moving, base: unitOf(j.b).filter(g => g.visible && !moving.includes(g)), P, N, mode });
+      if (!r) return say(mode === "align" ? "Pas de place où elle repose à plat sur cette face, autour de là où elle est collée (une face courbe : 🎯 Ajuster)"
+        : "Pas de place trouvée autour de là où elle est collée : la pièce déborde de son support partout");
+      const still = r.moved < 0.05 && Math.abs(r.turned) < 0.1 && Math.abs(r.sink) < 0.05;
+      if (still) return say(mode === "align" ? "Déjà alignée au mieux" : "Déjà à la meilleure place : elle ne descend pas plus bas autour de là où elle est collée");
+      apply(moving, r.M);
+      j.b.updateMatrix();
+      j.p.copy(r.contact.clone().applyMatrix4(j.b.matrix.clone().invert()));
+      pivot = { p: r.contact.clone(), axis: N.clone().normalize(), unit: moving };
+      showContact(); placeHandle(); push(); render();
+      egg(mode === "align" ? "aligne" : "emboite");
+      const mm = x => String(Math.round(x * 10) / 10).replace(".", ",");
+      const moved = `déplacée de ${mm(r.moved)} mm${Math.abs(r.turned) >= 0.5 ? `, tournée de ${Math.round(r.turned)}°` : ""}`;
+      say(mode === "align" ? `Alignée : ${Math.round(r.cov1 * 100)} % de sa face d'appui sur la face (avant ${Math.round(r.cov0 * 100)} %), centrée, ${moved}`
+        : `Emboîtée : ${r.sink >= 0.05 ? `${mm(r.sink)} mm plus bas` : "même hauteur"}, ${moved}`);
+    } catch (e) { console.error("[3D] emboiter / aligner", e); say("La recherche a échoué"); }
+  };
   const startTwins = A => {
     clearTwins();
     if (!assist || A.kind !== "face" || !A.mesh?.geometry?.attributes?.position) return;
@@ -1648,30 +1676,12 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     // Leger : un millier de facettes, l'arbre de recherche des pieces deja fait pour l'anti-collision
     // emboiter (30/10/2026) : la piece collee glisse et tourne sur son contact jusqu'a la place ou elle descend le plus
     // (un bloc dans son logement), sans rien traverser (assemblyNest)
-    nest: async () => {
-      const list = [...sel], j = jointOf(list);
-      if (!j) { fitMsg = "Colle d'abord la pièce sur celle où elle doit s'emboîter (🧲 Coller), puis 🧩 Emboîter"; onChange?.(state()); return; }
-      fitMsg = "Recherche de la place où la pièce s'emboîte…"; onChange?.(state());
-      await new Promise(r => setTimeout(r, 30));
-      try {
-        const col = await getCollider();
-        const { nestPlace } = await import("./assemblyNest");
-        const moving = withKids(list), { P, N } = contact(j);
-        const r = await nestPlace({ THREE, collider: col, moving, base: unitOf(j.b).filter(g => g.visible && !moving.includes(g)), P, N });
-        if (!r || (r.sink < 0.05 && r.moved < 0.05 && Math.abs(r.turned) < 0.1)) {
-          fitMsg = r ? "Déjà à la meilleure place : elle ne descend pas plus bas ailleurs sur cette pièce" : "Pas de place trouvée : la pièce déborde de son support partout";
-          onChange?.(state()); return;
-        }
-        apply(moving, r.M);
-        j.b.updateMatrix();
-        j.p.copy(r.contact.clone().applyMatrix4(j.b.matrix.clone().invert()));
-        pivot = { p: r.contact.clone(), axis: N.clone().normalize(), unit: moving };
-        showContact(); placeHandle(); push(); render();
-        egg("emboite");
-        fitMsg = `Emboîtée : ${r.sink >= 0.05 ? `${String(Math.round(r.sink * 10) / 10).replace(".", ",")} mm plus bas` : "même hauteur"}, déplacée de ${String(Math.round(r.moved * 10) / 10).replace(".", ",")} mm${Math.abs(r.turned) >= 0.5 ? `, tournée de ${Math.round(r.turned)}°` : ""}`;
-        onChange?.(state());
-      } catch (e) { console.error("[3D] emboiter", e); fitMsg = "L'emboîtement a échoué"; onChange?.(state()); }
-    },
+    // emboiter / aligner (30/10/2026, assemblyNest) : la piece collee glisse et tourne sur son contact, autour de la ou
+    // elle est collee : jusqu'a la place ou elle descend le plus (un bloc dans son logement), ou ou sa face d'appui
+    // deborde le moins de celle qui la porte, centree (une plaque sur un flanc)
+    nest: () => fitOnContact("nest"),
+    tell: m => { fitMsg = m; onChange?.(state()); },
+    align: () => fitOnContact("align"),
     refine: async () => {
       const list = [...sel], j = jointOf(list);
       if (!j) { fitMsg = "Colle d'abord la pièce (Coller ou Points) : l'ajustement part de son collage"; onChange?.(state()); return; }
