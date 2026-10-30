@@ -106,9 +106,33 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
     foot = [];
     for (let k = 0; k < cells.length; k += 3) if (cells[k + 2] <= lmin + TOL) foot.push(cells[k], cells[k + 1], cells[k + 2]);
   }
+  // la face qui porte : les mailles du dessus a la hauteur du contact, d'un seul tenant avec celle sous le point de
+  // collage (30/10/2026 : toute maille a la bonne hauteur comptait, une grande surface donnait n'importe quel angle ;
+  // la forme de la face, elle, dit comment tourner la piece -- l'empreinte d'un bec sur une tete)
   const face = new Uint8Array(nu * nv);
-  { // la face qui porte : les mailles du dessus a la hauteur du contact, reliees a celle sous la piece
-    for (let k = 0; k < H.length; k++) if (!Number.isNaN(H[k]) && Math.abs(H[k]) <= TOL) face[k] = 1;
+  let faceN = 0;
+  {
+    const ok = k => !Number.isNaN(H[k]) && Math.abs(H[k]) <= TOL;
+    let i0 = Math.round((0 - bu0) / h), j0 = Math.round((0 - bv0) / h);
+    i0 = Math.min(nu - 1, Math.max(0, i0)); j0 = Math.min(nv - 1, Math.max(0, j0));
+    // la maille de la face la plus proche du point de collage
+    let start = -1, bd = Infinity;
+    for (let r = 0; r < 12 && start < 0; r++) for (let j = j0 - r; j <= j0 + r; j++) for (let i = i0 - r; i <= i0 + r; i++) {
+      if (i < 0 || j < 0 || i >= nu || j >= nv || !ok(j * nu + i)) continue;
+      const d = (i - i0) ** 2 + (j - j0) ** 2;
+      if (d < bd) { bd = d; start = j * nu + i; }
+    }
+    if (start >= 0) {
+      const st = [start]; face[start] = 1;
+      while (st.length) {
+        const k = st.pop(), i = k % nu, j = (k - i) / nu;
+        faceN++;
+        for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const x = i + a, y = j + b, q = y * nu + x;
+          if (x >= 0 && y >= 0 && x < nu && y < nv && !face[q] && ok(q)) { face[q] = 1; st.push(q); }
+        }
+      }
+    }
   }
 
   // une place : la hauteur ou elle se pose (Infinity : hors du support). Les mailles de la piece hors du support ne
@@ -179,7 +203,11 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
     if (d === Infinity) return Infinity;
     if (mode === "align") {
       if (d > TOL) return Infinity;                     // quelque chose depasse de la face : elle ne s'y pose pas a plat
-      return -10 * onFace(F, nU_, nV_, hh, fl, th, su - s0, sv - s0) + pen(su, sv, th) * 0.1;
+      // la forme : la part commune de la face d'appui et de la face qui porte (sur leur reunion) ; une face plus grande
+      // que la piece laisse encore la place de centrer
+      const on = onFace(F, nU_, nV_, hh, fl, th, su - s0, sv - s0), nf = fl.length / 3;
+      const faceCells = fine ? faceN : faceN / (K * K), inter = on * nf;
+      return -10 * inter / Math.max(1, nf + faceCells - inter) + pen(su, sv, th) * 0.1;
     }
     return d + pen(su, sv, th);
   };
