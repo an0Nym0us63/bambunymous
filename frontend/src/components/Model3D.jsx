@@ -1665,14 +1665,18 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const edit = savedEdit !== undefined ? savedEdit : meta?.assembly_edit;
   useEffect(() => { setSavedEdit(undefined); setViewSel("mine"); }, [meta?.key]);
   // les assemblages des copains (30/10/2026) : pour chacun, le plus recent fait des memes pieces que ma vue (le meme
-  // profil d'abord) ; compares par objet et instance, comme la reprise d'une autre vue cote serveur
+  // profil d'abord) ; compares par objet et instance, comme la reprise d'une autre vue cote serveur. Un autre profil
+  // connu n'est jamais propose (30/10/2026 : « Petit » et « Grande » ont les memes objets, numerotes pareil, mais pas
+  // les memes pieces ni la meme taille -- l'assemblage de l'un eparpillait l'autre sur un metre)
   const friendEdits = useMemo(() => {
     const top = k => String(k || "").split("#")[0].split(":").slice(0, 2).join(":");
     const mine = new Set((p?.pieces || []).map(x => top(x.k)).filter(Boolean));
     if (!mine.size) return [];
-    const same = e => !!e.profile && String(e.profile) === String(meta?.profile || "");
+    const myProf = String(meta?.profile || "");
+    const same = e => !!e.profile && String(e.profile) === myProf;
     return (frShared?.friends || []).filter(f => f.status === "ok").map(f => {
       const ok = (f.edits || []).filter(e => {
+        if (myProf && e.profile && String(e.profile) !== myProf) return false;
         const ks = new Set(Object.keys(e.pieces || {}).map(top));
         return [...ks].filter(k => mine.has(k)).length >= Math.max(1, ks.size * 0.8);
       }).sort((a, b) => (same(b) - same(a)) || (b.at || 0) - (a.at || 0));

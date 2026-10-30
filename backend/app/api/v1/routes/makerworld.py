@@ -620,6 +620,9 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
         from ....services.mw_source import _index, _IDX
         _index()
         iid = known(did, "") or next((v for k, v in list(_IDX["v"].items()) if k.startswith(f"{did}:") and path_of(v).is_file()), None)
+        # le profil annonce est alors celui de ce 3MF (l'assemblage d'un copain se choisit d'apres lui)
+        if iid:
+            prof = next((k.split(":", 1)[1] for k, v in list(_IDX["v"].items()) if v == iid and k.startswith(f"{did}:") and k.split(":", 1)[1]), prof)
     fetch_error = None
     # un copain qui visite (cle fk_), ou un simple coup d'oeil (peek) : rien n'est telecharge ni converti ici
     # (29/10/2026) ; seule une vue deja calculee et a jour se montre, sinon « pas encore calculee chez lui »
