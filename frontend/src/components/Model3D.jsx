@@ -1000,7 +1000,7 @@ const EDIT_HELP = [
   ["Poser au sol (F)", [["Par une face : clic sur une face", "elle se pose à plat sur le sol ; une arête : mise à l'horizontale"],
     ["Par 3 points : trois clics", "à peu près sur les trois appuis (les roues d'un tricycle) : le vrai point d'appui est cherché autour de chaque clic, et la pièce repose dessus"]]],
   ["La barre", [
-    ["En haut", "les modes, ▭ (choisir au rectangle), ⚙ (aimanter, collage assisté, choix multiple, cran des rotations), ↶ ↷, 🕘 (versions, vue du 3MF), 💾, ?, ✕"],
+    ["En haut", "les modes, ▭ (choisir au rectangle), ⚙ (aimanter, collage assisté, choix multiple, crans des déplacements et des rotations), ↶ ↷, 🕘 (versions, vue du 3MF), 💾, ?, ✕"],
     ["Dessous", "selon le mode et la sélection : ses actions (points, pose au sol), 🔗 Grouper ▾, 🧩 Pièce ▾ (séparer, réunir, masquer), et pour une pièce collée 🎯 Ajuster, ⟳ Contact ▾, ✂ Décoller"],
   ]],
   ["Couper (X)", [
@@ -1032,7 +1032,8 @@ const EDIT_HELP = [
   ]],
   ["Toujours", [
     ["Alt maintenu en glissant", "sans aucun cran"],
-    ["🧷 Aimanter", "déplacement au mm ; lâchée à moins de 3 mm du sol ou d'une pièce, elle s'y colle"],
+    ["🧷 Aimanter", "lâchée à moins de 3 mm du sol ou d'une pièce, elle s'y colle"],
+    ["Cran des déplacements (⚙)", "libre par défaut ; 0,1, 0,5, 1 ou 5 mm pour avancer par pas (gardé sur l'appareil) ; Alt maintenu : libre"],
     ["Ctrl + Z / Ctrl + Y", "annuler / refaire"],
     ["💾 Enregistrer", "gardé dans BambuNymous, ton 3MF n'est pas touché ; ↺ Vue du 3MF pour revenir"],
   ]],
@@ -1271,6 +1272,12 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
             { label: "🪄 Collage assisté", on: !!est.assist, onClick: () => api?.setAssist(!est.assist), keep: true },
             "-",
             { custom: <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginRight: 2 }}>Cran des déplacements</span>
+              {[[0, "libre"], [0.1, "0,1"], [0.5, "0,5"], [1, "1 mm"], [5, "5 mm"]].map(([v, l]) =>
+                <button key={v} type="button" onClick={() => api?.setMoveStep(v)} style={{ padding: "6px 10px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 800,
+                  color: est.moveStep === v ? "#fff" : "var(--text2)", background: est.moveStep === v ? grad : "var(--surface2)" }}>{l}</button>)}
+            </div> },
+            { custom: <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", flexWrap: "wrap" }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginRight: 2 }}>Cran des rotations</span>
               {[[0, "libre"], [1, "1°"], [5, "5°"], [15, "15°"], [45, "45°"]].map(([v, l]) =>
                 <button key={v} type="button" onClick={() => api?.setRotStep(v)} style={{ padding: "6px 10px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 800,
@@ -1295,10 +1302,16 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
           data-tip="Choisir au rectangle : glisse pour entourer les pièces (Ctrl : en ajouter) ; la vue ne tourne pas tant que c'est allumé">▭ Rectangle</button>
         {sep}
         <BarMenu b={b} label="⚙" tip="Réglages : aimantation, cran des rotations, choix multiple, collage assisté" items={[
-          { label: "🧷 Aimanter", on: !!est.magnet, onClick: () => api?.setMagnet(!est.magnet), keep: true, tip: "Pas de 1 mm et 15°, et une pièce lâchée près d'une autre ou du sol vient s'y coller" },
+          { label: "🧷 Aimanter", on: !!est.magnet, onClick: () => api?.setMagnet(!est.magnet), keep: true, tip: "Une pièce lâchée à moins de 3 mm d'une autre ou du sol vient s'y coller (le pas des déplacements se règle à part, plus bas)" },
           { label: "🪄 Collage assisté", on: !!est.assist, onClick: () => api?.setAssist(!est.assist), keep: true, tip: "Faces entières centrées et grands axes alignés (sinon : au point cliqué)" },
           { label: "➕ Choix multiple", on: !!est.multi, onClick: () => api?.setMulti(!est.multi), keep: true, tip: "Chaque clic ajoute ou retire une pièce (comme Ctrl + clic, pour le stylet)" },
           "-",
+          { custom: <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginRight: 2 }}>Cran des déplacements</span>
+            {[[0, "libre"], [0.1, "0,1"], [0.5, "0,5"], [1, "1 mm"], [5, "5 mm"]].map(([v, l]) =>
+              <button key={v} type="button" onClick={() => api?.setMoveStep(v)} style={{ padding: "3px 8px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800,
+                color: est.moveStep === v ? "#fff" : "var(--text2)", background: est.moveStep === v ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" }}>{l}</button>)}
+          </div> },
           { custom: <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", flexWrap: "wrap" }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginRight: 2 }}>Cran des rotations</span>
             {[[0, "libre"], [1, "1°"], [5, "5°"], [15, "15°"], [45, "45°"]].map(([v, l]) =>

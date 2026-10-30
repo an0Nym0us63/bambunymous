@@ -35,6 +35,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   let mode = "move";                 // move | rotate | ground | mate
   let magnet = true, assist = true;
   let rotStep = 0;                   // le cran des rotations a la poignee (0 : libre) ; Alt maintenu : tout libre
+  // le cran des deplacements (30/10/2026 : l'aimant imposait le millimetre, on ne placait rien entre deux) : libre par
+  // defaut ; l'aimant ne fait plus que coller au sol et aux pieces voisines. Garde sur l'appareil
+  let moveStep = 0;
+  try { moveStep = Number(localStorage.getItem("bn.asm.moveStep")) || 0; } catch { /* pas de stockage */ }
+  const stepRound = (v, off = false) => (moveStep && !off ? v.set(...[v.x, v.y, v.z].map(x => Math.round(x / moveStep) * moveStep)) : v);
   // tablette au stylet (29/10/2026) : sans clavier, deux interrupteurs tiennent lieu de Ctrl (choisir plusieurs) et de
   // Maj (tourner la piece collee)
   let multi = false, turnGlued = false;
@@ -147,7 +152,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const push = () => { undo.push(last); if (undo.length > 100) undo.shift(); redo.length = 0; last = snapshot(); changes++; onChange?.(state()); };
   const selName = () => sel.size === 0 ? null : sel.size === 1 ? [...sel][0].userData.name : `${sel.size} pièces${groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))) ? " (groupe)" : ""}`;
   const center = () => { if (!sel.size) return null; const c = boxOfAll([...sel]).getCenter(new THREE.Vector3()); return [c.x, c.y, c.z].map(v => Math.round(v * 10) / 10); };
-  const state = () => ({ mode, magnet, assist, rotStep, center: center(), selected: selName(), count: sel.size, step: first ? 2 : 1, canUndo: undo.length > 0, canRedo: redo.length > 0,
+  const state = () => ({ mode, magnet, assist, rotStep, moveStep, center: center(), selected: selName(), count: sel.size, step: first ? 2 : 1, canUndo: undo.length > 0, canRedo: redo.length > 0,
     pivot: !!pivot, pairs: pairs.length, twinPos: twinAlt && twinAlt.at === changes && twinAlt.fits.length > 1 ? `${twinAlt.i + 1}/${twinAlt.fits.length}` : null, boxMode, ground3, groundPts: gPts.length, vertical, pinsA: pins.a.length, pinsB: pins.b.length,
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
@@ -420,7 +425,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     }
     if (t.lengthSq()) { apply(withKids(list), new THREE.Matrix4().makeTranslation(t.x, t.y, t.z)); placeHandle(); render(); }
   };
-  const applySnap = () => { tc.setTranslationSnap(magnet && !alt ? 1 : null); tc.setRotationSnap(null); };   // le cran des rotations : applique ici, apres la demultiplication
+  const applySnap = () => { tc.setTranslationSnap(moveStep && !alt ? moveStep : null); tc.setRotationSnap(null); };   // le cran des rotations : applique ici, apres la demultiplication
   applySnap();
 
   // coller A contre B
@@ -881,7 +886,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     if (!q) return;
     const want = q.sub(fdrag.from);
     if (vertical) { want.x = 0; want.y = 0; } else want.z = 0;
-    if (magnet) want.set(Math.round(want.x), Math.round(want.y), Math.round(want.z));
+    stepRound(want);
     const step = want.clone().sub(fdrag.done);
     if (step.lengthSq() < 1e-8) return;
     apply(withKids([...sel]), new THREE.Matrix4().makeTranslation(step.x, step.y, step.z));
@@ -1129,7 +1134,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       if (!p) return;
       const d = p.sub(s.p0);
       if (s.E) d.copy(s.E).multiplyScalar(d.dot(s.E)); else d.addScaledVector(s.N, -d.dot(s.N));
-      if (magnet && !ev.altKey) d.set(Math.round(d.x), Math.round(d.y), Math.round(d.z));
+      stepRound(d, ev.altKey);
       s.d.copy(d);
       M = new THREE.Matrix4().makeTranslation(d.x, d.y, d.z);
     }
@@ -1240,6 +1245,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     setMode: m => { if (m !== "cut") { cutCancel(); dropStroke(); } knifeView(m === "cut"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
     setRotStep: d => { rotStep = d; applySnap(); onChange?.(state()); },
+    setMoveStep: d => { moveStep = d; try { localStorage.setItem("bn.asm.moveStep", String(d)); } catch { /* rien */ } applySnap(); onChange?.(state()); },
     setMulti: on => { multi = on; onChange?.(state()); },
     // au doigt : glisser monte ou descend la piece au lieu de la faire glisser a plat
     setVertical: on => { vertical = on; onChange?.(state()); },
