@@ -783,7 +783,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           renderer.setClearColor(0x000000, 0);
           // de jour, une lumiere qui vient de l'appareil (30/10/2026) : une vue prise par-dessous ou de dos n'est plus
           // dans l'ombre ; retiree apres la prise
-          const head = !bloomOn && !litOn ? new THREE.DirectionalLight(0xffffff, 1.3) : null;
+          // (0,6 : a 1,3, la vignette sortait bien plus vive que la vue, 30/10/2026)
+          const head = !bloomOn && !litOn ? new THREE.DirectionalLight(0xffffff, 0.6) : null;
           if (head) { head.position.copy(camera.position); head.target.position.copy(sp.center); scene.add(head, head.target); }
           if (bloomOn && composer) composer.setSize(size, size);
           if (litOn && lit) lit.resize();

@@ -1344,7 +1344,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       background: "var(--surface2)" }}>
       {/* le fond : l'image floutee et saturee, une lueur de la couleur de l'etat */}
       <img src={thumbUrl(p, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
-        objectFit: "cover", filter: "blur(26px) saturate(1.6)", opacity: 0.4, transform: "scale(1.3)" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
+        objectFit: "cover", filter: "blur(26px) saturate(1.15)", opacity: 0.3, transform: "scale(1.3)" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
       <span aria-hidden="true" style={{ position: "absolute", inset: 0, background: `radial-gradient(60% 70% at 50% 38%, ${stC}33, transparent 72%)` }}/>
       <img key={heroOrig ? "o" : "v"} src={heroOrig ? `${thumbUrl(p, 512)}&orig=1` : thumbUrl(p, 512)} alt="" className="bn-plate" style={{ position: "absolute", inset: "4% 8% 26%", width: "84%", height: "70%",
         objectFit: "contain", filter: "drop-shadow(0 14px 24px rgba(0,0,0,.35))" }}
@@ -1820,7 +1820,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   const hero = (
     <div style={{ position: "relative", height: wide ? 300 : "min(36vh, 280px)", minHeight: 200, borderRadius: wide ? 20 : 0, overflow: "hidden", background: "var(--surface2)" }}>
       {cover && <img src={thumbUrl(cover, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
-        objectFit: "cover", filter: "blur(26px) saturate(1.6)", opacity: 0.4, transform: "scale(1.3)" }}/>}
+        objectFit: "cover", filter: "blur(26px) saturate(1.15)", opacity: 0.3, transform: "scale(1.3)" }}/>}
       <span aria-hidden="true" style={{ position: "absolute", inset: 0, background: "radial-gradient(60% 70% at 50% 38%, #A78BFA33, transparent 72%)" }}/>
       <div style={{ position: "absolute", inset: "8% 6% 34%", display: "grid", gap: 8,
         gridTemplateColumns: `repeat(${Math.min(mosaic.length, 4) || 1}, minmax(0, 1fr))` }}>
@@ -1832,7 +1832,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
                 boxShadow: "0 10px 24px rgba(0,0,0,.35)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }) }}>
           {/* le halo de chaque carte, comme celui de la fiche d'une impression : son image floutee et saturee derriere */}
           <img src={srcOf(x, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
-            objectFit: "cover", filter: "blur(18px) saturate(1.8)", opacity: 0.55, transform: "scale(1.35)" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
+            objectFit: "cover", filter: "blur(18px) saturate(1.2)", opacity: 0.4, transform: "scale(1.35)" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
           <img src={srcOf(x, 384)} alt="" loading="lazy" decoding="async" style={{ position: "relative", width: "100%", height: "100%", objectFit: "contain" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
         </div>)}
       </div>

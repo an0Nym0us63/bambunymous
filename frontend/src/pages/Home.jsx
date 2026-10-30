@@ -1569,7 +1569,7 @@ function PrinterPopup({ status, img, name, onClose }) {
         <div style={{ position: "relative", borderRadius: 20, overflow: "hidden", padding: 14, display: "flex", flexDirection: "column", gap: 12,
           background: `linear-gradient(135deg, ${s.color}33, transparent 60%), var(--surface2)` }}>
           {img && <img src={img} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
-            filter: "blur(22px) saturate(1.5)", opacity: 0.45, transform: "scale(1.3)" }}/>}
+            filter: "blur(22px) saturate(1.15)", opacity: 0.35, transform: "scale(1.3)" }}/>}
           <div style={{ position: "relative", display: "grid", gridTemplateColumns: narrowPop ? "1fr auto" : "auto minmax(0,1fr) auto",
             alignItems: "center", gap: narrowPop ? "10px 12px" : 14 }}>
             <div onClick={img ? () => setBig(true) : undefined} style={{ width: narrowPop ? 128 : 104, height: narrowPop ? 128 : 104, flexShrink: 0,

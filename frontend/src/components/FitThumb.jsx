@@ -72,9 +72,9 @@ export default function FitThumb({ src, style = {}, onError, photoFit = "contain
     f.place = p;
     setPlace(p);
   };
-  // un poil seulement : plus, les couleurs criaient
-  const look = { filter: light ? "contrast(1.05) saturate(1.05) drop-shadow(0 0 0.7px rgba(30,41,59,.6)) drop-shadow(0 4px 7px rgba(30,41,59,.22))"
-    : "contrast(1.05) saturate(1.05)" };
+  // un poil de contraste seulement, sans saturer (30/10/2026 : les couleurs criaient)
+  const look = { filter: light ? "contrast(1.03) drop-shadow(0 0 0.7px rgba(30,41,59,.6)) drop-shadow(0 4px 7px rgba(30,41,59,.22))"
+    : "contrast(1.03)" };
   return <img src={src} alt="" {...rest} onLoad={onLoad} onError={onError}
     style={place ? { ...style, ...look, position: "absolute", inset: "auto", objectFit: "fill", maxWidth: "none", ...place }
       : { ...style, ...look, objectFit: photoFit }}/>;
