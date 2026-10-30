@@ -21,6 +21,10 @@ function Picker({ kind, id, shot, onDone, close }) {
     const fd = new FormData(); fd.append("file", shot.blob, "Vue3D.png"); if (slot) fd.append("slot", String(slot));
     const r = await client.post(`${base}/vue3d`, fd);
     setSaved(r.data.n);
+    // la vue prise devient la vignette (30/10/2026 : elle ne l'etait pas, il fallait la choisir) ; d'autres deja
+    // choisies : elle s'y ajoute (elles defilent)
+    const cur = d?.sel || [];
+    if (r.data.n && !cur.includes(r.data.n)) await client.put(`${base}/thumb`, { slots: [...cur, r.data.n] });
   });
   // plusieurs vues choisies : la vignette en fait une mosaique (30/10/2026) ; aucune : la vignette par defaut
   const sel = d?.sel || [];
