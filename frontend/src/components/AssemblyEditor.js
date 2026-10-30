@@ -1473,6 +1473,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       }
       if (sel.size !== 1) return;
       const pg = [...sel][0];
+      // un morceau (d'une piece deja separee ou coupee) ne se separe pas une seconde fois : ses morceaux ne
+      // s'enregistraient pas, la piece revenait comme avant a la reouverture (30/10/2026) ; le couteau, lui, s'enregistre
+      if (pg.userData.from) { fitMsg = "Ce morceau vient déjà d'une séparation : pour le partager encore, 🔪 Couper (ou 🧽 Gomme)"; onChange?.(state()); return; }
       const { splitPieceGeometry, buildSplitGroups } = await import("./assemblySplit");
       const comps = splitPieceGeometry(THREE, pg);
       if (!comps) { fitMsg = "Cette pièce est d'un seul tenant : rien à séparer"; onChange?.(state()); return; }
