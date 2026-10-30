@@ -1101,6 +1101,7 @@ const EDIT_HELP = [
   ["Coller (C)", [
     ["Face puis face", "la première pièce vient se plaquer contre l'autre"],
     ["Arête puis arête", "les arêtes s'alignent"],
+    ["➕ Point de colle", "sur une pièce collée : touche un point, une arête ou une face de la pièce, puis l'endroit qui lui correspond sur son support ; le premier collage tient, la pièce glisse et tourne sur son contact (deux arêtes : alignées ; deux faces : l'une contre l'autre ; des points : superposés, au mieux à partir de deux)"],
     ["〰 Ondulée", "allumé (dans la barre du mode Coller), un clic prend toute une surface ondulée ou plissée, jusqu'à ses arêtes vives, surlignée en bleu ; deux surfaces ondulées collées l'une sur l'autre s'emboîtent aussitôt (🧩), plis dans plis"],
     ["Près d'une arête", "une petite liste propose la face touchée, l'arête (même courbe, suivie d'un bout à l'autre) et la face d'en face : survoler une ligne la surligne en bleu, la toucher la prend (de même en Poser au sol)"],
     ["🪄 Assisté", "faces entières centrées et grands axes alignés ; arêtes milieu contre milieu"],
@@ -1262,8 +1263,12 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
       {est.count === 1 && <button type="button" onClick={() => api?.detachSupports()} style={b(false)}
         data-tip="Repère les supports intégrés au modèle (parois et plaques fines) et les sépare de la pièce, sans trait à tracer">🪄 Détacher les supports</button>}
     </>)
-    : est.mode === "mate" ? <button type="button" onClick={() => api?.setWavy(!est.wavy)} style={b(!!est.wavy)}
-      data-tip="Surfaces ondulées : un clic prend toute la surface plissée (jusqu'à ses arêtes vives) ; deux surfaces ondulées collées l'une sur l'autre s'emboîtent d'elles-mêmes">〰 Ondulée</button>
+    : est.mode === "mate" ? <>
+      <button type="button" onClick={() => api?.setAddPin(!est.addPin)} style={b(!!est.addPin)}
+        data-tip="Sur une pièce déjà collée : une prise de plus (point, arête ou face) et sa cible, le premier collage tient">➕ Point de colle</button>
+      <button type="button" onClick={() => api?.setWavy(!est.wavy)} style={b(!!est.wavy)}
+        data-tip="Surfaces ondulées : un clic prend toute la surface plissée (jusqu'à ses arêtes vives) ; deux surfaces ondulées collées l'une sur l'autre s'emboîtent d'elles-mêmes">〰 Ondulée</button>
+    </>
     : est.mode === "pins" ? <>
       <button type="button" disabled={!est.pinsB} onClick={() => api?.pinsApply()} style={b(!!est.pinsB, { opacity: est.pinsB ? 1 : 0.45 })}
         data-tip="Faire coïncider chaque point orange avec le point vert de même numéro (Entrée)">✓ Assembler{est.pinsB ? ` (${est.pinsB})` : ""}</button>
@@ -1298,6 +1303,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         {sep}
         {est.twinPos && <button type="button" onClick={() => api?.twinNext()} style={b(true)}
           data-tip="Sur la même face jumelle, la position suivante qui va aussi bien (une face carrée, ronde, symétrique)">↻ Autre position {est.twinPos}</button>}
+        <button type="button" onClick={() => api?.setAddPin(true)} style={b(!!est.addPin)}
+          data-tip="Ajouter un point de colle (point, arête ou face) sans défaire ce collage : la pièce glisse et tourne sur son contact">➕ Point de colle</button>
         <button type="button" onClick={() => api?.align()} style={b(false)}
           data-tip="Faire glisser et tourner la pièce sur la face où elle est collée, pour qu'elle déborde le moins et soit centrée (une plaque sur un flanc)">📐 Aligner</button>
         <button type="button" onClick={() => api?.nest()} style={b(false)}

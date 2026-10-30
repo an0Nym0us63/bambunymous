@@ -142,7 +142,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   let pendingSplit = null;            // une separation proposee, pas encore validee
   let pendingCut = null;
   let choice = null;                  // la liste du choix face / arete ouverte : les prises, et ou la montrer
-  let wavyMode = false;               // « 〰 Ondulee » : un clic prend la surface ondulee entiere              // une coupe au couteau proposee (morceaux colores), pas encore validee
+  let wavyMode = false;               // « 〰 Ondulee » : un clic prend la surface ondulee entiere
+  // « ➕ Point de colle » (30/10/2026) : sur une piece deja collee, une prise de plus (point, arete ou face) et sa cible ;
+  // le premier collage tient (la piece ne fait que glisser et tourner sur son contact). keepPins : les points poses
+  let addPin = false, keepPins = [];              // une coupe au couteau proposee (morceaux colores), pas encore validee
   const snapshot = () => ({ m: all.map(g => g.matrix.clone()), groups: groups.map(gr => [...gr]), joints: joints.map(cloneJ), ex: all.map(g => !!g.userData.excluded) });
   const restore = s => { all.forEach((g, i) => { s.m[i].decompose(g.position, g.quaternion, g.scale); g.updateMatrix();
     if (s.ex) { g.userData.excluded = s.ex[i]; g.visible = !s.ex[i]; } }); groups = s.groups.map(gr => [...gr]);
@@ -158,7 +161,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pivot: !!pivot, pairs: pairs.length, twinPos: twinAlt && twinAlt.at === changes && twinAlt.fits.length > 1 ? `${twinAlt.i + 1}/${twinAlt.fits.length}` : null, boxMode, ground3, groundPts: gPts.length, vertical, pinsA: pins.a.length, pinsB: pins.b.length,
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
-    cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, wavy: wavyMode,
+    cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, wavy: wavyMode, addPin,
     choice: choice ? { x: choice.x, y: choice.y, items: choice.cands.map(altLabel), piece: choice.cands[0]?.group?.userData.name || "" } : null,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
@@ -749,6 +752,62 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         : `Emboîtée : ${r.sink >= 0.05 ? `${mm(r.sink)} mm plus bas` : "même hauteur"}, ${moved}`);
     } catch (e) { console.error("[3D] emboiter / aligner", e); say("La recherche a échoué"); }
   };
+  // un point de colle de plus, le premier collage tenu : la piece tourne autour de la normale du contact et glisse dans
+  // son plan, jusqu'a ce que la nouvelle prise vienne sur sa cible -- deux aretes : alignees (et l'une sur l'autre), deux
+  // faces : face a face (et l'une contre l'autre), des points : superposes (a partir de deux, au mieux pour tous)
+  const pinOnContact = (A, B, j) => {
+    const unit = unitOf(A.group), moving = withKids(unit), { P, N } = contact(j), w = N.clone().normalize();
+    const flat = v => v.clone().addScaledVector(w, -v.dot(w));
+    const angle = (a, b) => Math.atan2(a.clone().cross(b).dot(w), a.dot(b));
+    let th = 0, t = new THREE.Vector3(), kind = A.kind === "edge" && B.kind === "edge" ? "edge" : A.kind === "face" && B.kind === "face" && A.n && B.n ? "face" : "point";
+    const rot = (v, a) => v.clone().sub(P).applyAxisAngle(w, a).add(P);
+    if (kind === "edge") {
+      const da = flat(A.e), db = flat(B.e);
+      if (da.lengthSq() < 1e-6 || db.lengthSq() < 1e-6) kind = "point";
+      else {
+        da.normalize(); db.normalize();
+        const t1 = angle(da, db), t2 = angle(da, db.clone().negate());
+        th = Math.abs(t1) <= Math.abs(t2) ? t1 : t2;
+        const off = flat(B.p.clone().sub(rot(A.p, th))), dbn = db;
+        t = off.addScaledVector(dbn, -off.dot(dbn));                  // l'une sur l'autre ; le long de l'arete, libre
+      }
+    }
+    if (kind === "face") {
+      const na = flat(A.n), nb = flat(B.n).negate();
+      if (na.lengthSq() < 1e-4 || nb.lengthSq() < 1e-4) kind = "point";
+      else {
+        na.normalize(); nb.normalize();
+        th = angle(na, nb);
+        const d = B.p.clone().sub(rot(A.p, th)).dot(nb);
+        t = nb.clone().multiplyScalar(d);                               // face contre face ; dans son plan, libre
+      }
+    }
+    if (kind === "point") {
+      keepPins.push({ ag: A.group, bg: B.group, a: toLocal(A.group, A.p), b: toLocal(B.group, B.p) });
+      const pts = keepPins.filter(k => unit.includes(k.ag)).map(k => [toWorld(k.ag, k.a), toWorld(k.bg, k.b)]);
+      if (pts.length === 1) t = flat(pts[0][1].clone().sub(pts[0][0]));
+      else {
+        // au mieux pour tous les points, dans le plan du contact (Procuste a deux dimensions)
+        const ca = new THREE.Vector3(), cb = new THREE.Vector3();
+        pts.forEach(([a, b]) => { ca.add(a); cb.add(b); }); ca.divideScalar(pts.length); cb.divideScalar(pts.length);
+        let sc = 0, ss = 0;
+        for (const [a, b] of pts) { const x = flat(a.clone().sub(ca)), y = flat(b.clone().sub(cb)); sc += x.dot(y); ss += x.clone().cross(y).dot(w); }
+        th = Math.atan2(ss, sc);
+        t = flat(cb.clone().sub(rot(ca, th)));
+      }
+    }
+    const M = new THREE.Matrix4().makeTranslation(t.x, t.y, t.z).multiply(about(P, new THREE.Quaternion().setFromAxisAngle(w, th)));
+    apply(moving, M);
+    // le contact suit la piece (il glisse avec elle sur le support)
+    j.b.updateMatrix();
+    j.p.copy(P.clone().applyMatrix4(M).applyMatrix4(j.b.matrix.clone().invert()));
+    pivot = { p: P.clone().applyMatrix4(M), axis: w, unit: moving };
+    showContact(); placeHandle(); push(); setSel(unit);
+    const mm = x => String(Math.round(x * 10) / 10).replace(".", ",");
+    fitMsg = `Collée : point de colle ajouté (${kind === "edge" ? "arêtes alignées" : kind === "face" ? "faces l'une contre l'autre" : `${keepPins.filter(k => unit.includes(k.ag)).length} point(s)`}), le premier collage tient — glissée de ${mm(t.length())} mm${Math.abs(th) > 0.005 ? `, tournée de ${Math.round(th * 180 / Math.PI)}°` : ""}`;
+    egg("point_de_colle");
+    render(); onChange?.(state());
+  };
   const startTwins = A => {
     clearTwins();
     if (!assist || A.kind !== "face" || !A.mesh?.geometry?.attributes?.position) return;
@@ -988,9 +1047,17 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       drop(unit); pivot = null; clearMarks(); showContact(); push(); render(); return;
     }
     if (mode === "mate") {
-      if (!first) { first = pick; clearMarks(); if (pick.wavy) { showAlt(pick); } else mark(pick); onChange?.(state()); if (!pick.wavy) startTwins(pick); return; }
+      if (!first) { first = pick; clearMarks(); if (pick.wavy) { showAlt(pick); } else mark(pick); onChange?.(state()); if (!pick.wavy && !addPin) startTwins(pick); return; }
       const A = first;
       first = null; clearMarks();
+      if (addPin) {
+        const j = jointOf(unitOf(A.group));
+        if (!j || !unitOf(j.b).includes(pick.group)) {
+          fitMsg = j ? `La seconde prise se met sur ${j.b.userData.name}, la pièce où elle est collée` : "Colle d'abord la pièce (premier collage), puis ➕ Point de colle";
+          onChange?.(state()); return;
+        }
+        pinOnContact(A, pick, j); return;
+      }
       const search = twinFor === A ? twinSearch : null;
       twinFor = null;
       if (search && !ev.shiftKey && !multi) {
@@ -1573,7 +1640,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
 
   const api = {
     setGround3: on => { ground3 = on; gPts = []; gUnit = []; drawGround(); onChange?.(state()); },
-    setMode: m => { if (m !== "cut") { cutCancel(); dropStroke(); clearRub(); } knifeView(m === "cut"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
+    setMode: m => { if (m !== "mate") { addPin = false; keepPins = []; } if (m !== "cut") { cutCancel(); dropStroke(); clearRub(); } knifeView(m === "cut"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
     setRotStep: d => { rotStep = d; applySnap(); onChange?.(state()); },
     setMoveStep: d => { moveStep = d; try { localStorage.setItem("bn.asm.moveStep", String(d)); } catch { /* rien */ } applySnap(); onChange?.(state()); },
@@ -1679,6 +1746,12 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     choicePick: i => { const c = choice; if (!c) return; choice = null; clearMarks(); c.keep.forEach(mark); tap(c.cands[i], c.ev); onChange?.(state()); },
     choiceCancel: () => { const c = choice; choice = null; clearMarks(); c?.keep.forEach(mark); render(); onChange?.(state()); },
     setWavy: on => { wavyMode = on; onChange?.(state()); },
+    setAddPin: on => {
+      if (on && mode !== "mate") api.setMode("mate");
+      addPin = on; first = null; keepPins = []; clearMarks(); clearTwins(); render();
+      fitMsg = on ? "➕ Point de colle : touche un point, une arête ou une face de la pièce collée, puis l'endroit qui lui correspond sur la pièce où elle est collée" : null;
+      onChange?.(state());
+    },
     setEraser: on => { eraser = on; if (!on) clearRub(); onChange?.(state()); },
     // detacher les supports integres de la piece choisie : proposes en couleur, a valider comme une coupe
     cleanScraps: () => { if (mode !== "cut") api.setMode("cut"); return cutWith("clean"); },
