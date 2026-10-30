@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import html
+import io
 from datetime import timedelta
 import json
 import logging
@@ -481,6 +482,47 @@ def color_dot(hex_color: Optional[str]) -> str:
     return "🟣"
 
 
+CARD_ID = "filaments"      # la carte des filaments parmi les medias (30/10/2026)
+_card_cache: dict = {}
+
+
+def _card_info(f=None, u=None) -> dict:
+    """Ce que la carte montre d'un filament : nom, details, couleurs, degrade ou tranches, finition (celle choisie
+    sur sa fiche, sinon lue dans son nom, comme finishOf de l'appli). u : un filament utilise sans bobine connue."""
+    from .filament_card import colors_of
+    from .mw_3d import finish_of
+    if f is None:
+        fin = finish_of(u.filament_type, color=u.color_hex)
+        return {"name": u.filament_type or "Filament", "sub": None, "colors": colors_of(u.color_hex, None), "mtype": None,
+                "finish": None if fin == "translucent" else fin}
+    fin = f.fila_finish or finish_of(f.fila_type, f.name, f.translated_name, f.material, color=f.color)
+    return {"name": f.translated_name or f.name,
+            "sub": " · ".join(filter(None, [f.manufacturer, f.fila_type or f.material, (f.fila_color_code or "").strip() or None])),
+            "colors": colors_of(f.color, f.colors_array), "mtype": f.multicolor_type,
+            "finish": None if fin in ("none", "translucent") else fin}
+
+
+def card_preview(card: list) -> str:
+    """La carte en petit (data URL), pour la vignette de la fenetre de partage ; gardee pour les apercus suivants."""
+    import base64
+    from PIL import Image
+    from . import filament_card
+    k = repr(card)
+    if k not in _card_cache:
+        jpg = filament_card.render(card)
+        url = ""
+        if jpg:
+            with Image.open(io.BytesIO(jpg)) as im:
+                im.thumbnail((240, 240))
+                b = io.BytesIO()
+                im.convert("RGB").save(b, "JPEG", quality=85)
+            url = "data:image/jpeg;base64," + base64.b64encode(b.getvalue()).decode()
+        if len(_card_cache) > 50:
+            _card_cache.clear()
+        _card_cache[k] = url
+    return _card_cache[k]
+
+
 def _makerworld(design_id) -> Optional[str]:
     d = str(design_id or "").strip()
     return f"https://makerworld.com/models/{d}" if d and d != "0" else None
@@ -587,14 +629,15 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
                            # lui qu'on cherche pour racheter la meme bobine
                            + " · ".join(filter(None, [f.manufacturer, f.fila_type or f.material,
                                                       (f.fila_color_code or "").strip() or None])) + ")",
-                           f.color)
+                           f.color, _card_info(f))
                      for sid, f in rows}
-        fil = {}
+        fil, finfo = {}, {}
         for p in prints:
             for u in p.filament_usage:
-                key, col = names.get(u.spool_id) or (u.filament_type or "Filament", u.color_hex)
+                key, col, info = names.get(u.spool_id) or (u.filament_type or "Filament", u.color_hex, _card_info(None, u))
                 g0, c0 = fil.get(key, (0, None))
                 fil[key] = (g0 + (u.grams_used or 0), c0 or col)
+                finfo.setdefault(key, info)
 
     # Memes replis que la fiche (Prints.jsx) pour qu'impression seule et groupe
     # disent la meme chose : duree reelle, sinon l'estimation (en cours,
@@ -616,8 +659,10 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
         stats.append(f"⚖️ {_weight(weight)}")
     if dates:
         stats.append(f"📅 {max(dates).strftime('%d/%m/%Y')}")
-    fil_lines = [f"{color_dot(c)} {html.escape(k)} — {_weight(g) or '0 g'}"
-                 for k, (g, c) in sorted(fil.items(), key=lambda kv: -kv[1][0]) if g > 0][:6]
+    used = [(k, g, c) for k, (g, c) in sorted(fil.items(), key=lambda kv: -kv[1][0]) if g > 0][:6]
+    fil_lines = [f"{color_dot(c)} {html.escape(k)} — {_weight(g) or '0 g'}" for k, g, c in used]
+    # la carte des filaments (30/10/2026) : les memes, dans le meme ordre, en vraies couleurs
+    card = [{**finfo[k], "weight": _weight(g) or "0 g"} for k, g, _c in used if finfo.get(k, {}).get("colors")]
 
     live = _live(prints, tz_offset_min)
     if live:
@@ -637,6 +682,8 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
     pool = list(dict.fromkeys(pool))
     by_id = {_media_id(f): f for f in pool}
     default_ids = (["camera"] if live else []) + [_media_id(f) for f in media]
+    if card:                                       # la carte, en dernier, d'office (une place est gardee pour elle)
+        default_ids = default_ids[:ALBUM_MAX - 1] + [CARD_ID]
     tl_pool = [{"id": i, "url": _media_url(i), "video": True, "timelapse": True} for i in tls] if kind == "print" else []
     pool_out = [{"id": i, "url": _media_url(i), "video": f.suffix.lower() in (".mp4", ".mov", ".webm", ".m4v")}
                 for i, f in by_id.items()]
@@ -644,14 +691,20 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
         at = next((n for n, m in enumerate(pool_out) if not m["video"] and not m["id"].split("/")[-1].startswith("Photo-")), len(pool_out))
         pool_out[at:at] = tl_pool
     by_id.update({i: f for i, (f, _l) in tls.items()})
+    if card:
+        pool_out.append({"id": CARD_ID, "url": card_preview(card), "video": False, "card": True})
     camera = bool(live)
+    with_card = bool(card) and (len(media) < ALBUM_MAX - (1 if live else 0) or chosen is None)
     if chosen is not None:
         # Choix fait dans l'appli : dans son ordre, seulement des medias connus
-        # de ce print / groupe, 10 au plus (camera comprise).
-        ids = [i for i in dict.fromkeys(chosen) if i == "camera" or i in by_id]
+        # de ce print / groupe, 10 au plus (camera et carte des filaments comprises).
+        ids = [i for i in dict.fromkeys(chosen) if i == "camera" or i in by_id or (i == CARD_ID and card)]
         camera = bool(live) and "camera" in ids
-        media = [by_id[i] for i in ids if i != "camera"][:ALBUM_MAX - (1 if camera else 0)]
-    return {"title": title, "stats": stats, "filaments": fil_lines, "links": links,
+        with_card = CARD_ID in ids
+        media = [by_id[i] for i in ids if i not in ("camera", CARD_ID)][:ALBUM_MAX - (1 if camera else 0) - (1 if with_card else 0)]
+    elif with_card:
+        media = media[:ALBUM_MAX - (1 if live else 0) - 1]
+    return {"title": title, "stats": stats, "filaments": fil_lines, "links": links, "card": card if with_card else None,
             "media": media, "live": live, "camera": camera, "pool": pool_out,
             "timelapses": [{"id": i, "url": _media_url(i), "label": lab, "plate": plates.get(i)} for i, (_f, lab) in tls.items()] if kind == "group" else [],
             "default_ids": default_ids}
@@ -870,6 +923,12 @@ async def send(kind: str, obj_id: int, destination_ids, message: str = "",
             if cov:
                 files.insert(0, (cov, False))
         files = files[:ALBUM_MAX]
+        if share.get("card"):
+            from . import filament_card
+            jpg = await asyncio.to_thread(filament_card.render, share["card"])
+            if jpg:
+                (Path(tmp) / "filaments.jpg").write_bytes(jpg)
+                files = files[:ALBUM_MAX - 1 - (1 if share["live"] and share.get("camera", True) else 0)] + [(Path(tmp) / "filaments.jpg", False)]
         if share["live"] and share.get("camera", True):
             jpg = await _camera_jpeg()
             if jpg:

@@ -71,7 +71,7 @@ async def share_preview(kind: str, obj_id: int, message: str = "", tz: int | Non
     """Exactement ce qui partira : la legende et les medias."""
     share = await _call(tg.build_share(_kind(kind), obj_id, tz))
     return {"title": share["title"], "caption_html": tg.render_caption(share, message),
-            "media": (["camera"] if share["live"] else []) + [f"makerworld-{k}" for k, _u in enumerate(share.get("remote") or [])] + [p.name for p in share["media"]],
+            "media": (["camera"] if share["live"] else []) + [f"makerworld-{k}" for k, _u in enumerate(share.get("remote") or [])] + [p.name for p in share["media"]] + (["filaments.jpg"] if share.get("card") else []),
             "live": bool(share["live"]),
             # Medias qu'on peut joindre, et ceux choisis d'office (a cocher dans l'appli).
             "pool": share["pool"], "timelapses": share.get("timelapses") or [], "default_ids": share["default_ids"], "album_max": tg.ALBUM_MAX,

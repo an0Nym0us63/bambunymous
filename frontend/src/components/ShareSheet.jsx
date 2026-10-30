@@ -19,7 +19,8 @@ const TZ = new Date().getTimezoneOffset();
 const KIND_NAME = { group: "groupe", design: "modèle MakerWorld", creator: "créateur MakerWorld", print: "impression" };
 const KIND_THIS = { group: "Ce groupe", design: "Ce modèle", creator: "Ce créateur", print: "Cette impression" };
 // une vignette : nos fichiers passent par l'API, la couverture d'un modele vient de MakerWorld
-const srcOf = u => /^https?:/.test(u) ? mwImg(u, 256) : apiUrl(u.slice(7));
+// la carte des filaments arrive deja dessinee (data:)
+const srcOf = u => /^data:/.test(u) ? u : /^https?:/.test(u) ? mwImg(u, 256) : apiUrl(u.slice(7));
 
 // Les timelapses des impressions d'un groupe (26/10/2026) : aucun d'office, on coche ceux a joindre.
 function TimelapsePicker({ items, picked, room, onDone, onClose, z }) {
@@ -201,7 +202,7 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
                   return m.video
                     ? <video key={m.id} src={srcOf(m.url)} muted playsInline preload="metadata" onClick={() => toggle(m.id)} style={st}/>
                     : <img key={m.id} src={srcOf(m.url)} alt="" referrerPolicy="no-referrer" onClick={() => toggle(m.id)} style={st}
-                        data-tip={m.id === "mwcover" ? "La couverture du modèle sur MakerWorld" : m.id === "mwavatar" ? "Son avatar" : m.id.startsWith("mw") ? "Un de ses modèles" : undefined}/>;
+                        data-tip={m.card ? "La carte des filaments : leurs vraies couleurs et finitions (le texte de Telegram n'a que des ronds approchants)" : m.id === "mwcover" ? "La couverture du modèle sur MakerWorld" : m.id === "mwavatar" ? "Son avatar" : m.id.startsWith("mw") ? "Un de ses modèles" : undefined}/>;
                 })}
               </div>
             )}
