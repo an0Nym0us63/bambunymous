@@ -216,10 +216,10 @@ export default function GalleryCompare({
                       overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{getTitle(item)}</p>
                   </div>
                   <style>{".bn-stage:hover .bn-stage-img{transform:scale(1.05)}"
-                    // une piece toute blanche se perdait sur le fond clair du studio : un fond plus soutenu (30/10/2026)
-                    // (30/10/2026 : indigo plutot que gris, comme les vignettes ; le sol garde son horizon)
-                    + ".bn-stage[data-light='1']{background:radial-gradient(65% 50% at 50% 30%, rgba(255,255,255,.3), transparent 72%),"
-                    + "linear-gradient(180deg, color-mix(in srgb, #A5B4FC 50%, var(--surface2)) 0%, color-mix(in srgb, #818CF8 52%, var(--surface2)) 68%, color-mix(in srgb, #6366F1 56%, var(--surface2)) 68.5%, color-mix(in srgb, #6366F1 48%, var(--surface2)) 100%) !important}"}</style>
+                    // une piece toute blanche se perdait sur le fond clair du studio
+                    // (30/10/2026 : un lisere et une ombre sur la piece, comme les vignettes ; un fond a part la faisait
+                    // passer pour un statut)
+                    + ".bn-stage[data-light='1'] .bn-stage-img{filter:drop-shadow(0 0 0.7px rgba(30,41,59,.6)) drop-shadow(0 3px 5px rgba(30,41,59,.28)) !important}"}</style>
                 </>
               ) : renderCover ? renderCover(item) : img ? (
                 <img src={apiThumb(img, 384)} alt={getTitle(item)} loading="lazy" decoding="async" style={{ width:"100%", height:"100%", objectFit:"cover" }}

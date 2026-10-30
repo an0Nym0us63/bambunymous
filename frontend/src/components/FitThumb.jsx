@@ -9,16 +9,6 @@ import React, { useEffect, useState } from "react";
  * Le calcul est garde par adresse : une tuile qui revient ne relit pas son image.
  */
 const fits = new Map();
-let lightDone = false;
-const lightCss = () => {
-  if (lightDone || typeof document === "undefined") return;
-  lightDone = true;
-  const st = document.createElement("style");
-  // un studio indigo pastel (30/10/2026 : le gris brut etait terne, l'indigo franc trop vif), eclaire en haut
-  st.textContent = "[data-fit-light='1']{background:radial-gradient(75% 60% at 50% 30%, rgba(255,255,255,.3), transparent 72%),"
-    + "linear-gradient(170deg, color-mix(in srgb, #A5B4FC 50%, var(--surface2)) 0%, color-mix(in srgb, #818CF8 52%, var(--surface2)) 100%) !important}";
-  document.head.appendChild(st);
-};
 
 function measure(img) {
   const N = 64, c = document.createElement("canvas");
@@ -63,7 +53,8 @@ function placeFor(box, iw, ih, cw, ch) {
 // photoFit : une photo (sans fond uni) remplit la case (« cover », les petites cases d'une mosaique) ou y tient entiere
 export default function FitThumb({ src, style = {}, onError, photoFit = "contain", ...rest }) {
   const [place, setPlace] = useState(() => fits.get(src)?.place || null);
-  useEffect(() => { setPlace(fits.get(src)?.place || null); }, [src]);     // une autre image dans la meme case
+  const [light, setLight] = useState(() => !!fits.get(src)?.m?.light);
+  useEffect(() => { setPlace(fits.get(src)?.place || null); setLight(!!fits.get(src)?.m?.light); }, [src]);     // une autre image dans la meme case
   const onLoad = e => {
     const img = e.currentTarget, box = img.parentElement;
     if (!box?.clientWidth || !img.naturalWidth) return;
@@ -75,12 +66,15 @@ export default function FitThumb({ src, style = {}, onError, photoFit = "contain
       fits.set(src, f);
     }
     const p = f.m && placeFor(f.m, img.naturalWidth, img.naturalHeight, box.clientWidth, box.clientHeight);
-    // une piece toute blanche se perdait sur le fond clair de sa case (30/10/2026) : un fond gris-bleu
-    if (f.m?.light) { lightCss(); box.dataset.fitLight = "1"; } else if (box.dataset.fitLight) delete box.dataset.fitLight;
+    // une piece toute blanche se perdait sur le fond clair de sa case (30/10/2026) : un fin lisere et une ombre douce
+    // sur la piece elle-meme (un fond de couleur a part la faisait passer pour un statut)
+    setLight(!!f.m?.light);
     f.place = p;
     setPlace(p);
   };
-  const look = { filter: "contrast(1.05) saturate(1.05)" };    // un poil seulement : plus, les couleurs criaient
+  // un poil seulement : plus, les couleurs criaient
+  const look = { filter: light ? "contrast(1.05) saturate(1.05) drop-shadow(0 0 0.7px rgba(30,41,59,.6)) drop-shadow(0 4px 7px rgba(30,41,59,.22))"
+    : "contrast(1.05) saturate(1.05)" };
   return <img src={src} alt="" {...rest} onLoad={onLoad} onError={onError}
     style={place ? { ...style, ...look, position: "absolute", inset: "auto", objectFit: "fill", maxWidth: "none", ...place }
       : { ...style, ...look, objectFit: photoFit }}/>;
