@@ -464,21 +464,26 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
                 new THREE.Matrix4().fromArray(S).multiply(new THREE.Matrix4().makeTranslation(cg.x - o[0], cg.y - o[1], cg.z - o[2])).decompose(g.position, g.quaternion, g.scale);
                 g.updateMatrix();
               };
-              // une piece separee a la main (« objet:instance:partie:morceau ») : refaite en ses morceaux, chacun a sa place
-              const pre = `${pg.userData.k}:`;
-              if (splitPieceGeometry && splits.has(pg.userData.k) && Object.keys(saved).some(k => k.startsWith(pre))) {
-                // coupee au couteau : les memes coups refaits sur la piece entiere (30/10/2026)
-                const comps = splitPieceGeometry(THREE, pg, edit?.cuts?.[pg.userData.k] || null);
-                if (comps) {
-                  const parts = buildSplitGroups(THREE, pg, comps);
-                  holder.remove(pg); byPiece.delete(pg.userData.pid);
-                  for (const g of parts) {
-                    holder.add(g); byPiece.set(g.userData.pid, g);
-                    const S = saved[g.userData.k] || saved[pg.userData.k];
-                    if (S) place(g, S);
-                  }
-                  continue;
+              // une piece separee a la main (« objet:instance:partie:morceau ») : refaite en ses morceaux, chacun a sa place ;
+              // un morceau separe a son tour (« …:morceau:sous-morceau », 30/10/2026 : il revenait d'un seul tenant a la
+              // reouverture) l'est de meme, de proche en proche ; coupee au couteau : les memes coups refaits
+              const explode = q => {
+                const pre = `${q.userData.k}:`;
+                if (!splitPieceGeometry || !splits.has(q.userData.k) || !Object.keys(saved).some(k => k.startsWith(pre))) return [q];
+                const comps = splitPieceGeometry(THREE, q, edit?.cuts?.[q.userData.k] || null);
+                return comps ? buildSplitGroups(THREE, q, comps).flatMap(explode) : [q];
+              };
+              const parts = explode(pg);
+              if (parts.length > 1) {
+                holder.remove(pg); byPiece.delete(pg.userData.pid);
+                for (const g of parts) {
+                  holder.add(g); byPiece.set(g.userData.pid, g);
+                  // sa place, ou a defaut celle du morceau dont il vient
+                  let k = g.userData.k, S = null;
+                  while (!S && k) { S = saved[k]; k = k.split(":").length > 3 ? k.replace(/:\d+$/, "") : null; }
+                  if (S) place(g, S);
                 }
+                continue;
               }
               // une cle d'avant (« objet:instance ») : la place de l'objet entier vaut pour ses parties
               const kk = String(pg.userData.k || "").split(":");

@@ -1549,7 +1549,8 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
     clean = {}
     for k, m in (pieces or {}).items():
         # « #n » : un exemplaire ajoute de la piece (30/10/2026)
-        if re.fullmatch(r"\d+:\d+:\d+(:\d+)?(#\d{1,3})?", str(k)) and isinstance(m, list) and len(m) == 16 \
+        # « :n » : un morceau d'une piece separee, et ses sous-morceaux (separes a leur tour, 30/10/2026)
+        if re.fullmatch(r"\d+:\d+:\d+(:\d+){0,4}(#\d{1,3})?", str(k)) and isinstance(m, list) and len(m) == 16 \
                 and all(isinstance(x, (int, float)) and abs(x) < 1e6 for x in m):
             clean[str(k)] = [round(float(x), 6) for x in m]
     if not clean:
@@ -1563,7 +1564,7 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
            for j in (joints or []) if isinstance(j, dict) and str(j.get("a")) in clean and str(j.get("b")) in clean
            and num(j.get("p"), 3) and num(j.get("n"), 3)]
     # les pieces separees a la main (refaites en morceaux a l'ouverture), et la version de l'edition
-    spl = [str(k) for k in (splits or []) if re.fullmatch(r"\d+:\d+:\d+", str(k))]
+    spl = [str(k) for k in (splits or []) if re.fullmatch(r"\d+:\d+:\d+(:\d+){0,3}", str(k))]
     did = str(did) if did and str(did).isdigit() else _did_of(key)
     # les pieces exclues de l'assemblage (30/10/2026) : plus montrees, remises depuis la liste des pieces
     exc = [str(k) for k in (excluded or []) if str(k) in clean]
