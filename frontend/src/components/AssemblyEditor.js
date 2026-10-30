@@ -161,6 +161,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
     cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, addPin, edgeMode,
+    twinBusy, canTwins: mode === "mate" && !!first && first.kind === "face" && !addPin && !twinDone,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
     // de la selection part au moins un collage (vers une piece hors d'elle) : « Grouper le colle » a un sens
@@ -177,7 +178,30 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const lineMat = new THREE.LineBasicMaterial({ color: 0xf97316, depthTest: false });
   const marks = new THREE.Group(); marks.renderOrder = 999; holder.add(marks);
   const clearMarks = () => { marks.children.slice().forEach(m => { m.geometry.dispose(); marks.remove(m); }); };
+  // la face entiere d'une prise (30/10/2026), surlignee : au survol (pale), puis tant qu'elle est prise (plus franche)
+  const faceMat = new THREE.MeshBasicMaterial({ color: 0xf97316, transparent: true, opacity: 0.42, depthTest: false, side: THREE.DoubleSide });
+  const hoverMat = new THREE.MeshBasicMaterial({ color: 0xf97316, transparent: true, opacity: 0.22, depthTest: false, side: THREE.DoubleSide });
+  const hoverLine = new THREE.LineBasicMaterial({ color: 0xfdba74, depthTest: false });
+  const drawHl = (into, pick, mat, line) => {
+    if (pick.kind === "edge") {
+      const pts = pick.hl?.chain ? pick.hl.chain.map(v => v.clone().applyMatrix4(pick.hl.M)) : [pick.a, pick.b];
+      const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), line); l.renderOrder = 999; into.add(l);
+      return;
+    }
+    const geo = pick.mesh?.geometry, idx = geo?.index;
+    if (!idx || !geo.attributes?.position) return;
+    const tris = pick.region?.tris || regionOf(geo, pick.tri)?.tris;
+    if (!tris || tris.size > 80000) return;
+    pick.group.updateMatrix();
+    const M = pick.group.matrix.clone().multiply(pick.mesh.matrix), pos = geo.attributes.position, ix = idx.array, v = new THREE.Vector3();
+    const out = new Float32Array(tris.size * 9);
+    let k = 0;
+    for (const t of tris) for (let e = 0; e < 3; e++) { v.fromBufferAttribute(pos, ix[t * 3 + e]).applyMatrix4(M).addScaledVector(pick.n, 0.04); out[k++] = v.x; out[k++] = v.y; out[k++] = v.z; }
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(out, 3));
+    const m = new THREE.Mesh(g, mat); m.renderOrder = 998; into.add(m);
+  };
   const mark = pick => {
+    if (pick.kind === "face") drawHl(marks, pick, faceMat, lineMat);
     if (pick.kind === "edge") {
       // l'arete entiere, meme courbe (avant : le seul segment du triangle touche)
       const pts = pick.hl?.chain ? pick.hl.chain.map(v => v.clone().applyMatrix4(pick.hl.M)) : [pick.a, pick.b];
@@ -506,7 +530,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     let region = null;
     if (assist && idx) {
       const rg = regionOf(geo, hit.faceIndex);
-      if (rg) region = { c: rg.c.clone().applyMatrix4(M), area: rg.area, axis: rg.axis.clone().applyMatrix3(N).normalize(), elongated: rg.elongated, relaxed: rg.relaxed };
+      if (rg) region = { c: rg.c.clone().applyMatrix4(M), area: rg.area, axis: rg.axis.clone().applyMatrix3(N).normalize(), elongated: rg.elongated, relaxed: rg.relaxed, tris: rg.tris };
       if (rg?.relaxed && rg.area > 20) {
         const nr = rg.n.clone().applyMatrix3(N).normalize();
         if (nr.dot(n) < 0) nr.negate();
@@ -712,11 +736,15 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   // second toucher, sur l'une d'elles ou seulement sur sa piece, pose la piece exactement dessus. Quand plusieurs angles
   // vont aussi bien (une face carree, ronde), « ↻ Autre position » passe au suivant
   let twinsLib = null, twinSearch = null, twinFor = null, twinAlt = null;
+  // la recherche des jumelles (30/10/2026) : lancee a la demande (« 🔍 Faces jumelles »), elle tourne sans bloquer et
+  // s'arrete (« ⏹ Arreter », ou un autre clic) ; twinDone : son resultat, pour la face prise
+  let twinDone = null, twinBusy = false, twinStop = false;
   const twinMarks = new THREE.Group(); twinMarks.renderOrder = 998; holder.add(twinMarks);
   const twinMat = new THREE.MeshBasicMaterial({ color: 0x22c55e, transparent: true, opacity: 0.5, depthTest: false, side: THREE.DoubleSide });
   const clearTwins = () => {
     twinMarks.children.slice().forEach(m => { m.geometry?.dispose(); if (m.material !== twinMat) { m.material.map?.dispose(); m.material.dispose(); } twinMarks.remove(m); });
-    twinSearch = null; twinFor = null;
+    if (twinBusy) twinStop = true;
+    twinSearch = null; twinFor = null; twinDone = null;
   };
   const meshMat = (g, mesh) => { g.updateMatrix(); mesh.updateMatrix(); return g.matrix.clone().multiply(mesh.matrix); };
   const drawTwins = list => {
@@ -892,15 +920,22 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const unit = sel.has(A.group) ? [...sel] : unitOf(A.group), skip = new Set(withKids(unit));
     const others = all.filter(g => g.visible && !skip.has(g));
     if (!others.length) return;
-    fitMsg = "Recherche des faces jumelles…"; onChange?.(state());
+    fitMsg = "Recherche des faces jumelles… (⏹ Arrêter pour l'interrompre)";
+    twinBusy = true; twinStop = false;
+    onChange?.(state());
+    const stop = new Error("arret");
     const run = (async () => {
       await new Promise(r => setTimeout(r, 0));                // la consigne s'affiche d'abord
       if (!twinsLib) { const { createTwins } = await import("./assemblyTwins"); twinsLib = createTwins(THREE, neighbours); }
-      return twinsLib.search({ g: A.group, mesh: A.mesh, tri: A.tri }, others, meshMat);
-    })().catch(e => { console.error("[3D] faces jumelles", e); return null; });
+      return twinsLib.search({ g: A.group, mesh: A.mesh, tri: A.tri }, others, meshMat, () => { if (twinStop) throw stop; });
+    })().catch(e => { if (e !== stop) console.error("[3D] faces jumelles", e); return null; });
     twinSearch = run; twinFor = A;
     run.then(r => {
-      if (twinFor !== A) return;                               // deja colle, ou une autre face touchee
+      const stopped = twinStop;
+      twinBusy = false; twinStop = false;
+      if (twinFor !== A) { onChange?.(state()); return; }      // deja colle, ou une autre face touchee
+      if (stopped) { fitMsg = "Recherche arrêtée : touche l'endroit où la coller"; twinFor = null; onChange?.(state()); return; }
+      twinDone = r;
       // seules les nettes sont surlignees (une petite face ronde ressemble a beaucoup d'autres) ; les autres servent
       // quand on touche leur piece
       // une face deja prise (une autre piece posee dessus) n'est pas proposee (30/10/2026)
@@ -1018,6 +1053,25 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   // un tap se distingue d'un glisser (un doigt bouge plus qu'une souris) ; un geste a deux doigts (zoomer, deplacer la
   // vue) n'est jamais un tap, meme quand un doigt se releve sans avoir bouge
   let fingers = 0, several = false;
+  // au survol, en Coller et Poser au sol (30/10/2026) : la face ou l'arete qui serait prise, surlignee avant le clic
+  const hoverMarks = new THREE.Group(); hoverMarks.renderOrder = 997; holder.add(hoverMarks);
+  let hoverRaf = 0, hoverKey = null;
+  const clearHover = () => { hoverMarks.children.slice().forEach(m => { m.geometry.dispose(); hoverMarks.remove(m); }); hoverKey = null; };
+  const onHover = ev => {
+    if (!(mode === "mate" || (mode === "ground" && !ground3)) || ev.buttons || tc.dragging || ev.pointerType === "touch" || hoverRaf) return;
+    const x = ev.clientX, y = ev.clientY;
+    hoverRaf = requestAnimationFrame(() => {
+      hoverRaf = 0;
+      const pk = pickAt({ clientX: x, clientY: y });
+      const key = !pk ? null : pk.kind === "edge" ? `${pk.group.userData.pid}|e|${pk.a.toArray()}|${pk.b.toArray()}`
+        : `${pk.group.userData.pid}|f|${pk.mesh?.uuid}|${pk.region ? pk.region.c.toArray().map(v => v.toFixed(2)).join(",") : pk.tri}`;
+      if (key === hoverKey) return;
+      clearHover(); hoverKey = key;
+      if (pk) drawHl(hoverMarks, pk, hoverMat, hoverLine);
+      render();
+    });
+  };
+  const onHoverOut = () => { if (hoverKey !== null) { clearHover(); render(); } };
   const onDown = ev => { fingers++; if (fingers > 1) several = true; down = [ev.clientX, ev.clientY]; };
   const onCancel = () => { fingers = Math.max(0, fingers - 1); if (!fingers) several = false; down = null; };
   const onUp = ev => {
@@ -1119,7 +1173,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       drop(unit); pivot = null; clearMarks(); showContact(); push(); render(); return;
     }
     if (mode === "mate") {
-      if (!first) { first = pick; clearMarks(); mark(pick); onChange?.(state()); if (!addPin) startTwins(pick); return; }
+      if (!first) { first = pick; clearMarks(); clearHover(); mark(pick); fitMsg = null; onChange?.(state()); return; }
       const A = first;
       first = null; clearMarks();
       if (addPin) {
@@ -1130,22 +1184,19 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         }
         pinOnContact(A, pick, j); return;
       }
-      const search = twinFor === A ? twinSearch : null;
+      // les jumelles trouvees (une recherche encore en cours s'arrete : on colle au point touche)
+      const r = twinFor === A ? twinDone : null;
       twinFor = null;
-      if (search && !ev.shiftKey && !multi) {
-        // les jumelles (la recherche finit si elle tourne encore) ; sans jumelle sur la piece touchee : le collage d'avant
-        fitMsg = "Recherche des faces jumelles…"; onChange?.(state());
-        search.then(r => {
-          clearTwins(); fitMsg = null;
-          const t = twinAt(r, pick);
-          if (!(t && mateTwin(A, t))) {
-            // des jumelles proposees, et touche ailleurs : la piece vient la ou l'on a touche (sa face centree sur ce
-            // point), et non sur toute la face touchee (30/10/2026)
-            const unit = mate(A, r?.twins?.some(x => x.shown) ? { ...pick, region: null, at: true } : pick);
-            if (unit) { pairs = [pairOf(A, pick, pivot ? pivot.p : pick.p, pivot ? pivot.p : pick.p)]; push(); setSel(unit); }
-          }
-          render(); onChange?.(state());
-        });
+      if (r && !ev.shiftKey && !multi) {
+        clearTwins(); fitMsg = null;
+        const t = twinAt(r, pick);
+        if (!(t && mateTwin(A, t))) {
+          // des jumelles proposees, et touche ailleurs : la piece vient la ou l'on a touche (sa face centree sur ce
+          // point), et non sur toute la face touchee (30/10/2026)
+          const unit = mate(A, r?.twins?.some(x => x.shown) ? { ...pick, region: null, at: true } : pick);
+          if (unit) { pairs = [pairOf(A, pick, pivot ? pivot.p : pick.p, pivot ? pivot.p : pick.p)]; push(); setSel(unit); }
+        }
+        render(); onChange?.(state());
         return;
       }
       clearTwins();
@@ -1207,6 +1258,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   window.addEventListener("pointermove", onBoxMove);
   window.addEventListener("pointerup", onBoxUp);
   el.addEventListener("pointerdown", onDown);
+  el.addEventListener("pointermove", onHover);
+  el.addEventListener("pointerleave", onHoverOut);
   el.addEventListener("pointercancel", onCancel);
 
   // au doigt, deplacer en tirant la piece elle-meme (30/10/2026 : viser les fleches de la poignee etait penible) : en
@@ -1811,6 +1864,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     },
     cutConfirm, cutCancel,
     // le choix face / arete : survoler une ligne la surligne, la toucher la prend
+    findTwins: () => { if (first && first.kind === "face" && !twinBusy) startTwins(first); },
+    stopTwins: () => { if (twinBusy) { twinStop = true; onChange?.(state()); } },
     setEdgeMode: on => { edgeMode = on; onChange?.(state()); },
     setAddPin: on => {
       if (on && mode !== "mate") api.setMode("mate");
@@ -2157,7 +2212,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       try { tc.detach(); tc.disconnect(); } catch { /* deja debranchee */ }
       try { helper.traverse(o => { o.geometry?.dispose?.(); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m?.dispose?.()); }); } catch { /* rien */ }
       scene.remove(helper); holder.remove(handle);
-      clearMarks(); holder.remove(marks); markMat.dispose(); lineMat.dispose();
+      clearMarks(); holder.remove(marks); markMat.dispose(); lineMat.dispose(); faceMat.dispose();
+      el.removeEventListener("pointermove", onHover); el.removeEventListener("pointerleave", onHoverOut); cancelAnimationFrame(hoverRaf);
+      clearHover(); holder.remove(hoverMarks); hoverMat.dispose(); hoverLine.dispose();
       clearTwins(); holder.remove(twinMarks); twinMat.dispose();
       // les pieces masquees reviennent, pas celles retirees de l'assemblage (30/10/2026 : elles restaient affichees
       // apres l'edition, jusqu'a rouvrir la vue)

@@ -946,8 +946,8 @@ const EDIT_TIPS = {
   cut: "🔪 Clique la pièce à couper, puis trace un trait à travers elle, là où elle tient à ce qu'il faut détacher (un support) : elle est tranchée dans toute l'épaisseur vue · clic droit glissé : tourner la vue",
   mate1: "Clique la face ou l'arête de la pièce à déplacer (son groupe suit)",
   mate2: "Clique la face ou l'arête contre laquelle la coller",
-  mate1a: "Assisté : clique la face de la pièce à déplacer qui doit se coller ; ses faces jumelles (même contour) s'allument en vert sur les autres pièces",
-  mate2a: "Clique la face jumelle en vert (ou tout près) : la pièce s'y pose exactement ; ailleurs, même sur sa pièce, elle se colle au point cliqué",
+  mate1a: "Clique la face (surlignée au survol) de la pièce à déplacer qui doit se coller ; 🔍 Faces jumelles cherche ensuite celles de même contour",
+  mate2a: "Clique l'endroit où la coller (une face jumelle en vert, si tu les as cherchées : la pièce s'y pose exactement)",
 };
 // le mode « Points » : ce qu'il faut cliquer ensuite
 const pinsTip = est => {
@@ -1107,7 +1107,8 @@ const EDIT_HELP = [
     ["➕ Point de colle", "sur une pièce collée : touche un point, une arête ou une face de la pièce, puis l'endroit qui lui correspond sur son support ; le premier collage tient, la pièce glisse et tourne sur son contact (deux arêtes : alignées ; deux faces : l'une contre l'autre ; des points : superposés, au mieux à partir de deux)"],
     ["╱ Arête (Coller, Poser au sol)", "allumée, un clic prend l'arête vive la plus proche ; éteinte, un clic prend toujours la face. La pièce se cale là où tu as cliqué (centrée seulement entre deux faces planes de même taille)"],
     ["🪄 Assisté", "faces entières centrées et grands axes alignés ; arêtes milieu contre milieu"],
-    ["Faces jumelles (assisté)", "la face cliquée fait chercher, sur les autres pièces, celles de même contour (la coupe d'en face, trous des tenons compris) : en vert, avec leur ressemblance en % ; un clic sur l'une, ou juste sur sa pièce, l'y pose exactement : faces l'une contre l'autre, contours superposés ; ↻ Autre position quand plusieurs sens vont aussi bien"],
+    ["Au survol", "la face entière (ou l'arête, ╱ Arête allumée) qui serait prise se surligne en orange ; cliquée, elle reste surlignée"],
+    ["🔍 Faces jumelles", "une fois la face prise, ce bouton cherche sur les autres pièces celles de même contour, sans bloquer (⏹ Arrêter l'interrompt) — la coupe d'en face, trous des tenons compris : en vert, avec leur ressemblance en % ; un clic sur l'une, ou juste sur sa pièce, l'y pose exactement : faces l'une contre l'autre, contours superposés ; ↻ Autre position quand plusieurs sens vont aussi bien"],
     ["Flèches de la poignée, pièce collée", "elle glisse dans le plan du contact (deux flèches ; une seule le long d'une arête), sans se décoller ; en mode Tourner, un anneau la tourne autour du contact ; ← → ↑ ↓ : 1 mm sur le contact (Maj : 10)"],
     ["Glisser la pièce collée", "elle coulisse sur la face (ou le long de l'arête) sans se décoller"],
     ["Maj + glisser", "elle tourne autour du contact (au cran choisi ; Alt : libre) ; au stylet : ⟳ Tourner collée"],
@@ -1251,6 +1252,10 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
     : est.mode === "mate" ? <>
       <button type="button" onClick={() => api?.setEdgeMode(!est.edgeMode)} style={b(!!est.edgeMode)}
         data-tip="Allumé : un clic prend l'arête vive la plus proche ; éteint : un clic prend toujours la face">╱ Arête</button>
+      {est.twinBusy ? <button type="button" onClick={() => api?.stopTwins()} style={b(true, { background: "linear-gradient(135deg, #ef4444, #f97316)" })}
+          data-tip="Arrêter la recherche des faces jumelles">⏹ Arrêter</button>
+        : est.canTwins && <button type="button" onClick={() => api?.findTwins()} style={b(false)}
+          data-tip="Chercher sur les autres pièces les faces de même contour que celle prise (en vert) ; la recherche tourne sans bloquer">🔍 Faces jumelles</button>}
       <button type="button" onClick={() => api?.setAddPin(!est.addPin)} style={b(!!est.addPin)}
         data-tip="Sur une pièce déjà collée : une prise de plus (point, arête ou face) et sa cible, le premier collage tient">➕ Point de colle</button>
     </>
