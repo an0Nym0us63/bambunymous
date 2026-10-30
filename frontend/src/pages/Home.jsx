@@ -19,6 +19,7 @@ import { relayed } from "../components/Friends";
 import { AMSBox, AMSDetail, TrayBottomSheet, DryCard, amsRoute } from "../components/AMSSection";
 import { Zoom, TempStrip, SwitchArt, switchModel } from "../components/HomeTiles";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel, amsName, switchRoutes, trayPct } from "../utils/ams";
+import { FitBox } from "../components/FitThumb";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function hexCss(hex) {
@@ -219,9 +220,8 @@ function StatusBanner({ status, friend = null, switcher = null }) {
           <div style={{ width:72, height:72, borderRadius:10, overflow:"hidden", flexShrink:0,
             background:"var(--surface2)" }}>
             {printInfo && (friend || printInfo.plate_image) && (
-              <img key={`${friend?.id || "me"}-${printInfo.id}${imgV(printInfo)}`} src={apiThumb(img(`/prints/${printInfo.id}/image${imgV(printInfo)}`), 192)} alt=""
-                style={{ width:"100%", height:"100%", objectFit:"cover" }}
-                onError={e => e.currentTarget.style.display="none"}/>
+              <FitBox key={`${friend?.id || "me"}-${printInfo.id}${imgV(printInfo)}`} src={apiThumb(img(`/prints/${printInfo.id}/image${imgV(printInfo)}`), 192)}
+                style={{ width:"100%", height:"100%", }}/>
             )}
           </div>
           <div style={{ flex:1, minWidth:0, textAlign:"left" }}>
@@ -1421,8 +1421,8 @@ function PrinterLine({ status }) {
         overflow: "hidden", minWidth: 0, cursor: "pointer" }}>
       <span data-pk="" onClick={img ? e => { e.stopPropagation(); setBig(true); } : undefined} style={{ cursor: img ? "zoom-in" : undefined, width: 36, height: 36, borderRadius: 9, overflow: "hidden", flexShrink: 0, background: "var(--surface2)",
         display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
-        {img ? <img key={img} src={apiThumb(img, 192)} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/> : <Printer size={17}/>}</span>
+        {img ? <FitBox key={img} src={apiThumb(img, 192)}
+          style={{ width: "100%", height: "100%" }}/> : <Printer size={17}/>}</span>
       <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden",
         textOverflow: "ellipsis" }}>{info?.file_name || status?.print_name || info?.translated_name || "Imprimante"}</span>
       {live ? <>
@@ -1843,7 +1843,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
         <div onClick={img ? e => { e.stopPropagation(); setBig(true); } : undefined} style={{ height: "100%", aspectRatio: "1", maxHeight: 120, borderRadius: 14,
           overflow: "hidden", flexShrink: 0, background: "var(--surface2)", cursor: img ? "zoom-in" : "default", display: "flex", alignItems: "center",
           justifyContent: "center", color: "var(--muted)" }}>
-          {img ? <img key={img} src={apiThumb(img, 256)} alt="" onError={e => { e.currentTarget.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
+          {img ? <FitBox key={img} src={apiThumb(img, 256)} style={{ width: "100%", height: "100%", }}/>
             : <Printer size={26}/>}
         </div>
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1909,8 +1909,8 @@ function PrinterCompact({ status, size = "big", showFin = true, showLayer = true
     <div onClick={info ? e => { e.stopPropagation(); setBig(true); } : undefined}
       style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "var(--surface2)", flexShrink: 0, cursor: info ? "zoom-in" : undefined,
       ...(small ? { width: 42, height: 42, borderRadius: 10 } : { width: "100%", aspectRatio: size === "mid" ? "16 / 9" : "4 / 3" }) }}>
-      {info && <img key={imgV(info)} data-pk="" src={apiThumb(apiUrl(`/prints/${info.id}/image${imgV(info)}`), small ? 128 : 512)} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
-        style={{ width: "100%", height: "100%", objectFit: small ? "cover" : "contain", display: "block" }}/>}
+      {info && <FitBox photoFit={small ? "cover" : "contain"} key={imgV(info)} data-pk="" src={apiThumb(apiUrl(`/prints/${info.id}/image${imgV(info)}`), small ? 128 : 512)}
+        style={{ width: "100%", height: "100%" }}/>}
       {live && !small && <span data-pk="" style={{ position: "absolute", right: 8, top: 8, fontSize: 17, fontWeight: 900, color: "#fff",
         padding: "2px 9px", borderRadius: 10, background: `${s.color}dd`, boxShadow: "0 4px 12px rgba(0,0,0,0.25)" }}>{pct}%</span>}
     </div>

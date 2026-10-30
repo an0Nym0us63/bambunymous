@@ -23,6 +23,7 @@ import { DryCard } from "./AMSSection";
 import SpoolSVG, { FinishDefs } from "./SpoolSVG";
 import { switchRoutes, slotLabel, grilleAccueil, lireDisposition, trayPct } from "../utils/ams";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
+import { FitBox } from "./FitThumb";
 
 // Les tuiles de l'accueil (22/10/2026, refaites le meme jour). Chaque tuile :
 //  - connait sa place reelle (largeur et hauteur en pixels, mesurees) et s'agence
@@ -265,8 +266,8 @@ function Item({ img, dot, title, sub, right, size = 36, onClick, color, card = f
     <div onClick={onClick ? e => { e.stopPropagation(); onClick(); } : undefined}
       style={{ height: size, display: "flex", flexDirection: "column", gap: 3, minWidth: 0, cursor: onClick ? "pointer" : undefined }}>
       <span style={{ position: "relative", flex: 1, minHeight: 0, display: "block" }}>
-        {img ? <img data-pk="" src={img} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
-          style={{ width: "100%", height: "100%", borderRadius: 12, objectFit: "cover", background: "var(--surface2)", display: "block" }}/>
+        {img ? <FitBox data-pk="" src={img}
+          style={{ width: "100%", height: "100%", borderRadius: 12, background: "var(--surface2)" }}/>
           : <span style={{ width: "100%", height: "100%", borderRadius: 12, background: color ? `${color}22` : "var(--surface2)", display: "block" }}/>}
         {dot && <span style={{ position: "absolute", right: 6, top: 6, width: 12, height: 12, borderRadius: "50%", border: "2px solid var(--surface)", background: dot }}/>}
         {right && <span style={{ position: "absolute", left: 6, top: 6 }}>{right}</span>}
@@ -279,8 +280,8 @@ function Item({ img, dot, title, sub, right, size = 36, onClick, color, card = f
     <div onClick={onClick ? e => { e.stopPropagation(); onClick(); } : undefined}
       style={{ display: "flex", gap: 9, alignItems: "center", minWidth: 0, cursor: onClick ? "pointer" : undefined, height: size }}>
       {img !== undefined && <span style={{ position: "relative", flexShrink: 0 }}>
-        {img ? <img data-pk="" src={img} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
-          style={{ width: size, height: size, borderRadius: Math.round(size / 4), objectFit: "cover", background: "var(--surface2)", display: "block" }}/>
+        {img ? <FitBox data-pk="" src={img}
+          style={{ width: size, height: size, borderRadius: Math.round(size / 4), background: "var(--surface2)" }}/>
           : <span data-pk="" style={{ width: size, height: size, borderRadius: Math.round(size / 4), background: color ? `${color}22` : "var(--surface2)",
             display: "block" }}/>}
         {dot && <span style={{ position: "absolute", right: -3, bottom: -3, width: 12, height: 12, borderRadius: "50%",
@@ -558,8 +559,8 @@ function Thumbs({ list, size = 52, title }) {
   return <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
     {title && <H2>{title}</H2>}
     <div style={{ display: "flex", gap: 6 }}>{list.slice(0, more > 0 ? n - 1 : n).map(x => <span key={x.key} title={x.title} style={{ position: "relative", flexShrink: 0 }}>
-      <img data-pk="" src={x.img} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
-        style={{ width: size, height: size, borderRadius: 12, objectFit: "cover", background: "var(--surface2)", display: "block" }}/>
+      <FitBox data-pk="" src={x.img}
+        style={{ width: size, height: size, borderRadius: 12, background: "var(--surface2)" }}/>
       {x.dot && <span style={{ position: "absolute", right: -2, bottom: -2, width: 11, height: 11, borderRadius: "50%", border: "2px solid var(--surface)", background: x.dot }}/>}
     </span>)}
     {more > 0 && <span style={{ width: size, height: size, borderRadius: 12, background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "center",
@@ -900,8 +901,8 @@ function DayDetail({ date }) {
     {items == null ? <Muted>…</Muted> : !items.length ? <Muted>L'imprimante n'a pas tourné ce jour-là.</Muted>
       : items.map((x, i) => <div key={`${x.id}-${i}`} onClick={() => nav(`/prints?id=${x.id}`)} style={{ display: "flex", alignItems: "center", gap: 10,
         padding: "8px 10px", borderRadius: 12, background: "var(--surface2)", cursor: "pointer", minWidth: 0 }}>
-        <img src={printImg(x.id)} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
-          style={{ width: 36, height: 36, borderRadius: 9, objectFit: "cover", background: "var(--surface)", flexShrink: 0 }}/>
+        <FitBox src={printImg(x.id)}
+          style={{ width: 36, height: 36, borderRadius: 9, background: "var(--surface)", flexShrink: 0 }}/>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</div>
           <div style={{ fontSize: 11.5, color: "var(--muted)" }}>lancée le {new Date(x.start).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
@@ -976,8 +977,8 @@ function NextSorted({ models, card }) {
 // tuile ouvre la fenetre.
 const ROW_H = 38;
 const Thumb = ({ img, size, radius, color = "#64748B", children }) => <span style={{ position: "relative", flexShrink: 0, width: size, height: size }}>
-  {img ? <img data-pk="" src={img} alt="" loading="lazy" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
-    style={{ width: size, height: size, borderRadius: radius ?? Math.round(size / 4), objectFit: "cover", background: "var(--surface2)", display: "block" }}/>
+  {img ? <FitBox data-pk="" src={img} loading="lazy"
+    style={{ width: size, height: size, borderRadius: radius ?? Math.round(size / 4), background: "var(--surface2)" }}/>
     : <span data-pk="" style={{ width: size, height: size, borderRadius: radius ?? Math.round(size / 4), display: "block",
       background: `linear-gradient(135deg, ${color}33, ${color}12)` }}/>}
   {children}</span>;
@@ -1039,8 +1040,8 @@ function ListHero({ img, color, title, chips, meta, pct, foot, h, stacked, onOpe
     const ih = Math.max(48, h - 96 - (pct != null ? 10 : 0) - (showFoot ? 18 : 0));
     return <div onClick={open} style={{ ...frame, display: "flex", flexDirection: "column" }}>
       <span style={{ position: "relative", height: ih, flexShrink: 0, display: "block" }}>
-        {img ? <img data-pk="" src={img} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
+        {img ? <FitBox data-pk="" src={img}
+          style={{ width: "100%", height: "100%" }}/>
           : <span style={{ display: "block", height: "100%", background: `linear-gradient(135deg, ${color}40, ${color}10)` }}/>}
         {badge && <span style={{ position: "absolute", inset: 8 }}>{badge}</span>}</span>
       <span style={{ padding: "6px 8px 7px", display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: 1, justifyContent: "center" }}>{body}</span>
@@ -2937,8 +2938,8 @@ function SalesZoom({ v, hero }) {
   const tot = split.reduce((t, x) => t + x.value, 0) || 1;
   const objRow = (x, right, sub) => <div key={x.id} onClick={e => { e.stopPropagation(); nav(`/objects?id=${x.id}`); }} style={{ display: "flex", alignItems: "center", gap: 10,
     padding: 6, borderRadius: 11, background: "var(--surface2)", cursor: "pointer", minWidth: 0 }}>
-    <img src={apiThumb(apiUrl(`/objects/objects/${x.id}/image`), 256)} alt="" loading="lazy" decoding="async" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
-      style={{ width: 40, height: 40, borderRadius: 9, objectFit: "cover", flexShrink: 0, background: "var(--surface)" }}/>
+    <FitBox src={apiThumb(apiUrl(`/objects/objects/${x.id}/image`), 256)} loading="lazy" decoding="async"
+      style={{ width: 40, height: 40, borderRadius: 9, flexShrink: 0, background: "var(--surface)" }}/>
     <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</div>
       {sub && <Muted size={11.5}>{sub}</Muted>}</div>{right}</div>;
   return <>
@@ -3111,8 +3112,8 @@ function GalleryZoom({ all, nav }) {
       {list.map(p => { const good = okOf(p), name = p.file_name || p.translated_name || `Impression #${p.id}`;
         return <div key={p.id} onClick={() => nav(`/prints?id=${p.id}`)} style={{ position: "relative", aspectRatio: "1", borderRadius: 16, overflow: "hidden", cursor: "pointer",
           background: "linear-gradient(135deg, rgba(20,184,166,0.12), var(--surface2))", boxShadow: good ? "inset 0 0 0 1px var(--border)" : "inset 0 0 0 2px rgba(239,68,68,0.6)" }}>
-          <img src={printImg(p.id)} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}/>
+          <FitBox src={printImg(p.id)}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", }}/>
           <span style={{ position: "absolute", top: 8, right: 8, fontSize: 10.5, fontWeight: 900, color: "#fff", padding: "1px 7px", borderRadius: 9,
             background: good ? "#16a34a" : "#dc2626" }}>{good ? "réussie" : "ratée"}</span>
           <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "22px 10px 8px", background: "linear-gradient(to top, rgba(0,0,0,0.72), transparent)",
@@ -3128,10 +3129,10 @@ function Gallery({ g, o, sz }) {
   const nav = useNavigate();
   const all = (g || []).filter(p => !o.okOnly || okOf(p));
   if (!all.length) return <TileEmpty icon={<Images size={15}/>} color="#14B8A6" label="Galerie" to="/prints?tab=gallery" sz={sz} text="Pas encore d'impression"/>;
-  const img = (p, s, extra = {}) => <img key={p.id} data-pk="" src={printImg(p.id)} alt="" title={p.file_name || p.translated_name}
-    onClick={e => { e.stopPropagation(); nav(`/prints?id=${p.id}`); }} onError={e => { e.currentTarget.style.visibility = "hidden"; }}
-    style={{ width: s, height: s, objectFit: "cover", borderRadius: o.round ? "50%" : Math.max(6, Math.round(s / 7)), background: "var(--surface2)", cursor: "pointer",
-      outline: okOf(p) ? "none" : "2px solid rgba(239,68,68,0.6)", outlineOffset: -2, display: "block", ...extra }}/>;
+  const img = (p, s, extra = {}) => <FitBox key={p.id} data-pk="" src={printImg(p.id)} title={p.file_name || p.translated_name}
+    onClick={e => { e.stopPropagation(); nav(`/prints?id=${p.id}`); }}
+    style={{ width: s, height: s, borderRadius: o.round ? "50%" : Math.max(6, Math.round(s / 7)), background: "var(--surface2)", cursor: "pointer",
+      outline: okOf(p) ? "none" : "2px solid rgba(239,68,68,0.6)", outlineOffset: -2, ...extra }}/>;
   if (sz.h === 0.5) return (
     <div className="card" style={{ height: "100%", boxSizing: "border-box", padding: "0 10px", display: "flex", alignItems: "center", overflow: "hidden" }}>
       {/* une bande de vignettes entieres : celles qui ne tiennent pas passent a la ligne, cachee */}
@@ -3156,8 +3157,8 @@ function Gallery({ g, o, sz }) {
             style={{ position: "relative", minWidth: 0, minHeight: 0, overflow: "hidden", cursor: "pointer", borderRadius: o.round ? "50%" : 12,
               background: "linear-gradient(135deg, rgba(20,184,166,0.10), var(--surface2))", gridColumn: big ? "span 2" : undefined, gridRow: big ? "span 2" : undefined,
               boxShadow: ok ? "inset 0 0 0 1px var(--border)" : "inset 0 0 0 2px rgba(239,68,68,0.6)" }}>
-            <img data-pk="" src={printImg(p.id)} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
+            <FitBox data-pk="" src={printImg(p.id)}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}/>
             {showName && !o.round && <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "14px 8px 5px", fontSize: big ? 12.5 : 10.5, fontWeight: 800,
               color: "#fff", background: "linear-gradient(to top, rgba(0,0,0,0.65), transparent)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>}
             {!o.round && <span style={{ position: "absolute", top: 6, right: 6, width: 9, height: 9, borderRadius: "50%", background: ok ? "#22c55e" : "#ef4444",

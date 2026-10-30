@@ -67,3 +67,14 @@ export default function FitThumb({ src, style = {}, onError, photoFit = "contain
     style={place ? { ...style, ...look, position: "absolute", inset: "auto", objectFit: "fill", maxWidth: "none", ...place }
       : { ...style, ...look, objectFit: photoFit }}/>;
 }
+
+// une vignette dans sa boite (30/10/2026, le tableau de bord comme la page Impressions) : la boite porte la taille,
+// l'arrondi, le fond, les clics ; l'image y est cadree sur son objet (FitThumb). Une photo la remplit (« cover »).
+export function FitBox({ src, style = {}, photoFit = "cover", loading, decoding, onError, children, ...rest }) {
+  const [bad, setBad] = useState(false);
+  useEffect(() => { setBad(false); }, [src]);
+  return <span {...rest} style={{ position: "relative", display: "block", overflow: "hidden", ...style }}>
+    {src && !bad && <FitThumb src={src} photoFit={photoFit} loading={loading} decoding={decoding} draggable={false}
+      onError={e => { setBad(true); onError?.(e); }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }}/>}
+    {children}</span>;
+}
