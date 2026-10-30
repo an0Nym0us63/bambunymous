@@ -191,10 +191,12 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   const off = (K - 1) / 2 * h;                     // les grosses cellules sont centrees sur des blocs de K fines
   // le dessous en grosses mailles : chaque groupe de cellules au milieu de ses cellules (jamais plus large que la
   // piece), a la hauteur de la plus haute
+  // (au plus ~200 groupes : une grande piece en avait un millier, la recherche grossiere prenait 6 s)
   const coarse = list => {
+    const gc = hc * Math.max(1, Math.sqrt(list.length / 3 / (K * K) / 200));
     const gs = new Map();
     for (let k = 0; k < list.length; k += 3) {
-      const key = `${Math.floor(list[k] / hc)},${Math.floor(list[k + 1] / hc)}`;
+      const key = `${Math.floor(list[k] / gc)},${Math.floor(list[k + 1] / gc)}`;
       let g = gs.get(key);
       if (!g) gs.set(key, g = [0, 0, 0, -Infinity]);
       g[0] += list[k]; g[1] += list[k + 1]; g[2]++; g[3] = Math.max(g[3], list[k + 2]);
@@ -209,27 +211,31 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   // la note d'une place (plus basse : mieux), grossiere ou fine ; Infinity : impossible
   const turn = th => { const g = ((th * 180 / Math.PI) % 360 + 360) % 360; return Math.min(g, 360 - g); };
   const pen = (su, sv, th) => 0.02 * Math.hypot(su, sv) + 0.002 * turn(th);
-  const score = (fine, th, su, sv) => {
-    const [Hm, nU_, nV_, hh, cl, fl, F, s0] = fine ? [H, nu, nv, h, cells, foot, face, 0] : [Hc, nU, nV, hc, cc, fc, Fc, off];
+  // lv : 0 grossier (carte et mailles regroupees), 1 moyen (carte fine, mailles regroupees), 2 fin
+  const footN = foot.length / 3;
+  const score = (lv, th, su, sv) => {
+    const [Hm, nU_, nV_, hh, cl, fl, F, s0] = lv === 2 ? [H, nu, nv, h, cells, foot, face, 0] : lv === 1 ? [H, nu, nv, h, cc, fc, face, 0] : [Hc, nU, nV, hc, cc, fc, Fc, off];
     const d = lift(Hm, nU_, nV_, hh, cl, th, su - s0, sv - s0);
     if (d === Infinity) return Infinity;
     if (mode === "align") {
       if (d > TOL) return Infinity;                     // quelque chose depasse de la face : elle ne s'y pose pas a plat
       // la forme : la part commune de la face d'appui et de la face qui porte (sur leur reunion) ; une face plus grande
       // que la piece laisse encore la place de centrer
-      const on = onFace(F, nU_, nV_, hh, fl, th, su - s0, sv - s0), nf = fl.length / 3;
-      const faceCells = fine ? faceN : faceN / (K * K), inter = on * nf;
+      // (en mailles fines, quel que soit le niveau)
+      const on = onFace(F, nU_, nV_, hh, fl, th, su - s0, sv - s0), nf = footN, faceCells = faceN, inter = on * nf;
       // tourner ou glisser doit rapporter : 1° coute quatre dix-milliemes de recouvrement, 1 mm un demi-centieme (sinon un bec
       // presque bien pose faisait un quart de tour pour quelques mailles de mieux)
       return -10 * inter / Math.max(1, nf + faceCells - inter) + 0.05 * Math.hypot(su, sv) + 0.004 * turn(th);
     }
     return d + pen(su, sv, th);
   };
+  // le pas de la recherche grossiere : a la mesure de la piece (une trentaine de pas de chaque cote au plus), tous les 10°
+  const ss = Math.max(hc, W / 14), fs = Math.max(2 * h, ss / 5);      // et celui de la passe fine autour
   const all = [];
-  for (let a = 0; a < 72; a++) {
-    const th = a * Math.PI / 36;
-    for (let sv = -W; sv <= W + 1e-9; sv += hc) for (let su = -W; su <= W + 1e-9; su += hc) {
-      const c = score(false, th, su, sv);
+  for (let a = 0; a < 36; a++) {
+    const th = a * Math.PI / 18;
+    for (let sv = -W; sv <= W + 1e-9; sv += ss) for (let su = -W; su <= W + 1e-9; su += ss) {
+      const c = score(0, th, su, sv);
       if (c < Infinity) all.push({ th, su, sv, c });
     }
   }
@@ -239,17 +245,17 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   const tops = [];
   for (const c of all) {
     if (tops.length >= 24) break;
-    if (tops.some(t => Math.hypot(t.su - c.su, t.sv - c.sv) < 2 * hc && Math.abs(Math.sin((t.th - c.th) / 2)) < 0.09)) continue;
+    if (tops.some(t => Math.hypot(t.su - c.su, t.sv - c.sv) < 2 * ss && Math.abs(Math.sin((t.th - c.th) / 2)) < 0.09)) continue;
     tops.push(c);
   }
   // finement autour de chacune des meilleures : la meilleure place de chaque creux
   const fines = [];
   for (const t of tops) {
     let b = null;
-    for (let da = -3; da <= 3; da += 1) {
+    for (let da = -6; da <= 6; da += 1.5) {
       const th = t.th + da * Math.PI / 180;
-      for (let dv = -hc; dv <= hc + 1e-9; dv += h * 2) for (let du = -hc; du <= hc + 1e-9; du += h * 2) {
-        const su = t.su + du, sv = t.sv + dv, c = score(true, th, su, sv);
+      for (let dv = -ss; dv <= ss + 1e-9; dv += fs) for (let du = -ss; du <= ss + 1e-9; du += fs) {
+        const su = t.su + du, sv = t.sv + dv, c = score(1, th, su, sv);
         if (c < Infinity && (!b || c < b.c)) b = { th, su, sv, c };
       }
     }
@@ -277,18 +283,19 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   // l'editeur, 30/10/2026 : seule la piece support comptait, l'aile s'emboitait dans le corps a travers l'autre aile)
   let best = null, blocked = 0;
   for (const f of fines.slice(0, 12)) {
-    let b = { ...f };
+    let b = { ...f, c: score(2, f.th, f.su, f.sv) };
+    if (b.c === Infinity) b.c = 1e9;
     // a la maille et au demi-degre pres autour d'elle
-    for (let it = 0; it < 2; it++) {
-      const b0 = { ...b };
-      for (let da = -1.5; da <= 1.5; da += 0.5) for (let dv = -2 * h; dv <= 2 * h + 1e-9; dv += h) for (let du = -2 * h; du <= 2 * h + 1e-9; du += h) {
-        const th = b0.th + da * Math.PI / 180, su = b0.su + du, sv = b0.sv + dv, c = score(true, th, su, sv);
+    for (let it = 0; it < 3; it++) {
+      const b0 = { ...b }, r = it ? 2 * h : fs;
+      for (let da = -1.5; da <= 1.5; da += 0.5) for (let dv = -r; dv <= r + 1e-9; dv += r / 2) for (let du = -r; du <= r + 1e-9; du += r / 2) {
+        const th = b0.th + da * Math.PI / 180, su = b0.su + du, sv = b0.sv + dv, c = score(2, th, su, sv);
         if (c < b.c) b = { th, su, sv, c };
       }
     }
     // au milieu de ce qui va aussi bien (un logement ou une face plus grands que la piece), en angle puis en position,
     // deux fois (sinon elle restait de biais, collee a un bord) ; la note sans la penalite de chemin
-    const raw = (th, su, sv) => { const c = score(true, th, su, sv); return c === Infinity ? Infinity : c - (mode === "align" ? 0.05 * Math.hypot(su, sv) + 0.004 * turn(th) : pen(su, sv, th)); };
+    const raw = (th, su, sv) => { const c = score(2, th, su, sv); return c === Infinity ? Infinity : c - (mode === "align" ? 0.05 * Math.hypot(su, sv) + 0.004 * turn(th) : pen(su, sv, th)); };
     const ref = raw(b.th, b.su, b.sv), okp = (th, su, sv) => raw(th, su, sv) <= ref + 0.05;
     const c0 = { ...b };
     for (let it = 0; it < 2; it++) {
