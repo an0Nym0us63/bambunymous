@@ -1093,7 +1093,7 @@ const EDIT_HELP = [
     ["Clic sur une pièce", "la pièce à couper (une seule)"],
     ["Glisser à travers elle", "un trait rouge : la pièce est tranchée sur la longueur du trait, dans toute l'épaisseur que voit l'écran (rien au-delà des bouts du trait) ; les parties qui ne tiennent plus ensemble deviennent des morceaux, chacun de sa couleur"],
     ["Plusieurs traits", "un support tenu par plusieurs ponts : un trait par pont ; chacun reste marqué en rouge, et la pièce se sépare quand tous sont tranchés ; tourne la vue au clic droit entre deux traits ; ✕ efface les traits"],
-    ["🧩 S'ajuster après un collage (⚙)", "allumé par défaut : collée au jugé (sans face jumelle), la pièce s'emboîte d'elle-même dans le creux autour (🧩), sinon s'aligne sur la forme de la face (📐) ; ↶ revient au collage"],
+    ["🧩 S'ajuster après un collage (⚙)", "éteint par défaut ; allumé : collée au jugé (sans face jumelle), la pièce s'emboîte d'elle-même dans le creux autour (🧩), sinon s'aligne sur la forme de la face (📐) ; ↶ revient au collage"],
     ["📐 Aligner", "une pièce collée à plat sur une face glisse et tourne pour en déborder le moins possible, puis se centre (une plaque sur le flanc d'un obélisque)"],
     ["🧩 Emboîter", "une pièce collée (🧲 Coller, même au jugé) glisse et tourne sur son contact jusqu'à la place où elle descend le plus, sans rien traverser : un bloc vient dans son logement, un tenon dans son trou"],
     ["🧹 Nettoyer", "retire d'un coup les petits restes de la pièce choisie (ce qui ne tient que par un coin, les ailettes et aiguilles qui pendent), proposés en rouge à valider"],
@@ -1111,7 +1111,7 @@ const EDIT_HELP = [
     ["Face puis face", "la première pièce vient se plaquer contre l'autre"],
     ["Arête puis arête", "les arêtes s'alignent"],
     ["➕ Point de colle", "sur une pièce collée : touche un point, une arête ou une face de la pièce, puis l'endroit qui lui correspond sur son support ; le premier collage tient, la pièce glisse et tourne sur son contact (deux arêtes : alignées ; deux faces : l'une contre l'autre ; des points : superposés, au mieux à partir de deux)"],
-    ["Près d'une arête", "une petite liste propose la face touchée, l'arête (même courbe, suivie d'un bout à l'autre) et la face d'en face : survoler une ligne la surligne en bleu, la toucher la prend (de même en Poser au sol)"],
+    ["╱ Arête (Coller, Poser au sol)", "allumée, un clic prend l'arête vive la plus proche ; éteinte, un clic prend toujours la face. La pièce se cale là où tu as cliqué (centrée seulement entre deux faces planes de même taille)"],
     ["🪄 Assisté", "faces entières centrées et grands axes alignés ; arêtes milieu contre milieu"],
     ["Faces jumelles (assisté)", "la face cliquée fait chercher, sur les autres pièces, celles de même contour (la coupe d'en face, trous des tenons compris) : en vert, avec leur ressemblance en % ; un clic sur l'une, ou juste sur sa pièce, l'y pose exactement : faces l'une contre l'autre, contours superposés ; ↻ Autre position quand plusieurs sens vont aussi bien"],
     ["Flèches de la poignée, pièce collée", "elle glisse dans le plan du contact (deux flèches ; une seule le long d'une arête), sans se décoller ; en mode Tourner, un anneau la tourne autour du contact ; ← → ↑ ↓ : 1 mm sur le contact (Maj : 10)"],
@@ -1279,6 +1279,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         data-tip="Repère les supports intégrés au modèle (parois et plaques fines) et les sépare de la pièce, sans trait à tracer">🪄 Détacher les supports</button>}
     </>)
     : est.mode === "mate" ? <>
+      <button type="button" onClick={() => api?.setEdgeMode(!est.edgeMode)} style={b(!!est.edgeMode)}
+        data-tip="Allumé : un clic prend l'arête vive la plus proche ; éteint : un clic prend toujours la face">╱ Arête</button>
       <button type="button" onClick={() => api?.setAddPin(!est.addPin)} style={b(!!est.addPin)}
         data-tip="Sur une pièce déjà collée : une prise de plus (point, arête ou face) et sa cible, le premier collage tient">➕ Point de colle</button>
     </>
@@ -1290,6 +1292,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
     </>
     : est.mode === "ground" ? <>
       <button type="button" onClick={() => api?.setGround3(false)} style={b(!est.ground3)} data-tip="Clique la face (ou l'arête) qui doit être posée au sol">Par une face</button>
+      <button type="button" onClick={() => api?.setEdgeMode(!est.edgeMode)} style={b(!!est.edgeMode)}
+        data-tip="Allumé : un clic prend l'arête vive la plus proche ; éteint : un clic prend toujours la face">╱ Arête</button>
       <button type="button" onClick={() => api?.setGround3(true)} style={b(!!est.ground3)} data-tip="Clique trois points de la pièce qui doivent toucher le plateau : leur plan vient à plat sur le sol">Par 3 points{est.ground3 && est.groundPts ? ` (${est.groundPts}/3)` : ""}</button>
       {est.ground3 && est.groundPts > 0 && <button type="button" onClick={() => api?.setGround3(true)} style={b(false)} data-tip="Recommencer les points">✕ Points</button>}
     </> : null;

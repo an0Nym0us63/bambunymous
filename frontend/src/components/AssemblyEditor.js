@@ -142,6 +142,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   let pendingSplit = null;            // une separation proposee, pas encore validee
   let pendingCut = null;
   let choice = null;                  // la liste du choix face / arete ouverte : les prises, et ou la montrer
+  let edgeMode = false;               // « ╱ Arete » : un clic prend l'arete la plus proche, sinon toujours la face
   // « ➕ Point de colle » (30/10/2026) : sur une piece deja collee, une prise de plus (point, arete ou face) et sa cible ;
   // le premier collage tient (la piece ne fait que glisser et tourner sur son contact). keepPins : les points poses
   let addPin = false, keepPins = [];
@@ -163,7 +164,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pivot: !!pivot, pairs: pairs.length, twinPos: twinAlt && twinAlt.at === changes && twinAlt.fits.length > 1 ? `${twinAlt.i + 1}/${twinAlt.fits.length}` : null, boxMode, ground3, groundPts: gPts.length, vertical, pinsA: pins.a.length, pinsB: pins.b.length,
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
-    cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, addPin, autoFit,
+    cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, addPin, autoFit, edgeMode,
     place: placing ? { i: placing.i, n: placing.cands.length, label: placing.cands[placing.i].label } : null, placeStep: placeA ? 2 : 1,
     choice: choice ? { x: choice.x, y: choice.y, items: choice.cands.map(altLabel), piece: choice.cands[0]?.group?.userData.name || "" } : null,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
@@ -368,8 +369,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     // le choix (30/10/2026) : pres d'une arete vive (une douzaine de pixels), les prises possibles -- la face touchee,
     // l'arete, la face d'en face -- sont proposees dans une liste, chacune surlignee au survol (viser une arete courbe au
     // pixel pres etait penible)
+    // (coupee le 30/10/2026 : la liste venait ou non selon l'endroit du clic ; « ╱ Arete » dit quand on veut une arete)
     let alts = null;
-    if (idx) {
+    if (idx && false) {
       const nb = neighbours(geo), ix = idx.array, t = hit.faceIndex;
       const pxmm = hit.distance * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.max(1, el.clientHeight);
       const loose = (coarse ? 22 : 12) * pxmm;
@@ -421,14 +423,16 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       }
     }
     const withAlts = pk => (alts && alts.length > 1 ? Object.assign(pk, { alts }) : pk);
-    // l'arete la plus proche du clic, si le clic la frole et si c'est une vraie arete (angle marque avec sa voisine)
-    if (idx) {
+    // « ╱ Arete » allumee (30/10/2026) : l'arete vive la plus proche du clic (une quinzaine de pixels) ; eteinte, toujours
+    // la face -- avant, une arete etait prise ou non selon qu'on la frolait, sans savoir laquelle on aurait
+    if (idx && edgeMode) {
       const nb = neighbours(geo), ix = idx.array, t = hit.faceIndex;
       const edges = [[0, va, vb], [1, vb, vc], [2, vc, va]];
+      const pxmm = hit.distance * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.max(1, el.clientHeight);
       let best = null;
       for (const [e, a, b] of edges) {
         const q = new THREE.Line3(a, b).closestPointToPoint(p, true, new THREE.Vector3()), d = q.distanceTo(p);
-        if (d < Math.max(0.5, 0.12 * a.distanceTo(b)) && (!best || d < best.d)) best = { d, e, a, b, q };
+        if (d < Math.max(0.5, (coarse ? 26 : 16) * pxmm) && (!best || d < best.d)) best = { d, e, a, b, q };
       }
       const u = best ? nb[t * 3 + best.e] : -1;
       if (u >= 0) {
@@ -574,7 +578,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       const nb = B.n.clone().negate();
       q.setFromUnitVectors(A.n, nb);
       axis = B.n.clone();
-      if (A.region && B.region) {
+      // centrees l'une sur l'autre seulement entre deux faces planes de meme taille (une coupe et son vis-a-vis) ; sinon
+      // la piece se cale la ou l'on a clique (30/10/2026 : elle partait au centre de toute la face de l'objet)
+      const twinish = A.region && B.region && !A.region.relaxed && !B.region.relaxed
+        && Math.max(A.region.area, B.region.area) < 1.6 * Math.min(A.region.area, B.region.area);
+      if (twinish) {
         // assiste : les faces entieres centrees l'une sur l'autre, et leurs grands axes alignes (le plus proche des deux sens)
         from = A.region.c; to = B.region.c;
         if (A.region.elongated && B.region.elongated) {
@@ -585,7 +593,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
           if (ang > Math.PI / 2) ang -= Math.PI; else if (ang < -Math.PI / 2) ang += Math.PI;
           q = new THREE.Quaternion().setFromAxisAngle(B.n, ang).multiply(q);
         }
-      } else if (A.region && B.at) from = A.region.c;          // la face entiere de A, au point touche sur B
+      }
     } else if (A.kind === "edge" && B.kind === "edge") {
       const eb = A.e.dot(B.e) >= 0 ? B.e.clone() : B.e.clone().negate();
       q.setFromUnitVectors(A.e, eb); axis = eb;
@@ -772,7 +780,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   // apres un collage au jugé (sans face jumelle) : la piece s'emboite dans le creux autour, sinon s'aligne sur la forme
   // de la face (30/10/2026 : on la collait dans son trou, puis il fallait la deplacer et la tourner a la main)
   let autoFit = true;
-  try { autoFit = localStorage.getItem("bn.asm.autofit") !== "0"; } catch { /* rien */ }
+  // eteint par defaut (30/10/2026 : la piece bougeait d'elle-meme apres le collage, on ne savait plus pourquoi)
+  try { autoFit = localStorage.getItem("bn.asm.autofit") === "1"; } catch { autoFit = false; }
   const settle = async () => { if (!autoFit) return; if (!(await fitOnContact("nest", true))) await fitOnContact("align", true); };
   // un point de colle de plus, le premier collage tenu : la piece tourne autour de la normale du contact et glisse dans
   // son plan, jusqu'a ce que la nouvelle prise vienne sur sa cible -- deux aretes : alignees (et l'une sur l'autre), deux
@@ -1065,9 +1074,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const pick = pickAt(ev);
     // un clic sur la poignee ; ses zones invisibles debordent : dans le vide, le clic desselectionne quand meme (30/10/2026)
     if (tc.axis && pick) return;
-    if (pick?.alts && (mode === "mate" || mode === "place" || (mode === "ground" && !ground3))) {
-      const keep = mode === "mate" && first ? [first] : mode === "place" && placeA ? [placeA] : [];
-      choice = { cands: pick.alts, ev: { ctrlKey: ev.ctrlKey, shiftKey: ev.shiftKey, altKey: ev.altKey, metaKey: ev.metaKey }, x: ev.clientX, y: ev.clientY, keep };
+    // Placer, le second clic : choisir la piece visee quand le clic en traverse plusieurs
+    const pieceAlts = mode === "place" && placeA ? (pick?.alts || []).filter(a => a.piece) : [];
+    if (pieceAlts.length > 1) {
+      const keep = [placeA];
+      choice = { cands: pieceAlts, ev: { ctrlKey: ev.ctrlKey, shiftKey: ev.shiftKey, altKey: ev.altKey, metaKey: ev.metaKey }, x: ev.clientX, y: ev.clientY, keep };
       showAlt(null); keep.forEach(mark); onChange?.(state());
       return;
     }
@@ -1864,6 +1875,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     choicePick: i => { const c = choice; if (!c) return; choice = null; clearMarks(); c.keep.forEach(mark); tap(c.cands[i], c.ev); onChange?.(state()); },
     choiceCancel: () => { const c = choice; choice = null; clearMarks(); c?.keep.forEach(mark); render(); onChange?.(state()); },
     placeNext: () => placeShow(1), placePrev: () => placeShow(-1), placeOk, placeCancel,
+    setEdgeMode: on => { edgeMode = on; onChange?.(state()); },
     setAutoFit: on => { autoFit = on; try { localStorage.setItem("bn.asm.autofit", on ? "1" : "0"); } catch { /* rien */ } onChange?.(state()); },
     setAddPin: on => {
       if (on && mode !== "mate") api.setMode("mate");
