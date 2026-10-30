@@ -150,6 +150,7 @@ export function supportTris(pos, ix, only = null) {
   const big = R.map((r, i) => i).filter(i => R[i].area >= Math.max(3, 0.0002 * tot) && R[i].area / R[i].n >= 1)
     .sort((a, b) => R[b].area - R[a].area).slice(0, 1500);
   const inS = new Uint8Array(R.length);
+  const slabs = [];                                     // les parois : leurs deux faces
   for (const i of big) {
     const r = R[i];
     for (const j of big) {
@@ -160,10 +161,37 @@ export function supportTris(pos, ix, only = null) {
       if (gap > 2.5) continue;
       let over = true;
       for (let c = 0; c < 3; c++) if (Math.min(r.hi[c], q.hi[c]) + gap + 0.1 < Math.max(r.lo[c], q.lo[c])) over = false;
-      if (over) { inS[i] = 1; inS[j] = 1; }
+      if (over) { inS[i] = 1; inS[j] = 1; if (i < j) slabs.push({ r, q, gap }); }
     }
   }
   if (!inS.some(Boolean)) return null;
+  // 2 bis. tout ce qui tient entierement dans l'epaisseur d'une paroi en est (ses chants, ses bouts coupes en biais la
+  // ou elle traverse la piece, le rebord d'une semelle) : une region plane dont tous les sommets sont entre ses deux
+  // faces, dans leur etendue (30/10/2026 : ces bandes restaient collees a la piece)
+  const vin = new Map();
+  for (let t = 0; t < nt; t++) { const r = reg[t]; if (!inS[r]) { let l = vin.get(r); if (!l) vin.set(r, l = []); l.push(t); } }
+  for (const [ri, ts] of vin) {
+    const rr = R[ri];
+    // une vraie face de paroi : plusieurs triangles dans un meme plan, a plat contre la paroi ou en travers (un chant) ;
+    // pas un des petits triangles de la surface courbe qui passe par la (la piece en gardait des trous)
+    if (rr.area < 0.05 || rr.n < 2) continue;
+    for (const { r, q, gap } of slabs) {
+      const cs = Math.abs(rr.nx * r.nx + rr.ny * r.ny + rr.nz * r.nz);
+      if (cs > 0.25 && cs < 0.999) continue;
+      let ok = true;
+      for (const t of ts) {
+        for (let e = 0; e < 3 && ok; e++) {
+          const v = ix[t * 3 + e] * 3, x = pos[v], y = pos[v + 1], z = pos[v + 2];
+          const d = r.nx * x + r.ny * y + r.nz * z - r.o;            // 0 sur la face r, -gap sur la face q
+          if (d > 0.05 || d < -gap - 0.05) ok = false;
+          const c3 = [x, y, z];
+          for (let c = 0; c < 3 && ok; c++) if (c3[c] < Math.min(r.lo[c], q.lo[c]) - 0.3 || c3[c] > Math.max(r.hi[c], q.hi[c]) + 0.3) ok = false;
+        }
+        if (!ok) break;
+      }
+      if (ok) { inS[ri] = 1; break; }
+    }
+  }
   const S = new Uint8Array(nt);
   for (let t = 0; t < nt; t++) S[t] = inS[reg[t]];
   // 3. les bandes etroites qui touchent les supports (chants, sommets des parois)
