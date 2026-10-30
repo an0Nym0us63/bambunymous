@@ -5,8 +5,8 @@
 // « nest » (emboiter) : la place ou la piece descend le plus (un bloc dans son logement, un tenon dans son trou), sans
 // rien traverser : pour une place (decalage dans le plan, angle autour de w), elle descend jusqu'au premier contact, sa
 // hauteur est le plus grand ecart « dessus du support - dessous de la piece » sous elle.
-// « align » (aligner) : la place ou la face d'appui de la piece deborde le moins de la face qui la porte (une plaque
-// sur le flanc d'un obelisque), puis centree.
+// « align » (aligner) : la face collee de la piece et la face qui la porte se recouvrent au mieux (une plaque sur le
+// flanc d'un obelisque, un panneau sur le cote d'une boite), avec le moins de matiere qui se traverse, puis centree.
 // Dans les deux cas : a egalite, au milieu de ce qui va aussi bien (en angle et en position), et a peine penalise par
 // le chemin parcouru. La recherche se fait autour de la place ou on l'a collee (la piece et une marge a sa mesure :
 // sur un grand support, tout parcourir prenait plusieurs secondes), d'abord a grosses mailles, puis finement autour
@@ -98,13 +98,38 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
 
   // aligner : la face d'appui de la piece (le plus bas de son dessous, a 0,6 mm pres) et celle qui la porte (le dessus
   // du support a la hauteur du contact, a 0,6 mm pres : une face a grain ou a relief en est encore)
+  // (30/10/2026) la face d'appui est la face collee : la nappe du dessous, d'un seul tenant, a la hauteur du dessous au
+  // point de collage -- avant, le plus bas du dessous : sur un panneau a tenons, les tenons seuls, et il partait de cote
   const TOL = 0.6;
-  let foot = cells;
+  let foot = cells, lvl = 0;
   if (mode === "align") {
+    let i0 = Math.round(-sa.lo[0] / h), j0 = Math.round(-sa.lo[1] / h), s = -1, bd = Infinity;
+    for (let r = 0; r < 16 && s < 0; r++) for (let j = j0 - r; j <= j0 + r; j++) for (let i = i0 - r; i <= i0 + r; i++) {
+      if (Number.isNaN(at(i, j))) continue;
+      const d = (i - i0) ** 2 + (j - j0) ** 2;
+      if (d < bd) { bd = d; s = j * mu + i; }
+    }
+    if (s < 0) return null;
     let lmin = Infinity;
     for (let k = 2; k < cells.length; k += 3) lmin = Math.min(lmin, cells[k]);
-    foot = [];
-    for (let k = 0; k < cells.length; k += 3) if (cells[k + 2] <= lmin + TOL) foot.push(cells[k], cells[k + 1], cells[k + 2]);
+    lvl = La[s];
+    // le point de collage sur le plus bas du dessous (une plaque, la base d'un bec) : tout ce plus bas, comme avant ;
+    // plus haut (des tenons dessous) : la nappe collee seule
+    if (lvl <= lmin + TOL) {
+      lvl = lmin; foot = [];
+      for (let k = 0; k < cells.length; k += 3) if (cells[k + 2] <= lmin + TOL) foot.push(cells[k], cells[k + 1], cells[k + 2]);
+    } else {
+    const seen = new Uint8Array(mu * mv), st = [s];
+    seen[s] = 1; foot = [];
+    while (st.length) {
+      const k = st.pop(), i = k % mu, j = (k - i) / mu;
+      foot.push(sa.lo[0] + i * h - cu, sa.lo[1] + j * h - cv, La[k]);
+      for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const x = i + a, y = j + b, q = y * mu + x;
+        if (x >= 0 && y >= 0 && x < mu && y < mv && !seen[q] && Math.abs(at(x, y) - lvl) <= TOL) { seen[q] = 1; st.push(q); }
+      }
+    }
+    }
   }
   // la face qui porte : les mailles du dessus a la hauteur du contact, d'un seul tenant avec celle sous le point de
   // collage (30/10/2026 : toute maille a la bonne hauteur comptait, une grande surface donnait n'importe quel angle ;
@@ -125,6 +150,7 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
       }
       return true;
     };
+    const gap = Math.max(1, Math.round(5 / h));
     let i0 = Math.round((0 - bu0) / h), j0 = Math.round((0 - bv0) / h);
     i0 = Math.min(nu - 1, Math.max(0, i0)); j0 = Math.min(nv - 1, Math.max(0, j0));
     // la maille de la face la plus proche du point de collage
@@ -139,9 +165,15 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
       while (st.length) {
         const k = st.pop(), i = k % nu, j = (k - i) / nu;
         faceN++;
+        // une fente, une rainure etroite (5 mm au plus) ne coupe pas la face (30/10/2026 : le cote d'une boite a
+        // fentes ne comptait que son morceau sous le point de collage, le panneau se calait de travers)
         for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const x = i + a, y = j + b, q = y * nu + x;
-          if (x >= 0 && y >= 0 && x < nu && y < nv && !face[q] && ok(q)) { face[q] = 1; st.push(q); }
+          for (let r = 1; r <= gap; r++) {
+            const x = i + a * r, y = j + b * r, q = y * nu + x;
+            if (x < 0 || y < 0 || x >= nu || y >= nv) break;
+            if (face[q]) break;
+            if (ok(q)) { face[q] = 1; st.push(q); break; }
+          }
         }
       }
     }
@@ -166,6 +198,25 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
     }
     if (cov) cov.v = on / n;
     return on && on >= minCov * n ? d : Infinity;
+  };
+  // aligner : la part de matiere de la piece qui traverserait le support, la face collee posee sur la face qui porte
+  // (des tenons qui tombent dans leurs fentes ne comptent pas, sur la paroi pleine si)
+  let fLev = 0;
+  const clash = (Hm, nU, nV, hh, cl, th, su, sv) => {
+    const cs = Math.cos(th), sn = Math.sin(th);
+    let bad = 0, pn = 0, pb = 0;
+    for (let k = 0; k < cl.length; k += 3) {
+      const x = cu + cs * cl[k] - sn * cl[k + 1] + su, y = cv + sn * cl[k] + cs * cl[k + 1] + sv;
+      const i = Math.round((x - bu0) / hh), j = Math.round((y - bv0) / hh);
+      const prot = cl[k + 2] < lvl - TOL;              // un tenon, un ergot sous la face collee
+      if (prot) pn++;
+      if (i < 0 || j < 0 || i >= nU || j >= nV) continue;
+      const z = Hm[j * nU + i];
+      if (!Number.isNaN(z) && z > cl[k + 2] - lvl + fLev + TOL) { bad++; if (prot) pb++; }
+    }
+    // la part de la piece qui traverse, et celle de ses tenons (peu de matiere, mais qu'ils tombent dans leurs fentes
+    // compte : c'est ce qui dit la bonne place)
+    return [bad / Math.max(1, cl.length / 3), pn ? pb / pn : 0];
   };
   // la part de la face d'appui posee sur la face qui porte
   const onFace = (F, nU, nV, hh, cl, th, su, sv) => {
@@ -207,7 +258,10 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   };
   const cc = coarse(cells), fc = coarse(foot);
   // ce qui porte la piece a sa place de depart (un peu de marge)
-  { const c0 = {}; lift(H, nu, nv, h, cells, 0, 0, 0, c0); minCov = Math.max(0.05, Math.min(0.999, c0.v * 0.9)); }
+  if (mode !== "align") { const c0 = {}; lift(H, nu, nv, h, cells, 0, 0, 0, c0); minCov = Math.max(0.05, Math.min(0.999, c0.v * 0.9)); }
+  else if (faceN) { let s = 0; for (let k = 0; k < nu * nv; k++) if (face[k]) s += H[k]; fLev = s / faceN; }
+  // le recouvrement mutuel de la face collee et de la face qui porte (leur part commune sur leur reunion)
+  const iou = (F, nU, nV, hh, fl, th, su, sv) => { const inter = onFace(F, nU, nV, hh, fl, th, su, sv) * footN; return inter / Math.max(1, footN + faceN - inter); };
   // la note d'une place (plus basse : mieux), grossiere ou fine ; Infinity : impossible
   const turn = th => { const g = ((th * 180 / Math.PI) % 360 + 360) % 360; return Math.min(g, 360 - g); };
   const pen = (su, sv, th) => 0.02 * Math.hypot(su, sv) + 0.002 * turn(th);
@@ -215,18 +269,15 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   const footN = foot.length / 3;
   const score = (lv, th, su, sv) => {
     const [Hm, nU_, nV_, hh, cl, fl, F, s0] = lv === 2 ? [H, nu, nv, h, cells, foot, face, 0] : lv === 1 ? [H, nu, nv, h, cc, fc, face, 0] : [Hc, nU, nV, hc, cc, fc, Fc, off];
+    if (mode === "align") {
+      // la face collee posee a plat sur la face qui porte : le recouvrement, moins la matiere qui traverserait (un peu
+      // tolere : un relief, un tenon) ; tourner ou glisser doit rapporter : 1° coute quatre dix-milliemes de
+      // recouvrement, 1 mm un demi-centieme (sinon un bec presque bien pose faisait un quart de tour pour rien)
+      const o = iou(F, nU_, nV_, hh, fl, th, su - s0, sv - s0), [x, xp] = clash(Hm, nU_, nV_, hh, cl, th, su - s0, sv - s0);
+      return -10 * o + 12 * x + 2 * xp + 0.05 * Math.hypot(su, sv) + 0.004 * turn(th);
+    }
     const d = lift(Hm, nU_, nV_, hh, cl, th, su - s0, sv - s0);
     if (d === Infinity) return Infinity;
-    if (mode === "align") {
-      if (d > TOL) return Infinity;                     // quelque chose depasse de la face : elle ne s'y pose pas a plat
-      // la forme : la part commune de la face d'appui et de la face qui porte (sur leur reunion) ; une face plus grande
-      // que la piece laisse encore la place de centrer
-      // (en mailles fines, quel que soit le niveau)
-      const on = onFace(F, nU_, nV_, hh, fl, th, su - s0, sv - s0), nf = footN, faceCells = faceN, inter = on * nf;
-      // tourner ou glisser doit rapporter : 1° coute quatre dix-milliemes de recouvrement, 1 mm un demi-centieme (sinon un bec
-      // presque bien pose faisait un quart de tour pour quelques mailles de mieux)
-      return -10 * inter / Math.max(1, nf + faceCells - inter) + 0.05 * Math.hypot(su, sv) + 0.004 * turn(th);
-    }
     return d + pen(su, sv, th);
   };
   // le pas de la recherche grossiere : a la mesure de la piece (une trentaine de pas de chaque cote au plus), tous les 10°
@@ -263,7 +314,9 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   }
   if (!fines.length) return null;
   fines.sort((a, b) => a.c - b.c);
-  const here = lift(H, nu, nv, h, cells, 0, 0, 0);
+  const here = mode === "align" ? Infinity : lift(H, nu, nv, h, cells, 0, 0, 0);
+  // la hauteur d'une place : aligner pose la face collee sur la face qui porte ; emboiter descend jusqu'au contact
+  const dOf = b => (mode === "align" ? fLev - lvl : lift(H, nu, nv, h, cells, b.th, b.su, b.sv));
   const mid = (f, x0, step, lim) => {
     let a = 0, b = 0;
     while (a < lim && f(x0 - (a + 1) * step)) a++;
@@ -306,7 +359,7 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
     if (mode === "nest" && here !== Infinity && lift(H, nu, nv, h, cells, b.th, b.su, b.sv) > here - 0.05) break;     // plus rien a gagner
     let found = null;
     for (const cand of [b, c0]) {
-      const d = lift(H, nu, nv, h, cells, cand.th, cand.su, cand.sv);
+      const d = dOf(cand);
       if (d === Infinity) continue;
       if (collides && await collides(matOf(cand, d))) { blocked++; continue; }
       found = cand; break;
@@ -314,14 +367,15 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
     if (found) { best = found; break; }
   }
   if (!best) return blocked ? { blocked } : (mode === "nest" ? { M: new THREE.Matrix4(), sink: 0, moved: 0, turned: 0, contact: P.clone() } : null);
-  const d = lift(H, nu, nv, h, cells, best.th, best.su, best.sv);
+  const d = dOf(best);
   if (mode === "nest" && here !== Infinity && d > here - 0.05) return { M: new THREE.Matrix4(), sink: 0, moved: 0, turned: 0, contact: P.clone() };
-  const cov0 = mode === "align" ? onFace(face, nu, nv, h, foot, 0, 0, 0) : 0, cov1 = mode === "align" ? onFace(face, nu, nv, h, foot, best.th, best.su, best.sv) : 0;
+  const cov0 = mode === "align" ? iou(face, nu, nv, h, foot, 0, 0, 0) : 0, cov1 = mode === "align" ? iou(face, nu, nv, h, foot, best.th, best.su, best.sv) : 0;
+  const clash1 = mode === "align" ? clash(H, nu, nv, h, cells, best.th, best.su, best.sv)[0] : 0;
   const M = matOf(best, d);
   // le point de contact : sous le centre de la piece, sur le dessus du support
   const i = Math.round((cu + best.su - bu0) / h), j = Math.round((cv + best.sv - bv0) / h);
   const zc = (i >= 0 && j >= 0 && i < nu && j < nv && !Number.isNaN(H[j * nu + i])) ? H[j * nu + i] : d;
   const contact = P.clone().addScaledVector(u, cu + best.su).addScaledVector(v, cv + best.sv).addScaledVector(w, zc);
   const tr = best.th * 180 / Math.PI;
-  return { M, sink: (here === Infinity ? 0 : here) - d, moved: Math.hypot(best.su, best.sv), turned: ((tr + 540) % 360) - 180, contact, cov0, cov1, blocked };
+  return { M, sink: (here === Infinity ? 0 : here) - d, moved: Math.hypot(best.su, best.sv), turned: ((tr + 540) % 360) - 180, contact, cov0, cov1, clash: clash1, blocked };
 }

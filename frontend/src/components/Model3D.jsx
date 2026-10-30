@@ -1094,7 +1094,7 @@ const EDIT_HELP = [
     ["Glisser à travers elle", "un trait rouge : la pièce est tranchée sur la longueur du trait, dans toute l'épaisseur que voit l'écran (rien au-delà des bouts du trait) ; les parties qui ne tiennent plus ensemble deviennent des morceaux, chacun de sa couleur"],
     ["Plusieurs traits", "un support tenu par plusieurs ponts : un trait par pont ; chacun reste marqué en rouge, et la pièce se sépare quand tous sont tranchés ; tourne la vue au clic droit entre deux traits ; ✕ efface les traits"],
     ["🧩 S'ajuster après un collage (⚙)", "éteint par défaut ; allumé : collée au jugé (sans face jumelle), la pièce s'emboîte d'elle-même dans le creux autour (🧩), sinon s'aligne sur la forme de la face (📐) ; ↶ revient au collage"],
-    ["📐 Aligner", "une pièce collée à plat sur une face glisse et tourne pour en déborder le moins possible, puis se centre (une plaque sur le flanc d'un obélisque)"],
+    ["📐 Aligner", "une pièce collée sur une face glisse et tourne pour que sa face collée et celle qui la porte se recouvrent au mieux, avec le moins de matière qui se traverse (un panneau sur le côté d'une boîte : ses tenons dans leurs fentes), puis se centre"],
     ["🧩 Emboîter", "une pièce collée (🧲 Coller, même au jugé) glisse et tourne sur son contact jusqu'à la place où elle descend le plus, sans rien traverser : un bloc vient dans son logement, un tenon dans son trou"],
     ["🧹 Nettoyer", "retire d'un coup les petits restes de la pièce choisie (ce qui ne tient que par un coin, les ailettes et aiguilles qui pendent), proposés en rouge à valider"],
     ["🧽 Gomme", "allumée, le glisser peint en rouge ce qu'il touche sur la pièce choisie (ou sur les morceaux proposés) : les bouts de support restés collés, une bavure ; au lâcher, c'est détaché, et ✓ le retire de l'assemblage (📋 Pièces : ↩ le remet)"],
@@ -1323,7 +1323,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         <button type="button" onClick={() => api?.setAddPin(true)} style={b(!!est.addPin)}
           data-tip="Ajouter un point de colle (point, arête ou face) sans défaire ce collage : la pièce glisse et tourne sur son contact">➕ Point de colle</button>
         <button type="button" onClick={() => api?.align()} style={b(false)}
-          data-tip="Faire glisser et tourner la pièce sur la face où elle est collée, pour qu'elle déborde le moins et soit centrée (une plaque sur un flanc)">📐 Aligner</button>
+          data-tip="Faire glisser et tourner la pièce sur la face où elle est collée : les deux faces se recouvrent au mieux, sans conflit (un panneau sur le côté d'une boîte)">📐 Aligner</button>
         <button type="button" onClick={() => api?.nest()} style={b(false)}
           data-tip="Faire glisser et tourner la pièce sur son contact jusqu'à la place où elle descend le plus (un bloc dans son logement), sans rien traverser">🧩 Emboîter</button>
         <button type="button" onClick={() => api?.refine()} style={b(false)}

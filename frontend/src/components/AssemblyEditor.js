@@ -736,7 +736,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     // quand meme la piece) : emboiter, au moins 0,3 mm plus bas ; aligner, une face reellement recouverte, et mieux
     const still = (r.moved < 0.05 && Math.abs(r.turned) < 0.1 && Math.abs(r.sink) < 0.05)
       || (mode === "nest" && r.sink < 0.3)
-      || (mode === "align" && (r.cov1 < 0.3 || r.cov1 < r.cov0 + (quiet ? 0.05 : 0.01)));
+      || (mode === "align" && (r.cov1 < (quiet ? 0.3 : 0.1) || r.cov1 < r.cov0 + (quiet ? 0.05 : 0.01)));
     return { r, j, N, moving, touching, still };
   };
   // une place trouvee, appliquee : la piece, son point de contact (dans le repere du support), l'axe des rotations
@@ -749,7 +749,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const fitText = (mode, r) => {
     const mm = x => String(Math.round(x * 10) / 10).replace(".", ",");
     const moved = `déplacée de ${mm(r.moved)} mm${Math.abs(r.turned) >= 0.5 ? `, tournée de ${Math.round(r.turned)}°` : ""}`;
-    return mode === "align" ? `alignée : ${Math.round(r.cov1 * 100)} % de sa face d'appui sur la face (avant ${Math.round(r.cov0 * 100)} %), centrée, ${moved}`
+    return mode === "align" ? `alignée : les deux faces se recouvrent à ${Math.round(r.cov1 * 100)} % (avant ${Math.round(r.cov0 * 100)} %)${r.clash > 0.02 ? `, ${Math.round(r.clash * 100)} % de la pièce en conflit` : ""}, ${moved}`
       : `emboîtée : ${r.sink >= 0.05 ? `${mm(r.sink)} mm plus bas` : "même hauteur"}, ${moved}`;
   };
   // quiet : lance seul apres un collage -- rien n'est dit s'il n'y a rien a gagner ; rend vrai si la piece a bouge
