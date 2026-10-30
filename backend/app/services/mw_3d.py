@@ -1577,6 +1577,8 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
             box = {"box": w["box"]} if num(w.get("box"), 6) else {}
             if w.get("sup"):
                 ok.append({"sup": 1, **box})
+            elif w.get("clean"):
+                ok.append({"clean": 1, **box})
             elif w.get("erase") is not None:
                 if (r := rub(w.get("erase"))):
                     ok.append({"erase": r})

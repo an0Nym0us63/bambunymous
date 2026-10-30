@@ -102,17 +102,8 @@ export function splitPieceGeometry(THREE, pg, cuts = null, info = null) {
   return out;
 }
 
-// Les supports integres au modele (30/10/2026) : des parois et des plaques fines (moins de 2,5 mm), faites de grandes
-// faces planes en peu de triangles, fondues a la piece (une queue d'oiseau tenue par des voiles verticaux et une
-// semelle). Reperes ainsi :
-//  1. les regions planes (triangles voisins dans un meme plan) ;
-//  2. les « graines » : les grandes regions planes (3 mm2 au moins, triangles de 1 mm2 en moyenne : une surface courbe
-//     en a de bien plus petits) qui ont, en face, a 2,5 mm au plus, une autre grande region parallele qui la recouvre :
-//     les deux faces d'une paroi fine ;
-//  3. de proche en proche, les bandes planes etroites (1,8 mm au plus) qui les touchent : chants et sommets des parois ;
-//  4. ce qui reste, en morceaux : les petits (moins de 5 % du plus grand) qui touchent les supports les rejoignent.
-// Rend, pour chaque triangle, 1 s'il est d'un support (ou null : aucun support reconnu). Positions en mm.
-export function supportTris(pos, ix, only = null) {
+// la topologie d'un maillage : sommets soudes (w), normale, aire et plan de chaque triangle, voisins par arete (nb)
+function topo(pos, ix) {
   const nt = ix.length / 3;
   const weld = new Map(), w = new Int32Array(pos.length / 3);
   for (let i = 0; i < w.length; i++) {
@@ -140,6 +131,50 @@ export function supportTris(pos, ix, only = null) {
     const p = w[ix[t * 3 + e]], q = w[ix[t * 3 + (e + 1) % 3]], k = p < q ? p * nv + q : q * nv + p, o = edge.get(k);
     if (o === undefined) edge.set(k, t * 3 + e); else { nb[t * 3 + e] = Math.floor(o / 3); nb[o] = t; }
   }
+  return { nt, w, nv, N, A, O, nb };
+}
+
+// Nettoyer une piece (30/10/2026) : ce qui pend ou ne tient que par un coin, reste d'un support coupe ou bavure du
+// modele. Les morceaux lies par leurs aretes : les petits (moins de 2 % du plus grand) partent ; puis, trois fois, les
+// triangles qui ne tiennent au reste que par une arete (deux bords libres : une ailette, une aiguille). Rend 1 par
+// triangle a retirer, ou null s'il n'y a rien
+export function scrapTris(pos, ix) {
+  const { nt, nb, A } = topo(pos, ix);
+  const S = new Uint8Array(nt);
+  const up = new Int32Array(nt);
+  for (let i = 0; i < nt; i++) up[i] = i;
+  const root = i => { while (up[i] !== i) { up[i] = up[up[i]]; i = up[i]; } return i; };
+  for (let t = 0; t < nt; t++) for (let e = 0; e < 3; e++) { const o = nb[t * 3 + e]; if (o >= 0) up[root(o)] = root(t); }
+  const area = new Map();
+  for (let t = 0; t < nt; t++) { const k = root(t); area.set(k, (area.get(k) || 0) + A[t]); }
+  const main = Math.max(0, ...area.values());
+  for (let t = 0; t < nt; t++) if (area.get(root(t)) < 0.02 * main) S[t] = 1;
+  for (let pass = 0; pass < 3; pass++) {
+    const drop = [];
+    for (let t = 0; t < nt; t++) {
+      if (S[t]) continue;
+      let free = 0;
+      for (let e = 0; e < 3; e++) { const o = nb[t * 3 + e]; if (o < 0 || S[o]) free++; }
+      if (free >= 2) drop.push(t);
+    }
+    if (!drop.length) break;
+    for (const t of drop) S[t] = 1;
+  }
+  return S.some(Boolean) ? S : null;
+}
+
+// Les supports integres au modele (30/10/2026) : des parois et des plaques fines (moins de 2,5 mm), faites de grandes
+// faces planes en peu de triangles, fondues a la piece (une queue d'oiseau tenue par des voiles verticaux et une
+// semelle). Reperes ainsi :
+//  1. les regions planes (triangles voisins dans un meme plan) ;
+//  2. les « graines » : les grandes regions planes (3 mm2 au moins, triangles de 1 mm2 en moyenne : une surface courbe
+//     en a de bien plus petits) qui ont, en face, a 2,5 mm au plus, une autre grande region parallele qui la recouvre :
+//     les deux faces d'une paroi fine ;
+//  3. de proche en proche, les bandes planes etroites (1,8 mm au plus) qui les touchent : chants et sommets des parois ;
+//  4. ce qui reste, en morceaux : les petits (moins de 5 % du plus grand) qui touchent les supports les rejoignent.
+// Rend, pour chaque triangle, 1 s'il est d'un support (ou null : aucun support reconnu). Positions en mm.
+export function supportTris(pos, ix, only = null) {
+  const { nt, w, nv, N, A, O, nb } = topo(pos, ix);
   // 1. les regions planes
   const reg = new Int32Array(nt).fill(-1), R = [];
   for (let s = 0; s < nt; s++) {
@@ -205,7 +240,9 @@ export function supportTris(pos, ix, only = null) {
           const d = r.nx * x + r.ny * y + r.nz * z - r.o;            // 0 sur la face r, -gap sur la face q
           if (d > 0.05 || d < -gap - 0.05) ok = false;
           const c3 = [x, y, z];
-          for (let c = 0; c < 3 && ok; c++) if (c3[c] < Math.min(r.lo[c], q.lo[c]) - 0.3 || c3[c] > Math.max(r.hi[c], q.hi[c]) + 0.3) ok = false;
+          // un peu au-dela de l'etendue visible : la paroi continue dans la piece, et ses moignons depassent de l'autre
+          // cote (de petits taquets au pied d'une queue, 30/10/2026)
+          for (let c = 0; c < 3 && ok; c++) if (c3[c] < Math.min(r.lo[c], q.lo[c]) - 2.5 || c3[c] > Math.max(r.hi[c], q.hi[c]) + 2.5) ok = false;
         }
         if (!ok) break;
       }
@@ -231,17 +268,34 @@ export function supportTris(pos, ix, only = null) {
       for (const t of ts) { S[t] = 1; for (let e = 0; e < 3; e++) vS[w[ix[t * 3 + e]]] = 1; }
     }
   }
-  // 4. le reste en morceaux : les petits qui touchent les supports les rejoignent
-  const up = new Int32Array(nv);
-  for (let i = 0; i < nv; i++) up[i] = i;
+  // 4. le reste en morceaux, lies par leurs aretes (un bout de paroi qui ne tient a la piece que par un coin en est un a
+  // part) : les petits (moins de 5 % du plus grand) qui touchent les supports les rejoignent
+  const up = new Int32Array(nt);
+  for (let i = 0; i < nt; i++) up[i] = i;
   const root = i => { while (up[i] !== i) { up[i] = up[up[i]]; i = up[i]; } return i; };
-  for (let t = 0; t < nt; t++) if (!S[t]) { const a = root(w[ix[t * 3]]); up[root(w[ix[t * 3 + 1]])] = a; up[root(w[ix[t * 3 + 2]])] = a; }
+  for (let t = 0; t < nt; t++) if (!S[t]) for (let e = 0; e < 3; e++) { const o = nb[t * 3 + e]; if (o >= 0 && !S[o]) up[root(o)] = root(t); }
   const area = new Map();
-  for (let t = 0; t < nt; t++) if (!S[t]) { const k = root(w[ix[t * 3]]); area.set(k, (area.get(k) || 0) + A[t]); }
+  for (let t = 0; t < nt; t++) if (!S[t]) { const k = root(t); area.set(k, (area.get(k) || 0) + A[t]); }
   const main = Math.max(0, ...area.values());
+  const near = t => vS[w[ix[t * 3]]] || vS[w[ix[t * 3 + 1]]] || vS[w[ix[t * 3 + 2]]];
   const touch = new Set();
-  for (let t = 0; t < nt; t++) if (!S[t] && (vS[w[ix[t * 3]]] || vS[w[ix[t * 3 + 1]]] || vS[w[ix[t * 3 + 2]]])) touch.add(root(w[ix[t * 3]]));
-  for (let t = 0; t < nt; t++) if (!S[t]) { const k = root(w[ix[t * 3]]); if (area.get(k) < 0.05 * main && touch.has(k)) S[t] = 1; }
+  for (let t = 0; t < nt; t++) if (!S[t] && near(t)) touch.add(root(t));
+  for (let t = 0; t < nt; t++) if (!S[t]) { const k = root(t); if (area.get(k) < 0.05 * main && touch.has(k)) S[t] = 1; }
+  // 5. les languettes qui pendent pres des supports : un triangle qui ne tient au reste que par une arete (deux bords
+  // libres) part avec eux, et ainsi de suite, trois fois au plus (30/10/2026 : de petites ailettes et des aiguilles
+  // restaient plantees dans la piece)
+  for (let pass = 0; pass < 3; pass++) {
+    mark();
+    const drop = [];
+    for (let t = 0; t < nt; t++) {
+      if (S[t] || !near(t)) continue;
+      let free = 0;
+      for (let e = 0; e < 3; e++) { const o = nb[t * 3 + e]; if (o < 0 || S[o]) free++; }
+      if (free >= 2) drop.push(t);
+    }
+    if (!drop.length) break;
+    for (const t of drop) S[t] = 1;
+  }
   // seulement dans la boite d'un morceau vise
   if (only) for (let t = 0; t < nt; t++) if (S[t] && !only(t)) S[t] = 0;
   return S;
@@ -268,12 +322,20 @@ export function cutGeometry(THREE, geo, cuts, tagIds = new Map(), mi = 0) {
   const dot = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
   const cross = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
   cuts.forEach((c, ci) => {
-    if (c.sup || c.erase) {
+    if (c.sup || c.erase || c.clean) {
       // detacher les supports, ou ce qui a ete gomme (les triangles nommes de ce maillage, au point ou en sont les
       // coupes) : leurs triangles prennent des sommets a eux (ceux partages avec le reste sont doubles)
       const X = c.box, n = ix.length / 3;
       let S = null;
-      if (c.sup) {
+      if (c.clean) {
+        S = scrapTris(vals[pi], ix);
+        // un morceau vise : seulement dans sa boite
+        if (S && X) for (let t = 0; t < n; t++) if (S[t]) {
+          const q = [0, 1, 2].map(a => (P(ix[t * 3])[a] + P(ix[t * 3 + 1])[a] + P(ix[t * 3 + 2])[a]) / 3);
+          if (!(q[0] >= X[0] && q[1] >= X[1] && q[2] >= X[2] && q[0] <= X[3] && q[1] <= X[4] && q[2] <= X[5])) S[t] = 0;
+        }
+      }
+      else if (c.sup) {
         const only = X ? t => { const q = [0, 1, 2].map(a => (P(ix[t * 3])[a] + P(ix[t * 3 + 1])[a] + P(ix[t * 3 + 2])[a]) / 3);
           return q[0] >= X[0] && q[1] >= X[1] && q[2] >= X[2] && q[0] <= X[3] && q[1] <= X[4] && q[2] <= X[5]; } : null;
         S = supportTris(vals[pi], ix, only);

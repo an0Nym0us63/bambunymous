@@ -1050,7 +1050,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const cutWith = async (s, target = null) => {
     const g = pendingCut ? pendingCut.g : target || (sel.size === 1 ? [...sel][0] : null);
     const say = m => { fitMsg = m; onChange?.(state()); };
-    const sup = s === "sup", rubbed = !!s?.erase;
+    const sup = s === "sup", rubbed = !!s?.erase || s === "clean";
     if (rubbed && pendingCut && target && (target.userData.from || target.userData.k) !== pendingCut.K && !pendingCut.parts.includes(target))
       return say("Valide ou annule d'abord la coupe en cours, puis gomme l'autre pièce");
     if (!g) return say(sup ? "Choisis d'abord la pièce dont détacher les supports" : "Touche d'abord la pièce à couper, puis trace un trait à travers elle");
@@ -1058,7 +1058,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const K = g.userData.from || g.userData.k, whole = g.userData.from ? g.userData.whole : g;
     if (!whole) return say("Cette pièce ne se coupe pas : réunis-la d'abord (🧩 Pièce, ⊕ Réunir)");
     // l'oeil et les deux bords du trait, dans le repere de la piece entiere
-    let wedge = rubbed ? { erase: s.erase } : { sup: 1 };
+    let wedge = s === "clean" ? { clean: 1 } : rubbed ? { erase: s.erase } : { sup: 1 };
     if (!sup && !rubbed) {
       const r = el.getBoundingClientRect();
       const rayAt = (x, y) => { mouse.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1); ray.setFromCamera(mouse, camera); return ray.ray.clone(); };
@@ -1080,7 +1080,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     await new Promise(res => setTimeout(res, 0));
     const { splitPieceGeometry, buildSplitGroups } = await import("./assemblySplit");
     const info = {}, comps = splitPieceGeometry(THREE, whole, next, info);
-    if (!info.lastHits) return say(rubbed ? "Rien de gommé : passe la gomme sur la pièce" : sup ? "Pas de support reconnu sur cette pièce (parois ou plaques fines, à faces planes) : coupe-les au couteau, un trait par jointure"
+    if (!info.lastHits) return say(s === "clean" ? "Rien à nettoyer sur cette pièce : rien ne pend ni ne tient par un coin (la 🧽 Gomme reste là pour le reste)"
+      : rubbed ? "Rien de gommé : passe la gomme sur la pièce" : sup ? "Pas de support reconnu sur cette pièce (parois ou plaques fines, à faces planes) : coupe-les au couteau, un trait par jointure"
       : "Ce trait ne traverse pas la pièce : trace-le à travers elle, d'un bord à l'autre de la jointure");
     let pc = pendingCut;
     if (!pc) {
@@ -1194,10 +1195,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pc.parts.forEach((p, j) => { if (pc.marks?.[j] === 2) { p.userData.excluded = true; p.visible = false; } });
     cuts.set(pc.K, pc.cuts);
     resetHistory();
-    egg(fresh.some(x => x.erase) ? "coup_de_gomme" : fresh.some(x => x.sup) ? "sans_echafaudage" : "couteau");
+    egg(fresh.some(x => x.erase || x.clean) ? "coup_de_gomme" : fresh.some(x => x.sup) ? "sans_echafaudage" : "couteau");
     fitMsg = `Coupée : ${pc.parts.length} morceaux, chacun se choisit, se déplace ou se retire de l'assemblage (📋 Pièces)`;
     setSel(derived(pc.g));
-    fitMsg = fresh.some(x => x.erase) ? "Gommé : retiré de l'assemblage (📋 Pièces : ↩ pour le remettre)"
+    fitMsg = fresh.some(x => x.erase || x.clean) ? "Nettoyé : retiré de l'assemblage (📋 Pièces : ↩ pour le remettre)"
       : `Coupée : ${pc.parts.length} morceaux, chacun se choisit, se déplace ou se retire de l'assemblage (📋 Pièces)`;
     onChange?.(state());
   };
@@ -1456,6 +1457,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     cutConfirm, cutCancel,
     setEraser: on => { eraser = on; if (!on) clearRub(); onChange?.(state()); },
     // detacher les supports integres de la piece choisie : proposes en couleur, a valider comme une coupe
+    cleanScraps: () => { if (mode !== "cut") api.setMode("cut"); return cutWith("clean"); },
     detachSupports: () => { if (mode !== "cut") api.setMode("cut"); return cutWith("sup"); },
     cuts: () => Object.fromEntries([...cuts].filter(([k, v]) => v.length && all.some(g => g.userData.from === k))),
     // remettre une piece separee d'un seul tenant

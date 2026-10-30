@@ -140,12 +140,19 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
   const [lit, setLit] = useState(false);
   const [bedOn, setBedOn] = useState(true);            // le plateau (grille) : masquable pour voir dessous
   // la lampe placee a la main : sa direction (d'apres la vue) et sa force, gardees sur l'appareil
-  const [lamp, setLampS] = useState(() => { try { return { az: 35, el: 25, k: 0, ...JSON.parse(localStorage.getItem("bn.3d.lamp") || "{}") }; } catch { return { az: 35, el: 25, k: 0 }; } });
+  // la lampe : eteinte par defaut ; allumee et placee sur un modele, elle le reste pour ce modele seulement (30/10/2026)
+  const lampKey = String(url || "").split("?")[0];
+  const lampAll = () => { try { return JSON.parse(localStorage.getItem("bn.3d.lamps") || "{}"); } catch { return {}; } };
+  const [lamp, setLampS] = useState(() => { try { localStorage.removeItem("bn.3d.lamp"); } catch { /* rien */ } return { az: 35, el: 25, k: 0, ...(lampAll()[lampKey] || {}) }; });
   const [lampOpen, setLampOpen] = useState(false);
   const lampNow = useRef(lamp);
   const putLamp = v => {
     lampNow.current = v; setLampS(v); api.current?.setLamp(v);
-    try { localStorage.setItem("bn.3d.lamp", JSON.stringify(v)); } catch { /* rien */ }
+    try {
+      const all = lampAll();
+      if (v.k) all[lampKey] = v; else delete all[lampKey];       // eteinte : le modele revient au defaut
+      localStorage.setItem("bn.3d.lamps", JSON.stringify(all));
+    } catch { /* rien */ }
   };
   const [floorPick, setFloorPick] = useState(false), [oriented, setOriented] = useState(false);   // une face posee au sol (la vue)
   useEffect(() => { if (lit) egg("ombres_chinoises"); }, [lit]);
@@ -1068,6 +1075,7 @@ const EDIT_HELP = [
     ["Clic sur une pièce", "la pièce à couper (une seule)"],
     ["Glisser à travers elle", "un trait rouge : la pièce est tranchée sur la longueur du trait, dans toute l'épaisseur que voit l'écran (rien au-delà des bouts du trait) ; les parties qui ne tiennent plus ensemble deviennent des morceaux, chacun de sa couleur"],
     ["Plusieurs traits", "un support tenu par plusieurs ponts : un trait par pont ; chacun reste marqué en rouge, et la pièce se sépare quand tous sont tranchés ; tourne la vue au clic droit entre deux traits ; ✕ efface les traits"],
+    ["🧹 Nettoyer", "retire d'un coup les petits restes de la pièce choisie (ce qui ne tient que par un coin, les ailettes et aiguilles qui pendent), proposés en rouge à valider"],
     ["🧽 Gomme", "allumée, le glisser peint en rouge ce qu'il touche sur la pièce choisie (ou sur les morceaux proposés) : les bouts de support restés collés, une bavure ; au lâcher, c'est détaché, et ✓ le retire de l'assemblage (📋 Pièces : ↩ le remet)"],
     ["🪄 Détacher les supports", "les supports intégrés au modèle (parois et plaques fines, à faces planes, fondues à la pièce) sont repérés d'eux-mêmes et proposés en couleur, sans trait à tracer"],
     ["✓ Couper (Entrée) / ✕ Ne pas couper (Échap)", "valider les morceaux ou tout laisser ; chaque morceau se choisit, se déplace, s'exclut (📋 Pièces : 🚫) ; ⊕ Réunir rend la pièce entière d'origine"],
@@ -1217,6 +1225,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         ✕ {est.cutPending ? "Ne pas couper" : `Effacer ${est.cutCount > 1 ? `les ${est.cutCount} traits` : "le trait"}`}</button>
     </> : <>
       {rubBtn}
+      {est.count === 1 && <button type="button" onClick={() => api?.cleanScraps()} style={b(false)}
+        data-tip="Retire d'un coup les petits restes : ce qui ne tient que par un coin, les ailettes et aiguilles qui pendent">🧹 Nettoyer</button>}
       {est.count === 1 && <button type="button" onClick={() => api?.detachSupports()} style={b(false)}
         data-tip="Repère les supports intégrés au modèle (parois et plaques fines) et les sépare de la pièce, sans trait à tracer">🪄 Détacher les supports</button>}
     </>)
