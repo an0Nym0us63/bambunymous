@@ -5920,6 +5920,10 @@ async def secrets_by_account(usernames: list) -> list:
 FAMILY_SUBS = ("eggs", "cachettes", "android", "pranks", "fetes", "hidden")
 FAMILY_IDS = {aid for sid, _e, _n, ids in SECRET_SUBS if sid in FAMILY_SUBS
               for aid in ids.split() if aid.startswith("egg_") and aid not in ONLY_WON}
+# les autres secrets (ceux de la maison : heures, poids, couleurs, compteurs...) : un compte de la famille y met aussi une
+# loupe tant que la maison ne les a pas (30/10/2026 : la fiche ne proposait rien, sans un mot)
+HOUSE_SECRET_IDS = {aid for _sid, _e, _n, ids in SECRET_SUBS for aid in ids.split()
+                    if aid not in FAMILY_IDS and aid not in ONLY_WON and aid in BY_ID and len(BY_ID[aid]["tiers"]) == 1}
 
 
 async def family() -> dict:
@@ -5957,6 +5961,15 @@ def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> 
     for it in v["items"]:
         aid = it["id"]
         if aid not in FAMILY_IDS:
+            if aid in HOUSE_SECRET_IDS and it["level"] < 0:
+                # un secret de la maison qu'elle n'a pas encore : la loupe y vaut aussi
+                lit = aid in ((loupes or {}).get("used") or {})
+                dlit = lit and aid in ((loupes or {}).get("desc") or {})
+                a = BY_ID[aid]
+                it = {**it, "loupable": True, "loupe": bool(lit), "loupe_desc": bool(dlit),
+                      "hint": hint_of(a) if lit else it.get("hint"),
+                      "reveal": max(it.get("reveal") or 0, (1 if lit else 0) + (1 if dlit else 0)),
+                      **({"desc": describe(a, a["tiers"][0])} if dlit else {})}
             items.append(it)
             continue
         a, k = BY_ID[aid], aid[4:]
@@ -6165,10 +6178,14 @@ async def use_loupe(username: str, aid: str, what: str = "hint") -> dict:
     indice. Ou, l'indice deja revele, trois loupes pour son descriptif (what="desc")."""
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting, set_setting
-    if aid not in FAMILY_IDS:
+    if aid in FAMILY_IDS:
+        if aid[4:] in ((await _eggs_by()).get(username) or {}):
+            raise ValueError("Tu l'as déjà")
+    elif aid in HOUSE_SECRET_IDS:
+        if aid in await my_uniques():
+            raise ValueError("La maison l'a déjà")
+    else:
         raise ValueError("Pas de loupe pour ce secret")
-    if aid[4:] in ((await _eggs_by()).get(username) or {}):
-        raise ValueError("Tu l'as déjà")
     me = await loupes(username)
     if what == "desc":
         a = BY_ID[aid]

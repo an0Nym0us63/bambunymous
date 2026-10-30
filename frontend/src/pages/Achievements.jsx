@@ -2041,7 +2041,7 @@ function Rules({ data, onClose }) {
         {/* un compte de la famille : ses loupes et sa roue a lui (sans cles ni tickets ; sans ce cas, la fenetre plantait) */}
         {data.family && <>
           <H>🔍 Tes loupes</H>
-          <P>Une loupe révèle l'<b>indice</b> d'un secret que tu n'as pas encore, que {data.family.house || "la maison"} l'ait déjà trouvé ou non. L'indice en main,
+          <P>Une loupe révèle l'<b>indice</b> d'un secret que tu n'as pas encore, que {data.family.house || "la maison"} l'ait déjà trouvé ou non (et d'un secret de la maison, tant qu'elle ne l'a pas). L'indice en main,
             {" "}<b>{data.family.loupes_desc || 3} loupes</b> dévoilent aussi son descriptif. Tu en reçois {data.family.loupes_day || 1} par jour,
             {" "}jusqu'à {data.family.loupes_max || 10} ; celles gagnées à ta roue s'ajoutent, même au-delà.</P>
         </>}
