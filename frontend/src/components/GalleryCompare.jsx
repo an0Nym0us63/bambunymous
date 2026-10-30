@@ -18,6 +18,20 @@ const isVideoUrl = (u) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u || "");
  *  - maxCompare: nombre max comparable (def 6)
  *  - pageSize: nombre de tuiles affichées initialement, "Charger plus" ensuite (def 30)
  */
+// une vue 3D presque blanche (sa matiere, pas son fond transparent) : son studio prend un fond plus soutenu
+const lightStage = e => {
+  const img = e.currentTarget, stage = img.closest(".bn-stage");
+  if (!stage || !img.naturalWidth) return;
+  try {
+    const c = document.createElement("canvas"); c.width = c.height = 24;
+    const x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(img, 0, 0, 24, 24);
+    const d = x.getImageData(0, 0, 24, 24).data;
+    let n = 0, l = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128) { n++; l += (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255; }
+    stage.dataset.light = n > 20 && l / n > 0.8 ? "1" : "0";
+  } catch { /* image d'un autre site : on laisse le fond */ }
+};
+
 export default function GalleryCompare({
   onDeletePhoto, onSetPrimaryPhoto, onPhotosChanged,
   items, getId, getCoverImage, getPhotos, getTitle, getSubtitle, compareFields = [],
@@ -191,6 +205,7 @@ export default function GalleryCompare({
                       const phs = (getPhotos && getPhotos(item)) || [], kept = phs.filter(ph => ph?.sel);
                       const urls = [...new Set(kept.map(ph => ph.url).filter(Boolean))];
                       const one = (u, on = true) => <img className="bn-stage-img" src={`${apiThumb(u, 384)}&trim=1`} alt={getTitle(item)} loading="lazy" decoding="async"
+                        onLoad={on ? lightStage : undefined}
                         style={{ position:"absolute", left:"6%", top:"5%", width:"88%", height:"83%", objectFit:"contain", objectPosition:"50% 100%",
                           filter:"drop-shadow(0 3px 3px rgba(0,0,0,.25))", transformOrigin:"50% 100%", transition:"transform .25s, opacity .8s ease", opacity: on ? 1 : 0 }}/>;
                       return urls.length > 1 ? <CycleImg urls={urls} render={one}/> : img && one(img);
@@ -200,7 +215,10 @@ export default function GalleryCompare({
                     <p title={getTitle(item)} style={{ fontSize:"clamp(11.5px, 1.15vw, 13px)", color:"var(--text)", fontWeight:800, margin:0, lineHeight:1.25,
                       overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{getTitle(item)}</p>
                   </div>
-                  <style>{".bn-stage:hover .bn-stage-img{transform:scale(1.05)}"}</style>
+                  <style>{".bn-stage:hover .bn-stage-img{transform:scale(1.05)}"
+                    // une piece toute blanche se perdait sur le fond clair du studio : un fond plus soutenu (30/10/2026)
+                    + ".bn-stage[data-light='1']{background:radial-gradient(65% 50% at 50% 34%, color-mix(in srgb, #64748B 38%, transparent), transparent 75%),"
+                    + "linear-gradient(180deg, color-mix(in srgb, #475569 30%, var(--surface2)) 0%, color-mix(in srgb, #334155 26%, var(--surface2)) 68%, color-mix(in srgb, #0f172a 32%, var(--surface2)) 68.5%, color-mix(in srgb, #0f172a 22%, var(--surface2)) 100%) !important}"}</style>
                 </>
               ) : renderCover ? renderCover(item) : img ? (
                 <img src={apiThumb(img, 384)} alt={getTitle(item)} loading="lazy" decoding="async" style={{ width:"100%", height:"100%", objectFit:"cover" }}
