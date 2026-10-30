@@ -23,7 +23,7 @@ import { egg } from "../eggs";
 export const preloadEditor = () => import("three/examples/jsm/controls/TransformControls.js").catch(() => {});
 
 export async function createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder, pieces, render, onChange, groupsInit = [], jointsInit = [], groupByObject = false,
-                                                  copyPiece = null }) {
+                                                  copyPiece = null, cutsInit = {} }) {
   const { TransformControls } = await import("three/examples/jsm/controls/TransformControls.js");
   const el = renderer.domElement;
   const ray = new THREE.Raycaster();
@@ -135,6 +135,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
 
   const undo = [], redo = [];
   let pendingSplit = null;            // une separation proposee, pas encore validee
+  let pendingCut = null;              // une coupe au couteau proposee (morceaux colores), pas encore validee
   const snapshot = () => ({ m: all.map(g => g.matrix.clone()), groups: groups.map(gr => [...gr]), joints: joints.map(cloneJ), ex: all.map(g => !!g.userData.excluded) });
   const restore = s => { all.forEach((g, i) => { s.m[i].decompose(g.position, g.quaternion, g.scale); g.updateMatrix();
     if (s.ex) { g.userData.excluded = s.ex[i]; g.visible = !s.ex[i]; } }); groups = s.groups.map(gr => [...gr]);
@@ -149,12 +150,13 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const state = () => ({ mode, magnet, assist, rotStep, center: center(), selected: selName(), count: sel.size, step: first ? 2 : 1, canUndo: undo.length > 0, canRedo: redo.length > 0,
     pivot: !!pivot, pairs: pairs.length, twinPos: twinAlt && twinAlt.at === changes && twinAlt.fits.length > 1 ? `${twinAlt.i + 1}/${twinAlt.fits.length}` : null, boxMode, ground3, groundPts: gPts.length, vertical, pinsA: pins.a.length, pinsB: pins.b.length,
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
+    cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
     // de la selection part au moins un collage (vers une piece hors d'elle) : « Grouper le colle » a un sens
     canGroupGlued: sel.size > 0 && joints.some(j => sel.has(j.a) !== sel.has(j.b)),
     canUngroup: [...sel].some(g => groupOf(g)), multi, turnGlued, liveAngle, guard, fitMsg,
-    hidden: all.filter(g => !g.visible && !g.userData.excluded && g !== pendingSplit?.pg).length,
+    hidden: all.filter(g => !g.visible && !g.userData.excluded && g !== pendingSplit?.pg && !pendingCut?.old.includes(g)).length,
     // la liste des pieces (30/10/2026) : pour exclure, remettre, multiplier
     list: all.filter(g => g !== pendingSplit?.pg).map(g => ({ k: g.userData.k, name: g.userData.name, sel: sel.has(g), shown: g.visible,
       excluded: !!g.userData.excluded, copy: !!g.userData.copyOf })),
@@ -378,7 +380,15 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     tc.attach(handle); tc.setMode(mode === "move" ? "translate" : "rotate");
   };
   const shade = () => {
-    all.forEach(o => o.children.forEach(m => { if (m.isMesh && m.material) { const dim = sel.size > 0 && !sel.has(o); m.material.transparent = dim; m.material.opacity = dim ? 0.65 : 1; } }));
+    // chaque materiau garde son etat d'origine (30/10/2026 : les pieces translucides par nature revenaient opaques, sans
+    // ecrire la profondeur, et restaient abimees apres la selection)
+    all.forEach(o => o.children.forEach(m => {
+      if (!m.isMesh || !m.material) return;
+      const mt = m.material, b = mt.userData.base || (mt.userData.base = { transparent: mt.transparent, opacity: mt.opacity });
+      const dim = sel.size > 0 && !sel.has(o), tr = dim || b.transparent;
+      if (mt.transparent !== tr) { mt.transparent = tr; mt.needsUpdate = true; }
+      mt.opacity = dim ? Math.min(b.opacity, 0.65) : b.opacity;
+    }));
   };
   const setSel = list => { fitMsg = null; sel.clear(); list.forEach(g => sel.add(g)); shade(); placeHandle(); showContact(); render(); onChange?.(state()); };
   // le contact de la selection collee, marque d'un anneau
@@ -519,8 +529,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       const m = new THREE.Mesh(geo, twinMat); m.renderOrder = 998;
       m.position.copy(t.face.n).multiplyScalar(0.05);
       twinMarks.add(m);
+      // la pastille, de taille fixe a l'ecran et posee en haut a droite de la face : grande et au centre, elle cachait
+      // l'endroit a toucher (30/10/2026)
       const s = label(String(Math.round(t.fits[0].score * 100)), "#16a34a");
-      s.position.copy(t.face.c).addScaledVector(t.face.n, L * 0.02); s.scale.setScalar(L * 0.03); twinMarks.add(s);
+      s.material.sizeAttenuation = false; s.material.opacity = 0.9; s.scale.setScalar(0.055); s.center.set(-0.35, -0.35);
+      s.position.copy(t.face.c).addScaledVector(t.face.n, L * 0.002); twinMarks.add(s);
     }
     render();
   };
@@ -663,6 +676,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   };
   // ce que fait un toucher, selon le mode (une prise : la piece, sa face ou son arete ; ou rien)
   const tap = (pick, ev) => {
+    if (mode === "cut") { if (!pendingCut) setSel(pick ? [pick.group] : []); return; }
     if (mode === "move" || mode === "rotate") {
       if (!pick) { if (!ev.ctrlKey && !ev.shiftKey && !multi) setSel([]); return; }
       const unit = ev.altKey ? [pick.group] : unitOf(pick.group);
@@ -878,6 +892,166 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   window.addEventListener("pointerup", onDragEnd);
   window.addEventListener("pointercancel", onDragEnd);
   el.addEventListener("pointerup", onUp);
+
+  // le couteau (30/10/2026) : en mode « Couper », un trait trace a travers la piece choisie la tranche dans toute
+  // l'epaisseur vue a l'ecran, sur la longueur du trait ; les morceaux qui ne tiennent plus ensemble se separent (un
+  // support integre qui ne tient que par quelques ponts). Un doigt ou le clic gauche trace ; deux doigts ou le clic droit
+  // tournent la vue, la molette zoome. Plusieurs traits s'ajoutent avant de valider. Les coupes sont gardees avec
+  // l'assemblage (piece entiere -> liste de secteurs, dans son repere) et refaites a l'ouverture
+  const cuts = new Map(Object.entries(cutsInit || {}).filter(([, v]) => Array.isArray(v) && v.length));
+  let stroke = null, viewWas = null;
+  const knifeView = on => {
+    if (on && !viewWas) {
+      viewWas = { mb: { ...controls.mouseButtons }, t: { ...controls.touches } };
+      controls.mouseButtons.LEFT = null; controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
+      controls.touches.ONE = null; controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
+      el.style.cursor = "crosshair";
+    } else if (!on && viewWas) {
+      Object.assign(controls.mouseButtons, viewWas.mb); Object.assign(controls.touches, viewWas.t); viewWas = null;
+      el.style.cursor = "";
+    }
+  };
+  const drawStroke = () => {
+    const s = stroke, hr = host.getBoundingClientRect();
+    Object.assign(s.div.style, { left: `${s.x0 - hr.left}px`, top: `${s.y0 - hr.top}px`, width: `${Math.hypot(s.x1 - s.x0, s.y1 - s.y0)}px`,
+      transform: `rotate(${Math.atan2(s.y1 - s.y0, s.x1 - s.x0)}rad)` });
+  };
+  const dropStroke = () => { stroke?.div.remove(); stroke = null; };
+  const onKnifeDown = ev => {
+    if (mode !== "cut") return;
+    if (stroke) { if (ev.pointerId !== stroke.id) dropStroke(); return; }      // un second doigt : c'est la vue
+    if (fingers > 1 || (ev.pointerType === "mouse" && ev.button !== 0)) return;
+    const div = document.createElement("div");
+    div.style.cssText = "position:absolute;height:0;border-top:2.5px dashed #ef4444;transform-origin:0 0;pointer-events:none;z-index:5;filter:drop-shadow(0 0 2px #fff)";
+    host.appendChild(div);
+    stroke = { id: ev.pointerId, x0: ev.clientX, y0: ev.clientY, x1: ev.clientX, y1: ev.clientY, div };
+    drawStroke();
+  };
+  const onKnifeMove = ev => { if (stroke && ev.pointerId === stroke.id) { stroke.x1 = ev.clientX; stroke.y1 = ev.clientY; drawStroke(); } };
+  const onKnifeUp = ev => {
+    if (!stroke || ev.pointerId !== stroke.id) return;
+    const s = stroke;
+    dropStroke();
+    if (Math.hypot(s.x1 - s.x0, s.y1 - s.y0) >= 12) cutWith(s);              // plus court : un toucher, qui choisit la piece
+  };
+  const onKnifeCancel = ev => { if (stroke && ev.pointerId === stroke.id) dropStroke(); };
+  el.addEventListener("pointerdown", onKnifeDown);
+  window.addEventListener("pointermove", onKnifeMove);
+  window.addEventListener("pointerup", onKnifeUp);
+  window.addEventListener("pointercancel", onKnifeCancel);
+  // la place d'un morceau (ou de la piece entiere) ramenee au repere de la piece entiere
+  const wholeFrame = g => { g.updateMatrix(); const o = g.userData.from ? g.userData.c.clone().sub(g.userData.parentC) : new THREE.Vector3();
+    return g.matrix.clone().multiply(new THREE.Matrix4().makeTranslation(-o.x, -o.y, -o.z)); };
+  const r6 = v => v.toArray().map(x => Math.round(x * 1e6) / 1e6);
+  const cutWith = async s => {
+    const g = pendingCut ? pendingCut.g : sel.size === 1 ? [...sel][0] : null;
+    const say = m => { fitMsg = m; onChange?.(state()); };
+    if (!g) return say("Touche d'abord la pièce à couper, puis trace un trait à travers elle");
+    if (g.userData.copyOf) return say("Un exemplaire ajouté ne se coupe pas : coupe la pièce d'origine");
+    const K = g.userData.from || g.userData.k, whole = g.userData.from ? g.userData.whole : g;
+    if (!whole) return say("Cette pièce ne se coupe pas : réunis-la d'abord (🧩 Pièce, ⊕ Réunir)");
+    // l'oeil et les deux bords du trait, dans le repere de la piece entiere
+    const r = el.getBoundingClientRect();
+    const rayAt = (x, y) => { mouse.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1); ray.setFromCamera(mouse, camera); return ray.ray.clone(); };
+    holder.updateMatrixWorld(true);
+    const inv = holder.matrixWorld.clone().multiply(wholeFrame(g)).invert();
+    const r0 = rayAt(s.x0, s.y0), r1 = rayAt(s.x1, s.y1);
+    const wedge = { e: r0.origin.clone().applyMatrix4(inv).toArray().map(x => Math.round(x * 1e4) / 1e4),
+      a: r6(r0.direction.clone().transformDirection(inv)), b: r6(r1.direction.clone().transformDirection(inv)) };
+    if (g !== whole) {
+      // un morceau : la coupe reste dans sa boite (les autres morceaux de la piece ne sont pas touches)
+      const bx = new THREE.Box3(), o = g.userData.c.clone().sub(g.userData.parentC);
+      g.children.forEach(m => { if (m.isMesh) { m.geometry.computeBoundingBox(); bx.union(m.geometry.boundingBox); } });
+      bx.translate(o).expandByScalar(0.3);
+      wedge.box = [...bx.min.toArray(), ...bx.max.toArray()].map(x => Math.round(x * 100) / 100);
+    }
+    const base = pendingCut ? pendingCut.cuts : (cuts.get(K) || []), next = [...base, wedge];
+    say("Découpe…");
+    await new Promise(res => setTimeout(res, 0));
+    const { splitPieceGeometry, buildSplitGroups } = await import("./assemblySplit");
+    const comps = splitPieceGeometry(THREE, whole, next);
+    const had = pendingCut ? pendingCut.parts.length : g.userData.from ? all.filter(x => x.userData.from === K && !x.userData.copyOf).length : 1;
+    if (!comps || comps.length <= had) return say("Ce trait ne détache rien : trace-le à travers toute la pièce, là où elle tient à l'autre partie");
+    let pc = pendingCut;
+    if (!pc) {
+      // ce qu'il y avait avant : la piece entiere, ou ses morceaux ; et a quel morceau appartenait chaque triangle
+      const old = g.userData.from ? all.filter(x => x.userData.from === K && !x.userData.copyOf) : [g];
+      const prev = g.userData.from ? splitPieceGeometry(THREE, whole, base.length ? base : null) : null;
+      pc = { K, g, whole, old, vis: old.map(x => x.visible), oldOwn: prev?.owner || null, base: base.length, parts: [] };
+    } else pc.parts.forEach(p => { holder.remove(p); p.children.forEach(m => { m.geometry.dispose(); m.material.dispose(); }); });
+    const parts = buildSplitGroups(THREE, whole, comps);
+    // chaque nouveau morceau vient de l'ancien qui avait le plus de ses triangles d'origine (un triangle deja coupe
+    // appartient aux deux cotes : un seul ne suffit pas) et garde sa place
+    const votes = parts.map(() => new Map());
+    if (pc.oldOwn) comps.owner.forEach((own, mi) => { for (let t = 0; t < own.length; t++) {
+      const j = own[t], i = pc.oldOwn[mi][t];
+      if (j >= 0 && i >= 0) votes[j].set(i, (votes[j].get(i) || 0) + 1);
+    } });
+    const src = votes.map(v => {
+      const best = [...v].sort((x, y) => y[1] - x[1])[0];
+      return (best && byKey.get(`${K}:${best[0]}`)) || pc.old[0];
+    });
+    const tints = [0xef4444, 0x22c55e, 0x3b82f6, 0xf59e0b, 0xa855f7, 0x06b6d4, 0xec4899, 0x84cc16];
+    parts.forEach((p, j) => {
+      const o = src[j] || pc.old[0], cc = p.userData.c.clone().sub(p.userData.parentC);
+      wholeFrame(o).multiply(new THREE.Matrix4().makeTranslation(cc.x, cc.y, cc.z)).decompose(p.position, p.quaternion, p.scale);
+      p.updateMatrix();
+      p.userData.excluded = !!o.userData.excluded;
+      p.visible = pc.vis[pc.old.indexOf(o)] !== false && !o.userData.excluded;
+      holder.add(p);
+      p.children.forEach(m => { m.material.emissive = new THREE.Color(tints[j % tints.length]); m.material.emissiveIntensity = 0.55; });
+    });
+    pc.old.forEach(x => { x.visible = false; });
+    pc.parts = parts; pc.src = src; pc.cuts = next;
+    pendingCut = pc;
+    tc.detach(); fitMsg = null; render(); onChange?.(state());
+  };
+  const cutCancel = () => {
+    const pc = pendingCut;
+    if (!pc) return;
+    pendingCut = null;
+    pc.parts.forEach(p => { holder.remove(p); p.children.forEach(m => { m.geometry.dispose(); m.material.dispose(); }); });
+    pc.old.forEach((x, i) => { x.visible = pc.vis[i]; });
+    render(); onChange?.(state());
+  };
+  const cutConfirm = () => {
+    const pc = pendingCut;
+    if (!pc) return;
+    pendingCut = null;
+    pc.parts.forEach(p => p.children.forEach(m => {           // leur couleur d'origine
+      const s0 = pc.whole.children.find(x => x.isMesh && x.material.color.equals(m.material.color));
+      m.material.emissive = s0 ? s0.material.emissive.clone() : new THREE.Color(0); m.material.emissiveIntensity = s0 ? s0.material.emissiveIntensity : 1;
+    }));
+    const firstOf = o => pc.parts[pc.src.indexOf(o)] || pc.parts[0];
+    const oldKeys = new Map(pc.old.map(o => [o.userData.k, o]));
+    pc.old.forEach(o => { holder.remove(o); pieces.delete(o.userData.pid); });
+    pc.parts.forEach(p => pieces.set(p.userData.pid, p));
+    // les exemplaires ajoutes d'un ancien morceau suivent le nouveau qui en garde le plus
+    for (const cp of all) {
+      const o = cp.userData.copyOf && oldKeys.get(cp.userData.copyOf);
+      if (!o) continue;
+      const nb = firstOf(o).userData.k, n = String(cp.userData.k).split("#")[1];
+      cp.userData.copyOf = nb; cp.userData.k = `${nb}#${n}`;
+    }
+    reindex();
+    const derived = o => pc.parts.filter((p, j) => pc.src[j] === o);
+    groups = groups.map(gr => gr.flatMap(x => (pc.old.includes(x) ? derived(x) : [x]))).filter(gr => gr.length > 1);
+    // un collage sur un ancien morceau passe au nouveau qui en garde le plus (son point, ramene a son repere)
+    joints = joints.map(j => {
+      const a = pc.old.includes(j.a) ? firstOf(j.a) : j.a;
+      if (!pc.old.includes(j.b)) return { ...j, a };
+      const b = firstOf(j.b);
+      j.b.updateMatrix(); b.updateMatrix();
+      return { ...j, a, b, p: j.p.clone().applyMatrix4(j.b.matrix).applyMatrix4(b.matrix.clone().invert()) };
+    }).filter(j => j.a !== j.b);
+    cuts.set(pc.K, pc.cuts);
+    resetHistory();
+    egg("couteau");
+    fitMsg = `Coupée : ${pc.parts.length} morceaux, chacun se choisit, se déplace ou se retire de l'assemblage (📋 Pièces)`;
+    setSel(derived(pc.g));
+    fitMsg = `Coupée : ${pc.parts.length} morceaux, chacun se choisit, se déplace ou se retire de l'assemblage (📋 Pièces)`;
+    onChange?.(state());
+  };
   let slide = null;
   const rayHolder = ev => {
     const r = el.getBoundingClientRect();
@@ -888,7 +1062,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     return new THREE.Ray(ray.ray.origin.clone().applyMatrix4(inv), ray.ray.direction.clone().transformDirection(inv));
   };
   const onSlideDown = ev => {
-    if (ev.button !== 0 || !sel.size || tc.axis) return;
+    if (ev.button !== 0 || !sel.size || tc.axis || mode === "cut") return;
     const j = jointOf([...sel]);
     if (!j) return;
     const pick = pickAt(ev);
@@ -984,6 +1158,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       if (k === "f") return api.setMode("ground");
       if (k === "c") return api.setMode("mate");
       if (k === "p") return api.setMode("pins");
+      if (k === "x") return api.setMode("cut");
+      if (k === "enter" && mode === "cut" && pendingCut) return cutConfirm();
+      if (k === "escape" && mode === "cut" && pendingCut) { ev.preventDefault(); ev.stopPropagation(); return cutCancel(); }
       if (k === "z") return frame();
       if (k === "h") return api.hide();
       if (k === "enter" && mode === "pins") return pinsApply();
@@ -1027,7 +1204,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
 
   const api = {
     setGround3: on => { ground3 = on; gPts = []; gUnit = []; drawGround(); onChange?.(state()); },
-    setMode: m => { if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
+    setMode: m => { if (m !== "cut") { cutCancel(); dropStroke(); } knifeView(m === "cut"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
     setRotStep: d => { rotStep = d; applySnap(); onChange?.(state()); },
     setMulti: on => { multi = on; onChange?.(state()); },
@@ -1126,11 +1303,26 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       egg("puzzle_3d");
       setSel(parts);
     },
+    cutConfirm, cutCancel,
+    cuts: () => Object.fromEntries([...cuts].filter(([k, v]) => v.length && all.some(g => g.userData.from === k))),
     // remettre une piece separee d'un seul tenant
     reunite: () => {
       const from = [...sel].map(g => g.userData.from).find(Boolean);
       if (!from) return;
-      const parts = all.filter(g => g.userData.from === from);
+      const parts = all.filter(g => g.userData.from === from && !g.userData.copyOf);
+      cuts.delete(from);
+      // coupee au couteau : la piece entiere d'origine revient, a la place de son premier morceau (30/10/2026)
+      const W = parts[0].userData.whole;
+      if (W) {
+        wholeFrame(parts[0]).decompose(W.position, W.quaternion, W.scale); W.updateMatrix();
+        W.visible = true; W.userData.excluded = false;
+        parts.forEach(g => { holder.remove(g); pieces.delete(g.userData.pid); });
+        holder.add(W); pieces.set(W.userData.pid, W);
+        reindex();
+        groups = groups.map(gr => [...new Set(gr.map(g => (parts.includes(g) ? W : g)))]).filter(gr => gr.length > 1);
+        joints = joints.map(j => ({ ...j, a: parts.includes(j.a) ? W : j.a, b: parts.includes(j.b) ? W : j.b })).filter(j => j.a !== j.b);
+        resetHistory(); setSel([W]); return;
+      }
       const g0 = parts[0], whole = new THREE.Group();
       const pc = g0.userData.parentC || new THREE.Vector3();
       for (const g of parts) {
@@ -1430,6 +1622,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       boxDiv?.remove(); if (boxMode) controls.enabled = true;
       window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", onBlur);
       el.removeEventListener("pointerdown", onSlideDown, true); window.removeEventListener("pointermove", onSlideMove); window.removeEventListener("pointerup", onSlideUp);
+      el.removeEventListener("pointerdown", onKnifeDown); window.removeEventListener("pointermove", onKnifeMove);
+      window.removeEventListener("pointerup", onKnifeUp); window.removeEventListener("pointercancel", onKnifeCancel);
+      cutCancel(); dropStroke(); knifeView(false);
       holder.remove(ring); ring.geometry.dispose(); ringMat.dispose();
       try { tc.detach(); tc.disconnect(); } catch { /* deja debranchee */ }
       try { helper.traverse(o => { o.geometry?.dispose?.(); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m?.dispose?.()); }); } catch { /* rien */ }

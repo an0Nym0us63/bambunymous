@@ -1667,7 +1667,8 @@ async def mw_3d_edit_save(key: str, body: dict = Body({}), user: str = Depends(g
     from ....services import mw_3d as T
     try:
         return T.save_edit(key, body.get("pieces") or {}, str(user or ""), body.get("groups") or [], body.get("joints") or [],
-                           body.get("splits") or [], str(body.get("did") or "") or None, body.get("excluded") or [])
+                           body.get("splits") or [], str(body.get("did") or "") or None, body.get("excluded") or [],
+                           body.get("cuts") or {})
     except ValueError as e:
         raise HTTPException(400, str(e))
 

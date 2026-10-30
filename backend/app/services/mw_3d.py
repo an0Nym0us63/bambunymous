@@ -1530,7 +1530,7 @@ def load_edit(key: str, did: str | None = None, piece_keys: set | None = None) -
 
 
 def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, joints: list | None = None,
-              splits: list | None = None, did: str | None = None, excluded: list | None = None) -> dict:
+              splits: list | None = None, did: str | None = None, excluded: list | None = None, cuts: dict | None = None) -> dict:
     import time
     if not _KEY.fullmatch(key or ""):
         raise ValueError("Vue inconnue")
@@ -1555,7 +1555,18 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
     did = str(did) if did and str(did).isdigit() else _did_of(key)
     # les pieces exclues de l'assemblage (30/10/2026) : plus montrees, remises depuis la liste des pieces
     exc = [str(k) for k in (excluded or []) if str(k) in clean]
+    # les coups de couteau (30/10/2026) : piece entiere -> secteurs {e, a, b} (l'oeil et les deux bords du trait, dans
+    # son repere), seulement pour une piece separee
+    cut = {}
+    for k, lst in (cuts or {}).items() if isinstance(cuts, dict) else []:
+        if str(k) not in spl or not isinstance(lst, list):
+            continue
+        ok = [{"e": w["e"], "a": w["a"], "b": w["b"], **({"box": w["box"]} if num(w.get("box"), 6) else {})} for w in lst[:50]
+              if isinstance(w, dict) and all(num(w.get(x), 3) for x in ("e", "a", "b"))]
+        if ok:
+            cut[str(k)] = ok
     d = {"pieces": clean, "groups": [g for g in grp if len(g) > 1], "joints": jts, "splits": spl, "excluded": exc, "v": 2,
+         **({"cuts": cut} if cut else {}),
          "at": time.time(), "by": by, **({"did": did} if did else {})}
     _backup(key, "remplacee")
     f = _edits_file(key)
@@ -1633,7 +1644,8 @@ def edits_for_design(did: str) -> list:
         if not o or (o.get("did") or _did_of(f.stem)) != str(did):
             continue
         out.append({"key": f.stem, "profile": _prof_of(f.stem), "at": o.get("at"), "n": len(o["pieces"]),
-                    **{k: o.get(k) or [] for k in ("groups", "joints", "splits", "excluded")}, "pieces": o["pieces"]})
+                    **{k: o.get(k) or [] for k in ("groups", "joints", "splits", "excluded")}, "cuts": o.get("cuts") or {},
+                    "pieces": o["pieces"]})
     out.sort(key=lambda x: -(x.get("at") or 0))
     return out[:5]
 
@@ -1647,4 +1659,4 @@ def restore_edit(key: str, vid: str, by: str = "") -> dict:
     o = _read((_old_dir() if old else _edits_file(key).parent) / f"{stem}.json")
     if not o:
         raise ValueError("Version introuvable")
-    return save_edit(key, o["pieces"], by, o.get("groups"), o.get("joints"), o.get("splits"), o.get("did"), o.get("excluded"))
+    return save_edit(key, o["pieces"], by, o.get("groups"), o.get("joints"), o.get("splits"), o.get("did"), o.get("excluded"), o.get("cuts"))

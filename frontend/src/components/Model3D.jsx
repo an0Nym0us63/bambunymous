@@ -438,7 +438,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               // une piece separee a la main (« objet:instance:partie:morceau ») : refaite en ses morceaux, chacun a sa place
               const pre = `${pg.userData.k}:`;
               if (splitPieceGeometry && splits.has(pg.userData.k) && Object.keys(saved).some(k => k.startsWith(pre))) {
-                const comps = splitPieceGeometry(THREE, pg);
+                // coupee au couteau : les memes coups refaits sur la piece entiere (30/10/2026)
+                const comps = splitPieceGeometry(THREE, pg, edit?.cuts?.[pg.userData.k] || null);
                 if (comps) {
                   const parts = buildSplitGroups(THREE, pg, comps);
                   holder.remove(pg); byPiece.delete(pg.userData.pid);
@@ -687,7 +688,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             // l'appli restee ouverte pendant une mise a jour reclame un fichier qui n'existe plus : elle se recharge
             const { createAssemblyEditor } = await importRetry(() => import("./AssemblyEditor"));
             editor = await createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder: ed.holder, pieces: ed.byPiece, render, onChange,
-              groupsInit: edit?.groups || [], jointsInit: edit?.joints || [], copyPiece: (src, n) => copyPiece(THREE, src, n),
+              groupsInit: edit?.groups || [], jointsInit: edit?.joints || [], copyPiece: (src, n) => copyPiece(THREE, src, n), cutsInit: edit?.cuts || {},
               // pas encore enregistre par cette version : les parties d'un meme objet partent groupees
               groupByObject: edit?.v !== 2 });
             if (import.meta.env.DEV) window.__asmEditor = { editor, holder: ed.holder, pieces: ed.byPiece, THREE };   // banc d'essai seulement
@@ -861,6 +862,7 @@ const EDIT_TIPS = {
   move: "Clique une pièce (Ctrl / Maj : en ajouter ; Alt : une pièce d'un groupe seule), puis tire sur les flèches (Alt maintenu : sans cran) · flèches 1 mm (Maj : 10), Ctrl + ↑↓ : monter · M R F C : modes, Z : cadrer",
   rotate: "Clique une pièce, puis tourne-la par ses anneaux (Alt maintenu : sans cran) · flèches : 1° (Maj : 15°) · valeurs exactes à droite",
   ground: "Clique la face (ou l'arête) qui doit être posée au sol",
+  cut: "🔪 Clique la pièce à couper, puis trace un trait à travers elle, là où elle tient à ce qu'il faut détacher (un support) : elle est tranchée dans toute l'épaisseur vue · clic droit glissé : tourner la vue",
   mate1: "Clique la face ou l'arête de la pièce à déplacer (son groupe suit)",
   mate2: "Clique la face ou l'arête contre laquelle la coller",
   mate1a: "Assisté : clique la face de la pièce à déplacer qui doit se coller ; ses faces jumelles (même contour) s'allument en vert sur les autres pièces",
@@ -957,6 +959,7 @@ const EDIT_HELP = [
     ["Pièce collée", "◀ ▶ ▲ ▼ la font glisser sur le contact, sans la décoller (d'après l'écran) ; ses flèches aussi"],
     ["Glisser une pièce choisie", "en mode Déplacer : elle suit le doigt, à plat sur le plateau (ou tire une des flèches rouge, verte, bleue : dans cet axe) ; ⇕ Hauteur : elle monte ou descend ; ◀ ▶ ▲ ▼ ⤒ ⤓ : un pas précis (0,5, 1, 5 ou 10 mm, touche le pas pour le changer), d'après l'écran"],
     ["Toucher le vide", "plus rien de choisi"],
+    ["🔪 Couper", "touche la pièce, puis trace un trait du doigt à travers elle : elle est tranchée sur la longueur du trait, dans toute l'épaisseur vue ; deux doigts tournent et zooment la vue pendant ce mode"],
     ["Rail du bas", "les modes (glisser pour en voir plus), ➕ Multi, ▭ Rectangle, 📋 Pièces, ⌖ Cadrer (la sélection, ou tout), 📐 Valeurs exactes, ⚙ réglages, 🕘 versions ; au-dessus, les actions de la sélection"],
     ["En haut", "✕ fermer, ↶ ↷ annuler et refaire, ? cette aide, 💾 enregistrer ; la consigne du moment est juste dessous"],
   ]],
@@ -999,6 +1002,12 @@ const EDIT_HELP = [
   ["La barre", [
     ["En haut", "les modes, ▭ (choisir au rectangle), ⚙ (aimanter, collage assisté, choix multiple, cran des rotations), ↶ ↷, 🕘 (versions, vue du 3MF), 💾, ?, ✕"],
     ["Dessous", "selon le mode et la sélection : ses actions (points, pose au sol), 🔗 Grouper ▾, 🧩 Pièce ▾ (séparer, réunir, masquer), et pour une pièce collée 🎯 Ajuster, ⟳ Contact ▾, ✂ Décoller"],
+  ]],
+  ["Couper (X)", [
+    ["Clic sur une pièce", "la pièce à couper (une seule)"],
+    ["Glisser à travers elle", "un trait rouge : la pièce est tranchée sur la longueur du trait, dans toute l'épaisseur que voit l'écran (rien au-delà des bouts du trait) ; les parties qui ne tiennent plus ensemble deviennent des morceaux, chacun de sa couleur"],
+    ["Plusieurs traits", "s'ajoutent avant de valider (un support tenu par plusieurs ponts) ; tourne la vue au clic droit entre deux traits"],
+    ["✓ Couper (Entrée) / ✕ Ne pas couper (Échap)", "valider les morceaux ou tout laisser ; chaque morceau se choisit, se déplace, s'exclut (📋 Pièces : 🚫) ; ⊕ Réunir rend la pièce entière d'origine"],
   ]],
   ["Points (P)", [
     ["Clic sur la pièce à déplacer", "son point 1 (orange, numéroté)"],
@@ -1134,7 +1143,12 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
       : est.assist ? EDIT_TIPS.mate1a : EDIT_TIPS.mate1) : EDIT_TIPS[est.mode];
   const hasSel = est.count > 0;
   // la seconde ligne : les actions du mode, puis celles de la selection
-  const modeRow = est.mode === "pins" ? <>
+  const modeRow = est.mode === "cut" ? (est.cutPending ? <>
+      <button type="button" onClick={() => api?.cutConfirm()} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}
+        data-tip="Valider les morceaux (Entrée)">✓ Couper en {est.cutPending}</button>
+      <button type="button" onClick={() => api?.cutCancel()} style={b(false)} data-tip="Tout laisser comme avant (Échap)">✕ Ne pas couper</button>
+    </> : null)
+    : est.mode === "pins" ? <>
       <button type="button" disabled={!est.pinsB} onClick={() => api?.pinsApply()} style={b(!!est.pinsB, { opacity: est.pinsB ? 1 : 0.45 })}
         data-tip="Faire coïncider chaque point orange avec le point vert de même numéro (Entrée)">✓ Assembler{est.pinsB ? ` (${est.pinsB})` : ""}</button>
       <button type="button" disabled={!est.pinsA} onClick={() => api?.pinsUndo()} style={b(false, { opacity: est.pinsA ? 1 : 0.45 })} data-tip="Retirer le dernier point">⌫ Point</button>
@@ -1149,7 +1163,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
       <button type="button" onClick={() => api?.splitConfirm()} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}>✓ Séparer en {est.splitPending}</button>
       <button type="button" onClick={() => api?.splitCancel()} style={b(false)}>✕ Ne pas séparer</button>
     </> : null;
-  const selRow = hasSel && !est.splitPending ? <>
+  const selRow = hasSel && !est.splitPending && !est.cutPending ? <>
       <span style={{ fontSize: 12, fontWeight: 800, color: "#0EA5E9", padding: "0 4px", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{est.selected}</span>
       <BarMenu b={b} up={compact} label="🔗 Grouper" tip="Faire bouger des pièces ensemble" items={[
         est.canGroup && { label: "🔗 Grouper la sélection", key: "Ctrl+G", onClick: () => api?.group(), tip: "Les pièces choisies bougent ensemble" },
@@ -1182,7 +1196,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
   const showAll = est.hidden > 0 ? <button type="button" onClick={() => api?.showAll()} style={b(false)} data-tip="Réafficher tout (Alt+H)">👁 Tout afficher ({est.hidden})</button> : null;
   const second = modeRow || splitRow || selRow || showAll;
   const msg = est.splitPending ? <b style={{ color: "#0EA5E9" }}>{est.splitPending} morceaux, chacun de sa couleur : ✓ Séparer en {est.splitPending}, ou ✕ Ne pas séparer</b>
-    : est.fitMsg ? <b style={{ color: /^(Assemblée|Séparée|Collée|Ajustée|Groupée|Posée)/.test(est.fitMsg) ? "#16a34a" : "#d97706" }}>{est.fitMsg}</b>
+    : est.cutPending && !est.fitMsg ? <b style={{ color: "#0EA5E9" }}>{est.cutPending} morceaux, chacun de sa couleur : ✓ Couper en {est.cutPending}, ✕ Ne pas couper, ou un autre trait</b>
+    : est.fitMsg ? <b style={{ color: /^(Assemblée|Séparée|Collée|Ajustée|Groupée|Posée|Coupée)/.test(est.fitMsg) ? "#16a34a" : "#d97706" }}>{est.fitMsg}</b>
     : est.liveAngle != null ? <b style={{ color: "#0EA5E9", fontSize: 15 }}>Rotation : {String(est.liveAngle).replace(".", ",")}°</b> : null;
   const verMenu = [
     { label: "🕘 Versions enregistrées", onClick: onVersions, tip: "Reprendre un assemblage enregistré avant (chaque version est gardée)" },
@@ -1204,6 +1219,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
       : est.mode === "move" ? (est.count ? `Fais glisser ${est.count > 1 ? "la sélection" : "la pièce"} du doigt${est.vertical ? " : elle monte ou descend" : " sur le plateau (⇕ Hauteur : la monter)"} ; ou les flèches, d'un pas précis`
         : "Touche une pièce (➕ Multi : en choisir plusieurs), puis fais-la glisser du doigt")
       : est.mode === "rotate" ? "Touche une pièce, puis tourne-la par ses anneaux ; 📐 Exact pour un angle précis"
+      : est.mode === "cut" ? (est.count ? "🔪 Trace un trait du doigt à travers la pièce, là où couper ; deux doigts : tourner la vue" : "🔪 Touche la pièce à couper")
       : String(tip || "").replace(/Maj \+ clic \(ou ➕ Multi\)/g, "➕ Multi").replace(/ \(Entrée\)/g, "")
         .replace(/clique/g, "touche").replace(/Clique/g, "Touche").replace(/clic/g, "toucher");
     return <>
@@ -1240,7 +1256,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         </div>}
         {second && <div style={{ ...rail, borderBottom: "1px solid var(--border)" }}>{modeRow}{splitRow}{selRow}{showAll}</div>}
         <div style={rail}>
-          {[["move", "✥", "Déplacer"], ["rotate", "⟳", "Tourner"], ["ground", "⬇", "Au sol"], ["mate", "🧲", "Coller"], ["pins", "📍", "Points"]].map(([m, i, l]) =>
+          {[["move", "✥", "Déplacer"], ["rotate", "⟳", "Tourner"], ["ground", "⬇", "Au sol"], ["mate", "🧲", "Coller"], ["pins", "📍", "Points"], ["cut", "🔪", "Couper"]].map(([m, i, l]) =>
             <button key={m} type="button" onClick={() => api?.setMode(m)} style={tool(est.mode === m)}>{i}{lab(l)}</button>)}
           <span style={{ width: 1, alignSelf: "stretch", background: "var(--border)", flexShrink: 0 }}/>
           <button type="button" onClick={() => api?.setMulti(!est.multi)} style={tool(!!est.multi)}>➕{lab("Multi")}</button>
@@ -1270,9 +1286,10 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
     <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 3, display: "flex", flexDirection: "column", alignItems: "center",
       gap: 6, maxWidth: "calc(100% - 24px)" }}>
       <div style={bar}>
-        {[["move", "✥ Déplacer", "M"], ["rotate", "⟳ Tourner", "R"], ["ground", "⬇ Poser au sol", "F"], ["mate", "🧲 Coller", "C"], ["pins", "📍 Points", "P"]].map(([m, l, k]) =>
+        {[["move", "✥ Déplacer", "M"], ["rotate", "⟳ Tourner", "R"], ["ground", "⬇ Poser au sol", "F"], ["mate", "🧲 Coller", "C"], ["pins", "📍 Points", "P"], ["cut", "🔪 Couper", "X"]].map(([m, l, k]) =>
           <button key={m} type="button" onClick={() => api?.setMode(m)} style={b(est.mode === m)}
-            data-tip={m === "pins" ? "Assembler par paires de points : 1 avec 1, 2 avec 2, 3 avec 3 (P)" : m === "ground" ? "Poser au sol : par une face, ou par 3 points (F)" : `(${k})`}>{l}</button>)}
+            data-tip={m === "pins" ? "Assembler par paires de points : 1 avec 1, 2 avec 2, 3 avec 3 (P)" : m === "ground" ? "Poser au sol : par une face, ou par 3 points (F)"
+              : m === "cut" ? "Trancher une pièce d'un trait (un support intégré à détacher) (X)" : `(${k})`}>{l}</button>)}
         <button type="button" onClick={() => api?.setBoxMode(!est.boxMode)} style={b(!!est.boxMode)}
           data-tip="Choisir au rectangle : glisse pour entourer les pièces (Ctrl : en ajouter) ; la vue ne tourne pas tant que c'est allumé">▭ Rectangle</button>
         {sep}
@@ -1542,7 +1559,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     const e = frPick.edit;
     try {
       const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces: e.pieces, did: designId, excluded: e.excluded || [], groups: e.groups || [],
-        joints: e.joints || [], splits: e.splits || [], v: 2 });
+        joints: e.joints || [], splits: e.splits || [], cuts: e.cuts || {}, v: 2 });
       setSavedEdit(r.data); setViewSel("mine"); egg("assemblage_copain");
     } catch (er) { showAlert(er.response?.data?.detail || er.message); }
   };
@@ -1567,7 +1584,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     setSaving(true);
     try { const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces, did: designId, excluded: editApi.current?.editor?.excluded() || [],
       groups: editApi.current?.editor?.groups() || [],
-      joints: editApi.current?.editor?.joints() || [], splits: editApi.current?.editor?.splits() || [], v: 2 });
+      joints: editApi.current?.editor?.joints() || [], splits: editApi.current?.editor?.splits() || [], cuts: editApi.current?.editor?.cuts() || {}, v: 2 });
       setSavedEdit(r.data); editApi.current?.editor?.markSaved(); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setSaving(false); }
