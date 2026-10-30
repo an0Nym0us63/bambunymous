@@ -141,14 +141,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const undo = [], redo = [];
   let pendingSplit = null;            // une separation proposee, pas encore validee
   let pendingCut = null;
-  let choice = null;                  // la liste du choix face / arete ouverte : les prises, et ou la montrer
   let edgeMode = false;               // « ╱ Arete » : un clic prend l'arete la plus proche, sinon toujours la face
   // « ➕ Point de colle » (30/10/2026) : sur une piece deja collee, une prise de plus (point, arete ou face) et sa cible ;
   // le premier collage tient (la piece ne fait que glisser et tourner sur son contact). keepPins : les points poses
   let addPin = false, keepPins = [];
-  // « 🪄 Placer » (30/10/2026) : la piece touchee, puis l'endroit ou elle va ; les places possibles (face jumelle,
-  // emboitee, alignee, collee au point) calculees d'avance, montrees l'une apres l'autre, gardee celle qu'on choisit
-  let placeA = null, placing = null;          // placing : { base, cands: [{ label, s }], i } (s : l'etat de la scene)              // une coupe au couteau proposee (morceaux colores), pas encore validee
   const snapshot = () => ({ m: all.map(g => g.matrix.clone()), groups: groups.map(gr => [...gr]), joints: joints.map(cloneJ), ex: all.map(g => !!g.userData.excluded) });
   const restore = s => { all.forEach((g, i) => { s.m[i].decompose(g.position, g.quaternion, g.scale); g.updateMatrix();
     if (s.ex) { g.userData.excluded = s.ex[i]; g.visible = !s.ex[i]; } }); groups = s.groups.map(gr => [...gr]);
@@ -165,8 +161,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
     cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, addPin, autoFit, edgeMode,
-    place: placing ? { i: placing.i, n: placing.cands.length, label: placing.cands[placing.i].label } : null, placeStep: placeA ? 2 : 1,
-    choice: choice ? { x: choice.x, y: choice.y, items: choice.cands.map(altLabel), piece: choice.cands[0]?.group?.userData.name || "" } : null,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
     // de la selection part au moins un collage (vers une piece hors d'elle) : « Grouper le colle » a un sens
@@ -410,89 +404,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         return { group: g, kind: "face", p, n: nr, size, region, mesh: hit.object, tri: hit.faceIndex };
       }
     }
-    // le choix (30/10/2026) : pres d'une arete vive (une douzaine de pixels), les prises possibles -- la face touchee,
-    // l'arete, la face d'en face -- sont proposees dans une liste, chacune surlignee au survol (viser une arete courbe au
-    // pixel pres etait penible)
-    // (coupee le 30/10/2026 : la liste venait ou non selon l'endroit du clic ; « ╱ Arete » dit quand on veut une arete)
-    let alts = null;
-    if (idx && false) {
-      const nb = neighbours(geo), ix = idx.array, t = hit.faceIndex;
-      const pxmm = hit.distance * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.max(1, el.clientHeight);
-      const loose = (coarse ? 22 : 12) * pxmm;
-      const faceAt = (tt, pp) => {
-        const nn = new THREE.Vector3(); triNormal(pos, ix, tt, nn); nn.applyMatrix3(N).normalize();
-        const rg = regionOf(geo, tt);
-        let reg = null;
-        if (rg && assist) {
-          reg = { c: rg.c.clone().applyMatrix4(M), area: rg.area, axis: rg.axis.clone().applyMatrix3(N).normalize(), elongated: rg.elongated, relaxed: rg.relaxed };
-          if (rg.relaxed && rg.area > 20) { const nr = rg.n.clone().applyMatrix3(N).normalize(); if (nr.dot(nn) < 0) nr.negate(); nn.copy(nr); }
-        }
-        return { group: g, kind: "face", p: pp, n: nn, size, region: reg, mesh: hit.object, tri: tt, hl: { geo, M, tris: rg?.tris, area: rg?.area || 0 } };
-      };
-      const near = [];
-      [[0, va, vb], [1, vb, vc], [2, vc, va]].forEach(([e, a, b]) => {
-        const u = nb[t * 3 + e];
-        if (u < 0) return;
-        const n2 = new THREE.Vector3(); triNormal(pos, ix, u, n2); n2.applyMatrix3(N).normalize();
-        if (n.angleTo(n2) <= Math.PI / 6) return;
-        const q = new THREE.Line3(a, b).closestPointToPoint(p, true, new THREE.Vector3()), d = q.distanceTo(p);
-        if (d < loose) near.push({ d, e, a, b, q, u });
-      });
-      alts = [faceAt(t, p)];
-      if (near.length) {
-        near.sort((x, y) => x.d - y.d);
-        for (const x of near.slice(0, 2)) {
-          const ch = creaseChain(geo, ix[t * 3 + x.e], ix[t * 3 + (x.e + 1) % 3]);
-          alts.push({ group: g, kind: "edge", p: x.q, a: x.a, b: x.b, e: new THREE.Vector3().subVectors(x.b, x.a).normalize(), n, size, mesh: hit.object, tri: t,
-            hl: { geo, M, chain: ch.pts, len: ch.len, curved: ch.curved } });
-          alts.push(faceAt(x.u, x.q));
-        }
-      }
-    }
-    // Placer, le second toucher : les autres pieces traversees par le clic (les voisines sont transparentes, le clic
-    // tombait sur celle de devant), a 40 mm au plus derriere la premiere -- au choix dans la liste (30/10/2026)
-    if (mode === "place" && placeA && idx) {
-      const seen = new Set([g]);
-      for (const h of hits.slice(1)) {
-        const g2 = pieceOf(h.object);
-        if (!g2 || seen.has(g2) || h.distance - hit.distance > 40 || seen.size > 3) continue;
-        seen.add(g2);
-        g2.updateMatrix();
-        const M2 = g2.matrix.clone().multiply(h.object.matrix), N2 = new THREE.Matrix3().getNormalMatrix(M2);
-        const n2 = new THREE.Vector3(); triNormal(h.object.geometry.attributes.position, h.object.geometry.index.array, h.faceIndex, n2); n2.applyMatrix3(N2).normalize();
-        alts = alts || [];
-        if (!alts.length) alts.push({ group: g, kind: "face", p, n, size, mesh: hit.object, tri: hit.faceIndex, region, piece: true, hl: { geo, M, tris: null, area: 0 } });
-        alts.push({ group: g2, kind: "face", p: holder.worldToLocal(h.point.clone()), n: n2, size: boxOf(g2).getSize(new THREE.Vector3()).length(), mesh: h.object, tri: h.faceIndex,
-          piece: true, hl: { geo: h.object.geometry, M: M2, tris: null, area: 0 } });
-      }
-    }
-    const withAlts = pk => (alts && alts.length > 1 ? Object.assign(pk, { alts }) : pk);
-    return withAlts({ group: g, kind: "face", p, n, size, region, mesh: hit.object, tri: hit.faceIndex });
+    return { group: g, kind: "face", p, n, size, region, mesh: hit.object, tri: hit.faceIndex };
   };
-  const altMat = new THREE.MeshBasicMaterial({ color: 0x0ea5e9, transparent: true, opacity: 0.55, depthTest: false, side: THREE.DoubleSide });
-  const altLine = new THREE.LineBasicMaterial({ color: 0x0ea5e9, depthTest: false });
-  const showAlt = pk => {
-    clearMarks();
-    if (!pk?.hl) { render(); return; }
-    const { geo, M } = pk.hl;
-    if (pk.kind === "edge") {
-      const pts = (pk.hl.chain || [pk.a, pk.b]).map(q => (pk.hl.chain ? q.clone().applyMatrix4(M) : q));
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), altLine); line.renderOrder = 1001; marks.add(line);
-      // l'arete en epaisseur : de petites perles le long (un trait WebGL n'a qu'un pixel)
-      const step = Math.max(1, Math.floor(pts.length / 60)), r = Math.max(0.25, pk.size * 0.004);
-      for (let i = 0; i < pts.length; i += step) { const s = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), altMat); s.position.copy(pts[i]); s.renderOrder = 1001; marks.add(s); }
-    } else if (pk.hl.tris) {
-      const pos = geo.attributes.position, ix = geo.index.array, out = new Float32Array(pk.hl.tris.size * 9), q = new THREE.Vector3();
-      let o = 0;
-      for (const t of pk.hl.tris) for (let e = 0; e < 3; e++) { q.fromBufferAttribute(pos, ix[t * 3 + e]).applyMatrix4(M); out[o++] = q.x; out[o++] = q.y; out[o++] = q.z; }
-      const gg = new THREE.BufferGeometry(); gg.setAttribute("position", new THREE.BufferAttribute(out, 3));
-      const m = new THREE.Mesh(gg, altMat); m.renderOrder = 1001; marks.add(m);
-    } else mark(pk);
-    render();
-  };
-  const altLabel = pk => pk.piece ? `▣ ${pk.group.userData.name}` : pk.kind === "edge"
-    ? `╱ Arête${pk.hl?.curved ? " courbe" : ""}${pk.hl?.len ? ` · ${String(Math.round(pk.hl.len * 10) / 10).replace(".", ",")} mm` : ""}`
-    : `▭ Face${pk.hl?.area ? ` · ${Math.round(pk.hl.area)} mm²` : ""}`;
 
   // applique M (repere du support) a des pieces
   const apply = (list, M) => { for (const g of list) { g.updateMatrix(); M.clone().multiply(g.matrix).decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); } };
@@ -864,99 +777,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     egg("point_de_colle");
     render(); onChange?.(state());
   };
-  // Placer : le premier toucher prend la piece, le second l'endroit ; puis toutes les places possibles sont calculees
-  const placeTap = pick => {
-    if (placing) return;                                   // une proposition est montree : ✓ ou ✕ d'abord
-    if (!pick) { placeA = null; clearMarks(); setSel([]); fitMsg = null; onChange?.(state()); return; }
-    if (!placeA) { placeA = pick; clearMarks(); setSel(unitOf(pick.group)); mark(pick); fitMsg = null; onChange?.(state()); return; }
-    const A = placeA;
-    if (unitOf(A.group).includes(pick.group)) { placeA = pick; clearMarks(); mark(pick); onChange?.(state()); return; }
-    placeA = null;
-    placeFind(A, pick);
-  };
-  // la direction de la surface autour d'un clic, moyennee sur quelques millimetres (30/10/2026 : sur une piece en tricot,
-  // le triangle touche n'est qu'une maille du relief, sa normale partait dans tous les sens et la piece avec)
-  const smoothPick = pk => {
-    if (!pk || pk.kind !== "face" || !pk.mesh?.geometry?.attributes?.position) return pk;
-    const geo = pk.mesh.geometry, pos = geo.attributes.position, ix = geo.index?.array;
-    pk.group.updateMatrix(); pk.mesh.updateMatrix();
-    const M = pk.group.matrix.clone().multiply(pk.mesh.matrix), q = pk.p.clone().applyMatrix4(M.clone().invert());
-    const R = Math.min(10, Math.max(3, 0.06 * (pk.size || 50))), R2 = R * R, c = centersOf(geo), acc = new THREE.Vector3(), nt = new THREE.Vector3();
-    const tv = (t, e) => (ix ? ix[t * 3 + e] : t * 3 + e);
-    for (let t = 0; t < c.length / 3; t++) {
-      const dx = c[t * 3] - q.x, dy = c[t * 3 + 1] - q.y, dz = c[t * 3 + 2] - q.z;
-      if (dx * dx + dy * dy + dz * dz > R2) continue;
-      const a = new THREE.Vector3().fromBufferAttribute(pos, tv(t, 0)), b = new THREE.Vector3().fromBufferAttribute(pos, tv(t, 1)), d = new THREE.Vector3().fromBufferAttribute(pos, tv(t, 2));
-      nt.subVectors(b, a).cross(d.sub(a)); acc.add(nt);          // ponderee par la surface
-    }
-    if (acc.lengthSq() < 1e-12) return pk;
-    const n = acc.applyMatrix3(new THREE.Matrix3().getNormalMatrix(M)).normalize();
-    if (n.dot(pk.n) < 0) n.negate();
-    // une vraie face plane, assez grande, garde son centre (collage centre) ; sinon, point contre point
-    const keepRegion = pk.region && !pk.region.relaxed && pk.region.area > 20;
-    return { ...pk, n, region: keepRegion ? pk.region : null };
-  };
-  const sameState = (a, b) => a.m.every((m, i) => m.elements.every((x, k) => Math.abs(x - b.m[i].elements[k]) < 0.05));
-  const placeFind = async (A, B) => {
-    fitMsg = "Recherche des places possibles…"; onChange?.(state());
-    await new Promise(r => setTimeout(r, 30));
-    const base = snapshot(), cands = [];
-    const keep = label => { const st = snapshot(); if (!sameState(st, base) && !cands.some(c => sameState(c.s, st))) cands.push({ label, s: st }); };
-    const unit = unitOf(A.group);
-    try {
-      // 1. les faces jumelles de la face touchee sur la piece visee (une coupe et son vis-a-vis)
-      if (A.kind === "face" && A.mesh?.geometry?.attributes?.position) {
-        if (!twinsLib) { const { createTwins } = await import("./assemblyTwins"); twinsLib = createTwins(THREE, neighbours); }
-        const skip = new Set(withKids(unit));
-        const r = await twinsLib.search({ g: A.group, mesh: A.mesh, tri: A.tri }, unitOf(B.group).filter(g => g.visible && !skip.has(g)), meshMat);
-        const tw = (r?.twins || []).filter(t => !occupied(t, skip)).slice(0, 2);
-        for (const t of tw) {
-          restore(base);
-          if (!mateTwin(A, t)) continue;
-          keep(`Face jumelle (${Math.round(t.fits[0].score * 100)} %)`);
-          for (let k = 1; k < Math.min(3, twinAlt?.fits.length || 0); k++) { twinAlt.i = k; placeTwin(); keep(`Face jumelle, autre sens ${k + 1}`); }
-        }
-        twinAlt = null;
-      }
-      // 2. collee la ou l'on a touche, puis emboitee dans le creux, ou alignee sur la face
-      restore(base);
-      const u = mate(smoothPick(A), smoothPick(B));
-      if (u) {
-        sel.clear(); u.forEach(g => sel.add(g));
-        const glued = snapshot();
-        for (const mode of ["nest", "align"]) {
-          restore(glued); sel.clear(); u.forEach(g => sel.add(g));
-          const f = await fitCore(mode, true);
-          if (f.r && !f.still) { applyFit(f); keep(mode === "nest" ? "Emboîtée" + (f.touching ? " (touche une autre pièce)" : "") : "Alignée sur la face" + (f.touching ? " (touche une autre pièce)" : "")); }
-        }
-        restore(glued); keep("Collée au point touché");
-      }
-    } catch (e) { console.error("[3D] placer", e); }
-    restore(base);
-    if (!cands.length) { fitMsg = "Aucune place trouvée : touche une autre face de la pièce, ou l'endroit visé de plus près"; setSel(unit); onChange?.(state()); return; }
-    placing = { base, cands, i: 0, unit };
-    restore(cands[0].s); sel.clear(); unit.forEach(g => sel.add(g)); shade();
-    fitMsg = null; render(); onChange?.(state());
-  };
-  const placeShow = d => {
-    if (!placing) return;
-    placing.i = (placing.i + d + placing.cands.length) % placing.cands.length;
-    restore(placing.cands[placing.i].s); shade(); render(); onChange?.(state());
-  };
-  const placeOk = () => {
-    if (!placing) return;
-    const { unit, cands, i } = placing;
-    placing = null;
-    restore(cands[i].s);
-    push(); setSel(unit);                                   // ↶ revient a avant
-    egg("placer");
-    fitMsg = `Placée : ${cands[i].label.toLowerCase()}`; onChange?.(state());
-  };
-  const placeCancel = () => {
-    if (!placing) { placeA = null; clearMarks(); render(); onChange?.(state()); return; }
-    const { base, unit } = placing;
-    placing = null; restore(base); setSel(unit); fitMsg = null; onChange?.(state());
-  };
   const startTwins = A => {
     clearTwins();
     if (!assist || A.kind !== "face" || !A.mesh?.geometry?.attributes?.position) return;
@@ -1099,19 +919,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const pick = pickAt(ev);
     // un clic sur la poignee ; ses zones invisibles debordent : dans le vide, le clic desselectionne quand meme (30/10/2026)
     if (tc.axis && pick) return;
-    // Placer, le second clic : choisir la piece visee quand le clic en traverse plusieurs
-    const pieceAlts = mode === "place" && placeA ? (pick?.alts || []).filter(a => a.piece) : [];
-    if (pieceAlts.length > 1) {
-      const keep = [placeA];
-      choice = { cands: pieceAlts, ev: { ctrlKey: ev.ctrlKey, shiftKey: ev.shiftKey, altKey: ev.altKey, metaKey: ev.metaKey }, x: ev.clientX, y: ev.clientY, keep };
-      showAlt(null); keep.forEach(mark); onChange?.(state());
-      return;
-    }
     tap(pick, ev);
   };
   // ce que fait un toucher, selon le mode (une prise : la piece, sa face ou son arete ; ou rien)
   const tap = (pick, ev) => {
-    if (mode === "place") { placeTap(pick); return; }
     if (mode === "cut") { if (!pendingCut) setSel(pick ? [pick.group] : []); return; }
     if (mode === "move" || mode === "rotate") {
       if (!pick) { if (!ev.ctrlKey && !ev.shiftKey && !multi) setSel([]); return; }
@@ -1745,10 +1556,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       if (k === "c") return api.setMode("mate");
       if (k === "p") return api.setMode("pins");
       if (k === "x") return api.setMode("cut");
-      if (k === "a") return api.setMode("place");
-      if (mode === "place" && placing && (k === "enter")) return placeOk();
-      if (mode === "place" && placing && k === "escape") { ev.preventDefault(); ev.stopPropagation(); return placeCancel(); }
-      if (mode === "place" && placing && (ev.key === "ArrowRight" || ev.key === "ArrowLeft")) { ev.preventDefault(); return placeShow(ev.key === "ArrowRight" ? 1 : -1); }
       if (k === "enter" && mode === "cut" && pendingCut) return cutConfirm();
       if (k === "escape" && mode === "cut" && pendingCut) { ev.preventDefault(); ev.stopPropagation(); return cutCancel(); }
       if (k === "z") return frame();
@@ -1794,7 +1601,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
 
   const api = {
     setGround3: on => { ground3 = on; gPts = []; gUnit = []; drawGround(); onChange?.(state()); },
-    setMode: m => { if (m !== "place") { if (placing) placeCancel(); placeA = null; } if (m !== "mate") { addPin = false; keepPins = []; } if (m !== "cut") { cutCancel(); dropStroke(); clearRub(); } knifeView(m === "cut"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
+    setMode: m => { if (m !== "mate") { addPin = false; keepPins = []; } if (m !== "cut") { cutCancel(); dropStroke(); clearRub(); } knifeView(m === "cut"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
     setRotStep: d => { rotStep = d; applySnap(); onChange?.(state()); },
     setMoveStep: d => { moveStep = d; try { localStorage.setItem("bn.asm.moveStep", String(d)); } catch { /* rien */ } applySnap(); onChange?.(state()); },
@@ -1896,10 +1703,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     },
     cutConfirm, cutCancel,
     // le choix face / arete : survoler une ligne la surligne, la toucher la prend
-    choiceHover: i => { if (!choice) return; showAlt(choice.cands[i]); choice.keep.forEach(mark); },
-    choicePick: i => { const c = choice; if (!c) return; choice = null; clearMarks(); c.keep.forEach(mark); tap(c.cands[i], c.ev); onChange?.(state()); },
-    choiceCancel: () => { const c = choice; choice = null; clearMarks(); c?.keep.forEach(mark); render(); onChange?.(state()); },
-    placeNext: () => placeShow(1), placePrev: () => placeShow(-1), placeOk, placeCancel,
     setEdgeMode: on => { edgeMode = on; onChange?.(state()); },
     setAutoFit: on => { autoFit = on; try { localStorage.setItem("bn.asm.autofit", on ? "1" : "0"); } catch { /* rien */ } onChange?.(state()); },
     setAddPin: on => {
@@ -2242,7 +2045,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       window.removeEventListener("pointerup", onKnifeUp); window.removeEventListener("pointercancel", onKnifeCancel);
       clearRub(); rubMat.dispose(); cutCancel(); dropStroke(); knifeView(false);
       holder.remove(cutLines); cutMat.dispose();
-      holder.remove(ring); ring.geometry.dispose(); ringMat.dispose(); altMat.dispose(); altLine.dispose();
+      holder.remove(ring); ring.geometry.dispose(); ringMat.dispose();
       try { tc.detach(); tc.disconnect(); } catch { /* deja debranchee */ }
       try { helper.traverse(o => { o.geometry?.dispose?.(); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m?.dispose?.()); }); } catch { /* rien */ }
       scene.remove(helper); holder.remove(handle);

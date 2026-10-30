@@ -940,8 +940,6 @@ const EDIT_TIPS = {
   move: "Clique une pièce (Ctrl / Maj : en ajouter ; Alt : une pièce d'un groupe seule), puis tire sur les flèches (Alt maintenu : sans cran) · flèches 1 mm (Maj : 10), Ctrl + ↑↓ : monter · M R F C : modes, Z : cadrer",
   rotate: "Clique une pièce, puis tourne-la par ses anneaux (Alt maintenu : sans cran) · flèches : 1° (Maj : 15°) · valeurs exactes à droite",
   ground: "Clique la face (ou l'arête) qui doit être posée au sol",
-  place: "🪄 Clique la pièce à placer (sur la face qui doit toucher), puis l'endroit où elle va : les places possibles s'affichent, ◀ ▶ pour passer de l'une à l'autre, ✓ pour garder",
-  place2: "🪄 Maintenant, clique l'endroit où elle va (la face ou le creux qui doit la recevoir)",
   cut: "🔪 Clique la pièce à couper, puis trace un trait à travers elle, là où elle tient à ce qu'il faut détacher (un support) : elle est tranchée dans toute l'épaisseur vue · clic droit glissé : tourner la vue",
   mate1: "Clique la face ou l'arête de la pièce à déplacer (son groupe suit)",
   mate2: "Clique la face ou l'arête contre laquelle la coller",
@@ -1083,12 +1081,6 @@ const EDIT_HELP = [
     ["En haut", "les modes, ▭ (choisir au rectangle), ⚙ (aimanter, collage assisté, choix multiple, crans des déplacements et des rotations), ↶ ↷, 🕘 (versions, vue du 3MF), 💾, ?, ✕"],
     ["Dessous", "selon le mode et la sélection : ses actions (points, pose au sol), 🔗 Grouper ▾, 🧩 Pièce ▾ (séparer, réunir, masquer), et pour une pièce collée 🎯 Ajuster, ⟳ Contact ▾, ✂ Décoller"],
   ]],
-  ["🪄 Placer (A)", [
-    ["Clic sur la pièce", "sur la face qui doit toucher (son groupe vient avec)"],
-    ["Clic sur l'endroit", "la face ou le creux qui doit la recevoir, à peu près"],
-    ["Les places possibles", "calculées d'avance et montrées l'une après l'autre : face jumelle (et ses autres sens), emboîtée dans le creux, alignée sur la face, collée au point touché ; elles évitent les autres pièces quand c'est possible"],
-    ["◀ ▶ (← →) / ✓ (Entrée) / ✕ (Échap)", "passer d'une place à l'autre / garder celle montrée (↶ revient à avant) / tout laisser"],
-  ]],
   ["Couper (X)", [
     ["Clic sur une pièce", "la pièce à couper (une seule)"],
     ["Glisser à travers elle", "un trait rouge : la pièce est tranchée sur la longueur du trait, dans toute l'épaisseur que voit l'écran (rien au-delà des bouts du trait) ; les parties qui ne tiennent plus ensemble deviennent des morceaux, chacun de sa couleur"],
@@ -1217,24 +1209,6 @@ function BarMenu({ label, tip, items, active = false, b, up = false }) {
   </div>;
 }
 
-// le choix face / arete (30/10/2026) : pres d'une arete, la face touchee, l'arete et la face d'en face, au choix ;
-// chacune surlignee au survol (ou au premier toucher sur un ecran tactile)
-function ChoicePopup({ est, api }) {
-  const c = est.choice;
-  if (!c) return null;
-  const W = 220, x = Math.min(c.x + 12, window.innerWidth - W - 8), y = Math.min(c.y + 12, window.innerHeight - 40 * c.items.length - 60);
-  return <div onPointerDown={e => e.stopPropagation()} style={{ position: "fixed", left: Math.max(8, x), top: Math.max(8, y), zIndex: 60, width: W, padding: 6, borderRadius: 12,
-    background: "color-mix(in srgb, var(--surface) 96%, transparent)", border: "1px solid var(--border)", boxShadow: "0 12px 30px rgba(0,0,0,.3)", backdropFilter: "blur(8px)" }}>
-    <div style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", padding: "2px 6px 6px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-      Que prendre ici ?{c.piece ? ` · ${c.piece}` : ""}</div>
-    {c.items.map((l, i) => <button key={i} type="button" onMouseEnter={() => api?.choiceHover(i)} onFocus={() => api?.choiceHover(i)} onClick={() => api?.choicePick(i)}
-      style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 10px", margin: "2px 0", borderRadius: 9, border: "none", cursor: "pointer",
-        fontSize: 13, fontWeight: 800, color: "var(--text)", background: "var(--surface2)" }}>{l}</button>)}
-    <button type="button" onClick={() => api?.choiceCancel()} style={{ display: "block", width: "100%", padding: "6px", marginTop: 4, borderRadius: 9, border: "none",
-      cursor: "pointer", fontSize: 12, fontWeight: 700, color: "var(--muted)", background: "transparent" }}>Annuler</button>
-  </div>;
-}
-
 // La barre de l'edition (30/10/2026, rangee) : en haut, une seule ligne -- les modes, les reglages, annuler/refaire, les
 // versions, enregistrer, l'aide, fermer ; dessous, seulement avec une selection ou un mode qui en a, ses actions
 function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compact = false }) {
@@ -1251,7 +1225,6 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
     background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(8px)", boxShadow: "0 10px 30px rgba(0,0,0,.25)" };
   const tip = est.glued && est.step !== 2 ? `Collée à ${est.glued.to} : glisse-la (ou tire ses flèches, ou ← → ↑ ↓) pour la faire coulisser ${est.glued.kind === "edge" ? "le long de l'arête" : "sur la face"} sans la décoller, Maj + glisser (ou ⟳ Tourner) pour la tourner autour du contact · ✂ Décoller pour la libérer`
     : est.mode === "pins" ? pinsTip(est)
-    : est.mode === "place" ? (est.place ? `🪄 ${est.place.label} — ◀ ▶ pour les autres places (${est.place.i + 1}/${est.place.n}), ✓ pour garder (Entrée), ✕ pour laisser (Échap)` : est.placeStep === 2 ? EDIT_TIPS.place2 : EDIT_TIPS.place)
     : est.mode === "ground" && est.ground3 ? `⬇ Point ${Math.min(3, (est.groundPts || 0) + 1)} sur 3 : clique un point de la pièce qui doit toucher le plateau`
     : est.mode === "mate" ? (est.step === 2 ? (est.assist ? EDIT_TIPS.mate2a : EDIT_TIPS.mate2) : est.pairs ? `Collée${est.pairs > 1 ? ` en ${est.pairs} points` : ""} : Maj + clic (ou ➕ Multi) sur un autre point, une face ou une arête de la pièce, puis sur sa cible, pour fixer l'orientation`
       : est.assist ? EDIT_TIPS.mate1a : EDIT_TIPS.mate1) : EDIT_TIPS[est.mode];
@@ -1259,13 +1232,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
   // la seconde ligne : les actions du mode, puis celles de la selection
   const rubBtn = <button type="button" onClick={() => api?.setEraser(!est.eraser)} style={b(!!est.eraser)}
     data-tip="Gomme : passe-la sur les restes (bouts de support, bavures) ; ils se détachent et quittent l'assemblage à la validation">🧽 Gomme</button>;
-  const modeRow = est.mode === "place" && est.place ? <>
-      <button type="button" onClick={() => api?.placePrev()} style={b(false)} aria-label="Place précédente">◀</button>
-      <span style={{ fontSize: 12.5, fontWeight: 800, color: "#0EA5E9", padding: "0 4px", whiteSpace: "nowrap" }}>{est.place.label} · {est.place.i + 1}/{est.place.n}</span>
-      <button type="button" onClick={() => api?.placeNext()} style={b(false)} aria-label="Place suivante">▶</button>
-      <button type="button" onClick={() => api?.placeOk()} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })} data-tip="Garder cette place (Entrée)">✓ Garder</button>
-      <button type="button" onClick={() => api?.placeCancel()} style={b(false)} data-tip="Tout laisser comme avant (Échap)">✕</button>
-    </> : est.mode === "cut" ? (est.cutCount ? <>
+  const modeRow = est.mode === "cut" ? (est.cutCount ? <>
       {rubBtn}
       {est.cutPending > 0 && <button type="button" onClick={() => api?.cutConfirm()} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}
         data-tip="Valider les morceaux (Entrée)">✓ Couper en {est.cutPending}</button>}
@@ -1402,7 +1369,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         </div>}
         {second && <div style={{ ...rail, borderBottom: "1px solid var(--border)" }}>{modeRow}{splitRow}{selRow}{showAll}</div>}
         <div style={rail}>
-          {[["place", "🪄", "Placer"], ["move", "✥", "Déplacer"], ["rotate", "⟳", "Tourner"], ["ground", "⬇", "Au sol"], ["mate", "🧲", "Coller"], ["pins", "📍", "Points"], ["cut", "🔪", "Couper"]].map(([m, i, l]) =>
+          {[["move", "✥", "Déplacer"], ["rotate", "⟳", "Tourner"], ["ground", "⬇", "Au sol"], ["mate", "🧲", "Coller"], ["pins", "📍", "Points"], ["cut", "🔪", "Couper"]].map(([m, i, l]) =>
             <button key={m} type="button" onClick={() => api?.setMode(m)} style={tool(est.mode === m)}>{i}{lab(l)}</button>)}
           <span style={{ width: 1, alignSelf: "stretch", background: "var(--border)", flexShrink: 0 }}/>
           <button type="button" onClick={() => api?.setMulti(!est.multi)} style={tool(!!est.multi)}>➕{lab("Multi")}</button>
@@ -1433,18 +1400,16 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         </div>
       </div>
       {help && <EditHelp onClose={() => setHelp(false)}/>}
-      <ChoicePopup est={est} api={api}/>
     </>;
   }
   return <>
     <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 3, display: "flex", flexDirection: "column", alignItems: "center",
       gap: 6, maxWidth: "calc(100% - 24px)" }}>
       <div style={bar}>
-        {[["place", "🪄 Placer", "A"], ["move", "✥ Déplacer", "M"], ["rotate", "⟳ Tourner", "R"], ["ground", "⬇ Poser au sol", "F"], ["mate", "🧲 Coller", "C"], ["pins", "📍 Points", "P"], ["cut", "🔪 Couper", "X"]].map(([m, l, k]) =>
+        {[["move", "✥ Déplacer", "M"], ["rotate", "⟳ Tourner", "R"], ["ground", "⬇ Poser au sol", "F"], ["mate", "🧲 Coller", "C"], ["pins", "📍 Points", "P"], ["cut", "🔪 Couper", "X"]].map(([m, l, k]) =>
           <button key={m} type="button" onClick={() => api?.setMode(m)} style={b(est.mode === m)}
             data-tip={m === "pins" ? "Assembler par paires de points : 1 avec 1, 2 avec 2, 3 avec 3 (P)" : m === "ground" ? "Poser au sol : par une face, ou par 3 points (F)"
-              : m === "cut" ? "Trancher une pièce d'un trait (un support intégré à détacher) (X)"
-              : m === "place" ? "Clique la pièce, puis l'endroit où elle va : les places possibles proposées l'une après l'autre (A)" : `(${k})`}>{l}</button>)}
+              : m === "cut" ? "Trancher une pièce d'un trait (un support intégré à détacher) (X)" : `(${k})`}>{l}</button>)}
         <button type="button" onClick={() => api?.setBoxMode(!est.boxMode)} style={b(!!est.boxMode)}
           data-tip="Choisir au rectangle : glisse pour entourer les pièces (Ctrl : en ajouter) ; la vue ne tourne pas tant que c'est allumé">▭ Rectangle</button>
         {sep}
@@ -1482,7 +1447,6 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
     {help && <EditHelp onClose={() => setHelp(false)}/>}
     {(est.mode === "move" || est.mode === "rotate") && <ExactPanel est={est} api={api}/>}
     <PiecesPanel est={est} api={api}/>
-    <ChoicePopup est={est} api={api}/>
     <div style={{ position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)", zIndex: 3, padding: "7px 14px", borderRadius: 12, fontSize: 12.5,
       fontWeight: 700, color: "var(--text2)", background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)",
       maxWidth: "calc(100% - 140px)", textAlign: "center" }}>
