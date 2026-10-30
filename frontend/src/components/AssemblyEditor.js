@@ -448,7 +448,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
           if (ang > Math.PI / 2) ang -= Math.PI; else if (ang < -Math.PI / 2) ang += Math.PI;
           q = new THREE.Quaternion().setFromAxisAngle(B.n, ang).multiply(q);
         }
-      }
+      } else if (A.region && B.at) from = A.region.c;          // la face entiere de A, au point touche sur B
     } else if (A.kind === "edge" && B.kind === "edge") {
       const eb = A.e.dot(B.e) >= 0 ? B.e.clone() : B.e.clone().negate();
       q.setFromUnitVectors(A.e, eb); axis = eb;
@@ -543,6 +543,27 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     }
     render();
   };
+  // une face jumelle deja occupee : juste devant elle (moins de 0,8 mm), une autre piece, en plusieurs points de la face
+  const occupied = (t, skip) => {
+    const own = new Set(unitOf(t.g));
+    const targets = all.filter(g => g.visible && !own.has(g) && !skip.has(g)).flatMap(g => g.children.filter(c => c.isMesh));
+    if (!targets.length) return false;
+    holder.updateMatrixWorld(true);
+    const tri = t.face.tri, nt = tri.length / 9, pts = [t.face.c.clone()];
+    for (let k = 0; k < 6 && nt; k++) {
+      const i = Math.floor((k + 0.5) / 6 * nt) * 9;
+      pts.push(new THREE.Vector3((tri[i] + tri[i + 3] + tri[i + 6]) / 3, (tri[i + 1] + tri[i + 4] + tri[i + 7]) / 3, (tri[i + 2] + tri[i + 5] + tri[i + 8]) / 3));
+    }
+    const dir = t.face.n.clone().transformDirection(holder.matrixWorld);
+    const rc = new THREE.Raycaster();
+    let hits = 0;
+    for (const p of pts) {
+      const o = holder.localToWorld(p.clone().addScaledVector(t.face.n, -0.3));
+      rc.set(o, dir); rc.far = 1.1;
+      if (rc.intersectObjects(targets, false).length) hits++;
+    }
+    return hits >= Math.ceil(pts.length / 2);
+  };
   const startTwins = A => {
     clearTwins();
     if (!assist || A.kind !== "face" || !A.mesh?.geometry?.attributes?.position) return;
@@ -560,6 +581,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       if (twinFor !== A) return;                               // deja colle, ou une autre face touchee
       // seules les nettes sont surlignees (une petite face ronde ressemble a beaucoup d'autres) ; les autres servent
       // quand on touche leur piece
+      // une face deja prise (une autre piece posee dessus) n'est pas proposee (30/10/2026)
+      if (r) r.twins = r.twins.filter(t => !occupied(t, skip));
       const best = r?.twins[0]?.fits[0].score || 0, shown = (r?.twins || []).filter(t => t.fits[0].score >= Math.max(0.88, best - 0.05));
       const n = shown.length;
       shown.forEach(t => { t.shown = true; });
@@ -786,7 +809,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
           clearTwins(); fitMsg = null;
           const t = twinAt(r, pick);
           if (!(t && mateTwin(A, t))) {
-            const unit = mate(A, pick);
+            // des jumelles proposees, et touche ailleurs : la piece vient la ou l'on a touche (sa face centree sur ce
+            // point), et non sur toute la face touchee (30/10/2026)
+            const unit = mate(A, r?.twins?.some(x => x.shown) ? { ...pick, region: null, at: true } : pick);
             if (unit) { pairs = [pairOf(A, pick, pivot ? pivot.p : pick.p, pivot ? pivot.p : pick.p)]; push(); setSel(unit); }
           }
           render(); onChange?.(state());
