@@ -1201,6 +1201,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
   const [p, setP] = useState(pProp);
   const [editFr, setEditFr] = useState(false);
   const [frVal, setFrVal] = useState("");
+  // l'en-tete montre l'image d'origine (le plateau) au lieu de la vue 3D choisie comme vignette (30/10/2026)
+  const [heroOrig, setHeroOrig] = useState(false);
+  useEffect(() => { setHeroOrig(false); }, [p.id]);
   useTrackDetail(`Fiche print · ${p?.file_name || pProp?.file_name || "#" + pProp.id}`);
   const scrollRef = useRef(null);
   const firstId = useRef(pProp.id);
@@ -1343,9 +1346,19 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       <img src={thumbUrl(p, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
         objectFit: "cover", filter: "blur(26px) saturate(1.6)", opacity: 0.4, transform: "scale(1.3)" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
       <span aria-hidden="true" style={{ position: "absolute", inset: 0, background: `radial-gradient(60% 70% at 50% 38%, ${stC}33, transparent 72%)` }}/>
-      <img src={thumbUrl(p, 512)} alt="" className="bn-plate" style={{ position: "absolute", inset: "4% 8% 26%", width: "84%", height: "70%",
+      <img key={heroOrig ? "o" : "v"} src={heroOrig ? `${thumbUrl(p, 512)}&orig=1` : thumbUrl(p, 512)} alt="" className="bn-plate" style={{ position: "absolute", inset: "4% 8% 26%", width: "84%", height: "70%",
         objectFit: "contain", filter: "drop-shadow(0 14px 24px rgba(0,0,0,.35))" }}
         onError={e => { e.currentTarget.style.display = "none"; }}/>
+      {/* la vignette choisie est une vue 3D : l'image d'origine reste a portee, en petit dans le coin ; la toucher echange */}
+      {!!p.thumb_3d && <button type="button" onClick={() => setHeroOrig(o => !o)}
+        data-tip={heroOrig ? "Revenir à la vue 3D" : "Voir l'image d'origine (le plateau)"}
+        style={{ position: "absolute", top: wide ? 12 : 54, right: 12, width: 64, padding: 0, borderRadius: 12, overflow: "hidden", cursor: "pointer",
+          border: "1px solid color-mix(in srgb, var(--border) 80%, #fff)", background: "color-mix(in srgb, var(--surface) 88%, transparent)",
+          boxShadow: "0 6px 16px rgba(0,0,0,.22)", backdropFilter: "blur(6px)", display: "flex", flexDirection: "column", alignItems: "stretch" }}>
+        <img src={heroOrig ? thumbUrl(p, 128) : `${thumbUrl(p, 128)}&orig=1`} alt="" style={{ width: 64, height: 52, objectFit: "contain", display: "block" }}
+          onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
+        <span style={{ fontSize: 9.5, fontWeight: 900, color: "var(--text2)", padding: "2px 0 3px", textAlign: "center" }}>{heroOrig ? "Vue 3D" : "Original"}</span>
+      </button>}
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "34px 16px 12px",
         background: "linear-gradient(transparent, color-mix(in srgb, var(--sheet-bg) 92%, transparent) 55%)" }}>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>

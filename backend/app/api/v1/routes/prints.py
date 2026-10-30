@@ -2105,13 +2105,14 @@ async def upload_print_photo(
 
 
 @router.get("/{print_id}/image")
-async def print_image(print_id: int):
+async def print_image(print_id: int, orig: int = 0):
     import mimetypes
     print_dir = DATA_DIR / "prints" / str(print_id)
     if not print_dir.exists():
         raise HTTPException(404)
-    # la vignette choisie : la vue 3D assemblee, si elle a ete prise et preferee
-    if _v3slots(print_dir):
+    # la vignette choisie : la vue 3D assemblee, si elle a ete prise et preferee ; ?orig=1 : l'image d'origine, toujours
+    # (30/10/2026 : la fiche la montre a cote de la vue 3D)
+    if not orig and _v3slots(print_dir):
         async with AsyncSessionLocal() as db:
             pref = (await db.execute(select(Print.thumb_3d).where(Print.id == print_id))).scalar()
         nm, _ = await asyncio.to_thread(_v3cover, print_dir, pref)
