@@ -139,6 +139,10 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
   const [dark, setDark] = useState(false);
   const [lit, setLit] = useState(false);
   const [bedOn, setBedOn] = useState(true);            // le plateau (grille) : masquable pour voir dessous
+  // l'assemblage enregistre le plus recent : l'edition rouverte part de lui (30/10/2026 : elle repartait de celui lu a
+  // l'ouverture de la vue ; apres un enregistrement, les groupes, separations et coupes revenaient a l'etat d'avant)
+  const editNow = useRef(edit);
+  editNow.current = edit;
   // la lampe placee a la main : sa direction (d'apres la vue) et sa force, gardees sur l'appareil
   // la lampe : eteinte par defaut ; allumee et placee sur un modele, elle le reste pour ce modele seulement (30/10/2026)
   const lampKey = String(url || "").split("?")[0];
@@ -712,10 +716,11 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           if (on && !editor) {
             // l'appli restee ouverte pendant une mise a jour reclame un fichier qui n'existe plus : elle se recharge
             const { createAssemblyEditor } = await importRetry(() => import("./AssemblyEditor"));
+            const cur = editNow.current;
             editor = await createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder: ed.holder, pieces: ed.byPiece, render, onChange,
-              groupsInit: edit?.groups || [], jointsInit: edit?.joints || [], copyPiece: (src, n) => copyPiece(THREE, src, n), cutsInit: edit?.cuts || {},
+              groupsInit: cur?.groups || [], jointsInit: cur?.joints || [], copyPiece: (src, n) => copyPiece(THREE, src, n), cutsInit: cur?.cuts || {},
               // pas encore enregistre par cette version : les parties d'un meme objet partent groupees
-              groupByObject: edit?.v !== 2 });
+              groupByObject: cur?.v !== 2 });
             if (import.meta.env.DEV) window.__asmEditor = { editor, holder: ed.holder, pieces: ed.byPiece, THREE };   // banc d'essai seulement
           } else if (!on && editor) { try { editor.dispose(); } catch { /* la vue se ferme quand meme */ } editor = null; }
           return editor;
