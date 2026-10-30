@@ -1102,7 +1102,6 @@ const EDIT_HELP = [
     ["Face puis face", "la première pièce vient se plaquer contre l'autre"],
     ["Arête puis arête", "les arêtes s'alignent"],
     ["➕ Point de colle", "sur une pièce collée : touche un point, une arête ou une face de la pièce, puis l'endroit qui lui correspond sur son support ; le premier collage tient, la pièce glisse et tourne sur son contact (deux arêtes : alignées ; deux faces : l'une contre l'autre ; des points : superposés, au mieux à partir de deux)"],
-    ["〰 Ondulée", "allumé (dans la barre du mode Coller), un clic prend toute une surface ondulée ou plissée, jusqu'à ses arêtes vives, surlignée en bleu ; deux surfaces ondulées collées l'une sur l'autre s'emboîtent aussitôt (🧩), plis dans plis"],
     ["Près d'une arête", "une petite liste propose la face touchée, l'arête (même courbe, suivie d'un bout à l'autre) et la face d'en face : survoler une ligne la surligne en bleu, la toucher la prend (de même en Poser au sol)"],
     ["🪄 Assisté", "faces entières centrées et grands axes alignés ; arêtes milieu contre milieu"],
     ["Faces jumelles (assisté)", "la face cliquée fait chercher, sur les autres pièces, celles de même contour (la coupe d'en face, trous des tenons compris) : en vert, avec leur ressemblance en % ; un clic sur l'une, ou juste sur sa pièce, l'y pose exactement : faces l'une contre l'autre, contours superposés ; ↻ Autre position quand plusieurs sens vont aussi bien"],
@@ -1266,8 +1265,6 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
     : est.mode === "mate" ? <>
       <button type="button" onClick={() => api?.setAddPin(!est.addPin)} style={b(!!est.addPin)}
         data-tip="Sur une pièce déjà collée : une prise de plus (point, arête ou face) et sa cible, le premier collage tient">➕ Point de colle</button>
-      <button type="button" onClick={() => api?.setWavy(!est.wavy)} style={b(!!est.wavy)}
-        data-tip="Surfaces ondulées : un clic prend toute la surface plissée (jusqu'à ses arêtes vives) ; deux surfaces ondulées collées l'une sur l'autre s'emboîtent d'elles-mêmes">〰 Ondulée</button>
     </>
     : est.mode === "pins" ? <>
       <button type="button" disabled={!est.pinsB} onClick={() => api?.pinsApply()} style={b(!!est.pinsB, { opacity: est.pinsB ? 1 : 0.45 })}

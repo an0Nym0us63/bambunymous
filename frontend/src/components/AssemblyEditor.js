@@ -142,7 +142,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   let pendingSplit = null;            // une separation proposee, pas encore validee
   let pendingCut = null;
   let choice = null;                  // la liste du choix face / arete ouverte : les prises, et ou la montrer
-  let wavyMode = false;               // « 〰 Ondulee » : un clic prend la surface ondulee entiere
   // « ➕ Point de colle » (30/10/2026) : sur une piece deja collee, une prise de plus (point, arete ou face) et sa cible ;
   // le premier collage tient (la piece ne fait que glisser et tourner sur son contact). keepPins : les points poses
   let addPin = false, keepPins = [];              // une coupe au couteau proposee (morceaux colores), pas encore validee
@@ -161,7 +160,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pivot: !!pivot, pairs: pairs.length, twinPos: twinAlt && twinAlt.at === changes && twinAlt.fits.length > 1 ? `${twinAlt.i + 1}/${twinAlt.fits.length}` : null, boxMode, ground3, groundPts: gPts.length, vertical, pinsA: pins.a.length, pinsB: pins.b.length,
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
-    cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, wavy: wavyMode, addPin,
+    cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, addPin,
     choice: choice ? { x: choice.x, y: choice.y, items: choice.cands.map(altLabel), piece: choice.cands[0]?.group?.userData.name || "" } : null,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
@@ -278,39 +277,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     return { c, area, axis, n: n0, elongated, count: seen.size, relaxed, tris: seen };
   };
 
-  // une surface ondulee entiere (30/10/2026 : un plisse, une tole ondulee, une face a cannelures) : les triangles voisins
-  // tant que le pli reste doux (moins de 40° d'un triangle a l'autre : on s'arrete aux aretes vives) et que la surface
-  // reste a peu pres dans un plan (ses points a moins de 6 mm du plan moyen, normales a moins de 80° de la moyenne).
-  // Rend sa surface, son centre, sa normale moyenne et ses triangles. Seulement a la demande (« 〰 Ondulee » : propose
-  // d'office, il s'ouvrait aussi sur des visages et des oreilles)
-  const wavyOf = (geo, t0) => {
-    const nb = neighbours(geo), pos = geo.attributes.position, ix = geo.index.array;
-    const n = new THREE.Vector3(), m = new THREE.Vector3(), nAvg = new THREE.Vector3(), cAvg = new THREE.Vector3();
-    const seen = new Set([t0]), st = [t0], cos40 = Math.cos(THREE.MathUtils.degToRad(40)), cos80 = Math.cos(THREE.MathUtils.degToRad(80));
-    let area = 0;
-    const ctr = (a, b, c) => a.clone().add(b).add(c).multiplyScalar(1 / 3);
-    { const [ar, a, b, c] = triNormal(pos, ix, t0, n); nAvg.addScaledVector(n, ar); cAvg.addScaledVector(ctr(a, b, c), ar); area += ar; }
-    while (st.length && seen.size < 60000) {
-      const t = st.pop();
-      triNormal(pos, ix, t, n);
-      const pn = nAvg.clone().normalize(), pc = cAvg.clone().divideScalar(area || 1);
-      for (let e = 0; e < 3; e++) {
-        const u = nb[t * 3 + e];
-        if (u < 0 || seen.has(u)) continue;
-        const [ar, a, b, c] = triNormal(pos, ix, u, m);
-        if (m.dot(n) < cos40 || m.dot(pn) < cos80 || Math.abs(ctr(a, b, c).sub(pc).dot(pn)) > 6) continue;
-        seen.add(u); st.push(u);
-        nAvg.addScaledVector(m, ar); cAvg.addScaledVector(ctr(a, b, c), ar); area += ar;
-      }
-    }
-    if (area <= 0) return null;
-    const nn = nAvg.normalize(), c = cAvg.divideScalar(area);
-    let dev = 0;
-    for (const t of seen) { const [ar, a, b, cc] = triNormal(pos, ix, t, m); dev += ar * ctr(a, b, cc).sub(c).dot(nn) ** 2; }
-    const rms = Math.sqrt(dev / area);
-    return { c, area, n: nn, tris: seen, rms };
-  };
-
   // les aretes vives d'un maillage (deux faces a plus de 30°), sommet -> sommets voisins le long d'elles : pour suivre
   // une arete courbe d'un bout a l'autre (faite une fois par maillage, a la demande)
   const creases = new WeakMap();
@@ -423,16 +389,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         if (d < loose) near.push({ d, e, a, b, q, u });
       });
       alts = [faceAt(t, p)];
-      // « 〰 Ondulée » allumee : la surface ondulee entiere autour du clic, a la place de la face touchee (un plisse, une
-      // tole ondulee : leur direction moyenne, pour les coller l'une sur l'autre puis les emboiter)
-      const wv = wavyMode ? wavyOf(geo, t) : null;
-      if (wv) {
-        const nn = wv.n.clone().applyMatrix3(N).normalize();
-        if (nn.dot(n) < 0) nn.negate();
-        return { group: g, kind: "face", wavy: true, p, n: nn, size, mesh: hit.object, tri: t,
-          region: { c: wv.c.clone().applyMatrix4(M), area: wv.area, axis: new THREE.Vector3(1, 0, 0), elongated: false, relaxed: true },
-          hl: { geo, M, tris: wv.tris, area: wv.area } };
-      }
       if (near.length) {
         near.sort((x, y) => x.d - y.d);
         for (const x of near.slice(0, 2)) {
@@ -484,7 +440,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     } else mark(pk);
     render();
   };
-  const altLabel = pk => pk.wavy ? `〰 Surface ondulée · ${Math.round(pk.hl.area)} mm²` : pk.kind === "edge"
+  const altLabel = pk => pk.kind === "edge"
     ? `╱ Arête${pk.hl?.curved ? " courbe" : ""}${pk.hl?.len ? ` · ${String(Math.round(pk.hl.len * 10) / 10).replace(".", ",")} mm` : ""}`
     : `▭ Face${pk.hl?.area ? ` · ${Math.round(pk.hl.area)} mm²` : ""}`;
 
@@ -1047,7 +1003,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       drop(unit); pivot = null; clearMarks(); showContact(); push(); render(); return;
     }
     if (mode === "mate") {
-      if (!first) { first = pick; clearMarks(); if (pick.wavy) { showAlt(pick); } else mark(pick); onChange?.(state()); if (!pick.wavy && !addPin) startTwins(pick); return; }
+      if (!first) { first = pick; clearMarks(); mark(pick); onChange?.(state()); if (!addPin) startTwins(pick); return; }
       const A = first;
       first = null; clearMarks();
       if (addPin) {
@@ -1069,10 +1025,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
           if (!(t && mateTwin(A, t))) {
             // des jumelles proposees, et touche ailleurs : la piece vient la ou l'on a touche (sa face centree sur ce
             // point), et non sur toute la face touchee (30/10/2026)
-            const unit = mate(A, r?.twins?.some(x => x.shown) && !pick.wavy ? { ...pick, region: null, at: true } : pick);
+            const unit = mate(A, r?.twins?.some(x => x.shown) ? { ...pick, region: null, at: true } : pick);
             if (unit) { pairs = [pairOf(A, pick, pivot ? pivot.p : pick.p, pivot ? pivot.p : pick.p)]; push(); setSel(unit); }
-            // deux surfaces ondulees l'une sur l'autre : leurs plis s'emboitent (30/10/2026)
-            if (unit && A.wavy && pick.wavy) fitOnContact("nest");
           }
           render(); onChange?.(state());
         });
@@ -1095,7 +1049,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         // la premiere paire : le point de la piece, la ou il est venu (sur sa cible)
         pairs = [pairOf(A, pick, pivot ? pivot.p : pick.p, pivot ? pivot.p : pick.p)];
         push(); setSel(unit);
-        if (A.wavy && pick.wavy) fitOnContact("nest");      // deux surfaces ondulees : leurs plis s'emboitent
       }
       render(); onChange?.(state());
     }
@@ -1745,7 +1698,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     choiceHover: i => { if (!choice) return; showAlt(choice.cands[i]); choice.keep.forEach(mark); },
     choicePick: i => { const c = choice; if (!c) return; choice = null; clearMarks(); c.keep.forEach(mark); tap(c.cands[i], c.ev); onChange?.(state()); },
     choiceCancel: () => { const c = choice; choice = null; clearMarks(); c?.keep.forEach(mark); render(); onChange?.(state()); },
-    setWavy: on => { wavyMode = on; onChange?.(state()); },
     setAddPin: on => {
       if (on && mode !== "mate") api.setMode("mate");
       addPin = on; first = null; keepPins = []; clearMarks(); clearTwins(); render();
