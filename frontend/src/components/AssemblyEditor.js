@@ -700,14 +700,27 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       // deja une autre piece la ou on l'a collee, le test ne bloque rien
       const sup = new Set(unitOf(j.b));
       const others = all.filter(g => g.visible && !moving.includes(g) && !sup.has(g));
-      const hit = M => col.anyTouch(moving.map(g => { g.updateMatrix(); return [g, M.clone().multiply(g.matrix)]; }), others, 0.3);
+      // une tolerance d'un millimetre (la piece amincie d'autant) : un frottement de relief n'est pas une collision
+      const hit = M => col.anyTouch(moving.map(g => { g.updateMatrix(); return [g, M.clone().multiply(g.matrix)]; }), others, 1);
       const collides = others.length && !hit(new THREE.Matrix4()) ? hit : null;
-      const r = await nestPlace({ THREE, collider: col, moving, base: unitOf(j.b).filter(g => g.visible && !moving.includes(g)), P, N, mode, collides });
-      if (r && !r.M) return say("Chaque place qui conviendrait traverse une autre pièce : elle reste où elle est collée");
+      let r = await nestPlace({ THREE, collider: col, moving, base: unitOf(j.b).filter(g => g.visible && !moving.includes(g)), P, N, mode, collides });
+      // toutes les places touchent une autre piece : la meilleure quand meme, en le disant (30/10/2026 : refuser tout ne
+      // laissait rien a faire)
+      let touching = false;
+      if (r && !r.M) {
+        r = await nestPlace({ THREE, collider: col, moving, base: unitOf(j.b).filter(g => g.visible && !moving.includes(g)), P, N, mode });
+        touching = true;
+      }
       if (!r) return say(mode === "align" ? "Pas de place où elle repose à plat sur cette face, autour de là où elle est collée (une face courbe : 🎯 Ajuster)"
         : "Pas de place trouvée autour de là où elle est collée : la pièce déborde de son support partout");
-      const still = (r.moved < 0.05 && Math.abs(r.turned) < 0.1 && Math.abs(r.sink) < 0.05) || (quiet && mode === "align" && r.cov1 < r.cov0 + 0.05);
-      if (still) return say(mode === "align" ? "Déjà alignée au mieux" : "Déjà à la meilleure place : elle ne descend pas plus bas autour de là où elle est collée");
+      // rien ne bouge sans un gain net (30/10/2026 : 32 mm de chemin pour 0,1 mm plus bas ; un alignement sans face
+      // trouvee, a 0 %, tournait quand meme la piece) : emboiter, au moins 0,3 mm plus bas ; aligner, une face
+      // reellement recouverte, et mieux qu'avant
+      const still = (r.moved < 0.05 && Math.abs(r.turned) < 0.1 && Math.abs(r.sink) < 0.05)
+        || (mode === "nest" && r.sink < 0.3)
+        || (mode === "align" && (r.cov1 < 0.3 || r.cov1 < r.cov0 + (quiet ? 0.05 : 0.01)));
+      if (still) return say(mode === "align" ? (r.cov1 < 0.3 ? "Pas de face plane à épouser sous la pièce : elle reste où elle est (🎯 Ajuster pour une face courbe)" : "Déjà alignée au mieux")
+        : "Déjà à la meilleure place : elle ne descend pas plus bas autour de là où elle est collée");
       apply(moving, r.M);
       j.b.updateMatrix();
       j.p.copy(r.contact.clone().applyMatrix4(j.b.matrix.clone().invert()));
@@ -719,6 +732,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       fitMsg = (quiet ? "Collée, puis " : "") + (mode === "align" ? `alignée : ${Math.round(r.cov1 * 100)} % de sa face d'appui sur la face (avant ${Math.round(r.cov0 * 100)} %), centrée, ${moved}`
         : `emboîtée : ${r.sink >= 0.05 ? `${mm(r.sink)} mm plus bas` : "même hauteur"}, ${moved}`);
       if (!quiet) fitMsg = fitMsg[0].toUpperCase() + fitMsg.slice(1);
+      if (touching) fitMsg += " — elle touche une autre pièce à cette place";
       onChange?.(state());
       return true;
     } catch (e) { console.error("[3D] emboiter / aligner", e); return say("La recherche a échoué"); }
