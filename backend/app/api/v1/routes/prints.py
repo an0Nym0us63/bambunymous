@@ -704,7 +704,8 @@ async def _build_gallery(kind: str = "photos") -> dict:
     ]
     items.sort(key=lambda it: it["print_date"] or "", reverse=True)
     groups.sort(key=lambda g: g["latest_date"] or "", reverse=True)
-    return {"prints": items, "groups": groups}
+    # n_vue3d (31/10/2026) : combien d'impressions ont des vues 3D -- sans, l'appli ne montre pas le choix Photos / Vues 3D
+    return {"prints": items, "groups": groups, "n_vue3d": len(vue3d_prints)}
 
 
 @router.get("/groups")

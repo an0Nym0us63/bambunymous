@@ -2684,6 +2684,17 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
   const nMine = mine ? [...(mine.prints || []).map(p => p.title || p.file_name), ...(mine.groups || []).map(g => g.name)]
     .filter(t => !q || (t || "").toLowerCase().includes(q)).length : null;
   const tiny = typeof window !== "undefined" && window.innerWidth < 420;
+  // le choix Photos / Vues 3D (31/10/2026 : « un peu omnipresent ») : une petite paire d'icones au bout des onglets,
+  // et seulement s'il existe des vues 3D (un serveur d'avant n_vue3d : on le montre)
+  const hasV3 = gKind === "vue3d" || (mine != null && (mine.n_vue3d ?? 1) > 0);
+  const kindSw = hasV3 && who !== "sd" && (
+    <div style={{ display:"inline-flex", flexShrink:0, alignSelf:"center", padding:2, gap:2, borderRadius:12,
+      background:"var(--surface)", border:"1px solid var(--border)" }}>
+      {[["photos", "📷", "Les photos des impressions"], ["vue3d", "🧊", "Les vues prises dans la vue 3D (📸), à la place des photos"]].map(([k, l, tip]) =>
+        <button key={k} type="button" onClick={() => setGKind(k)} data-tip={tip} aria-label={tip} style={{ width:30, height:28, padding:0,
+          borderRadius:10, border:"none", cursor:"pointer", fontSize:14, lineHeight:1,
+          background: gKind === k ? "linear-gradient(135deg, #EC4899, #8B5CF6)" : "transparent", opacity: gKind === k ? 1 : 0.55 }}>{l}</button>)}
+    </div>);
   return (<>
     {!currentFriend() && (
       <div style={{ display:"flex", gap:3, background:"var(--surface2)", borderRadius:16, padding:3,
@@ -2702,18 +2713,12 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
               {tiny ? `${e}${n != null ? ` ${n}` : ""}` : n != null ? n : "·"}</span>
           </button>
         ))}
+        {kindSw}
       </div>
     )}
     {who === "sd" && !currentFriend() ? <TimelapsesView search={search} onCount={setNTl}/>
       : <>
-        <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>
-          <div style={{ display:"inline-flex", padding:2, gap:2, borderRadius:14, background:"var(--surface2)", border:"1px solid var(--border)" }}>
-            {[["photos", "📷 Photos", "Les photos des impressions"], ["vue3d", "🧊 Vues 3D", "Les vues prises dans la vue 3D (📸), à la place des photos"]].map(([k, l, tip]) =>
-              <button key={k} type="button" onClick={() => setGKind(k)} data-tip={tip} style={{ padding:"4px 11px", borderRadius:11, border:"none", cursor:"pointer",
-                fontSize:11.5, fontWeight:800, color: gKind === k ? "#fff" : "var(--muted)",
-                background: gKind === k ? "linear-gradient(135deg, #EC4899, #8B5CF6)" : "transparent" }}>{l}</button>)}
-          </div>
-        </div>
+        {currentFriend() && kindSw && <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>{kindSw}</div>}
         {who === "friends" && hasFriends ? <FriendsGalleryView search={search} data={fdata} kind={gKind}/>
           : <MyGalleryView search={search} sortF={sortF} data={mine} loading={mineLoading} kind={gKind}/>}
       </>}
