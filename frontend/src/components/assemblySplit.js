@@ -8,11 +8,13 @@
 // cuts (30/10/2026) : les coups de couteau donnes a la piece (cutGeometry), appliques d'abord. Le tableau rendu porte
 // aussi « owner » : pour chaque maillage, le morceau de chaque triangle d'origine (de quoi suivre un morceau d'une coupe
 // a l'autre)
-export function splitPieceGeometry(THREE, pg, cuts = null) {
+// info (facultatif) : y est note « lastHits », le nombre de triangles tranches par le dernier coup
+export function splitPieceGeometry(THREE, pg, cuts = null, info = null) {
   const meshes = pg.children.filter(m => m.isMesh && m.geometry?.attributes?.position);
   if (!meshes.length) return null;
   const tagIds = new Map(), cut = cuts?.length ? meshes.map(m => cutGeometry(THREE, m.geometry, cuts, tagIds)) : null;
   const geos = cut ? cut.map(c => c.geo) : meshes.map(m => m.geometry);
+  if (info && cut) info.lastHits = cut.reduce((s, c) => s + (c.hits[c.hits.length - 1] || 0), 0);
   const weld = new Map(), ids = [], tris = [];       // tris : [maillage, numero du triangle, sommets soudes a, b, c]
   const vid = (x, y, z, tag = 0) => {
     // un sommet ne d'une coupe est d'un cote ou de l'autre : son « tag » l'empeche de se souder a son jumeau d'en face
@@ -92,6 +94,7 @@ export function cutGeometry(THREE, geo, cuts, tagIds = new Map()) {
   const n0 = geo.index ? geo.index.count / 3 : geo.attributes.position.count / 3;
   let ix = geo.index ? Array.from(geo.index.array) : Array.from({ length: n0 * 3 }, (_, i) => i);
   let from = Array.from({ length: n0 }, (_, i) => i);
+  const hits = cuts.map(() => 0);
   const tag = new Array(geo.attributes.position.count).fill(0);   // tagIds : partages entre les maillages d'une piece
   const P = v => [vals[pi][v * 3], vals[pi][v * 3 + 1], vals[pi][v * 3 + 2]];
   const sub = (u, v) => [u[0] - v[0], u[1] - v[1], u[2] - v[2]];
@@ -136,6 +139,7 @@ export function cutGeometry(THREE, geo, cuts, tagIds = new Map()) {
       const oj = between(v[i], v[j], tj, so), ok = between(v[i], v[k], tk, so);
       // l'ordre des sommets garde le sens du triangle (les faces restent tournees vers l'exterieur)
       nix.push(v[i], ij, ik, oj, v[j], v[k], oj, v[k], ok);
+      hits[ci]++;
       nfrom.push(from[t], from[t], from[t]);
     }
     ix = nix; from = nfrom;
@@ -143,7 +147,7 @@ export function cutGeometry(THREE, geo, cuts, tagIds = new Map()) {
   const out = new THREE.BufferGeometry();
   names.forEach((nm, ai) => out.setAttribute(nm, new THREE.BufferAttribute(new src[ai].array.constructor(vals[ai]), size[ai], src[ai].normalized)));
   out.setIndex(new THREE.BufferAttribute(tag.length > 65535 ? new Uint32Array(ix) : new Uint16Array(ix), 1));
-  return { geo: out, tag: Int32Array.from(tag), from: Int32Array.from(from), n: n0 };
+  return { geo: out, tag: Int32Array.from(tag), from: Int32Array.from(from), n: n0, hits };
 }
 
 // une partie d'une geometrie : ces triangles, ses sommets renumerotes (tous les attributs suivent)

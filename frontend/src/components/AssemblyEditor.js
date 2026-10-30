@@ -151,6 +151,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pivot: !!pivot, pairs: pairs.length, twinPos: twinAlt && twinAlt.at === changes && twinAlt.fits.length > 1 ? `${twinAlt.i + 1}/${twinAlt.fits.length}` : null, boxMode, ground3, groundPts: gPts.length, vertical, pinsA: pins.a.length, pinsB: pins.b.length,
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
+    cutPiece: pendingCut ? pendingCut.g.userData.name : null,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
     // de la selection part au moins un collage (vers une piece hors d'elle) : « Grouper le colle » a un sens
@@ -969,16 +970,27 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     say("Découpe…");
     await new Promise(res => setTimeout(res, 0));
     const { splitPieceGeometry, buildSplitGroups } = await import("./assemblySplit");
-    const comps = splitPieceGeometry(THREE, whole, next);
-    const had = pendingCut ? pendingCut.parts.length : g.userData.from ? all.filter(x => x.userData.from === K && !x.userData.copyOf).length : 1;
-    if (!comps || comps.length <= had) return say("Ce trait ne détache rien : trace-le à travers toute la pièce, là où elle tient à l'autre partie");
+    const info = {}, comps = splitPieceGeometry(THREE, whole, next, info);
+    if (!info.lastHits) return say("Ce trait ne traverse pas la pièce : trace-le à travers elle, d'un bord à l'autre de la jointure");
     let pc = pendingCut;
     if (!pc) {
       // ce qu'il y avait avant : la piece entiere, ou ses morceaux ; et a quel morceau appartenait chaque triangle
       const old = g.userData.from ? all.filter(x => x.userData.from === K && !x.userData.copyOf) : [g];
       const prev = g.userData.from ? splitPieceGeometry(THREE, whole, base.length ? base : null) : null;
       pc = { K, g, whole, old, vis: old.map(x => x.visible), oldOwn: prev?.owner || null, base: base.length, parts: [] };
-    } else pc.parts.forEach(p => { holder.remove(p); p.children.forEach(m => { m.geometry.dispose(); m.material.dispose(); }); });
+      pendingCut = pc;
+    }
+    pc.cuts = next;
+    drawCuts();
+    // plusieurs jointures (30/10/2026) : un trait qui ne detache encore rien est garde, la piece se separe quand toutes
+    // sont tranchees
+    if (!comps || comps.length <= (pc.parts.length || pc.old.length)) {
+      const n = pc.cuts.length - pc.base;
+      tc.detach(); render();
+      return say(pc.parts.length ? `Trait ${n} gardé : il ne détache rien de plus ; trace les autres jointures, ou ✓ Couper`
+        : `Trait ${n} gardé (en rouge) : la pièce tient encore ailleurs ; trace les autres jointures, elle se sépare quand tout est tranché`);
+    }
+    pc.parts.forEach(p => { holder.remove(p); p.children.forEach(m => { m.geometry.dispose(); m.material.dispose(); }); });
     const parts = buildSplitGroups(THREE, whole, comps);
     // chaque nouveau morceau vient de l'ancien qui avait le plus de ses triangles d'origine (un triangle deja coupe
     // appartient aux deux cotes : un seul ne suffit pas) et garde sa place
@@ -1002,22 +1014,43 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       p.children.forEach(m => { m.material.emissive = new THREE.Color(tints[j % tints.length]); m.material.emissiveIntensity = 0.55; });
     });
     pc.old.forEach(x => { x.visible = false; });
-    pc.parts = parts; pc.src = src; pc.cuts = next;
-    pendingCut = pc;
+    pc.parts = parts; pc.src = src;
     tc.detach(); fitMsg = null; render(); onChange?.(state());
+  };
+  // les traits deja donnes, en rouge sur la piece (le secteur coupe, a la profondeur du morceau vise)
+  const cutLines = new THREE.Group(); cutLines.renderOrder = 1000; holder.add(cutLines);
+  const cutMat = new THREE.LineBasicMaterial({ color: 0xef4444, depthTest: false, transparent: true, opacity: 0.95 });
+  const drawCuts = () => {
+    cutLines.children.slice().forEach(l => { l.geometry.dispose(); cutLines.remove(l); });
+    const pc = pendingCut;
+    if (!pc) { render(); return; }
+    const M = wholeFrame(pc.g), o = pc.g.userData.from ? pc.g.userData.c.clone().sub(pc.g.userData.parentC) : new THREE.Vector3();
+    const bx = new THREE.Box3();
+    pc.g.children.forEach(m => { if (m.isMesh) { m.geometry.computeBoundingBox(); bx.union(m.geometry.boundingBox); } });
+    const mid = bx.getCenter(new THREE.Vector3()).add(o);
+    for (const w of pc.cuts.slice(pc.base)) {
+      const E = new THREE.Vector3().fromArray(w.e), A = new THREE.Vector3().fromArray(w.a), Bd = new THREE.Vector3().fromArray(w.b);
+      const t = mid.clone().sub(E).dot(A.clone().add(Bd).normalize());
+      const pts = [E.clone().addScaledVector(A, t / Math.max(0.2, A.dot(A.clone().add(Bd).normalize()))), E.clone().addScaledVector(Bd, t / Math.max(0.2, Bd.dot(A.clone().add(Bd).normalize())))]
+        .map(p => p.applyMatrix4(M));
+      cutLines.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), cutMat));
+    }
+    render();
   };
   const cutCancel = () => {
     const pc = pendingCut;
     if (!pc) return;
     pendingCut = null;
+    drawCuts();
     pc.parts.forEach(p => { holder.remove(p); p.children.forEach(m => { m.geometry.dispose(); m.material.dispose(); }); });
     pc.old.forEach((x, i) => { x.visible = pc.vis[i]; });
     render(); onChange?.(state());
   };
   const cutConfirm = () => {
     const pc = pendingCut;
-    if (!pc) return;
+    if (!pc || !pc.parts.length) return;
     pendingCut = null;
+    drawCuts();
     pc.parts.forEach(p => p.children.forEach(m => {           // leur couleur d'origine
       const s0 = pc.whole.children.find(x => x.isMesh && x.material.color.equals(m.material.color));
       m.material.emissive = s0 ? s0.material.emissive.clone() : new THREE.Color(0); m.material.emissiveIntensity = s0 ? s0.material.emissiveIntensity : 1;
@@ -1625,6 +1658,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       el.removeEventListener("pointerdown", onKnifeDown); window.removeEventListener("pointermove", onKnifeMove);
       window.removeEventListener("pointerup", onKnifeUp); window.removeEventListener("pointercancel", onKnifeCancel);
       cutCancel(); dropStroke(); knifeView(false);
+      holder.remove(cutLines); cutMat.dispose();
       holder.remove(ring); ring.geometry.dispose(); ringMat.dispose();
       try { tc.detach(); tc.disconnect(); } catch { /* deja debranchee */ }
       try { helper.traverse(o => { o.geometry?.dispose?.(); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m?.dispose?.()); }); } catch { /* rien */ }

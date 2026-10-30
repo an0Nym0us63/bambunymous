@@ -1006,7 +1006,7 @@ const EDIT_HELP = [
   ["Couper (X)", [
     ["Clic sur une pièce", "la pièce à couper (une seule)"],
     ["Glisser à travers elle", "un trait rouge : la pièce est tranchée sur la longueur du trait, dans toute l'épaisseur que voit l'écran (rien au-delà des bouts du trait) ; les parties qui ne tiennent plus ensemble deviennent des morceaux, chacun de sa couleur"],
-    ["Plusieurs traits", "s'ajoutent avant de valider (un support tenu par plusieurs ponts) ; tourne la vue au clic droit entre deux traits"],
+    ["Plusieurs traits", "un support tenu par plusieurs ponts : un trait par pont ; chacun reste marqué en rouge, et la pièce se sépare quand tous sont tranchés ; tourne la vue au clic droit entre deux traits ; ✕ efface les traits"],
     ["✓ Couper (Entrée) / ✕ Ne pas couper (Échap)", "valider les morceaux ou tout laisser ; chaque morceau se choisit, se déplace, s'exclut (📋 Pièces : 🚫) ; ⊕ Réunir rend la pièce entière d'origine"],
   ]],
   ["Points (P)", [
@@ -1143,10 +1143,11 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
       : est.assist ? EDIT_TIPS.mate1a : EDIT_TIPS.mate1) : EDIT_TIPS[est.mode];
   const hasSel = est.count > 0;
   // la seconde ligne : les actions du mode, puis celles de la selection
-  const modeRow = est.mode === "cut" ? (est.cutPending ? <>
-      <button type="button" onClick={() => api?.cutConfirm()} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}
-        data-tip="Valider les morceaux (Entrée)">✓ Couper en {est.cutPending}</button>
-      <button type="button" onClick={() => api?.cutCancel()} style={b(false)} data-tip="Tout laisser comme avant (Échap)">✕ Ne pas couper</button>
+  const modeRow = est.mode === "cut" ? (est.cutCount ? <>
+      {est.cutPending > 0 && <button type="button" onClick={() => api?.cutConfirm()} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}
+        data-tip="Valider les morceaux (Entrée)">✓ Couper en {est.cutPending}</button>}
+      <button type="button" onClick={() => api?.cutCancel()} style={b(false)} data-tip="Effacer les traits, tout laisser comme avant (Échap)">
+        ✕ {est.cutPending ? "Ne pas couper" : `Effacer ${est.cutCount > 1 ? `les ${est.cutCount} traits` : "le trait"}`}</button>
     </> : null)
     : est.mode === "pins" ? <>
       <button type="button" disabled={!est.pinsB} onClick={() => api?.pinsApply()} style={b(!!est.pinsB, { opacity: est.pinsB ? 1 : 0.45 })}
@@ -1163,7 +1164,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
       <button type="button" onClick={() => api?.splitConfirm()} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}>✓ Séparer en {est.splitPending}</button>
       <button type="button" onClick={() => api?.splitCancel()} style={b(false)}>✕ Ne pas séparer</button>
     </> : null;
-  const selRow = hasSel && !est.splitPending && !est.cutPending ? <>
+  const selRow = hasSel && !est.splitPending && !est.cutCount ? <>
       <span style={{ fontSize: 12, fontWeight: 800, color: "#0EA5E9", padding: "0 4px", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{est.selected}</span>
       <BarMenu b={b} up={compact} label="🔗 Grouper" tip="Faire bouger des pièces ensemble" items={[
         est.canGroup && { label: "🔗 Grouper la sélection", key: "Ctrl+G", onClick: () => api?.group(), tip: "Les pièces choisies bougent ensemble" },
