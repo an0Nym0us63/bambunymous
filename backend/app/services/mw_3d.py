@@ -1534,15 +1534,19 @@ def load_edit(key: str, did: str | None = None, piece_keys: set | None = None) -
     d = _read(_edits_file(key))
     if not did:
         return d
-    # le plus recent l'emporte (30/10/2026) : un assemblage fait depuis la vue d'une impression doit se voir aussi dans
-    # celle de son groupe, meme si le groupe en avait deja un, plus ancien (avant, celui de la vue passait toujours)
+    # le plus recent l'emporte (30/10/2026) entre les vues du MEME profil (meme 3MF : la vue d'une impression et celle de
+    # son groupe) ; d'un autre profil, seulement si cette vue n'a pas d'assemblage a elle (ses pieces ne partent pas du
+    # meme endroit : appliquees ici, les places eparpillaient tout -- la bobine d'un groupe, le 30/10)
     best = d
+    prof = _prof_of(key)
     try:
         files = list(_edits_file(key).parent.glob("*.json"))
     except OSError:
         files = []
     for f in files:
         if f.stem == key:
+            continue
+        if d and (not prof or _prof_of(f.stem) != prof):
             continue
         o = _read(f)
         if not o or (o.get("did") or _did_of(f.stem)) != str(did):
