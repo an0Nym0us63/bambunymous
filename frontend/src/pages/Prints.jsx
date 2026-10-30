@@ -2224,12 +2224,12 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
     <div onClick={handleClick} {...press} style={{ ...frame, overflow:"hidden", display:"flex", flexDirection:"column", borderRadius:18,
       border:"1px solid var(--border)", background:"var(--surface2)", boxShadow:"0 8px 22px -16px rgba(0,0,0,.45)" }}>
       {/* la vignette, l'etat en pastille, ×N, ⭐ a evaluer, les filaments */}
-      {/* un peu plus haute que large ne l'etait (30/10/2026 : a 78 %, le bas des vignettes carrees etait rogne) ; le peu
-          qui reste rogne l'est surtout en haut, ou les rendus ont de la marge */}
-      <div style={{ position:"relative", paddingTop:"92%", overflow:"hidden",
+      <div style={{ position:"relative", paddingTop:"78%", overflow:"hidden",
         background:`radial-gradient(75% 70% at 50% 45%, ${tint}2e, transparent 75%), linear-gradient(180deg, ${tint}1a, transparent 55%), var(--surface2)` }}>
+        {/* l'image entiere, un peu dezoomee, plutot que rognee en bas (30/10/2026) ; la tuile garde la hauteur de celles
+            des groupes, pour que les textes s'alignent */}
         <img src={thumbUrl(p, 384)} alt="" loading="lazy" decoding="async" draggable={false}
-          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", objectPosition:"50% 75%", WebkitTouchCallout:"none", WebkitUserDrag:"none" }}
+          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"contain", WebkitTouchCallout:"none", WebkitUserDrag:"none" }}
           onError={e => { e.currentTarget.style.display="none"; }}/>
         {check}
         {p.number_of_items > 1 && <span data-tip={`${p.number_of_items} pièces`} style={chipS("#2563EB", { top:7, right:7 })}>×{p.number_of_items}</span>}
