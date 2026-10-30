@@ -693,7 +693,12 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       const col = await getCollider();
       const { nestPlace } = await import("./assemblyNest");
       const moving = withKids(list), { P, N } = contact(j);
-      const r = await nestPlace({ THREE, collider: col, moving, base: unitOf(j.b).filter(g => g.visible && !moving.includes(g)), P, N, mode });
+      // les autres pieces ne se traversent pas : une place qui en traverse une (la piece amincie de 0,3 mm, pour ne pas
+      // compter le contact lui-meme) est sautee, la suivante est essayee (30/10/2026)
+      const others = all.filter(g => g.visible && !moving.includes(g));
+      const collides = M => col.anyTouch(moving.map(g => { g.updateMatrix(); return [g, M.clone().multiply(g.matrix)]; }), others, 0.3);
+      const r = await nestPlace({ THREE, collider: col, moving, base: unitOf(j.b).filter(g => g.visible && !moving.includes(g)), P, N, mode, collides });
+      if (r && !r.M) return say("Chaque place qui conviendrait traverse une autre pièce : elle reste où elle est collée");
       if (!r) return say(mode === "align" ? "Pas de place où elle repose à plat sur cette face, autour de là où elle est collée (une face courbe : 🎯 Ajuster)"
         : "Pas de place trouvée autour de là où elle est collée : la pièce déborde de son support partout");
       const still = (r.moved < 0.05 && Math.abs(r.turned) < 0.1 && Math.abs(r.sink) < 0.05) || (quiet && mode === "align" && r.cov1 < r.cov0 + 0.05);

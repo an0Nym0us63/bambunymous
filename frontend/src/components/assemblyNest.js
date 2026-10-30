@@ -12,7 +12,7 @@
 // sur un grand support, tout parcourir prenait plusieurs secondes), d'abord a grosses mailles, puis finement autour
 // des meilleures.
 
-export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "nest" }) {
+export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "nest", collides = null }) {
   const { MeshBVH } = await import("three-mesh-bvh");
   const w = N.clone().normalize();
   const u = (Math.abs(w.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0)).cross(w).normalize();
@@ -112,7 +112,19 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   const face = new Uint8Array(nu * nv);
   let faceN = 0;
   {
-    const ok = k => !Number.isNaN(H[k]) && Math.abs(H[k]) <= TOL;
+    // une maille de la face : a la hauteur du contact, et a plat avec ses voisines (30/10/2026 : sur une tete en tricot,
+    // le relief passait par cette hauteur tout autour, la « face » debordait de l'empreinte et l'angle partait au hasard)
+    const ok = k => {
+      if (Number.isNaN(H[k]) || Math.abs(H[k]) > 0.35) return false;
+      const i = k % nu, j = (k - i) / nu;
+      for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const x = i + a, y = j + b;
+        if (x < 0 || y < 0 || x >= nu || y >= nv) continue;
+        const z = H[y * nu + x];
+        if (!Number.isNaN(z) && Math.abs(z - H[k]) > Math.max(0.12, 0.3 * h)) return false;
+      }
+      return true;
+    };
     let i0 = Math.round((0 - bu0) / h), j0 = Math.round((0 - bv0) / h);
     i0 = Math.min(nu - 1, Math.max(0, i0)); j0 = Math.min(nv - 1, Math.max(0, j0));
     // la maille de la face la plus proche du point de collage
@@ -207,7 +219,9 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
       // que la piece laisse encore la place de centrer
       const on = onFace(F, nU_, nV_, hh, fl, th, su - s0, sv - s0), nf = fl.length / 3;
       const faceCells = fine ? faceN : faceN / (K * K), inter = on * nf;
-      return -10 * inter / Math.max(1, nf + faceCells - inter) + pen(su, sv, th) * 0.1;
+      // tourner ou glisser doit rapporter : 1° coute quatre dix-milliemes de recouvrement, 1 mm un demi-centieme (sinon un bec
+      // presque bien pose faisait un quart de tour pour quelques mailles de mieux)
+      return -10 * inter / Math.max(1, nf + faceCells - inter) + 0.05 * Math.hypot(su, sv) + 0.004 * turn(th);
     }
     return d + pen(su, sv, th);
   };
@@ -228,58 +242,79 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
     if (tops.some(t => Math.hypot(t.su - c.su, t.sv - c.sv) < 2 * hc && Math.abs(Math.sin((t.th - c.th) / 2)) < 0.09)) continue;
     tops.push(c);
   }
-  // finement autour des meilleures
-  let best = null;
+  // finement autour de chacune des meilleures : la meilleure place de chaque creux
+  const fines = [];
   for (const t of tops) {
+    let b = null;
     for (let da = -3; da <= 3; da += 1) {
       const th = t.th + da * Math.PI / 180;
       for (let dv = -hc; dv <= hc + 1e-9; dv += h * 2) for (let du = -hc; du <= hc + 1e-9; du += h * 2) {
         const su = t.su + du, sv = t.sv + dv, c = score(true, th, su, sv);
-        if (c < Infinity && (!best || c < best.c)) best = { th, su, sv, c };
+        if (c < Infinity && (!b || c < b.c)) b = { th, su, sv, c };
       }
     }
+    if (b) fines.push(b);
   }
-  if (!best) return null;
-  // puis a la maille et au demi-degre pres autour de la meilleure
-  for (let it = 0; it < 2; it++) {
-    const b0 = { ...best };
-    for (let da = -1.5; da <= 1.5; da += 0.5) for (let dv = -2 * h; dv <= 2 * h + 1e-9; dv += h) for (let du = -2 * h; du <= 2 * h + 1e-9; du += h) {
-      const th = b0.th + da * Math.PI / 180, su = b0.su + du, sv = b0.sv + dv, c = score(true, th, su, sv);
-      if (c < best.c) best = { th, su, sv, c };
-    }
-  }
-  // au milieu de ce qui va aussi bien (un logement ou une face plus grands que la piece), en angle puis en position,
-  // deux fois (sinon elle restait de biais, collee a un bord) ; la note sans la penalite de chemin
-  const raw = (th, su, sv) => { const c = score(true, th, su, sv); return c === Infinity ? Infinity : c - (mode === "align" ? 0.1 : 1) * pen(su, sv, th); };
-  const ref = raw(best.th, best.su, best.sv);
-  const ok = (th, su, sv) => raw(th, su, sv) <= ref + (mode === "align" ? 0.05 : 0.05);
+  if (!fines.length) return null;
+  fines.sort((a, b) => a.c - b.c);
+  const here = lift(H, nu, nv, h, cells, 0, 0, 0);
   const mid = (f, x0, step, lim) => {
     let a = 0, b = 0;
     while (a < lim && f(x0 - (a + 1) * step)) a++;
     while (b < lim && f(x0 + (b + 1) * step)) b++;
     return x0 + (b - a) / 2 * step;
   };
-  for (let it = 0; it < 2; it++) {
-    best.th = mid(t => ok(t, best.su, best.sv), best.th, Math.PI / 360, 120);
-    best.su = mid(x => ok(best.th, x, best.sv), best.su, h, 400);
-    best.sv = mid(y => ok(best.th, best.su, y), best.sv, h, 400);
+  // une place -> la transformation (repere du support du modele) : tourner autour de la normale par le centre de la
+  // piece, puis glisser et descendre (ou monter) jusqu'au contact
+  const C = P.clone().addScaledVector(u, cu).addScaledVector(v, cv);
+  const matOf = (b, d) => {
+    const R = new THREE.Matrix4().makeTranslation(C.x, C.y, C.z).multiply(new THREE.Matrix4().makeRotationAxis(w, b.th))
+      .multiply(new THREE.Matrix4().makeTranslation(-C.x, -C.y, -C.z));
+    const sh = u.clone().multiplyScalar(b.su).addScaledVector(v, b.sv).addScaledVector(w, d);
+    return new THREE.Matrix4().makeTranslation(sh.x, sh.y, sh.z).multiply(R);
+  };
+  // les meilleures dans l'ordre, la premiere qui ne traverse aucune autre piece (collides : le test des collisions de
+  // l'editeur, 30/10/2026 : seule la piece support comptait, l'aile s'emboitait dans le corps a travers l'autre aile)
+  let best = null, blocked = 0;
+  for (const f of fines.slice(0, 12)) {
+    let b = { ...f };
+    // a la maille et au demi-degre pres autour d'elle
+    for (let it = 0; it < 2; it++) {
+      const b0 = { ...b };
+      for (let da = -1.5; da <= 1.5; da += 0.5) for (let dv = -2 * h; dv <= 2 * h + 1e-9; dv += h) for (let du = -2 * h; du <= 2 * h + 1e-9; du += h) {
+        const th = b0.th + da * Math.PI / 180, su = b0.su + du, sv = b0.sv + dv, c = score(true, th, su, sv);
+        if (c < b.c) b = { th, su, sv, c };
+      }
+    }
+    // au milieu de ce qui va aussi bien (un logement ou une face plus grands que la piece), en angle puis en position,
+    // deux fois (sinon elle restait de biais, collee a un bord) ; la note sans la penalite de chemin
+    const raw = (th, su, sv) => { const c = score(true, th, su, sv); return c === Infinity ? Infinity : c - (mode === "align" ? 0.05 * Math.hypot(su, sv) + 0.004 * turn(th) : pen(su, sv, th)); };
+    const ref = raw(b.th, b.su, b.sv), okp = (th, su, sv) => raw(th, su, sv) <= ref + 0.05;
+    const c0 = { ...b };
+    for (let it = 0; it < 2; it++) {
+      b.th = mid(t => okp(t, b.su, b.sv), b.th, Math.PI / 360, 120);
+      b.su = mid(x => okp(b.th, x, b.sv), b.su, h, 400);
+      b.sv = mid(y => okp(b.th, b.su, y), b.sv, h, 400);
+    }
+    if (mode === "nest" && here !== Infinity && lift(H, nu, nv, h, cells, b.th, b.su, b.sv) > here - 0.05) break;     // plus rien a gagner
+    let found = null;
+    for (const cand of [b, c0]) {
+      const d = lift(H, nu, nv, h, cells, cand.th, cand.su, cand.sv);
+      if (d === Infinity) continue;
+      if (collides && await collides(matOf(cand, d))) { blocked++; continue; }
+      found = cand; break;
+    }
+    if (found) { best = found; break; }
   }
+  if (!best) return blocked ? { blocked } : (mode === "nest" ? { M: new THREE.Matrix4(), sink: 0, moved: 0, turned: 0, contact: P.clone() } : null);
   const d = lift(H, nu, nv, h, cells, best.th, best.su, best.sv);
-  const here = lift(H, nu, nv, h, cells, 0, 0, 0);
-  if (d === Infinity) return null;
   if (mode === "nest" && here !== Infinity && d > here - 0.05) return { M: new THREE.Matrix4(), sink: 0, moved: 0, turned: 0, contact: P.clone() };
   const cov0 = mode === "align" ? onFace(face, nu, nv, h, foot, 0, 0, 0) : 0, cov1 = mode === "align" ? onFace(face, nu, nv, h, foot, best.th, best.su, best.sv) : 0;
-  // la transformation (repere du support du modele) : tourner autour de la normale par le centre de la piece, puis
-  // glisser et descendre (ou monter) jusqu'au contact
-  const C = P.clone().addScaledVector(u, cu).addScaledVector(v, cv);
-  const R = new THREE.Matrix4().makeTranslation(C.x, C.y, C.z).multiply(new THREE.Matrix4().makeRotationAxis(w, best.th))
-    .multiply(new THREE.Matrix4().makeTranslation(-C.x, -C.y, -C.z));
-  const sh = u.clone().multiplyScalar(best.su).addScaledVector(v, best.sv).addScaledVector(w, d);
-  const M = new THREE.Matrix4().makeTranslation(sh.x, sh.y, sh.z).multiply(R);
+  const M = matOf(best, d);
   // le point de contact : sous le centre de la piece, sur le dessus du support
   const i = Math.round((cu + best.su - bu0) / h), j = Math.round((cv + best.sv - bv0) / h);
   const zc = (i >= 0 && j >= 0 && i < nu && j < nv && !Number.isNaN(H[j * nu + i])) ? H[j * nu + i] : d;
   const contact = P.clone().addScaledVector(u, cu + best.su).addScaledVector(v, cv + best.sv).addScaledVector(w, zc);
   const tr = best.th * 180 / Math.PI;
-  return { M, sink: (here === Infinity ? 0 : here) - d, moved: Math.hypot(best.su, best.sv), turned: ((tr + 540) % 360) - 180, contact, cov0, cov1 };
+  return { M, sink: (here === Infinity ? 0 : here) - d, moved: Math.hypot(best.su, best.sv), turned: ((tr + 540) % 360) - 180, contact, cov0, cov1, blocked };
 }
