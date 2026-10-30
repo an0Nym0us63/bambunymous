@@ -1526,19 +1526,24 @@ def _backup(key: str, why: str) -> None:
 
 
 def load_edit(key: str, did: str | None = None, piece_keys: set | None = None) -> dict | None:
-    """L'assemblage edite de cette vue. A defaut, celui d'une autre vue du meme modele (un autre profil, une vue
-    rangee autrement) dont les pieces sont les memes : marque « from_key », a reenregistrer sous cette vue."""
+    """L'assemblage edite de cette vue, ou celui d'une autre vue du meme modele (un autre profil, la vue d'une impression
+    et celle de son groupe) dont les pieces sont les memes, s'il est plus recent : marque « from_key », a reenregistrer
+    sous cette vue."""
     if not _KEY.fullmatch(key or ""):
         return None
     d = _read(_edits_file(key))
-    if d or not did:
+    if not did:
         return d
-    best = None
+    # le plus recent l'emporte (30/10/2026) : un assemblage fait depuis la vue d'une impression doit se voir aussi dans
+    # celle de son groupe, meme si le groupe en avait deja un, plus ancien (avant, celui de la vue passait toujours)
+    best = d
     try:
         files = list(_edits_file(key).parent.glob("*.json"))
     except OSError:
         files = []
     for f in files:
+        if f.stem == key:
+            continue
         o = _read(f)
         if not o or (o.get("did") or _did_of(f.stem)) != str(did):
             continue
@@ -1548,8 +1553,8 @@ def load_edit(key: str, did: str | None = None, piece_keys: set | None = None) -
             continue
         if not best or (o.get("at") or 0) > (best.get("at") or 0):
             best = {**o, "from_key": f.stem}
-    if best:
-        logger.info(f"[3D] assemblage de {key} repris de la vue {best['from_key']} (meme modele {did})")
+    if best and best.get("from_key"):
+        logger.info(f"[3D] assemblage de {key} repris de la vue {best['from_key']} (meme modele {did}, plus recent)")
     return best
 
 
