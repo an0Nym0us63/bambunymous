@@ -1122,6 +1122,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     if (Math.abs(d.dot(camera.up)) > 0.999) d.addScaledVector(new THREE.Vector3(0, 0, 1), 0.002).normalize();   // pas pile dans l'axe du haut
     controls.target.copy(target); camera.position.copy(target).addScaledVector(d, dist);
     camera.lookAt(target); controls.update(); render();
+    egg("vue_axe");
   };
   const viewAxis = name => {
     const sgn = name.startsWith("-") ? -1 : 1, i = "xyz".indexOf(name.replace("-", ""));
@@ -1168,6 +1169,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     joints.push({ a: unit[0], b: B, kind: "face", p: P.clone().applyMatrix4(inv), n: N.clone().transformDirection(inv), e: null });
     pivot = { p: P.clone(), axis: N.clone(), unit: moving };
     push(); setSel(unit);
+    egg("sans_colle");
     const moved = await fitOnContact(mode);
     if (!moved) { fitMsg = `Posée contre ${B.userData.name} et collée${fitMsg ? ` — ${fitMsg}` : ""}`; onChange?.(state()); }
   };
@@ -1181,6 +1183,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     if (what === "line") {
       lineAxis = dir.normalize();
       fitMsg = `Le long ${pick.kind === "edge" ? "de l'arête" : "de la normale de la face"} : tire la flèche (✕ Ligne libre pour revenir)`;
+      egg("le_long");
       placeHandle(); render(); onChange?.(state()); return;
     }
     if (what === "axis") {
@@ -1191,6 +1194,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       const ax = to.x ? "X" : to.y ? "Y" : "Z";
       push(); setSel(unit);
       fitMsg = `Redressée : ${pick.kind === "edge" ? "l'arête" : "la face (sa normale)"} dans l'axe ${ax}`;
+      egg("redresse");
       onChange?.(state()); return;
     }
     if (what === "nest" || what === "align") { pairFit(what, pick.group); return; }
@@ -1215,6 +1219,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     joints = joints.filter(j => !unit.includes(j.a));
     push(); setSel(unit);
     fitMsg = `Dégagée de ${String(Math.round(t * 10) / 10).replace(".", ",")} mm`; onChange?.(state());
+    egg("degage");
   };
   const tap = (pick, ev) => {
     if (pickFor) { pickTool(pick); return; }
