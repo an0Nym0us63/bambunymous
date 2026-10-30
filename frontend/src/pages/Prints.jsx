@@ -738,7 +738,10 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false, ot
       {!open && <div style={{ display:"none" }}>
         <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShown}
         modelTitle={mw.title} modelTitleFr={mw.title_fr}/></div>}
-      {view3d && <Model3D designId={designId} profileId={(group && !visiting && asmProf) || shownProf || null} wait={shownProf === undefined || (group && !visiting && asmProf === undefined)}
+      {/* le profil de l'assemblage le plus recent, seulement quand celui de la carte n'est que deduit : un profil choisi ou
+          confirme (« C'est celui-la ») l'emporte toujours (30/10/2026 : le groupe restait sur l'ancienne vue) */}
+      {view3d && <Model3D designId={designId} profileId={(group && !visiting && shown?.deduced !== false && asmProf) || shownProf || null}
+        wait={shownProf === undefined || (group && !visiting && shown?.deduced !== false && asmProf === undefined)}
         printId={(prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id}
         usedPrints={prints.map(x => x.id)} scope={colorScope(prints)}
         title={mw.title_fr || mw.title} onClose={() => setView3d(false)}/>}
