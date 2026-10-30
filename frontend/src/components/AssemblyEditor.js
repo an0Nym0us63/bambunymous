@@ -1646,6 +1646,32 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     // epouser, au lieu de s'accrocher aux reliefs), une trentaine de fois ; puis elle recule le long du contact juste assez
     // pour ne rien traverser. Si le resultat n'est pas meilleur, ou s'il faut trop reculer, la piece reste ou elle est.
     // Leger : un millier de facettes, l'arbre de recherche des pieces deja fait pour l'anti-collision
+    // emboiter (30/10/2026) : la piece collee glisse et tourne sur son contact jusqu'a la place ou elle descend le plus
+    // (un bloc dans son logement), sans rien traverser (assemblyNest)
+    nest: async () => {
+      const list = [...sel], j = jointOf(list);
+      if (!j) { fitMsg = "Colle d'abord la pièce sur celle où elle doit s'emboîter (🧲 Coller), puis 🧩 Emboîter"; onChange?.(state()); return; }
+      fitMsg = "Recherche de la place où la pièce s'emboîte…"; onChange?.(state());
+      await new Promise(r => setTimeout(r, 30));
+      try {
+        const col = await getCollider();
+        const { nestPlace } = await import("./assemblyNest");
+        const moving = withKids(list), { P, N } = contact(j);
+        const r = await nestPlace({ THREE, collider: col, moving, base: unitOf(j.b).filter(g => g.visible && !moving.includes(g)), P, N });
+        if (!r || (r.sink < 0.05 && r.moved < 0.05 && Math.abs(r.turned) < 0.1)) {
+          fitMsg = r ? "Déjà à la meilleure place : elle ne descend pas plus bas ailleurs sur cette pièce" : "Pas de place trouvée : la pièce déborde de son support partout";
+          onChange?.(state()); return;
+        }
+        apply(moving, r.M);
+        j.b.updateMatrix();
+        j.p.copy(r.contact.clone().applyMatrix4(j.b.matrix.clone().invert()));
+        pivot = { p: r.contact.clone(), axis: N.clone().normalize(), unit: moving };
+        showContact(); placeHandle(); push(); render();
+        egg("emboite");
+        fitMsg = `Emboîtée : ${r.sink >= 0.05 ? `${String(Math.round(r.sink * 10) / 10).replace(".", ",")} mm plus bas` : "même hauteur"}, déplacée de ${String(Math.round(r.moved * 10) / 10).replace(".", ",")} mm${Math.abs(r.turned) >= 0.5 ? `, tournée de ${Math.round(r.turned)}°` : ""}`;
+        onChange?.(state());
+      } catch (e) { console.error("[3D] emboiter", e); fitMsg = "L'emboîtement a échoué"; onChange?.(state()); }
+    },
     refine: async () => {
       const list = [...sel], j = jointOf(list);
       if (!j) { fitMsg = "Colle d'abord la pièce (Coller ou Points) : l'ajustement part de son collage"; onChange?.(state()); return; }

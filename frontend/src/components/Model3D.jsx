@@ -1080,6 +1080,7 @@ const EDIT_HELP = [
     ["Clic sur une pièce", "la pièce à couper (une seule)"],
     ["Glisser à travers elle", "un trait rouge : la pièce est tranchée sur la longueur du trait, dans toute l'épaisseur que voit l'écran (rien au-delà des bouts du trait) ; les parties qui ne tiennent plus ensemble deviennent des morceaux, chacun de sa couleur"],
     ["Plusieurs traits", "un support tenu par plusieurs ponts : un trait par pont ; chacun reste marqué en rouge, et la pièce se sépare quand tous sont tranchés ; tourne la vue au clic droit entre deux traits ; ✕ efface les traits"],
+    ["🧩 Emboîter", "une pièce collée (🧲 Coller, même au jugé) glisse et tourne sur son contact jusqu'à la place où elle descend le plus, sans rien traverser : un bloc vient dans son logement, un tenon dans son trou"],
     ["🧹 Nettoyer", "retire d'un coup les petits restes de la pièce choisie (ce qui ne tient que par un coin, les ailettes et aiguilles qui pendent), proposés en rouge à valider"],
     ["🧽 Gomme", "allumée, le glisser peint en rouge ce qu'il touche sur la pièce choisie (ou sur les morceaux proposés) : les bouts de support restés collés, une bavure ; au lâcher, c'est détaché, et ✓ le retire de l'assemblage (📋 Pièces : ↩ le remet)"],
     ["🪄 Détacher les supports", "les supports intégrés au modèle (parois et plaques fines, à faces planes, fondues à la pièce) sont repérés d'eux-mêmes et proposés en couleur, sans trait à tracer"],
@@ -1269,6 +1270,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         {sep}
         {est.twinPos && <button type="button" onClick={() => api?.twinNext()} style={b(true)}
           data-tip="Sur la même face jumelle, la position suivante qui va aussi bien (une face carrée, ronde, symétrique)">↻ Autre position {est.twinPos}</button>}
+        <button type="button" onClick={() => api?.nest()} style={b(false)}
+          data-tip="Faire glisser et tourner la pièce sur son contact jusqu'à la place où elle descend le plus (un bloc dans son logement), sans rien traverser">🧩 Emboîter</button>
         <button type="button" onClick={() => api?.refine()} style={b(false)}
           data-tip="Chercher le meilleur ajustement : la pièce épouse au mieux l'autre surface près du contact, sans la traverser">🎯 Ajuster</button>
         <BarMenu b={b} up={compact} label="⟳ Contact" tip="Tourner autour du contact, glisser sans traverser" items={[
