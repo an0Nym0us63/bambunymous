@@ -1606,6 +1606,38 @@ def edit_versions(key: str, did: str | None = None) -> list:
     return out[:60]
 
 
+def _prof_of(key: str) -> str | None:
+    """Le profil MakerWorld d'une vue (index des 3MF : cle « modele:profil » -> vue)."""
+    try:
+        from .mw_source import _index
+        for k, v in _index().items():
+            if v == key and ":" in str(k):
+                return str(k).split(":", 1)[1] or None
+    except Exception:
+        pass
+    return None
+
+
+def edits_for_design(did: str) -> list:
+    """Mes assemblages enregistres de ce modele, une vue par entree (30/10/2026 : lus par mes copains, qui peuvent les
+    voir sur leur propre vue du meme modele et les reprendre)."""
+    if not str(did or "").isdigit():
+        return []
+    out = []
+    try:
+        files = list(_edits_file("x").parent.glob("*.json"))
+    except OSError:
+        files = []
+    for f in files:
+        o = _read(f)
+        if not o or (o.get("did") or _did_of(f.stem)) != str(did):
+            continue
+        out.append({"key": f.stem, "profile": _prof_of(f.stem), "at": o.get("at"), "n": len(o["pieces"]),
+                    **{k: o.get(k) or [] for k in ("groups", "joints", "splits", "excluded")}, "pieces": o["pieces"]})
+    out.sort(key=lambda x: -(x.get("at") or 0))
+    return out[:5]
+
+
 def restore_edit(key: str, vid: str, by: str = "") -> dict:
     """Reprend une version (« old/<cle>.<ms> » ou « <autre cle> ») comme assemblage de cette vue."""
     old = vid.startswith("old/")

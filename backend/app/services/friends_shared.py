@@ -200,3 +200,13 @@ async def for_design(design_id: str) -> dict:
     if not did.isdigit():
         return {"friends": []}
     return await _each(lambda f: _ask(f, f"prints/design/{did}/gallery"))
+
+
+async def for_assembly(design_id: str) -> dict:
+    """Les assemblages enregistres par mes copains pour ce modele (30/10/2026) : chacun les voit sur sa propre vue."""
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        return {"friends": []}
+    res = await _each(lambda f: _ask(f, f"makerworld/3d/shared-edits/{did}"))
+    return {"friends": [{"id": f["id"], "name": f["name"], "status": f["status"], "edits": f.get("edits") or []}
+                        for f in res["friends"]]}

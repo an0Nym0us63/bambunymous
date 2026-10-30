@@ -11,6 +11,8 @@ import { useIsAdmin } from "../store/auth";
 import { showAlert, showConfirm } from "../utils/dialog";
 import MwImg from "./MwImg";
 import { openVue3D } from "./Vue3DPicker";
+import Select from "./Select";
+import { useHasFriends, useShared } from "./Friends";
 
 // La vue 3D d'un modele (27/10/2026) : son 3MF d'origine garde sur le serveur (converti la-bas, aux couleurs de
 // ses filaments), sinon l'apercu 3D de MakerWorld (sans couleurs). Un plateau a la fois ; on tourne au doigt
@@ -1447,7 +1449,11 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const altLabel = altName || (palette || platePalettes ? "Retenues" : "Utilisées");
   const [own, setOwn] = useState(false);
   // comparer (30/10/2026) : la vue assemblee du 3MF d'origine, a cote de mon assemblage enregistre (la vue seulement)
-  const [origView, setOrigView] = useState(false);
+  // quel assemblage voir (30/10/2026) : le mien, celui du 3MF, ou celui d'un copain qui a le meme modele
+  const [viewSel, setViewSel] = useState("mine");
+  const origView = viewSel === "orig";
+  const hasFriends = useHasFriends();
+  const frShared = useShared(designId ? `/friends/shared/assembly/${encodeURIComponent(designId)}` : null, hasFriends && !fr && asm);
   // plein ecran (PC) et edition de la vue assemblee (29/10/2026)
   const isAdmin = useIsAdmin();
   // un PC : une souris, ou un navigateur d'ordinateur (un portable tactile annonce parfois un ecran tactile), et de la place
@@ -1508,7 +1514,38 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const setPseudoFull = on => { setPfull(on); document.body.classList.toggle("bn-edit3d", on); };
   useEffect(() => () => document.body.classList.remove("bn-edit3d"), []);
   const edit = savedEdit !== undefined ? savedEdit : meta?.assembly_edit;
-  useEffect(() => { setSavedEdit(undefined); }, [meta?.key]);
+  useEffect(() => { setSavedEdit(undefined); setViewSel("mine"); }, [meta?.key]);
+  // les assemblages des copains (30/10/2026) : pour chacun, le plus recent fait des memes pieces que ma vue (le meme
+  // profil d'abord) ; compares par objet et instance, comme la reprise d'une autre vue cote serveur
+  const friendEdits = useMemo(() => {
+    const top = k => String(k || "").split("#")[0].split(":").slice(0, 2).join(":");
+    const mine = new Set((p?.pieces || []).map(x => top(x.k)).filter(Boolean));
+    if (!mine.size) return [];
+    const same = e => !!e.profile && String(e.profile) === String(meta?.profile || "");
+    return (frShared?.friends || []).filter(f => f.status === "ok").map(f => {
+      const ok = (f.edits || []).filter(e => {
+        const ks = new Set(Object.keys(e.pieces || {}).map(top));
+        return [...ks].filter(k => mine.has(k)).length >= Math.max(1, ks.size * 0.8);
+      }).sort((a, b) => (same(b) - same(a)) || (b.at || 0) - (a.at || 0));
+      return ok[0] ? { id: f.id, name: f.name, edit: ok[0] } : null;
+    }).filter(Boolean);
+  }, [frShared, p, meta?.profile]);
+  const frPick = viewSel.startsWith("f:") ? friendEdits.find(f => `f:${f.id}` === viewSel) : null;
+  const showMine = !origView && !frPick;
+  const viewOpts = [{ value: "mine", label: edit?.pieces ? "🧩 Mon assemblage" : "📦 Assemblage du 3MF" },
+    ...(edit?.pieces ? [{ value: "orig", label: "📦 Origine du 3MF" }] : []),
+    ...friendEdits.map(f => ({ value: `f:${f.id}`, label: `👥 Celui de ${f.name}` }))];
+  // reprendre celui d'un copain comme le mien : le mien part dans les versions (🕘), comme a chaque enregistrement
+  const adoptFriend = async () => {
+    if (!frPick || !meta?.key) return;
+    if (edit?.pieces && !(await showConfirm(`Remplacer ton assemblage par celui de ${frPick.name} ? Le tien reste dans les versions (🕘).`))) return;
+    const e = frPick.edit;
+    try {
+      const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces: e.pieces, did: designId, excluded: e.excluded || [], groups: e.groups || [],
+        joints: e.joints || [], splits: e.splits || [], v: 2 });
+      setSavedEdit(r.data); setViewSel("mine"); egg("assemblage_copain");
+    } catch (er) { showAlert(er.response?.data?.detail || er.message); }
+  };
   // les assemblages a reprendre (30/10/2026) : versions passees de cette vue, et ceux d'autres vues du meme modele
   const [versions, setVersions] = useState(null);       // null | "busy" | [{ id, at, n, why, other }]
   const openVersions = async () => {
@@ -1633,8 +1670,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           height: pfull ? "100dvh" : full ? "100vh" : "min(62dvh, 560px)", borderRadius: full || pfull ? 0 : 18, overflow: "hidden",
           border: full || pfull ? "none" : "1px solid var(--border)", ...(pfull ? { backgroundColor: "var(--sheet-bg)" } : {}),
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
-          {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}|${vkey}|${piecePal ? Object.keys(piecePal).length : 0}|${origView && !editing ? "orig" : ""}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown} piecePalettes={piecePal}
-            pieces={p.assembled ? p.pieces : null} edit={p.assembled && !(origView && !editing) ? edit : null} editApi={editApi} pad={full || editing} editing={editing}
+          {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}|${vkey}|${piecePal ? Object.keys(piecePal).length : 0}|${editing ? "" : viewSel}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown} piecePalettes={piecePal}
+            pieces={p.assembled ? p.pieces : null} edit={p.assembled && !(origView && !editing) ? (frPick && !editing ? frPick.edit : edit) : null} editApi={editApi} pad={full || editing} editing={editing}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
             hue={p.litho && zc.length ? zc : null} bare={editing && !desktop} tdMap={td} onTd={fr ? null : saveTd} tdSlot={full || pfull ? null : tdSlot}
@@ -1672,7 +1709,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
               data-tip={`Prendre la vue telle que tu la regardes (${p.assembled ? "l'assemblage" : "ce plateau"}) comme vignette ${shotTarget.kind === "group" ? "du groupe" : "de l'impression"}, sans la grille`}
               style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 13, fontWeight: 800,
                 background: "var(--surface)", color: "var(--text2)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{shot === "busy" ? "…" : "📸 Vignette"}</button>}
-            {editable && !origView && <button type="button" onClick={startEdit} data-tip="Déplacer, tourner, poser au sol, coller les pièces (en plein écran)"
+            {editable && showMine && <button type="button" onClick={startEdit} data-tip="Déplacer, tourner, poser au sol, coller les pièces (en plein écran)"
               style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff",
                 background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>✏️ Éditer l'assemblage</button>}
             {editable && <button type="button" disabled={versions === "busy"} onClick={openVersions} data-tip="Reprendre un assemblage enregistré avant (chaque version est gardée)"
@@ -1680,12 +1717,18 @@ export default function Model3D({ designId = null, profileId = null, printId = n
                 fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>🕘</button>}
           </div>}
           {/* sur un telephone, sous le choix des couleurs (30/10/2026 : les deux se chevauchaient) */}
-          {!editing && p?.assembled && edit?.pieces && <div style={{ position: "absolute", top: !desktop && alt && !isGlb(p.url) ? 58 : 10, right: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20, zIndex: 2,
-            background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
-            {[[false, "Mon assemblage", "Ton assemblage enregistré"], [true, "Origine", "La vue assemblée telle que le 3MF la donne, avant tes modifications (pour comparer)"]].map(([o, l, tip]) =>
-              <button key={l} type="button" onClick={() => setOrigView(o)} data-tip={tip}
-                style={{ padding: "5px 11px", borderRadius: 16, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800,
-                  color: origView === o ? "#fff" : "var(--text2)", background: origView === o ? "linear-gradient(135deg, #16a34a, #0EA5E9)" : "transparent" }}>{l}</button>)}
+          {/* quel assemblage voir, en petite liste (30/10/2026) : le mien, l'origine du 3MF, celui de chaque copain qui a le
+              meme modele ; sur un telephone, sous le choix des couleurs (les deux se chevauchaient) */}
+          {!editing && p?.assembled && viewOpts.length > 1 && <div style={{ position: "absolute", top: !desktop && alt && !isGlb(p.url) ? 58 : 10, right: 10, zIndex: 2,
+            display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, maxWidth: "calc(100% - 20px)" }}>
+            <span data-tip="Quel assemblage voir" style={{ display: "flex", maxWidth: "100%" }}>
+              <Select value={frPick || viewSel === "orig" ? viewSel : "mine"} onChange={e => setViewSel(e.target.value)} options={viewOpts}
+                style={{ height: 32, maxWidth: 230, padding: "0 12px", borderRadius: 16, border: "1px solid var(--border)", fontSize: 12, fontWeight: 800,
+                  color: "var(--text)", background: "color-mix(in srgb, var(--surface) 88%, transparent)", backdropFilter: "blur(6px)",
+                  boxShadow: "0 4px 12px rgba(0,0,0,.12)" }}/></span>
+            {frPick && editable && <button type="button" onClick={adoptFriend} data-tip={`Garder l'assemblage de ${frPick.name} comme le tien (le tien reste dans les versions)`}
+              style={{ height: 32, padding: "0 12px", borderRadius: 16, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 800, color: "#fff",
+                background: "linear-gradient(135deg, #16a34a, #0EA5E9)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>📥 Le prendre comme le mien</button>}
           </div>}
           {!editing && alt && p && !p.pending && !isGlb(p.url) && <div style={{ position: "absolute", top: 10, left: 10, display: "flex", padding: 3, gap: 2, borderRadius: 20,
             background: "color-mix(in srgb, var(--surface) 88%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(6px)" }}>
@@ -1704,11 +1747,11 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         {editErr && !editing && <div style={{ alignSelf: "center", padding: "6px 12px", borderRadius: 10, fontSize: 12, fontWeight: 700, color: "#b91c1c",
           background: "color-mix(in srgb, #ef4444 12%, var(--surface))", border: "1px solid color-mix(in srgb, #ef4444 35%, transparent)" }}>
           L'édition n'a pas pu s'ouvrir : {editErr}</div>}
-        {!desktop && p && !p.pending && !st.busy && !editing && ((editable && !origView) || canShot) && <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+        {!desktop && p && !p.pending && !st.busy && !editing && ((editable && showMine) || canShot) && <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
           {canShot && <button type="button" disabled={shot === "busy"} onClick={takeShot}
             style={{ height: 40, padding: "0 14px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 13, fontWeight: 800,
               background: "var(--surface)", color: "var(--text2)" }}>{shot === "busy" ? "…" : "📸 Vignette"}</button>}
-          {editable && !origView && <button type="button" onClick={startEdit}
+          {editable && showMine && <button type="button" onClick={startEdit}
             style={{ height: 40, padding: "0 16px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff",
               background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 6px 16px -8px #6366F1" }}>✏️ Éditer l'assemblage</button>}
           {editable && <button type="button" disabled={versions === "busy"} onClick={openVersions} aria-label="Versions de l'assemblage"
@@ -1729,7 +1772,9 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {meta.ms >= 1000 && <span data-tip="La première ouverture prépare le modèle ; les suivantes sont immédiates">· préparé en {(meta.ms / 1000).toFixed(1).replace(".", ",")} s</span>}
           {st.size && !p?.pending && <span>· {mm(st.size[0])} × {mm(st.size[1])} × {mm(st.size[2])}</span>}
           {p?.triangles ? <span>· {p.triangles.toLocaleString("fr-FR")} triangles</span> : null}
-          {p?.assembled && edit?.pieces && <span style={{ color: edit.from_key ? "#d97706" : "#16a34a" }}
+          {p?.assembled && frPick && <span style={{ color: "#8B5CF6" }} data-tip="La vue seulement : « 📥 Le prendre comme le mien » pour le garder">
+            · assemblage de {frPick.name}</span>}
+          {p?.assembled && showMine && edit?.pieces && <span style={{ color: edit.from_key ? "#d97706" : "#16a34a" }}
             data-tip={edit.from_key ? "Enregistré sur une autre vue de ce modèle (un autre profil) : enregistre-le ici pour le garder" : "Ton assemblage enregistré"}>
             · {edit.from_key ? "assemblage repris d'une autre vue du modèle" : "assemblage enregistré"}</span>}
           {p?.tidied && !(p?.assembled && edit?.pieces) && <span data-tip="Dans le 3MF, les pièces étaient dispersées : celles qui se touchent restent ensemble, les autres sont rapprochées">· pièces rapprochées</span>}

@@ -83,6 +83,13 @@ async def friends_shared_design(design_id: str, _: str = Depends(get_current_use
     return await FS.for_design(design_id)
 
 
+@router.get("/shared/assembly/{design_id}")
+async def friends_shared_assembly(design_id: str, _: str = Depends(get_current_user)):
+    """Les assemblages 3D de mes copains pour ce modele MakerWorld (30/10/2026)."""
+    from ....services import friends_shared as FS
+    return await FS.for_assembly(design_id)
+
+
 @router.get("/{fid}/p/{path:path}")
 async def friends_proxy(fid: str, path: str, request: Request, _: str = Depends(_viewer)):
     params = [(k, v) for k, v in request.query_params.multi_items() if k != "_t"]

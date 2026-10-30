@@ -1672,6 +1672,13 @@ async def mw_3d_edit_save(key: str, body: dict = Body({}), user: str = Depends(g
         raise HTTPException(400, str(e))
 
 
+@router.get("/3d/shared-edits/{did}")
+async def mw_3d_shared_edits(did: str, _: str = Depends(get_current_user)):
+    """Mes assemblages de ce modele, pour mes copains (30/10/2026) : lus par leur serveur avec leur cle copain."""
+    from ....services import mw_3d as T
+    return {"edits": T.edits_for_design(did)}
+
+
 @router.get("/3d/edit/{key}/versions")
 async def mw_3d_edit_versions(key: str, did: str = "", _: str = Depends(require_admin)):
     """Les assemblages a reprendre : versions passees de cette vue, et ceux des autres vues du meme modele (30/10/2026)."""
