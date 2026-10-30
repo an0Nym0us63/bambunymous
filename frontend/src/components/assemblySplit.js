@@ -103,16 +103,27 @@ export function splitPieceGeometry(THREE, pg, cuts = null, info = null) {
     near.set(r, j);
     return j;
   };
+  // le morceau ou chaque triangle allait avec la regle d'avant le 30/10/2026 (sans coupe : un morceau, c'etait assez de
+  // triangles ; une miette : au plus gros de sa marque) -- un assemblage enregistre avant n'a la place que de ceux-la
+  const oldBig = cut ? big : order.filter(([, c]) => c >= Math.max(30, 0.003 * total));
+  const oldRank = new Map(oldBig.map(([r], i) => [r, i]));
+  const oldFirst = [0, 1, 2].map(m => oldBig.findIndex(([r]) => (typeof r === "string" ? Number(r.slice(1)) : mk(r)) === m));
+  const oldOf = r => (oldRank.has(r) ? oldRank.get(r) : Math.max(0, oldFirst[mk(r)]));
   // les triangles de chaque morceau, par maillage d'origine
   const per = big.map(() => meshes.map(() => []));
+  const votes = big.map(() => new Map());
   for (let t = 0; t < tris.length; t += 5) {
     const r = root(tris[t + 2]);
     const n = rank.has(r) ? rank.get(r) : crumbTo(r);
     per[n][tris[t]].push(tris[t + 1]);
+    const o = oldBig.length < 2 ? 0 : oldOf(r);
+    votes[n].set(o, (votes[n].get(o) || 0) + 1);
   }
   const out = per.map((byMesh, j) => ({
     parts: byMesh.map((list, mi) => list.length ? [meshes[mi], subGeometry(THREE, geos[mi], list), mi, Int32Array.from(list)] : null).filter(Boolean),
     mark: typeof big[j][0] === "string" ? Number(big[j][0].slice(1)) : mk(big[j][0]),
+    // son morceau selon la regle d'avant (celui de la plupart de ses triangles), et s'il en etait un d'un seul tenant
+    legacy: [...votes[j].entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0,
   }));
   out.owner = geos.map((geo, mi) => {
     const n = cut ? cut[mi].n : (geo.index ? geo.index.count : geo.attributes.position.count) / 3;
@@ -492,7 +503,7 @@ export function buildSplitGroups(THREE, pg, comps) {
     }
     const c0 = pg.userData.c || new THREE.Vector3();
     g.userData = { ...pg.userData, k: `${pg.userData.k}:${n}`, name: `${pg.userData.name} · ${n + 1}`, pid: `${pg.userData.pid}:${n}`,
-      c: c0.clone().add(cc), from: pg.userData.k, parentC: c0.clone(), whole: pg };
+      c: c0.clone().add(cc), from: pg.userData.k, parentC: c0.clone(), whole: pg, legacyK: `${pg.userData.k}:${comp.legacy ?? n}` };
     pg.matrix.clone().multiply(new THREE.Matrix4().makeTranslation(cc.x, cc.y, cc.z)).decompose(g.position, g.quaternion, g.scale);
     g.updateMatrix();
     return g;
