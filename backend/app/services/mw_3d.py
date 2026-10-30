@@ -23,7 +23,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 20                          # 20 : pieces en miroir gardees en miroir dans la vue assemblee (30/10) ; 19 : couches en marches d'un lithophane lissees (30/10) ; 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 21                          # 21 : triangles d'une piece en miroir remis dans le bon sens (30/10) ; 20 : pieces en miroir gardees en miroir dans la vue assemblee (30/10) ; 19 : couches en marches d'un lithophane lissees (30/10) ; 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan|hue ?forge", re.I)       # HueForge : une image en couches, a voir par derriere aussi (30/10)
 MAX_TRIANGLES = 1_500_000              # au-dela, le plateau est simplifie (29/10/2026 ; avant : pas converti du tout) :
                                        # un telephone l'affiche vite, et le fichier reste de quelques Mo
@@ -739,6 +739,10 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                     break
                 rot = np.array(mt[:9], dtype=np.float64).reshape(3, 3)
                 vt = v + np.array(mt[9:], dtype=np.float64) if np.array_equal(rot, np.eye(3)) else v @ rot + np.array(mt[9:])
+                # une piece en miroir : ses triangles tournent dans l'autre sens, leur normale pointait vers l'interieur ;
+                # coller une face ou la poser au sol retournait la piece (30/10/2026). L'ordre de leurs sommets est inverse
+                if np.linalg.det(rot) < 0:
+                    by_ext = {k: np.asarray(x)[:, [0, 2, 1]] for k, x in by_ext.items()}
                 zp = zplate.get((ident, tag[0])) if zplate else None
                 zc_, vcut, back = zchg, vt, None
                 if zp:
