@@ -411,7 +411,10 @@ def _dur(seconds) -> Optional[str]:
 def _weight(g) -> Optional[str]:
     if not g:
         return None
-    return f"{g / 1000:.2f} kg".replace(".", ",") if g >= 1000 else f"{round(g)} g"
+    if g >= 1000:
+        return f"{g / 1000:.2f} kg".replace(".", ",")
+    # sous le gramme (31/10/2026 : « 0 g » pour un filament a peine utilise) : au dixieme
+    return f"{g:.1f} g".replace(".", ",") if g < 0.95 else f"{round(g)} g"
 
 
 LIVE_STATES = ("RUNNING", "PAUSE", "PREPARE", "SLICING")

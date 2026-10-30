@@ -330,103 +330,119 @@ def _pills(draw, items: list, font, width: int, ph: int, gap: int) -> list:
 
 def render(rows: list) -> Optional[bytes]:
     """rows : [{name, sub, weight, colors, mtype, finish}] -> JPEG ; None sans filament colore.
-    Un nuancier (31/10/2026) : une carte par filament -- une grande zone de matiere, puis sur un fond teinte de sa
-    couleur son nom en entier, sa marque, son type et son code en pastilles, et le poids ; sur un fond pastel, en
-    grille presque carree (Telegram recadre les images d'un album en mosaique)."""
+    Une carte blanche par filament (31/10/2026) : un grand rond de sa matiere, cercle de blanc et souligne d'un
+    trait (un filament blanc se voit), puis centres son nom en entier, sa marque, son type et son code en pastilles,
+    et le poids ; sur un fond gris bleute, en grille presque carree (Telegram recadre les images d'un album)."""
     rows = [r for r in rows if r.get("colors")]                    # tous : il ne doit en manquer aucun
     if not rows:
         return None
     n = len(rows)
     cols = 1 if n == 1 else 2 if n in (2, 4) else 3 if n <= 9 else 4
-    gap, pad, head = 26, 44, 116
-    cw = 640 if n == 1 else (W - 2 * pad - (cols - 1) * gap) // cols
-    sh = int(cw * (0.62 if n == 1 else 0.7))
+    gap, pad, head = 24, 40, 112
+    cw = 560 if n == 1 else (W - 2 * pad - (cols - 1) * gap) // cols
     k = (1.0, 1.0, 0.82, 0.68)[cols - 1]
-    f_name, f_pill, f_w = _font(int(36 * k), True), _font(int(22 * k), True), _font(int(30 * k), True)
-    f_head, f_cnt = _font(42, True), _font(24, True)
+    dia = int(cw * (0.62 if n == 1 else 0.7))
+    top = int(26 * k)
+    f_name, f_pill, f_w = _font(int(34 * k), True), _font(int(21 * k), True), _font(int(28 * k), True)
+    f_head, f_cnt = _font(40, True), _font(23, True)
     tmp = ImageDraw.Draw(Image.new("RGB", (1, 1)))
 
     def lh(f):
         return f.getbbox("Ag")[3] + 6
 
-    ip, php, pg = int(22 * k), int(12 * k), int(8 * k)             # marge de la carte, des pastilles, entre elles
+    ip, php, pg = int(20 * k), int(11 * k), int(7 * k)
     tw = cw - 2 * ip
     pill_h = lh(f_pill) + int(10 * k)
-    w_h = lh(f_w) + int(16 * k)
+    w_h = lh(f_w) + int(14 * k)
     lay = []
-    for r in rows:                                                 # le nom en entier (4 lignes au plus), les pastilles
+    for r in rows:
         names = _lines(tmp, r["name"], f_name, tw, most=4)
         pills = _pills(tmp, [x for x in str(r.get("sub") or "").split(" · ") if x.strip()], f_pill, tw, php, pg)
         npl = (pills[-1][0] + 1) if pills else 0
-        info = ip + len(names) * lh(f_name) + (8 + npl * (pill_h + pg) if npl else 0) + 12 + w_h + ip
-        lay.append((names, pills, info))
+        body = 18 * k + len(names) * lh(f_name) + (6 + npl * (pill_h + pg) if npl else 0) + 10 + w_h + ip
+        lay.append((names, pills, int(top + dia + body)))
     nrows = math.ceil(n / cols)
-    row_h = [max(lay[i][2] for i in range(rr * cols, min(n, rr * cols + cols))) + sh for rr in range(nrows)]
-    width = W if n > 1 else cw + 2 * pad + 120
+    row_h = [max(lay[i][2] for i in range(rr * cols, min(n, rr * cols + cols))) for rr in range(nrows)]
+    width = W if n > 1 else cw + 2 * pad + 200
     H = head + sum(row_h) + (nrows - 1) * gap + pad
-    # le fond : un degrade pastel (rose, lavande), et une lueur de chaque couleur derriere sa carte
+    # le fond : un gris bleute doux, un peu plus clair en haut
     ys, xs = np.mgrid[0:H, 0:width].astype(np.float32)
-    g = (xs / width * 0.55 + ys / H * 0.45)[..., None]
-    bg = np.array([252, 231, 243], np.float32) * (1 - g) + np.array([228, 226, 252], np.float32) * g
+    g = (ys / H * 0.8 + xs / width * 0.2)[..., None]
+    bg = np.array([236, 240, 245], np.float32) * (1 - g) + np.array([218, 225, 234], np.float32) * g
     im = Image.fromarray(bg.astype(np.uint8), "RGB").convert("RGBA")
     pos = []
-    glow = Image.new("RGBA", (width, H), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(glow)
-    for i, r in enumerate(rows):
+    for i in range(n):
         row_i, col_i = divmod(i, cols)
         in_row = min(cols, n - row_i * cols)                       # la derniere rangee, centree
         x0 = (width - (in_row * cw + (in_row - 1) * gap)) // 2 + col_i * (cw + gap)
-        y0 = head + sum(row_h[:row_i]) + row_i * gap
-        pos.append((x0, y0, row_h[row_i]))
-        gd.ellipse((x0 - 20, y0 - 20, x0 + cw + 20, y0 + sh + 40), fill=r["colors"][0][:3] + (70,))
-    im.alpha_composite(glow.filter(ImageFilter.GaussianBlur(60)))
+        pos.append((x0, head + sum(row_h[:row_i]) + row_i * gap, row_h[row_i]))
+    rad = int(24 * k)
     for (x0, y0, ch), r in zip(pos, rows):
-        rad = int(26 * k)
         c = r["colors"][0][:3]
+        # la carte blanche, son ombre et son trait
         sha = Image.new("RGBA", (cw + 80, ch + 80), (0, 0, 0, 0))
-        ImageDraw.Draw(sha).rounded_rectangle((40, 50, 40 + cw, 50 + ch), rad, fill=(70, 40, 90, 60))
-        im.alpha_composite(sha.filter(ImageFilter.GaussianBlur(16)), (x0 - 40, y0 - 40))
-        mask = Image.new("L", (cw * 3, ch * 3), 0)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, cw * 3 - 1, ch * 3 - 1), rad * 3, fill=255)
-        mask = mask.resize((cw, ch), Image.LANCZOS)
-        card = Image.new("RGBA", (cw, ch), _mix(c, (255, 255, 255), 0.86) + (255,))   # le bandeau, teinte de sa couleur
-        card.paste(material(r["colors"], r.get("mtype"), r.get("finish"), cw, sh), (0, 0))
-        card.putalpha(mask)
+        ImageDraw.Draw(sha).rounded_rectangle((40, 48, 40 + cw, 48 + ch), rad, fill=(30, 41, 59, 45))
+        im.alpha_composite(sha.filter(ImageFilter.GaussianBlur(14)), (x0 - 40, y0 - 40))
+        card = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
+        ImageDraw.Draw(card).rounded_rectangle((0, 0, cw - 1, ch - 1), rad, fill=(255, 255, 255, 255), outline=(203, 213, 225, 255), width=2)
         im.alpha_composite(card, (x0, y0))
+        # le rond de matiere : une ombre douce, un cercle blanc, un trait (gris pour un filament clair)
+        cx, cy = x0 + cw // 2, y0 + top + dia // 2
+        ring = max(5, int(dia * 0.035))
+        sh = Image.new("RGBA", (dia + 80, dia + 80), (0, 0, 0, 0))
+        ImageDraw.Draw(sh).ellipse((40, 50, 40 + dia, 50 + dia), fill=(30, 41, 59, 70))
+        im.alpha_composite(sh.filter(ImageFilter.GaussianBlur(10)), (cx - dia // 2 - 40, cy - dia // 2 - 40))
+        big = dia * 3
+        m = Image.new("L", (big, big), 0)
+        ImageDraw.Draw(m).ellipse((0, 0, big - 1, big - 1), fill=255)
+        m = m.resize((dia, dia), Image.LANCZOS)
+        disc = Image.new("RGBA", (dia, dia), (0, 0, 0, 0))
+        trait = _mix(c, (0, 0, 0), 0.25) if sum(c) < 600 else (176, 186, 200)
+        disc.paste(trait + (255,), (0, 0), m)                       # le trait exterieur
+        m2 = Image.new("L", (big, big), 0)
+        ImageDraw.Draw(m2).ellipse((6, 6, big - 7, big - 7), fill=255)
+        disc.paste((255, 255, 255, 255), (0, 0), m2.resize((dia, dia), Image.LANCZOS))   # le cercle blanc
+        inner = dia - 2 * ring
+        m3 = Image.new("L", (inner * 3, inner * 3), 0)
+        ImageDraw.Draw(m3).ellipse((0, 0, inner * 3 - 1, inner * 3 - 1), fill=255)
+        mat = material(r["colors"], r.get("mtype"), r.get("finish"), inner, inner)
+        disc.paste(mat, (ring, ring), m3.resize((inner, inner), Image.LANCZOS))
+        m4 = Image.new("L", (inner * 3, inner * 3), 0)                # un trait fin au bord de la matiere
+        ImageDraw.Draw(m4).ellipse((0, 0, inner * 3 - 1, inner * 3 - 1), outline=255, width=4)
+        disc.paste(trait + (255,), (ring, ring), m4.resize((inner, inner), Image.LANCZOS).point(lambda v: v * 0.6))
+        im.alpha_composite(disc, (cx - dia // 2, cy - dia // 2))
     im = im.convert("RGB")
     d = ImageDraw.Draw(im, "RGBA")
-    d.text((pad, 66), "Filaments", font=f_head, fill=(49, 25, 72), anchor="ls")
+    d.text((pad, 64), "Filaments", font=f_head, fill=(30, 41, 59), anchor="ls")
     if n > 1:
         t = f"{n} couleurs"
         x = pad + d.textlength("Filaments", font=f_head) + 16
-        tw_ = d.textlength(t, font=f_cnt)
-        d.rounded_rectangle((x, 30, x + tw_ + 28, 66), 18, fill=(139, 92, 246))
-        d.text((x + 14, 48), t, font=f_cnt, fill=(255, 255, 255), anchor="lm")
-    for (x0, y0, ch), r, (names, pills, _info) in zip(pos, rows, lay):
+        d.rounded_rectangle((x, 30, x + d.textlength(t, font=f_cnt) + 28, 64), 17, fill=(51, 65, 85))
+        d.text((x + 14, 47), t, font=f_cnt, fill=(255, 255, 255), anchor="lm")
+    for (x0, y0, ch), r, (names, pills, _h) in zip(pos, rows, lay):
         c = r["colors"][0][:3]
-        ink = _mix(c, (20, 16, 32), 0.75)                          # un texte sombre, nuance de la couleur
-        y = y0 + sh + ip
+        cx = x0 + cw // 2
+        y = y0 + top + dia + int(18 * k)
         for line in names:
-            d.text((x0 + ip, y), line, font=f_name, fill=ink)
+            d.text((cx, y), line, font=f_name, fill=(15, 23, 42), anchor="mt")
             y += lh(f_name)
-        if pills:
-            y += 8
-            for line, px, pw, t in pills:
-                py = y + line * (pill_h + pg)
-                d.rounded_rectangle((x0 + ip + px, py, x0 + ip + px + pw, py + pill_h), pill_h // 2,
-                                    fill=(255, 255, 255, 190), outline=_mix(c, (255, 255, 255), 0.55) + (255,), width=2)
-                d.text((x0 + ip + px + pw / 2, py + pill_h / 2), t, font=f_pill, fill=_mix(c, (40, 36, 56), 0.7), anchor="mm")
+        if pills:                                                  # les pastilles, chaque ligne centree
+            y += 6
+            for ln in range(pills[-1][0] + 1):
+                row = [p for p in pills if p[0] == ln]
+                lw = row[-1][1] + row[-1][2]
+                for _l, px, pw, t in row:
+                    xx = cx - lw // 2 + px
+                    py = y + ln * (pill_h + pg)
+                    d.rounded_rectangle((xx, py, xx + pw, py + pill_h), pill_h // 2, fill=(241, 245, 249), outline=(203, 213, 225), width=2)
+                    d.text((xx + pw / 2, py + pill_h / 2), t, font=f_pill, fill=(51, 65, 85), anchor="mm")
         if r.get("weight"):
             yy = y0 + ch - ip - w_h
             wt = r["weight"]
-            ww = int(d.textlength(wt, font=f_w)) + int(30 * k) + int(26 * k)
-            d.rounded_rectangle((x0 + ip, yy, x0 + ip + ww, yy + w_h), w_h // 2, fill=c + (255,),
-                                outline=(255, 255, 255, 160), width=2)
-            on = _text_on(c)
-            dot = int(12 * k)
-            cy = yy + w_h / 2
-            d.ellipse((x0 + ip + int(14 * k), cy - dot / 2, x0 + ip + int(14 * k) + dot, cy + dot / 2), fill=on + (200,))
-            d.text((x0 + ip + int(14 * k) + dot + int(10 * k), cy), wt, font=f_w, fill=on, anchor="lm")
+            ww = int(d.textlength(wt, font=f_w)) + int(36 * k)
+            d.rounded_rectangle((cx - ww // 2, yy, cx + ww // 2, yy + w_h), w_h // 2, fill=c,
+                                outline=_mix(c, (0, 0, 0), 0.2) if sum(c) < 600 else (176, 186, 200), width=2)
+            d.text((cx, yy + w_h / 2), wt, font=f_w, fill=_text_on(c), anchor="mm")
     buf = io.BytesIO()
     im.save(buf, "JPEG", quality=92, subsampling=0)
     return buf.getvalue()
