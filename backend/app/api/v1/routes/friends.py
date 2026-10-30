@@ -111,5 +111,12 @@ async def friends_proxy(fid: str, path: str, request: Request, _: str = Depends(
         raise HTTPException(403, "Accès refusé par le BambuNymous du copain (invitation révoquée ?)")
     if code == 204:
         return Response(status_code=204)
-    return Response(content=content, status_code=code, media_type=ctype,
-                    headers={"Cache-Control": "private, max-age=300"} if ctype.startswith("image/") else None)
+    hdrs = None
+    if ctype.startswith("image/"):
+        hdrs = {"Cache-Control": "private, max-age=300"}
+        # une empreinte, pour que la vignette (w=, trim=) se refasse ici aussi (30/10/2026) : un copain dont le
+        # BambuNymous n'est pas a jour ne rogne pas ses vues 3D, qui flottaient dans la galerie
+        if code == 200 and request.query_params.get("w"):
+            import hashlib
+            hdrs["ETag"] = '"f' + hashlib.sha1(content).hexdigest()[:24] + '"'
+    return Response(content=content, status_code=code, media_type=ctype, headers=hdrs)
