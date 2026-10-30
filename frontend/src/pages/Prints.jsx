@@ -572,7 +572,8 @@ function RateStatusLine({ designId }) {
 const colorScope = prints => prints.length === 1 ? `print:${prints[0].id}` : prints[0]?.group_id ? `group:${prints[0].group_id}` : null;
 
 // others : les autres impressions du groupe, pas (encore) liees a ce modele ; onLinked : l'une d'elles vient de l'etre
-function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false, others = [], onLinked = null }) {
+// group : la carte d'un groupe -- sa vue 3D prend le profil de l'assemblage le plus recent du modele
+function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false, others = [], onLinked = null, group = false }) {
   const [open, setOpen] = useState(false);       // replie a chaque ouverture : le resume suffit
   const mineOf = useMine([designId]);            // chez un copain : l'ai-je deja ?
   const visiting = useFriend((s) => s.friend);
@@ -583,6 +584,16 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false, ot
   const [view3d, setView3d] = useState(false);   // la vue 3D du modele
   const [shown, setShown] = useState(undefined);   // le profil montre par les plateaux {id, title, deduced} ; undefined : pas encore deduit
   const shownProf = shown === undefined ? undefined : shown?.id || null;
+  // le profil de l'assemblage le plus recent du modele (30/10/2026) : la vue 3D d'un groupe s'ouvre dessus, l'assemblage
+  // fait depuis une de ses impressions s'y retrouve (deux profils differents, et les pieces partaient d'ailleurs)
+  const [asmProf, setAsmProf] = useState(group ? undefined : null);
+  useEffect(() => {
+    if (!group || !view3d || visiting || !designId) return;
+    let alive = true;
+    client.get(`/makerworld/3d/shared-edits/${encodeURIComponent(designId)}`)
+      .then(r => alive && setAsmProf(r.data?.edits?.find(e => e.profile)?.profile || null)).catch(() => alive && setAsmProf(null));
+    return () => { alive = false; };
+  }, [group, view3d, visiting, designId]);
   // chez un copain (29/10/2026) : la vue 3D ne se calcule pas chez lui a ma demande ; on regarde seulement si elle existe deja
   const [ready3d, setReady3d] = useState(null);
   useEffect(() => {
@@ -727,7 +738,8 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false, ot
       {!open && <div style={{ display:"none" }}>
         <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShown}
         modelTitle={mw.title} modelTitleFr={mw.title_fr}/></div>}
-      {view3d && <Model3D designId={designId} profileId={shownProf || null} wait={shownProf === undefined} printId={(prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id}
+      {view3d && <Model3D designId={designId} profileId={(group && !visiting && asmProf) || shownProf || null} wait={shownProf === undefined || (group && !visiting && asmProf === undefined)}
+        printId={(prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id}
         usedPrints={prints.map(x => x.id)} scope={colorScope(prints)}
         title={mw.title_fr || mw.title} onClose={() => setView3d(false)}/>}
     </div>
@@ -1942,7 +1954,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       <GroupPhotosV2 groupId={groupId} onUpdated={onUpdated} prints={prints}/>
       {printsBlock}
       {filaments.length > 0 && <FilamentsV2 filaments={filaments} onSpoolClick={setSelSpool} onUnmap={setUnmapping}/>}
-      {designs.map(([d, n]) => <MakerWorldCard key={d} designId={d} rateElsewhere prints={prints.filter(x => String(x.design_id || "").trim() === d)}
+      {designs.map(([d, n]) => <MakerWorldCard key={d} designId={d} rateElsewhere group prints={prints.filter(x => String(x.design_id || "").trim() === d)}
         others={prints.filter(x => String(x.design_id || "").trim() !== d)} onLinked={loadPrints}
         note={designs.length > 1 || n < prints.length ? `${n} print${n > 1 ? "s" : ""} sur ${prints.length} de ce modèle` : null}/>)}
     </div>);
