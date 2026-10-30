@@ -695,8 +695,13 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       const moving = withKids(list), { P, N } = contact(j);
       // les autres pieces ne se traversent pas : une place qui en traverse une (la piece amincie de 0,3 mm, pour ne pas
       // compter le contact lui-meme) est sautee, la suivante est essayee (30/10/2026)
-      const others = all.filter(g => g.visible && !moving.includes(g));
-      const collides = M => col.anyTouch(moving.map(g => { g.updateMatrix(); return [g, M.clone().multiply(g.matrix)]; }), others, 0.3);
+      // la piece support ne compte pas (le contact avec elle est deja regle par les cartes de hauteur ; son relief, un
+      // tricot autour de l'empreinte d'un bec, faisait refuser toutes les places, 30/10/2026) ; et si la piece chevauche
+      // deja une autre piece la ou on l'a collee, le test ne bloque rien
+      const sup = new Set(unitOf(j.b));
+      const others = all.filter(g => g.visible && !moving.includes(g) && !sup.has(g));
+      const hit = M => col.anyTouch(moving.map(g => { g.updateMatrix(); return [g, M.clone().multiply(g.matrix)]; }), others, 0.3);
+      const collides = others.length && !hit(new THREE.Matrix4()) ? hit : null;
       const r = await nestPlace({ THREE, collider: col, moving, base: unitOf(j.b).filter(g => g.visible && !moving.includes(g)), P, N, mode, collides });
       if (r && !r.M) return say("Chaque place qui conviendrait traverse une autre pièce : elle reste où elle est collée");
       if (!r) return say(mode === "align" ? "Pas de place où elle repose à plat sur cette face, autour de là où elle est collée (une face courbe : 🎯 Ajuster)"
