@@ -265,16 +265,16 @@ def spool(colors: list, mtype: Optional[str], finish: Optional[str], size: int) 
     # un translucide (31/10/2026) : sans damier, la couleur laisse voir la joue fumee, comme du verre teinte
     glass = min(c[3] for c in colors) / 255 if any(c[3] < 255 for c in colors) else 1.0
     tex = np.asarray(swatch([c[:3] + (255,) for c in colors], mtype, finish, S).convert("RGB"), np.float32) / 255
-    nr, nz = -np.cos(np.pi * t) * 0.85, np.sin(np.pi * t) + 0.15
+    nr, nz = -np.cos(np.pi * t) * 0.4, np.sin(np.pi * t) + 0.6          # un relief doux (31/10/2026 : « trop 3D »)
     nx, ny = ux * nr, uy * nr
     nn = np.sqrt(nx * nx + ny * ny + nz * nz)
     nx, ny, nz = nx / nn, ny / nn, nz / nn
     diff = np.clip(nx * L[0] + ny * L[1] + nz * L[2], 0, 1)
-    spec = np.clip(nx * Hh[0] + ny * Hh[1] + nz * Hh[2], 0, 1) ** 48
-    spires = 1 - 0.09 * (0.5 + 0.5 * np.sin(r * (S / 2) * 2 * np.pi / 3.2))   # une spire tous les ~1,6 px
-    shine = {"silk": 0.85, "metal": 0.9, "glow": 0.3, "matte": 0.12}.get(finish, 0.45) if glass >= 1 else 0.95
-    fil = tex * (0.32 + 0.82 * diff)[..., None] * spires[..., None] + (spec * shine)[..., None]
-    fil = fil * (0.7 + 0.3 * np.clip(np.sin(np.pi * t), 0, 1) ** 0.5)[..., None]   # les creux contre les joues
+    spec = np.clip(nx * Hh[0] + ny * Hh[1] + nz * Hh[2], 0, 1) ** 60
+    spires = 1 - 0.06 * (0.5 + 0.5 * np.sin(r * (S / 2) * 2 * np.pi / 3.2))   # une spire tous les ~1,6 px
+    shine = {"silk": 0.5, "metal": 0.55, "glow": 0.15, "matte": 0.05}.get(finish, 0.22) if glass >= 1 else 0.5
+    fil = tex * (0.72 + 0.34 * diff)[..., None] * spires[..., None] + (spec * shine)[..., None]
+    fil = fil * (0.86 + 0.14 * np.clip(np.sin(np.pi * t), 0, 1) ** 0.5)[..., None]   # les creux contre les joues
     cover = band * (1.0 if glass >= 1 else 0.35 + 0.5 * glass)
     out[..., :3] = out[..., :3] * (1 - cover[..., None]) + fil * cover[..., None]
     if glass < 1:                                                  # le reflet du verre, par-dessus
