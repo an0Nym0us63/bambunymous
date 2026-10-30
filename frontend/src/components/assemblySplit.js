@@ -12,7 +12,7 @@
 export function splitPieceGeometry(THREE, pg, cuts = null, info = null) {
   const meshes = pg.children.filter(m => m.isMesh && m.geometry?.attributes?.position);
   if (!meshes.length) return null;
-  const tagIds = new Map(), cut = cuts?.length ? meshes.map(m => cutGeometry(THREE, m.geometry, cuts, tagIds)) : null;
+  const tagIds = new Map(), cut = cuts?.length ? meshes.map((m, mi) => cutGeometry(THREE, m.geometry, cuts, tagIds, mi)) : null;
   const geos = cut ? cut.map(c => c.geo) : meshes.map(m => m.geometry);
   if (info && cut) info.lastHits = cut.reduce((s, c) => s + (c.hits[c.hits.length - 1] || 0), 0);
   const weld = new Map(), ids = [], tris = [];       // tris : [maillage, numero du triangle, sommets soudes a, b, c]
@@ -62,16 +62,36 @@ export function splitPieceGeometry(THREE, pg, cuts = null, info = null) {
     const min = Math.max(0.6, 0.015 * diag(whole));
     big = order.filter(([r], j) => j === 0 || diag(box.get(r)) >= min);
   } else big = order.filter(([, c]) => c >= Math.max(30, 0.003 * total));
+  // la marque d'un morceau (coupe : 0 ; support detache : 1 ; gomme : 2) : celle de la plupart de ses triangles. Une
+  // miette va au plus gros morceau de meme marque, sinon toutes celles d'une marque font un morceau a elles (30/10/2026 :
+  // les bouts gommes, minuscules, retournaient a la piece)
+  const markOf = new Map();
+  if (cut) {
+    const cnt = new Map();
+    for (let t = 0; t < tris.length; t += 5) {
+      const r = root(tris[t + 2]), m = cut[tris[t]].mark[tris[t + 1]];
+      let c = cnt.get(r); if (!c) cnt.set(r, c = [0, 0, 0]); c[m]++;
+    }
+    for (const [r, c] of cnt) markOf.set(r, c.indexOf(Math.max(...c)));
+  }
+  const mk = r => markOf.get(r) || 0;
+  if (cut) {
+    const marks = new Set(order.map(([r]) => mk(r)));
+    for (const m of [1, 2]) if (marks.has(m) && !big.some(([r]) => mk(r) === m)) big.push([`m${m}`, 0]);
+  }
   if (big.length < 2) return null;
   const rank = new Map(big.map(([r], i) => [r, i]));
+  const firstOf = [0, 1, 2].map(m => big.findIndex(([r]) => (typeof r === "string" ? Number(r.slice(1)) : mk(r)) === m));
   // les triangles de chaque morceau, par maillage d'origine
   const per = big.map(() => meshes.map(() => []));
   for (let t = 0; t < tris.length; t += 5) {
-    const n = rank.has(root(tris[t + 2])) ? rank.get(root(tris[t + 2])) : 0;     // une miette : au plus gros morceau
+    const r = root(tris[t + 2]);
+    const n = rank.has(r) ? rank.get(r) : Math.max(0, firstOf[mk(r)]);    // une miette : au plus gros morceau de sa marque
     per[n][tris[t]].push(tris[t + 1]);
   }
-  const out = per.map(byMesh => ({
-    parts: byMesh.map((list, mi) => list.length ? [meshes[mi], subGeometry(THREE, geos[mi], list)] : null).filter(Boolean),
+  const out = per.map((byMesh, j) => ({
+    parts: byMesh.map((list, mi) => list.length ? [meshes[mi], subGeometry(THREE, geos[mi], list), mi, Int32Array.from(list)] : null).filter(Boolean),
+    mark: typeof big[j][0] === "string" ? Number(big[j][0].slice(1)) : mk(big[j][0]),
   }));
   out.owner = geos.map((geo, mi) => {
     const n = cut ? cut[mi].n : (geo.index ? geo.index.count : geo.attributes.position.count) / 3;
@@ -232,7 +252,8 @@ export function supportTris(pos, ix, only = null) {
 // une). Les triangles traverses dans ce secteur sont coupes en
 // deux ; hors du secteur, rien ne change (un trait court ne tranche que ce qu'il traverse). La geometrie rendue a ses
 // sommets marques (« tag ») d'un cote ou de l'autre de chaque coupe, et « from » : le triangle d'origine de chacun.
-export function cutGeometry(THREE, geo, cuts, tagIds = new Map()) {
+// mi : le numero du maillage dans la piece (les traits de gomme sont donnes par maillage)
+export function cutGeometry(THREE, geo, cuts, tagIds = new Map(), mi = 0) {
   const names = Object.keys(geo.attributes), src = names.map(nm => geo.attributes[nm]);
   const vals = src.map(a => Array.from(a.array)), size = src.map(a => a.itemSize);
   const pi = names.indexOf("position");
@@ -240,25 +261,33 @@ export function cutGeometry(THREE, geo, cuts, tagIds = new Map()) {
   let ix = geo.index ? Array.from(geo.index.array) : Array.from({ length: n0 * 3 }, (_, i) => i);
   let from = Array.from({ length: n0 }, (_, i) => i);
   const hits = cuts.map(() => 0);
+  let mark = new Array(n0).fill(0);                    // 1 : support detache, 2 : gomme
   const tag = new Array(geo.attributes.position.count).fill(0);   // tagIds : partages entre les maillages d'une piece
   const P = v => [vals[pi][v * 3], vals[pi][v * 3 + 1], vals[pi][v * 3 + 2]];
   const sub = (u, v) => [u[0] - v[0], u[1] - v[1], u[2] - v[2]];
   const dot = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
   const cross = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
   cuts.forEach((c, ci) => {
-    if (c.sup) {
-      // detacher les supports : leurs triangles prennent des sommets a eux (ceux partages avec le reste sont doubles)
+    if (c.sup || c.erase) {
+      // detacher les supports, ou ce qui a ete gomme (les triangles nommes de ce maillage, au point ou en sont les
+      // coupes) : leurs triangles prennent des sommets a eux (ceux partages avec le reste sont doubles)
       const X = c.box, n = ix.length / 3;
-      const only = X ? t => { const q = [0, 1, 2].map(a => (P(ix[t * 3])[a] + P(ix[t * 3 + 1])[a] + P(ix[t * 3 + 2])[a]) / 3);
-        return q[0] >= X[0] && q[1] >= X[1] && q[2] >= X[2] && q[0] <= X[3] && q[1] <= X[4] && q[2] <= X[5]; } : null;
-      const S = supportTris(vals[pi], ix, only);
+      let S = null;
+      if (c.sup) {
+        const only = X ? t => { const q = [0, 1, 2].map(a => (P(ix[t * 3])[a] + P(ix[t * 3 + 1])[a] + P(ix[t * 3 + 2])[a]) / 3);
+          return q[0] >= X[0] && q[1] >= X[1] && q[2] >= X[2] && q[0] <= X[3] && q[1] <= X[4] && q[2] <= X[5]; } : null;
+        S = supportTris(vals[pi], ix, only);
+      } else {
+        const list = c.erase[String(mi)];
+        if (Array.isArray(list) && list.length) { S = new Uint8Array(n); for (const t of list) if (t >= 0 && t < n) S[t] = 1; }
+      }
       if (!S) return;
       const inR = new Uint8Array(tag.length), inSv = new Uint8Array(tag.length);
       for (let t = 0; t < n; t++) for (let e = 0; e < 3; e++) (S[t] ? inSv : inR)[ix[t * 3 + e]] = 1;
       const dup = new Map();
       for (let t = 0; t < n; t++) {
         if (!S[t]) continue;
-        hits[ci]++;
+        hits[ci]++; mark[t] = c.sup ? 1 : 2;
         for (let e = 0; e < 3; e++) {
           const v = ix[t * 3 + e], tk = `${tag[v]}|s${ci}`;
           let id = tagIds.get(tk);
@@ -299,29 +328,29 @@ export function cutGeometry(THREE, geo, cuts, tagIds = new Map()) {
       made.set(k, j);
       return j;
     };
-    const nix = [], nfrom = [];
+    const nix = [], nfrom = [], nmark = [];
     for (let t = 0; t < ix.length / 3; t++) {
       const v = [ix[t * 3], ix[t * 3 + 1], ix[t * 3 + 2]], p = v.map(P), d = p.map(q => dot(sub(q, E), nn)), s = d.map(x => (x >= 0 ? 1 : 0));
-      if (s[0] === s[1] && s[1] === s[2]) { nix.push(...v); nfrom.push(from[t]); continue; }
+      if (s[0] === s[1] && s[1] === s[2]) { nix.push(...v); nfrom.push(from[t]); nmark.push(mark[t]); continue; }
       // le sommet seul de son cote (i), les deux autres (j, k) en face
       const i = s[0] !== s[1] && s[0] !== s[2] ? 0 : s[1] !== s[0] && s[1] !== s[2] ? 1 : 2, j = (i + 1) % 3, k = (i + 2) % 3;
       const tj = d[i] / (d[i] - d[j]), tk = d[i] / (d[i] - d[k]);
       const qj = p[i].map((x, a) => x + (p[j][a] - x) * tj), qk = p[i].map((x, a) => x + (p[k][a] - x) * tk);
-      if (!inside(qj.map((x, a) => (x + qk[a]) / 2))) { nix.push(...v); nfrom.push(from[t]); continue; }
+      if (!inside(qj.map((x, a) => (x + qk[a]) / 2))) { nix.push(...v); nfrom.push(from[t]); nmark.push(mark[t]); continue; }
       const si = s[i], so = 1 - si;
       const ij = between(v[i], v[j], tj, si), ik = between(v[i], v[k], tk, si);
       const oj = between(v[i], v[j], tj, so), ok = between(v[i], v[k], tk, so);
       // l'ordre des sommets garde le sens du triangle (les faces restent tournees vers l'exterieur)
       nix.push(v[i], ij, ik, oj, v[j], v[k], oj, v[k], ok);
       hits[ci]++;
-      nfrom.push(from[t], from[t], from[t]);
+      nfrom.push(from[t], from[t], from[t]); nmark.push(mark[t], mark[t], mark[t]);
     }
-    ix = nix; from = nfrom;
+    ix = nix; from = nfrom; mark = nmark;
   });
   const out = new THREE.BufferGeometry();
   names.forEach((nm, ai) => out.setAttribute(nm, new THREE.BufferAttribute(new src[ai].array.constructor(vals[ai]), size[ai], src[ai].normalized)));
   out.setIndex(new THREE.BufferAttribute(tag.length > 65535 ? new Uint32Array(ix) : new Uint16Array(ix), 1));
-  return { geo: out, tag: Int32Array.from(tag), from: Int32Array.from(from), n: n0, hits };
+  return { geo: out, tag: Int32Array.from(tag), from: Int32Array.from(from), n: n0, hits, mark: Uint8Array.from(mark) };
 }
 
 // une partie d'une geometrie : ces triangles, ses sommets renumerotes (tous les attributs suivent)
@@ -366,14 +395,14 @@ export function buildSplitGroups(THREE, pg, comps) {
     const b = new THREE.Box3();
     comp.parts.forEach(([, geo]) => { geo.computeBoundingBox(); b.union(geo.boundingBox); });
     const cc = b.getCenter(new THREE.Vector3());
-    for (const [m, geo] of comp.parts) {
+    for (const [m, geo, mi, list] of comp.parts) {
       geo.translate(-cc.x, -cc.y, -cc.z); geo.computeBoundingSphere();
       const mat = m.material.clone();
       mat.onBeforeCompile = m.material.onBeforeCompile;
       mat.customProgramCacheKey = m.material.customProgramCacheKey;
       mat.userData = m.material.userData;
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.userData = { ...m.userData };
+      mesh.userData = { ...m.userData, src: list ? { mi, tris: list } : null };
       g.add(mesh);
     }
     const c0 = pg.userData.c || new THREE.Vector3();

@@ -300,7 +300,11 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             const fin = finishes?.[own];
             // les deux cotes des faces (29/10/2026) : la ou une zone peinte tres decoupee touche une zone qui l'est moins,
             // des fissures d'un pixel laissaient voir le noir de l'interieur (des pointilles noirs sur la Nonne)
-            const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true, envMapIntensity: 0, side: THREE.DoubleSide,
+            // un filament tres sombre (noir) : un gris charbon a peine plus clair, et un peu plus brillant, pour que le relief
+            // se lise (30/10/2026 : une piece noire n'etait qu'une silhouette, a l'edition comme sur les vignettes)
+            const hsl = c.getHSL({}), dark = hsl.l < 0.14;
+            if (dark) c.setHSL(hsl.h, hsl.s, 0.14);
+            const mat = new THREE.MeshStandardMaterial({ color: c, roughness: dark ? 0.36 : 0.5, metalness: 0.05, flatShading: true, envMapIntensity: 0, side: THREE.DoubleSide,
               ...(FINISH_MAT[fin] || {}) });
             // un filament multicolore (28/10/2026), en simili, la finition posee par-dessus comme pour les autres :
             // le degrade evolue le long du filament consomme, donc surtout avec la hauteur d'impression, et un peu dans
@@ -866,7 +870,7 @@ const EDIT_TIPS = {
   mate1: "Clique la face ou l'arête de la pièce à déplacer (son groupe suit)",
   mate2: "Clique la face ou l'arête contre laquelle la coller",
   mate1a: "Assisté : clique la face de la pièce à déplacer qui doit se coller ; ses faces jumelles (même contour) s'allument en vert sur les autres pièces",
-  mate2a: "Clique la face jumelle en vert (ou juste sa pièce) : la pièce s'y pose exactement ; ailleurs, elle vient au point cliqué",
+  mate2a: "Clique la face jumelle en vert (ou tout près) : la pièce s'y pose exactement ; ailleurs, même sur sa pièce, elle se colle au point cliqué",
 };
 // le mode « Points » : ce qu'il faut cliquer ensuite
 const pinsTip = est => {
@@ -1007,6 +1011,7 @@ const EDIT_HELP = [
     ["Clic sur une pièce", "la pièce à couper (une seule)"],
     ["Glisser à travers elle", "un trait rouge : la pièce est tranchée sur la longueur du trait, dans toute l'épaisseur que voit l'écran (rien au-delà des bouts du trait) ; les parties qui ne tiennent plus ensemble deviennent des morceaux, chacun de sa couleur"],
     ["Plusieurs traits", "un support tenu par plusieurs ponts : un trait par pont ; chacun reste marqué en rouge, et la pièce se sépare quand tous sont tranchés ; tourne la vue au clic droit entre deux traits ; ✕ efface les traits"],
+    ["🧽 Gomme", "allumée, le glisser peint en rouge ce qu'il touche sur la pièce choisie (ou sur les morceaux proposés) : les bouts de support restés collés, une bavure ; au lâcher, c'est détaché, et ✓ le retire de l'assemblage (📋 Pièces : ↩ le remet)"],
     ["🪄 Détacher les supports", "les supports intégrés au modèle (parois et plaques fines, à faces planes, fondues à la pièce) sont repérés d'eux-mêmes et proposés en couleur, sans trait à tracer"],
     ["✓ Couper (Entrée) / ✕ Ne pas couper (Échap)", "valider les morceaux ou tout laisser ; chaque morceau se choisit, se déplace, s'exclut (📋 Pièces : 🚫) ; ⊕ Réunir rend la pièce entière d'origine"],
   ]],
@@ -1145,13 +1150,19 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
       : est.assist ? EDIT_TIPS.mate1a : EDIT_TIPS.mate1) : EDIT_TIPS[est.mode];
   const hasSel = est.count > 0;
   // la seconde ligne : les actions du mode, puis celles de la selection
+  const rubBtn = <button type="button" onClick={() => api?.setEraser(!est.eraser)} style={b(!!est.eraser)}
+    data-tip="Gomme : passe-la sur les restes (bouts de support, bavures) ; ils se détachent et quittent l'assemblage à la validation">🧽 Gomme</button>;
   const modeRow = est.mode === "cut" ? (est.cutCount ? <>
+      {rubBtn}
       {est.cutPending > 0 && <button type="button" onClick={() => api?.cutConfirm()} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}
         data-tip="Valider les morceaux (Entrée)">✓ Couper en {est.cutPending}</button>}
       <button type="button" onClick={() => api?.cutCancel()} style={b(false)} data-tip="Effacer les traits, tout laisser comme avant (Échap)">
         ✕ {est.cutPending ? "Ne pas couper" : `Effacer ${est.cutCount > 1 ? `les ${est.cutCount} traits` : "le trait"}`}</button>
-    </> : est.count === 1 ? <button type="button" onClick={() => api?.detachSupports()} style={b(false)}
-      data-tip="Repère les supports intégrés au modèle (parois et plaques fines) et les sépare de la pièce, sans trait à tracer">🪄 Détacher les supports</button> : null)
+    </> : <>
+      {rubBtn}
+      {est.count === 1 && <button type="button" onClick={() => api?.detachSupports()} style={b(false)}
+        data-tip="Repère les supports intégrés au modèle (parois et plaques fines) et les sépare de la pièce, sans trait à tracer">🪄 Détacher les supports</button>}
+    </>)
     : est.mode === "pins" ? <>
       <button type="button" disabled={!est.pinsB} onClick={() => api?.pinsApply()} style={b(!!est.pinsB, { opacity: est.pinsB ? 1 : 0.45 })}
         data-tip="Faire coïncider chaque point orange avec le point vert de même numéro (Entrée)">✓ Assembler{est.pinsB ? ` (${est.pinsB})` : ""}</button>
@@ -1224,7 +1235,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
       : est.mode === "move" ? (est.count ? `Fais glisser ${est.count > 1 ? "la sélection" : "la pièce"} du doigt${est.vertical ? " : elle monte ou descend" : " sur le plateau (⇕ Hauteur : la monter)"} ; ou les flèches, d'un pas précis`
         : "Touche une pièce (➕ Multi : en choisir plusieurs), puis fais-la glisser du doigt")
       : est.mode === "rotate" ? "Touche une pièce, puis tourne-la par ses anneaux ; 📐 Exact pour un angle précis"
-      : est.mode === "cut" ? (est.count ? "🔪 Trace un trait du doigt à travers la pièce, là où couper ; deux doigts : tourner la vue" : "🔪 Touche la pièce à couper")
+      : est.mode === "cut" ? (est.eraser ? (est.count || est.cutPending ? "🧽 Passe le doigt sur les restes à gommer ; deux doigts : tourner la vue" : "🧽 Touche la pièce à nettoyer")
+        : est.count ? "🔪 Trace un trait du doigt à travers la pièce, là où couper ; deux doigts : tourner la vue" : "🔪 Touche la pièce à couper")
       : String(tip || "").replace(/Maj \+ clic \(ou ➕ Multi\)/g, "➕ Multi").replace(/ \(Entrée\)/g, "")
         .replace(/clique/g, "touche").replace(/Clique/g, "Touche").replace(/clic/g, "toucher");
     return <>

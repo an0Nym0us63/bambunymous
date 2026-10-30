@@ -1562,8 +1562,26 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
         if str(k) not in spl or not isinstance(lst, list):
             continue
         # un trait {e, a, b}, ou « detacher les supports » {sup: 1} ; et la boite du morceau vise
-        ok = [{**({"sup": 1} if w.get("sup") else {"e": w["e"], "a": w["a"], "b": w["b"]}), **({"box": w["box"]} if num(w.get("box"), 6) else {})}
-              for w in lst[:50] if isinstance(w, dict) and (w.get("sup") or all(num(w.get(x), 3) for x in ("e", "a", "b")))]
+        # ou un coup de gomme {erase: {maillage: [triangles]}} (200 000 triangles au plus)
+        def rub(x):
+            if not isinstance(x, dict):
+                return None
+            out = {str(int(k)): sorted({int(t) for t in v if isinstance(t, int) and 0 <= t < 50_000_000})
+                   for k, v in x.items() if str(k).isdigit() and isinstance(v, list)}
+            out = {k: v for k, v in out.items() if v}
+            return out if out and sum(len(v) for v in out.values()) <= 200_000 else None
+        ok = []
+        for w in lst[:50]:
+            if not isinstance(w, dict):
+                continue
+            box = {"box": w["box"]} if num(w.get("box"), 6) else {}
+            if w.get("sup"):
+                ok.append({"sup": 1, **box})
+            elif w.get("erase") is not None:
+                if (r := rub(w.get("erase"))):
+                    ok.append({"erase": r})
+            elif all(num(w.get(x), 3) for x in ("e", "a", "b")):
+                ok.append({"e": w["e"], "a": w["a"], "b": w["b"], **box})
         if ok:
             cut[str(k)] = ok
     d = {"pieces": clean, "groups": [g for g in grp if len(g) > 1], "joints": jts, "splits": spl, "excluded": exc, "v": 2,

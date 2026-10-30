@@ -156,7 +156,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pivot: !!pivot, pairs: pairs.length, twinPos: twinAlt && twinAlt.at === changes && twinAlt.fits.length > 1 ? `${twinAlt.i + 1}/${twinAlt.fits.length}` : null, boxMode, ground3, groundPts: gPts.length, vertical, pinsA: pins.a.length, pinsB: pins.b.length,
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
-    cutPiece: pendingCut ? pendingCut.g.userData.name : null,
+    cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
     // de la selection part au moins un collage (vers une piece hors d'elle) : « Grouper le colle » a un sens
@@ -545,7 +545,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   };
   const startTwins = A => {
     clearTwins();
-    if (!assist || A.kind !== "face" || !A.mesh?.geometry?.index) return;
+    if (!assist || A.kind !== "face" || !A.mesh?.geometry?.attributes?.position) return;
     const unit = sel.has(A.group) ? [...sel] : unitOf(A.group), skip = new Set(withKids(unit));
     const others = all.filter(g => g.visible && !skip.has(g));
     if (!others.length) return;
@@ -562,8 +562,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       // quand on touche leur piece
       const best = r?.twins[0]?.fits[0].score || 0, shown = (r?.twins || []).filter(t => t.fits[0].score >= Math.max(0.88, best - 0.05));
       const n = shown.length;
+      shown.forEach(t => { t.shown = true; });
       if (n) drawTwins(shown);
-      fitMsg = n ? `${n === 1 ? "Une face jumelle" : `${n} faces jumelles`} en vert (% de ressemblance) : touche ${n === 1 ? "sa pièce" : "celle qui va avec, ou juste sa pièce"}`
+      fitMsg = n ? `${n === 1 ? "Une face jumelle" : `${n} faces jumelles`} en vert (% de ressemblance) : touche ${n === 1 ? "la face verte" : "celle qui va avec"} ; ailleurs, la pièce se colle au point touché`
         : r ? "Pas de face jumelle : touche l'endroit où la coller" : "Face courbe : touche l'endroit où la coller";
       onChange?.(state());
     });
@@ -595,11 +596,15 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     return unit;
   };
   // la jumelle visee par le second toucher : celle touchee, sinon la plus proche du toucher sur la piece touchee (ou son groupe)
+  // la jumelle touchee : sur sa face, ou tout pres d'une face verte ; ailleurs sur la piece, aucune (30/10/2026 : toucher
+  // n'importe ou sur la piece la posait sur sa jumelle, on ne pouvait plus la coller ailleurs)
   const twinAt = (r, pick) => {
     const on = r?.twins.filter(t => unitOf(pick.group).includes(t.g)) || [];
     if (!on.length) return null;
     const hit = pick.mesh && on.find(t => t.mesh === pick.mesh && twinsLib.regionOfTri(pick.mesh.geometry, pick.tri) === t.reg);
-    return hit || on.reduce((m, t) => (!m || t.face.c.distanceTo(pick.p) < m.face.c.distanceTo(pick.p) ? t : m), null);
+    if (hit) return hit;
+    const near = on.filter(t => t.shown && t.face.c.distanceTo(pick.p) <= Math.max(3, Math.sqrt(t.face.area) * 0.6));
+    return near.reduce((m, t) => (!m || t.face.c.distanceTo(pick.p) < m.face.c.distanceTo(pick.p) ? t : m), null);
   };
 
   // le mode « Points » (30/10/2026) : des paires numerotees, 1 avec 1, 2 avec 2… Un clic sur la piece a deplacer (son
@@ -923,24 +928,116 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       transform: `rotate(${Math.atan2(s.y1 - s.y0, s.x1 - s.x0)}rad)` });
   };
   const dropStroke = () => { stroke?.div.remove(); stroke = null; };
+  // la gomme (30/10/2026) : en mode Couper, « 🧽 Gomme » allumee, le glisser peint en rouge les triangles sous le
+  // pinceau (sur la piece choisie, ses morceaux ou la coupe en cours) ; au lacher, ils se detachent en un morceau a part,
+  // retire de l'assemblage a la validation. Pour les restes de supports, les bavures
+  let eraser = false, rub = null;
+  const rubMat = new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.75, depthTest: false, side: THREE.DoubleSide });
+  const centroids = new WeakMap();
+  const centersOf = geo => {
+    let c = centroids.get(geo);
+    if (c) return c;
+    const p = geo.attributes.position.array, ix = geo.index?.array, n = ix ? ix.length / 3 : p.length / 9;
+    c = new Float32Array(n * 3);
+    for (let t = 0; t < n; t++) for (let e = 0; e < 3; e++) { const v = ix ? ix[t * 3 + e] : t * 3 + e; for (let a = 0; a < 3; a++) c[t * 3 + a] += p[v * 3 + a] / 3; }
+    centroids.set(geo, c);
+    return c;
+  };
+  // les maillages que la gomme peut toucher : ceux de la piece visee (ses morceaux, ou la coupe proposee)
+  const rubTargets = () => {
+    if (pendingCut) return (pendingCut.parts.length ? pendingCut.parts : pendingCut.old).filter(g => g.visible);
+    const g = sel.size === 1 ? [...sel][0] : null;
+    if (!g || g.userData.copyOf) return [];
+    return g.userData.from ? all.filter(x => x.userData.from === g.userData.from && !x.userData.copyOf && x.visible) : [g];
+  };
+  const drawRub = () => {
+    for (const [mesh, set] of rub.marks) {
+      if (mesh.userData.rubView) { mesh.remove(mesh.userData.rubView); mesh.userData.rubView.geometry.dispose(); }
+      const p = mesh.geometry.attributes.position.array, ix = mesh.geometry.index?.array, out = new Float32Array(set.size * 9);
+      let o = 0;
+      for (const t of set) for (let e = 0; e < 3; e++) { const v = ix ? ix[t * 3 + e] : t * 3 + e; out[o++] = p[v * 3]; out[o++] = p[v * 3 + 1]; out[o++] = p[v * 3 + 2]; }
+      const gg = new THREE.BufferGeometry(); gg.setAttribute("position", new THREE.BufferAttribute(out, 3));
+      const view = new THREE.Mesh(gg, rubMat); view.renderOrder = 999; view.raycast = () => {};
+      mesh.add(view); mesh.userData.rubView = view;
+    }
+    render();
+  };
+  const clearRub = () => {
+    if (!rub) return;
+    for (const mesh of rub.marks.keys()) if (mesh.userData.rubView) { mesh.remove(mesh.userData.rubView); mesh.userData.rubView.geometry.dispose(); delete mesh.userData.rubView; }
+    rub = null; render();
+  };
+  const rubAt = ev => {
+    const r = el.getBoundingClientRect();
+    mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(mouse, camera);
+    const hit = ray.intersectObjects(rub.targets.flatMap(g => g.children.filter(c => c.isMesh)), false)[0];
+    if (!hit) return;
+    // le rayon du pinceau : une douzaine de pixels a l'ecran, en mm a cette distance
+    const px = coarse ? 20 : 12, mm = hit.distance * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / r.height * px;
+    const mesh = hit.object, q = mesh.worldToLocal(hit.point.clone()), c = centersOf(mesh.geometry), r2 = mm * mm;
+    let set = rub.marks.get(mesh);
+    if (!set) rub.marks.set(mesh, set = new Set());
+    const before = set.size;
+    for (let t = 0; t < c.length / 3; t++) {
+      const dx = c[t * 3] - q.x, dy = c[t * 3 + 1] - q.y, dz = c[t * 3 + 2] - q.z;
+      if (dx * dx + dy * dy + dz * dz <= r2) set.add(t);
+    }
+    set.add(hit.faceIndex);
+    if (set.size !== before) drawRub();
+  };
+  const rubEnd = () => {
+    const rb = rub;
+    if (!rb) return;
+    rub = null;
+    // les triangles gommes, nommes dans la geometrie d'ou viennent les morceaux (par maillage de la piece entiere)
+    const erase = {};
+    let g0 = null;
+    for (const [mesh, set] of rb.marks) {
+      if (!set.size) continue;
+      const g = pieceOf(mesh) || rb.targets.find(x => x.children.includes(mesh));
+      g0 = g0 || g;
+      const whole = g.userData.from ? g.userData.whole : g;
+      const src = mesh.userData.src, mi = src ? src.mi : whole.children.filter(m => m.isMesh && m.geometry?.attributes?.position).indexOf(mesh);
+      const list = erase[mi] || (erase[mi] = []);
+      for (const t of set) list.push(src ? src.tris[t] : t);
+    }
+    for (const mesh of rb.marks.keys()) if (mesh.userData.rubView) { mesh.remove(mesh.userData.rubView); mesh.userData.rubView.geometry.dispose(); delete mesh.userData.rubView; }
+    if (!g0) { render(); return; }
+    Object.values(erase).forEach(l => l.sort((a, b) => a - b));
+    cutWith({ erase }, g0);
+  };
   const onKnifeDown = ev => {
     if (mode !== "cut") return;
     if (stroke) { if (ev.pointerId !== stroke.id) dropStroke(); return; }      // un second doigt : c'est la vue
+    if (rub) { if (ev.pointerId !== rub.id) clearRub(); return; }
     if (fingers > 1 || (ev.pointerType === "mouse" && ev.button !== 0)) return;
+    if (eraser) {
+      if (pendingCut && !pendingCut.parts.length) { fitMsg = "Des traits attendent : finis la coupe (ou ✕ efface-les) avant de gommer"; onChange?.(state()); return; }
+      const targets = rubTargets();
+      if (!targets.length) { fitMsg = "Touche d'abord la pièce à nettoyer, puis gomme les restes"; onChange?.(state()); return; }
+      rub = { id: ev.pointerId, targets, marks: new Map() };
+      rubAt(ev);
+      return;
+    }
     const div = document.createElement("div");
     div.style.cssText = "position:absolute;height:0;border-top:2.5px dashed #ef4444;transform-origin:0 0;pointer-events:none;z-index:5;filter:drop-shadow(0 0 2px #fff)";
     host.appendChild(div);
     stroke = { id: ev.pointerId, x0: ev.clientX, y0: ev.clientY, x1: ev.clientX, y1: ev.clientY, div };
     drawStroke();
   };
-  const onKnifeMove = ev => { if (stroke && ev.pointerId === stroke.id) { stroke.x1 = ev.clientX; stroke.y1 = ev.clientY; drawStroke(); } };
+  const onKnifeMove = ev => {
+    if (rub && ev.pointerId === rub.id) { if (fingers > 1) clearRub(); else rubAt(ev); return; }
+    if (stroke && ev.pointerId === stroke.id) { stroke.x1 = ev.clientX; stroke.y1 = ev.clientY; drawStroke(); }
+  };
   const onKnifeUp = ev => {
+    if (rub && ev.pointerId === rub.id) { rubEnd(); return; }
     if (!stroke || ev.pointerId !== stroke.id) return;
     const s = stroke;
     dropStroke();
     if (Math.hypot(s.x1 - s.x0, s.y1 - s.y0) >= 12) cutWith(s);              // plus court : un toucher, qui choisit la piece
   };
-  const onKnifeCancel = ev => { if (stroke && ev.pointerId === stroke.id) dropStroke(); };
+  const onKnifeCancel = ev => { if (stroke && ev.pointerId === stroke.id) dropStroke(); if (rub && ev.pointerId === rub.id) clearRub(); };
   el.addEventListener("pointerdown", onKnifeDown);
   window.addEventListener("pointermove", onKnifeMove);
   window.addEventListener("pointerup", onKnifeUp);
@@ -950,17 +1047,19 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     return g.matrix.clone().multiply(new THREE.Matrix4().makeTranslation(-o.x, -o.y, -o.z)); };
   const r6 = v => v.toArray().map(x => Math.round(x * 1e6) / 1e6);
   // s : le trait trace, ou « sup » : detacher les supports integres (reperes d'eux-memes, assemblySplit.supportTris)
-  const cutWith = async s => {
-    const g = pendingCut ? pendingCut.g : sel.size === 1 ? [...sel][0] : null;
+  const cutWith = async (s, target = null) => {
+    const g = pendingCut ? pendingCut.g : target || (sel.size === 1 ? [...sel][0] : null);
     const say = m => { fitMsg = m; onChange?.(state()); };
-    const sup = s === "sup";
+    const sup = s === "sup", rubbed = !!s?.erase;
+    if (rubbed && pendingCut && target && (target.userData.from || target.userData.k) !== pendingCut.K && !pendingCut.parts.includes(target))
+      return say("Valide ou annule d'abord la coupe en cours, puis gomme l'autre pièce");
     if (!g) return say(sup ? "Choisis d'abord la pièce dont détacher les supports" : "Touche d'abord la pièce à couper, puis trace un trait à travers elle");
     if (g.userData.copyOf) return say("Un exemplaire ajouté ne se coupe pas : coupe la pièce d'origine");
     const K = g.userData.from || g.userData.k, whole = g.userData.from ? g.userData.whole : g;
     if (!whole) return say("Cette pièce ne se coupe pas : réunis-la d'abord (🧩 Pièce, ⊕ Réunir)");
     // l'oeil et les deux bords du trait, dans le repere de la piece entiere
-    let wedge = { sup: 1 };
-    if (!sup) {
+    let wedge = rubbed ? { erase: s.erase } : { sup: 1 };
+    if (!sup && !rubbed) {
       const r = el.getBoundingClientRect();
       const rayAt = (x, y) => { mouse.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1); ray.setFromCamera(mouse, camera); return ray.ray.clone(); };
       holder.updateMatrixWorld(true);
@@ -981,7 +1080,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     await new Promise(res => setTimeout(res, 0));
     const { splitPieceGeometry, buildSplitGroups } = await import("./assemblySplit");
     const info = {}, comps = splitPieceGeometry(THREE, whole, next, info);
-    if (!info.lastHits) return say(sup ? "Pas de support reconnu sur cette pièce (parois ou plaques fines, à faces planes) : coupe-les au couteau, un trait par jointure"
+    if (!info.lastHits) return say(rubbed ? "Rien de gommé : passe la gomme sur la pièce" : sup ? "Pas de support reconnu sur cette pièce (parois ou plaques fines, à faces planes) : coupe-les au couteau, un trait par jointure"
       : "Ce trait ne traverse pas la pièce : trace-le à travers elle, d'un bord à l'autre de la jointure");
     let pc = pendingCut;
     if (!pc) {
@@ -1025,7 +1124,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       p.children.forEach(m => { m.material.emissive = new THREE.Color(tints[j % tints.length]); m.material.emissiveIntensity = 0.55; });
     });
     pc.old.forEach(x => { x.visible = false; });
-    pc.parts = parts; pc.src = src;
+    pc.parts = parts; pc.src = src; pc.marks = comps.map(c => c.mark);
+    // ce qui est gomme est montre en rouge vif jusqu'a la validation
+    parts.forEach((p, j) => { if (pc.marks[j] === 2) p.children.forEach(m => { m.material.emissive = new THREE.Color(0xff0000); m.material.emissiveIntensity = 0.9; }); });
     tc.detach(); fitMsg = null; render(); onChange?.(state());
   };
   // les traits deja donnes, en rouge sur la piece (le secteur coupe, a la profondeur du morceau vise)
@@ -1039,7 +1140,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const bx = new THREE.Box3();
     pc.g.children.forEach(m => { if (m.isMesh) { m.geometry.computeBoundingBox(); bx.union(m.geometry.boundingBox); } });
     const mid = bx.getCenter(new THREE.Vector3()).add(o);
-    for (const w of pc.cuts.slice(pc.base).filter(x => !x.sup)) {
+    for (const w of pc.cuts.slice(pc.base).filter(x => x.e)) {           // les traits seulement (ni supports ni gomme)
       const E = new THREE.Vector3().fromArray(w.e), A = new THREE.Vector3().fromArray(w.a), Bd = new THREE.Vector3().fromArray(w.b);
       const t = mid.clone().sub(E).dot(A.clone().add(Bd).normalize());
       const pts = [E.clone().addScaledVector(A, t / Math.max(0.2, A.dot(A.clone().add(Bd).normalize()))), E.clone().addScaledVector(Bd, t / Math.max(0.2, Bd.dot(A.clone().add(Bd).normalize())))]
@@ -1088,12 +1189,16 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       j.b.updateMatrix(); b.updateMatrix();
       return { ...j, a, b, p: j.p.clone().applyMatrix4(j.b.matrix).applyMatrix4(b.matrix.clone().invert()) };
     }).filter(j => j.a !== j.b);
+    const fresh = pc.cuts.slice(pc.base);
+    // ce qui a ete gomme quitte l'assemblage (il reste dans la liste des pieces, a remettre au besoin)
+    pc.parts.forEach((p, j) => { if (pc.marks?.[j] === 2) { p.userData.excluded = true; p.visible = false; } });
     cuts.set(pc.K, pc.cuts);
     resetHistory();
-    egg(pc.cuts.slice(pc.base).some(x => x.sup) ? "sans_echafaudage" : "couteau");
+    egg(fresh.some(x => x.erase) ? "coup_de_gomme" : fresh.some(x => x.sup) ? "sans_echafaudage" : "couteau");
     fitMsg = `Coupée : ${pc.parts.length} morceaux, chacun se choisit, se déplace ou se retire de l'assemblage (📋 Pièces)`;
     setSel(derived(pc.g));
-    fitMsg = `Coupée : ${pc.parts.length} morceaux, chacun se choisit, se déplace ou se retire de l'assemblage (📋 Pièces)`;
+    fitMsg = fresh.some(x => x.erase) ? "Gommé : retiré de l'assemblage (📋 Pièces : ↩ pour le remettre)"
+      : `Coupée : ${pc.parts.length} morceaux, chacun se choisit, se déplace ou se retire de l'assemblage (📋 Pièces)`;
     onChange?.(state());
   };
   let slide = null;
@@ -1248,7 +1353,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
 
   const api = {
     setGround3: on => { ground3 = on; gPts = []; gUnit = []; drawGround(); onChange?.(state()); },
-    setMode: m => { if (m !== "cut") { cutCancel(); dropStroke(); } knifeView(m === "cut"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
+    setMode: m => { if (m !== "cut") { cutCancel(); dropStroke(); clearRub(); } knifeView(m === "cut"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
     setRotStep: d => { rotStep = d; applySnap(); onChange?.(state()); },
     setMoveStep: d => { moveStep = d; try { localStorage.setItem("bn.asm.moveStep", String(d)); } catch { /* rien */ } applySnap(); onChange?.(state()); },
@@ -1349,6 +1454,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       setSel(parts);
     },
     cutConfirm, cutCancel,
+    setEraser: on => { eraser = on; if (!on) clearRub(); onChange?.(state()); },
     // detacher les supports integres de la piece choisie : proposes en couleur, a valider comme une coupe
     detachSupports: () => { if (mode !== "cut") api.setMode("cut"); return cutWith("sup"); },
     cuts: () => Object.fromEntries([...cuts].filter(([k, v]) => v.length && all.some(g => g.userData.from === k))),
@@ -1671,7 +1777,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       el.removeEventListener("pointerdown", onSlideDown, true); window.removeEventListener("pointermove", onSlideMove); window.removeEventListener("pointerup", onSlideUp);
       el.removeEventListener("pointerdown", onKnifeDown); window.removeEventListener("pointermove", onKnifeMove);
       window.removeEventListener("pointerup", onKnifeUp); window.removeEventListener("pointercancel", onKnifeCancel);
-      cutCancel(); dropStroke(); knifeView(false);
+      clearRub(); rubMat.dispose(); cutCancel(); dropStroke(); knifeView(false);
       holder.remove(cutLines); cutMat.dispose();
       holder.remove(ring); ring.geometry.dispose(); ringMat.dispose();
       try { tc.detach(); tc.disconnect(); } catch { /* deja debranchee */ }

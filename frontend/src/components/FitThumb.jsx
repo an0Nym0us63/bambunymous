@@ -62,7 +62,7 @@ export default function FitThumb({ src, style = {}, onError, photoFit = "contain
     f.place = p;
     setPlace(p);
   };
-  const look = { filter: "contrast(1.08) saturate(1.12)" };
+  const look = { filter: "contrast(1.05) saturate(1.05)" };    // un poil seulement : plus, les couleurs criaient
   return <img src={src} alt="" {...rest} onLoad={onLoad} onError={onError}
     style={place ? { ...style, ...look, position: "absolute", inset: "auto", objectFit: "fill", maxWidth: "none", ...place }
       : { ...style, ...look, objectFit: photoFit }}/>;

@@ -7,14 +7,31 @@
 // Chaque maillage est decoupe une fois en faces planes (triangles voisins de meme plan, a 3° pres), gardees au-dessus de
 // 4 mm² ; la comparaison se fait sur deux grilles (les deux faces vues dans le plan du support), angle par angle.
 
-const MIN_AREA = 4;                  // mm² : en dessous, ce n'est pas une face de coupe
+import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+
+const MIN_AREA = 3;                  // mm² : en dessous, ce n'est pas une face de coupe
 const COS_PLANE = Math.cos(3 * Math.PI / 180);
 
 export function createTwins(THREE, neighbours) {
   const cache = new WeakMap();       // geometrie -> { regions, of : Int32Array (triangle -> face, -1 : aucune) }
+  // un maillage sans index (les finitions a texture) : une copie indexee, sommets soudes, memes triangles dans le meme
+  // ordre (30/10/2026 : ces pieces n'etaient jamais examinees, leurs faces jumelles manquaient)
+  const merged = new WeakMap();
+  const indexed = geo => {
+    if (geo.index) return geo;
+    let m = merged.get(geo);
+    if (!m) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", geo.attributes.position);
+      m = mergeVertices(g, 1e-4);
+      merged.set(geo, m);
+    }
+    return m;
+  };
 
   // les faces planes d'un maillage (dans son repere)
-  const segment = geo => {
+  const segment = geo0 => {
+    const geo = indexed(geo0);
     if (cache.has(geo)) return cache.get(geo);
     const pos = geo.attributes.position, ix = geo.index.array, n = ix.length / 3, nb = neighbours(geo);
     const N = new Float32Array(n * 3), C = new Float32Array(n * 3), A = new Float32Array(n);
@@ -75,8 +92,8 @@ export function createTwins(THREE, neighbours) {
   };
 
   // les triangles d'une face, dans le repere du support (M : maillage -> support)
-  const trianglesOf = (geo, reg, M) => {
-    const pos = geo.attributes.position, ix = geo.index.array, out = new Float32Array(reg.tris.length * 9), p = new THREE.Vector3();
+  const trianglesOf = (geo0, reg, M) => {
+    const geo = indexed(geo0), pos = geo.attributes.position, ix = geo.index.array, out = new Float32Array(reg.tris.length * 9), p = new THREE.Vector3();
     reg.tris.forEach((t, i) => { for (let k = 0; k < 3; k++) { p.fromBufferAttribute(pos, ix[t * 3 + k]).applyMatrix4(M); out[i * 9 + k * 3] = p.x; out[i * 9 + k * 3 + 1] = p.y; out[i * 9 + k * 3 + 2] = p.z; } });
     return out;
   };
@@ -90,7 +107,9 @@ export function createTwins(THREE, neighbours) {
   // la face B est-elle de meme empreinte que la face A ? (les tenons, une tolerance d'impression changent un peu la surface)
   const alike = (fa, fb) => {
     const r = (x, y) => Math.max(x, y) / Math.max(1e-6, Math.min(x, y));
-    return r(fa.area, fb.area) < 1.3 && r(fa.per, fb.per) < 1.35 && r(fa.l1, fb.l1) < 1.3 && r(fa.l2 + 0.5, fb.l2 + 0.5) < 1.35;
+    // un peu de souplesse (30/10/2026 : des jumelles manquaient) : un jeu d'impression, un tenon d'un cote et son trou
+    // de l'autre, un contour decoupe autrement changent surface et perimetre ; la superposition des contours tranche ensuite
+    return r(fa.area, fb.area) < 1.45 && r(fa.per, fb.per) < 1.6 && r(fa.l1, fb.l1) < 1.35 && r(fa.l2 + 0.5, fb.l2 + 0.5) < 1.45;
   };
 
   // la grille d'une face (triangles en 2D) : les cases dont le centre tombe dans un triangle, et celle du centre de chaque
@@ -205,14 +224,14 @@ export function createTwins(THREE, neighbours) {
     let k = 0;
     for (const g of others) {
       for (const mesh of g.children) {
-        if (!mesh.isMesh || !mesh.geometry?.index) continue;
+        if (!mesh.isMesh || !mesh.geometry?.attributes?.position) continue;
         const sb = segment(mesh.geometry);
         const M = matOf(g, mesh);
         for (const reg of sb.regions) {
           const fb = placed(mesh.geometry, reg, M);
           if (!alike(fa, fb)) continue;
           const fits = fit(fa, fb).filter(x => x.score >= 0.7);
-          if (fits.length && fits[0].score >= 0.8) out.push({ g, mesh, reg, face: fb, fits });
+          if (fits.length && fits[0].score >= 0.78) out.push({ g, mesh, reg, face: fb, fits });
         }
         if (++k % 2 === 0) { onStep?.(); await new Promise(r => setTimeout(r, 0)); }
       }
