@@ -144,7 +144,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   let choice = null;                  // la liste du choix face / arete ouverte : les prises, et ou la montrer
   // « ➕ Point de colle » (30/10/2026) : sur une piece deja collee, une prise de plus (point, arete ou face) et sa cible ;
   // le premier collage tient (la piece ne fait que glisser et tourner sur son contact). keepPins : les points poses
-  let addPin = false, keepPins = [];              // une coupe au couteau proposee (morceaux colores), pas encore validee
+  let addPin = false, keepPins = [];
+  // « 🪄 Placer » (30/10/2026) : la piece touchee, puis l'endroit ou elle va ; les places possibles (face jumelle,
+  // emboitee, alignee, collee au point) calculees d'avance, montrees l'une apres l'autre, gardee celle qu'on choisit
+  let placeA = null, placing = null;          // placing : { base, cands: [{ label, s }], i } (s : l'etat de la scene)              // une coupe au couteau proposee (morceaux colores), pas encore validee
   const snapshot = () => ({ m: all.map(g => g.matrix.clone()), groups: groups.map(gr => [...gr]), joints: joints.map(cloneJ), ex: all.map(g => !!g.userData.excluded) });
   const restore = s => { all.forEach((g, i) => { s.m[i].decompose(g.position, g.quaternion, g.scale); g.updateMatrix();
     if (s.ex) { g.userData.excluded = s.ex[i]; g.visible = !s.ex[i]; } }); groups = s.groups.map(gr => [...gr]);
@@ -161,6 +164,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
     cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, addPin, autoFit,
+    place: placing ? { i: placing.i, n: placing.cands.length, label: placing.cands[placing.i].label } : null, placeStep: placeA ? 2 : 1,
     choice: choice ? { x: choice.x, y: choice.y, items: choice.cands.map(altLabel), piece: choice.cands[0]?.group?.userData.name || "" } : null,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
@@ -681,58 +685,69 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     return hits >= Math.ceil(pts.length / 2);
   };
   // quiet : lance seul apres un collage -- rien n'est dit s'il n'y a rien a gagner ; rend vrai si la piece a bouge
-  const fitOnContact = async (mode, quiet = false) => {
+  // le calcul d'emboiter / aligner pour la selection collee (sans rien deplacer) : { r, j, N, moving, touching, still }, ou
+  // { why } ; quiet : les seuils d'un ajustement automatique (un gain net, sinon rien)
+  const fitCore = async (mode, quiet = false) => {
     const list = [...sel], j = jointOf(list);
+    if (!j) return { why: "nojoint" };
+    const col = await getCollider();
+    const { nestPlace } = await import("./assemblyNest");
+    const moving = withKids(list), { P, N } = contact(j);
+    // les autres pieces ne se traversent pas (la piece support ne compte pas : le contact avec elle est deja regle par
+    // les cartes de hauteur, et son relief -- un tricot autour de l'empreinte d'un bec -- faisait refuser toutes les
+    // places) ; une tolerance d'un millimetre (la piece amincie d'autant) : un frottement de relief n'est pas une
+    // collision ; si la piece chevauche deja une autre piece la ou on l'a collee, le test ne bloque rien
+    const sup = new Set(unitOf(j.b));
+    const others = all.filter(g => g.visible && !moving.includes(g) && !sup.has(g));
+    const hit = M => col.anyTouch(moving.map(g => { g.updateMatrix(); return [g, M.clone().multiply(g.matrix)]; }), others, 1);
+    const collides = others.length && !hit(new THREE.Matrix4()) ? hit : null;
+    const base = unitOf(j.b).filter(g => g.visible && !moving.includes(g));
+    let r = await nestPlace({ THREE, collider: col, moving, base, P, N, mode, collides });
+    // toutes les places touchent une autre piece : la meilleure quand meme, en le disant (refuser tout ne laissait rien a faire)
+    let touching = false;
+    if (r && !r.M) { r = await nestPlace({ THREE, collider: col, moving, base, P, N, mode }); touching = true; }
+    if (!r) return { why: "none" };
+    // rien ne bouge sans un gain net (32 mm de chemin pour 0,1 mm plus bas ; un alignement sans face trouvee tournait
+    // quand meme la piece) : emboiter, au moins 0,3 mm plus bas ; aligner, une face reellement recouverte, et mieux
+    const still = (r.moved < 0.05 && Math.abs(r.turned) < 0.1 && Math.abs(r.sink) < 0.05)
+      || (mode === "nest" && r.sink < 0.3)
+      || (mode === "align" && (r.cov1 < 0.3 || r.cov1 < r.cov0 + (quiet ? 0.05 : 0.01)));
+    return { r, j, N, moving, touching, still };
+  };
+  // une place trouvee, appliquee : la piece, son point de contact (dans le repere du support), l'axe des rotations
+  const applyFit = f => {
+    apply(f.moving, f.r.M);
+    f.j.b.updateMatrix();
+    f.j.p.copy(f.r.contact.clone().applyMatrix4(f.j.b.matrix.clone().invert()));
+    pivot = { p: f.r.contact.clone(), axis: f.N.clone().normalize(), unit: f.moving };
+  };
+  const fitText = (mode, r) => {
+    const mm = x => String(Math.round(x * 10) / 10).replace(".", ",");
+    const moved = `déplacée de ${mm(r.moved)} mm${Math.abs(r.turned) >= 0.5 ? `, tournée de ${Math.round(r.turned)}°` : ""}`;
+    return mode === "align" ? `alignée : ${Math.round(r.cov1 * 100)} % de sa face d'appui sur la face (avant ${Math.round(r.cov0 * 100)} %), centrée, ${moved}`
+      : `emboîtée : ${r.sink >= 0.05 ? `${mm(r.sink)} mm plus bas` : "même hauteur"}, ${moved}`;
+  };
+  // quiet : lance seul apres un collage -- rien n'est dit s'il n'y a rien a gagner ; rend vrai si la piece a bouge
+  const fitOnContact = async (mode, quiet = false) => {
     const said = fitMsg;
     const say = m => { fitMsg = quiet && m !== null ? (said || fitMsg) : m; onChange?.(state()); return false; };
-    if (!j) return say(mode === "align" ? "Colle d'abord la pièce sur la face où l'aligner (🧲 Coller), puis 📐 Aligner"
+    if (!jointOf([...sel])) return say(mode === "align" ? "Colle d'abord la pièce sur la face où l'aligner (🧲 Coller), puis 📐 Aligner"
       : "Colle d'abord la pièce sur celle où elle doit s'emboîter (🧲 Coller), puis 🧩 Emboîter");
     say(mode === "align" ? "Recherche de la place où la pièce déborde le moins…" : "Recherche de la place où la pièce s'emboîte…");
     await new Promise(r => setTimeout(r, 30));
     try {
-      const col = await getCollider();
-      const { nestPlace } = await import("./assemblyNest");
-      const moving = withKids(list), { P, N } = contact(j);
-      // les autres pieces ne se traversent pas : une place qui en traverse une (la piece amincie de 0,3 mm, pour ne pas
-      // compter le contact lui-meme) est sautee, la suivante est essayee (30/10/2026)
-      // la piece support ne compte pas (le contact avec elle est deja regle par les cartes de hauteur ; son relief, un
-      // tricot autour de l'empreinte d'un bec, faisait refuser toutes les places, 30/10/2026) ; et si la piece chevauche
-      // deja une autre piece la ou on l'a collee, le test ne bloque rien
-      const sup = new Set(unitOf(j.b));
-      const others = all.filter(g => g.visible && !moving.includes(g) && !sup.has(g));
-      // une tolerance d'un millimetre (la piece amincie d'autant) : un frottement de relief n'est pas une collision
-      const hit = M => col.anyTouch(moving.map(g => { g.updateMatrix(); return [g, M.clone().multiply(g.matrix)]; }), others, 1);
-      const collides = others.length && !hit(new THREE.Matrix4()) ? hit : null;
-      let r = await nestPlace({ THREE, collider: col, moving, base: unitOf(j.b).filter(g => g.visible && !moving.includes(g)), P, N, mode, collides });
-      // toutes les places touchent une autre piece : la meilleure quand meme, en le disant (30/10/2026 : refuser tout ne
-      // laissait rien a faire)
-      let touching = false;
-      if (r && !r.M) {
-        r = await nestPlace({ THREE, collider: col, moving, base: unitOf(j.b).filter(g => g.visible && !moving.includes(g)), P, N, mode });
-        touching = true;
-      }
-      if (!r) return say(mode === "align" ? "Pas de place où elle repose à plat sur cette face, autour de là où elle est collée (une face courbe : 🎯 Ajuster)"
+      const f = await fitCore(mode, quiet);
+      if (f.why === "none") return say(mode === "align" ? "Pas de place où elle repose à plat sur cette face, autour de là où elle est collée (une face courbe : 🎯 Ajuster)"
         : "Pas de place trouvée autour de là où elle est collée : la pièce déborde de son support partout");
-      // rien ne bouge sans un gain net (30/10/2026 : 32 mm de chemin pour 0,1 mm plus bas ; un alignement sans face
-      // trouvee, a 0 %, tournait quand meme la piece) : emboiter, au moins 0,3 mm plus bas ; aligner, une face
-      // reellement recouverte, et mieux qu'avant
-      const still = (r.moved < 0.05 && Math.abs(r.turned) < 0.1 && Math.abs(r.sink) < 0.05)
-        || (mode === "nest" && r.sink < 0.3)
-        || (mode === "align" && (r.cov1 < 0.3 || r.cov1 < r.cov0 + (quiet ? 0.05 : 0.01)));
-      if (still) return say(mode === "align" ? (r.cov1 < 0.3 ? "Pas de face plane à épouser sous la pièce : elle reste où elle est (🎯 Ajuster pour une face courbe)" : "Déjà alignée au mieux")
+      if (f.why) return say(null);
+      if (f.still) return say(mode === "align" ? (f.r.cov1 < 0.3 ? "Pas de face plane à épouser sous la pièce : elle reste où elle est (🎯 Ajuster pour une face courbe)" : "Déjà alignée au mieux")
         : "Déjà à la meilleure place : elle ne descend pas plus bas autour de là où elle est collée");
-      apply(moving, r.M);
-      j.b.updateMatrix();
-      j.p.copy(r.contact.clone().applyMatrix4(j.b.matrix.clone().invert()));
-      pivot = { p: r.contact.clone(), axis: N.clone().normalize(), unit: moving };
+      applyFit(f);
       showContact(); placeHandle(); push(); render();
       egg(mode === "align" ? "aligne" : "emboite");
-      const mm = x => String(Math.round(x * 10) / 10).replace(".", ",");
-      const moved = `déplacée de ${mm(r.moved)} mm${Math.abs(r.turned) >= 0.5 ? `, tournée de ${Math.round(r.turned)}°` : ""}`;
-      fitMsg = (quiet ? "Collée, puis " : "") + (mode === "align" ? `alignée : ${Math.round(r.cov1 * 100)} % de sa face d'appui sur la face (avant ${Math.round(r.cov0 * 100)} %), centrée, ${moved}`
-        : `emboîtée : ${r.sink >= 0.05 ? `${mm(r.sink)} mm plus bas` : "même hauteur"}, ${moved}`);
+      fitMsg = (quiet ? "Collée, puis " : "") + fitText(mode, f.r);
       if (!quiet) fitMsg = fitMsg[0].toUpperCase() + fitMsg.slice(1);
-      if (touching) fitMsg += " — elle touche une autre pièce à cette place";
+      if (f.touching) fitMsg += " — elle touche une autre pièce à cette place";
       onChange?.(state());
       return true;
     } catch (e) { console.error("[3D] emboiter / aligner", e); return say("La recherche a échoué"); }
@@ -797,6 +812,77 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     fitMsg = `Collée : point de colle ajouté (${kind === "edge" ? "arêtes alignées" : kind === "face" ? "faces l'une contre l'autre" : `${keepPins.filter(k => unit.includes(k.ag)).length} point(s)`}), le premier collage tient — glissée de ${mm(t.length())} mm${Math.abs(th) > 0.005 ? `, tournée de ${Math.round(th * 180 / Math.PI)}°` : ""}`;
     egg("point_de_colle");
     render(); onChange?.(state());
+  };
+  // Placer : le premier toucher prend la piece, le second l'endroit ; puis toutes les places possibles sont calculees
+  const placeTap = pick => {
+    if (placing) return;                                   // une proposition est montree : ✓ ou ✕ d'abord
+    if (!pick) { placeA = null; clearMarks(); setSel([]); fitMsg = null; onChange?.(state()); return; }
+    if (!placeA) { placeA = pick; clearMarks(); setSel(unitOf(pick.group)); mark(pick); fitMsg = null; onChange?.(state()); return; }
+    const A = placeA;
+    if (unitOf(A.group).includes(pick.group)) { placeA = pick; clearMarks(); mark(pick); onChange?.(state()); return; }
+    placeA = null;
+    placeFind(A, pick);
+  };
+  const sameState = (a, b) => a.m.every((m, i) => m.elements.every((x, k) => Math.abs(x - b.m[i].elements[k]) < 0.05));
+  const placeFind = async (A, B) => {
+    fitMsg = "Recherche des places possibles…"; onChange?.(state());
+    await new Promise(r => setTimeout(r, 30));
+    const base = snapshot(), cands = [];
+    const keep = label => { const st = snapshot(); if (!sameState(st, base) && !cands.some(c => sameState(c.s, st))) cands.push({ label, s: st }); };
+    const unit = unitOf(A.group);
+    try {
+      // 1. les faces jumelles de la face touchee sur la piece visee (une coupe et son vis-a-vis)
+      if (A.kind === "face" && A.mesh?.geometry?.attributes?.position) {
+        if (!twinsLib) { const { createTwins } = await import("./assemblyTwins"); twinsLib = createTwins(THREE, neighbours); }
+        const skip = new Set(withKids(unit));
+        const r = await twinsLib.search({ g: A.group, mesh: A.mesh, tri: A.tri }, unitOf(B.group).filter(g => g.visible && !skip.has(g)), meshMat);
+        const tw = (r?.twins || []).filter(t => !occupied(t, skip)).slice(0, 2);
+        for (const t of tw) {
+          restore(base);
+          if (!mateTwin(A, t)) continue;
+          keep(`Face jumelle (${Math.round(t.fits[0].score * 100)} %)`);
+          for (let k = 1; k < Math.min(3, twinAlt?.fits.length || 0); k++) { twinAlt.i = k; placeTwin(); keep(`Face jumelle, autre sens ${k + 1}`); }
+        }
+        twinAlt = null;
+      }
+      // 2. collee la ou l'on a touche, puis emboitee dans le creux, ou alignee sur la face
+      restore(base);
+      const u = mate(A, B);
+      if (u) {
+        sel.clear(); u.forEach(g => sel.add(g));
+        const glued = snapshot();
+        for (const mode of ["nest", "align"]) {
+          restore(glued); sel.clear(); u.forEach(g => sel.add(g));
+          const f = await fitCore(mode, true);
+          if (f.r && !f.still) { applyFit(f); keep(mode === "nest" ? "Emboîtée" + (f.touching ? " (touche une autre pièce)" : "") : "Alignée sur la face" + (f.touching ? " (touche une autre pièce)" : "")); }
+        }
+        restore(glued); keep("Collée au point touché");
+      }
+    } catch (e) { console.error("[3D] placer", e); }
+    restore(base);
+    if (!cands.length) { fitMsg = "Aucune place trouvée : touche une autre face de la pièce, ou l'endroit visé de plus près"; setSel(unit); onChange?.(state()); return; }
+    placing = { base, cands, i: 0, unit };
+    restore(cands[0].s); sel.clear(); unit.forEach(g => sel.add(g)); shade();
+    fitMsg = null; render(); onChange?.(state());
+  };
+  const placeShow = d => {
+    if (!placing) return;
+    placing.i = (placing.i + d + placing.cands.length) % placing.cands.length;
+    restore(placing.cands[placing.i].s); shade(); render(); onChange?.(state());
+  };
+  const placeOk = () => {
+    if (!placing) return;
+    const { unit, cands, i } = placing;
+    placing = null;
+    restore(cands[i].s);
+    push(); setSel(unit);                                   // ↶ revient a avant
+    egg("placer");
+    fitMsg = `Placée : ${cands[i].label.toLowerCase()}`; onChange?.(state());
+  };
+  const placeCancel = () => {
+    if (!placing) { placeA = null; clearMarks(); render(); onChange?.(state()); return; }
+    const { base, unit } = placing;
+    placing = null; restore(base); setSel(unit); fitMsg = null; onChange?.(state());
   };
   const startTwins = A => {
     clearTwins();
@@ -950,6 +1036,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   };
   // ce que fait un toucher, selon le mode (une prise : la piece, sa face ou son arete ; ou rien)
   const tap = (pick, ev) => {
+    if (mode === "place") { placeTap(pick); return; }
     if (mode === "cut") { if (!pendingCut) setSel(pick ? [pick.group] : []); return; }
     if (mode === "move" || mode === "rotate") {
       if (!pick) { if (!ev.ctrlKey && !ev.shiftKey && !multi) setSel([]); return; }
@@ -1583,6 +1670,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       if (k === "c") return api.setMode("mate");
       if (k === "p") return api.setMode("pins");
       if (k === "x") return api.setMode("cut");
+      if (k === "a") return api.setMode("place");
+      if (mode === "place" && placing && (k === "enter")) return placeOk();
+      if (mode === "place" && placing && k === "escape") { ev.preventDefault(); ev.stopPropagation(); return placeCancel(); }
+      if (mode === "place" && placing && (ev.key === "ArrowRight" || ev.key === "ArrowLeft")) { ev.preventDefault(); return placeShow(ev.key === "ArrowRight" ? 1 : -1); }
       if (k === "enter" && mode === "cut" && pendingCut) return cutConfirm();
       if (k === "escape" && mode === "cut" && pendingCut) { ev.preventDefault(); ev.stopPropagation(); return cutCancel(); }
       if (k === "z") return frame();
@@ -1628,7 +1719,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
 
   const api = {
     setGround3: on => { ground3 = on; gPts = []; gUnit = []; drawGround(); onChange?.(state()); },
-    setMode: m => { if (m !== "mate") { addPin = false; keepPins = []; } if (m !== "cut") { cutCancel(); dropStroke(); clearRub(); } knifeView(m === "cut"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
+    setMode: m => { if (m !== "place") { if (placing) placeCancel(); placeA = null; } if (m !== "mate") { addPin = false; keepPins = []; } if (m !== "cut") { cutCancel(); dropStroke(); clearRub(); } knifeView(m === "cut"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
     setRotStep: d => { rotStep = d; applySnap(); onChange?.(state()); },
     setMoveStep: d => { moveStep = d; try { localStorage.setItem("bn.asm.moveStep", String(d)); } catch { /* rien */ } applySnap(); onChange?.(state()); },
@@ -1733,6 +1824,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     choiceHover: i => { if (!choice) return; showAlt(choice.cands[i]); choice.keep.forEach(mark); },
     choicePick: i => { const c = choice; if (!c) return; choice = null; clearMarks(); c.keep.forEach(mark); tap(c.cands[i], c.ev); onChange?.(state()); },
     choiceCancel: () => { const c = choice; choice = null; clearMarks(); c?.keep.forEach(mark); render(); onChange?.(state()); },
+    placeNext: () => placeShow(1), placePrev: () => placeShow(-1), placeOk, placeCancel,
     setAutoFit: on => { autoFit = on; try { localStorage.setItem("bn.asm.autofit", on ? "1" : "0"); } catch { /* rien */ } onChange?.(state()); },
     setAddPin: on => {
       if (on && mode !== "mate") api.setMode("mate");
