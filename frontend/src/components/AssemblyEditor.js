@@ -736,9 +736,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     render();
   };
   // une face jumelle deja occupee : juste devant elle (moins de 0,8 mm), une autre piece, en plusieurs points de la face
+  // une face deja prise : une autre piece posee dessus -- y compris une piece du meme groupe (30/10/2026 : le haut du
+  // pantalon, groupe avec la chemise posee dessus, etait encore propose) ; le rayon voit les deux cotes des faces (une
+  // piece qui s'y enfonce un peu) ; pas plus loin que 0,8 mm (plus loin, les tenons dans leur logement passaient pour pris)
   const occupied = (t, skip) => {
-    const own = new Set(unitOf(t.g));
-    const targets = all.filter(g => g.visible && !own.has(g) && !skip.has(g)).flatMap(g => g.children.filter(c => c.isMesh));
+    const targets = all.filter(g => g.visible && g !== t.g && !skip.has(g)).flatMap(g => g.children.filter(c => c.isMesh));
     if (!targets.length) return false;
     holder.updateMatrixWorld(true);
     const tri = t.face.tri, nt = tri.length / 9, pts = [t.face.c.clone()];
@@ -748,12 +750,16 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     }
     const dir = t.face.n.clone().transformDirection(holder.matrixWorld);
     const rc = new THREE.Raycaster();
+    const sides = targets.map(m => [m, m.material.side]);
+    sides.forEach(([m]) => { m.material.side = THREE.DoubleSide; });
     let hits = 0;
-    for (const p of pts) {
-      const o = holder.localToWorld(p.clone().addScaledVector(t.face.n, -0.3));
-      rc.set(o, dir); rc.far = 1.1;
-      if (rc.intersectObjects(targets, false).length) hits++;
-    }
+    try {
+      for (const p of pts) {
+        const o = holder.localToWorld(p.clone().addScaledVector(t.face.n, -0.3));
+        rc.set(o, dir); rc.far = 1.1;
+        if (rc.intersectObjects(targets, false).length) hits++;
+      }
+    } finally { sides.forEach(([m, sd]) => { m.material.side = sd; }); }
     return hits >= Math.ceil(pts.length / 2);
   };
   // quiet : lance seul apres un collage -- rien n'est dit s'il n'y a rien a gagner ; rend vrai si la piece a bouge
