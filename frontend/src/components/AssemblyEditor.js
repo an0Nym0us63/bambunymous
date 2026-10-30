@@ -338,7 +338,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   };
   // la prise le long du rayon deja pose (la souris, ou un essai sur le banc)
   const pickRay = () => {
-    const hit = ray.intersectObjects(meshes(), false)[0];
+    const hits = ray.intersectObjects(meshes(), false), hit = hits[0];
     if (!hit) return null;
     const g = pieceOf(hit.object);
     if (!g) return null;
@@ -403,6 +403,23 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         }
       }
     }
+    // Placer, le second toucher : les autres pieces traversees par le clic (les voisines sont transparentes, le clic
+    // tombait sur celle de devant), a 40 mm au plus derriere la premiere -- au choix dans la liste (30/10/2026)
+    if (mode === "place" && placeA && idx) {
+      const seen = new Set([g]);
+      for (const h of hits.slice(1)) {
+        const g2 = pieceOf(h.object);
+        if (!g2 || seen.has(g2) || h.distance - hit.distance > 40 || seen.size > 3) continue;
+        seen.add(g2);
+        g2.updateMatrix();
+        const M2 = g2.matrix.clone().multiply(h.object.matrix), N2 = new THREE.Matrix3().getNormalMatrix(M2);
+        const n2 = new THREE.Vector3(); triNormal(h.object.geometry.attributes.position, h.object.geometry.index.array, h.faceIndex, n2); n2.applyMatrix3(N2).normalize();
+        alts = alts || [];
+        if (!alts.length) alts.push({ group: g, kind: "face", p, n, size, mesh: hit.object, tri: hit.faceIndex, region, piece: true, hl: { geo, M, tris: null, area: 0 } });
+        alts.push({ group: g2, kind: "face", p: holder.worldToLocal(h.point.clone()), n: n2, size: boxOf(g2).getSize(new THREE.Vector3()).length(), mesh: h.object, tri: h.faceIndex,
+          piece: true, hl: { geo: h.object.geometry, M: M2, tris: null, area: 0 } });
+      }
+    }
     const withAlts = pk => (alts && alts.length > 1 ? Object.assign(pk, { alts }) : pk);
     // l'arete la plus proche du clic, si le clic la frole et si c'est une vraie arete (angle marque avec sa voisine)
     if (idx) {
@@ -444,7 +461,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     } else mark(pk);
     render();
   };
-  const altLabel = pk => pk.kind === "edge"
+  const altLabel = pk => pk.piece ? `▣ ${pk.group.userData.name}` : pk.kind === "edge"
     ? `╱ Arête${pk.hl?.curved ? " courbe" : ""}${pk.hl?.len ? ` · ${String(Math.round(pk.hl.len * 10) / 10).replace(".", ",")} mm` : ""}`
     : `▭ Face${pk.hl?.area ? ` · ${Math.round(pk.hl.area)} mm²` : ""}`;
 
@@ -823,6 +840,28 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     placeA = null;
     placeFind(A, pick);
   };
+  // la direction de la surface autour d'un clic, moyennee sur quelques millimetres (30/10/2026 : sur une piece en tricot,
+  // le triangle touche n'est qu'une maille du relief, sa normale partait dans tous les sens et la piece avec)
+  const smoothPick = pk => {
+    if (!pk || pk.kind !== "face" || !pk.mesh?.geometry?.attributes?.position) return pk;
+    const geo = pk.mesh.geometry, pos = geo.attributes.position, ix = geo.index?.array;
+    pk.group.updateMatrix(); pk.mesh.updateMatrix();
+    const M = pk.group.matrix.clone().multiply(pk.mesh.matrix), q = pk.p.clone().applyMatrix4(M.clone().invert());
+    const R = Math.min(10, Math.max(3, 0.06 * (pk.size || 50))), R2 = R * R, c = centersOf(geo), acc = new THREE.Vector3(), nt = new THREE.Vector3();
+    const tv = (t, e) => (ix ? ix[t * 3 + e] : t * 3 + e);
+    for (let t = 0; t < c.length / 3; t++) {
+      const dx = c[t * 3] - q.x, dy = c[t * 3 + 1] - q.y, dz = c[t * 3 + 2] - q.z;
+      if (dx * dx + dy * dy + dz * dz > R2) continue;
+      const a = new THREE.Vector3().fromBufferAttribute(pos, tv(t, 0)), b = new THREE.Vector3().fromBufferAttribute(pos, tv(t, 1)), d = new THREE.Vector3().fromBufferAttribute(pos, tv(t, 2));
+      nt.subVectors(b, a).cross(d.sub(a)); acc.add(nt);          // ponderee par la surface
+    }
+    if (acc.lengthSq() < 1e-12) return pk;
+    const n = acc.applyMatrix3(new THREE.Matrix3().getNormalMatrix(M)).normalize();
+    if (n.dot(pk.n) < 0) n.negate();
+    // une vraie face plane, assez grande, garde son centre (collage centre) ; sinon, point contre point
+    const keepRegion = pk.region && !pk.region.relaxed && pk.region.area > 20;
+    return { ...pk, n, region: keepRegion ? pk.region : null };
+  };
   const sameState = (a, b) => a.m.every((m, i) => m.elements.every((x, k) => Math.abs(x - b.m[i].elements[k]) < 0.05));
   const placeFind = async (A, B) => {
     fitMsg = "Recherche des places possibles…"; onChange?.(state());
@@ -847,7 +886,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       }
       // 2. collee la ou l'on a touche, puis emboitee dans le creux, ou alignee sur la face
       restore(base);
-      const u = mate(A, B);
+      const u = mate(smoothPick(A), smoothPick(B));
       if (u) {
         sel.clear(); u.forEach(g => sel.add(g));
         const glued = snapshot();
@@ -1026,8 +1065,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const pick = pickAt(ev);
     // un clic sur la poignee ; ses zones invisibles debordent : dans le vide, le clic desselectionne quand meme (30/10/2026)
     if (tc.axis && pick) return;
-    if (pick?.alts && (mode === "mate" || (mode === "ground" && !ground3))) {
-      const keep = mode === "mate" && first ? [first] : [];
+    if (pick?.alts && (mode === "mate" || mode === "place" || (mode === "ground" && !ground3))) {
+      const keep = mode === "mate" && first ? [first] : mode === "place" && placeA ? [placeA] : [];
       choice = { cands: pick.alts, ev: { ctrlKey: ev.ctrlKey, shiftKey: ev.shiftKey, altKey: ev.altKey, metaKey: ev.metaKey }, x: ev.clientX, y: ev.clientY, keep };
       showAlt(null); keep.forEach(mark); onChange?.(state());
       return;
