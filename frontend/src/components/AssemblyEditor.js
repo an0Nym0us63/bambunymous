@@ -160,7 +160,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pivot: !!pivot, pairs: pairs.length, twinPos: twinAlt && twinAlt.at === changes && twinAlt.fits.length > 1 ? `${twinAlt.i + 1}/${twinAlt.fits.length}` : null, boxMode, ground3, groundPts: gPts.length, vertical, pinsA: pins.a.length, pinsB: pins.b.length,
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
-    cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, addPin, autoFit, edgeMode,
+    cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, addPin, edgeMode,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
     // de la selection part au moins un collage (vers une piece hors d'elle) : « Grouper le colle » a un sens
@@ -830,12 +830,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       return true;
     } catch (e) { console.error("[3D] emboiter / aligner", e); return say("La recherche a échoué"); }
   };
-  // apres un collage au jugé (sans face jumelle) : la piece s'emboite dans le creux autour, sinon s'aligne sur la forme
-  // de la face (30/10/2026 : on la collait dans son trou, puis il fallait la deplacer et la tourner a la main)
-  let autoFit = true;
-  // eteint par defaut (30/10/2026 : la piece bougeait d'elle-meme apres le collage, on ne savait plus pourquoi)
-  try { autoFit = localStorage.getItem("bn.asm.autofit") === "1"; } catch { autoFit = false; }
-  const settle = async () => { if (!autoFit) return; if (!(await fitOnContact("nest", true))) await fitOnContact("align", true); };
   // un point de colle de plus, le premier collage tenu : la piece tourne autour de la normale du contact et glisse dans
   // son plan, jusqu'a ce que la nouvelle prise vienne sur sa cible -- deux aretes : alignees (et l'une sur l'autre), deux
   // faces : face a face (et l'une contre l'autre), des points : superposes (a partir de deux, au mieux pour tous)
@@ -1148,7 +1142,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
             // des jumelles proposees, et touche ailleurs : la piece vient la ou l'on a touche (sa face centree sur ce
             // point), et non sur toute la face touchee (30/10/2026)
             const unit = mate(A, r?.twins?.some(x => x.shown) ? { ...pick, region: null, at: true } : pick);
-            if (unit) { pairs = [pairOf(A, pick, pivot ? pivot.p : pick.p, pivot ? pivot.p : pick.p)]; push(); setSel(unit); settle(); }
+            if (unit) { pairs = [pairOf(A, pick, pivot ? pivot.p : pick.p, pivot ? pivot.p : pick.p)]; push(); setSel(unit); }
           }
           render(); onChange?.(state());
         });
@@ -1171,7 +1165,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         // la premiere paire : le point de la piece, la ou il est venu (sur sa cible)
         pairs = [pairOf(A, pick, pivot ? pivot.p : pick.p, pivot ? pivot.p : pick.p)];
         push(); setSel(unit);
-        settle();
       }
       render(); onChange?.(state());
     }
@@ -1819,7 +1812,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     cutConfirm, cutCancel,
     // le choix face / arete : survoler une ligne la surligne, la toucher la prend
     setEdgeMode: on => { edgeMode = on; onChange?.(state()); },
-    setAutoFit: on => { autoFit = on; try { localStorage.setItem("bn.asm.autofit", on ? "1" : "0"); } catch { /* rien */ } onChange?.(state()); },
     setAddPin: on => {
       if (on && mode !== "mate") api.setMode("mate");
       addPin = on; first = null; keepPins = []; clearMarks(); clearTwins(); render();

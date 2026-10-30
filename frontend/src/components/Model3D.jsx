@@ -1085,7 +1085,6 @@ const EDIT_HELP = [
     ["Clic sur une pièce", "la pièce à couper (une seule)"],
     ["Glisser à travers elle", "un trait rouge : la pièce est tranchée sur la longueur du trait, dans toute l'épaisseur que voit l'écran (rien au-delà des bouts du trait) ; les parties qui ne tiennent plus ensemble deviennent des morceaux, chacun de sa couleur"],
     ["Plusieurs traits", "un support tenu par plusieurs ponts : un trait par pont ; chacun reste marqué en rouge, et la pièce se sépare quand tous sont tranchés ; tourne la vue au clic droit entre deux traits ; ✕ efface les traits"],
-    ["🧩 S'ajuster après un collage (⚙)", "éteint par défaut ; allumé : collée au jugé (sans face jumelle), la pièce s'emboîte d'elle-même dans le creux autour (🧩), sinon s'aligne sur la forme de la face (📐) ; ↶ revient au collage"],
     ["📐 Aligner", "une pièce collée sur une face glisse et tourne pour que sa face collée et celle qui la porte se recouvrent au mieux, avec le moins de matière qui se traverse (un panneau sur le côté d'une boîte : ses tenons dans leurs fentes), puis se centre"],
     ["🧩 Emboîter", "une pièce collée (🧲 Coller, même au jugé) glisse et tourne sur son contact jusqu'à la place où elle descend le plus, sans rien traverser : un bloc vient dans son logement, un tenon dans son trou"],
     ["🧹 Nettoyer", "retire d'un coup les petits restes de la pièce choisie (ce qui ne tient que par un coin, les ailettes et aiguilles qui pendent), proposés en rouge à valider"],
@@ -1383,7 +1382,6 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
           <BarMenu up b={on => tool(on)} label={<>⚙{lab("Réglages")}</>} items={[
             { label: "🧷 Aimanter", on: !!est.magnet, onClick: () => api?.setMagnet(!est.magnet), keep: true },
             { label: "🪄 Collage assisté", on: !!est.assist, onClick: () => api?.setAssist(!est.assist), keep: true },
-            { label: "🧩 S'ajuster après un collage", on: !!est.autoFit, onClick: () => api?.setAutoFit(!est.autoFit), keep: true },
             "-",
             { custom: <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", flexWrap: "wrap" }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginRight: 2 }}>Cran des déplacements</span>
@@ -1418,7 +1416,6 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         <BarMenu b={b} label="⚙" tip="Réglages : aimantation, cran des rotations, choix multiple, collage assisté" items={[
           { label: "🧷 Aimanter", on: !!est.magnet, onClick: () => api?.setMagnet(!est.magnet), keep: true, tip: "Une pièce lâchée à moins de 3 mm d'une autre ou du sol vient s'y coller (le pas des déplacements se règle à part, plus bas)" },
           { label: "🪄 Collage assisté", on: !!est.assist, onClick: () => api?.setAssist(!est.assist), keep: true, tip: "Faces entières centrées et grands axes alignés (sinon : au point cliqué)" },
-          { label: "🧩 S'ajuster après un collage", on: !!est.autoFit, onClick: () => api?.setAutoFit(!est.autoFit), keep: true, tip: "Collée au jugé, la pièce s'emboîte d'elle-même dans le creux autour, sinon s'aligne sur la forme de la face" },
           { label: "➕ Choix multiple", on: !!est.multi, onClick: () => api?.setMulti(!est.multi), keep: true, tip: "Chaque clic ajoute ou retire une pièce (comme Ctrl + clic, pour le stylet)" },
           "-",
           { custom: <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", flexWrap: "wrap" }}>
