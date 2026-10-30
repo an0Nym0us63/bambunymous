@@ -1436,7 +1436,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       scene.remove(helper); holder.remove(handle);
       clearMarks(); holder.remove(marks); markMat.dispose(); lineMat.dispose();
       clearTwins(); holder.remove(twinMarks); twinMat.dispose();
-      sel.clear(); shade(); all.forEach(g => { g.visible = true; });
+      // les pieces masquees reviennent, pas celles retirees de l'assemblage (30/10/2026 : elles restaient affichees
+      // apres l'edition, jusqu'a rouvrir la vue)
+      sel.clear(); shade(); all.forEach(g => { g.visible = !g.userData.excluded; });
       controls.enabled = true; render();
     },
   };
