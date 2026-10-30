@@ -949,21 +949,26 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const wholeFrame = g => { g.updateMatrix(); const o = g.userData.from ? g.userData.c.clone().sub(g.userData.parentC) : new THREE.Vector3();
     return g.matrix.clone().multiply(new THREE.Matrix4().makeTranslation(-o.x, -o.y, -o.z)); };
   const r6 = v => v.toArray().map(x => Math.round(x * 1e6) / 1e6);
+  // s : le trait trace, ou « sup » : detacher les supports integres (reperes d'eux-memes, assemblySplit.supportTris)
   const cutWith = async s => {
     const g = pendingCut ? pendingCut.g : sel.size === 1 ? [...sel][0] : null;
     const say = m => { fitMsg = m; onChange?.(state()); };
-    if (!g) return say("Touche d'abord la pièce à couper, puis trace un trait à travers elle");
+    const sup = s === "sup";
+    if (!g) return say(sup ? "Choisis d'abord la pièce dont détacher les supports" : "Touche d'abord la pièce à couper, puis trace un trait à travers elle");
     if (g.userData.copyOf) return say("Un exemplaire ajouté ne se coupe pas : coupe la pièce d'origine");
     const K = g.userData.from || g.userData.k, whole = g.userData.from ? g.userData.whole : g;
     if (!whole) return say("Cette pièce ne se coupe pas : réunis-la d'abord (🧩 Pièce, ⊕ Réunir)");
     // l'oeil et les deux bords du trait, dans le repere de la piece entiere
-    const r = el.getBoundingClientRect();
-    const rayAt = (x, y) => { mouse.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1); ray.setFromCamera(mouse, camera); return ray.ray.clone(); };
-    holder.updateMatrixWorld(true);
-    const inv = holder.matrixWorld.clone().multiply(wholeFrame(g)).invert();
-    const r0 = rayAt(s.x0, s.y0), r1 = rayAt(s.x1, s.y1);
-    const wedge = { e: r0.origin.clone().applyMatrix4(inv).toArray().map(x => Math.round(x * 1e4) / 1e4),
-      a: r6(r0.direction.clone().transformDirection(inv)), b: r6(r1.direction.clone().transformDirection(inv)) };
+    let wedge = { sup: 1 };
+    if (!sup) {
+      const r = el.getBoundingClientRect();
+      const rayAt = (x, y) => { mouse.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1); ray.setFromCamera(mouse, camera); return ray.ray.clone(); };
+      holder.updateMatrixWorld(true);
+      const inv = holder.matrixWorld.clone().multiply(wholeFrame(g)).invert();
+      const r0 = rayAt(s.x0, s.y0), r1 = rayAt(s.x1, s.y1);
+      wedge = { e: r0.origin.clone().applyMatrix4(inv).toArray().map(x => Math.round(x * 1e4) / 1e4),
+        a: r6(r0.direction.clone().transformDirection(inv)), b: r6(r1.direction.clone().transformDirection(inv)) };
+    }
     if (g !== whole) {
       // un morceau : la coupe reste dans sa boite (les autres morceaux de la piece ne sont pas touches)
       const bx = new THREE.Box3(), o = g.userData.c.clone().sub(g.userData.parentC);
@@ -972,11 +977,12 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       wedge.box = [...bx.min.toArray(), ...bx.max.toArray()].map(x => Math.round(x * 100) / 100);
     }
     const base = pendingCut ? pendingCut.cuts : (cuts.get(K) || []), next = [...base, wedge];
-    say("Découpe…");
+    say(sup ? "Recherche des supports…" : "Découpe…");
     await new Promise(res => setTimeout(res, 0));
     const { splitPieceGeometry, buildSplitGroups } = await import("./assemblySplit");
     const info = {}, comps = splitPieceGeometry(THREE, whole, next, info);
-    if (!info.lastHits) return say("Ce trait ne traverse pas la pièce : trace-le à travers elle, d'un bord à l'autre de la jointure");
+    if (!info.lastHits) return say(sup ? "Pas de support reconnu sur cette pièce (parois ou plaques fines, à faces planes) : coupe-les au couteau, un trait par jointure"
+      : "Ce trait ne traverse pas la pièce : trace-le à travers elle, d'un bord à l'autre de la jointure");
     let pc = pendingCut;
     if (!pc) {
       // ce qu'il y avait avant : la piece entiere, ou ses morceaux ; et a quel morceau appartenait chaque triangle
@@ -1033,7 +1039,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const bx = new THREE.Box3();
     pc.g.children.forEach(m => { if (m.isMesh) { m.geometry.computeBoundingBox(); bx.union(m.geometry.boundingBox); } });
     const mid = bx.getCenter(new THREE.Vector3()).add(o);
-    for (const w of pc.cuts.slice(pc.base)) {
+    for (const w of pc.cuts.slice(pc.base).filter(x => !x.sup)) {
       const E = new THREE.Vector3().fromArray(w.e), A = new THREE.Vector3().fromArray(w.a), Bd = new THREE.Vector3().fromArray(w.b);
       const t = mid.clone().sub(E).dot(A.clone().add(Bd).normalize());
       const pts = [E.clone().addScaledVector(A, t / Math.max(0.2, A.dot(A.clone().add(Bd).normalize()))), E.clone().addScaledVector(Bd, t / Math.max(0.2, Bd.dot(A.clone().add(Bd).normalize())))]
@@ -1084,7 +1090,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     }).filter(j => j.a !== j.b);
     cuts.set(pc.K, pc.cuts);
     resetHistory();
-    egg("couteau");
+    egg(pc.cuts.slice(pc.base).some(x => x.sup) ? "sans_echafaudage" : "couteau");
     fitMsg = `Coupée : ${pc.parts.length} morceaux, chacun se choisit, se déplace ou se retire de l'assemblage (📋 Pièces)`;
     setSel(derived(pc.g));
     fitMsg = `Coupée : ${pc.parts.length} morceaux, chacun se choisit, se déplace ou se retire de l'assemblage (📋 Pièces)`;
@@ -1343,6 +1349,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       setSel(parts);
     },
     cutConfirm, cutCancel,
+    // detacher les supports integres de la piece choisie : proposes en couleur, a valider comme une coupe
+    detachSupports: () => { if (mode !== "cut") api.setMode("cut"); return cutWith("sup"); },
     cuts: () => Object.fromEntries([...cuts].filter(([k, v]) => v.length && all.some(g => g.userData.from === k))),
     // remettre une piece separee d'un seul tenant
     reunite: () => {

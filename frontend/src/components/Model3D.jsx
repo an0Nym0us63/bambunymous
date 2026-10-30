@@ -1007,6 +1007,7 @@ const EDIT_HELP = [
     ["Clic sur une pièce", "la pièce à couper (une seule)"],
     ["Glisser à travers elle", "un trait rouge : la pièce est tranchée sur la longueur du trait, dans toute l'épaisseur que voit l'écran (rien au-delà des bouts du trait) ; les parties qui ne tiennent plus ensemble deviennent des morceaux, chacun de sa couleur"],
     ["Plusieurs traits", "un support tenu par plusieurs ponts : un trait par pont ; chacun reste marqué en rouge, et la pièce se sépare quand tous sont tranchés ; tourne la vue au clic droit entre deux traits ; ✕ efface les traits"],
+    ["🪄 Détacher les supports", "les supports intégrés au modèle (parois et plaques fines, à faces planes, fondues à la pièce) sont repérés d'eux-mêmes et proposés en couleur, sans trait à tracer"],
     ["✓ Couper (Entrée) / ✕ Ne pas couper (Échap)", "valider les morceaux ou tout laisser ; chaque morceau se choisit, se déplace, s'exclut (📋 Pièces : 🚫) ; ⊕ Réunir rend la pièce entière d'origine"],
   ]],
   ["Points (P)", [
@@ -1149,7 +1150,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         data-tip="Valider les morceaux (Entrée)">✓ Couper en {est.cutPending}</button>}
       <button type="button" onClick={() => api?.cutCancel()} style={b(false)} data-tip="Effacer les traits, tout laisser comme avant (Échap)">
         ✕ {est.cutPending ? "Ne pas couper" : `Effacer ${est.cutCount > 1 ? `les ${est.cutCount} traits` : "le trait"}`}</button>
-    </> : null)
+    </> : est.count === 1 ? <button type="button" onClick={() => api?.detachSupports()} style={b(false)}
+      data-tip="Repère les supports intégrés au modèle (parois et plaques fines) et les sépare de la pièce, sans trait à tracer">🪄 Détacher les supports</button> : null)
     : est.mode === "pins" ? <>
       <button type="button" disabled={!est.pinsB} onClick={() => api?.pinsApply()} style={b(!!est.pinsB, { opacity: est.pinsB ? 1 : 0.45 })}
         data-tip="Faire coïncider chaque point orange avec le point vert de même numéro (Entrée)">✓ Assembler{est.pinsB ? ` (${est.pinsB})` : ""}</button>
@@ -1176,6 +1178,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
       ]}/>
       <BarMenu b={b} up={compact} label="🧩 Pièce" tip="Séparer, réunir, masquer" items={[
         est.canSplit && { label: "✂ Séparer", onClick: () => api?.splitPreview(), tip: "Pièces groupées : les rendre indépendantes ; une pièce seule : proposer ses morceaux" },
+        est.count === 1 && { label: "🪄 Détacher les supports", onClick: () => api?.detachSupports(), tip: "Repère les supports intégrés au modèle (parois et plaques fines) et les sépare de la pièce" },
         est.canReunite && { label: "⊕ Réunir", onClick: () => api?.reunite(), tip: "Remettre la pièce d'un seul tenant" },
         { label: "🙈 Masquer", key: "H", onClick: () => api?.hide(), tip: "Pour atteindre ce qu'elle cache (la vue seulement)" },
       ]}/>

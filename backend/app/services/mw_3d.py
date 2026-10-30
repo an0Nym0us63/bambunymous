@@ -1561,8 +1561,9 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
     for k, lst in (cuts or {}).items() if isinstance(cuts, dict) else []:
         if str(k) not in spl or not isinstance(lst, list):
             continue
-        ok = [{"e": w["e"], "a": w["a"], "b": w["b"], **({"box": w["box"]} if num(w.get("box"), 6) else {})} for w in lst[:50]
-              if isinstance(w, dict) and all(num(w.get(x), 3) for x in ("e", "a", "b"))]
+        # un trait {e, a, b}, ou « detacher les supports » {sup: 1} ; et la boite du morceau vise
+        ok = [{**({"sup": 1} if w.get("sup") else {"e": w["e"], "a": w["a"], "b": w["b"]}), **({"box": w["box"]} if num(w.get("box"), 6) else {})}
+              for w in lst[:50] if isinstance(w, dict) and (w.get("sup") or all(num(w.get(x), 3) for x in ("e", "a", "b")))]
         if ok:
             cut[str(k)] = ok
     d = {"pieces": clean, "groups": [g for g in grp if len(g) > 1], "joints": jts, "splits": spl, "excluded": exc, "v": 2,

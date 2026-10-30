@@ -82,6 +82,123 @@ export function splitPieceGeometry(THREE, pg, cuts = null, info = null) {
   return out;
 }
 
+// Les supports integres au modele (30/10/2026) : des parois et des plaques fines (moins de 2,5 mm), faites de grandes
+// faces planes en peu de triangles, fondues a la piece (une queue d'oiseau tenue par des voiles verticaux et une
+// semelle). Reperes ainsi :
+//  1. les regions planes (triangles voisins dans un meme plan) ;
+//  2. les « graines » : les grandes regions planes (3 mm2 au moins, triangles de 1 mm2 en moyenne : une surface courbe
+//     en a de bien plus petits) qui ont, en face, a 2,5 mm au plus, une autre grande region parallele qui la recouvre :
+//     les deux faces d'une paroi fine ;
+//  3. de proche en proche, les bandes planes etroites (1,8 mm au plus) qui les touchent : chants et sommets des parois ;
+//  4. ce qui reste, en morceaux : les petits (moins de 5 % du plus grand) qui touchent les supports les rejoignent.
+// Rend, pour chaque triangle, 1 s'il est d'un support (ou null : aucun support reconnu). Positions en mm.
+export function supportTris(pos, ix, only = null) {
+  const nt = ix.length / 3;
+  const weld = new Map(), w = new Int32Array(pos.length / 3);
+  for (let i = 0; i < w.length; i++) {
+    const k = `${Math.round(pos[i * 3] * 1000)},${Math.round(pos[i * 3 + 1] * 1000)},${Math.round(pos[i * 3 + 2] * 1000)}`;
+    let j = weld.get(k);
+    if (j === undefined) { j = weld.size; weld.set(k, j); }
+    w[i] = j;
+  }
+  const nv = weld.size;
+  const N = new Float64Array(nt * 3), A = new Float64Array(nt), O = new Float64Array(nt);
+  for (let t = 0; t < nt; t++) {
+    const a = ix[t * 3] * 3, b = ix[t * 3 + 1] * 3, c = ix[t * 3 + 2] * 3;
+    const ux = pos[b] - pos[a], uy = pos[b + 1] - pos[a + 1], uz = pos[b + 2] - pos[a + 2];
+    const vx = pos[c] - pos[a], vy = pos[c + 1] - pos[a + 1], vz = pos[c + 2] - pos[a + 2];
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const l = Math.hypot(nx, ny, nz);
+    A[t] = l / 2;
+    if (l > 1e-12) { nx /= l; ny /= l; nz /= l; }
+    N[t * 3] = nx; N[t * 3 + 1] = ny; N[t * 3 + 2] = nz;
+    O[t] = nx * pos[a] + ny * pos[a + 1] + nz * pos[a + 2];
+  }
+  // les voisins par arete (soudee)
+  const edge = new Map(), nb = new Int32Array(nt * 3).fill(-1);
+  for (let t = 0; t < nt; t++) for (let e = 0; e < 3; e++) {
+    const p = w[ix[t * 3 + e]], q = w[ix[t * 3 + (e + 1) % 3]], k = p < q ? p * nv + q : q * nv + p, o = edge.get(k);
+    if (o === undefined) edge.set(k, t * 3 + e); else { nb[t * 3 + e] = Math.floor(o / 3); nb[o] = t; }
+  }
+  // 1. les regions planes
+  const reg = new Int32Array(nt).fill(-1), R = [];
+  for (let s = 0; s < nt; s++) {
+    if (reg[s] >= 0) continue;
+    const id = R.length, r = { area: 0, n: 0, nx: 0, ny: 0, nz: 0, o: 0, lo: [Infinity, Infinity, Infinity], hi: [-Infinity, -Infinity, -Infinity] };
+    R.push(r); reg[s] = id;
+    const st = [s];
+    while (st.length) {
+      const t = st.pop();
+      r.area += A[t]; r.n++; r.nx += N[t * 3] * A[t]; r.ny += N[t * 3 + 1] * A[t]; r.nz += N[t * 3 + 2] * A[t]; r.o += O[t] * A[t];
+      for (let e = 0; e < 3; e++) {
+        const v = ix[t * 3 + e] * 3;
+        for (let c = 0; c < 3; c++) { r.lo[c] = Math.min(r.lo[c], pos[v + c]); r.hi[c] = Math.max(r.hi[c], pos[v + c]); }
+        const o = nb[t * 3 + e];
+        if (o < 0 || reg[o] >= 0) continue;
+        if (N[o * 3] * N[s * 3] + N[o * 3 + 1] * N[s * 3 + 1] + N[o * 3 + 2] * N[s * 3 + 2] > 0.9995 && Math.abs(O[o] - O[s]) < 0.05) { reg[o] = id; st.push(o); }
+      }
+    }
+  }
+  let tot = 0;
+  for (const r of R) {
+    tot += r.area;
+    const l = Math.hypot(r.nx, r.ny, r.nz) || 1;
+    r.nx /= l; r.ny /= l; r.nz /= l; r.o /= r.area || 1;
+    r.width = r.area / (Math.hypot(r.hi[0] - r.lo[0], r.hi[1] - r.lo[1], r.hi[2] - r.lo[2]) || 1);
+  }
+  // 2. les graines : deux grandes faces paralleles, face a face, a 2,5 mm au plus
+  const big = R.map((r, i) => i).filter(i => R[i].area >= Math.max(3, 0.0002 * tot) && R[i].area / R[i].n >= 1)
+    .sort((a, b) => R[b].area - R[a].area).slice(0, 1500);
+  const inS = new Uint8Array(R.length);
+  for (const i of big) {
+    const r = R[i];
+    for (const j of big) {
+      if (j === i) continue;
+      const q = R[j];
+      if (r.nx * q.nx + r.ny * q.ny + r.nz * q.nz > -0.999) continue;
+      const gap = Math.abs(r.o + q.o);
+      if (gap > 2.5) continue;
+      let over = true;
+      for (let c = 0; c < 3; c++) if (Math.min(r.hi[c], q.hi[c]) + gap + 0.1 < Math.max(r.lo[c], q.lo[c])) over = false;
+      if (over) { inS[i] = 1; inS[j] = 1; }
+    }
+  }
+  if (!inS.some(Boolean)) return null;
+  const S = new Uint8Array(nt);
+  for (let t = 0; t < nt; t++) S[t] = inS[reg[t]];
+  // 3. les bandes etroites qui touchent les supports (chants, sommets des parois)
+  const cand = R.map((r, i) => i).filter(i => !inS[i] && R[i].area >= 2 && R[i].area / R[i].n >= 0.8 && R[i].width <= 1.8);
+  const vS = new Uint8Array(nv);
+  const mark = () => { for (let t = 0; t < nt; t++) if (S[t]) for (let e = 0; e < 3; e++) vS[w[ix[t * 3 + e]]] = 1; };
+  mark();
+  const trisOf = new Map();
+  for (let t = 0; t < nt; t++) { const r = reg[t]; if (!inS[r]) { let l = trisOf.get(r); if (!l) trisOf.set(r, l = []); l.push(t); } }
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const i of cand) {
+      if (inS[i]) continue;
+      const ts = trisOf.get(i) || [];
+      if (!ts.some(t => vS[w[ix[t * 3]]] || vS[w[ix[t * 3 + 1]]] || vS[w[ix[t * 3 + 2]]])) continue;
+      inS[i] = 1; grew = true;
+      for (const t of ts) { S[t] = 1; for (let e = 0; e < 3; e++) vS[w[ix[t * 3 + e]]] = 1; }
+    }
+  }
+  // 4. le reste en morceaux : les petits qui touchent les supports les rejoignent
+  const up = new Int32Array(nv);
+  for (let i = 0; i < nv; i++) up[i] = i;
+  const root = i => { while (up[i] !== i) { up[i] = up[up[i]]; i = up[i]; } return i; };
+  for (let t = 0; t < nt; t++) if (!S[t]) { const a = root(w[ix[t * 3]]); up[root(w[ix[t * 3 + 1]])] = a; up[root(w[ix[t * 3 + 2]])] = a; }
+  const area = new Map();
+  for (let t = 0; t < nt; t++) if (!S[t]) { const k = root(w[ix[t * 3]]); area.set(k, (area.get(k) || 0) + A[t]); }
+  const main = Math.max(0, ...area.values());
+  const touch = new Set();
+  for (let t = 0; t < nt; t++) if (!S[t] && (vS[w[ix[t * 3]]] || vS[w[ix[t * 3 + 1]]] || vS[w[ix[t * 3 + 2]]])) touch.add(root(w[ix[t * 3]]));
+  for (let t = 0; t < nt; t++) if (!S[t]) { const k = root(w[ix[t * 3]]); if (area.get(k) < 0.05 * main && touch.has(k)) S[t] = 1; }
+  // seulement dans la boite d'un morceau vise
+  if (only) for (let t = 0; t < nt; t++) if (S[t] && !only(t)) S[t] = 0;
+  return S;
+}
+
 // Un coup de couteau (30/10/2026) : un trait trace a l'ecran, devenu un secteur de plan qui part de l'oeil (e) entre
 // deux directions (a, b), dans le repere de la piece entiere (et dans la boite « box » du morceau vise, s'il y en a
 // une). Les triangles traverses dans ce secteur sont coupes en
@@ -101,6 +218,35 @@ export function cutGeometry(THREE, geo, cuts, tagIds = new Map()) {
   const dot = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
   const cross = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
   cuts.forEach((c, ci) => {
+    if (c.sup) {
+      // detacher les supports : leurs triangles prennent des sommets a eux (ceux partages avec le reste sont doubles)
+      const X = c.box, n = ix.length / 3;
+      const only = X ? t => { const q = [0, 1, 2].map(a => (P(ix[t * 3])[a] + P(ix[t * 3 + 1])[a] + P(ix[t * 3 + 2])[a]) / 3);
+        return q[0] >= X[0] && q[1] >= X[1] && q[2] >= X[2] && q[0] <= X[3] && q[1] <= X[4] && q[2] <= X[5]; } : null;
+      const S = supportTris(vals[pi], ix, only);
+      if (!S) return;
+      const inR = new Uint8Array(tag.length), inSv = new Uint8Array(tag.length);
+      for (let t = 0; t < n; t++) for (let e = 0; e < 3; e++) (S[t] ? inSv : inR)[ix[t * 3 + e]] = 1;
+      const dup = new Map();
+      for (let t = 0; t < n; t++) {
+        if (!S[t]) continue;
+        hits[ci]++;
+        for (let e = 0; e < 3; e++) {
+          const v = ix[t * 3 + e], tk = `${tag[v]}|s${ci}`;
+          let id = tagIds.get(tk);
+          if (id === undefined) { id = tagIds.size + 1; tagIds.set(tk, id); }
+          if (!inR[v]) { tag[v] = id; continue; }
+          let j = dup.get(v);
+          if (j === undefined) {
+            j = tag.length;
+            vals.forEach((arr, ai) => { for (let q = 0; q < size[ai]; q++) arr.push(arr[v * size[ai] + q]); });
+            tag.push(id); dup.set(v, j);
+          }
+          ix[t * 3 + e] = j;
+        }
+      }
+      return;
+    }
     const E = c.e, A = c.a, B = c.b, N = cross(A, B), ln = Math.hypot(...N);
     if (ln < 1e-12) return;
     const nn = N.map(x => x / ln), fwd = [A[0] + B[0], A[1] + B[1], A[2] + B[2]];
