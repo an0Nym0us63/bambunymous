@@ -887,7 +887,7 @@ async def _group_view(gid: int) -> dict:
     if not srcs:
         raise HTTPException(404, "Aucun 3MF d'origine dans ce groupe : importe-les, ou ouvre la vue 3D de ses modèles")
     chosen = await _color_choices(f"group:{gid}")
-    parts, finishes, missing = [], {}, []
+    parts, fin_used, fin_orig, missing = [], {}, {}, []
     for iid, e in srcs.items():
         ok = await asyncio.to_thread(T._in_child, e["path"], iid, "view")
         meta = T._read_side(iid, "plates.json") if ok else None
@@ -911,16 +911,21 @@ async def _group_view(gid: int) -> dict:
             pal = await _used_palette(e["path"], e["ids"], e["did"], e["prof"], dd, plate=n, chosen=chosen, print_choices=pchoices) or {}
             per[n] = {**allp, **pal}
             detail += dd
-        fins = T.origin_finishes(e["path"])
+        # les finitions, par couleur affichee : celle de la bobine qui a remplace une couleur ; la finition d'origine
+        # seulement pour une couleur que ce 3MF garde (31/10/2026 : le noir translucide d'origine d'un autre modele,
+        # remplace a l'impression, rendait translucide le noir opaque de la boite)
+        mapped = {str(k)[:6].upper() for k in allp} | {str(k)[:6].upper() for pal_ in per.values() for k in pal_}
         for x in detail:
             if x.get("to") and x.get("finish"):
-                finishes[str(x["to"])[:6].upper()] = x["finish"]
-        for c, fz in (fins or {}).items():
-            finishes.setdefault(str(c)[:6].upper(), fz)
+                fin_used[str(x["to"])[:6].upper()] = x["finish"]
+        for c, fz in (T.origin_finishes(e["path"]) or {}).items():
+            if str(c)[:6].upper() not in mapped:
+                fin_orig.setdefault(str(c)[:6].upper(), fz)
         parts.append({"iid": iid, "name": e["name"], "keep": keep,
                       "pal": {i: (per.get(n) if n is not None else None) or allp for i, n in enumerate(plate_of)}})
     if not parts:
         raise HTTPException(404, f"Pas de vue assemblée pour les 3MF de ce groupe ({', '.join(missing[:3])})")
+    finishes = {**fin_orig, **fin_used}
     sig_src = [(p["iid"], int((T._root() / p["iid"] / "plates.json").stat().st_mtime), sorted(p["keep"]) if p["keep"] else None,
                 sorted((k, sorted(v.items())) for k, v in p["pal"].items())) for p in parts]
     sig = hashlib.sha1(_json.dumps(sig_src, default=str).encode()).hexdigest()[:16]
