@@ -103,6 +103,14 @@ async def mw_img(u: str, _=Depends(_img_user)):
     return Response(data, media_type=ctype, headers=head)
 
 
+@router.get("/store-link")
+async def mw_store_link(url: str, code: str, variant: str = "", size: str = "", _: str = Depends(get_current_user)):
+    """La page de la boutique Bambu sur la couleur recommandee (31/10/2026) ; {url: None} si introuvable."""
+    import asyncio as _aio
+    from ....services.mw_docs import store_link
+    return {"url": await _aio.to_thread(store_link, url, code, variant, size)}
+
+
 @router.get("/status")
 async def mw_status(_: str = Depends(get_current_user)):
     out = {"cache": await mw.stats()}

@@ -321,6 +321,73 @@ async def filaments_view(fils: list) -> list:
     return out
 
 
+# ── Le lien de la boutique sur la bonne couleur (31/10/2026) ──
+# MakerWorld donne la page du produit (PLA Basic…) ; la boutique Bambu ouvre une variante (couleur, avec bobine ou
+# recharge, poids) par « ?id=<variante> ». Sa page produit les liste toutes (JSON-LD, « ProductGroup » : nom
+# « PLA Basic - Jaune tournesol (10402) / Recharge / 1 kg » et son lien) : lue une fois par jour et par produit.
+_STORE: dict = {}                                       # page produit -> (heure, [(nom, lien)])
+_STORE_TTL = 24 * 3600
+
+
+def _store_variants(url: str) -> list:
+    import json
+    import requests
+    from urllib.parse import urlsplit
+    hit = _STORE.get(url)
+    if hit and time.time() - hit[0] < _STORE_TTL:
+        return hit[1]
+    out = []
+    try:
+        r = requests.get(url, timeout=(10, 30), headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "fr-FR,fr;q=0.9"})
+        r.raise_for_status()
+        host = urlsplit(r.url).hostname or ""
+        if host == "bambulab.com" or host.endswith(".bambulab.com"):     # redirige ailleurs : rien
+            for m in re.finditer(r'<script[^>]*application/ld\+json[^>]*>(.*?)</script>', r.text, re.S):
+                try:
+                    d = json.loads(m.group(1))
+                except ValueError:
+                    continue
+                for g in (d if isinstance(d, list) else [d]):
+                    if not isinstance(g, dict) or g.get("@type") != "ProductGroup":
+                        continue
+                    for v in g.get("hasVariant") or []:
+                        o = (v.get("offers") or {}) if isinstance(v, dict) else {}
+                        if isinstance(v.get("name"), str) and isinstance(o.get("url"), str) and o["url"].startswith("https://"):
+                            out.append((v["name"], o["url"]))
+    except Exception as e:
+        logger.info(f"[boutique] {url} : {e}")
+    _STORE[url] = (time.time(), out)
+    return out
+
+
+def _kind(s: str) -> str:
+    s = str(s or "").lower()
+    return "refill" if ("refill" in s or "recharge" in s) else "spool" if ("spool" in s or "bobine" in s) else ""
+
+
+def _kg(s: str) -> str:
+    m = re.search(r"(\d+(?:[.,]\d+)?)\s*(k?g)", str(s or "").lower())
+    return f"{float(m.group(1).replace(',', '.')):g}{m.group(2)}" if m else ""
+
+
+def store_link(url: str, code: str, variant: str = "", size: str = "") -> str | None:
+    """Le lien de la boutique Bambu sur la variante de ce code couleur (et de ce type, de ce poids s'ils sont dits) ;
+    None : pas trouvee (le lien du produit reste)."""
+    from urllib.parse import urlsplit
+    host = urlsplit(str(url or "")).hostname or ""
+    code = str(code or "").strip()
+    if not code.isdigit() or not (host == "bambulab.com" or host.endswith(".bambulab.com")):
+        return None
+    cands = [(n, u) for n, u in _store_variants(url) if f"({code})" in n]
+    k, w = _kind(variant), _kg(size)
+    best = None
+    for n, u in cands:
+        score = (bool(k) and _kind(n) == k) * 2 + (bool(w) and w in (_kg(p) for p in n.split("/"))) * 1
+        if best is None or score > best[0]:
+            best = (score, u)
+    return best[1] if best else None
+
+
 async def find(did: str, docid: str):
     """(document, chemin garde ou None) d'apres la fiche gardee."""
     from ..db.session import AsyncSessionLocal

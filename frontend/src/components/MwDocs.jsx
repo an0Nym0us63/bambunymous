@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import client from "../api/client";
 import { currentFriend } from "../store/friend";
 
 // Documents joints d'un modele MakerWorld et pieces a prevoir (27/10/2026) : notice d'assemblage, nomenclature,
@@ -9,8 +10,24 @@ const KIND = { guide: ["📘", "#3B82F6"], bom: ["📋", "#8B5CF6"], other: ["�
 
 // les filaments recommandes par le createur, face a mon stock (meme code couleur Bambu)
 const kg = g => g >= 1000 ? `${(g / 1000).toFixed(1).replace(".", ",")} kg` : `${Math.round(g)} g`;
+// le lien de la boutique, ouvert sur la couleur (31/10/2026) : la page du produit, remplacee par celle de la variante
+// (couleur, type, poids) des que le serveur l'a trouvee
+function useStoreLink(f) {
+  const [url, setUrl] = useState(f.url || null);
+  useEffect(() => {
+    setUrl(f.url || null);
+    if (!f.url || !f.code) return undefined;
+    let alive = true;
+    client.get("/makerworld/store-link", { home: true, params: { url: f.url, code: f.code, variant: f.variant || "", size: f.size || "" } })
+      .then(r => { if (alive && r.data?.url) setUrl(r.data.url); }).catch(() => {});
+    return () => { alive = false; };
+  }, [f.url, f.code, f.variant, f.size]);
+  return url;
+}
+
 function FilaLine({ f }) {
   const s = f.stock, has = s && s.spools > 0;
+  const shop = useStoreLink(f);
   const hex = f.hex ? `#${String(f.hex).replace("#", "").slice(0, 6)}` : "#94a3b8";
   return <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
     <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: "50%", background: `radial-gradient(circle at 35% 30%, color-mix(in srgb, ${hex} 55%, #ffffff), ${hex})`,
@@ -27,7 +44,7 @@ function FilaLine({ f }) {
           ✓ {s.spools} · {kg(s.grams)}</span>
       : <span data-tip={s ? "Au catalogue, mais plus de bobine" : "Pas dans ton stock"} style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 800, padding: "2px 8px",
           borderRadius: 20, color: "#fff", background: "linear-gradient(135deg, #F59E0B, #EA580C)", whiteSpace: "nowrap" }}>à commander</span>}
-    {f.url && <a href={f.url} target="_blank" rel="noopener noreferrer" data-tip="Dans la boutique Bambu Lab"
+    {shop && <a href={shop} target="_blank" rel="noopener noreferrer" data-tip={shop !== f.url ? "Dans la boutique Bambu Lab, sur cette couleur" : "Dans la boutique Bambu Lab"}
       style={{ flexShrink: 0, fontSize: 11, fontWeight: 800, color: "#3b82f6", textDecoration: "none" }}>↗</a>}
   </div>;
 }
