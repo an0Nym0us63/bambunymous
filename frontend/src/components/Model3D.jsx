@@ -1095,6 +1095,7 @@ const EDIT_HELP = [
     ["╱ Autour d'une ligne", "touche une arête (ou une face : sa normale) : l'anneau rouge tourne autour de cette ligne"],
   ]],
   ["Poser au sol (F)", [["Par une face : clic sur une face", "elle se pose à plat sur le sol ; une arête : mise à l'horizontale"],
+    ["⤓ Descendre", "la pièce choisie (ou la prochaine touchée) tombe tout droit, sans tourner, jusqu'au sol ou sur la pièce qu'elle rencontre en dessous"],
     ["Par 3 points : trois clics", "à peu près sur les trois appuis (les roues d'un tricycle) : le vrai point d'appui est cherché autour de chaque clic, et la pièce repose dessus"]]],
   ["La barre", [
     ["En haut", "les modes, ▭ (choisir au rectangle), ⚙ (aimanter, collage assisté, choix multiple, crans des déplacements et des rotations), ↶ ↷, 🕘 (versions, vue du 3MF), 💾, ?, ✕"],
@@ -1330,6 +1331,9 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         data-tip="Allumé : un clic prend l'arête vive la plus proche ; éteint : un clic prend toujours la face">╱ Arête</button>
       <button type="button" onClick={() => api?.setGround3(true)} style={b(!!est.ground3)} data-tip="Clique trois points de la pièce qui doivent toucher le plateau : leur plan vient à plat sur le sol">Par 3 points{est.ground3 && est.groundPts ? ` (${est.groundPts}/3)` : ""}</button>
       {est.ground3 && est.groundPts > 0 && <button type="button" onClick={() => api?.setGround3(true)} style={b(false)} data-tip="Recommencer les points">✕ Points</button>}
+      {sep}
+      <button type="button" onClick={() => api?.fall()} style={b(est.pickFor === "fall")}
+        data-tip={hasSel ? "La pièce choisie tombe tout droit, sans tourner, jusqu'au sol ou sur une autre pièce" : "Touche ensuite la pièce à faire descendre : elle tombe tout droit, sans tourner, jusqu'au sol ou sur une autre pièce"}>⤓ Descendre</button>
     </> : null;
   const splitRow = est.splitPending ? <>
       <button type="button" onClick={() => api?.splitConfirm()} style={b(true, { background: "linear-gradient(135deg, #16a34a, #0EA5E9)" })}>✓ Séparer en {est.splitPending}</button>

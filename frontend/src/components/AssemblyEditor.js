@@ -1184,10 +1184,37 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     if (!moved) { fitMsg = `Posée contre ${B.userData.name} et collée${fitMsg ? ` — ${fitMsg}` : ""}`; onChange?.(state()); }
   };
   // ce que fait le clic d'un outil
+  // « ⤓ Descendre » (31/10/2026) : la piece (ou la selection, avec ce qui y est colle) tombe tout droit, sans tourner,
+  // jusqu'au premier contact : une autre piece en dessous, sinon le sol
+  const fall = async unit => {
+    const moving = withKids(unit);
+    if (!moving.length) return;
+    const others = all.filter(g => g.visible && !g.userData.excluded && !moving.includes(g));
+    const col = await getCollider();
+    const toFloor = minZ(moving) - floorZ();
+    if (toFloor <= 0.02) { fitMsg = "Déjà au sol"; onChange?.(state()); return; }
+    const touch = (t, list = others) => col.anyTouch(moving.map(g => { g.updateMatrix(); return [g, new THREE.Matrix4().makeTranslation(0, 0, -t).multiply(g.matrix)]; }), list);
+    // la premiere hauteur ou elle touche quelque chose, puis a 0,05 mm pres
+    const step = Math.max(0.5, toFloor / 300);
+    let lo = 0, hi = null;
+    for (let t = step; t < toFloor + step; t += step) { const tt = Math.min(t, toFloor); if (touch(tt)) { hi = tt; break; } lo = tt; if (tt >= toFloor) break; }
+    let on = null;
+    if (hi !== null) {
+      for (let k = 0; k < 14; k++) { const m = (lo + hi) / 2; if (touch(m)) hi = m; else lo = m; }
+      on = others.find(g => touch(hi, [g])) || null;
+    } else lo = toFloor;
+    if (lo < 0.02) { fitMsg = on ? `Déjà posée sur ${on.userData.name}` : "Elle ne peut pas descendre"; onChange?.(state()); return; }
+    apply(moving, new THREE.Matrix4().makeTranslation(0, 0, -lo));
+    push(); setSel(unit);
+    fitMsg = on ? `Descendue de ${lo.toFixed(1).replace(".", ",")} mm, posée sur ${on.userData.name}` : `Descendue de ${lo.toFixed(1).replace(".", ",")} mm, posée au sol`;
+    egg("descendre");
+    render(); onChange?.(state());
+  };
   const pickTool = pick => {
     const what = pickFor;
     pickFor = null; clearHover();
     if (!pick) { fitMsg = null; onChange?.(state()); return; }
+    if (what === "fall") { fall(sel.has(pick.group) ? [...sel] : unitOf(pick.group)); return; }
     const dir = pick.kind === "edge" ? pick.e.clone() : pick.n.clone();
     if (what === "view") { lookAlong(pick.kind === "edge" ? pick.n : pick.n, pick.p); fitMsg = null; onChange?.(state()); return; }
     if (what === "line") {
@@ -2098,9 +2125,12 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     viewAxis,
     pickTool: what => { pickFor = pickFor === what ? null : what; first = null; clearMarks();
       fitMsg = !pickFor ? null : { line: "Touche une arête (la ligne) ou une face (sa normale) : la pièce glissera le long", axis: "Touche l'arête ou la face de la pièce à mettre dans l'axe X, Y ou Z le plus proche",
-        view: "Touche une face : la vue se place juste en face", nest: "Touche la pièce où l'emboîter", align: "Touche la pièce sur laquelle l'aligner" }[what];
+        view: "Touche une face : la vue se place juste en face", nest: "Touche la pièce où l'emboîter", align: "Touche la pièce sur laquelle l'aligner",
+        fall: "Touche la pièce à faire descendre : elle tombe tout droit jusqu'au sol ou sur une autre pièce" }[what];
       render(); onChange?.(state()); },
     clearLine: () => { lineAxis = null; fitMsg = null; placeHandle(); render(); onChange?.(state()); },
+    // ⤓ : la selection tombe tout de suite ; sans selection, la prochaine piece touchee
+    fall: () => { if (sel.size) { pickFor = null; fall([...sel]); } else api.pickTool("fall"); },
     freeOut,
     findTwins: () => { if (first && first.kind === "face" && !twinBusy) startTwins(first); },
     stopTwins: () => { if (twinBusy) { twinStop = true; onChange?.(state()); } },
