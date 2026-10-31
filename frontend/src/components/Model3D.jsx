@@ -1499,7 +1499,9 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
   return <>
     {/* le bloc des menus ne prend que ses barres (31/10/2026) : entre elles et autour, la scene recoit les clics
         (avant : une zone morte en haut, ou le glisser selectionnait le texte) */}
-    <style>{`.bn-3d-top{pointer-events:none}.bn-3d-top>*{pointer-events:auto}`}</style>
+    <style>{`.bn-3d-top{pointer-events:none}.bn-3d-top>*{pointer-events:auto;position:relative}`
+      // chaque barre est un calque (son flou) : celle du haut passe devant, ses menus ne glissent plus sous celle du dessous (31/10/2026)
+      + `.bn-3d-top>*:nth-child(1){z-index:3}.bn-3d-top>*:nth-child(2){z-index:2}`}</style>
     <div className="bn-3d-top" style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 3, display: "flex", flexDirection: "column", alignItems: "center",
       gap: 6, maxWidth: "calc(100% - 24px)" }}>
       <div style={bar}>
