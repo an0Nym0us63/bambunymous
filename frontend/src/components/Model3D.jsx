@@ -1948,6 +1948,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title || `Modèle ${designId}`}</div>
             {meta?.profile_title && <div data-tip="Le profil affiché" style={{ fontSize: 11.5, fontWeight: 700, color: "#0891b2", overflow: "hidden",
               textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🧩 {meta.profile_title}</div>}
+            {meta?.missing?.length > 0 && <div data-tip={`Sans vue assemblée, pas dans cet assemblage : ${meta.missing.join(", ")}`} style={{ fontSize: 11, fontWeight: 700,
+              color: "#d97706", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>⚠ {meta.missing.length} modèle{meta.missing.length > 1 ? "s" : ""} sans vue assemblée : {meta.missing.join(", ")}</div>}
           </div>
         </div>
         {meta?.plates?.length > 1 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>

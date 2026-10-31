@@ -1526,6 +1526,111 @@ def from_makerworld(did: str, profile: str | None) -> dict | None:
     return meta
 
 
+def _unpack_bin(raw: bytes) -> list:
+    """Le contraire de _pack_bin : [(couleur RGBA, piece, sommets (n, 3) float64, triangles (m, 3) int64)]."""
+    import numpy as np
+    magic, ng, *h = struct.unpack_from("<II3f3f", raw, 0)
+    lo, sc = np.array(h[:3], dtype=np.float64), np.array(h[3:], dtype=np.float64)
+    pieces, off, out = magic == BIN_MAGIC_P, 32, []
+    for _ in range(ng):
+        col, nv, nt = struct.unpack_from("<III", raw, off)
+        off += 12
+        pc = 0
+        if pieces:
+            pc = struct.unpack_from("<I", raw, off)[0]
+            off += 4
+        q = np.frombuffer(raw, np.uint8, 6 * nv, off).reshape(6, nv).T.copy().view("<u2").reshape(nv, 3)
+        off += 6 * nv
+        d = np.frombuffer(raw, np.uint8, 12 * nt, off).reshape(4, 3 * nt).T.copy().view("<i4").ravel()
+        off += 12 * nt
+        out.append((col, pc, lo + q.astype(np.float64) * sc, np.cumsum(d.astype(np.int64)).reshape(-1, 3)))
+    return out
+
+
+GROUP_GAP = 20.0                       # mm entre les modeles poses cote a cote (assemblage d'un groupe)
+
+
+def compose_group(gkey: str, parts: list, sig: str) -> dict | None:
+    """L'assemblage d'un groupe (31/10/2026) : les pieces de la vue assemblee de chaque 3MF du groupe (profils differents
+    d'un meme modele, ou modeles differents, qui font un seul objet), reunies dans une seule vue, posees cote a cote,
+    chacune aux couleurs de ses impressions ; elle s'edite et s'enregistre comme une autre (cle gkey).
+    parts : [{iid, name, keep (pieces gardees, par numero ; None : toutes), pal (par numero de piece : {RRGGBB : RRGGBB})}].
+    sig : ce qui la fait refaire (vues des 3MF, couleurs). Rend plates.json, ou None (rien a montrer)."""
+    import gzip
+    import numpy as np
+    d = _root() / gkey
+    old = _read_side(gkey, "plates.json")
+    if isinstance(old, dict) and old.get("sig") == sig and old.get("v") == FORMAT_V and (d / f"plate_{ASSEMBLED_N}.bin").is_file():
+        return old
+    groups_out, pieces, cursor, srcs = {}, [], 0.0, []
+    for pi, part in enumerate(parts):
+        meta = _read_side(part["iid"], "plates.json") or {}
+        asm = next((p for p in meta.get("plates") or [] if p.get("assembled") and p.get("pieces") and p.get("size_mm")), None)
+        f = _root() / part["iid"] / f"plate_{ASSEMBLED_N}.bin"
+        if not asm or not f.is_file():
+            continue
+        try:
+            got = _unpack_bin(gzip.decompress(f.read_bytes()))
+        except Exception as e:
+            logger.warning(f"[3D] assemblage du groupe : {part['iid']} illisible ({e})")
+            continue
+        keep = part.get("keep")
+        got = [g for g in got if keep is None or g[1] in keep]
+        if not got:
+            continue
+        lo = np.min([g[2].min(axis=0) for g in got], axis=0)
+        hi = np.max([g[2].max(axis=0) for g in got], axis=0)
+        D = np.array([cursor - lo[0], -(lo[1] + hi[1]) / 2, -lo[2]])
+        cursor += float(hi[0] - lo[0]) + GROUP_GAP
+        base = len(pieces)
+        remap = {}
+        for i, pc in enumerate(asm["pieces"]):
+            if keep is not None and i not in keep:
+                continue
+            k = str(pc.get("k") or "").split(":")
+            nk = ":".join([str((pi + 1) * 100000 + int(k[0]))] + k[1:]) if k and k[0].isdigit() else f"{(pi + 1) * 100000}:0:{i}"
+            remap[i] = len(pieces)
+            pieces.append({"k": nk, "name": pc.get("name") or f"Pièce {i + 1}", "src": pi,
+                           "o": [float(a) + float(b) for a, b in zip(pc.get("o") or [0, 0, 0], D)]})
+        pal = part.get("pal") or {}
+        for col, pc, v, t in got:
+            if pc not in remap:
+                continue
+            p_ = pal.get(pc) or {}
+            to = p_.get(f"{col >> 8:06X}")
+            ncol = _hex_rgba(to) if to and len(str(to)) >= 6 else col
+            key = (ncol, remap[pc])
+            if key in groups_out:                       # deux couleurs devenues la meme sur une piece : reunies
+                g = groups_out[key]
+                g[0].append(v + D); g[1].append(t + g[2]); g[2] += len(v)
+            else:
+                groups_out[key] = [[v + D], [t], len(v)]
+        srcs.append({"iid": part["iid"], "name": part.get("name") or "", "pieces": len(pieces) - base})
+    if not groups_out:
+        return None
+    for g in groups_out.values():
+        _collapse(g)
+    total = sum(len(g[1][0]) for g in groups_out.values())
+    reduced = None
+    if total > MAX_TRIANGLES:
+        reduced, total = total, _decimate(groups_out, MAX_TRIANGLES)
+    allv = [g[0][0] for g in groups_out.values()]
+    lo = np.min([a.min(axis=0) for a in allv], axis=0)
+    hi = np.max([a.max(axis=0) for a in allv], axis=0)
+    shift = np.array([(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, lo[2]])
+    buf = _pack_bin({k: (g[0][0] - shift, g[1][0]) for k, g in groups_out.items()})
+    d.mkdir(parents=True, exist_ok=True)
+    _write(d / f"plate_{ASSEMBLED_N}.bin", _gzip(bytes(buf)))
+    for p in pieces:
+        p["o"] = [round(a - b, 4) for a, b in zip(p["o"], shift)]
+    rec = {"n": ASSEMBLED_N, "name": "Assemblé du groupe", "assembled": True, "z_asm": True, "triangles": total,
+           "size_mm": [round(float(x), 1) for x in hi - lo], "pieces": pieces, "sources": srcs,
+           **({"reduced_from": reduced} if reduced else {})}
+    meta = {"v": FORMAT_V, "group": True, "sig": sig, "plates": [rec]}
+    _write(d / "plates.json", json.dumps(meta).encode("utf-8"))
+    return meta
+
+
 def file_path(key: str, name: str) -> Path | None:
     if not re.fullmatch(r"[A-Za-z0-9_]+", key or "") or not re.fullmatch(r"plate_\d+\.(bin|glb)", name or ""):
         return None

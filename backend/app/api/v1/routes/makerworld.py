@@ -625,8 +625,11 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
     from ....services import mw_3d as T
     from ....services.mw_source import known, path_of, _profile
     did = str(design_id or "").strip()
-    # « p12 » : le 3MF importe a la main pour l'impression 12, sans modele MakerWorld (31/10/2026)
+    # « g12 » : l'assemblage du groupe 12, toutes ses pieces de tous ses 3MF (31/10/2026)
     import re as _re
+    if _re.fullmatch(r"g\d{1,9}", did):
+        return await _group_view(int(did[1:]))
+    # « p12 » : le 3MF importe a la main pour l'impression 12, sans modele MakerWorld (31/10/2026)
     mine = bool(_re.fullmatch(r"p\d+", did))
     if not did.isdigit() and not mine:
         raise HTTPException(404, "Modèle inconnu")
@@ -825,6 +828,93 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             if key and source != "makerworld" else None,
             # des plateaux encore en preparation (« pending » sur eux) : la vue redemande jusqu'a la fin
             "pending": bool((gmeta or meta or {}).get("pending"))}
+
+
+async def _group_view(gid: int) -> dict:
+    """L'assemblage d'un groupe (31/10/2026) : un objet fait de plusieurs modeles (les touches d'un Game Boy), ou de
+    plusieurs profils d'un meme modele (deux pieces sur l'un, une sur l'autre) -- chaque 3MF d'origine du groupe donne
+    les pieces de sa vue assemblee (celles des plateaux imprimes, quand on les connait), aux couleurs de ses
+    impressions ; reunies, elles s'editent comme un assemblage (cle « grp<groupe> »)."""
+    import asyncio
+    import hashlib
+    import json as _json
+    from sqlalchemy import select
+    from ....db.session import AsyncSessionLocal
+    from ....models.print_history import Print, Group
+    from ....services import mw_3d as T
+    from ....services.mw_source import print_file, _profile
+    async with AsyncSessionLocal() as db:
+        g = await db.get(Group, gid)
+        rows = (await db.execute(select(Print.id, Print.design_id, Print.mw_profile_id, Print.mw_plates, Print.plate_id,
+                                        Print.translated_name, Print.file_name)
+                                 .where(Print.group_id == gid).order_by(Print.print_date, Print.id))).all()
+    if not g or not rows:
+        raise HTTPException(404, "Groupe inconnu")
+    srcs: dict = {}
+    for pid, did_, prof, plates, plate_id, tname, fname in rows:
+        f = await asyncio.to_thread(print_file, did_, prof, plates, pid)
+        if not f or not f.is_file():
+            continue
+        e = srcs.setdefault(f.stem, {"path": f, "did": str(did_ or ""), "prof": _profile(prof, plates) or "", "ids": [], "plates": set(),
+                                     "name": tname or fname or ""})
+        e["ids"].append(pid)
+        e["plates"].add(int(plate_id) if str(plate_id or "").isdigit() else None)
+    if not srcs:
+        raise HTTPException(404, "Aucun 3MF d'origine dans ce groupe : importe-les, ou ouvre la vue 3D de ses modèles")
+    chosen = await _color_choices(f"group:{gid}")
+    parts, finishes, missing = [], {}, []
+    for iid, e in srcs.items():
+        ok = await asyncio.to_thread(T._in_child, e["path"], iid, "view")
+        meta = T._read_side(iid, "plates.json") if ok else None
+        asm = next((p for p in (meta or {}).get("plates") or [] if p.get("assembled") and p.get("pieces") and p.get("size_mm")), None)
+        if not asm:
+            missing.append(e["name"] or iid)
+            continue
+        # les pieces des plateaux imprimes, quand chaque impression dit le sien (sinon toutes)
+        pp = await asyncio.to_thread(T.piece_plates, e["path"])
+        plate_of = [pp.get(":".join(str(pc.get("k") or "").split(":")[:2])) for pc in asm["pieces"]]
+        keep = None
+        if None not in e["plates"] and any(n is not None for n in plate_of):
+            keep = {i for i, n in enumerate(plate_of) if n in e["plates"]} or None
+        # les couleurs : celles de chaque plateau (ses impressions), a defaut celles de toutes
+        pchoices = await _print_choices(e["ids"])
+        detail: list = []
+        allp = await _used_palette(e["path"], e["ids"], e["did"], e["prof"], detail, chosen=chosen, print_choices=pchoices) or {}
+        per: dict = {}
+        for n in {x for x in plate_of if x is not None}:
+            dd: list = []
+            pal = await _used_palette(e["path"], e["ids"], e["did"], e["prof"], dd, plate=n, chosen=chosen, print_choices=pchoices) or {}
+            per[n] = {**allp, **pal}
+            detail += dd
+        fins = T.origin_finishes(e["path"])
+        for x in detail:
+            if x.get("to") and x.get("finish"):
+                finishes[str(x["to"])[:6].upper()] = x["finish"]
+        for c, fz in (fins or {}).items():
+            finishes.setdefault(str(c)[:6].upper(), fz)
+        parts.append({"iid": iid, "name": e["name"], "keep": keep,
+                      "pal": {i: (per.get(n) if n is not None else None) or allp for i, n in enumerate(plate_of)}})
+    if not parts:
+        raise HTTPException(404, f"Pas de vue assemblée pour les 3MF de ce groupe ({', '.join(missing[:3])})")
+    sig_src = [(p["iid"], int((T._root() / p["iid"] / "plates.json").stat().st_mtime), sorted(p["keep"]) if p["keep"] else None,
+                sorted((k, sorted(v.items())) for k, v in p["pal"].items())) for p in parts]
+    sig = hashlib.sha1(_json.dumps(sig_src, default=str).encode()).hexdigest()[:16]
+    gkey = f"grp{gid}"
+    meta = await asyncio.to_thread(T.compose_group, gkey, parts, sig)
+    if not meta:
+        raise HTTPException(404, "Rien à montrer pour ce groupe")
+    shown = T.plates_out(meta, gkey)[0]
+    try:
+        bed = mw.bed_of(await mw.my_printer())
+    except Exception:
+        bed = [256, 256]
+    return {"source": "group", "profile": None, "profile_title": f"{len(meta['plates'][0].get('sources') or [])} 3MF réunis",
+            "ms": 0, "bed": bed, "used_palette": None, "used_detail": None, "fetch_error": None, "used_options": [], "chosen": {},
+            "scope": None, "used_plates": {}, "used_details_plates": {}, "used_multi_plates": {}, "used_multi": {},
+            "used_finishes_plates": {}, "finishes": finishes, "used_finishes": {}, "plates": shown, "skipped": [],
+            "gcode_view": None, "piece_plates": {}, "key": gkey, "missing": missing,
+            "assembly_edit": T.load_edit(gkey, None, {x.get("k") for p in shown for x in p.get("pieces") or [] if isinstance(x, dict)}),
+            "pending": False}
 
 
 def _ext_by_name(z) -> dict:

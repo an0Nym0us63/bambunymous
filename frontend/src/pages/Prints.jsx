@@ -1793,6 +1793,11 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     return [k, { key: k, label: k === "-" ? "sans modèle MakerWorld" : (x.translated_name || x.file_name || `modèle ${k}`),
       has: prints.filter(y => (String(y.design_id || "").trim() || "-") === k).every(y => y.source_3mf) }]; })).values()];
   const own3dPrint = prints.find(x => !String(x.design_id || "").trim() && x.source_3mf) || null;
+  // l'assemblage du groupe (31/10/2026) : les pieces de plusieurs modeles, ou de plusieurs profils d'un meme modele, qui
+  // font un seul objet, reunies dans une seule vue ; propose des que le groupe melange au moins deux 3MF
+  const [grpAsm, setGrpAsm] = useState(false);
+  const nSources = new Set(prints.filter(x => x.source_3mf || String(x.design_id || "").trim())
+    .map(x => `${String(x.design_id || "").trim() || `p${x.id}`}:${x.mw_profile_id || ""}`)).size;
   const importGroupSource = m => {
     const inp = document.createElement("input");
     inp.type = "file"; inp.accept = ".3mf";
@@ -1907,6 +1912,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       (isAdmin || prints.some(x => x.source_3mf) || prints.some(x => x.model_3mf)) && "-",
       // sans modele MakerWorld, la vue 3D du 3MF d'origine importe (31/10/2026)
       ...(own3dPrint ? [{ icon: "🧊", label: "Vue 3D", hint: "depuis le 3MF d'origine importé", tone: "#0EA5E9", onClick: () => setOwn3d(own3dPrint) }] : []),
+      ...(nSources > 1 ? [{ icon: "🧩", label: "Assemblage du groupe", hint: "toutes ses pièces, de tous ses modèles et profils, dans une seule vue", tone: "#6366F1",
+        onClick: () => setGrpAsm(true) }] : []),
       // importer le 3MF d'origine pour le groupe : un par modele s'il en melange plusieurs
       ...(isAdmin ? groupModels.map(m => ({ icon: "📤", label: groupModels.length > 1 ? `3MF d'origine · ${m.label}` : (m.has ? "Remplacer le 3MF d'origine" : "Importer le 3MF d'origine"),
         hint: m.key === "-" ? "le projet Bambu Studio, pour la vue 3D" : "le mien, si MakerWorld ne le donne pas", tone: "#F97316", onClick: () => importGroupSource(m) })) : []),
@@ -2141,6 +2148,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       {objCreate && <ObjectCreateSheet parentType="group" parentId={groupId} defaultName={title} costFabrication={totalCost / nbItems}
         onDone={() => { setObjRefresh(k => k + 1); onUpdated?.(); }} onClose={() => setObjCreate(false)}/>}
       {sharing && <ShareSheet kind="group" id={groupId} onClose={() => setSharing(false)}/>}
+      {grpAsm && <Model3D designId={`g${groupId}`} title={name} onClose={() => setGrpAsm(false)}/>}
       {own3d && <Model3D designId={`p${own3d.id}`} title={name} printId={own3d.id}
         usedPrints={prints.filter(x => !String(x.design_id || "").trim()).map(x => x.id)} scope={`group:${groupId}`} onClose={() => setOwn3d(null)}/>}
       {mwAll && <GroupMwLink prints={prints} onClose={() => setMwAll(false)} onDone={() => { setMwAll(false); loadPrints(); onUpdated?.(); }}/>}
