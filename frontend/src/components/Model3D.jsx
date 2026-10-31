@@ -1806,6 +1806,16 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   // l'edition se fait aussi au doigt (30/10/2026) : sur un telephone, plein ecran par la page elle-meme (l'iPhone n'a pas
   // de plein ecran pour un element), et la barre d'edition en version tactile
   const editable = isAdmin && !fr && !!p?.assembled && !!p?.pieces && !!meta?.key;
+  // l'assemblage propre a cette impression (31/10/2026) : sur PC (a cote de 🕘) comme au doigt
+  const ownBtn = h => editable && meta?.can_own && <button type="button" onClick={async () => {
+      if (meta.own_edit && !(await showConfirm("Revenir à l'assemblage partagé par les impressions de ce 3MF ? Le sien reste dans les versions (🕘).", { confirmLabel: "Revenir" }))) return;
+      try { await client.post(`/makerworld/3d/edit/${meta.key}/own`, { print_id: printId, on: !meta.own_edit }); if (!meta.own_edit) egg("assemblage_a_elle"); setTick(t => t + 1); }
+      catch (e) { showAlert(e.response?.data?.detail || e.message); } }}
+    data-tip={meta.own_edit ? "Cette impression a son propre assemblage : touche pour revenir à celui partagé par les impressions du même 3MF"
+      : "Donner à cette impression son propre assemblage (une autre variante que les autres impressions du même 3MF) ; il part d'une copie de l'assemblage partagé"}
+    style={{ height: h, padding: "0 12px", borderRadius: 12, cursor: "pointer", fontSize: 12.5, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)",
+      border: meta.own_edit ? "none" : "1px solid var(--border)", color: meta.own_edit ? "#fff" : "var(--text2)",
+      background: meta.own_edit ? "linear-gradient(135deg, #F59E0B, #EA580C)" : "var(--surface)" }}>{meta.own_edit ? "📌 À elle" : "📌 Partagé"}</button>;
   // les couleurs a poser (31/10/2026) : les filaments des impressions de ce modele (une fois chacun)
   const swatchList = useMemo(() => {
     const seen = new Map();
@@ -2083,6 +2093,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             {editable && <button type="button" disabled={versions === "busy"} onClick={openVersions} data-tip="Reprendre un assemblage enregistré avant (chaque version est gardée)"
               style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", background: "var(--surface)", color: "var(--text2)",
                 fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>🕘</button>}
+            {ownBtn(38)}
           </div>}
           {/* sur un telephone, sous le choix des couleurs (30/10/2026 : les deux se chevauchaient) */}
           {/* quel assemblage voir, en petite liste (30/10/2026) : le mien, l'origine du 3MF, celui de chaque copain qui a le
@@ -2138,15 +2149,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {editable && <button type="button" disabled={versions === "busy"} onClick={openVersions} aria-label="Versions de l'assemblage"
             style={{ width: 40, height: 40, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", background: "var(--surface)", color: "var(--text2)", fontSize: 16 }}>🕘</button>}
           {/* un assemblage a elle (31/10/2026) : une impression qui a fait une autre variante que les autres du meme 3MF */}
-          {editable && meta.can_own && <button type="button" onClick={async () => {
-              if (meta.own_edit && !(await showConfirm("Revenir à l'assemblage partagé par les impressions de ce 3MF ? Le sien reste dans les versions (🕘).", { confirmLabel: "Revenir" }))) return;
-              try { await client.post(`/makerworld/3d/edit/${meta.key}/own`, { print_id: printId, on: !meta.own_edit }); if (!meta.own_edit) egg("assemblage_a_elle"); setTick(t => t + 1); }
-              catch (e) { showAlert(e.response?.data?.detail || e.message); } }}
-            data-tip={meta.own_edit ? "Cette impression a son propre assemblage : touche pour revenir à celui partagé par les impressions du même 3MF"
-              : "Donner à cette impression son propre assemblage (une autre variante que les autres impressions du même 3MF) ; il part d'une copie de l'assemblage partagé"}
-            style={{ height: 40, padding: "0 12px", borderRadius: 12, cursor: "pointer", fontSize: 12.5, fontWeight: 800,
-              border: meta.own_edit ? "none" : "1px solid var(--border)", color: meta.own_edit ? "#fff" : "var(--text2)",
-              background: meta.own_edit ? "linear-gradient(135deg, #F59E0B, #EA580C)" : "var(--surface)" }}>{meta.own_edit ? "📌 À elle" : "📌 Partagé"}</button>}
+          {ownBtn(40)}
         </div>}
         {onFiche && !editing && <button type="button" onClick={onFiche} data-tip={fr ? "La fiche, chez ton copain" : "La fiche de l'impression ou du groupe"}
           style={{ alignSelf: "center", padding: "8px 22px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff",
