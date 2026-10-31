@@ -2041,7 +2041,7 @@ def load_edit(key: str, did: str | None = None, piece_keys: set | None = None) -
     except OSError:
         files = []
     for f in files:
-        if f.stem == key:
+        if f.stem == key or "__p" in f.stem:            # celui d'une impression reste a elle
             continue
         if d and (not prof or _prof_of(f.stem) != prof):
             continue
@@ -2157,6 +2157,52 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
     _write(f, json.dumps(d).encode("utf-8"))
     logger.info(f"[3D] assemblage enregistre : vue {key}, {len(clean)} pieces (modele {did or '?'})")
     return d
+
+
+# ── L'assemblage propre a une impression (31/10/2026) ──
+# Un assemblage se garde par 3MF : toutes les impressions faites du meme fichier le partagent. Une impression qui a
+# imprime une autre variante (d'autres pieces, une autre place) peut avoir le sien : cle « <vue>__p<impression> »,
+# notee dans mw_3d_edits/_own.idx (une ligne par cle) ; a l'activation il part d'une copie de l'assemblage partage.
+def own_key(key: str, print_id) -> str:
+    return f"{key}__p{int(print_id)}"
+
+
+def _own_file() -> Path:
+    from ..core.config import settings
+    return Path(settings.DATA_DIR) / "mw_3d_edits" / "_own.idx"
+
+
+def own_keys() -> set:
+    try:
+        return {x.strip() for x in _own_file().read_text(encoding="utf-8").splitlines() if x.strip()}
+    except OSError:
+        return set()
+
+
+def set_own(key: str, print_id, on: bool) -> str | None:
+    """Donne (on) ou retire a cette impression son propre assemblage ; rend la cle de l'assemblage qu'elle suit."""
+    import os as _os
+    import time
+    if not _KEY.fullmatch(key or ""):
+        raise ValueError("Vue inconnue")
+    ok = own_key(key, print_id)
+    keys = own_keys()
+    if on:
+        if not _edits_file(ok).is_file() and _edits_file(key).is_file():
+            d = _read(_edits_file(key)) or {}
+            d.update(key=ok, at=int(time.time()), saved_as="copie de l'assemblage partagé")
+            _edits_file(ok).parent.mkdir(parents=True, exist_ok=True)
+            _edits_file(ok).write_text(json.dumps(d), encoding="utf-8")
+        keys.add(ok)
+    else:
+        if _edits_file(ok).is_file():
+            drop_edit(ok)                               # range dans les versions, rien n'est perdu
+        keys.discard(ok)
+    _own_file().parent.mkdir(parents=True, exist_ok=True)
+    tmp = _own_file().with_suffix(".part")
+    tmp.write_text("\n".join(sorted(keys)), encoding="utf-8")
+    _os.replace(tmp, _own_file())
+    return ok if on else key
 
 
 def drop_edit(key: str) -> None:

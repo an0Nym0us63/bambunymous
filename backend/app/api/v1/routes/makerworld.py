@@ -761,6 +761,10 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             ptitle, pcover = hit.get("title") or None, hit.get("cover") or None
         except Exception:
             pass
+    # l'assemblage propre a l'impression ouverte depuis sa fiche (pas depuis son groupe)
+    ekey = key
+    if key and source != "makerworld" and print_id and scope == f"print:{print_id}" and T.own_key(key, print_id) in T.own_keys():
+        ekey = T.own_key(key, print_id)
     # used : des impressions de ce modele -> chaque couleur du 3MF d'origine et celle de la bobine qui l'a remplacee
     # (le numero du filament dans le projet est le meme ; sans bobine liee, la couleur notee au tranchage)
     used_palette, used_detail = None, None
@@ -826,9 +830,12 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             "piece_plates": T.piece_plates(path_of(key)) if key and source in ("3mf", "3mf_other")
                             and any(p.get("assembled") for p in (meta or {}).get("plates") or []) else {},
             # la vue assemblee editee a la main (29/10/2026), et la cle de la vue pour l'enregistrer
-            "key": key, "assembly_edit": T.load_edit(key, did, {x.get("k") for p in T.plates_out(meta, key)[0] for x in p.get("pieces") or []
-                                                                  if isinstance(x, dict) and x.get("k")} or None)
+            "key": key, "assembly_edit": (T.load_edit(ekey, None) if ekey != key else T.load_edit(key, did, {x.get("k") for p in T.plates_out(meta, key)[0] for x in p.get("pieces") or []
+                                                                  if isinstance(x, dict) and x.get("k")} or None))
             if key and source != "makerworld" else None,
+            # l'assemblage propre a cette impression, si elle en a un (31/10/2026) : la cle sous laquelle il s'enregistre
+            "edit_key": ekey if key and source != "makerworld" else None, "own_edit": bool(key and ekey != key),
+            "can_own": bool(key and source != "makerworld" and print_id and scope == f"print:{print_id}"),
             # des plateaux encore en preparation (« pending » sur eux) : la vue redemande jusqu'a la fin
             "pending": bool((gmeta or meta or {}).get("pending"))}
 
@@ -1848,6 +1855,19 @@ async def mw_3d_edit_restore(key: str, body: dict = Body({}), user: str = Depend
     from ....services import mw_3d as T
     try:
         return T.restore_edit(key, str(body.get("id") or ""), str(user or ""))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/3d/edit/{key}/own")
+async def mw_3d_edit_own(key: str, body: dict = Body({}), _: str = Depends(require_admin)):
+    """Un assemblage propre a cette impression (on), ou de nouveau celui partage par les impressions du meme 3MF."""
+    from ....services import mw_3d as T
+    try:
+        pid = int(body.get("print_id") or 0)
+        if pid <= 0:
+            raise ValueError("Impression inconnue")
+        return {"edit_key": T.set_own(key, pid, bool(body.get("on")))}
     except ValueError as e:
         raise HTTPException(400, str(e))
 

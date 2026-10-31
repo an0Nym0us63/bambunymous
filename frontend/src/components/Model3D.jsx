@@ -1797,7 +1797,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const setPseudoFull = on => { setPfull(on); document.body.classList.toggle("bn-edit3d", on); };
   useEffect(() => () => document.body.classList.remove("bn-edit3d"), []);
   const edit = savedEdit !== undefined ? savedEdit : meta?.assembly_edit;
-  useEffect(() => { setSavedEdit(undefined); setViewSel("mine"); }, [meta?.key]);
+  useEffect(() => { setSavedEdit(undefined); setViewSel("mine"); }, [meta?.key, meta?.edit_key]);
   // les assemblages des copains (30/10/2026) : pour chacun, le plus recent fait des memes pieces que ma vue (le meme
   // profil d'abord) ; compares par objet et instance, comme la reprise d'une autre vue cote serveur. Un autre profil
   // connu n'est jamais propose (30/10/2026 : « Petit » et « Grande » ont les memes objets, numerotes pareil, mais pas
@@ -1828,7 +1828,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     if (edit?.pieces && !(await showConfirm(`Remplacer ton assemblage par celui de ${frPick.name} ? Le tien reste dans les versions (🕘).`))) return;
     const e = frPick.edit;
     try {
-      const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces: e.pieces, did, excluded: e.excluded || [], groups: e.groups || [],
+      const r = await client.put(`/makerworld/3d/edit/${meta.edit_key || meta.key}`, { pieces: e.pieces, did, excluded: e.excluded || [], groups: e.groups || [],
         joints: e.joints || [], splits: e.splits || [], cuts: e.cuts || {}, colors: e.colors || {}, paints: e.paints || [], v: 2 });
       setSavedEdit(r.data); setViewSel("mine"); egg("assemblage_copain");
     } catch (er) { showAlert(er.response?.data?.detail || er.message); }
@@ -1837,12 +1837,12 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const [versions, setVersions] = useState(null);       // null | "busy" | [{ id, at, n, why, other }]
   const openVersions = async () => {
     setVersions("busy");
-    try { const r = await client.get(`/makerworld/3d/edit/${meta.key}/versions`, { params: { did } }); setVersions(r.data.versions || []); }
+    try { const r = await client.get(`/makerworld/3d/edit/${meta.edit_key || meta.key}/versions`, { params: { did } }); setVersions(r.data.versions || []); }
     catch (e) { setVersions(null); showAlert(e.response?.data?.detail || e.message); }
   };
   const restoreVersion = async id => {
     try {
-      const r = await client.post(`/makerworld/3d/edit/${meta.key}/restore`, { id });
+      const r = await client.post(`/makerworld/3d/edit/${meta.edit_key || meta.key}/restore`, { id });
       setVersions(null);
       if (editing) { await editApi.current?.editing(false); setEditing(false); setEst(null); }
       setSavedEdit(r.data); setVkey(k => k + 1);      // la vue se refait avec l'assemblage repris
@@ -1852,7 +1852,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     const pieces = editApi.current?.toSave();
     if (!pieces) return;
     setSaving(true);
-    try { const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces, did, excluded: editApi.current?.editor?.excluded() || [],
+    try { const r = await client.put(`/makerworld/3d/edit/${meta.edit_key || meta.key}`, { pieces, did, excluded: editApi.current?.editor?.excluded() || [],
       groups: editApi.current?.editor?.groups() || [],
       joints: editApi.current?.editor?.joints() || [], splits: editApi.current?.editor?.splits() || [], cuts: editApi.current?.editor?.cuts() || {},
       colors: editApi.current?.editor?.colors() || {}, paints: editApi.current?.editor?.paints() || [], v: 2 });
@@ -1864,7 +1864,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     finally { setSaving(false); }
   };
   const resetEdit = async () => {
-    try { await client.delete(`/makerworld/3d/edit/${meta.key}`); setSavedEdit(null); egg("case_depart"); editApi.current?.editor?.reset(editApi.current.origin()); editApi.current?.editor?.markSaved();
+    try { await client.delete(`/makerworld/3d/edit/${meta.edit_key || meta.key}`); setSavedEdit(null); egg("case_depart"); editApi.current?.editor?.reset(editApi.current.origin()); editApi.current?.editor?.markSaved();
       editApi.current?.relayout(); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
@@ -1967,7 +1967,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           </div>
         </div>
         {(meta?.plates?.length > 1 || (gid && !fr)) && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {(meta?.plates?.length > 1 || grpAll) && meta.plates.map((x, i) => <button key={x.n} type="button" onClick={() => setPlate(i)} style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer",
+          {meta?.plates?.length > 0 && (meta.plates.length > 1 || grpAll) && meta.plates.map((x, i) => <button key={x.n} type="button" onClick={() => setPlate(i)} style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer",
             fontSize: 12.5, fontWeight: 800, border: i === plate ? "none" : "1px solid var(--border)", color: i === plate ? "#fff" : "var(--text2)",
             background: i === plate ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" }}>{x.pending ? "⏳ " : ""}{x.assembled ? (grpAll ? "🧩 Tout le groupe" : "🧩 Assemblé") : x.name ? `${x.n} · ${x.name}` : `Plateau ${x.n}`}</button>)}
           {gid && !fr && <button type="button" onClick={() => { setGview(false); setPlate(0); setGrpAll(v => !v); if (!grpAll) egg("assemblage_groupe"); }}
@@ -2075,6 +2075,16 @@ export default function Model3D({ designId = null, profileId = null, printId = n
               background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 6px 16px -8px #6366F1" }}>✏️ Éditer l'assemblage</button>}
           {editable && <button type="button" disabled={versions === "busy"} onClick={openVersions} aria-label="Versions de l'assemblage"
             style={{ width: 40, height: 40, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", background: "var(--surface)", color: "var(--text2)", fontSize: 16 }}>🕘</button>}
+          {/* un assemblage a elle (31/10/2026) : une impression qui a fait une autre variante que les autres du meme 3MF */}
+          {editable && meta.can_own && <button type="button" onClick={async () => {
+              if (meta.own_edit && !(await showConfirm("Revenir à l'assemblage partagé par les impressions de ce 3MF ? Le sien reste dans les versions (🕘).", { confirmLabel: "Revenir" }))) return;
+              try { await client.post(`/makerworld/3d/edit/${meta.key}/own`, { print_id: printId, on: !meta.own_edit }); if (!meta.own_edit) egg("assemblage_a_elle"); setTick(t => t + 1); }
+              catch (e) { showAlert(e.response?.data?.detail || e.message); } }}
+            data-tip={meta.own_edit ? "Cette impression a son propre assemblage : touche pour revenir à celui partagé par les impressions du même 3MF"
+              : "Donner à cette impression son propre assemblage (une autre variante que les autres impressions du même 3MF) ; il part d'une copie de l'assemblage partagé"}
+            style={{ height: 40, padding: "0 12px", borderRadius: 12, cursor: "pointer", fontSize: 12.5, fontWeight: 800,
+              border: meta.own_edit ? "none" : "1px solid var(--border)", color: meta.own_edit ? "#fff" : "var(--text2)",
+              background: meta.own_edit ? "linear-gradient(135deg, #F59E0B, #EA580C)" : "var(--surface)" }}>{meta.own_edit ? "📌 À elle" : "📌 Partagé"}</button>}
         </div>}
         {onFiche && !editing && <button type="button" onClick={onFiche} data-tip={fr ? "La fiche, chez ton copain" : "La fiche de l'impression ou du groupe"}
           style={{ alignSelf: "center", padding: "8px 22px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff",
