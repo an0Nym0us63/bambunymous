@@ -1172,7 +1172,7 @@ const tagS = (c, extra = {}) => ({ fontSize: 9.5, fontWeight: 900, lineHeight: "
 const pastel = c => `color-mix(in srgb, ${c} 62%, #ffffff)`;
 const statusColor = st => (V2_STATUS[st] || [])[1] || STATUS_CFG[st]?.color || "#94a3b8";
 const STATUS_ORDER = ["SUCCESS", "PARTIAL", "TO_REDO", "IN_PROGRESS", "FAILED", "CANCELLED"];
-function TileLine({ statuses, left = false }) {
+function TileLine({ statuses, left = false, bar = false }) {
   const n = statuses.length || 1, count = {};
   statuses.forEach(st => { count[st] = (count[st] || 0) + 1; });
   let at = 0;
@@ -1181,7 +1181,9 @@ function TileLine({ statuses, left = false }) {
     return `${pastel(statusColor(k))} ${a0}% ${a1}%`;
   });
   const live = !!count.IN_PROGRESS;
-  return <span aria-hidden="true" style={{ position:"absolute", left:0, top:0, ...(left ? { bottom:0, width:5 } : { right:0, height:4 }), zIndex:1, pointerEvents:"none", overflow:"hidden",
+  // bar : une barre posee dans le texte (la fiche d'un groupe repliee), plutot qu'au bord d'une tuile
+  return <span aria-hidden="true" style={{ ...(bar ? { position:"relative", display:"block", height:4, borderRadius:2, marginTop:2 }
+      : { position:"absolute", left:0, top:0, ...(left ? { bottom:0, width:5 } : { right:0, height:4 }), zIndex:1 }), pointerEvents:"none", overflow:"hidden",
     background:`linear-gradient(${left ? "180deg" : "90deg"}, ${stops.join(", ")})` }}>
     {live && <span style={{ position:"absolute", inset:0, backgroundImage:`linear-gradient(${left ? "180deg" : "90deg"}, transparent 0%, rgba(255,255,255,.75) 50%, transparent 100%)`,
       backgroundSize: left ? "100% 40%" : "40% 100%", backgroundRepeat:"no-repeat", animation: left ? "bn-tile-sweep-v 1.8s linear infinite" : "bn-tile-sweep 1.8s linear infinite" }}/>}
@@ -2054,17 +2056,18 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   // les impressions : des rangees (ou une grille) ; toucher ouvre la fiche, ⋯ : vignette du groupe, retirer
   const row = x => { const [l, c, ic] = V2_STATUS[x.status] || [x.status || "", "#94a3b8", "•"], d = utcDate(x.print_date), [dy, hr] = whenFr(d);
     return (
+      // (31/10/2026) l'etat en barre pastel a gauche, comme les rangees de la liste : la miniature nue
       <div key={x.id} onClick={() => setSelectedPrint(x)} onContextMenu={e => { e.preventDefault(); printMenu(e, x); }}
-        style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 6px 6px 6px", borderRadius: 14, cursor: "pointer",
+        style={{ position: "relative", overflow: "hidden", display: "flex", alignItems: "center", gap: 10, padding: "6px 6px 6px 11px", borderRadius: 14, cursor: "pointer",
           background: `linear-gradient(90deg, color-mix(in srgb, ${c} 9%, transparent), transparent 70%), var(--surface2)`, border: "1px solid var(--border)" }}>
+        <TileLine statuses={[x.status]} left/>
         <span style={{ position: "relative", flexShrink: 0 }}>
           <FitBox src={thumbUrl(x, 128)} loading="lazy" decoding="async" style={{ width: 52, height: 52, borderRadius: 11, background: "var(--surface)" }}/>
-          {coverPrintId === x.id && <span data-tip="Vignette du groupe" style={{ position: "absolute", left: -4, top: -4, width: 18, height: 18, borderRadius: "50%",
-            background: "#F59E0B", color: "#fff", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid var(--sheet-bg)" }}>★</span>}
-          <span style={{ position: "absolute", right: -3, bottom: -3, width: 14, height: 14, borderRadius: "50%", background: c, border: "2px solid var(--sheet-bg)" }}/>
         </span>
         <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: "block", fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.file_name || "Sans nom"}</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 800, color: "var(--text)", minWidth: 0 }}>
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.file_name || "Sans nom"}</span>
+            {coverPrintId === x.id && <span data-tip="Vignette du groupe" style={tagS("#F59E0B")}>★</span>}</span>
           <span style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             <span style={{ color: c }}>{ic} {l}</span> · {dy} {hr.split(" · ")[0]}</span>
         </span>
@@ -2081,14 +2084,14 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
         border: "1px solid var(--border)" }}>
         <div style={{ position: "relative", paddingTop: "78%" }}>
           <FitBox src={thumbUrl(x, 384)} loading="lazy" decoding="async" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", }}/>
-          {coverPrintId === x.id && <span style={{ position: "absolute", left: 6, top: 6, width: 20, height: 20, borderRadius: "50%", background: "#F59E0B", color: "#fff",
-            fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>★</span>}
-          <span style={{ position: "absolute", right: 6, bottom: 6, width: 12, height: 12, borderRadius: "50%", background: c, border: "2px solid var(--sheet-bg)" }}/>
+          <TileLine statuses={[x.status]}/>
           <button onClick={e => { e.stopPropagation(); printMenu(e, x); }} aria-label="Actions de l'impression" style={{ position: "absolute", right: 6, top: 6, width: 26, height: 26,
             borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.5)", color: "#fff", cursor: "pointer", fontSize: 13 }}>⋯</button>
         </div>
         <div style={{ padding: "6px 8px" }}>
-          <div style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.file_name || "Sans nom"}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, fontWeight: 800, color: "var(--text)", minWidth: 0 }}>
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.file_name || "Sans nom"}</span>
+            {coverPrintId === x.id && <span data-tip="Vignette du groupe" style={tagS("#F59E0B")}>★</span>}</div>
           <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{fmtDate(x.print_date)}</div>
         </div>
       </div>); };
@@ -2112,15 +2115,14 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
           <span style={{ display: "flex", flexShrink: 0 }}>{prints.slice(0, 6).map((x, i) => (
             <span key={x.id} style={{ position: "relative", width: 44, height: 44, marginLeft: i ? -14 : 0, borderRadius: 12, overflow: "hidden",
               border: "2px solid var(--surface2)", background: "var(--surface)", boxShadow: "0 4px 10px rgba(0,0,0,.18)", zIndex: 10 - i }}>
-              <FitBox src={thumbUrl(x, 128)} loading="lazy" decoding="async" style={{ width: "100%", height: "100%", }}/>
-              <span style={{ position: "absolute", right: 2, bottom: 2, width: 9, height: 9, borderRadius: "50%", background: (V2_STATUS[x.status] || [0, "#94a3b8"])[1],
-                border: "1.5px solid var(--surface2)" }}/></span>))}
+              <FitBox src={thumbUrl(x, 128)} loading="lazy" decoding="async" style={{ width: "100%", height: "100%", }}/></span>))}
             {prints.length > 6 && <span style={{ width: 44, height: 44, marginLeft: -14, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center",
               background: "#A78BFA", color: "#fff", fontSize: 12, fontWeight: 900, border: "2px solid var(--surface2)" }}>+{prints.length - 6}</span>}</span>
           <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
             <span style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: 11.5, fontWeight: 800 }}>
               {Object.entries(counts).map(([st, n]) => { const [l, c, ic] = V2_STATUS[st] || [st, "#94a3b8", "•"];
                 return <span key={st} style={{ color: c }}>{ic} {n} {l.toLowerCase()}{n > 1 && /e$/.test(l) ? "s" : ""}</span>; })}</span>
+            <TileLine statuses={prints.map(x => x.status)} bar/>
             {ds.length > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {ds.length > 1 ? `du ${ds[0].toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} au ${ds[ds.length - 1].toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`
                 : ds[0].toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>}
