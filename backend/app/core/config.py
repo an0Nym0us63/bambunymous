@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     # Électricité (€/h)
     COST_BY_HOUR: float = 0.0
 
+    # Vue 3D des 3MF d'origine (31/10/2026) : MW_3D=false n'en convertit aucun ; MW_3D_MAX_MB > 0 laisse de cote les
+    # 3MF plus gros (en Mo), qui gardent l'apercu MakerWorld.
+    MW_3D: bool = True
+    MW_3D_MAX_MB: int = 0
+
     class Config:
         env_file = ".env"
         extra = "ignore"

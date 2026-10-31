@@ -1281,9 +1281,9 @@ def ready(src: Path, key: str) -> bool:
 
 def from_3mf(src: Path, key: str) -> dict | None:
     """Le modele d'un 3MF garde, converti au besoin (et refait si le 3MF a change). None : rien a montrer.
-    Une conversion a la fois par modele (la vue ouverte pendant la conversion de fond attend la meme)."""
-    with _lock(key):
-        return _from_3mf(src, key)
+    Une conversion a la fois par modele (la vue ouverte pendant la conversion de fond attend la meme) ; dans un
+    processus a part (31/10/2026 : un gros 3MF faisait tomber le serveur)."""
+    return _read_side(key, "plates.json") if _in_child(src, key, "view") else None
 
 
 def _from_3mf(src: Path, key: str) -> dict | None:
@@ -1306,6 +1306,10 @@ def _from_3mf(src: Path, key: str) -> dict | None:
             except Exception:
                 logger.exception("[3D] reprise du NAS")
         return convert(src, d, key)
+    except MemoryError:
+        logger.warning(f"[3D] {src.name} non converti : memoire insuffisante")
+        _mark_failed(src, key, "mémoire insuffisante")
+        return None
     except Exception as e:
         logger.warning(f"[3D] {src.name} non converti : {type(e).__name__}: {e}")
         return None
@@ -1393,6 +1397,86 @@ def file_path(key: str, name: str) -> Path | None:
 _POOL = {"bg": None, "view": None, "gcode": None}         # le fond (priorite basse), et la vue ouverte (sans attendre le fond)
 
 
+# ── Un 3MF trop gros pour la memoire (31/10/2026) ──
+# Un 3MF de 150 Mo demande plus d'1 Go : le processus de conversion etait tue (OOM), l'appli retombait sur une
+# conversion dans le serveur, qui tombait a son tour ; au redemarrage, le meme modele restait a faire, en boucle.
+# Desormais : jamais de conversion dans le serveur apres un processus tue ; l'echec est note dans mw_3d/<cle>/failed.json
+# (avec la taille et la date du 3MF, le format, la memoire du conteneur) et le modele n'est plus retente tant que rien
+# de cela ne change. Chaque conversion commencee laisse converting.json jusqu'a sa fin : deux commencees et jamais
+# finies (le conteneur entier est tombe), c'est un echec aussi.
+def _mem_limit() -> int:
+    """La memoire permise au conteneur (cgroup v2, puis v1), en octets ; 0 : inconnue ou sans limite."""
+    for f in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            v = Path(f).read_text().strip()
+        except OSError:
+            continue
+        return int(v) if v.isdigit() and int(v) < 1 << 60 else 0
+    return 0
+
+
+def _sig(src: Path) -> dict:
+    st = src.stat()
+    return {"size": st.st_size, "mtime": int(st.st_mtime), "v": FORMAT_V}
+
+
+def _mark_failed(src: Path, key: str, why: str) -> None:
+    import time
+    try:
+        d = _root() / key
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "failed.json").write_text(json.dumps({**_sig(src), "mem": _mem_limit(), "why": why, "at": int(time.time())}),
+                                       encoding="utf-8")
+        (d / "converting.json").unlink(missing_ok=True)
+    except OSError:
+        pass
+    logger.warning(f"[3D] {key} : vue 3D abandonnee ({why}) ; retentee si le 3MF change ou si la memoire augmente")
+
+
+def blocked(src: Path, key: str) -> str | None:
+    """Pourquoi ce 3MF ne se convertit pas (None : il se convertit)."""
+    from ..core.config import settings
+    if not settings.MW_3D:
+        return "Vue 3D désactivée (MW_3D=false)"
+    try:
+        size = src.stat().st_size
+    except OSError:
+        return None
+    if settings.MW_3D_MAX_MB > 0 and size > settings.MW_3D_MAX_MB * 1024 * 1024:
+        return f"3MF trop gros pour la vue 3D ({size // (1024 * 1024)} Mo, MW_3D_MAX_MB={settings.MW_3D_MAX_MB})"
+    f = _read_side(key, "failed.json")
+    if isinstance(f, dict):
+        try:
+            same = all(f.get(k) == v for k, v in _sig(src).items())
+        except OSError:
+            same = False
+        mem, was = _mem_limit(), f.get("mem") or 0
+        more = (was and not mem) or (mem and was and mem > was)     # plus de memoire qu'a l'echec : on retente
+        if same and not more:
+            return f"Vue 3D abandonnée : {f.get('why') or 'échec'}"
+        try:
+            (_root() / key / "failed.json").unlink()
+        except OSError:
+            pass
+    return None
+
+
+def _begin(key: str) -> None:
+    import time
+    d = _root() / key
+    d.mkdir(parents=True, exist_ok=True)
+    m = _read_side(key, "converting.json") or {}
+    (d / "converting.json").write_text(json.dumps({"tries": int(m.get("tries") or 0) + 1, "started": time.time()}),
+                                       encoding="utf-8")
+
+
+def _end(key: str) -> None:
+    try:
+        (_root() / key / "converting.json").unlink()
+    except OSError:
+        pass
+
+
 def _child_convert(src: str, key: str, low: bool) -> bool:
     if low:
         try:
@@ -1405,7 +1489,48 @@ def _child_convert(src: str, key: str, low: bool) -> bool:
             (_root() / key / f).unlink()
         except OSError:
             pass
-    return _from_3mf(Path(src), key) is not None
+    _begin(key)
+    try:
+        return _from_3mf(Path(src), key) is not None
+    finally:
+        _end(key)
+
+
+def _guarded(pool: str, src: Path, key: str, fn, *args) -> bool:
+    """Lance fn(*args) dans le processus « pool », sans jamais faire tomber le serveur : un processus tue (memoire)
+    note l'echec, sans repli dans le serveur ; un processus qui ne demarre pas, lui, convertit sur place un petit 3MF."""
+    import time
+    from concurrent.futures.process import BrokenProcessPool
+    if blocked(src, key):
+        return False
+    m = _read_side(key, "converting.json") or {}
+    if int(m.get("tries") or 0) >= 2:                   # deux fois commencee, jamais finie : le conteneur est tombe
+        _mark_failed(src, key, "la conversion a fait tomber l'application")
+        return False
+    for attempt in (1, 2):
+        t0 = time.time()
+        try:
+            return bool(_pool(pool).submit(fn, *args).result())
+        except BrokenProcessPool:
+            _POOL[pool] = None
+            m = _read_side(key, "converting.json") or {}
+            if attempt == 2 or float(m.get("started") or 0) >= t0 - 1:
+                _mark_failed(src, key, "processus de conversion arrêté, mémoire insuffisante")
+                return False
+            # elle attendait derriere une autre conversion, tombee : retentee une fois dans un processus neuf
+            logger.info(f"[3D] {key} : processus de conversion perdu avant de commencer, nouvel essai")
+        except Exception as e:
+            _POOL[pool] = None
+            try:
+                small = src.stat().st_size < 30 * 1024 * 1024
+            except OSError:
+                small = False
+            if not small:
+                logger.warning(f"[3D] processus de conversion indisponible ({type(e).__name__}: {e}) : {key} laisse de cote")
+                return False
+            logger.warning(f"[3D] processus de conversion indisponible ({type(e).__name__}: {e}) : conversion sur place")
+            return bool(fn(*args))
+    return False
 
 
 def _noop() -> bool:
@@ -1437,12 +1562,17 @@ def gcode_key(iid: str, print_id: int) -> str:
 def _child_gcode(src: str, key: str, sliced: str, plate) -> bool:
     _CHILD["on"], _CHILD["last"] = True, None
     d = _root() / key
+    _begin(key)
     try:
         return bool(convert(Path(src), d, key, {"path": sliced, "plate": plate}))
+    except MemoryError:
+        _mark_failed(Path(src), key, "mémoire insuffisante")
+        return False
     except Exception as e:
         logger.warning(f"[3D] couleurs du G-code ({key}) : {type(e).__name__}: {e}")
         return False
     finally:
+        _end(key)
         for f in ("progress.json", "partial.json"):
             try:
                 (d / f).unlink()
@@ -1473,12 +1603,7 @@ async def from_gcode_early(src: Path, sliced: Path, key: str, plate=None) -> dic
                     return True
             except Exception:
                 logger.exception("[3D] reprise du NAS (couleurs du G-code)")
-            try:
-                return _pool("gcode").submit(_child_gcode, str(src), key, str(sliced), plate).result()
-            except Exception as e:
-                logger.warning(f"[3D] processus indisponible ({e}) : couleurs du G-code sur place")
-                _POOL["gcode"] = None
-                return _child_gcode(str(src), key, str(sliced), plate)
+            return _guarded("gcode", src, key, _child_gcode, str(src), key, str(sliced), plate)
     t = _RUNNING.get(key)
     if t is None or t.done():
         if gcode_ready(src, sliced, key):
@@ -1494,16 +1619,11 @@ async def from_gcode_early(src: Path, sliced: Path, key: str, plate=None) -> dic
 
 def _in_child(src: Path, key: str, pool: str = "bg") -> bool:
     """Convertit dans un processus a part (garde le verrou du modele : la vue ouverte en meme temps attend la meme
-    conversion, et suit son avancement par ses fichiers). Repli dans ce processus s'il ne demarre pas."""
+    conversion, et suit son avancement par ses fichiers). Jamais dans le serveur apres un processus tue (_guarded)."""
     with _lock(key):
         if ready(src, key):
             return True
-        try:
-            return _pool(pool).submit(_child_convert, str(src), key, pool == "bg").result()
-        except Exception as e:
-            logger.warning(f"[3D] processus de conversion indisponible ({type(e).__name__}: {e}) : conversion sur place")
-            _POOL[pool] = None
-            return _from_3mf(src, key) is not None
+        return _guarded(pool, src, key, _child_convert, str(src), key, pool == "bg")
 
 
 async def prepare(iid: str) -> None:
@@ -1511,7 +1631,7 @@ async def prepare(iid: str) -> None:
     import asyncio
     from .mw_source import path_of
     src = path_of(iid)
-    if src.is_file() and not ready(src, iid):
+    if src.is_file() and not ready(src, iid) and not blocked(src, iid):
         await asyncio.to_thread(_in_child, src, iid)
 
 
@@ -1584,7 +1704,7 @@ async def warm_loop(first_delay_s: int = 90, period_s: int = 12 * 3600) -> None:
     while True:
         try:
             files = await asyncio.to_thread(_all_sources)
-            todo = [(f, k) for f, k in files if not _view_ok(f, k)]
+            todo = [(f, k) for f, k in files if not _view_ok(f, k) and not blocked(f, k)]
             WARM.update(running=bool(todo), done=0, total=len(todo), all=len(files), started=time.time(), finished=None,
                         current=None, stopped=None)
             for f, k in todo:

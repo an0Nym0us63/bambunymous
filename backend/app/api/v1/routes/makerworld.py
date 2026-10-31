@@ -677,12 +677,13 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             fetch_error = str(e)[:200] if (print_id or get_src) else None
     if not readonly:
         meta, source, key = None, "3mf", None
-    gmeta, gkey, gview = None, None, None
+    gmeta, gkey, gview, why3d = None, None, None, None
     if iid and not readonly:
         src = path_of(iid)
         T.WATCH[did] = iid
         meta = await T.from_3mf_early(src, iid)             # des le premier plateau pret (29/10/2026)
         key = iid
+        why3d = None if meta else T.blocked(src, iid)       # trop gros, desactive, ou abandonne (31/10/2026)
         if gcode > 0:
             # aux couleurs de cette impression, lues dans le G-code de son 3MF tranche (31/10/2026) : ses propres
             # plateaux ; l'assemblage, les finitions et l'enregistrement restent ceux de la vue d'origine (key)
@@ -722,7 +723,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
         T.WATCH.pop(did, None)
     T.PROGRESS.pop(f"did:{did}", None)
     if not meta or not meta.get("plates"):
-        raise HTTPException(404, "Pas de modèle 3D pour celui-ci")
+        raise HTTPException(404, why3d or "Pas de modèle 3D pour celui-ci")
     ms = round((_t.perf_counter() - t0) * 1000)
     if ms > 1500:
         logger.info(f"[3D] {did} (profil {prof or '?'}) prepare en {ms} ms ({source})")
