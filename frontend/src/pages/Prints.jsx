@@ -1524,9 +1524,15 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       <img src={thumbUrl(p, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
         objectFit: "cover", filter: "blur(26px) saturate(1.15)", opacity: 0.3, transform: "scale(1.3)" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
       <span aria-hidden="true" style={{ position: "absolute", inset: 0, background: `radial-gradient(60% 70% at 50% 38%, ${stC}33, transparent 72%)` }}/>
-      <img key={heroOrig ? "o" : "v"} src={heroOrig ? `${thumbUrl(p, 512)}&orig=1` : thumbUrl(p, 512)} alt="" className="bn-plate" style={{ position: "absolute", inset: "4% 8% 26%", width: "84%", height: "70%",
+      {/* plusieurs vues 3D choisies : elles defilent ici aussi, comme sur la tuile (31/10/2026) */}
+      {!heroOrig && p.thumb_3d && p.vue3d_sel?.length > 1
+        ? <span style={{ position: "absolute", inset: "4% 8% 26%" }}>
+            <CycleImg urls={p.vue3d_sel.map(s => apiThumb(withV(apiUrl(`/prints/${p.id}/file/${s.name}`), s.v), 512))}
+              render={(u, on) => <img src={u} alt="" className="bn-plate" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain",
+                filter: "drop-shadow(0 14px 24px rgba(0,0,0,.35))", opacity: on ? 1 : 0, transition: "opacity .8s ease" }}/>}/></span>
+        : <img key={heroOrig ? "o" : "v"} src={heroOrig ? `${thumbUrl(p, 512)}&orig=1` : thumbUrl(p, 512)} alt="" className="bn-plate" style={{ position: "absolute", inset: "4% 8% 26%", width: "84%", height: "70%",
         objectFit: "contain", filter: "drop-shadow(0 14px 24px rgba(0,0,0,.35))" }}
-        onError={e => { e.currentTarget.style.display = "none"; }}/>
+        onError={e => { e.currentTarget.style.display = "none"; }}/>}
       {/* la vignette choisie est une vue 3D : l'image d'origine reste a portee, en petit dans le coin ; la toucher echange */}
       {!!p.thumb_3d && <button type="button" onClick={() => setHeroOrig(o => !o)}
         data-tip={heroOrig ? "Revenir à la vue 3D" : "Voir l'image d'origine (le plateau)"}
@@ -2035,6 +2041,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   // la vignette 3D du groupe, choisie a la place de la mosaique (29/10/2026)
   const v3u = thumb3d ? withV(apiUrl(`/prints/groups/${groupId}/photo/${prints[0]?.group_vue3d_name || "Vue3D.png"}`), prints[0]?.group_vue3d_v || 0) : null;
   const mosaic = v3u ? [{ id: "vue3d", _src: w => apiThumb(v3u, w) }] : [cover, ...prints.filter(x => x !== cover)].filter(Boolean).slice(0, 4);
+  // plusieurs vues 3D choisies pour le groupe : elles defilent dans sa carte (31/10/2026)
+  const v3sel = v3u && prints[0]?.group_vue3d_sel?.length > 1 ? prints[0].group_vue3d_sel.map(s => apiThumb(withV(apiUrl(`/prints/groups/${groupId}/photo/${s.name}`), s.v), 384)) : null;
   const srcOf = (x, w) => (x._src ? x._src(w) : thumbUrl(x, w));
   const hero = (
     <div style={{ position: "relative", height: wide ? 300 : "min(36vh, 280px)", minHeight: 200, borderRadius: wide ? 20 : 0, overflow: "hidden", background: "var(--surface2)" }}>
@@ -2052,7 +2060,9 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
           {/* le halo de chaque carte, comme celui de la fiche d'une impression : son image floutee et saturee derriere */}
           <img src={srcOf(x, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
             objectFit: "cover", filter: "blur(18px) saturate(1.2)", opacity: 0.4, transform: "scale(1.35)" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
-          <img src={srcOf(x, 384)} alt="" loading="lazy" decoding="async" style={{ position: "relative", width: "100%", height: "100%", objectFit: "contain" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
+          {x.id === "vue3d" && v3sel && <CycleImg urls={v3sel} render={(u, on) => <img src={u} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
+            objectFit: "contain", opacity: on ? 1 : 0, transition: "opacity .8s ease", zIndex: 1 }}/>}/>}
+          <img src={srcOf(x, 384)} alt="" loading="lazy" decoding="async" style={{ position: "relative", width: "100%", height: "100%", objectFit: "contain", opacity: x.id === "vue3d" && v3sel ? 0 : 1 }} onError={e => { e.currentTarget.style.display = "none"; }}/>
         </div>)}
       </div>
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "34px 16px 12px",

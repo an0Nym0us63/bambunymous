@@ -627,7 +627,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           scene.background = on ? new THREE.Color(0x05070d) : null;
           // seul le phosphorescent luit (31/10/2026) : le reflet de l'environnement (soie, metal) ne depend pas des lampes,
           // il restait vif dans le noir et le halo le faisait briller ; eteint la nuit, rendu au jour. Le phosphorescent, lui,
-          // un peu plus fort
+          // a peine plus fort (+35 % effacait les details : +12 %)
           model.traverse(o => {
             if (!o.isMesh) return;
             (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
@@ -636,7 +636,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               m.envMapIntensity = on ? 0.02 : m.userData.dayEnvI;
             });
           });
-          glowMats.forEach(m => { m.emissiveIntensity = on ? Math.min(1.8, m.userData.nightEmit * 1.35) : m.userData.dayEmit; if (m.userData.rim) m.userData.rim.value = on ? 0.6 : 2.2; });
+          glowMats.forEach(m => { m.emissiveIntensity = on ? Math.min(1.45, m.userData.nightEmit * 1.12) : m.userData.dayEmit; if (m.userData.rim) m.userData.rim.value = on ? 0.6 : 2.2; });
           render();
         };
         // lumiere derriere (28/10/2026) : un lithophane ne se lit qu'eclaire par l'arriere. En chaque pixel, l'epaisseur

@@ -7,7 +7,8 @@ import React, { useEffect, useRef, useState } from "react";
  * pas en cadence), et rien ne bouge si le systeme demande a limiter les animations.
  * render(url, actif) : l'image (posee en absolu dans la case), son opacite suit « actif ».
  */
-export default function CycleImg({ urls, render, period = 3400 }) {
+// (31/10/2026) un peu plus vite (3,4 s -> 2,6 s), et de petits points discrets en bas : on voit que ca tourne, et ou on en est
+export default function CycleImg({ urls, render, period = 2600, dots = true }) {
   const [i, setI] = useState(0);
   const box = useRef(null);
   const [onScreen, setOnScreen] = useState(false);
@@ -27,7 +28,13 @@ export default function CycleImg({ urls, render, period = 3400 }) {
     }, Math.floor(Math.random() * period));
     return () => { clearTimeout(start); clearInterval(id); };
   }, [urls.length, onScreen, period]);
+  const cur = i % urls.length;
   return <span ref={box} style={{ position: "absolute", inset: 0, display: "block" }}>
-    {urls.map((u, k) => <React.Fragment key={u}>{render(u, k === i % urls.length)}</React.Fragment>)}
+    {urls.map((u, k) => <React.Fragment key={u}>{render(u, k === cur)}</React.Fragment>)}
+    {dots && urls.length > 1 && <span aria-hidden="true" style={{ position: "absolute", left: "50%", bottom: 6, transform: "translateX(-50%)", zIndex: 2,
+      display: "flex", gap: 3, pointerEvents: "none" }}>
+      {urls.map((u, k) => <span key={u} style={{ width: k === cur ? 9 : 4, height: 4, borderRadius: 2, transition: "width .35s ease, background .35s ease",
+        background: k === cur ? "rgba(255,255,255,.9)" : "rgba(255,255,255,.45)", boxShadow: "0 0 2px rgba(0,0,0,.45)" }}/>)}
+    </span>}
   </span>;
 }
