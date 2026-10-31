@@ -628,6 +628,7 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false, ot
   }, [designId]);
 
   const url = mw?.url || `https://makerworld.com/fr/models/${designId}`;
+  if (mw === null && prints.some(x => x.source_3mf)) return <OwnSourceCard designId={designId} prints={prints} group={group} url={url}/>;
   if (!mw) return (
     <a href={url} target="_blank" rel="noopener noreferrer"
       style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6,
@@ -753,6 +754,59 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false, ot
         printId={(prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id}
         usedPrints={prints.map(x => x.id)} scope={colorScope(prints)}
         title={mw.title_fr || mw.title} onClose={() => setView3d(false)}/>}
+    </div>
+  );
+}
+
+// La carte du 3MF d'origine importe a la main (31/10/2026) : comme celle de MakerWorld quand le modele n'y est pas
+// (404, retire) ou qu'il n'y en a pas -- ses plateaux (lus dans le 3MF, avec leur vignette), le plateau imprime, la
+// correspondance des filaments, la vue 3D. designId : l'ID MakerWorld, ou « p<impression> » sans modele
+function OwnSourceCard({ designId, prints = [], group = false, url = null }) {
+  const [info, setInfo] = useState(undefined);
+  const [open, setOpen] = useState(false);
+  const [view3d, setView3d] = useState(false);
+  const [shown, setShown] = useState(undefined);
+  const ids = prints.map(x => x.id).join(",");
+  useEffect(() => {
+    let alive = true;
+    client.get("/prints/source-info", { params: { ids } }).then(r => alive && setInfo(r.data)).catch(() => alive && setInfo(null));
+    return () => { alive = false; };
+  }, [ids]);
+  const link = url && <a href={url} target="_blank" rel="noopener noreferrer" style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+    width:"100%", padding:"10px", borderRadius:14, boxSizing:"border-box", border:"1px solid rgba(59,130,246,0.3)", background:"rgba(59,130,246,0.06)",
+    color:"#3b82f6", fontSize:12, fontWeight:700, textDecoration:"none" }}>🌐 Voir sur MakerWorld</a>;
+  if (!info) return link || null;
+  const shownProf = shown === undefined ? undefined : shown?.id || null;
+  const pl = info.profiles?.[0]?.plates || [];
+  const T = "#F97316";
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+    <div style={{ borderRadius:18, border:`1px solid color-mix(in srgb, ${T} 28%, var(--border))`, overflow:"hidden",
+      background:`linear-gradient(160deg, color-mix(in srgb, ${T} 10%, transparent), transparent 60%), var(--surface2)` }}>
+      <div onClick={() => setOpen(o => !o)} style={{ display:"flex", gap:12, padding:12, cursor:"pointer", alignItems:"center" }}>
+        {info.cover && <img src={apiUrl(info.cover.replace(/^\/api\/v1/, ""))} alt="" style={{ width:58, height:58, borderRadius:14, objectFit:"contain", flexShrink:0,
+          background:"var(--surface)", boxShadow:"0 6px 16px rgba(0,0,0,.18)" }}/>}
+        <div style={{ minWidth:0, flex:1 }}>
+          <div style={{ fontSize:10.5, fontWeight:900, color:T, letterSpacing:".05em" }}>📦 MON 3MF D'ORIGINE</div>
+          <div style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", lineHeight:1.3, overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis" }}>{info.title}</div>
+          <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginTop:2 }}>{pl.length} plateau{pl.length > 1 ? "x" : ""} · importé à la main</div>
+        </div>
+        <button onClick={e => { e.stopPropagation(); setView3d(true); }} aria-label="Voir en 3D" data-tip="Voir en 3D"
+          style={{ width:32, height:32, borderRadius:10, border:"1px solid rgba(14,165,233,0.4)", background:"rgba(14,165,233,0.1)", cursor:"pointer", flexShrink:0, fontSize:14 }}>🧊</button>
+        <span style={{ fontSize:11, color:"var(--muted)", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s", flexShrink:0 }}>▶</span>
+      </div>
+      {/* les couleurs du 3MF et ce qui les a remplacees (un modele MakerWorld seulement : la correspondance s'y range) */}
+      {/^\d+$/.test(String(designId)) && <ColorMap designId={designId} profileId={shownProf || null} wait={shownProf === undefined} usedPrints={prints.map(x => x.id)}
+        printId={(prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id} scope={colorScope(prints)} style={{ padding:"0 12px 10px" }}/>}
+      {/* ouverte : les plateaux ; fermee, ils choisissent quand meme le profil montre, sans s'afficher */}
+      <div style={open ? {} : { display:"none" }}>
+        <MakerWorldPlates designId={designId} profiles={info.profiles || []} prints={prints} onProfile={setShown} modelTitle={info.title}/>
+      </div>
+      {view3d && <Model3D designId={designId} profileId={shownProf || null} wait={shownProf === undefined}
+        printId={(prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id}
+        usedPrints={prints.map(x => x.id)} scope={colorScope(prints)} title={info.title} onClose={() => setView3d(false)}/>}
+    </div>
+    {link}
     </div>
   );
 }
@@ -1494,6 +1548,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       {fils.length > 0 && <FilamentsV2 filaments={fils} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker}
         onRestore={() => setShowDeleteConfirm("restore")} onUnmap={setUnmapping}/>}
       {p.design_id && <MakerWorldCard designId={p.design_id} prints={[p]} rateElsewhere/>}
+      {!p.design_id && p.source_3mf && <OwnSourceCard designId={`p${p.id}`} prints={[p]}/>}
       {p.status_note && <div style={{ position: "relative", padding: "12px 14px 12px 18px", borderRadius: 16, overflow: "hidden",
         background: "linear-gradient(135deg, color-mix(in srgb, #A855F7 12%, transparent), transparent 70%), var(--surface2)", border: "1px solid var(--border)" }}>
         <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 4, borderRadius: 4, background: "linear-gradient(#A855F7, #EC4899)" }}/>
@@ -2048,6 +2103,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       {designs.map(([d, n]) => <MakerWorldCard key={d} designId={d} rateElsewhere group prints={prints.filter(x => String(x.design_id || "").trim() === d)}
         others={prints.filter(x => String(x.design_id || "").trim() !== d)} onLinked={loadPrints}
         note={designs.length > 1 || n < prints.length ? `${n} print${n > 1 ? "s" : ""} sur ${prints.length} de ce modèle` : null}/>)}
+      {/* ses impressions sans modele MakerWorld, avec un 3MF d'origine importe (31/10/2026) */}
+      {(own => own.length > 0 && <OwnSourceCard designId={`p${own[0].id}`} group prints={own}/>)(prints.filter(x => !String(x.design_id || "").trim() && x.source_3mf))}
     </div>);
   return (
     <>

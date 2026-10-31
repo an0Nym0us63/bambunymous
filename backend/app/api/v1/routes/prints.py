@@ -522,6 +522,78 @@ def gallery_touched() -> None:
     _GALLERY["key"] = None
 
 
+@router.get("/source-info")
+async def print_source_info(ids: str = "", _: str = Depends(get_current_user)):
+    """Ce que dit le 3MF d'origine importe a la main (31/10/2026), pour une carte comme celle de MakerWorld : son titre,
+    ses plateaux (nom, vignette lue dans le 3MF) sous un profil (celui des impressions, sinon vide). 404 sans 3MF."""
+    import re as _re
+    import zipfile
+    from ....services.mw_source import print_file, _profile
+    pids = [int(x) for x in ids.split(",") if x.strip().isdigit()][:60]
+    if not pids:
+        raise HTTPException(404)
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Print.id, Print.design_id, Print.mw_profile_id, Print.mw_plates).where(Print.id.in_(pids)))).all()
+    f, prof = None, ""
+    for r in rows:
+        f = print_file(r[1], r[2], r[3], r[0])
+        if f and f.is_file():
+            prof = _profile(r[2], r[3])
+            break
+    if not f or not f.is_file():
+        raise HTTPException(404, "Pas de 3MF d'origine")
+    iid = f.stem
+
+    def read():
+        with zipfile.ZipFile(f) as z:
+            names = set(z.namelist())
+            root = z.read("3D/3dmodel.model")[:200000].decode("utf-8", "replace")
+            title = (_re.search(r'<metadata name="Title">([^<]*)', root) or [None, ""])[1].strip()
+            try:
+                cfg = z.read("Metadata/model_settings.config").decode("utf-8", "replace")
+            except KeyError:
+                cfg = ""
+            plates = []
+            for m in _re.finditer(r"<plate>(.*?)</plate>", cfg, _re.S):
+                n = _re.search(r'key="plater_id" value="(\d+)"', m.group(1))
+                nm = _re.search(r'key="plater_name" value="([^"]*)"', m.group(1))
+                if n:
+                    k = int(n.group(1))
+                    plates.append({"index": k, "name": (nm.group(1) if nm else "") or "",
+                                   "thumb": f"/api/v1/prints/source-thumb/{iid}/{k}" if f"Metadata/plate_{k}.png" in names else None})
+            if not plates:
+                plates = [{"index": 1, "name": "", "thumb": f"/api/v1/prints/source-thumb/{iid}/1" if "Metadata/plate_1.png" in names else None}]
+            return title, sorted(plates, key=lambda x: x["index"])
+    import asyncio as _aio
+    try:
+        title, plates = await _aio.to_thread(read)
+    except Exception:
+        raise HTTPException(404, "3MF d'origine illisible")
+    pid_ = str(prof or "")                 # sans profil connu : vide, le 3MF importe sert alors pour tout le modele
+    return {"key": iid, "title": title or f.stem, "cover": plates[0]["thumb"] if plates else None,
+            "profiles": [{"profile_id": pid_, "title": "Mon 3MF d'origine", "default": True, "plates": plates}]}
+
+
+@router.get("/source-thumb/{iid}/{n}")
+async def print_source_thumb(iid: str, n: int):
+    """La vignette d'un plateau du 3MF d'origine importe (lue dans le 3MF ; une balise <img> n'envoie pas le jeton)."""
+    import re as _re
+    import zipfile
+    from fastapi import Response
+    from ....services.mw_source import path_of
+    if not _re.fullmatch(r"up\d+_\d+", iid or ""):
+        raise HTTPException(404)
+    f = path_of(iid)
+    if not f.is_file():
+        raise HTTPException(404)
+    try:
+        with zipfile.ZipFile(f) as z:
+            data = z.read(f"Metadata/plate_{int(n)}.png")
+    except (KeyError, zipfile.BadZipFile, OSError):
+        raise HTTPException(404)
+    return Response(data, media_type="image/png", headers={"Cache-Control": "private, max-age=86400"})
+
+
 @router.get("/gallery")
 async def prints_gallery(kind: str = "photos", _: str = Depends(get_current_user)):
     """kind : « photos » (les vraies photos), ou « vue3d » (les vues prises dans la vue 3D, 30/10/2026)."""
