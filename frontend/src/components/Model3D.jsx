@@ -133,7 +133,7 @@ function copyPiece(THREE, src, n) {
 
 function Viewer({ url, glb, onState, palette = null, finishes = null, multi = null, glow = false, bed = null, litho = false,
                   pieces = null, edit = null, editApi = null, pad = false, piecePalettes = null, editing = false, hue = null, bare = false,
-                  tdMap = null, onTd = null, tdSlot = null }) {
+                  tdMap = null, onTd = null, tdSlot = null, pieceFinishes = null, pieceMulti = null }) {
   const [pans, setPans] = useState(false);
   const box = useRef(null);
   const [dark, setDark] = useState(false);
@@ -326,7 +326,10 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             const pal = (piecePalettes && g.piece != null && piecePalettes[pieces?.[g.piece]?.k]) || palette;   // celle du plateau de la piece
             const c = pal?.[own] ? new THREE.Color(`#${hex6(pal[own])}`) : new THREE.Color(`rgb(${g.color.join(",")})`);
             // sa finition : celle du filament d'origine, ou celle de la bobine utilisee / choisie
-            const fin = finishes?.[own];
+            // celle du plateau de la piece (31/10/2026 : une bobine sparkle sur un plateau mettait des paillettes a toutes
+            // les pieces de la meme couleur d'origine dans la vue assemblee, meme imprimees dans un autre filament)
+            const pk = g.piece != null ? pieces?.[g.piece]?.k : null;
+            const fin = ((pieceFinishes && pk && pieceFinishes[pk]) || finishes)?.[own];
             // les deux cotes des faces (29/10/2026) : la ou une zone peinte tres decoupee touche une zone qui l'est moins,
             // des fissures d'un pixel laissaient voir le noir de l'interieur (des pointilles noirs sur la Nonne)
             const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true, envMapIntensity: 0, side: THREE.DoubleSide,
@@ -336,7 +339,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             // la couche elle-meme, le long du parcours (le remplissage du dessus change sur sa longueur) : couleur par
             // sommet ; le bicolore ou tricolore coaxial change selon l'angle de vue (une couleur de face, l'autre en
             // biais, la troisieme sur la tranche), avec un leger scintillement irise
-            const mc = multi?.[own];
+            const mc = ((pieceMulti && pk && pieceMulti[pk]) || multi)?.[own];
             if (mc?.type === "gradient" && mc.colors?.length >= 2) {
               const cols = mc.colors.map(h => new THREE.Color(`#${hex6(h)}`));
               let z0 = Infinity, z1 = -Infinity, x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -1904,6 +1907,18 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     }
     return Object.keys(out).length ? out : null;
   }, [asm, shown, p?.pieces, meta?.piece_plates, meta?.used_plates, platePalettes, palette]); // eslint-disable-line react-hooks/exhaustive-deps
+  // les finitions et multicolores de chaque piece : ceux des impressions de son plateau, comme ses couleurs
+  const pieceFx = useMemo(() => {
+    if (!asm || !shown || !p?.pieces || palette || platePalettes) return null;
+    const pp = meta?.piece_plates || {}, fin = {}, mul = {};
+    for (const pc of Object.values(p.pieces)) {
+      const n = pp[String(pc.k || "").split(":").slice(0, 2).join(":")];
+      if (n == null || !meta?.used_plates?.[String(n)]) continue;   // un plateau que personne n'a imprime : celles de tous
+      fin[pc.k] = meta?.used_finishes_plates?.[String(n)] || {};
+      mul[pc.k] = meta?.used_multi_plates?.[String(n)] || {};
+    }
+    return Object.keys(fin).length ? { fin, mul } : null;
+  }, [asm, shown, p?.pieces, meta?.piece_plates, meta?.used_finishes_plates, meta?.used_multi_plates, palette, platePalettes]); // eslint-disable-line react-hooks/exhaustive-deps
   const mm = v => `${Math.round(v)} mm`;
   return createPortal(
     <FSheet onClose={onClose} z={4600}>
@@ -1938,6 +1953,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             pieces={p.assembled ? p.pieces : null} edit={p.assembled && !(origView && !editing) ? (frPick && !editing ? frPick.edit : edit) : null} editApi={editApi} pad={full || editing} editing={editing}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
             multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
+            pieceFinishes={pieceFx?.fin || null} pieceMulti={pieceFx?.mul || null}
             hue={p.litho && zc.length ? zc : null} bare={editing && !desktop} tdMap={td} onTd={fr ? null : saveTd} tdSlot={full || pfull ? null : tdSlot}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}
           {starting && !editing && <div style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center",
