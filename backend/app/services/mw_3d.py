@@ -851,7 +851,8 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         asm_lst = []
     from_plate = False
     # (pas un lithophane ni un HueForge : leurs couches lissees du plateau ne le seraient pas dans la copie)
-    if not asm_lst and len(work) == 1 and work[0][2] and not _LITHO.search(f"{work[0][1]} {names_txt}"):
+    # (31/10/2026) un lithophane ou un HueForge aussi : sa copie est lissee comme le plateau (write)
+    if not asm_lst and len(work) == 1 and work[0][2]:
         # un seul plateau (31/10/2026) : sa copie en vue assemblee, chaque piece a sa place d'impression, pour pouvoir
         # l'editer comme les autres (deplacer, colorer, peindre, descendre) ; sans elle, rien n'etait editable
         asm_lst, from_plate = list(work[0][2]), True
@@ -967,7 +968,7 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         hi = np.max([a.max(axis=0) for a in allv.values()], axis=0).astype(np.float64)
         # un lithophane (30/10/2026) : ses couches de couleur en marches (des colonnes a dessus plat, sur une grille)
         # deviennent des surfaces continues ; vues par derriere, elles faisaient des pixels en escalier
-        if (bool(_LITHO.search(f"{pname} {names_txt}")) or (hi[2] - lo[2] <= 6 and min(hi[0] - lo[0], hi[1] - lo[1]) >= 40))                 and not any(isinstance(k, tuple) for k in groups_out):
+        if (bool(_LITHO.search(f"{pname} {names_txt}")) or (hi[2] - lo[2] <= 6 and min(hi[0] - lo[0], hi[1] - lo[1]) >= 40))                 and (from_plate or not any(isinstance(k, tuple) for k in groups_out)):
             for col, g in list(groups_out.items()):
                 try:
                     sm = _smooth_terraces(allv[col], g[1][0])
@@ -1056,6 +1057,9 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         tidy = False if from_plate else _tidy(own, {(oid, k): mt for oid, k, mt in asm}, on_plate, moved)
         own.clear()                                     # les sommets des pieces : seuls les groupes les gardent
         r = write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True, "z_asm": True, **({"tidied": True} if tidy else {}), **({"from_plate": True} if from_plate else {})})
+        # la copie d'un lithophane / HueForge garde sa lumiere derriere
+        if r and from_plate and (bool(_LITHO.search(f"{work[0][1]} {names_txt}")) or (r[1][2] <= 6 and min(r[1][0], r[1][1]) >= 40)):
+            r[0]["litho"] = True
         if r:
             # les pieces, pour l'edition (29/10/2026) : leur cle (objet:instance), leur nom, et « o », le decalage de
             # leurs sommets affiches par rapport a leur place dans le 3MF (rangement, recentrage) : les positions
@@ -1361,6 +1365,10 @@ def _fresh(meta: dict) -> bool:
     if not isinstance(meta, dict) or meta.get("v") != FORMAT_V:
         return False
     pl = meta.get("plates") or []
+    # un lithophane / HueForge d'un seul plateau a maintenant sa vue assemblee (31/10/2026) : refait s'il ne l'a pas
+    real = [p for p in pl if not p.get("assembled")]
+    if len(real) == 1 and real[0].get("litho") and not any(p.get("assembled") for p in pl):
+        return False
     return not (any(p.get("z_colors") for p in pl) and any(p.get("assembled") and not p.get("z_asm") for p in pl))
 
 
