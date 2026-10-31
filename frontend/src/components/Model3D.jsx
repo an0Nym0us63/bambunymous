@@ -160,6 +160,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
   };
   const [floorPick, setFloorPick] = useState(false), [oriented, setOriented] = useState(false);   // une face posee au sol (la vue)
   const [orientOpen, setOrientOpen] = useState(false);  // tourner tout le modele (la vue), pour une photo
+  const menuBtn = on => ({ height: 32, padding: "0 10px", borderRadius: 9, cursor: "pointer", fontSize: 12, fontWeight: 800, whiteSpace: "nowrap",
+    border: on ? "none" : "1px solid var(--border)", color: on ? "#fff" : "var(--text)", background: on ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" });
   useEffect(() => { if (lit) egg("ombres_chinoises"); }, [lit]);
   // la transparence des couches d'un HueForge (30/10/2026) : une valeur par filament, reglable, gardee par couleur
   const [hueL, setHueL] = useState(null), [tdOpen, setTdOpen] = useState(false);
@@ -891,17 +893,31 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         <span style={{ width: 52, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{l.td.toFixed(2).replace(".", ",")} mm</span>
       </label>)}
     </div>)}
-    {orientOpen && !editing && !bare && <div style={{ position: "absolute", right: 10, bottom: 56, zIndex: 3, display: "grid", gridTemplateColumns: "auto repeat(4, 38px)",
-      gap: 5, alignItems: "center", padding: 8, borderRadius: 14, background: "color-mix(in srgb, var(--surface) 94%, transparent)", border: "1px solid var(--border)",
-      boxShadow: "0 10px 30px rgba(0,0,0,.25)", backdropFilter: "blur(8px)" }}>
-      {[["turn", "Tourner", ["⟲", "⟳"]], ["tilt", "Basculer", ["⤒", "⤓"]], ["roll", "Pencher", ["↶", "↷"]]].map(([how, label, [a, b]]) => <React.Fragment key={how}>
-        <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)", paddingRight: 4 }}>{label}</span>
-        {[[-90, `${a} 90°`], [-15, `${a} 15°`], [15, `${b} 15°`], [90, `${b} 90°`]].map(([d, t]) =>
-          <button key={d} type="button" onClick={() => api.current?.orient(how, how === "tilt" ? -d : d)}
-            data-tip={`${label} ${how === "turn" ? "autour de la verticale" : how === "tilt" ? (d > 0 ? "vers toi" : "vers l'arrière") : (d > 0 ? "vers la droite" : "vers la gauche")}, de ${Math.abs(d)}°`}
-            style={{ height: 32, borderRadius: 9, border: "1px solid var(--border)", cursor: "pointer", background: "var(--surface2)", color: "var(--text)",
-              fontSize: 10.5, fontWeight: 800, padding: 0 }}>{t}</button>)}
-      </React.Fragment>)}
+    {/* « 🎛 Vue » (31/10/2026) : les reglages de la vue regroupes (la rangee du bas debordait sous celle de gauche) --
+        orienter, poser au sol, revenir a l'origine, le plateau, la lampe */}
+    {orientOpen && !bare && <div style={{ position: "absolute", right: 10, bottom: 56, zIndex: 3, display: "flex", flexDirection: "column", gap: 8,
+      padding: 8, borderRadius: 14, background: "color-mix(in srgb, var(--surface) 94%, transparent)", border: "1px solid var(--border)",
+      boxShadow: "0 10px 30px rgba(0,0,0,.25)", backdropFilter: "blur(8px)", maxWidth: "calc(100% - 20px)" }}>
+      <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+        {!editing && <button type="button" onClick={() => { setOrientOpen(false); setFloorPick(true); api.current?.floorMode(true); }} style={menuBtn(false)}
+          data-tip="Clique ensuite la face du modèle qui doit reposer sur le plateau (la vue seulement : rien n'est enregistré)">⬇ Poser une face au sol</button>}
+        {oriented && !editing && <button type="button" onClick={() => api.current?.untilt()} style={menuBtn(false)} data-tip="Remettre le modèle comme à l'origine">↺ Comme à l'origine</button>}
+        <button type="button" onClick={() => { const v = !bedOn; setBedOn(v); api.current?.bedShow(v); }} style={menuBtn(!bedOn)}
+          data-tip={bedOn ? "Masquer le plateau : voir le dessous sans la grille" : "Afficher le plateau"}>{bedOn ? "▦ Plateau affiché" : "▢ Plateau masqué"}</button>
+        {!lit && <button type="button" onClick={() => { setOrientOpen(false); setLampOpen(o => !o); if (!lamp.k) putLamp({ ...lamp, k: 1.4 }); egg("eclairagiste"); }} style={menuBtn(!!lamp.k)}
+          data-tip="Une lampe à placer soi-même (de face, de côté, rasante) : pour lire le relief d'une pièce sombre">💡 Lampe</button>}
+      </div>
+      {!editing && <div style={{ display: "grid", gridTemplateColumns: "auto repeat(4, 38px)", gap: 5, alignItems: "center" }}
+        onClick={() => egg("orienter")}>
+        {[["turn", "Tourner", ["⟲", "⟳"]], ["tilt", "Basculer", ["⤒", "⤓"]], ["roll", "Pencher", ["↶", "↷"]]].map(([how, label, [a, b]]) => <React.Fragment key={how}>
+          <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)", paddingRight: 4 }}>{label}</span>
+          {[[-90, `${a} 90°`], [-15, `${a} 15°`], [15, `${b} 15°`], [90, `${b} 90°`]].map(([d, t]) =>
+            <button key={d} type="button" onClick={() => api.current?.orient(how, how === "tilt" ? -d : d)}
+              data-tip={`${label} ${how === "turn" ? "autour de la verticale" : how === "tilt" ? (d > 0 ? "vers toi" : "vers l'arrière") : (d > 0 ? "vers la droite" : "vers la gauche")}, de ${Math.abs(d)}° (la vue seulement)`}
+              style={{ height: 32, borderRadius: 9, border: "1px solid var(--border)", cursor: "pointer", background: "var(--surface2)", color: "var(--text)",
+                fontSize: 10.5, fontWeight: 800, padding: 0 }}>{t}</button>)}
+        </React.Fragment>)}
+      </div>}
     </div>}
     <div style={{ position: "absolute", right: 10, bottom: 10, display: bare ? "none" : "flex", gap: 8 }}>
       {hueL && !lit && <button type="button" onClick={() => setTdOpen(o => !o)}
@@ -914,34 +930,19 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: lit ? "linear-gradient(135deg, #fde68a, #f59e0b)" : "linear-gradient(135deg, #1e293b, #0f172a)", color: lit ? "#1e293b" : "#e2e8f0",
           fontSize: 13, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }} aria-label={lit ? "Devant" : "Derrière"}>{lit ? (narrow ? "☀️" : "☀️ Devant") : (narrow ? "🔦" : "🔦 Derrière")}</button>}
-      {!lit && <button type="button" onClick={() => { setLampOpen(o => !o); if (!lamp.k) putLamp({ ...lamp, k: 1.4 }); egg("eclairagiste"); }}
-        data-tip="Une lampe à placer soi-même (de face, de côté, rasante) : pour lire le relief d'une pièce sombre"
-        style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 15,
-          background: lamp.k ? "linear-gradient(135deg, #fde68a, #f59e0b)" : "var(--surface)", color: lamp.k ? "#1e293b" : "var(--text2)",
-          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }} aria-label="Lampe">💡</button>}
-      <button type="button" onClick={() => { const v = !bedOn; setBedOn(v); api.current?.bedShow(v); }}
-        data-tip={bedOn ? "Masquer le plateau : voir le dessous sans la grille" : "Afficher le plateau"}
-        style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 15,
-          background: bedOn ? "var(--surface)" : "linear-gradient(135deg, #0EA5E9, #6366F1)", color: bedOn ? "var(--text2)" : "#fff",
-          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{bedOn ? "▦" : "▢"}</button>
       {glow && <button type="button" onClick={() => { const v = !dark; setDark(v); api.current?.night(v); }}
         data-tip={dark ? "Rallumer la lumière" : "Éteindre la lumière : le filament phosphorescent luit"}
         style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: dark ? "linear-gradient(135deg, #facc15, #f59e0b)" : "linear-gradient(135deg, #1e293b, #0f172a)", color: dark ? "#1e293b" : "#e2e8f0",
           fontSize: 13, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }} aria-label={dark ? "Rallumer" : "Éteindre"}>{dark ? (narrow ? "💡" : "💡 Rallumer") : (narrow ? "🌙" : "🌙 Éteindre")}</button>}
-      {oriented && !editing && <button type="button" onClick={() => api.current?.untilt()} data-tip="Remettre le modèle comme à l'origine"
-        style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
-          background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>↺</button>}
-      {!editing && <button type="button" onClick={() => { setOrientOpen(o => !o); egg("orienter"); }}
-        data-tip="Orienter tout le modèle pour une photo : le tourner, le basculer, le pencher (la vue seulement : rien n'est enregistré ; ↺ le remet comme à l'origine)"
-        style={{ height: 38, padding: "0 10px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 12.5, fontWeight: 800,
-          background: orientOpen ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", color: orientOpen ? "#fff" : "var(--text2)",
-          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }} aria-label="Orienter">{narrow ? "🔄" : "🔄 Orienter"}</button>}
-      {!editing && <button type="button" onClick={() => { const v = !floorPick; setFloorPick(v); api.current?.floorMode(v); }}
-        data-tip={floorPick ? "Annuler" : "Poser une face au sol : clique ensuite la face du modèle qui doit reposer sur le plateau (la vue seulement : rien n'est enregistré)"}
-        style={{ height: 38, padding: "0 10px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 12.5, fontWeight: 800,
-          background: floorPick ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", color: floorPick ? "#fff" : "var(--text2)",
-          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }} aria-label="Au sol">{floorPick ? (narrow ? "Touche la face…" : "Clique la face…") : (narrow ? "⬇" : "⬇ Au sol")}</button>}
+      {floorPick && <button type="button" onClick={() => { setFloorPick(false); api.current?.floorMode(false); }} data-tip="Annuler"
+        style={{ height: 38, padding: "0 10px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: "#fff",
+          background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{narrow ? "Touche la face… ✕" : "Clique la face… ✕"}</button>}
+      <button type="button" onClick={() => setOrientOpen(o => !o)} aria-label="Réglages de la vue"
+        data-tip="La vue : orienter le modèle, poser une face au sol, le plateau, la lampe"
+        style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 15,
+          background: orientOpen || oriented || !bedOn || lamp.k ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)",
+          color: orientOpen || oriented || !bedOn || lamp.k ? "#fff" : "var(--text2)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>🎛</button>
       <button type="button" onClick={() => api.current?.fit()} data-tip="Recentrer la vue"
         style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>⟲</button>
