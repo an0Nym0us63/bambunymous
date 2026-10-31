@@ -23,7 +23,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 24                          # 24 : une piece a l'echelle de son plateau dans la vue assemblee (30/10) ; 23 : une piece redimensionnee volontairement n est plus prise pour une place abimee (30/10) ; 22 : place d'assemblage abimee d'une piece en miroir reprise (30/10) ; 21 : triangles d'une piece en miroir remis dans le bon sens (30/10) ; 20 : pieces en miroir gardees en miroir dans la vue assemblee (30/10) ; 19 : couches en marches d'un lithophane lissees (30/10) ; 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 25                          # 25 : un modele a un seul plateau a aussi sa vue assemblee, pour l'editer (31/10) ; 24 : une piece a l'echelle de son plateau dans la vue assemblee (30/10) ; 23 : une piece redimensionnee volontairement n est plus prise pour une place abimee (30/10) ; 22 : place d'assemblage abimee d'une piece en miroir reprise (30/10) ; 21 : triangles d'une piece en miroir remis dans le bon sens (30/10) ; 20 : pieces en miroir gardees en miroir dans la vue assemblee (30/10) ; 19 : couches en marches d'un lithophane lissees (30/10) ; 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan|hue ?forge", re.I)       # HueForge : une image en couches, a voir par derriere aussi (30/10)
 MAX_TRIANGLES = 1_500_000              # au-dela, le plateau est simplifie (29/10/2026 ; avant : pas converti du tout) :
                                        # un telephone l'affiche vite, et le fichier reste de quelques Mo
@@ -729,6 +729,12 @@ def convert(src: Path, out_dir: Path, key: str = None, gsrc: dict | None = None)
         asm_lst.append(((oid, k), parts))
     if len(asm_lst) < 2:                                # un seul objet : rien de plus que son plateau
         asm_lst = []
+    from_plate = False
+    # (pas un lithophane ni un HueForge : leurs couches lissees du plateau ne le seraient pas dans la copie)
+    if not asm_lst and len(work) == 1 and work[0][2] and not _LITHO.search(f"{work[0][1]} {names_txt}"):
+        # un seul plateau (31/10/2026) : sa copie en vue assemblee, chaque piece a sa place d'impression, pour pouvoir
+        # l'editer comme les autres (deplacer, colorer, peindre, descendre) ; sans elle, rien n'etait editable
+        asm_lst, from_plate = list(work[0][2]), True
     weight = (sum(len(p[3]) for _, _, lst in work for _, parts in lst for p in parts)
               + sum(len(p[3]) for _, parts in asm_lst for p in parts)) or 1
     # l'avancement (29/10/2026) : chaque plateau a sa part, a la taille de ses pieces, lecture puis compression ;
@@ -964,8 +970,9 @@ def convert(src: Path, out_dir: Path, key: str = None, gsrc: dict | None = None)
                 if k < len(mts):
                     on_plate[(oid, k)] = (n_, mts[k][:9])
         moved: dict = {}
-        tidy = _tidy(own, {(oid, k): mt for oid, k, mt in asm}, on_plate, moved)
-        r = write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True, "z_asm": True, **({"tidied": True} if tidy else {})})
+        # la copie d'un plateau unique reste telle qu'imprimee (rien a ranger)
+        tidy = False if from_plate else _tidy(own, {(oid, k): mt for oid, k, mt in asm}, on_plate, moved)
+        r = write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True, "z_asm": True, **({"tidied": True} if tidy else {}), **({"from_plate": True} if from_plate else {})})
         if r:
             # les pieces, pour l'edition (29/10/2026) : leur cle (objet:instance), leur nom, et « o », le decalage de
             # leurs sommets affiches par rapport a leur place dans le 3MF (rangement, recentrage) : les positions
