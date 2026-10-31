@@ -1383,6 +1383,10 @@ function PrinterFlags({ status, size = 13 }) {
 // IN_PROGRESS ; sinon la plus recente, quel que soit son resultat. Relue quand l'etat ou le travail
 // change, et, tant qu'elle tourne, toutes les 8 s jusqu'a avoir son image : au lancement, la fiche
 // n'existe pas encore ou son image sort du 3MF quelques secondes apres (il fallait faire F5).
+// 31/10/2026 : la vignette restait celle de l'impression d'avant (echouee, puis supprimee) : tant que la nouvelle fiche
+// n'etait pas trouvee, l'ancienne restait affichee, et on cessait de chercher apres 5 min (une preparation peut durer
+// plus). Desormais une fiche d'un autre travail n'est plus montree pendant une impression, on cherche tant qu'il le
+// faut (8 s, puis 30 s), et la fiche est relue toutes les minutes, au retour sur la page et quand une impression change
 function useLivePrint(status, via = x => x, who = null) {
   const [info, setInfo] = useState(null);
   const st = String(status?.status || "").toUpperCase();
@@ -1392,16 +1396,29 @@ function useLivePrint(status, via = x => x, who = null) {
   useEffect(() => {
     if (!st) return undefined;
     let stop = false, timer = null, tries = 0;
+    const other = p => live && job && p?.job_id && String(p.job_id) !== job;    // la fiche d'un autre travail
+    const later = () => { clearTimeout(timer); timer = setTimeout(load, 60000); };
     const load = () => client.get(via("/prints"), { params: { limit: 1, ...(live ? { status: "IN_PROGRESS" } : {}) } })
       .then(r => {
         if (stop) return;
         const p = (r.data?.prints || r.data?.items || [])[0];
-        if (p) setInfo(p);
-        const behind = !p || !p.plate_image || (job && p.job_id && String(p.job_id) !== job);
-        if (live && behind && ++tries < 40) timer = setTimeout(load, 8000);
-      }).catch(() => { if (!stop && live && ++tries < 40) timer = setTimeout(load, 8000); });
+        setInfo(p && !other(p) ? p : (live ? null : p || null));
+        const behind = !p || !p.plate_image || other(p);
+        clearTimeout(timer);
+        if (live && behind) timer = setTimeout(load, ++tries < 15 ? 8000 : 30000);
+        else later();
+      }).catch(() => { if (!stop) { clearTimeout(timer); timer = setTimeout(load, live ? 8000 : 60000); } });
+    const again = () => { if (!stop && document.visibilityState !== "hidden") load(); };
     load();
-    return () => { stop = true; clearTimeout(timer); };
+    window.addEventListener("bn-prints-changed", again);
+    window.addEventListener("bn-print-deleted", again);
+    document.addEventListener("visibilitychange", again);
+    return () => {
+      stop = true; clearTimeout(timer);
+      window.removeEventListener("bn-prints-changed", again);
+      window.removeEventListener("bn-print-deleted", again);
+      document.removeEventListener("visibilitychange", again);
+    };
   }, [st, job, who]); // eslint-disable-line react-hooks/exhaustive-deps
   return info;
 }
