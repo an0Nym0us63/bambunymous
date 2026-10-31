@@ -265,6 +265,52 @@ function SpoolMapPicker({ usageId, printId, colorHex, colorsArray, multicolorTyp
   );
 }
 
+// supprimer plusieurs impressions choisies (31/10/2026) : la meme question que pour une seule -- rendre aux bobines le
+// filament consomme ? -- une part pour toutes (avant : supprimees sans rien proposer)
+function BulkDeleteConfirm({ prints, onCancel, onConfirm }) {
+  const rows = prints.map(p => ({ p, used: (p.filament_usage || []).filter(f => f.spool_id && f.grams_used > 0) })).filter(r => r.used.length);
+  const [frac, setFrac] = useState(1);
+  const total = rows.reduce((s, r) => s + r.used.reduce((a, f) => a + f.grams_used, 0), 0);
+  const C = "#EF4444";
+  const OPTS = [0, 0.25, 0.5, 0.75, 1];
+  const g = x => x.toFixed(1).replace(".", ",");
+  return (
+    <FSheet onClose={onCancel} z={3000} bottom={<>
+      <button onClick={onCancel} style={{ ...fBtn, flex:1 }}>Annuler</button>
+      <button onClick={async () => {
+        if (frac > 0 && !(await showConfirm(`Supprimer ${prints.length} impressions et rendre ${g(total * frac)} g aux bobines ? Pour supprimer sans rien rendre, reviens et choisis « Non ».`,
+          { title: "Rendre du filament ?", confirmLabel: "Supprimer et rendre" }))) return;
+        onConfirm(frac, rows);
+      }} style={{ ...fBtn, flex:2, border:"none", color:"#fff", fontWeight:900, background:`linear-gradient(135deg, ${C}, ${lighten(C)})`, boxShadow:`0 8px 18px -10px ${C}` }}>
+        🗑 Supprimer {prints.length}</button></>}>
+      <div style={{ padding:"52px 18px 16px", display:"flex", alignItems:"center", gap:14, background:`radial-gradient(circle at 15% 40%, ${C}40, transparent 60%), var(--surface2)` }}>
+        <span style={{ width:54, height:54, borderRadius:17, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:26,
+          background:`linear-gradient(135deg, ${C}, ${lighten(C)})`, boxShadow:`0 8px 20px -8px ${C}` }}>🗑️</span>
+        <div style={{ minWidth:0, display:"flex", flexDirection:"column", gap:3 }}>
+          <span style={{ fontSize:12, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:C }}>Supprimer les impressions</span>
+          <span style={{ fontSize:19, fontWeight:900, color:"var(--text)", lineHeight:1.2 }}>Supprimer ces {prints.length} prints ?</span>
+        </div>
+      </div>
+      <div style={{ padding:"14px 16px 18px", display:"flex", flexDirection:"column", gap:12 }}>
+        <p style={{ margin:0, fontSize:12.5, fontWeight:600, color:"var(--muted)" }}>
+          {rows.length > 1 ? `${rows.length} d'entre elles ont` : "L'une d'elles a"} consommé {g(total)} g sur des bobines : les rendre ?</p>
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+          {OPTS.map(o => <button key={o} type="button" onClick={() => setFrac(o)} style={{ padding:"6px 12px", borderRadius:10, cursor:"pointer", fontSize:12.5, fontWeight:800,
+            border: frac === o ? "none" : "1px solid var(--border)", color: frac === o ? "#fff" : "var(--text2)",
+            background: frac === o ? "linear-gradient(135deg, #22C55E, #16A34A)" : "var(--surface2)" }}>{o === 0 ? "Non" : o === 1 ? "100 %" : `${o * 100} %`}</button>)}
+        </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+          {rows.map(({ p, used }) => <div key={p.id} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, fontWeight:700, color:"var(--text)" }}>
+            <span style={{ flex:1, minWidth:0, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.file_name || "Sans nom"}</span>
+            <span style={{ color: frac > 0 ? "#16a34a" : "var(--muted)", fontWeight:900 }}>+{g(used.reduce((a, f) => a + f.grams_used, 0) * frac)} g</span>
+          </div>)}
+        </div>
+        {frac > 0 && <div style={{ padding:"8px 12px", borderRadius:12, fontSize:12.5, fontWeight:800, color:"#16a34a", textAlign:"center",
+          background:"rgba(34,197,94,0.12)", border:"1px solid rgba(34,197,94,0.35)" }}>+{g(total * frac)} g rendus aux bobines</div>}
+      </div>
+    </FSheet>);
+}
+
 function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
   const mapped = (p.filament_usage || []).filter(f => f.spool_id && f.grams_used > 0);
   const [fracs, setFracs] = useState(() => Object.fromEntries(mapped.map(f=>[f.id, 1.0])));
@@ -3426,10 +3472,27 @@ export default function Prints() {
 
   // Suppression des prints selectionnes (pas d'endpoint bulk -> un par un, comme
   // ailleurs dans le code). Confirmation a deux temps dans la barre.
+  // avant de supprimer : du filament consomme sur des bobines ? la question de la restitution, comme pour une seule
+  const [bulkDel, setBulkDel] = useState(null);
   const deleteSelected = async () => {
     setDeleting(true);
+    let asked = false;
     try {
+      const full = await Promise.all(Array.from(selectedIds).map(id => client.get("/prints/" + id).then(r => r.data).catch(() => ({ id }))));
+      if (full.some(p => (p.filament_usage || []).some(f => f.spool_id && f.grams_used > 0))) { setBulkDel(full); asked = true; }
+    } catch (err) {
+      showAlert("Erreur: " + (err.response?.data?.detail || err.message));
+      asked = true;
+    } finally { setDeleting(false); }
+    if (!asked) await reallyDelete(0, []);
+  };
+  const reallyDelete = async (frac, rows) => {
+    setDeleting(true);
+    try {
+      if (frac > 0) for (const { p, used } of rows)
+        await client.post("/prints/" + p.id + "/restore-weights", { fracs: Object.fromEntries(used.map(f => [f.id, frac])) }).catch(() => {});
       await Promise.all(Array.from(selectedIds).map(id => client.delete("/prints/" + id)));
+      setBulkDel(null);
       exitSelectMode();
       await Promise.all([load(), loadGroups()]);
     } catch (err) {
@@ -4127,6 +4190,7 @@ export default function Prints() {
               <span style={{ overflow:"hidden", textOverflow:"ellipsis",
                 whiteSpace:"nowrap" }}>Grouper</span>
             </button>
+            {bulkDel && createPortal(<BulkDeleteConfirm prints={bulkDel} onCancel={() => { setBulkDel(null); setConfirmDelete(false); }} onConfirm={reallyDelete}/>, document.body)}
             {confirmDelete ? (
               <button onClick={deleteSelected} disabled={deleting}
                 style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center",
