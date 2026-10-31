@@ -12,6 +12,7 @@ import TarePicker, { useSpoolTares, tareForBrand } from "../components/TarePicke
 import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette, Tag, Sun } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
+import StoreLink from "../components/StoreLink";
 import { egg } from "../eggs";
 import { useFriend } from "../store/friend";
 import { showAlert, showConfirm } from "../utils/dialog";
@@ -1105,7 +1106,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
           <FRow l="Couleur" v={color} mono pre={<ColorSwatch color={spool.filament_color} colorsArray={spool.filament_colors_array}
             multicolorType={spool.filament_multicolor_type} finish={finishOf(spool)} size={16} radius={4}/>}/>
           <FRow l="Code Bambu" v={spool.filament_profile_id} mono/>
-          <FRow l="Code couleur Bambu" v={spool.filament_fila_color_code} mono/>
+          <FRow l="Code couleur Bambu" v={spool.filament_fila_color_code ? <>{spool.filament_fila_color_code} <StoreLink code={spool.filament_fila_color_code} label="🛒 Racheter ↗"/></> : null} mono/>
           <FRow l="Stock du filament" v={stockFil != null ? fmtStock(stockFil) : null} d={spool.ordered_siblings > 0 ? `toutes bobines · 📬 ${spool.ordered_siblings} en commande` : "toutes bobines"}/>
           <FRow l="Poids total" v={spool.filament_weight_g ? `${spool.filament_weight_g} g` : null}/>
           <FRow l="Prix catalogue" v={spool.filament_price ? `${moneyVal(Number(spool.filament_price), 2)} €` : null}/>
@@ -1990,7 +1991,8 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
           fChip(<><Palette size={11}/>{f.swatch ? "Échantillon" : "Sans échantillon"}</>, f.swatch ? "#22c55e" : "#94a3b8"),
           <span key="lbl" data-tip={labelDay ? `Étiquette imprimée le ${labelDay}` : undefined}>
             {fChip(<><Tag size={11}/>{f.label_printed ? "Étiquette" : "Sans étiquette"}</>, f.label_printed ? "#3b82f6" : "#94a3b8")}</span>,
-          f.to_order && fChip("🛒 À commander", "#f97316")]}
+          f.to_order && fChip("🛒 À commander", "#f97316"),
+          <StoreLink key="shop" filamentId={f.id} look="pill" label="🛒 Racheter ↗"/>]}
         sub={<>
           {f.translated_name && f.translated_name !== f.name && <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:-3 }}>{f.name}</div>}
           {/* Marque puis SOUS-TYPE (PLA Basic), repli sur la matiere : comme la fiche bobine. */}

@@ -15,6 +15,7 @@ import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets
          Dices, ChevronRight, Camera, Video, Thermometer, CalendarDays, ShoppingBag, Rss, Images, Zap, Medal as MedalIcon,
          BellRing, Split, Fan, Wrench, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck, Maximize2, PackageOpen } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
+import StoreLink from "./StoreLink";
 import { RateButton } from "./MwToRate";
 import { mwImg } from "./MwImg";
 import LiveCamera from "./LiveCamera";
@@ -1525,6 +1526,7 @@ function FilamentStock() {
           {f.manufacturer && group !== "brand" && pill(f.manufacturer, "#8B5CF6")}
           {kind && group !== "type" && pill(kind, "#0EA5E9")}
           {f.to_order && f.st !== "order" && f.st !== "coming" && pill("🛒 marqué à commander", "#ea580c")}
+          {!visiting && f.st !== "ok" && <StoreLink filamentId={f.id} look="pill"/>}
           {f.st !== "coming" && f.ordered_spool_count > 0 && pill(`📬 +${f.ordered_spool_count} en commande`, "#0EA5E9")}
           <Muted size={11}>{f.active_spool_count ? `${f.active_spool_count} bobine${f.active_spool_count > 1 ? "s" : ""}` : "plus de bobine"}</Muted>
         </div>

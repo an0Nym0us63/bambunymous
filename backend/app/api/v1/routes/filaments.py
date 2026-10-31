@@ -505,6 +505,19 @@ async def filament_labels_pdf(
     )
 
 
+@router.get("/store-links")
+async def filament_store_links(_: str = Depends(get_current_user)):
+    """Les liens directs de la boutique Bambu (31/10/2026) : par code couleur, la recharge et la bobine de 1 kg ; et le
+    code couleur de chaque filament du catalogue. Lu une fois par semaine en fond (bambu_store) : vide la premiere fois."""
+    import asyncio as _aio
+    from ....services import bambu_store
+    data = await _aio.to_thread(bambu_store.load)
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Filament.id, Filament.fila_color_code).where(Filament.fila_color_code.isnot(None)))).all()
+    codes = data.get("codes") or {}
+    return {"codes": codes, "filaments": {str(i): str(c).strip() for i, c in rows if str(c or "").strip() in codes}}
+
+
 @router.get("/price-review")
 async def price_review(
     db: AsyncSession = Depends(get_db),

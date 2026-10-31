@@ -5,6 +5,7 @@ import { useTrackDetail } from "../utils/track";
 import { useUrlTab } from "../utils/useUrlTab";
 import { createPortal } from "react-dom";
 import client from "../api/client";
+import StoreLink from "./StoreLink";
 import MwImg from "./MwImg";
 import AdminOnly from "./AdminOnly";
 import { Pressable } from "./ContextMenu";
@@ -354,8 +355,10 @@ export default function MwQueue() {
                   </span>
                   <span style={{ textAlign:"right", flexShrink:0 }}>
                     <span style={{ display:"block", fontSize:13, fontWeight:900, color:"var(--text)" }}>{g(f.need_g)} <span style={{ color:"var(--muted)", fontWeight:700 }}>/ {g(f.stock_g)}</span></span>
-                    <span style={{ display:"inline-block", marginTop:3, fontSize:10.5, fontWeight:800, padding:"1px 8px", borderRadius:20, color:c, background:`${c}1f` }}>
-                      {f.missing_g ? `manque ${g(f.missing_g)}` : `reste ${g(f.stock_g - f.need_g)}`}</span>
+                    <span style={{ display:"inline-flex", alignItems:"center", gap:6, marginTop:3 }}>
+                      <StoreLink filamentId={f.filament_id}/>
+                      <span style={{ fontSize:10.5, fontWeight:800, padding:"1px 8px", borderRadius:20, color:c, background:`${c}1f` }}>
+                      {f.missing_g ? `manque ${g(f.missing_g)}` : `reste ${g(f.stock_g - f.need_g)}`}</span></span>
                   </span>
                 </div>);
             })}
