@@ -33,6 +33,12 @@ function Picker({ kind, id, shot, onDone, close }) {
   const none = () => act(() => client.put(`${base}/thumb`, { slots: [] }));
   const drop = n => { if (sure !== n) { setSure(n); setTimeout(() => setSure(0), 4000); return; } setSure(0); act(() => client.delete(`${base}/vue3d/${n}`)); };
   const full = d && d.slots.length >= d.max;
+  // la vue prise est gardee d'office (31/10/2026 : « ＋ La garder » etait une etape de trop ; ici on la retire, la
+  // change de vignette ou la supprime) ; seulement 4 vues deja : on choisit celle qu'elle remplace
+  const autoPut = React.useRef(false);
+  useEffect(() => {
+    if (shot && d && !saved && !full && !autoPut.current) { autoPut.current = true; put(0); }
+  }, [d, shot, saved, full]); // eslint-disable-line react-hooks/exhaustive-deps
   const tile = { position: "relative", width: 112, display: "flex", flexDirection: "column", gap: 6, alignItems: "stretch" };
   const img = on => ({ width: 112, height: 112, objectFit: "contain", borderRadius: 12, background: "var(--surface2)",
     border: on ? "2px solid #0EA5E9" : "1px solid var(--border)", boxSizing: "border-box" });
@@ -52,8 +58,8 @@ function Picker({ kind, id, shot, onDone, close }) {
         <img src={shot.url} alt="" style={img(false)}/>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 700 }}>
           <span>La vue que tu viens de prendre</span>
-          {d && !full && <button type="button" disabled={busy} onClick={() => put(0)} style={btn(true, { padding: "0 12px" })}>＋ La garder ({d.slots.length + 1}/{d.max})</button>}
-          {d && d.slots.length > 0 && <span style={{ color: "var(--muted)", fontWeight: 600 }}>{full ? `Déjà ${d.max} vues : ` : "Ou "}touche « ↻ Remplacer » sous celle à écraser.</span>}
+          {d && !full ? <span style={{ color: "var(--muted)", fontWeight: 600 }}>Enregistrement…</span>
+            : d && <span style={{ color: "var(--muted)", fontWeight: 600 }}>Déjà {d.max} vues : touche « ↻ Remplacer » sous celle à écraser.</span>}
         </div>
       </div>}
       {!d ? <span>…</span> : <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
