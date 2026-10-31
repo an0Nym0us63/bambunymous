@@ -2875,7 +2875,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
 const friendMatch = (it, q) => `${it.kind === "group" ? it.name : (it.title || it.file_name) || ""} ${it.friend_name || ""}`
   .toLowerCase().includes(q);
 
-function PrintsGalleryView({ search, sortF = "recent" }) {
+function PrintsGalleryView({ search, sortF = "recent", kindSlot = null }) {
   const hasFriends = useHasFriends();
   const [who, setWho] = useState("mine");          // mine | friends | sd
   const [nTl, setNTl] = useState(null);            // les timelapses (selon la recherche), une fois lus
@@ -2907,11 +2907,11 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
   // et seulement s'il existe des vues 3D (un serveur d'avant n_vue3d : on le montre)
   const hasV3 = gKind === "vue3d" || (mine != null && (mine.n_vue3d ?? 1) > 0);
   const kindSw = hasV3 && who !== "sd" && (
-    <div style={{ display:"inline-flex", flexShrink:0, alignSelf:"center", padding:2, gap:2, borderRadius:12,
-      background:"var(--surface)", border:"1px solid var(--border)" }}>
+    <div style={{ display:"inline-flex", flexShrink:0, alignItems:"center", height:40, boxSizing:"border-box", padding:3, gap:2, borderRadius:14,
+      background:"var(--surface2)", border:"1px solid var(--border)" }}>
       {[["photos", "📷", "Les photos des impressions"], ["vue3d", "🧊", "Les vues prises dans la vue 3D (📸), à la place des photos"]].map(([k, l, tip]) =>
-        <button key={k} type="button" onClick={() => setGKind(k)} data-tip={tip} aria-label={tip} style={{ width:30, height:28, padding:0,
-          borderRadius:10, border:"none", cursor:"pointer", fontSize:14, lineHeight:1,
+        <button key={k} type="button" onClick={() => setGKind(k)} data-tip={tip} aria-label={tip} style={{ width:30, height:32, padding:0,
+          borderRadius:11, border:"none", cursor:"pointer", fontSize:14, lineHeight:1,
           background: gKind === k ? "linear-gradient(135deg, #EC4899, #8B5CF6)" : "transparent", opacity: gKind === k ? 1 : 0.55 }}>{l}</button>)}
     </div>);
   return (<>
@@ -2932,12 +2932,13 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
               {tiny ? `${e}${n != null ? ` ${n}` : ""}` : n != null ? n : "·"}</span>
           </button>
         ))}
-        {kindSw}
       </div>
     )}
+    {/* le choix Photos / Vues 3D vit au bout de la ligne de recherche (01/11/2026 : seul sur sa ligne chez un copain,
+        et a l'etroit au bout des onglets au telephone) */}
+    {kindSw && kindSlot && createPortal(kindSw, kindSlot)}
     {who === "sd" && !currentFriend() ? <TimelapsesView search={search} onCount={setNTl}/>
       : <>
-        {currentFriend() && kindSw && <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>{kindSw}</div>}
         {who === "friends" && hasFriends ? <FriendsGalleryView search={search} data={fdata} kind={gKind}/>
           : <MyGalleryView search={search} sortF={sortF} data={mine} loading={mineLoading} kind={gKind}/>}
       </>}
@@ -3447,6 +3448,7 @@ export default function Prints() {
   const [viewMode, setViewMode] = useUrlTab("tab", "list", ["list", "gallery", "makerworld", "queue"]);
   // la liste en grille de cartes, ou en rangees compactes (choix retenu sur l'appareil)
   const [rows, setRows0] = useState(() => { try { return localStorage.getItem("bn-prints-rows") === "1"; } catch { return false; } });
+  const [kindSlot, setKindSlot] = useState(null);       // la place du choix Photos / Vues 3D de la galerie
   const setRows = v => { setRows0(v); try { localStorage.setItem("bn-prints-rows", v ? "1" : "0"); } catch { /* indisponible */ } };
   useTrackDetail(`Historique · ${ {list:"Liste", gallery:"Galerie", makerworld:"MakerWorld", queue:"À faire"}[viewMode] || viewMode }`);
   const [selectMode, setSelectMode] = useState(false);
@@ -3851,6 +3853,7 @@ export default function Prints() {
               {chips.length > 0 && <span style={{ position:"absolute", top:-5, right:-5, minWidth:18, height:18, padding:"0 4px", borderRadius:9, fontSize:10.5,
                 fontWeight:900, color:"#fff", background:"#3b82f6", display:"flex", alignItems:"center", justifyContent:"center", border:"2px solid var(--bg)" }}>{chips.length}</span>}
             </button>
+            {viewMode==="gallery" && <div ref={setKindSlot} style={{ display:"contents" }}/>}
             {viewMode==="list" && <button onClick={() => setRows(!rows)} aria-label={rows ? "Afficher en grille" : "Afficher en rangées"}
               data-tip={rows ? "En grille" : "En rangées"} style={round(false)}>{rows ? "▦" : "☰"}</button>}
             {viewMode==="list" && (
@@ -4072,7 +4075,7 @@ export default function Prints() {
         </p>
       )}
 
-      {viewMode==="gallery" && <PrintsGalleryView search={search} sortF={sortF}/>}
+      {viewMode==="gallery" && <PrintsGalleryView search={search} sortF={sortF} kindSlot={kindSlot}/>}
 
       {!loading && !error && prints.length > 0 && viewMode==="list" && (() => {
         const onDelete = id => { setPrints(ps => ps.filter(x => x.id !== id)); setTotal(t => t-1); };
