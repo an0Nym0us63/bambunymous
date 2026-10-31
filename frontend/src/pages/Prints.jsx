@@ -3054,7 +3054,7 @@ const STATUS_LABELS = {"":"Tous","IN_PROGRESS":"En cours","SUCCESS":"Réussis",
   "PARTIAL":"Partiels","TO_REDO":"À refaire","FAILED":"Échoués"};
 const SORT_KEYS = ["recent", "oldest", "cost", "weight", "duration"];
 // Les filtres de la liste dans l'adresse (28/10/2026) : cles courtes, une valeur par defaut n'y est pas ecrite.
-const FILTER_DEFAULTS = { q: "", st: "", sort: "recent", mat: "", type: "", fil: "", col: "", from: "", to: "" };
+const FILTER_DEFAULTS = { q: "", st: "", sort: "recent", mat: "", type: "", fil: "", col: "", from: "", to: "", v3: "" };
 const FILTER_KEYS = Object.keys(FILTER_DEFAULTS);
 const isYmd = s => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
 
@@ -3209,6 +3209,8 @@ export default function Prints() {
   const filaTypeF = urlVal("type"), setFilaTypeF = v => patchUrl({ type: v });
   const filamentIdF = urlVal("fil"), setFilamentIdF = v => patchUrl({ fil: v });
   const colorF = urlVal("col"), setColorF = v => patchUrl({ col: v });
+  // seulement ce qui a des vues 3D (31/10/2026)
+  const vue3dF = urlVal("v3") === "1", setVue3dF = v => patchUrl({ v3: v ? "1" : "" });
   const dateFrom = isYmd(searchParams.get("from")) ? searchParams.get("from") : "";  // borne debut plage temporelle
   const dateTo = isYmd(searchParams.get("to")) ? searchParams.get("to") : "";        // borne fin (incluse)
   const setDateFrom = v => patchUrl({ from: v });
@@ -3288,11 +3290,12 @@ export default function Prints() {
     if (colorF)      p.set("color", colorF);
     if (dateFrom)    p.set("date_from", dateFrom);
     if (dateTo)      p.set("date_to", dateTo);
+    if (vue3dF)      p.set("vue3d", "1");
     try {
       const { data } = await client.get("/prints/kpis?" + p);
       if (gen === kpiGen.current) setKpis(data);
     } catch {}
-  }, [searchQ, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo]);
+  }, [searchQ, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, vue3dF]);
 
   // la liste et ses KPI ne servent qu'a l'onglet Liste : en galerie, MakerWorld ou file, on note seulement que les
   // filtres ont change, et on recharge au retour sur la liste si besoin (28/10/2026 : chaque recherche en galerie
@@ -3339,6 +3342,7 @@ export default function Prints() {
       if (colorF)      params.set("color", colorF);
       if (dateFrom)    params.set("date_from", dateFrom);
       if (dateTo)      params.set("date_to", dateTo);
+      if (vue3dF)      params.set("vue3d", "1");
       if (sortF)       params.set("sort", sortF);
       const { data } = await client.get("/prints?" + params);
       if (gen !== loadGen.current) return;   // une demande plus recente est partie
@@ -3352,7 +3356,7 @@ export default function Prints() {
     }
     if (gen === loadGen.current) reloadingRef.current = false;
     setLoading(false);
-  }, [searchQ, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, sortF]);
+  }, [searchQ, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, sortF, vue3dF]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || loadingMoreRef.current || reloadingRef.current) return;
@@ -3387,6 +3391,7 @@ export default function Prints() {
         if (colorF)      params.set("color", colorF);
         if (dateFrom)    params.set("date_from", dateFrom);
         if (dateTo)      params.set("date_to", dateTo);
+        if (vue3dF)      params.set("vue3d", "1");
         if (sortF)       params.set("sort", sortF);
         const { data } = await client.get("/prints?" + params);
         if (gen !== loadGen.current) { more = false; acc = null; break; }
@@ -3405,7 +3410,7 @@ export default function Prints() {
     } catch(e) {}
     setLoadingMore(false);
     loadingMoreRef.current = false;
-  }, [loadingMore, hasMore, offset, statusF, searchQ, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, sortF]);
+  }, [loadingMore, hasMore, offset, statusF, searchQ, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, sortF, vue3dF]);
 
   useEffect(() => {
     const container = document.querySelector(".page-content");
@@ -3450,6 +3455,29 @@ export default function Prints() {
     return () => io.disconnect();
   }, [loadMore, viewMode, hasMore, prints.length]);
 
+  // apres une modification dans une fiche (31/10/2026 : « je me retrouve toujours en haut de la liste ») : seule
+  // l'impression ou le groupe touche est relu et remis a sa place ; un changement de groupe recharge tout
+  const refreshInPlace = async ({ id = null, groupId = null } = {}) => {
+    try {
+      if (groupId) {
+        const { data } = await client.get("/prints", { params: { group_id: groupId, limit: 200 } });
+        const fresh = data.prints || [];
+        setPrints(ps => {
+          const at = ps.findIndex(x => x.group_id === groupId);
+          if (at < 0) return ps;
+          const rest = ps.filter(x => x.group_id !== groupId);
+          rest.splice(Math.min(at, rest.length), 0, ...fresh);
+          return rest;
+        });
+      } else if (id) {
+        const old = prints.find(x => x.id === id);
+        const { data } = await client.get(`/prints/${id}`);
+        if (!old || (old.group_id || null) !== (data.group_id || null)) { load(); loadGroups(); return; }
+        setPrints(ps => ps.map(x => x.id === id ? { ...x, ...data } : x));
+      } else { load(); }
+    } catch { load(); }
+    loadKpis(); loadGroups();
+  };
   const loadGroups = useCallback(async () => {
     try {
       const { data } = await client.get("/prints/groups");
@@ -3563,6 +3591,7 @@ export default function Prints() {
           filaTypeF && ["🏷️", filaTypeF, () => setFilaTypeF("")],
           colorF && ["🎨", bucket?.label || colorF, () => setColorF("")],
           filamentIdF && ["🧵", fil ? (fil.translated_name || fil.name) : `#${filamentIdF}`, () => setFilamentIdF("")],
+          vue3dF && ["🧊", "Avec une vue 3D", () => setVue3dF(false)],
         ].filter(Boolean);
         const round = on => ({ width:40, height:40, borderRadius:14, border:"1px solid var(--border)", flexShrink:0, cursor:"pointer",
           display:"flex", alignItems:"center", justifyContent:"center", background: on ? "rgba(59,130,246,0.14)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--muted)" });
@@ -3617,7 +3646,7 @@ export default function Prints() {
         const PERIODS = [["all", "Tout", "", ""], ["7", "7 jours", back(7), ""], ["30", "30 jours", back(30), ""],
           ["month", "Ce mois", ymdL(new Date(today.getFullYear(), today.getMonth(), 1)), ""], ["year", "Cette année", ymdL(new Date(today.getFullYear(), 0, 1)), ""]];
         const period = PERIODS.find(([, , a, b]) => a === dateFrom && b === dateTo);
-        const anyF = !!(searchQ || statusF || sortF !== "recent" || materialF || filaTypeF || filamentIdF || colorF || dateFrom || dateTo);   // la recherche aussi : « Tout effacer » la vide
+        const anyF = !!(searchQ || statusF || sortF !== "recent" || materialF || filaTypeF || filamentIdF || colorF || dateFrom || dateTo || vue3dF);   // la recherche aussi : « Tout effacer » la vide
         const clearAll = clearFilters;
         const chip = (on, c = "#3b82f6") => ({ display:"inline-flex", alignItems:"center", gap:5, padding:"7px 13px", borderRadius:20, fontSize:12.5, fontWeight:800,
           cursor:"pointer", border:`1px solid ${on ? c : "var(--border)"}`, background: on ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 72%, #ffffff))` : "var(--surface)",
@@ -3675,6 +3704,12 @@ export default function Prints() {
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                   {STATUSES.map(s => <button key={s} onClick={()=>setStatusF(s)} style={chip(statusF===s, STATUS_C[s])}>
                     <span style={{ color: statusF===s ? "#fff" : STATUS_C[s] }}>{STATUS_I[s]}</span>{STATUS_LABELS[s]}</button>)}
+                </div>)}
+
+              {sec("🧊", "Vue 3D", vue3dF ? "Avec une vue 3D" : null, "#0EA5E9",
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                  <button onClick={() => setVue3dF(false)} style={chip(!vue3dF, "#0EA5E9")}>Toutes</button>
+                  <button onClick={() => setVue3dF(true)} style={chip(vue3dF, "#0EA5E9")} data-tip="Les impressions (ou leur groupe) qui ont des vues prises dans la vue 3D (📸)">🧊 Avec une vue 3D</button>
                 </div>)}
 
               {sec("↕", "Trier par", sortF !== "recent" ? SORTS.find(x => x[0] === sortF)?.[2] : null, "#8B5CF6",
@@ -3807,7 +3842,7 @@ export default function Prints() {
         if (groupF) {
           return (
             <div style={rows ? { display:"flex", flexDirection:"column", gap:8 } : { display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(160px, 1fr))", gap:10 }}>
-              {prints.map(p => <PrintCard key={p.id} p={p} row={rows} onClick={()=>setSelected(p)} onDelete={onDelete} onChanged={() => load()} onLongPress={id=>{ setSelectMode(true); setSelectedIds(new Set([id])); }}/>)}
+              {prints.map(p => <PrintCard key={p.id} p={p} row={rows} onClick={()=>setSelected(p)} onDelete={onDelete} onChanged={() => refreshInPlace({ id: p.id })} onLongPress={id=>{ setSelectMode(true); setSelectedIds(new Set([id])); }}/>)}
             </div>
           );
         }
@@ -3821,7 +3856,7 @@ export default function Prints() {
               <PrintCard key={item.p.id} p={item.p} row={rows}
                 onClick={()=>setSelected(item.p)}
                 onDelete={onDelete}
-                onChanged={() => load()}
+                onChanged={() => refreshInPlace({ id: item.p.id })}
                 selectMode={selectMode}
                 selected={selectedIds.has(item.p.id)}
                 onToggleSelect={toggleSelect}
@@ -3862,11 +3897,11 @@ export default function Prints() {
       {groupDeep && <GroupBottomSheet groupId={groupDeep.id} name={groupDeep.name} prints={groupDeep.prints} latestDate={groupDeep.latestDate}
         number_of_items={groupDeep.number_of_items} cover_print_id={groupDeep.cover_print_id} onClose={closeGroupDeep}
         onSelectPrint={p => setSelected(p)} onUngroup={() => { closeGroupDeep(); load(); loadGroups(); }}
-        onDelete={id => setPrints(ps => ps.filter(p => p.id !== id))} onUpdated={() => { load(); loadGroups(); }}/>}
+        onDelete={id => setPrints(ps => ps.filter(p => p.id !== id))} onUpdated={() => refreshInPlace({ groupId: groupDeep.id })}/>}
 
       {selected && <PrintDetail p={selected} onClose={()=>{ setSelected(null); closeDeep(); }} onPrev={onPrevPrint} onNext={onNextPrint}
         onDelete={id=>{setPrints(ps=>ps.filter(p=>p.id!==id));setTotal(t=>t-1);}}
-        onChanged={() => { load(); loadGroups(); }}/>}
+        onChanged={() => refreshInPlace({ id: selected.id })}/>}
 
       {/* Barre flottante de sélection multiple */}
       {selectMode && (selectedIds.size > 0 || selectedGroups.length > 0) && (

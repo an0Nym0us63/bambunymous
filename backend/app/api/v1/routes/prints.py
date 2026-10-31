@@ -410,6 +410,7 @@ async def list_prints(
     color:       Optional[str] = None,
     date_from: Optional[str] = None,  # borne debut (ISO / YYYY-MM-DD)
     date_to:   Optional[str] = None,  # borne fin incluse
+    vue3d:     int = 0,               # 1 : seulement les impressions (ou groupes) qui ont des vues 3D (31/10/2026)
     sort:     str = "recent",
     limit:    int = Query(40, le=200),
     offset:   int = 0,
@@ -450,6 +451,8 @@ async def list_prints(
             ))
         for c in _period_clauses(date_from, date_to):
             q = q.where(c)
+        if vue3d:
+            q = q.where(_vue3d_clause())
 
         # le total (affiche en tete) seulement pour la premiere page : chaque lot du defilement le recomptait sur
         # toute la table filtree (28/10/2026) ; la suite sait d'elle-meme s'il reste des cartes
@@ -1608,6 +1611,7 @@ async def prints_kpis(
     color:       Optional[str] = None,
     date_from: Optional[str] = None,
     date_to:   Optional[str] = None,
+    vue3d:     int = 0,
     _: str = Depends(get_current_user),
 ):
     async with AsyncSessionLocal() as db:
@@ -1630,6 +1634,8 @@ async def prints_kpis(
             q = q.where(Print.id.in_(_filament_filter_subq(material, fila_type, filament_id, color)))
         for c in _period_clauses(date_from, date_to):
             q = q.where(c)
+        if vue3d:
+            q = q.where(_vue3d_clause())
         r = (await db.execute(q)).one()
         return {"count": r.count or 0, "duration": int(r.duration or 0),
                 "weight_g": float(r.weight or 0), "cost": round(float(r.cost or 0), 2),
@@ -2754,6 +2760,41 @@ def _v3cover(folder: Path, val) -> tuple:
     except Exception as e:
         logging.getLogger(__name__).info(f"[VUE3D] mosaique de {folder} : {e}")
         return _v3name(ns[0]), sl[ns[0]]
+
+
+_V3IDS = {"at": 0.0, "ids": (set(), set())}
+
+
+def _vue3d_ids() -> tuple:
+    """(impressions, groupes) qui ont au moins une vue 3D, lus sur le disque ; gardes 30 s (le filtre « 🧊 Avec
+    une vue 3D » de la liste, 31/10/2026)."""
+    import os
+    import time
+    if time.time() - _V3IDS["at"] < 30:
+        return _V3IDS["ids"]
+    names = {_v3name(n) for n in range(1, V3_MAX + 1)}
+    out = []
+    for sub in ("prints", "groups"):
+        ids = set()
+        try:
+            for e in os.scandir(DATA_DIR / sub):
+                if e.name.isdigit() and e.is_dir():
+                    try:
+                        if any(f.name in names for f in os.scandir(e.path)):
+                            ids.add(int(e.name))
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+        out.append(ids)
+    _V3IDS.update(at=time.time(), ids=tuple(out))
+    return _V3IDS["ids"]
+
+
+def _vue3d_clause():
+    """Une impression qui a des vues 3D, ou dont le groupe en a."""
+    pids, gids = _vue3d_ids()
+    return Print.id.in_(pids or [-1]) | Print.group_id.in_(gids or [-1])
 
 
 def _v3slots(folder: Path) -> dict:
