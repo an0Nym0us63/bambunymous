@@ -756,8 +756,10 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             grp_id = None
     # l'assemblage propre a l'impression ouverte depuis sa fiche (pas depuis son groupe)
     ekey = key
-    if key and source != "makerworld" and print_id and scope == f"print:{print_id}" and T.own_key(key, print_id) in T.own_keys():
-        ekey = T.own_key(key, print_id)
+    # ou du groupe ouvert (31/10/2026 : les impressions de ce modele dans ce groupe, une autre variante)
+    own_who = f"p{print_id}" if print_id and scope == f"print:{print_id}" else (scope.replace("group:", "g") if _SCOPE.fullmatch(scope or "") and scope.startswith("group:") else None)
+    if key and source != "makerworld" and own_who and T.own_key(key, own_who) in T.own_keys():
+        ekey = T.own_key(key, own_who)
     # used : des impressions de ce modele -> chaque couleur du 3MF d'origine et celle de la bobine qui l'a remplacee
     # (le numero du filament dans le projet est le meme ; sans bobine liee, la couleur notee au tranchage)
     used_palette, used_detail = None, None
@@ -827,7 +829,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             if key and source != "makerworld" else None,
             # l'assemblage propre a cette impression, si elle en a un (31/10/2026) : la cle sous laquelle il s'enregistre
             "edit_key": ekey if key and source != "makerworld" else None, "own_edit": bool(key and ekey != key),
-            "can_own": bool(key and source != "makerworld" and print_id and scope == f"print:{print_id}"),
+            "can_own": bool(key and source != "makerworld" and own_who), "own_who": own_who,
             "group_id": grp_id if grp_n > 1 else None,
             # des plateaux encore en preparation (« pending » sur eux) : la vue redemande jusqu'a la fin
             "pending": bool((meta or {}).get("pending"))}
@@ -1895,10 +1897,14 @@ async def mw_3d_edit_own(key: str, body: dict = Body({}), _: str = Depends(requi
     """Un assemblage propre a cette impression (on), ou de nouveau celui partage par les impressions du meme 3MF."""
     from ....services import mw_3d as T
     try:
-        pid = int(body.get("print_id") or 0)
-        if pid <= 0:
-            raise ValueError("Impression inconnue")
-        return {"edit_key": T.set_own(key, pid, bool(body.get("on")))}
+        import re as _re
+        who = str(body.get("who") or "")
+        if not _re.fullmatch(r"[pg]\d{1,9}", who):
+            pid = int(body.get("print_id") or 0)
+            if pid <= 0:
+                raise ValueError("Impression inconnue")
+            who = f"p{pid}"
+        return {"edit_key": T.set_own(key, who, bool(body.get("on")))}
     except ValueError as e:
         raise HTTPException(400, str(e))
 

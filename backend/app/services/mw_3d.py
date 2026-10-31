@@ -1938,7 +1938,7 @@ def load_edit(key: str, did: str | None = None, piece_keys: set | None = None) -
     except OSError:
         files = []
     for f in files:
-        if f.stem == key or "__p" in f.stem:            # celui d'une impression reste a elle
+        if f.stem == key or re.search(r"__[pg]\d+$", f.stem):   # celui d'une impression, d'un groupe, reste a lui
             continue
         if d and (not prof or _prof_of(f.stem) != prof):
             continue
@@ -2060,8 +2060,10 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
 # Un assemblage se garde par 3MF : toutes les impressions faites du meme fichier le partagent. Une impression qui a
 # imprime une autre variante (d'autres pieces, une autre place) peut avoir le sien : cle « <vue>__p<impression> »,
 # notee dans mw_3d_edits/_own.idx (une ligne par cle) ; a l'activation il part d'une copie de l'assemblage partage.
-def own_key(key: str, print_id) -> str:
-    return f"{key}__p{int(print_id)}"
+# Un groupe aussi (31/10/2026) : « <vue>__g<groupe> », pour les impressions de ce modele dans ce groupe.
+def own_key(key: str, who) -> str:
+    w = str(who)
+    return f"{key}__{w}" if re.fullmatch(r"[pg]\d+", w) else f"{key}__p{int(w)}"
 
 
 def _own_file() -> Path:
@@ -2076,7 +2078,7 @@ def own_keys() -> set:
         return set()
 
 
-def set_own(key: str, print_id, on: bool) -> str | None:
+def set_own(key: str, print_id, on: bool) -> str | None:   # print_id : une impression (12, « p12 ») ou un groupe (« g5 »)
     """Donne (on) ou retire a cette impression son propre assemblage ; rend la cle de l'assemblage qu'elle suit."""
     import os as _os
     import time

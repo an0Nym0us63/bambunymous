@@ -1807,15 +1807,16 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   // de plein ecran pour un element), et la barre d'edition en version tactile
   const editable = isAdmin && !fr && !!p?.assembled && !!p?.pieces && !!meta?.key;
   // l'assemblage propre a cette impression (31/10/2026) : sur PC (a cote de 🕘) comme au doigt
+  const grpOwn = String(meta?.own_who || "").startsWith("g");
   const ownBtn = h => editable && meta?.can_own && <button type="button" onClick={async () => {
-      if (meta.own_edit && !(await showConfirm("Revenir à l'assemblage partagé par les impressions de ce 3MF ? Le sien reste dans les versions (🕘).", { confirmLabel: "Revenir" }))) return;
-      try { await client.post(`/makerworld/3d/edit/${meta.key}/own`, { print_id: printId, on: !meta.own_edit }); if (!meta.own_edit) egg("assemblage_a_elle"); setTick(t => t + 1); }
+      if (meta.own_edit && !(await showConfirm(`Revenir à l'assemblage partagé par les impressions de ce 3MF ? ${grpOwn ? "Celui du groupe" : "Le sien"} reste dans les versions (🕘).`, { confirmLabel: "Revenir" }))) return;
+      try { await client.post(`/makerworld/3d/edit/${meta.key}/own`, { who: meta.own_who, print_id: printId, on: !meta.own_edit }); if (!meta.own_edit) egg("assemblage_a_elle"); setTick(t => t + 1); }
       catch (e) { showAlert(e.response?.data?.detail || e.message); } }}
-    data-tip={meta.own_edit ? "Cette impression a son propre assemblage : touche pour revenir à celui partagé par les impressions du même 3MF"
-      : "Donner à cette impression son propre assemblage (une autre variante que les autres impressions du même 3MF) ; il part d'une copie de l'assemblage partagé"}
+    data-tip={meta.own_edit ? `${grpOwn ? "Ce groupe a son propre assemblage de ce modèle" : "Cette impression a son propre assemblage"} : touche pour revenir à celui partagé par les impressions du même 3MF`
+      : `Donner à ${grpOwn ? "ce groupe son propre assemblage de ce modèle" : "cette impression son propre assemblage"} (une autre variante que les autres impressions du même 3MF) ; il part d'une copie de l'assemblage partagé`}
     style={{ height: h, padding: "0 12px", borderRadius: 12, cursor: "pointer", fontSize: 12.5, fontWeight: 800, boxShadow: "0 4px 12px rgba(0,0,0,.15)",
       border: meta.own_edit ? "none" : "1px solid var(--border)", color: meta.own_edit ? "#fff" : "var(--text2)",
-      background: meta.own_edit ? "linear-gradient(135deg, #F59E0B, #EA580C)" : "var(--surface)" }}>{meta.own_edit ? "📌 À elle" : "📌 Partagé"}</button>;
+      background: meta.own_edit ? "linear-gradient(135deg, #F59E0B, #EA580C)" : "var(--surface)" }}>{meta.own_edit ? (grpOwn ? "📌 Au groupe" : "📌 À elle") : "📌 Partagé"}</button>;
   // les couleurs a poser (31/10/2026) : les filaments des impressions de ce modele (une fois chacun)
   const swatchList = useMemo(() => {
     const seen = new Map();
