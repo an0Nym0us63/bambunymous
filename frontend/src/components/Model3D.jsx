@@ -1137,7 +1137,7 @@ const EDIT_HELP = [
   ["Coller (C)", [
     ["Face puis face", "la première pièce vient se plaquer contre l'autre"],
     ["Arête puis arête", "les arêtes s'alignent"],
-    ["➕ Point de colle", "sur une pièce collée : touche un point, une arête ou une face de la pièce, puis l'endroit qui lui correspond sur son support ; le premier collage tient, la pièce glisse et tourne sur son contact (deux arêtes : alignées ; deux faces : l'une contre l'autre ; des points : superposés, au mieux à partir de deux)"],
+    ["Plusieurs points de colle", "sur une pièce déjà collée, touche un autre point, une arête ou une face de la pièce, puis l'endroit qui lui correspond sur son support : c'est un point de colle de plus, sans bouton ni touche ; le premier collage tient, la pièce glisse et tourne sur son contact (deux arêtes : alignées ; deux faces : l'une contre l'autre ; des points : la pièce tourne autour du premier pour les amener au mieux sur leur cible) ; touchée ailleurs que sur son support, elle y est recollée"],
     ["╱ Arête (Coller, Poser au sol)", "allumée, un clic prend l'arête vive la plus proche ; éteinte, un clic prend toujours la face. La pièce se cale là où tu as cliqué (centrée seulement entre deux faces planes de même taille)"],
     ["🪄 Assisté", "faces entières centrées et grands axes alignés ; arêtes milieu contre milieu"],
     ["Au survol", "la face entière (ou l'arête, ╱ Arête allumée) qui serait prise se surligne en orange ; cliquée, elle reste surlignée"],
@@ -1149,7 +1149,6 @@ const EDIT_HELP = [
     ["Les pièces collées", "suivent celle sur laquelle elles sont collées"],
     ["✂ Décoller", "libérer la pièce (écartée de 2 mm)"],
     ["🎯 Ajuster", "après un collage (face ou points) : la pièce épouse au mieux la surface de l'autre près du contact, puis recule juste assez pour ne rien traverser"],
-    ["Maj + clic, après un collage", "une paire de plus (point, face ou arête de la pièce, puis sa cible) : l'orientation suit toutes les paires"],
     ["🛡 Anti-collision", "en coulissant, la pièce collée s'arrête au contact de la matière"],
   ]],
   ["Toujours", [
@@ -1275,10 +1274,12 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
   const sep = <span style={{ width: 1, alignSelf: "stretch", background: "var(--border)", margin: "0 2px" }}/>;
   const bar = { display: "flex", gap: 6, padding: 6, borderRadius: 14, alignItems: "center", flexWrap: "wrap", justifyContent: "center",
     background: "color-mix(in srgb, var(--surface) 92%, transparent)", border: "1px solid var(--border)", backdropFilter: "blur(8px)", boxShadow: "0 10px 30px rgba(0,0,0,.25)" };
-  const tip = est.glued && est.step !== 2 ? `Collée à ${est.glued.to} : glisse-la (ou tire ses flèches, ou ← → ↑ ↓) pour la faire coulisser ${est.glued.kind === "edge" ? "le long de l'arête" : "sur la face"} sans la décoller, Maj + glisser (ou ⟳ Tourner) pour la tourner autour du contact · ✂ Décoller pour la libérer`
+  const tip = est.glued && est.step !== 2 && est.mode !== "mate" ? `Collée à ${est.glued.to} : glisse-la (ou tire ses flèches, ou ← → ↑ ↓) pour la faire coulisser ${est.glued.kind === "edge" ? "le long de l'arête" : "sur la face"} sans la décoller, Maj + glisser (ou ⟳ Tourner) pour la tourner autour du contact · ✂ Décoller pour la libérer`
     : est.mode === "pins" ? pinsTip(est)
     : est.mode === "ground" && est.ground3 ? `⬇ Point ${Math.min(3, (est.groundPts || 0) + 1)} sur 3 : clique un point de la pièce qui doit toucher le plateau`
-    : est.mode === "mate" ? (est.step === 2 ? (est.assist ? EDIT_TIPS.mate2a : EDIT_TIPS.mate2) : est.pairs ? `Collée${est.pairs > 1 ? ` en ${est.pairs} points` : ""} : Maj + clic (ou ➕ Multi) sur un autre point, une face ou une arête de la pièce, puis sur sa cible, pour fixer l'orientation`
+    : est.mode === "mate" ? (est.step === 2
+        ? `${est.firstMoves > 1 ? `${est.firstMoves} pièces vont bouger · ` : ""}${est.firstGlued ? `Sur ${est.firstGlued} : un point de colle de plus (le premier tient) ; sur une autre pièce : recollée là · ` : ""}${est.assist ? EDIT_TIPS.mate2a : EDIT_TIPS.mate2}`
+        : est.pairs ? `Collée en ${est.pairs} point${est.pairs > 1 ? "s" : ""} : touche un autre point, une face ou une arête de la pièce, puis sa cible sur ${est.glued?.to || "son support"}, pour un point de colle de plus`
       : est.assist ? EDIT_TIPS.mate1a : EDIT_TIPS.mate1) : EDIT_TIPS[est.mode];
   const hasSel = est.count > 0;
   // la seconde ligne : les actions du mode, puis celles de la selection
@@ -1304,8 +1305,6 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
           data-tip="Arrêter la recherche des faces jumelles">⏹ Arrêter</button>
         : est.canTwins && <button type="button" onClick={() => api?.findTwins()} style={b(false)}
           data-tip="Chercher sur les autres pièces les faces de même contour que celle prise (en vert) ; la recherche tourne sans bloquer">🔍 Faces jumelles</button>}
-      <button type="button" onClick={() => api?.setAddPin(!est.addPin)} style={b(!!est.addPin)}
-        data-tip="Sur une pièce déjà collée : une prise de plus (point, arête ou face) et sa cible, le premier collage tient">➕ Point de colle</button>
     </>
     : est.mode === "paint" ? <>
       <button type="button" onClick={() => api?.setPaint({ tool: "zone" })} style={b(est.paintTool === "zone")}
@@ -1383,8 +1382,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         {sep}
         {est.twinPos && <button type="button" onClick={() => api?.twinNext()} style={b(true)}
           data-tip="Sur la même face jumelle, la position suivante qui va aussi bien (une face carrée, ronde, symétrique)">↻ Autre position {est.twinPos}</button>}
-        <button type="button" onClick={() => api?.setAddPin(true)} style={b(!!est.addPin)}
-          data-tip="Ajouter un point de colle (point, arête ou face) sans défaire ce collage : la pièce glisse et tourne sur son contact">➕ Point de colle</button>
+        {est.mode !== "mate" && <button type="button" onClick={() => api?.setMode("mate")} style={b(false)}
+          data-tip="Ajouter un point de colle : en 🧲 Coller, touche un point de la pièce puis sa cible ; le premier collage tient">➕ Point de colle</button>}
         <button type="button" onClick={() => api?.align()} style={b(false)}
           data-tip="Faire glisser et tourner la pièce sur la face où elle est collée : les deux faces se recouvrent au mieux, sans conflit (un panneau sur le côté d'une boîte)">📐 Aligner</button>
         <button type="button" onClick={() => api?.nest()} style={b(false)}

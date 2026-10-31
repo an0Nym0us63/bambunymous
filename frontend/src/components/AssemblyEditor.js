@@ -68,7 +68,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const unitOf = g => groupOf(g) || [g];
   // les collages : {a : la piece collee, b : son support, kind, p, n, e : dans le repere de b}
   const V = a => (a ? new THREE.Vector3().fromArray(a) : null);
-  let joints = (jointsInit || []).map(j => ({ a: byOld(j.a)[0], b: byOld(j.b)[0], kind: j.kind === "edge" ? "edge" : "face", p: V(j.p), n: V(j.n), e: V(j.e) }))
+  let jseq = 0;                      // le numero de chaque collage (t) : ses points de colle ajoutes le portent
+  let joints = (jointsInit || []).map(j => ({ a: byOld(j.a)[0], b: byOld(j.b)[0], kind: j.kind === "edge" ? "edge" : "face", p: V(j.p), n: V(j.n), e: V(j.e), t: ++jseq }))
     .filter(j => j.a && j.b && j.p && j.n);
   const cloneJ = j => ({ ...j, p: j.p.clone(), n: j.n.clone(), e: j.e ? j.e.clone() : null });
   // une liste de pieces, et tout ce qui y est colle (de proche en proche, avec leurs groupes)
@@ -82,6 +83,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   };
   // le collage qui tient cette selection a une piece hors d'elle
   const jointOf = list => { const set = new Set(list); return joints.find(j => set.has(j.a) && !set.has(j.b)) || null; };
+  // les points de colle d'un collage : le contact, et ceux ajoutes depuis
+  const gluePts = j => (j ? 1 + keepPins.filter(k => k.jt === j.t).length : 0);
   // le contact d'un collage, dans le repere du support du modele
   const contact = j => {
     j.b.updateMatrix();
@@ -152,16 +155,17 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   let pendingSplit = null;            // une separation proposee, pas encore validee
   let pendingCut = null;
   let edgeMode = false;               // « ╱ Arete » : un clic prend l'arete la plus proche, sinon toujours la face
-  // « ➕ Point de colle » (30/10/2026) : sur une piece deja collee, une prise de plus (point, arete ou face) et sa cible ;
-  // le premier collage tient (la piece ne fait que glisser et tourner sur son contact). keepPins : les points poses
-  let addPin = false, keepPins = [];
+  // les points de colle (30/10/2026 ; 31/10/2026 : sans bouton) : sur une piece deja collee, une prise de plus (point,
+  // arete ou face) et sa cible sur son support ; le premier collage tient. keepPins : ceux poses, avec leur collage (jt)
+  let keepPins = [];
   // les couleurs (31/10/2026) : une piece entiere {cle : RRGGBB}, et les zones peintes [{k, own, tris, c}] (assemblyPaint)
   let colors = { ...(colorsInit || {}) }, paints = (paintsInit || []).map(p => ({ k: p.k, own: p.own, c: p.c, tris: trisOf(p) }));
   const snapshot = () => ({ m: all.map(g => g.matrix.clone()), groups: groups.map(gr => [...gr]), joints: joints.map(cloneJ), ex: all.map(g => !!g.userData.excluded),
-    col: { ...colors }, pt: paints.map(p => ({ ...p })) });
+    col: { ...colors }, pt: paints.map(p => ({ ...p })), kp: keepPins.slice() });
   const restore = s => { all.forEach((g, i) => { s.m[i].decompose(g.position, g.quaternion, g.scale); g.updateMatrix();
     if (s.ex) { g.userData.excluded = s.ex[i]; g.visible = !s.ex[i]; } }); groups = s.groups.map(gr => [...gr]);
     joints = s.joints.map(cloneJ);
+    if (s.kp) keepPins = s.kp.slice();
     if (s.col && (JSON.stringify(s.col) !== JSON.stringify(colors) || s.pt.length !== paints.length || s.pt.some((p, i) => p.tris !== paints[i].tris || p.c !== paints[i].c))) {
       colors = { ...s.col }; paints = s.pt.map(p => ({ ...p })); applyColors(THREE, all, colors, paints);
     }
@@ -174,14 +178,18 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const selName = () => sel.size === 0 ? null : sel.size === 1 ? [...sel][0].userData.name : `${sel.size} pièces${groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))) ? " (groupe)" : ""}`;
   const center = () => { if (!sel.size) return null; const c = boxOfAll([...sel]).getCenter(new THREE.Vector3()); return [c.x, c.y, c.z].map(v => Math.round(v * 10) / 10); };
   const state = () => ({ mode, magnet, assist, rotStep, moveStep, center: center(), selected: selName(), count: sel.size, step: first ? 2 : 1, canUndo: undo.length > 0, canRedo: redo.length > 0,
-    pivot: !!pivot, pairs: pairs.length, twinPos: twinAlt && twinAlt.at === changes && twinAlt.fits.length > 1 ? `${twinAlt.i + 1}/${twinAlt.fits.length}` : null, boxMode, ground3, groundPts: gPts.length, vertical, pinsA: pins.a.length, pinsB: pins.b.length,
+    pivot: !!pivot, pairs: gluePts(jointOf([...sel])), twinPos: twinAlt && twinAlt.at === changes && twinAlt.fits.length > 1 ? `${twinAlt.i + 1}/${twinAlt.fits.length}` : null, boxMode, ground3, groundPts: gPts.length, vertical, pinsA: pins.a.length, pinsB: pins.b.length,
     pinsFrom: pins.A?.userData.name || null, pinsTo: pins.B?.userData.name || null, dirty: changes !== savedAt, splitPending: pendingSplit ? pendingSplit.groups.length : 0,
     cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
-    cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, addPin, edgeMode,
+    cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, edgeMode,
+    // la premiere prise faite en Coller : ce qui va bouger, et son support s'il est deja colle (la seconde prise sur lui
+    // ajoute un point de colle)
+    firstOn: first ? first.group.userData.name : null, firstMoves: first ? (sel.has(first.group) ? sel.size : unitOf(first.group).length) : 0,
+    firstGlued: first ? (jointOf(sel.has(first.group) ? [...sel] : unitOf(first.group))?.b.userData.name || null) : null,
     pickFor, lineAxis: !!lineAxis,
     paintTool, paintColor, paintR, paintCrease, painted: paints.length,
     pieceColor: sel.size ? (([...sel].map(g => colors[g.userData.k] || null).every((c, _i, a) => c === a[0])) ? colors[[...sel][0].userData.k] || null : "mix") : null,
-    twinBusy, canTwins: mode === "mate" && !!first && first.kind === "face" && !addPin && !twinDone,
+    twinBusy, canTwins: mode === "mate" && !!first && first.kind === "face" && !twinDone,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
     // de la selection part au moins un collage (vers une piece hors d'elle) : « Grouper le colle » a un sens
@@ -701,21 +709,13 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     B.group.updateMatrix();
     const inv = B.group.matrix.clone().invert();
     joints = joints.filter(j => !unit.includes(j.a));
-    joints.push({ a: A.group, b: B.group, kind: B.kind === "edge" && A.kind === "edge" ? "edge" : "face", p: to.clone().applyMatrix4(inv),
+    joints.push({ t: ++jseq, a: A.group, b: B.group, kind: B.kind === "edge" && A.kind === "edge" ? "edge" : "face", p: to.clone().applyMatrix4(inv),
       n: (B.kind === "face" ? B.n : B.n).clone().transformDirection(inv), e: B.kind === "edge" ? B.e.clone().transformDirection(inv) : null });
     return unit;
   };
 
-  // le collage a plusieurs points (30/10/2026) : apres un premier collage, d'autres paires (Maj + clic, ou « Multi ») :
-  // un point, une face ou une arete de la piece, puis sa cible sur le support. Chaque paire est gardee dans le repere de
-  // sa piece ; a chaque ajout, la place et l'orientation qui font coincider au mieux toutes les paires (points
-  // superposes, faces qui se regardent, aretes alignees) sont recalculees (methode de Horn, moindres carres)
-  let pairs = [];                    // [{ ag, bg, a, b, an, bn, ae, be, kind }] (repere de ag / de bg)
   const toLocal = (g, v, dir) => { g.updateMatrix(); const inv = g.matrix.clone().invert(); return dir ? v.clone().transformDirection(inv) : v.clone().applyMatrix4(inv); };
   const toWorld = (g, v, dir) => { g.updateMatrix(); return dir ? v.clone().transformDirection(g.matrix) : v.clone().applyMatrix4(g.matrix); };
-  const pairOf = (A, B, aPt, bPt) => ({ ag: A.group, bg: B.group, kind: A.kind === "edge" && B.kind === "edge" ? "edge" : A.kind === "face" && B.kind === "face" ? "face" : "point",
-    a: toLocal(A.group, aPt), b: toLocal(B.group, bPt), an: A.n ? toLocal(A.group, A.n, true) : null, bn: B.n ? toLocal(B.group, B.n, true) : null,
-    ae: A.e ? toLocal(A.group, A.e, true) : null, be: B.e ? toLocal(B.group, B.e, true) : null });
   // la rotation R et la translation t qui menent au mieux les points a vers b (et les directions da vers db)
   const horn = (pts, dirs) => {
     const ca = new THREE.Vector3(), cb = new THREE.Vector3();
@@ -739,23 +739,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const t = cb.clone().sub(ca.clone().applyQuaternion(Q));
     return new THREE.Matrix4().makeRotationFromQuaternion(Q).setPosition(t);
   };
-  const solvePairs = unit => {
-    const pts = [], dirs = [];
-    const L = Math.max(10, boxOfAll(unit).getSize(new THREE.Vector3()).length());
-    for (const p of pairs) {
-      const a = toWorld(p.ag, p.a), b = toWorld(p.bg, p.b);
-      pts.push([a, b]);
-      if (p.kind === "face" && p.an && p.bn) dirs.push([toWorld(p.ag, p.an, true), toWorld(p.bg, p.bn, true).negate(), L * L * 0.5]);
-      if (p.kind === "edge" && p.ae && p.be) {
-        const ea = toWorld(p.ag, p.ae, true), eb = toWorld(p.bg, p.be, true);
-        dirs.push([ea, ea.dot(eb) >= 0 ? eb : eb.negate(), L * L * 0.5]);
-      }
-    }
-    // une seule paire de points : rien a orienter ; deux points seuls : l'axe qui les joint, le reste garde
-    if (pts.length < 2 && !dirs.length) return;
-    apply(withKids(unit), horn(pts, dirs));
-  };
-
   // les faces jumelles (30/10/2026, assemblyTwins) : en Coller assiste, la face touchee sur la piece a coller fait chercher
   // sur les autres pieces les faces de meme contour (la coupe d'en face), surlignees en vert avec leur ressemblance ; le
   // second toucher, sur l'une d'elles ou seulement sur sa piece, pose la piece exactement dessus. Quand plusieurs angles
@@ -886,8 +869,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   // un point de colle de plus, le premier collage tenu : la piece tourne autour de la normale du contact et glisse dans
   // son plan, jusqu'a ce que la nouvelle prise vienne sur sa cible -- deux aretes : alignees (et l'une sur l'autre), deux
   // faces : face a face (et l'une contre l'autre), des points : superposes (a partir de deux, au mieux pour tous)
-  const pinOnContact = (A, B, j) => {
-    const unit = unitOf(A.group), moving = withKids(unit), { P, N } = contact(j), w = N.clone().normalize();
+  const pinOnContact = (A, B, j, unit = unitOf(A.group)) => {
+    const moving = withKids(unit), { P, N } = contact(j), w = N.clone().normalize();
     const flat = v => v.clone().addScaledVector(w, -v.dot(w));
     const angle = (a, b) => Math.atan2(a.clone().cross(b).dot(w), a.dot(b));
     let th = 0, t = new THREE.Vector3(), kind = A.kind === "edge" && B.kind === "edge" ? "edge" : A.kind === "face" && B.kind === "face" && A.n && B.n ? "face" : "point";
@@ -913,19 +896,18 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         t = nb.clone().multiplyScalar(d);                               // face contre face ; dans son plan, libre
       }
     }
+    keepPins.push({ jt: j.t, kind, ag: A.group, bg: B.group, a: toLocal(A.group, A.p), b: toLocal(B.group, B.p) });
     if (kind === "point") {
-      keepPins.push({ ag: A.group, bg: B.group, a: toLocal(A.group, A.p), b: toLocal(B.group, B.p) });
-      const pts = keepPins.filter(k => unit.includes(k.ag)).map(k => [toWorld(k.ag, k.a), toWorld(k.bg, k.b)]);
-      if (pts.length === 1) t = flat(pts[0][1].clone().sub(pts[0][0]));
-      else {
-        // au mieux pour tous les points, dans le plan du contact (Procuste a deux dimensions)
-        const ca = new THREE.Vector3(), cb = new THREE.Vector3();
-        pts.forEach(([a, b]) => { ca.add(a); cb.add(b); }); ca.divideScalar(pts.length); cb.divideScalar(pts.length);
-        let sc = 0, ss = 0;
-        for (const [a, b] of pts) { const x = flat(a.clone().sub(ca)), y = flat(b.clone().sub(cb)); sc += x.dot(y); ss += x.clone().cross(y).dot(w); }
-        th = Math.atan2(ss, sc);
-        t = flat(cb.clone().sub(rot(ca, th)));
+      // le premier point de colle (le contact) ne bouge pas (31/10/2026 : avant, il etait ignore et la piece glissait
+      // pour amener les seuls points ajoutes) : la piece tourne autour de lui, pour amener au mieux chaque point ajoute
+      // vers sa cible
+      let sc = 0, ss = 0;
+      for (const k of keepPins) {
+        if (k.jt !== j.t || k.kind !== "point") continue;
+        const x = flat(toWorld(k.ag, k.a).sub(P)), y = flat(toWorld(k.bg, k.b).sub(P));
+        sc += x.dot(y); ss += x.clone().cross(y).dot(w);
       }
+      th = sc || ss ? Math.atan2(ss, sc) : 0;
     }
     const M = new THREE.Matrix4().makeTranslation(t.x, t.y, t.z).multiply(about(P, new THREE.Quaternion().setFromAxisAngle(w, th)));
     apply(moving, M);
@@ -935,7 +917,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pivot = { p: P.clone().applyMatrix4(M), axis: w, unit: moving };
     showContact(); placeHandle(); push(); setSel(unit);
     const mm = x => String(Math.round(x * 10) / 10).replace(".", ",");
-    fitMsg = `Collée : point de colle ajouté (${kind === "edge" ? "arêtes alignées" : kind === "face" ? "faces l'une contre l'autre" : `${keepPins.filter(k => unit.includes(k.ag)).length} point(s)`}), le premier collage tient — glissée de ${mm(t.length())} mm${Math.abs(th) > 0.005 ? `, tournée de ${Math.round(th * 180 / Math.PI)}°` : ""}`;
+    fitMsg = `Collée en ${gluePts(j)} points sur ${j.b.userData.name} (${kind === "edge" ? "arêtes alignées" : kind === "face" ? "faces l'une contre l'autre" : "tournée autour du premier point"})${t.length() > 0.05 ? ` — glissée de ${mm(t.length())} mm` : ""}${Math.abs(th) > 0.005 ? `, tournée de ${Math.round(th * 180 / Math.PI)}°` : ""} · un autre point de la pièce puis sa cible : un point de plus`;
     egg("point_de_colle");
     render(); onChange?.(state());
   };
@@ -983,8 +965,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     s.g.updateMatrix();
     const inv = s.g.matrix.clone().invert();
     joints = joints.filter(j => !s.unit.includes(j.a));
-    joints.push({ a: s.a, b: s.g, kind: "face", p: c.clone().applyMatrix4(inv), n: n.clone().transformDirection(inv), e: null });
-    pairs = [pairOf({ group: s.a, kind: "face", n: n.clone().negate() }, { group: s.g, kind: "face", n }, c, c)];
+    joints.push({ t: ++jseq, a: s.a, b: s.g, kind: "face", p: c.clone().applyMatrix4(inv), n: n.clone().transformDirection(inv), e: null });
     push(); s.at = changes; setSel(s.unit);
     const k = s.fits.length;
     fitMsg = `Collée sur sa face jumelle · ${Math.round(f.score * 100)} % de recouvrement${k > 1 ? ` · position ${s.i + 1}/${k} : ↻ Autre position` : ""}`;
@@ -1055,7 +1036,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const b0 = pins.b[0];
     if (b0.n) {
       joints = joints.filter(j => !unit.includes(j.a));
-      joints.push({ a: pins.a[0].g, b: b0.g, kind: "face", p: b0.p.clone(), n: b0.n.clone(), e: null });
+      joints.push({ t: ++jseq, a: pins.a[0].g, b: b0.g, kind: "face", p: b0.p.clone(), n: b0.n.clone(), e: null });
     }
     const err = Math.max(...pts.map((_, i) => toWorld(pins.a[i].g, pins.a[i].p).distanceTo(toWorld(pins.b[i].g, pins.b[i].p))));
     pinsClear(); push(); setSel(unit);
@@ -1176,7 +1157,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     B.updateMatrix();
     const inv = B.matrix.clone().invert();
     joints = joints.filter(j => !unit.includes(j.a));
-    joints.push({ a: unit[0], b: B, kind: "face", p: P.clone().applyMatrix4(inv), n: N.clone().transformDirection(inv), e: null });
+    joints.push({ t: ++jseq, a: unit[0], b: B, kind: "face", p: P.clone().applyMatrix4(inv), n: N.clone().transformDirection(inv), e: null });
     pivot = { p: P.clone(), axis: N.clone(), unit: moving };
     push(); setSel(unit);
     egg("sans_colle");
@@ -1351,46 +1332,34 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       if (!first) { first = pick; clearMarks(); clearHover(); mark(pick); fitMsg = null; onChange?.(state()); return; }
       const A = first;
       first = null; clearMarks();
-      if (addPin) {
-        const j = jointOf(unitOf(A.group));
-        if (!j || !unitOf(j.b).includes(pick.group)) {
-          fitMsg = j ? `La seconde prise se met sur ${j.b.userData.name}, la pièce où elle est collée` : "Colle d'abord la pièce (premier collage), puis ➕ Point de colle";
-          onChange?.(state()); return;
-        }
-        pinOnContact(A, pick, j); return;
-      }
       // les jumelles trouvees (une recherche encore en cours s'arrete : on colle au point touche)
       const r = twinFor === A ? twinDone : null;
       twinFor = null;
-      if (r && !ev.shiftKey && !multi) {
+      if (r) {
         clearTwins(); fitMsg = null;
         const t = twinAt(r, pick);
         if (!(t && mateTwin(A, t))) {
           // des jumelles proposees, et touche ailleurs : la piece vient la ou l'on a touche (sa face centree sur ce
           // point), et non sur toute la face touchee (30/10/2026)
           const unit = mate(A, r?.twins?.some(x => x.shown) ? { ...pick, region: null, at: true } : pick);
-          if (unit) { pairs = [pairOf(A, pick, pivot ? pivot.p : pick.p, pivot ? pivot.p : pick.p)]; push(); setSel(unit); }
+          if (unit) { push(); setSel(unit); }
         }
         render(); onChange?.(state());
         return;
       }
       clearTwins();
-      // une paire de plus pour la meme piece et le meme support (Maj, ou « Multi ») : toutes les paires a la fois
-      const more = (ev.shiftKey || multi) && pairs.length && unitOf(pairs[0].ag).includes(A.group) && pick.group === pairs[0].bg;
-      if (more) {
-        pairs.push(pairOf(A, pick, A.p, pick.p));
-        const unit = unitOf(pairs[0].ag);
-        solvePairs(unit);
-        pivot = null; push(); setSel(unit);
-        fitMsg = `Collée en ${pairs.length} points : l'orientation suit toutes les paires (Maj + clic : une de plus)`;
-        render(); onChange?.(state());
-        return;
-      }
+      // deja collee sur la piece touchee en second : un point de colle de plus (31/10/2026 : plus de bouton ni de Maj ;
+      // avant, ce toucher la recollait a neuf et defaisait le premier point)
+      const u0 = sel.has(A.group) ? [...sel] : unitOf(A.group), j0 = jointOf(u0);
+      if (j0 && unitOf(j0.b).includes(pick.group) && !u0.includes(pick.group)) { pinOnContact(A, pick, j0, u0); return; }
       const unit = mate(A, pick);
       if (unit) {
-        // la premiere paire : le point de la piece, la ou il est venu (sur sa cible)
-        pairs = [pairOf(A, pick, pivot ? pivot.p : pick.p, pivot ? pivot.p : pick.p)];
         push(); setSel(unit);
+        // recollee ailleurs : on le dit (un collage remplace l'autre ; ↶ revient)
+        if (j0 && j0.b !== pick.group) { fitMsg = `Décollée de ${j0.b.userData.name}, collée sur ${pick.group.userData.name} (↶ pour revenir)`; onChange?.(state()); }
+      } else {
+        fitMsg = u0.includes(pick.group) ? "Touche une autre pièce que celle à coller (elle est dans son groupe)"
+          : `${pick.group.userData.name} est collée sur ${A.group.userData.name} : colle-les dans l'autre sens, ou décolle-la d'abord`;
       }
       render(); onChange?.(state());
     }
@@ -2001,7 +1970,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
 
   const api = {
     setGround3: on => { ground3 = on; gPts = []; gUnit = []; drawGround(); onChange?.(state()); },
-    setMode: m => { pickFor = null; if (m !== "mate") { addPin = false; keepPins = []; } if (m !== "cut") { cutCancel(); dropStroke(); clearRub(); } knifeView(m === "cut" || m === "paint"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
+    setMode: m => { pickFor = null; if (m !== "cut") { cutCancel(); dropStroke(); clearRub(); } knifeView(m === "cut" || m === "paint"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
     // 🎨 la couleur de la selection entiere (null : sa couleur d'origine) ; 🖌 les reglages de la peinture
     setPieceColor: hex => {
@@ -2138,12 +2107,6 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     findTwins: () => { if (first && first.kind === "face" && !twinBusy) startTwins(first); },
     stopTwins: () => { if (twinBusy) { twinStop = true; onChange?.(state()); } },
     setEdgeMode: on => { edgeMode = on; onChange?.(state()); },
-    setAddPin: on => {
-      if (on && mode !== "mate") api.setMode("mate");
-      addPin = on; first = null; keepPins = []; clearMarks(); clearTwins(); render();
-      fitMsg = on ? "➕ Point de colle : touche un point, une arête ou une face de la pièce collée, puis l'endroit qui lui correspond sur la pièce où elle est collée" : null;
-      onChange?.(state());
-    },
     setEraser: on => { eraser = on; if (!on) clearRub(); onChange?.(state()); },
     // detacher les supports integres de la piece choisie : proposes en couleur, a valider comme une coupe
     cleanScraps: () => { if (mode !== "cut") api.setMode("cut"); return cutWith("clean"); },
