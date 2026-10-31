@@ -1439,7 +1439,10 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
     </>;
   }
   return <>
-    <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 3, display: "flex", flexDirection: "column", alignItems: "center",
+    {/* le bloc des menus ne prend que ses barres (31/10/2026) : entre elles et autour, la scene recoit les clics
+        (avant : une zone morte en haut, ou le glisser selectionnait le texte) */}
+    <style>{`.bn-3d-top{pointer-events:none}.bn-3d-top>*{pointer-events:auto}`}</style>
+    <div className="bn-3d-top" style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 3, display: "flex", flexDirection: "column", alignItems: "center",
       gap: 6, maxWidth: "calc(100% - 24px)" }}>
       <div style={bar}>
         {[["move", "✥ Déplacer", "M"], ["rotate", "⟳ Tourner", "R"], ["ground", "⬇ Poser au sol", "F"], ["mate", "🧲 Coller", "C"], ["pins", "📍 Points", "P"], ["cut", "🔪 Couper", "X"]].map(([m, l, k]) =>
@@ -1863,6 +1866,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         <div ref={wrap} style={{ position: pfull ? "fixed" : "relative", ...(pfull ? { inset: 0, zIndex: 6000 } : {}),
           height: pfull ? "100dvh" : full ? "100vh" : "min(62dvh, 560px)", borderRadius: full || pfull ? 0 : 18, overflow: "hidden",
           border: full || pfull ? "none" : "1px solid var(--border)", ...(pfull ? { backgroundColor: "var(--sheet-bg)" } : {}),
+          userSelect: "none", WebkitUserSelect: "none",   // un glisser sur la vue ne selectionne jamais de texte
           background: "radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, #0EA5E9 10%, var(--surface)), var(--surface2))" }}>
           {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}|${vkey}|${piecePal ? Object.keys(piecePal).length : 0}|${editing || viewSel === "mine" ? "" : viewSel}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown} piecePalettes={piecePal}
             pieces={p.assembled ? p.pieces : null} edit={p.assembled && !(origView && !editing) ? (frPick && !editing ? frPick.edit : edit) : null} editApi={editApi} pad={full || editing} editing={editing}
