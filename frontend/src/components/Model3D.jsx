@@ -193,7 +193,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
       renderer.setSize(el.clientWidth, el.clientHeight);
       el.appendChild(renderer.domElement);
       // le contexte perdu en cours de route (memoire graphique pleine, pilote qui redemarre) : le dire, et proposer de relancer
-      renderer.domElement.addEventListener("webglcontextlost", e => { e.preventDefault(); onState({ busy: false, error: null, lost: true }); });
+      // (31/10/2026) une vue qu'on refait (les couleurs du G-code) rend son contexte expres : ce n'est pas une panne
+      renderer.domElement.addEventListener("webglcontextlost", e => { e.preventDefault(); if (!dead) onState({ busy: false, error: null, lost: true }); });
       const scene = new THREE.Scene();
       const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1.6); scene.add(hemi);
       const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(150, 300, 200); scene.add(sun);
@@ -1622,7 +1623,20 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const softRef = useRef(false);
   plateRef.current = plate;
   useEffect(() => { if (st.broken && redo < 1) { setSt({ busy: true }); setRedo(r => r + 1); } }, [st.broken]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const base = `/makerworld/3d/${encodeURIComponent(designId)}`;
+  // la carte graphique perdue (31/10/2026) : la vue se relance d'elle-meme, une fois (le message ne vient qu'apres)
+  const lostTries = useRef(0);
+  useEffect(() => {
+    if (!st.lost || lostTries.current >= 1) return undefined;
+    lostTries.current += 1;
+    const t = setTimeout(() => { setSt({ busy: true }); setVkey(k => k + 1); }, 400);
+    return () => clearTimeout(t);
+  }, [st.lost]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // « 🧩 Tout le groupe » (31/10/2026) : ouverte depuis un groupe, la vue passe a l'assemblage du groupe (toutes ses
+  // pieces, de tous ses modeles et profils) ; did : ce que la vue montre
+  const gid = /^group:(\d+)$/.exec(scope || "")?.[1] || null;
+  const [grpAll, setGrpAll] = useState(false);
+  const did = grpAll && gid ? `g${gid}` : designId;
+  const base = `/makerworld/3d/${encodeURIComponent(did)}`;
   useEffect(() => {
     if (wait) return;                    // le profil se deduit encore (fiche d'une impression)
     let alive = true;
@@ -1658,7 +1672,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     const n = { ...(m || {}), ...patch };
     Object.keys(n).forEach(k => { if (n[k] == null) delete n[k]; });
     clearTimeout(tdTimer.current);
-    tdTimer.current = setTimeout(() => { client.put(`/makerworld/3d/${encodeURIComponent(designId)}/td`, { td: n }).catch(() => {}); }, 600);
+    tdTimer.current = setTimeout(() => { client.put(`/makerworld/3d/${encodeURIComponent(did)}/td`, { td: n }).catch(() => {}); }, 600);
     return n;
   });
   // des plateaux encore en preparation (29/10/2026) : la vue s'est ouverte sur les premiers, elle redemande la suite
@@ -1814,7 +1828,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     if (edit?.pieces && !(await showConfirm(`Remplacer ton assemblage par celui de ${frPick.name} ? Le tien reste dans les versions (🕘).`))) return;
     const e = frPick.edit;
     try {
-      const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces: e.pieces, did: designId, excluded: e.excluded || [], groups: e.groups || [],
+      const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces: e.pieces, did, excluded: e.excluded || [], groups: e.groups || [],
         joints: e.joints || [], splits: e.splits || [], cuts: e.cuts || {}, colors: e.colors || {}, paints: e.paints || [], v: 2 });
       setSavedEdit(r.data); setViewSel("mine"); egg("assemblage_copain");
     } catch (er) { showAlert(er.response?.data?.detail || er.message); }
@@ -1823,7 +1837,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const [versions, setVersions] = useState(null);       // null | "busy" | [{ id, at, n, why, other }]
   const openVersions = async () => {
     setVersions("busy");
-    try { const r = await client.get(`/makerworld/3d/edit/${meta.key}/versions`, { params: { did: designId } }); setVersions(r.data.versions || []); }
+    try { const r = await client.get(`/makerworld/3d/edit/${meta.key}/versions`, { params: { did } }); setVersions(r.data.versions || []); }
     catch (e) { setVersions(null); showAlert(e.response?.data?.detail || e.message); }
   };
   const restoreVersion = async id => {
@@ -1838,7 +1852,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     const pieces = editApi.current?.toSave();
     if (!pieces) return;
     setSaving(true);
-    try { const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces, did: designId, excluded: editApi.current?.editor?.excluded() || [],
+    try { const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces, did, excluded: editApi.current?.editor?.excluded() || [],
       groups: editApi.current?.editor?.groups() || [],
       joints: editApi.current?.editor?.joints() || [], splits: editApi.current?.editor?.splits() || [], cuts: editApi.current?.editor?.cuts() || {},
       colors: editApi.current?.editor?.colors() || {}, paints: editApi.current?.editor?.paints() || [], v: 2 });
@@ -1952,10 +1966,14 @@ export default function Model3D({ designId = null, profileId = null, printId = n
               color: "#d97706", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>⚠ {meta.missing.length} modèle{meta.missing.length > 1 ? "s" : ""} sans vue assemblée : {meta.missing.join(", ")}</div>}
           </div>
         </div>
-        {meta?.plates?.length > 1 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {meta.plates.map((x, i) => <button key={x.n} type="button" onClick={() => setPlate(i)} style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer",
+        {(meta?.plates?.length > 1 || (gid && !fr)) && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {(meta?.plates?.length > 1 || grpAll) && meta.plates.map((x, i) => <button key={x.n} type="button" onClick={() => setPlate(i)} style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer",
             fontSize: 12.5, fontWeight: 800, border: i === plate ? "none" : "1px solid var(--border)", color: i === plate ? "#fff" : "var(--text2)",
-            background: i === plate ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" }}>{x.pending ? "⏳ " : ""}{x.assembled ? "🧩 Assemblé" : x.name ? `${x.n} · ${x.name}` : `Plateau ${x.n}`}</button>)}
+            background: i === plate ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" }}>{x.pending ? "⏳ " : ""}{x.assembled ? (grpAll ? "🧩 Tout le groupe" : "🧩 Assemblé") : x.name ? `${x.n} · ${x.name}` : `Plateau ${x.n}`}</button>)}
+          {gid && !fr && <button type="button" onClick={() => { setGview(false); setPlate(0); setGrpAll(v => !v); if (!grpAll) egg("assemblage_groupe"); }}
+            data-tip={grpAll ? "Revenir à ce modèle seul" : "L'assemblage du groupe : toutes ses pièces, de tous ses modèles et profils (seulement les plateaux imprimés), dans une seule vue à éditer"}
+            style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 800, border: "1px dashed color-mix(in srgb, #6366F1 55%, var(--border))",
+              color: "#6366F1", background: "color-mix(in srgb, #6366F1 8%, transparent)" }}>{grpAll ? "↩ Ce modèle seul" : "🧩 Tout le groupe"}</button>}
         </div>}
         <div ref={wrap} style={{ position: pfull ? "fixed" : "relative", ...(pfull ? { inset: 0, zIndex: 6000 } : {}),
           height: pfull ? "100dvh" : full ? "100vh" : "min(62dvh, 560px)", borderRadius: full || pfull ? 0 : 18, overflow: "hidden",
@@ -2070,12 +2088,12 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             style={{ padding: "3px 10px", borderRadius: 14, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800, color: "#fff",
               background: "linear-gradient(135deg, #0EA5E9, #6366F1)" }}>🎨 Récupérer le 3MF d'origine (couleurs)</button>}
           {meta.fetch_error && <span style={{ color: "#ef4444" }}>· 3MF non récupéré : {meta.fetch_error}</span>}
-          {printId && !fr && (meta.source === "3mf" || gview) && <button type="button" onClick={() => { if (!gview) egg("couleurs_gcode"); setGview(v => !v); }}
+          {printId && !fr && !grpAll && (meta.source === "3mf" || gview) && <button type="button" onClick={() => { if (!gview) egg("couleurs_gcode"); setGview(v => !v); }}
             data-tip={gview ? "Revenir aux couleurs du 3MF d'origine"
               : "Lire le G-code du 3MF tranché de ton impression : chaque face prend le filament vraiment déposé contre elle (ce que tu as peint dans Bambu Studio), même si tu as déplacé ou tourné les objets sur le plateau"}
-            style={{ padding: "3px 10px", borderRadius: 14, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800, color: "#fff",
-              background: gview ? "linear-gradient(135deg, #64748B, #475569)" : "linear-gradient(135deg, #F97316, #EC4899)" }}>
-            {gview ? "↺ Couleurs d'origine" : "🎯 Couleurs de mon impression (G-code)"}</button>}
+            style={{ padding: "1px 8px", borderRadius: 10, border: "1px solid var(--border)", cursor: "pointer", fontSize: 10.5, fontWeight: 700,
+              color: gview ? "#EC4899" : "var(--muted)", background: "transparent" }}>
+            {gview ? "↺ Couleurs d'origine" : "couleurs du G-code"}</button>}
           {gview && meta.gcode_view?.error && <span style={{ color: "#ef4444" }}>· {meta.gcode_view.error}</span>}
           {gv && gv.of != null && <span style={{ color: gv.placed ? "#16a34a" : "#d97706" }}
             data-tip="Les objets que l'appli a retrouvés sur ton plateau (déplacés ou tournés) ; les autres gardent les couleurs d'origine">

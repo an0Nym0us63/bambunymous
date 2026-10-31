@@ -1912,7 +1912,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       (isAdmin || prints.some(x => x.source_3mf) || prints.some(x => x.model_3mf)) && "-",
       // sans modele MakerWorld, la vue 3D du 3MF d'origine importe (31/10/2026)
       ...(own3dPrint ? [{ icon: "🧊", label: "Vue 3D", hint: "depuis le 3MF d'origine importé", tone: "#0EA5E9", onClick: () => setOwn3d(own3dPrint) }] : []),
-      ...(nSources > 1 ? [{ icon: "🧩", label: "Assemblage du groupe", hint: "toutes ses pièces, de tous ses modèles et profils, dans une seule vue", tone: "#6366F1",
+      ...(nSources > 1 || prints.filter(x => x.source_3mf || String(x.design_id || "").trim()).length > 1 ? [{ icon: "🧩", label: "Assemblage du groupe", hint: "toutes ses pièces, de tous ses modèles et profils, dans une seule vue", tone: "#6366F1",
         onClick: () => { setGrpAsm(true); egg("assemblage_groupe"); } }] : []),
       // importer le 3MF d'origine pour le groupe : un par modele s'il en melange plusieurs
       ...(isAdmin ? groupModels.map(m => ({ icon: "📤", label: groupModels.length > 1 ? `3MF d'origine · ${m.label}` : (m.has ? "Remplacer le 3MF d'origine" : "Importer le 3MF d'origine"),

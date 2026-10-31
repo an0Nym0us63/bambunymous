@@ -54,7 +54,8 @@ def _validate_3mf(data: bytes) -> None:
 
 def _clean_name(raw: str) -> str:
     from ..core.text import unent
-    name, _ = os.path.splitext(unent(raw or ""))
+    # seulement une vraie extension (31/10/2026 : « 0.2mm layer, 2 walls » devenait « 0 », coupe au premier point)
+    name = re.sub(r"\.(gcode\.3mf|3mf|gcode|bgcode|stl|step|stp|obj|amf)$", "", unent(raw or ""), flags=re.IGNORECASE)
     name = name.replace("_", " ").replace("–", " ")
     name = re.sub(r"\b(v|rev|final)\d*\b", "", name, flags=re.IGNORECASE)
     name = re.sub(r"\s+", " ", name).strip()
