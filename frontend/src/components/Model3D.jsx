@@ -1649,7 +1649,6 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const [tick, setTick] = useState(0);                 // un choix de couleur a la main : la vue se relit
   const [again, setAgain] = useState(0);               // la suite des plateaux en preparation
   // les couleurs de mon impression, lues dans le G-code de son 3MF tranche (31/10/2026) : a la demande, un clic
-  const [gview, setGview] = useState(false);
   const plateRef = useRef(0);
   const softRef = useRef(false);
   plateRef.current = plate;
@@ -1680,7 +1679,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     if (!soft) { setErr(null); setMeta(null); }
     // le profil montre par la fiche ; sans lui, le serveur lit celui de l'impression (imprimante, ou choisi a la main)
     get(base, { params: { profile: profileId || "", print_id: printId || 0, fetch: fetchSource || want3mf ? 1 : 0,
-                                 used: (usedPrints || []).join(","), scope: scope || "", gcode: gview && printId ? printId : 0 }, timeout: 180000 })
+                                 used: (usedPrints || []).join(","), scope: scope || "" }, timeout: 180000 })
       .then(({ data }) => { if (alive) {
         // une relecture pendant la preparation : on reste sur le plateau regarde
         // focus (30/10/2026, la galerie des vues 3D) : seulement la vue assemblee, s'il y en a une
@@ -1692,7 +1691,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
       .catch(e => { if (!alive) return; if (soft) setTimeout(() => { softRef.current = true; setAgain(a => a + 1); }, 3000);
         else setErr(e?.response?.data?.detail || "Pas de modèle 3D pour celui-ci"); });
     return () => { alive = false; };
-  }, [base, profileId, printId, wait, want3mf, redo, tick, again, gview]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [base, profileId, printId, wait, want3mf, redo, tick, again]);   // eslint-disable-line react-hooks/exhaustive-deps
   // la transparence des filaments d'un HueForge, gardee sur le modele (30/10/2026) : lue a l'ouverture, enregistree
   // (un instant apres le dernier reglage) ; chez un copain, elle se lit seulement
   const [td, setTd] = useState(null);
@@ -1755,8 +1754,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const usedFin = byPlate ? ofPlate(meta.used_finishes_plates, {}) : meta?.used_finishes;
   const usedMulti = byPlate ? ofPlate(meta.used_multi_plates, {}) : meta?.used_multi;
   // aux couleurs du G-code : ce sont deja celles de l'impression, aucune correspondance a appliquer
-  const gv = meta?.gcode_view && !meta.gcode_view.error ? meta.gcode_view : null;
-  const alt = gv ? null : (p && (asm ? merged(platePalettes) : platePalettes?.[p.n])) || palette || usedPal || null;
+  const alt = (p && (asm ? merged(platePalettes) : platePalettes?.[p.n])) || palette || usedPal || null;
   const altLabel = altName || (palette || platePalettes ? "Retenues" : "Utilisées");
   const [own, setOwn] = useState(false);
   // comparer (30/10/2026) : la vue assemblee du 3MF d'origine, a cote de mon assemblage enregistre (la vue seulement)
@@ -2004,7 +2002,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {meta?.plates?.length > 0 && (meta.plates.length > 1 || grpAll) && meta.plates.map((x, i) => <button key={x.n} type="button" onClick={() => setPlate(i)} style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer",
             fontSize: 12.5, fontWeight: 800, border: i === plate ? "none" : "1px solid var(--border)", color: i === plate ? "#fff" : "var(--text2)",
             background: i === plate ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" }}>{x.pending ? "⏳ " : ""}{x.assembled ? (grpAll ? "🧩 Tout le groupe" : "🧩 Assemblé") : x.name ? `${x.n} · ${x.name}` : `Plateau ${x.n}`}</button>)}
-          {gid && !fr && <button type="button" onClick={() => { setGview(false); setPlate(0); setGrpAll(v => !v); if (!grpAll) egg("assemblage_groupe"); }}
+          {gid && !fr && <button type="button" onClick={() => { setPlate(0); setGrpAll(v => !v); if (!grpAll) egg("assemblage_groupe"); }}
             data-tip={grpAll ? "Revenir à ce modèle seul" : "L'assemblage du groupe : toutes ses pièces, de tous ses modèles et profils (seulement les plateaux imprimés), dans une seule vue à éditer"}
             style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 800, border: "1px dashed color-mix(in srgb, #6366F1 55%, var(--border))",
               color: "#6366F1", background: "color-mix(in srgb, #6366F1 8%, transparent)" }}>{grpAll ? "↩ Ce modèle seul" : "🧩 Tout le groupe"}</button>}
@@ -2132,16 +2130,6 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             style={{ padding: "3px 10px", borderRadius: 14, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800, color: "#fff",
               background: "linear-gradient(135deg, #0EA5E9, #6366F1)" }}>🎨 Récupérer le 3MF d'origine (couleurs)</button>}
           {meta.fetch_error && <span style={{ color: "#ef4444" }}>· 3MF non récupéré : {meta.fetch_error}</span>}
-          {printId && !fr && !grpAll && (meta.source === "3mf" || gview) && <button type="button" onClick={() => { if (!gview) egg("couleurs_gcode"); setGview(v => !v); }}
-            data-tip={gview ? "Revenir aux couleurs du 3MF d'origine"
-              : "Lire le G-code du 3MF tranché de ton impression : chaque face prend le filament vraiment déposé contre elle (ce que tu as peint dans Bambu Studio), même si tu as déplacé ou tourné les objets sur le plateau"}
-            style={{ padding: "1px 8px", borderRadius: 10, border: "1px solid var(--border)", cursor: "pointer", fontSize: 10.5, fontWeight: 700,
-              color: gview ? "#EC4899" : "var(--muted)", background: "transparent" }}>
-            {gview ? "↺ Couleurs d'origine" : "couleurs du G-code"}</button>}
-          {gview && meta.gcode_view?.error && <span style={{ color: "#ef4444" }}>· {meta.gcode_view.error}</span>}
-          {gv && gv.of != null && <span style={{ color: gv.placed ? "#16a34a" : "#d97706" }}
-            data-tip="Les objets que l'appli a retrouvés sur ton plateau (déplacés ou tournés) ; les autres gardent les couleurs d'origine">
-            · {gv.placed ? `aux couleurs de ton impression : ${gv.placed} objet${gv.placed > 1 ? "s" : ""} sur ${gv.of} retrouvé${gv.placed > 1 ? "s" : ""}` : "aucun objet retrouvé dans le G-code"}</span>}
           {meta.ms >= 1000 && <span data-tip="La première ouverture prépare le modèle ; les suivantes sont immédiates">· préparé en {(meta.ms / 1000).toFixed(1).replace(".", ",")} s</span>}
           {st.size && !p?.pending && <span>· {mm(st.size[0])} × {mm(st.size[1])} × {mm(st.size[2])}</span>}
           {p?.triangles ? <span>· {p.triangles.toLocaleString("fr-FR")} triangles</span> : null}

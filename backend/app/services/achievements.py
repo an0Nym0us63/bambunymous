@@ -2512,7 +2512,8 @@ CATALOG += [
        lore="Pas une tuile ne manque : l'accueil déborde de partout."),
 ]
 CATALOG += [_a(f"egg_{k}", "secret", e, t, d, [1], lore=l) for k, (e, t, d, _h, l) in EGGS.items()]
-HIDDEN_EGGS = {"anonymous", "teapot"} | {k for k in EGGS if k.startswith("h_")}
+# couleurs_gcode : la vue aux couleurs du G-code a ete retiree (31/10/2026) ; gagne, il reste, sinon il ne se montre plus
+HIDDEN_EGGS = {"anonymous", "teapot", "couleurs_gcode"} | {k for k in EGGS if k.startswith("h_")}
 # des secrets qui n'existent que la ou ils sont gagnes : ailleurs, ni affiches, ni comptes dans le
 # total, la completude, les tiroirs ou les revelations par cles (impossibles a gagner chez les autres)
 # egg_placer : le geste a disparu (30/10/2026) ; qui l'a gagne le garde, ailleurs il n'existe plus
