@@ -237,7 +237,8 @@ export default function GalleryCompare({
                   pointerEvents:"none",
                   boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.22)" }}/>
               )}
-              {photos.length > 1 && !swatchMode && (
+              {/* les vues 3D : leur filet qui defile dit deja qu'il y en a plusieurs (31/10/2026 : le compte en plus, c'etait trop) */}
+              {photos.length > 1 && !swatchMode && !stage && (
                 <span style={{ position:"absolute", top:6, right:6, background: stage ? "color-mix(in srgb, #0EA5E9 18%, var(--surface))" : "rgba(15,23,42,0.6)",
                   color: stage ? "#0284c7" : "white", backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)",
                   fontSize:10, fontWeight:800, padding:"2px 7px", borderRadius:20 }}>
