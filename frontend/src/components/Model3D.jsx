@@ -1312,6 +1312,10 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         data-tip="Un toucher remplit la zone jusqu'aux arêtes vives (un œil, une pièce posée dessus)">◉ Zone</button>
       <button type="button" onClick={() => api?.setPaint({ tool: "brush" })} style={b(est.paintTool === "brush")}
         data-tip="Peindre en glissant le doigt (ou la souris) sur la pièce">🖌 Pinceau</button>
+      {est.paintTool === "zone" && <BarMenu b={b} up={compact} label={`◿ Seuil ${est.paintCrease}°`}
+        tip="Le seuil de la zone : l'angle d'une arête qui l'arrête (plus petit : la zone s'arrête aux moindres plis ; plus grand : elle passe les arrondis). Une zone ratée : ↶, change le seuil, touche de nouveau"
+        items={[[8, "très fin"], [15, "fin"], [25, ""], [35, "par défaut"], [50, ""], [70, "large"], [90, "très large"]].map(([a, l]) =>
+          ({ label: `${a}°${l ? ` · ${l}` : ""}`, on: est.paintCrease === a, onClick: () => api?.setPaint({ crease: a }) }))}/>}
       {est.paintTool === "brush" && <BarMenu b={b} up={compact} label={`⌀ ${est.paintR} mm`} tip="La taille du pinceau" items={[1, 2, 4, 8, 15].map(r =>
         ({ label: `${r} mm`, on: est.paintR === r, onClick: () => api?.setPaint({ r }) }))}/>}
       {sep}

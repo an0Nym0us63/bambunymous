@@ -179,7 +179,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
     cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, addPin, edgeMode,
     pickFor, lineAxis: !!lineAxis,
-    paintTool, paintColor, paintR, painted: paints.length,
+    paintTool, paintColor, paintR, paintCrease, painted: paints.length,
     pieceColor: sel.size ? (([...sel].map(g => colors[g.userData.k] || null).every((c, _i, a) => c === a[0])) ? colors[[...sel][0].userData.k] || null : "mix") : null,
     twinBusy, canTwins: mode === "mate" && !!first && first.kind === "face" && !addPin && !twinDone,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
@@ -1630,7 +1630,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   // ── 🖌 Peindre (31/10/2026) : « Zone » remplit d'un toucher jusqu'aux aretes vives (un oeil, une piece posee dessus),
   // « Pinceau » peint ce que le doigt survole (rayon reglable) ; sans couleur, c'est la gomme (la couleur d'origine
   // revient). Un doigt peint, deux doigts tournent la vue ; chaque coup s'annule (↶)
-  let paintTool = "zone", paintColor = null, paintR = 2, paintStroke = null;
+  // paintCrease (31/10/2026) : le seuil de la zone, l'angle a partir duquel une arete l'arrete (plus petit : des zones plus
+  // petites, qui s'arretent aux moindres plis ; plus grand : elles debordent sur les arrondis)
+  let paintTool = "zone", paintColor = null, paintR = 2, paintStroke = null, paintCrease = 35;
   const paintHit = ev => {
     const r = el.getBoundingClientRect();
     mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
@@ -1641,7 +1643,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const hit = paintHit(ev);
     if (!hit) return;
     const mesh = hit.object, g = pieceOf(mesh);
-    const tris = paintTool === "zone" ? zoneOf(mesh.geometry, hit.faceIndex) : brushOf(mesh.geometry, mesh.worldToLocal(hit.point.clone()), paintR);
+    const tris = paintTool === "zone" ? zoneOf(mesh.geometry, hit.faceIndex, paintCrease) : brushOf(mesh.geometry, mesh.worldToLocal(hit.point.clone()), paintR);
     if (!tris.length) return;
     const { top, own, map } = paintResolve(mesh, g);
     const orig = tris.map(map).filter(t => t != null);
@@ -2013,10 +2015,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       paints = paints.filter(p => !tops.has(p.k));
       if (paints.length !== n) { applyColors(THREE, all, colors, paints); push(); render(); }
     },
-    setPaint: ({ tool, color, r } = {}) => {
+    setPaint: ({ tool, color, r, crease } = {}) => {
       if (tool) paintTool = tool;
       if (color !== undefined) paintColor = color;
       if (r) paintR = r;
+      if (crease) paintCrease = crease;
       onChange?.(state());
     },
     colors: () => ({ ...colors }),
