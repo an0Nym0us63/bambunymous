@@ -159,6 +159,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
     } catch { /* rien */ }
   };
   const [floorPick, setFloorPick] = useState(false), [oriented, setOriented] = useState(false);   // une face posee au sol (la vue)
+  const [orientOpen, setOrientOpen] = useState(false);  // tourner tout le modele (la vue), pour une photo
   useEffect(() => { if (lit) egg("ombres_chinoises"); }, [lit]);
   // la transparence des couches d'un HueForge (30/10/2026) : une valeur par filament, reglable, gardee par couleur
   const [hueL, setHueL] = useState(null), [tdOpen, setTdOpen] = useState(false);
@@ -570,6 +571,18 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         renderer.domElement.addEventListener("pointerdown", onFloorDown);
         renderer.domElement.addEventListener("pointerup", onFloorUp);
         const untilt = () => { floorMode(false); setFloorPick(false); if (!model.quaternion.equals(q0)) { model.quaternion.copy(q0); replace(); } setOriented(false); };
+        // « 🔄 Orienter » (31/10/2026) : tout le modele tourne, pour une photo (la vue seulement, comme « Au sol ») --
+        // autour de la verticale, basculé vers soi ou penché sur le cote, d'apres ou l'on regarde
+        const orient = (how, deg) => {
+          const up = new THREE.Vector3(0, 1, 0), fwd = camera.getWorldDirection(new THREE.Vector3()).setY(0);
+          if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+          fwd.normalize();
+          const right = fwd.clone().cross(up).normalize();
+          const axis = how === "turn" ? up : how === "tilt" ? right : fwd;
+          model.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, THREE.MathUtils.degToRad(deg)));
+          replace();
+          setOriented(!model.quaternion.equals(q0));
+        };
         const noMenu = e => e.preventDefault();
         const focus = e => {
           const r = el.getBoundingClientRect(), rc = new THREE.Raycaster();
@@ -837,7 +850,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         if (editApi) editApi.current = { editing, toSave, origin, relayout, snapshot, untilt, get editor() { return editor; } };
         disposables.push({ dispose: () => { try { editor?.dispose(); } catch { /* rien */ } if (editApi) editApi.current = null; } });
         const setTd = (i, v) => { if (hueU) { hueU.hT.value[i] = v; render(); } };
-        api.current = { fit, night, backlight, bedShow, dragPans, zoom, floorMode, untilt, setTd, setLamp };
+        api.current = { fit, night, backlight, bedShow, dragPans, zoom, floorMode, untilt, orient, setTd, setLamp };
         setLamp(lampNow.current);
         const s = bb2.getSize(new THREE.Vector3());
         onState({ busy: false, error: null, size: glb ? [s.x, s.z, s.y] : [s.x, s.z, s.y], glow: glowMats.length > 0 });
@@ -878,6 +891,18 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         <span style={{ width: 52, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{l.td.toFixed(2).replace(".", ",")} mm</span>
       </label>)}
     </div>)}
+    {orientOpen && !editing && !bare && <div style={{ position: "absolute", right: 10, bottom: 56, zIndex: 3, display: "grid", gridTemplateColumns: "auto repeat(4, 38px)",
+      gap: 5, alignItems: "center", padding: 8, borderRadius: 14, background: "color-mix(in srgb, var(--surface) 94%, transparent)", border: "1px solid var(--border)",
+      boxShadow: "0 10px 30px rgba(0,0,0,.25)", backdropFilter: "blur(8px)" }}>
+      {[["turn", "Tourner", ["⟲", "⟳"]], ["tilt", "Basculer", ["⤒", "⤓"]], ["roll", "Pencher", ["↶", "↷"]]].map(([how, label, [a, b]]) => <React.Fragment key={how}>
+        <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)", paddingRight: 4 }}>{label}</span>
+        {[[-90, `${a} 90°`], [-15, `${a} 15°`], [15, `${b} 15°`], [90, `${b} 90°`]].map(([d, t]) =>
+          <button key={d} type="button" onClick={() => api.current?.orient(how, how === "tilt" ? -d : d)}
+            data-tip={`${label} ${how === "turn" ? "autour de la verticale" : how === "tilt" ? (d > 0 ? "vers toi" : "vers l'arrière") : (d > 0 ? "vers la droite" : "vers la gauche")}, de ${Math.abs(d)}°`}
+            style={{ height: 32, borderRadius: 9, border: "1px solid var(--border)", cursor: "pointer", background: "var(--surface2)", color: "var(--text)",
+              fontSize: 10.5, fontWeight: 800, padding: 0 }}>{t}</button>)}
+      </React.Fragment>)}
+    </div>}
     <div style={{ position: "absolute", right: 10, bottom: 10, display: bare ? "none" : "flex", gap: 8 }}>
       {hueL && !lit && <button type="button" onClick={() => setTdOpen(o => !o)}
         data-tip="Régler la transparence de chaque filament de ce HueForge"
@@ -907,6 +932,11 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
       {oriented && !editing && <button type="button" onClick={() => api.current?.untilt()} data-tip="Remettre le modèle comme à l'origine"
         style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
           background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>↺</button>}
+      {!editing && <button type="button" onClick={() => { setOrientOpen(o => !o); egg("orienter"); }}
+        data-tip="Orienter tout le modèle pour une photo : le tourner, le basculer, le pencher (la vue seulement : rien n'est enregistré ; ↺ le remet comme à l'origine)"
+        style={{ height: 38, padding: "0 10px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 12.5, fontWeight: 800,
+          background: orientOpen ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)", color: orientOpen ? "#fff" : "var(--text2)",
+          boxShadow: "0 4px 12px rgba(0,0,0,.15)" }} aria-label="Orienter">{narrow ? "🔄" : "🔄 Orienter"}</button>}
       {!editing && <button type="button" onClick={() => { const v = !floorPick; setFloorPick(v); api.current?.floorMode(v); }}
         data-tip={floorPick ? "Annuler" : "Poser une face au sol : clique ensuite la face du modèle qui doit reposer sur le plateau (la vue seulement : rien n'est enregistré)"}
         style={{ height: 38, padding: "0 10px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 12.5, fontWeight: 800,
