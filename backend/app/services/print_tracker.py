@@ -500,6 +500,53 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
 
 
 # ── Milestones ─────────────────────────────────────────────────────────────
+# Le rattrapage d'une impression jamais creee (31/10/2026) : une impression lancee depuis le cloud n'est creee qu'au
+# message de lancement (« project_file »), que l'imprimante n'envoie qu'une fois ; l'appli qui redemarrait a ce
+# moment-la (une mise a jour) ne la voyait jamais : rien dans les impressions, et « introuvable » a chaque progression.
+# Une impression qui tourne, inconnue en memoire et en base, est donc creee des sa premiere progression vue, avec ce
+# que l'etat en dit (son nom, son fichier sur l'imprimante, pour le 3MF) ; son debut est celui ou on l'a vue.
+_CAUGHT: set = set()
+
+
+def _catch_up(job_id: str) -> bool:
+    try:
+        from ..core.mqtt import get_state
+        stt = get_state()
+    except Exception:
+        return False
+    if str(getattr(stt, "job_id", "") or "") != str(job_id) or str(getattr(stt, "status", "") or "").upper() not in ("RUNNING", "PAUSE"):
+        return False
+    with _LOCK:
+        if job_id in _CAUGHT:
+            return True
+        _CAUGHT.add(job_id)
+    task = str(getattr(stt, "print_name", "") or "")
+    gf = str(getattr(stt, "gcode_file", "") or "")
+    did = str(getattr(stt, "design_id", "") or "")
+    logger.warning(f"[PRINT] job={job_id} en cours mais jamais créé (lancé pendant un arrêt de l'appli ?) : création de rattrapage")
+
+    def run():
+        import asyncio as _a
+        lp = _a.new_event_loop()
+
+        async def go():
+            async with AsyncSessionLocal() as db:
+                ip = await get_setting(db, "PRINTER_IP")
+                code = await get_setting(db, "PRINTER_ACCESS_CODE")
+            await create_print(job_id, f"ftp://{gf}" if gf else "", task, "cloud", ip or "", code or "", ams_mapping=[], design_id=did)
+        try:
+            lp.run_until_complete(go())
+        except Exception:
+            logger.exception(f"[PRINT] rattrapage de job={job_id} impossible")
+            with _LOCK:
+                _CAUGHT.discard(job_id)
+        finally:
+            lp.close()
+    import threading
+    threading.Thread(target=run, daemon=True).start()
+    return True
+
+
 def on_progress(job_id: str, pct: float, layer: int):
     if not job_id or job_id in _PROCESSED: return
     st = _job(job_id); pid = st.get("print_id")
@@ -520,7 +567,8 @@ def on_progress(job_id: str, pct: float, layer: int):
             with _LOCK: st["print_id"] = pid
             logger.info(f"[FINISH] Print récupéré depuis DB: id={pid} job={job_id}")
         else:
-            logger.warning(f"[FINISH] job_id={job_id} introuvable en mémoire ni en DB")
+            if not _catch_up(job_id):
+                logger.warning(f"[FINISH] job_id={job_id} introuvable en mémoire ni en DB")
             return
 
     prev = st["last_pct"]
