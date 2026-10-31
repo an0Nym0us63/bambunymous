@@ -1167,10 +1167,27 @@ const chipS = (c, extra = {}) => ({ position: "absolute", fontSize: 9.5, fontWei
 // d'impressions d'un groupe, en petites pastilles au bout de la rangee des filaments
 const tagS = (c, extra = {}) => ({ fontSize: 9.5, fontWeight: 900, lineHeight: "14px", padding: "0 6px", borderRadius: 7, whiteSpace: "nowrap", flexShrink: 0,
   color: `color-mix(in srgb, ${c} 82%, var(--text))`, background: `color-mix(in srgb, ${c} 16%, transparent)`, ...extra });
-const tileEdge = (c, live) => ({ position: "absolute", left: 0, right: 0, bottom: 0, height: 3, zIndex: 1, pointerEvents: "none",
-  background: live ? `linear-gradient(90deg, ${c}, color-mix(in srgb, ${c} 25%, #fff), ${c}, color-mix(in srgb, ${c} 25%, #fff))` : `linear-gradient(90deg, ${c}, color-mix(in srgb, ${c} 40%, transparent))`,
-  backgroundSize: live ? "200% 100%" : undefined, animation: live ? "bn-tile-run 2.4s linear infinite" : undefined });
-const tileFrame = (c, on) => on ? { border: `1px solid color-mix(in srgb, ${c} 45%, var(--border))`, boxShadow: `0 10px 26px -14px ${c}` } : {};
+// la ligne d'etat, en haut de la tuile (31/10/2026) : pastel, toujours la (verte pour une reussite) ; un groupe la
+// partage entre les etats de ses impressions, a proportion ; une impression en cours y fait passer un reflet
+const pastel = c => `color-mix(in srgb, ${c} 62%, #ffffff)`;
+const statusColor = st => (V2_STATUS[st] || [])[1] || STATUS_CFG[st]?.color || "#94a3b8";
+const STATUS_ORDER = ["SUCCESS", "PARTIAL", "TO_REDO", "IN_PROGRESS", "FAILED", "CANCELLED"];
+function TileLine({ statuses }) {
+  const n = statuses.length || 1, count = {};
+  statuses.forEach(st => { count[st] = (count[st] || 0) + 1; });
+  let at = 0;
+  const stops = STATUS_ORDER.concat(Object.keys(count).filter(k => !STATUS_ORDER.includes(k))).filter(k => count[k]).map(k => {
+    const a0 = at, a1 = at + (count[k] / n) * 100; at = a1;
+    return `${pastel(statusColor(k))} ${a0}% ${a1}%`;
+  });
+  const live = !!count.IN_PROGRESS;
+  return <span aria-hidden="true" style={{ position:"absolute", left:0, right:0, top:0, height:4, zIndex:1, pointerEvents:"none", overflow:"hidden",
+    background:`linear-gradient(90deg, ${stops.join(", ")})` }}>
+    {live && <span style={{ position:"absolute", inset:0, backgroundImage:"linear-gradient(90deg, transparent 0%, rgba(255,255,255,.75) 50%, transparent 100%)",
+      backgroundSize:"40% 100%", backgroundRepeat:"no-repeat", animation:"bn-tile-sweep 1.8s linear infinite" }}/>}
+  </span>;
+}
+const tileFrame = (c, on) => on ? { border: `1px solid color-mix(in srgb, ${c} 35%, var(--border))` } : {};
 
 const V2_STATUS = { SUCCESS: ["Réussie", "#22c55e", "✓"], PARTIAL: ["En partie", "#f59e0b", "◐"], FAILED: ["Échouée", "#ef4444", "✕"],
   IN_PROGRESS: ["En cours", "#3b82f6", "●"], CANCELLED: ["Annulée", "#94a3b8", "■"] };
@@ -2263,18 +2280,9 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
           <span style={{ fontSize:13, fontWeight:900, color:"var(--text)", flexShrink:0 }}>{duration_seconds > 0 ? durFr(duration_seconds) : ""}</span>
         </div>
       ) : (
-      // un groupe : deux cartes qui depassent derriere, en haut (31/10/2026 : plus de pastille sur la vignette) ; l'image
-      // perd leur hauteur pour que les textes restent alignes sur ceux des impressions
-      <div style={{ position:"relative", paddingTop:8 }}>
-      <span aria-hidden="true" style={{ position:"absolute", top:0, left:16, right:16, height:24, borderRadius:14, zIndex:0,
-        border:"1px solid color-mix(in srgb, #A78BFA 40%, var(--border))", background:"color-mix(in srgb, #A78BFA 22%, var(--surface2))" }}/>
-      <span aria-hidden="true" style={{ position:"absolute", top:4, left:8, right:8, height:24, borderRadius:16, zIndex:0,
-        border:"1px solid color-mix(in srgb, #A78BFA 55%, var(--border))", background:"color-mix(in srgb, #A78BFA 34%, var(--surface2))" }}/>
-      <div onClick={handleClick} {...press} style={{ ...gFrame, zIndex:1, overflow:"hidden", display:"flex", flexDirection:"column", borderRadius:18,
-        // un fond opaque sous la teinte de la tuile : les cartes de derriere ne se voient pas au travers
-        border:"1px solid color-mix(in srgb, #A78BFA 30%, var(--border))", background:"linear-gradient(var(--surface2), var(--surface2)), var(--sheet-bg)", boxShadow:"0 8px 22px -16px rgba(124,58,237,.6)",
-        ...tileFrame(aggCfg?.color, !!aggCfg) }}>
-        <div style={{ position:"relative", paddingTop:"calc(78% - 8px)", background:"var(--surface)", overflow:"hidden" }}>
+      <div onClick={handleClick} {...press} style={{ ...gFrame, overflow:"hidden", display:"flex", flexDirection:"column", borderRadius:18,
+        border:"1px solid color-mix(in srgb, #A78BFA 30%, var(--border))", background:"var(--surface2)", boxShadow:"0 8px 22px -16px rgba(124,58,237,.6)" }}>
+        <div style={{ position:"relative", paddingTop:"78%", background:"var(--surface)", overflow:"hidden" }}>
           <div style={{ position:"absolute", inset:0 }}>
             {/* plusieurs vues 3D choisies : l'une apres l'autre, chacune en grand (30/10/2026), plutot que leur mosaique */}
             {prints[0]?.group_thumb_3d && prints[0]?.group_vue3d_sel?.length > 1
@@ -2284,7 +2292,7 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
               : <GroupMosaic photos={mosaicUrls} title={name}/>}
           </div>
           {gCheck}
-          {aggCfg && <span style={tileEdge(aggCfg.color, true)}/>}
+          <TileLine statuses={prints.map(x => x.status)}/>
         </div>
         <div style={{ padding:"5px 10px 9px" }}>
           {/* les filaments de toutes ses impressions (une fois chaque couleur), sur la meme petite rangee que les tuiles d'impression */}
@@ -2307,7 +2315,6 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
             {duration_seconds > 0 && <span style={{ fontSize:10.5, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap" }}>{durFr(duration_seconds)}</span>}
           </div>
         </div>
-      </div>
       </div>
       )}
 
@@ -2467,7 +2474,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
               style={{ position:"absolute", inset:0, width:"100%", height:"100%", WebkitTouchCallout:"none", WebkitUserDrag:"none" }}
               onError={e => { e.currentTarget.style.display="none"; }}/>}
         {check}
-        {p.status !== "SUCCESS" && <span style={tileEdge(stC, p.status === "IN_PROGRESS")}/>}
+        <TileLine statuses={[p.status]}/>
       </div>
       <div style={{ padding:"5px 10px 9px" }}>
         {/* les filaments, sur leur propre petite rangee entre la vignette et le nom (30/10/2026 : ni sur l'image, ni sur la
