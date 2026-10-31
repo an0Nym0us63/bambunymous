@@ -617,11 +617,14 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
     from ....services import mw_3d as T
     from ....services.mw_source import known, path_of, _profile
     did = str(design_id or "").strip()
-    if not did.isdigit():
+    # « p12 » : le 3MF importe a la main pour l'impression 12, sans modele MakerWorld (31/10/2026)
+    import re as _re
+    mine = bool(_re.fullmatch(r"p\d+", did))
+    if not did.isdigit() and not mine:
         raise HTTPException(404, "Modèle inconnu")
     # le profil affiche par la fiche (deduit, ou choisi dans la liste) passe avant celui lu sur l'impression
     how = []
-    prof = await _prof_of(did, profile, print_id, how)
+    prof = "" if mine else await _prof_of(did, profile, print_id, how)
     t0 = _t.perf_counter()
     # le 3MF d'origine de CE profil ; sans profil connu, celui retenu pour le modele
     iid = known(did, prof) if prof else known(did, "")
@@ -701,7 +704,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
                     gview = {"print_id": gcode, "placed": g.get("placed"), "of": g.get("of"), "pending": bool(gmeta.get("pending"))}
                 else:
                     gview, gkey = {"error": "Le G-code de cette impression n'a pas pu être lu"}, None
-    if not readonly and (not meta or not any(not p.get("skipped") for p in meta.get("plates") or [])):
+    if not readonly and not mine and (not meta or not any(not p.get("skipped") for p in meta.get("plates") or [])):
         # l'apercu MakerWorld du meme profil ; a defaut, le 3MF garde d'un autre profil du modele
         source = "makerworld"
         try:

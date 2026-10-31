@@ -324,10 +324,51 @@ def _profile(prof, manual) -> str:
 _BY_DID = {"mt": None, "n": -1, "v": {}}
 
 
-def print_file(design_id, profile_id, manual=None) -> Path | None:
-    """Le 3MF d'origine d'une impression : celui de son profil, sinon celui retenu pour le modele."""
+def own_key(pid) -> str:
+    """La cle d'un 3MF d'origine importe a la main pour une impression sans modele MakerWorld (31/10/2026)."""
+    return f"p{int(pid)}"
+
+
+def save_upload(pid: int, design_id, profile, raw_path: Path) -> str:
+    """Un 3MF d'origine importe a la main (31/10/2026) : pour une impression sans modele MakerWorld, ou dont le
+    modele n'est plus la (404, retire). Il doit garder sa geometrie (un 3MF tranche n'a que son G-code). Range dans la
+    bibliotheque comme un telecharge : il sert ensuite a tout (vue 3D, telechargement, plateaux), a la place de celui
+    de MakerWorld pour ce modele et ce profil. Rend son identifiant."""
+    import re as _re
+    import time as _t
+    import zipfile
+    try:
+        with zipfile.ZipFile(raw_path) as z:
+            names = z.namelist()
+            if "3D/3dmodel.model" not in names:
+                raise ValueError("Ce n'est pas un 3MF (pas de 3D/3dmodel.model)")
+            root = z.read("3D/3dmodel.model")
+            if b"<vertex" not in root and not any(n.startswith("3D/Objects/") for n in names):
+                raise ValueError("Ce 3MF n'a pas de modèle (un 3MF tranché ne garde que le G-code) : prends le projet d'origine")
+    except zipfile.BadZipFile:
+        raise ValueError("Fichier illisible : ce n'est pas un 3MF")
+    iid = f"up{int(pid)}_{int(_t.time())}"
+    dest = local_path_of(iid)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    import shutil
+    shutil.move(str(raw_path), dest)
+    did = str(design_id or "").strip()
+    keys = [f"{own_key(pid)}:"]
+    if did.isdigit():
+        prof = str(profile or "").strip()
+        keys += [f"{did}:{prof}"] if prof and _re.fullmatch(r"\d+", prof) else []
+        keys += [f"{did}:"]
+    for k in keys:
+        _index_put(k, iid)
+    return iid
+
+
+def print_file(design_id, profile_id, manual=None, pid=None) -> Path | None:
+    """Le 3MF d'origine d'une impression : celui de son profil, sinon celui retenu pour le modele ; sans modele
+    MakerWorld, celui importe a la main pour elle (pid)."""
     if not design_id:
-        return None
+        iid = known(own_key(pid), "") if pid else None
+        return path_of(iid) if iid else None
     prof = _profile(profile_id, manual)
     iid = (known(design_id, prof) if prof else None) or known(design_id, "")
     if not iid and prof and path_of(prof).is_file():

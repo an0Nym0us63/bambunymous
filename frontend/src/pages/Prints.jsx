@@ -1276,6 +1276,27 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
   const [unmapping, setUnmapping] = useState(null);
   const [, setPhotoCount] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [own3d, setOwn3d] = useState(false);       // la vue 3D de mon 3MF d'origine (impression sans modele MakerWorld)
+  // importer le 3MF d'origine (31/10/2026) : le projet Bambu Studio (pas le tranche, qui n'a plus que son G-code)
+  const importSource = () => {
+    const inp = document.createElement("input");
+    inp.type = "file"; inp.accept = ".3mf";
+    inp.onchange = async () => {
+      const f = inp.files?.[0];
+      if (!f) return;
+      if (p.source_3mf && !(await showConfirm(`Remplacer le 3MF d'origine de cette impression par « ${f.name} » ?`, { confirmLabel: "Remplacer" }))) return;
+      const fd = new FormData(); fd.append("file", f);
+      toast("Envoi du 3MF d'origine…");
+      try {
+        await client.post(`/prints/${p.id}/source-3mf`, fd, { timeout: 600000 });
+        setP(prev => ({ ...prev, source_3mf: true }));
+        egg("mon_3mf");
+        toast("3MF d'origine importé : la vue 3D se prépare");
+        onChanged?.();
+      } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    };
+    inp.click();
+  };
   const [selSpool, setSelSpool] = useState(null);
   // le detail du cout : ouvert par defaut (comme l'ancien bloc) ; l'appareil retient le choix
   // le compte des objets crees (pour l'entree du menu, comme le faisait le bouton)
@@ -1330,11 +1351,16 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         ? { icon: "📊", label: "Hors classements des stats", hint: "Imposé par son groupe", tone: "#64748B", disabled: true }
         : { icon: "📊", label: p.stats_excluded ? "Remettre dans les classements des stats" : "Retirer des classements des stats",
             hint: p.stats_excluded ? "Il compte de nouveau dans les tops" : "Les totaux le comptent toujours", tone: "#64748B", onClick: toggleRanked }),
-      (p.source_3mf || p.model_3mf || (p.design_id && p.mw_profile_id)) && "-",
+      (isAdmin || p.source_3mf || p.model_3mf || (p.design_id && p.mw_profile_id)) && "-",
+      // sans modele MakerWorld, sa vue 3D vient du 3MF d'origine importe a la main (31/10/2026)
+      !p.design_id && p.source_3mf && { icon: "🧊", label: "Vue 3D", hint: "depuis mon 3MF d'origine", tone: "#0EA5E9", onClick: () => setOwn3d(true) },
       p.source_3mf && { icon: "⤓", label: "Télécharger le 3MF d'origine", hint: "MakerWorld · à retrancher", tone: "#F97316", onClick: () => download3mf(p.id, "source") },
       !p.source_3mf && p.design_id && p.mw_profile_id && { icon: "⇣", label: "Récupérer le 3MF d'origine", hint: "depuis MakerWorld", tone: "#F97316",
         onClick: async () => { try { await client.post(`/makerworld/source3mf/print/${p.id}`); setP(prev => ({ ...prev, source_3mf: true })); toast("3MF d'origine récupéré"); }
           catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
+      // le 3MF d'origine importe soi-meme (31/10/2026) : sans modele MakerWorld, ou quand le sien ne se recupere pas
+      isAdmin && { icon: "📤", label: p.source_3mf ? "Remplacer le 3MF d'origine" : "Importer le 3MF d'origine",
+        hint: p.design_id ? "le mien, si MakerWorld ne le donne pas" : "le projet Bambu Studio, pour la vue 3D", tone: "#F97316", onClick: importSource },
       p.model_3mf && { icon: "⤓", label: "Télécharger le 3MF tranché", hint: "pour mon imprimante", tone: "#F59E0B", onClick: () => download3mf(p.id, "sliced") },
       isAdmin && p.has_vue3d && { icon: "🧊", label: "Vues 3D et vignette", hint: p.thumb_3d ? "Vignette : une vue 3D" : "Vignette : l'image du plateau", tone: "#0EA5E9",
         onClick: () => openVue3D({ kind: "print", id: p.id, onDone: async () => {
@@ -1540,6 +1566,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         multicolorType={spoolPicker.multicolorType} filamentType={spoolPicker.filamentType} onClose={() => setSpoolPicker(null)}
         onMapped={() => { setSpoolPicker(null); reload(); onChanged?.(); }}/>}
       {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={() => setSelSpool(null)} zIndex={2000}/>}
+      {own3d && <Model3D designId={`p${p.id}`} title={p.translated_name || p.file_name} printId={p.id} usedPrints={[p.id]}
+        scope={`print:${p.id}`} onClose={() => setOwn3d(false)}/>}
       {editMode && <PrintEditSheet p={p} onClose={() => setEditMode(false)} onSaved={updated => { setP(prev => ({ ...prev, ...updated })); setEditMode(false); onChanged?.(); }}/>}
       {unmapping && <UnmapFilamentConfirm f={unmapping} printId={p.id} onClose={() => setUnmapping(null)} onDone={() => { setUnmapping(null); reload(); onChanged?.(); }}/>}
       {showDeleteConfirm && <DeletePrintConfirm p={p} restoreOnly={showDeleteConfirm === "restore"} onCancel={() => setShowDeleteConfirm(false)}

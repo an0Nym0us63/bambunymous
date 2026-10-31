@@ -143,7 +143,7 @@ def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict]
     # le 3MF d'origine MakerWorld deja garde pour ce profil (le tranche, lui, est model_3mf)
     try:
         from ....services.mw_source import print_file as _src
-        d["source_3mf"] = bool(_src(p.design_id, p.mw_profile_id, p.mw_plates))
+        d["source_3mf"] = bool(_src(p.design_id, p.mw_profile_id, p.mw_plates, p.id))
     except Exception:
         d["source_3mf"] = False
     if gcache is not None and p.group_id in gcache:
@@ -2960,6 +2960,39 @@ async def group_thumb(group_id: int, body: dict = Body({}), _: str = Depends(req
     return {"ok": True, "thumb_3d": n}
 
 
+@router.post("/{print_id}/source-3mf")
+async def print_source_upload(print_id: int, file: UploadFile = File(...), _: str = Depends(require_admin)):
+    """Importer soi-meme le 3MF d'origine d'une impression (31/10/2026) : sans modele MakerWorld, ou quand le sien
+    ne se recupere pas. Il remplace celui de MakerWorld pour ce modele et ce profil ; la vue 3D se prepare en fond."""
+    import asyncio as _aio
+    import tempfile
+    from ....services import mw_source as S
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+    if not p:
+        raise HTTPException(404, "Impression introuvable")
+    tmp = Path(tempfile.mkstemp(suffix=".3mf")[1])
+    size = 0
+    try:
+        with open(tmp, "wb") as fh:
+            while chunk := await file.read(1 << 20):
+                size += len(chunk)
+                if size > 600 * 1024 * 1024:
+                    raise HTTPException(413, "Fichier trop gros (600 Mo au plus)")
+                fh.write(chunk)
+        try:
+            iid = await _aio.to_thread(S.save_upload, print_id, p.design_id, S._profile(p.mw_profile_id, p.mw_plates), tmp)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    finally:
+        tmp.unlink(missing_ok=True)
+    from ....services import mw_3d as T
+    t = _aio.ensure_future(T.prepare(iid))
+    S._PREP.add(t)
+    t.add_done_callback(S._PREP.discard)
+    return {"ok": True, "iid": iid, "own": not p.design_id}
+
+
 @router.get("/{print_id}/3mf")
 async def print_3mf(print_id: int, kind: str = Query("sliced", pattern="^(sliced|source)$"), _: str = Depends(get_current_user)):
     """Le 3MF d'une impression : « sliced » celui tranche pour mon imprimante (garde au lancement),
@@ -2971,8 +3004,8 @@ async def print_3mf(print_id: int, kind: str = Query("sliced", pattern="^(sliced
     if not p:
         raise HTTPException(404, "Impression introuvable")
     if kind == "source":
-        f = print_file(p.design_id, p.mw_profile_id, p.mw_plates)
-        suffix = " (MakerWorld)"
+        f = print_file(p.design_id, p.mw_profile_id, p.mw_plates, p.id)
+        suffix = " (MakerWorld)" if p.design_id else " (origine)"
     else:
         from ....services.archive import local_or_archive
         f = local_or_archive(p.model_3mf) if p.model_3mf else None     # vide du local : relu sur le NAS
