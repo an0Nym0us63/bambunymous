@@ -1774,15 +1774,21 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   // la vignette 3D (29/10/2026) : prise dans la vue assemblee, rangee avec l'impression ou le groupe d'ou la vue s'ouvre
   const [shot, setShot] = useState(null);                // null | "busy"
   const shotTarget = /^(print|group):\d+$/.test(scope || "") ? { kind: scope.split(":")[0], id: scope.split(":")[1] } : (printId ? { kind: "print", id: String(printId) } : null);
-  const canShot = isAdmin && !fr && !!p && !p.pending && !!shotTarget;
-  const takeShot = async () => {
+  // la vignette d'un groupe aussi (31/10/2026) : une impression d'un groupe propose de la ranger pour l'une ou pour
+  // l'autre ; la vue de tout le groupe la range pour le groupe
+  const groupTarget = gid && !(shotTarget?.kind === "group") ? { kind: "group", id: String(gid) } : null;
+  const canShot = isAdmin && !fr && !!p && !p.pending && !!(shotTarget || groupTarget);
+  const [shotPick, setShotPick] = useState(false);
+  const shotClick = () => { if (grpAll && groupTarget) takeShot(groupTarget); else if (groupTarget && shotTarget) setShotPick(v => !v); else takeShot(shotTarget || groupTarget); };
+  const takeShot = async (target = shotTarget) => {
+    setShotPick(false);
     setShot("busy");
     try {
       const blob = await editApi.current?.snapshot();
       if (!blob) throw new Error("Vue pas prête");
       egg("vignette_3d");
       // a ranger : nouvelle vue (jusqu'a 4) ou a la place d'une autre, puis la choisir comme vignette (30/10/2026)
-      openVue3D({ ...shotTarget, shot: { blob, url: URL.createObjectURL(blob) } });
+      openVue3D({ ...target, shot: { blob, url: URL.createObjectURL(blob) } });
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setShot(null); }
   };
@@ -2048,10 +2054,18 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             <button type="button" onClick={() => full ? document.exitFullscreen?.() : wrap.current?.requestFullscreen?.().catch(() => {})}
               data-tip={full ? "Quitter le plein écran" : "Plein écran"} style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)",
                 cursor: "pointer", background: "var(--surface)", color: "var(--text2)", fontSize: 16, boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{full ? "🗗" : "⛶"}</button>
-            {canShot && <button type="button" disabled={shot === "busy"} onClick={takeShot}
-              data-tip={`Prendre la vue telle que tu la regardes (${p.assembled ? "l'assemblage" : "ce plateau"}) comme vignette ${shotTarget.kind === "group" ? "du groupe" : "de l'impression"}, sans la grille`}
+            {canShot && <span style={{ position: "relative", display: "inline-flex" }}>
+              <button type="button" disabled={shot === "busy"} onClick={shotClick}
+              data-tip={`Prendre la vue telle que tu la regardes (${p.assembled ? "l'assemblage" : "ce plateau"}) comme vignette ${grpAll || !shotTarget ? "du groupe" : groupTarget ? "de l'impression ou du groupe" : shotTarget.kind === "group" ? "du groupe" : "de l'impression"}, sans la grille`}
               style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 13, fontWeight: 800,
-                background: "var(--surface)", color: "var(--text2)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{shot === "busy" ? "…" : "📸 Vignette"}</button>}
+                background: "var(--surface)", color: "var(--text2)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{shot === "busy" ? "…" : "📸 Vignette"}</button>
+              {shotPick && <span style={{ position: "absolute", left: 0, bottom: 46, zIndex: 4, display: "flex", flexDirection: "column", gap: 5, padding: 6, borderRadius: 12,
+                background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 10px 30px rgba(0,0,0,.25)", whiteSpace: "nowrap" }}>
+                <button type="button" onClick={() => takeShot(shotTarget)} style={{ padding: "7px 12px", borderRadius: 9, border: "1px solid var(--border)", cursor: "pointer",
+                  fontSize: 12.5, fontWeight: 800, background: "var(--surface2)", color: "var(--text)", textAlign: "left" }}>🖨 Pour l'impression</button>
+                <button type="button" onClick={() => takeShot(groupTarget)} style={{ padding: "7px 12px", borderRadius: 9, border: "1px solid color-mix(in srgb, #A78BFA 45%, var(--border))",
+                  cursor: "pointer", fontSize: 12.5, fontWeight: 800, background: "color-mix(in srgb, #A78BFA 14%, var(--surface2))", color: "var(--text)", textAlign: "left" }}>📁 Pour le groupe</button>
+              </span>}</span>}
             {editable && showMine && <button type="button" onClick={startEdit} data-tip="Déplacer, tourner, poser au sol, coller les pièces (en plein écran)"
               style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff",
                 background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>✏️ Éditer l'assemblage</button>}
@@ -2099,9 +2113,14 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           background: "color-mix(in srgb, #ef4444 12%, var(--surface))", border: "1px solid color-mix(in srgb, #ef4444 35%, transparent)" }}>
           L'édition n'a pas pu s'ouvrir : {editErr}</div>}
         {!desktop && p && !p.pending && !st.busy && !editing && ((editable && showMine) || canShot) && <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-          {canShot && <button type="button" disabled={shot === "busy"} onClick={takeShot}
+          {canShot && (shotPick && groupTarget && shotTarget ? <>
+            <button type="button" onClick={() => takeShot(shotTarget)} style={{ height: 40, padding: "0 14px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
+              fontSize: 13, fontWeight: 800, background: "var(--surface)", color: "var(--text2)" }}>🖨 Pour l'impression</button>
+            <button type="button" onClick={() => takeShot(groupTarget)} style={{ height: 40, padding: "0 14px", borderRadius: 12, cursor: "pointer", fontSize: 13, fontWeight: 800,
+              border: "1px solid color-mix(in srgb, #A78BFA 45%, var(--border))", background: "color-mix(in srgb, #A78BFA 14%, var(--surface))", color: "var(--text)" }}>📁 Pour le groupe</button></>
+            : <button type="button" disabled={shot === "busy"} onClick={shotClick}
             style={{ height: 40, padding: "0 14px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 13, fontWeight: 800,
-              background: "var(--surface)", color: "var(--text2)" }}>{shot === "busy" ? "…" : "📸 Vignette"}</button>}
+              background: "var(--surface)", color: "var(--text2)" }}>{shot === "busy" ? "…" : "📸 Vignette"}</button>)}
           {editable && showMine && <button type="button" onClick={startEdit}
             style={{ height: 40, padding: "0 16px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff",
               background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 6px 16px -8px #6366F1" }}>✏️ Éditer l'assemblage</button>}
