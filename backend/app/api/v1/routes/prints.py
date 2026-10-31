@@ -2810,6 +2810,7 @@ def _v3slots(folder: Path) -> dict:
 
 
 async def _save_vue3d(folder: Path, file: UploadFile, slot: int = 0) -> int:
+    _V3IDS["at"] = 0                      # le filtre « avec / sans vue 3D » se relit (31/10/2026)
     """Range la vue : a la place demandee (elle remplace l'ancienne), sinon a la premiere libre. Rend son numero."""
     raw = await file.read()
     if len(raw) > 8 * 1024 * 1024 or not raw.startswith(b"\x89PNG"):
@@ -2887,6 +2888,7 @@ async def print_vue3d_drop(print_id: int, n: int, _: str = Depends(require_admin
             raise HTTPException(404, "Vue introuvable")
         folder = DATA_DIR / "prints" / str(print_id)
         (folder / _v3name(n)).unlink(missing_ok=True)
+        _V3IDS["at"] = 0
         p.thumb_3d = _v3val(_v3sel(p.thumb_3d, _v3slots(folder)))
         p.updated_at = datetime.utcnow()
         await db.commit()
@@ -2902,6 +2904,7 @@ async def group_vue3d_drop(group_id: int, n: int, _: str = Depends(require_admin
             raise HTTPException(404, "Vue introuvable")
         folder = DATA_DIR / "groups" / str(group_id)
         (folder / _v3name(n)).unlink(missing_ok=True)
+        _V3IDS["at"] = 0
         g.thumb_3d = _v3val(_v3sel(g.thumb_3d, _v3slots(folder)))
         await db.commit()
     gallery_touched()

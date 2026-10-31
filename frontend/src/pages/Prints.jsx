@@ -3459,10 +3459,12 @@ export default function Prints() {
   // apres une modification dans une fiche (31/10/2026 : « je me retrouve toujours en haut de la liste ») : seule
   // l'impression ou le groupe touche est relu et remis a sa place ; un changement de groupe recharge tout
   const refreshInPlace = async ({ id = null, groupId = null } = {}) => {
+    // le filtre « avec / sans vue 3D » : une impression qui n'y repond plus quitte la liste (31/10/2026)
+    const keep = x => !vue3dF || (vue3dF === "1") === !!(x.has_vue3d || x.group_has_vue3d);
     try {
       if (groupId) {
         const { data } = await client.get("/prints", { params: { group_id: groupId, limit: 200 } });
-        const fresh = data.prints || [];
+        const fresh = (data.prints || []).filter(keep);
         setPrints(ps => {
           const at = ps.findIndex(x => x.group_id === groupId);
           if (at < 0) return ps;
@@ -3474,7 +3476,8 @@ export default function Prints() {
         const old = prints.find(x => x.id === id);
         const { data } = await client.get(`/prints/${id}`);
         if (!old || (old.group_id || null) !== (data.group_id || null)) { load(); loadGroups(); return; }
-        setPrints(ps => ps.map(x => x.id === id ? { ...x, ...data } : x));
+        if (!keep({ ...old, ...data })) { setPrints(ps => ps.filter(x => x.id !== id)); setTotal(t => (t ? t - 1 : t)); }
+        else setPrints(ps => ps.map(x => x.id === id ? { ...x, ...data } : x));
       } else { load(); }
     } catch { load(); }
     loadKpis(); loadGroups();
