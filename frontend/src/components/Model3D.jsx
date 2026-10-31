@@ -625,7 +625,18 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           hemi.intensity = on ? 0.12 : 1.6; sun.intensity = on ? 0.4 : 1.6; back.intensity = on ? 0.08 : 0.6;
           grid.material.opacity = on ? 0.12 : 0.45;
           scene.background = on ? new THREE.Color(0x05070d) : null;
-          glowMats.forEach(m => { m.emissiveIntensity = on ? m.userData.nightEmit : m.userData.dayEmit; if (m.userData.rim) m.userData.rim.value = on ? 0.6 : 2.2; });
+          // seul le phosphorescent luit (31/10/2026) : le reflet de l'environnement (soie, metal) ne depend pas des lampes,
+          // il restait vif dans le noir et le halo le faisait briller ; eteint la nuit, rendu au jour. Le phosphorescent, lui,
+          // un peu plus fort
+          model.traverse(o => {
+            if (!o.isMesh) return;
+            (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
+              if (!m || glowMats.includes(m) || !m.envMap) return;
+              if (m.userData.dayEnvI == null) m.userData.dayEnvI = m.envMapIntensity;
+              m.envMapIntensity = on ? 0.02 : m.userData.dayEnvI;
+            });
+          });
+          glowMats.forEach(m => { m.emissiveIntensity = on ? Math.min(1.8, m.userData.nightEmit * 1.35) : m.userData.dayEmit; if (m.userData.rim) m.userData.rim.value = on ? 0.6 : 2.2; });
           render();
         };
         // lumiere derriere (28/10/2026) : un lithophane ne se lit qu'eclaire par l'arriere. En chaque pixel, l'epaisseur
