@@ -2804,42 +2804,20 @@ def _v3val(ns: list) -> int:
 
 
 def _v3cover(folder: Path, val) -> tuple:
-    """(nom du fichier qui sert de vignette, sa date) ; (None, None) : la vignette par defaut. Plusieurs vues : une
-    mosaique faite ici (refaite quand une de ses vues change)."""
+    """(nom du fichier qui sert de vignette, sa date) ; (None, None) : la vignette par defaut. Plusieurs vues choisies :
+    la tuile les fait defiler (vue3d_sel) ; la ou il ne faut qu'une image (accueil, partage), la premiere.
+    (31/10/2026 : plus de mosaique « Vue3D_mix », qui finissait parmi les photos de la fiche ; celles d'avant sont
+    retirees au passage.)"""
+    for old in folder.glob("Vue3D_mix*.png"):
+        try:
+            old.unlink()
+        except OSError:
+            pass
     sl = _v3slots(folder)
     ns = _v3sel(val, sl)
     if not ns:
         return None, None
-    if len(ns) == 1:
-        return _v3name(ns[0]), sl[ns[0]]
-    mask = sum(1 << (n - 1) for n in ns)
-    f = folder / f"Vue3D_mix{mask}.png"
-    try:
-        if f.stat().st_mtime >= max(sl[n] for n in ns):
-            return f.name, int(f.stat().st_mtime)
-    except OSError:
-        pass
-    try:
-        from PIL import Image
-        S = 1024
-        out = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-        # 2 : cote a cote ; 3 : deux en haut, une en bas ; 4 : en carre
-        boxes = {2: [(0, S // 4, S // 2), (S // 2, S // 4, S // 2)],
-                 3: [(0, 0, S // 2), (S // 2, 0, S // 2), (S // 4, S // 2, S // 2)]}.get(len(ns)) \
-            or [(0, 0, S // 2), (S // 2, 0, S // 2), (0, S // 2, S // 2), (S // 2, S // 2, S // 2)]
-        for n, (x, y, w) in zip(ns, boxes):
-            im = Image.open(folder / _v3name(n)).convert("RGBA")
-            im.thumbnail((w, w))
-            out.alpha_composite(im, (x + (w - im.width) // 2, y + (w - im.height) // 2))
-        for old in folder.glob("Vue3D_mix*.png"):
-            old.unlink(missing_ok=True)
-        tmp = folder / (f.name + ".part")
-        out.save(tmp, "PNG")
-        os.replace(tmp, f)
-        return f.name, int(f.stat().st_mtime)
-    except Exception as e:
-        logging.getLogger(__name__).info(f"[VUE3D] mosaique de {folder} : {e}")
-        return _v3name(ns[0]), sl[ns[0]]
+    return _v3name(ns[0]), sl[ns[0]]
 
 
 _V3IDS = {"at": 0.0, "ids": (set(), set())}
