@@ -2993,6 +2993,43 @@ async def print_source_upload(print_id: int, file: UploadFile = File(...), _: st
     return {"ok": True, "iid": iid, "own": not p.design_id}
 
 
+@router.post("/groups/{group_id}/source-3mf")
+async def group_source_upload(group_id: int, file: UploadFile = File(...), design: str = Form("*"),
+                              _: str = Depends(require_admin)):
+    """Le 3MF d'origine importe pour un groupe (31/10/2026) : rattache a ses impressions d'un modele (design : son ID
+    MakerWorld ; « - » : celles sans modele ; « * » : toutes)."""
+    import asyncio as _aio
+    import tempfile
+    from ....services import mw_source as S
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Print.id, Print.design_id, Print.mw_profile_id, Print.mw_plates)
+                                 .where(Print.group_id == group_id))).all()
+    d = str(design or "*").strip()
+    rows = [r for r in rows if d == "*" or (d == "-" and not str(r[1] or "").strip()) or str(r[1] or "").strip() == d]
+    if not rows:
+        raise HTTPException(404, "Aucune impression de ce groupe pour ce modèle")
+    tmp = Path(tempfile.mkstemp(suffix=".3mf")[1])
+    size = 0
+    try:
+        with open(tmp, "wb") as fh:
+            while chunk := await file.read(1 << 20):
+                size += len(chunk)
+                if size > 600 * 1024 * 1024:
+                    raise HTTPException(413, "Fichier trop gros (600 Mo au plus)")
+                fh.write(chunk)
+        try:
+            iid = await _aio.to_thread(S.save_upload_many, [(r[0], r[1], S._profile(r[2], r[3])) for r in rows], tmp)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    finally:
+        tmp.unlink(missing_ok=True)
+    from ....services import mw_3d as T
+    t = _aio.ensure_future(T.prepare(iid))
+    S._PREP.add(t)
+    t.add_done_callback(S._PREP.discard)
+    return {"ok": True, "iid": iid, "print_ids": [r[0] for r in rows]}
+
+
 @router.get("/{print_id}/3mf")
 async def print_3mf(print_id: int, kind: str = Query("sliced", pattern="^(sliced|source)$"), _: str = Depends(get_current_user)):
     """Le 3MF d'une impression : « sliced » celui tranche pour mon imprimante (garde au lancement),

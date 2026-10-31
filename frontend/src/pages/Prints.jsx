@@ -1732,6 +1732,32 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   const groupVisiting = useFriend(s => s.friend);
   const [prints, setPrints] = useState([]);
   const [mwAll, setMwAll] = useState(false);          // « Lier toutes au modele MakerWorld »
+  // le 3MF d'origine importe pour le groupe (31/10/2026) : ses modeles (ID MakerWorld, ou « - » sans modele)
+  const [own3d, setOwn3d] = useState(null);
+  const groupModels = [...new Map(prints.map(x => { const k = String(x.design_id || "").trim() || "-";
+    return [k, { key: k, label: k === "-" ? "sans modèle MakerWorld" : (x.translated_name || x.file_name || `modèle ${k}`),
+      has: prints.filter(y => (String(y.design_id || "").trim() || "-") === k).every(y => y.source_3mf) }]; })).values()];
+  const own3dPrint = prints.find(x => !String(x.design_id || "").trim() && x.source_3mf) || null;
+  const importGroupSource = m => {
+    const inp = document.createElement("input");
+    inp.type = "file"; inp.accept = ".3mf";
+    inp.onchange = async () => {
+      const f = inp.files?.[0];
+      if (!f) return;
+      if (m.has && !(await showConfirm(`Remplacer le 3MF d'origine (${m.label}) par « ${f.name} » ?`, { confirmLabel: "Remplacer" }))) return;
+      const fd = new FormData(); fd.append("file", f); fd.append("design", m.key);
+      toast("Envoi du 3MF d'origine…");
+      try {
+        const { data } = await client.post(`/prints/groups/${groupId}/source-3mf`, fd, { timeout: 600000 });
+        const ids = new Set(data.print_ids || []);
+        setPrints(ps => ps.map(x => ids.has(x.id) ? { ...x, source_3mf: true } : x));
+        egg("mon_3mf");
+        toast(`3MF d'origine importé pour ${ids.size} impression${ids.size > 1 ? "s" : ""} : la vue 3D se prépare`);
+        onUpdated?.();
+      } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    };
+    inp.click();
+  };
   const [sharing, setSharing] = useState(false);
   const [nbItems, setNbItems] = useState(nbItemsProp || 1);
   const [editNb, setEditNb] = useState(false);
@@ -1823,7 +1849,12 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
             setPrints(ps => ps.map(x => ({ ...x, group_thumb_3d: cv ? 1 : 0, group_has_vue3d: r.data.slots.length > 0, group_vue3d_name: cv?.name || null,
               group_vue3d_v: cv?.v || null })));
             onUpdated?.(); } catch { /* rien */ } } }) },
-      (prints.some(x => x.source_3mf) || prints.some(x => x.model_3mf)) && "-",
+      (isAdmin || prints.some(x => x.source_3mf) || prints.some(x => x.model_3mf)) && "-",
+      // sans modele MakerWorld, la vue 3D du 3MF d'origine importe (31/10/2026)
+      ...(own3dPrint ? [{ icon: "🧊", label: "Vue 3D", hint: "depuis le 3MF d'origine importé", tone: "#0EA5E9", onClick: () => setOwn3d(own3dPrint) }] : []),
+      // importer le 3MF d'origine pour le groupe : un par modele s'il en melange plusieurs
+      ...(isAdmin ? groupModels.map(m => ({ icon: "📤", label: groupModels.length > 1 ? `3MF d'origine · ${m.label}` : (m.has ? "Remplacer le 3MF d'origine" : "Importer le 3MF d'origine"),
+        hint: m.key === "-" ? "le projet Bambu Studio, pour la vue 3D" : "le mien, si MakerWorld ne le donne pas", tone: "#F97316", onClick: () => importGroupSource(m) })) : []),
       prints.some(x => x.source_3mf) && { icon: "⤓", label: "Télécharger les 3MF d'origine", hint: "Un fichier s'ils sont identiques, sinon un zip",
         tone: "#F97316", onClick: () => download3mf(groupId, "source", true) },
       prints.some(x => x.model_3mf) && { icon: "⤓", label: "Télécharger les 3MF tranchés", hint: "Un fichier s'ils sont identiques, sinon un zip",
@@ -2053,6 +2084,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       {objCreate && <ObjectCreateSheet parentType="group" parentId={groupId} defaultName={title} costFabrication={totalCost / nbItems}
         onDone={() => { setObjRefresh(k => k + 1); onUpdated?.(); }} onClose={() => setObjCreate(false)}/>}
       {sharing && <ShareSheet kind="group" id={groupId} onClose={() => setSharing(false)}/>}
+      {own3d && <Model3D designId={`p${own3d.id}`} title={name} printId={own3d.id}
+        usedPrints={prints.filter(x => !String(x.design_id || "").trim()).map(x => x.id)} scope={`group:${groupId}`} onClose={() => setOwn3d(null)}/>}
       {mwAll && <GroupMwLink prints={prints} onClose={() => setMwAll(false)} onDone={() => { setMwAll(false); loadPrints(); onUpdated?.(); }}/>}
       {unmapping && <UnmapFilamentConfirm f={unmapping} printId={unmapping.print_id} onClose={() => setUnmapping(null)} onDone={() => { setUnmapping(null); loadPrints(); onUpdated?.(); }}/>}
       {editGroup && <GroupEditSheet groupId={groupId} name={title} onClose={() => setEditGroup(false)} onSaved={() => { setEditGroup(false); loadPrints(); onUpdated?.(); }}/>}

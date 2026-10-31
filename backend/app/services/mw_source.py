@@ -330,6 +330,10 @@ def own_key(pid) -> str:
 
 
 def save_upload(pid: int, design_id, profile, raw_path: Path) -> str:
+    return save_upload_many([(pid, design_id, profile)], raw_path)
+
+
+def save_upload_many(targets: list, raw_path: Path) -> str:
     """Un 3MF d'origine importe a la main (31/10/2026) : pour une impression sans modele MakerWorld, ou dont le
     modele n'est plus la (404, retire). Il doit garder sa geometrie (un 3MF tranche n'a que son G-code). Range dans la
     bibliotheque comme un telecharge : il sert ensuite a tout (vue 3D, telechargement, plateaux), a la place de celui
@@ -347,18 +351,21 @@ def save_upload(pid: int, design_id, profile, raw_path: Path) -> str:
                 raise ValueError("Ce 3MF n'a pas de modèle (un 3MF tranché ne garde que le G-code) : prends le projet d'origine")
     except zipfile.BadZipFile:
         raise ValueError("Fichier illisible : ce n'est pas un 3MF")
-    iid = f"up{int(pid)}_{int(_t.time())}"
+    iid = f"up{int(targets[0][0])}_{int(_t.time())}"
     dest = local_path_of(iid)
     dest.parent.mkdir(parents=True, exist_ok=True)
     import shutil
     shutil.move(str(raw_path), dest)
-    did = str(design_id or "").strip()
-    keys = [f"{own_key(pid)}:"]
-    if did.isdigit():
-        prof = str(profile or "").strip()
-        keys += [f"{did}:{prof}"] if prof and _re.fullmatch(r"\d+", prof) else []
-        keys += [f"{did}:"]
-    for k in keys:
+    # chaque impression visee (une seule, ou celles d'un groupe) : la sienne, et son modele et son profil
+    keys = []
+    for pid, design_id, profile in targets:
+        keys.append(f"{own_key(pid)}:")
+        did = str(design_id or "").strip()
+        if did.isdigit():
+            prof = str(profile or "").strip()
+            keys += [f"{did}:{prof}"] if prof and _re.fullmatch(r"\d+", prof) else []
+            keys.append(f"{did}:")
+    for k in dict.fromkeys(keys):
         _index_put(k, iid)
     return iid
 
