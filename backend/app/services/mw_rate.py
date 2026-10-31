@@ -170,23 +170,29 @@ def imgs_of(g) -> list:
     return [u for u in (g.get("photos") or []) if u.split("?")[0].lower().endswith(tuple(_MIME))]
 
 
-def card_url(print_id) -> str:
-    return f"/api/v1/makerworld/rate-card/{int(print_id)}.jpg"
+def card_url(print_ids) -> str:
+    """La carte des filaments de ces impressions (31/10/2026 : toutes celles du modele, comme le partage ; avant,
+    une seule, et un modele imprime en plusieurs fois n'en montrait qu'une partie)."""
+    ids = [int(x) for x in (print_ids if isinstance(print_ids, (list, tuple)) else [print_ids])][:40]
+    return f"/api/v1/makerworld/rate-card/{'-'.join(map(str, ids))}.jpg"
 
 
 _cards: dict = {}
 
 
-async def card_jpeg(print_id: int):
-    """La carte des filaments d'une impression (telegram_share), en JPEG ; None sans filament colore."""
+async def card_jpeg(print_ids):
+    """La carte des filaments de ces impressions (telegram_share), en JPEG ; None sans filament colore."""
+    from sqlalchemy import select
     from sqlalchemy.orm import selectinload
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print
     from . import filament_card
     from .telegram_share import filaments_used, card_rows
+    ids = [int(x) for x in (print_ids if isinstance(print_ids, (list, tuple)) else [print_ids])][:40]
     async with AsyncSessionLocal() as db:
-        p = await db.get(Print, int(print_id), options=[selectinload(Print.filament_usage)])
-        rows = card_rows(await filaments_used(db, [p])) if p else []
+        ps = (await db.execute(select(Print).options(selectinload(Print.filament_usage)).where(Print.id.in_(ids))
+                               .order_by(Print.print_date.desc()))).scalars().all()
+        rows = card_rows(await filaments_used(db, list(ps))) if ps else []
     if not rows:
         return None
     k = repr(rows)
@@ -245,10 +251,9 @@ async def to_rate(fresh: bool = False) -> dict:
                                "photos": [], "photo_source": None, "print_ids": []}
         it["printed"] += 1
         it["print_ids"].append(p.id)
-        # la carte des filaments (30/10/2026) : celle de l'impression dont viennent les photos, sinon la plus recente
-        colored = any(u.color_hex and (u.grams_used or 0) > 0 for u in p.filament_usage)
-        if colored and ("card_print" not in it or (not it["photos"] and imgs_of(g))):
-            it["card_print"] = p.id
+        # la carte des filaments (30/10/2026) : ceux de toutes les impressions du modele (31/10/2026, comme le partage)
+        if any(u.color_hex and (u.grams_used or 0) > 0 for u in p.filament_usage):
+            it.setdefault("card_prints", []).append(p.id)
         # Photos : celles du print le plus recent qui en a ; sinon celles de son groupe.
         imgs = imgs_of(g)
         if not it["photos"] and imgs:
@@ -283,9 +288,9 @@ async def to_rate(fresh: bool = False) -> dict:
     out = sorted(vals, key=lambda x: x["last_date"] or "", reverse=True)
     out.sort(key=lambda x: not x["photos"])                 # avec photos d'abord, puis les plus recents
     for x in out:                                           # la carte en dernier, dans la limite des photos
-        pid = x.pop("card_print", None)
-        if pid:
-            x["photos"] = x["photos"][:MAX_PHOTOS - 1] + [card_url(pid)]
+        pids = x.pop("card_prints", None)
+        if pids:
+            x["photos"] = x["photos"][:MAX_PHOTOS - 1] + [card_url(pids)]
     return {"items": out, "rated_known": rated is not None, "stats": stats}
 
 
@@ -478,10 +483,10 @@ async def _submit(design_id: str, rating_id: str, score: int, content: str, phot
         raise AccountError("Texte trop long (2000 caractères au plus)")
     files = []
     for u in (photos or [])[:MAX_PHOTOS]:
-        c = re.fullmatch(r"/api/v1/makerworld/rate-card/(\d+)\.jpg", u or "")
+        c = re.fullmatch(r"/api/v1/makerworld/rate-card/(\d+(?:-\d+){0,39})\.jpg", u or "")
         if c:                                     # la carte des filaments : dessinee pour l'envoi
             import uuid
-            jpg = await card_jpeg(int(c.group(1)))
+            jpg = await card_jpeg(c.group(1).split("-"))
             if not jpg:
                 continue
             _tmp_dir().mkdir(parents=True, exist_ok=True)

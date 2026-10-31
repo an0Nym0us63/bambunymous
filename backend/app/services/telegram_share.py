@@ -714,7 +714,11 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
         pool_out[at:at] = tl_pool
     by_id.update({i: f for i, (f, _l) in tls.items()})
     if card:
-        pool_out.append({"id": CARD_ID, "url": card_preview(card), "video": False, "card": True})
+        # juste apres les medias joints d'office (31/10/2026 : en tout dernier, apres les captures et les photos non
+        # choisies, on ne la voyait pas)
+        sel = set(default_ids)
+        at = max((n + 1 for n, m in enumerate(pool_out) if m["id"] in sel), default=0)
+        pool_out.insert(at, {"id": CARD_ID, "url": card_preview(card), "video": False, "card": True})
     camera = bool(live)
     with_card = bool(card) and (len(media) < ALBUM_MAX - (1 if live else 0) or chosen is None)
     if chosen is not None:

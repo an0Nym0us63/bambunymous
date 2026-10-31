@@ -422,13 +422,16 @@ async def mw_rate_photo(file: UploadFile = File(...), _: str = Depends(require_m
     return {"id": await _call(asyncio.to_thread(mw_rate.save_extra, raw, file.content_type))}
 
 
-@router.get("/rate-card/{print_id}.jpg")
-async def mw_rate_card(print_id: int):
-    """La carte des filaments d'une impression (30/10/2026), a joindre a son evaluation. Sans connexion, comme les
-    photos de l'impression (une balise <img> n'envoie pas le jeton)."""
+@router.get("/rate-card/{ids}.jpg")
+async def mw_rate_card(ids: str):
+    """La carte des filaments des impressions d'un modele (« 12-15-18 », 30/10/2026), a joindre a son evaluation. Sans
+    connexion, comme les photos de l'impression (une balise <img> n'envoie pas le jeton)."""
+    import re as _re
     from fastapi import Response
     from ....services import mw_rate
-    jpg = await mw_rate.card_jpeg(print_id)
+    if not _re.fullmatch(r"\d+(?:-\d+){0,39}", ids or ""):
+        raise HTTPException(404)
+    jpg = await mw_rate.card_jpeg(ids.split("-"))
     if not jpg:
         raise HTTPException(404)
     return Response(jpg, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
