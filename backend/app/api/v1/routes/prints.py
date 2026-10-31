@@ -3082,6 +3082,55 @@ async def group_source_upload(group_id: int, file: UploadFile = File(...), desig
     return {"ok": True, "iid": iid, "print_ids": [r[0] for r in rows]}
 
 
+@router.post("/{print_id}/plate-image/restore")
+async def print_plate_image_restore(print_id: int, _: str = Depends(require_admin)):
+    """La vignette du plateau reprise du 3MF (31/10/2026 : supprimee par erreur, elle ne revenait pas) : celle du 3MF
+    tranche garde avec l'impression (son plateau), sinon celle du 3MF d'origine."""
+    import zipfile
+    from ....services.archive import local_or_archive
+    from ....services.mw_source import print_file
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if not p:
+            raise HTTPException(404, "Impression introuvable")
+        n = int(p.plate_id) if str(p.plate_id or "").isdigit() else None
+        srcs = []
+        sliced = local_or_archive(p.model_3mf) if p.model_3mf else None
+        if sliced and sliced.is_file():
+            srcs.append(("tranché", sliced))
+        try:
+            orig = print_file(p.design_id, p.mw_profile_id, p.mw_plates, p.id)
+            if orig and orig.is_file():
+                srcs.append(("d'origine", orig))
+        except Exception:
+            pass
+
+        def pick():
+            for what, f in srcs:
+                try:
+                    with zipfile.ZipFile(f) as z:
+                        names = z.namelist()
+                        cands = ([f"Metadata/plate_{n}.png"] if n else []) + sorted(x for x in names if re.fullmatch(r"Metadata/plate_\d+\.png", x))
+                        for k in cands:
+                            if k in names:
+                                return what, z.read(k)
+                except (OSError, zipfile.BadZipFile):
+                    continue
+            return None, None
+        what, data = await asyncio.to_thread(pick)
+        if not data:
+            raise HTTPException(404, "Pas de vignette dans les 3MF de cette impression")
+        d = DATA_DIR / "prints" / str(print_id)
+        d.mkdir(parents=True, exist_ok=True)
+        tmp = d / "plate.png.part"
+        tmp.write_bytes(data)
+        os.replace(tmp, d / "plate.png")
+        p.plate_image = f"prints/{print_id}/plate.png"
+        await db.commit()
+    gallery_touched()
+    return {"ok": True, "from": what, "plate_image": f"prints/{print_id}/plate.png"}
+
+
 @router.get("/{print_id}/3mf")
 async def print_3mf(print_id: int, kind: str = Query("sliced", pattern="^(sliced|source)$"), _: str = Depends(get_current_user)):
     """Le 3MF d'une impression : « sliced » celui tranche pour mon imprimante (garde au lancement),

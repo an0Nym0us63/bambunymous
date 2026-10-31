@@ -1445,6 +1445,13 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       isAdmin && { icon: "📤", label: p.source_3mf ? "Remplacer le 3MF d'origine" : "Importer le 3MF d'origine",
         hint: p.design_id ? "le mien, si MakerWorld ne le donne pas" : "le projet Bambu Studio, pour la vue 3D", tone: "#F97316", onClick: importSource },
       p.model_3mf && { icon: "⤓", label: "Télécharger le 3MF tranché", hint: "pour mon imprimante", tone: "#F59E0B", onClick: () => download3mf(p.id, "sliced") },
+      // la vignette du plateau, reprise du 3MF (31/10/2026 : supprimee par erreur, elle ne revenait pas)
+      isAdmin && (p.model_3mf || p.source_3mf) && { icon: "🖼", label: "Reprendre la vignette du 3MF", hint: p.model_3mf ? "l'image du plateau, depuis le 3MF tranché" : "l'image du plateau, depuis le 3MF d'origine",
+        tone: "#0EA5E9", onClick: async () => {
+          try { const r = await client.post(`/prints/${p.id}/plate-image/restore`);
+            setP(prev => ({ ...prev, plate_image: r.data.plate_image, updated_at: new Date().toISOString() })); setRefreshKey(k => k + 1); onChanged?.();
+            toast(`Vignette reprise du 3MF ${r.data.from}`); }
+          catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
       isAdmin && p.has_vue3d && { icon: "🧊", label: "Vues 3D et vignette", hint: p.thumb_3d ? "Vignette : une vue 3D" : "Vignette : l'image du plateau", tone: "#0EA5E9",
         onClick: () => openVue3D({ kind: "print", id: p.id, onDone: async () => {
           try { const r = await client.get(`/prints/${p.id}/vue3d`); setP(prev => ({ ...prev, thumb_3d: r.data.sel.length ? 1 : 0, has_vue3d: r.data.slots.length > 0, updated_at: new Date().toISOString() })); }
