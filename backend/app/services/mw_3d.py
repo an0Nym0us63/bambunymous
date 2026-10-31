@@ -1438,12 +1438,6 @@ def blocked(src: Path, key: str) -> str | None:
     from ..core.config import settings
     if not settings.MW_3D:
         return "Vue 3D désactivée (MW_3D=false)"
-    try:
-        size = src.stat().st_size
-    except OSError:
-        return None
-    if settings.MW_3D_MAX_MB > 0 and size > settings.MW_3D_MAX_MB * 1024 * 1024:
-        return f"3MF trop gros pour la vue 3D ({size // (1024 * 1024)} Mo, MW_3D_MAX_MB={settings.MW_3D_MAX_MB})"
     f = _read_side(key, "failed.json")
     if isinstance(f, dict):
         try:

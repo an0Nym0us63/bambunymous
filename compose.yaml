@@ -14,8 +14,7 @@ services:
       - DATA_DIR=/data
       - DATABASE_URL=sqlite+aiosqlite:////data/bambunymous.db
       - UPLOADS_DIR=/data/uploads
-      # Vue 3D sur une petite machine : laisser de cote les 3MF de plus de N Mo, ou n'en preparer aucune
-      # - MW_3D_MAX_MB=100
+      # Vue 3D sur une petite machine : n'en preparer aucune
       # - MW_3D=false
     env_file:
       - .env
