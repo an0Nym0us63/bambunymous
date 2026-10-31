@@ -70,36 +70,138 @@ def _mul(a: list, b: list) -> list:
     return out
 
 
-def _objects(xml) -> dict:
-    """Les objets d'un fichier .model : id -> {"mesh": son maillage (octets), ou "components": [...], "pid"}.
-    Decoupe par recherche de balises, sans expression sur tout le texte (des dizaines de Mo : 27/10/2026)."""
-    b = xml.encode() if isinstance(xml, str) else xml
-    out = {}
+_CHUNK = 8 << 20                       # lu par morceaux de 8 Mo (31/10/2026)
+
+
+class _Mesh:
+    """Un maillage lu (31/10/2026) : sommets (n, 3) float32 (la vue les ramene a 16 bits dans la boite du plateau),
+    triangles (m, 3) int32, peinture (None, ou (numeros des
+    triangles peints, leurs codes)), et n, la taille de son XML (la part de la piece dans l'avancement). Avant, le XML
+    de tous les objets restait en memoire pendant toute la conversion, et chaque maillage etait decoupe en millions
+    de petits objets Python : un 3MF de 28 Mo demandait 620 Mo, un de 150 Mo plus de 3 Go."""
+    __slots__ = ("v", "t", "paint", "n")
+
+    def __init__(self, v, t, paint, n):
+        v.flags.writeable = t.flags.writeable = False    # partage entre les plateaux et la vue assemblee
+        self.v, self.t, self.paint, self.n = v, t, paint, n
+
+    def __len__(self):
+        return self.n
+
+
+def _objects(src) -> tuple:
+    """Les objets d'un fichier .model (octets, ou fichier ouvert) : (id -> {"mesh": _Mesh, ou "components": [...],
+    "pid", "type"}, le texte hors des objets). Lu par morceaux, les maillages au fil de la lecture : la memoire ne tient
+    que les tableaux, jamais tout le XML (31/10/2026). Decoupe par recherche de balises, sans expression sur tout le
+    texte (des dizaines de Mo : 27/10/2026)."""
+    import io
+    import numpy as np
+    fh = io.BytesIO(src.encode() if isinstance(src, str) else bytes(src)) if isinstance(src, (bytes, bytearray, str)) else src
+    st = {"b": b""}
+
+    def fill(keep: int) -> bool:
+        """Garde le texte a partir de keep et lit le morceau suivant ; faux a la fin du fichier."""
+        c = fh.read(_CHUNK)
+        st["b"] = st["b"][keep:] + c
+        return bool(c)
+
+    def until(tag: bytes, pos: int) -> tuple:
+        """(position de tag, pos recale) : tout est garde depuis pos (une balise courte)."""
+        while True:
+            i = st["b"].find(tag, pos)
+            if i >= 0:
+                return i, pos
+            if not fill(pos):
+                return -1, 0
+            pos = 0
+
+    def scan(tags: tuple, pos: int, seen: list) -> tuple:
+        """(position, balise, pos recale) de la premiere des balises a partir de pos ; le texte passe va a seen.
+        (-1, None, _) a la fin du fichier."""
+        m = max(len(t) for t in tags)
+        while True:
+            ks = [(k, t) for t in tags for k in (st["b"].find(t, pos),) if k >= 0]
+            if ks:
+                k, t = min(ks)
+                return k, t, pos
+            keep = max(pos, len(st["b"]) - m)
+            seen.append(st["b"][pos:keep])
+            if not fill(keep):
+                seen.append(st["b"])
+                return -1, None, len(st["b"])
+            pos = 0
+
+    def section(pos: int, end: bytes, parse) -> int:
+        """Une section de balises (<vertices>, <triangles>) lue morceau par morceau : parse(bloc) recoit des blocs de
+        balises entieres. Rend la position apres la fin de la section."""
+        while True:
+            e = st["b"].find(end, pos)
+            if e >= 0:
+                parse(st["b"][pos:e])
+                return e + len(end)
+            cut = st["b"].rfind(b"/>", pos)
+            if cut >= 0:
+                parse(st["b"][pos:cut + 2])
+                pos = cut + 2
+            if not fill(pos):
+                return len(st["b"])
+            pos = 0
+
+    out, rest = {}, []
     pos = 0
+    fill(0)
     while True:
-        i = b.find(b"<object", pos)
+        i, _, pos = scan((b"<object",), pos, rest)
         if i < 0:
             break
-        j = b.find(b">", i)
+        rest.append(st["b"][pos:i])
+        j, i = until(b">", i)
         if j < 0:
             break
-        if b[i + 7:i + 8] not in (b" ", b"\t", b"\n", b"\r", b">", b"/"):
+        if st["b"][i + 7:i + 8] not in (b" ", b"\t", b"\n", b"\r", b">", b"/"):
+            rest.append(st["b"][i:i + 7])
             pos = i + 7                                    # <objects…> : pas un objet
             continue
-        head = b[i + 7:j].decode("utf-8", "replace")
-        if head.endswith("/"):
-            body, pos = b"", j + 1
-        else:
-            k = b.find(b"</object>", j)
-            if k < 0:
-                break
-            body, pos = b[j + 1:k], k + 9
+        head = st["b"][i + 7:j].decode("utf-8", "replace")
+        pos = j + 1
+        small, verts, tris, pidx, codes, ntri = [], [], [], [], [], [0]
+
+        def ptris(blk):
+            t_, pi_, co_ = _tris(blk)
+            if len(t_):
+                if co_:
+                    pidx.append(pi_ + ntri[0])
+                    codes.extend(co_)
+                tris.append(t_)
+                ntri[0] += len(t_)
+        if not head.endswith("/"):
+            while True:
+                k, t, pos = scan((b"<vertices", b"<triangles", b"</object>"), pos, small)
+                if k < 0:
+                    break
+                small.append(st["b"][pos:k])
+                if t == b"</object>":
+                    pos = k + 9
+                    break
+                g, k = until(b">", k)
+                if g < 0:
+                    break
+                small.append(st["b"][k:g + 1])
+                if t == b"<vertices":
+                    pos = section(g + 1, b"</vertices>", lambda blk: verts.append(_verts(blk)))
+                else:
+                    pos = section(g + 1, b"</triangles>", ptris)
+        body = b"".join(small)
         oid = _attr(head, "id")
         if oid is None:
             continue
         o = {"pid": _attr(head, "pid"), "type": _attr(head, "type")}
         if b"<mesh" in body:
-            o["mesh"] = body
+            v = np.concatenate(verts) if verts else np.zeros((0, 3), dtype=np.float32)
+            t = np.concatenate(tris) if tris else np.zeros((0, 3), dtype=np.int32)
+            paint = (np.concatenate(pidx), codes) if codes else None
+            o["mesh"] = _Mesh(v, t, paint, 45 * (len(v) + len(t)) + len(body))
+        del verts[:], tris[:]
         comps = []
         if b"<component" in body:
             for c in re.finditer(rb"<component\b([^>]*)/?>", body):
@@ -109,7 +211,7 @@ def _objects(xml) -> dict:
         if comps:
             o["components"] = comps
         out[oid] = o
-    return out
+    return out, b"".join(rest)
 
 
 def _vals(blk: bytes, tag: bytes, rx) -> list:
@@ -120,20 +222,19 @@ def _vals(blk: bytes, tag: bytes, rx) -> list:
     return rx.findall(blk)
 
 
-def _mesh(body):
-    """(sommets (n, 3) float64, triangles (m, 3) int64, peinture) d'un maillage. Peinture : None, ou
-    (numeros des triangles peints, leurs codes) ; les valeurs sont lues a plat, en une fois."""
+def _verts(blk: bytes):
+    """Les sommets (n, 3) float32 d'un bloc de balises <vertex>."""
     import numpy as np
-    b = body.encode() if isinstance(body, str) else body
-    vs, ve = b.find(b"<vertices"), b.find(b"</vertices>")
-    verts = np.array(list(map(float, _vals(b[vs:ve], b"<vertex ", _XYZ))) if vs >= 0 and ve > vs else [],
-                     dtype=np.float64).reshape(-1, 3)
-    ts, te = b.find(b"<triangles"), b.find(b"</triangles>")
-    blk = b[ts:te] if ts >= 0 and te > ts else b""
+    return np.array(list(map(float, _vals(blk, b"<vertex ", _XYZ))), dtype=np.float32).reshape(-1, 3)
+
+
+def _tris(blk: bytes) -> tuple:
+    """(triangles (m, 3) int32, numeros des triangles peints (dans ce bloc) ou None, leurs codes) d'un bloc de
+    balises <triangle>. Les valeurs sont lues a plat, en une fois."""
+    import numpy as np
     ntri = blk.count(b"<triangle ")
     if b"paint_color" not in blk:
-        tris = np.array(list(map(int, _vals(blk, b"<triangle ", _V123))), dtype=np.int64).reshape(-1, 3)
-        return verts, tris, None
+        return np.array(list(map(int, _vals(blk, b"<triangle ", _V123))), dtype=np.int32).reshape(-1, 3), None, []
     npaint = blk.count(b'paint_color="')
     if blk.count(b'="') == 3 * ntri + npaint:
         # le cas de Bambu Studio : v1, v2, v3, puis paint_color s'il y en a ; decoupe aux guillemets
@@ -143,10 +244,10 @@ def _mesh(body):
         isp = np.fromiter(map(b" paint_color=".__eq__, keys), dtype=bool, count=len(keys))
         if int(isp.sum()) != npaint:                    # autre mise en page : on regarde la fin de chaque cle
             isp = np.fromiter((k.endswith(b"paint_color=") for k in keys), dtype=bool, count=len(keys))
-        tris = np.array(list(map(int, compress(vals, ~isp))), dtype=np.int64).reshape(-1, 3)
+        tris = np.array(list(map(int, compress(vals, ~isp))), dtype=np.int32).reshape(-1, 3)
         codes = [c.decode() for c in compress(vals, isp)]
         pidx = np.cumsum(~isp)[isp] // 3 - 1             # le code suit le v3 de son triangle
-        return verts, tris, (pidx, codes)
+        return tris, pidx, codes
     # d'autres attributs sur les triangles : balise par balise
     tl, pidx, codes = [], [], []
     for k, (i_, j_, l_, rest) in enumerate(_TRI_PAINT.findall(blk)):
@@ -155,7 +256,22 @@ def _mesh(body):
         if m:
             pidx.append(k)
             codes.append(m.group(1).decode())
-    return verts, np.array(tl, dtype=np.int64).reshape(-1, 3), (np.array(pidx, dtype=np.int64), codes)
+    return np.array(tl, dtype=np.int32).reshape(-1, 3), np.array(pidx, dtype=np.int64), codes
+
+
+def _mesh(m):
+    """(sommets (n, 3) float32, triangles (m, 3) int32, peinture) d'un maillage lu (_Mesh), en lecture seule ; les
+    calculs (placement, peinture, coupes) se font en float64, les plateaux gardent leurs sommets en float32."""
+    return m.v, m.t, m.paint
+
+
+def _collapse(g) -> None:
+    """Les morceaux d'un groupe [sommets, triangles, n] mis bout a bout, a la place des morceaux (sans les garder
+    en double)."""
+    import numpy as np
+    for i in (0, 1):
+        if len(g[i]) > 1:
+            g[i][:] = [np.concatenate(g[i])]
 
 
 def _leaf_state(code: str):
@@ -615,8 +731,10 @@ def convert(src: Path, out_dir: Path, key: str = None, gsrc: dict | None = None)
     import numpy as np
     z = zipfile.ZipFile(src)
     names = set(z.namelist())
-    root_xml = z.read("3D/3dmodel.model").decode("utf-8", "replace")
-    root_objs = _objects(root_xml)
+    # lu par morceaux (31/10/2026) : les maillages en tableaux, le reste du texte (construction, metadonnees) a part
+    with z.open("3D/3dmodel.model") as fh:
+        root_objs, root_rest = _objects(fh)
+    root_xml = root_rest.decode("utf-8", "replace")
     files = {}                                         # chemin -> objets de ce fichier
 
     def objs_in(path):
@@ -624,7 +742,11 @@ def convert(src: Path, out_dir: Path, key: str = None, gsrc: dict | None = None)
         if not p:
             return root_objs
         if p not in files:
-            files[p] = _objects(z.read(p)) if p in names else {}
+            if p in names:
+                with z.open(p) as fh:
+                    files[p] = _objects(fh)[0]
+            else:
+                files[p] = {}
         return files[p]
     colors = _colors_of(z)
     zch = _z_changes(z, colors)
@@ -843,6 +965,7 @@ def convert(src: Path, out_dir: Path, key: str = None, gsrc: dict | None = None)
                     cuts = [(zt, c) for zt, e, c, kind in zc_[1] if kind == 2 or zc_[0] == "SingleExtruder" or e in (None, ex)] \
                         if zc_ and not isinstance(ex, str) else []    # le G-code dit deja les changements en hauteur
                     if not cuts and len(by_ext) == 1:
+                        vt = vt.astype(np.float32)
                         g = groups_out.setdefault(gk(col, ident, tag), [[], [], 0])
                         g[0].append(vt)
                         if own is not None:
@@ -863,7 +986,7 @@ def convert(src: Path, out_dir: Path, key: str = None, gsrc: dict | None = None)
                         # seuls les sommets de cette couleur (piece peinte ou tranchee), renumerotes
                         g = groups_out.setdefault(gk(c, ident, tag), [[], [], 0])
                         used, inv = np.unique(tr.ravel(), return_inverse=True)
-                        g[0].append(vv[used] if back is None else (vv[used] - back[1]) @ back[0] + back[2])
+                        g[0].append((vv[used] if back is None else (vv[used] - back[1]) @ back[0] + back[2]).astype(np.float32))
                         if own is not None:
                             own.setdefault(ident, []).append(g[0][-1])
                         g[1].append(inv.reshape(-1, 3) + g[2])
@@ -887,15 +1010,17 @@ def convert(src: Path, out_dir: Path, key: str = None, gsrc: dict | None = None)
                                    "empty": not groups_out, **(extra or {})})
             return None
         # recentre le plateau : au milieu en X et Y, pose sur z = 0
-        allv = {col: np.concatenate(g[0]) for col, g in groups_out.items()}
-        lo = np.min([a.min(axis=0) for a in allv.values()], axis=0)
-        hi = np.max([a.max(axis=0) for a in allv.values()], axis=0)
+        for g in groups_out.values():
+            _collapse(g)
+        allv = {col: g[0][0] for col, g in groups_out.items()}
+        lo = np.min([a.min(axis=0) for a in allv.values()], axis=0).astype(np.float64)
+        hi = np.max([a.max(axis=0) for a in allv.values()], axis=0).astype(np.float64)
         # un lithophane (30/10/2026) : ses couches de couleur en marches (des colonnes a dessus plat, sur une grille)
         # deviennent des surfaces continues ; vues par derriere, elles faisaient des pixels en escalier
         if (bool(_LITHO.search(f"{pname} {names_txt}")) or (hi[2] - lo[2] <= 6 and min(hi[0] - lo[0], hi[1] - lo[1]) >= 40))                 and not any(isinstance(k, tuple) for k in groups_out):
             for col, g in list(groups_out.items()):
                 try:
-                    sm = _smooth_terraces(allv[col], np.concatenate(g[1]))
+                    sm = _smooth_terraces(allv[col], g[1][0])
                 except Exception as e:                  # une forme inattendue : laissee telle quelle
                     logger.debug(f"[3D] lissage impossible : {e}")
                     sm = None
@@ -905,7 +1030,14 @@ def convert(src: Path, out_dir: Path, key: str = None, gsrc: dict | None = None)
                     allv[col] = sm[0]
         shift = np.array([(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, lo[2]])
         size = [float(hi[0] - lo[0]), float(hi[1] - lo[1]), float(hi[2] - lo[2])]
-        buf = _pack_bin({col: (allv[col] - shift, np.concatenate(g[1])) for col, g in groups_out.items()})
+        for col, a in allv.items():
+            if a.flags.writeable:
+                a -= shift
+            else:
+                allv[col] = a - shift
+        buf = _pack_bin({col: (allv[col], groups_out[col][1][0]) for col in allv})
+        groups_out.clear()
+        allv.clear()
         # compresse une fois pour toutes : servi tel quel (Content-Encoding: gzip), le telephone le recoit leger
         say(pct(prog["done"]), "Compression")
         _write(out_dir / f"plate_{n}.bin", _gzip(bytes(buf)))
@@ -972,6 +1104,7 @@ def convert(src: Path, out_dir: Path, key: str = None, gsrc: dict | None = None)
         moved: dict = {}
         # la copie d'un plateau unique reste telle qu'imprimee (rien a ranger)
         tidy = False if from_plate else _tidy(own, {(oid, k): mt for oid, k, mt in asm}, on_plate, moved)
+        own.clear()                                     # les sommets des pieces : seuls les groupes les gardent
         r = write(ASSEMBLED_N, "Assemblé", groups_out, total, pw, {"assembled": True, "z_asm": True, **({"tidied": True} if tidy else {}), **({"from_plate": True} if from_plate else {})})
         if r:
             # les pieces, pour l'edition (29/10/2026) : leur cle (objet:instance), leur nom, et « o », le decalage de
@@ -1101,8 +1234,8 @@ def _pack_bin(groups: dict) -> bytes:
     couleur RGBA, u32 sommets, u32 triangles, (BIN_MAGIC_P : u32 numero de piece), puis 6 plans de sommets (x bas, x haut, y bas, y haut, z bas, z haut), puis 4 plans
     des ecarts d'indices (int32, petit-boutiste)."""
     import numpy as np
-    lo = np.min([v.min(axis=0) for v, _ in groups.values()], axis=0)
-    hi = np.max([v.max(axis=0) for v, _ in groups.values()], axis=0)
+    lo = np.min([v.min(axis=0) for v, _ in groups.values()], axis=0).astype(np.float64)
+    hi = np.max([v.max(axis=0) for v, _ in groups.values()], axis=0).astype(np.float64)
     sc = np.where(hi - lo > 0, (hi - lo) / 65535, 1.0)
     pieces = any(isinstance(k, tuple) for k in groups)
     buf = bytearray(struct.pack("<II3f3f", BIN_MAGIC_P if pieces else BIN_MAGIC, len(groups), *lo.tolist(), *sc.tolist()))
@@ -1209,27 +1342,38 @@ def _decimate(groups_out: dict, target: int) -> int:
     sous target), les triangles devenus plats retires. La forme reste, les details fins s'estompent. Rend le nombre
     de triangles restant ; groups_out est remplace sur place."""
     import numpy as np
-    flat = {col: (np.concatenate(g[0]), np.concatenate(g[1])) for col, g in groups_out.items()}
-    lo = np.min([v.min(axis=0) for v, _ in flat.values()], axis=0)
-    hi = np.max([v.max(axis=0) for v, _ in flat.values()], axis=0)
+    for g in groups_out.values():
+        _collapse(g)
+    flat = {col: (g[0][0], g[1][0]) for col, g in groups_out.items()}
+    lo = np.min([v.min(axis=0) for v, _ in flat.values()], axis=0).astype(np.float64)
+    hi = np.max([v.max(axis=0) for v, _ in flat.values()], axis=0).astype(np.float64)
     cell = float(np.linalg.norm(hi - lo)) / 4000 or 0.01
+    step = 1 << 20                                      # triangles par morceau : sans tableau de la taille du plateau
     out, total = {}, 0
     for _ in range(12):
         out, total = {}, 0
         for col, (v, t) in flat.items():
-            q = np.floor((v - lo) / cell).astype(np.int64)
-            k = (q[:, 0] << 42) | (q[:, 1] << 21) | q[:, 2]
+            k = np.floor((v[:, 0] - lo[0]) / cell).astype(np.int64) << 42
+            k |= np.floor((v[:, 1] - lo[1]) / cell).astype(np.int64) << 21
+            k |= np.floor((v[:, 2] - lo[2]) / cell).astype(np.int64)
             _, first, inv = np.unique(k, return_index=True, return_inverse=True)
-            nt = inv.reshape(-1)[t]
-            keep = (nt[:, 0] != nt[:, 1]) & (nt[:, 1] != nt[:, 2]) & (nt[:, 0] != nt[:, 2])
-            nt = nt[keep]
-            out[col] = (v[first], nt)
-            total += len(nt)
+            del k
+            inv = inv.reshape(-1).astype(np.int32)      # sur 32 bits : la moitie de la memoire
+            keep = []
+            for a in range(0, len(t), step):
+                nt = inv[t[a:a + step]]
+                keep.append((nt[:, 0] != nt[:, 1]) & (nt[:, 1] != nt[:, 2]) & (nt[:, 0] != nt[:, 2]))
+            keep = np.concatenate(keep) if keep else np.zeros(0, dtype=bool)
+            out[col] = (first, inv, keep)               # les triangles gardes ne sont faits qu'a la fin
+            total += int(keep.sum())
         if total <= target:
             break
         cell *= 1.5
-    for col, (v, t) in out.items():
-        groups_out[col] = [[v], [t], len(v)]
+    for col, (first, inv, keep) in out.items():
+        v, t = flat.pop(col)
+        nt = [inv[t[a:a + step][keep[a:a + step]]] for a in range(0, len(t), step)]
+        groups_out[col] = [[v[first]], [np.concatenate(nt) if nt else np.zeros((0, 3), dtype=np.int32)], len(first)]
+        del v, t, nt
     return total
 
 
@@ -1398,7 +1542,7 @@ _POOL = {"bg": None, "view": None, "gcode": None}         # le fond (priorite ba
 
 
 # ── Un 3MF trop gros pour la memoire (31/10/2026) ──
-# Un 3MF de 150 Mo demande plus d'1 Go : le processus de conversion etait tue (OOM), l'appli retombait sur une
+# Un 3MF de 150 Mo demandait plus de 3 Go : le processus de conversion etait tue (OOM), l'appli retombait sur une
 # conversion dans le serveur, qui tombait a son tour ; au redemarrage, le meme modele restait a faire, en boucle.
 # Desormais : jamais de conversion dans le serveur apres un processus tue ; l'echec est note dans mw_3d/<cle>/failed.json
 # (avec la taille et la date du 3MF, le format, la memoire du conteneur) et le modele n'est plus retente tant que rien
@@ -1434,10 +1578,7 @@ def _mark_failed(src: Path, key: str, why: str) -> None:
 
 
 def blocked(src: Path, key: str) -> str | None:
-    """Pourquoi ce 3MF ne se convertit pas (None : il se convertit)."""
-    from ..core.config import settings
-    if not settings.MW_3D:
-        return "Vue 3D désactivée (MW_3D=false)"
+    """Pourquoi ce 3MF ne se convertit plus (None : il se convertit) : une conversion qui a manque de memoire."""
     f = _read_side(key, "failed.json")
     if isinstance(f, dict):
         try:

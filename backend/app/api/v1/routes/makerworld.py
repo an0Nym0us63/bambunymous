@@ -683,7 +683,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
         T.WATCH[did] = iid
         meta = await T.from_3mf_early(src, iid)             # des le premier plateau pret (29/10/2026)
         key = iid
-        why3d = None if meta else T.blocked(src, iid)       # desactivee, ou abandonnee (31/10/2026)
+        why3d = None if meta else T.blocked(src, iid)       # abandonnee faute de memoire (31/10/2026)
         if gcode > 0:
             # aux couleurs de cette impression, lues dans le G-code de son 3MF tranche (31/10/2026) : ses propres
             # plateaux ; l'assemblage, les finitions et l'enregistrement restent ceux de la vue d'origine (key)
