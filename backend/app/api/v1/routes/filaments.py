@@ -1289,6 +1289,11 @@ async def archive_spool(
 class WeightAdjust(BaseModel):
     mode:  str    # "set" | "add" | "sub"
     value: float  # grammes
+    # des grammes rendus depuis une impression (31/10/2026) : gardes dans l'historique de la bobine
+    print_id: Optional[int] = None
+    usage_id: Optional[int] = None
+    label: Optional[str] = None
+    unlink: bool = False          # la consommation est detachee de la bobine dans la foulee
 
 
 @router.post("/spools/{sid}/weight", response_model=SpoolOut)
@@ -1309,6 +1314,10 @@ async def adjust_spool_weight(
         s.remaining_weight_g = max(0.0, body.value)
     elif body.mode == "add":
         s.remaining_weight_g = max(0.0, cur + body.value)
+        if body.print_id and body.value > 0:
+            from ....models.spool_move import SpoolMove
+            db.add(SpoolMove(spool_id=sid, grams=round(body.value, 1), kind="rendu", print_id=body.print_id,
+                             usage_id=body.usage_id, unlinked=bool(body.unlink), label=(body.label or "")[:250] or None))
     elif body.mode == "sub":
         s.remaining_weight_g = max(0.0, cur - body.value)
     else:
@@ -2058,23 +2067,28 @@ async def delete_filament(fid: int, _: str = Depends(get_current_user)):
 
 @router.get("/spools/{sid}/usage")
 async def spool_usage_history(sid: int, _: str = Depends(get_current_user)):
-    """Retourne tous les FilamentUsage liés à cette bobine, avec infos du print."""
+    """L'historique de la bobine : ses consommations (kind « usage », avec infos du print) et, depuis le 31/10/2026,
+    ce qu'on lui a rendu (kind « rendu » ; « annule » : une consommation annulee), le plus recent d'abord."""
     from sqlalchemy import select as _sel
     from ....models.print_history import FilamentUsage as _FU, Print as _P
+    from ....models.spool_move import SpoolMove
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(
             _sel(
-                _FU.print_id, _FU.grams_used, _FU.cost,
-                _P.file_name, _P.print_date, _P.status
+                _FU.id, _FU.print_id, _FU.grams_used, _FU.cost,
+                _P.file_name, _P.translated_name, _P.print_date, _P.status
             )
             .join(_P, _FU.print_id == _P.id)
             .where(_FU.spool_id == sid)
             .order_by(_P.print_date.desc())
         )).all()
-    return [
+        moves = (await db.execute(_sel(SpoolMove).where(SpoolMove.spool_id == sid))).scalars().all()
+    out = [
         {
+            "kind":       "usage",
+            "usage_id":   r.id,
             "print_id":   r.print_id,
-            "file_name":  r.file_name,
+            "file_name":  r.translated_name or r.file_name,
             "print_date":  r.print_date.isoformat() if r.print_date else None,
             "status":      r.status,
             "grams_used": r.grams_used,
@@ -2082,3 +2096,69 @@ async def spool_usage_history(sid: int, _: str = Depends(get_current_user)):
         }
         for r in rows
     ]
+    out += [{"kind": m.kind, "id": m.id, "print_id": m.print_id, "file_name": m.label, "grams": m.grams,
+             "print_date": m.at.isoformat() + "Z" if m.at else None, "reverted": m.reverted_at is not None,
+             "reverted_at": m.reverted_at.isoformat() + "Z" if m.reverted_at else None} for m in moves]
+    out.sort(key=lambda x: x.get("print_date") or "", reverse=True)
+    return out
+
+
+@router.post("/spools/{sid}/history/undo")
+async def spool_history_undo(sid: int, body: dict = Body({}), _: str = Depends(require_admin)):
+    """Annule une ligne de l'historique d'une bobine (31/10/2026) :
+      - une consommation (kind « usage », id : la consommation) : ses grammes reviennent a la bobine, et l'impression
+        ne compte plus sur elle (detachee, ses couts refaits) ;
+      - un rendu (kind « move », id : le mouvement) : ses grammes sont repris a la bobine, et la consommation d'ou ils
+        venaient les retrouve (ou est rattachee de nouveau a la bobine, si elle en avait ete detachee)."""
+    from datetime import datetime as _dt
+    from ....models.print_history import FilamentUsage as _FU
+    from ....models.spool_move import SpoolMove
+    from .prints import _propagate_from_print
+    from ....services.print_tracker import _costs as _calc_costs
+    from ....models.print_history import Print as _P
+    kind, oid = str(body.get("kind") or ""), body.get("id")
+    if not isinstance(oid, int):
+        raise HTTPException(400, "Ligne inconnue")
+    async with AsyncSessionLocal() as db:
+        s = await db.get(Spool, sid)
+        if not s:
+            raise HTTPException(404, "Bobine introuvable")
+        pid = None
+        if kind == "usage":
+            fu = await db.get(_FU, oid)
+            if not fu or fu.spool_id != sid:
+                raise HTTPException(404, "Consommation introuvable")
+            g = round(fu.grams_used or 0, 1)
+            s.remaining_weight_g = round((s.remaining_weight_g or 0) + g, 1)
+            fu.spool_id = None
+            pid = fu.print_id
+            p = await db.get(_P, pid)
+            db.add(SpoolMove(spool_id=sid, grams=g, kind="annule", print_id=pid, usage_id=fu.id, unlinked=True,
+                             label=(p.translated_name or p.file_name) if p else None))
+            msg = f"{g:g} g rendus à la bobine".replace(".", ",")
+        elif kind == "move":
+            m = await db.get(SpoolMove, oid)
+            if not m or m.spool_id != sid or m.reverted_at is not None:
+                raise HTTPException(404, "Ligne introuvable ou déjà annulée")
+            s.remaining_weight_g = round(max(0.0, (s.remaining_weight_g or 0) - (m.grams or 0)), 1)
+            fu = await db.get(_FU, m.usage_id) if m.usage_id else None
+            if fu is not None:
+                if m.unlinked:
+                    if fu.spool_id is None:
+                        fu.spool_id = sid                   # rattachee a la bobine, comme avant
+                elif fu.spool_id == sid:
+                    fu.grams_used = round((fu.grams_used or 0) + (m.grams or 0), 1)
+                pid = fu.print_id
+            m.reverted_at = _dt.utcnow()
+            msg = f"{(m.grams or 0):g} g repris à la bobine".replace(".", ",")
+        else:
+            raise HTTPException(400, "Ligne inconnue")
+        if pid:
+            await db.flush()
+            p = await db.get(_P, pid)
+            if p:
+                await _calc_costs(db, p)
+                await _propagate_from_print(db, pid)
+        await db.commit()
+    _clear_match_cache()
+    return {"ok": True, "message": msg}

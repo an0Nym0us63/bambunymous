@@ -199,6 +199,12 @@
   <section id="filaments-historique">
     <h3>Historique d'utilisation d'une bobine</h3>
     <p>Le bouton <span class="ui">📋 Historique</span> (ou <span class="ui">📋 Voir l'historique</span> dans la carte « Son histoire ») ouvre l'historique de la bobine : en tête, la bobine, le nombre d'impressions et les grammes consommés en tout ; puis une ligne par impression qui l'a consommée, avec la vignette du plateau, le nom, la date, <span class="ui">● Réussie</span> ou <span class="ui">● Échouée</span>, et à droite les grammes consommés et leur coût. Touche une ligne pour ouvrir la fiche de l'impression.</p>
+    <p>Ce qui a été <b>rendu</b> à la bobine y figure aussi, en vert (« ⚖️ Rendu à la bobine · nom de l'impression », +12,5 g, avec sa date) : en supprimant une impression, en dissociant un filament, ou en annulant une consommation. Le nom de l'impression reste même quand elle a été supprimée, et l'en-tête ajoute le total rendu.</p>
+    <p><span class="admin">admin</span> Chaque ligne a un bouton <span class="ui">↶ Annuler</span>, après confirmation :</p>
+    <ul>
+      <li>sur une <b>consommation</b> : ses grammes reviennent à la bobine, et l'impression ne compte plus sur elle (elle en est dissociée, ses coûts sont refaits) ; une ligne verte « ↩️ Consommation annulée » le garde ;</li>
+      <li>sur un <b>rendu</b> : ses grammes sont repris à la bobine, et l'impression d'où ils venaient les retrouve (ou se rattache de nouveau à la bobine si elle en avait été dissociée) ; la ligne reste, barrée, « annulé ».</li>
+    </ul>
     <figure class="phone"><img src="img/filaments-historique-bobine.webp" alt="Historique d'utilisation d'une bobine"><figcaption>Chaque impression a retiré des grammes de la bobine.</figcaption></figure>
     <p>Sans aucune impression : « Aucune utilisation enregistrée ». Le ✕ revient à la fiche.</p>
   </section>

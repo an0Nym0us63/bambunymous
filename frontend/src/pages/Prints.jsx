@@ -298,7 +298,15 @@ function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
   return (
     <FSheet onClose={onCancel} z={3000} bottom={<>
       <button onClick={onCancel} style={{ ...fBtn, flex:1 }}>Annuler</button>
-      <button onClick={()=>onConfirm(fracs)} style={{ ...fBtn, flex:2, border:"none", color:"#fff", fontWeight:900,
+      <button onClick={async () => {
+        // supprimer en rendant du filament (31/10/2026) : on le confirme, rendre sans s'en apercevoir faussait la bobine
+        if (!restoreOnly && totalAdded > 0) {
+          const n = mapped.filter(f => (fracs[f.id] ?? 0) > 0).length;
+          if (!(await showConfirm(`Supprimer l'impression et rendre ${totalAdded.toFixed(1).replace(".", ",")} g à ${n > 1 ? `${n} bobines` : "la bobine"} ? `
+            + "Pour supprimer sans rien rendre, reviens et choisis « Non ».", { title: "Rendre du filament ?", confirmLabel: "Supprimer et rendre" }))) return;
+        }
+        onConfirm(fracs);
+      }} style={{ ...fBtn, flex:2, border:"none", color:"#fff", fontWeight:900,
         background:`linear-gradient(135deg, ${C}, ${lighten(C)})`, boxShadow:`0 8px 18px -10px ${C}` }}>
         {restoreOnly ? `✓ Restituer${totalAdded > 0 ? ` ${totalAdded.toFixed(1).replace(".", ",")} g` : ""}` : "🗑 Supprimer"}</button></>}>
       {/* l'en-tete : ce qu'on fait, et a quelle impression */}
@@ -380,7 +388,7 @@ function UnmapFilamentConfirm({ f, printId, onClose, onDone }) {
     // 1. Restituer les grammes à la bobine si demandé et si non archivée
     if (fraction > 0 && f.spool_id) {
       await client.post(`/filaments/spools/${f.spool_id}/weight`,
-        { mode:"add", value: (f.grams_used||0)*fraction }).catch(()=>{});
+        { mode:"add", value: (f.grams_used||0)*fraction, print_id: printId, usage_id: f.id, unlink: true }).catch(()=>{});
     }
     // 2. Démapper le filament
     await client.patch(`/prints/${printId}/filament-usage/${f.id}`, { spool_id: null }).catch(()=>{});

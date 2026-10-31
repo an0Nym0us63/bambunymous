@@ -880,6 +880,18 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
   const [usageHistory, setUsageHistory] = React.useState([]);
   const [loadingUsage, setLoadingUsage] = React.useState(false);
 
+  // annuler une ligne de l'historique (31/10/2026) : une consommation rend ses grammes, un rendu les reprend
+  const undoLine = async (kind, id, grams, back) => {
+    const g = `${(grams || 0).toFixed(1).replace(".", ",")} g`;
+    if (!(await showConfirm(back ? `Rendre ${g} à la bobine ? L'impression ne comptera plus sur elle (ses coûts sont refaits).`
+      : `Reprendre ${g} à la bobine (annuler ce rendu) ?`, { title: "Annuler cette ligne ?", confirmLabel: back ? "Rendre" : "Reprendre" }))) return;
+    try {
+      await client.post(`/filaments/spools/${spool.id}/history/undo`, { kind, id });
+      egg("annule_ligne");
+      await loadUsage();
+      refresh();
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
   const loadUsage = async () => {
     setLoadingUsage(true);
     try {
@@ -1120,15 +1132,39 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
               <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#8B5CF6" }}>📋 Historique · bobine #{spool.id}</div>
               <div style={{ fontSize:17, fontWeight:900, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
               <div style={{ fontSize:12, fontWeight:700, color:"var(--muted)" }}>
-                {usageHistory.length} impression{usageHistory.length !== 1 ? "s" : ""}
-                {usageHistory.length > 0 && ` · ${Math.round(usageHistory.reduce((t, u) => t + (u.grams_used || 0), 0))} g consommés`}</div>
+                {(() => { const us = usageHistory.filter(u => (u.kind || "usage") === "usage"), back = usageHistory.filter(u => u.kind && u.kind !== "usage" && !u.reverted);
+                  return <>{us.length} impression{us.length !== 1 ? "s" : ""}
+                    {us.length > 0 && ` · ${Math.round(us.reduce((t, u) => t + (u.grams_used || 0), 0))} g consommés`}
+                    {back.length > 0 && ` · ${Math.round(back.reduce((t, u) => t + (u.grams || 0), 0))} g rendus`}</>; })()}</div>
             </div>
           </div>
           <div style={{ padding:"12px 14px 18px", display:"flex", flexDirection:"column", gap:6 }}>
             {usageHistory.length === 0 && <p style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:"24px 0" }}>Aucune utilisation enregistrée</p>}
             {usageHistory.map((u, i) => {
+              // un rendu (ou une consommation annulee) : vert, « + », et annulable s'il ne l'est pas deja (31/10/2026)
+              if (u.kind && u.kind !== "usage") {
+                const when = u.print_date ? new Date(u.print_date).toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" }) : null;
+                return <div key={`m${u.id}`} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:14, border:"1px solid var(--border)",
+                  background:"linear-gradient(135deg, rgba(34,197,94,0.12), transparent 55%), var(--surface2)", opacity: u.reverted ? 0.55 : 1 }}>
+                  <span style={{ width:46, height:46, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20,
+                    background:"rgba(34,197,94,0.15)" }}>{u.kind === "annule" ? "↩️" : "⚖️"}</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+                      textDecoration: u.reverted ? "line-through" : "none" }}>
+                      {u.kind === "annule" ? "Consommation annulée" : "Rendu à la bobine"}{u.file_name ? ` · ${u.file_name}` : ""}</div>
+                    <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>
+                      {when}{u.reverted ? " · annulé" : ""}</div>
+                  </div>
+                  <div style={{ textAlign:"right", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
+                    <div style={{ fontSize:14, fontWeight:900, color:"#16a34a" }}>+{(u.grams || 0).toFixed(1)} g</div>
+                    {!u.reverted && isAdmin && <button onClick={() => undoLine("move", u.id, u.grams, false)} data-tip="Reprendre ces grammes à la bobine"
+                      style={{ padding:"3px 9px", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer", border:"1px solid var(--border)",
+                        background:"var(--surface)", color:"var(--text2)" }}>↶ Annuler</button>}
+                  </div>
+                </div>;
+              }
               const st = u.status === "SUCCESS" ? ["Réussie", "#22c55e"] : u.status === "FAILED" ? ["Échouée", "#ef4444"] : null;
-              return <button key={i} onClick={() => openDetail(u.print_id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:14,
+              return <div key={i} role="button" tabIndex={0} onClick={() => openDetail(u.print_id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:14,
                 border:"1px solid var(--border)", cursor:"pointer", textAlign:"left", font:"inherit", color:"inherit",
                 background:`linear-gradient(135deg, ${main}14, transparent 55%), var(--surface2)` }}>
                 <FitBox src={apiThumb(apiUrl(`/prints/${u.print_id}/image`), 128)} loading="lazy" decoding="async" style={{ width:46, height:46, borderRadius:10, flexShrink:0, background:"var(--surface)" }}/>
@@ -1138,11 +1174,15 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                     {u.print_date && <span>{new Date(u.print_date).toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" })}</span>}
                     {st && <span style={{ color:st[1] }}>● {st[0]}</span>}</div>
                 </div>
-                <div style={{ textAlign:"right", flexShrink:0 }}>
+                <div style={{ textAlign:"right", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
                   <div style={{ fontSize:14, fontWeight:900, ...fGrad("#ef4444", "#f97316") }}>−{u.grams_used?.toFixed(1)} g</div>
                   {u.cost > 0 && <div style={{ fontSize:11, fontWeight:700, color:"#16a34a" }}>{moneyVal(u.cost, 2)} €</div>}
+                  {isAdmin && u.usage_id && <button onClick={e => { e.stopPropagation(); undoLine("usage", u.usage_id, u.grams_used, true); }}
+                    data-tip="Rendre ces grammes à la bobine : l'impression ne compte plus sur elle"
+                    style={{ padding:"3px 9px", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer", border:"1px solid var(--border)",
+                      background:"var(--surface)", color:"var(--text2)" }}>↶ Annuler</button>}
                 </div>
-              </button>; })}
+              </div>; })}
           </div>
         </FSheet>, document.body)}
       {detail && createPortal(<div onClick={e => e.stopPropagation()} style={{ position:"relative", zIndex:usageZ + 1 }}>

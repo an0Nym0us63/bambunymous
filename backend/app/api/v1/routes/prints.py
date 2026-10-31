@@ -2537,9 +2537,12 @@ async def restore_spool_weights(
     body: { "fraction": 1.0 }  (1.0 = 100%, 0.5 = 50%)
     """
     from ....models.filament import Spool
+    from ....models.spool_move import SpoolMove
     fracs = body.get("fracs", {})
     restored = []
     async with AsyncSessionLocal() as db:
+        pr0 = await db.get(Print, print_id)
+        label = (pr0.translated_name or pr0.file_name or f"Impression {print_id}") if pr0 else f"Impression {print_id}"
         usages = (await db.execute(
             select(_FU).where(_FU.print_id == print_id, _FU.spool_id.isnot(None))
         )).scalars().all()
@@ -2553,6 +2556,9 @@ async def restore_spool_weights(
             spool.remaining_weight_g = round((spool.remaining_weight_g or 0) + add_g, 1)
             fu.grams_used = round(max(0, (fu.grams_used or 0) - add_g), 1)
             restored.append({"spool_id": fu.spool_id, "added_g": add_g, "usage_id": fu.id})
+            # garde dans l'historique de la bobine (31/10/2026), meme si l'impression est supprimee ensuite
+            if add_g > 0:
+                db.add(SpoolMove(spool_id=fu.spool_id, grams=add_g, kind="rendu", print_id=print_id, usage_id=fu.id, label=label))
         if restored:
             # Les grammes consommes ont baisse : le poids et le cout du print (et des
             # objets qui en derivent) suivent, sinon l'en-tete gardait l'ancien total.
