@@ -313,3 +313,80 @@ async def printed_profile(design_id: str) -> dict:
     if best_sc is None or best_sc <= 0:
         best_p = next((p for p in avec if p.get("default")), avec[0])
     return {"profile": str(best_p["profile_id"]), "sure": False}
+
+
+async def profile_per_print(design_id: str, print_ids: list) -> dict:
+    """{print_id: {"profile", "plate"}} : le profil de chaque impression du modele, comme la ligne « Plateaux » de sa
+    carte (31/10/2026, pour l'assemblage d'un groupe : deux profils d'un meme modele) -- donne par l'imprimante ou
+    choisi a la main, lu dans son 3MF tranche, sinon deduit : nom de la tache, image de l'apercu, numero et poids du
+    plateau. Sans indice : absente."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    from .makerworld import _base
+    did = str(design_id or "").strip()
+    ids = [int(x) for x in print_ids if str(x).isdigit()][:60]
+    if not did.isdigit() or not ids:
+        return {}
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Print.id, Print.status, Print.plate_id, Print.mw_profile_id, Print.mw_plates,
+                                        Print.original_name, Print.task_name, Print.file_name, Print.total_weight_g,
+                                        Print.model_3mf).where(Print.id.in_(ids)))).all()
+    try:
+        from_files = await profiles_from_files([(r.id, r.mw_profile_id, r.model_3mf) for r in rows])
+    except Exception:
+        logger.exception("[MW] profil lu dans les 3MF")
+        from_files = {}
+    base = await _base(did, True)
+    profs = [p for p in ((base.get("profiles") if isinstance(base, dict) else None) or []) if isinstance(p, dict)]
+    avec = [p for p in profs if p.get("plates")]
+    by_inst = {str(p.get("instance_id")): str(p.get("profile_id")) for p in profs if p.get("instance_id")}
+    out, todo = {}, []
+    for r in rows:
+        m = _manual(r.mw_plates) or {}
+        pp = str(m.get("profile") or r.mw_profile_id or from_files.get(r.id) or "")
+        pp = by_inst.get(pp, pp)
+        if pp and pp != "0":
+            out[r.id] = {"profile": pp, "plate": int(r.plate_id) if str(r.plate_id or "").isdigit() else None}
+        else:
+            todo.append(r)
+    if not todo or not avec:
+        return out
+    if len(avec) == 1:
+        for r in todo:
+            out[r.id] = {"profile": str(avec[0]["profile_id"]), "plate": int(r.plate_id) if str(r.plate_id or "").isdigit() else None}
+        return out
+    weights = {r.id: r.total_weight_g for r in todo if r.total_weight_g}
+    try:
+        img = await asyncio.to_thread(_guess, avec, [r.id for r in todo], weights)
+    except Exception:
+        logger.exception("[MW] profil par impression : reconnaissance a l'image")
+        img = {}
+    mwords = _words(" ".join(str(base.get(k) or "") for k in ("title", "title_fr", "title_mw_fr")))
+    for r in todo:
+        nw = _words(f"{r.original_name or ''} {r.task_name or ''} {r.file_name or ''}")
+        g = img.get(str(r.id))
+        try:
+            i = int(r.plate_id or 0)
+        except (TypeError, ValueError):
+            i = 0
+        best_p, best_sc = None, 0.0
+        for p in avec:
+            sc = 0.0
+            pws = [w for w in (_words(p.get("title")) - mwords, _words(p.get("title_original")) - mwords) if len(w) >= 2]
+            ns = max((len(pw & nw) / len(pw) for pw in pws), default=0)
+            if ns >= 0.5:
+                sc += 12 * ns                      # le nom de la tache cite ce profil
+            if g and str(g["profile"]) == str(p.get("profile_id")):
+                sc += 6 if g.get("sure") is False else 10
+            pl = next((q for q in p["plates"] if q.get("index") == i), None) if i else None
+            if i and not pl:
+                sc -= 4
+            elif pl and pl.get("weight_g") and (r.total_weight_g or 0) > 0:
+                sc += 3 * min(pl["weight_g"], r.total_weight_g) / max(pl["weight_g"], r.total_weight_g)
+            if sc > best_sc:
+                best_p, best_sc = p, sc
+        if best_p is not None:
+            plate = i or (int(g["plate"]) if g and str(g["profile"]) == str(best_p.get("profile_id")) and g.get("plate") else None)
+            out[r.id] = {"profile": str(best_p["profile_id"]), "plate": plate or None}
+    return out

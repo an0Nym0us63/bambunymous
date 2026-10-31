@@ -882,23 +882,16 @@ async def _group_view(gid: int) -> dict:
     from ....services.mw_source import known, resolve, fetch, path_of
     profs = {r[0]: _profile(r[2], r[3]) or "" for r in rows}
     plate_of = {r[0]: int(r[4]) if str(r[4] or "").isdigit() else None for r in rows}
-    try:
-        for pid, p_ in (await _G.profiles_from_files([(r[0], r[2], r[7]) for r in rows if not profs[r[0]]])).items():
-            profs[pid] = str(p_)
-    except Exception:
-        logger.exception("[3D] groupe : profils des 3MF tranches")
     for did_ in {str(r[1]).strip() for r in rows if str(r[1] or "").strip().isdigit()}:
-        need = [r[0] for r in rows if str(r[1] or "").strip() == did_ and not profs[r[0]]]
-        if not need:
-            continue
         try:
-            for k, gss in ((await _G.guess(did_, need)).get("guesses") or {}).items():
-                if gss.get("profile"):
-                    profs[int(k)] = str(gss["profile"])
-                    if plate_of.get(int(k)) is None and gss.get("plate"):
-                        plate_of[int(k)] = int(gss["plate"])
+            for pid, d in (await _G.profile_per_print(did_, [r[0] for r in rows if str(r[1] or "").strip() == did_])).items():
+                if d.get("profile"):
+                    profs[pid] = str(d["profile"])
+                if plate_of.get(pid) is None and d.get("plate"):
+                    plate_of[pid] = int(d["plate"])
         except Exception:
-            logger.exception("[3D] groupe : profils devines")
+            logger.exception("[3D] groupe : profil de chaque impression")
+    logger.info(f"[3D] assemblage du groupe {gid} : profils {profs}")
     srcs: dict = {}
     for pid, did_, prof, plates, plate_id, tname, fname, _m3 in rows:
         f = None
