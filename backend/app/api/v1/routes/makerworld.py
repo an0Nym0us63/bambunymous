@@ -871,19 +871,59 @@ async def _group_view(gid: int) -> dict:
     async with AsyncSessionLocal() as db:
         g = await db.get(Group, gid)
         rows = (await db.execute(select(Print.id, Print.design_id, Print.mw_profile_id, Print.mw_plates, Print.plate_id,
-                                        Print.translated_name, Print.file_name)
+                                        Print.translated_name, Print.file_name, Print.model_3mf)
                                  .where(Print.group_id == gid).order_by(Print.print_date, Print.id))).all()
     if not g or not rows:
         raise HTTPException(404, "Groupe inconnu")
+    # le profil de chaque impression (31/10/2026 : sans profil enregistre, toutes prenaient le 3MF par defaut du modele,
+    # et deux profils d'un meme modele n'en faisaient qu'un) : lu dans son 3MF tranche, sinon deduit (image de l'apercu,
+    # plateau), comme la ligne « Plateaux » de sa carte
+    from ....services import mw_plate_guess as _G
+    from ....services.mw_source import known, resolve, fetch, path_of
+    profs = {r[0]: _profile(r[2], r[3]) or "" for r in rows}
+    plate_of = {r[0]: int(r[4]) if str(r[4] or "").isdigit() else None for r in rows}
+    try:
+        for pid, p_ in (await _G.profiles_from_files([(r[0], r[2], r[7]) for r in rows if not profs[r[0]]])).items():
+            profs[pid] = str(p_)
+    except Exception:
+        logger.exception("[3D] groupe : profils des 3MF tranches")
+    for did_ in {str(r[1]).strip() for r in rows if str(r[1] or "").strip().isdigit()}:
+        need = [r[0] for r in rows if str(r[1] or "").strip() == did_ and not profs[r[0]]]
+        if not need:
+            continue
+        try:
+            for k, gss in ((await _G.guess(did_, need)).get("guesses") or {}).items():
+                if gss.get("profile"):
+                    profs[int(k)] = str(gss["profile"])
+                    if plate_of.get(int(k)) is None and gss.get("plate"):
+                        plate_of[int(k)] = int(gss["plate"])
+        except Exception:
+            logger.exception("[3D] groupe : profils devines")
     srcs: dict = {}
-    for pid, did_, prof, plates, plate_id, tname, fname in rows:
-        f = await asyncio.to_thread(print_file, did_, prof, plates, pid)
+    for pid, did_, prof, plates, plate_id, tname, fname, _m3 in rows:
+        f = None
+        d0, pr0 = str(did_ or "").strip(), profs.get(pid) or ""
+        if d0.isdigit() and pr0:
+            # le 3MF de CE profil : garde, sinon recupere (une fois : il sert ensuite a tout)
+            iid0 = known(d0, pr0)
+            if not iid0:
+                try:
+                    cand = await resolve(d0, pr0)
+                    if cand and not path_of(cand).is_file():
+                        await fetch(cand)
+                    iid0 = cand if cand and path_of(cand).is_file() else None
+                except Exception as ex:
+                    logger.info(f"[3D] groupe : 3MF du profil {pr0} de {d0} non recupere : {ex}")
+            f = path_of(iid0) if iid0 else None
+        if not f or not f.is_file():
+            f = await asyncio.to_thread(print_file, did_, prof, plates, pid)
         if not f or not f.is_file():
             continue
-        e = srcs.setdefault(f.stem, {"path": f, "did": str(did_ or ""), "prof": _profile(prof, plates) or "", "ids": [], "plates": set(),
+        plate_id = plate_of.get(pid)
+        e = srcs.setdefault(f.stem, {"path": f, "did": str(did_ or ""), "prof": profs.get(pid) or _profile(prof, plates) or "", "ids": [], "plates": set(),
                                      "name": tname or fname or ""})
         e["ids"].append(pid)
-        e["plates"].add(int(plate_id) if str(plate_id or "").isdigit() else None)
+        e["plates"].add(plate_id)
     if not srcs:
         raise HTTPException(404, "Aucun 3MF d'origine dans ce groupe : importe-les, ou ouvre la vue 3D de ses modèles")
     chosen = await _color_choices(f"group:{gid}")
