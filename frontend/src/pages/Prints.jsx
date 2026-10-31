@@ -3253,7 +3253,8 @@ export default function Prints() {
   // passe en selection, la bulle du bas rappelle le modele et valide.
   // une association a un modele MakerWorld (fenetre dediee) vient de changer des impressions
   useEffect(() => {
-    const f = () => load();
+    // une impression ou un groupe nomme (vues 3D) : relu sur place, la liste garde sa position
+    const f = e => { const d = e?.detail; if (d?.id) refreshInPlace(d.kind === "group" ? { groupId: Number(d.id) } : { id: Number(d.id) }); else load(); };
     window.addEventListener("bn-prints-changed", f);
     return () => window.removeEventListener("bn-prints-changed", f);
   }); // eslint-disable-line react-hooks/exhaustive-deps

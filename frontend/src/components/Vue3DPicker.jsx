@@ -13,7 +13,8 @@ function Picker({ kind, id, shot, onDone, close }) {
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const act = async f => {
     setBusy(true);
-    try { await f(); await load(); onDone?.(); window.dispatchEvent(new Event("bn-prints-changed")); }
+    // la liste ne relit que cette impression ou ce groupe (31/10/2026 : elle repartait en haut de page)
+    try { await f(); await load(); onDone?.(); window.dispatchEvent(new CustomEvent("bn-prints-changed", { detail: { kind, id } })); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setBusy(false); }
   };
