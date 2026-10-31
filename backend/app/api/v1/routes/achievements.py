@@ -131,11 +131,10 @@ async def achievements_secrets_by_account(acc=Depends(require_own_account), db: 
 
 
 def _dev(dev: str) -> str:
-    """L'appareil qui demande (identifiant tire au hasard par la page) : ce qu'un appareil a
-    annonce ne l'est plus pour lui seul, les autres l'annoncent encore (avant, le premier
-    appareil a demander « mangeait » l'annonce, et le telephone n'avait rien)."""
-    import re
-    return dev if re.fullmatch(r"[A-Za-z0-9]{6,40}", dev or "") else ""
+    """Les fetes (cartes, grades, paliers) se suivent par compte (31/10/2026) : une fois vues sur un appareil, elles ne
+    se rejouent plus sur les autres (chacun avait les siennes, tout repassait sur chaque telephone et ordinateur).
+    L'identifiant d'appareil que la page envoie encore est ignore."""
+    return ""
 
 
 @router.get("/news")
@@ -464,7 +463,6 @@ async def achievements_gift_accounts(username: str = Depends(require_main), db: 
 async def achievements_gift(body: dict, username: str = Depends(require_main), db: AsyncSession = Depends(get_db)):
     """Offre en une fois : gifts = [{to, kind, n}], kind parmi spins / keys / tickets / loupes / surprise (n = %).
     Cles et tickets : la maison seulement ; tours : la maison ou un compte de la famille qui a sa roue."""
-    await _check_secret(body, username, db)
     from ....services import achievements as A
     gifts = (body or {}).get("gifts") or []
     if not isinstance(gifts, list) or not gifts or len(gifts) > 40:

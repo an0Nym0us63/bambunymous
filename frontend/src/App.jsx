@@ -120,8 +120,7 @@ export default function App() {
         {/* ancienne adresse des succes (liens deja envoyes) : onglet des statistiques */}
         <Route path="achievements" element={<AchievementsRedirect />} />
         <Route path="anonymous" element={<Anonymous />} />
-        <Route path="rembobiner" element={<Navigate to="/coup-de-pouce" replace />} />
-        <Route path="coup-de-pouce" element={<React.Suspense fallback={null}><CoupDePouce /></React.Suspense>} />
+        <Route path="cdpnymous" element={<React.Suspense fallback={null}><CoupDePouce /></React.Suspense>} />
         <Route path="teapot" element={<Teapot />} />
         <Route path="guide" element={<React.Suspense fallback={null}><Guide /></React.Suspense>} />
         {/* l'ancienne adresse du guide (fichiers statiques, ouverts a tous jusqu'au 23/10/2026) */}

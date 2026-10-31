@@ -5,7 +5,7 @@ import { useTrackDetail } from "../utils/track";
 
 // Le coup de pouce (28/10/2026) : une seule page, a la place de « rembobiner » (tours de roue) et de l'ancien
 // « coup de pouce » (chance de surprise). On choisit a qui, quoi et combien, plusieurs cadeaux et plusieurs
-// comptes a la fois, et tout part en un envoi (meme secret qu'avant : le mot de passe).
+// comptes a la fois, et tout part en un envoi.
 const KINDS = [
   { k: "spins",   e: "🎡", label: "Tours de roue",      hint: "la maison, ou un compte de la famille qui a sa roue", unit: n => `tour${n > 1 ? "s" : ""}` },
   { k: "keys",    e: "🔑", label: "Clés",               hint: "la maison seulement", unit: n => `clé${n > 1 ? "s" : ""}` },
@@ -42,7 +42,6 @@ export default function CoupDePouce() {
   const [sel, setSel] = useState(() => new Set());
   const [qty, setQty] = useState({ spins: 0, keys: 0, tickets: 0, loupes: 0 });
   const [surprise, setSurprise] = useState("");       // "" = pas touche
-  const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [result, setResult] = useState(null);
@@ -78,12 +77,11 @@ export default function CoupDePouce() {
   const go = async e => {
     e.preventDefault();
     if (!gifts.length) { setErr(chosen.length ? "Choisis quoi offrir" : "Choisis à qui offrir"); return; }
-    if (!pw) { setErr("Mot de passe requis"); return; }
     setBusy(true); setErr(""); setResult(null);
     try {
-      const { data } = await client.post("/achievements/gift", { secret: pw, gifts });
+      const { data } = await client.post("/achievements/gift", { gifts });
       setResult(data);
-      setPw(""); setQty({ spins: 0, keys: 0, tickets: 0, loupes: 0 }); setSurprise("");
+      setQty({ spins: 0, keys: 0, tickets: 0, loupes: 0 }); setSurprise("");
       if ((data.done || []).length >= 2) egg("mecene");
       await load();
     } catch (e2) { setErr(e2.response?.data?.detail || e2.message); }
@@ -163,7 +161,6 @@ export default function CoupDePouce() {
           : <div style={{ fontSize: 13, color: "var(--muted)", fontWeight: 700 }}>{chosen.length ? "Choisis quoi offrir au-dessus." : "Choisis d'abord à qui."}</div>}
         {skipped.length > 0 && <div style={{ fontSize: 12, color: "#f59e0b", fontWeight: 700 }}>Pas possible : {skipped.join(", ")}.</div>}
       </div>
-      <input type="password" value={pw} onChange={e => { setPw(e.target.value); setErr(""); }} placeholder="Mot de passe" autoComplete="off" style={field}/>
       <button type="submit" disabled={busy || !gifts.length} style={{ padding: "12px 0", borderRadius: 12, border: "none", fontSize: 15,
         background: gifts.length ? "linear-gradient(135deg, #3b82f6, #8b5cf6)" : "var(--surface2)", color: gifts.length ? "#fff" : "var(--muted)",
         fontWeight: 800, cursor: gifts.length ? "pointer" : "default" }}>
