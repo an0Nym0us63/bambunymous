@@ -27,6 +27,10 @@ function inHorizontalScroller(el) {
   return false;
 }
 
+// Un doigt sur la vue 3D (tourner, deplacer une piece) ou dans l'edition d'un assemblage en plein ecran (01/11/2026 :
+// un glisser vers le bas y rechargeait la page) : jamais un geste de la page.
+export const noPageGesture = el => !!(el?.closest?.("[data-3d]") || document.body.classList.contains("bn-edit3d"));
+
 // Une fenetre (feuille) ouverte par-dessus la page : on ne rafraichit pas.
 const sheetOpen = () => !!document.querySelector("[data-no-pull]");
 
@@ -35,7 +39,7 @@ export function installPullRefreshGuard() {
   installed = true;
   let touching = false;
   const report = () => {
-    try { window.BambuScan.setAtTop(!touching && !sheetOpen() && pageTop()); } catch { /* coquille absente */ }
+    try { window.BambuScan.setAtTop(!touching && !sheetOpen() && !noPageGesture(null) && pageTop()); } catch { /* coquille absente */ }
   };
   // Differe : passe toujours APRES l'ecouteur de la coquille, quel que soit
   // l'ordre dans lequel ils ont ete poses. La coquille ne se trompe que quand
@@ -51,11 +55,12 @@ export function installPullRefreshGuard() {
     setTimeout(() => { pending = false; report(); }, 0);
   }, { capture: true, passive: true });
   document.addEventListener("touchstart", e => {
-    if (inHorizontalScroller(e.target)) { touching = true; report(); }
+    if (inHorizontalScroller(e.target) || noPageGesture(e.target)) { touching = true; report(); }
   }, { capture: true, passive: true });
   const end = () => { if (touching) { touching = false; report(); } };
   document.addEventListener("touchend", end, { capture: true, passive: true });
   document.addEventListener("touchcancel", end, { capture: true, passive: true });
   // Ouverture / fermeture d'une feuille : la position change sans defilement.
-  new MutationObserver(() => report()).observe(document.body, { childList: true });
+  // l'edition d'un assemblage en plein ecran (classe bn-edit3d du body) : coupe tant qu'elle dure
+  new MutationObserver(() => report()).observe(document.body, { childList: true, attributes: true, attributeFilter: ["class"] });
 }

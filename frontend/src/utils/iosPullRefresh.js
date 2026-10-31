@@ -11,6 +11,8 @@
 //  - et il s'abandonne des que le doigt part plus de cote que vers le bas.
 // Relache au-dela du seuil : la page se recharge.
 
+import { noPageGesture } from "./pullRefreshGuard";
+
 const THRESHOLD = 70;     // px tires (apres amortissement) pour recharger
 const MAX = 110;
 
@@ -81,7 +83,7 @@ export function installIosPullRefresh(force = false) {
 
   document.addEventListener("touchstart", (e) => {
     start = null; pull = 0; locked = false;
-    if (e.touches.length !== 1 || !pageTop() || document.querySelector("[data-no-pull]") || blockedBy(e.target)) return;
+    if (e.touches.length !== 1 || !pageTop() || document.querySelector("[data-no-pull]") || blockedBy(e.target) || noPageGesture(e.target)) return;
     start = { x: e.touches[0].clientX, y: e.touches[0].clientY };
   }, { passive: true, capture: true });
 

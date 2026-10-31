@@ -874,7 +874,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
     return () => { dead = true; cleanup(); api.current = null; };
   }, [url, glb]); // eslint-disable-line react-hooks/exhaustive-deps
   return <div style={{ position: "relative", width: "100%", height: "100%" }}>
-    <div ref={box} style={{ position: "absolute", inset: 0, touchAction: "none", borderRadius: "inherit", transition: "background .4s",
+    <div ref={box} data-noswipe="" data-3d="" style={{ position: "absolute", inset: 0, touchAction: "none", borderRadius: "inherit", transition: "background .4s",
       background: dark || lit ? "radial-gradient(circle at 50% 40%, #0b1020, #020308)" : "transparent" }}/>
     {pad && !bare && <div style={{ position: "absolute", right: 10, bottom: 58, display: "flex", flexDirection: "column", gap: 6, zIndex: 2 }}>
       {[[pans ? "✋" : "🔄", pans ? "Le glisser déplace la vue (toucher : tourner)" : "Le glisser tourne la vue (toucher : déplacer)", () => { const v = !pans; setPans(v); api.current?.dragPans(v); }, pans],

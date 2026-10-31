@@ -16,6 +16,7 @@ import MakerWorldModelSheet, { prefetchModel } from "../components/MakerWorldMod
 import { openCreator } from "../components/MwCreatorPage";
 import { useToRateSet, RateButton, RateStar as RateStarBtn } from "../components/MwToRate";
 import { useFriend, currentFriend } from "../store/friend";
+import { noPageGesture } from "../utils/pullRefreshGuard";
 import MwImg from "../components/MwImg";
 import client, { apiUrl, apiThumb } from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
@@ -1369,6 +1370,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
   const swipeStart = e => {
     swipe.current = null;
     if (!onPrev && !onNext) return;
+    if (noPageGesture(e.target)) return;               // tourner la vue 3D, editer un assemblage : pas l'impression voisine
     for (let el = e.target; el && el !== e.currentTarget; el = el.parentElement) {
       const ox = getComputedStyle(el).overflowX;
       if ((ox === "auto" || ox === "scroll") && el.scrollWidth > el.clientWidth) return;
