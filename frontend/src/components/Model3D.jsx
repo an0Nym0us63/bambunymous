@@ -1664,10 +1664,13 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   }, [st.lost]);   // eslint-disable-line react-hooks/exhaustive-deps
   // « 🧩 Tout le groupe » (31/10/2026) : ouverte depuis un groupe, la vue passe a l'assemblage du groupe (toutes ses
   // pieces, de tous ses modeles et profils) ; did : ce que la vue montre
-  const gid = /^group:(\d+)$/.exec(scope || "")?.[1] || null;
+  // le groupe : celui d'ou la vue est ouverte, sinon celui de l'impression (dit par le serveur, garde une fois connu)
+  const [grpSeen, setGrpSeen] = useState(null);
+  const gid = /^group:(\d+)$/.exec(scope || "")?.[1] || grpSeen;
   const [grpAll, setGrpAll] = useState(false);
   const did = grpAll && gid ? `g${gid}` : designId;
   const base = `/makerworld/3d/${encodeURIComponent(did)}`;
+  useEffect(() => { if (meta?.group_id) setGrpSeen(String(meta.group_id)); }, [meta?.group_id]);
   useEffect(() => {
     if (wait) return;                    // le profil se deduit encore (fiche d'une impression)
     let alive = true;

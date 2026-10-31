@@ -761,6 +761,20 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             ptitle, pcover = hit.get("title") or None, hit.get("cover") or None
         except Exception:
             pass
+    # le groupe de l'impression (31/10/2026) : la vue propose « 🧩 Tout le groupe » ou qu'elle soit ouverte (fiche de
+    # l'impression, galerie des vues 3D), pas seulement depuis la carte du groupe
+    grp_id, grp_n = None, 0
+    if print_id:
+        try:
+            from sqlalchemy import select as _sel, func as _fn
+            from ....models.print_history import Print as _P
+            from ....db.session import AsyncSessionLocal as _SL
+            async with _SL() as db:
+                grp_id = (await db.execute(_sel(_P.group_id).where(_P.id == print_id))).scalar()
+                if grp_id:
+                    grp_n = (await db.execute(_sel(_fn.count(_P.id)).where(_P.group_id == grp_id))).scalar() or 0
+        except Exception:
+            grp_id = None
     # l'assemblage propre a l'impression ouverte depuis sa fiche (pas depuis son groupe)
     ekey = key
     if key and source != "makerworld" and print_id and scope == f"print:{print_id}" and T.own_key(key, print_id) in T.own_keys():
@@ -836,6 +850,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             # l'assemblage propre a cette impression, si elle en a un (31/10/2026) : la cle sous laquelle il s'enregistre
             "edit_key": ekey if key and source != "makerworld" else None, "own_edit": bool(key and ekey != key),
             "can_own": bool(key and source != "makerworld" and print_id and scope == f"print:{print_id}"),
+            "group_id": grp_id if grp_n > 1 else None,
             # des plateaux encore en preparation (« pending » sur eux) : la vue redemande jusqu'a la fin
             "pending": bool((gmeta or meta or {}).get("pending"))}
 
