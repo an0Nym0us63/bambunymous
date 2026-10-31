@@ -3209,8 +3209,8 @@ export default function Prints() {
   const filaTypeF = urlVal("type"), setFilaTypeF = v => patchUrl({ type: v });
   const filamentIdF = urlVal("fil"), setFilamentIdF = v => patchUrl({ fil: v });
   const colorF = urlVal("col"), setColorF = v => patchUrl({ col: v });
-  // seulement ce qui a des vues 3D (31/10/2026)
-  const vue3dF = urlVal("v3") === "1", setVue3dF = v => patchUrl({ v3: v ? "1" : "" });
+  // ce qui a des vues 3D (« 1 ») ou n'en a pas (« 0 ») (31/10/2026) ; vide : tout
+  const vue3dF = ["1", "0"].includes(urlVal("v3")) ? urlVal("v3") : "", setVue3dF = v => patchUrl({ v3: v });
   const dateFrom = isYmd(searchParams.get("from")) ? searchParams.get("from") : "";  // borne debut plage temporelle
   const dateTo = isYmd(searchParams.get("to")) ? searchParams.get("to") : "";        // borne fin (incluse)
   const setDateFrom = v => patchUrl({ from: v });
@@ -3290,7 +3290,7 @@ export default function Prints() {
     if (colorF)      p.set("color", colorF);
     if (dateFrom)    p.set("date_from", dateFrom);
     if (dateTo)      p.set("date_to", dateTo);
-    if (vue3dF)      p.set("vue3d", "1");
+    if (vue3dF)      p.set("vue3d", vue3dF === "1" ? "1" : "-1");
     try {
       const { data } = await client.get("/prints/kpis?" + p);
       if (gen === kpiGen.current) setKpis(data);
@@ -3342,7 +3342,7 @@ export default function Prints() {
       if (colorF)      params.set("color", colorF);
       if (dateFrom)    params.set("date_from", dateFrom);
       if (dateTo)      params.set("date_to", dateTo);
-      if (vue3dF)      params.set("vue3d", "1");
+      if (vue3dF)      params.set("vue3d", vue3dF === "1" ? "1" : "-1");
       if (sortF)       params.set("sort", sortF);
       const { data } = await client.get("/prints?" + params);
       if (gen !== loadGen.current) return;   // une demande plus recente est partie
@@ -3391,7 +3391,7 @@ export default function Prints() {
         if (colorF)      params.set("color", colorF);
         if (dateFrom)    params.set("date_from", dateFrom);
         if (dateTo)      params.set("date_to", dateTo);
-        if (vue3dF)      params.set("vue3d", "1");
+        if (vue3dF)      params.set("vue3d", vue3dF === "1" ? "1" : "-1");
         if (sortF)       params.set("sort", sortF);
         const { data } = await client.get("/prints?" + params);
         if (gen !== loadGen.current) { more = false; acc = null; break; }
@@ -3591,7 +3591,7 @@ export default function Prints() {
           filaTypeF && ["🏷️", filaTypeF, () => setFilaTypeF("")],
           colorF && ["🎨", bucket?.label || colorF, () => setColorF("")],
           filamentIdF && ["🧵", fil ? (fil.translated_name || fil.name) : `#${filamentIdF}`, () => setFilamentIdF("")],
-          vue3dF && ["🧊", "Avec une vue 3D", () => setVue3dF(false)],
+          vue3dF && ["🧊", vue3dF === "1" ? "Avec une vue 3D" : "Sans vue 3D", () => setVue3dF("")],
         ].filter(Boolean);
         const round = on => ({ width:40, height:40, borderRadius:14, border:"1px solid var(--border)", flexShrink:0, cursor:"pointer",
           display:"flex", alignItems:"center", justifyContent:"center", background: on ? "rgba(59,130,246,0.14)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--muted)" });
@@ -3706,10 +3706,11 @@ export default function Prints() {
                     <span style={{ color: statusF===s ? "#fff" : STATUS_C[s] }}>{STATUS_I[s]}</span>{STATUS_LABELS[s]}</button>)}
                 </div>)}
 
-              {sec("🧊", "Vue 3D", vue3dF ? "Avec une vue 3D" : null, "#0EA5E9",
+              {sec("🧊", "Vue 3D", vue3dF ? (vue3dF === "1" ? "Avec une vue 3D" : "Sans vue 3D") : null, "#0EA5E9",
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                  <button onClick={() => setVue3dF(false)} style={chip(!vue3dF, "#0EA5E9")}>Toutes</button>
-                  <button onClick={() => setVue3dF(true)} style={chip(vue3dF, "#0EA5E9")} data-tip="Les impressions (ou leur groupe) qui ont des vues prises dans la vue 3D (📸)">🧊 Avec une vue 3D</button>
+                  <button onClick={() => setVue3dF("")} style={chip(!vue3dF, "#0EA5E9")}>Toutes</button>
+                  <button onClick={() => setVue3dF(vue3dF === "1" ? "" : "1")} style={chip(vue3dF === "1", "#0EA5E9")} data-tip="Les impressions (ou leur groupe) qui ont des vues prises dans la vue 3D (📸)">🧊 Avec une vue 3D</button>
+                  <button onClick={() => setVue3dF(vue3dF === "0" ? "" : "0")} style={chip(vue3dF === "0", "#0EA5E9")} data-tip="Les impressions qui n'ont aucune vue prise dans la vue 3D (ni elles, ni leur groupe)">Sans vue 3D</button>
                 </div>)}
 
               {sec("↕", "Trier par", sortF !== "recent" ? SORTS.find(x => x[0] === sortF)?.[2] : null, "#8B5CF6",

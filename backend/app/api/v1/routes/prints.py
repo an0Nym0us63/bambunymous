@@ -410,7 +410,7 @@ async def list_prints(
     color:       Optional[str] = None,
     date_from: Optional[str] = None,  # borne debut (ISO / YYYY-MM-DD)
     date_to:   Optional[str] = None,  # borne fin incluse
-    vue3d:     int = 0,               # 1 : seulement les impressions (ou groupes) qui ont des vues 3D (31/10/2026)
+    vue3d:     int = 0,               # 1 : seulement celles (ou leur groupe) qui ont des vues 3D ; -1 : celles qui n'en ont pas
     sort:     str = "recent",
     limit:    int = Query(40, le=200),
     offset:   int = 0,
@@ -452,7 +452,7 @@ async def list_prints(
         for c in _period_clauses(date_from, date_to):
             q = q.where(c)
         if vue3d:
-            q = q.where(_vue3d_clause())
+            q = q.where(_vue3d_clause() if vue3d > 0 else ~_vue3d_clause())
 
         # le total (affiche en tete) seulement pour la premiere page : chaque lot du defilement le recomptait sur
         # toute la table filtree (28/10/2026) ; la suite sait d'elle-meme s'il reste des cartes
@@ -1635,7 +1635,7 @@ async def prints_kpis(
         for c in _period_clauses(date_from, date_to):
             q = q.where(c)
         if vue3d:
-            q = q.where(_vue3d_clause())
+            q = q.where(_vue3d_clause() if vue3d > 0 else ~_vue3d_clause())
         r = (await db.execute(q)).one()
         return {"count": r.count or 0, "duration": int(r.duration or 0),
                 "weight_g": float(r.weight or 0), "cost": round(float(r.cost or 0), 2),
@@ -2792,9 +2792,10 @@ def _vue3d_ids() -> tuple:
 
 
 def _vue3d_clause():
-    """Une impression qui a des vues 3D, ou dont le groupe en a."""
+    """Une impression qui a des vues 3D, ou dont le groupe en a (sans groupe : seulement les siennes)."""
+    from sqlalchemy import and_ as _and
     pids, gids = _vue3d_ids()
-    return Print.id.in_(pids or [-1]) | Print.group_id.in_(gids or [-1])
+    return Print.id.in_(pids or [-1]) | _and(Print.group_id.isnot(None), Print.group_id.in_(gids or [-1]))
 
 
 def _v3slots(folder: Path) -> dict:
