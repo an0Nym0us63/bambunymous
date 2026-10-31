@@ -1172,7 +1172,7 @@ const tagS = (c, extra = {}) => ({ fontSize: 9.5, fontWeight: 900, lineHeight: "
 const pastel = c => `color-mix(in srgb, ${c} 62%, #ffffff)`;
 const statusColor = st => (V2_STATUS[st] || [])[1] || STATUS_CFG[st]?.color || "#94a3b8";
 const STATUS_ORDER = ["SUCCESS", "PARTIAL", "TO_REDO", "IN_PROGRESS", "FAILED", "CANCELLED"];
-function TileLine({ statuses }) {
+function TileLine({ statuses, left = false }) {
   const n = statuses.length || 1, count = {};
   statuses.forEach(st => { count[st] = (count[st] || 0) + 1; });
   let at = 0;
@@ -1181,10 +1181,10 @@ function TileLine({ statuses }) {
     return `${pastel(statusColor(k))} ${a0}% ${a1}%`;
   });
   const live = !!count.IN_PROGRESS;
-  return <span aria-hidden="true" style={{ position:"absolute", left:0, right:0, top:0, height:4, zIndex:1, pointerEvents:"none", overflow:"hidden",
-    background:`linear-gradient(90deg, ${stops.join(", ")})` }}>
-    {live && <span style={{ position:"absolute", inset:0, backgroundImage:"linear-gradient(90deg, transparent 0%, rgba(255,255,255,.75) 50%, transparent 100%)",
-      backgroundSize:"40% 100%", backgroundRepeat:"no-repeat", animation:"bn-tile-sweep 1.8s linear infinite" }}/>}
+  return <span aria-hidden="true" style={{ position:"absolute", left:0, top:0, ...(left ? { bottom:0, width:5 } : { right:0, height:4 }), zIndex:1, pointerEvents:"none", overflow:"hidden",
+    background:`linear-gradient(${left ? "180deg" : "90deg"}, ${stops.join(", ")})` }}>
+    {live && <span style={{ position:"absolute", inset:0, backgroundImage:`linear-gradient(${left ? "180deg" : "90deg"}, transparent 0%, rgba(255,255,255,.75) 50%, transparent 100%)`,
+      backgroundSize: left ? "100% 40%" : "40% 100%", backgroundRepeat:"no-repeat", animation: left ? "bn-tile-sweep-v 1.8s linear infinite" : "bn-tile-sweep 1.8s linear infinite" }}/>}
   </span>;
 }
 const tileFrame = (c, on) => on ? { border: `1px solid color-mix(in srgb, ${c} 35%, var(--border))` } : {};
@@ -2260,9 +2260,10 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
     <>
       {row ? (
         // en rangee : les vignettes en pile, le nom, combien et quand ; a droite la duree
-        <div onClick={handleClick} {...press} style={{ ...gFrame, display:"flex", alignItems:"center", gap:11, padding:7, borderRadius:16,
+        <div onClick={handleClick} {...press} style={{ ...gFrame, overflow:"hidden", display:"flex", alignItems:"center", gap:11, padding:"7px 7px 7px 12px", borderRadius:16,
           border:"1px solid color-mix(in srgb, #A78BFA 30%, var(--border))",
           background:"linear-gradient(90deg, color-mix(in srgb, #A78BFA 12%, transparent), transparent 60%), var(--surface2)" }}>
+          <TileLine statuses={prints.map(x => x.status)} left/>
           <span style={{ position:"relative", display:"flex", flexShrink:0, width:60, height:60 }}>
             {mosaicUrls.slice(0, 3).map(({ url: u, small }, i) => <img key={u} src={small || u} alt="" draggable={false} loading="lazy" decoding="async" style={{ position:"absolute", left: i * 9, top: i * 4,
               width:46, height:46, borderRadius:12, objectFit:"cover", background:"var(--surface)", border:"2px solid var(--surface2)", zIndex: 3 - i,
@@ -2435,22 +2436,22 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
   return (<>
     {row ? (
       // en rangee : vignette (etat, ×N, ⭐), nom, etat et date, filaments ; a droite la duree et le poids
-      <div onClick={handleClick} {...press} style={{ ...frame, display:"flex", alignItems:"center", gap:11, padding:7, borderRadius:16,
+      // (31/10/2026) l'etat en barre pastel sur le bord gauche, comme la ligne des tuiles : plus de pastille sur la miniature
+      <div onClick={handleClick} {...press} style={{ ...frame, overflow:"hidden", display:"flex", alignItems:"center", gap:11, padding:"7px 7px 7px 12px", borderRadius:16,
         border:"1px solid var(--border)", background:`linear-gradient(90deg, color-mix(in srgb, ${stC} 8%, transparent), transparent 60%), var(--surface2)` }}>
+        <TileLine statuses={[p.status]} left/>
         <span style={{ position:"relative", flexShrink:0, width:60, height:60 }}>
           <FitBox src={thumbUrl(p, 128)} loading="lazy" decoding="async" draggable={false} style={{ width:60, height:60, borderRadius:13,
             background:"var(--surface)", WebkitTouchCallout:"none" }}/>
           {check}
-          <span style={{ position:"absolute", right:-3, bottom:-3, width:15, height:15, borderRadius:"50%", background:stC, border:"2px solid var(--sheet-bg)" }}/>
-          {p.number_of_items > 1 && <span style={{ position:"absolute", left:-4, top:-4, fontSize:9.5, fontWeight:900, color:"#fff", background:"#3b82f6", borderRadius:8,
-            padding:"0 5px", lineHeight:"15px", border:"1.5px solid var(--sheet-bg)", visibility: selectMode ? "hidden" : "visible" }}>×{p.number_of_items}</span>}
         </span>
         <span style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
           <span style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.file_name || "Sans nom"}</span>
           <span style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
             <span style={{ color:stC }}>{stI} {stL}</span> · {day} {hour}</span>
           <span style={{ display:"flex", alignItems:"center", gap:6 }}>{dots}
-            {rateMe && <span data-tip="À évaluer sur MakerWorld" style={{ fontSize:10.5, fontWeight:800, color:"#d97706" }}>⭐ à évaluer</span>}</span>
+            {p.number_of_items > 1 && <span data-tip={`${p.number_of_items} pièces`} style={tagS("#2563EB")}>×{p.number_of_items}</span>}
+            {rateMe && <span data-tip="À évaluer sur MakerWorld" style={tagS("#F59E0B")}>★ à évaluer</span>}</span>
         </span>
         <span style={{ textAlign:"right", flexShrink:0, display:"flex", flexDirection:"column", gap:2 }}>
           <span style={{ fontSize:13, fontWeight:900, color:"var(--text)" }}>{dur > 0 ? durFr(dur) : "—"}</span>
