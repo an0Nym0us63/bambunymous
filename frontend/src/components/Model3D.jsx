@@ -184,10 +184,16 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
       const { OrbitControls } = await import("three/examples/jsm/controls/OrbitControls.js");
       if (dead || !box.current) return;
       const el = box.current;
-      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      // la 3D du navigateur (WebGL) peut manquer : apres un plantage de son processus graphique (31/10/2026, msedgewebview2),
+      // il la coupe jusqu'a ce qu'on le relance ; on le dit au lieu d'une vue vide
+      let renderer;
+      try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); }
+      catch (e) { console.warn("[3D] WebGL indisponible", e); onState({ busy: false, error: null, nogl: true }); return; }
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));   // assez net, et 2 a 4 fois moins de pixels a calculer qu'un ecran x3
       renderer.setSize(el.clientWidth, el.clientHeight);
       el.appendChild(renderer.domElement);
+      // le contexte perdu en cours de route (memoire graphique pleine, pilote qui redemarre) : le dire, et proposer de relancer
+      renderer.domElement.addEventListener("webglcontextlost", e => { e.preventDefault(); onState({ busy: false, error: null, lost: true }); });
       const scene = new THREE.Scene();
       const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1.6); scene.add(hemi);
       const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(150, 300, 200); scene.add(sun);
@@ -2022,6 +2028,14 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             pointerEvents: "none" }}>
             <Ring pct={meta && !p?.pending ? null : prog?.pct ?? null}
               label={p?.pending ? prog?.label || "Préparation de ce plateau…" : meta ? "Chargement du plateau…" : prog?.label || "Préparation du modèle…"}/></div> : null}
+          {(st.nogl || st.lost) && <div style={{ position: "absolute", inset: 0, zIndex: 6, display: "flex", flexDirection: "column", alignItems: "center",
+            justifyContent: "center", gap: 10, padding: 20, textAlign: "center", fontSize: 13, fontWeight: 700, color: "var(--text2)", background: "var(--surface2)" }}>
+            <span style={{ fontSize: 28 }}>🧊</span>
+            {st.nogl ? "La 3D n'est plus disponible dans ce navigateur : son processus graphique a sans doute planté. Ferme-le complètement (toutes ses fenêtres, ou l'appli), puis rouvre-le."
+              : "La vue 3D a perdu la carte graphique (mémoire pleine, pilote redémarré)."}
+            <button type="button" onClick={() => { setSt({ busy: true }); setVkey(k => k + 1); }} style={{ padding: "8px 16px", borderRadius: 12, border: "none", cursor: "pointer",
+              fontSize: 13, fontWeight: 800, color: "#fff", background: "linear-gradient(135deg, #0EA5E9, #6366F1)" }}>↻ Relancer la vue 3D</button>
+          </div>}
           {(err || st.error || (st.broken && redo >= 1)) && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
             textAlign: "center", fontSize: 13, fontWeight: 700, color: "#ef4444" }}>{err || (st.error ? `Plateau illisible : ${st.error}` : "Plateau abîmé, même refait : rouvre la vue plus tard")}</div>}
         </div>
