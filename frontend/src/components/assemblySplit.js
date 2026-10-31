@@ -498,7 +498,8 @@ export function buildSplitGroups(THREE, pg, comps) {
       mat.customProgramCacheKey = m.material.customProgramCacheKey;
       mat.userData = m.material.userData;
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.userData = { ...m.userData, src: list ? { mi, tris: list } : null };
+      // d'ou viennent ses triangles : le maillage du parent, et ses triangles (null : tous, dans le meme ordre)
+      mesh.userData = { ...m.userData, src: { mi, tris: list || null } };
       g.add(mesh);
     }
     const c0 = pg.userData.c || new THREE.Vector3();

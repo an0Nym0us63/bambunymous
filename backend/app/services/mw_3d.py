@@ -607,9 +607,11 @@ def progress_of(did: str) -> dict:
     return PROGRESS.get(key) or PROGRESS.get(f"did:{did}") or (_read_side(key, "progress.json") if key else None) or {}
 
 
-def convert(src: Path, out_dir: Path, key: str = None) -> dict:
+def convert(src: Path, out_dir: Path, key: str = None, gsrc: dict | None = None) -> dict:
     """Le 3MF -> un fichier binaire par plateau, et plates.json. Rend {"plates": [{n, name, triangles}]}.
-    Les sommets et triangles en tableaux numpy (27/10/2026 : 20 s pour un gros modele peint, en Python pur)."""
+    Les sommets et triangles en tableaux numpy (27/10/2026 : 20 s pour un gros modele peint, en Python pur).
+    gsrc {path, plate} : les couleurs reprises du G-code d'un 3MF tranche (31/10/2026, gcode_colors) -- chaque triangle
+    des objets retrouves sur son plateau prend le filament depose contre lui."""
     import numpy as np
     z = zipfile.ZipFile(src)
     names = set(z.namelist())
@@ -739,6 +741,38 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     nb = len(work) + (1 if asm_lst else 0)
     where = {"tag": ""}                                 # « Plateau 2/6 » devant chaque etape
 
+    gfx = None
+    if gsrc:
+        from . import gcode_colors as G
+        _step(key, 2, "Lecture du G-code tranché")
+        g = G.read(Path(gsrc["path"]))
+        if g:
+            gfx = {"G": G, "cloud": G.Cloud(g), "colors": g["colors"], "at": {}, "plate_of": {}}
+            # les objets a chercher : ceux du plateau imprime s'il est connu, sinon tous
+            cand = [(oid, k) for n_, _, inst in plates if gsrc.get("plate") in (None, n_) for oid, k in inst] \
+                or [(oid, k) for _, _, inst in plates for oid, k in inst]
+            for i_, (oid, k) in enumerate(cand):
+                mts = items_by_obj.get(oid) or []
+                if k >= len(mts):
+                    continue
+                _step(key, 3 + 20 * i_ / max(1, len(cand)), f"Placement des objets sur ton plateau ({i_ + 1}/{len(cand)})")
+                vs, ts, off = [], [], 0
+                for part in parts_of(oid, mts[k]):
+                    v_, t_, _p = _mesh(part[3])
+                    m_ = part[2]
+                    r_ = np.array(m_[:9], dtype=np.float64).reshape(3, 3)
+                    vs.append(v_ @ r_ + np.array(m_[9:], dtype=np.float64))
+                    ts.append(t_ + off)
+                    off += len(v_)
+                    gfx["plate_of"][((oid, k), part[4][0])] = m_
+                if not vs:
+                    continue
+                r_ = G.place(gfx["cloud"], np.concatenate(vs), np.concatenate(ts))
+                if r_:
+                    gfx["at"][(oid, k)] = r_[0]
+            meta["gcode"] = {"placed": len(gfx["at"]), "of": len(cand), "colors": g["colors"]}
+            logger.info(f"[3D] {key} : couleurs du G-code, {len(gfx['at'])}/{len(cand)} objets retrouves")
+
     def say(p_, label):
         _step(key, p_, f"{where['tag']} · {label}" if where["tag"] and nb > 1 else label)
 
@@ -762,6 +796,18 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                 if paint:
                     say(a0 + (a1 - a0) * 0.55, "Couleurs peintes")
                 v, by_ext = _painted(v, t, paint, ext) if paint else (v, {ext: t})
+                pm_ = gfx["plate_of"].get((ident, tag[0])) if gfx else None
+                if pm_ is not None and ident in gfx["at"]:
+                    # le filament depose contre chaque triangle (« g<outil> ») ; ceux sans trait proche gardent le leur
+                    say(a0 + (a1 - a0) * 0.7, "Couleurs du G-code")
+                    vp = v @ np.array(pm_[:9], dtype=np.float64).reshape(3, 3) + np.array(pm_[9:], dtype=np.float64)
+                    nb_ = {}
+                    for ex_, tt_ in by_ext.items():
+                        tl = gfx["G"].recolor(gfx["cloud"], vp, np.asarray(tt_), gfx["at"][ident],
+                                              flip=np.linalg.det(np.array(pm_[:9], dtype=np.float64).reshape(3, 3)) < 0)
+                        for u in np.unique(tl):
+                            nb_.setdefault(ex_ if u < 0 else f"g{int(u)}", []).append(np.asarray(tt_)[tl == u])
+                    by_ext = {k_: np.concatenate(x_) for k_, x_ in nb_.items()}
                 say(a0 + (a1 - a0) * 0.85, "Mise en place")
                 total += sum(len(x) for x in by_ext.values())
                 if total > READ_TRIANGLES:
@@ -781,11 +827,15 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                     vcut = v @ rp + tp
                     back = (np.linalg.inv(rp) @ rot, tp, np.array(mt[9:], dtype=np.float64))
                 for ex, tt in by_ext.items():
-                    col = colors[ex - 1] if 0 < ex <= len(colors) else fcol
+                    if isinstance(ex, str):                 # une couleur du G-code
+                        gi = int(ex[1:])
+                        col = f"#{gfx['colors'][gi]}" if gi < len(gfx["colors"]) else fcol
+                    else:
+                        col = colors[ex - 1] if 0 < ex <= len(colors) else fcol
                     # les changements de filament a une hauteur qui touchent ces triangles : un changement
                     # d'outil ou, avec un seul filament, tout changement ; a plusieurs, celui de ce filament
                     cuts = [(zt, c) for zt, e, c, kind in zc_[1] if kind == 2 or zc_[0] == "SingleExtruder" or e in (None, ex)] \
-                        if zc_ else []
+                        if zc_ and not isinstance(ex, str) else []    # le G-code dit deja les changements en hauteur
                     if not cuts and len(by_ext) == 1:
                         g = groups_out.setdefault(gk(col, ident, tag), [[], [], 0])
                         g[0].append(vt)
@@ -1333,7 +1383,7 @@ def file_path(key: str, name: str) -> Path | None:
 # main de l'interpreteur, et dans un fil du serveur elle figeait toute l'appli (blocages de plusieurs secondes,
 # meme sur /progress, quand le changement de format a fait refaire toutes les vues). Un seul processus, de priorite
 # basse ; la vue ouverte par quelqu'un, elle, reste dans le serveur (son avancement s'affiche).
-_POOL = {"bg": None, "view": None}         # le fond (priorite basse), et la vue ouverte (sans attendre le fond)
+_POOL = {"bg": None, "view": None, "gcode": None}         # le fond (priorite basse), et la vue ouverte (sans attendre le fond)
 
 
 def _child_convert(src: str, key: str, low: bool) -> bool:
@@ -1370,6 +1420,69 @@ def warm_view_pool() -> None:
         _pool("view").submit(_noop)
     except Exception:
         pass
+
+
+def gcode_key(iid: str, print_id: int) -> str:
+    """La vue d'un modele aux couleurs d'une impression, lues dans son G-code (31/10/2026)."""
+    return f"{iid}_g{int(print_id)}"
+
+
+def _child_gcode(src: str, key: str, sliced: str, plate) -> bool:
+    _CHILD["on"], _CHILD["last"] = True, None
+    d = _root() / key
+    try:
+        return bool(convert(Path(src), d, key, {"path": sliced, "plate": plate}))
+    except Exception as e:
+        logger.warning(f"[3D] couleurs du G-code ({key}) : {type(e).__name__}: {e}")
+        return False
+    finally:
+        for f in ("progress.json", "partial.json"):
+            try:
+                (d / f).unlink()
+            except OSError:
+                pass
+
+
+def gcode_ready(src: Path, sliced: Path, key: str) -> bool:
+    try:
+        f = _root() / key / "plates.json"
+        return f.is_file() and f.stat().st_mtime >= max(src.stat().st_mtime, sliced.stat().st_mtime) \
+            and _fresh(json.loads(f.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return False
+
+
+async def from_gcode_early(src: Path, sliced: Path, key: str, plate=None) -> dict | None:
+    """La vue aux couleurs du G-code (comme from_3mf_early : rend la main des le premier plateau pret)."""
+    import asyncio
+
+    def job():
+        with _lock(key):
+            if gcode_ready(src, sliced, key):
+                return True
+            try:                                        # videe du local, mais gardee sur le NAS : reprise telle quelle
+                from .archive import restore_3d
+                if restore_3d(key, _root() / key) and gcode_ready(src, sliced, key):
+                    return True
+            except Exception:
+                logger.exception("[3D] reprise du NAS (couleurs du G-code)")
+            try:
+                return _pool("gcode").submit(_child_gcode, str(src), key, str(sliced), plate).result()
+            except Exception as e:
+                logger.warning(f"[3D] processus indisponible ({e}) : couleurs du G-code sur place")
+                _POOL["gcode"] = None
+                return _child_gcode(str(src), key, str(sliced), plate)
+    t = _RUNNING.get(key)
+    if t is None or t.done():
+        if gcode_ready(src, sliced, key):
+            return _read_side(key, "plates.json")
+        t = _RUNNING[key] = asyncio.ensure_future(asyncio.to_thread(job))
+    while not t.done():
+        part = PARTIAL.get(key) or _read_side(key, "partial.json")
+        if part and any(p.get("size_mm") for p in part.get("plates") or []):
+            return part
+        await asyncio.wait({t}, timeout=0.25)
+    return _read_side(key, "plates.json") if t.result() else None
 
 
 def _in_child(src: Path, key: str, pool: str = "bg") -> bool:
@@ -1580,7 +1693,8 @@ def load_edit(key: str, did: str | None = None, piece_keys: set | None = None) -
 
 
 def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, joints: list | None = None,
-              splits: list | None = None, did: str | None = None, excluded: list | None = None, cuts: dict | None = None) -> dict:
+              splits: list | None = None, did: str | None = None, excluded: list | None = None, cuts: dict | None = None,
+              colors: dict | None = None, paints: list | None = None) -> dict:
     import time
     if not _KEY.fullmatch(key or ""):
         raise ValueError("Vue inconnue")
@@ -1637,8 +1751,34 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
                 ok.append({"e": w["e"], "a": w["a"], "b": w["b"], **box})
         if ok:
             cut[str(k)] = ok
+    # les couleurs (31/10/2026) : une piece entiere {cle : RRGGBB}, et des zones peintes [{k : piece, own : la couleur
+    # d'origine du maillage, r : ses triangles en plages (debut, nombre, debut, nombre…), c : RRGGBB}] ; « tris » (une
+    # liste de triangles) est encore lue. 5 millions de triangles et 400 000 plages au plus
+    hexok = lambda c: isinstance(c, str) and re.fullmatch(r"[0-9A-Fa-f]{6}", c)
+    col = {str(k): c.upper() for k, c in (colors or {}).items() if str(k) in clean and hexok(c)} if isinstance(colors, dict) else {}
+    pts, ntri, nrun = [], 0, 0
+    okint = lambda t: isinstance(t, int) and not isinstance(t, bool) and 0 <= t < 50_000_000
+    for z in (paints or [])[:500] if isinstance(paints, list) else []:
+        if not (isinstance(z, dict) and str(z.get("k")) in clean and hexok(z.get("c")) and hexok(z.get("own"))):
+            continue
+        if isinstance(z.get("r"), list) and len(z["r"]) % 2 == 0 and all(okint(t) for t in z["r"]):
+            r = [int(t) for t in z["r"]]
+        elif isinstance(z.get("tris"), list):
+            tr = sorted({int(t) for t in z["tris"] if okint(t)})
+            r = []
+            for t in tr:
+                if r and t == r[-2] + r[-1]:
+                    r[-1] += 1
+                else:
+                    r += [t, 1]
+        else:
+            continue
+        n = sum(r[1::2])
+        if n and ntri + n <= 5_000_000 and nrun + len(r) <= 400_000:
+            ntri, nrun = ntri + n, nrun + len(r)
+            pts.append({"k": str(z["k"]), "own": z["own"].upper(), "r": r, "c": z["c"].upper()})
     d = {"pieces": clean, "groups": [g for g in grp if len(g) > 1], "joints": jts, "splits": spl, "excluded": exc, "v": 2,
-         **({"cuts": cut} if cut else {}),
+         **({"cuts": cut} if cut else {}), **({"colors": col} if col else {}), **({"paints": pts} if pts else {}),
          "at": time.time(), "by": by, **({"did": did} if did else {})}
     _backup(key, "remplacee")
     f = _edits_file(key)
@@ -1717,7 +1857,7 @@ def edits_for_design(did: str) -> list:
             continue
         out.append({"key": f.stem, "profile": _prof_of(f.stem), "at": o.get("at"), "n": len(o["pieces"]),
                     **{k: o.get(k) or [] for k in ("groups", "joints", "splits", "excluded")}, "cuts": o.get("cuts") or {},
-                    "pieces": o["pieces"]})
+                    "colors": o.get("colors") or {}, "paints": o.get("paints") or [], "pieces": o["pieces"]})
     out.sort(key=lambda x: -(x.get("at") or 0))
     return out[:5]
 
@@ -1731,4 +1871,5 @@ def restore_edit(key: str, vid: str, by: str = "") -> dict:
     o = _read((_old_dir() if old else _edits_file(key).parent) / f"{stem}.json")
     if not o:
         raise ValueError("Version introuvable")
-    return save_edit(key, o["pieces"], by, o.get("groups"), o.get("joints"), o.get("splits"), o.get("did"), o.get("excluded"), o.get("cuts"))
+    return save_edit(key, o["pieces"], by, o.get("groups"), o.get("joints"), o.get("splits"), o.get("did"), o.get("excluded"), o.get("cuts"),
+                     o.get("colors"), o.get("paints"))

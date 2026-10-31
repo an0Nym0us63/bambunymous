@@ -664,6 +664,11 @@ def _3d_dest(key: str, lib_plan: dict) -> str:
     if rel:
         folder, name = rel.rsplit("/", 1)
         return f"{folder}/Vue 3D/{name[:-4] if name.lower().endswith('.3mf') else name}"
+    # aux couleurs d'une impression (« <cle>_g<impression> », lues dans son G-code, 31/10/2026) : a cote de la vue du 3MF
+    g = re.fullmatch(r"(.+)_g(\d+)", key or "")
+    if g and lib_plan.get(g.group(1)):
+        folder, name = lib_plan[g.group(1)].rsplit("/", 1)
+        return f"{folder}/Vue 3D/{name[:-4] if name.lower().endswith('.3mf') else name} - impression {g.group(2)}"
     return f"{SYS}/Vues 3D/{key}"
 
 

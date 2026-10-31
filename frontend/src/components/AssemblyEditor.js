@@ -17,13 +17,14 @@
 // la suivent quand elle bouge ; « Decoller » la libere. Un collage est garde dans le repere de la piece support (B) :
 // le point et la normale du contact (et l'arete), enregistres avec l'assemblage.
 import { egg } from "../eggs";
+import { applyColors, resolve as paintResolve, zoneOf, brushOf, toRuns, tris as trisOf } from "./assemblyPaint";
 
 // ce que l'editeur charge a part, demande d'avance (30/10/2026 : sur un telephone, le premier chargement prenait
 // quelques secondes sans rien montrer, on croyait l'edition en panne)
 export const preloadEditor = () => import("three/examples/jsm/controls/TransformControls.js").catch(() => {});
 
 export async function createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder, pieces, render, onChange, groupsInit = [], jointsInit = [], groupByObject = false,
-                                                  copyPiece = null, cutsInit = {} }) {
+                                                  copyPiece = null, cutsInit = {}, colorsInit = {}, paintsInit = [] }) {
   const { TransformControls } = await import("three/examples/jsm/controls/TransformControls.js");
   const el = renderer.domElement;
   const ray = new THREE.Raycaster();
@@ -154,10 +155,17 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   // « ➕ Point de colle » (30/10/2026) : sur une piece deja collee, une prise de plus (point, arete ou face) et sa cible ;
   // le premier collage tient (la piece ne fait que glisser et tourner sur son contact). keepPins : les points poses
   let addPin = false, keepPins = [];
-  const snapshot = () => ({ m: all.map(g => g.matrix.clone()), groups: groups.map(gr => [...gr]), joints: joints.map(cloneJ), ex: all.map(g => !!g.userData.excluded) });
+  // les couleurs (31/10/2026) : une piece entiere {cle : RRGGBB}, et les zones peintes [{k, own, tris, c}] (assemblyPaint)
+  let colors = { ...(colorsInit || {}) }, paints = (paintsInit || []).map(p => ({ k: p.k, own: p.own, c: p.c, tris: trisOf(p) }));
+  const snapshot = () => ({ m: all.map(g => g.matrix.clone()), groups: groups.map(gr => [...gr]), joints: joints.map(cloneJ), ex: all.map(g => !!g.userData.excluded),
+    col: { ...colors }, pt: paints.map(p => ({ ...p })) });
   const restore = s => { all.forEach((g, i) => { s.m[i].decompose(g.position, g.quaternion, g.scale); g.updateMatrix();
     if (s.ex) { g.userData.excluded = s.ex[i]; g.visible = !s.ex[i]; } }); groups = s.groups.map(gr => [...gr]);
-    joints = s.joints.map(cloneJ); placeHandle(); showContact(); render(); };
+    joints = s.joints.map(cloneJ);
+    if (s.col && (JSON.stringify(s.col) !== JSON.stringify(colors) || s.pt.length !== paints.length || s.pt.some((p, i) => p.tris !== paints[i].tris || p.c !== paints[i].c))) {
+      colors = { ...s.col }; paints = s.pt.map(p => ({ ...p })); applyColors(THREE, all, colors, paints);
+    }
+    placeHandle(); showContact(); render(); };
   // l'historique repart d'ici (une piece ajoutee ou retiree : les etats d'avant n'ont pas le meme nombre de pieces)
   const resetHistory = () => { undo.length = 0; redo.length = 0; last = snapshot(); changes++; };
   let last = snapshot();
@@ -171,6 +179,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     cutPending: pendingCut ? pendingCut.parts.length : 0, cutCount: pendingCut ? pendingCut.cuts.length - pendingCut.base : 0,
     cutPiece: pendingCut ? pendingCut.g.userData.name : null, eraser, addPin, edgeMode,
     pickFor, lineAxis: !!lineAxis,
+    paintTool, paintColor, paintR, painted: paints.length,
+    pieceColor: sel.size ? (([...sel].map(g => colors[g.userData.k] || null).every((c, _i, a) => c === a[0])) ? colors[[...sel][0].userData.k] || null : "mix") : null,
     twinBusy, canTwins: mode === "mate" && !!first && first.kind === "face" && !addPin && !twinDone,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
@@ -1222,6 +1232,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     egg("degage");
   };
   const tap = (pick, ev) => {
+    if (mode === "paint") return;
     if (pickFor) { pickTool(pick); return; }
     if (mode === "cut") { if (!pendingCut) setSel(pick ? [pick.group] : []); return; }
     if (mode === "move" || mode === "rotate") {
@@ -1546,7 +1557,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       const whole = g.userData.from ? g.userData.whole : g;
       const src = mesh.userData.src, mi = src ? src.mi : whole.children.filter(m => m.isMesh && m.geometry?.attributes?.position).indexOf(mesh);
       const list = erase[mi] || (erase[mi] = []);
-      for (const t of set) list.push(src ? src.tris[t] : t);
+      for (const t of set) list.push(src?.tris ? src.tris[t] : t);
     }
     for (const mesh of rb.marks.keys()) if (mesh.userData.rubView) { mesh.remove(mesh.userData.rubView); mesh.userData.rubView.geometry.dispose(); delete mesh.userData.rubView; }
     if (!g0) { render(); return; }
@@ -1588,6 +1599,65 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   window.addEventListener("pointermove", onKnifeMove);
   window.addEventListener("pointerup", onKnifeUp);
   window.addEventListener("pointercancel", onKnifeCancel);
+
+  // ── 🖌 Peindre (31/10/2026) : « Zone » remplit d'un toucher jusqu'aux aretes vives (un oeil, une piece posee dessus),
+  // « Pinceau » peint ce que le doigt survole (rayon reglable) ; sans couleur, c'est la gomme (la couleur d'origine
+  // revient). Un doigt peint, deux doigts tournent la vue ; chaque coup s'annule (↶)
+  let paintTool = "zone", paintColor = null, paintR = 2, paintStroke = null;
+  const paintHit = ev => {
+    const r = el.getBoundingClientRect();
+    mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(mouse, camera);
+    return ray.intersectObjects(all.filter(g => g.visible), true).find(h => h.face && h.object.isMesh && pieceOf(h.object)) || null;
+  };
+  const paintAt = (ev, st) => {
+    const hit = paintHit(ev);
+    if (!hit) return;
+    const mesh = hit.object, g = pieceOf(mesh);
+    const tris = paintTool === "zone" ? zoneOf(mesh.geometry, hit.faceIndex) : brushOf(mesh.geometry, mesh.worldToLocal(hit.point.clone()), paintR);
+    if (!tris.length) return;
+    const { top, own, map } = paintResolve(mesh, g);
+    const orig = tris.map(map).filter(t => t != null);
+    if (!paintColor) {                                  // la gomme : ces triangles retrouvent leur couleur d'origine
+      const set = new Set(orig);
+      paints = paints.map(p => (p.k === top && p.own === own ? { ...p, tris: p.tris.filter(t => !set.has(t)) } : p)).filter(p => p.tris.length);
+      st.changed = true;
+    } else {
+      // un coup de pinceau = une zone par maillage touche, qui grandit tant que le doigt glisse
+      const key = `${top}|${own}`;
+      let e = st.entries.get(key);
+      if (!e) { e = { p: { k: top, own, tris: [], c: paintColor }, set: new Set() }; st.entries.set(key, e); paints.push(e.p); }
+      orig.forEach(t => e.set.add(t));
+      e.p.tris = [...e.set];
+      st.changed = true;
+    }
+    applyColors(THREE, [g], colors, paints);           // seule la piece touchee change
+    render();
+  };
+  const onPaintDown = ev => {
+    if (mode !== "paint" || fingers > 1 || (ev.pointerType === "mouse" && ev.button !== 0)) { if (paintStroke && fingers > 1) paintStroke = null; return; }
+    paintStroke = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, entries: new Map(), changed: false, at: 0 };
+    if (paintTool === "brush") paintAt(ev, paintStroke);
+  };
+  const onPaintMove = ev => {
+    const st = paintStroke;
+    if (!st || ev.pointerId !== st.id || paintTool !== "brush") return;
+    if (fingers > 1) { paintStroke = null; return; }
+    const now = performance.now();
+    if (now - st.at < 40) return;                       // au plus 25 coups par seconde
+    st.at = now;
+    paintAt(ev, st);
+  };
+  const onPaintUp = ev => {
+    const st = paintStroke;
+    if (!st || ev.pointerId !== st.id) return;
+    paintStroke = null;
+    if (paintTool === "zone" && Math.hypot(ev.clientX - st.x, ev.clientY - st.y) < (coarse ? 10 : 5)) paintAt(ev, st);
+    if (st.changed) { push(); egg(paintColor ? "zone_peinte" : "gomme_couleur"); }
+  };
+  el.addEventListener("pointerdown", onPaintDown);
+  window.addEventListener("pointermove", onPaintMove);
+  window.addEventListener("pointerup", onPaintUp);
   // la place d'un morceau (ou de la piece entiere) ramenee au repere de la piece entiere
   const wholeFrame = g => { g.updateMatrix(); const o = g.userData.from ? g.userData.c.clone().sub(g.userData.parentC) : new THREE.Vector3();
     return g.matrix.clone().multiply(new THREE.Matrix4().makeTranslation(-o.x, -o.y, -o.z)); };
@@ -1855,6 +1925,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       if (k === "c") return api.setMode("mate");
       if (k === "p") return api.setMode("pins");
       if (k === "x") return api.setMode("cut");
+      if (k === "b") return api.setMode("paint");
       if (k === "enter" && mode === "cut" && pendingCut) return cutConfirm();
       if (k === "escape" && mode === "cut" && pendingCut) { ev.preventDefault(); ev.stopPropagation(); return cutCancel(); }
       if (k === "z") return frame();
@@ -1901,8 +1972,28 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
 
   const api = {
     setGround3: on => { ground3 = on; gPts = []; gUnit = []; drawGround(); onChange?.(state()); },
-    setMode: m => { pickFor = null; if (m !== "mate") { addPin = false; keepPins = []; } if (m !== "cut") { cutCancel(); dropStroke(); clearRub(); } knifeView(m === "cut"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
+    setMode: m => { pickFor = null; if (m !== "mate") { addPin = false; keepPins = []; } if (m !== "cut") { cutCancel(); dropStroke(); clearRub(); } knifeView(m === "cut" || m === "paint"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); if (m !== "mate") pairs = []; pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
+    // 🎨 la couleur de la selection entiere (null : sa couleur d'origine) ; 🖌 les reglages de la peinture
+    setPieceColor: hex => {
+      if (!sel.size) return;
+      for (const g of sel) { if (hex) colors[g.userData.k] = hex; else delete colors[g.userData.k]; }
+      applyColors(THREE, [...sel], colors, paints); push(); render(); if (hex) egg("piece_couleur");
+    },
+    clearPaint: () => {
+      const tops = new Set([...(sel.size ? sel : all)].map(g => { const m = g.children.find(x => x.isMesh); return m ? paintResolve(m, g).top : g.userData.k; }));
+      const n = paints.length;
+      paints = paints.filter(p => !tops.has(p.k));
+      if (paints.length !== n) { applyColors(THREE, all, colors, paints); push(); render(); }
+    },
+    setPaint: ({ tool, color, r } = {}) => {
+      if (tool) paintTool = tool;
+      if (color !== undefined) paintColor = color;
+      if (r) paintR = r;
+      onChange?.(state());
+    },
+    colors: () => ({ ...colors }),
+    paints: () => paints.filter(p => p.tris.length).map(p => ({ k: p.k, own: p.own, c: p.c, r: toRuns(p.tris) })),
     setRotStep: d => { rotStep = d; applySnap(); onChange?.(state()); },
     setMoveStep: d => { moveStep = d; try { localStorage.setItem("bn.asm.moveStep", String(d)); } catch { /* rien */ } applySnap(); onChange?.(state()); },
     setMulti: on => { multi = on; onChange?.(state()); },
@@ -2351,6 +2442,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       boxDiv?.remove(); if (boxMode) controls.enabled = true;
       window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", onBlur);
       el.removeEventListener("pointerdown", onSlideDown, true); window.removeEventListener("pointermove", onSlideMove); window.removeEventListener("pointerup", onSlideUp);
+      el.removeEventListener("pointerdown", onPaintDown); window.removeEventListener("pointermove", onPaintMove); window.removeEventListener("pointerup", onPaintUp);
       el.removeEventListener("pointerdown", onKnifeDown); window.removeEventListener("pointermove", onKnifeMove);
       window.removeEventListener("pointerup", onKnifeUp); window.removeEventListener("pointercancel", onKnifeCancel);
       clearRub(); rubMat.dispose(); cutCancel(); dropStroke(); knifeView(false);

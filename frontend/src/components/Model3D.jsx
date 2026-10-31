@@ -416,6 +416,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               };
             }
             const piece = new THREE.Mesh(mesh, mat);
+            piece.userData.own = own;
             if (fin === "glow") {
               piece.userData.glow = true; mat.userData.dayEmit = mat.emissiveIntensity;
               // dans le noir, autant de lumiere pour toutes les couleurs : un bleu ou un rouge (sombres) luisent plus fort
@@ -505,6 +506,11 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             }
             const out = new Set(edit?.excluded || []);
             for (const g of byPiece.values()) if (out.has(g.userData.k)) { g.userData.excluded = true; g.visible = false; }
+            // ses couleurs (31/10/2026) : une piece entiere, et les zones peintes
+            if (Object.keys(edit?.colors || {}).length || edit?.paints?.length) {
+              const { applyColors } = await import("./assemblyPaint");
+              applyColors(THREE, [...byPiece.values()], edit.colors || {}, edit.paints || []);
+            }
           }
           model.add(holder);
           if (byPiece) model.userData.edit = { holder, byPiece };
@@ -726,6 +732,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             const cur = editNow.current;
             editor = await createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder: ed.holder, pieces: ed.byPiece, render, onChange,
               groupsInit: cur?.groups || [], jointsInit: cur?.joints || [], copyPiece: (src, n) => copyPiece(THREE, src, n), cutsInit: cur?.cuts || {},
+              colorsInit: cur?.colors || {}, paintsInit: cur?.paints || [],
               // pas encore enregistre par cette version : les parties d'un meme objet partent groupees
               groupByObject: cur?.v !== 2 });
             if (import.meta.env.DEV) window.__asmEditor = { editor, holder: ed.holder, pieces: ed.byPiece, THREE, camera };   // banc d'essai seulement
@@ -940,6 +947,7 @@ function LampPanel({ lamp, onChange, onClose }) {
 
 // La barre de l'edition de la vue assemblee (29/10/2026, PC, en plein ecran)
 const EDIT_TIPS = {
+  paint: "🖌 Choisis une couleur, puis ◉ Zone : touche une zone (elle se remplit jusqu'aux arêtes vives) ou 🖌 Pinceau : peins en glissant · 🧽 Gomme : la couleur d'origine revient · clic droit ou deux doigts : tourner la vue",
   move: "Clique une pièce (Ctrl / Maj : en ajouter ; Alt : une pièce d'un groupe seule), puis tire sur les flèches (Alt maintenu : sans cran) · flèches 1 mm (Maj : 10), Ctrl + ↑↓ : monter · M R F C : modes, Z : cadrer",
   rotate: "Clique une pièce, puis tourne-la par ses anneaux (Alt maintenu : sans cran) · flèches : 1° (Maj : 15°) · valeurs exactes à droite",
   ground: "Clique la face (ou l'arête) qui doit être posée au sol",
@@ -1040,6 +1048,8 @@ const EDIT_HELP = [
     ["Pièce collée", "◀ ▶ ▲ ▼ la font glisser sur le contact, sans la décoller (d'après l'écran) ; ses flèches aussi"],
     ["Glisser une pièce choisie", "en mode Déplacer : elle suit le doigt, à plat sur le plateau (ou tire une des flèches rouge, verte, bleue : dans cet axe) ; ⇕ Hauteur : elle monte ou descend ; ◀ ▶ ▲ ▼ ⤒ ⤓ : un pas précis (0,5, 1, 5 ou 10 mm, touche le pas pour le changer), d'après l'écran"],
     ["Toucher le vide", "plus rien de choisi"],
+    ["🖌 Peindre", "choisis une pastille, puis ◉ Zone (un toucher remplit jusqu'aux arêtes vives) ou 🖌 Pinceau (glisse le doigt) ; 🧽 Gomme : la couleur d'origine revient ; deux doigts : tourner la vue"],
+    ["🎨 Couleur", "une pièce choisie : toute la pièce prend la couleur d'une pastille (filaments du modèle, ou couleur libre) ; ↺ sa couleur d'origine"],
     ["🔪 Couper", "touche la pièce, puis trace un trait du doigt à travers elle : elle est tranchée sur la longueur du trait, dans toute l'épaisseur vue ; deux doigts tournent et zooment la vue pendant ce mode"],
     ["Rail du bas", "les modes (glisser pour en voir plus), ➕ Multi, ▭ Rectangle, 📋 Pièces, ⌖ Cadrer (la sélection, ou tout), 📐 Valeurs exactes, ⚙ réglages, 🕘 versions ; au-dessus, les actions de la sélection"],
     ["En haut", "✕ fermer, ↶ ↷ annuler et refaire, ? cette aide, 💾 enregistrer ; la consigne du moment est juste dessous"],
@@ -1090,6 +1100,13 @@ const EDIT_HELP = [
     ["En haut", "les modes, ▭ (choisir au rectangle), ⚙ (aimanter, collage assisté, choix multiple, crans des déplacements et des rotations), ↶ ↷, 🕘 (versions, vue du 3MF), 💾, ?, ✕"],
     ["Dessous", "selon le mode et la sélection : ses actions (points, pose au sol), 🔗 Grouper ▾, 🧩 Pièce ▾ (séparer, réunir, masquer), et pour une pièce collée 🎯 Ajuster, ⟳ Contact ▾, ✂ Décoller"],
   ]],
+  ["Peindre (B)", [
+    ["Une pastille", "la couleur à poser : les filaments des impressions du modèle, ou l'arc-en-ciel pour une couleur libre ; 🧽 Gomme : la couleur d'origine"],
+    ["◉ Zone : un clic", "la zone touchée se remplit jusqu'aux arêtes vives (un œil, une pièce posée sur une autre)"],
+    ["🖌 Pinceau : glisser", "peint ce que la souris survole, ⌀ règle sa taille (1 à 15 mm) ; clic droit glissé : tourner la vue"],
+    ["↺ Tout effacer", "retire la peinture des pièces choisies, ou de tout l'assemblage ; chaque coup s'annule avec ↶"]]],
+  ["🎨 Couleur (une pièce choisie)", [
+    ["Une pastille", "toute la pièce prend cette couleur ; ↺ Couleur d'origine la lui rend"]]],
   ["Couper (X)", [
     ["Clic sur une pièce", "la pièce à couper (une seule)"],
     ["Glisser à travers elle", "un trait rouge : la pièce est tranchée sur la longueur du trait, dans toute l'épaisseur que voit l'écran (rien au-delà des bouts du trait) ; les parties qui ne tiennent plus ensemble deviennent des morceaux, chacun de sa couleur"],
@@ -1182,6 +1199,21 @@ function EditVersions({ list, dirty, onPick, onClose }) {
 }
 
 // un menu deroulant de la barre d'edition : un bouton, puis ses choix (chacun avec son aide au survol)
+// des pastilles de couleur (31/10/2026) : les filaments des impressions du groupe, et une couleur libre ; value : RRGGBB
+function Swatches({ list, value, onPick, free = true }) {
+  const dot = (c, on) => ({ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, cursor: "pointer", padding: 0, background: `#${c}`,
+    border: on ? "3px solid #0EA5E9" : "2px solid color-mix(in srgb, var(--text) 25%, transparent)", boxShadow: on ? "0 0 0 2px var(--surface)" : "none" });
+  return <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", maxWidth: 260 }}>
+    {(list || []).map(x => <button key={x.c} type="button" aria-label={x.name || `#${x.c}`} data-tip={x.name ? `${x.name} · #${x.c}` : `#${x.c}`}
+      onClick={() => onPick(x.c)} style={dot(x.c, value === x.c)}/>)}
+    {free && <label data-tip="Une couleur libre" style={{ position: "relative", width: 26, height: 26, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
+      background: "conic-gradient(#ef4444, #f59e0b, #22c55e, #0ea5e9, #8b5cf6, #ec4899, #ef4444)",
+      border: value && !(list || []).some(x => x.c === value) ? "3px solid #0EA5E9" : "2px solid color-mix(in srgb, var(--text) 25%, transparent)" }}>
+      <input type="color" value={`#${value && value !== "mix" ? value : "888888"}`} onChange={e => onPick(e.target.value.slice(1).toUpperCase())}
+        style={{ position: "absolute", inset: 0, opacity: 0, width: "100%", height: "100%", cursor: "pointer", border: "none", padding: 0 }}/></label>}
+  </div>;
+}
+
 function BarMenu({ label, tip, items, active = false, b, up = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -1221,7 +1253,7 @@ function BarMenu({ label, tip, items, active = false, b, up = false }) {
 
 // La barre de l'edition (30/10/2026, rangee) : en haut, une seule ligne -- les modes, les reglages, annuler/refaire, les
 // versions, enregistrer, l'aide, fermer ; dessous, seulement avec une selection ou un mode qui en a, ses actions
-function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compact = false }) {
+function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compact = false, swatches = [] }) {
   const [sure, setSure] = useState(false);
   const [help, setHelp] = useState(false);
   const [panel, setPanel] = useState(null);          // au doigt : le volet ouvert (« pieces », « exact »)
@@ -1265,6 +1297,20 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
       <button type="button" onClick={() => api?.setAddPin(!est.addPin)} style={b(!!est.addPin)}
         data-tip="Sur une pièce déjà collée : une prise de plus (point, arête ou face) et sa cible, le premier collage tient">➕ Point de colle</button>
     </>
+    : est.mode === "paint" ? <>
+      <button type="button" onClick={() => api?.setPaint({ tool: "zone" })} style={b(est.paintTool === "zone")}
+        data-tip="Un toucher remplit la zone jusqu'aux arêtes vives (un œil, une pièce posée dessus)">◉ Zone</button>
+      <button type="button" onClick={() => api?.setPaint({ tool: "brush" })} style={b(est.paintTool === "brush")}
+        data-tip="Peindre en glissant le doigt (ou la souris) sur la pièce">🖌 Pinceau</button>
+      {est.paintTool === "brush" && <BarMenu b={b} up={compact} label={`⌀ ${est.paintR} mm`} tip="La taille du pinceau" items={[1, 2, 4, 8, 15].map(r =>
+        ({ label: `${r} mm`, on: est.paintR === r, onClick: () => api?.setPaint({ r }) }))}/>}
+      {sep}
+      <Swatches list={swatches} value={est.paintColor} onPick={c => api?.setPaint({ color: c })}/>
+      <button type="button" onClick={() => api?.setPaint({ color: null })} style={b(!est.paintColor)}
+        data-tip="La gomme : ce que tu touches reprend sa couleur d'origine">🧽 Gomme</button>
+      {est.painted > 0 && <button type="button" onClick={() => api?.clearPaint()} style={b(false, { color: "#ef4444" })}
+        data-tip={hasSel ? "Retirer toute la peinture des pièces choisies" : "Retirer toute la peinture de l'assemblage"}>↺ Tout effacer</button>}
+    </>
     : est.mode === "pins" ? <>
       <button type="button" disabled={!est.pinsB} onClick={() => api?.pinsApply()} style={b(!!est.pinsB, { opacity: est.pinsB ? 1 : 0.45 })}
         data-tip="Faire coïncider chaque point orange avec le point vert de même numéro (Entrée)">✓ Assembler{est.pinsB ? ` (${est.pinsB})` : ""}</button>
@@ -1297,6 +1343,11 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         est.canGroupGlued && { label: "🔗 Grouper le collé", onClick: () => api?.groupGlued(), tip: "La pièce et tout ce qui y est collé, de proche en proche" },
         est.canUngroup && "-",
         est.canUngroup && { label: "⛓ Dégrouper", key: "Ctrl+Maj+G", onClick: () => api?.ungroup() },
+      ]}/>
+      <BarMenu b={b} up={compact} label="🎨 Couleur" tip="Donner une couleur à toute la pièce choisie" items={[
+        { custom: <div style={{ padding: "4px 6px" }}><Swatches list={swatches} value={est.pieceColor} onPick={c => api?.setPieceColor(c)}/></div> },
+        "-",
+        { label: "↺ Couleur d'origine", onClick: () => api?.setPieceColor(null), disabled: !est.pieceColor, tip: "Les couleurs du fichier reviennent" },
       ]}/>
       <BarMenu b={b} up={compact} label="🧩 Pièce" tip="Séparer, réunir, masquer" items={[
         est.canSplit && { label: "✂ Séparer", onClick: () => api?.splitPreview(), tip: "Pièces groupées : les rendre indépendantes ; une pièce seule : proposer ses morceaux" },
@@ -1398,7 +1449,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         </div>}
         {second && <div style={{ ...rail, borderBottom: "1px solid var(--border)" }}>{modeRow}{splitRow}{selRow}{showAll}</div>}
         <div style={rail}>
-          {[["move", "✥", "Déplacer"], ["rotate", "⟳", "Tourner"], ["ground", "⬇", "Au sol"], ["mate", "🧲", "Coller"], ["pins", "📍", "Points"], ["cut", "🔪", "Couper"]].map(([m, i, l]) =>
+          {[["move", "✥", "Déplacer"], ["rotate", "⟳", "Tourner"], ["ground", "⬇", "Au sol"], ["mate", "🧲", "Coller"], ["pins", "📍", "Points"], ["cut", "🔪", "Couper"], ["paint", "🖌", "Peindre"]].map(([m, i, l]) =>
             <button key={m} type="button" onClick={() => api?.setMode(m)} style={tool(est.mode === m)}>{i}{lab(l)}</button>)}
           <span style={{ width: 1, alignSelf: "stretch", background: "var(--border)", flexShrink: 0 }}/>
           <button type="button" onClick={() => api?.setMulti(!est.multi)} style={tool(!!est.multi)}>➕{lab("Multi")}</button>
@@ -1445,7 +1496,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
     <div className="bn-3d-top" style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 3, display: "flex", flexDirection: "column", alignItems: "center",
       gap: 6, maxWidth: "calc(100% - 24px)" }}>
       <div style={bar}>
-        {[["move", "✥ Déplacer", "M"], ["rotate", "⟳ Tourner", "R"], ["ground", "⬇ Poser au sol", "F"], ["mate", "🧲 Coller", "C"], ["pins", "📍 Points", "P"], ["cut", "🔪 Couper", "X"]].map(([m, l, k]) =>
+        {[["move", "✥ Déplacer", "M"], ["rotate", "⟳ Tourner", "R"], ["ground", "⬇ Poser au sol", "F"], ["mate", "🧲 Coller", "C"], ["pins", "📍 Points", "P"], ["cut", "🔪 Couper", "X"], ["paint", "🖌 Peindre", "B"]].map(([m, l, k]) =>
           <button key={m} type="button" onClick={() => api?.setMode(m)} style={b(est.mode === m)}
             data-tip={m === "pins" ? "Assembler par paires de points : 1 avec 1, 2 avec 2, 3 avec 3 (P)" : m === "ground" ? "Poser au sol : par une face, ou par 3 points (F)"
               : m === "cut" ? "Trancher une pièce d'un trait (un support intégré à détacher) (X)" : `(${k})`}>{l}</button>)}
@@ -1547,6 +1598,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const [redo, setRedo] = useState(0);
   const [tick, setTick] = useState(0);                 // un choix de couleur a la main : la vue se relit
   const [again, setAgain] = useState(0);               // la suite des plateaux en preparation
+  // les couleurs de mon impression, lues dans le G-code de son 3MF tranche (31/10/2026) : a la demande, un clic
+  const [gview, setGview] = useState(false);
   const plateRef = useRef(0);
   const softRef = useRef(false);
   plateRef.current = plate;
@@ -1561,7 +1614,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     if (!soft) { setErr(null); setMeta(null); }
     // le profil montre par la fiche ; sans lui, le serveur lit celui de l'impression (imprimante, ou choisi a la main)
     get(base, { params: { profile: profileId || "", print_id: printId || 0, fetch: fetchSource || want3mf ? 1 : 0,
-                                 used: (usedPrints || []).join(","), scope: scope || "" }, timeout: 180000 })
+                                 used: (usedPrints || []).join(","), scope: scope || "", gcode: gview && printId ? printId : 0 }, timeout: 180000 })
       .then(({ data }) => { if (alive) {
         // une relecture pendant la preparation : on reste sur le plateau regarde
         // focus (30/10/2026, la galerie des vues 3D) : seulement la vue assemblee, s'il y en a une
@@ -1573,7 +1626,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
       .catch(e => { if (!alive) return; if (soft) setTimeout(() => { softRef.current = true; setAgain(a => a + 1); }, 3000);
         else setErr(e?.response?.data?.detail || "Pas de modèle 3D pour celui-ci"); });
     return () => { alive = false; };
-  }, [base, profileId, printId, wait, want3mf, redo, tick, again]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [base, profileId, printId, wait, want3mf, redo, tick, again, gview]);   // eslint-disable-line react-hooks/exhaustive-deps
   // la transparence des filaments d'un HueForge, gardee sur le modele (30/10/2026) : lue a l'ouverture, enregistree
   // (un instant apres le dernier reglage) ; chez un copain, elle se lit seulement
   const [td, setTd] = useState(null);
@@ -1635,7 +1688,9 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const usedDetail = byPlate ? ofPlate(meta.used_details_plates, []) : meta?.used_detail || [];
   const usedFin = byPlate ? ofPlate(meta.used_finishes_plates, {}) : meta?.used_finishes;
   const usedMulti = byPlate ? ofPlate(meta.used_multi_plates, {}) : meta?.used_multi;
-  const alt = (p && (asm ? merged(platePalettes) : platePalettes?.[p.n])) || palette || usedPal || null;
+  // aux couleurs du G-code : ce sont deja celles de l'impression, aucune correspondance a appliquer
+  const gv = meta?.gcode_view && !meta.gcode_view.error ? meta.gcode_view : null;
+  const alt = gv ? null : (p && (asm ? merged(platePalettes) : platePalettes?.[p.n])) || palette || usedPal || null;
   const altLabel = altName || (palette || platePalettes ? "Retenues" : "Utilisées");
   const [own, setOwn] = useState(false);
   // comparer (30/10/2026) : la vue assemblee du 3MF d'origine, a cote de mon assemblage enregistre (la vue seulement)
@@ -1670,6 +1725,12 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   // l'edition se fait aussi au doigt (30/10/2026) : sur un telephone, plein ecran par la page elle-meme (l'iPhone n'a pas
   // de plein ecran pour un element), et la barre d'edition en version tactile
   const editable = isAdmin && !fr && !!p?.assembled && !!p?.pieces && !!meta?.key;
+  // les couleurs a poser (31/10/2026) : les filaments des impressions de ce modele (une fois chacun)
+  const swatchList = useMemo(() => {
+    const seen = new Map();
+    for (const o of meta?.used_options || []) if (o.color && !seen.has(o.color)) seen.set(o.color, { c: o.color, name: [o.name, o.kind].filter(Boolean).join(" · ") });
+    return [...seen.values()];
+  }, [meta?.used_options]);
   const [pfull, setPfull] = useState(false), [editErr, setEditErr] = useState(null), [starting, setStarting] = useState(false);
   const [tdSlot, setTdSlot] = useState(null);
   useEffect(() => { if (editing && !desktop && !pfull) setPseudoFull(true); }, [editing, pfull]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1736,7 +1797,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     const e = frPick.edit;
     try {
       const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces: e.pieces, did: designId, excluded: e.excluded || [], groups: e.groups || [],
-        joints: e.joints || [], splits: e.splits || [], cuts: e.cuts || {}, v: 2 });
+        joints: e.joints || [], splits: e.splits || [], cuts: e.cuts || {}, colors: e.colors || {}, paints: e.paints || [], v: 2 });
       setSavedEdit(r.data); setViewSel("mine"); egg("assemblage_copain");
     } catch (er) { showAlert(er.response?.data?.detail || er.message); }
   };
@@ -1761,7 +1822,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     setSaving(true);
     try { const r = await client.put(`/makerworld/3d/edit/${meta.key}`, { pieces, did: designId, excluded: editApi.current?.editor?.excluded() || [],
       groups: editApi.current?.editor?.groups() || [],
-      joints: editApi.current?.editor?.joints() || [], splits: editApi.current?.editor?.splits() || [], cuts: editApi.current?.editor?.cuts() || {}, v: 2 });
+      joints: editApi.current?.editor?.joints() || [], splits: editApi.current?.editor?.splits() || [], cuts: editApi.current?.editor?.cuts() || {},
+      colors: editApi.current?.editor?.colors() || {}, paints: editApi.current?.editor?.paints() || [], v: 2 });
       setSavedEdit(r.data); editApi.current?.editor?.markSaved();
       // le masquage (🙈) n'est que pour la vue : le dire, sinon on croit l'avoir enregistre (30/10/2026)
       const hid = editApi.current?.editor?.state()?.hidden || 0;
@@ -1879,7 +1941,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {pfull && !editing && !starting && <button type="button" onClick={() => setPseudoFull(false)} aria-label="Quitter le plein écran"
             style={{ position: "absolute", bottom: "calc(10px + env(safe-area-inset-bottom, 0px))", left: 10, zIndex: 5, width: 42, height: 42, borderRadius: 12,
               border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)", fontSize: 16, cursor: "pointer" }}>✕</button>}
-          {editing && <EditBar est={est} api={editApi.current?.editor} onSave={saveEdit} onReset={resetEdit} onClose={stopEdit} saving={saving} onVersions={openVersions}
+          {editing && <EditBar est={est} api={editApi.current?.editor} swatches={swatchList} onSave={saveEdit} onReset={resetEdit} onClose={stopEdit} saving={saving} onVersions={openVersions}
             compact={!desktop}/>}
           {versions && <EditVersions list={versions} dirty={!!est?.dirty} onPick={restoreVersion} onClose={() => setVersions(null)}/>}
           {editing && leaving && <div style={{ position: "absolute", inset: 0, zIndex: 7, background: "rgba(2,6,23,.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1967,6 +2029,16 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             style={{ padding: "3px 10px", borderRadius: 14, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800, color: "#fff",
               background: "linear-gradient(135deg, #0EA5E9, #6366F1)" }}>🎨 Récupérer le 3MF d'origine (couleurs)</button>}
           {meta.fetch_error && <span style={{ color: "#ef4444" }}>· 3MF non récupéré : {meta.fetch_error}</span>}
+          {printId && !fr && (meta.source === "3mf" || gview) && <button type="button" onClick={() => { if (!gview) egg("couleurs_gcode"); setGview(v => !v); }}
+            data-tip={gview ? "Revenir aux couleurs du 3MF d'origine"
+              : "Lire le G-code du 3MF tranché de ton impression : chaque face prend le filament vraiment déposé contre elle (ce que tu as peint dans Bambu Studio), même si tu as déplacé ou tourné les objets sur le plateau"}
+            style={{ padding: "3px 10px", borderRadius: 14, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800, color: "#fff",
+              background: gview ? "linear-gradient(135deg, #64748B, #475569)" : "linear-gradient(135deg, #F97316, #EC4899)" }}>
+            {gview ? "↺ Couleurs d'origine" : "🎯 Couleurs de mon impression (G-code)"}</button>}
+          {gview && meta.gcode_view?.error && <span style={{ color: "#ef4444" }}>· {meta.gcode_view.error}</span>}
+          {gv && gv.of != null && <span style={{ color: gv.placed ? "#16a34a" : "#d97706" }}
+            data-tip="Les objets que l'appli a retrouvés sur ton plateau (déplacés ou tournés) ; les autres gardent les couleurs d'origine">
+            · {gv.placed ? `aux couleurs de ton impression : ${gv.placed} objet${gv.placed > 1 ? "s" : ""} sur ${gv.of} retrouvé${gv.placed > 1 ? "s" : ""}` : "aucun objet retrouvé dans le G-code"}</span>}
           {meta.ms >= 1000 && <span data-tip="La première ouverture prépare le modèle ; les suivantes sont immédiates">· préparé en {(meta.ms / 1000).toFixed(1).replace(".", ",")} s</span>}
           {st.size && !p?.pending && <span>· {mm(st.size[0])} × {mm(st.size[1])} × {mm(st.size[2])}</span>}
           {p?.triangles ? <span>· {p.triangles.toLocaleString("fr-FR")} triangles</span> : null}

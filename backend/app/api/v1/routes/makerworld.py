@@ -608,7 +608,7 @@ async def mw_model_3d_progress(design_id: str, _: str = Depends(get_current_user
 
 @router.get("/3d/{design_id}")
 async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_src: int = Query(0, alias="fetch"),
-                      used: str = "", scope: str = "", peek: int = 0, _: str = Depends(get_current_user),
+                      used: str = "", scope: str = "", peek: int = 0, gcode: int = 0, _: str = Depends(get_current_user),
                       token: str = Depends(oauth2_scheme)):
     """Les plateaux a afficher en 3D : {source: "3mf" | "makerworld", plates: [{n, name, url, size_mm}], ms}.
     print_id : le profil de cette impression (celui de l'imprimante, ou celui choisi a la main avec ses plateaux,
@@ -674,11 +674,33 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             fetch_error = str(e)[:200] if (print_id or get_src) else None
     if not readonly:
         meta, source, key = None, "3mf", None
+    gmeta, gkey, gview = None, None, None
     if iid and not readonly:
         src = path_of(iid)
         T.WATCH[did] = iid
         meta = await T.from_3mf_early(src, iid)             # des le premier plateau pret (29/10/2026)
         key = iid
+        if gcode > 0:
+            # aux couleurs de cette impression, lues dans le G-code de son 3MF tranche (31/10/2026) : ses propres
+            # plateaux ; l'assemblage, les finitions et l'enregistrement restent ceux de la vue d'origine (key)
+            from ....services.archive import local_or_archive
+            from ....models.print_history import Print as _Pr
+            from ....db.session import AsyncSessionLocal as _S
+            async with _S() as db:
+                pr = await db.get(_Pr, gcode)
+            sliced = local_or_archive(pr.model_3mf) if pr and pr.model_3mf else None
+            if not sliced or not sliced.is_file():
+                gview = {"error": "Pas de 3MF tranché gardé pour cette impression"}
+            else:
+                gkey = T.gcode_key(iid, gcode)
+                T.WATCH[did] = gkey
+                pl = int(pr.plate_id) if str(pr.plate_id or "").isdigit() else None
+                gmeta = await T.from_gcode_early(src, sliced, gkey, pl)
+                if gmeta:
+                    g = gmeta.get("gcode") or {}
+                    gview = {"print_id": gcode, "placed": g.get("placed"), "of": g.get("of"), "pending": bool(gmeta.get("pending"))}
+                else:
+                    gview, gkey = {"error": "Le G-code de cette impression n'a pas pu être lu"}, None
     if not readonly and (not meta or not any(not p.get("skipped") for p in meta.get("plates") or [])):
         # l'apercu MakerWorld du meme profil ; a defaut, le 3MF garde d'un autre profil du modele
         source = "makerworld"
@@ -693,7 +715,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             src = path_of(k2)
             T.WATCH[did] = k2
             meta, source, key = await asyncio.to_thread(T.from_3mf, src, k2), "3mf_other", k2
-    if not (meta or {}).get("pending"):                    # en cours : la vue suit encore l'avancement
+    if not (gmeta or meta or {}).get("pending"):           # en cours : la vue suit encore l'avancement
         T.WATCH.pop(did, None)
     T.PROGRESS.pop(f"did:{did}", None)
     if not meta or not meta.get("plates"):
@@ -726,7 +748,8 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
     used_palette, used_detail = None, None
     used_plates, used_details_plates = {}, {}
     used_options, chosen = [], {}
-    if used and source in ("3mf", "3mf_other") and key:
+    # aux couleurs du G-code : ce sont deja celles de l'impression, rien a remplacer
+    if used and source in ("3mf", "3mf_other") and key and not gmeta:
         try:
             ids = await _with_group(scope, [int(x) for x in used.split(",") if x.strip().isdigit()][:60], did)
             # les correspondances choisies a la main pour cette impression ou ce groupe (28/10/2026)
@@ -779,7 +802,8 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             # la finition de chaque couleur, pour le rendu : d'origine (profils filament du 3MF), et des bobines utilisees
             "finishes": T.origin_finishes(path_of(key)) if source in ("3mf", "3mf_other") and key else {},
             "used_finishes": {d["from"]: d["finish"] for d in used_detail or [] if d.get("to") and d.get("finish")},
-            "plates": T.plates_out(meta, key)[0], "skipped": T.plates_out(meta, key)[1],
+            "plates": T.plates_out(gmeta or meta, gkey if gmeta else key)[0], "skipped": T.plates_out(gmeta or meta, gkey if gmeta else key)[1],
+            "gcode_view": gview,
             # le plateau de chaque piece de la vue assemblee, pour ses couleurs (30/10/2026)
             "piece_plates": T.piece_plates(path_of(key)) if key and source in ("3mf", "3mf_other")
                             and any(p.get("assembled") for p in (meta or {}).get("plates") or []) else {},
@@ -788,7 +812,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
                                                                   if isinstance(x, dict) and x.get("k")} or None)
             if key and source != "makerworld" else None,
             # des plateaux encore en preparation (« pending » sur eux) : la vue redemande jusqu'a la fin
-            "pending": bool((meta or {}).get("pending"))}
+            "pending": bool((gmeta or meta or {}).get("pending"))}
 
 
 def _ext_by_name(z) -> dict:
@@ -1693,7 +1717,7 @@ async def mw_3d_edit_save(key: str, body: dict = Body({}), user: str = Depends(g
     try:
         return T.save_edit(key, body.get("pieces") or {}, str(user or ""), body.get("groups") or [], body.get("joints") or [],
                            body.get("splits") or [], str(body.get("did") or "") or None, body.get("excluded") or [],
-                           body.get("cuts") or {})
+                           body.get("cuts") or {}, body.get("colors") or {}, body.get("paints") or [])
     except ValueError as e:
         raise HTTPException(400, str(e))
 
