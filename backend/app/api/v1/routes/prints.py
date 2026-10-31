@@ -2066,6 +2066,8 @@ async def delete_print(print_id: int, _: str = Depends(get_current_user)):
         p = await db.get(Print, print_id)
         if not p: raise HTTPException(404)
         await db.delete(p); await db.commit()
+    from ....models.print_history import note_deleted_id
+    note_deleted_id(print_id)                            # son numero ne resservira pas
     # Supprimer les fichiers
     d = DATA_DIR / "prints" / str(print_id)
     if d.exists(): shutil.rmtree(d, ignore_errors=True)

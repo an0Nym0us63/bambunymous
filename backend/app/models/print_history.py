@@ -2,7 +2,7 @@
 Modèles SQLAlchemy — historique des impressions BambuNymous.
 """
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Index, event, text
 from sqlalchemy.orm import relationship
 from ..db.session import Base
 
@@ -94,6 +94,39 @@ class Print(Base):
         Index("idx_prints_filename", "file_name"),
         Index("idx_prints_group_id", "group_id"),
     )
+
+
+# Un numero d'impression ne resert jamais (31/10/2026) : SQLite redonne celui de la derniere impression supprimee a
+# la suivante, et tout ce qui est range par numero la confondait avec l'ancienne -- sa vignette (meme adresse, gardee
+# un an par le navigateur), ses fichiers sur le NAS. La suppression note le plus grand numero donne
+# (DATA_DIR/print_ids.json) ; une impression creee sous ce numero passe au-dessus.
+def last_deleted_id() -> int:
+    import json
+    from pathlib import Path
+    from ..core.config import settings
+    try:
+        return int(json.loads((Path(settings.DATA_DIR) / "print_ids.json").read_text(encoding="utf-8")).get("last") or 0)
+    except (OSError, ValueError, TypeError, AttributeError):
+        return 0
+
+
+def note_deleted_id(pid: int) -> None:
+    import json
+    from pathlib import Path
+    from ..core.config import settings
+    if int(pid) > last_deleted_id():
+        try:
+            (Path(settings.DATA_DIR) / "print_ids.json").write_text(json.dumps({"last": int(pid)}), encoding="utf-8")
+        except OSError:
+            pass
+
+
+@event.listens_for(Print, "before_insert")
+def _fresh_print_id(mapper, connection, target):
+    if target.id is None:
+        floor = last_deleted_id()
+        if floor and (connection.execute(text("SELECT COALESCE(MAX(id), 0) FROM prints")).scalar() or 0) < floor:
+            target.id = floor + 1
 
 
 class FilamentUsage(Base):

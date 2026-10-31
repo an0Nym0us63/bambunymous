@@ -1311,7 +1311,9 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, activeNoz
 // ── La tuile imprimante : son en-tete, et sa version en demi-largeur ─────────
 const LIVE_ST = ["RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING"];
 // l'adresse de l'image change quand elle arrive : le navigateur la recharge (et une erreur d'avant ne la masque plus)
-const imgV = p => (p?.plate_image ? `?v=${encodeURIComponent(String(p.plate_image).slice(-24))}` : "");
+// la version de la vignette : son image et son travail (31/10/2026 : une impression qui reprenait le numero d'une
+// impression supprimee avait la meme adresse, et le navigateur, qui la garde un an, montrait l'ancienne image)
+const imgV = p => (p?.plate_image ? `?v=${encodeURIComponent(`${String(p.plate_image).slice(-24)}~${p.job_id || p.print_date || ""}`)}` : "");
 function stateOf(status) {
   const st = String(status?.status || "").toUpperCase();
   if (!status) return { label: "…", color: "#94a3b8" };
