@@ -69,8 +69,12 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   // les collages : {a : la piece collee, b : son support, kind, p, n, e : dans le repere de b}
   const V = a => (a ? new THREE.Vector3().fromArray(a) : null);
   let jseq = 0;                      // le numero de chaque collage (t) : ses points de colle ajoutes le portent
-  let joints = (jointsInit || []).map(j => ({ a: byOld(j.a)[0], b: byOld(j.b)[0], kind: j.kind === "edge" ? "edge" : "face", p: V(j.p), n: V(j.n), e: V(j.e), t: ++jseq }))
+  let joints = (jointsInit || []).map(j => ({ a: byOld(j.a)[0], b: byOld(j.b)[0], kind: j.kind === "edge" ? "edge" : "face", p: V(j.p), n: V(j.n), e: V(j.e), t: ++jseq, pins: j.pins }))
     .filter(j => j.a && j.b && j.p && j.n);
+  // les points de colle enregistres avec chaque collage (31/10/2026 : ils se perdaient a la fermeture)
+  const pinsInit = joints.flatMap(j => (Array.isArray(j.pins) ? j.pins : []).map(k => ({ jt: j.t, kind: ["edge", "face"].includes(k.kind) ? k.kind : "point",
+    ag: byKey.get(k.ag), bg: byKey.get(k.bg), a: V(k.a), b: V(k.b) })).filter(k => k.ag && k.bg && k.a && k.b));
+  joints.forEach(j => { delete j.pins; });
   const cloneJ = j => ({ ...j, p: j.p.clone(), n: j.n.clone(), e: j.e ? j.e.clone() : null });
   // une liste de pieces, et tout ce qui y est colle (de proche en proche, avec leurs groupes)
   const withKids = list => {
@@ -83,6 +87,14 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   };
   // le collage qui tient cette selection a une piece hors d'elle
   const jointOf = list => { const set = new Set(list); return joints.find(j => set.has(j.a) && !set.has(j.b)) || null; };
+  // les collages de ce qui bouge vers une piece hors de lui, retires (31/10/2026 : ceux entre ses pieces tiennent, elles
+  // bougent ensemble ; avant, poser au sol ou redresser un bloc colle defaisait aussi ses collages internes) ; rend
+  // « — décollée de X », a dire (avant, ces outils decollaient sans rien dire)
+  const dropOut = list => {
+    const set = new Set(list), gone = joints.filter(j => set.has(j.a) && !set.has(j.b));
+    if (gone.length) joints = joints.filter(j => !gone.includes(j));
+    return gone.length ? ` — décollée de ${[...new Set(gone.map(j => j.b.userData.name))].join(", ")}` : "";
+  };
   // les points de colle d'un collage : le contact, et ceux ajoutes depuis
   const gluePts = j => (j ? 1 + keepPins.filter(k => k.jt === j.t).length : 0);
   // le contact d'un collage, dans le repere du support du modele
@@ -157,7 +169,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   let edgeMode = false;               // « ╱ Arete » : un clic prend l'arete la plus proche, sinon toujours la face
   // les points de colle (30/10/2026 ; 31/10/2026 : sans bouton) : sur une piece deja collee, une prise de plus (point,
   // arete ou face) et sa cible sur son support ; le premier collage tient. keepPins : ceux poses, avec leur collage (jt)
-  let keepPins = [];
+  let keepPins = pinsInit;
   // les couleurs (31/10/2026) : une piece entiere {cle : RRGGBB}, et les zones peintes [{k, own, tris, c}] (assemblyPaint)
   let colors = { ...(colorsInit || {}) }, paints = (paintsInit || []).map(p => ({ k: p.k, own: p.own, c: p.c, tris: trisOf(p) }));
   const snapshot = () => ({ m: all.map(g => g.matrix.clone()), groups: groups.map(gr => [...gr]), joints: joints.map(cloneJ), ex: all.map(g => !!g.userData.excluded),
@@ -708,7 +720,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     // le collage, dans le repere du support (un nouveau collage de cette piece remplace l'ancien)
     B.group.updateMatrix();
     const inv = B.group.matrix.clone().invert();
-    joints = joints.filter(j => !unit.includes(j.a));
+    dropOut(unit);
     joints.push({ t: ++jseq, a: A.group, b: B.group, kind: B.kind === "edge" && A.kind === "edge" ? "edge" : "face", p: to.clone().applyMatrix4(inv),
       n: (B.kind === "face" ? B.n : B.n).clone().transformDirection(inv), e: B.kind === "edge" ? B.e.clone().transformDirection(inv) : null });
     return unit;
@@ -816,17 +828,23 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const hit = M => col.anyTouch(moving.map(g => { g.updateMatrix(); return [g, M.clone().multiply(g.matrix)]; }), others, 1);
     const collides = others.length && !hit(new THREE.Matrix4()) ? hit : null;
     const base = unitOf(j.b).filter(g => g.visible && !moving.includes(g));
-    let r = await nestPlace({ THREE, collider: col, moving, base, P, N, mode, collides });
+    // les consignes du collage (31/10/2026 : la recherche tournait la piece de n'importe quel angle, sur toute la face) :
+    // collee par une arete, elle ne fait que glisser le long d'elle ; tenue par des points de colle ajoutes, elle ne
+    // bouge que d'un rien (2 mm, 3°) ; sinon, libre autour de son contact
+    const pinsN = keepPins.filter(k => k.jt === j.t).length, { E } = contact(j);
+    const cons = j.kind === "edge" && E ? { lock: pinsN ? 3 * Math.PI / 180 : 0, axis: E, reach: pinsN ? 2 : null }
+      : pinsN ? { lock: 3 * Math.PI / 180, axis: null, reach: 2 } : {};
+    let r = await nestPlace({ THREE, collider: col, moving, base, P, N, mode, collides, ...cons });
     // toutes les places touchent une autre piece : la meilleure quand meme, en le disant (refuser tout ne laissait rien a faire)
     let touching = false;
-    if (r && !r.M) { r = await nestPlace({ THREE, collider: col, moving, base, P, N, mode }); touching = true; }
+    if (r && !r.M) { r = await nestPlace({ THREE, collider: col, moving, base, P, N, mode, ...cons }); touching = true; }
     if (!r) return { why: "none" };
     // rien ne bouge sans un gain net (32 mm de chemin pour 0,1 mm plus bas ; un alignement sans face trouvee tournait
     // quand meme la piece) : emboiter, au moins 0,3 mm plus bas ; aligner, une face reellement recouverte, et mieux
     const still = (r.moved < 0.05 && Math.abs(r.turned) < 0.1 && Math.abs(r.sink) < 0.05)
       || (mode === "nest" && r.sink < 0.3)
       || (mode === "align" && (r.cov1 < (quiet ? 0.3 : 0.1) || r.cov1 < r.cov0 + (quiet ? 0.05 : 0.01)));
-    return { r, j, N, moving, touching, still };
+    return { r, j, N, moving, touching, still, held: j.kind === "edge" ? "le long de son arête" : pinsN ? `tenue par ses ${pinsN + 1} points de colle` : null };
   };
   // une place trouvee, appliquee : la piece, son point de contact (dans le repere du support), l'axe des rotations
   const applyFit = f => {
@@ -861,6 +879,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       egg(mode === "align" ? "aligne" : "emboite");
       fitMsg = (quiet ? "Collée, puis " : "") + fitText(mode, f.r);
       if (!quiet) fitMsg = fitMsg[0].toUpperCase() + fitMsg.slice(1);
+      if (f.held) fitMsg += ` (${f.held})`;
       if (f.touching) fitMsg += " — elle touche une autre pièce à cette place";
       onChange?.(state());
       return true;
@@ -964,7 +983,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pivot = { p: c.clone(), axis: n.clone(), unit: s.start.map(([g]) => g) };
     s.g.updateMatrix();
     const inv = s.g.matrix.clone().invert();
-    joints = joints.filter(j => !s.unit.includes(j.a));
+    dropOut(s.unit);
     joints.push({ t: ++jseq, a: s.a, b: s.g, kind: "face", p: c.clone().applyMatrix4(inv), n: n.clone().transformDirection(inv), e: null });
     push(); s.at = changes; setSel(s.unit);
     const k = s.fits.length;
@@ -1035,7 +1054,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     // collee a la cible par la premiere paire (elle coulisse et tourne ensuite comme une piece collee)
     const b0 = pins.b[0];
     if (b0.n) {
-      joints = joints.filter(j => !unit.includes(j.a));
+      dropOut(unit);
       joints.push({ t: ++jseq, a: pins.a[0].g, b: b0.g, kind: "face", p: b0.p.clone(), n: b0.n.clone(), e: null });
     }
     const err = Math.max(...pts.map((_, i) => toWorld(pins.a[i].g, pins.a[i].p).distanceTo(toWorld(pins.b[i].g, pins.b[i].p))));
@@ -1156,7 +1175,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const P = hit ? holder.worldToLocal(hit.point.clone()) : c.clone().addScaledVector(N, -sa.dot(new THREE.Vector3(Math.abs(N.x), Math.abs(N.y), Math.abs(N.z))) / 2);
     B.updateMatrix();
     const inv = B.matrix.clone().invert();
-    joints = joints.filter(j => !unit.includes(j.a));
+    dropOut(unit);
     joints.push({ t: ++jseq, a: unit[0], b: B, kind: "face", p: P.clone().applyMatrix4(inv), n: N.clone().transformDirection(inv), e: null });
     pivot = { p: P.clone(), axis: N.clone(), unit: moving };
     push(); setSel(unit);
@@ -1185,9 +1204,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       on = others.find(g => touch(hi, [g])) || null;
     } else lo = toFloor;
     if (lo < 0.02) { fitMsg = on ? `Déjà posée sur ${on.userData.name}` : "Elle ne peut pas descendre"; onChange?.(state()); return; }
+    // collee, elle quitte son collage en tombant (31/10/2026 : le collage restait, son contact flottait dans le vide)
+    const lost = dropOut(unit);
     apply(moving, new THREE.Matrix4().makeTranslation(0, 0, -lo));
     push(); setSel(unit);
-    fitMsg = on ? `Descendue de ${lo.toFixed(1).replace(".", ",")} mm, posée sur ${on.userData.name}` : `Descendue de ${lo.toFixed(1).replace(".", ",")} mm, posée au sol`;
+    fitMsg = (on ? `Descendue de ${lo.toFixed(1).replace(".", ",")} mm, posée sur ${on.userData.name}` : `Descendue de ${lo.toFixed(1).replace(".", ",")} mm, posée au sol`) + lost;
     egg("descendre");
     render(); onChange?.(state());
   };
@@ -1208,10 +1229,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       const unit = sel.has(pick.group) ? [...sel] : unitOf(pick.group), moving = withKids(unit);
       const to = nearestAxis(dir);
       apply(moving, about(boxOfAll(moving).getCenter(new THREE.Vector3()), new THREE.Quaternion().setFromUnitVectors(dir.normalize(), to)));
-      joints = joints.filter(j => !unit.includes(j.a));
+      const lost = dropOut(unit);
       const ax = to.x ? "X" : to.y ? "Y" : "Z";
       push(); setSel(unit);
-      fitMsg = `Redressée : ${pick.kind === "edge" ? "l'arête" : "la face (sa normale)"} dans l'axe ${ax}`;
+      fitMsg = `Redressée : ${pick.kind === "edge" ? "l'arête" : "la face (sa normale)"} dans l'axe ${ax}${lost}`;
       egg("redresse");
       onChange?.(state()); return;
     }
@@ -1234,9 +1255,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     if (!best) { fitMsg = "Pas de sortie trouvée"; onChange?.(state()); return; }
     const t = best.t + 0.1;
     apply(moving, new THREE.Matrix4().makeTranslation(best.d.x * t, best.d.y * t, best.d.z * t));
-    joints = joints.filter(j => !unit.includes(j.a));
+    const lost = dropOut(unit);
     push(); setSel(unit);
-    fitMsg = `Dégagée de ${String(Math.round(t * 10) / 10).replace(".", ",")} mm`; onChange?.(state());
+    fitMsg = `Dégagée de ${String(Math.round(t * 10) / 10).replace(".", ",")} mm${lost}`; onChange?.(state());
     egg("degage");
   };
   const tap = (pick, ev) => {
@@ -1313,10 +1334,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         turn(m2, new THREE.Vector3(0, 0, -1), low[0]);
         pts.splice(0, 3, ...low.map(v => v.clone().applyMatrix4(about(low[0], new THREE.Quaternion().setFromUnitVectors(m2, new THREE.Vector3(0, 0, -1))))));
       }
-      joints = joints.filter(j => !gUnit.includes(j.a));
+      const lost = dropOut(gUnit);
       drop(gUnit); const u = gUnit; gPts = []; gUnit = []; drawGround();
       pivot = null; clearMarks(); showContact(); push(); setSel(u);
-      fitMsg = "Posée au sol sur ses 3 points"; onChange?.(state()); render(); return;
+      fitMsg = `Posée au sol sur ses 3 points${lost}`; onChange?.(state()); render(); return;
     }
     if (mode === "ground") {
       const unit = sel.has(pick.group) ? [...sel] : unitOf(pick.group), moving = withKids(unit);
@@ -1325,8 +1346,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         const h = new THREE.Vector3(pick.e.x, pick.e.y, 0);
         if (h.lengthSq() > 1e-6) apply(moving, about(pick.p, new THREE.Quaternion().setFromUnitVectors(pick.e, h.normalize())));
       }
-      joints = joints.filter(j => !unit.includes(j.a));
-      drop(unit); pivot = null; clearMarks(); showContact(); push(); render(); return;
+      const lost = dropOut(unit);
+      drop(unit); pivot = null; clearMarks(); showContact(); push(); setSel(unit);
+      fitMsg = lost ? `Posée au sol${lost}` : null; onChange?.(state()); render(); return;
     }
     if (mode === "mate") {
       if (!first) { first = pick; clearMarks(); clearHover(); mark(pick); fitMsg = null; onChange?.(state()); return; }
@@ -2359,6 +2381,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       };
       const contactOf = ps => ps.filter(p => p[3] <= 0.3).length;
       let D = new THREE.Matrix4();
+      // les consignes du collage (31/10/2026 : l'ajustement suivait la seule surface, et emmenait la piece loin de la ou
+      // elle etait collee) : le point de contact, et les points de colle ajoutes, restent sur leur cible -- un poids
+      // dans le calcul, a peine pour le contact (il glisse un peu pour epouser), fort pour les points poses a la main
+      const anchors = [[P.clone(), P.clone(), 0.08]];
+      for (const k of keepPins) if (k.jt === j.t && k.kind === "point" && moving.includes(k.ag)) anchors.push([toWorld(k.ag, k.a), toWorld(k.bg, k.b), 0.3]);
       const ps0 = pairsOf(D), before = ps0.length ? ps0.map(p => p[3]).sort((x, y) => x - y)[Math.floor(ps0.length / 2)] : Infinity, c0 = contactOf(ps0);
       // une iteration point-plan : petite rotation (w) et translation (t) qui rapprochent chaque point du plan de son vis-a-vis
       const solve6 = (A, g) => {
@@ -2381,6 +2408,13 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
         for (const [w, bp, n] of keep) {
           const r = w.clone().sub(cen), cr = r.clone().cross(n), J = [cr.x, cr.y, cr.z, n.x, n.y, n.z], res = bp.clone().sub(w).dot(n);
           for (let i = 0; i < 6; i++) { gv[i] += J[i] * res; for (let k = 0; k < 6; k++) A[i][k] += J[i] * J[k]; }
+        }
+        for (const [a0, bt, wt] of anchors) {
+          const aw = a0.clone().applyMatrix4(D), r = aw.clone().sub(cen), wk = wt * keep.length;
+          for (const e of AXES) {
+            const cr = r.clone().cross(e), J = [cr.x, cr.y, cr.z, e.x, e.y, e.z], res = bt.clone().sub(aw).dot(e);
+            for (let i = 0; i < 6; i++) { gv[i] += wk * J[i] * res; for (let k = 0; k < 6; k++) A[i][k] += wk * J[i] * J[k]; }
+          }
         }
         for (let i = 0; i < 6; i++) A[i][i] += 1e-3 * keep.length;
         const x = solve6(A, gv);
@@ -2411,6 +2445,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       // trop reculer, c'est que la place trouvee n'est pas la bonne : on laisse la piece ou elle etait
       if (hi > 1.5) { fitMsg = "Pas de meilleure place sans traverser l'autre pièce : la pièce reste où tu l'as collée"; onChange?.(state()); return; }
       for (const [g, m] of at(hi)) { m.decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); }
+      // le contact suit la piece (avant, il restait ou elle etait collee)
+      j.b.updateMatrix();
+      j.p.copy(P.clone().applyMatrix4(new THREE.Matrix4().makeTranslation(out.x * hi, out.y * hi, out.z * hi).multiply(D)).applyMatrix4(j.b.matrix.clone().invert()));
       egg("sur_mesure");
       fitMsg = `Ajustée : écart ${fmt(before)} → ${fmt(after)} mm · ${c1} points en contact (avant ${c0})${hi > 0.05 ? ` · reculée de ${fmt(hi)} mm pour ne rien traverser` : ""}`;
       showContact(); placeHandle(); push(); render();
@@ -2419,13 +2456,15 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       const list = [...sel], j = jointOf(list);
       if (!j) return;
       const { N, E } = contact(j);
-      joints = joints.filter(x => !list.includes(x.a));
+      dropOut(list);
       const away = (E ? new THREE.Vector3(0, 0, 1) : N).clone().multiplyScalar(2);
       apply(withKids(list), new THREE.Matrix4().makeTranslation(away.x, away.y, away.z));
       showContact(); placeHandle(); push(); render();
     },
     joints: () => joints.map(j => ({ a: j.a.userData.k, b: j.b.userData.k, kind: j.kind, p: j.p.toArray().map(v => Math.round(v * 1e4) / 1e4),
-      n: j.n.toArray().map(v => Math.round(v * 1e6) / 1e6), ...(j.e ? { e: j.e.toArray().map(v => Math.round(v * 1e6) / 1e6) } : {}) })),
+      n: j.n.toArray().map(v => Math.round(v * 1e6) / 1e6), ...(j.e ? { e: j.e.toArray().map(v => Math.round(v * 1e6) / 1e6) } : {}),
+      ...(keepPins.some(k => k.jt === j.t) ? { pins: keepPins.filter(k => k.jt === j.t && all.includes(k.ag) && all.includes(k.bg)).map(k => ({ kind: k.kind,
+        ag: k.ag.userData.k, bg: k.bg.userData.k, a: k.a.toArray().map(v => Math.round(v * 1e4) / 1e4), b: k.b.toArray().map(v => Math.round(v * 1e4) / 1e4) })) } : {}) })),
     state,
     dispose: () => {
       // pas tc.dispose() : en three 0.169 il appelle traverse, qui n'existe plus sur la poignee, et l'erreur cassait la

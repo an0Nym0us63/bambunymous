@@ -12,12 +12,26 @@
 // sur un grand support, tout parcourir prenait plusieurs secondes), d'abord a grosses mailles, puis finement autour
 // des meilleures.
 
-export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "nest", collides = null }) {
+// Les consignes du collage (31/10/2026) : lock, l'angle permis autour de la normale (0 : aucun ; null : tous) ; axis, la
+// seule direction ou glisser (collee par une arete) ; reach, jusqu'ou glisser (mm). Emboiter prefere la place la plus
+// proche : 1 mm de chemin coute 0,06 mm de profondeur, 1° 0,008 mm (avant 0,02 et 0,002 : un creux un peu plus profond
+// a l'autre bout de la face, ou un demi-tour, l'emportait)
+export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "nest", collides = null, lock = null, axis = null, reach = null }) {
   const { MeshBVH } = await import("three-mesh-bvh");
   const w = N.clone().normalize();
   const u = (Math.abs(w.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0)).cross(w).normalize();
   const v = w.clone().cross(u);
   const fr = p => { const d = p.clone().sub(P); return [d.dot(u), d.dot(v), d.dot(w)]; };
+  // la direction permise dans le plan (u, v), et la place ramenee dans ce que le collage permet
+  const ax = axis ? (() => { const a = [axis.dot(u), axis.dot(v)], l = Math.hypot(a[0], a[1]); return l > 1e-6 ? [a[0] / l, a[1] / l] : null; })() : null;
+  const wrap = t => { const r = ((t + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI; return r; };
+  const cons = (th, su, sv) => {
+    if (lock !== null) th = Math.max(-lock, Math.min(lock, wrap(th)));
+    if (ax) { let s = su * ax[0] + sv * ax[1]; if (reach !== null) s = Math.max(-reach, Math.min(reach, s)); su = s * ax[0]; sv = s * ax[1]; }
+    else if (reach !== null) { const d = Math.hypot(su, sv); if (d > reach) { su *= reach / d; sv *= reach / d; } }
+    return [th, su, sv];
+  };
+  const fix = b => { const [th, su, sv] = cons(b.th, b.su, b.sv); return { ...b, th, su, sv }; };
 
   // les maillages des pieces (leur arbre de recherche), et un rayon lance dans le repere du support du modele
   const bvhOf = g => {
@@ -264,10 +278,11 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   const iou = (F, nU, nV, hh, fl, th, su, sv) => { const inter = onFace(F, nU, nV, hh, fl, th, su, sv) * footN; return inter / Math.max(1, footN + faceN - inter); };
   // la note d'une place (plus basse : mieux), grossiere ou fine ; Infinity : impossible
   const turn = th => { const g = ((th * 180 / Math.PI) % 360 + 360) % 360; return Math.min(g, 360 - g); };
-  const pen = (su, sv, th) => 0.02 * Math.hypot(su, sv) + 0.002 * turn(th);
+  const pen = (su, sv, th) => 0.06 * Math.hypot(su, sv) + 0.008 * turn(th);
   // lv : 0 grossier (carte et mailles regroupees), 1 moyen (carte fine, mailles regroupees), 2 fin
   const footN = foot.length / 3;
-  const score = (lv, th, su, sv) => {
+  const score = (lv, th0, su0, sv0) => {
+    const [th, su, sv] = cons(th0, su0, sv0);
     const [Hm, nU_, nV_, hh, cl, fl, F, s0] = lv === 2 ? [H, nu, nv, h, cells, foot, face, 0] : lv === 1 ? [H, nu, nv, h, cc, fc, face, 0] : [Hc, nU, nV, hc, cc, fc, Fc, off];
     if (mode === "align") {
       // la face collee posee a plat sur la face qui porte : le recouvrement, moins la matiere qui traverserait (un peu
@@ -283,9 +298,20 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   // le pas de la recherche grossiere : a la mesure de la piece (une trentaine de pas de chaque cote au plus), tous les 10°
   const ss = Math.max(hc, W / 14), fs = Math.max(2 * h, ss / 5);      // et celui de la passe fine autour
   const all = [];
-  for (let a = 0; a < 36; a++) {
-    const th = a * Math.PI / 18;
-    for (let sv = -W; sv <= W + 1e-9; sv += ss) for (let su = -W; su <= W + 1e-9; su += ss) {
+  const R = reach !== null ? Math.min(W, reach) : W;
+  const angs = lock === null ? Array.from({ length: 36 }, (_, a) => a * Math.PI / 18)
+    : Array.from({ length: 2 * Math.floor(lock / (Math.PI / 18)) + 1 }, (_, a) => (a - Math.floor(lock / (Math.PI / 18))) * Math.PI / 18);
+  for (const th of angs) {
+    if (ax) {
+      for (let s = -R; s <= R + 1e-9; s += Math.min(ss, Math.max(h, R / 4))) {
+        const c = score(0, th, s * ax[0], s * ax[1]);
+        if (c < Infinity) all.push({ th, su: s * ax[0], sv: s * ax[1], c });
+      }
+      continue;
+    }
+    const st = Math.min(ss, Math.max(h, R / 4));
+    for (let sv = -R; sv <= R + 1e-9; sv += st) for (let su = -R; su <= R + 1e-9; su += st) {
+      if (Math.hypot(su, sv) > R + 1e-9) continue;
       const c = score(0, th, su, sv);
       if (c < Infinity) all.push({ th, su, sv, c });
     }
@@ -310,7 +336,7 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
         if (c < Infinity && (!b || c < b.c)) b = { th, su, sv, c };
       }
     }
-    if (b) fines.push(b);
+    if (b) fines.push(fix(b));
   }
   if (!fines.length) return null;
   fines.sort((a, b) => a.c - b.c);
@@ -356,9 +382,10 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
       b.su = mid(x => okp(b.th, x, b.sv), b.su, h, 400);
       b.sv = mid(y => okp(b.th, b.su, y), b.sv, h, 400);
     }
+    b = fix(b);
     if (mode === "nest" && here !== Infinity && lift(H, nu, nv, h, cells, b.th, b.su, b.sv) > here - 0.05) break;     // plus rien a gagner
     let found = null;
-    for (const cand of [b, c0]) {
+    for (const cand of [b, fix(c0)]) {
       const d = dOf(cand);
       if (d === Infinity) continue;
       if (collides && await collides(matOf(cand, d))) { blocked++; continue; }

@@ -1973,8 +1973,12 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
     grp = [[str(k) for k in g if str(k) in clean] for g in (groups or []) if isinstance(g, list)]
     # les collages : piece collee, support, et le contact dans le repere du support
     num = lambda v, n: isinstance(v, list) and len(v) == n and all(isinstance(x, (int, float)) and abs(x) < 1e6 for x in v)
+    # et ses points de colle ajoutes (31/10/2026) : {kind, ag, bg, a, b}, chacun dans le repere de sa piece
+    pins = lambda j: [{"kind": k.get("kind") if k.get("kind") in ("edge", "face") else "point", "ag": str(k["ag"]), "bg": str(k["bg"]),
+                       "a": k["a"], "b": k["b"]} for k in (j.get("pins") or [])[:30] if isinstance(k, dict)
+                      and str(k.get("ag")) in clean and str(k.get("bg")) in clean and num(k.get("a"), 3) and num(k.get("b"), 3)]
     jts = [{"a": str(j["a"]), "b": str(j["b"]), "kind": "edge" if j.get("kind") == "edge" else "face", "p": j["p"], "n": j["n"],
-            **({"e": j["e"]} if num(j.get("e"), 3) else {})}
+            **({"e": j["e"]} if num(j.get("e"), 3) else {}), **({"pins": pins(j)} if pins(j) else {})}
            for j in (joints or []) if isinstance(j, dict) and str(j.get("a")) in clean and str(j.get("b")) in clean
            and num(j.get("p"), 3) and num(j.get("n"), 3)]
     # les pieces separees a la main (refaites en morceaux a l'ouverture), et la version de l'edition
