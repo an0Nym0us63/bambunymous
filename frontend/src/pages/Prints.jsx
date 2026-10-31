@@ -1162,6 +1162,16 @@ const chipS = (c, extra = {}) => ({ position: "absolute", fontSize: 9.5, fontWei
   // depoli blanc ne plaisait pas)
   color: `color-mix(in srgb, ${c} 80%, var(--text))`, background: `color-mix(in srgb, ${c} 22%, var(--surface))`, whiteSpace: "nowrap", ...extra });
 
+// les tuiles (31/10/2026) : rien sur la vignette -- l'etat se lit au cadre (sa couleur, une lueur, un filet anime au
+// bas de l'image pour une impression en cours) et en tete de la ligne de la date ; ×N, ★ a evaluer, le nombre
+// d'impressions d'un groupe, en petites pastilles au bout de la rangee des filaments
+const tagS = (c, extra = {}) => ({ fontSize: 9.5, fontWeight: 900, lineHeight: "14px", padding: "0 6px", borderRadius: 7, whiteSpace: "nowrap", flexShrink: 0,
+  color: `color-mix(in srgb, ${c} 82%, var(--text))`, background: `color-mix(in srgb, ${c} 16%, transparent)`, ...extra });
+const tileEdge = (c, live) => ({ position: "absolute", left: 0, right: 0, bottom: 0, height: 3, zIndex: 1, pointerEvents: "none",
+  background: live ? `linear-gradient(90deg, ${c}, color-mix(in srgb, ${c} 25%, #fff), ${c}, color-mix(in srgb, ${c} 25%, #fff))` : `linear-gradient(90deg, ${c}, color-mix(in srgb, ${c} 40%, transparent))`,
+  backgroundSize: live ? "200% 100%" : undefined, animation: live ? "bn-tile-run 2.4s linear infinite" : undefined });
+const tileFrame = (c, on) => on ? { border: `1px solid color-mix(in srgb, ${c} 45%, var(--border))`, boxShadow: `0 10px 26px -14px ${c}` } : {};
+
 const V2_STATUS = { SUCCESS: ["Réussie", "#22c55e", "✓"], PARTIAL: ["En partie", "#f59e0b", "◐"], FAILED: ["Échouée", "#ef4444", "✕"],
   IN_PROGRESS: ["En cours", "#3b82f6", "●"], CANCELLED: ["Annulée", "#94a3b8", "■"] };
 const v2grad = (a, b) => ({ backgroundImage: `linear-gradient(135deg, ${a}, ${b})`, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" });
@@ -2253,9 +2263,18 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
           <span style={{ fontSize:13, fontWeight:900, color:"var(--text)", flexShrink:0 }}>{duration_seconds > 0 ? durFr(duration_seconds) : ""}</span>
         </div>
       ) : (
-      <div onClick={handleClick} {...press} style={{ ...gFrame, overflow:"hidden", display:"flex", flexDirection:"column", borderRadius:18,
-        border:"1px solid color-mix(in srgb, #A78BFA 30%, var(--border))", background:"var(--surface2)", boxShadow:"0 8px 22px -16px rgba(124,58,237,.6)" }}>
-        <div style={{ position:"relative", paddingTop:"78%", background:"var(--surface)", overflow:"hidden" }}>
+      // un groupe : deux cartes qui depassent derriere, en haut (31/10/2026 : plus de pastille sur la vignette) ; l'image
+      // perd leur hauteur pour que les textes restent alignes sur ceux des impressions
+      <div style={{ position:"relative", paddingTop:8 }}>
+      <span aria-hidden="true" style={{ position:"absolute", top:0, left:16, right:16, height:24, borderRadius:14, zIndex:0,
+        border:"1px solid color-mix(in srgb, #A78BFA 40%, var(--border))", background:"color-mix(in srgb, #A78BFA 22%, var(--surface2))" }}/>
+      <span aria-hidden="true" style={{ position:"absolute", top:4, left:8, right:8, height:24, borderRadius:16, zIndex:0,
+        border:"1px solid color-mix(in srgb, #A78BFA 55%, var(--border))", background:"color-mix(in srgb, #A78BFA 34%, var(--surface2))" }}/>
+      <div onClick={handleClick} {...press} style={{ ...gFrame, zIndex:1, overflow:"hidden", display:"flex", flexDirection:"column", borderRadius:18,
+        // un fond opaque sous la teinte de la tuile : les cartes de derriere ne se voient pas au travers
+        border:"1px solid color-mix(in srgb, #A78BFA 30%, var(--border))", background:"linear-gradient(var(--surface2), var(--surface2)), var(--sheet-bg)", boxShadow:"0 8px 22px -16px rgba(124,58,237,.6)",
+        ...tileFrame(aggCfg?.color, !!aggCfg) }}>
+        <div style={{ position:"relative", paddingTop:"calc(78% - 8px)", background:"var(--surface)", overflow:"hidden" }}>
           <div style={{ position:"absolute", inset:0 }}>
             {/* plusieurs vues 3D choisies : l'une apres l'autre, chacune en grand (30/10/2026), plutot que leur mosaique */}
             {prints[0]?.group_thumb_3d && prints[0]?.group_vue3d_sel?.length > 1
@@ -2264,23 +2283,8 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
               style={{ position:"absolute", inset:0, width:"100%", height:"100%", opacity: on ? 1 : 0, transition:"opacity .8s ease" }}/>}/>
               : <GroupMosaic photos={mosaicUrls} title={name}/>}
           </div>
-          <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, rgba(124,58,237,0.10), transparent 40%)" }}/>
-          <span data-tip={`${prints.length} impression${prints.length > 1 ? "s" : ""} dans ce groupe`} style={chipS("#7C3AED", { top:7, left:7 })}>
-            📁 {prints.length}
-          </span>
           {gCheck}
-          {!selectMode && number_of_items > 1 && (
-            <span data-tip={`${number_of_items} pièces`} style={chipS("#2563EB", { top:7, right:7 })}>×{number_of_items}</span>
-          )}
-          {nToRate > 0 && !selectMode && (
-            <span data-tip={`${nToRate} modèle${nToRate > 1 ? "s" : ""} à évaluer sur MakerWorld`} style={{ position:"absolute", fontSize:10, fontWeight:900, lineHeight:"16px", padding:"0 6px", borderRadius:9, color:"#fff", background:"linear-gradient(135deg, #F59E0B, #FBBF24)", boxShadow:"0 2px 6px rgba(245,158,11,.45)", whiteSpace:"nowrap", bottom:7, right:7 }}>
-              ★{nToRate > 1 ? ` ${nToRate}` : ""}</span>
-          )}
-          {aggCfg && (
-            <span style={chipS(aggCfg.color, { bottom:7, left:7, display:"inline-flex", alignItems:"center", gap:3 })}>
-              <AggIcon size={9}/> {aggCfg.label}
-            </span>
-          )}
+          {aggCfg && <span style={tileEdge(aggCfg.color, true)}/>}
         </div>
         <div style={{ padding:"5px 10px 9px" }}>
           {/* les filaments de toutes ses impressions (une fois chaque couleur), sur la meme petite rangee que les tuiles d'impression */}
@@ -2290,14 +2294,20 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
               {fu.slice(0, 8).map((f, i) => <ColorDot key={i} hex={f.color_hex} colors={f.filament_colors_array} multicolor={f.filament_multicolor_type} size={9} ring="none"
                 style={{ boxShadow:"0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent)" }}/>)}
               {fu.length > 8 && <span style={{ fontSize:9, fontWeight:800, color:"var(--muted)" }}>+{fu.length - 8}</span>}
+              <span style={{ flex:1 }}/>
+              <span data-tip={`${prints.length} impression${prints.length > 1 ? "s" : ""} dans ce groupe`} style={tagS("#7C3AED")}>📁 {prints.length}</span>
+              {number_of_items > 1 && <span data-tip={`${number_of_items} pièces`} style={tagS("#2563EB")}>×{number_of_items}</span>}
+              {nToRate > 0 && <span data-tip={`${nToRate} modèle${nToRate > 1 ? "s" : ""} à évaluer sur MakerWorld`} style={tagS("#F59E0B")}>★{nToRate > 1 ? ` ${nToRate}` : ""}</span>}
             </div>; })()}
           <p style={{ fontWeight:800, fontSize:12.5, color:"#8B5CF6", margin:"0 0 3px",
             overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</p>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }}>
-            <span data-tip={fmtDate(latestDate)} style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{gDay} {gHour.split(" · ")[0]}</span>
+            <span data-tip={fmtDate(latestDate)} style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+              {aggCfg && <span style={{ color:aggCfg.color, fontWeight:900 }}>● {aggCfg.label} · </span>}{gDay} {gHour.split(" · ")[0]}</span>
             {duration_seconds > 0 && <span style={{ fontSize:10.5, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap" }}>{durFr(duration_seconds)}</span>}
           </div>
         </div>
+      </div>
       </div>
       )}
 
@@ -2442,7 +2452,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
       </div>
     ) : (
     <div onClick={handleClick} {...press} style={{ ...frame, overflow:"hidden", display:"flex", flexDirection:"column", borderRadius:18,
-      border:"1px solid var(--border)", background:"var(--surface2)", boxShadow:"0 8px 22px -16px rgba(0,0,0,.45)" }}>
+      border:"1px solid var(--border)", background:"var(--surface2)", boxShadow:"0 8px 22px -16px rgba(0,0,0,.45)", ...tileFrame(stC, p.status !== "SUCCESS") }}>
       {/* la vignette, l'etat en pastille, ×N, ⭐ a evaluer, les filaments */}
       <div style={{ position:"relative", paddingTop:"78%", overflow:"hidden",
         background:`radial-gradient(75% 70% at 50% 45%, ${tint}2e, transparent 75%), linear-gradient(180deg, ${tint}1a, transparent 55%), var(--surface2)` }}>
@@ -2457,9 +2467,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
               style={{ position:"absolute", inset:0, width:"100%", height:"100%", WebkitTouchCallout:"none", WebkitUserDrag:"none" }}
               onError={e => { e.currentTarget.style.display="none"; }}/>}
         {check}
-        {p.number_of_items > 1 && <span data-tip={`${p.number_of_items} pièces`} style={chipS("#2563EB", { top:7, right:7 })}>×{p.number_of_items}</span>}
-        {p.status !== "SUCCESS" && <span style={chipS(stC, { top:7, left:7, visibility: selectMode ? "hidden" : "visible" })}>{stI} {stL}</span>}
-        {rateMe && <span data-tip="À évaluer sur MakerWorld" style={{ position:"absolute", fontSize:10, fontWeight:900, lineHeight:"16px", padding:"0 6px", borderRadius:9, color:"#fff", background:"linear-gradient(135deg, #F59E0B, #FBBF24)", boxShadow:"0 2px 6px rgba(245,158,11,.45)", whiteSpace:"nowrap", bottom:7, right:7 }}>★</span>}
+        {p.status !== "SUCCESS" && <span style={tileEdge(stC, p.status === "IN_PROGRESS")}/>}
       </div>
       <div style={{ padding:"5px 10px 9px" }}>
         {/* les filaments, sur leur propre petite rangee entre la vignette et le nom (30/10/2026 : ni sur l'image, ni sur la
@@ -2469,12 +2477,16 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
           {(p.filament_usage || []).slice(0, 8).map((f, i) => <ColorDot key={i} hex={f.color_hex} colors={f.filament_colors_array} multicolor={f.filament_multicolor_type} size={9} ring="none"
             style={{ boxShadow:"0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent)" }}/>)}
           {(p.filament_usage?.length || 0) > 8 && <span style={{ fontSize:9, fontWeight:800, color:"var(--muted)" }}>+{p.filament_usage.length - 8}</span>}
+          <span style={{ flex:1 }}/>
+          {p.number_of_items > 1 && <span data-tip={`${p.number_of_items} pièces`} style={tagS("#2563EB")}>×{p.number_of_items}</span>}
+          {rateMe && <span data-tip="À évaluer sur MakerWorld" style={tagS("#F59E0B")}>★</span>}
         </div>
         <p style={{ fontWeight:800, fontSize:12.5, color:"var(--text)", margin:"0 0 3px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
           {p.file_name || "Sans nom"}
         </p>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }}>
-          <span data-tip={fmtDate(p.print_date)} style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{day} {hour.split(" · ")[0]}</span>
+          <span data-tip={fmtDate(p.print_date)} style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+            {p.status !== "SUCCESS" && <span style={{ color:stC, fontWeight:900 }}>{stI} {stL} · </span>}{day} {hour.split(" · ")[0]}</span>
           {/* Repli sur estimated_seconds, comme la fiche */}
           {dur > 0 && <span style={{ fontSize:10.5, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap", flexShrink:0 }}>{durFr(dur)}</span>}
         </div>

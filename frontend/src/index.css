@@ -123,6 +123,7 @@ input, textarea, select, [contenteditable]:not([contenteditable="false"]) { care
 @keyframes bn-dash { to { stroke-dashoffset: -16; } }
 @keyframes bn-wave { to { transform: translateX(30px); } }
 @keyframes bn-fade { from { opacity: 0; } }
+@keyframes bn-tile-run { from { background-position: 0 0; } to { background-position: 200% 0; } }
 @keyframes bn-pop { from { opacity: 0; transform: translateY(10px) scale(.97); } }
 @keyframes bn-sheet-up { from { transform: translateY(100%); } }
 @keyframes bn-spool-glow { 0%, 100% { opacity: .35; transform: scale(.92); } 50% { opacity: .9; transform: scale(1.06); } }
