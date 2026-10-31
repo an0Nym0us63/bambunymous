@@ -1449,7 +1449,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       isAdmin && (p.model_3mf || p.source_3mf) && { icon: "🖼", label: "Reprendre la vignette du 3MF", hint: p.model_3mf ? "l'image du plateau, depuis le 3MF tranché" : "l'image du plateau, depuis le 3MF d'origine",
         tone: "#0EA5E9", onClick: async () => {
           try { const r = await client.post(`/prints/${p.id}/plate-image/restore`);
-            setP(prev => ({ ...prev, plate_image: r.data.plate_image, updated_at: new Date().toISOString() })); setRefreshKey(k => k + 1); onChanged?.();
+            setP(prev => ({ ...prev, plate_image: r.data.plate_image, updated_at: r.data.updated_at || new Date().toISOString() })); setRefreshKey(k => k + 1); onChanged?.();
             toast(`Vignette reprise du 3MF ${r.data.from}`); }
           catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
       isAdmin && p.has_vue3d && { icon: "🧊", label: "Vues 3D et vignette", hint: p.thumb_3d ? "Vignette : une vue 3D" : "Vignette : l'image du plateau", tone: "#0EA5E9",

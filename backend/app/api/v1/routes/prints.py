@@ -3126,9 +3126,13 @@ async def print_plate_image_restore(print_id: int, _: str = Depends(require_admi
         tmp.write_bytes(data)
         os.replace(tmp, d / "plate.png")
         p.plate_image = f"prints/{print_id}/plate.png"
+        # la date de mise a jour bouge (le chemin, lui, ne change pas) : l'adresse de la vignette en depend, sinon le
+        # navigateur, qui la garde un an, remontrait l'ancienne
+        p.updated_at = datetime.utcnow()
         await db.commit()
+        upd = p.updated_at.isoformat()
     gallery_touched()
-    return {"ok": True, "from": what, "plate_image": f"prints/{print_id}/plate.png"}
+    return {"ok": True, "from": what, "plate_image": f"prints/{print_id}/plate.png", "updated_at": upd}
 
 
 @router.get("/{print_id}/3mf")
