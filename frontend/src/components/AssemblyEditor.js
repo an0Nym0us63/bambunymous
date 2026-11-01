@@ -135,15 +135,44 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   // un dixieme, puis au cran choisi ; il s'affiche en direct.
   const ROT_GAIN = 0.1;
   let liveAngle = null;
+  // le tour fait autour du cercle (01/11/2026) : three.js ne lit que le glisser projete sur une seule direction (la
+  // tangente au depart) ; en suivant le cercle, l'angle plafonnait (la piece s'arretait) puis redescendait (elle
+  // repartait dans l'autre sens). Ici, l'angle du doigt autour du centre, cumule d'un mouvement a l'autre : un tour du
+  // doigt, un tour de piece, sans limite. Un cercle vu par la tranche (on ne peut pas en faire le tour) garde le
+  // glisser demultiplie de three.js : rend null.
+  const ringTurn = () => {
+    const ax = tc.axis;
+    if (dragStart.circ === undefined) {
+      let A = null;
+      if (ax === "E") A = tc.eye.clone();
+      else if (ax === "X" || ax === "Y" || ax === "Z") {
+        A = new THREE.Vector3(ax === "X" ? 1 : 0, ax === "Y" ? 1 : 0, ax === "Z" ? 1 : 0);
+        if (tc.space === "local") A.applyQuaternion(tc.worldQuaternionStart);
+        if (Math.abs(A.dot(tc.eye)) < 0.3) A = null;
+      }
+      dragStart.circ = A && A.normalize(); dragStart.turn = 0; dragStart.raw = 0;
+    }
+    const A = dragStart.circ;
+    if (!A) return null;
+    // les points du geste, sur le plan face a la camera passant par le centre de la poignee
+    const s = tc.pointStart.clone().projectOnPlane(A), e = tc.pointEnd.clone().projectOnPlane(A);
+    if (s.lengthSq() < 1e-12 || e.lengthSq() < 1e-12) return dragStart.turn;
+    const raw = Math.atan2(s.clone().cross(e).dot(A), s.dot(e));
+    let d = raw - dragStart.raw;
+    d -= 2 * Math.PI * Math.round(d / (2 * Math.PI));
+    dragStart.raw = raw; dragStart.turn += d;
+    return dragStart.turn;
+  };
   tc.addEventListener("objectChange", () => {
     if (!dragStart) return;
     if (tc.mode === "rotate") {
       // l'angle du geste lui-meme (continu, signe), pas celui relu sur la poignee : au-dela d'un demi-tour, un
       // quaternion se replie et l'axe s'inversait, la piece sautait d'un sens a l'autre (30/10/2026)
-      let a = THREE.MathUtils.radToDeg((tc.rotationAngle || 0) * ROT_GAIN);
+      let a = THREE.MathUtils.radToDeg(ringTurn() ?? (tc.rotationAngle || 0) * ROT_GAIN);
       if (rotStep && !alt) a = Math.round(a / rotStep) * rotStep;
       const rq = new THREE.Quaternion().setFromAxisAngle(tc.rotationAxis.clone().normalize(), THREE.MathUtils.degToRad(a));
-      if (tc.space === "local") handle.quaternion.copy(dragStart.q).multiply(rq).normalize();       // l'axe de la poignee (piece collee)
+      // l'axe de la poignee (piece collee) ; le cercle de l'ecran (E) tourne toujours autour de la vue, comme three.js
+      if (tc.space === "local" && tc.axis !== "E" && tc.axis !== "XYZE") handle.quaternion.copy(dragStart.q).multiply(rq).normalize();
       else handle.quaternion.copy(rq).multiply(dragStart.q).normalize();
       liveAngle = Math.round(a * 10) / 10;
       onChange?.(state());
