@@ -2023,11 +2023,14 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
     # d'origine du maillage, r : ses triangles en plages (debut, nombre, debut, nombre…), c : RRGGBB}] ; « tris » (une
     # liste de triangles) est encore lue. 5 millions de triangles et 400 000 plages au plus
     hexok = lambda c: isinstance(c, str) and re.fullmatch(r"[0-9A-Fa-f]{6}", c)
-    col = {str(k): c.upper() for k, c in (colors or {}).items() if str(k) in clean and hexok(c)} if isinstance(colors, dict) else {}
+    # la couleur posee : « RRGGBB » (libre) ou « RRGGBB/finition » (un filament et sa finition, 01/11/2026)
+    pickok = lambda c: isinstance(c, str) and re.fullmatch(r"[0-9A-Fa-f]{6}(/[a-z]{2,16})?", c)
+    norm = lambda c: c[:6].upper() + c[6:]
+    col = {str(k): norm(c) for k, c in (colors or {}).items() if str(k) in clean and pickok(c)} if isinstance(colors, dict) else {}
     pts, ntri, nrun = [], 0, 0
     okint = lambda t: isinstance(t, int) and not isinstance(t, bool) and 0 <= t < 50_000_000
     for z in (paints or [])[:500] if isinstance(paints, list) else []:
-        if not (isinstance(z, dict) and str(z.get("k")) in clean and hexok(z.get("c")) and hexok(z.get("own"))):
+        if not (isinstance(z, dict) and str(z.get("k")) in clean and pickok(z.get("c")) and hexok(z.get("own"))):
             continue
         if isinstance(z.get("r"), list) and len(z["r"]) % 2 == 0 and all(okint(t) for t in z["r"]):
             r = [int(t) for t in z["r"]]
@@ -2044,7 +2047,7 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
         n = sum(r[1::2])
         if n and ntri + n <= 5_000_000 and nrun + len(r) <= 400_000:
             ntri, nrun = ntri + n, nrun + len(r)
-            pts.append({"k": str(z["k"]), "own": z["own"].upper(), "r": r, "c": z["c"].upper()})
+            pts.append({"k": str(z["k"]), "own": z["own"].upper(), "r": r, "c": norm(z["c"])})
     d = {"pieces": clean, "groups": [g for g in grp if len(g) > 1], "joints": jts, "splits": spl, "excluded": exc, "v": 2,
          **({"cuts": cut} if cut else {}), **({"colors": col} if col else {}), **({"paints": pts} if pts else {}),
          "at": time.time(), "by": by, **({"did": did} if did else {})}

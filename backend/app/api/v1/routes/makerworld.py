@@ -947,12 +947,14 @@ async def _group_view(gid: int) -> dict:
     if not meta:
         raise HTTPException(404, "Rien à montrer pour ce groupe")
     shown = T.plates_out(meta, gkey)[0]
+    # les filaments de ses impressions, pour peindre ou recolorier une piece dans l'edition (01/11/2026 : il n'y en avait aucun)
+    used_options = await _used_options(sorted({pid for e in srcs.values() for pid in e["ids"]}))
     try:
         bed = mw.bed_of(await mw.my_printer())
     except Exception:
         bed = [256, 256]
     return {"source": "group", "profile": None, "profile_title": f"{len(meta['plates'][0].get('sources') or [])} 3MF réunis",
-            "ms": 0, "bed": bed, "used_palette": None, "used_detail": None, "fetch_error": None, "used_options": [], "chosen": {},
+            "ms": 0, "bed": bed, "used_palette": None, "used_detail": None, "fetch_error": None, "used_options": used_options, "chosen": {},
             "scope": None, "used_plates": {}, "used_details_plates": {}, "used_multi_plates": {}, "used_multi": {},
             "used_finishes_plates": {}, "finishes": finishes, "used_finishes": {}, "plates": shown, "skipped": [],
             "piece_plates": {}, "key": gkey, "missing": missing,

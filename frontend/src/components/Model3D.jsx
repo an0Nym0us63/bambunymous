@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { finishCanvas } from "../utils/finishTex";
+import { colorBg, FINISHES } from "../utils/colors";
 import { egg } from "../eggs";
 import { ColorPairs, chooseColor } from "./ColorMap";
 import { FSheet } from "./FicheKit";
@@ -97,7 +98,70 @@ function boxUV(THREE, geo) {
     }
   }
   g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  // un index trivial (01/11/2026) : les triangles gardent leur ordre, et la peinture (qui les retrouve par l'index) marche
+  // aussi sur une piece a motif
+  g.setIndex(new THREE.BufferAttribute(Uint32Array.from({ length: p.count }, (_, i) => i), 1));
   return g;
+}
+
+// la finition d'un filament posee sur une matiere de sa couleur c (01/11/2026 : la meme pour une piece lue et pour une
+// zone peinte ou une piece recoloriee d'un filament) ; texOf : les motifs deja dessines. Rend vrai si le motif demande
+// des coordonnees de texture (boxUV). Le reflet (envMap) est pose par l'appelant.
+function finishOn(THREE, mat, c, fin, texOf, disposables) {
+  // phosphorescent : il luit de sa couleur, eclaircie (une piece eclairee de l'interieur)
+  // (la couleur eclairee baissee d'autant : sinon la somme sature, et la piece vire au blanc)
+  if (fin === "glow") { mat.color = c.clone().multiplyScalar(0.6); mat.emissive = c.clone(); mat.emissiveIntensity = 0.45; mat.roughness = 0.6; }
+  // le reflet s'ajoute a l'eclairage : la couleur est un peu baissee d'autant, sinon un gris satine sort blanc
+  if (fin === "silk") {
+    // le brillant d'un silk : la couleur de la face reste la sienne (aucun voile, c'est lui qui blanchissait un gris) ;
+    // seul un lisere etroit, de sa propre couleur, s'allume sur la tranche vue en biais, comme un fil qui accroche la lumiere
+    const prev = mat.onBeforeCompile;
+    mat.onBeforeCompile = sh => {
+      prev?.(sh);
+      sh.fragmentShader = sh.fragmentShader.replace("#include <emissivemap_fragment>",
+        "#include <emissivemap_fragment>\n  { float fr = 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)));\n" +
+        "    float rim = pow(smoothstep(0.5, 1.0, fr), 2.5);\n" +
+        "    totalEmissiveRadiance += diffuseColor.rgb * rim * 0.35; }");
+    };
+  }
+  let uv = false;
+  if (["sparkle", "galaxy", "marble", "wood", "carbon"].includes(fin)) {
+    if (!texOf[fin]) {
+      const { cv, emit } = finishCanvas(fin, "3d");
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = 4; texOf[fin] = { t, emit }; disposables.push(t);
+    }
+    const { t, emit } = texOf[fin];
+    uv = true;
+    if (emit) { mat.emissive = new THREE.Color(0xffffff); mat.emissiveMap = t; mat.emissiveIntensity = 0.9; }
+    else mat.map = t;
+    // carbone (28/10/2026) : en couleur seule, la trame multipliait du noir et ne se voyait pas ; elle module
+    // aussi la rugosite (les brins brillent differemment) et affleure a peine en lumiere
+    if (fin === "carbon") { mat.roughnessMap = t; mat.emissive = new THREE.Color(0xffffff); mat.emissiveMap = t; mat.emissiveIntensity = 0.05; }
+  }
+  if (fin === "glow") {
+    mat.userData.glow = true; mat.userData.dayEmit = mat.emissiveIntensity;
+    // dans le noir, autant de lumiere pour toutes les couleurs : un bleu ou un rouge (sombres) luisent plus fort
+    const lum = 0.2126 * mat.emissive.r + 0.7152 * mat.emissive.g + 0.0722 * mat.emissive.b;
+    mat.userData.nightEmit = Math.min(1.3, 0.3 / Math.max(0.12, lum));
+    // un lisere lumineux sur les bords (la ou la surface fuit le regard) : on le devine phosphorescent meme
+    // lumiere allumee
+    const rim = { value: 2.2 };
+    mat.userData.rim = rim;
+    const prev = mat.onBeforeCompile;
+    mat.onBeforeCompile = sh => {
+      prev?.(sh);
+      sh.uniforms.rimK = rim;
+      sh.fragmentShader = "uniform float rimK;\n" + sh.fragmentShader.replace("#include <emissivemap_fragment>",
+        // la lueur suit legerement le relief (un peu plus forte de face) : les gravures restent devinables sans
+        // rien enlever a la lueur d'ensemble (28/10/2026)
+        "#include <emissivemap_fragment>\n  float ndv = abs(dot(normalize(normal), normalize(vViewPosition)));\n" +
+        // le lisere passe par un lissage : sur des facettes planes, un seuil franc d'une face a l'autre fourmillait sous le halo
+        "  float rimF = pow(smoothstep(0.08, 1.0, 1.0 - ndv), 1.6);\n" +
+        "  totalEmissiveRadiance = totalEmissiveRadiance * (0.82 + 0.18 * ndv) + emissive * rimF * rimK;");
+    };
+  }
+  return uv;
 }
 
 // pieces / edit (29/10/2026) : la vue assemblee, piece par piece (cle, nom, decalage « o » de ses sommets affiches par
@@ -214,6 +278,27 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         return envTex;
       };
       const texOf = {};
+      // la matiere d'une couleur choisie dans l'edition (01/11/2026) : une couleur libre (sans effet), ou un filament (sa
+      // finition avec) ; une par couleur et finition, partagee
+      const finMats = new Map();
+      const matFor = (hex, fin) => {
+        const key = `${hex}/${fin || ""}`;
+        if (finMats.has(key)) return finMats.get(key);
+        const c = new THREE.Color(`#${hex}`);
+        const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true, envMapIntensity: 0, side: THREE.DoubleSide,
+          ...(FINISH_MAT[fin] || {}) });
+        mat.userData.needUV = finishOn(THREE, mat, c, fin, texOf, disposables);
+        if (FINISH_MAT[fin]?.envMapIntensity) {
+          mat.userData.waitEnv = [];                        // les copies faites d'ici la (assemblyPaint)
+          envMap().then(t => {
+            for (const x of [mat, ...mat.userData.waitEnv]) { x.envMap = t; x.needsUpdate = true; }
+            delete mat.userData.waitEnv; render();
+          }).catch(() => {});
+        }
+        disposables.push(mat); finMats.set(key, mat);
+        return mat;
+      };
+      matFor.uv = g => boxUV(THREE, g);
       // le plateau de l'imprimante, en repere
       // un carre de 16 mm, etire a la taille du plateau
       const [bw, bd] = bed || BED, side = Math.max(bw, bd);
@@ -381,38 +466,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
                   "    diffuseColor.rgb *= mc * (0.92 + 0.25 * fr); }");     // *= : le motif de la finition reste par-dessus
               };
             }
-            // phosphorescent : il luit de sa couleur, eclaircie (une piece eclairee de l'interieur)
-            // (la couleur eclairee baissee d'autant : sinon la somme sature, et la piece vire au blanc)
-            if (fin === "glow") { mat.color = c.clone().multiplyScalar(0.6); mat.emissive = c.clone(); mat.emissiveIntensity = 0.45; mat.roughness = 0.6; }
             if (FINISH_MAT[fin]?.envMapIntensity) mat.envMap = await envMap();
-            // le reflet s'ajoute a l'eclairage : la couleur est un peu baissee d'autant, sinon un gris satine sort blanc
-            if (fin === "silk") {
-              // le brillant d'un silk : la couleur de la face reste la sienne (aucun voile, c'est lui qui blanchissait un gris) ;
-              // seul un lisere etroit, de sa propre couleur, s'allume sur la tranche vue en biais, comme un fil qui accroche la lumiere
-              const prev = mat.onBeforeCompile;
-              mat.onBeforeCompile = sh => {
-                prev?.(sh);
-                sh.fragmentShader = sh.fragmentShader.replace("#include <emissivemap_fragment>",
-                  "#include <emissivemap_fragment>\n  { float fr = 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)));\n" +
-                  "    float rim = pow(smoothstep(0.5, 1.0, fr), 2.5);\n" +
-                  "    totalEmissiveRadiance += diffuseColor.rgb * rim * 0.35; }");
-              };
-            }
             let mesh = geo;
-            if (["sparkle", "galaxy", "marble", "wood", "carbon"].includes(fin)) {
-              if (!texOf[fin]) {
-                const { cv, emit } = finishCanvas(fin, "3d");
-                const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
-                t.anisotropy = 4; texOf[fin] = { t, emit }; disposables.push(t);
-              }
-              const { t, emit } = texOf[fin];
-              mesh = boxUV(THREE, geo); geo.dispose();
-              if (emit) { mat.emissive = new THREE.Color(0xffffff); mat.emissiveMap = t; mat.emissiveIntensity = 0.9; }
-              else mat.map = t;
-              // carbone (28/10/2026) : en couleur seule, la trame multipliait du noir et ne se voyait pas ; elle module
-              // aussi la rugosite (les brins brillent differemment) et affleure a peine en lumiere
-              if (fin === "carbon") { mat.roughnessMap = t; mat.emissive = new THREE.Color(0xffffff); mat.emissiveMap = t; mat.emissiveIntensity = 0.05; }
-            }
+            if (finishOn(THREE, mat, c, fin, texOf, disposables)) { mesh = boxUV(THREE, geo); geo.dispose(); }
             if (hueU) {
               const prev = mat.onBeforeCompile;
               mat.color.set(0xffffff);
@@ -430,26 +486,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             }
             const piece = new THREE.Mesh(mesh, mat);
             piece.userData.own = own;
-            if (fin === "glow") {
-              piece.userData.glow = true; mat.userData.dayEmit = mat.emissiveIntensity;
-              // dans le noir, autant de lumiere pour toutes les couleurs : un bleu ou un rouge (sombres) luisent plus fort
-              const lum = 0.2126 * mat.emissive.r + 0.7152 * mat.emissive.g + 0.0722 * mat.emissive.b;
-              mat.userData.nightEmit = Math.min(1.3, 0.3 / Math.max(0.12, lum));
-              // un liseré lumineux sur les bords (la ou la surface fuit le regard) : on le devine phosphorescent meme
-              // lumiere allumee
-              const rim = { value: 2.2 };
-              mat.userData.rim = rim;
-              mat.onBeforeCompile = sh => {
-                sh.uniforms.rimK = rim;
-                sh.fragmentShader = "uniform float rimK;\n" + sh.fragmentShader.replace("#include <emissivemap_fragment>",
-                  // la lueur suit legerement le relief (un peu plus forte de face) : les gravures restent devinables sans
-                  // rien enlever a la lueur d'ensemble (28/10/2026)
-                  "#include <emissivemap_fragment>\n  float ndv = abs(dot(normalize(normal), normalize(vViewPosition)));\n" +
-                  // le lisere passe par un lissage : sur des facettes planes, un seuil franc d'une face a l'autre fourmillait sous le halo
-                  "  float rimF = pow(smoothstep(0.08, 1.0, 1.0 - ndv), 1.6);\n" +
-                  "  totalEmissiveRadiance = totalEmissiveRadiance * (0.82 + 0.18 * ndv) + emissive * rimF * rimK;");
-              };
-            }
+            if (mat.userData.glow) piece.userData.glow = true;
             if (byPiece) {
               let pg = byPiece.get(g.piece);
               if (!pg) { pg = new THREE.Group(); pg.userData = { pid: g.piece, ...(pieces[g.piece] || {}) }; byPiece.set(g.piece, pg); holder.add(pg); }
@@ -522,7 +559,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             // ses couleurs (31/10/2026) : une piece entiere, et les zones peintes
             if (Object.keys(edit?.colors || {}).length || edit?.paints?.length) {
               const { applyColors } = await import("./assemblyPaint");
-              applyColors(THREE, [...byPiece.values()], edit.colors || {}, edit.paints || []);
+              applyColors(THREE, [...byPiece.values()], edit.colors || {}, edit.paints || [], matFor);
             }
           }
           model.add(holder);
@@ -599,6 +636,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         const glowMats = [];
         scene.traverse(o => { if (o.isMesh && o.userData.glow) glowMats.push(o.material); });
         const night = async on => {
+          // relues a chaque bascule : une zone peinte ou une piece recoloriee d'un filament phosphorescent en est
+          glowMats.length = 0;
+          scene.traverse(o => { if (o.isMesh && o.userData.glow && !glowMats.includes(o.material)) glowMats.push(o.material); });
           if (on && !composer) {
             const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }, { SMAAPass }] = await Promise.all([
               import("three/examples/jsm/postprocessing/EffectComposer.js"), import("three/examples/jsm/postprocessing/RenderPass.js"),
@@ -768,7 +808,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             const cur = editNow.current;
             editor = await createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder: ed.holder, pieces: ed.byPiece, render, onChange,
               groupsInit: cur?.groups || [], jointsInit: cur?.joints || [], copyPiece: (src, n) => copyPiece(THREE, src, n), cutsInit: cur?.cuts || {},
-              colorsInit: cur?.colors || {}, paintsInit: cur?.paints || [],
+              colorsInit: cur?.colors || {}, paintsInit: cur?.paints || [], matFor,
               // pas encore enregistre par cette version : les parties d'un meme objet partent groupees
               groupByObject: cur?.v !== 2 });
             if (import.meta.env.DEV) window.__asmEditor = { editor, holder: ed.holder, pieces: ed.byPiece, THREE, camera };   // banc d'essai seulement
@@ -1256,12 +1296,12 @@ function Swatches({ list, value, onPick, free = true }) {
   const dot = (c, on) => ({ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, cursor: "pointer", padding: 0, background: `#${c}`,
     border: on ? "3px solid #0EA5E9" : "2px solid color-mix(in srgb, var(--text) 25%, transparent)", boxShadow: on ? "0 0 0 2px var(--surface)" : "none" });
   return <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", maxWidth: 260 }}>
-    {(list || []).map(x => <button key={x.c} type="button" aria-label={x.name || `#${x.c}`} data-tip={x.name ? `${x.name} · #${x.c}` : `#${x.c}`}
-      onClick={() => onPick(x.c)} style={dot(x.c, value === x.c)}/>)}
+    {(list || []).map(x => <button key={x.c} type="button" aria-label={x.name || `#${x.hex || x.c}`} data-tip={x.name ? `${x.name} · #${x.hex || x.c}` : `#${x.hex || x.c}`}
+      onClick={() => onPick(x.c)} style={{ ...dot(x.hex || x.c, value === x.c), ...(x.fin ? { background: undefined, ...colorBg([x.hex], null, x.fin, { size: 26 }) } : {}) }}/>)}
     {free && <label data-tip="Une couleur libre" style={{ position: "relative", width: 26, height: 26, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
       background: "conic-gradient(#ef4444, #f59e0b, #22c55e, #0ea5e9, #8b5cf6, #ec4899, #ef4444)",
       border: value && !(list || []).some(x => x.c === value) ? "3px solid #0EA5E9" : "2px solid color-mix(in srgb, var(--text) 25%, transparent)" }}>
-      <input type="color" value={`#${value && value !== "mix" ? value : "888888"}`} onChange={e => onPick(e.target.value.slice(1).toUpperCase())}
+      <input type="color" value={`#${value && value !== "mix" ? value.split("/")[0] : "888888"}`} onChange={e => onPick(e.target.value.slice(1).toUpperCase())}
         style={{ position: "absolute", inset: 0, opacity: 0, width: "100%", height: "100%", cursor: "pointer", border: "none", padding: 0 }}/></label>}
   </div>;
 }
@@ -1820,7 +1860,14 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   // les couleurs a poser (31/10/2026) : les filaments des impressions de ce modele (une fois chacun)
   const swatchList = useMemo(() => {
     const seen = new Map();
-    for (const o of meta?.used_options || []) if (o.color && !seen.has(o.color)) seen.set(o.color, { c: o.color, name: [o.name, o.kind].filter(Boolean).join(" · ") });
+    // les filaments des impressions (de l'impression, ou du groupe) : leur couleur et leur finition (01/11/2026 : peindre
+    // d'un filament soie ou phosphorescent en donne l'effet) ; une couleur libre reste sans effet
+    for (const o of meta?.used_options || []) {
+      if (!o.color) continue;
+      const v = o.finish ? `${o.color}/${o.finish}` : o.color;
+      if (!seen.has(v)) seen.set(v, { c: v, hex: o.color, fin: o.finish || null,
+        name: [o.name, o.kind, o.finish && (FINISHES.find(f => f[0] === o.finish)?.[1] || o.finish)].filter(Boolean).join(" · ") });
+    }
     return [...seen.values()];
   }, [meta?.used_options]);
   const [pfull, setPfull] = useState(false), [editErr, setEditErr] = useState(null), [starting, setStarting] = useState(false);

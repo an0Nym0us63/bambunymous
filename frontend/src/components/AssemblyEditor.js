@@ -24,7 +24,7 @@ import { applyColors, resolve as paintResolve, zoneOf, brushOf, toRuns, tris as 
 export const preloadEditor = () => import("three/examples/jsm/controls/TransformControls.js").catch(() => {});
 
 export async function createAssemblyEditor({ THREE, scene, camera, renderer, controls, holder, pieces, render, onChange, groupsInit = [], jointsInit = [], groupByObject = false,
-                                                  copyPiece = null, cutsInit = {}, colorsInit = {}, paintsInit = [] }) {
+                                                  copyPiece = null, cutsInit = {}, colorsInit = {}, paintsInit = [], matFor = null }) {
   const { TransformControls } = await import("three/examples/jsm/controls/TransformControls.js");
   const el = renderer.domElement;
   const ray = new THREE.Raycaster();
@@ -179,7 +179,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     joints = s.joints.map(cloneJ);
     if (s.kp) keepPins = s.kp.slice();
     if (s.col && (JSON.stringify(s.col) !== JSON.stringify(colors) || s.pt.length !== paints.length || s.pt.some((p, i) => p.tris !== paints[i].tris || p.c !== paints[i].c))) {
-      colors = { ...s.col }; paints = s.pt.map(p => ({ ...p })); applyColors(THREE, all, colors, paints);
+      colors = { ...s.col }; paints = s.pt.map(p => ({ ...p })); applyColors(THREE, all, colors, paints, matFor);
     }
     placeHandle(); showContact(); render(); };
   // l'historique repart d'ici (une piece ajoutee ou retiree : les etats d'avant n'ont pas le meme nombre de pieces)
@@ -1651,7 +1651,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       e.p.tris = [...e.set];
       st.changed = true;
     }
-    applyColors(THREE, [g], colors, paints);           // seule la piece touchee change
+    applyColors(THREE, [g], colors, paints, matFor);           // seule la piece touchee change
     render();
   };
   const onPaintDown = ev => {
@@ -1998,13 +1998,13 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     setPieceColor: hex => {
       if (!sel.size) return;
       for (const g of sel) { if (hex) colors[g.userData.k] = hex; else delete colors[g.userData.k]; }
-      applyColors(THREE, [...sel], colors, paints); push(); render(); if (hex) egg("piece_couleur");
+      applyColors(THREE, [...sel], colors, paints, matFor); push(); render(); if (hex) egg("piece_couleur");
     },
     clearPaint: () => {
       const tops = new Set([...(sel.size ? sel : all)].map(g => { const m = g.children.find(x => x.isMesh); return m ? paintResolve(m, g).top : g.userData.k; }));
       const n = paints.length;
       paints = paints.filter(p => !tops.has(p.k));
-      if (paints.length !== n) { applyColors(THREE, all, colors, paints); push(); render(); }
+      if (paints.length !== n) { applyColors(THREE, all, colors, paints, matFor); push(); render(); }
     },
     setPaint: ({ tool, color, r, crease } = {}) => {
       if (tool) paintTool = tool;

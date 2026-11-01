@@ -54,11 +54,25 @@ const base = m => {
   ownOf(m);
 };
 
-// remet chaque maillage comme lu, puis pose les couleurs des pieces et les zones peintes
-export function applyColors(THREE, groups, colors = {}, paints = []) {
+// une couleur posee : « RRGGBB » (une couleur libre) ou « RRGGBB/finition » (un filament, 01/11/2026 : sa finition
+// avec -- soie, paillettes, phosphorescent...)
+export const colorOf = v => { const [hex, fin] = String(v || "").split("/"); return { hex, fin: fin || null }; };
+
+// remet chaque maillage comme lu, puis pose les couleurs des pieces et les zones peintes ; matFor(hex, finition) : la
+// matiere d'une couleur posee (celle de la vue, avec la finition du filament) ; sans elle, la matiere lue reteinte
+export function applyColors(THREE, groups, colors = {}, paints = [], matFor = null) {
   const mats = new Map();
-  const tint = (mat0, hex) => {
-    const key = `${mat0.uuid}|${hex}`;
+  const tint = (mat0, v) => {
+    const { hex, fin } = colorOf(v);
+    const key = `${mat0.uuid}|${v}`;
+    // une matiere a chaque piece (la selection estompe les autres pieces matiere par matiere), copiee de celle de la vue
+    if (matFor && !mats.has(key)) {
+      const b = matFor(hex, fin), m = b.clone();
+      m.onBeforeCompile = b.onBeforeCompile; m.customProgramCacheKey = b.customProgramCacheKey;
+      const { waitEnv, ...ud } = b.userData; m.userData = ud;
+      waitEnv?.push(m);                                     // le reflet, pas encore prepare : pose a son arrivee
+      mats.set(key, m);
+    }
     if (!mats.has(key)) {
       const m = mat0.clone();
       m.onBeforeCompile = mat0.onBeforeCompile; m.customProgramCacheKey = mat0.customProgramCacheKey; m.userData = mat0.userData;
@@ -74,33 +88,43 @@ export function applyColors(THREE, groups, colors = {}, paints = []) {
     const meshes = g.children.filter(x => x.isMesh);
     meshes.forEach(base);
     const pc = colors[g.userData.k];
+    // une piece d'un filament a motif (paillettes, marbre...) sur un maillage sans coordonnees de texture : posee comme une
+    // zone peinte de toute la piece (le motif a besoin de faces a part)
+    const whole = new Set();
     for (const m of meshes) {
       if (m.userData.idx0) { m.geometry.index.array.set(m.userData.idx0); m.geometry.index.needsUpdate = true; }
-      m.material = pc ? tint(m.userData.mat0, pc) : m.userData.mat0;
+      const mat = pc ? tint(m.userData.mat0, pc) : m.userData.mat0;
+      if (pc && mat.userData?.needUV && !m.geometry.attributes.uv && m.geometry.index) { whole.add(m); m.material = m.userData.mat0; }
+      else m.material = mat;
+      m.userData.glow = !!m.material.userData?.glow;
     }
-    if (!paints.length) continue;
+    if (!paints.length && !whole.size) continue;
     for (const m of meshes) {
       const { top, own, map } = resolve(m, g);
       const mine = paints.filter(p => p.k === top && p.own === own);
-      if (!mine.length) continue;
+      if (!mine.length && !whole.has(m)) continue;
       const idx = m.geometry.index.array, n = idx.length / 3;
       const local = new Map();                              // triangle d'origine -> triangle de ce maillage
       for (let t = 0; t < n; t++) { const o = map(t); if (o != null) local.set(o, t); }
-      const colorOf = new Map();
-      for (const p of mine) for (const o of tris(p)) { const t = local.get(o); if (t != null) colorOf.set(t, p.c); }
-      if (!colorOf.size) continue;
+      const cOf = new Map();
+      if (whole.has(m)) for (let t = 0; t < n; t++) if (!(idx[t * 3] === idx[t * 3 + 1] && idx[t * 3 + 1] === idx[t * 3 + 2]) && map(t) != null) cOf.set(t, pc);
+      for (const p of mine) for (const o of tris(p)) { const t = local.get(o); if (t != null) cOf.set(t, p.c); }
+      if (!cOf.size) continue;
       const byC = new Map();
-      for (const [t, c] of colorOf) { if (!byC.has(c)) byC.set(c, []); byC.get(c).push(t); }
+      for (const [t, c] of cOf) { if (!byC.has(c)) byC.set(c, []); byC.get(c).push(t); }
       for (const [c, ts] of byC) {
         const ix = new Uint32Array(ts.length * 3), orig = new Int32Array(ts.length);
         ts.forEach((t, i) => { ix[i * 3] = idx[t * 3]; ix[i * 3 + 1] = idx[t * 3 + 1]; ix[i * 3 + 2] = idx[t * 3 + 2]; orig[i] = map(t); });
         for (const t of ts) { idx[t * 3 + 1] = idx[t * 3]; idx[t * 3 + 2] = idx[t * 3]; }   // aplati dans son maillage
-        const geo = new THREE.BufferGeometry();
+        let geo = new THREE.BufferGeometry();
         for (const [name, a] of Object.entries(m.geometry.attributes)) geo.setAttribute(name, a);
         geo.setIndex(new THREE.BufferAttribute(ix, 1));
+        const mat = tint(m.userData.mat0, c);
+        // un motif (paillettes, marbre, bois...) : ses coordonnees de texture, face par face (l'ordre des triangles reste)
+        if (mat.userData?.needUV && !geo.attributes.uv && matFor?.uv) { const u = matFor.uv(geo); geo.setIndex(null); geo = u; }
         geo.computeBoundingSphere();
-        const pm = new THREE.Mesh(geo, tint(m.userData.mat0, c));
-        pm.userData = { isPaint: true, paint: { k: top, own, orig }, own };
+        const pm = new THREE.Mesh(geo, mat);
+        pm.userData = { isPaint: true, paint: { k: top, own, orig }, own, glow: !!mat.userData?.glow };
         g.add(pm);
       }
       m.geometry.index.needsUpdate = true;
