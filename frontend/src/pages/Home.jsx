@@ -809,6 +809,25 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
     const el = hdr.current;
     if (el && cut < 3 && el.scrollWidth > el.clientWidth + 1) setCut(c => c + 1);
   });
+  // l'onglet du sechage tient dans la largeur de l'unite (01/11/2026 : « PETG Translucent · 11h57 » debordait d'une
+  // unite etroite, HT) : le filament et le temps, sinon le temps, sinon la flamme ; mesure comme l'en-tete
+  const tabTxt = [a.dry_filament && `🔥 ${a.dry_filament} · ${dryLeft(a.dry_time)}`, `🔥 ${dryLeft(a.dry_time)}`, "🔥"].filter(Boolean);
+  const tabEl = useRef(null);
+  const [tcut, setTcut] = useState(0);
+  useEffect(() => { setTcut(0); }, [uw, tabTxt[0]]);
+  // la largeur reelle de l'unite change (ecran tourne, fenetre elargie) : on retente le texte entier
+  useEffect(() => {
+    const el = tabEl.current?.parentElement;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let w = el.clientWidth;
+    const ro = new ResizeObserver(() => { if (el.clientWidth !== w) { w = el.clientWidth; setTcut(0); } });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [dry, big]);
+  useLayoutEffect(() => {
+    const el = tabEl.current;
+    if (el && tcut < tabTxt.length - 1 && el.scrollWidth > el.clientWidth + 1) setTcut(c => c + 1);
+  });
   const want = (route ? 30 : 0) + (climate && a.humidity > 0 ? 38 : 0);
   const short = !big && (cut >= 1 || uw - 14 - (amsName(a.id).length * 7 + (act ? 10 : 0)) < want) && a.id < 128;
   const label = short ? amsName(a.id).replace("AMS-", "") : amsName(a.id);
@@ -835,9 +854,10 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
     </button>
   );
   const head = big ? 20 : 15;
-  const tab = !big && dry && <span title={`Séchage${a.dry_filament ? ` ${a.dry_filament}` : ""}`} style={{ position: "absolute", top: -7, left: "50%", transform: "translateX(-50%)", zIndex: 2,
+  const tab = !big && dry && <span ref={tabEl} data-tip={`Séchage${a.dry_filament ? ` ${a.dry_filament}` : ""} · ${dryLeft(a.dry_time)}`} style={{ position: "absolute", top: -7, left: "50%", transform: "translateX(-50%)", zIndex: 2,
+    maxWidth: "calc(100% - 8px)", boxSizing: "border-box", overflow: "hidden", textOverflow: "ellipsis",
     padding: "0 7px", height: 13, lineHeight: "13px", borderRadius: 7, fontSize: 9, fontWeight: 900, color: "#fff", background: "#f97316",
-    whiteSpace: "nowrap", boxShadow: "0 2px 6px rgba(249,115,22,0.35)" }}>🔥 {a.dry_filament ? `${a.dry_filament} · ` : ""}{dryLeft(a.dry_time)}</span>;
+    whiteSpace: "nowrap", boxShadow: "0 2px 6px rgba(249,115,22,0.35)" }}>{tabTxt[Math.min(tcut, tabTxt.length - 1)]}</span>;
   let broom = uw - 22;
   const bfit = w => (broom -= w + 4) >= 0;
   const dryFull = `🔥 ${a.dry_temperature > 0 ? `${a.dry_temperature}° · ` : ""}${dryLeft(a.dry_time)}`, dryShort = `🔥 ${dryLeft(a.dry_time)}`;
