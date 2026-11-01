@@ -285,6 +285,12 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
       onState({ busy: true, error: null });
       const THREE = await import("three");
       const { OrbitControls } = await import("three/examples/jsm/controls/OrbitControls.js");
+      // l'ecran noir qui clignote en tournant, lumiere eteinte (01/11/2026) : un triangle minuscule, vu par la tranche, n'a
+      // pas de normale (0/0) et donne un pixel « pas un nombre » ; le halo l'etale sur toute l'image, noire le temps d'une
+      // image. Un tel pixel sort noir, et le halo ne voit plus que des nombres.
+      if (!THREE.ShaderChunk.dithering_fragment.includes("isnan")) {
+        THREE.ShaderChunk.dithering_fragment += "\n  if (any(isnan(gl_FragColor)) || any(isinf(gl_FragColor))) gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);";
+      }
       if (dead || !box.current) return;
       const el = box.current;
       // la 3D du navigateur (WebGL) peut manquer : apres un plantage de son processus graphique (31/10/2026, msedgewebview2),

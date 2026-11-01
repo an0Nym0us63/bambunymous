@@ -73,7 +73,7 @@ function Picker({ kind, id, shot, onDone, close }) {
           <img src={apiUrl(s.url.replace(/^\/api\/v1/, ""))} alt="" style={img(sel.includes(s.n))}/>
           {sel.includes(s.n) ? <button type="button" disabled={busy} onClick={() => toggle(s.n)} data-tip="Elle est dans la vignette : la retirer"
               style={btn(false, { color: "#0EA5E9", borderColor: "#0EA5E9" })}>★ Choisie</button>
-            : <button type="button" disabled={busy} onClick={() => toggle(s.n)} data-tip="L'ajouter à la vignette (plusieurs : une mosaïque)" style={btn(true)}>⭐ Vignette</button>}
+            : <button type="button" disabled={busy} onClick={() => toggle(s.n)} data-tip="L'ajouter à la vignette (plusieurs : elles défilent l'une après l'autre)" style={btn(true)}>⭐ Vignette</button>}
           {shot && !saved && <button type="button" disabled={busy} onClick={() => put(s.n)} style={btn(false)}>↻ Remplacer</button>}
           <button type="button" disabled={busy} onClick={() => drop(s.n)} style={sure === s.n ? btn(false, { color: "#fff", background: "#991b1b", borderColor: "#991b1b", boxShadow: "0 4px 12px -4px #991b1b" })
             : btn(false, { color: "#ef4444" })}>{sure === s.n ? "⚠ Confirmer" : "🗑 Supprimer"}</button>
@@ -81,10 +81,10 @@ function Picker({ kind, id, shot, onDone, close }) {
       </div>}
       {d?.cover && sel.length > 1 && <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12.5, fontWeight: 700 }}>
         <img src={(u => `${u}${u.includes("?") ? "&" : "?"}v=${d.cover.v}`)(apiUrl(`${kind === "group" ? `/prints/groups/${id}/photo` : `/prints/${id}/file`}/${d.cover.name}`))} alt="" style={{ ...img(true), width: 72, height: 72 }}/>
-        <span>La vignette : une mosaïque des {sel.length} vues choisies</span>
+        <span>La vignette : les {sel.length} vues choisies défilent l'une après l'autre</span>
       </div>}
       {d && !d.slots.length && !shot && <span style={{ fontSize: 12.5 }}>Aucune vue : prends-en une avec 📸 dans la vue 3D.</span>}
-      <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Jusqu'à {d?.max || 4} vues, prises avec 📸 dans la vue 3D : un plateau ou l'assemblage, de jour, de nuit ou éclairé par derrière, telle qu'affichée. Plusieurs choisies : la vignette en fait une mosaïque.</span>
+      <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Jusqu'à {d?.max || 4} vues, prises avec 📸 dans la vue 3D : un plateau ou l'assemblage, de jour, de nuit ou éclairé par derrière, telle qu'affichée. Plusieurs choisies : elles défilent l'une après l'autre sur la vignette.</span>
     </div>
   </div>;
 }
