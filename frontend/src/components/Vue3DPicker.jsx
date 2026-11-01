@@ -46,6 +46,11 @@ function Picker({ kind, id, shot, onDone, close }) {
     color: main ? "#fff" : "var(--text2)", background: main ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)",
     whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", padding: "0 6px", ...extra });
   const def = kind === "group" ? "Mosaïque des impressions" : "Image du plateau";
+  // la vue qui vient d'etre prise (01/11/2026) : une fois rangee, rien ne la distinguait des autres ; elle porte un
+  // badge, un cadre vert, et on l'amene sous les yeux
+  const fresh = shot && typeof saved === "number" ? saved : 0;
+  const freshRef = React.useRef(null);
+  useEffect(() => { if (fresh) freshRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [fresh, d]);
   return <div onClick={close} style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(2,6,23,.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
     <div onClick={e => e.stopPropagation()} style={{ width: "min(560px, calc(100% - 32px))", maxHeight: "calc(100% - 40px)", overflowY: "auto", padding: "16px 18px",
       borderRadius: 16, background: "var(--sheet-bg)", border: "1px solid var(--border)", boxShadow: "0 20px 60px rgba(0,0,0,.4)", color: "var(--text2)",
@@ -62,6 +67,10 @@ function Picker({ kind, id, shot, onDone, close }) {
             : d && <span style={{ color: "var(--muted)", fontWeight: 600 }}>Déjà {d.max} vues : touche « ↻ Remplacer » sous celle à écraser.</span>}
         </div>
       </div>}
+      {fresh > 0 && <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 12px", borderRadius: 12, fontSize: 12.5, fontWeight: 700,
+          background: "rgba(34,197,94,.12)", border: "1px solid rgba(34,197,94,.45)", color: "var(--text)" }}>
+        <span>✓</span><span>Ta vue est gardée{sel.includes(fresh) ? " et ajoutée à la vignette" : ""} : c'est celle marquée <b style={{ color: "#16a34a" }}>✨ Nouvelle</b>.</span>
+      </div>}
       {!d ? <span>…</span> : <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
         <div style={tile}>
           <div style={{ ...img(!sel.length), display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 8, fontSize: 12, fontWeight: 800 }}>
@@ -69,8 +78,11 @@ function Picker({ kind, id, shot, onDone, close }) {
           {sel.length ? <button type="button" disabled={busy} onClick={none} style={btn(false)}>Par défaut</button>
             : <span style={{ fontSize: 11.5, fontWeight: 800, color: "#0EA5E9", textAlign: "center" }}>★ Vignette</span>}
         </div>
-        {d.slots.map(s => <div key={s.n} style={tile}>
-          <img src={apiUrl(s.url.replace(/^\/api\/v1/, ""))} alt="" style={img(sel.includes(s.n))}/>
+        {d.slots.map(s => <div key={s.n} ref={fresh === s.n ? freshRef : null} style={tile}>
+          <img src={apiUrl(s.url.replace(/^\/api\/v1/, ""))} alt="" style={fresh === s.n
+            ? { ...img(false), border: "2px solid #22c55e", boxShadow: "0 0 0 4px rgba(34,197,94,.22)", animation: "bn-pop .35s ease-out" } : img(sel.includes(s.n))}/>
+          {fresh === s.n && <span style={{ position: "absolute", top: 6, left: 6, padding: "2px 8px", borderRadius: 999, fontSize: 10.5, fontWeight: 800,
+            color: "#fff", background: "linear-gradient(135deg, #22c55e, #0EA5E9)", boxShadow: "0 2px 8px rgba(0,0,0,.2)", pointerEvents: "none" }}>✨ Nouvelle</span>}
           {sel.includes(s.n) ? <button type="button" disabled={busy} onClick={() => toggle(s.n)} data-tip="Elle est dans la vignette : la retirer"
               style={btn(false, { color: "#0EA5E9", borderColor: "#0EA5E9" })}>★ Choisie</button>
             : <button type="button" disabled={busy} onClick={() => toggle(s.n)} data-tip="L'ajouter à la vignette (plusieurs : elles défilent l'une après l'autre)" style={btn(true)}>⭐ Vignette</button>}
