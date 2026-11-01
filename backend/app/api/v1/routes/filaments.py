@@ -84,6 +84,7 @@ class FilamentOut(BaseModel):
     multicolor_type: str
     colors_array: Optional[str]
     fila_finish: Optional[str] = None
+    glow_color: Optional[str] = None
     no_reorder: bool = False
     color_bucket: Optional[str] = None
     price: Optional[float]
@@ -117,6 +118,8 @@ class FilamentCreate(BaseModel):
     colors_array: Optional[str] = None
     # "" = revenir a la finition deduite du nom
     fila_finish: Optional[str] = None
+    # phosphorescent : la couleur de sa lueur ("" = il luit de sa couleur)
+    glow_color: Optional[str] = None
     price: Optional[float] = None
     filament_weight_g: float = 1000.0
     spool_weight_g: Optional[float] = None
@@ -919,6 +922,8 @@ async def create_filament(
 
     f = Filament(**body.model_dump(exclude={"label_printed"}))
     f.spool_tare_name = (f.spool_tare_name or "").strip() or None
+    g = (f.glow_color or "").strip().lstrip("#")[:6].upper()
+    f.glow_color = g if len(g) == 6 and all(x in "0123456789ABCDEF" for x in g) else None
     if body.label_printed:
         f.label_printed, f.label_printed_at = True, datetime.utcnow()
     f.color_bucket = buckets_for(f.color, f.colors_array)
@@ -959,6 +964,9 @@ async def update_filament(
         payload["colors_array"] = None
     if "fila_finish" in payload:
         payload["fila_finish"] = (payload["fila_finish"] or "").strip() or None
+    if "glow_color" in payload:
+        g = (payload["glow_color"] or "").strip().lstrip("#")[:6].upper()
+        payload["glow_color"] = g if len(g) == 6 and all(x in "0123456789ABCDEF" for x in g) else None
 
     if "spool_tare_name" in payload:
         payload["spool_tare_name"] = payload["spool_tare_name"].strip() or None
@@ -1404,6 +1412,7 @@ def _fil_out(f: Filament, agg: tuple | None = None) -> FilamentOut:
         fila_type=getattr(f,"fila_type",None),
         color=f.color, multicolor_type=f.multicolor_type, colors_array=f.colors_array,
         fila_finish=getattr(f, "fila_finish", None),
+        glow_color=getattr(f, "glow_color", None),
         no_reorder=bool(getattr(f, "no_reorder", False)),
         color_bucket=getattr(f, "color_bucket", None),
         price=f.price, filament_weight_g=f.filament_weight_g, spool_weight_g=f.spool_weight_g,

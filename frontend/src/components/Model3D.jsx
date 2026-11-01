@@ -139,10 +139,14 @@ function multiOn(THREE, mat, mc) {
 // la finition d'un filament posee sur une matiere de sa couleur c (01/11/2026 : la meme pour une piece lue et pour une
 // zone peinte ou une piece recoloriee d'un filament) ; texOf : les motifs deja dessines. Rend vrai si le motif demande
 // des coordonnees de texture (boxUV). Le reflet (envMap) est pose par l'appelant.
-function finishOn(THREE, mat, c, fin, texOf, disposables) {
+function finishOn(THREE, mat, c, fin, texOf, disposables, glowHex = null) {
   // phosphorescent : il luit de sa couleur, eclaircie (une piece eclairee de l'interieur)
-  // (la couleur eclairee baissee d'autant : sinon la somme sature, et la piece vire au blanc)
-  if (fin === "glow") { mat.color = c.clone().multiplyScalar(0.6); mat.emissive = c.clone(); mat.emissiveIntensity = 0.45; mat.roughness = 0.6; }
+  // (la couleur eclairee baissee d'autant : sinon la somme sature, et la piece vire au blanc) ; ou de celle de sa lueur,
+  // quand sa fiche en donne une autre (01/11/2026 : chez Bambu, l'orange luit jaune)
+  if (fin === "glow") {
+    mat.color = c.clone().multiplyScalar(0.6); mat.emissive = glowHex ? new THREE.Color(`#${glowHex}`) : c.clone();
+    mat.emissiveIntensity = 0.45; mat.roughness = 0.6;
+  }
   // le reflet s'ajoute a l'eclairage : la couleur est un peu baissee d'autant, sinon un gris satine sort blanc
   if (fin === "silk") {
     // le brillant d'un silk : la couleur de la face reste la sienne (aucun voile, c'est lui qui blanchissait un gris) ;
@@ -229,7 +233,7 @@ function copyPiece(THREE, src, n) {
 
 function Viewer({ url, glb, onState, palette = null, finishes = null, multi = null, glow = false, bed = null, litho = false,
                   pieces = null, edit = null, editApi = null, pad = false, piecePalettes = null, editing = false, hue = null, bare = false,
-                  tdMap = null, onTd = null, tdSlot = null, pieceFinishes = null, pieceMulti = null }) {
+                  tdMap = null, onTd = null, tdSlot = null, pieceFinishes = null, pieceMulti = null, glows = null }) {
   const [pans, setPans] = useState(false);
   const box = useRef(null);
   const [dark, setDark] = useState(false);
@@ -320,7 +324,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true, envMapIntensity: 0, side: THREE.DoubleSide,
           ...(FINISH_MAT[fin] || {}) });
         if (multi) multiOn(THREE, mat, multi);
-        mat.userData.needUV = finishOn(THREE, mat, c, fin, texOf, disposables);
+        mat.userData.needUV = finishOn(THREE, mat, c, fin, texOf, disposables, glows?.[hex]);
         // un programme par combinaison : three.js les distingue sinon par le texte du dernier crochet pose (une soie
         // degradee et une soie unie auraient partage le meme)
         mat.customProgramCacheKey = () => `pick|${multi?.type || ""}|${fin || ""}`;
@@ -504,7 +508,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             }
             if (FINISH_MAT[fin]?.envMapIntensity) mat.envMap = await envMap();
             let mesh = geo;
-            if (finishOn(THREE, mat, c, fin, texOf, disposables)) { mesh = boxUV(THREE, geo); geo.dispose(); }
+            if (finishOn(THREE, mat, c, fin, texOf, disposables, glows?.[pal?.[own] ? hex6(pal[own]).toUpperCase() : own])) { mesh = boxUV(THREE, geo); geo.dispose(); }
             mat.customProgramCacheKey = () => `piece|${mc?.type || ""}|${fin || ""}|${hueU ? "h" : ""}`;   // voir matFor
             if (hueU) {
               const prev = mat.onBeforeCompile;
@@ -2130,7 +2134,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {p && !p.pending && <Viewer key={`${p.url}|${shown ? "alt" : "own"}|${vkey}|${piecePal ? Object.keys(piecePal).length : 0}|${editing || viewSel === "mine" ? "" : viewSel}`} url={p.url} glb={isGlb(p.url)} onState={setSt} palette={shown} piecePalettes={piecePal}
             pieces={p.assembled ? p.pieces : null} edit={p.assembled && !(origView && !editing) ? (frPick && !editing ? frPick.edit : edit) : null} editApi={editApi} pad={full || editing} editing={editing}
             finishes={shown ? (palette || platePalettes ? paletteFinishes : usedFin) : meta?.finishes}
-            multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho}
+            multi={shown ? (palette || platePalettes ? paletteMulti : usedMulti) : null} glow={!!st.glow} litho={!!p.litho} glows={meta?.glows || null}
             pieceFinishes={pieceFx?.fin || null} pieceMulti={pieceFx?.mul || null}
             hue={p.litho && zc.length ? zc : null} bare={editing && !desktop} tdMap={td} onTd={fr ? null : saveTd} tdSlot={full || pfull ? null : tdSlot}
             bed={asm && p.size_mm ? [Math.ceil(p.size_mm[0] * 1.2 / 16) * 16, Math.ceil(p.size_mm[1] * 1.2 / 16) * 16] : meta?.bed}/>}

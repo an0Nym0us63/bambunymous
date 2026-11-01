@@ -809,6 +809,8 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             "used_palette": used_palette, "used_detail": used_detail, "fetch_error": fetch_error,
             # les filaments de ces impressions (pour choisir a la main), les choix faits, et la portee de ces choix
             "used_options": used_options, "chosen": chosen, "scope": scope if _SCOPE.fullmatch(scope or "") else None,
+            # la lueur des phosphorescents qui ne luisent pas de leur couleur : {couleur du filament : lueur}
+            "glows": {o["color"]: o["glow"] for o in used_options if o.get("glow")},
             # par plateau (vide : aucune impression rattachee a un plateau precis, on garde le melange ci-dessus)
             "used_plates": used_plates, "used_details_plates": used_details_plates,
             "used_multi_plates": {n: {d["from"]: d["multi"] for d in dd if d.get("to") and d.get("multi")}
@@ -955,6 +957,7 @@ async def _group_view(gid: int) -> dict:
         bed = [256, 256]
     return {"source": "group", "profile": None, "profile_title": f"{len(meta['plates'][0].get('sources') or [])} 3MF réunis",
             "ms": 0, "bed": bed, "used_palette": None, "used_detail": None, "fetch_error": None, "used_options": used_options, "chosen": {},
+            "glows": {o["color"]: o["glow"] for o in used_options if o.get("glow")},
             "scope": None, "used_plates": {}, "used_details_plates": {}, "used_multi_plates": {}, "used_multi": {},
             "used_finishes_plates": {}, "finishes": finishes, "used_finishes": {}, "plates": shown, "skipped": [],
             "piece_plates": {}, "key": gkey, "missing": missing,
@@ -1530,12 +1533,12 @@ async def _used_options(print_ids: list) -> list:
         rows = (await db.execute(
             select(FU.print_id, FU.ams_slot, FU.color_hex, Filament.color, FU.grams_used, FU.filament_type, Filament.fila_type,
                    Filament.name, Filament.translated_name, Filament.fila_finish, Print.translated_name, Print.file_name,
-                   Filament.manufacturer, Filament.material, Filament.multicolor_type, Filament.colors_array)
+                   Filament.manufacturer, Filament.material, Filament.multicolor_type, Filament.colors_array, Filament.glow_color)
             .join(Print, Print.id == FU.print_id)
             .outerjoin(Spool, Spool.id == FU.spool_id).outerjoin(Filament, Filament.id == Spool.filament_id)
             .where(FU.print_id.in_(print_ids)).order_by(FU.print_id.desc(), FU.ams_slot))).all()
     out = []
-    for pid, slot, chex, fcol, g, ftype, ffila, fname, ftr, ffin, pname, pfile, brand, mat, mtype, carr in rows:
+    for pid, slot, chex, fcol, g, ftype, ffila, fname, ftr, ffin, pname, pfile, brand, mat, mtype, carr, glow in rows:
         c = h6(fcol or chex)
         if not slot or len(c) != 6:
             continue
@@ -1546,7 +1549,9 @@ async def _used_options(print_ids: list) -> list:
         out.append({"print": pid, "print_name": (pname or pfile or f"Impression {pid}")[:60], "slot": int(slot), "color": c,
                     "name": (ftr or fname or ffila or ftype or "")[:60], "kind": kind[:60], "grams": round(float(g or 0), 1),
                     "finish": (None if ffin == "none" else ffin) if ffin else T.finish_of(ffila, fname, ftype, color=fcol or chex),
-                    **({"multi": {"type": mtype, "colors": mcols[:3]}} if len(mcols) >= 2 else {})})
+                    **({"multi": {"type": mtype, "colors": mcols[:3]}} if len(mcols) >= 2 else {}),
+                    # un phosphorescent qui ne luit pas de sa couleur (fiche du filament, 01/11/2026)
+                    **({"glow": h6(glow)} if len(h6(glow)) == 6 else {})})
     return out
 
 

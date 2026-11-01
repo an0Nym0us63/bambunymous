@@ -85,6 +85,25 @@ function FinishPicker({ value, auto, colors, style, lStyle, onChange }) {
   </div>;
 }
 
+// un phosphorescent qui ne luit pas de sa couleur (01/11/2026 : chez Bambu, l'orange luit jaune) : la couleur de sa
+// lueur, pour la vue 3D lumiere eteinte ; vide, il luit de sa couleur
+function GlowColorField({ value, color, lStyle, onChange }) {
+  const v = (value || "").replace(/^#/, "");
+  return <div style={{ marginBottom:10 }}>
+    <label style={lStyle}>Couleur de la lueur</label>
+    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+      <label data-tip="La couleur dont il luit dans le noir" style={{ position:"relative", width:34, height:34, flexShrink:0, borderRadius:9, cursor:"pointer",
+        border:"1px solid var(--border)", background:`#${v || color || "9CA3AF"}`, boxShadow: `0 0 12px -2px #${v || color || "9CA3AF"}` }}>
+        <input type="color" value={`#${v || color || "9CA3AF"}`} onChange={e => onChange(e.target.value.slice(1).toUpperCase())}
+          style={{ position:"absolute", inset:0, opacity:0, width:"100%", height:"100%", cursor:"pointer", border:"none", padding:0 }}/></label>
+      <span style={{ flex:1, minWidth:0, fontSize:12, fontWeight:600, color:"var(--muted)" }}>
+        {v ? `#${v}` : "Sa couleur (vide)"}</span>
+      {v && <button type="button" onClick={() => onChange("")} style={{ fontSize:12, fontWeight:800, color:"var(--muted)", background:"none",
+        border:"none", cursor:"pointer" }}>↺ Sa couleur</button>}
+    </div>
+  </div>;
+}
+
 function ColorSwatch({ color, colorsArray, multicolorType, finish = null, size=40, radius=10 }) {
   const colors = parseColorsList(color, colorsArray);
   return (
@@ -1090,6 +1109,8 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
             {spool.sibling_count != null && fChip(spool.sibling_count > 0
               ? `+${spool.sibling_count} en stock${spool.sibling_weight_g ? ` · ${Math.round(spool.sibling_weight_g)} g` : ""}` : "seule bobine",
               spool.sibling_count > 0 ? "#22c55e" : "#94a3b8")}
+            {/* racheter, sans deplier la carte (01/11/2026 : le lien etait cache dans la fiche du filament) */}
+            {spool.filament_fila_color_code && <StoreLink code={spool.filament_fila_color_code} look="pill" label="🛒 Racheter ↗"/>}
             {spool.filament_id && <button onClick={e => { e.stopPropagation(); openFilament(); }} aria-label="Ouvrir la fiche du filament" data-tip="Ouvrir la fiche du filament"
               style={{ width:30, height:30, borderRadius:10, border:"1px solid var(--border)", background:"var(--surface)", color:"#EC4899", cursor:"pointer",
                 fontSize:14, fontWeight:900, flexShrink:0 }}>↗</button>}</>}
@@ -1106,7 +1127,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
           <FRow l="Couleur" v={color} mono pre={<ColorSwatch color={spool.filament_color} colorsArray={spool.filament_colors_array}
             multicolorType={spool.filament_multicolor_type} finish={finishOf(spool)} size={16} radius={4}/>}/>
           <FRow l="Code Bambu" v={spool.filament_profile_id} mono/>
-          <FRow l="Code couleur Bambu" v={spool.filament_fila_color_code ? <>{spool.filament_fila_color_code} <StoreLink code={spool.filament_fila_color_code} label="🛒 Racheter ↗"/></> : null} mono/>
+          <FRow l="Code couleur Bambu" v={spool.filament_fila_color_code} mono/>
           <FRow l="Stock du filament" v={stockFil != null ? fmtStock(stockFil) : null} d={spool.ordered_siblings > 0 ? `toutes bobines · 📬 ${spool.ordered_siblings} en commande` : "toutes bobines"}/>
           <FRow l="Poids total" v={spool.filament_weight_g ? `${spool.filament_weight_g} g` : null}/>
           <FRow l="Prix catalogue" v={spool.filament_price ? `${moneyVal(Number(spool.filament_price), 2)} €` : null}/>
@@ -1849,6 +1870,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
       : (f.color || ""),
     multicolor_type:  f.multicolor_type || "monochrome",
     fila_finish:      f.fila_finish || autoFinishOf(f) || "none",
+    glow_color:       f.glow_color || "",
     profile_id:       f.profile_id || "",
     fila_color_code:  f.fila_color_code || "",
     filament_weight_g: f.filament_weight_g || 1000,
@@ -1904,6 +1926,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
         multicolor_type:   mct,
         // gardee seulement si elle differe de celle que le nom donne ("" : on suit le nom)
         fila_finish:       form.fila_finish === (autoFinishOf(form) || "none") ? "" : form.fila_finish,
+        glow_color:        form.fila_finish === "glow" ? form.glow_color || "" : "",
         profile_id:        form.profile_id || undefined,
         fila_color_code:   form.fila_color_code || undefined,
         filament_weight_g: Number(form.filament_weight_g) || 1000,
@@ -2042,6 +2065,8 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               )}
               <FinishPicker value={form.fila_finish} auto={autoFinishOf(form)} colors={liveColors} style={iStyle} lStyle={lStyle}
                 onChange={v => setForm(p => ({ ...p, fila_finish: v }))}/>
+              {form.fila_finish === "glow" && <GlowColorField value={form.glow_color} color={(form.colors_input || "").split(",")[0].trim().replace(/^#/, "").slice(0, 6)} lStyle={lStyle}
+                onChange={v => setForm(p => ({ ...p, glow_color: v }))}/>}
               {F("Profile ID Bambu (ex: GFA00)","profile_id")}
               {F("Code couleur Bambu (ex: 10600)","fila_color_code")}
               {F("Poids total (g)","filament_weight_g","number")}
@@ -2510,7 +2535,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
     name:"", manufacturer:"", material:"PLA Basic",
     colors_input:"", multicolor_type:"monochrome",
     fila_type:"", profile_id:"", fila_color_code:"", weight:1000,
-    translated_name:"", price:"", spool_weight_g:"", spool_tare_name:"", comment:"",
+    translated_name:"", price:"", spool_weight_g:"", spool_tare_name:"", comment:"", glow_color:"",
     ...(prefill || {}),
   });
   // Support vide propose d'apres la marque (modele des Parametres au nom de la marque), tant qu'il n'a pas ete choisi a la main
@@ -2622,6 +2647,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
         colors_array:      ca ?? null,
         multicolor_type:   mct,
         fila_finish:       form.fila_finish && form.fila_finish !== (autoFinishOf(form) || "none") ? form.fila_finish : undefined,
+        glow_color:        (form.fila_finish || autoFinishOf(form)) === "glow" && form.glow_color ? form.glow_color : undefined,
         profile_id:        form.profile_id || undefined,
         fila_color_code:   form.fila_color_code || undefined,
         filament_weight_g: Number(form.weight) || 1000,
@@ -2809,7 +2835,9 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
                 )}
                 <div style={{ marginTop:8 }}>
                   <FinishPicker value={form.fila_finish || autoFinishOf(form) || "none"} auto={autoFinishOf(form)} colors={liveColors}
-                    style={field} lStyle={lStyle} onChange={v => setForm(p => ({ ...p, fila_finish: v }))}/></div>
+                    style={field} lStyle={lStyle} onChange={v => setForm(p => ({ ...p, fila_finish: v }))}/>
+                  {(form.fila_finish || autoFinishOf(form)) === "glow" && <GlowColorField value={form.glow_color}
+                    color={(form.colors_input || "").split(",")[0].trim().replace(/^#/, "").slice(0, 6)} lStyle={lStyle} onChange={v => setForm(p => ({ ...p, glow_color: v }))}/>}</div>
               </FCard>
               <FCard t="Côté Bambu et poids" i="⚖" c="#0EA5E9">
                 {F("Profile ID Bambu (ex: GFA00)", "profile_id", "", { fontFamily:"JetBrains Mono,monospace" })}
