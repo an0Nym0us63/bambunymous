@@ -441,7 +441,7 @@ def _catalog_index():
 
 def match_catalog_code(code: str) -> dict | None:
     """L'entree du catalogue par son code couleur Bambu (« 13201 »), exact."""
-    from .bambu_catalog import catalog_entries
+    from .bambu_catalog import catalog_entries, fr_name
     data, _ = catalog_entries()
     for e in data or []:
         if str(e.get("fila_color_code") or "") == str(code):
@@ -449,7 +449,7 @@ def match_catalog_code(code: str) -> dict | None:
             cols = [c.lstrip("#")[:6] for c in (e.get("fila_color") or []) if isinstance(c, str)]
             ctype = {"单色": "monochrome", "渐变色": "gradient", "多拼色": "coaxial"}.get(e.get("fila_color_type") or "", "monochrome")
             return {"fila_id": e.get("fila_id"), "fila_color_code": e.get("fila_color_code"), "fila_type": e.get("fila_type"),
-                    "name_fr": names.get("fr") or names.get("en"), "name_en": names.get("en"),
+                    "name_fr": fr_name(names), "name_en": names.get("en"),
                     "color_hex": (cols[0] if cols else None), "colors": cols, "multicolor_type": ctype if len(cols) > 1 else "monochrome",
                     "refill": False}
     return None
@@ -459,6 +459,7 @@ def match_catalog(title: str) -> dict | None:
     """L'entree du catalogue Bambu qu'une ligne de commande designe : le type le plus long present dans le
     titre, puis le nom de couleur le plus long present. Rend {fila_id, fila_color_code, fila_type, name_fr,
     name_en, color_hex, refill}."""
+    from .bambu_catalog import fr_name
     low = _fold(title)
     types, colors = _catalog_index()
     for t in types:
@@ -474,7 +475,7 @@ def match_catalog(title: str) -> dict | None:
             names = e.get("fila_color_name") or {}
             cols = e.get("fila_color") or []
             return {"fila_id": e.get("fila_id"), "fila_color_code": e.get("fila_color_code"), "fila_type": e.get("fila_type"),
-                    "name_fr": names.get("fr") or names.get("en"), "name_en": names.get("en"),
+                    "name_fr": fr_name(names), "name_en": names.get("en"),
                     "color_hex": (cols[0].lstrip("#")[:6] if cols else None), "refill": "refill" in low or "recharge" in low}
         return {"fila_type": e_type_label(t, types, colors), "fila_id": None, "fila_color_code": None, "name_fr": None,
                 "name_en": None, "color_hex": None, "refill": "refill" in low or "recharge" in low}

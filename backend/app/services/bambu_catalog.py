@@ -190,6 +190,7 @@ class BambuCatalogSync:
             en, fr = n.get("en", ""), n.get("fr", "")
             if en and fr:
                 en_to_fr[en] = fr
+                en_to_fr.setdefault(en.casefold(), fr)
 
         for entry in entries:
             if entry.get("fila_id", "").upper() != fila_id:
@@ -198,7 +199,7 @@ class BambuCatalogSync:
                 continue
             names   = entry.get("fila_color_name", {})
             name_en = names.get("en") or names.get("fr") or next(iter(names.values()), "")
-            name_fr = names.get("fr") or en_to_fr.get(name_en, "") or name_en
+            name_fr = fr_name(names, en_to_fr) or name_en
             name    = name_fr if lang == "fr" else name_en
             colors  = entry.get("fila_color", [])
             ctype   = entry.get("fila_color_type", "")
@@ -307,5 +308,47 @@ def catalog_entries() -> Tuple[Optional[list], Optional[dict]]:
             return None, None
         en_to_fr = {e.get("fila_color_name", {}).get("en", ""): e.get("fila_color_name", {}).get("fr", "")
                     for e in data if e.get("fila_color_name", {}).get("en") and e.get("fila_color_name", {}).get("fr")}
+        # aussi casse ignoree (« Gray » / « gray ») : voir fr_name
+        en_to_fr.update({k.casefold(): v for k, v in list(en_to_fr.items()) if k.casefold() not in en_to_fr})
         c.update(path=path, mtime=mtime, data=data, fr=en_to_fr)
     return c["data"], c["fr"]
+
+
+def fr_name(names: dict, en_to_fr: Optional[dict] = None) -> str:
+    """Le nom francais d'une couleur du catalogue : le sien ; sinon celui d'une autre entree au meme nom anglais
+    (casse ignoree : le catalogue n'a pas traduit toutes les entrees d'une meme couleur) ; sinon l'anglais."""
+    names = names or {}
+    if names.get("fr"):
+        return names["fr"]
+    en = names.get("en") or ""
+    if en_to_fr is None:
+        en_to_fr = catalog_entries()[1] or {}
+    return en_to_fr.get(en) or en_to_fr.get(en.casefold()) or en or next(iter(names.values()), "")
+
+
+async def retranslate_filaments() -> int:
+    """Les fiches filament restees au nom anglais (01/11/2026 : creees depuis une commande lue dans un mail, qui ne
+    reprenait pas la traduction d'une autre entree) : leur nom francais, quand le catalogue en a un. Un nom change a
+    la main (different du nom anglais) n'est pas touche. Rend le nombre de fiches corrigees."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.filament import Filament
+    data, en_to_fr = catalog_entries()
+    if not data:
+        return 0
+    by_code = {str(e.get("fila_color_code")): e for e in data if e.get("fila_color_code")}
+    n = 0
+    async with AsyncSessionLocal() as db:
+        for f in (await db.execute(select(Filament).where(Filament.fila_color_code.is_not(None)))).scalars():
+            e = by_code.get(str(f.fila_color_code))
+            if not e or (f.translated_name and f.translated_name not in (f.name_en, f.name)):
+                continue
+            fr = fr_name(e.get("fila_color_name"), en_to_fr)
+            if fr and fr != (f.translated_name or f.name):
+                f.translated_name = fr
+                n += 1
+        if n:
+            await db.commit()
+    if n:
+        log.info(f"[CATALOG] {n} fiche(s) filament remise(s) au nom francais")
+    return n

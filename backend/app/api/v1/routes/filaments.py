@@ -1518,7 +1518,7 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
 
     updated, not_found, skipped = [], [], []
 
-    from ....services.bambu_catalog import catalog_entries
+    from ....services.bambu_catalog import catalog_entries, fr_name
     cat_data, en_to_fr = catalog_entries()
     if cat_data is None:
         return {"error": "Catalogue non disponible — démarrez l'app pour le télécharger", "total_bambu": 0}
@@ -1574,7 +1574,7 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
             if entry:
                 names   = entry.get("fila_color_name", {})
                 name_en = names.get("en") or names.get("fr") or next(iter(names.values()),"")
-                name_fr = names.get("fr") or en_to_fr.get(name_en,"") or name_en
+                name_fr = fr_name(names, en_to_fr) or name_en
                 colors  = [c.lstrip("#")[:8] for c in entry.get("fila_color", [])]
                 ctype   = COLOR_TYPE_FR.get(entry.get("fila_color_type",""), "monochrome")
                 fresh   = await db.get(Filament, f.id)
@@ -1657,7 +1657,7 @@ async def catalog_search(
     Filtre par famille (PLA/PETG…), type détaillé, et/ou substring sur le nom couleur.
     Retourne les entrées triées par type puis nom.
     """
-    from ....services.bambu_catalog import catalog_entries
+    from ....services.bambu_catalog import catalog_entries, fr_name
     entries, en_to_fr = catalog_entries()
     if entries is None:
         return {"entries": [], "available": False}
@@ -1683,7 +1683,7 @@ async def catalog_search(
             continue
         # Noms
         names = entry.get("fila_color_name", {})
-        name_fr  = names.get("fr") or en_to_fr.get(names.get("en",""),"") or names.get("en") or next(iter(names.values()), "")
+        name_fr  = fr_name(names, en_to_fr)
         name_en  = names.get("en") or names.get("fr") or next(iter(names.values()), "")
         fila_cc  = entry.get("fila_color_code", "")
         # Filtre recherche textuelle — insensible à la casse ET à la position
