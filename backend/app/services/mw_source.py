@@ -395,6 +395,26 @@ def print_file(design_id, profile_id, manual=None, pid=None) -> Path | None:
     return path_of(iid) if iid else None
 
 
+# les profils imprimes sans fichier exact (01/11/2026), notes par le rattrapage : « guessed » (le profil n'existe plus
+# sur MakerWorld, le fichier du profil le plus proche est garde) ou « gone » (modele introuvable). Le bilan les comptait
+# « a recuperer » a jamais, et « Reprendre » les reessayait pour rien.
+def _unres() -> dict:
+    try:
+        d = json.loads((_dir() / "unresolved.json").read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _unres_save(d: dict) -> None:
+    try:
+        tmp = _dir() / "unresolved.json.tmp"
+        tmp.write_text(json.dumps(d), encoding="utf-8")
+        tmp.replace(_dir() / "unresolved.json")
+    except OSError:
+        pass
+
+
 # ── Le rattrapage : toutes les impressions liees a un profil, une par une, en arriere-plan ──
 def _job_save() -> None:
     try:
@@ -455,6 +475,7 @@ async def backfill() -> None:
                 return False
             await asyncio.sleep(min(2, max(0.0, end - time.time())))
         return True
+    unres = _unres()
     try:
         for did, prof, name in pairs:
             if _STOP["flag"]:
@@ -465,10 +486,18 @@ async def backfill() -> None:
                 JOB["already"] += 1
             else:
                 iid, key = (await resolve(did, prof), f"{did}:{prof}") if prof else (None, None)
+                pk, was_u = f"{did}:{prof or ''}", unres.get(f"{did}:{prof or ''}")
+                unres.pop(pk, None)
                 if not iid:
                     iid, key = await resolve(did, "", guess=True), f"{did}:"
                     if iid:
                         JOB["guessed"] += 1
+                        if prof:
+                            unres[pk] = "guessed"
+                if not iid:
+                    unres[pk] = "gone"
+                if unres.get(pk) != was_u:
+                    _unres_save(unres)
                 if not iid:
                     JOB["skipped"] += 1
                 else:
@@ -590,7 +619,15 @@ async def _resume_at(at: float) -> None:
 async def summary() -> dict:
     """Le bilan, hors de tout rattrapage : modeles et profils imprimes, deja gardes, encore a recuperer."""
     pairs = await _pairs()
-    have = sum(1 for did, prof, _n in pairs if known(did, prof) or (not prof and known(did, "")))
+    u = _unres()
+    have = guessed = gone = 0
+    for did, prof, _n in pairs:
+        if known(did, prof) or (not prof and known(did, "")):
+            have += 1
+        elif prof and u.get(f"{did}:{prof}") == "guessed" and known(did, ""):
+            guessed += 1                          # garde, par le fichier du profil le plus proche
+        elif u.get(f"{did}:{prof or ''}") == "gone":
+            gone += 1                             # introuvable sur MakerWorld : rien a recuperer
     files = sum(1 for f in _dir().glob("*.3mf"))
-    return {"pairs": len(pairs), "models": len({d for d, _p, _n in pairs}), "have": have, "missing": len(pairs) - have,
-            "files": files}
+    return {"pairs": len(pairs), "models": len({d for d, _p, _n in pairs}), "have": have + guessed, "exact": have,
+            "guessed": guessed, "gone": gone, "missing": len(pairs) - have - guessed - gone, "files": files}

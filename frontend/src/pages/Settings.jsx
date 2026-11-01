@@ -1379,6 +1379,13 @@ function SourceBackfillSection() {
           {big(sm.missing, "à récupérer", sm.missing ? "#F97316" : "#64748B")}
           {big(sm.models, "modèles imprimés", "#6366F1")}
         </div>
+        {/* ce qui n'a pas de fichier exact : garde par le profil le plus proche, ou introuvable (rien a recuperer) */}
+        {(sm.guessed > 0 || sm.gone > 0) && <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+          {sm.guessed > 0 && <span data-tip="Le profil imprimé n'existe plus sur MakerWorld : le 3MF du profil le plus proche de ton imprimante est gardé à sa place">
+            {chip(sm.guessed, `gardé${sm.guessed > 1 ? "s" : ""} par le profil le plus proche`, "#6366F1")}</span>}
+          {sm.gone > 0 && <span data-tip="Modèle retiré ou devenu privé sur MakerWorld : il n'y a plus rien à télécharger">
+            {chip(sm.gone, `introuvable${sm.gone > 1 ? "s" : ""} sur MakerWorld`, "#d97706")}</span>}
+        </div>}
         <div style={{ height:8, borderRadius:6, background:"var(--surface2)", overflow:"hidden" }}>
           <div style={{ height:"100%", width:`${pct}%`, borderRadius:6, background:"linear-gradient(90deg, #16a34a, #4ADE80)", transition:"width .4s" }}/></div>
       </div>}
@@ -1450,7 +1457,11 @@ function SourceBackfillSection() {
         ? <button onClick={stop} style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer", border:"1px solid var(--border)",
             background:"var(--surface2)", color:"var(--text)" }}>■ Arrêter</button>
         : sm && !sm.missing
-        ? <span style={{ fontSize:13, fontWeight:800, color:"#16a34a" }}>✓ Tout est gardé</span>
+        ? <span style={{ display:"inline-flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+            <span style={{ fontSize:13, fontWeight:800, color:"#16a34a" }}>{sm.gone ? "✓ Tout ce que MakerWorld propose encore est gardé" : "✓ Tout est gardé"}</span>
+            {/* un modele introuvable peut revenir (redevenu public) : un passage le reverifie, sans rien retelecharger */}
+            {sm.gone > 0 && <button onClick={start} style={{ padding:"5px 12px", borderRadius:10, fontSize:12, fontWeight:700, cursor:"pointer",
+              border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)" }}>↻ Revérifier les introuvables</button>}</span>
         : <button onClick={start} style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer", border:"none",
             background:"#F97316", color:"white" }}>⇣ {has ? "Reprendre" : "Tout récupérer"}{sm ? ` (${sm.missing} restant${sm.missing > 1 ? "s" : ""})` : ""}</button>}
     </div>
