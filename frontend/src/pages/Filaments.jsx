@@ -87,20 +87,27 @@ function FinishPicker({ value, auto, colors, style, lStyle, onChange }) {
 
 // un phosphorescent qui ne luit pas de sa couleur (01/11/2026 : chez Bambu, l'orange luit jaune) : la couleur de sa
 // lueur, pour la vue 3D lumiere eteinte ; vide, il luit de sa couleur
-function GlowColorField({ value, color, lStyle, onChange }) {
-  const v = (value || "").replace(/^#/, "");
+function GlowColorField({ value, color, style, lStyle, onChange }) {
+  // le texte saisi tel quel (une valeur precise, « #F0E27E » ou « f0e27e ») ; le carre suit des qu'il fait 6 chiffres, et
+  // le choisir dans le carre remplit le texte
+  const v = (value || "").replace(/^#/, "").toUpperCase();
+  const ok = /^[0-9A-F]{6}$/.test(v);
+  const shown = ok ? v : color || "9CA3AF";
   return <div style={{ marginBottom:10 }}>
     <label style={lStyle}>Couleur de la lueur</label>
     <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-      <label data-tip="La couleur dont il luit dans le noir" style={{ position:"relative", width:34, height:34, flexShrink:0, borderRadius:9, cursor:"pointer",
-        border:"1px solid var(--border)", background:`#${v || color || "9CA3AF"}`, boxShadow: `0 0 12px -2px #${v || color || "9CA3AF"}` }}>
-        <input type="color" value={`#${v || color || "9CA3AF"}`} onChange={e => onChange(e.target.value.slice(1).toUpperCase())}
+      <input value={value || ""} onChange={e => onChange(e.target.value.replace(/[^#0-9a-fA-F]/g, "").replace(/^#/, "").slice(0, 6).toUpperCase())}
+        placeholder={`Vide : sa couleur${color ? ` (${color.toUpperCase()})` : ""}`} spellCheck={false} autoCapitalize="characters"
+        style={{ ...style, flex:1, minWidth:0, width:"auto", fontFamily:"JetBrains Mono,monospace",
+          border: v && !ok ? "1px solid #f59e0b" : style?.border }}/>
+      <label data-tip="Choisir dans le nuancier" style={{ position:"relative", width:34, height:34, flexShrink:0, borderRadius:9, cursor:"pointer",
+        border:"1px solid var(--border)", background:`#${shown}`, boxShadow:`0 0 12px -2px #${shown}` }}>
+        <input type="color" value={`#${shown}`} onChange={e => onChange(e.target.value.slice(1).toUpperCase())}
           style={{ position:"absolute", inset:0, opacity:0, width:"100%", height:"100%", cursor:"pointer", border:"none", padding:0 }}/></label>
-      <span style={{ flex:1, minWidth:0, fontSize:12, fontWeight:600, color:"var(--muted)" }}>
-        {v ? `#${v}` : "Sa couleur (vide)"}</span>
-      {v && <button type="button" onClick={() => onChange("")} style={{ fontSize:12, fontWeight:800, color:"var(--muted)", background:"none",
-        border:"none", cursor:"pointer" }}>↺ Sa couleur</button>}
+      {v && <button type="button" onClick={() => onChange("")} data-tip="Vider : il luit de sa couleur" aria-label="Vider : il luit de sa couleur"
+        style={{ fontSize:12, fontWeight:800, color:"var(--muted)", background:"none", border:"none", cursor:"pointer", flexShrink:0 }}>↺</button>}
     </div>
+    {v && !ok && <div style={{ fontSize:11.5, fontWeight:700, color:"#d97706", marginTop:4 }}>6 chiffres hexadécimaux (ex. F0E27E)</div>}
   </div>;
 }
 
@@ -2065,7 +2072,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               )}
               <FinishPicker value={form.fila_finish} auto={autoFinishOf(form)} colors={liveColors} style={iStyle} lStyle={lStyle}
                 onChange={v => setForm(p => ({ ...p, fila_finish: v }))}/>
-              {form.fila_finish === "glow" && <GlowColorField value={form.glow_color} color={(form.colors_input || "").split(",")[0].trim().replace(/^#/, "").slice(0, 6)} lStyle={lStyle}
+              {form.fila_finish === "glow" && <GlowColorField value={form.glow_color} color={(form.colors_input || "").split(",")[0].trim().replace(/^#/, "").slice(0, 6)} style={iStyle} lStyle={lStyle}
                 onChange={v => setForm(p => ({ ...p, glow_color: v }))}/>}
               {F("Profile ID Bambu (ex: GFA00)","profile_id")}
               {F("Code couleur Bambu (ex: 10600)","fila_color_code")}
@@ -2837,7 +2844,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
                   <FinishPicker value={form.fila_finish || autoFinishOf(form) || "none"} auto={autoFinishOf(form)} colors={liveColors}
                     style={field} lStyle={lStyle} onChange={v => setForm(p => ({ ...p, fila_finish: v }))}/>
                   {(form.fila_finish || autoFinishOf(form)) === "glow" && <GlowColorField value={form.glow_color}
-                    color={(form.colors_input || "").split(",")[0].trim().replace(/^#/, "").slice(0, 6)} lStyle={lStyle} onChange={v => setForm(p => ({ ...p, glow_color: v }))}/>}</div>
+                    color={(form.colors_input || "").split(",")[0].trim().replace(/^#/, "").slice(0, 6)} style={field} lStyle={lStyle} onChange={v => setForm(p => ({ ...p, glow_color: v }))}/>}</div>
               </FCard>
               <FCard t="Côté Bambu et poids" i="⚖" c="#0EA5E9">
                 {F("Profile ID Bambu (ex: GFA00)", "profile_id", "", { fontFamily:"JetBrains Mono,monospace" })}
