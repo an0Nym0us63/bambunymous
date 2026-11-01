@@ -54,22 +54,32 @@ const base = m => {
   ownOf(m);
 };
 
-// une couleur posee : « RRGGBB » (une couleur libre) ou « RRGGBB/finition » (un filament, 01/11/2026 : sa finition
-// avec -- soie, paillettes, phosphorescent...)
-export const colorOf = v => { const [hex, fin] = String(v || "").split("/"); return { hex, fin: fin || null }; };
+// une couleur posee : « RRGGBB » (une couleur libre), ou un filament (01/11/2026) avec sa finition (« RRGGBB/silk ») et
+// pour un multicolore ses couleurs et son type (« RRGGBB,RRGGBB:gradient/silk »)
+export const colorOf = v => {
+  const [main, fin] = String(v || "").split("/"), [cs, type] = main.split(":"), cols = cs.split(",");
+  return { hex: cols[0], fin: fin || null, multi: type && cols.length >= 2 ? { type, colors: cols } : null };
+};
+// les bornes d'un degrade, d'apres le maillage qui le porte : (z0, hauteur, x0+y0, etendue)
+const bounds = (THREE, geo) => {
+  if (!geo.boundingBox) geo.computeBoundingBox();
+  const b = geo.boundingBox;
+  return new THREE.Vector4(b.min.z, b.max.z - b.min.z, b.min.x + b.min.y, (b.max.x - b.min.x) + (b.max.y - b.min.y));
+};
 
 // remet chaque maillage comme lu, puis pose les couleurs des pieces et les zones peintes ; matFor(hex, finition) : la
 // matiere d'une couleur posee (celle de la vue, avec la finition du filament) ; sans elle, la matiere lue reteinte
 export function applyColors(THREE, groups, colors = {}, paints = [], matFor = null) {
   const mats = new Map();
-  const tint = (mat0, v) => {
-    const { hex, fin } = colorOf(v);
-    const key = `${mat0.uuid}|${v}`;
+  const tint = (mat0, v, geo = null) => {
+    const { hex, fin, multi } = colorOf(v);
+    const key = `${mat0.uuid}|${v}${geo ? `|${geo.uuid}` : ""}`;
     // une matiere a chaque piece (la selection estompe les autres pieces matiere par matiere), copiee de celle de la vue
     if (matFor && !mats.has(key)) {
-      const b = matFor(hex, fin), m = b.clone();
+      const b = matFor(hex, fin, multi), m = b.clone();
       m.onBeforeCompile = b.onBeforeCompile; m.customProgramCacheKey = b.customProgramCacheKey;
       const { waitEnv, ...ud } = b.userData; m.userData = ud;
+      if (ud.mb) m.userData.mb = { value: geo ? bounds(THREE, geo) : ud.mb.value.clone() };   // un degrade : de bout en bout de son maillage
       waitEnv?.push(m);                                     // le reflet, pas encore prepare : pose a son arrivee
       mats.set(key, m);
     }
@@ -93,7 +103,7 @@ export function applyColors(THREE, groups, colors = {}, paints = [], matFor = nu
     const whole = new Set();
     for (const m of meshes) {
       if (m.userData.idx0) { m.geometry.index.array.set(m.userData.idx0); m.geometry.index.needsUpdate = true; }
-      const mat = pc ? tint(m.userData.mat0, pc) : m.userData.mat0;
+      const mat = pc ? tint(m.userData.mat0, pc, m.geometry) : m.userData.mat0;
       if (pc && mat.userData?.needUV && !m.geometry.attributes.uv && m.geometry.index) { whole.add(m); m.material = m.userData.mat0; }
       else m.material = mat;
       m.userData.glow = !!m.material.userData?.glow;
@@ -119,7 +129,7 @@ export function applyColors(THREE, groups, colors = {}, paints = [], matFor = nu
         let geo = new THREE.BufferGeometry();
         for (const [name, a] of Object.entries(m.geometry.attributes)) geo.setAttribute(name, a);
         geo.setIndex(new THREE.BufferAttribute(ix, 1));
-        const mat = tint(m.userData.mat0, c);
+        const mat = tint(m.userData.mat0, c, m.geometry);
         // un motif (paillettes, marbre, bois...) : ses coordonnees de texture, face par face (l'ordre des triangles reste)
         if (mat.userData?.needUV && !geo.attributes.uv && matFor?.uv) { const u = matFor.uv(geo); geo.setIndex(null); geo = u; }
         geo.computeBoundingSphere();

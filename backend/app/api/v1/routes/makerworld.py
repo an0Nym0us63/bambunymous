@@ -1530,20 +1530,23 @@ async def _used_options(print_ids: list) -> list:
         rows = (await db.execute(
             select(FU.print_id, FU.ams_slot, FU.color_hex, Filament.color, FU.grams_used, FU.filament_type, Filament.fila_type,
                    Filament.name, Filament.translated_name, Filament.fila_finish, Print.translated_name, Print.file_name,
-                   Filament.manufacturer, Filament.material)
+                   Filament.manufacturer, Filament.material, Filament.multicolor_type, Filament.colors_array)
             .join(Print, Print.id == FU.print_id)
             .outerjoin(Spool, Spool.id == FU.spool_id).outerjoin(Filament, Filament.id == Spool.filament_id)
             .where(FU.print_id.in_(print_ids)).order_by(FU.print_id.desc(), FU.ams_slot))).all()
     out = []
-    for pid, slot, chex, fcol, g, ftype, ffila, fname, ftr, ffin, pname, pfile, brand, mat in rows:
+    for pid, slot, chex, fcol, g, ftype, ffila, fname, ftr, ffin, pname, pfile, brand, mat, mtype, carr in rows:
         c = h6(fcol or chex)
         if not slot or len(c) != 6:
             continue
+        # un multicolore (degrade, coaxial) : ses couleurs (01/11/2026 : pour peindre de lui dans l'assemblage)
+        mcols = [h6(x) for x in str(carr or "").split(",") if len(h6(x)) == 6] if mtype in ("gradient", "coaxial") else []
         # la bobine : marque, matiere et sous-type (« Bambu Lab · PLA Basic »), puis son nom
         kind = " · ".join(x for x in (brand, ffila or mat or ftype) if x)
         out.append({"print": pid, "print_name": (pname or pfile or f"Impression {pid}")[:60], "slot": int(slot), "color": c,
                     "name": (ftr or fname or ffila or ftype or "")[:60], "kind": kind[:60], "grams": round(float(g or 0), 1),
-                    "finish": (None if ffin == "none" else ffin) if ffin else T.finish_of(ffila, fname, ftype, color=fcol or chex)})
+                    "finish": (None if ffin == "none" else ffin) if ffin else T.finish_of(ffila, fname, ftype, color=fcol or chex),
+                    **({"multi": {"type": mtype, "colors": mcols[:3]}} if len(mcols) >= 2 else {})})
     return out
 
 

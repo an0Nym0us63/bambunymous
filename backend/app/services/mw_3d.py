@@ -2023,9 +2023,10 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
     # d'origine du maillage, r : ses triangles en plages (debut, nombre, debut, nombre…), c : RRGGBB}] ; « tris » (une
     # liste de triangles) est encore lue. 5 millions de triangles et 400 000 plages au plus
     hexok = lambda c: isinstance(c, str) and re.fullmatch(r"[0-9A-Fa-f]{6}", c)
-    # la couleur posee : « RRGGBB » (libre) ou « RRGGBB/finition » (un filament et sa finition, 01/11/2026)
-    pickok = lambda c: isinstance(c, str) and re.fullmatch(r"[0-9A-Fa-f]{6}(/[a-z]{2,16})?", c)
-    norm = lambda c: c[:6].upper() + c[6:]
+    # la couleur posee : « RRGGBB » (libre), ou un filament (01/11/2026) : « RRGGBB,RRGGBB[,RRGGBB]:gradient|coaxial »
+    # pour un multicolore, puis « /finition »
+    pickok = lambda c: isinstance(c, str) and re.fullmatch(r"[0-9A-Fa-f]{6}(,[0-9A-Fa-f]{6}){0,2}(:(gradient|coaxial))?(/[a-z]{2,16})?", c)
+    norm = lambda c: re.sub(r"[0-9a-fA-F]{6}", lambda m: m.group(0).upper(), c.split(":")[0].split("/")[0]) + c[len(c.split(":")[0].split("/")[0]):]
     col = {str(k): norm(c) for k, c in (colors or {}).items() if str(k) in clean and pickok(c)} if isinstance(colors, dict) else {}
     pts, ntri, nrun = [], 0, 0
     okint = lambda t: isinstance(t, int) and not isinstance(t, bool) and 0 <= t < 50_000_000

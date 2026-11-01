@@ -104,6 +104,38 @@ function boxUV(THREE, geo) {
   return g;
 }
 
+// un filament multicolore pose sur une matiere (01/11/2026 : pour une zone peinte ou une piece recoloriee de lui), comme
+// dans la vue : le degrade evolue surtout avec la hauteur, un peu le long de la couche, d'un bout a l'autre du maillage
+// peint (ses bornes : userData.mb, (z0, hauteur, x0+y0, etendue), posees par assemblyPaint d'apres le maillage) ; le
+// coaxial change selon l'angle de vue. Calcule dans le shader : la zone peinte partage les sommets de sa piece.
+function multiOn(THREE, mat, mc) {
+  const cols = mc.colors.map(h => new THREE.Color(`#${h}`));
+  const [a, b, d] = [0, 1, 2].map(i => cols[Math.min(i, cols.length - 1)]);
+  const u = { cA: { value: a }, cB: { value: b }, cC: { value: d }, nC: { value: cols.length } };
+  mat.color.set(0xffffff);
+  mat.userData.multi = mc.type;
+  if (mc.type === "gradient") mat.userData.mb = { value: new THREE.Vector4(0, 1, 0, 1) };
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = function (sh, r) {
+    prev?.call(this, sh, r);
+    Object.assign(sh.uniforms, u);
+    if (mc.type === "gradient") {
+      sh.uniforms.mb = this.userData.mb;                   // les bornes de CETTE copie (un maillage chacune)
+      sh.vertexShader = "varying vec3 vMp;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n  vMp = position;");
+      sh.fragmentShader = "varying vec3 vMp; uniform vec4 mb; uniform vec3 cA; uniform vec3 cB; uniform vec3 cC; uniform float nC;\n" +
+        sh.fragmentShader.replace("#include <color_fragment>", "#include <color_fragment>\n  { float f = clamp(0.8 * (vMp.z - mb.x) / max(mb.y, 1e-6)" +
+        " + 0.2 * (vMp.x + vMp.y - mb.z) / max(mb.w, 1e-6), 0.0, 1.0);\n" +
+        "    vec3 mc = nC > 2.5 ? (f < 0.5 ? mix(cA, cB, f * 2.0) : mix(cB, cC, (f - 0.5) * 2.0)) : mix(cA, cB, f);\n" +
+        "    diffuseColor.rgb *= mc; }");
+    } else {
+      sh.fragmentShader = "uniform vec3 cA; uniform vec3 cB; uniform vec3 cC; uniform float nC;\n" + sh.fragmentShader.replace("#include <emissivemap_fragment>",
+        "#include <emissivemap_fragment>\n  { float fr = smoothstep(0.0, 0.85, 1.0 - abs(dot(normalize(normal), normalize(vViewPosition))));\n" +
+        "    vec3 mc = nC > 2.5 ? (fr < 0.5 ? mix(cA, cB, fr * 2.0) : mix(cB, cC, (fr - 0.5) * 2.0)) : mix(cA, cB, fr);\n" +
+        "    diffuseColor.rgb *= mc * (0.92 + 0.25 * fr); }");
+    }
+  };
+}
+
 // la finition d'un filament posee sur une matiere de sa couleur c (01/11/2026 : la meme pour une piece lue et pour une
 // zone peinte ou une piece recoloriee d'un filament) ; texOf : les motifs deja dessines. Rend vrai si le motif demande
 // des coordonnees de texture (boxUV). Le reflet (envMap) est pose par l'appelant.
@@ -116,8 +148,8 @@ function finishOn(THREE, mat, c, fin, texOf, disposables) {
     // le brillant d'un silk : la couleur de la face reste la sienne (aucun voile, c'est lui qui blanchissait un gris) ;
     // seul un lisere etroit, de sa propre couleur, s'allume sur la tranche vue en biais, comme un fil qui accroche la lumiere
     const prev = mat.onBeforeCompile;
-    mat.onBeforeCompile = sh => {
-      prev?.(sh);
+    mat.onBeforeCompile = function (sh, r) {
+      prev?.call(this, sh, r);
       sh.fragmentShader = sh.fragmentShader.replace("#include <emissivemap_fragment>",
         "#include <emissivemap_fragment>\n  { float fr = 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)));\n" +
         "    float rim = pow(smoothstep(0.5, 1.0, fr), 2.5);\n" +
@@ -149,8 +181,8 @@ function finishOn(THREE, mat, c, fin, texOf, disposables) {
     const rim = { value: 2.2 };
     mat.userData.rim = rim;
     const prev = mat.onBeforeCompile;
-    mat.onBeforeCompile = sh => {
-      prev?.(sh);
+    mat.onBeforeCompile = function (sh, r) {
+      prev?.call(this, sh, r);
       sh.uniforms.rimK = rim;
       sh.fragmentShader = "uniform float rimK;\n" + sh.fragmentShader.replace("#include <emissivemap_fragment>",
         // la lueur suit legerement le relief (un peu plus forte de face) : les gravures restent devinables sans
@@ -281,13 +313,17 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
       // la matiere d'une couleur choisie dans l'edition (01/11/2026) : une couleur libre (sans effet), ou un filament (sa
       // finition avec) ; une par couleur et finition, partagee
       const finMats = new Map();
-      const matFor = (hex, fin) => {
-        const key = `${hex}/${fin || ""}`;
+      const matFor = (hex, fin, multi = null) => {
+        const key = `${multi ? `${multi.colors.join(",")}:${multi.type}` : hex}/${fin || ""}`;
         if (finMats.has(key)) return finMats.get(key);
         const c = new THREE.Color(`#${hex}`);
         const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true, envMapIntensity: 0, side: THREE.DoubleSide,
           ...(FINISH_MAT[fin] || {}) });
+        if (multi) multiOn(THREE, mat, multi);
         mat.userData.needUV = finishOn(THREE, mat, c, fin, texOf, disposables);
+        // un programme par combinaison : three.js les distingue sinon par le texte du dernier crochet pose (une soie
+        // degradee et une soie unie auraient partage le meme)
+        mat.customProgramCacheKey = () => `pick|${multi?.type || ""}|${fin || ""}`;
         if (FINISH_MAT[fin]?.envMapIntensity) {
           mat.userData.waitEnv = [];                        // les copies faites d'ici la (assemblyPaint)
           envMap().then(t => {
@@ -469,6 +505,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             if (FINISH_MAT[fin]?.envMapIntensity) mat.envMap = await envMap();
             let mesh = geo;
             if (finishOn(THREE, mat, c, fin, texOf, disposables)) { mesh = boxUV(THREE, geo); geo.dispose(); }
+            mat.customProgramCacheKey = () => `piece|${mc?.type || ""}|${fin || ""}|${hueU ? "h" : ""}`;   // voir matFor
             if (hueU) {
               const prev = mat.onBeforeCompile;
               mat.color.set(0xffffff);
@@ -1297,7 +1334,7 @@ function Swatches({ list, value, onPick, free = true }) {
     border: on ? "3px solid #0EA5E9" : "2px solid color-mix(in srgb, var(--text) 25%, transparent)", boxShadow: on ? "0 0 0 2px var(--surface)" : "none" });
   return <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", maxWidth: 260 }}>
     {(list || []).map(x => <button key={x.c} type="button" aria-label={x.name || `#${x.hex || x.c}`} data-tip={x.name ? `${x.name} · #${x.hex || x.c}` : `#${x.hex || x.c}`}
-      onClick={() => onPick(x.c)} style={{ ...dot(x.hex || x.c, value === x.c), ...(x.fin ? { background: undefined, ...colorBg([x.hex], null, x.fin, { size: 26 }) } : {}) }}/>)}
+      onClick={() => onPick(x.c)} style={{ ...dot(x.hex || x.c, value === x.c), ...(x.fin || x.multi ? { background: undefined, ...colorBg((x.multi?.colors || [x.hex]).map(h => `#${h}`), x.multi?.type || null, x.fin, { size: 26 }) } : {}) }}/>)}
     {free && <label data-tip="Une couleur libre" style={{ position: "relative", width: 26, height: 26, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
       background: "conic-gradient(#ef4444, #f59e0b, #22c55e, #0ea5e9, #8b5cf6, #ec4899, #ef4444)",
       border: value && !(list || []).some(x => x.c === value) ? "3px solid #0EA5E9" : "2px solid color-mix(in srgb, var(--text) 25%, transparent)" }}>
@@ -1864,9 +1901,12 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     // d'un filament soie ou phosphorescent en donne l'effet) ; une couleur libre reste sans effet
     for (const o of meta?.used_options || []) {
       if (!o.color) continue;
-      const v = o.finish ? `${o.color}/${o.finish}` : o.color;
-      if (!seen.has(v)) seen.set(v, { c: v, hex: o.color, fin: o.finish || null,
-        name: [o.name, o.kind, o.finish && (FINISHES.find(f => f[0] === o.finish)?.[1] || o.finish)].filter(Boolean).join(" · ") });
+      // un multicolore : ses couleurs et son type (degrade, coaxial) dans la valeur posee
+      const mc = o.multi?.colors?.length >= 2 ? o.multi : null;
+      const v = (mc ? `${mc.colors.join(",")}:${mc.type}` : o.color) + (o.finish ? `/${o.finish}` : "");
+      if (!seen.has(v)) seen.set(v, { c: v, hex: mc ? mc.colors[0] : o.color, fin: o.finish || null, multi: mc,
+        name: [o.name, o.kind, mc && (mc.type === "gradient" ? "Dégradé" : "Bicolore"),
+          o.finish && (FINISHES.find(f => f[0] === o.finish)?.[1] || o.finish)].filter(Boolean).join(" · ") });
     }
     return [...seen.values()];
   }, [meta?.used_options]);
