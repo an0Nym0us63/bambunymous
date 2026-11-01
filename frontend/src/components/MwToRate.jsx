@@ -181,7 +181,11 @@ const day = d => d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", m
 
 export function ToRateTile({ data, onClick, card }) {
   const n = data?.items?.length || 0;
-  const covers = (data?.items || []).flatMap(x => x.photos?.length ? [x.photos[0]] : x.cover_url ? [x.cover_url] : []).slice(0, 4);
+  // la carte des filaments (jointe a l'evaluation) n'est pas une photo du modele : sans vraie photo, sa vignette MakerWorld
+  const covers = (data?.items || []).flatMap(x => {
+    const ph = (x.photos || []).find(u => !u.includes("/rate-card/"));
+    return ph ? [ph] : x.cover_url ? [x.cover_url] : [];
+  }).slice(0, 4);
   return (
     <button onClick={onClick} style={{ ...card, cursor: "pointer", padding: 0, textAlign: "left", color: "var(--text)", position: "relative",
       border: "1.5px solid rgba(245,158,11,0.6)", boxShadow: "0 10px 24px -14px #F59E0B" }}>
@@ -442,7 +446,7 @@ export function ToRateSheet({ data, onClose, onOpen }) {
                       style={{ width: 62, height: 62, borderRadius: 12, objectFit: "cover", cursor: "pointer", border: "1px solid var(--border)" }}/>
                   ))}
                   <span style={{ alignSelf: "center", fontSize: 10.5, color: "var(--muted)" }}>
-                    {x.photo_source === "group" ? "photos du groupe" : "tes photos"}</span>
+                    {x.photos.every(u => u.includes("/rate-card/")) ? "la carte des filaments" : x.photo_source === "group" ? "photos du groupe" : "tes photos"}</span>
                 </div>
               ) : <div style={{ fontSize: 11, color: "var(--muted)" }}>Pas de photo de cette impression.</div>}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6 }}>
