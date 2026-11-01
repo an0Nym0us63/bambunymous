@@ -88,7 +88,7 @@ export function Medal({ tier, emoji, size = 48, locked = false }) {
           animation:"bn-medal-breath 4s ease-in-out infinite" }}/>
       )}
       {fx === "mythic" && (
-        <span aria-hidden="true" style={{ ...disc, "--glow": `${tier.color}cc`, animation:"bn-medal-pulse 2.2s ease-in-out infinite" }}/>
+        <span aria-hidden="true" style={{ ...disc, boxShadow:`0 0 14px 5px ${tier.color}cc`, animation:"bn-medal-pulse 2.2s ease-in-out infinite" }}/>
       )}
       <svg width={size} height={size} viewBox="0 0 48 48" style={{ position:"absolute", inset:0 }} aria-hidden="true">
         <defs>

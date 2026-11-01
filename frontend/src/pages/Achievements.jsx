@@ -1489,7 +1489,7 @@ function TreasureRow({ keys, onRules, onWheel, onSpent, loupes = null }) {
             boxShadow:"0 6px 16px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.25)" }}>
             <div aria-hidden="true" style={{ position:"absolute", inset:3, pointerEvents:"none" }}>
               {[[10, 0], [50, 0], [90, 0], [10, 100], [50, 100], [90, 100]].map(([x, y], i) => <span key={i} style={{ position:"absolute",
-                width:5, height:5, borderRadius:"50%", background:"#fde047", left:`calc(${x}% - 2.5px)`, top:`calc(${y}% - 2.5px)`,
+                width:5, height:5, borderRadius:"50%", background:"#fde047", left:`calc(${x}% - 2.5px)`, top:`calc(${y}% - 2.5px)`, boxShadow:"0 0 8px 2px #fde047",
                 animation:`bn-lamp ${has ? 0.9 : 1.6}s ${i * 0.12}s infinite` }}/>)}
             </div>
             <span style={{ fontSize:10, fontWeight:900, color:"#fde047", letterSpacing:".08em", marginTop:2,
@@ -1639,7 +1639,7 @@ function MiniMachine({ w, onOpen }) {
       onMouseLeave={e => { e.currentTarget.style.transform = ""; }}>
       <div aria-hidden="true" style={{ position:"absolute", inset:5, pointerEvents:"none" }}>
         {LAMPS.map(([x, y], i) => <span key={i} style={{ position:"absolute", width:7, height:7, borderRadius:"50%", background:"#fde047",
-          left:`calc(${x}% - 3.5px)`, top:`calc(${y}% - 3.5px)`, animation:`bn-lamp ${has ? 0.9 : 1.6}s ${i * 0.08}s infinite` }}/>)}
+          left:`calc(${x}% - 3.5px)`, top:`calc(${y}% - 3.5px)`, boxShadow:"0 0 8px 2px #fde047", animation:`bn-lamp ${has ? 0.9 : 1.6}s ${i * 0.08}s infinite` }}/>)}
       </div>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
         <span style={{ fontWeight:900, color:"#fde047", letterSpacing:".05em", fontSize:14.5,

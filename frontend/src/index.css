@@ -181,7 +181,8 @@ body.bn-edit3d .sheet-inner { will-change: auto !important; transform: none !imp
 
 /* Medailles de haut rang (page Succes) : elles vivent selon leur palier. */
 @keyframes bn-medal-sweep { 0% { transform: translateX(-120%) rotate(25deg) } 55%, 100% { transform: translateX(160%) rotate(25deg) } }
-@keyframes bn-medal-pulse { 0%, 100% { box-shadow: 0 0 4px 1px var(--glow) } 50% { box-shadow: 0 0 14px 5px var(--glow) } }
+/* halos et lampes : la lueur est posee une fois, seule l'opacite bat (01/11/2026 : animer box-shadow repeignait a chaque image) */
+@keyframes bn-medal-pulse { 0%, 100% { opacity: .35 } 50% { opacity: 1 } }
 @keyframes bn-medal-twinkle { 0%, 100% { opacity: 0; transform: scale(.4) } 50% { opacity: 1; transform: scale(1) } }
 @keyframes bn-medal-turn { to { transform: rotate(360deg) } }
 /* chaque palier a son effet (22/10/2026) : transparence et position seulement, pour rester fluide */
@@ -196,7 +197,7 @@ body.bn-edit3d .sheet-inner { will-change: auto !important; transform: none !imp
 @keyframes bn-reel-idle { from { transform: translateY(0) } to { transform: translateY(-50%) } }
 @keyframes bn-glint { 0% { transform: translateX(-150%) rotate(20deg) } 60%, 100% { transform: translateX(260%) rotate(20deg) } }
 @keyframes bn-float { 0%, 100% { transform: translateY(0) rotate(-6deg) } 50% { transform: translateY(-5px) rotate(-2deg) } }
-@keyframes bn-lamp { 0%, 100% { opacity: 1; box-shadow: 0 0 8px 2px #fde047 } 50% { opacity: .3; box-shadow: none } }
+@keyframes bn-lamp { 0%, 100% { opacity: 1 } 50% { opacity: .3 } }
 @keyframes bn-press { 0%, 100% { transform: scale(1) } 50% { transform: scale(1.035) } }
 @keyframes bn-ring-glow { 0%, 100% { opacity: .55 } 50% { opacity: 1 } }
 
@@ -210,7 +211,9 @@ body.ach-room-on main.page-content {
     radial-gradient(900px 640px at 40% 112%, rgba(236,72,153,0.16), transparent 62%),
     radial-gradient(rgba(245,183,0,0.22) 1px, transparent 1.6px) 0 0 / 26px 26px,
     linear-gradient(180deg, #160d2e 0%, #0d0a1f 100%) !important;
-  background-attachment: fixed !important;
+  /* pas de background-attachment: fixed (01/11/2026) : sur le cadre qui defile, il privait le telephone du
+     defilement compose (tout l'ecran repeint a chaque mouvement du doigt, page saccadee). Sur un cadre qui
+     defile, le fond par defaut reste deja immobile sous le contenu. */
 }
 [data-theme="light"] body.ach-room-on main.page-content,
 [data-theme="light"].ach-room-on main.page-content {
@@ -220,7 +223,6 @@ body.ach-room-on main.page-content {
     radial-gradient(900px 640px at 40% 112%, rgba(236,72,153,0.14), transparent 62%),
     radial-gradient(rgba(139,92,246,0.13) 1px, transparent 1.6px) 0 0 / 26px 26px,
     linear-gradient(180deg, #fbf6ff 0%, #f3ecfb 100%) !important;
-  background-attachment: fixed !important;
 }
 .ach-room {
   --surface:  rgba(36, 24, 66, 0.62);
