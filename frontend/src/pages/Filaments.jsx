@@ -1348,7 +1348,8 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
 
       {/* Sous-type, comme sur l'accueil ; « a secher » en coin (l'emplacement est en bas, en pastille 📍) */}
       <p style={{ fontSize:9, fontWeight:800, color:"var(--muted)", textAlign:"center",
-        letterSpacing:"0.05em", textTransform:"uppercase", margin:"8px 24px 0",
+        // les marges laissent juste la place du 💧 quand il y est : le sous-type (« PETG TRANSLUCENT ») passe entier
+        letterSpacing:"0.05em", textTransform:"uppercase", margin: s.needs_drying && !s.ordered ? "8px 18px 0" : "8px 8px 0",
         height:12, lineHeight:"12px", overflow:"hidden", whiteSpace:"nowrap",
         textOverflow:"ellipsis" }}>
         {sub || " "}
@@ -1832,7 +1833,8 @@ function SpoolsView({ filaments, showArchived }) {
           petits telephones aussi, et la grille s'elargit ensuite d'elle-meme
           sur tablette et bureau -- aucun point de rupture a maintenir. */}
       {!loading && !spools.length && <EmptyCard icon={showArchived ? "🗄" : "🧵"} text={allSpools.length ? "Aucune bobine ne correspond." : showArchived ? "Aucune bobine archivée." : "Aucune bobine en stock."}/>}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(108px,1fr))", gap:8 }}>
+      {/* 01/11/2026 : plus larges des que l'ecran le permet (136px sur ordinateur), pour lire le sous-type en entier */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(clamp(108px, 28vw, 136px),1fr))", gap:8 }}>
         {spools.map(s => {
           const colorsList = parseColorsList(s.filament_color, s.filament_colors_array);
           return (
