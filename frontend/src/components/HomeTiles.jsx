@@ -1781,14 +1781,17 @@ function Dry({ v, status, o, sz }) {
             const g = fitGrid(drying.length, W, H, { gap: 8, extra: 27, max: 96 });
             if (g.size >= 30) return <div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, minmax(0, 1fr))`, gap: 8,
               alignContent: "center", justifyItems: "center", minWidth: 0 }}>
-              {drying.map(a => <div key={a.id} title={`${amsLab(a)}${a.dry_filament ? ` · ${a.dry_filament}` : ""} · encore ${fmtDur((a.dry_time || 0) * 60)}`}
-                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, minWidth: 0, maxWidth: "100%" }}>
+              {drying.map(a => <div key={a.id} data-tip={`${amsLab(a)}${a.dry_filament ? ` · ${a.dry_filament}` : ""} · encore ${fmtDur((a.dry_time || 0) * 60)}`}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, width: "100%", minWidth: 0 }}>
                 <span style={{ position: "relative", display: "inline-flex" }}>
                   <Ring value={prog(a)} size={g.size} color="#f97316">{a.dry_temperature ? `${a.dry_temperature}°` : `${Math.round(prog(a) * 100)}%`}</Ring>
                   <FanBadge a={a} size={Math.max(14, Math.round(g.size * 0.32))}/>
                   <span aria-hidden="true" style={{ position: "absolute", inset: -2, borderRadius: "50%", boxShadow: "0 0 10px rgba(249,115,22,0.4)",
                     animation: "dryPulse 2.5s ease-in-out infinite", pointerEvents: "none" }}/></span>
-                <span style={{ fontSize: 11, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", lineHeight: "13px" }}>
+                {/* le nom et le filament se coupent a la largeur de la colonne (01/11/2026 : « AMS-A PLA Silk » mordait sur
+                    le voisin) ; le tout reste dans la bulle */}
+                <span style={{ fontSize: 11, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", lineHeight: "13px", maxWidth: "100%",
+                  overflow: "hidden", textOverflow: "ellipsis" }}>
                   {g.size >= 46 ? amsLab(a) : amsLab(a).replace("AMS-", "")}{a.dry_filament && g.size >= 60 ? <span style={{ color: "var(--muted)", fontWeight: 800 }}> {a.dry_filament}</span> : null}</span>
                 <span style={{ fontSize: 10.5, fontWeight: 800, color: "#ea580c", whiteSpace: "nowrap", lineHeight: "13px" }}>{fmtDur((a.dry_time || 0) * 60)}</span>
               </div>)}</div>;
