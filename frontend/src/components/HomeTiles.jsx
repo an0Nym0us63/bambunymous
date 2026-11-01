@@ -3586,7 +3586,8 @@ function Spool({ status, o, sz }) {
   );
   const si = t.spool_info || {};
   const color = hexCss(si.color || t.color);
-  const colors = si.colors_array ? si.colors_array.split(",").map(c => hexCss(c.trim())) : [color];
+  // les couleurs du dessin gardent leur transparence (01/11/2026 : coupees a 6 caracteres, un translucide perdait son damier)
+  const colors = (l => l.length ? l : [color])(parseColorsList(si.color || t.color, si.colors_array));
   const name = si.translated_name || si.name || t.filament_type || "Bobine";
   const type = si.fila_type || si.material || t.filament_type;
   const g = si.remaining_weight_g, tot = si.initial_weight_g;
