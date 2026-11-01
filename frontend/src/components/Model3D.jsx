@@ -258,6 +258,19 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
       localStorage.setItem("bn.3d.lamps", JSON.stringify(all));
     } catch { /* rien */ }
   };
+  // la force de la lueur, lumiere eteinte (01/11/2026) : selon le modele, il en faut plus, ou moins pour garder ses details
+  // (sinon une boule lumineuse) ; gardee sur l'appareil, pour ce modele seulement, comme la lampe (1 : la force par defaut)
+  const glowAll = () => { try { return JSON.parse(localStorage.getItem("bn.3d.glowk") || "{}"); } catch { return {}; } };
+  const [glowK, setGlowKS] = useState(() => glowAll()[lampKey] || 1);
+  const glowKNow = useRef(glowK);
+  const putGlowK = k => {
+    glowKNow.current = k; setGlowKS(k); api.current?.setGlowK(k);
+    try {
+      const all = glowAll();
+      if (Math.abs(k - 1) > 0.001) all[lampKey] = k; else delete all[lampKey];
+      localStorage.setItem("bn.3d.glowk", JSON.stringify(all));
+    } catch { /* rien */ }
+  };
   const [floorPick, setFloorPick] = useState(false), [oriented, setOriented] = useState(false);   // une face posee au sol (la vue)
   const [orientOpen, setOrientOpen] = useState(false);  // tourner tout le modele (la vue), pour une photo
   const menuBtn = on => ({ height: 32, padding: "0 10px", borderRadius: 9, cursor: "pointer", fontSize: 12, fontWeight: 800, whiteSpace: "nowrap",
@@ -702,7 +715,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             const pr0 = renderer.getPixelRatio();
             // le halo calcule a la resolution reelle (et non en pixels CSS) : ses mipmaps grossiers faisaient fourmiller les
             // aretes fines quand on tourne ; puis un lissage des aretes (SMAA) en sortie, par-dessus le multi-echantillonnage
-            composer.addPass(new UnrealBloomPass(new THREE.Vector2(el.clientWidth * pr0, el.clientHeight * pr0), 0.45, 0.3, 0.3));
+            bloomPass = new UnrealBloomPass(new THREE.Vector2(el.clientWidth * pr0, el.clientHeight * pr0), 0.45, 0.3, 0.3);
+            composer.addPass(bloomPass);
             composer.addPass(new OutputPass());
             composer.addPass(new SMAAPass(el.clientWidth * pr0, el.clientHeight * pr0));
             disposables.push(composer);
@@ -723,9 +737,20 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               m.envMapIntensity = on ? 0.02 : m.userData.dayEnvI;
             });
           });
-          glowMats.forEach(m => { m.emissiveIntensity = on ? Math.min(1.45, m.userData.nightEmit * 1.12) : m.userData.dayEmit; if (m.userData.rim) m.userData.rim.value = on ? 0.6 : 2.2; });
+          glowNight();
           render();
         };
+        // la lueur dans le noir, a la force choisie (glowK : 1 par defaut) : la piece, son lisere et le halo autour
+        let glowK = glowKNow.current || 1, bloomPass = null;
+        const glowNight = () => {
+          const on = bloomOn;
+          glowMats.forEach(m => {
+            m.emissiveIntensity = on ? Math.min(3, m.userData.nightEmit * 1.12 * glowK) : m.userData.dayEmit;
+            if (m.userData.rim) m.userData.rim.value = on ? 0.6 * glowK : 2.2;
+          });
+          if (bloomPass) bloomPass.strength = 0.45 * Math.min(1.8, glowK);
+        };
+        const setGlowK = k => { glowK = k; if (bloomOn) { glowNight(); render(); } };
         // lumiere derriere (28/10/2026) : un lithophane ne se lit qu'eclaire par l'arriere. En chaque pixel, l'epaisseur
         // de chaque couleur que la lumiere traverse (la somme des profondeurs des faces arriere moins celle des faces
         // avant, par melange additif : juste meme quand le rayon entre et sort plusieurs fois), puis la lumiere filtree
@@ -950,7 +975,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         if (editApi) editApi.current = { editing, toSave, origin, relayout, snapshot, untilt, get editor() { return editor; } };
         disposables.push({ dispose: () => { try { editor?.dispose(); } catch { /* rien */ } if (editApi) editApi.current = null; } });
         const setTd = (i, v) => { if (hueU) { hueU.hT.value[i] = v; render(); } };
-        api.current = { fit, night, backlight, bedShow, dragPans, zoom, floorMode, untilt, orient, setTd, setLamp };
+        api.current = { fit, night, backlight, bedShow, dragPans, zoom, floorMode, untilt, orient, setTd, setLamp, setGlowK };
         setLamp(lampNow.current);
         const s = bb2.getSize(new THREE.Vector3());
         onState({ busy: false, error: null, size: glb ? [s.x, s.z, s.y] : [s.x, s.z, s.y], glow: glowMats.length > 0 });
@@ -971,6 +996,17 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{l}</button>)}
     </div>}
     {lampOpen && !lit && !bare && <LampPanel lamp={lamp} onChange={putLamp} onClose={() => setLampOpen(false)}/>}
+    {/* lumiere eteinte : la force de la lueur, a regler selon le modele */}
+    {dark && glow && !bare && <div onPointerDown={e => e.stopPropagation()} style={{ position: "absolute", left: 10, bottom: 10, zIndex: 3,
+      width: "min(230px, calc(100% - 170px))", minWidth: 120, padding: "6px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 8,
+      background: "color-mix(in srgb, #0f172a 82%, transparent)", border: "1px solid rgba(250,204,21,.35)", backdropFilter: "blur(6px)", color: "#fde68a" }}>
+      <span style={{ fontSize: 14, flexShrink: 0 }} data-tip="La force de la lueur : moins pour garder les détails, plus pour qu'il luise davantage (gardée pour ce modèle)">✨</span>
+      <input type="range" min={0.2} max={2.5} step={0.05} value={glowK} onChange={e => putGlowK(Number(e.target.value))}
+        aria-label="Force de la lueur" style={{ flex: 1, minWidth: 0, accentColor: "#facc15" }}/>
+      <button type="button" onClick={() => putGlowK(1)} data-tip="Revenir à la force par défaut"
+        style={{ flexShrink: 0, minWidth: 40, border: "none", background: "none", color: "#fde68a", fontSize: 11.5, fontWeight: 900, cursor: "pointer", padding: 0,
+          fontVariantNumeric: "tabular-nums" }}>{Math.round(glowK * 100)} %</button>
+    </div>}
     {tdOpen && hueL && !lit && (pan => (tdSlot ? createPortal(pan, tdSlot) : pan))(<div onPointerDown={e => e.stopPropagation()} style={{ zIndex: 3,
       ...(tdSlot ? {} : { position: "absolute", right: 10, bottom: 56, width: "min(300px, calc(100% - 20px))", boxShadow: "0 10px 30px rgba(0,0,0,.25)" }),
       padding: "10px 12px", borderRadius: 14, background: "color-mix(in srgb, var(--surface) 94%, transparent)", border: "1px solid var(--border)",
