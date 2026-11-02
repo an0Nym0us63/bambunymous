@@ -147,6 +147,9 @@ class _Hub:
         self.proc = None             # le ffmpeg du direct (RTSP), pour l'arreter s'il se fige
         self.socket = None           # la socket du direct (TLS:6000), idem
         self.stalls = 0
+        # la methode qui a deja donne des images (02/11/2026) : un modele non reconnu (mode « both ») essayait aussi la
+        # connexion des P1/A1 apres chaque blocage d'une X1/H2, en vain, et c'est son erreur qui restait
+        self.good = None
 
     def unstick(self) -> None:
         """Le direct se fige sans erreur (02/11/2026 : plus une image depuis 33 s, ffmpeg vivant, le serveur attendait
@@ -278,7 +281,7 @@ def _tls_frames(ip: str, code: str, stop):
 
 
 def _produce(ip: str, code: str, mode: str) -> None:
-    order = (["rtsp"] if mode == "rtsp" else ["tls"] if mode == "tls" else ["rtsp", "tls"])
+    order = (["rtsp"] if mode == "rtsp" else ["tls"] if mode == "tls" else [_HUB.good] if _HUB.good else ["rtsp", "tls"])
     err = None
     for m in order:
         with _HUB.lock:
@@ -288,6 +291,8 @@ def _produce(ip: str, code: str, mode: str) -> None:
             gen = _rtsp_frames(ip, code, _HUB.stop) if m == "rtsp" else _tls_frames(ip, code, _HUB.stop)
             for jpg in gen:
                 _HUB.put(jpg)
+                if _HUB.good != m:
+                    _HUB.good = m
             err = None
             break                                  # plus personne : arret normal
         except Exception as e:
@@ -408,6 +413,8 @@ async def _serve(ip: str, code: str, model: str, model_id: str = "") -> Response
     last_err = None
 
     providers = []
+    if mode == "both" and _HUB.good:
+        mode = _HUB.good
     if mode in ("rtsp", "both"):
         providers.append(("rtsp", lambda: _grab_rtsps(ip, code)))
     if mode in ("tls", "both"):
@@ -557,10 +564,16 @@ async def camera_stats():
                "taille_derniere_ko": round(len(_HUB.frame) / 1024) if _HUB.frame else None,
                "echecs": _HUB.fails, "figes_coupes": _HUB.stalls, "nouvel_essai_dans_s": max(0, round(_HUB.retry_at - now, 1)),
                "derniere_erreur": _HUB.err or None, "erreur_il_y_a_s": round(now - _HUB.err_at) if _HUB.err_at else None,
-               "ffmpeg": list(_HUB.ff_log), "spectateurs_flux": _HUB.subs,
+               "ffmpeg": list(_HUB.ff_log), "methode_qui_marche": _HUB.good, "spectateurs_flux": _HUB.subs,
                "spectateurs_tires": len([1 for v in _HUB.pullers.values() if now - v < _IDLE_STOP])}
     with _LOCK:
         out["capture"] = {"ok": _CACHE["ok"], "echecs": _CACHE["fail_count"], "nouvel_essai_dans_s": max(0, round(_CACHE["retry_at"] - now, 1))}
+    try:
+        import os
+        # la charge du serveur : un ffmpeg qui ne suit pas le decodage (machine modeste) ralentit puis fige le direct
+        out["serveur"] = {"charge_1_5_15min": [round(x, 2) for x in os.getloadavg()], "coeurs": os.cpu_count()}
+    except (AttributeError, OSError):
+        pass
     try:
         st = get_state()
         out["modele"] = {"nom": getattr(st, "printer_model", "") or "", "id": getattr(st, "model_id", "") or ""}
