@@ -1678,173 +1678,235 @@ async def ofd_search(brand: str = "", family: str = "", q: str = "", _: str = De
 async def link_catalog(fid: int, body: dict = Body({}), db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
     """Rattache un filament a une entree du catalogue Bambu choisie a la main (02/11/2026) : il prend ses noms, son type,
     son code couleur, ses couleurs et son profil, comme la synchro, qui le retrouvera ensuite par ce code."""
-    if body.get("source") == "ofd":
-        from ....services import ofd_catalog
-        e = ofd_catalog.entry(body.get("ref"))
-        if e is None:
-            raise HTTPException(404, "Entrée introuvable dans le catalogue des autres marques")
-        f = await db.get(Filament, fid)
-        if f is None:
-            raise HTTPException(404, "Filament introuvable")
-        changed = await _apply_ofd(db, f, e, link=True)
-        twin = (await db.execute(select(Filament.id, Filament.translated_name, Filament.name).where(
-            Filament.id != fid, Filament.catalog_ref == f.catalog_ref))).first()
-        await db.commit()
-        _clear_match_cache()
-        return {"ok": True, "changes": changed, "name": f.translated_name or f.name,
-                "twin": {"id": twin[0], "name": twin[1] or twin[2]} if twin else None}
-    from ....services.bambu_catalog import catalog_entries
-    data, en_to_fr = catalog_entries()
-    if data is None:
-        raise HTTPException(503, "Catalogue non disponible (téléchargé au démarrage de l'appli)")
-    pid, code = str(body.get("fila_id") or "").upper(), str(body.get("fila_color_code") or "")
-    entry = next((e for e in data if str(e.get("fila_id", "")).upper() == pid and str(e.get("fila_color_code", "")) == code), None)
-    if entry is None:
-        raise HTTPException(404, "Entrée introuvable dans le catalogue")
     f = await db.get(Filament, fid)
     if f is None:
         raise HTTPException(404, "Filament introuvable")
-    changed = _apply_catalog(f, entry, en_to_fr, link=True)
-    from ....services import spool_tare
-    if await spool_tare.fill(db, f):
-        changed.append("spool_weight_g")
+    try:
+        changed = await _link_one(db, f, body, link=True)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
     # un autre filament deja rattache a la meme entree : dit, pour fusionner a la main si c'est un doublon
-    twin = (await db.execute(select(Filament.id, Filament.translated_name, Filament.name).where(
-        Filament.id != fid, Filament.profile_id == entry.get("fila_id"), Filament.fila_color_code == code))).first()
+    same = (Filament.catalog_ref == f.catalog_ref) if body.get("source") == "ofd" else \
+        ((Filament.profile_id == f.profile_id) & (Filament.fila_color_code == f.fila_color_code))
+    twin = (await db.execute(select(Filament.id, Filament.translated_name, Filament.name).where(Filament.id != fid, same))).first()
     await db.commit()
     _clear_match_cache()
     return {"ok": True, "changes": changed, "name": f.translated_name or f.name,
             "twin": {"id": twin[0], "name": twin[1] or twin[2]} if twin else None}
 
 
-@router.post("/filaments/enrich-from-catalog")
-async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
-    """
-    Pour tous les filaments Bambu Lab en base (ceux avec un profile_id),
-    cherche leur entrée dans le catalogue local (filaments_color_codes.json)
-    et met à jour : name, translated_name, material, color, multicolor_type,
-    colors_array, fila_color_code.
-    Retourne un bilan détaillé.
-    """
-    from ....services.bambu_catalog import BambuCatalogSync
-    from ....core.config import settings
-    cat = BambuCatalogSync(data_dir=settings.DATA_DIR)
+# ── La synchro des filaments avec les catalogues (03/11/2026) : Bambu et autres marques, en deux temps ──
+# L'apercu ne touche a rien : pour chaque filament, ce qui changerait (rattachement sur), la correspondance devinee et
+# d'autres choix (a confirmer), ou rien. La validation n'applique que ce qui a ete confirme.
+_SNAP = ("name", "name_en", "translated_name", "material", "fila_type", "fila_color_code", "multicolor_type", "colors_array",
+         "profile_id", "manufacturer", "color", "catalog_ref", "color_bucket", "spool_weight_g", "spool_tare_name")
+_SHOW = ("translated_name", "name", "fila_type", "material", "color", "colors_array", "multicolor_type", "fila_color_code", "profile_id",
+         "manufacturer", "spool_weight_g")
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Filament)
-            .options(selectinload(Filament.spools))
-            .where(Filament.profile_id.isnot(None))
-        )
-        filaments = result.scalars().all()
 
-        # Filaments sans profile_id (non enrichissables)
-        result_no_profile = await db.execute(
-            select(Filament).where(
-                (Filament.profile_id.is_(None)) | (Filament.profile_id == "")
-            )
-        )
-        no_profile = [
-            {"id": f.id, "name": f.name, "manufacturer": f.manufacturer, "color": f.color, "material": f.material,
-             "fila_type": f.fila_type}
-            for f in result_no_profile.scalars().all()
-            if "bambu" in (f.manufacturer or "").lower()
-        ]
+def _snap(f):
+    from types import SimpleNamespace
+    return SimpleNamespace(**{c: getattr(f, c, None) for c in _SNAP})
 
-    updated, not_found, skipped = [], [], []
 
-    from ....services.bambu_catalog import catalog_entries, fr_name
-    cat_data, en_to_fr = catalog_entries()
-    if cat_data is None:
-        return {"error": "Catalogue non disponible — démarrez l'app pour le télécharger", "total_bambu": 0}
-    COLOR_TYPE_FR = {"单色": "monochrome", "渐变色": "gradient", "多拼色": "coaxial"}
+def _diff(before, after, changed) -> list:
+    return [{"f": c, "a": getattr(before, c), "b": getattr(after, c)} for c in changed if c in _SHOW]
 
-    async with AsyncSessionLocal() as db:
-        for f in filaments:
-            if not f.color:
-                skipped.append({"id": f.id, "name": f.name, "reason": "pas de couleur hex renseignée",
-                                "material": f.material, "fila_type": f.fila_type})
+
+def _rgb(h):
+    h = str(h or "").strip().lstrip("#")
+    try:
+        return tuple(int(h[k:k + 2], 16) for k in (0, 2, 4)) if len(h) >= 6 else None
+    except ValueError:
+        return None
+
+
+def _words(*xs) -> set:
+    import re as _re
+    return {w for x in xs for w in _re.findall(r"[a-z0-9]+", str(x or "").lower()) if len(w) >= 2}
+
+
+def _score(f, v) -> float:
+    """Plus c'est bas, plus la couleur du catalogue ressemble au filament : la teinte, le nom, la gamme."""
+    a, b = _rgb(f.color), _rgb(v.get("color_hex"))
+    d = sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5 if a and b else 160.0
+    names = {str(x or "").strip().lower() for x in (f.name, f.name_en, f.translated_name) if x}
+    if str(v.get("name") or "").lower() in names or str(v.get("name_fr") or "").lower() in names:
+        d -= 150
+    else:
+        d -= 35 * len(_words(f.name, f.name_en, f.translated_name) & _words(v.get("name"), v.get("name_fr")))
+    # une seule couleur contre plusieurs (ou l'inverse) : un « Rouge » n'est pas un tricolore rouge-jaune-bleu
+    multi_v = len(v.get("colors") or []) > 1 or bool(_words(v.get("name")) & {"dual", "tri", "rainbow", "multi", "gradient", "bicolor", "tricolor"})
+    if ((f.multicolor_type or "monochrome") != "monochrome") != multi_v:
+        d += 90
+    if f.fila_type and v.get("fila_type"):
+        if str(f.fila_type).lower() == str(v["fila_type"]).lower():
+            d -= 60
+        else:
+            d -= 15 * len(_words(f.fila_type) & _words(v["fila_type"]))
+    return d
+
+
+def _bambu_exact(f, raw: list):
+    """L'entree Bambu de ce filament : son code couleur s'il en a un, sinon son profil et sa couleur exacte (la regle de
+    toujours : mono avec mono, multi avec multi)."""
+    pid = (f.profile_id or "").upper()
+    if not pid:
+        return None
+    if f.fila_color_code:
+        e = next((e for e in raw if e.get("fila_id", "").upper() == pid and str(e.get("fila_color_code", "")) == str(f.fila_color_code)), None)
+        if e:
+            return e
+    if not f.color:
+        return None
+    c = (f.color or "").lower().replace("#", "")
+    c = c + "ff" if len(c) == 6 else c[:8]
+    multi = (f.multicolor_type or "monochrome") != "monochrome"
+    for e in raw:
+        if e.get("fila_id", "").upper() != pid:
+            continue
+        cols = e.get("fila_color", [])
+        if multi != (_CTYPE_FR.get(e.get("fila_color_type", ""), "monochrome") != "monochrome"):
+            continue
+        first = cols[0].lstrip("#").lower()[:8] if cols else ""
+        if multi and f.colors_array:
+            mine = {x.strip().lstrip("#").lower()[:6] for x in f.colors_array.split(",") if x.strip()}
+            theirs = {x.lstrip("#").lower()[:6] for x in cols}
+            if mine and theirs and not (mine <= theirs or theirs <= mine):
                 continue
+        elif first != c:
+            continue
+        return e
+    return None
 
-            color_hex_raw = (f.color or "").lower().replace("#","")
-            # Si 6 chars en DB → ajouter ff (alpha opaque) pour comparer avec catalogue 8 chars
-            color_hex = color_hex_raw + "ff" if len(color_hex_raw) == 6 else color_hex_raw[:8]
-            # Multicolore en base = filament avec colors_array ou multicolor_type != monochrome
-            is_multi = (f.multicolor_type or "monochrome") != "monochrome"
 
-            # le code couleur deja pose (rattachement a la main, 02/11/2026, ou synchro d'avant) l'emporte : l'entree choisie
-            # reste la sienne, meme si une autre a la meme couleur
-            entry = next((e for e in cat_data if f.fila_color_code and e.get("fila_id", "").upper() == (f.profile_id or "").upper()
-                          and str(e.get("fila_color_code", "")) == str(f.fila_color_code)), None)
-            for e in cat_data if entry is None else []:
-                if e.get("fila_id","").upper() != (f.profile_id or "").upper():
-                    continue
-                e_colors = e.get("fila_color", [])
-                e_ctype  = COLOR_TYPE_FR.get(e.get("fila_color_type",""), "monochrome")
-                e_is_multi = e_ctype != "monochrome"
+def _bambu_view(e: dict, t2f: dict, en_to_fr: dict) -> dict:
+    """Une entree du catalogue Bambu, comme /catalog/search la rend."""
+    from ....services.bambu_catalog import fr_name
+    names = e.get("fila_color_name", {})
+    ftype, colors, raw = e.get("fila_type", ""), e.get("fila_color", []), e.get("fila_color_type", "")
+    return {"source": "bambu", "brand": "Bambu Lab", "fila_id": e.get("fila_id", ""), "fila_color_code": e.get("fila_color_code", ""),
+            "color_code": e.get("color_code", ""), "fila_type": ftype, "family": t2f.get(ftype.lower(), ""),
+            "name": names.get("en") or names.get("fr") or next(iter(names.values()), ""), "name_fr": fr_name(names, en_to_fr),
+            "color_hex": colors[0].lstrip("#")[:8] if colors else "", "colors": [c.lstrip("#")[:8] for c in colors],
+            "color_type": raw, "color_type_fr": _CTYPE_FR.get(raw, raw)}
 
-                # Cohérence mono↔mono / multi↔multi — évite de mapper un filament
-                # monochrome sur une entrée bicolore qui aurait la même première couleur
-                if is_multi != e_is_multi:
-                    continue
 
-                # Monochromes : comparer la première couleur (avec alpha padding)
-                # Multicouleurs : ne PAS comparer la 1ère couleur seule — ordre catalogue peut différer
-                if not is_multi:
-                    ec = (e_colors[0]).lstrip("#").lower()[:8] if e_colors else ""
-                    if ec != color_hex:
-                        continue
+async def _link_one(db, f, body: dict, link: bool = True) -> list:
+    """Met le filament a l'entree designee : {source: "ofd", ref} ou {fila_id, fila_color_code} (Bambu). Leve ValueError."""
+    if body.get("source") == "ofd":
+        from ....services import ofd_catalog
+        e = ofd_catalog.entry(body.get("ref"))
+        if e is None:
+            raise ValueError("Entrée introuvable dans le catalogue des autres marques")
+        return await _apply_ofd(db, f, e, link=link)
+    from ....services.bambu_catalog import catalog_entries
+    data, en_to_fr = catalog_entries()
+    if data is None:
+        raise ValueError("Catalogue Bambu non disponible (téléchargé au démarrage de l'appli)")
+    pid, code = str(body.get("fila_id") or "").upper(), str(body.get("fila_color_code") or "")
+    entry = next((e for e in data if str(e.get("fila_id", "")).upper() == pid and str(e.get("fila_color_code", "")) == code), None)
+    if entry is None:
+        raise ValueError("Entrée introuvable dans le catalogue Bambu")
+    changed = _apply_catalog(f, entry, en_to_fr, link=link)
+    if link:
+        from ....services import spool_tare
+        if await spool_tare.fill(db, f):
+            changed.append("spool_weight_g")
+    return changed
 
-                # Multicouleurs : comparer les sets de couleurs (ordre-indépendant, 6 chars RGB)
-                if is_multi and f.colors_array:
-                    db_cols = {c.strip().lstrip("#").lower()[:6] for c in f.colors_array.split(",") if c.strip()}
-                    cat_cols = {c.lstrip("#").lower()[:6] for c in e_colors}
-                    if db_cols and cat_cols and not (db_cols <= cat_cols or cat_cols <= db_cols):
-                        continue
-                elif is_multi:
-                    # Pas de colors_array en DB : comparer uniquement la première couleur
-                    ec = (e_colors[0]).lstrip("#").lower()[:8] if e_colors else ""
-                    if ec != color_hex:
-                        continue
 
-                entry = e
-                break
-
-            if entry:
-                fresh = await db.get(Filament, f.id)
-                changed = _apply_catalog(fresh, entry, en_to_fr)
-                updated.append({"id": f.id, "name": fresh.name, "changes": changed})
-            else:
-                # N'afficher comme "introuvable" que les filaments Bambu Lab
-                # (les filaments tiers ne sont pas dans ce catalogue)
-                if "bambu" in (f.manufacturer or "").lower():
-                    not_found.append({"id": f.id, "name": f.name, "profile_id": f.profile_id, "color": f.color,
-                                      "material": f.material, "fila_type": f.fila_type})
-
-        await db.commit()
-
-    # les filaments rattaches au catalogue des autres marques (02/11/2026) : remis a jour de la meme facon
+@router.get("/filaments/enrich/preview")
+async def enrich_preview(db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    """L'apercu de la synchro : rien n'est enregistre. items : {id, nom, marque, couleur…, status, changes, proposals,
+    reason}. status : « sure » (rattache, des champs changeraient), « ok » (deja a jour), « guess » (correspondance devinee,
+    a confirmer ; proposals[0] la meilleure, puis d'autres choix), « none » (rien trouve)."""
+    from ....services.bambu_catalog import catalog_entries
     from ....services import ofd_catalog
-    async with AsyncSessionLocal() as db:
-        others = (await db.execute(select(Filament).where(Filament.catalog_ref.like("ofd:%")))).scalars().all()
-        for f in others:
-            e = ofd_catalog.entry(f.catalog_ref[4:])
-            if e is None:
-                not_found.append({"id": f.id, "name": f.name, "profile_id": f.profile_id, "color": f.color,
-                                  "material": f.material, "fila_type": f.fila_type, "manufacturer": f.manufacturer})
-                continue
-            changed = await _apply_ofd(db, f, e)
-            updated.append({"id": f.id, "name": f.name, "changes": changed})
-        await db.commit()
+    raw, en_to_fr = catalog_entries()
+    raw, en_to_fr = raw or [], en_to_fr or {}
+    t2f = _get_catalog().type_to_family() if raw else {}
+    bviews = [(e, _bambu_view(e, t2f, en_to_fr)) for e in raw]
+    ofd_brands = {ofd_catalog.norm(b["name"]): b["name"] for b in (ofd_catalog.brands().get("brands") or [])}
+    pools: dict = {}
 
-    return {
-        "total_bambu": len(filaments),
-        "total_other": len(others),
-        "updated": len(updated),
-        "not_found": len(not_found),
-        "skipped": len(skipped),
-        "details": {"updated": updated, "not_found": not_found, "skipped": skipped, "no_profile": no_profile},
-    }
+    def ofd_pool(brand, fam):
+        k = (brand, fam)
+        if k not in pools:
+            v = ofd_catalog.search(brand, fam or "", "", limit=100000).get("entries") or []
+            pools[k] = v or (ofd_catalog.search(brand, "", "", limit=100000).get("entries") or [] if fam else [])
+        return pools[k]
+
+    items = []
+    fils = (await db.execute(select(Filament).order_by(Filament.manufacturer, Filament.name))).scalars().all()
+    for f in fils:
+        it = {"id": f.id, "name": f.translated_name or f.name, "name_en": f.name, "manufacturer": f.manufacturer, "color": f.color,
+              "colors_array": f.colors_array, "multicolor_type": f.multicolor_type, "fila_type": f.fila_type, "material": f.material,
+              "status": "none", "changes": [], "proposals": [], "reason": None}
+        bambu = "bambu" in (f.manufacturer or "").lower() or (bool(f.profile_id) and not f.catalog_ref and not (f.manufacturer or "").strip())
+        fam = family_of(f.fila_type, f.material) or f.material
+        sure = None
+        if f.catalog_ref and f.catalog_ref.startswith("ofd:"):
+            e = ofd_catalog.entry(f.catalog_ref[4:])
+            if e:
+                after = _snap(f)
+                ch = await _apply_ofd(None, after, e)
+                sure = (e, _diff(f, after, ch))
+            else:
+                it["reason"] = "Son entrée a disparu du catalogue de sa marque"
+        elif bambu and raw:
+            e = _bambu_exact(f, raw)
+            if e:
+                v = _bambu_view(e, t2f, en_to_fr)
+                after = _snap(f)
+                ch = _apply_catalog(after, e, en_to_fr)
+                sure = (v, _diff(f, after, ch))
+        if sure:
+            it.update(status="sure" if sure[1] else "ok", changes=sure[1], proposals=[sure[0]])
+            items.append(it)
+            continue
+        # a deviner : les plus ressemblantes du bon catalogue
+        if bambu:
+            pool = [v for e, v in bviews if f.profile_id and e.get("fila_id", "").upper() == f.profile_id.upper()] \
+                or [v for e, v in bviews if (v.get("family") or "").lower() == (fam or "").lower()] or [v for e, v in bviews]
+            if not raw:
+                it["reason"] = "Catalogue Bambu pas encore téléchargé"
+        else:
+            b = ofd_brands.get(ofd_catalog.norm(f.manufacturer))
+            pool = ofd_pool(b, fam) if b else []
+            if not b:
+                it["reason"] = "Sans marque" if not (f.manufacturer or "").strip() else \
+                    ("Catalogue des autres marques pas encore téléchargé" if not ofd_brands else f"« {f.manufacturer} » absente du catalogue des autres marques")
+        if pool:
+            ranked = sorted(pool, key=lambda v: _score(f, v))[:6]
+            # « sure » : le meme nom, ou une teinte vraiment proche (la gamme seule ne suffit pas : un cuivre pour un rouge)
+            best = ranked[0]
+            a, b = _rgb(f.color), _rgb(best.get("color_hex"))
+            close = bool(a and b) and sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5 < 40
+            named = str(best.get("name") or "").lower() in {str(x or "").lower() for x in (f.name, f.name_en, f.translated_name)}                 or str(best.get("name_fr") or "").lower() in {str(x or "").lower() for x in (f.name, f.name_en, f.translated_name)}
+            it.update(status="guess", proposals=ranked, strong=_score(f, best) < 30 and (close or named))
+        items.append(it)
+    counts = {k: sum(1 for x in items if x["status"] == k) for k in ("sure", "ok", "guess", "none")}
+    return {"items": items, "counts": counts, "bambu_ready": bool(raw), "others_ready": bool(ofd_brands)}
+
+
+@router.post("/filaments/enrich/apply")
+async def enrich_apply(body: dict = Body({}), db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    """Applique la synchro confirmee : items [{id, source, ref | fila_id + fila_color_code, link}] ; link : une
+    correspondance devinee et confirmee (rattachement complet, comme « Rattacher au catalogue »), sinon une mise a jour."""
+    done, errors = 0, []
+    for x in (body.get("items") or [])[:2000]:
+        f = await db.get(Filament, int(x.get("id") or 0))
+        if f is None:
+            continue
+        try:
+            await _link_one(db, f, x, link=bool(x.get("link")))
+            done += 1
+        except ValueError as e:
+            errors.append({"id": f.id, "name": f.translated_name or f.name, "error": str(e)})
+    await db.commit()
+    _clear_match_cache()
+    return {"updated": done, "errors": errors}
 
 
 @router.get("/color-buckets")
@@ -1888,19 +1950,13 @@ async def catalog_search(
     Filtre par famille (PLA/PETG…), type détaillé, et/ou substring sur le nom couleur.
     Retourne les entrées triées par type puis nom.
     """
-    from ....services.bambu_catalog import catalog_entries, fr_name
+    from ....services.bambu_catalog import catalog_entries
     entries, en_to_fr = catalog_entries()
     if entries is None:
         return {"entries": [], "available": False}
 
     # Famille de chaque type : deduite, le fichier communautaire en secours
     type_to_family: dict = _get_catalog().type_to_family()
-
-    COLOR_TYPE_FR = {
-        "单色":  "monochrome",
-        "渐变色": "gradient",
-        "多拼色": "coaxial",
-    }
 
     results = []
     for entry in entries:
@@ -1912,34 +1968,14 @@ async def catalog_search(
         # Filtre type détaillé
         if fila_type and ftype.lower() != fila_type.lower():
             continue
-        # Noms
-        names = entry.get("fila_color_name", {})
-        name_fr  = fr_name(names, en_to_fr)
-        name_en  = names.get("en") or names.get("fr") or next(iter(names.values()), "")
-        fila_cc  = entry.get("fila_color_code", "")
+        v = _bambu_view(entry, type_to_family, en_to_fr)
         # Filtre recherche textuelle — insensible à la casse ET à la position
         # cherche dans le nom français, anglais ET le code couleur Bambu
         if q:
             ql = q.strip().lower()
-            if (ql not in name_fr.lower() and
-                ql not in name_en.lower() and
-                ql not in fila_cc.lower()):
+            if ql not in v["name_fr"].lower() and ql not in v["name"].lower() and ql not in v["fila_color_code"].lower():
                 continue
-        colors = entry.get("fila_color", [])
-        ctype_raw = entry.get("fila_color_type", "")
-        results.append({
-            "fila_id":          entry.get("fila_id", ""),
-            "fila_color_code":  fila_cc,
-            "color_code":       entry.get("color_code", ""),
-            "fila_type":        ftype,
-            "family":           type_to_family.get(ftype.lower(), ""),
-            "name":             name_en,       # nom "officiel" non traduit (anglais)
-            "name_fr":          name_fr,       # nom traduit français
-            "color_hex":        colors[0].lstrip("#")[:8] if colors else "",
-            "colors":           [c.lstrip("#")[:8] for c in colors],
-            "color_type":       ctype_raw,
-            "color_type_fr":    COLOR_TYPE_FR.get(ctype_raw, ctype_raw),
-        })
+        results.append(v)
 
     results.sort(key=lambda e: (e["fila_type"], e["name"]))
     return {"entries": results, "available": True}
