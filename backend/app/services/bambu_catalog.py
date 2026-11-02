@@ -317,24 +317,76 @@ def catalog_entries() -> Tuple[Optional[list], Optional[dict]]:
 # Les noms francais que le catalogue n'a nulle part (ceux de la boutique Bambu Lab, donnes par l'utilisateur) : le
 # dernier recours avant l'anglais
 FR_MISSING = {
-    "dawn radiance": "Éclat de l'Aube",          # PLA Silk degrade M8 (13912), 02/11/2026
+    "Dawn Radiance": "Éclat de l'Aube",          # PLA Silk degrade M8 (13912), 02/11/2026
 }
+
+
+_FR_MISSING_CF = {k.casefold(): v for k, v in FR_MISSING.items()}
+
+
+# Nos correspondances, a cote du catalogue (02/11/2026 ; Parametres › Filaments) : un nom anglais du catalogue -> notre
+# nom francais. Elles passent avant le catalogue (une traduction absente, ou qui ne convient pas). Gardees en base
+# (reglage CATALOG_NAMES), en memoire ici pour les lectures synchrones.
+K_NAMES = "CATALOG_NAMES"
+_NAMES: dict = {}
+
+
+def names_map() -> dict:
+    return dict(_NAMES)
+
+
+async def load_names() -> None:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, K_NAMES, "")
+    try:
+        items = json.loads(raw) if raw else []
+    except ValueError:
+        items = []
+    _NAMES.clear()
+    for it in items if isinstance(items, list) else []:
+        en, fr = str(it.get("en") or "").strip(), str(it.get("fr") or "").strip()
+        if en and fr:
+            _NAMES[en.casefold()] = fr
+
+
+async def save_names(items: list) -> list:
+    """Enregistre la liste [{en, fr}] (la derniere ecrite pour un meme nom anglais gagne), et remet les fiches filament
+    a jour : celles qui portaient le nom anglais, le nom du catalogue ou notre ancienne correspondance."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    clean, seen = [], {}
+    for it in items or []:
+        en, fr = str((it or {}).get("en") or "").strip()[:120], str((it or {}).get("fr") or "").strip()[:120]
+        if en and fr:
+            seen[en.casefold()] = {"en": en, "fr": fr}
+    clean = sorted(seen.values(), key=lambda x: x["en"].casefold())
+    before = dict(_NAMES)
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, K_NAMES, json.dumps(clean, ensure_ascii=False))
+    _NAMES.clear()
+    _NAMES.update({x["en"].casefold(): x["fr"] for x in clean})
+    await retranslate_filaments(previous=before)
+    return clean
 
 
 def fr_name(names: dict, en_to_fr: Optional[dict] = None) -> str:
     """Le nom francais d'une couleur du catalogue : le sien ; sinon celui d'une autre entree au meme nom anglais
     (casse ignoree : le catalogue n'a pas traduit toutes les entrees d'une meme couleur) ; sinon l'anglais."""
     names = names or {}
+    en = names.get("en") or ""
+    if en and en.strip().casefold() in _NAMES:          # nos correspondances d'abord
+        return _NAMES[en.strip().casefold()]
     if names.get("fr"):
         return names["fr"]
-    en = names.get("en") or ""
     if en_to_fr is None:
         en_to_fr = catalog_entries()[1] or {}
-    return (en_to_fr.get(en) or en_to_fr.get(en.casefold()) or FR_MISSING.get(en.strip().casefold())
+    return (en_to_fr.get(en) or en_to_fr.get(en.casefold()) or _FR_MISSING_CF.get(en.strip().casefold())
             or en or next(iter(names.values()), ""))
 
 
-async def retranslate_filaments() -> int:
+async def retranslate_filaments(previous: Optional[dict] = None) -> int:
     """Les fiches filament restees au nom anglais (01/11/2026 : creees depuis une commande lue dans un mail, qui ne
     reprenait pas la traduction d'une autre entree) : leur nom francais, quand le catalogue en a un. Un nom change a
     la main (different du nom anglais) n'est pas touche. Rend le nombre de fiches corrigees."""
@@ -349,9 +401,15 @@ async def retranslate_filaments() -> int:
     async with AsyncSessionLocal() as db:
         for f in (await db.execute(select(Filament).where(Filament.fila_color_code.is_not(None)))).scalars():
             e = by_code.get(str(f.fila_color_code))
-            if not e or (f.translated_name and f.translated_name not in (f.name_en, f.name)):
+            if not e:
                 continue
-            fr = fr_name(e.get("fila_color_name"), en_to_fr)
+            names = e.get("fila_color_name") or {}
+            key = (names.get("en") or "").strip().casefold()
+            # un nom pose par nous (correspondance) ou par le catalogue peut changer ; un nom tape a la main, jamais
+            ours = {v for v in ((previous or {}).get(key), _NAMES.get(key), names.get("fr"), en_to_fr.get(names.get("en") or "")) if v}
+            if f.translated_name and f.translated_name not in (f.name_en, f.name) and f.translated_name not in ours:
+                continue
+            fr = fr_name(names, en_to_fr)
             if fr and fr != (f.translated_name or f.name):
                 f.translated_name = fr
                 n += 1

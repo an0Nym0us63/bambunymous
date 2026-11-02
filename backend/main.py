@@ -203,8 +203,12 @@ async def lifespan(app: FastAPI):
     catalog_sync = BambuCatalogSync(data_dir=settings.DATA_DIR)
     catalog_sync.start()
     # les fiches restees au nom anglais (commandes lues dans les mails) : leur nom francais, une fois au demarrage
-    from app.services.bambu_catalog import retranslate_filaments as _retranslate
-    _bg(_retranslate())
+    # nos correspondances de noms (Parametres › Filaments), puis ces noms francais sur les fiches
+    from app.services.bambu_catalog import retranslate_filaments as _retranslate, load_names as _load_names
+    async def _names_then():
+        await _load_names()
+        await _retranslate()
+    _bg(_names_then())
     # Vider le cache de matching au démarrage
     from app.core.mqtt import invalidate_tray_cache
     invalidate_tray_cache()

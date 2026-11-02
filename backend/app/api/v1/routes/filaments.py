@@ -1099,6 +1099,32 @@ async def drying_overview(db: AsyncSession = Depends(get_db), _: str = Depends(g
     }
 
 
+@router.get("/catalog-names")
+async def catalog_names(_: str = Depends(get_current_user)):
+    """Nos correspondances de noms (02/11/2026) : un nom anglais du catalogue Bambu -> notre nom francais ; et les
+    quelques noms que l'appli connait deja (dernier recours avant l'anglais)."""
+    import json
+    from ....db.session import AsyncSessionLocal
+    from ....services import bambu_catalog as BC
+    raw = sorted(({"en": en, "fr": fr} for en, fr in BC.names_map().items()), key=lambda x: x["en"])
+    async with AsyncSessionLocal() as db:
+        from ....services.settings_service import get_setting
+        try:
+            items = json.loads(await get_setting(db, BC.K_NAMES, "") or "[]")
+        except ValueError:
+            items = raw
+    return {"items": items if isinstance(items, list) else raw,
+            "builtin": [{"en": en, "fr": fr} for en, fr in BC.FR_MISSING.items()]}
+
+
+@router.put("/catalog-names")
+async def catalog_names_save(body: dict = Body({}), _: str = Depends(require_admin)):
+    from ....services import bambu_catalog as BC
+    items = await BC.save_names(body.get("items") or [])
+    _clear_match_cache()
+    return {"items": items}
+
+
 @router.get("/spools", response_model=list[SpoolOut])
 async def list_spools(
     archived: bool = Query(False),
