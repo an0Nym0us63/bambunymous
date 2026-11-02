@@ -1309,8 +1309,9 @@ function MwDocsSection() {
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Documents joints MakerWorld</h3>
       <CardHelp title="Documents joints MakerWorld">
         Notices d'assemblage, nomenclatures, solutions et autres documents que les créateurs joignent à leurs modèles. Ils sont
-        gardés ici pour chaque modèle imprimé (lisibles même si le créateur les retire, et rangés avec le modèle sur le NAS). C'est
-        fait à chaque relecture d'une fiche ; ce bouton rattrape les modèles déjà imprimés, un à la fois. Sans compte MakerWorld :
+        gardés ici pour chaque modèle imprimé, et chaque modèle de « À faire » (récupérés d'avance), lisibles même si le créateur
+        les retire, et rangés avec le modèle sur le NAS. C'est fait à chaque relecture d'une fiche ; ce bouton rattrape les autres,
+        un à la fois. Sans compte MakerWorld :
         ces documents sont publics, et ne comptent pas comme des téléchargements.
       </CardHelp>
       {sm && <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:12 }}>
@@ -1319,7 +1320,7 @@ function MwDocsSection() {
           {big(sm.with_docs, `modèle${sm.with_docs > 1 ? "s" : ""} en ont`, "#0EA5E9")}
           {big(sm.unread, "fiches à relire", sm.unread ? "#F97316" : "#64748B")}
         </div>
-        <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)" }}>{sm.read} fiches relues sur {sm.designs} modèles imprimés
+        <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)" }}>{sm.read} fiches relues sur {sm.designs} modèles{sm.queue > 0 ? ` (${sm.designs - sm.queue} imprimés, ${sm.queue} de « À faire »)` : " imprimés"}
           {sm.missing > 0 && <span data-tip="Retirés de MakerWorld : plus de fiche à lire"> · {sm.missing} introuvable{sm.missing > 1 ? "s" : ""} sur MakerWorld</span>}
           {sm.unread > 0 && <span data-tip="Jamais lus (dont les modèles rattachés après coup) ou en erreur : « Tout récupérer » les relit"> · {sm.unread} à relire</span>}</div>
         <div style={{ height:8, borderRadius:6, background:"var(--surface2)", overflow:"hidden" }}>

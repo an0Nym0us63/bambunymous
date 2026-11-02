@@ -139,13 +139,29 @@ async def _printed_designs() -> list:
     return sorted({str(x).strip() for x in ids if x and str(x).strip() not in ("", "0") and str(x).strip().isdigit()})
 
 
+def _queue_designs() -> list:
+    """Les modeles de « À faire » (02/11/2026), lus dans le dernier calcul de la file."""
+    try:
+        from .mw_source import _queue_pairs
+        return list(dict.fromkeys(d for d, _i, _n in _queue_pairs()))
+    except Exception:
+        return []
+
+
+async def _designs() -> tuple:
+    """(modeles a suivre : ceux de « À faire » d'abord, puis les imprimes ; nombre de ceux de « À faire » pas imprimes)."""
+    printed = await _printed_designs()
+    queue = [d for d in _queue_designs() if d not in set(printed)]
+    return queue + printed, len(queue)
+
+
 async def summary() -> dict:
-    """Le bilan, toujours a jour : modeles imprimes, fiches relues, documents trouves et gardes."""
+    """Le bilan, toujours a jour : modeles imprimes (et de « À faire »), fiches relues, documents trouves et gardes."""
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import MakerWorldDesign as MW
     from .makerworld import extras_of, extras_stale
-    ids = await _printed_designs()
+    ids, n_queue = await _designs()
     async with AsyncSessionLocal() as db:
         rows = {m.design_id: (m.status, m.extras) for m in (await db.execute(select(MW).where(MW.design_id.in_(ids)))).scalars().all()} if ids else {}
     def count():
@@ -167,7 +183,7 @@ async def summary() -> dict:
     # ce qui manque, dit (30/10/2026) : retire de MakerWorld, ou a relire (jamais lu, dont les modeles rattaches
     # apres coup, ou en erreur)
     missing = sum(1 for did in ids if rows.get(did, (None, None))[0] == "notfound")
-    return {"designs": len(ids), "read": n_read, "unread": unread, "missing": missing, "with_docs": n_with, "docs": n_docs, "kept": n_kept}
+    return {"designs": len(ids), "queue": n_queue, "read": n_read, "unread": unread, "missing": missing, "with_docs": n_with, "docs": n_docs, "kept": n_kept}
 
 
 def status() -> dict:
@@ -183,7 +199,7 @@ async def backfill() -> None:
     from . import makerworld as mw
     from .makerworld import extras_of
     _STOP["flag"] = False
-    ids = await _printed_designs()
+    ids, _nq = await _designs()
     JOB.clear()
     JOB.update(running=True, total=len(ids), done=0, read=0, fetched=0, failed=0, bytes=0, current=None,
                started_at=time.time(), finished_at=None, error=None)

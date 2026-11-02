@@ -55,8 +55,8 @@ def _snap_put(out):
         logger.exception("[QUEUE] instantane non garde")
 
 
-async def _recompute():
-    out = await _compute()
+async def _recompute(fresh: bool = False):
+    out = await _compute(fresh)
     _CACHE[:] = [time.time(), out]
     _INVALID[0] = False
     await asyncio.to_thread(_snap_put, out)
@@ -221,11 +221,11 @@ def _num(v):
         return 0.0
 
 
-async def _collection_designs(cid: str) -> list:
+async def _collection_designs(cid: str, fresh: bool = False) -> list:
     from . import makerworld_account as A
     out, off = [], 0
     while off < MAX_PER_COLLECTION:
-        p = await A.collection_designs(cid, off, 60)
+        p = await A.collection_designs(cid, off, 60, fresh)
         got = p.get("items") or []
         out += got
         if not got or not p.get("has_more"):
@@ -338,7 +338,7 @@ async def queue(fresh: bool = False, until: str | None = None, pick: list | None
             if _TASK[0] and not _TASK[0].done() and not fresh:
                 await _TASK[0]                       # un calcul tourne deja : on l'attend
             else:
-                await _recompute()
+                await _recompute(fresh)
         else:
             _refresh_bg()                            # ancien resultat tout de suite, relu en fond
             stale = True
@@ -422,7 +422,9 @@ def _aggregate(models: list, stock_of: dict) -> dict:
     }
 
 
-async def _compute() -> dict:
+async def _compute(fresh: bool = False) -> dict:
+    """fresh (« Relire maintenant », 02/11/2026) : les collections relues chez MakerWorld, pas dans le cache de 2 h ;
+    un modele ajoute sur le site apparait tout de suite."""
     from . import makerworld_account as A
     from .makerworld import model_detail
     cfg = await _load()
@@ -430,7 +432,7 @@ async def _compute() -> dict:
     chosen = [c for c in cfg["collections"] if c in colls]
     designs, where = {}, {}
     for cid in chosen:
-        for x in await _collection_designs(cid):
+        for x in await _collection_designs(cid, fresh):
             designs.setdefault(x["design_id"], x)
             where.setdefault(x["design_id"], []).append(colls[cid])
 
