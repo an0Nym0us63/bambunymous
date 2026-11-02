@@ -269,7 +269,7 @@ function SpoolMapPicker({ usageId, printId, colorHex, colorsArray, multicolorTyp
 
 // supprimer plusieurs impressions choisies (31/10/2026) : la meme question que pour une seule -- rendre aux bobines le
 // filament consomme ? -- une part pour toutes (avant : supprimees sans rien proposer)
-function BulkDeleteConfirm({ prints, onCancel, onConfirm }) {
+function BulkDeleteConfirm({ prints, onCancel, onConfirm, title }) {
   const rows = prints.map(p => ({ p, used: (p.filament_usage || []).filter(f => f.spool_id && f.grams_used > 0) })).filter(r => r.used.length);
   const [frac, setFrac] = useState(1);
   const total = rows.reduce((s, r) => s + r.used.reduce((a, f) => a + f.grams_used, 0), 0);
@@ -290,7 +290,7 @@ function BulkDeleteConfirm({ prints, onCancel, onConfirm }) {
           background:`linear-gradient(135deg, ${C}, ${lighten(C)})`, boxShadow:`0 8px 20px -8px ${C}` }}>🗑️</span>
         <div style={{ minWidth:0, display:"flex", flexDirection:"column", gap:3 }}>
           <span style={{ fontSize:12, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:C }}>Supprimer les impressions</span>
-          <span style={{ fontSize:19, fontWeight:900, color:"var(--text)", lineHeight:1.2 }}>Supprimer ces {prints.length} prints ?</span>
+          <span style={{ fontSize:19, fontWeight:900, color:"var(--text)", lineHeight:1.2 }}>{title || `Supprimer ces ${prints.length} prints ?`}</span>
         </div>
       </div>
       <div style={{ padding:"14px 16px 18px", display:"flex", flexDirection:"column", gap:12 }}>
@@ -1958,10 +1958,21 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     if (!isNaN(n) && n >= 1) { try { await client.patch(`/prints/groups/${groupId}`, { number_of_items: n }); setNbItems(n); onUpdated?.(); } catch { /* garde l'ancien */ } }
     setEditNb(false);
   };
+  // supprimer le groupe (02/11/2026) : la question de la restitution, comme pour une impression ou une selection (avant :
+  // ses impressions partaient sans rien proposer)
+  const [delAsk, setDelAsk] = useState(false);
   const handleDelete = async () => {
+    if (prints.some(x => (x.filament_usage || []).some(f => f.spool_id && f.grams_used > 0))) { setDelAsk(true); return; }
     if (!(await showConfirm(`Supprimer le groupe "${title}" et ses ${prints.length} prints ?`, { danger: true, confirmLabel: "Supprimer" }))) return;
-    try { await Promise.all(prints.map(x => client.delete("/prints/" + x.id))); onDelete?.(); onClose(); }
-    catch (err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
+    await reallyDelete(0, []);
+  };
+  const reallyDelete = async (frac, rows) => {
+    try {
+      if (frac > 0) for (const { p, used } of rows)
+        await client.post("/prints/" + p.id + "/restore-weights", { fracs: Object.fromEntries(used.map(f => [f.id, frac])) });
+      await Promise.all(prints.map(x => client.delete("/prints/" + x.id)));
+      setDelAsk(false); onDelete?.(); onClose();
+    } catch (err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
   };
   const handleUngroup = async () => {
     if (!(await showConfirm(`Dégrouper "${title}" (les prints resteront) ?`, { confirmLabel: "Dégrouper" }))) return;
@@ -2245,6 +2256,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       {objCreate && <ObjectCreateSheet parentType="group" parentId={groupId} defaultName={title} costFabrication={totalCost / nbItems}
         onDone={() => { setObjRefresh(k => k + 1); onUpdated?.(); }} onClose={() => setObjCreate(false)}/>}
       {sharing && <ShareSheet kind="group" id={groupId} onClose={() => setSharing(false)}/>}
+      {delAsk && createPortal(<BulkDeleteConfirm prints={prints} title={`Supprimer le groupe « ${title} » et ses ${prints.length} prints ?`}
+        onCancel={() => setDelAsk(false)} onConfirm={reallyDelete}/>, document.body)}
       {grpAsm && <Model3D designId={`g${groupId}`} title={name} onClose={() => setGrpAsm(false)}/>}
       {own3d && <Model3D designId={`p${own3d.id}`} title={name} printId={own3d.id}
         usedPrints={prints.filter(x => !String(x.design_id || "").trim()).map(x => x.id)} scope={`group:${groupId}`} onClose={() => setOwn3d(null)}/>}
