@@ -1840,6 +1840,14 @@ async def _link_one(db, f, body: dict, link: bool = True) -> list:
     skip (liste, facultatif) : ce qu'on garde a nous ; retenu sur le filament pour les synchros suivantes."""
     if isinstance(body.get("skip"), list):
         f.catalog_skip = ",".join(sorted(_skips(f, body["skip"]))) or None
+    # une page restee en cache (03/11/2026) envoyait une entree de notre catalogue sans sa source, prise pour du Bambu :
+    # une entree reconnaissable a son identifiant (« own-… », ou une couleur de l'Open Filament Database) est retrouvee
+    if not body.get("source") and not body.get("fila_color_code"):
+        fid_ = str(body.get("fila_id") or "")
+        if fid_.startswith("own-"):
+            body = {**body, "source": "own", "ref": fid_[4:]}
+        elif _other_entry(fid_, "ofd"):
+            body = {**body, "source": "ofd", "ref": fid_}
     if body.get("source") in ("ofd", "own"):
         e = _other_entry(body.get("ref"), body["source"])
         if e is None:
