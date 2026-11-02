@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { apiUrl } from "../api/client";
-import { currentFriend } from "../store/friend";
+import { useFriend } from "../store/friend";
 
 // La camera de l'imprimante (22/10/2026). Trois modes :
 //  - « stream » : le flux continu du serveur (une image des qu'elle arrive) ;
@@ -60,7 +60,9 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
     return () => window.removeEventListener("keydown", k);
   }, [big]);
   const img = useRef(null);
-  const friend = currentFriend();
+  // suivi (02/11/2026) : au retour de chez un copain, la camera repart sur ton direct (lue une fois, elle pouvait garder
+  // le reglage du copain)
+  const friend = useFriend(s => s.friend);
   const [live, setLive] = useState(null);          // "stream" | "images" | null (rien encore)
   const [hidden, setHidden] = useState(document.hidden);
   const [broken, setBroken] = useState(false);
@@ -122,9 +124,11 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
       const gaps = [];
       clearInterval(watch);
       watch = setInterval(() => {
-        if (dead || !base || !last) return;
+        if (dead || !last) return;                   // des la premiere image (sans reference, 1 s)
         const gap = Date.now() - last;
-        if (gap > Math.max(2500, base * 4) && gap < STALL_MS) {
+        // plus de 4 s entre deux images est toujours anormal (une reference prise sur un demarrage lent ne doit pas
+        // faire passer un direct a une image toutes les 5 s pour normal)
+        if (gap > Math.max(2500, Math.min(base || 1000, 1000) * 4) && gap < STALL_MS) {
           const now = Date.now();
           soft = soft.filter(t => now - t < 60000);
           soft.push(now);
