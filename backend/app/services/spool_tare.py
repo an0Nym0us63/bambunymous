@@ -29,23 +29,51 @@ def _match(tares: list, brand: str):
 
 async def tare_for(db, brand: str):
     """Le modele de support de cette marque ; pour Bambu Lab, cree a 250 g s'il manque."""
-    from sqlalchemy import select
-    from ..api.v1.routes.settings import _read_tares, SPOOL_TARES_KEY
-    from ..models.setting import Setting
-    from . import settings_service as SS
+    from ..api.v1.routes.settings import _read_tares
     tares = await _read_tares(db)
     t = _match(tares, brand)
     if t is None and _norm(brand).startswith("bambu"):
         t = {"name": BAMBU[0], "weight_g": BAMBU[1]}
-        tares = sorted(tares + [t], key=lambda x: x["name"].lower())
-        # dans la transaction de l'appelant (set_setting validerait en plein scan RFID, filament a moitie fait)
-        row = (await db.execute(select(Setting).where(Setting.key == SPOOL_TARES_KEY))).scalar_one_or_none()
-        if row:
-            row.value = json.dumps(tares)
-        else:
-            db.add(Setting(key=SPOOL_TARES_KEY, value=json.dumps(tares)))
-        SS._cache[SPOOL_TARES_KEY] = json.dumps(tares)   # tout de suite : une lecture d'ailleurs garderait sinon l'ancienne liste
+        await _save(db, _add(tares, t))
         logger.info("[TARE] modele « Bambu Lab » (250 g) cree dans les supports vides")
+    return t
+
+
+def _add(db_tares: list, t: dict) -> list:
+    return sorted(db_tares + [t], key=lambda x: x["name"].lower())
+
+
+async def _save(db, tares: list) -> None:
+    """Dans la transaction de l'appelant (set_setting validerait en plein scan RFID, filament a moitie fait)."""
+    from sqlalchemy import select
+    from ..api.v1.routes.settings import SPOOL_TARES_KEY
+    from ..models.setting import Setting
+    from . import settings_service as SS
+    row = (await db.execute(select(Setting).where(Setting.key == SPOOL_TARES_KEY))).scalar_one_or_none()
+    if row:
+        row.value = json.dumps(tares)
+    else:
+        db.add(Setting(key=SPOOL_TARES_KEY, value=json.dumps(tares)))
+    SS._cache[SPOOL_TARES_KEY] = json.dumps(tares)   # tout de suite : une lecture d'ailleurs garderait sinon l'ancienne liste
+
+
+async def ensure(db, brand: str, weight: float) -> dict:
+    """Le support de cette marque a ce poids, cree dans les Parametres s'il n'y est pas (02/11/2026 : un poids venu du
+    catalogue et utilise chez nous doit s'y retrouver). Nom : la marque si elle n'a pas encore de support, sinon
+    « Marque 170 g »."""
+    from ..api.v1.routes.settings import _read_tares
+    tares = await _read_tares(db)
+    w = round(float(weight), 1)
+    t = _match([x for x in tares if abs(float(x["weight_g"]) - w) < 0.05], brand)
+    if t:
+        return t
+    label = f"{(brand or '').strip() or 'Support'} {w:g} g"
+    t = next((x for x in tares if x["name"].casefold() == label.casefold()), None)
+    if t:
+        return t
+    t = {"name": label if _match(tares, brand) or not (brand or "").strip() else brand.strip()[:60], "weight_g": w}
+    await _save(db, _add(tares, t))
+    logger.info(f"[TARE] support « {t['name']} » ({w:g} g) cree depuis le catalogue")
     return t
 
 

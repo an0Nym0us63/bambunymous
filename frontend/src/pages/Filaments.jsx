@@ -2654,18 +2654,25 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
     const colorsInput = entry.colors?.length > 1
       ? entry.colors.join(", ")   // ex: "0047bb, bb22a3"
       : (entry.color_hex || "");
+    // autres marques (02/11/2026) : la marque, le poids net et le support du catalogue (le serveur range ce support
+    // dans les Parametres) ; pas de profil ni de code couleur Bambu
+    const other = entry.source === "ofd";
+    if (other && entry.spool_weight_g) tareTouched.current = true;
     setForm(f => ({
-      price: f.price, spool_weight_g: f.spool_weight_g, spool_tare_name: f.spool_tare_name, comment: f.comment,
+      price: f.price, comment: f.comment,
+      spool_weight_g:  other && entry.spool_weight_g ? String(Math.round(entry.spool_weight_g)) : f.spool_weight_g,
+      spool_tare_name: other && entry.spool_weight_g ? "" : f.spool_tare_name,
+      catalog_ref:     other ? `ofd:${entry.ref}` : "",
       name:            entry.name,
-      manufacturer:    "Bambu Lab",
-      material:        entry.fila_type,
+      manufacturer:    other ? entry.brand : "Bambu Lab",
+      material:        other ? entry.family || entry.fila_type : entry.fila_type,
       fila_type:       entry.fila_type,
       translated_name: entry.name_fr || "",
       colors_input:    colorsInput,
       multicolor_type: entry.color_type_fr || "monochrome",
-      profile_id:      entry.fila_id,
+      profile_id:      other ? "" : entry.fila_id,
       fila_color_code: entry.fila_color_code || "",
-      weight:          1000,
+      weight:          other ? entry.filament_weight_g || 1000 : 1000,
     }));
     setMode("free");
   };
@@ -2681,7 +2688,8 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
         name_en:           form.name || undefined,
         translated_name:   form.translated_name || undefined,
         manufacturer:      form.manufacturer || undefined,
-        material:          form.fila_type || form.material || "PLA",
+        // autres marques : la famille donnee par le catalogue (« 95A High Speed TPU » -> TPU)
+        material:          (form.catalog_ref ? form.material : form.fila_type || form.material) || "PLA",
         fila_type:         form.fila_type || undefined,
         color:             col || undefined,
         colors_array:      ca ?? null,
@@ -2690,6 +2698,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
         glow_color:        (form.fila_finish || autoFinishOf(form)) === "glow" && form.glow_color ? form.glow_color : undefined,
         profile_id:        form.profile_id || undefined,
         fila_color_code:   form.fila_color_code || undefined,
+        catalog_ref:       form.catalog_ref || undefined,
         filament_weight_g: Number(form.weight) || 1000,
         price:             form.price !== "" && form.price != null ? Number(form.price) : undefined,
         spool_weight_g:    form.spool_weight_g !== "" && form.spool_weight_g != null ? Number(form.spool_weight_g) : undefined,
@@ -2697,6 +2706,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
         comment:           form.comment || undefined,
       });
       // la bobine dans la foulee : la fenetre s'ouvre par-dessus, onCreated a sa fermeture
+      if (form.catalog_ref) egg("autre_marque");           // un filament d'une autre marque, depuis son catalogue
       if (addSpoolAfter && r.data?.id) setCreated(r.data);
       else onCreated();
     } catch(e) {
@@ -2743,7 +2753,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
         <div style={{ minWidth:0, flex:1 }}>
           <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#8B5CF6" }}>＋ Nouveau filament</div>
           <div style={{ fontSize:19, fontWeight:900, color:"var(--text)", lineHeight:1.2, overflowWrap:"anywhere" }}>
-            {mode === "free" ? (form.translated_name || form.name || "Sans nom") : mode === "catalog" ? "Catalogue Bambu" : "D'où vient-il ?"}</div>
+            {mode === "free" ? (form.translated_name || form.name || "Sans nom") : mode === "catalog" ? "Catalogue" : "D'où vient-il ?"}</div>
           {mode === "free" && (form.manufacturer || form.fila_type) && <div style={{ fontSize:12.5, fontWeight:700, color:"var(--text2)" }}>
             {[form.manufacturer, form.fila_type].filter(Boolean).join(" · ")}</div>}
         </div>
@@ -2752,7 +2762,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
       <div style={{ padding:"12px 14px 18px", display:"flex", flexDirection:"column", gap:12 }}>
           {mode === "choose" && (
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              {[["catalog", "📦", "Importer depuis le catalogue Bambu", "Type → Couleur → Préremplissage automatique (nom officiel, hex, profil…)", "#22C55E"],
+              {[["catalog", "📦", "Importer depuis un catalogue", "Bambu Lab ou une autre marque (Sunlu, Geeetech, Polymaker…) : nom, couleur et support préremplis", "#22C55E"],
                 ["free", "✏️", "Saisie libre", "Remplir manuellement tous les champs", "#8B5CF6"]].map(([m, ic, t, d, c]) => (
                 <button key={m} onClick={() => setMode(m)}
                   style={{ display:"flex", alignItems:"center", gap:12, padding:"14px 14px", borderRadius:18, cursor:"pointer", textAlign:"left",
@@ -2777,7 +2787,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
               {catalogEntry && (
                 <div style={{ padding:"9px 12px", borderRadius:14, fontSize:12, fontWeight:800, color:"#16a34a",
                   background:"rgba(34,197,94,0.10)", border:"1px solid rgba(34,197,94,0.3)" }}>
-                  📦 Pré-rempli depuis le catalogue Bambu · {catalogEntry.fila_type} · {catalogEntry.color_code}
+                  📦 Pré-rempli depuis {catalogEntry.source === "ofd" ? `le catalogue ${catalogEntry.brand}` : "le catalogue Bambu"} · {catalogEntry.fila_type}{catalogEntry.source === "ofd" ? "" : ` · ${catalogEntry.color_code}`}
                 </div>
               )}
               <FCard t="Identité" i="🏷️" c="#8B5CF6">

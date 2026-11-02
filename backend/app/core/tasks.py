@@ -30,6 +30,7 @@ CATALOG = {
     "ach_warm":     ("Calcul des succès", "Prépare le gros calcul des succès au démarrage.", "Succès"),
     "db_upkeep":    ("Entretien de la base", "Statistiques au besoin, puis « PRAGMA optimize » : chaque heure.", "Serveur"),
     "loop_watch":   ("Surveillance du serveur", "Relève ce qui fige le serveur et la charge du processeur (Vitesse du serveur).", "Serveur"),
+    "catalog_ofd":  ("Catalogue des autres marques", "Télécharge l'Open Filament Database (Sunlu, Geeetech, Polymaker…) et les poids des supports de SpoolmanDB : une minute après le démarrage, puis chaque semaine.", "Serveur"),
     "catalog":      ("Catalogue des filaments Bambu", "Télécharge le catalogue des filaments Bambu (codes, couleurs) : au démarrage, puis toutes les 24 h s'il a changé.", "Serveur"),
     "nas":          ("Sauvegarde de nuit", "Sauvegarde vers le NAS (et vidage du local) chaque nuit, si elle est activée ; vérifie toutes les 5 min.", "Serveur"),
 }

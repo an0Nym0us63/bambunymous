@@ -39,6 +39,8 @@ class Filament(Base):
     spool_tare_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     profile_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)   # ex: GFA00
     fila_color_code: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # ex: 10600 (code couleur catalogue Bambu)
+    # l'entree du catalogue des autres marques (02/11/2026) : « ofd:<couleur> » (Open Filament Database)
+    catalog_ref: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     external_filament_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     translated_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # nom localisé
     reference_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)

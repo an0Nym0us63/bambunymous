@@ -208,6 +208,9 @@ async def lifespan(app: FastAPI):
     from app.services.bambu_catalog import BambuCatalogSync
     catalog_sync = BambuCatalogSync(data_dir=settings.DATA_DIR)
     catalog_sync.start()
+    # le catalogue des autres marques (Open Filament Database, poids des supports de SpoolmanDB) : chaque semaine
+    from app.services import ofd_catalog as _ofd
+    _tasks.track("catalog_ofd", _aio.create_task(_ofd.loop()))
     # les fiches restees au nom anglais (commandes lues dans les mails) : leur nom francais, une fois au demarrage
     # nos correspondances de noms (Parametres › Filaments), puis ces noms francais sur les fiches
     from app.services.bambu_catalog import retranslate_filaments as _retranslate, load_names as _load_names

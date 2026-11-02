@@ -93,6 +93,7 @@ class FilamentOut(BaseModel):
     spool_tare_name: Optional[str] = None
     profile_id: Optional[str]
     fila_color_code: Optional[str] = None
+    catalog_ref: Optional[str] = None     # catalogue des autres marques (« ofd:… »)
     swatch: bool
     label_printed: bool = False
     label_printed_at: Optional[datetime] = None
@@ -127,6 +128,7 @@ class FilamentCreate(BaseModel):
     spool_tare_name: Optional[str] = None
     profile_id: Optional[str] = None
     fila_color_code: Optional[str] = None
+    catalog_ref: Optional[str] = None
     swatch: bool = False
     # None = « je n'en parle pas » : un appelant qui ne connait pas le champ ne
     # doit pas decocher l'etiquette en enregistrant le reste de la fiche.
@@ -927,8 +929,17 @@ async def create_filament(
     if body.label_printed:
         f.label_printed, f.label_printed_at = True, datetime.utcnow()
     f.color_bucket = buckets_for(f.color, f.colors_array)
-    # sans poids de support : celui de sa marque (Parametres ; Bambu Lab 250 g cree s'il manque, 02/11/2026)
+    # sans poids de support : celui de sa marque (Parametres ; Bambu Lab 250 g cree s'il manque, 02/11/2026) ; un poids
+    # venu du catalogue des autres marques, sans support choisi : le support de la marque a ce poids, cree s'il manque
     from ....services import spool_tare
+    if f.catalog_ref and f.manufacturer:
+        f.manufacturer = await _brand_spelling(db, f.manufacturer)
+    # venu d'un catalogue (Bambu ou autres marques) : la matiere est la famille (PLA), la gamme reste dans fila_type,
+    # comme apres une synchro (02/11/2026 : « 95A High Speed TPU » restait en matiere jusqu'a la synchro)
+    if (f.catalog_ref or f.fila_color_code) and f.fila_type:
+        f.material = family_of(f.fila_type, f.material) or f.material
+    if f.catalog_ref and f.spool_weight_g is not None and not f.spool_tare_name and f.manufacturer:
+        f.spool_tare_name = (await spool_tare.ensure(db, f.manufacturer, f.spool_weight_g))["name"]
     await spool_tare.fill(db, f)
     db.add(f)
     await db.commit()
@@ -1591,6 +1602,7 @@ def _apply_catalog(f, entry: dict, en_to_fr: dict, link: bool = False) -> list:
         upd("colors_array", ",".join(f"#{c}" for c in colors))
     if link:
         upd("profile_id", entry.get("fila_id", ""))
+        upd("catalog_ref", None)
         if not (f.manufacturer or "").strip():
             upd("manufacturer", "Bambu Lab")
         if colors:
@@ -1601,10 +1613,86 @@ def _apply_catalog(f, entry: dict, en_to_fr: dict, link: bool = False) -> list:
     return changed
 
 
+async def _brand_spelling(db, brand: str) -> str:
+    """La marque telle qu'on l'ecrit deja chez nous (« Sunlu » plutot que le « SUNLU » du catalogue), sinon telle quelle."""
+    import re as _re
+    n = lambda x: _re.sub(r"[^a-z0-9]", "", str(x or "").lower())
+    for m in (await db.execute(select(Filament.manufacturer).distinct())).scalars().all():
+        if m and n(m) == n(brand):
+            return m
+    return brand
+
+
+async def _apply_ofd(db, f, e: dict, link: bool = False) -> list:
+    """Comme _apply_catalog, pour une couleur du catalogue des autres marques (vue de ofd_catalog.view) : memes champs
+    qu'un import Bambu. link : aussi la couleur, la marque si vide, et le support s'il n'en a pas."""
+    changed: list = []
+
+    def upd(attr, val):
+        if getattr(f, attr, None) != val:
+            setattr(f, attr, val)
+            changed.append(attr)
+
+    upd("name", e["name"])
+    upd("name_en", e["name"])
+    upd("translated_name", e.get("name_fr") or e["name"])
+    upd("material", family_of(e.get("fila_type"), e.get("family") or f.material))
+    upd("fila_type", e.get("fila_type"))
+    upd("multicolor_type", e.get("color_type_fr") or "monochrome")
+    upd("catalog_ref", f"ofd:{e['ref']}")
+    cols = e.get("colors") or []
+    if len(cols) > 1:
+        upd("colors_array", ",".join(f"#{c}" for c in cols))
+    if link:
+        upd("fila_color_code", None)
+        if not (f.manufacturer or "").strip():
+            upd("manufacturer", await _brand_spelling(db, e.get("brand")))
+        if cols:
+            upd("color", cols[0])
+        if len(cols) <= 1:
+            upd("colors_array", None)
+        if f.spool_weight_g is None and e.get("spool_weight_g"):
+            from ....services import spool_tare
+            t = await spool_tare.ensure(db, f.manufacturer or e.get("brand"), e["spool_weight_g"])
+            upd("spool_weight_g", float(t["weight_g"]))
+            upd("spool_tare_name", t["name"])
+    f.color_bucket = buckets_for(f.color, f.colors_array)
+    return changed
+
+
+@router.get("/catalog/ofd/brands")
+async def ofd_brands(_: str = Depends(get_current_user)):
+    """Les marques du catalogue des autres marques (02/11/2026) : nom, nombre de couleurs, familles."""
+    from ....services import ofd_catalog
+    return ofd_catalog.brands()
+
+
+@router.get("/catalog/ofd/search")
+async def ofd_search(brand: str = "", family: str = "", q: str = "", _: str = Depends(get_current_user)):
+    """Les couleurs d'une marque, a la forme de /catalog/search (plus la marque et le poids du support)."""
+    from ....services import ofd_catalog
+    return ofd_catalog.search(brand, family, q)
+
+
 @router.post("/filaments/{fid}/link-catalog")
 async def link_catalog(fid: int, body: dict = Body({}), db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
     """Rattache un filament a une entree du catalogue Bambu choisie a la main (02/11/2026) : il prend ses noms, son type,
     son code couleur, ses couleurs et son profil, comme la synchro, qui le retrouvera ensuite par ce code."""
+    if body.get("source") == "ofd":
+        from ....services import ofd_catalog
+        e = ofd_catalog.entry(body.get("ref"))
+        if e is None:
+            raise HTTPException(404, "Entrée introuvable dans le catalogue des autres marques")
+        f = await db.get(Filament, fid)
+        if f is None:
+            raise HTTPException(404, "Filament introuvable")
+        changed = await _apply_ofd(db, f, e, link=True)
+        twin = (await db.execute(select(Filament.id, Filament.translated_name, Filament.name).where(
+            Filament.id != fid, Filament.catalog_ref == f.catalog_ref))).first()
+        await db.commit()
+        _clear_match_cache()
+        return {"ok": True, "changes": changed, "name": f.translated_name or f.name,
+                "twin": {"id": twin[0], "name": twin[1] or twin[2]} if twin else None}
     from ....services.bambu_catalog import catalog_entries
     data, en_to_fr = catalog_entries()
     if data is None:
@@ -1735,8 +1823,23 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
 
         await db.commit()
 
+    # les filaments rattaches au catalogue des autres marques (02/11/2026) : remis a jour de la meme facon
+    from ....services import ofd_catalog
+    async with AsyncSessionLocal() as db:
+        others = (await db.execute(select(Filament).where(Filament.catalog_ref.like("ofd:%")))).scalars().all()
+        for f in others:
+            e = ofd_catalog.entry(f.catalog_ref[4:])
+            if e is None:
+                not_found.append({"id": f.id, "name": f.name, "profile_id": f.profile_id, "color": f.color,
+                                  "material": f.material, "fila_type": f.fila_type, "manufacturer": f.manufacturer})
+                continue
+            changed = await _apply_ofd(db, f, e)
+            updated.append({"id": f.id, "name": f.name, "changes": changed})
+        await db.commit()
+
     return {
         "total_bambu": len(filaments),
+        "total_other": len(others),
         "updated": len(updated),
         "not_found": len(not_found),
         "skipped": len(skipped),

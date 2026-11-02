@@ -282,7 +282,8 @@ function EnrichFromCatalogSection() {
       <p style={cardTitle}>Enrichissement catalogue Bambu</p>
       <CardHelp title="Enrichissement catalogue Bambu">
         Pour tous les filaments Bambu en base (avec Profile ID), cherche leur fiche officielle
-        dans le catalogue et met à jour : nom, code couleur, type multicolore, couleurs… Ceux qu'elle ne trouve pas se touchent
+        dans le catalogue et met à jour : nom, code couleur, type multicolore, couleurs… Les filaments d'autres marques
+        rattachés à leur catalogue (Open Filament Database) sont remis à jour de la même façon. Ceux qu'elle ne trouve pas se touchent
         dans le résultat pour les rattacher à la main (aussi depuis la fiche d'un filament, ⋯ › Rattacher au catalogue).
       </CardHelp>
       <button onClick={run} disabled={running}
@@ -296,7 +297,7 @@ function EnrichFromCatalogSection() {
         <div style={{ marginTop:14, padding:"10px 14px", borderRadius:10,
           background:"var(--surface2)", border:"1px solid var(--border)", fontSize:12 }}>
           <p style={{ fontWeight:700, color:"var(--text)", margin:"0 0 8px" }}>
-            Résultat — {result.total_bambu} filament(s) Bambu en base
+            Résultat — {result.total_bambu} filament(s) Bambu en base{result.total_other ? `, ${result.total_other} d'autres marques rattachés à leur catalogue` : ""}
           </p>
           <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:10 }}>
             <span style={{ color:"#22c55e", fontWeight:700 }}>✓ {result.updated} mis à jour</span>
