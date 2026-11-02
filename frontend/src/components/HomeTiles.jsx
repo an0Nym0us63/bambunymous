@@ -3724,8 +3724,9 @@ function Spool({ status, o, sz }) {
             <span style={{ fontSize: 15, fontWeight: 900, color: "var(--text)", maxWidth: "100%", ...clamp(1) }}>{name}</span>
             <Muted size={11.5}>{slot}</Muted>
             <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 900, color: light ? "var(--text)" : barCol, whiteSpace: "nowrap" }}>{weight}</span><LiveTo lv={lv} size={10.5} color={light ? undefined : barCol}/><div style={{ flex: 1 }}>{bar(6)}</div>
+              <span style={{ fontSize: 13, fontWeight: 900, color: light ? "var(--text)" : barCol, whiteSpace: "nowrap" }}>{weight}</span><div style={{ flex: 1 }}>{bar(6)}</div>
               {pctPill(11)}</div>
+            {lv && <LiveTo lv={lv} size={10.5} color={light ? undefined : barCol} style={{ lineHeight: 1.1 }}/>}
           </div>;
         }
         // sinon en ligne : la bobine a gauche (a la hauteur), le nom, la matiere, le poids et sa jauge
@@ -3749,9 +3750,13 @@ function Spool({ status, o, sz }) {
             </> : <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {[type, si.brand, H < 80 && g != null ? `${Math.round(g)} g` : null].filter(Boolean).join(" · ")}</span>}
             {!narrow && H < 80 ? bar(6) : <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: narrow ? 12.5 : 15, fontWeight: 900, color: light ? "var(--text)" : barCol, whiteSpace: "nowrap" }}>{weight}</span><LiveTo lv={lv} size={narrow ? 10.5 : 12} color={light ? undefined : barCol}/>
+              <span style={{ fontSize: narrow ? 12.5 : 15, fontWeight: 900, color: light ? "var(--text)" : barCol, whiteSpace: "nowrap" }}>{weight}</span>
+              {!narrow && <LiveTo lv={lv} size={12} color={light ? undefined : barCol}/>}
               {(!narrow || W >= 175) && <div style={{ flex: 1, minWidth: 0 }}>{bar(narrow ? 5 : 7)}</div>}
               {narrow && <span style={{ marginLeft: "auto" }}>{pctPill(10.5)}</span>}</div>}
+            {/* etroite (telephone) : la valeur a la fin sur sa propre ligne, sous le poids (02/11/2026 : a la suite, elle
+                poussait la pastille du pourcentage hors de la tuile) */}
+            {narrow && lv && <LiveTo lv={lv} size={10.5} color={light ? undefined : barCol} style={{ lineHeight: 1.1 }}/>}
             {facts && facts.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>{facts}</div>}
           </div>
         </div>;
