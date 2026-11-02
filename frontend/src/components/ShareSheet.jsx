@@ -272,6 +272,13 @@ function ShareCompose({ kind, id, mode = "telegram", onClose, z = 1500 }) {
   );
 }
 
+// ce qui part, selon ce qu'on partage (02/11/2026 : un createur annoncait « les photos et la carte des filaments »)
+const TG_WHAT = {
+  print: "Le message, les photos et la carte des filaments", group: "Le message, les photos et la carte des filaments",
+  design: "Le message, la couverture du modèle et tes photos", creator: "Le message, son avatar et ses modèles",
+};
+const ONE_WHAT = { print: "une photo", group: "une photo", design: "une image", creator: "une image" };
+
 // Le bouton « Partager » ouvre d'abord ce menu (02/11/2026) : copier le lien MakerWorld, Telegram, ou une autre appli
 // (dans l'appli Android). Le lien est lu a l'ouverture, pour etre copie d'un seul geste.
 export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
@@ -313,8 +320,8 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
         <div style={{ fontSize: 20, fontWeight: 900, color: "var(--text)", marginBottom: 4 }}>{KIND_THIS[kind] || "Ce partage"}</div>
         {(links == null || links.length > 0) && row(copied ? "✓" : "🔗", "#8B5CF6", copied ? "Lien copié" : `Copier le lien MakerWorld${links?.length > 1 ? "s" : ""}`,
           links == null ? "…" : links.length > 1 ? `${links.length} liens, un par ligne` : links[0], copy, !links?.length)}
-        {row(<Send size={19}/>, "#229ED9", "Telegram", "Le message, les photos et la carte des filaments, en album, dans tes discussions", () => setMode("telegram"))}
-        {nativeShare && row("📲", "#22C55E", "Autre appli", "WhatsApp, Messages, mail… : le message et un visuel au choix", () => setMode("other"))}
+        {row(<Send size={19}/>, "#229ED9", "Telegram", `${TG_WHAT[kind] || TG_WHAT.print}, en album, dans tes discussions`, () => setMode("telegram"))}
+        {nativeShare && row("📲", "#22C55E", "Autre appli", `WhatsApp, Messages, mail… : le message et ${ONE_WHAT[kind] || ONE_WHAT.print} au choix`, () => setMode("other"))}
       </div>
     </FSheet>, document.body);
 }
