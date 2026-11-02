@@ -8,12 +8,11 @@
       "family": "PLA",
       "name": "Skin",
       "name_fr": "Peau",
-      "colors": ["E6BA83"],
-      "hex_approx": true,
+      "colors": ["FFDBAC"],
       "filament_weight_g": 1000,
       "gtin": "6974994172613",
       "print_temp": [185, 215],
-      "source": "3DJake, fiche GEEETECH PLA Skin (03/11/2026). Teinte non publiee : celle du Matte PLA Skin Geeetech (Open Filament Database)."
+      "source": "3DJake, fiche GEEETECH PLA Skin (03/11/2026). Teinte FFDBAC : donnee par l'utilisateur d'apres sa bobine (03/11/2026)."
     },
     {
       "id": "geeetech-hs-pla-skin",
