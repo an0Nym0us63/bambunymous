@@ -7,13 +7,14 @@ import CardHelp from "./CardHelp";
 // -> « PLA », « Matte PLA » -> « PLA Matte », comme Bambu) ; nos transcos corrigent le reste : « telle gamme » -> « notre
 // sous-type ». Chaque geste s'enregistre tout de suite ; la synchro des catalogues propose ensuite d'harmoniser les
 // filaments deja rattaches.
-export default function TypeTranscoCard({ card, cardTitle }) {
+export default function TypeTranscoCard({ card, cardTitle, bare = false }) {
   const [d, setD] = useState(null);
   const [edit, setEdit] = useState(null);          // {from, to, orig} ; orig : la ligne remplacee (ou null)
   const [busy, setBusy] = useState(false);
   const [sug, setSug] = useState(false);
   const [browse, setBrowse] = useState(false);
   const [q, setQ] = useState("");
+  const [qi, setQi] = useState("");                // la recherche dans nos transcos
   const load = () => client.get("/filaments/catalog/type-transco").then(r => setD(r.data)).catch(() => setD({ items: [], gammes: [] }));
   useEffect(() => { load(); }, []);
   const put = async items => {
@@ -67,17 +68,20 @@ export default function TypeTranscoCard({ card, cardTitle }) {
     </div>
   </div>;
 
-  return <div className="card" style={card}>
-    <div style={{ ...cardTitle, display: "flex", alignItems: "center", gap: 6 }}>🔀 Sous-types des catalogues
+  const shownItems = items.filter(x => !qi.trim() || `${x.from} ${x.to}`.toLowerCase().includes(qi.trim().toLowerCase()));
+  return <div className={bare ? undefined : "card"} style={bare ? undefined : card}>
+    {!bare && <div style={{ ...cardTitle, display: "flex", alignItems: "center", gap: 6 }}>🔀 Sous-types des catalogues
       <CardHelp inline title="Sous-types des catalogues">
         Les autres marques nomment leurs gammes à leur façon (« Fil PLA », « Matte PLA », « 95A High Speed TPU »). L'appli les
         remet d'office à la manière de Bambu : sans « Fil » ni « Filament », la matière devant (« PLA Matte »,
         « TPU 95A High Speed »), et la matière seule en sous-type de base (« PLA » → « PLA Basic »). Une transco à toi passe avant : « telle gamme du catalogue » → « notre sous-type ». Elles
         valent à la création, au rattachement et à la synchro des catalogues, qui propose ensuite d'harmoniser les filaments
-        déjà rattachés. Un sous-type gardé sur un filament (décoché au rattachement) n'est jamais touché.</CardHelp></div>
+        déjà rattachés. Un sous-type gardé sur un filament (décoché au rattachement) n'est jamais touché.</CardHelp></div>}
     {d == null ? <span style={{ fontSize: 13, color: "var(--muted)" }}>…</span> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {(bare || items.length > 6) && items.length > 0 && <input value={qi} onChange={e => setQi(e.target.value)} placeholder="Chercher une transco…"
+        aria-label="Chercher une transco" style={{ ...inp, maxWidth: 320 }}/>}
       {items.length === 0 && !edit && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Aucune transco à toi : la normalisation seule s'applique.</span>}
-      {items.map(x => edit?.orig === x.from ? <React.Fragment key={x.from}>{editor}</React.Fragment>
+      {shownItems.map(x => edit?.orig === x.from ? <React.Fragment key={x.from}>{editor}</React.Fragment>
         : <div key={x.from} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface2)" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)" }}>{x.from} <span style={{ color: "#16a34a" }}>→ {x.to}</span></div>

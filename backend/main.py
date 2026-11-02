@@ -218,6 +218,8 @@ async def lifespan(app: FastAPI):
         await _load_names()
         from app.services.type_transco import load as _load_transco       # nos transcos des sous-types
         await _load_transco()
+        from app.services.family_map import load as _load_families        # nos familles (sous-type -> famille)
+        await _load_families()
         await _retranslate()
     _bg(_names_then())
     # Vider le cache de matching au démarrage

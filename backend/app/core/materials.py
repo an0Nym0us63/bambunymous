@@ -30,9 +30,16 @@ def family_of(value: Optional[str], fallback: Optional[str] = None) -> Optional[
     "PLA-CF"     → "PLA-CF"   (famille à part entière)
     "Support W"  → fallback   (rien de reconnu)
     """
+    try:                                         # nos familles (Parametres) d'abord, 03/11/2026
+        from ..services.family_map import lookup
+    except Exception:
+        lookup = None
     for raw in (value, fallback):
         if not raw:
             continue
+        mine = lookup(raw) if lookup else None
+        if mine:
+            return mine
         norm = str(raw).strip().upper().replace("_", "-")
         for m in _BY_LENGTH:
             # match sur le début, en évitant "PLA" dans "PLASTIC"

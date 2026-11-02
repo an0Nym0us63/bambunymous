@@ -1727,6 +1727,37 @@ async def type_transco_put(body: dict = Body({}), _: str = Depends(require_admin
     return {"items": await T.save(body.get("items") or [])}
 
 
+@router.get("/catalog/family-map")
+async def family_map_get(db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
+    """Nos familles (03/11/2026) : la table « sous-type -> famille », les familles connues, et les sous-types (ceux de nos
+    filaments, avec leur nombre, puis ceux des catalogues) avec la famille qu'on en deduit (None : aucune)."""
+    from ....core.materials import MATERIALS
+    from ....services import family_map as FM, ofd_catalog, type_transco as T
+    rows = (await db.execute(select(Filament.fila_type, func.count(Filament.id)).where(Filament.fila_type.isnot(None))
+                             .group_by(Filament.fila_type))).all()
+    seen, out = set(), []
+    for ft, n in rows:
+        if ft and ft.strip() and ft.casefold() not in seen:
+            seen.add(ft.casefold())
+            out.append({"name": ft, "filaments": n, "family": family_of(ft, None)})
+    for g in ofd_catalog.gammes():
+        ft = T.apply(g["gamme"], g["material"])
+        if ft and ft.casefold() not in seen:
+            seen.add(ft.casefold())
+            out.append({"name": ft, "filaments": 0, "family": family_of(ft, None)})
+    out.sort(key=lambda x: (-x["filaments"], x["name"].casefold()))
+    fams = sorted({*MATERIALS, *(x["to"] for x in FM.items())})
+    return {"items": FM.items(), "families": fams, "subtypes": out}
+
+
+@router.put("/catalog/family-map")
+async def family_map_put(body: dict = Body({}), _: str = Depends(require_admin)):
+    from ....services import family_map as FM
+    items, n = await FM.save(body.get("items") or [])
+    _clear_match_cache()
+    return {"items": items, "updated_filaments": n}
+
+
 @router.get("/catalog/ofd/search")
 async def ofd_search(brand: str = "", family: str = "", q: str = "", _: str = Depends(get_current_user)):
     """Les couleurs d'une marque, a la forme de /catalog/search (plus la marque et le poids du support) : celles de notre

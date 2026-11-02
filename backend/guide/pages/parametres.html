@@ -104,7 +104,9 @@
   </section>
 
   <section id="parametres-filament-prix">
-    <h3 id="noms-catalogue">🔤 Noms du catalogue</h3>
+    <h3 id="correspondances-catalogues">🗂️ Correspondances des catalogues</h3>
+    <p>Une carte, trois boutons : <span class="ui">🔤 Noms des couleurs</span>, <span class="ui">🔀 Sous-types des catalogues</span> et <span class="ui">🧬 Familles</span>, avec à droite le nombre de lignes à toi. Chacun ouvre sa fenêtre, pour que la page reste courte : une explication, un champ de recherche, la liste (modifier ✏️, supprimer 🗑), et l'ajout d'une ligne ; <span class="ui">Fermer</span> en bas. Chaque geste s'enregistre tout de suite.</p>
+    <h4 id="noms-catalogue">🔤 Noms des couleurs</h4>
     <p>Nos propres noms français, à côté du catalogue Bambu, en tableau : le nom anglais du catalogue (« Dawn Radiance »), <b>notre nom</b> (« Éclat de l'Aube »), et <b>ce qu'en dit le catalogue</b> : son nom français entre guillemets s'il en a un, « pas de nom français », ou « ⚠ absent du catalogue » (une faute de frappe, ou une couleur qu'il ne connaît pas), avec en pastilles les filaments qui portent ce nom (couleurs, matière, code, dégradé ou multicolore). Nos noms passent <b>avant</b> le catalogue : scan RFID, AMS, commandes lues dans les mails et fiches filament les reprennent.</p>
     <ul>
       <li><span class="ui">＋ Ajouter un nom</span> ouvre une ligne : le nom anglais se choisit dans la liste des noms du catalogue (en tapant, elle se resserre), et la ligne dit tout de suite ce qu'en dit le catalogue ; <span class="ui">✓ Enregistrer</span> (ou Entrée) garde, <span class="ui">Annuler</span> renonce.</li>
@@ -113,13 +115,21 @@
       <li>En enregistrant, les fiches filament qui portaient le nom anglais, celui du catalogue ou notre ancien nom prennent le nouveau ; un nom tapé à la main sur une fiche n'est jamais touché.</li>
       <li>Au-delà de six lignes, un champ <span class="ui">Chercher un nom</span> filtre le tableau. Sur un téléphone, chaque ligne devient une petite carte.</li>
     </ul>
-    <h3 id="sous-types-catalogues">🔀 Sous-types des catalogues</h3>
+    <h4 id="sous-types-catalogues">🔀 Sous-types des catalogues</h4>
     <p>Les autres marques nomment leurs gammes à leur façon : « Fil PLA », « 123-3D Filament PLA », « Matte PLA », « 95A High Speed TPU ». L'appli les remet d'office à la manière de Bambu, matière devant : « Fil » et « Filament » retirés, la matière placée en tête (« PLA Matte », « PLA+ Silk », « TPU 95A High Speed »), la matière seule devenue le sous-type de base comme chez Bambu (« PLA » → « PLA Basic », « PETG » → « PETG Basic »), la matière écrite deux fois retirée (« PET-G Premium PETG » → « PETG Premium »). Cette carte ajoute <b>tes transcos</b>, qui passent avant : « telle gamme du catalogue » → « notre sous-type ».</p>
     <ul>
       <li><span class="ui">＋ Ajouter une transco</span> : la gamme se choisit dans la liste des gammes des catalogues (avec ce qu'elle devient d'office, les marques qui l'ont et le nombre de couleurs ; « ⚠ Aucune gamme de ce nom » si elle n'existe pas), puis notre sous-type, proposé d'après la normalisation ; <span class="ui">✓ Enregistrer</span>.</li>
       <li><span class="ui">✏️</span> modifie une transco, <span class="ui">🗑</span> la supprime (la normalisation reprend).</li>
       <li><span class="ui">Voir les gammes renommées (N)</span> liste ce que la normalisation change, avec une recherche (gamme ou marque) ; <span class="ui">✏️</span> sur une ligne ouvre une transco pour elle.</li>
       <li>Les sous-types servent à la création d'un filament depuis un catalogue, au rattachement et à la <a href="#parametres-synchro-catalogues">synchro des catalogues</a>, qui propose ensuite d'harmoniser les filaments déjà rattachés (« Type : Matte PLA → PLA Matte »). Un sous-type gardé sur un filament (décoché au rattachement) n'est jamais touché.</li>
+    </ul>
+    <h4 id="familles">🧬 Familles</h4>
+    <p>La famille d'un filament (sa matière : PLA, PETG…) se déduit de son sous-type (« PLA Silk » → PLA, « HS-PLA » → PLA). Quand la déduction se trompe ou ne trouve rien (« PET-G », « PEEK CF », « PP Glass Fiber »), une famille à toi passe avant : « tel sous-type » → « telle famille ».</p>
+    <ul>
+      <li><span class="ui">＋ Ajouter une famille</span> : le sous-type se choisit parmi ceux de tes filaments (avec leur nombre) et des catalogues, avec la famille déduite aujourd'hui ; la famille se touche dans la liste (PLA, PETG…, et celles que tu as déjà ajoutées) ou se tape (une famille nouvelle, comme PEEK, est acceptée) ; <span class="ui">✓ Enregistrer</span>.</li>
+      <li>En enregistrant, la matière des filaments de ce sous-type suit : « ✓ Enregistré · matière remise à jour sur N filaments ».</li>
+      <li><b>Sans famille</b> liste les sous-types pour lesquels l'appli ne trouve aucune famille ; <span class="ui">✏️</span> lui en donne une.</li>
+      <li>Une famille à toi vaut partout : fiche filament, création, rattachement, catalogues.</li>
     </ul>
     <h3>Révision des prix</h3>
     <p>Compare le prix catalogue de chaque filament au prix d'achat de ses bobines (archivées comprises) et permet de corriger sur place. Utile pour repérer les prix manquants : sans prix, le calcul des coûts compte 20 €/kg par défaut.</p>

@@ -8,7 +8,7 @@ import CardHelp from "./CardHelp";
 // portaient l'ancien nom (anglais, catalogue ou notre ancienne correspondance) prennent le nouveau ; un nom tape a la
 // main sur une fiche n'est jamais touche. En tableau : chaque nom, ce qu'en dit le catalogue, modifier ou supprimer.
 // Chaque geste s'enregistre tout de suite.
-export default function CatalogNamesCard({ card, cardTitle }) {
+export default function CatalogNamesCard({ card, cardTitle, bare = false }) {
   const [d, setD] = useState(null);
   const [busy, setBusy] = useState(false);
   const [edit, setEdit] = useState(null);          // { i (ligne), en, fr } ; i = -1 : un nouveau nom
@@ -101,16 +101,16 @@ export default function CatalogNamesCard({ card, cardTitle }) {
       </div>
     </div>;
   };
-  return <div className="card" style={card} ref={box}>
-    <div style={{ ...cardTitle, display: "flex", alignItems: "center", gap: 6 }}>🔤 Noms du catalogue
+  return <div className={bare ? undefined : "card"} style={bare ? undefined : card} ref={box}>
+    {!bare && <div style={{ ...cardTitle, display: "flex", alignItems: "center", gap: 6 }}>🔤 Noms du catalogue
       <CardHelp inline title="Noms du catalogue">
         Le catalogue Bambu n'a pas traduit toutes ses couleurs, et certaines traductions ne collent pas à la boutique. Chaque
         ligne : un nom anglais du catalogue, le nom français à montrer, et ce qu'en dit le catalogue (son nom français s'il en
         a un, les filaments qui portent ce nom). Nos noms passent avant le catalogue : scan RFID, AMS, commandes lues dans les
         mails, fiches filament. En enregistrant, les fiches qui portaient l'ancien nom sont renommées ; un nom tapé à la main
-        sur une fiche n'est jamais touché. « appli » : un nom que l'appli connaît déjà ; ✏️ le remplace par le tien.</CardHelp></div>
+        sur une fiche n'est jamais touché. « appli » : un nom que l'appli connaît déjà ; ✏️ le remplace par le tien.</CardHelp></div>}
     {d == null ? <span style={{ fontSize: 13, color: "var(--muted)" }}>…</span> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {(d.rows || []).length > 6 && <input value={q} onChange={e => setQ(e.target.value)} placeholder="Chercher un nom…" aria-label="Chercher un nom" style={{ ...inp, maxWidth: 280 }}/>}
+      {(bare || (d.rows || []).length > 6) && <input value={q} onChange={e => setQ(e.target.value)} placeholder="Chercher un nom…" aria-label="Chercher un nom" style={{ ...inp, maxWidth: 280 }}/>}
       {!narrow && rows.length > 0 && <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1.1fr 1.6fr 84px", gap: 10, padding: "0 10px",
         fontSize: 10.5, fontWeight: 900, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>
         <span>Catalogue (anglais)</span><span>Notre nom</span><span>Ce qu'en dit le catalogue</span><span/></div>}
