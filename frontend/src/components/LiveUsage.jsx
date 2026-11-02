@@ -37,10 +37,10 @@ export function LiveHatch({ a, b, r = 3 }) {
 
 // a cote d'un « ≈ 671 g » d'une bobine qui sert a l'impression en cours : sa valeur a la fin (« → 640 g »), plus petite,
 // de la couleur du poids en plus pale (02/11/2026 ; le gris ne plaisait pas) ; rien hors impression
-export function LiveTo({ lv, size = "0.8em", color, style }) {
+export function LiveTo({ lv, size = "0.8em", color, style, unit = true }) {
   if (!lv || lv.target == null) return null;
   return <span data-tip={`${Math.round(lv.target)} g à la fin de l'impression en cours`}
-    style={{ fontSize: size, fontWeight: 800, color: color || "inherit", opacity: .72, whiteSpace: "nowrap", ...style }}>→ {Math.round(lv.target)} g</span>;
+    style={{ fontSize: size, fontWeight: 800, color: color || "inherit", opacity: .72, whiteSpace: "nowrap", ...style }}>→ {Math.round(lv.target)}{unit ? " g" : ""}</span>;
 }
 
 // la bobine qui imprime : son poids maintenant, et sa cible (son poids a la fin)

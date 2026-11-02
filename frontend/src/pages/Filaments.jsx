@@ -1417,7 +1417,8 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
         <div style={{ position:"relative", display:"flex", alignItems:"center", justifyContent:"center", gap:4, whiteSpace:"nowrap" }}>
           {/* posee par-dessus (sans place prise) : la carte garde la hauteur de ses voisines */}
           {lv && <span style={{ position:"absolute", bottom:"100%", left:0, right:0, textAlign:"center", lineHeight:1, marginBottom:-2 }}>
-            <LiveTo lv={lv} size={10} color={barColor}/></span>}
+            {/* sans « g » : son jambage touchait le poids juste dessous (qui porte deja l'unite) */}
+            <LiveTo lv={lv} size={10} color={barColor} unit={false}/></span>}
           <span style={{ whiteSpace:"nowrap", fontSize:13, fontWeight:900, backgroundImage:`linear-gradient(135deg, ${barColor}, ${lighten(barColor)})`,
             WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}
             data-tip={lv ? `≈ ${Math.round(lv.now)} g maintenant · ${Math.round(lv.target)} g à la fin de l'impression en cours` : undefined}>{rem != null ? `${lv ? "≈ " : ""}${Math.round(rem)} g` : "—"}</span>
