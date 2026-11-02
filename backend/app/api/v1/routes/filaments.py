@@ -927,6 +927,9 @@ async def create_filament(
     if body.label_printed:
         f.label_printed, f.label_printed_at = True, datetime.utcnow()
     f.color_bucket = buckets_for(f.color, f.colors_array)
+    # sans poids de support : celui de sa marque (Parametres ; Bambu Lab 250 g cree s'il manque, 02/11/2026)
+    from ....services import spool_tare
+    await spool_tare.fill(db, f)
     db.add(f)
     await db.commit()
     await db.refresh(f)
@@ -983,6 +986,10 @@ async def update_filament(
         setattr(f, k, v)
     if "color" in payload or "colors_array" in payload:
         f.color_bucket = buckets_for(f.color, f.colors_array)
+    # une marque donnee apres coup : son support, si aucun poids n'a ete saisi (un poids vide expres reste vide)
+    if "manufacturer" in payload and "spool_weight_g" not in payload:
+        from ....services import spool_tare
+        await spool_tare.fill(db, f)
     await db.commit()
     _clear_match_cache()
     if f.to_order and not was_to_order:
@@ -1610,6 +1617,9 @@ async def link_catalog(fid: int, body: dict = Body({}), db: AsyncSession = Depen
     if f is None:
         raise HTTPException(404, "Filament introuvable")
     changed = _apply_catalog(f, entry, en_to_fr, link=True)
+    from ....services import spool_tare
+    if await spool_tare.fill(db, f):
+        changed.append("spool_weight_g")
     # un autre filament deja rattache a la meme entree : dit, pour fusionner a la main si c'est un doublon
     twin = (await db.execute(select(Filament.id, Filament.translated_name, Filament.name).where(
         Filament.id != fid, Filament.profile_id == entry.get("fila_id"), Filament.fila_color_code == code))).first()
@@ -2069,6 +2079,8 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
             if multicolor_type:
                 fil.multicolor_type = multicolor_type
             fil.color_bucket = buckets_for(fil.color, fil.colors_array)
+            from ....services import spool_tare
+            await spool_tare.fill(db, fil)
             db.add(fil)
             await db.flush()
             filament_created = True

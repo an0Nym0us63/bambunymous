@@ -105,6 +105,12 @@ async def lifespan(app: FastAPI):
             await link_legacy_tares(_db)
     except Exception:
         logging.getLogger(__name__).exception("[TARE] rattachement des supports vides non fait")
+    try:
+        # les filaments sans poids de support prennent celui de leur marque (Bambu Lab 250 g cree s'il manque, 02/11/2026)
+        from app.services.spool_tare import sweep as _tare_sweep
+        await _tare_sweep()
+    except Exception:
+        logging.getLogger(__name__).exception("[TARE] supports des marques non attribues")
     from app.services.hms import init_hms
     init_hms()   # charge cache/dump des libelles HMS
     # Restaurer les prints IN_PROGRESS en mémoire après un redémarrage

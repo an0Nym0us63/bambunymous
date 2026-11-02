@@ -351,6 +351,8 @@ async def rfid_create(
             filament_weight_g=scan["spool_weight_g"] or 1000,
             price=body.filament_price,
         )
+        from ....services import spool_tare
+        await spool_tare.fill(db, fil)          # le support Bambu Lab (02/11/2026)
         db.add(fil)
         await db.flush()
         filament_created = True

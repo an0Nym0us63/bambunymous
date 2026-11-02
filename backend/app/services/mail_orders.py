@@ -1119,6 +1119,8 @@ async def _ensure_filament(db, it: dict):
                  multicolor_type=(cat or {}).get("multicolor_type") or "monochrome",
                  profile_id=(cat or {}).get("fila_id") or it.get("fila_id"), fila_color_code=str(it.get("fila_color_code") or "") or None,
                  filament_weight_g=1000.0, color_bucket=bucket)
+    from . import spool_tare
+    await spool_tare.fill(db, f)                 # le support Bambu Lab (02/11/2026)
     db.add(f)
     await db.flush()
     return f, True
