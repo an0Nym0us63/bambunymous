@@ -14,6 +14,7 @@ export default function CatalogNamesCard({ card, cardTitle }) {
   const [edit, setEdit] = useState(null);          // { i (ligne), en, fr } ; i = -1 : un nouveau nom
   const [sure, setSure] = useState(null);          // la ligne dont la suppression attend sa confirmation
   const [q, setQ] = useState("");
+  const [sug, setSug] = useState(false);           // la liste des noms du catalogue sous le champ ouverte
   const box = useRef(null);
   const [W, setW] = useState(600);
   const load = () => client.get("/filaments/catalog-names").then(r => setD(r.data)).catch(() => setD({ rows: [], items: [], names: [] }));
@@ -69,8 +70,25 @@ export default function CatalogNamesCard({ card, cardTitle }) {
     return <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "1fr 1fr auto", gap: 6, alignItems: "center", padding: "8px 10px", borderRadius: 12,
       background: "color-mix(in srgb, #3B82F6 7%, var(--surface))", border: "1px solid color-mix(in srgb, #3B82F6 35%, var(--border))" }}>
       <div style={{ minWidth: 0 }}>
-        <input list="bn-catalog-names" value={edit.en} onChange={e => setEdit(x => ({ ...x, en: e.target.value }))} placeholder="Nom anglais du catalogue"
-          aria-label="Nom anglais du catalogue" autoFocus={i < 0} style={inp}/>
+        {/* nos propres suggestions (02/11/2026) : la liste native (datalist) s'affichait transparente par-dessus la page
+            dans l'appli Android */}
+        <input value={edit.en} onChange={e => { setEdit(x => ({ ...x, en: e.target.value })); setSug(true); }} placeholder="Nom anglais du catalogue"
+          aria-label="Nom anglais du catalogue" autoFocus={i < 0} onFocus={() => setSug(true)} onBlur={() => setTimeout(() => setSug(false), 150)}
+          autoComplete="off" style={inp}/>
+        {sug && (() => {
+          const t = edit.en.trim().toLowerCase();
+          const list = t ? (d?.names || []).filter(n => n.en.toLowerCase().includes(t) && n.en.toLowerCase() !== t)
+            .sort((a, b) => a.en.toLowerCase().indexOf(t) - b.en.toLowerCase().indexOf(t)).slice(0, 8) : [];
+          return list.length > 0 && <div role="listbox" style={{ marginTop: 4, maxHeight: 220, overflowY: "auto", borderRadius: 10, border: "1px solid var(--border)",
+            background: "var(--surface)", boxShadow: "0 10px 24px -14px rgba(0,0,0,.35)" }}>
+            {list.map(n => <button key={n.en} type="button" role="option" onMouseDown={e => e.preventDefault()}
+              onClick={() => { setEdit(x => ({ ...x, en: n.en })); setSug(false); }}
+              style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1, width: "100%", textAlign: "left", padding: "7px 10px",
+                border: "none", borderBottom: "1px solid var(--border)", background: "transparent", cursor: "pointer" }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text)" }}>{n.en}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>{n.fr || "pas de nom français"}</span></button>)}
+          </div>;
+        })()}
         {edit.en.trim() && <span style={{ fontSize: 11, fontWeight: 700, color: hit ? "var(--muted)" : "#d97706" }}>
           {hit ? (hit.fr ? `Catalogue : « ${hit.fr} »` : "Au catalogue, sans nom français") : "⚠ Absent du catalogue (vérifie l'orthographe)"}</span>}
       </div>
@@ -91,7 +109,6 @@ export default function CatalogNamesCard({ card, cardTitle }) {
         a un, les filaments qui portent ce nom). Nos noms passent avant le catalogue : scan RFID, AMS, commandes lues dans les
         mails, fiches filament. En enregistrant, les fiches qui portaient l'ancien nom sont renommées ; un nom tapé à la main
         sur une fiche n'est jamais touché. « appli » : un nom que l'appli connaît déjà ; ✏️ le remplace par le tien.</CardHelp></div>
-    <datalist id="bn-catalog-names">{(d?.names || []).map(n => <option key={n.en} value={n.en}>{n.fr || "pas de nom français"}</option>)}</datalist>
     {d == null ? <span style={{ fontSize: 13, color: "var(--muted)" }}>…</span> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {(d.rows || []).length > 6 && <input value={q} onChange={e => setQ(e.target.value)} placeholder="Chercher un nom…" aria-label="Chercher un nom" style={{ ...inp, maxWidth: 280 }}/>}
       {!narrow && rows.length > 0 && <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1.1fr 1.6fr 84px", gap: 10, padding: "0 10px",
