@@ -88,16 +88,35 @@ async def fill(db, f) -> bool:
     return True
 
 
+async def link_weight(db, f) -> bool:
+    """Un poids de support sans support des Parametres (03/11/2026 : repris d'un catalogue au rattachement, ou saisi en
+    « Autre ») : le support de sa marque a ce poids, cree s'il n'existe pas. Tout poids utilise chez nous se retrouve dans
+    les Parametres. Ne commit pas."""
+    if f.spool_weight_g is None or (f.spool_tare_name or "").strip() or not (f.manufacturer or "").strip():
+        return False
+    t = await ensure(db, f.manufacturer, f.spool_weight_g)
+    f.spool_tare_name, f.spool_weight_g = t["name"], float(t["weight_g"])
+    return True
+
+
+async def settle(db, f) -> bool:
+    """Le support d'un filament : celui de sa marque s'il n'en a pas, et son poids range dans les Parametres."""
+    a = await fill(db, f)
+    b = await link_weight(db, f)
+    return a or b
+
+
 async def sweep() -> int:
-    """Au demarrage : les filaments deja en base sans poids de support."""
-    from sqlalchemy import select
+    """Au demarrage : les filaments sans poids de support, et ceux dont le poids n'a pas de support des Parametres."""
+    from sqlalchemy import select, or_
     from ..db.session import AsyncSessionLocal
     from ..models.filament import Filament
     async with AsyncSessionLocal() as db:
-        fils = (await db.execute(select(Filament).where(Filament.spool_weight_g.is_(None)))).scalars().all()
+        fils = (await db.execute(select(Filament).where(or_(Filament.spool_weight_g.is_(None), Filament.spool_tare_name.is_(None),
+                                                            Filament.spool_tare_name == "")))).scalars().all()
         n = 0
         for f in fils:
-            n += await fill(db, f)
+            n += await settle(db, f)
         await db.commit()
     if n:
         logger.info(f"[TARE] {n} filament(s) sans support : celui de leur marque attribue")

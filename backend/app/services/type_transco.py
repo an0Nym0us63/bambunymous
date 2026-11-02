@@ -11,6 +11,8 @@ import json
 import re
 
 KEY = "TYPE_TRANSCO"
+# la seule matiere, sans precision : le sous-type de base de Bambu (03/11/2026 : « PLA » -> « PLA Basic »)
+BASIC = {"PLA": "PLA Basic", "PETG": "PETG Basic"}
 _MAP: dict = {}                       # gamme (casefold) -> notre sous-type
 _ITEMS: list = []
 
@@ -28,7 +30,8 @@ def auto(gamme: str, family: str = "") -> str:
     # la matiere ecrite une seconde fois autrement (« PET-G Premium PETG » -> « PETG Premium »)
     if fam and len(toks) > 1:
         toks = toks[:1] + [t for t in toks[1:] if t.upper().replace("-", "") != fam.replace("-", "")]
-    return " ".join(toks) or str(gamme or "").strip()
+    out = " ".join(toks) or str(gamme or "").strip()
+    return BASIC.get(out.upper(), out)
 
 
 def apply(gamme: str, family: str = "") -> str:

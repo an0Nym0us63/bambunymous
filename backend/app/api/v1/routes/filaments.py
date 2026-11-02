@@ -940,9 +940,7 @@ async def create_filament(
     # comme apres une synchro (02/11/2026 : « 95A High Speed TPU » restait en matiere jusqu'a la synchro)
     if (f.catalog_ref or f.fila_color_code) and f.fila_type:
         f.material = family_of(f.fila_type, f.material) or f.material
-    if f.catalog_ref and f.spool_weight_g is not None and not f.spool_tare_name and f.manufacturer:
-        f.spool_tare_name = (await spool_tare.ensure(db, f.manufacturer, f.spool_weight_g))["name"]
-    await spool_tare.fill(db, f)
+    await spool_tare.settle(db, f)
     db.add(f)
     await db.commit()
     await db.refresh(f)
@@ -1000,9 +998,11 @@ async def update_filament(
     if "color" in payload or "colors_array" in payload:
         f.color_bucket = buckets_for(f.color, f.colors_array)
     # une marque donnee apres coup : son support, si aucun poids n'a ete saisi (un poids vide expres reste vide)
+    from ....services import spool_tare
     if "manufacturer" in payload and "spool_weight_g" not in payload:
-        from ....services import spool_tare
         await spool_tare.fill(db, f)
+    if {"manufacturer", "spool_weight_g", "spool_tare_name"} & set(payload):
+        await spool_tare.link_weight(db, f)            # un poids saisi en « Autre » : rangé dans les Paramètres
     await db.commit()
     _clear_match_cache()
     if f.to_order and not was_to_order:
@@ -1876,7 +1876,12 @@ async def _link_one(db, f, body: dict, link: bool = True) -> list:
         e = _other_entry(body.get("ref"), body["source"])
         if e is None:
             raise ValueError("Entrée introuvable dans le catalogue des autres marques")
-        return await _apply_ofd(db, f, e, link=link)
+        changed = await _apply_ofd(db, f, e, link=link)
+        if link:
+            from ....services import spool_tare
+            if await spool_tare.link_weight(db, f):              # un poids deja la, sans support des Parametres
+                changed.append("spool_tare_name")
+        return changed
     from ....services.bambu_catalog import catalog_entries
     data, en_to_fr = catalog_entries()
     if data is None:
@@ -1888,7 +1893,7 @@ async def _link_one(db, f, body: dict, link: bool = True) -> list:
     changed = _apply_catalog(f, entry, en_to_fr, link=link)
     if link:
         from ....services import spool_tare
-        if await spool_tare.fill(db, f):
+        if await spool_tare.settle(db, f):
             changed.append("spool_weight_g")
     return changed
 

@@ -71,8 +71,8 @@ export default function TypeTranscoCard({ card, cardTitle }) {
     <div style={{ ...cardTitle, display: "flex", alignItems: "center", gap: 6 }}>🔀 Sous-types des catalogues
       <CardHelp inline title="Sous-types des catalogues">
         Les autres marques nomment leurs gammes à leur façon (« Fil PLA », « Matte PLA », « 95A High Speed TPU »). L'appli les
-        remet d'office à la manière de Bambu : sans « Fil » ni « Filament », la matière devant (« PLA », « PLA Matte »,
-        « TPU 95A High Speed »). Une transco à toi passe avant : « telle gamme du catalogue » → « notre sous-type ». Elles
+        remet d'office à la manière de Bambu : sans « Fil » ni « Filament », la matière devant (« PLA Matte »,
+        « TPU 95A High Speed »), et la matière seule en sous-type de base (« PLA » → « PLA Basic »). Une transco à toi passe avant : « telle gamme du catalogue » → « notre sous-type ». Elles
         valent à la création, au rattachement et à la synchro des catalogues, qui propose ensuite d'harmoniser les filaments
         déjà rattachés. Un sous-type gardé sur un filament (décoché au rattachement) n'est jamais touché.</CardHelp></div>
     {d == null ? <span style={{ fontSize: 13, color: "var(--muted)" }}>…</span> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
