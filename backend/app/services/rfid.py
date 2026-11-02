@@ -68,7 +68,7 @@ def _entries() -> list[dict]:
     if not os.path.exists(path):
         return []
     try:
-        return json.loads(open(path).read()).get("data", [])
+        return json.loads(open(path, encoding="utf-8").read()).get("data", [])
     except Exception as e:
         logger.error(f"[RFID] catalogue illisible : {e}")
         return []
@@ -124,8 +124,17 @@ def catalog_match(scan: dict, lang: str = "fr") -> Optional[dict]:
                     and (e.get("fila_color_code") or "").upper() == vid):
                 return build(e)
 
+    # Passe 1 bis (02/11/2026) : le catalogue range une reference sous un numero (fila_color_code « 13912 ») et son
+    # code couleur a part (color_code « M8 ») ; le tag, lui, porte « A05-M8 ». Le code couleur est ce qui suit le tiret.
+    code = vid.split("-", 1)[1].strip().upper() if vid and "-" in vid else ""
+    if mid and code:
+        for e in entries:
+            if e.get("fila_id", "").upper() == mid and (e.get("color_code") or "").strip().upper() == code:
+                return build(e)
+
     # Passe 2 : meme famille + meme couleur
     want = [c for c in (scan["color_hex"], scan["second_color"]) if c and c != "00000000"]
+    n = int(scan.get("color_count") or 0)
     if mid and want:
         for e in entries:
             if e.get("fila_id", "").upper() != mid:
@@ -135,7 +144,11 @@ def catalog_match(scan: dict, lang: str = "fr") -> Optional[dict]:
                 continue
             # Comparaison sur le RGB seul : l'alpha du tag n'est pas toujours
             # celui du catalogue, et une difference d'opacite n'a aucun sens ici.
-            if [c[:6] for c in colors] == [c[:6] for c in want]:
+            # Le tag ne porte que deux couleurs : un multicolore a 4 teintes (02/11/2026, « Dawn Radiance ») se
+            # reconnait a ses deux premieres, si le nombre de couleurs annonce par le tag est le sien.
+            same = [c[:6] for c in colors] == [c[:6] for c in want]
+            more = (n > len(want) and len(colors) == n and [c[:6] for c in colors[:len(want)]] == [c[:6] for c in want])
+            if same or more:
                 return build(e)
 
     return None
