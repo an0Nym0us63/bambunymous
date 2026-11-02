@@ -94,7 +94,7 @@ async def friends_shared_assembly(design_id: str, _: str = Depends(get_current_u
 async def friends_proxy(fid: str, path: str, request: Request, _: str = Depends(_viewer)):
     params = [(k, v) for k, v in request.query_params.multi_items() if k != "_t"]
     try:
-        code, ctype, content = await F.proxy(fid, path, params, dict(request.headers))
+        code, ctype, content, seq = await F.proxy(fid, path, params, dict(request.headers))
     except F.FriendError as e:
         raise HTTPException(502 if "injoignable" in str(e) else 400, str(e))
     if code < 400:
@@ -112,7 +112,10 @@ async def friends_proxy(fid: str, path: str, request: Request, _: str = Depends(
     if code == 204:
         return Response(status_code=204)
     hdrs = None
-    if ctype.startswith("image/"):
+    if path == "camera/frame":
+        # l'image tiree de sa camera : jamais gardee, et son numero suit (la page demande la suivante)
+        hdrs = {"Cache-Control": "no-store", **({"X-Seq": seq} if seq else {})}
+    elif ctype.startswith("image/"):
         hdrs = {"Cache-Control": "private, max-age=300"}
         # une empreinte, pour que la vignette (w=, trim=) se refasse ici aussi (30/10/2026) : un copain dont le
         # BambuNymous n'est pas a jour ne rogne pas ses vues 3D, qui flottaient dans la galerie

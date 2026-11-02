@@ -252,9 +252,10 @@
   <h2>La caméra</h2>
   <p>L'image de la caméra de l'imprimante s'affiche dans la tuile <a href="#tuiles-camera">Caméra</a>.</p>
   <ul>
-    <li>Un petit point rouge pulsé en haut à gauche signale le <strong>direct</strong> (flux vidéo continu).</li>
-    <li>Si le direct ne démarre pas ou se fige, l'appli passe toute seule à une <strong>image toutes les 2 secondes</strong>, puis retente le direct 10 secondes plus tard (puis 20, 40, et au plus une minute ; dès que le direct repart, on revient à 10 secondes). Pendant ce temps, une petite pastille « captures » le signale dans le coin de l'image (le point rouge, lui, veut dire en direct). Revenir sur l'appli, ou rentrer de chez un copain, relance aussi le direct. Si le direct ralentit sans se figer (une image toutes les quelques secondes au lieu d'un flux fluide), l'appli rouvre d'elle-même une connexion neuve (plus de 4 secondes entre deux images n'est jamais normal) ; trois fois en une minute sans mieux, elle passe aux captures. La tuile Caméra permet d'imposer l'un ou l'autre.</li>
-    <li>Chez un copain, ce sont toujours des images toutes les 2 secondes.</li>
+    <li>Un petit point rouge pulsé en haut à gauche signale le <strong>direct</strong>. Le serveur garde la caméra ouverte et l'appli lui demande l'image suivante dès qu'elle a reçu la précédente : jusqu'à 8 images par seconde sur le wifi, moins sur une liaison lente (4G, chez un copain), mais toujours l'image la plus récente, sans retard qui s'accumule.</li>
+    <li>Pendant le chargement, un fond clair « 📷 Connexion à la caméra… » patiente à la place de l'image.</li>
+    <li>Si le direct ne démarre pas ou se fige, l'appli passe toute seule à une <strong>image toutes les 2 secondes</strong>, puis retente le direct 10 secondes plus tard (puis 20, 40, et au plus une minute ; dès que le direct repart, on revient à 10 secondes). Pendant ce temps, une petite pastille « captures » le signale dans le coin de l'image (le point rouge, lui, veut dire en direct). Revenir sur l'appli, ou rentrer de chez un copain, relance aussi le direct. La tuile Caméra permet d'imposer l'un ou l'autre.</li>
+    <li>Chez un copain, c'est aussi le direct, à travers ton BambuNymous (si le sien n'est pas à jour : des images toutes les 2 secondes).</li>
     <li>Rien ne se télécharge quand l'appli est en arrière-plan.</li>
     <li>Si la caméra ne répond pas : « Caméra injoignable pour l'instant ».</li>
   </ul>

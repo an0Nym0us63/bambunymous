@@ -156,4 +156,5 @@ async def proxy(fid: str, path: str, params: dict, headers=None):
                 await _save(lst)
         except ValueError:
             pass
-    return r.status_code, r.headers.get("content-type") or "application/octet-stream", r.content
+    # le numero de l'image de camera tiree (X-Seq) suit la reponse : sans lui, la page redemanderait la meme
+    return r.status_code, r.headers.get("content-type") or "application/octet-stream", r.content, r.headers.get("x-seq")

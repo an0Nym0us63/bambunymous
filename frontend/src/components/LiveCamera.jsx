@@ -5,50 +5,22 @@ import { apiUrl } from "../api/client";
 import { useFriend } from "../store/friend";
 
 // La camera de l'imprimante (22/10/2026). Trois modes :
-//  - « stream » : le flux continu du serveur (une image des qu'elle arrive) ;
+//  - « stream » : le direct, tire image par image (02/11/2026) : la page demande l'image suivante des qu'elle a recu
+//                 la precedente. Le flux MJPEG d'avant empilait les images dans les tampons du reseau : sur une liaison
+//                 lente, le retard grandissait jusqu'a une image toutes les quelques secondes, et seul un onglet rouvert
+//                 le remettait a zero. Ici la cadence suit ce que la liaison laisse passer, toujours l'image la plus
+//                 recente. Et ca passe par le relais copain (une requete ordinaire) : le direct marche aussi chez eux ;
 //  - « images » : une capture toutes les 2 s ;
-//  - « auto »   : le flux, et s'il ne demarre pas ou se fige plus de 6 s, les
-//                 captures, puis un nouvel essai du flux 10 s plus tard, puis 20, 40, et au plus une minute (02/11/2026 :
-//                 une minute d'emblee laissait la camera saccadee longtemps apres un simple hoquet ; on fermait l'onglet).
-// Chez un copain, toujours des captures (le relais ne transporte pas de flux).
+//  - « auto »   : le direct, et s'il ne demarre pas ou se fige, les captures, puis un nouvel essai du direct 10 s plus
+//                 tard, puis 20, 40, et au plus une minute. Un copain dont le BambuNymous n'est pas a jour (pas de
+//                 direct tire chez lui) : captures, comme avant.
 // Rien ne tourne quand l'appli est en arriere-plan.
-const STALL_MS = 6000, RETRY_MS = 60000, RETRY_FIRST_MS = 10000, PERIOD_MS = 2000;
-// le delai avant de retenter le flux, partage par toutes les cameras de la page : il double a chaque echec, et revient
-// au plus court des que le flux redonne des images
+const RETRY_MS = 60000, RETRY_FIRST_MS = 10000, PERIOD_MS = 2000;
+// le delai avant de retenter le direct, partage par toutes les cameras de la page : il double a chaque echec, et revient
+// au plus court des que le direct redonne des images
 let retryMs = RETRY_FIRST_MS;
 
-function readStream(url, onFrame, onEnd) {
-  const ctl = new AbortController();
-  const token = (() => { try { return localStorage.getItem("token") || ""; } catch { return ""; } })();
-  fetch(url, { signal: ctl.signal, headers: token ? { Authorization: `Bearer ${token}` } : {}, cache: "no-store" })
-    .then(async r => {
-      if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
-      const reader = r.body.getReader();
-      let buf = new Uint8Array(0);
-      const dec = new TextDecoder("latin1");
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        const nb = new Uint8Array(buf.length + value.length);
-        nb.set(buf); nb.set(value, buf.length); buf = nb;
-        // « --frame / en-tetes / ligne vide / image » : on decoupe image par image
-        for (;;) {
-          const head = dec.decode(buf.subarray(0, Math.min(buf.length, 300)));
-          const sep = head.indexOf("\r\n\r\n");
-          if (sep < 0) break;
-          const m = /Content-Length:\s*(\d+)/i.exec(head.slice(0, sep));
-          if (!m) { buf = buf.subarray(sep + 4); continue; }
-          const n = parseInt(m[1], 10), start = sep + 4;
-          if (buf.length < start + n) break;
-          onFrame(buf.slice(start, start + n));
-          buf = buf.subarray(start + n + 2);
-        }
-      }
-      onEnd(null);
-    })
-    .catch(e => { if (e.name !== "AbortError") onEnd(e); });
-  return () => ctl.abort();
-}
+const token = () => { try { return localStorage.getItem("token") || ""; } catch { return ""; } };
 
 // Un clic ouvre la camera en grand (Echap ou un clic pour fermer).
 export default function LiveCamera({ mode = "auto", style, maxHeight, expandable = true, fit = "cover", natural = false }) {
@@ -76,8 +48,8 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
 
   useEffect(() => {
     if (hidden) return undefined;
-    let stop = null, poll = null, stall = null, retry = null, dead = false, lastUrl = null;
-    const want = friend ? "images" : mode;
+    let stop = null, poll = null, retry = null, dead = false, lastUrl = null;
+    const want = mode;
     const show = blob => {
       const u = URL.createObjectURL(new Blob([blob], { type: "image/jpeg" }));
       const el = img.current;
@@ -109,47 +81,46 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
       return el;
     };
     const fallback = () => {
-      stop?.(); stop = null; clearTimeout(stall); clearInterval(watch);
+      stop?.(); stop = null;
       if (dead) return;
       if (want === "stream") { setLive(null); setBroken(true); retry = setTimeout(() => !dead && stream(), 15000); }
       else images();
     };
-    const arm = () => { clearTimeout(stall); stall = setTimeout(fallback, STALL_MS); };
-    // un direct qui ralentit sans se figer (02/11/2026 : une image toutes les 5 s au lieu de 8 par seconde, jusqu'a ce
-    // qu'on rouvre l'onglet) : la cadence du debut de la connexion sert de reference ; trop lent par rapport a elle, on
-    // rouvre une connexion neuve, sans passer aux captures ; trois fois en une minute sans mieux, on y passe
-    let watch = null, soft = [];
+    const viewer = Math.random().toString(36).slice(2, 10);       // pour compter les spectateurs (travaux)
     const stream = () => {
       setLive("stream");
-      arm();
-      let last = 0, base = null;
-      const gaps = [];
-      clearInterval(watch);
-      watch = setInterval(() => {
-        if (dead || !last) return;                   // des la premiere image (sans reference, 1 s)
-        const gap = Date.now() - last;
-        // plus de 4 s entre deux images est toujours anormal (une reference prise sur un demarrage lent ne doit pas
-        // faire passer un direct a une image toutes les 5 s pour normal)
-        if (gap > Math.max(2500, Math.min(base || 1000, 1000) * 4) && gap < STALL_MS) {
-          const now = Date.now();
-          soft = soft.filter(t => now - t < 60000);
-          soft.push(now);
-          clearInterval(watch); watch = null;
-          stop?.(); stop = null; clearTimeout(stall);
-          if (soft.length >= 3) fallback(); else stream();
+      let seq = 0, empty = 0;
+      (async () => {
+        while (!dead) {
+          const ctl = new AbortController();
+          stop = () => ctl.abort();
+          let r;
+          try {
+            const t = token();
+            r = await fetch(apiUrl(`/camera/frame?after=${seq}&v=${viewer}&t=${Date.now()}`),
+              { signal: ctl.signal, cache: "no-store", headers: t ? { Authorization: `Bearer ${t}` } : {} });
+            if (dead) return;
+            // rien en 4 s, deux fois : la camera s'est figee ; une erreur, ou un copain pas a jour (404) : captures
+            if (r.status === 204) { if (++empty >= 2) return fallback(); continue; }
+            if (!r.ok) return fallback();
+            const b = await r.arrayBuffer();
+            if (dead) return;
+            const n = parseInt(r.headers.get("X-Seq") || "", 10);
+            empty = 0; retryMs = RETRY_FIRST_MS;
+            show(b);
+            if (Number.isFinite(n)) seq = n;
+            else await new Promise(ok => setTimeout(ok, 250));    // sans numero, on redemanderait la meme : on patiente
+          } catch (e) {
+            if (dead || e.name === "AbortError") return;
+            return fallback();
+          }
         }
-      }, 1000);
-      stop = readStream("/api/v1/camera/stream", f => {
-        const now = Date.now();
-        if (last && !base) { gaps.push(now - last); if (gaps.length >= 5) base = [...gaps].sort((a, b) => a - b)[2]; }
-        last = now;
-        arm(); retryMs = RETRY_FIRST_MS; show(f);
-      }, () => !dead && fallback());
+      })();
     };
     if (want === "images") images(); else stream();
     return () => {
       dead = true;
-      stop?.(); clearInterval(poll); clearTimeout(stall); clearTimeout(retry); clearInterval(watch);
+      stop?.(); clearInterval(poll); clearTimeout(retry);
       if (lastUrl) setTimeout(() => URL.revokeObjectURL(lastUrl), 1000);
     };
   }, [mode, hidden, friend?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -161,19 +132,19 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
       {/* rien d'affiche tant qu'aucune vue n'est arrivee (ni icone cassee ni noir) : un fond doux qui patiente a la place */}
       <img ref={img} data-pk="" alt="" style={natural
         ? { display: broken || !ready ? "none" : "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: "74vh", borderRadius: "inherit" }
-        : { width: "100%", display: broken ? "none" : "block", visibility: ready ? "visible" : "hidden", aspectRatio: style?.height ? undefined : "16/9",
+        : { width: "100%", display: "block", visibility: ready && !broken ? "visible" : "hidden", aspectRatio: style?.height ? undefined : "16/9",
           height: style?.height, objectFit: fit, background: ready ? "#111" : "transparent", maxHeight, borderRadius: "inherit" }}/>
       {!ready && !broken && <div aria-label="Connexion à la caméra" style={{ ...(natural ? { width: "min(90vw, 720px)", aspectRatio: "16/9" } : { position: "absolute", inset: 0 }),
         borderRadius: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "var(--muted)",
         backgroundColor: "var(--surface2)", backgroundImage: "linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--text) 7%, transparent) 50%, transparent 70%)",
         backgroundSize: "60% 100%", backgroundRepeat: "no-repeat", animation: "bn-tile-sweep 1.6s ease-in-out infinite" }}>📷 Connexion à la caméra…</div>}
-      {broken && <div style={{ padding: "26px 12px", textAlign: "center", fontSize: 12.5, color: "var(--muted)", background: "var(--surface2)",
-        borderRadius: "inherit" }}>Caméra injoignable pour l'instant</div>}
+      {broken && <div style={{ ...(natural ? { padding: "26px 12px" } : { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }),
+        textAlign: "center", fontSize: 12.5, fontWeight: 700, color: "var(--muted)", background: "var(--surface2)", borderRadius: "inherit" }}>📷 Caméra injoignable pour l'instant</div>}
       {/* un voyant discret quand c'est le flux continu ; rien pour les captures */}
       {live === "stream" && !broken && <span title="En direct" style={{ position: "absolute", left: 8, top: 8, width: 6, height: 6, borderRadius: "50%",
         background: "#ef4444", boxShadow: "0 0 0 2px rgba(0,0,0,0.25)", opacity: 0.85, animation: "livePulse 2s infinite" }}/>}
       {/* en secours sur les captures (le flux s'est fige) : on le voit, et le direct est retente tout seul */}
-      {live === "images" && !friend && !broken && <span data-tip="Le flux continu s'est figé : une image toutes les 2 s, le direct est retenté tout seul"
+      {live === "images" && mode !== "images" && !broken && <span data-tip="Le direct ne passe pas : une image toutes les 2 s, le direct est retenté tout seul"
         style={{ position: "absolute", left: 6, top: 6, padding: "1px 6px", borderRadius: 8, fontSize: 9.5, fontWeight: 800, color: "#fff",
           background: "rgba(15,23,42,0.55)", letterSpacing: ".03em", pointerEvents: "auto" }}>captures</span>}
       {/* en grand : un en-tete (camera, en direct ou captures, fermer), l'image a ses proportions sur un fond sombre */}

@@ -131,10 +131,19 @@ class _Hub:
         self.thread = None
         self.retry_at = 0.0
         self.fails = 0
+        self.pulled = 0.0            # la derniere demande d'une image tiree (/frame)
+        self.pullers = {}            # qui tire, et quand (le nombre de spectateurs des travaux)
 
     def stop(self) -> bool:
         with self.lock:
-            return self.subs == 0 and time.monotonic() - self.idle_since > _IDLE_STOP
+            now = time.monotonic()
+            return self.subs == 0 and now - self.idle_since > _IDLE_STOP and now - self.pulled > _IDLE_STOP
+
+    def viewers(self) -> int:
+        with self.lock:
+            now = time.monotonic()
+            self.pullers = {k: t for k, t in self.pullers.items() if now - t < _IDLE_STOP}
+            return self.subs + len(self.pullers)
 
     def put(self, jpg: bytes) -> None:
         with self.lock:
@@ -395,6 +404,49 @@ async def _printer_conf():
     except Exception:
         model = model_id = ""
     return ip, code, model, model_id
+
+
+# Le direct tire image par image (02/11/2026) : la page demande l'image suivante des qu'elle a recu la precedente.
+# Le flux MJPEG poussait les images dans un tuyau ou elles s'empilaient (tampons du systeme, proxy) : sur une liaison
+# lente, le retard grandissait jusqu'a une image toutes les quelques secondes, et seul un onglet rouvert le remettait a
+# zero ; le relais copain, lui, ne transporte pas de flux. Ici la cadence suit d'elle-meme ce que la liaison laisse
+# passer (8 images/s sur le wifi, moins en 4G ou par le relais), toujours l'image la plus recente, jamais de retard
+# accumule. La source ne change pas : la connexion a la camera reste ouverte sur le serveur (_HUB), pas de capture
+# relancee a chaque image.
+_PULL_WAIT = 4.0
+
+
+@router.get("/frame")
+async def camera_frame(request: Request, after: int = 0, v: str = ""):
+    """La premiere image plus recente que « after » (le numero rendu par X-Seq), attendue au plus 4 s (204 sinon)."""
+    ip, code, model, model_id = await _printer_conf()
+    if not ip or not code:
+        return Response(status_code=503, content=b"non configure")
+    mode = _select_grab(model, model_id)
+    if mode is None:
+        return Response(status_code=503, content=b"Pas de camera chambre sur ce modele")
+
+    def touch():
+        with _HUB.lock:
+            _HUB.pulled = time.monotonic()
+            if v:
+                _HUB.pullers[v[:40]] = _HUB.pulled
+    touch()
+    _ensure_producer(ip, code, mode)
+    end = time.monotonic() + _PULL_WAIT
+    while True:
+        with _HUB.lock:
+            seq, fr, ts, alive = _HUB.seq, _HUB.frame, _HUB.ts, _HUB.thread is not None
+        # « differente » et pas « plus grande » : apres un redemarrage du serveur, les numeros repartent de zero
+        if fr and seq != after and time.monotonic() - ts < 3:
+            _watch_tick(request)
+            return Response(fr, media_type="image/jpeg", headers={"Cache-Control": "no-store", "X-Seq": str(seq)})
+        if time.monotonic() > end or await request.is_disconnected():
+            return Response(status_code=204, headers={"Cache-Control": "no-store"})
+        if not alive:
+            _ensure_producer(ip, code, mode)
+        await asyncio.sleep(0.03)
+        touch()
 
 
 @router.get("/stream")

@@ -156,7 +156,8 @@ def jobs() -> list:
     try:
         from ..api.v1.routes.camera import _HUB
         alive = bool(_HUB.thread and _HUB.thread.is_alive())
-        add("camera", "Flux de la caméra", {"running": alive, "current": f"{_HUB.subs} spectateur{'s' if _HUB.subs > 1 else ''}" if alive else None})
+        n = _HUB.viewers()
+        add("camera", "Flux de la caméra", {"running": alive, "current": f"{n} spectateur{'s' if n > 1 else ''}" if alive else None})
     except Exception:
         pass
     try:
