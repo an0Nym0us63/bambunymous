@@ -988,8 +988,11 @@ def _bundle_purge() -> None:
             pass
 
 
-async def bundle(kind: str, obj_id: int, message: str = "", tz_offset_min: Optional[int] = None, chosen=None) -> dict:
-    """Le partage par une autre appli : le texte, et les fichiers a joindre (nom, type, jeton de leur adresse)."""
+async def bundle(kind: str, obj_id: int, message: str = "", tz_offset_min: Optional[int] = None, chosen=None,
+                 single: bool = False) -> dict:
+    """Le partage par une autre appli : le texte, et les fichiers a joindre (nom, type, jeton de leur adresse).
+    single (02/11/2026) : UN seul fichier, celui choisi (ou aucun) ; les filaments en texte, sauf si ce fichier est leur carte (comme Telegram). WhatsApp envoie
+    un message par photo, et la legende ne va qu'avec l'une d'elles : six photos faisaient six messages."""
     import mimetypes
     import secrets
     share = await build_share(kind, obj_id, tz_offset_min, chosen)
@@ -1000,7 +1003,8 @@ async def bundle(kind: str, obj_id: int, message: str = "", tz_offset_min: Optio
     d.mkdir(parents=True, exist_ok=True)
     files = []
     with tempfile.TemporaryDirectory() as tmp:
-        for i, (f, video) in enumerate(await gather_files(share, Path(tmp))):
+        got = await gather_files(share, Path(tmp))
+        for i, (f, video) in enumerate(got[:1] if single else got):
             name = f"{i + 1:02d}-{f.name}"
             (d / name).write_bytes(f.read_bytes())
             files.append({"name": name, "mime": mimetypes.guess_type(name)[0] or ("video/mp4" if video else "image/jpeg"), "video": video})

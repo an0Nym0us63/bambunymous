@@ -63,7 +63,11 @@ function TimelapsePicker({ items, picked, room, onDone, onClose, z }) {
   );
 }
 
-export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
+// La fenetre de redaction (message, medias, apercu). mode « telegram » : destinations et album ; mode « other »
+// (02/11/2026) : une autre appli, UN seul visuel (WhatsApp envoie un message par photo : six photos faisaient six
+// messages) ; les filaments partent dans le message, sauf si le visuel choisi est leur carte (comme Telegram).
+function ShareCompose({ kind, id, mode = "telegram", onClose, z = 1500 }) {
+  const single = mode === "other";
   const [preview, setPreview] = useState(null);
   const [message, setMessage] = useState("");
   const [sel, setSel] = useState(null);         // ids coches (null tant que non initialise)
@@ -80,7 +84,8 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
     { params: { message: msg, tz: TZ, ...(cardRef.current === false ? { card: 0 } : {}) } })
     .then(r => {
       setPreview(r.data);
-      setPick(cur => cur || r.data.default_ids || []);
+      // une autre appli : d'office le premier visuel joint (hors carte des filaments, qu'on choisit expres)
+      setPick(cur => cur || (single ? (r.data.default_ids || []).filter(x => x !== "filaments").slice(0, 1) : r.data.default_ids || []));
       setSel(cur => {
         if (cur) return cur;
         let last = []; try { last = JSON.parse(localStorage.getItem(LAST_DEST) || "[]"); } catch { /* stockage indisponible */ }
@@ -111,20 +116,20 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
     return () => clearTimeout(timer.current);
   }, [message]);
 
-  // Partage par une autre appli (01/11/2026, WhatsApp d'abord) : le meme contenu, prepare par le serveur ; le menu de
-  // partage du telephone choisit l'appli et la discussion. Dans l'appli Android seulement (02/11/2026) : elle telecharge
-  // les fichiers et ouvre son menu (BambuScan.shareFiles) ; le partage du navigateur, en deux temps, n'etait pas fiable.
-  const [other, setOther] = useState(null);   // null | "prep"
-  const nativeShare = typeof window !== "undefined" && !!window.BambuScan?.shareFiles;
-  const prepOther = async () => {
-    setOther("prep");
+  // Partage par une autre appli (01/11/2026, WhatsApp d'abord) : le meme texte, prepare par le serveur ; le menu de
+  // partage du telephone choisit l'appli et la discussion. Dans l'appli Android seulement : elle telecharge le fichier
+  // et ouvre son menu (BambuScan.shareFiles).
+  const [prep, setPrep] = useState(false);
+  const shareOther = async () => {
+    setPrep(true);
     try {
-      const b = (await client.post(`/share/${kind}/${id}/bundle`, { message, tz: TZ, media: pick || undefined })).data;
+      const b = (await client.post(`/share/${kind}/${id}/bundle`, { message, tz: TZ, media: pick || [], single: true })).data;
       window.BambuScan.shareFiles(JSON.stringify({ text: b.text, title: b.title,
         files: b.files.map(f => ({ url: new URL(f.url, location.href).href, name: f.name, mime: f.mime })) }));
       egg("partage_ailleurs");
+      onClose();
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
-    finally { setOther(null); }
+    finally { setPrep(false); }
   };
 
   // L'envoi part en arriere-plan (store global) : la fenetre se ferme tout de
@@ -139,23 +144,23 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
   const dests = preview?.destinations || [];
   const max = preview?.album_max || 10;
   const nMedia = pick ? pick.length : preview?.media?.length || 0;
-  const toggle = (mid) => setPick(p => p.includes(mid) ? p.filter(x => x !== mid) : p.length < max ? [...p, mid] : p);
+  const toggle = (mid) => setPick(p => single ? (p.includes(mid) ? [] : [mid])
+    : p.includes(mid) ? p.filter(x => x !== mid) : p.length < max ? [...p, mid] : p);
   const tls = preview?.timelapses || [];
   const tlIds = new Set(tls.map(t => t.id));
   // les timelapses choisis d'un groupe rejoignent les vignettes (touche pour retirer)
   const shown = [...(preview?.pool || []), ...tls.filter(t => pick?.includes(t.id)).map(t => ({ ...t, video: true, timelapse: true }))];
   const thumb = { width: 62, height: 62, borderRadius: 12, objectFit: "cover", cursor: "pointer", display: "block", boxSizing: "border-box" };
   const T = "#229ED9";
-  const canSend = dests.length > 0 && !preview?.error;
+  const canSend = !single && dests.length > 0 && !preview?.error;
   const W = "#22C55E";
   return createPortal(
     <FSheet onClose={onClose} z={z} bottom={<>
-      <button onClick={onClose} style={{ ...fBtn, flex: canSend ? "0 0 auto" : 1, padding: canSend ? "0 14px" : undefined }}>{done ? "Fermer" : "Annuler"}</button>
-      {nativeShare && preview && !preview.error && <button onClick={prepOther} disabled={other === "prep"}
-        data-tip="WhatsApp, Messages, mail… : le même message et les mêmes photos, tu choisis l'appli et la discussion"
-        style={{ ...fBtn, flex: canSend ? 1 : 2, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", border: `1px solid ${W}88`,
-          color: other === "prep" ? "var(--muted)" : "#16A34A", background: `${W}14` }}>
-        {other === "prep" ? "Préparation…" : "📲 Autre appli"}</button>}
+      <button onClick={onClose} style={{ ...fBtn, flex: canSend || single ? "0 0 auto" : 1, padding: canSend || single ? "0 14px" : undefined }}>{done ? "Fermer" : "Annuler"}</button>
+      {single && <button onClick={shareOther} disabled={prep || !preview || !!preview.error}
+        style={{ ...fBtn, flex: 1, minWidth: 0, border: "none", color: prep ? "var(--muted)" : "#fff",
+          background: prep ? "var(--surface2)" : `linear-gradient(135deg, ${W}, #16A34A)`, boxShadow: prep ? "none" : `0 8px 18px -10px ${W}` }}>
+        {prep ? "Préparation…" : "📲 Partager"}</button>}
       {canSend && <button onClick={send} disabled={busy || !sel?.length || !!done}
         style={{ ...fBtn, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", border: "none", color: busy && !done ? "var(--muted)" : "#fff",
           cursor: busy || done ? "default" : "pointer", opacity: !sel?.length ? .55 : 1,
@@ -164,12 +169,14 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
         <Send size={15}/> {done ? `✓ Envoyé · ${done.destination}` : busy ? "Envoi…"
           : sel?.length > 1 ? `Telegram · ${sel.length}` : "Telegram"}</button>}
     </>}>
-      <div style={{ padding: "52px 18px 16px", background: `radial-gradient(circle at 15% 40%, ${T}55, transparent 60%), linear-gradient(135deg, ${T}22, transparent 70%), var(--surface2)` }}>
+      <div style={{ padding: "52px 18px 16px", background: `radial-gradient(circle at 15% 40%, ${single ? W : T}55, transparent 60%), linear-gradient(135deg, ${single ? W : T}22, transparent 70%), var(--surface2)` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ width: 46, height: 46, borderRadius: 15, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-            background: `linear-gradient(135deg, ${T}, #3B82F6)`, boxShadow: `0 8px 18px -8px ${T}` }}><Send size={21} color="#fff"/></span>
+            background: single ? `linear-gradient(135deg, ${W}, #16A34A)` : `linear-gradient(135deg, ${T}, #3B82F6)`, boxShadow: `0 8px 18px -8px ${single ? W : T}`,
+            fontSize: 22 }}>{single ? "📲" : <Send size={21} color="#fff"/>}</span>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: T }}>Partager</div>
+            <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: single ? "#16A34A" : T }}>
+              {single ? "Partager · autre appli" : "Partager · Telegram"}</div>
             <div style={{ fontSize: 20, fontWeight: 900, color: "var(--text)", lineHeight: 1.2, overflowWrap: "anywhere" }}>
               {preview?.title || KIND_THIS[kind] || "Ce partage"}</div>
           </div>
@@ -183,9 +190,12 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
           <p style={{ fontSize: 13, fontWeight: 700, color: "#ef4444" }}>{preview.error}</p>
         ) : (<>
           {/* sans Telegram, « 📲 Autre appli » partage quand meme (01/11/2026) */}
-          {dests.length === 0 ? <p style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5, margin: 0 }}>
+          {single ? <p style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5, margin: 0 }}>
+            Un seul visuel part, avec le message en légende (WhatsApp envoie un message par photo). Les filaments sont écrits
+            dans le message, sauf si tu choisis leur carte. Rien de coché : le texte seul.</p>
+          : dests.length === 0 ? <p style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5, margin: 0 }}>
             Telegram : aucune destination (relie ton compte et ajoute des discussions dans Paramètres › Notifs › Partage
-            Telegram).{nativeShare && " « 📲 Autre appli » partage le même contenu par WhatsApp ou une autre appli."}</p>
+            Telegram).</p>
           : <FCard t="Destinations Telegram" i="💬" c={T}>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
               {dests.map(d => {
@@ -212,7 +222,7 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
           </FCard>
 
           <FCard t="Ce qui partira" i="👀" c="#22C55E" aside={<span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)" }}>
-            {nMedia ? `${nMedia} photo${nMedia > 1 ? "s" : ""} ou vidéo${nMedia > 1 ? "s" : ""}` : "texte seul"}{pick?.includes("camera") && " · caméra"}</span>}>
+            {single ? (nMedia ? "1 visuel" : "texte seul") : nMedia ? `${nMedia} photo${nMedia > 1 ? "s" : ""} ou vidéo${nMedia > 1 ? "s" : ""}` : "texte seul"}{pick?.includes("camera") && " · caméra"}</span>}>
             {/* Medias joints : touche pour retirer ou ajouter, 10 au plus (limite Telegram). */}
             {(shown.length > 0 || preview.live) && (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "6px 0 10px" }}>
@@ -239,7 +249,7 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
                 })}
               </div>
             )}
-            {kind === "group" && tls.length > 0 && (
+            {kind === "group" && tls.length > 0 && !single && (
               <button onClick={() => setTlOpen(true)} style={{ ...fBtn, margin: "0 0 10px", border: "1px solid var(--border)", fontSize: 13 }}>
                 🎬 Joindre des timelapses{tls.some(t => pick?.includes(t.id)) ? ` · ${tls.filter(t => pick?.includes(t.id)).length} / ${tls.length}` : ` (${tls.length})`}</button>
             )}
@@ -260,4 +270,51 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
     </FSheet>,
     document.body
   );
+}
+
+// Le bouton « Partager » ouvre d'abord ce menu (02/11/2026) : copier le lien MakerWorld, Telegram, ou une autre appli
+// (dans l'appli Android). Le lien est lu a l'ouverture, pour etre copie d'un seul geste.
+export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
+  const [mode, setMode] = useState(null);
+  const [links, setLinks] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const nativeShare = typeof window !== "undefined" && !!window.BambuScan?.shareFiles;
+  useEffect(() => {
+    client.get(`/share/${kind}/${id}/preview`, { params: { tz: TZ } }).then(r => setLinks(r.data.links || [])).catch(() => setLinks([]));
+  }, [kind, id]);
+  if (mode) return <ShareCompose kind={kind} id={id} mode={mode} z={z} onClose={onClose}/>;
+  const copy = async () => {
+    const t = (links || []).join("\n");
+    try { await navigator.clipboard.writeText(t); }
+    catch {
+      const ta = document.createElement("textarea");
+      ta.value = t; ta.style.cssText = "position:fixed;opacity:0"; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } finally { ta.remove(); }
+    }
+    setCopied(true);
+    egg("lien_copie");
+    setTimeout(onClose, 900);
+  };
+  const row = (icon, c, title, sub, onClick, dis) => (
+    <button type="button" onClick={onClick} disabled={dis} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left",
+      padding: "12px 14px", borderRadius: 16, cursor: dis ? "default" : "pointer", opacity: dis ? .55 : 1,
+      border: `1px solid ${c}55`, background: `linear-gradient(135deg, ${c}1f, transparent 70%), var(--surface)` }}>
+      <span style={{ width: 40, height: 40, borderRadius: 13, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19,
+        background: `linear-gradient(135deg, ${c}, ${c}bb)`, color: "#fff", boxShadow: `0 8px 18px -10px ${c}` }}>{icon}</span>
+      <span style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ fontSize: 15, fontWeight: 900, color: "var(--text)" }}>{title}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.35 }}>{sub}</span>
+      </span>
+    </button>);
+  return createPortal(
+    <FSheet onClose={onClose} z={z} bottom={<button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Annuler</button>}>
+      <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#8B5CF6" }}>Partager</div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: "var(--text)", marginBottom: 4 }}>{KIND_THIS[kind] || "Ce partage"}</div>
+        {(links == null || links.length > 0) && row(copied ? "✓" : "🔗", "#8B5CF6", copied ? "Lien copié" : `Copier le lien MakerWorld${links?.length > 1 ? "s" : ""}`,
+          links == null ? "…" : links.length > 1 ? `${links.length} liens, un par ligne` : links[0], copy, !links?.length)}
+        {row(<Send size={19}/>, "#229ED9", "Telegram", "Le message, les photos et la carte des filaments, en album, dans tes discussions", () => setMode("telegram"))}
+        {nativeShare && row("📲", "#22C55E", "Autre appli", "WhatsApp, Messages, mail… : le message et un visuel au choix", () => setMode("other"))}
+      </div>
+    </FSheet>, document.body);
 }

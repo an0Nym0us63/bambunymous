@@ -75,7 +75,7 @@ async def share_preview(kind: str, obj_id: int, message: str = "", tz: int | Non
         share["card"] = None
     return {"title": share["title"], "caption_html": tg.render_caption(share, message),
             "media": (["camera"] if share["live"] else []) + [f"makerworld-{k}" for k, _u in enumerate(share.get("remote") or [])] + [p.name for p in share["media"]] + (["filaments.jpg"] if share.get("card") else []),
-            "live": bool(share["live"]),
+            "live": bool(share["live"]), "links": share.get("links") or [],
             # Medias qu'on peut joindre, et ceux choisis d'office (a cocher dans l'appli).
             "pool": share["pool"], "timelapses": share.get("timelapses") or [], "default_ids": share["default_ids"], "album_max": tg.ALBUM_MAX,
             "destinations": [{"id": d["id"], "label": d["label"]} for d in await tg.destinations()]}
@@ -95,7 +95,7 @@ async def share_send(kind: str, obj_id: int, body: dict = Body({}), _: str = Dep
 @router.post("/{kind}/{obj_id}/bundle")
 async def share_bundle(kind: str, obj_id: int, body: dict = Body({}), _: str = Depends(require_admin)):
     chosen = body.get("media") if isinstance(body.get("media"), list) else None
-    b = await _call(tg.bundle(_kind(kind), obj_id, body.get("message", ""), body.get("tz"), chosen))
+    b = await _call(tg.bundle(_kind(kind), obj_id, body.get("message", ""), body.get("tz"), chosen, bool(body.get("single"))))
     return {**b, "files": [{**f, "url": f"/api/v1/share/bundle/{b['token']}/{f['name']}"} for f in b["files"]]}
 
 
