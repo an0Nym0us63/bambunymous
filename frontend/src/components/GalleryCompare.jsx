@@ -50,6 +50,17 @@ export default function GalleryCompare({
   const effectivePageSize = swatchMode ? 9999 : pageSize;
   const [visibleCount, setVisibleCount] = useState(effectivePageSize);
   const sentinelRef = useRef(null);
+  // le nombre de colonnes de la grille : un paquet s'arrondit a des rangees entieres (02/11/2026 : sur grand ecran, 30
+  // vignettes sur 12 colonnes coupaient la derniere rangee, on se croyait a la fin)
+  const gridRef = useRef(null);
+  const [cols, setCols] = useState(1);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const read = () => { const n = getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length; setCols(Math.max(1, n || 1)); };
+    const ro = new ResizeObserver(read); ro.observe(el); read();
+    return () => ro.disconnect();
+  }, [items?.length > 0]);
 
   // Reset la pagination si la liste source change (ex: changement d'onglet/filtre)
   useEffect(() => { setVisibleCount(effectivePageSize); }, [items, effectivePageSize]);
@@ -60,7 +71,7 @@ export default function GalleryCompare({
     if (!el) return;
     const obs = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) {
-        setVisibleCount(c => Math.min(c + effectivePageSize, items?.length || 0));
+        setVisibleCount(c => Math.min(c + effectivePageSize, items?.length || 0));     // arrondi aux rangees a l'affichage
       }
     }, { rootMargin: "600px" });
     obs.observe(el);
@@ -125,12 +136,13 @@ export default function GalleryCompare({
       <p style={{ color:"var(--muted)", fontSize:13, fontWeight:600, margin:0 }}>{emptyLabel}</p></div>;
   }
 
-  const visibleItems = items.slice(0, visibleCount);
+  const shownCount = Math.min(items.length, Math.ceil(visibleCount / cols) * cols);
+  const visibleItems = items.slice(0, shownCount);
 
   return (
     <div style={{ position:"relative" }}>
 
-      <div style={{ display:"grid",
+      <div ref={gridRef} style={{ display:"grid",
         gridTemplateColumns: swatchMode
           ? `repeat(auto-fill,minmax(${swatchInfo ? 108 : 72}px,1fr))`
           // 110 px sur telephone (inchange), jusqu'a 180 px sur grand ecran :
@@ -272,7 +284,7 @@ export default function GalleryCompare({
         })}
       </div>
 
-      {visibleCount < items.length && (
+      {shownCount < items.length && (
         <div ref={sentinelRef} style={{ textAlign:"center", padding:"14px 0", color:"var(--muted)", fontSize:11 }}>
           Chargement…
         </div>
