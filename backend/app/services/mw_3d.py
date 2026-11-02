@@ -2030,8 +2030,13 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
     col = {str(k): norm(c) for k, c in (colors or {}).items() if str(k) in clean and pickok(c)} if isinstance(colors, dict) else {}
     pts, ntri, nrun = [], 0, 0
     okint = lambda t: isinstance(t, int) and not isinstance(t, bool) and 0 <= t < 50_000_000
+    # une zone peinte porte la cle de la piece D'ORIGINE (celle du fichier du plateau) : une piece separee, coupee ou
+    # copiee n'est plus enregistree que par ses morceaux (« 0:0:0:1 », « 0:0:0#2 »). Sa peinture se garde des qu'un
+    # morceau en descend (02/11/2026 : elle etait jetee, et disparaissait a la reouverture)
+    def known(k):
+        return k in clean or any(c.startswith(k + ":") or c.startswith(k + "#") for c in clean)
     for z in (paints or [])[:500] if isinstance(paints, list) else []:
-        if not (isinstance(z, dict) and str(z.get("k")) in clean and pickok(z.get("c")) and hexok(z.get("own"))):
+        if not (isinstance(z, dict) and known(str(z.get("k"))) and pickok(z.get("c")) and hexok(z.get("own"))):
             continue
         if isinstance(z.get("r"), list) and len(z["r"]) % 2 == 0 and all(okint(t) for t in z["r"]):
             r = [int(t) for t in z["r"]]
