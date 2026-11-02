@@ -41,6 +41,8 @@ class Filament(Base):
     fila_color_code: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # ex: 10600 (code couleur catalogue Bambu)
     # l'entree du catalogue des autres marques (02/11/2026) : « ofd:<couleur> » (Open Filament Database)
     catalog_ref: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # ce qu'on garde a nous au lieu du catalogue (03/11/2026), CSV : name, color, family, type, brand, spool
+    catalog_skip: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     external_filament_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     translated_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # nom localisé
     reference_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)

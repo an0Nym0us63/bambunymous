@@ -2656,13 +2656,17 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
       : (entry.color_hex || "");
     // autres marques (02/11/2026) : la marque, le poids net et le support du catalogue (le serveur range ce support
     // dans les Parametres) ; pas de profil ni de code couleur Bambu
-    const other = entry.source === "ofd";
+    const other = !!entry.source && entry.source !== "bambu";
     if (other && entry.spool_weight_g) tareTouched.current = true;
+    // ce que le catalogue a mis : ce qu'on changera ensuite reste a nous (catalog_skip), la synchro ne l'ecrasera pas
+    pre.current = { name: entry.name, translated_name: entry.name_fr || "", colors_input: colorsInput, fila_type: entry.fila_type,
+      material: other ? entry.family || entry.fila_type : entry.fila_type, manufacturer: other ? entry.brand : "Bambu Lab",
+      spool_weight_g: other && entry.spool_weight_g ? String(Math.round(entry.spool_weight_g)) : null };
     setForm(f => ({
       price: f.price, comment: f.comment,
       spool_weight_g:  other && entry.spool_weight_g ? String(Math.round(entry.spool_weight_g)) : f.spool_weight_g,
       spool_tare_name: other && entry.spool_weight_g ? "" : f.spool_tare_name,
-      catalog_ref:     other ? `ofd:${entry.ref}` : "",
+      catalog_ref:     other ? `${entry.source}:${entry.ref}` : "",
       name:            entry.name,
       manufacturer:    other ? entry.brand : "Bambu Lab",
       material:        other ? entry.family || entry.fila_type : entry.fila_type,
@@ -2678,6 +2682,16 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
   };
 
   const [duplicate, setDuplicate] = useState(null);
+  const pre = useRef(null);
+  const skipOf = () => {
+    const p = pre.current;
+    if (!p) return undefined;
+    const diff = k => String(form[k] ?? "").trim() !== String(p[k] ?? "").trim();
+    const out = [diff("name") || diff("translated_name") ? "name" : null, diff("colors_input") ? "color" : null, diff("fila_type") ? "type" : null,
+      form.catalog_ref && diff("material") ? "family" : null, diff("manufacturer") ? "brand" : null,
+      p.spool_weight_g != null && diff("spool_weight_g") ? "spool" : null].filter(Boolean);
+    return out.length ? out.join(",") : undefined;
+  };
 
   const save = async () => {
     const { color: col, colors_array: ca, multicolor_type: mct } = parseColorsInput(form.colors_input, form.multicolor_type);
@@ -2699,6 +2713,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
         profile_id:        form.profile_id || undefined,
         fila_color_code:   form.fila_color_code || undefined,
         catalog_ref:       form.catalog_ref || undefined,
+        catalog_skip:      skipOf(),
         filament_weight_g: Number(form.weight) || 1000,
         price:             form.price !== "" && form.price != null ? Number(form.price) : undefined,
         spool_weight_g:    form.spool_weight_g !== "" && form.spool_weight_g != null ? Number(form.spool_weight_g) : undefined,
@@ -2787,7 +2802,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
               {catalogEntry && (
                 <div style={{ padding:"9px 12px", borderRadius:14, fontSize:12, fontWeight:800, color:"#16a34a",
                   background:"rgba(34,197,94,0.10)", border:"1px solid rgba(34,197,94,0.3)" }}>
-                  📦 Pré-rempli depuis {catalogEntry.source === "ofd" ? `le catalogue ${catalogEntry.brand}` : "le catalogue Bambu"} · {catalogEntry.fila_type}{catalogEntry.source === "ofd" ? "" : ` · ${catalogEntry.color_code}`}
+                  📦 Pré-rempli depuis {catalogEntry.source === "own" ? "notre catalogue" : catalogEntry.source === "ofd" ? `le catalogue ${catalogEntry.brand}` : "le catalogue Bambu"} · {catalogEntry.fila_type}{catalogEntry.source && catalogEntry.source !== "bambu" ? "" : ` · ${catalogEntry.color_code}`}{catalogEntry.hex_approx ? " · teinte approchée, à vérifier" : ""}
                 </div>
               )}
               <FCard t="Identité" i="🏷️" c="#8B5CF6">

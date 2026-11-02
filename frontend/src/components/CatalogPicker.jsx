@@ -154,9 +154,10 @@ export default function CatalogPicker({ onPick, field, family0 = "", type0 = "",
                 )}
               </div>
               <p style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {e.source === "ofd"
+                {e.source && e.source !== "bambu"
                   ? <span data-tip={e.spool_src === "catalogue" ? "Poids du support vide donné par le catalogue" : e.spool_src ? "Poids du support vide estimé (SpoolmanDB : même marque, même matière)" : undefined}>
-                      {e.fila_type}{spoolTxt(e)}{e.discontinued ? " · plus fabriqué" : ""}</span>
+                      {e.source === "own" && <span style={{ color: "#8B5CF6", fontWeight: 800 }}>★ notre catalogue · </span>}
+                      {e.fila_type}{spoolTxt(e)}{e.hex_approx ? " · teinte approchée" : ""}{e.discontinued ? " · plus fabriqué" : ""}</span>
                   : <>{e.fila_type} · <span style={{ fontFamily: "monospace" }}>{e.fila_color_code}</span></>}
               </p>
             </div>
@@ -170,29 +171,43 @@ export default function CatalogPicker({ onPick, field, family0 = "", type0 = "",
 
 // Rattacher un filament existant au catalogue (02/11/2026) : choisir l'entree, voir ce qui change, valider. Le filament
 // prend ses noms, son type, son code couleur, ses couleurs et son profil, comme la synchro, qui le retrouvera ensuite.
-// f : {id, name, color, material, fila_type}
+// Chaque champ se coche ou non (03/11/2026) : ce qui n'est pas importe reste a nous (catalog_skip), et la synchro le garde.
+// f : {id, name, color, material, fila_type, manufacturer, spool_weight_g, catalog_skip}
+export const isOther = e => !!e?.source && e.source !== "bambu";
 export function CatalogLinkSheet({ f, onClose, onDone, z = 1600 }) {
   const [pick, setPick] = useState(null);
   const [saving, setSaving] = useState(false);
+  const kept0 = new Set(String(f.catalog_skip || "").split(",").filter(Boolean));
+  const [imp, setImp] = useState(() => Object.fromEntries(["name", "family", "type", "color", "brand", "spool"].map(g => [g, !kept0.has(g)])));
   const field = { width: "100%", boxSizing: "border-box", height: 42, padding: "0 12px", borderRadius: 12, fontSize: 14, fontWeight: 700,
     background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", outline: "none" };
   const hex = String(f.color || "").replace(/^#/, "");
+  const other = isOther(pick);
   const save = async () => {
     setSaving(true);
     try {
-      const { data } = await client.post(`/filaments/filaments/${f.id}/link-catalog`, pick.source === "ofd" ? { source: "ofd", ref: pick.ref }
-        : { fila_id: pick.fila_id, fila_color_code: pick.fila_color_code });
-      egg(pick.source === "ofd" ? "autre_marque" : "catalogue_rattache");
+      const skip = Object.entries(imp).filter(([, on]) => !on).map(([g]) => g);
+      const { data } = await client.post(`/filaments/filaments/${f.id}/link-catalog`, { ...(other ? { source: pick.source, ref: pick.ref }
+        : { fila_id: pick.fila_id, fila_color_code: pick.fila_color_code }), skip });
+      egg(other ? "autre_marque" : "catalogue_rattache");
       if (data.twin) showAlert(`Le filament #${data.twin.id} (${data.twin.name}) est déjà rattaché à la même entrée : s'il s'agit d'un doublon, fusionne-les.`);
       onDone?.(data);
       onClose();
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setSaving(false); }
   };
-  const row = (l, a, b) => <div style={{ display: "flex", gap: 8, fontSize: 12.5, fontWeight: 700 }}>
-    <span style={{ color: "var(--muted)", width: 92, flexShrink: 0 }}>{l}</span>
-    <span style={{ color: "var(--muted)", textDecoration: a && a !== b ? "line-through" : "none" }}>{a || "—"}</span>
-    {a !== b && <><span style={{ color: "var(--muted)" }}>→</span><span style={{ color: "var(--text)" }}>{b || "—"}</span></>}</div>;
+  // une ligne : la case « importer », l'avant et l'apres (barre l'avant seulement s'il est remplace)
+  const row = (g, l, a, b) => {
+    const on = g ? imp[g] : true, same = (a || "") === (b || "");
+    return <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 700, cursor: g ? "pointer" : "default", minWidth: 0 }}>
+      {g ? <input type="checkbox" checked={on} onChange={e => setImp(m => ({ ...m, [g]: e.target.checked }))} style={{ width: 17, height: 17, flexShrink: 0, accentColor: "#3B82F6" }}/>
+        : <span style={{ width: 17, flexShrink: 0 }}/>}
+      <span style={{ color: "var(--muted)", width: 86, flexShrink: 0 }}>{l}</span>
+      <span style={{ minWidth: 0, display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <span style={{ color: on && !same ? "var(--muted)" : "var(--text)", textDecoration: on && !same && a ? "line-through" : "none" }}>{a || "—"}</span>
+        {on && !same && <><span style={{ color: "var(--muted)" }}>→</span><span style={{ color: "var(--text)" }}>{b || "—"}</span></>}
+        {!on && !same && <span style={{ color: "#d97706" }}>gardé</span>}</span></label>;
+  };
   return createPortal(
     <FSheet onClose={onClose} z={z} bottom={pick ? <>
       <button onClick={() => setPick(null)} style={{ ...fBtn, flex: 1, color: "var(--muted)" }}>← Autre</button>
@@ -206,19 +221,26 @@ export function CatalogLinkSheet({ f, onClose, onDone, z = 1600 }) {
           <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", minWidth: 0 }}>#{f.id} {f.name}</div>
         </div>
         {pick ? <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface2)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 2 }}>
             <CatalogSwatch e={pick} size={34}/>
-            <div style={{ fontSize: 14, fontWeight: 900, color: "var(--text)" }}>{pick.name_fr || pick.name}</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 900, color: "var(--text)" }}>{pick.name_fr || pick.name}</div>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{pick.brand} · {pick.fila_type}{pick.source === "own" ? " · notre catalogue" : ""}</div>
+            </div>
           </div>
-          {row("Type", f.fila_type || f.material, pick.fila_type)}
-          {pick.source === "ofd" ? row("Marque", f.manufacturer, f.manufacturer || pick.brand) : row("Code couleur", f.fila_color_code, pick.fila_color_code)}
-          {row("Couleur", hex ? `#${hex.slice(0, 6)}` : "", `#${(pick.color_hex || "").slice(0, 6)}`)}
-          {pick.source === "ofd" && f.spool_weight_g == null && pick.spool_weight_g > 0 &&
-            row("Support vide", "", `${pick.spool_src === "catalogue" ? "" : "≈ "}${Math.round(pick.spool_weight_g)} g (rangé dans les Paramètres)`)}
+          <div style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)" }}>Coche ce qui vient du catalogue ; le reste est gardé, et la synchro le gardera.</div>
+          {row("name", "Nom", f.name, pick.name_fr || pick.name)}
+          {row("family", "Famille", f.material, pick.family)}
+          {row("type", "Sous-type", f.fila_type, pick.fila_type)}
+          {row("color", "Couleur", hex ? `#${hex.slice(0, 6).toUpperCase()}` : "", `#${(pick.color_hex || "").slice(0, 6).toUpperCase()}${pick.hex_approx ? " (approchée)" : ""}`)}
+          {other && !(f.manufacturer || "").trim() && row("brand", "Marque", "", pick.brand)}
+          {other && f.spool_weight_g == null && pick.spool_weight_g > 0 &&
+            row("spool", "Support vide", "", `${pick.spool_src === "catalogue" ? "" : "≈ "}${Math.round(pick.spool_weight_g)} g`)}
+          {!other && row(null, "Code couleur", f.fila_color_code, pick.fila_color_code)}
           <p style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", margin: "4px 0 0", lineHeight: 1.4 }}>
-            {pick.source === "ofd" ? "Noms, gamme et couleurs viennent du catalogue de la marque (Open Filament Database) ; la synchro le tiendra à jour. Son profil d'impression ne change pas."
-              : "Noms, type, code couleur, couleurs et profil viennent du catalogue, comme à la synchro ; la synchro le retrouvera ensuite par ce code."}
-            {" "}Ses bobines, son prix et son stock ne changent pas.</p>
+            {other ? `Rattaché au catalogue ${pick.source === "own" ? "de l'appli" : "de la marque (Open Filament Database)"} : la synchro tiendra à jour ce qui est coché. Son profil d'impression ne change pas.`
+              : "Le code couleur et le profil Bambu font le rattachement : la synchro le retrouvera par ce code."}
+            {" "}Ses bobines, son prix et son stock ne changent pas{other && f.spool_weight_g == null && pick.spool_weight_g > 0 ? " ; le support vide se range dans les Paramètres" : ""}.</p>
         </div>
         : <CatalogPicker onPick={setPick} field={field} family0={f.material || ""} type0={f.fila_type || ""} near={hex || null} brand0={f.manufacturer || ""}/>}
       </div>

@@ -16,8 +16,9 @@ const val = (k, v) => v == null || v === "" ? "—" : k === "color" ? `#${String
 const sw = (hex, size = 26) => <span style={{ width: size, height: size, borderRadius: Math.round(size * 0.28), flexShrink: 0,
   background: hex ? `#${String(hex).replace(/^#/, "").slice(0, 6)}` : "repeating-linear-gradient(135deg, var(--border) 0 3px, transparent 3px 6px)",
   boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.22)" }}/>;
-const keyOf = p => p.source === "ofd" ? `o:${p.ref}` : `b:${p.fila_id}:${p.fila_color_code}`;
-const bodyOf = p => p.source === "ofd" ? { source: "ofd", ref: p.ref } : { fila_id: p.fila_id, fila_color_code: p.fila_color_code };
+const other = p => p.source && p.source !== "bambu";
+const keyOf = p => other(p) ? `${p.source}:${p.ref}` : `b:${p.fila_id}:${p.fila_color_code}`;
+const bodyOf = p => other(p) ? { source: p.source, ref: p.ref } : { fila_id: p.fila_id, fila_color_code: p.fila_color_code };
 
 export default function CatalogSyncSheet({ onClose, onDone, z = 1500 }) {
   const [d, setD] = useState(null);
@@ -110,7 +111,7 @@ export default function CatalogSyncSheet({ onClose, onDone, z = 1500 }) {
               <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
                 {x.proposals.map((p, k) => { const sel = pick[x.id] === keyOf(p);
                   return <button key={keyOf(p)} type="button" onClick={() => { setPick(m => ({ ...m, [x.id]: keyOf(p) })); setOk(m => ({ ...m, [x.id]: true })); }}
-                    data-tip={`${p.brand} · ${p.fila_type}${p.source === "ofd" && p.spool_weight_g ? ` · support ${Math.round(p.spool_weight_g)} g` : p.fila_color_code ? ` · ${p.fila_color_code}` : ""}`}
+                    data-tip={`${p.brand} · ${p.fila_type}${p.source === "own" ? " · notre catalogue" : ""}${other(p) && p.spool_weight_g ? ` · support ${Math.round(p.spool_weight_g)} g` : p.fila_color_code ? ` · ${p.fila_color_code}` : ""}${p.hex_approx ? " · teinte approchée" : ""}`}
                     style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 9px", borderRadius: 12, cursor: "pointer", flexShrink: 0, maxWidth: 210, textAlign: "left",
                       border: sel ? "2px solid #F59E0B" : "1px solid var(--border)", background: sel ? "color-mix(in srgb, #F59E0B 12%, var(--surface))" : "var(--surface)" }}>
                     <CatalogSwatch e={p} size={24}/>

@@ -1,0 +1,33 @@
+{
+  "_doc": "Notre catalogue : les couleurs qu'aucun autre catalogue n'a (Bambu officiel, Open Filament Database). S'ajoute aux autres dans « Autres marques ». id : stable (sert au rattachement des filaments), jamais renomme. colors : hex sans #. hex_approx : teinte non publiee par le fabricant, approchee (dire d'ou). spool_weight_g absent : celui de SpoolmanDB pour la marque. source : d'ou viennent les donnees.",
+  "entries": [
+    {
+      "id": "geeetech-pla-skin",
+      "brand": "Geeetech",
+      "gamme": "PLA",
+      "family": "PLA",
+      "name": "Skin",
+      "name_fr": "Peau",
+      "colors": ["E6BA83"],
+      "hex_approx": true,
+      "filament_weight_g": 1000,
+      "gtin": "6974994172613",
+      "print_temp": [185, 215],
+      "source": "3DJake, fiche GEEETECH PLA Skin (03/11/2026). Teinte non publiee : celle du Matte PLA Skin Geeetech (Open Filament Database)."
+    },
+    {
+      "id": "geeetech-hs-pla-skin",
+      "brand": "Geeetech",
+      "gamme": "HS-PLA",
+      "family": "PLA",
+      "name": "Skin",
+      "name_fr": "Peau",
+      "colors": ["E6BA83"],
+      "hex_approx": true,
+      "filament_weight_g": 1000,
+      "gtin": "6974994175041",
+      "print_temp": [210, 230],
+      "source": "3DJake, fiche GEEETECH HS-PLA Skin (03/11/2026). Teinte non publiee : celle du Matte PLA Skin Geeetech (Open Filament Database)."
+    }
+  ]
+}

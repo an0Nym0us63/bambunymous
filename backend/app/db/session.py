@@ -208,6 +208,7 @@ async def _migrate():
         ("filaments", "spool_weight_g",       "REAL"),
         ("filaments", "spool_tare_name",      "TEXT"),
         ("filaments", "catalog_ref",          "TEXT"),
+        ("filaments", "catalog_skip",         "TEXT"),
         ("prints",    "mw_profile_id",        "TEXT"),
         ("prints",    "mw_plates",            "TEXT"),
         ("prints",    "paused_seconds",       "REAL"),

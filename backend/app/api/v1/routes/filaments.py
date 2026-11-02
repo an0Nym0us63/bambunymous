@@ -94,6 +94,7 @@ class FilamentOut(BaseModel):
     profile_id: Optional[str]
     fila_color_code: Optional[str] = None
     catalog_ref: Optional[str] = None     # catalogue des autres marques (« ofd:… »)
+    catalog_skip: Optional[str] = None    # ce qu'on garde a nous au lieu du catalogue
     swatch: bool
     label_printed: bool = False
     label_printed_at: Optional[datetime] = None
@@ -129,6 +130,7 @@ class FilamentCreate(BaseModel):
     profile_id: Optional[str] = None
     fila_color_code: Optional[str] = None
     catalog_ref: Optional[str] = None
+    catalog_skip: Optional[str] = None
     swatch: bool = False
     # None = « je n'en parle pas » : un appelant qui ne connait pas le champ ne
     # doit pas decocher l'etiquette en enregistrant le reste de la fiche.
@@ -1572,7 +1574,19 @@ def _get_catalog():
 _CTYPE_FR = {"单色": "monochrome", "渐变色": "gradient", "多拼色": "coaxial"}
 
 
-def _apply_catalog(f, entry: dict, en_to_fr: dict, link: bool = False) -> list:
+# Ce qu'un catalogue peut ecrire, par groupe (03/11/2026) : on choisit au rattachement ce qu'on importe ; le reste est garde
+# a nous (catalog_skip), et la synchro ne l'ecrase plus. Le code couleur et le profil Bambu, eux, sont le rattachement.
+CAT_GROUPS = {"name": ("name", "name_en", "translated_name"), "color": ("color", "colors_array", "multicolor_type"),
+              "family": ("material",), "type": ("fila_type",), "brand": ("manufacturer",), "spool": ("spool_weight_g", "spool_tare_name")}
+_GROUP_OF = {a: g for g, attrs in CAT_GROUPS.items() for a in attrs}
+
+
+def _skips(f, skip=None) -> set:
+    raw = skip if skip is not None else (getattr(f, "catalog_skip", None) or "").split(",")
+    return {x.strip() for x in raw if x and x.strip() in CAT_GROUPS}
+
+
+def _apply_catalog(f, entry: dict, en_to_fr: dict, link: bool = False, skip=None) -> list:
     """Met le filament aux noms, type, code couleur et couleurs de cette entree du catalogue Bambu ; rend les champs
     changes. link (rattachement a la main, 02/11/2026) : aussi le profil, la marque et la couleur, celle du catalogue
     (la synchro, elle, a trouve l'entree par la couleur)."""
@@ -1583,8 +1597,11 @@ def _apply_catalog(f, entry: dict, en_to_fr: dict, link: bool = False) -> list:
     colors = [c.lstrip("#")[:8] for c in entry.get("fila_color", [])]
     ctype = _CTYPE_FR.get(entry.get("fila_color_type", ""), "monochrome")
     changed: list = []
+    keep = _skips(f, skip)
 
     def upd(attr, val):
+        if _GROUP_OF.get(attr) in keep:
+            return
         if getattr(f, attr, None) != val:
             setattr(f, attr, val)
             changed.append(attr)
@@ -1623,12 +1640,15 @@ async def _brand_spelling(db, brand: str) -> str:
     return brand
 
 
-async def _apply_ofd(db, f, e: dict, link: bool = False) -> list:
+async def _apply_ofd(db, f, e: dict, link: bool = False, skip=None) -> list:
     """Comme _apply_catalog, pour une couleur du catalogue des autres marques (vue de ofd_catalog.view) : memes champs
     qu'un import Bambu. link : aussi la couleur, la marque si vide, et le support s'il n'en a pas."""
     changed: list = []
+    keep = _skips(f, skip)
 
     def upd(attr, val):
+        if _GROUP_OF.get(attr) in keep:
+            return
         if getattr(f, attr, None) != val:
             setattr(f, attr, val)
             changed.append(attr)
@@ -1639,7 +1659,7 @@ async def _apply_ofd(db, f, e: dict, link: bool = False) -> list:
     upd("material", family_of(e.get("fila_type"), e.get("family") or f.material))
     upd("fila_type", e.get("fila_type"))
     upd("multicolor_type", e.get("color_type_fr") or "monochrome")
-    upd("catalog_ref", f"ofd:{e['ref']}")
+    upd("catalog_ref", f"{e.get('source') or 'ofd'}:{e['ref']}")
     cols = e.get("colors") or []
     if len(cols) > 1:
         upd("colors_array", ",".join(f"#{c}" for c in cols))
@@ -1651,7 +1671,7 @@ async def _apply_ofd(db, f, e: dict, link: bool = False) -> list:
             upd("color", cols[0])
         if len(cols) <= 1:
             upd("colors_array", None)
-        if f.spool_weight_g is None and e.get("spool_weight_g"):
+        if f.spool_weight_g is None and e.get("spool_weight_g") and "spool" not in keep:
             from ....services import spool_tare
             t = await spool_tare.ensure(db, f.manufacturer or e.get("brand"), e["spool_weight_g"])
             upd("spool_weight_g", float(t["weight_g"]))
@@ -1663,15 +1683,30 @@ async def _apply_ofd(db, f, e: dict, link: bool = False) -> list:
 @router.get("/catalog/ofd/brands")
 async def ofd_brands(_: str = Depends(get_current_user)):
     """Les marques du catalogue des autres marques (02/11/2026) : nom, nombre de couleurs, familles."""
-    from ....services import ofd_catalog
-    return ofd_catalog.brands()
+    from ....services import ofd_catalog, own_catalog
+    r = ofd_catalog.brands()
+    own = own_catalog.brands()
+    out = []
+    for b in r.get("brands") or []:
+        k = ofd_catalog.norm(b["name"])
+        if k in own:                                 # notre catalogue complete la marque
+            _n, n, fams = own.pop(k)
+            b = {**b, "count": b["count"] + n, "families": sorted({*b["families"], *(x for x in fams if x)}), "own": n}
+        out.append(b)
+    out += [{"name": nm, "count": n, "families": sorted(x for x in fams if x), "own": n} for nm, n, fams in own.values()]
+    out.sort(key=lambda b: b["name"].casefold())
+    return {**r, "available": bool(out), "brands": out}
 
 
 @router.get("/catalog/ofd/search")
 async def ofd_search(brand: str = "", family: str = "", q: str = "", _: str = Depends(get_current_user)):
-    """Les couleurs d'une marque, a la forme de /catalog/search (plus la marque et le poids du support)."""
-    from ....services import ofd_catalog
-    return ofd_catalog.search(brand, family, q)
+    """Les couleurs d'une marque, a la forme de /catalog/search (plus la marque et le poids du support) : celles de notre
+    catalogue d'abord, puis l'Open Filament Database."""
+    from ....services import ofd_catalog, own_catalog
+    mine = own_catalog.search(brand, family, q)
+    r = ofd_catalog.search(brand, family, q)
+    return {"available": bool(mine) or r.get("available", False), "total": len(mine) + (r.get("total") or 0),
+            "entries": mine + (r.get("entries") or [])}
 
 
 @router.post("/filaments/{fid}/link-catalog")
@@ -1686,7 +1721,7 @@ async def link_catalog(fid: int, body: dict = Body({}), db: AsyncSession = Depen
     except ValueError as e:
         raise HTTPException(404, str(e))
     # un autre filament deja rattache a la meme entree : dit, pour fusionner a la main si c'est un doublon
-    same = (Filament.catalog_ref == f.catalog_ref) if body.get("source") == "ofd" else \
+    same = (Filament.catalog_ref == f.catalog_ref) if body.get("source") in ("ofd", "own") else \
         ((Filament.profile_id == f.profile_id) & (Filament.fila_color_code == f.fila_color_code))
     twin = (await db.execute(select(Filament.id, Filament.translated_name, Filament.name).where(Filament.id != fid, same))).first()
     await db.commit()
@@ -1699,7 +1734,7 @@ async def link_catalog(fid: int, body: dict = Body({}), db: AsyncSession = Depen
 # L'apercu ne touche a rien : pour chaque filament, ce qui changerait (rattachement sur), la correspondance devinee et
 # d'autres choix (a confirmer), ou rien. La validation n'applique que ce qui a ete confirme.
 _SNAP = ("name", "name_en", "translated_name", "material", "fila_type", "fila_color_code", "multicolor_type", "colors_array",
-         "profile_id", "manufacturer", "color", "catalog_ref", "color_bucket", "spool_weight_g", "spool_tare_name")
+         "profile_id", "manufacturer", "color", "catalog_ref", "color_bucket", "spool_weight_g", "spool_tare_name", "catalog_skip")
 _SHOW = ("translated_name", "name", "fila_type", "material", "color", "colors_array", "multicolor_type", "fila_color_code", "profile_id",
          "manufacturer", "spool_weight_g")
 
@@ -1792,11 +1827,21 @@ def _bambu_view(e: dict, t2f: dict, en_to_fr: dict) -> dict:
             "color_type": raw, "color_type_fr": _CTYPE_FR.get(raw, raw)}
 
 
+def _other_entry(ref_or_catalog_ref: str, source: str = None):
+    """L'entree « autres marques » : (source, ref) ou un catalog_ref « ofd:… » / « own:… »."""
+    from ....services import ofd_catalog, own_catalog
+    if source is None:
+        source, _, ref_or_catalog_ref = str(ref_or_catalog_ref or "").partition(":")
+    return own_catalog.entry(ref_or_catalog_ref) if source == "own" else ofd_catalog.entry(ref_or_catalog_ref) if source == "ofd" else None
+
+
 async def _link_one(db, f, body: dict, link: bool = True) -> list:
-    """Met le filament a l'entree designee : {source: "ofd", ref} ou {fila_id, fila_color_code} (Bambu). Leve ValueError."""
-    if body.get("source") == "ofd":
-        from ....services import ofd_catalog
-        e = ofd_catalog.entry(body.get("ref"))
+    """Met le filament a l'entree designee : {source: "ofd", ref} ou {fila_id, fila_color_code} (Bambu). Leve ValueError.
+    skip (liste, facultatif) : ce qu'on garde a nous ; retenu sur le filament pour les synchros suivantes."""
+    if isinstance(body.get("skip"), list):
+        f.catalog_skip = ",".join(sorted(_skips(f, body["skip"]))) or None
+    if body.get("source") in ("ofd", "own"):
+        e = _other_entry(body.get("ref"), body["source"])
         if e is None:
             raise ValueError("Entrée introuvable dans le catalogue des autres marques")
         return await _apply_ofd(db, f, e, link=link)
@@ -1827,14 +1872,18 @@ async def enrich_preview(db: AsyncSession = Depends(get_db), _: str = Depends(re
     raw, en_to_fr = raw or [], en_to_fr or {}
     t2f = _get_catalog().type_to_family() if raw else {}
     bviews = [(e, _bambu_view(e, t2f, en_to_fr)) for e in raw]
+    from ....services import own_catalog
     ofd_brands = {ofd_catalog.norm(b["name"]): b["name"] for b in (ofd_catalog.brands().get("brands") or [])}
+    ofd_brands.update({k: v[0] for k, v in own_catalog.brands().items() if k not in ofd_brands})
     pools: dict = {}
 
     def ofd_pool(brand, fam):
         k = (brand, fam)
         if k not in pools:
-            v = ofd_catalog.search(brand, fam or "", "", limit=100000).get("entries") or []
-            pools[k] = v or (ofd_catalog.search(brand, "", "", limit=100000).get("entries") or [] if fam else [])
+            def both(fm):
+                return own_catalog.search(brand, fm, "") + (ofd_catalog.search(brand, fm, "", limit=100000).get("entries") or [])
+            v = both(fam or "")
+            pools[k] = v or (both("") if fam else [])
         return pools[k]
 
     items = []
@@ -1846,8 +1895,8 @@ async def enrich_preview(db: AsyncSession = Depends(get_db), _: str = Depends(re
         bambu = "bambu" in (f.manufacturer or "").lower() or (bool(f.profile_id) and not f.catalog_ref and not (f.manufacturer or "").strip())
         fam = family_of(f.fila_type, f.material) or f.material
         sure = None
-        if f.catalog_ref and f.catalog_ref.startswith("ofd:"):
-            e = ofd_catalog.entry(f.catalog_ref[4:])
+        if f.catalog_ref and f.catalog_ref.split(":", 1)[0] in ("ofd", "own"):
+            e = _other_entry(f.catalog_ref)
             if e:
                 after = _snap(f)
                 ch = await _apply_ofd(None, after, e)
