@@ -938,8 +938,8 @@ async def create_filament(
         f.manufacturer = await _brand_spelling(db, f.manufacturer)
     # venu d'un catalogue (Bambu ou autres marques) : la matiere est la famille (PLA), la gamme reste dans fila_type,
     # comme apres une synchro (02/11/2026 : « 95A High Speed TPU » restait en matiere jusqu'a la synchro)
-    if (f.catalog_ref or f.fila_color_code) and f.fila_type:
-        f.material = family_of(f.fila_type, f.material) or f.material
+    # la matiere est toujours la famille (03/11/2026 : aussi en saisie libre, ou l'ecran envoyait le sous-type)
+    f.material = family_of(f.fila_type, None) or family_of(f.material, None) or f.material or "PLA"
     await spool_tare.settle(db, f)
     db.add(f)
     await db.commit()
@@ -993,8 +993,13 @@ async def update_filament(
         f.label_printed = bool(lp)
         f.label_printed_at = datetime.utcnow() if lp else None
     was_to_order = bool(f.to_order)
+    old_material = f.material
     for k, v in payload.items():
         setattr(f, k, v)
+    # la matiere est la famille (PLA), le sous-type reste dans fila_type (03/11/2026 : la fiche envoyait le sous-type
+    # en matiere) ; un sous-type qui ne dit pas sa famille garde l'ancienne
+    if "fila_type" in payload or "material" in payload:
+        f.material = family_of(f.fila_type, None) or family_of(payload.get("material"), None) or old_material or "PLA"
     if "color" in payload or "colors_array" in payload:
         f.color_bucket = buckets_for(f.color, f.colors_array)
     # une marque donnee apres coup : son support, si aucun poids n'a ete saisi (un poids vide expres reste vide)

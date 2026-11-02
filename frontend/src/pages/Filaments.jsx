@@ -2005,7 +2005,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
         name_en:           form.name_en || undefined,
         translated_name:   form.translated_name || undefined,
         manufacturer:      form.manufacturer || undefined,
-        material:          form.fila_type || form.material || "PLA",
+        material:          form.material || undefined,       // la famille ; le serveur la deduit du sous-type
         fila_type:         form.fila_type || undefined,
         color:             col || undefined,
         colors_array:      ca ?? null,
