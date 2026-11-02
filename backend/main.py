@@ -216,6 +216,8 @@ async def lifespan(app: FastAPI):
     from app.services.bambu_catalog import retranslate_filaments as _retranslate, load_names as _load_names
     async def _names_then():
         await _load_names()
+        from app.services.type_transco import load as _load_transco       # nos transcos des sous-types
+        await _load_transco()
         await _retranslate()
     _bg(_names_then())
     # Vider le cache de matching au démarrage

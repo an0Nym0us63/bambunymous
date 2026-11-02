@@ -23,6 +23,7 @@ import SwitchCard, { phoneWidth } from "../components/SwitchCard";
 import DryRulesCard from "../components/DryRulesCard";
 import SpoolTaresCard from "../components/SpoolTaresCard";
 import CatalogNamesCard from "../components/CatalogNamesCard";
+import TypeTranscoCard from "../components/TypeTranscoCard";
 import MakerWorldSettings from "../components/MakerWorldSettings";
 import RateTemplatesSettings from "../components/RateTemplatesSettings";
 import NotificationsSettings from "../components/NotificationsSettings";
@@ -2209,6 +2210,7 @@ export default function Settings() {
         <SpoolTaresCard card={card} cardTitle={cardTitle}/>
         <LabelsCard card={card} cardTitle={cardTitle}/>
         <CatalogNamesCard card={card} cardTitle={cardTitle}/>
+        <TypeTranscoCard card={card} cardTitle={cardTitle}/>
         <PriceReviewSection/>
       </div></AdminOnly>
       )}

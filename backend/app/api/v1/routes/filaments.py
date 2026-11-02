@@ -1698,6 +1698,30 @@ async def ofd_brands(_: str = Depends(get_current_user)):
     return {**r, "available": bool(out), "brands": out}
 
 
+@router.get("/catalog/type-transco")
+async def type_transco_get(_: str = Depends(get_current_user)):
+    """Nos transcos des sous-types (03/11/2026) et les gammes des catalogues des autres marques : leur nom d'origine,
+    ce qu'en fait la normalisation (« Matte PLA » -> « PLA Matte »), notre sous-type, les marques, le nombre de couleurs."""
+    from ....services import ofd_catalog, own_catalog, type_transco as T
+    rows: dict = {}
+    for g in ofd_catalog.gammes():
+        rows[(g["gamme"], g["material"])] = g
+    for x in own_catalog.items():
+        k = (x.get("gamme") or x.get("family") or "", x.get("family") or "")
+        a = rows.setdefault(k, {"gamme": k[0], "material": k[1], "brands": [], "count": 0})
+        a["brands"] = sorted({*a["brands"], x["brand"]})
+        a["count"] += 1
+    out = [{**g, "auto": T.auto(g["gamme"], g["material"]), "ours": T.apply(g["gamme"], g["material"])} for g in rows.values() if g["gamme"]]
+    out.sort(key=lambda g: g["gamme"].casefold())
+    return {"items": T.items(), "gammes": out}
+
+
+@router.put("/catalog/type-transco")
+async def type_transco_put(body: dict = Body({}), _: str = Depends(require_admin)):
+    from ....services import type_transco as T
+    return {"items": await T.save(body.get("items") or [])}
+
+
 @router.get("/catalog/ofd/search")
 async def ofd_search(brand: str = "", family: str = "", q: str = "", _: str = Depends(get_current_user)):
     """Les couleurs d'une marque, a la forme de /catalog/search (plus la marque et le poids du support) : celles de notre

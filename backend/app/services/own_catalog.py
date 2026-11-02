@@ -40,7 +40,9 @@ def view(x: dict) -> dict:
     """A la forme des autres catalogues (ofd_catalog.view), source « own »."""
     from .bambu_catalog import fr_name
     from . import ofd_catalog
+    from .type_transco import apply as transco
     cols = [str(c).lstrip("#").upper() for c in x.get("colors") or []]
+    ft = transco(x.get("gamme") or x.get("family"), x.get("family"))
     ctype = x.get("color_type") or ("coaxial" if len(cols) > 1 else "monochrome")
     fw = x.get("filament_weight_g") or 1000
     sw, src = x.get("spool_weight_g"), "catalogue" if x.get("spool_weight_g") else None
@@ -52,7 +54,7 @@ def view(x: dict) -> dict:
                 sw, src = db[k], "spoolman"
                 break
     return {"source": "own", "fila_id": f"own-{x['id']}", "ref": x["id"], "fila_color_code": "", "color_code": "",
-            "brand": x["brand"], "fila_type": x.get("gamme") or x.get("family"), "family": x.get("family"),
+            "brand": x["brand"], "fila_type": ft, "gamme": x.get("gamme"), "family": x.get("family"),
             "name": x["name"], "name_fr": x.get("name_fr") or fr_name({"en": x["name"]}), "color_hex": cols[0] if cols else "",
             "colors": cols, "color_type": ctype, "color_type_fr": ctype, "filament_weight_g": fw,
             "spool_weight_g": sw, "spool_src": src, "hex_approx": bool(x.get("hex_approx")), "gtin": x.get("gtin"),

@@ -113,6 +113,14 @@
       <li>En enregistrant, les fiches filament qui portaient le nom anglais, celui du catalogue ou notre ancien nom prennent le nouveau ; un nom tapé à la main sur une fiche n'est jamais touché.</li>
       <li>Au-delà de six lignes, un champ <span class="ui">Chercher un nom</span> filtre le tableau. Sur un téléphone, chaque ligne devient une petite carte.</li>
     </ul>
+    <h3 id="sous-types-catalogues">🔀 Sous-types des catalogues</h3>
+    <p>Les autres marques nomment leurs gammes à leur façon : « Fil PLA », « 123-3D Filament PLA », « Matte PLA », « 95A High Speed TPU ». L'appli les remet d'office à la manière de Bambu, matière devant : « Fil » et « Filament » retirés, la matière placée en tête (« PLA », « PLA Matte », « PLA+ Silk », « TPU 95A High Speed »), la matière écrite deux fois retirée (« PET-G Premium PETG » → « PETG Premium »). Cette carte ajoute <b>tes transcos</b>, qui passent avant : « telle gamme du catalogue » → « notre sous-type ».</p>
+    <ul>
+      <li><span class="ui">＋ Ajouter une transco</span> : la gamme se choisit dans la liste des gammes des catalogues (avec ce qu'elle devient d'office, les marques qui l'ont et le nombre de couleurs ; « ⚠ Aucune gamme de ce nom » si elle n'existe pas), puis notre sous-type, proposé d'après la normalisation ; <span class="ui">✓ Enregistrer</span>.</li>
+      <li><span class="ui">✏️</span> modifie une transco, <span class="ui">🗑</span> la supprime (la normalisation reprend).</li>
+      <li><span class="ui">Voir les gammes renommées (N)</span> liste ce que la normalisation change, avec une recherche (gamme ou marque) ; <span class="ui">✏️</span> sur une ligne ouvre une transco pour elle.</li>
+      <li>Les sous-types servent à la création d'un filament depuis un catalogue, au rattachement et à la <a href="#parametres-synchro-catalogues">synchro des catalogues</a>, qui propose ensuite d'harmoniser les filaments déjà rattachés (« Type : Matte PLA → PLA Matte »). Un sous-type gardé sur un filament (décoché au rattachement) n'est jamais touché.</li>
+    </ul>
     <h3>Révision des prix</h3>
     <p>Compare le prix catalogue de chaque filament au prix d'achat de ses bobines (archivées comprises) et permet de corriger sur place. Utile pour repérer les prix manquants : sans prix, le calcul des coûts compte 20 €/kg par défaut.</p>
     <figure class="phone"><img src="img/parametres-prix.webp" alt="Écran Révision des prix avec les filtres et la liste des filaments"><figcaption>La révision des prix.</figcaption></figure>

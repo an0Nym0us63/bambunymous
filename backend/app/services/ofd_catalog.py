@@ -203,15 +203,31 @@ def view(e: dict) -> dict:
     """Une couleur, a la forme des entrees du catalogue Bambu (/catalog/search), plus la marque et le support."""
     from ..core.materials import family_of
     from .bambu_catalog import fr_name
+    from .type_transco import apply as transco
     hexes = [h.lstrip("#")[:8].upper() for h in (e.get("hexes") or [])] or [e.get("hex", "").lstrip("#")[:8].upper()]
+    ft = transco(e.get("gamme"), e.get("material"))            # notre sous-type (« Matte PLA » -> « PLA Matte »)
     multi = len(hexes) > 1
     ctype = ("gradient" if "gradual_color_change" in (e.get("traits") or []) else "coaxial") if multi else "monochrome"
     fw, sw, src = _weight(e)
     return {"source": "ofd", "fila_id": e["ref"], "ref": e["ref"], "fila_color_code": "", "color_code": "",
-            "brand": e.get("brand"), "fila_type": e.get("gamme"), "family": family_of(e.get("gamme"), e.get("material")) or e.get("material"),
+            "brand": e.get("brand"), "fila_type": ft, "gamme": e.get("gamme"), "family": family_of(ft, e.get("material")) or e.get("material"),
             "name": e.get("name"), "name_fr": fr_name({"en": e.get("name")}), "color_hex": hexes[0], "colors": hexes,
             "color_type": ctype, "color_type_fr": ctype, "filament_weight_g": fw, "spool_weight_g": sw, "spool_src": src,
             "discontinued": e.get("disc", False)}
+
+
+def gammes() -> list:
+    """Les gammes des autres marques : [{gamme, material, brands, count}], pour nos transcos."""
+    idx = index()
+    if not idx:
+        return []
+    acc: dict = {}
+    for e in idx.get("entries") or []:
+        k = (e.get("gamme") or "", e.get("material") or "")
+        a = acc.setdefault(k, {"gamme": k[0], "material": k[1], "brands": set(), "count": 0})
+        a["brands"].add(e.get("brand"))
+        a["count"] += 1
+    return [{**a, "brands": sorted(a["brands"])} for a in acc.values()]
 
 
 def brands() -> dict:
