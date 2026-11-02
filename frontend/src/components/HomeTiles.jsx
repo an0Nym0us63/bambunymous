@@ -1702,7 +1702,7 @@ function Dry({ v, status, o, sz }) {
     <span style={{ fontWeight: 800, color: "#dc2626" }}>{x.age_days != null ? `${x.age_days} j` : "jamais"}</span></div>;
   const prog = a => { const tot = (a.dry_duration || 0) * 60; return tot ? Math.max(0, Math.min(1, 1 - (a.dry_time || 0) / tot)) : 0; };
   // une unite qui seche : l'anneau (avancement, temperature au centre), son nom, le restant, la barre
-  const dryRow = (a, ring, W) => (
+  const dryRow = (a, ring, W, rh = 999) => (
     <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
       <span style={{ position: "relative", flexShrink: 0, display: "inline-flex" }}>
         <Ring value={prog(a)} size={ring} color="#f97316">{a.dry_temperature ? `${a.dry_temperature}°` : ""}</Ring>
@@ -1713,8 +1713,16 @@ function Dry({ v, status, o, sz }) {
         // la place a cote de l'anneau : etroite (demi-colonne), le nom court, la matiere dessous, le temps sans « encore »
         const room = W - ring - 10, tight = room < 130;
         const one = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 };
-        return <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-          {tight ? <>
+        // etroite ET basse (deux unites qui sechent en demi-colonne, 02/11/2026 : trois lignes et la jauge ne tenaient
+        // pas dans la rangee, le nom et le temps se coupaient) : le nom et le temps sur une ligne, le filament dessous
+        const low = tight && rh < 62;
+        return <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: low ? 1 : 2 }}>
+          {low ? <>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
+              <span style={{ fontSize: 13, fontWeight: 900, color: "var(--text)", lineHeight: 1.2, ...one }}>{amsLab(a)}</span>
+              <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 900, color: "#ea580c", whiteSpace: "nowrap", flexShrink: 0, lineHeight: 1.2 }}>{fmtDur((a.dry_time || 0) * 60)}</span></div>
+            {(a.dry_filament || a.dry_temperature) && <Muted size={11} style={{ ...one, lineHeight: 1.2 }}>{[a.dry_filament, a.dry_temperature ? `${a.dry_temperature}°` : null].filter(Boolean).join(" · ")}</Muted>}
+          </> : tight ? <>
             <span style={{ fontSize: 14, fontWeight: 900, color: "var(--text)", ...one }}>{amsLab(a)}</span>
             {a.dry_filament && <Muted size={11} style={one}>{a.dry_filament}{a.dry_temperature ? ` · ${a.dry_temperature}°` : ""}</Muted>}
             <span style={{ fontSize: 13, fontWeight: 900, color: "#ea580c", ...one }}>{fmtDur((a.dry_time || 0) * 60)}</span>
@@ -1818,7 +1826,7 @@ function Dry({ v, status, o, sz }) {
             </div>;
           }
           const ring = Math.max(34, Math.min(each, W < 215 ? 64 : 84, W * 0.42, W - 100));
-          return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>{drying.map(a => dryRow(a, Math.floor(ring), W))}</div>;
+          return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>{drying.map(a => dryRow(a, Math.floor(ring), W, each))}</div>;
         }
         // l'anneau prend ce que la liste « a secher » laisse (rien de liste quand c'est bas)
         const listH = H < 120 || !todo.length ? 0 : Math.min(Math.round(H * 0.5), todo.length * 23 + 28);
