@@ -300,29 +300,7 @@ export function installEggs() {
     if (v === "easter egg" || v === "easteregg") egg("seeker");
     if (v === "1337") egg("leet_input");
   });
-  // secouer : trois a-coups violents en une seconde et demie
-  const shake = tapper(3, 1500, () => egg("shake"));
-  let lastJolt = 0;
-  window.addEventListener("devicemotion", e => {
-    const a = e.accelerationIncludingGravity || e.acceleration;
-    if (!a) return;
-    const g = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2);
-    const now = Date.now();
-    if (g > 25 && now - lastJolt > 150) { lastJolt = now; shake(); }
-  });
-  // retourner : ecran vers le bas, ou tete en bas, une seconde
-  let flipT = null;
-  const flipped = (beta, gamma) => Math.abs(beta) > 150 || (beta < -60 && Math.abs(gamma) < 30);
-  window.addEventListener("deviceorientation", e => {
-    if (e.beta == null) return;
-    if (flipped(e.beta, e.gamma || 0)) { if (!flipT) flipT = setTimeout(() => egg("flip"), 1000); }
-    else if (flipT) { clearTimeout(flipT); flipT = null; }
-  });
-  try {
-    screen.orientation?.addEventListener?.("change", () => {
-      if ((screen.orientation.type || "").includes("secondary") && screen.orientation.type.startsWith("portrait")) egg("flip");
-    });
-  } catch { /* pas d'orientation */ }
+  // secouer, retourner : retires le 02/11/2026 (ils ecoutaient les capteurs du telephone en continu : la batterie)
   // imprimer la page, plein ecran, copier, tunnel
   window.addEventListener("beforeprint", () => egg("print_page"));
   document.addEventListener("fullscreenchange", () => { if (document.fullscreenElement) egg("fullscreen"); });
@@ -450,17 +428,9 @@ export function installEggs() {
 }
 
 // ── Lot du 23/10/2026 ───────────────────────────────────────────────────────
-// Ce que seule l'appli Android voit (24/10/2026) : la vraie lampe torche, une capture d'ecran, la luminosite,
-// les capteurs, le mode avion… Elle appelle window.__bnEgg(nom) ; seuls ces noms-la sont acceptes.
-const NATIVE = new Set([
-  "airplane", "altitude", "big_font", "bold_text", "brightness_max", "brightness_min", "cold_phone", "dark_room",
-  "display_zoom", "do_not_disturb", "elevator", "fast_charge", "four_sides", "fresh_apk", "from_notif", "hardware_keyboard",
-  "headphones", "hot_phone", "hotspot", "humid_air", "just_booted", "knock_knock", "level", "magnet",
-  "network_switch", "new_android", "nod", "nope", "north", "old_android", "pocket", "power_save",
-  "print_screen", "proximity", "roaming", "rotation_lock", "screen_recording", "silence", "sos_torch", "spin_phone",
-  "split_screen", "storage_full", "storm", "sunlight", "tablet", "time_travel", "timezone", "torch",
-  "uptime_30", "vibrate_mode", "volume_dj", "volume_max", "vpn", "wireless_charge",
-]);
+// Ce que l'appli Android annoncait (24/10/2026) : ses secrets sont retires le 02/11/2026 (ses ecouteurs vidaient la
+// batterie) ; une ancienne version de l'appli annonce encore ces trois-la, qui se trouvent aussi sur le web.
+const NATIVE = new Set(["print_screen", "split_screen", "torch"]);
 function installEggs2() {
   // ce que la maison a deja trouve (sur n'importe quel appareil) : les objets caches s'effacent
   if (!currentFriend()) client.get("/achievements/eggs-found", { home: true }).then(({ data }) => {

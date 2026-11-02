@@ -779,12 +779,6 @@ EGGS = {
     "impatient": ("⏳", "Impatient", "Recharger l'appli 5 fois en moins de 30 secondes",
                   "La patience n'est pas ta vertu, et ton bouton préféré tourne en rond.",
                   "Cinq rechargements en trente secondes. Respire, tout est à jour."),
-    "shake": ("🫨", "Secoué", "Secouer le téléphone, appli ouverte",
-              "Ton téléphone a besoin d'être un peu bousculé.",
-              "Secoué, pas remué. L'appli s'en remet doucement."),
-    "flip": ("🙃", "Tête en bas", "Retourner le téléphone, appli ouverte",
-             "Regarde l'appli sous un tout autre angle… voire à l'envers.",
-             "Le monde à l'envers : même les médailles ont le tournis."),
     "bell": ("🔔", "Sonneur", "Appuyer 10 fois sur la cloche en 5 secondes",
              "Ding, ding, ding… quelqu'un insiste lourdement à la porte des nouvelles.",
              "Dix coups de cloche : tout le quartier est réveillé."),
@@ -1521,7 +1515,7 @@ EGGS = {
     "abracadabra": ('🎩', 'Tour de magie', 'Taper « abracadabra » au clavier, sans être dans un champ',
         "Le mot magique le plus connu, celui qu'on dit avant de sortir le lapin.",
         'Disparu… et revenu. Le lapin, lui, est resté dans la buse.'),
-    "print_screen": ('📸', "Capture d'écran", "Faire une capture d'écran : touche Impr. écran, ou dans l'appli Android",
+    "print_screen": ('📸', "Capture d'écran", "Faire une capture d'écran avec la touche Impr. écran",
         "Garder une preuve de ce qui s'affiche, ça se fait d'un geste… ou d'une touche que personne n'utilise.",
         'Clic. La preuve est faite : ton tableau de bord est très photogénique.'),
     "caps_lock": ('📢', 'ARRÊTE DE CRIER', 'Écrire en majuscules verrouillées dans un champ',
@@ -1566,7 +1560,7 @@ EGGS = {
     "spinner": ('🌀', 'Tourniquet', "Faire tourner deux doigts sur l'écran",
         'Deux doigts, un geste de bouton de volume, et on tourne, on tourne…',
         'Ça tourne. Comme une bobine dans un sécheur.'),
-    "torch": ('🔦', 'Lampe de poche', "Allumer la lampe torche du téléphone (appli Android), ou la nuit, garder deux doigts immobiles 3 secondes sur l'écran",
+    "torch": ('🔦', 'Lampe de poche', "La nuit, garder deux doigts immobiles 3 secondes sur l'écran",
         "Dans le noir, il manque de lumière. Deux doigts, sans bouger, le temps de compter jusqu'à trois.",
         "L'écran s'est fait lampe de poche. Pratique pour trouver la bobine tombée sous l'établi."),
     "crab": ('🦀', 'Crabe', 'Faire défiler longtemps sur le côté (molette ou pavé tactile)',
@@ -1593,7 +1587,7 @@ EGGS = {
     "full_moon": ('🌕', 'Pleine lune', "Ouvrir l'appli la nuit, un soir de pleine lune",
         'Lève les yeux au ciel : quand il est tout rond et que la nuit est tombée.',
         "La lune est pleine, l'imprimante hurle doucement. Rien d'inquiétant."),
-    "split_screen": ('🪟', 'Côte à côte', "Mettre l'appli sur une moitié d'écran : fenêtre sur ordinateur, ou écran partagé dans l'appli Android",
+    "split_screen": ('🪟', 'Côte à côte', "Mettre l'appli sur une moitié d'écran, en fenêtre sur ordinateur",
         "Sur un grand écran, l'appli accepte de partager la place avec autre chose.",
         "Une moitié pour l'appli, une moitié pour le reste. Le partage, c'est beau."),
     "precommande": ('🧾', 'Déjà en rayon', "Créer depuis une commande lue dans les mails la fiche d'un filament et sa bobine « en commande », avant même la livraison",
@@ -1933,67 +1927,7 @@ EGGS = {
     "h_boite_a_musique": ('🎶', 'Valse de la bobine', "Sur la page /boite-a-musique, jouer la mélodie jusqu'au bout",
         "Un coffret en bois, une ballerine qui ressemble beaucoup à une bobine et une manivelle qui ne demande qu'à tourner. Longtemps.",
         "La ballerine-bobine fait sa révérence. Elle a tourné si vite qu'elle s'est déroulée de trois mètres."),
-    # lot du 24/10/2026 : le telephone (appli Android) et des choses cachees dans les pages
-    "brightness_max": ('☀️', 'Plein phare', "Dans l'appli Android, pousser la luminosité de l'écran à fond",
-        "Certains aiment voir la vie en très, très clair. Jusqu'à plisser les yeux.",
-        "Lunettes de soudeur conseillées. Ton tableau de bord n'a jamais été aussi lumineux."),
-    "brightness_min": ('🌑', 'Mode taupe', "Dans l'appli Android, baisser la luminosité de l'écran au minimum",
-        "Certains préfèrent la pénombre, jusqu'à ne presque plus rien voir.",
-        "Tu lis dans le noir comme une taupe. Ou comme quelqu'un qui surveille une impression à 3 h du matin."),
-    "proximity": ('🙈', 'Coucou caché', "Dans l'appli Android, poser la main sur le haut du téléphone quelques secondes",
-        'Le téléphone a un œil discret, tout en haut. Joue à cache-cache avec lui.',
-        "Coucou… caché ! Le capteur n'a rien vu venir."),
-    "dark_room": ('🕶️', 'Dans le noir complet', "Dans l'appli Android, rester quelques secondes dans le noir complet",
-        'Éteins tout. Vraiment tout. Le téléphone le sentira.',
-        'Noir total. Seule ton imprimante, au loin, fait encore clignoter sa LED.'),
-    "sunlight": ('🏖️', 'Plein soleil', "Dans l'appli Android, ouvrir l'appli en plein soleil",
-        "Emmène l'atelier en vacances, là où il faut des lunettes noires.",
-        "Grand soleil. Mets ton PLA à l'ombre, il n'aime pas ça."),
-    "airplane": ('✈️', 'Décollage', "Dans l'appli Android, activer le mode avion",
-        'Prépare-toi à décoller sans quitter ton fauteuil.',
-        "Mode avion activé. L'imprimante, elle, reste au sol et continue d'imprimer."),
-    "headphones": ('🎧', 'Dans ma bulle', "Dans l'appli Android, brancher des écouteurs (fil, USB ou Bluetooth)",
-        "L'appli ne fait pas de bruit, mais elle aime savoir que tu écoutes quelque chose.",
-        "Musique dans les oreilles, imprimante dans l'œil : l'atelier idéal."),
-    "power_save": ('🔋', 'Économe', "Dans l'appli Android, activer l'économie d'énergie",
-        "Quand l'énergie se fait rare, il existe une façon de tenir plus longtemps.",
-        "Économie d'énergie activée. Ton imprimante, elle, consomme toujours autant."),
-    "volume_dj": ('🎚️', 'DJ', "Dans l'appli Android, enchaîner volume haut, bas, haut, bas, haut, bas",
-        'Sur le côté, deux boutons. Joue avec eux comme un DJ avec ses platines.',
-        "Haut, bas, haut, bas… Le public de l'atelier est en délire."),
-    "magnet": ('🧲', 'Attraction', "Dans l'appli Android, approcher le téléphone d'un aimant",
-        "Certaines surfaces d'impression ont un pouvoir d'attraction. Le téléphone le sent.",
-        'Le champ magnétique a fait tourner la tête de ta boussole. Le plateau PEI, peut-être ?'),
-    "altitude": ('🏔️', 'En altitude', "Dans l'appli Android, ouvrir l'appli en montagne, bien au-dessus de la mer",
-        "Monte. Encore. Là où les oreilles se bouchent et où l'eau bout plus vite.",
-        "Là-haut, l'eau bout plus vite… et ton filament sèche mieux. Belle vue."),
-    "spin_phone": ('🌪️', 'Toupie', "Dans l'appli Android, faire tourner le téléphone très vite sur lui-même",
-        'Fais-le tourner comme une toupie. Au-dessus de quelque chose de moelleux, de préférence.',
-        "Il a tourné plus vite qu'une bobine en fin de rouleau. La tête lui tourne encore."),
-    "hot_phone": ('🔥', 'Téléphone brûlant', "Dans l'appli Android, avoir un téléphone qui chauffe vraiment",
-        "Quand il chauffe presque autant qu'une buse, il le sait.",
-        'Ton téléphone chauffe presque autant que le plateau. Laisse-le respirer.'),
-    "silence": ('🤫', 'Chut', "Dans l'appli Android, passer le téléphone en mode silencieux",
-        'Chut. Fais taire ce qui sonne.',
-        "Silence. On n'entend plus que le chant des moteurs pas-à-pas."),
-    "do_not_disturb": ('🌙', 'Ne pas déranger', "Dans l'appli Android, activer le mode Ne pas déranger",
-        "Il existe un mode pour avoir enfin la paix. Même l'imprimante devra attendre.",
-        'Ne pas déranger. Sauf pour une impression qui se termine, évidemment.'),
-    "network_switch": ('📶', 'Changement de réseau', "Dans l'appli Android, passer du Wi-Fi aux données mobiles (ou l'inverse) appli ouverte",
-        "Pars de chez toi l'appli ouverte : à un moment, quelque chose change sous tes pieds.",
-        "Le relais est passé sans un accroc. L'imprimante n'a rien remarqué."),
-    "screen_recording": ('🎬', 'Sous les projecteurs', "Dans l'appli Android, filmer l'écran pendant que l'appli est ouverte",
-        'Silence, ça tourne ! Ton tableau de bord a des envies de cinéma.',
-        'Action ! Ton tableau de bord est la star de la vidéo.'),
-    "sos_torch": ('🆘', 'Signal SOS', "Dans l'appli Android, allumer et éteindre la lampe torche plusieurs fois de suite",
-        "Les marins en détresse ont une façon lumineuse d'appeler à l'aide.",
-        "Trois éclairs. Message reçu : quelqu'un est coincé avec une buse bouchée."),
-    "big_font": ('🔠', 'Gros caractères', "Dans l'appli Android, ouvrir l'appli avec une très grande taille de police",
-        "Pour ceux qui ont oublié leurs lunettes, tout peut s'écrire en GROS.",
-        "Tout est plus gros. Même les grammes de filament restants ont l'air énormes."),
-    "hardware_keyboard": ('⌨️', 'Clavier branché', "Dans l'appli Android, brancher un vrai clavier au téléphone",
-        "Un téléphone, c'est tactile… à moins de lui offrir des touches.",
-        'Un vrai clavier sur un téléphone. Tu vas pouvoir taper tes G-codes à toute vitesse.'),
+    # lot du 24/10/2026 : des choses cachees dans les pages
     "snail": ('🐌', 'Escargot', "Toucher l'escargot caché tout en bas des filaments",
         "Là où dorment tes bobines, tout en bas, quelqu'un n'est pas pressé du tout.",
         'Il était là depuis le début. Il a même commencé à ronger une bobine de PLA vert.'),
@@ -2027,100 +1961,6 @@ EGGS = {
     "snowman": ('⛄', 'Atelier glacial', "Toucher le bonhomme de neige caché sous les températures, quand la chambre de l'imprimante est froide",
         "Quand le caisson de la machine grelotte, un passager tout blanc s'invite.",
         "Brrr. Pense à fermer la porte de l'imprimante, l'ABS déteste les courants d'air."),
-    # appli Android, suite (24/10/2026)
-    "cold_phone": ('🥶', 'Téléphone gelé', "Dans l'appli Android, avoir un téléphone tout froid",
-        'Là où le PLA durcit tout seul, ton téléphone grelotte et le sait.',
-        "Ton téléphone grelotte. Même l'ABS refuse de sortir par ce temps."),
-    "storm": ('⛈️', 'Avis de tempête', "Dans l'appli Android, ouvrir l'appli quand la pression de l'air est très basse",
-        "Quand le ciel s'assombrit et que l'air pèse moins lourd, quelque chose le sent.",
-        "Tempête en vue. Garde ton filament au sec, l'humidité monte."),
-    "north": ('🧭', 'Plein nord', "Dans l'appli Android, tenir le téléphone à plat, pointé plein nord, quelques secondes",
-        'Les marins suivaient une étoile. Fais comme eux, à plat, sans trembler.',
-        "Plein nord, à trois degrés près. Les marins t'auraient embauché."),
-    "level": ('📏', 'Niveau à bulle', "Dans l'appli Android, poser le téléphone parfaitement à plat quelques secondes",
-        'Comme un plateau parfaitement réglé : pas un poil de pente, et ne bouge plus.',
-        'Parfaitement de niveau. Ta première couche va adorer.'),
-    "humid_air": ('💦', 'Air humide', "Dans l'appli Android, être dans un air très humide (téléphones avec capteur d'humidité)",
-        "Là où les bobines boivent l'air, certains téléphones s'en aperçoivent.",
-        'Il fait humide ici. Ferme vite tes bobines, elles boivent tout.'),
-    "wireless_charge": ('🪫', 'Sans fil', "Dans l'appli Android, recharger le téléphone sans fil",
-        "Un repas sans couverts : de l'énergie sans câble.",
-        'Ça charge sans fil. Comme quoi, on peut se passer de filament pour certaines choses.'),
-    "timezone": ('🌐', 'Décalage horaire', "Dans l'appli Android, changer de fuseau horaire appli ouverte",
-        "Voyage assez loin pour que les aiguilles changent d'elles-mêmes.",
-        'Nouveau fuseau. Ton imprimante, elle, est restée à la maison.'),
-    "time_travel": ('⏳', 'Voyage dans le temps', "Dans l'appli Android, changer l'heure du téléphone à la main",
-        'On peut tricher avec le temps, rien que pour voir.',
-        "Tu as changé l'heure. L'impression ne finira pas plus vite, désolé."),
-    "four_sides": ('🔄', 'Les quatre côtés', "Dans l'appli Android, faire tourner l'écran dans les quatre sens",
-        'Tête en haut, en bas, et sur les deux côtés. Un tour complet.',
-        "Un tour complet. L'appli a le tournis, mais elle a tenu bon."),
-    "from_notif": ('🔔', 'Accouru', "Dans l'appli Android, ouvrir l'appli en touchant une de ses notifications",
-        "Quand l'appli t'appelle, réponds-lui directement.",
-        "Tu es accouru dès la notification. L'imprimante apprécie l'attention."),
-    "fresh_apk": ('📦', 'Tout neuf', "Dans l'appli Android, ouvrir l'appli juste après l'avoir mise à jour",
-        "Sois le tout premier à ouvrir ce qui vient d'arriver.",
-        'Appli toute neuve, odeur de plastique fraîchement imprimé.'),
-    "tablet": ('📱', 'Grand format', "Dans l'appli Android, ouvrir l'appli sur une tablette",
-        'Un écran plus grand fait respirer les tuiles.',
-        'Grand écran, grandes tuiles. Le tableau de bord respire.'),
-    "pocket": ('👖', 'Au fond de la poche', "Dans l'appli Android, glisser le téléphone dans une poche, appli ouverte",
-        "L'appli ouverte, range-le là où il fait noir et chaud.",
-        "Dans la poche, l'appli continue de veiller. Elle a même trouvé une vis M3."),
-    "volume_max": ('🔊', 'Pleine puissance', "Dans l'appli Android, pousser le volume média au maximum",
-        "Monte le son. Encore. Jusqu'au bout.",
-        "Volume à fond. Les moteurs pas-à-pas n'ont qu'à bien se tenir."),
-    "fast_charge": ('⚡', 'Charge rapide', "Dans l'appli Android, recharger le téléphone en charge rapide",
-        "Certains chargeurs sont plus pressés que d'autres.",
-        "Charge rapide. Plus rapide qu'une impression en mode brouillon."),
-    "just_booted": ('🌅', 'Tout juste réveillé', "Dans l'appli Android, ouvrir l'appli juste après avoir redémarré le téléphone",
-        "Éteins, rallume… et que l'appli soit ta toute première pensée.",
-        "Tu viens de redémarrer et c'est l'appli que tu ouvres en premier. C'est touchant."),
-    "uptime_30": ('🏋️', 'Increvable', "Dans l'appli Android, ouvrir l'appli sur un téléphone qui n'a pas redémarré depuis un mois",
-        'Certains téléphones ne dorment jamais. Le tien tiendra-t-il un mois ?',
-        "Un mois sans redémarrer. Plus endurant qu'une imprimante en pleine production."),
-    "storage_full": ('💾', 'Disque plein', "Dans l'appli Android, ouvrir l'appli avec un téléphone presque plein",
-        'Quand il déborde, comme ton étagère à filaments.',
-        'Plus de place. Il est temps de trier les photos de Benchy en double.'),
-    "old_android": ('🦕', 'Vétéran', "Dans l'appli Android, ouvrir l'appli sur un vieux téléphone Android",
-        'Les anciens ont toujours de bonnes histoires. Les vieux téléphones aussi.',
-        "Un vétéran d'Android. Il a connu les imprimantes sans capteur de filament."),
-    "new_android": ('🚀', 'À la pointe', "Dans l'appli Android, ouvrir l'appli sur la toute dernière version d'Android",
-        'Toujours à la pointe ? Ton téléphone aussi, peut-être.',
-        'Dernier Android. Ton téléphone est plus à jour que le firmware de certaines imprimantes.'),
-    "elevator": ('🛗', 'Ça monte !', "Dans l'appli Android, monter de plusieurs étages rapidement, appli ouverte",
-        "Monte vite plusieurs étages : l'air change, et quelque chose s'en aperçoit.",
-        'Plusieurs étages en quelques secondes. Le baromètre en a les oreilles qui bouchent.'),
-    "vibrate_mode": ('📳', 'Vibreur', "Dans l'appli Android, passer le téléphone en mode vibreur",
-        'Ni sonnerie, ni silence complet : quelque chose qui tremble.',
-        'Mode vibreur. Ça tremble comme une imprimante mal fixée.'),
-    "rotation_lock": ('🔒', 'Rotation figée', "Dans l'appli Android, activer ou couper la rotation automatique de l'écran",
-        "Décide si l'écran a le droit de tourner. Puis change d'avis.",
-        "La rotation a changé d'avis. L'appli s'adapte, comme toujours."),
-    "bold_text": ('🅱️', 'Texte en gras', "Dans l'appli Android, activer le texte en gras dans les réglages du téléphone",
-        'Certaines lettres ont envie de prendre du poids.',
-        "Tout est en gras. Même les messages d'erreur ont l'air sûrs d'eux."),
-    "display_zoom": ('🔍', 'Affichage agrandi', "Dans l'appli Android, agrandir la taille d'affichage du téléphone",
-        'Pas seulement les lettres : tout peut grossir.',
-        'Tout est plus grand. Les tuiles en profitent pour se montrer.'),
-    "nod": ('🙆', 'Oui oui', "Dans l'appli Android, hocher le téléphone de haut en bas, comme pour dire oui",
-        'Fais-lui dire oui.',
-        "Oui, oui, oui. L'appli est d'accord avec toi."),
-    "nope": ('🙅', 'Non non', "Dans l'appli Android, secouer le téléphone de gauche à droite, comme pour dire non",
-        'Fais-lui dire non.',
-        "Non, non et non. L'appli a compris, elle n'insiste pas."),
-    "knock_knock": ('🚪', 'Toc toc', "Dans l'appli Android, tapoter deux fois le dos du téléphone",
-        "Frappe à la porte… de l'autre côté de l'écran.",
-        'Toc toc. Qui est là ? Benchy. Benchy qui ? Benchy de rien.'),
-    "roaming": ('🧳', "À l'étranger", "Dans l'appli Android, ouvrir l'appli à l'étranger, en itinérance",
-        "Pars loin, hors des réseaux de chez toi, et garde un œil sur l'atelier.",
-        "Même à l'étranger, tu surveilles ton imprimante. Les vacances, ce sera pour une autre fois."),
-    "hotspot": ('📡', 'Partage de connexion', "Dans l'appli Android, ouvrir l'appli connecté au partage de connexion d'un autre téléphone",
-        "Un Wi-Fi qui vient d'un autre téléphone, ça se reconnaît.",
-        "Connexion partagée. L'entraide entre téléphones, c'est beau."),
-    "vpn": ('🕵️', 'Agent secret', "Dans l'appli Android, ouvrir l'appli à travers un VPN",
-        'Certains passent par des tunnels pour aller sur Internet.',
-        "Connexion chiffrée, identité masquée. L'imprimante ne dira rien."),
     # cachettes du 24/10/2026 : de petites choses qui n'apparaissent qu'a certains moments
     "c_pumpkin": ('🎃', 'Citrouille cachée', 'Fin octobre, toucher la citrouille cachée au bas des objets',
         'Quand les feuilles tombent et que les masques sortent, un visage orange se terre parmi tes créations.',
@@ -2526,8 +2366,12 @@ CACHETTE_EGGS = {"micro_benchy", "astronome", "chrono", "score_tap", "calme_plat
 # celles qui n'apparaissent qu'a une periode de l'annee : la depense automatique de cles les sert en premier
 DATED_CACHETTES = {"c_pumpkin", "c_xmas_tree", "c_easter_chick", "c_valentine_heart", "c_dead_leaf", "c_snowflake", "c_sakura",
                    "c_watermelon", "c_april_fish", "c_black_cat", "c_sunflower", "c_pencil", "c_new_year_toast", "c_bee", "c_penguin", "c_crab", "c_whale", "c_cactus", "c_kite", "c_shell", "c_mushroom", "c_herb", "c_ice_cream", "c_umbrella", "c_fireworks", "c_mitten", "c_sunglasses", "c_bunny", "c_ghost", "c_lantern", "c_wave", "c_mask", "c_xmas_bell"}
-# ce que seule l'appli Android voit (capteurs, reglages, etat du telephone) : leur propre section
-ANDROID_EGGS = {"brightness_max", "brightness_min", "proximity", "dark_room", "sunlight", "airplane", "headphones", "power_save", "volume_dj", "magnet", "altitude", "spin_phone", "hot_phone", "silence", "do_not_disturb", "network_switch", "screen_recording", "sos_torch", "big_font", "hardware_keyboard", "cold_phone", "storm", "north", "level", "humid_air", "wireless_charge", "timezone", "time_travel", "four_sides", "from_notif", "fresh_apk", "tablet", "pocket", "volume_max", "fast_charge", "just_booted", "uptime_30", "storage_full", "old_android", "new_android", "elevator", "vibrate_mode", "rotation_lock", "bold_text", "display_zoom", "nod", "nope", "knock_knock", "roaming", "hotspot", "vpn"}
+# Retires le 02/11/2026 : les secrets de l'appli Android (capteurs, reglages, etat du telephone) et ceux du web qui
+# ecoutaient les capteurs en continu (secouer, retourner) : ils vidaient la batterie. Ceux qui les avaient ont
+# recu RETIRED_TICKETS tickets de palier par succes retire (_retire_android, une fois).
+RETIRED_EGGS = frozenset(['airplane', 'altitude', 'big_font', 'bold_text', 'brightness_max', 'brightness_min', 'cold_phone', 'dark_room', 'display_zoom', 'do_not_disturb', 'elevator', 'fast_charge', 'four_sides', 'fresh_apk', 'from_notif', 'hardware_keyboard', 'headphones', 'hot_phone', 'hotspot', 'humid_air', 'just_booted', 'knock_knock', 'level', 'magnet', 'network_switch', 'new_android', 'nod', 'nope', 'north', 'old_android', 'pocket', 'power_save', 'proximity', 'roaming', 'rotation_lock', 'screen_recording', 'silence', 'sos_torch', 'spin_phone', 'storage_full', 'storm', 'sunlight', 'tablet', 'time_travel', 'timezone', 'uptime_30', 'vibrate_mode', 'volume_dj', 'volume_max', 'vpn', 'wireless_charge', 'shake', 'flip'])
+RETIRED_IDS = frozenset([f"egg_{k}" for k in RETIRED_EGGS] + [f"card_s_android_{k}" for k in "vdra"])
+RETIRED_TICKETS = 10
 for _x in CATALOG:
     if _x["id"] in ONLY_WON:
         _x["only_won"] = True
@@ -2561,9 +2405,8 @@ SECRET_SUBS = [
     ("app", "📱", "Photos et appli", "home_first home_multi home_two home_three home_four home_copy home_minimal home_pages home_all zero_alert paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit "
      "action_cam making_of festival retro_video family_film flash_video bunker pwd_changes black_photo white_photo "
      "panorama hires_photo photo_burst purge_day tinkerer"),
-    ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS if k not in HIDDEN_EGGS | PRANK_EGGS | FETE_EGGS | ANDROID_EGGS | CACHETTE_EGGS and f"egg_{k}" not in ONLY_WON)),
+    ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS if k not in HIDDEN_EGGS | PRANK_EGGS | FETE_EGGS | CACHETTE_EGGS and f"egg_{k}" not in ONLY_WON)),
     ("cachettes", "🔎", "Cachettes", " ".join(f"egg_{k}" for k in EGGS if k in CACHETTE_EGGS)),
-    ("android", "🤖", "Appli Android", " ".join(f"egg_{k}" for k in EGGS if k in ANDROID_EGGS)),
     ("pranks", "🌀", "Farces", " ".join([f"egg_{k}" for k in EGGS if k in PRANK_EGGS] + sorted(ONLY_WON))),
     ("fetes", "🎉", "Fêtes", " ".join([f"egg_{k}" for k in EGGS if k in FETE_EGGS] + FETE_VISITS)),
     ("hidden", "🗺️", "Pages cachées", " ".join(f"egg_{k}" for k in EGGS if k in HIDDEN_EGGS)),
@@ -5951,7 +5794,7 @@ async def secrets_by_account(usernames: list) -> list:
 # Seulement ce qui se trouve en cherchant (easter eggs, cachettes, Android, farces, fetes, pages
 # cachees). Chacun a les siens ; ce que la maison a deja se voit comme chez un copain : categorie,
 # medaille et titre, « untel l'a deja ». Le reste des succes reste celui de la maison.
-FAMILY_SUBS = ("eggs", "cachettes", "android", "pranks", "fetes", "hidden")
+FAMILY_SUBS = ("eggs", "cachettes", "pranks", "fetes", "hidden")
 FAMILY_IDS = {aid for sid, _e, _n, ids in SECRET_SUBS if sid in FAMILY_SUBS
               for aid in ids.split() if aid.startswith("egg_") and aid not in ONLY_WON}
 # les autres secrets (ceux de la maison : heures, poids, couleurs, compteurs...) : un compte de la famille y met aussi une
@@ -6684,11 +6527,9 @@ def _sets(out: dict, st: dict) -> None:
         out[a["id"]] = {"value": 1 if ok else 0, "reached": {"0": max(dates)} if ok else {}}
 
 
-def joker_members(rank: str, android: bool) -> list:
-    """Les cartes qu'un Joker demande : toutes celles de ce rang, sections et tiroirs ; celle du
-    tiroir Android seulement si l'appli sert dans la maison (sinon le Joker serait impossible)."""
-    return [m["id"] for m in CATALOG if m["cat"] == "cards" and not m.get("joker") and m["card_tier"]["id"] == f"card_{rank}"
-            and (android or (m.get("pile") or ("",))[0] != "android")]
+def joker_members(rank: str) -> list:
+    """Les cartes qu'un Joker demande : toutes celles de ce rang, sections et tiroirs."""
+    return [m["id"] for m in CATALOG if m["cat"] == "cards" and not m.get("joker") and m["card_tier"]["id"] == f"card_{rank}"]
 
 
 def _cards(out: dict) -> None:
@@ -6711,12 +6552,10 @@ def _cards(out: dict) -> None:
             mem = _members(cat, i)
             n = sum(1 for m in mem if (out.get(m["id"]) or {}).get("reached", {}).get(str(i)))
             out[a["id"]]["prog"] = [n, len(mem)]
-    # le tiroir Android ne compte pour les Jokers que si l'appli sert dans la maison (sinon ils seraient impossibles)
-    android = any(got(f"egg_{k}") for k in ANDROID_EGGS)
     for a in CATALOG:
         if not a.get("joker"):
             continue
-        mem = joker_members(a["joker"], android)
+        mem = joker_members(a["joker"])
         dates = [got(m) for m in mem]
         ok = bool(mem) and all(dates)
         out[a["id"]] = {"value": 1 if ok else 0, "reached": {"0": max(dates)} if ok else {},
@@ -6781,6 +6620,7 @@ async def _tick(notify: bool = True) -> list:
     st = await _state_get()
     first = st is None
     st = st or {"unlocked": {}, "best": {}}
+    retired = [] if first else await _retire_android(st)
     # seuils changes depuis le dernier passage : on recalcule en silence
     silent = first or st.get("sig") != CATALOG_SIG
     new = []
@@ -6856,10 +6696,52 @@ async def _tick(notify: bool = True) -> list:
         await _notify_keys(gains, st["keys"]["balance"])
     if retro and notify:
         await _notify_retro(*retro, st["wheel"]["spins"], st["wheel"].get("tickets", 0))
+    if retired and notify:
+        await _notify_retired(retired, st["wheel"].get("tickets", 0))
     if (spins or s_spins or s_tickets or w_tickets or p_spins or p_tickets) and notify:
         await _notify_spins(spins, st["wheel"]["spins"], s_spins, s_tickets, st["wheel"].get("tickets", 0), w_tickets,
                             p_spins, p_tickets)
     return new
+
+
+async def _retire_android(st: dict) -> list:
+    """Une fois (02/11/2026) : les succes retires (RETIRED_IDS) que la maison avait rapportent chacun RETIRED_TICKETS
+    tickets de palier, puis sortent de l'etat et des secrets trouves. Rend les ids des succes rembourses."""
+    if st.get("retired_android"):
+        return []
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    had = sorted(aid for aid in RETIRED_IDS if (st.get("unlocked") or {}).get(aid))
+    if had:
+        w = _wheel_init(st)
+        w["tickets"] = w.get("tickets", 0) + RETIRED_TICKETS * len(had)
+        w["tickets_won"] = w.get("tickets_won", 0) + RETIRED_TICKETS * len(had)
+    for k in ("unlocked", "best", "ever"):
+        if isinstance(st.get(k), dict):
+            st[k] = {aid: v for aid, v in st[k].items() if aid not in RETIRED_IDS}
+    st["retired_android"] = {"at": datetime.utcnow().isoformat(), "ids": had, "tickets": RETIRED_TICKETS * len(had)}
+    # les secrets trouves (par la maison, et par chaque compte) : sans eux, rien ne les rejoue ni ne les compte
+    found = await eggs_found()
+    by = await _eggs_by()
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, KEY + "_EGGS", json.dumps({k: v for k, v in found.items() if k not in RETIRED_EGGS}))
+        await set_setting(db, KEY + "_EGGS_BY", json.dumps({u: {k: v for k, v in (d or {}).items() if k not in RETIRED_EGGS}
+                                                            for u, d in by.items()}))
+    await _state_put(st)                 # le remboursement est acquis, meme si la suite du passage echoue
+    return had
+
+
+async def _notify_retired(names: list, tickets_total: int) -> None:
+    from . import notify as N
+    cfg = await N._load()
+    if not N.enabled_in(cfg, "wheel_spin"):
+        return
+    n = len(names)
+    await N.notify("wheel_spin", f"🎟️ {RETIRED_TICKETS * n} tickets de palier offerts !",
+                   f"Les succès de l'appli Android et ceux qui écoutaient les capteurs du téléphone sont retirés "
+                   f"(ils vidaient la batterie). Tu en avais {n} : {RETIRED_TICKETS} tickets de palier pour chacun.\n"
+                   f"Tu as {tickets_total} ticket{'s' if tickets_total > 1 else ''} de palier.",
+                   click=N.app_link(cfg, "/stats?tab=achievements"), priority=2)
 
 
 # ── Cles (20/10/2026) ────────────────────────────────────────────────────────
@@ -7142,11 +7024,9 @@ def _auto_plan(st: dict, budget: int, fam=None) -> list:
     hint_lvl = next(i for i, r in enumerate(REVEALS) if r[0] == "hint") + 1
     # ni les farces tirees au hasard (elles ne se gagnent que si elles tombent par surprise : un indice
     # n'y peut rien) ; et d'abord les secrets dates (calendrier, fetes), pour pouvoir les anticiper
-    # la section Android : seulement si l'appli Android sert dans la maison (un de ses secrets deja trouve)
     won = st.get("unlocked") or {}
-    android = any(won.get(f"egg_{k}") for k in ANDROID_EGGS)
     todo = [a["id"] for a in CATALOG if len(a["tiers"]) == 1 and a.get("hidden") and not a.get("set") and not a.get("only_won")
-            and a["id"][4:] not in PRANK_EGGS and (android or a["id"][4:] not in ANDROID_EGGS) and not won.get(a["id"])]
+            and a["id"][4:] not in PRANK_EGGS and not won.get(a["id"])]
     dated = lambda aid: SUB_OF.get(aid) in ("calendar", "fetes") or aid[4:] in DATED_CACHETTES      # noqa: E731
     lvl = {aid: _reveal_level(st, aid, fam) for aid in todo}
     to_hint = lambda aid: sum(REVEALS[i][2] for i in range(lvl[aid], hint_lvl))

@@ -262,7 +262,7 @@ export default function Achievements({ embedded = false }) {
           <div style={{ ...sectionTitle, display:"flex", alignItems:"center", gap:6 }}>🏠 Classement de la famille
             <span style={{ marginLeft:"auto", fontSize:11, fontWeight:800, letterSpacing:0, textTransform:"none", color:"#EC4899" }}>Détail ›</span></div>
           <Podium places={4} people={famBoard.people.map(x => ({ id: x.username, name: x.username, me: x.username === famBoard.me, score: x.count }))} score={p => p.score}/>
-          <span style={{ fontSize:11.5, color:"var(--muted)" }}>Sur les secrets à chercher : easter eggs, cachettes, farces, fêtes, pages cachées et appli Android.</span>
+          <span style={{ fontSize:11.5, color:"var(--muted)" }}>Sur les secrets à chercher : easter eggs, cachettes, farces, fêtes et pages cachées.</span>
         </button>
       )}
 
@@ -422,7 +422,7 @@ export default function Achievements({ embedded = false }) {
                     {data.family && <span><b style={{ color:"#EC4899" }}>🥚 Tes trouvailles : {data.family.found} / {data.family.total}</b>
                       {" · "}<b style={{ color:"#0EA5E9" }}>🔍 {data.family.loupes} loupe{data.family.loupes > 1 ? "s" : ""}</b> : sur un secret que tu n'as pas encore ({data.family.house} l'ait trouvé ou non), une dévoile la catégorie, la vignette et le titre,
                       une l'indice, puis {data.family.loupes_desc || 2} le descriptif ({data.family.loupes_day} de plus chaque jour, {data.family.loupes_max} au plus).
-                      Easter eggs, cachettes, Android, farces, fêtes et pages cachées : ici, ce sont les tiennes. Le reste des succès est celui
+                      Easter eggs, cachettes, farces, fêtes et pages cachées : ici, ce sont les tiennes. Le reste des succès est celui
                       de la maison.</span>}
                     {near > 0 && !atFriend && <span><b style={{ color:"#F59E0B" }}>👀 À portée</b> : pas encore à toi, mais {data.family
                       ? "quelqu'un de la maison ou un copain" : "un copain"} l'a déjà
@@ -2030,7 +2030,7 @@ function Rules({ data, onClose }) {
           un tiroir : 25, 50, 75 % de ses secrets trouvés, et tous pour l'As. Une section ou un tiroir qui apparaît a d'office
           sa main.</P>
         <P>Quatre <b>Jokers</b> : un pour tous les Valets, un pour toutes les Dames, un pour tous les Rois, et le <b>Joker
-          d'or</b> pour tous les As (la carte des secrets de l'appli Android n'y compte qu'une fois l'un d'eux trouvé). Comme les collections, une carte <b>se retourne</b> si un nouveau succès ou secret arrive :
+          d'or</b> pour tous les As. Comme les collections, une carte <b>se retourne</b> si un nouveau succès ou secret arrive :
           il suffit de le décrocher pour la retrouver. Une carte gagnée se fête à la prochaine ouverture de l'appli, sur le compte principal : c'est à toi de la retourner, et plus elle est haute, plus la fête est grande (son, vibration, reflet holographique pour l'As et les Jokers). Elle rapporte {k?.rules?.secret ?? 3} clés et un tour de roue
           (celles de « Clés et roue », un tour seulement).</P>
 
@@ -2066,8 +2066,7 @@ function Rules({ data, onClose }) {
           </div>
           <P><b>Dépense automatique</b> (⚡ sous tes clés) : tu choisis combien en dépenser, l'appli choisit où. Elle vise le plus
             d'indices possible. Les secrets liés à une date (calendrier, fêtes, cachettes de saison) passent en premier, pour que tu
-            puisses les anticiper ; les tours qui ne tombent que par hasard sont laissés de côté (un indice n'y changerait rien), et les
-            secrets de l'appli Android aussi, tant qu'aucun n'a été trouvé (sans l'appli, ils sont introuvables). Ensuite, les secrets les moins chers à mener jusqu'à leur indice (ceux qu'un copain a gagnés, ceux
+            puisses les anticiper ; les tours qui ne tombent que par hasard sont laissés de côté (un indice n'y changerait rien). Ensuite, les secrets les moins chers à mener jusqu'à leur indice (ceux qu'un copain a gagnés, ceux
             déjà entamés), puis elle avance les suivants étape par étape ; les descriptifs ne passent qu'une fois tous les indices
             pris. Tu vois ce qui sera révélé avant de valider.</P>
         </>}
@@ -2117,7 +2116,7 @@ function Rules({ data, onClose }) {
         <H>🏠 Les comptes de la maison</H>
         <P>Les <b>clés</b> et les <b>tickets</b> ne se dépensent que depuis le compte principal. La <b>roue</b> aussi, sauf
           pour un compte à qui il l'a permise : le lot va alors à la maison.</P>
-        <P>Un compte de la <b>famille</b> (case cochée par l'administrateur) cherche les easter eggs, cachettes, secrets Android,
+        <P>Un compte de la <b>famille</b> (case cochée par l'administrateur) cherche les easter eggs, cachettes,
           farces, fêtes et pages cachées pour lui-même : il voit ses trouvailles en entier, et celles de la maison comme chez un
           copain (catégorie, médaille et titre, « untel l'a déjà »). Le reste des succès est celui de la maison.</P>
         <P>Chaque compte de la famille a des <b>loupes</b> : deux de plus chaque jour, trois au plus. Une loupe révèle l'indice d'un
@@ -2324,7 +2323,7 @@ const feltBg = (c, c2 = c) => [
 const feltCard = (c, c2) => ({ background: feltBg(c, c2), border:`1px solid ${rgba(c, 0.35)}`,
   boxShadow:`0 6px 18px -10px ${rgba(c, 0.55)}, inset 0 1px 0 rgba(255,255,255,0.10)` });
 // Tiroirs des secrets : une couleur chacun
-const SUB_COLOR = { android:"#3DDC84", calendar:"#F97316", clock:"#6366F1", measures:"#0EA5E9", colors:"#EC4899", counts:"#14B8A6",
+const SUB_COLOR = { calendar:"#F97316", clock:"#6366F1", measures:"#0EA5E9", colors:"#EC4899", counts:"#14B8A6",
   ups:"#EF4444", trade:"#F59E0B", mw:"#22C55E", social:"#06B6D4", app:"#8B5CF6", eggs:"#EAB308", game:"#DC2626",
   sets:"#D4A017", jokers:"#D4A017" };
 const pill = (c, dark = false) => ({ fontSize:11, fontWeight:800, whiteSpace:"nowrap", padding:"3px 9px", borderRadius:20,

@@ -4471,7 +4471,7 @@ function FamilyBoardZoom({ b }) {
   return <>
     <Stats items={[["Secrets à chercher", b.total, FAM_C], ["En tête", people[0] ? `${people[0].username} · ${people[0].count}` : "—", "#D4A017"],
       ["Membres", people.length, "#A855F7"]]}/>
-    <Muted>Seuls comptent les secrets qui se cherchent : easter eggs, cachettes, appli Android, farces, fêtes et pages cachées. Chacun les siens ;
+    <Muted>Seuls comptent les secrets qui se cherchent : easter eggs, cachettes, farces, fêtes et pages cachées. Chacun les siens ;
       ceux de la maison sont ceux du compte principal.</Muted>
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{people.map((x, r) => famRow(b, x, r, 48, false, max))}</div>
     <H2>Section par section</H2>
