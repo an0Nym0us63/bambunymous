@@ -390,10 +390,18 @@ async def switch(pid: int, slot: int, spool_id: int, auto: bool = False) -> dict
         at = used.get(int(slot), 0.0)
         part = _row_used(last, at)
         left = round(float(last.grams_used or 0) - part, 2)
+        pname = p.translated_name or p.file_name or f"Impression {pid}"
         if last.spool_id:
             old = await db.get(Spool, last.spool_id)
             if old and not old.archived:
+                left_old = round(float(old.remaining_weight_g or 0), 1)
                 old.remaining_weight_g = 0.0                  # finie : ce qui restait a ete imprime
+                if left_old > 0:
+                    # tracee dans son historique (02/11/2026), et annulable comme un rendu
+                    from ..models.spool_move import SpoolMove
+                    db.add(SpoolMove(spool_id=old.id, grams=left_old, kind="fin", print_id=pid, usage_id=last.id,
+                                     label=f"{pname} — bobine finie, la #{spool_id} prend la suite"
+                                           f"{' (relais de l’AMS)' if auto else ''}"[:250]))
         last.grams_used = round(part, 2)
         row = FilamentUsage(print_id=pid, spool_id=spool_id, filament_type=last.filament_type, color_hex=last.color_hex,
                             grams_used=left, ams_slot=int(slot), from_g=round(float(last.from_g or 0) + part, 2))
@@ -438,7 +446,7 @@ async def settle(pid: int) -> list:
         if not p:
             return []
         rows, used, _src = await _used(db, pid, p)
-        label = f"{p.translated_name or p.file_name or f'Impression {pid}'} (non imprimé)"
+        label = f"{p.translated_name or p.file_name or f'Impression {pid}'} — échec : la part non imprimée"
         for slot, rs in rows.items():
             for r in rs:
                 g = float(r.grams_used or 0)
@@ -523,7 +531,8 @@ async def live(pid: int) -> dict:
                 "name": (getattr(fil, "translated_name", None) or getattr(fil, "name", None) or "") if fil else "",
                 "spool_full": float(fil.filament_weight_g) if fil and fil.filament_weight_g else None,
             })
-    return {"print_id": pid, "layer": prog.get("layer"), "pct": prog.get("pct"), "items": items}
+    return {"print_id": pid, "print_name": p.translated_name or p.file_name, "layer": prog.get("layer"), "pct": prog.get("pct"),
+            "items": items}
 
 
 async def current_print_id() -> Optional[int]:

@@ -2097,7 +2097,7 @@ async def spool_usage_history(sid: int, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(
             _sel(
-                _FU.id, _FU.print_id, _FU.grams_used, _FU.cost,
+                _FU.id, _FU.print_id, _FU.grams_used, _FU.cost, _FU.from_g,
                 _P.file_name, _P.translated_name, _P.print_date, _P.status
             )
             .join(_P, _FU.print_id == _P.id)
@@ -2115,6 +2115,8 @@ async def spool_usage_history(sid: int, _: str = Depends(get_current_user)):
             "status":      r.status,
             "grams_used": r.grams_used,
             "cost":       r.cost,
+            # suivi couche par couche : cette bobine a pris le relais d'une autre en cours d'impression (02/11/2026)
+            "relay":      r.from_g is not None,
         }
         for r in rows
     ]
@@ -2162,6 +2164,13 @@ async def spool_history_undo(sid: int, body: dict = Body({}), _: str = Depends(r
             m = await db.get(SpoolMove, oid)
             if not m or m.spool_id != sid or m.reverted_at is not None:
                 raise HTTPException(404, "Ligne introuvable ou déjà annulée")
+            if m.kind == "fin":
+                # une bobine mise a 0 en cours d'impression (suivi couche par couche) : ce qu'elle avait lui revient
+                s.remaining_weight_g = round((s.remaining_weight_g or 0) + (m.grams or 0), 1)
+                m.reverted_at = _dt.utcnow()
+                await db.commit()
+                _clear_match_cache()
+                return {"ok": True, "message": f"{(m.grams or 0):g} g remis à la bobine".replace(".", ",")}
             s.remaining_weight_g = round(max(0.0, (s.remaining_weight_g or 0) - (m.grams or 0)), 1)
             fu = await db.get(_FU, m.usage_id) if m.usage_id else None
             if fu is not None:

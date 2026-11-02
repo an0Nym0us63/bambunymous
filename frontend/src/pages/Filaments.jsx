@@ -28,6 +28,7 @@ import SpoolSVG from "../components/SpoolSVG";
 import { Ghost, GhostBadge, HeroSpool, ORD_C, ORD_BG, tipStock, tipOrdered } from "../components/SpoolGhost";
 import { EmptyCard, FCard, FLAB, FROW, FRow, FSheet, FTile, FVAL, PageTabs, SearchRow, agoFr, dayFr, fBtn, fChip, fGrad, fRound, isLight, lighten } from "../components/FicheKit";
 import GalleryCompare from "../components/GalleryCompare";
+import { useLiveUsage } from "../components/LiveUsage";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 import { FriendsPrints, useHasFriends, useShared, sharedCount } from "../components/Friends";
 import { FitBox } from "../components/FitThumb";
@@ -877,6 +878,10 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
   const [cur, setCur] = useState(spoolProp);
   useEffect(() => { setCur(spoolProp); }, [spoolProp]);
   const spool = cur;
+  // suivi couche par couche (alpha, 02/11/2026) : la bobine sert a l'impression en cours ; son poids enregistre est
+  // deja sa cible (tout est retire au debut), et on montre ou elle en est maintenant
+  const liveD = useLiveUsage(!spool?.archived && !spool?.ordered);
+  const live = (liveD?.items || []).find(i => i.spool_id === spool?.id && i.current && i.now != null) || null;
   const refresh = async () => {
     try {
       const r = await client.get(`/filaments/spools/${spoolProp.id}`);
@@ -910,8 +915,10 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
   // annuler une ligne de l'historique (31/10/2026) : une consommation rend ses grammes, un rendu les reprend
   const undoLine = async (kind, id, grams, back) => {
     const g = `${(grams || 0).toFixed(1).replace(".", ",")} g`;
-    if (!(await showConfirm(back ? `Rendre ${g} à la bobine ? L'impression ne comptera plus sur elle (ses coûts sont refaits).`
-      : `Reprendre ${g} à la bobine (annuler ce rendu) ?`, { title: "Annuler cette ligne ?", confirmLabel: back ? "Rendre" : "Reprendre" }))) return;
+    // back === "fin" : une bobine mise a 0 en cours d'impression (suivi couche par couche)
+    if (!(await showConfirm(back === "fin" ? `Remettre ${g} à la bobine (annuler sa mise à 0) ?`
+      : back ? `Rendre ${g} à la bobine ? L'impression ne comptera plus sur elle (ses coûts sont refaits).`
+      : `Reprendre ${g} à la bobine (annuler ce rendu) ?`, { title: "Annuler cette ligne ?", confirmLabel: back === "fin" ? "Remettre" : back ? "Rendre" : "Reprendre" }))) return;
     try {
       await client.post(`/filaments/spools/${spool.id}/history/undo`, { kind, id });
       egg("annule_ligne");
@@ -1061,9 +1068,17 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
             border: light ? "1px solid rgba(0,0,0,0.18)" : "none", boxShadow:`0 3px 10px ${light ? "rgba(0,0,0,0.12)" : `${barColor}55`}` }}>{pct} %</span>
           <span style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>sur {Math.round(total)} g</span>
         </div>
-        <div style={{ height:10, borderRadius:10, background:"var(--surface)", overflow:"hidden", boxShadow:"inset 0 0 0 1px var(--border)" }}>
-          <div style={{ height:"100%", width:`${pct}%`, borderRadius:10, background:barColor, transition:"width .5s",
+        <div style={{ position:"relative", height:10, borderRadius:10, background:"var(--surface)", overflow:"hidden", boxShadow:"inset 0 0 0 1px var(--border)" }}>
+          {/* en cours d'impression : ce qu'elle a maintenant, en pale ; ce qui restera a la fin, en plein */}
+          {live && <div style={{ position:"absolute", inset:0, width:`${Math.min(100, live.now / total * 100)}%`, borderRadius:10, background:`${barColor}55` }}/>}
+          <div style={{ position:"relative", height:"100%", width:`${pct}%`, borderRadius:10, background:barColor, transition:"width .5s",
             boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : `0 0 8px ${barColor}66` }}/></div>
+        {live && <div style={{ display:"flex", alignItems:"flex-start", gap:8, marginTop:2, padding:"8px 10px", borderRadius:12, fontSize:12.5, lineHeight:1.45,
+          color:"var(--text2)", background:"linear-gradient(135deg, rgba(139,92,246,.14), transparent 70%), var(--surface)", border:"1px solid rgba(139,92,246,.35)" }}>
+          <span>🖨️</span>
+          <span><b style={{ color:"var(--text)" }}>Impression en cours{liveD.print_name ? ` : ${liveD.print_name}` : ""}</b>{liveD.layer ? ` · couche ${liveD.layer}` : ""}<br/>
+            Elle a <b style={{ color:"var(--text)" }}>≈ {Math.round(live.now)} g</b> maintenant ; les {Math.round(remaining)} g affichés sont sa cible, ce qui
+            restera à la fin ({Math.round(live.row_used)} g consommés sur {Math.round(live.row_planned)} g prévus, en pâle sur la barre).</span></div>}
       </FHero>
 
       <div style={{ padding:"12px 14px 18px", display:"flex", flexDirection:"column", gap:12 }}>
@@ -1161,7 +1176,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
               <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#8B5CF6" }}>📋 Historique · bobine #{spool.id}</div>
               <div style={{ fontSize:17, fontWeight:900, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
               <div style={{ fontSize:12, fontWeight:700, color:"var(--muted)" }}>
-                {(() => { const us = usageHistory.filter(u => (u.kind || "usage") === "usage"), back = usageHistory.filter(u => u.kind && u.kind !== "usage" && !u.reverted);
+                {(() => { const us = usageHistory.filter(u => (u.kind || "usage") === "usage"), back = usageHistory.filter(u => u.kind && u.kind !== "usage" && u.kind !== "fin" && !u.reverted);
                   return <>{us.length} impression{us.length !== 1 ? "s" : ""}
                     {us.length > 0 && ` · ${Math.round(us.reduce((t, u) => t + (u.grams_used || 0), 0))} g consommés`}
                     {back.length > 0 && ` · ${Math.round(back.reduce((t, u) => t + (u.grams || 0), 0))} g rendus`}</>; })()}</div>
@@ -1171,6 +1186,26 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
             {usageHistory.length === 0 && <p style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:"24px 0" }}>Aucune utilisation enregistrée</p>}
             {usageHistory.map((u, i) => {
               // un rendu (ou une consommation annulee) : vert, « + », et annulable s'il ne l'est pas deja (31/10/2026)
+              // une bobine finie en cours d'impression (suivi couche par couche, 02/11/2026) : mise a 0, annulable
+              if (u.kind === "fin") {
+                const when = u.print_date ? new Date(u.print_date).toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" }) : null;
+                return <div key={`m${u.id}`} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:14, border:"1px solid var(--border)",
+                  background:"linear-gradient(135deg, rgba(245,158,11,0.13), transparent 55%), var(--surface2)", opacity: u.reverted ? 0.55 : 1 }}>
+                  <span style={{ width:46, height:46, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20,
+                    background:"rgba(245,158,11,0.15)" }}>🏁</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+                      textDecoration: u.reverted ? "line-through" : "none" }}>Bobine finie{u.file_name ? ` · ${u.file_name}` : ""}</div>
+                    <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>{when}{u.reverted ? " · annulé" : " · mise à 0 g"}</div>
+                  </div>
+                  <div style={{ textAlign:"right", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
+                    <div style={{ fontSize:14, fontWeight:900, color:"#d97706" }}>−{(u.grams || 0).toFixed(1)} g</div>
+                    {!u.reverted && isAdmin && <button onClick={() => undoLine("move", u.id, u.grams, "fin")} data-tip="Remettre ces grammes à la bobine"
+                      style={{ padding:"3px 9px", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer", border:"1px solid var(--border)",
+                        background:"var(--surface)", color:"var(--text2)" }}>↶ Annuler</button>}
+                  </div>
+                </div>;
+              }
               if (u.kind && u.kind !== "usage") {
                 const when = u.print_date ? new Date(u.print_date).toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" }) : null;
                 return <div key={`m${u.id}`} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:14, border:"1px solid var(--border)",
@@ -1201,7 +1236,8 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                   <div style={{ fontSize:13, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{u.file_name || "Print #" + u.print_id}</div>
                   <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>
                     {u.print_date && <span>{new Date(u.print_date).toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" })}</span>}
-                    {st && <span style={{ color:st[1] }}>● {st[0]}</span>}</div>
+                    {st && <span style={{ color:st[1] }}>● {st[0]}</span>}
+                    {u.relay && <span data-tip="Elle a pris la suite d'une bobine finie en cours d'impression" style={{ color:"#8B5CF6" }}>🔁 a pris le relais</span>}</div>
                 </div>
                 <div style={{ textAlign:"right", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
                   <div style={{ fontSize:14, fontWeight:900, ...fGrad("#ef4444", "#f97316") }}>−{u.grams_used?.toFixed(1)} g</div>
