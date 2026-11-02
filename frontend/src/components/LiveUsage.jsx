@@ -36,10 +36,10 @@ export function LiveBar({ now, target, full, color, h = 8 }) {
   if (now == null || !full) return null;
   const w = v => `${Math.max(0, Math.min(100, (v / full) * 100))}%`;
   return <div style={{ position: "relative", height: h, borderRadius: h, background: "var(--surface2)", overflow: "hidden", boxShadow: "inset 0 0 0 1px var(--border)" }}>
-    <div style={{ position: "absolute", inset: 0, width: w(now), borderRadius: h, background: `linear-gradient(90deg, ${color}aa, ${color})` }}/>
-    {target != null && target < now && <div style={{ position: "absolute", top: 0, bottom: 0, left: w(target), width: w(now - target),
-      background: "repeating-linear-gradient(135deg, rgba(255,255,255,.55) 0 3px, transparent 3px 6px)" }}/>}
-    {target != null && <div data-tip={`À la fin : ${g(target)}`} style={{ position: "absolute", top: 0, bottom: 0, left: w(target), width: 2, background: "var(--text)", opacity: .55 }}/>}
+    {/* ce qui restera a la fin en plein, la part qui partira d'ici la fin en pale (sans trait sombre) */}
+    <div data-tip={target != null ? `À la fin : ${g(target)}` : undefined} style={{ position: "absolute", inset: 0, width: w(now), borderRadius: h,
+      background: target != null && target < now ? `${color}55` : `linear-gradient(90deg, ${color}aa, ${color})` }}/>
+    {target != null && target < now && <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: w(target), borderRadius: h, background: color }}/>}
   </div>;
 }
 

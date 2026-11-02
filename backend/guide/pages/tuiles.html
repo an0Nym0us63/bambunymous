@@ -65,6 +65,7 @@
       <tr><td><a href="#tuiles-camera">Caméra</a></td><td>L'image de la caméra et l'avancement</td><td>toute · 2</td></tr>
       <tr><td><a href="#tuiles-temps">Températures</a></td><td>Buse(s), plateau, chambre et leurs consignes</td><td>demi · 1</td></tr>
       <tr><td><a href="#tuiles-spool">Filament en cours</a></td><td>La bobine qui imprime et ce qu'il en reste</td><td>demi · 1</td></tr>
+      <tr><td><a href="#tuiles-layer">Couche en cours</a></td><td>Le dessin de la couche qui s'imprime, lu dans le G-code</td><td>demi · 1</td></tr>
       <tr><td><a href="#tuiles-head">Tête d'impression</a></td><td>Les deux buses en dessin (machines à deux buses)</td><td>demi · 2</td></tr>
       <tr><td><a href="#tuiles-switch">Aiguillage (Track Switch)</a> (« Aiguillage »)</td><td>Quelle entrée alimente quelle buse</td><td>toute · 2</td></tr>
       <tr><td><a href="#tuiles-colors">Couleurs chargées</a></td><td>Toutes les bobines en place, en carrés de couleur</td><td>toute · 1</td></tr>
@@ -109,7 +110,7 @@
       <dt><span class="ui">Heure de fin</span> (oui)</dt><dd>Affiche « fin à … ».</dd>
       <dt><span class="ui">Couche</span> (oui)</dt><dd>Affiche la couche en cours sur le total.</dd>
     </dl>
-    <p><b>Au toucher</b> : la vue en grand reprend l'anneau et le temps, la barre des couches, et six cases : <span class="ui">Reste</span>, <span class="ui">Fin</span>, <span class="ui">Couche</span>, <span class="ui">Avancement</span>, <span class="ui">Commencée</span>, <span class="ui">Durée totale</span>. Pas de bouton <span class="ui">Ouvrir</span>.</p>
+    <p><b>Au toucher</b> : la vue en grand reprend l'anneau et le temps, la barre des couches, et six cases : <span class="ui">Reste</span>, <span class="ui">Fin</span>, <span class="ui">Couche</span>, <span class="ui">Avancement</span>, <span class="ui">Commencée</span>, <span class="ui">Durée totale</span>. Pas de bouton <span class="ui">Ouvrir</span>. Dessous, le dessin de la couche en cours, comme dans la tuile <a href="#tuiles-layer">Couche en cours</a>.</p>
   </section>
 
   <section id="tuiles-camera">
@@ -138,9 +139,16 @@
     <p><b>Au toucher</b> : les thermomètres en grand (quatre par ligne sur un grand écran, deux sur téléphone), avec la source, la consigne et l'état. La <a href="#imprimante-fenetre">fenêtre de l'imprimante</a> les montre en plus petit. Pas de bouton <span class="ui">Ouvrir</span>.</p>
   </section>
 
+  <section id="tuiles-layer">
+    <h3>Couche en cours</h3>
+    <p><b>Ce qu'elle montre</b> : pendant une impression, le dessin de la couche qui s'imprime, lu dans le G-code du 3MF tranché : chaque filament à sa couleur, la part déjà imprimée de la couche en plein et le reste en pâle, la couche d'avant en gris derrière ; dessous, « couche 87 / 210 · 40 % de la couche ». Le dessin se relit à chaque nouvelle couche. Sans impression : <span class="ui">Rien en cours d'impression</span> ; sans 3MF tranché : <span class="ui">Pas de G-code pour cette impression</span>.</p>
+    <p><b>Options</b> : aucune en dehors du titre et du fond.</p>
+    <p><b>Au toucher</b> : le dessin en grand, un curseur pour parcourir toutes les couches de l'impression (<span class="ui">● En cours</span> revient à celle qui s'imprime), et la légende des filaments. Il ne fait qu'afficher : il marche quel que soit le suivi du filament choisi dans les Paramètres.</p>
+  </section>
+
   <section id="tuiles-spool">
     <h3>Filament en cours</h3>
-    <p><b>Ce qu'elle montre</b> : la bobine qui imprime, dessinée à sa couleur (multicolore si besoin) et qui tourne pendant l'impression ; son nom, sa matière et sa marque, le poids restant (« 906 g ») avec une pastille de pourcentage (rouge sous 15 %, orange sous 35 %) et une jauge ; l'emplacement (« A3 · AMS-A »). Sur une grande tuile s'ajoutent des pastilles : « ≈ 12,80 € restants », l'humidité de l'AMS (« 💧 26 % »), <span class="ui">à sécher</span>, <span class="ui">échantillon à faire</span>. Sans impression : <span class="ui">Pas d'impression en cours</span> (ou <span class="ui">Bobine inconnue</span> si la bobine n'est pas reconnue).</p>
+    <p><b>Ce qu'elle montre</b> : la bobine qui imprime, dessinée à sa couleur (multicolore si besoin) et qui tourne pendant l'impression ; son nom, sa matière et sa marque, le poids restant (« 906 g ») avec une pastille de pourcentage (rouge sous 15 %, orange sous 35 %) et une jauge (avec le <a href="#suivi-filament">suivi couche par couche</a> : « ≈ 695 g », le poids maintenant ; la jauge garde en plein ce qui restera à la fin, et en pâle ce qui partira d'ici là) ; l'emplacement (« A3 · AMS-A »). Sur une grande tuile s'ajoutent des pastilles : « ≈ 12,80 € restants », l'humidité de l'AMS (« 💧 26 % »), <span class="ui">à sécher</span>, <span class="ui">échantillon à faire</span>. Sans impression : <span class="ui">Pas d'impression en cours</span> (ou <span class="ui">Bobine inconnue</span> si la bobine n'est pas reconnue).</p>
     <figure><img src="img/tuiles-spool.webp" alt="Tuile Filament en cours en demi-colonne et sur toute la colonne"><figcaption>Une rangée en demi-colonne, et toute la colonne sur 2 rangées.</figcaption></figure>
     <p><b>Options</b> : aucune en dehors du titre et du fond.</p>
     <p><b>Au toucher</b> : la bobine en grand sur un fond de sa couleur, avec ses pastilles (emplacement, <span class="ui">● en cours</span>, <span class="ui">à sécher</span>, <span class="ui">échantillon à faire</span>), son nom, « sur 1000 g · 91 % » et une barre, puis des cartes :</p>

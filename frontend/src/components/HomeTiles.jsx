@@ -5,6 +5,7 @@ import AllAlertsModal from "./AllAlertsModal";
 import { Hide } from "./Cachettes";
 import { useFriend, currentFriend } from "../store/friend";
 import { useLiveUsage, liveOfSpool } from "./LiveUsage";
+import { useLayer, LayerCanvas, LayerExplorer } from "./LayerView";
 import { useIsAdmin } from "../store/auth";
 import { showAlert } from "../utils/dialog";
 import { relayed } from "./Friends";
@@ -14,7 +15,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets, Coins, Star, Users, Trophy,
          Dices, ChevronRight, Camera, Video, Thermometer, CalendarDays, ShoppingBag, Rss, Images, Zap, Medal as MedalIcon,
-         BellRing, Split, Fan, Wrench, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck, Maximize2, PackageOpen } from "lucide-react";
+         BellRing, Split, Fan, Wrench, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck, Maximize2, PackageOpen, Layers } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
 import StoreLink from "./StoreLink";
 import { RateButton } from "./MwToRate";
@@ -3565,11 +3566,32 @@ function Countdown({ status, o, sz }) {
         <div style={{ height: "100%", width: `${pct}%`, borderRadius: 6, background: color, boxShadow: `0 0 10px ${color}` }}/></div>
       {name}
       <Stats items={[["Reste", left ? fmtDur(left * 60) : "—"], ["Fin", left ? finAt(left) : "—"],
-        ["Couche", status.total_layers > 0 ? `${status.layer} / ${status.total_layers}` : "—"], ["Avancement", `${pct} %`, color], ...facts]}/></> : null}
+        ["Couche", status.total_layers > 0 ? `${status.layer} / ${status.total_layers}` : "—"], ["Avancement", `${pct} %`, color], ...facts]}/>
+      {/* le dessin de la couche en cours (02/11/2026), lu dans le G-code */}
+      {!currentFriend() && <LayerExplorer status={status}/>}</> : null}
       mini={sz.h === 0.5} summary={live ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13.5 }}>
         <span style={{ color }}>{pct}%</span>{left > 0 && <>{fmtDur(left * 60)}<Muted>· {finAt(left)}</Muted></>}</span> : <Muted size={12.5}>rien en cours</Muted>}>
       {({ W }) => live ? <Stack min={W < 215 ? 150 : 76} head={hero} blocks={[name && { h: 18, node: name }, layers && { h: 30, node: layers },
         facts.length && { h: statsH(facts.length, W), node: <Stats items={facts}/> }]}/> : <Empty>Rien en cours d'impression</Empty>}
+    </Tile>
+  );
+}
+// la couche en cours (02/11/2026) : son dessin, lu dans le G-code du 3MF tranche ; la part deja imprimee en plein, la
+// couche d'avant en fantome ; en grand, un curseur pour parcourir les couches
+function LayerTile({ status, sz }) {
+  const live = isLive(status) && !currentFriend();
+  const { d, ghost } = useLayer(live, null, status?.layer, status?.progress);
+  const tot = status?.total_layers || d?.last;
+  return (
+    <Tile icon={<Layers size={15}/>} color="#8B5CF6" label="Couche en cours" zoom={live ? <LayerExplorer status={status}/> : null}
+      mini={sz.h === 0.5} summary={live && d?.ok ? <span style={{ fontSize: 13.5 }}>couche {d.layer}<Muted> / {tot}</Muted></span>
+        : <Muted size={12.5}>rien en cours</Muted>}>
+      {({ W, H }) => !live ? <Empty>Rien en cours d'impression</Empty>
+        : !d ? <Empty>…</Empty>
+        : !d.ok ? <Empty>Pas de G-code pour cette impression</Empty>
+        : <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 0 }}>
+          <LayerCanvas d={d} ghost={ghost} w={Math.max(60, Math.floor(W))} h={Math.max(50, Math.floor(H) - 18)}/>
+          <Muted size={11.5}>couche {d.layer} / {tot}{d.frac != null ? ` · ${Math.round(d.frac * 100)} % de la couche` : ""}</Muted></div>}
     </Tile>
   );
 }
@@ -3604,16 +3626,16 @@ function Spool({ status, o, sz }) {
   // une couleur tres claire (blanc, jade…) se perd sur le fond : la barre garde un contour, le texte du % passe en sombre
   const light = (c => { const m = /^#?([0-9a-f]{6})/i.exec(c || ""); if (!m) return false; const n = parseInt(m[1], 16);
     return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.72; })(barCol);
-  // suivi couche par couche : la part qui partira d'ici la fin, hachuree, et un repere a la cible (02/11/2026)
+  // suivi couche par couche (02/11/2026) : ce qui restera a la fin en plein, la part qui partira d'ici la fin en pale
+  // (02/11/2026 : un trait sombre a la cible faisait tache)
   const tgt = lv?.target != null && tot ? Math.max(0, Math.min(1, lv.target / tot)) : null;
-  const bar = h => <div style={{ position: "relative", height: h, borderRadius: h, background: "var(--surface2)", overflow: "hidden", boxShadow: "inset 0 0 0 1px var(--border)" }}>
-    <div data-pk="" style={{ height: "100%", width: `${(pct ?? 0) * 100}%`, borderRadius: h, background: barCol,
-      boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : `0 0 8px ${barCol}66` }}/>
-    {tgt != null && pct != null && tgt < pct && <>
-      <div style={{ position: "absolute", top: 0, bottom: 0, left: `${tgt * 100}%`, width: `${(pct - tgt) * 100}%`,
-        background: "repeating-linear-gradient(135deg, rgba(255,255,255,.55) 0 3px, transparent 3px 6px)" }}/>
-      <div data-tip={`À la fin de l'impression : ${Math.round(lv.target)} g`} style={{ position: "absolute", top: 0, bottom: 0, left: `${tgt * 100}%`, width: 2,
-        marginLeft: -1, background: "var(--text)", opacity: .7 }}/></>}</div>;
+  const soon = tgt != null && pct != null && tgt < pct;
+  const bar = h => <div data-tip={soon ? `≈ ${Math.round(g)} g maintenant · ${Math.round(lv.target)} g à la fin de l'impression` : undefined}
+    style={{ position: "relative", height: h, borderRadius: h, background: "var(--surface2)", overflow: "hidden", boxShadow: "inset 0 0 0 1px var(--border)" }}>
+    <div data-pk="" style={{ height: "100%", width: `${(pct ?? 0) * 100}%`, borderRadius: h, background: soon ? `${barCol}55` : barCol,
+      boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : soon ? "none" : `0 0 8px ${barCol}66` }}/>
+    {soon && <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: `${tgt * 100}%`, borderRadius: h, background: barCol,
+      boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : `0 0 8px ${barCol}66` }}/>}</div>;
   // le pourcentage restant, en pastille a la couleur de la bobine
   const pctPill = fs => pct == null ? null : <span data-pk="" style={{ display: "inline-flex", alignItems: "baseline", gap: 1, padding: `1px ${Math.round(fs * 0.55)}px`,
     borderRadius: 20, fontSize: fs, fontWeight: 900, whiteSpace: "nowrap", flexShrink: 0, lineHeight: 1.35,
@@ -4579,6 +4601,7 @@ export const TILES = {
   countdown: { label: "Fin d'impression", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Countdown status={st} o={o} sz={sz(it)}/>,
     options: [B("fin", "Heure de fin", true), B("layer", "Couche", true)] },
   spool: { label: "Filament en cours", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Spool status={st} o={o} sz={sz(it)}/> },
+  layer: { label: "Couche en cours", w: [1, 2], h: [2, 1, 3, 0.5], render: (d, st, o, it) => <LayerTile status={st} sz={sz(it)}/> },
   head: { label: "Tête d'impression", w: [1, 2], h: [2, 1, 3], render: (d, st, o, it) => <Toolhead status={st} sz={sz(it)}/> },
   switch: { label: "Aiguillage (Track Switch)", w: [2, 1], h: [2, 1, 3, 0.5], render: (d, st, o, it) => <FilaSwitch status={st} o={o} sz={sz(it)}/> },
   colors: { label: "Couleurs chargées", w: [2, 1], h: [1, 2, 0.5], render: (d, st, o, it) => <Colors status={st} o={o} sz={sz(it)}/> },
@@ -4618,6 +4641,7 @@ const WAIT = {
   alerts: ["attention", "Ce qui mérite ton attention dans le stock et les fiches."],
   orders: ["orders", "Les commandes Bambu Lab en route, lues dans tes mails."],
   countdown: ["status", "Le temps qu'il reste à l'impression en cours."],
+  layer: ["status", "Le dessin de la couche en cours d'impression."],
   spool: ["status", "La bobine qui imprime en ce moment."],
   head: ["status", "Les buses de la tête d'impression."],
   switch: ["status", "Le chemin du filament dans l'aiguillage."],
