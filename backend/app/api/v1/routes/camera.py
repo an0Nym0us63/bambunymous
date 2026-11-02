@@ -119,6 +119,7 @@ def _grab_tls6000(ip: str, code: str, timeout_s: float = 8.0) -> bytes:
 # Plus personne depuis 10 s : la connexion se ferme.
 _STREAM_FPS = 8
 _IDLE_STOP = 10.0
+_STALL_S = 8.0
 
 
 class _Hub:
@@ -142,6 +143,29 @@ class _Hub:
         self.err = ""
         self.err_at = 0.0
         self.ff_log = deque(maxlen=8)
+        self.proc = None             # le ffmpeg du direct (RTSP), pour l'arreter s'il se fige
+        self.socket = None           # la socket du direct (TLS:6000), idem
+        self.stalls = 0
+
+    def unstick(self) -> None:
+        """Le direct se fige sans erreur (02/11/2026 : plus une image depuis 33 s, ffmpeg vivant, le serveur attendait
+        indefiniment et seul un redemarrage le relancait) : au-dela de STALL_S sans image, la connexion est coupee ;
+        le producteur s'arrete sur une erreur et repart."""
+        with self.lock:
+            now = time.monotonic()
+            if self.thread is None or now - max(self.ts, self.started_at) < _STALL_S:
+                return
+            proc, sock = self.proc, self.socket
+            self.started_at = now                  # une seule coupure par blocage
+            self.stalls += 1
+        logger.info("Camera flux : fige, connexion coupee")
+        try:
+            if proc:
+                proc.kill()
+            if sock:
+                sock.close()
+        except Exception:
+            pass
 
     def stop(self) -> bool:
         with self.lock:
@@ -167,9 +191,15 @@ _HUB = _Hub()
 
 def _rtsp_frames(ip: str, code: str, stop):
     url = f"rtsps://bblp:{code}@{ip}:322/streaming/live/1"
+    # 02/11/2026 : « -r 8 » seul DUPLIQUE des images pour tenir la cadence : apres un retard de lecture, ffmpeg crachait
+    # des rafales de copies (ecarts de 0 s, « 46 img/s » qui saccadait), puis plus rien. « -fps_mode vfr » : au plus
+    # 8 images/s, des images en trop ecartees, jamais copiees. Sans tampon a l'entree (nobuffer, low_delay) : l'image
+    # part des qu'elle est decodee. « -timeout » (5 s, en microsecondes) : une lecture RTSP muette finit en erreur.
     proc = subprocess.Popen(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-rtsp_transport", "tcp",
-                             "-i", url, "-an", "-r", str(_STREAM_FPS), "-f", "image2pipe", "-vcodec", "mjpeg",
+                             "-fflags", "nobuffer", "-flags", "low_delay", "-timeout", "5000000",
+                             "-i", url, "-an", "-fps_mode", "vfr", "-r", str(_STREAM_FPS), "-f", "image2pipe", "-vcodec", "mjpeg",
                              "-q:v", "6", "pipe:1"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    _HUB.proc = proc
 
     def errors():                  # ce que dit ffmpeg, garde pour le releve (sans le code d'acces)
         for line in iter(proc.stderr.readline, b""):
@@ -192,6 +222,7 @@ def _rtsp_frames(ip: str, code: str, stop):
                 yield buf[a:b + 2]
                 buf = buf[b + 2:]
     finally:
+        _HUB.proc = None
         try:
             proc.kill()
         except Exception:
@@ -211,6 +242,7 @@ def _tls_frames(ip: str, code: str, stop):
     sock = socket.create_connection((ip, 6000), timeout=_TIMEOUT)
     try:
         with ctx.wrap_socket(sock, server_hostname=ip) as ss:
+            _HUB.socket = ss
             ss.settimeout(_TIMEOUT)
             ss.sendall(auth)
             buf, size = bytearray(), None
@@ -235,6 +267,7 @@ def _tls_frames(ip: str, code: str, stop):
                     if jpg[:2] == b"\xff\xd8":
                         yield jpg if jpg[-2:] == b"\xff\xd9" else jpg + b"\xff\xd9"
     finally:
+        _HUB.socket = None
         try:
             sock.close()
         except Exception:
@@ -264,6 +297,8 @@ def _produce(ip: str, code: str, mode: str) -> None:
         if err:
             _HUB.fails = min(_HUB.fails + 1, 6)
             _HUB.retry_at = time.monotonic() + min(5 * 2 ** (_HUB.fails - 1), 60)
+            if _HUB.ts and _HUB.ts > _HUB.started_at - 60:     # il donnait des images il y a peu : on repart vite
+                _HUB.retry_at = time.monotonic() + 1
 
 
 def _ensure_producer(ip: str, code: str, mode: str) -> None:
@@ -303,6 +338,39 @@ def _select_grab(model: str, model_id: str = ""):
     return "both"
 
 
+# Une seule connexion a la camera (02/11/2026). Les captures (secours de la page, partage, cliches des etapes d'une
+# impression) ouvraient chacune leur ffmpeg pendant que celui du direct tournait : l'imprimante supporte mal deux
+# connexions, le direct se figeait (plus une image depuis 33 s), et chaque capture de secours en rouvrait une autre.
+# Desormais une capture prend l'image du direct : elle le demarre au besoin (il s'arrete seul 10 s apres) ; une
+# capture a part n'est tentee que si le direct ne peut pas tourner (en attente apres des echecs).
+async def _hub_wait(ip: str, code: str, mode: str, wait: float = 10.0):
+    end = time.monotonic() + wait
+    while True:
+        with _HUB.lock:
+            _HUB.pulled = time.monotonic()
+            fr, ts, alive, retry = _HUB.frame, _HUB.ts, _HUB.thread is not None, _HUB.retry_at
+        if fr and time.monotonic() - ts < 3:
+            return fr
+        if time.monotonic() > end or (not alive and time.monotonic() < retry):
+            return None
+        if alive:
+            _HUB.unstick()
+        else:
+            _ensure_producer(ip, code, mode)
+        await asyncio.sleep(0.05)
+
+
+async def grab_jpeg() -> bytes:
+    """Une image de la camera, par la connexion du direct (cliches des etapes d'une impression)."""
+    ip, code, model, model_id = await _printer_conf()
+    if not ip or not code:
+        raise RuntimeError("camera non configuree")
+    r = await _serve(ip, code, model, model_id)
+    if r.status_code != 200:
+        raise RuntimeError(r.body.decode("utf-8", "ignore")[:200] or f"HTTP {r.status_code}")
+    return r.body
+
+
 async def _serve(ip: str, code: str, model: str, model_id: str = "") -> Response:
     now = time.monotonic()
     # un flux tourne : sa derniere image, sans relancer de capture
@@ -310,6 +378,20 @@ async def _serve(ip: str, code: str, model: str, model_id: str = "") -> Response
         if _HUB.frame and now - _HUB.ts < 3:
             return Response(_HUB.frame, media_type="image/jpeg",
                             headers={"Cache-Control": "no-store", "X-Camera-Status": "ok-stream"})
+    mode = _select_grab(model, model_id)
+    if mode is None:
+        return Response(status_code=503, content=b"Pas de camera chambre sur ce modele")
+    fr = await _hub_wait(ip, code, mode)
+    if fr:
+        return Response(fr, media_type="image/jpeg", headers={"Cache-Control": "no-store", "X-Camera-Status": "ok-stream"})
+    with _HUB.lock:
+        busy = _HUB.thread is not None
+    if busy:                                   # le direct tourne mais n'a rien donne : pas de seconde connexion
+        with _LOCK:
+            if _CACHE["data"]:
+                return Response(_CACHE["data"], media_type="image/jpeg", headers={"Cache-Control": "no-store", "X-Camera-Status": "stale"})
+        return Response(status_code=503, content=b"camera muette")
+    now = time.monotonic()
     with _LOCK:
         if _CACHE["ok"] and _CACHE["data"] and (now - _CACHE["ts"]) < _TTL_OK:
             return Response(_CACHE["data"], media_type="image/jpeg",
@@ -318,10 +400,6 @@ async def _serve(ip: str, code: str, model: str, model_id: str = "") -> Response
             return Response(_CACHE["data"], media_type="image/jpeg",
                            headers={"Cache-Control": "no-store", "X-Camera-Status": "stale"})
         _CACHE["ts"] = now
-
-    mode = _select_grab(model, model_id)
-    if mode is None:
-        return Response(status_code=503, content=b"Pas de camera chambre sur ce modele")
 
     loop = asyncio.get_event_loop()
     last_err = None
@@ -399,18 +477,9 @@ def _watch_tick(request: Request | None = None, printing: bool | None = None):
 @router.get("/snapshot")
 async def camera_snapshot(request: Request):
     _watch_tick(request)
-    async with AsyncSessionLocal() as db:
-        ip   = await get_setting(db, "PRINTER_IP")
-        code = await get_setting(db, "PRINTER_ACCESS_CODE")
+    ip, code, model, model_id = await _printer_conf()
     if not ip or not code:
         return Response(status_code=503, content=b"non configure")
-    # Récupérer le modèle depuis l'état MQTT
-    try:
-        state = get_state()
-        model = getattr(state, "printer_model", "") or ""
-        model_id = getattr(state, "model_id", "") or ""
-    except Exception:
-        model = ""; model_id = ""
     return await _serve(ip, code, model, model_id)
 
 
@@ -465,6 +534,8 @@ async def camera_frame(request: Request, after: int = 0, v: str = ""):
             return Response(status_code=204, headers={"Cache-Control": "no-store"})
         if not alive:
             _ensure_producer(ip, code, mode)
+        else:
+            _HUB.unstick()
         await asyncio.sleep(0.03)
         touch()
 
@@ -481,7 +552,7 @@ async def camera_stats():
                "images_par_s_10s": round(len(t) / 10, 1), "derniers_ecarts_s": gaps,
                "derniere_image_il_y_a_s": round(now - _HUB.ts, 1) if _HUB.ts else None,
                "taille_derniere_ko": round(len(_HUB.frame) / 1024) if _HUB.frame else None,
-               "echecs": _HUB.fails, "nouvel_essai_dans_s": max(0, round(_HUB.retry_at - now, 1)),
+               "echecs": _HUB.fails, "figes_coupes": _HUB.stalls, "nouvel_essai_dans_s": max(0, round(_HUB.retry_at - now, 1)),
                "derniere_erreur": _HUB.err or None, "erreur_il_y_a_s": round(now - _HUB.err_at) if _HUB.err_at else None,
                "ffmpeg": list(_HUB.ff_log), "spectateurs_flux": _HUB.subs,
                "spectateurs_tires": len([1 for v in _HUB.pullers.values() if now - v < _IDLE_STOP])}
@@ -533,6 +604,8 @@ async def camera_stream(request: Request):
                     break
                 if not alive:
                     _ensure_producer(ip, code, mode)
+                else:
+                    _HUB.unstick()
         finally:
             with _HUB.lock:
                 _HUB.subs -= 1

@@ -208,13 +208,9 @@ def _bg(coro):
 # ── Snapshot ───────────────────────────────────────────────────────────────
 async def _snap(print_id: int, trigger: str):
     try:
-        from ..api.v1.routes.camera import _grab_rtsps
-        async with AsyncSessionLocal() as db:
-            ip   = await get_setting(db, "PRINTER_IP")
-            code = await get_setting(db, "PRINTER_ACCESS_CODE")
-        if not ip or not code: return
-        loop = asyncio.get_event_loop()
-        jpeg = await loop.run_in_executor(None, _grab_rtsps, ip, code)
+        # par la connexion du direct (02/11/2026) : un ffmpeg a part, pendant que le direct tournait, le figeait
+        from ..api.v1.routes.camera import grab_jpeg
+        jpeg = await grab_jpeg()
         d = DATA_DIR / "prints" / str(print_id)
         d.mkdir(parents=True, exist_ok=True)
         rel = f"prints/{print_id}/snapshot-{trigger}.jpg"

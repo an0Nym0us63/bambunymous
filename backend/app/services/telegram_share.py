@@ -878,9 +878,10 @@ def render_caption(share: dict, message: str = "") -> str:
 async def _camera_jpeg() -> Optional[bytes]:
     """Image de la camera, comme sur l'accueil ; None si indisponible."""
     try:
-        from ..api.v1.routes.camera import camera_snapshot
-        r = await camera_snapshot()
-        return r.body if r.status_code == 200 and r.body[:2] == b"\xff\xd8" else None
+        # camera_snapshot() demande la requete : appelee sans, elle levait et le partage partait toujours sans camera
+        from ..api.v1.routes.camera import grab_jpeg
+        b = await grab_jpeg()
+        return b if b[:2] == b"\xff\xd8" else None
     except Exception as e:
         logger.info(f"[TG] camera : {e}")
         return None
