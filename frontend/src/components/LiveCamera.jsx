@@ -105,21 +105,45 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
       return el;
     };
     const fallback = () => {
-      stop?.(); stop = null; clearTimeout(stall);
+      stop?.(); stop = null; clearTimeout(stall); clearInterval(watch);
       if (dead) return;
       if (want === "stream") { setLive(null); setBroken(true); retry = setTimeout(() => !dead && stream(), 15000); }
       else images();
     };
     const arm = () => { clearTimeout(stall); stall = setTimeout(fallback, STALL_MS); };
+    // un direct qui ralentit sans se figer (02/11/2026 : une image toutes les 5 s au lieu de 8 par seconde, jusqu'a ce
+    // qu'on rouvre l'onglet) : la cadence du debut de la connexion sert de reference ; trop lent par rapport a elle, on
+    // rouvre une connexion neuve, sans passer aux captures ; trois fois en une minute sans mieux, on y passe
+    let watch = null, soft = [];
     const stream = () => {
       setLive("stream");
       arm();
-      stop = readStream("/api/v1/camera/stream", f => { arm(); retryMs = RETRY_FIRST_MS; show(f); }, () => !dead && fallback());
+      let last = 0, base = null;
+      const gaps = [];
+      clearInterval(watch);
+      watch = setInterval(() => {
+        if (dead || !base || !last) return;
+        const gap = Date.now() - last;
+        if (gap > Math.max(2500, base * 4) && gap < STALL_MS) {
+          const now = Date.now();
+          soft = soft.filter(t => now - t < 60000);
+          soft.push(now);
+          clearInterval(watch); watch = null;
+          stop?.(); stop = null; clearTimeout(stall);
+          if (soft.length >= 3) fallback(); else stream();
+        }
+      }, 1000);
+      stop = readStream("/api/v1/camera/stream", f => {
+        const now = Date.now();
+        if (last && !base) { gaps.push(now - last); if (gaps.length >= 5) base = [...gaps].sort((a, b) => a - b)[2]; }
+        last = now;
+        arm(); retryMs = RETRY_FIRST_MS; show(f);
+      }, () => !dead && fallback());
     };
     if (want === "images") images(); else stream();
     return () => {
       dead = true;
-      stop?.(); clearInterval(poll); clearTimeout(stall); clearTimeout(retry);
+      stop?.(); clearInterval(poll); clearTimeout(stall); clearTimeout(retry); clearInterval(watch);
       if (lastUrl) setTimeout(() => URL.revokeObjectURL(lastUrl), 1000);
     };
   }, [mode, hidden, friend?.id]); // eslint-disable-line react-hooks/exhaustive-deps
