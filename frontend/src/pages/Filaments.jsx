@@ -26,9 +26,10 @@ import { Pressable, openMenu } from "../components/ContextMenu";
 import { colorBg, parseColorsList, finishOf, autoFinishOf, FINISHES, COLOR_BUCKETS, BUCKET_FR, BUCKET_HEX, bucketsOf } from "../utils/colors";
 import SpoolSVG from "../components/SpoolSVG";
 import { Ghost, GhostBadge, HeroSpool, ORD_C, ORD_BG, tipStock, tipOrdered } from "../components/SpoolGhost";
-import { EmptyCard, FCard, FLAB, FROW, FRow, FSheet, FTile, FVAL, PageTabs, SearchRow, agoFr, dayFr, fBtn, fChip, fGrad, fRound, isLight, lighten } from "../components/FicheKit";
+import { EmptyCard, FCard, FLAB, FROW, FRow, FSheet, FTile, FVAL, PageTabs, SearchRow, agoFr, dayFr, fBtn, fChip, fGrad, fRound, isLight, lighten, fOutline } from "../components/FicheKit";
 import GalleryCompare from "../components/GalleryCompare";
-import { useLiveUsage } from "../components/LiveUsage";
+import { useLiveCurrent, useLiveSpool } from "../store/liveUsage";
+import { LiveHatch } from "../components/LiveUsage";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 import { FriendsPrints, useHasFriends, useShared, sharedCount } from "../components/Friends";
 import { FitBox } from "../components/FitThumb";
@@ -880,8 +881,8 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
   const spool = cur;
   // suivi couche par couche (alpha, 02/11/2026) : la bobine sert a l'impression en cours ; son poids enregistre est
   // deja sa cible (tout est retire au debut), et on montre ou elle en est maintenant
-  const liveD = useLiveUsage(!spool?.archived && !spool?.ordered);
-  const live = (liveD?.items || []).find(i => i.spool_id === spool?.id && i.current && i.now != null) || null;
+  const liveD = useLiveCurrent();
+  const live = useLiveSpool(!spool?.archived && !spool?.ordered ? spool?.id : null);
   const refresh = async () => {
     try {
       const r = await client.get(`/filaments/spools/${spoolProp.id}`);
@@ -1062,20 +1063,18 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
           <div style={{ fontSize:14, fontWeight:700, color:"var(--text2)" }}>
             {[spool.filament_manufacturer, spool.filament_fila_type || spool.filament_material].filter(Boolean).join(" · ")}</div></>}>
         <div style={{ display:"flex", alignItems:"baseline", gap:8, flexWrap:"wrap", marginTop:2 }}>
-          <span style={{ fontSize:30, fontWeight:900, lineHeight:1.2, paddingBottom:2, ...(light ? { color:"var(--text)" } : fGrad(barColor, `${barColor}bb`)) }}>{Math.round(remaining)} g</span>
+          <span style={{ fontSize:30, fontWeight:900, lineHeight:1.2, paddingBottom:2, ...(light ? { color:"var(--text)" } : { ...fGrad(barColor, `${barColor}bb`), ...fOutline(barColor) }) }}>{Math.round(remaining)} g</span>
           <span style={{ padding:"1px 8px", borderRadius:20, fontSize:14, fontWeight:900, color: light ? "#0f172a" : "#fff",
             background: light ? `linear-gradient(135deg, ${barColor}, #e2e8f0)` : `linear-gradient(135deg, ${barColor}, ${barColor}cc)`,
             border: light ? "1px solid rgba(0,0,0,0.18)" : "none", boxShadow:`0 3px 10px ${light ? "rgba(0,0,0,0.12)" : `${barColor}55`}` }}>{pct} %</span>
           <span style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>sur {Math.round(total)} g</span>
         </div>
         <div style={{ position:"relative", height:10, borderRadius:10, background:"var(--surface)", overflow:"hidden", boxShadow:"inset 0 0 0 1px var(--border)" }}>
-          {/* en cours d'impression : ce qu'elle a maintenant, la part qui partira encore hachuree, un repere doux a la cible */}
+          {/* en cours d'impression : ce qu'elle a maintenant, la part qui partira encore hachuree */}
           <div style={{ position:"relative", height:"100%", width:`${live ? Math.min(100, live.now / total * 100) : pct}%`, borderRadius:10, background:barColor, transition:"width .5s",
             boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : `0 0 8px ${barColor}66` }}/>
           {live && live.now > remaining && <>
-            <div style={{ position:"absolute", top:0, bottom:0, left:`${pct}%`, width:`${Math.min(100, live.now / total * 100) - pct}%`, background:"repeating-linear-gradient(135deg, rgba(255,255,255,.5) 0 3px, transparent 3px 6px)" }}/>
-            <div style={{ position:"absolute", top:1, bottom:1, left:`${pct}%`, width:3, marginLeft:-1.5, borderRadius:3,
-              background:"var(--surface)", boxShadow:`0 0 0 1px ${barColor}88, 0 0 6px ${barColor}` }}/></>}</div>
+            <div style={{ position:"absolute", top:0, bottom:0, left:`${pct}%`, width:`${Math.min(100, live.now / total * 100) - pct}%`, background:"repeating-linear-gradient(135deg, rgba(255,255,255,.5) 0 3px, transparent 3px 6px)" }}/></>}</div>
         {live && <div style={{ display:"flex", alignItems:"flex-start", gap:8, marginTop:2, padding:"8px 10px", borderRadius:12, fontSize:12.5, lineHeight:1.45,
           color:"var(--text2)", background:"linear-gradient(135deg, rgba(139,92,246,.14), transparent 70%), var(--surface)", border:"1px solid rgba(139,92,246,.35)" }}>
           <span>🖨️</span>
@@ -1366,7 +1365,9 @@ function FilterChips({ filters, setFilters, sort, setSort, defSort, sorts = SPOO
 
 function SpoolCard({ s, colorsList, onClick, menu }) {
   const total = s.filament_weight_g || 1000;
-  const rem   = s.remaining_weight_g;
+  // en cours d'impression (suivi couche par couche) : ce qu'elle a maintenant ; le poids enregistre est sa cible
+  const lv = useLiveSpool(s.archived || s.ordered ? null : s.id);
+  const rem   = lv ? lv.now : s.remaining_weight_g;
   const pct   = rem != null ? Math.max(0, Math.min(100, Math.round(rem / total * 100))) : 0;
   // Vert -> rouge selon ce qu'il reste : la couleur previent avant qu'on lise
   // le chiffre, ce qui est tout l'interet d'une grille qu'on parcourt vite.
@@ -1413,12 +1414,14 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
         {/* Le poids en couleur, le pourcentage en pastille, puis la jauge */}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:4, whiteSpace:"nowrap" }}>
           <span style={{ fontSize:13, fontWeight:900, backgroundImage:`linear-gradient(135deg, ${barColor}, ${lighten(barColor)})`,
-            WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}>{rem != null ? `${Math.round(rem)} g` : "—"}</span>
+            WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}
+            data-tip={lv ? `≈ ${Math.round(lv.now)} g maintenant · ${Math.round(lv.target)} g à la fin de l'impression en cours` : undefined}>{rem != null ? `${lv ? "≈ " : ""}${Math.round(rem)} g` : "—"}</span>
           {rem != null && <span style={{ fontSize:8.5, fontWeight:900, padding:"1px 5px", borderRadius:20, color:"#fff", background:barColor }}>{pct}%</span>}
         </div>
-        <div style={{ height:5, borderRadius:5, background:"var(--surface2)", overflow:"hidden", boxShadow:"inset 0 0 0 1px var(--border)" }}>
+        <div style={{ position:"relative", height:5, borderRadius:5, background:"var(--surface2)", overflow:"hidden", boxShadow:"inset 0 0 0 1px var(--border)" }}>
           <div style={{ width:`${pct}%`, height:"100%", borderRadius:5, transition:"width 0.5s",
             background:`linear-gradient(90deg, ${barColor}, ${lighten(barColor)})` }}/>
+          {lv && <LiveHatch a={lv.target / total} b={lv.now / total} r={5}/>}
         </div>
         <div style={{ fontSize:9, fontWeight:700, color:"var(--muted)", textAlign:"center", marginTop:-2 }}>sur {total} g</div>
 

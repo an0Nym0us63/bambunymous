@@ -4,7 +4,8 @@ import { importRetry } from "../utils/importRetry";
 import AllAlertsModal from "./AllAlertsModal";
 import { Hide } from "./Cachettes";
 import { useFriend, currentFriend } from "../store/friend";
-import { useLiveUsage, liveOfSpool } from "./LiveUsage";
+import { liveOfSpool, LiveHatch } from "./LiveUsage";
+import { useLiveSpool, useLiveCurrent } from "../store/liveUsage";
 import { useLayer, LayerCanvas, LayerExplorer } from "./LayerView";
 import { useIsAdmin } from "../store/auth";
 import { showAlert } from "../utils/dialog";
@@ -1613,6 +1614,7 @@ function FilamentStock() {
 }
 // l'onglet des bobines : les chiffres, la repartition par matiere, chaque bobine
 function SpoolsZoom({ list, kg }) {
+  const liveD = useLiveCurrent();              // suivi couche par couche : les bobines de l'impression en cours
   const [only, setOnly] = useState("low");          // low | all | mat:<x> | brand:<x>
   const [sort, setSort] = useState("g");
   const [more, setMore] = useState(false);
@@ -1657,14 +1659,16 @@ function SpoolsZoom({ list, kg }) {
       {[["g", "les plus basses"], ["pct", "en %"], ["name", "par nom"]].map(([k, l]) => <button key={k} type="button" style={chip(sort === k, "#3B82F6")} onClick={() => setSort(k)}>{l}</button>)}
     </div>
     {!shown.length ? <Muted>Aucune bobine ici.</Muted> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 8 }}>
-      {shown.slice(0, cap).map(x => { const pc = spoolPct(x), c = pctColor(pc);
+      {shown.slice(0, cap).map(x => { const lv = liveOfSpool(liveD, x.id), one = x.filament_weight_g || null;
+        const pc = lv && one ? Math.min(1, lv.now / one) : spoolPct(x), c = pctColor(pc);
         return <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 14, minWidth: 0,
           background: `linear-gradient(135deg, ${hexCss(x.filament_color)}22, transparent 55%), var(--surface2)`, border: "1px solid var(--border)" }}>
           <SpoolDot color={x.filament_color} colors={x.filament_colors_array} multicolor={x.filament_multicolor_type} finish={finishOf(x)} pct={pc} size={40}/>
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{spoolName(x)}</span>
-              <span style={{ fontSize: 13.5, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{fmtG(x.remaining_weight_g)}</span></div>
+              <span data-tip={lv ? `≈ ${Math.round(lv.now)} g maintenant · ${Math.round(lv.target)} g à la fin de l'impression en cours` : undefined}
+                style={{ fontSize: 13.5, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{lv ? `≈ ${Math.round(lv.now)} g` : fmtG(x.remaining_weight_g)}</span></div>
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
               {x.filament_manufacturer && pill(x.filament_manufacturer, "#8B5CF6")}
               {x.filament_material && pill(x.filament_material, "#F59E0B")}
@@ -1673,8 +1677,9 @@ function SpoolsZoom({ list, kg }) {
               {x.ams_tray && pill(`📍 ${x.location || "AMS"}`, "#3B82F6")}
             </div>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ flex: 1, height: 5, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
-                <span style={{ display: "block", height: "100%", width: `${(pc ?? 0) * 100}%`, background: c }}/></span>
+              <span style={{ position: "relative", flex: 1, height: 5, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
+                <span style={{ display: "block", height: "100%", width: `${(pc ?? 0) * 100}%`, background: c }}/>
+                {lv && one && <LiveHatch a={lv.target / one} b={lv.now / one}/>}</span>
               {pc != null && <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)" }}>{Math.round(pc * 100)} %</span>}</span>
           </div></div>; })}</div>}
     {shown.length > cap && <button type="button" style={{ ...chip(false), alignSelf: "center" }} onClick={() => setMore(true)}>Voir les {shown.length - cap} autres</button>}
@@ -3606,7 +3611,7 @@ function Spool({ status, o, sz }) {
   const t = activeTray(status);
   const live = isLive(status);
   // suivi couche par couche (alpha, 02/11/2026) : le poids de la bobine maintenant, et sa cible a la fin ; rien sur « Actuel »
-  const lv = liveOfSpool(useLiveUsage(live && !currentFriend()), t?.spool_id);
+  const lv = useLiveSpool(live && !currentFriend() ? t?.spool_id : null);
   if (!t) return (
     <Tile icon={<Disc3 size={15}/>} color="#8B5CF6" label="Filament en cours">
       <Empty>{live ? "Bobine inconnue" : "Pas d'impression en cours"}</Empty>
@@ -3634,9 +3639,7 @@ function Spool({ status, o, sz }) {
     style={{ position: "relative", height: h, borderRadius: h, background: "var(--surface2)", overflow: "hidden", boxShadow: "inset 0 0 0 1px var(--border)" }}>
     <div data-pk="" style={{ height: "100%", width: `${(pct ?? 0) * 100}%`, borderRadius: h, background: barCol,
       boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : `0 0 8px ${barCol}66` }}/>
-    {soon && <><div style={{ position: "absolute", top: 0, bottom: 0, left: `${tgt * 100}%`, width: `${(pct - tgt) * 100}%`, background: "repeating-linear-gradient(135deg, rgba(255,255,255,.5) 0 3px, transparent 3px 6px)" }}/>
-      <div style={{ position: "absolute", top: 1, bottom: 1, left: `${tgt * 100}%`, width: 3, marginLeft: -1.5, borderRadius: 3,
-        background: "var(--surface)", boxShadow: `0 0 0 1px ${barCol}88, 0 0 6px ${barCol}` }}/></>}</div>;
+    {soon && <><div style={{ position: "absolute", top: 0, bottom: 0, left: `${tgt * 100}%`, width: `${(pct - tgt) * 100}%`, background: "repeating-linear-gradient(135deg, rgba(255,255,255,.5) 0 3px, transparent 3px 6px)" }}/></>}</div>;
   // le pourcentage restant, en pastille a la couleur de la bobine
   const pctPill = fs => pct == null ? null : <span data-pk="" style={{ display: "inline-flex", alignItems: "baseline", gap: 1, padding: `1px ${Math.round(fs * 0.55)}px`,
     borderRadius: 20, fontSize: fs, fontWeight: 900, whiteSpace: "nowrap", flexShrink: 0, lineHeight: 1.35,
@@ -4245,6 +4248,7 @@ function Colors({ status, o, sz }) {
 }
 // la fenetre : les chiffres, puis chaque unite et ses bobines, avec leur nom, marque, sous-type et ce qui reste
 function ColorsZoom({ units, on, mats, cur }) {
+  const liveD = useLiveCurrent();
   const n = units.reduce((t, u) => t + u.trays.length, 0);
   const pill = (t, c) => <span style={{ fontSize: 10.5, fontWeight: 800, padding: "1px 7px", borderRadius: 20, whiteSpace: "nowrap", color: c,
     background: `${c}1f`, border: `1px solid ${c}40` }}>{t}</span>;
@@ -4259,14 +4263,16 @@ function ColorsZoom({ units, on, mats, cur }) {
         {a.is_drying && a.dry_time > 0 && pill(`🔥 séchage · ${fmtDur(a.dry_time * 60)}`, "#f97316")}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 8 }}>
-        {trays.map(t => { const si = t.spool_info || {}, p = trayPct(t), c = p == null ? "#94a3b8" : p < 15 ? "#ef4444" : p < 35 ? "#f59e0b" : "#22c55e";
+        {trays.map(t => { const si = t.spool_info || {}, lv = liveOfSpool(liveD, t.spool_id), one = si.initial_weight_g || null;
+          const p = lv && one ? Math.round(Math.min(1, lv.now / one) * 100) : trayPct(t), c = p == null ? "#94a3b8" : p < 15 ? "#ef4444" : p < 35 ? "#f59e0b" : "#22c55e";
           return <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 14, minWidth: 0,
             background: `linear-gradient(135deg, ${trayCol(t)}26, transparent 55%), var(--surface2)`, border: `1px solid ${on(t) ? "#3b82f6" : "var(--border)"}` }}>
             <TraySwatch t={t} s={44} on={on(t)}/>
             <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
                 <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{trayName(t)}</span>
-                {si.remaining_weight_g != null && <span style={{ fontSize: 13, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{fmtG(si.remaining_weight_g)}</span>}</div>
+                {si.remaining_weight_g != null && <span data-tip={lv ? `≈ ${Math.round(lv.now)} g maintenant · ${Math.round(lv.target)} g à la fin de l'impression en cours` : undefined}
+                  style={{ fontSize: 13, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{lv ? `≈ ${Math.round(lv.now)} g` : fmtG(si.remaining_weight_g)}</span>}</div>
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                 {pill(slotOf(t), on(t) ? "#3b82f6" : "#64748b")}
                 {si.brand && pill(si.brand, "#8B5CF6")}
@@ -4275,8 +4281,9 @@ function ColorsZoom({ units, on, mats, cur }) {
                 {!t.spool_info && pill("bobine non associée", "#94a3b8")}
               </div>
               {p != null && <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ flex: 1, height: 5, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
-                  <span style={{ display: "block", height: "100%", width: `${p}%`, background: c }}/></span>
+                <span style={{ position: "relative", flex: 1, height: 5, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
+                  <span style={{ display: "block", height: "100%", width: `${p}%`, background: c }}/>
+                  {lv && one && <LiveHatch a={lv.target / one} b={lv.now / one}/>}</span>
                 <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)" }}>{p} %</span></span>}
             </div></div>; })}</div>
     </div>)}

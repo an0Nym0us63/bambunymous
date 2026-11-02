@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { useLiveSpool } from "../store/liveUsage";
+import { LiveHatch } from "./LiveUsage";
 import { useTrackDetail } from "../utils/track";
 import { Droplets, Sun, Thermometer, Timer, Clock, Package, Palette } from "lucide-react";
 import client from "../api/client";
@@ -10,7 +12,7 @@ import { HeroSpool } from "./SpoolGhost";
 import { EXT_AMS_ID, amsName, slotLabel, isExternal, trayPct } from "../utils/ams";
 import AdminOnly from "./AdminOnly";
 import { showAlert } from "../utils/dialog";
-import { FSheet, FCard, FRow, fChip, fBtn, fGrad } from "./FicheKit";
+import { FSheet, FCard, FRow, fChip, fBtn, fGrad, fOutline } from "./FicheKit";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 // Convertit un hex 6 ou 8 chars (avec ou sans #) en valeur CSS utilisable.
@@ -305,11 +307,14 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
     ?? spoolInfo?.material ?? spoolInfo?.filament_material ?? tray.filament_type ?? null;
   const hasW = spoolInfo?.remaining_weight_g != null;
   const hasT = (spoolInfo?.initial_weight_g ?? spoolInfo?.filament_weight_g) != null;
-  const pct = hasW && hasT
+  // en cours d'impression (suivi couche par couche, 02/11/2026) : ce qu'elle a maintenant, et la part qui partira
+  const lv = useLiveSpool(!posee ? tray.spool_id : null);
+  const full = spoolInfo?.initial_weight_g ?? spoolInfo?.filament_weight_g;
+  const pct = lv && full ? Math.round(Math.min(1, lv.now / full) * 100) : hasW && hasT
     ? Math.round((spoolInfo.remaining_weight_g/(spoolInfo.initial_weight_g ?? spoolInfo.filament_weight_g))*100)
     : (tray.remain ?? 0);
   // Toujours en grammes : si bobine mappée → remaining_weight_g, sinon remain% × 10 (≈1kg)
-  const wLabel = hasW
+  const wLabel = lv ? `≈ ${Math.round(lv.now)} g` : hasW
     ? `${Math.round(spoolInfo.remaining_weight_g)} g`
     : tray.remain != null ? `≈ ${tray.remain * 10} g` : null;
 
@@ -336,9 +341,10 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
         {vide ? "" : (material || "—")}
       </p>}
       {/* Barre de progression couleur filament */}
-      <div style={{ width: Math.round(size * 0.72), height:5, background: barTrackColor,
+      <div style={{ position:"relative", width: Math.round(size * 0.72), height:5, background: barTrackColor,
         borderRadius:3, overflow:"hidden",
         boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.08)" }}>
+        {!vide && lv && full && <LiveHatch a={lv.target / full} b={lv.now / full}/>}
         {!vide && (
           <div style={{ height:"100%", borderRadius:3,
             width:`${Math.max(0,Math.min(100,pct))}%`,
@@ -425,8 +431,11 @@ function TrayRow({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loa
   const material = spoolInfo?.fila_type ?? spoolInfo?.filament_fila_type ?? spoolInfo?.material ?? spoolInfo?.filament_material ?? tray.filament_type ?? null;
   const hasW = spoolInfo?.remaining_weight_g != null;
   const hasT = (spoolInfo?.initial_weight_g ?? spoolInfo?.filament_weight_g) != null;
-  const pct = hasW && hasT ? Math.round((spoolInfo.remaining_weight_g / (spoolInfo.initial_weight_g ?? spoolInfo.filament_weight_g)) * 100) : (tray.remain ?? 0);
-  const w = hasW ? `${Math.round(spoolInfo.remaining_weight_g)} g` : tray.remain != null ? `≈ ${tray.remain * 10} g` : "";
+  const lv = useLiveSpool(!posee ? tray.spool_id : null);
+  const full = spoolInfo?.initial_weight_g ?? spoolInfo?.filament_weight_g;
+  const pct = lv && full ? Math.round(Math.min(1, lv.now / full) * 100)
+    : hasW && hasT ? Math.round((spoolInfo.remaining_weight_g / (spoolInfo.initial_weight_g ?? spoolInfo.filament_weight_g)) * 100) : (tray.remain ?? 0);
+  const w = lv ? `≈ ${Math.round(lv.now)} g` : hasW ? `${Math.round(spoolInfo.remaining_weight_g)} g` : tray.remain != null ? `≈ ${tray.remain * 10} g` : "";
   const barBg = colorBg(opaqueColors(colors), mcType, finishOf(spoolInfo, tray), { bar: true });
   return (
     <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, height: size + 4, cursor: onClick ? "pointer" : "default",
@@ -447,8 +456,9 @@ function TrayRow({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loa
           <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{w}</span>
           {name && material && <span style={{ fontSize: 10.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{material}</span>}
         </div>}
-        {!vide && size >= 40 && <div style={{ height: 4, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${Math.max(0, Math.min(100, pct))}%`, borderRadius: 3, ...barBg }}/></div>}
+        {!vide && size >= 40 && <div style={{ position: "relative", height: 4, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${Math.max(0, Math.min(100, pct))}%`, borderRadius: 3, ...barBg }}/>
+          {lv && full && <LiveHatch a={lv.target / full} b={lv.now / full}/>}</div>}
       </div>
     </div>
   );
@@ -696,6 +706,8 @@ const MATCH_LABEL = {
 
 function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
   useTrackDetail("Accueil · Emplacement AMS");
+  // en cours d'impression (suivi couche par couche) : ce qu'elle a maintenant ; le poids enregistre est sa cible
+  const lv = useLiveSpool(tray?.spool_id);
   const [spoolSheet, setSpoolSheet] = React.useState(null);
   if (!tray) return null;
   const color  = hexDisplay(tray.color);
@@ -755,14 +767,18 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
             {[info?.brand, info?.fila_type || tray.filament_type].filter(Boolean).join(" · ")}</div>}
           {!isEmpty && pct > 0 && <div style={{ display:"flex", flexDirection:"column", gap:5, marginTop:2 }}>
             <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
-              <span style={{ fontSize:26, fontWeight:900, lineHeight:1.2, ...fGrad(gauge, `color-mix(in srgb, ${gauge} 60%, #ffffff)`) }}>
-                {info?.remaining_weight_g ? `${info.remaining_weight_g.toFixed(0)} g` : `${pct} %`}</span>
+              <span style={{ fontSize:26, fontWeight:900, lineHeight:1.2, ...fGrad(gauge, `color-mix(in srgb, ${gauge} 60%, #ffffff)`), ...fOutline(gauge) }}
+                data-tip={lv ? `${Math.round(lv.target)} g à la fin de l'impression en cours` : undefined}>
+                {lv ? `≈ ${Math.round(lv.now)} g` : info?.remaining_weight_g ? `${info.remaining_weight_g.toFixed(0)} g` : `${pct} %`}</span>
               {info?.remaining_weight_g ? <span style={{ fontSize:12.5, fontWeight:900, color:"#fff", padding:"2px 8px", borderRadius:20, background:gauge }}>{pct} %</span> : null}
             </div>
-            <div style={{ height:8, borderRadius:5, background:"color-mix(in srgb, var(--border) 80%, transparent)", overflow:"hidden" }}>
-              <div style={{ height:"100%", width:`${pct}%`, borderRadius:5, transition:"width 0.5s",
+            <div style={{ position:"relative", height:8, borderRadius:5, background:"color-mix(in srgb, var(--border) 80%, transparent)", overflow:"hidden" }}>
+              <div style={{ height:"100%", width:`${lv && info?.initial_weight_g ? Math.min(100, lv.now / info.initial_weight_g * 100) : pct}%`, borderRadius:5, transition:"width 0.5s",
                 background:`linear-gradient(90deg, ${gauge}, color-mix(in srgb, ${gauge} 60%, #ffffff))` }}/>
+              {lv && info?.initial_weight_g && <LiveHatch a={lv.target / info.initial_weight_g} b={lv.now / info.initial_weight_g} r={5}/>}
             </div>
+            {lv && <div style={{ fontSize:12, fontWeight:700, color:"var(--text2)" }}>🖨️ Impression en cours : {Math.round(lv.target)} g à la fin
+              ({Math.round(lv.row_used)} g consommés sur {Math.round(lv.row_planned)} g) ; hachurée sur la barre, la part qui partira encore.</div>}
           </div>}
         </div>
       </div>

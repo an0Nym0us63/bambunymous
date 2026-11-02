@@ -26,6 +26,15 @@ export function useLiveUsage(active, printId = null, rev = 0) {
   return d?.on ? d : null;
 }
 
+// la part d'une jauge qui partira encore d'ici la fin de l'impression : hachuree, de la cible (a) a maintenant (b), en
+// fractions de la jauge ; a poser dans une jauge en position relative (sa partie pleine va jusqu'a maintenant)
+export function LiveHatch({ a, b, r = 3 }) {
+  if (a == null || b == null || b <= a) return null;
+  const pc = v => `${Math.max(0, Math.min(1, v)) * 100}%`;
+  return <span aria-hidden="true" style={{ position: "absolute", top: 0, bottom: 0, left: pc(a), width: `calc(${pc(b)} - ${pc(a)})`, borderRadius: `0 ${r}px ${r}px 0`,
+    background: "repeating-linear-gradient(135deg, rgba(255,255,255,.5) 0 3px, transparent 3px 6px)", pointerEvents: "none" }}/>;
+}
+
 // la bobine qui imprime : son poids maintenant, et sa cible (son poids a la fin)
 export function liveOfSpool(d, spoolId) {
   return spoolId ? (d?.items || []).find(i => i.spool_id === spoolId && i.current) || null : null;
@@ -38,10 +47,8 @@ export function LiveBar({ now, target, full, color, h = 8 }) {
   return <div style={{ position: "relative", height: h, borderRadius: h, background: "var(--surface2)", overflow: "hidden", boxShadow: "inset 0 0 0 1px var(--border)" }}>
     <div data-tip={target != null ? `À la fin : ${g(target)}` : undefined} style={{ position: "absolute", inset: 0, width: w(now), borderRadius: h,
       background: `linear-gradient(90deg, ${color}aa, ${color})` }}/>
-    {/* la part qui partira d'ici la fin, hachuree, et un repere doux a la cible (couleur du fond, halo de la bobine) */}
-    {target != null && target < now && <><div style={{ position: "absolute", top: 0, bottom: 0, left: w(target), width: w(now - target), background: "repeating-linear-gradient(135deg, rgba(255,255,255,.5) 0 3px, transparent 3px 6px)" }}/>
-      <div style={{ position: "absolute", top: 0, bottom: 0, left: w(target), width: 3, marginLeft: -1.5, borderRadius: 3,
-        background: "var(--surface)", boxShadow: `0 0 0 1px ${color}88, 0 0 5px ${color}` }}/></>}
+    {/* la part qui partira d'ici la fin, hachuree (02/11/2026 : sans repere, le trait clair genait) */}
+    {target != null && target < now && <><div style={{ position: "absolute", top: 0, bottom: 0, left: w(target), width: w(now - target), background: "repeating-linear-gradient(135deg, rgba(255,255,255,.5) 0 3px, transparent 3px 6px)" }}/></>}
   </div>;
 }
 

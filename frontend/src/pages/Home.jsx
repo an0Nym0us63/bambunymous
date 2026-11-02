@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
 import { LayerExplorer } from "../components/LayerView";
 import { currentFriend } from "../store/friend";
+import { useLiveSpool } from "../store/liveUsage";
 import { trayBg, parseColorsList, finishOf, colorBg, bgWithTop, isDark } from "../utils/colors";
 import { stageLabel, stageIsPause } from "../utils/printStage";
 import { createPortal } from "react-dom";
@@ -1538,6 +1539,8 @@ function PrinterPopup({ status, img, name, onClose }) {
   const ams = (status?.ams_list || []).find(a => a.id === status?.active_ams_id);
   const tray = ams?.trays?.find(t => t.id === status?.active_tray_id);
   const spool = tray?.spool_info;
+  // suivi couche par couche (alpha) : ce que la bobine a maintenant ; son poids enregistre est sa cible
+  const lvSpool = useLiveSpool(live && !currentFriend() ? tray?.spool_id : null);
   // les AMS comme la tuile : leur disposition, l'unite et le bac qui impriment
   const [order, setOrder] = useState(null);
   useEffect(() => { client.get("/settings/ams-order").then(({ data }) => setOrder(data.order ?? null)).catch(() => setOrder(null)); }, []);
@@ -1696,7 +1699,8 @@ function PrinterPopup({ status, img, name, onClose }) {
               <div style={{ fontSize: 14.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {spool?.translated_name || spool?.name || tray.filament_type || "?"}</div>
               <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 700 }}>
-                {[spool?.fila_type || tray.filament_type, spool?.remaining_weight_g != null ? `${Math.round(spool.remaining_weight_g)} g` : tray.remain != null ? `${tray.remain} %` : null].filter(Boolean).join(" · ")}</div>
+                {[spool?.fila_type || tray.filament_type, lvSpool ? `≈ ${Math.round(lvSpool.now)} g → ${Math.round(lvSpool.target)} g à la fin`
+                  : spool?.remaining_weight_g != null ? `${Math.round(spool.remaining_weight_g)} g` : tray.remain != null ? `${tray.remain} %` : null].filter(Boolean).join(" · ")}</div>
             </div>
           </div>}
         </div> : null}
