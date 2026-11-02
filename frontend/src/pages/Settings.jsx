@@ -1370,7 +1370,8 @@ function SourceBackfillSection() {
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>3MF d'origine MakerWorld</h3>
       <CardHelp title="3MF d'origine MakerWorld">
         Pour chaque modèle MakerWorld imprimé, garde le projet de son profil (à retrancher, ou à garder si le modèle disparaît).
-        C'est fait dès le lancement d'une impression ; ce bouton rattrape les anciennes. Un fichier par profil ; sans profil connu,
+        C'est fait dès le lancement d'une impression ; ce bouton rattrape les anciennes. Les modèles de « À faire » sont
+        récupérés d'avance (le profil retenu, sinon celui que la liste montre), et passent en premier. Un fichier par profil ; sans profil connu,
         celui du modèle le plus proche de ton imprimante. Chaque récupération compte comme un téléchargement sur MakerWorld,
         et il faut le compte MakerWorld connecté.
       </CardHelp>
@@ -1382,7 +1383,9 @@ function SourceBackfillSection() {
           {big(sm.models, "modèles imprimés", "#6366F1")}
         </div>
         {/* ce qui n'a pas de fichier exact : garde par le profil le plus proche, ou introuvable (rien a recuperer) */}
-        {(sm.guessed > 0 || sm.gone > 0) && <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+        {(sm.guessed > 0 || sm.gone > 0 || sm.queue > 0) && <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+          {sm.queue > 0 && <span data-tip="Les modèles de « À faire » : leur 3MF est récupéré d'avance, dans le quota ci-dessous">
+            {chip(sm.queue, `profil${sm.queue > 1 ? "s" : ""} de « À faire »`, "#0EA5E9")}</span>}
           {sm.guessed > 0 && <span data-tip="Le profil imprimé n'existe plus sur MakerWorld : le 3MF du profil le plus proche de ton imprimante est gardé à sa place">
             {chip(sm.guessed, `gardé${sm.guessed > 1 ? "s" : ""} par le profil le plus proche`, "#6366F1")}</span>}
           {sm.gone > 0 && <span data-tip="Modèle retiré ou devenu privé sur MakerWorld : il n'y a plus rien à télécharger">

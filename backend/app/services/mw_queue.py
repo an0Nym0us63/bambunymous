@@ -60,6 +60,12 @@ async def _recompute():
     _CACHE[:] = [time.time(), out]
     _INVALID[0] = False
     await asyncio.to_thread(_snap_put, out)
+    # les 3MF d'origine, fiches et documents des modeles de la file, recuperes d'avance (02/11/2026)
+    try:
+        from . import mw_source
+        mw_source.start_prefetch_queue()
+    except Exception:
+        logger.exception("[QUEUE] recuperation d'avance")
     return out
 
 

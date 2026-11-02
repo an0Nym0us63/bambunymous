@@ -434,6 +434,19 @@ def status() -> dict:
     return dict(JOB) or {"running": False}
 
 
+def _queue_pairs() -> list:
+    """Les modeles de « À faire » (02/11/2026) : (modele, instance du profil retenu, ou de celui que la file montre, titre),
+    lus dans le dernier calcul de la file (rien demande a MakerWorld)."""
+    from . import mw_queue as Q
+    raw = Q._CACHE[1] or Q._snap_get() or {}
+    out = []
+    for r in raw.get("models") or []:
+        did, iid = str(r.get("design_id") or ""), str((r.get("profile") or {}).get("instance_id") or "")
+        if did.isdigit() and iid.isdigit():
+            out.append((did, iid, html.unescape(r.get("title_fr") or r.get("title") or "")))
+    return out
+
+
 async def _pairs() -> list:
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
@@ -441,8 +454,13 @@ async def _pairs() -> list:
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(Print.design_id, Print.mw_profile_id, Print.mw_plates, Print.translated_name, Print.file_name)
                                  .where(Print.design_id.is_not(None)).order_by(Print.id.desc()))).all()
-    # un modele imprime sans profil connu compte aussi (le profil le plus proche sera pris)
+    # un modele imprime sans profil connu compte aussi (le profil le plus proche sera pris) ; ceux de « À faire »
+    # d'abord (02/11/2026) : ce sont eux qu'on va imprimer
     seen, out = set(), []
+    for did, iid, name in _queue_pairs():
+        if (did, iid) not in seen:
+            seen.add((did, iid))
+            out.append((did, iid, name))
     for did, prof, manual, tr, name in rows:
         k = (str(did), _profile(prof, manual))
         if str(did).isdigit() and k not in seen:
@@ -629,5 +647,113 @@ async def summary() -> dict:
         elif u.get(f"{did}:{prof or ''}") == "gone":
             gone += 1                             # introuvable sur MakerWorld : rien a recuperer
     files = sum(1 for f in _dir().glob("*.3mf"))
-    return {"pairs": len(pairs), "models": len({d for d, _p, _n in pairs}), "have": have + guessed, "exact": have,
+    queue = {(d, i) for d, i, _n in _queue_pairs()}
+    printed = {d for d, p, _n in pairs if (d, p) not in queue}
+    return {"pairs": len(pairs), "models": len(printed), "queue": len(queue), "have": have + guessed, "exact": have,
             "guessed": guessed, "gone": gone, "missing": len(pairs) - have - guessed - gone, "files": files}
+
+
+# ── « À faire » d'avance (02/11/2026) : les modeles des collections de la file ont leur 3MF d'origine, leur fiche et
+# leurs documents avant d'etre imprimes (assembler, peindre, lire la notice des maintenant). Rien n'y est lie a une
+# impression : le 3MF se range par profil, les documents par modele, et l'impression qui viendra les retrouve.
+# Apres chaque calcul de la file, un modele a la fois. Les 3MF passent sous le quota du rattrapage (la limite de
+# MakerWorld vaut pour tout le compte) ; une limite du jour ou un controle anti-robot suspend jusqu'au lendemain ou
+# une heure plus tard, au lieu de reessayer a chaque calcul.
+QJOB: dict = {}
+_QTASK = {"t": None}
+
+
+def _q_pause_file() -> Path:
+    return _dir() / "queue_prefetch.json"
+
+
+def _q_paused() -> float:
+    """L'heure jusqu'a laquelle la recuperation d'avance attend (0 : rien en attente)."""
+    if "until" not in QJOB:
+        try:
+            QJOB.update(json.loads(_q_pause_file().read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            QJOB["until"] = 0.0
+    return float(QJOB.get("until") or 0)
+
+
+def _q_pause(sec: float, why: str) -> None:
+    QJOB.update(until=time.time() + sec, stopped=why)
+    try:
+        _q_pause_file().write_text(json.dumps({"until": QJOB["until"], "stopped": why}, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+    logger.info(f"[MW-3MF] « À faire » d'avance suspendu : {why}")
+
+
+def queue_status() -> dict:
+    _q_paused()
+    return {k: v for k, v in QJOB.items() if k != "failed"}
+
+
+async def prefetch_queue() -> None:
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import MakerWorldDesign as MW
+    from .mw_3mf import ExactError
+    from . import makerworld as mw, mw_docs
+    pairs = _queue_pairs()
+    failed = QJOB.setdefault("failed", set())          # en echec ce passage-ci de l'appli : pas reessaye a chaque calcul
+    QJOB.update(running=True, started=time.time(), finished=None, total=len(pairs), done=0, ok=0, current=None,
+                stopped=QJOB.get("stopped") if _q_paused() > time.time() else None)     # une pause en cours se dit encore
+    cap = await budget()
+    try:
+        for did, iid, name in pairs:
+            QJOB["current"] = name or f"Modèle {did}"
+            # la fiche gardee (la sauvegarde du NAS nomme le 3MF et range les documents d'apres elle), et ses documents
+            try:
+                if await mw._todo(1, [did]):
+                    await mw.refresh(limit=1, only=[did])          # garde aussi ses documents
+                    await asyncio.sleep(1.5)
+                else:
+                    async with AsyncSessionLocal() as db:
+                        raw = (await db.execute(select(MW.extras).where(MW.design_id == did, MW.status == "ok"))).scalar()
+                    if raw:
+                        await asyncio.to_thread(mw_docs.keep_many, [(did, raw)])
+            except Exception:
+                logger.exception(f"[MW] « À faire » : fiche ou documents de {did}")
+            # le 3MF d'origine du profil
+            if not (known(did, iid) or iid in failed or _q_paused() > time.time() or JOB.get("running")):
+                if path_of(iid).is_file():
+                    _index_put(f"{did}:{iid}", iid)
+                elif cap and len(_downloads()) >= cap:
+                    QJOB["stopped"] = f"Quota de l'appli atteint ({cap} par 24 h) : la suite au prochain calcul de la liste"
+                else:
+                    try:
+                        await fetch(iid)
+                        _index_put(f"{did}:{iid}", iid)
+                        QJOB["ok"] += 1
+                        logger.info(f"[MW-3MF] « À faire » : 3MF d'origine de {name or did} recupere d'avance")
+                        await asyncio.sleep(PAUSE_S + random.uniform(0, PAUSE_RAND_S))
+                    except ExactError as e:
+                        if daily_limited(e):
+                            _q_pause(DAILY_S, "Limite quotidienne de téléchargements MakerWorld atteinte : reprise demain")
+                        elif rate_limited(e):
+                            _q_pause(CAPTCHA_RETRY_S, "MakerWorld demande de vérifier que tu n'es pas un robot : nouvel essai dans une heure")
+                        elif "Jeton" in str(e) or "non connecté" in str(e):
+                            _q_pause(CAPTCHA_RETRY_S, str(e))
+                        else:
+                            failed.add(iid)
+                            logger.info(f"[MW-3MF] « À faire » : {name or did} : {e}")
+                    except Exception:
+                        failed.add(iid)
+                        logger.exception("[MW-3MF] « À faire » d'avance")
+            QJOB["done"] += 1
+    finally:
+        QJOB.update(running=False, finished=time.time(), current=None)
+
+
+def start_prefetch_queue() -> None:
+    """Apres un calcul de la file : un seul passage a la fois."""
+    t = _QTASK["t"]
+    if t and not t.done():
+        return
+    try:
+        _QTASK["t"] = asyncio.get_running_loop().create_task(prefetch_queue())
+    except RuntimeError:
+        pass

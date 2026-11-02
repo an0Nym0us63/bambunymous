@@ -108,6 +108,9 @@ def jobs() -> list:
     try:
         from ..services import mw_source
         add("mw_source", "Rattrapage des 3MF d'origine MakerWorld", mw_source.status())
+        q = mw_source.queue_status()
+        if q.get("started"):
+            add("mw_source_queue", "« À faire » d'avance : 3MF d'origine et documents", q)
     except Exception:
         pass
     try:
