@@ -8,10 +8,14 @@ import { currentFriend } from "../store/friend";
 //  - « stream » : le flux continu du serveur (une image des qu'elle arrive) ;
 //  - « images » : une capture toutes les 2 s ;
 //  - « auto »   : le flux, et s'il ne demarre pas ou se fige plus de 6 s, les
-//                 captures, puis un nouvel essai du flux une minute plus tard.
+//                 captures, puis un nouvel essai du flux 10 s plus tard, puis 20, 40, et au plus une minute (02/11/2026 :
+//                 une minute d'emblee laissait la camera saccadee longtemps apres un simple hoquet ; on fermait l'onglet).
 // Chez un copain, toujours des captures (le relais ne transporte pas de flux).
 // Rien ne tourne quand l'appli est en arriere-plan.
-const STALL_MS = 6000, RETRY_MS = 60000, PERIOD_MS = 2000;
+const STALL_MS = 6000, RETRY_MS = 60000, RETRY_FIRST_MS = 10000, PERIOD_MS = 2000;
+// le delai avant de retenter le flux, partage par toutes les cameras de la page : il double a chaque echec, et revient
+// au plus court des que le flux redonne des images
+let retryMs = RETRY_FIRST_MS;
 
 function readStream(url, onFrame, onEnd) {
   const ctl = new AbortController();
@@ -94,7 +98,10 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
       };
       tick();
       poll = setInterval(tick, PERIOD_MS);
-      if (want === "auto") retry = setTimeout(() => { clearInterval(poll); poll = null; if (!dead) stream(); }, RETRY_MS);
+      if (want === "auto") {
+        retry = setTimeout(() => { clearInterval(poll); poll = null; if (!dead) stream(); }, retryMs);
+        retryMs = Math.min(RETRY_MS, retryMs * 2);
+      }
       return el;
     };
     const fallback = () => {
@@ -107,7 +114,7 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
     const stream = () => {
       setLive("stream");
       arm();
-      stop = readStream("/api/v1/camera/stream", f => { arm(); show(f); }, () => !dead && fallback());
+      stop = readStream("/api/v1/camera/stream", f => { arm(); retryMs = RETRY_FIRST_MS; show(f); }, () => !dead && fallback());
     };
     if (want === "images") images(); else stream();
     return () => {
@@ -130,6 +137,10 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
       {/* un voyant discret quand c'est le flux continu ; rien pour les captures */}
       {live === "stream" && !broken && <span title="En direct" style={{ position: "absolute", left: 8, top: 8, width: 6, height: 6, borderRadius: "50%",
         background: "#ef4444", boxShadow: "0 0 0 2px rgba(0,0,0,0.25)", opacity: 0.85, animation: "livePulse 2s infinite" }}/>}
+      {/* en secours sur les captures (le flux s'est fige) : on le voit, et le direct est retente tout seul */}
+      {live === "images" && !friend && !broken && <span data-tip="Le flux continu s'est figé : une image toutes les 2 s, le direct est retenté tout seul"
+        style={{ position: "absolute", left: 6, top: 6, padding: "1px 6px", borderRadius: 8, fontSize: 9.5, fontWeight: 800, color: "#fff",
+          background: "rgba(15,23,42,0.55)", letterSpacing: ".03em", pointerEvents: "auto" }}>captures</span>}
       {/* en grand : un en-tete (camera, en direct ou captures, fermer), l'image a ses proportions sur un fond sombre */}
       {big && createPortal(
         <div data-no-pull="" onClick={e => { e.stopPropagation(); setBig(false); }} style={{ position: "fixed", inset: 0, zIndex: 6000,
