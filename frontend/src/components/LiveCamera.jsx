@@ -66,6 +66,8 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
   const [live, setLive] = useState(null);          // "stream" | "images" | null (rien encore)
   const [hidden, setHidden] = useState(document.hidden);
   const [broken, setBroken] = useState(false);
+  // une premiere vue est arrivee : avant, l'image vide montrait l'icone d'image cassee sur fond noir (02/11/2026)
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     const f = () => setHidden(document.hidden);
     document.addEventListener("visibilitychange", f);
@@ -83,7 +85,7 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
       const old = lastUrl;
       lastUrl = u;
       el.src = u;
-      setBroken(false);
+      setBroken(false); setReady(true);
       if (old) setTimeout(() => URL.revokeObjectURL(old), 1000);
     };
     const images = () => {
@@ -94,7 +96,7 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
         if (busy || !img.current) return;
         busy = true;
         const im = new Image();
-        im.onload = () => { busy = false; if (!dead && img.current) { img.current.src = im.src; setBroken(false); } };
+        im.onload = () => { busy = false; if (!dead && img.current) { img.current.src = im.src; setBroken(false); setReady(true); } };
         im.onerror = () => { busy = false; if (!dead) setBroken(true); };
         im.src = apiUrl(`/camera/snapshot?t=${Date.now()}`);
       };
@@ -156,10 +158,15 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
     <div style={{ position: "relative", cursor: expandable ? "zoom-in" : undefined, ...style }}
       onClick={expandable ? e => { e.stopPropagation(); setBig(true); } : undefined}>
       {/* natural (en grand) : l'image a ses vraies proportions, sans bandes noires autour */}
-      <img ref={img} data-pk="" alt="Caméra de l'imprimante" style={natural
-        ? { display: broken ? "none" : "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: "74vh", borderRadius: "inherit" }
-        : { width: "100%", display: broken ? "none" : "block", aspectRatio: style?.height ? undefined : "16/9", height: style?.height,
-          objectFit: fit, background: "#111", maxHeight, borderRadius: "inherit" }}/>
+      {/* rien d'affiche tant qu'aucune vue n'est arrivee (ni icone cassee ni noir) : un fond doux qui patiente a la place */}
+      <img ref={img} data-pk="" alt="" style={natural
+        ? { display: broken || !ready ? "none" : "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: "74vh", borderRadius: "inherit" }
+        : { width: "100%", display: broken ? "none" : "block", visibility: ready ? "visible" : "hidden", aspectRatio: style?.height ? undefined : "16/9",
+          height: style?.height, objectFit: fit, background: ready ? "#111" : "transparent", maxHeight, borderRadius: "inherit" }}/>
+      {!ready && !broken && <div aria-label="Connexion à la caméra" style={{ ...(natural ? { width: "min(90vw, 720px)", aspectRatio: "16/9" } : { position: "absolute", inset: 0 }),
+        borderRadius: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "var(--muted)",
+        backgroundColor: "var(--surface2)", backgroundImage: "linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--text) 7%, transparent) 50%, transparent 70%)",
+        backgroundSize: "60% 100%", backgroundRepeat: "no-repeat", animation: "bn-tile-sweep 1.6s ease-in-out infinite" }}>📷 Connexion à la caméra…</div>}
       {broken && <div style={{ padding: "26px 12px", textAlign: "center", fontSize: 12.5, color: "var(--muted)", background: "var(--surface2)",
         borderRadius: "inherit" }}>Caméra injoignable pour l'instant</div>}
       {/* un voyant discret quand c'est le flux continu ; rien pour les captures */}
