@@ -1417,7 +1417,8 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
           <span style={{ whiteSpace:"nowrap", fontSize:13, fontWeight:900, backgroundImage:`linear-gradient(135deg, ${barColor}, ${lighten(barColor)})`,
             WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}
             data-tip={lv ? `≈ ${Math.round(lv.now)} g maintenant · ${Math.round(lv.target)} g à la fin de l'impression en cours` : undefined}>{rem != null ? `${lv ? "≈ " : ""}${Math.round(rem)} g` : "—"}</span>
-          {lv ? <LiveTo lv={lv} size={10}/> : rem != null && <span style={{ fontSize:8.5, fontWeight:900, padding:"1px 5px", borderRadius:20, color:"#fff", background:barColor }}>{pct}%</span>}
+          {lv && <LiveTo lv={lv} size={10} color={barColor} style={{ order: 2 }}/>}
+          {rem != null && <span style={{ fontSize:8.5, fontWeight:900, padding:"1px 5px", borderRadius:20, color:"#fff", background:barColor }}>{pct}%</span>}
         </div>
         <div style={{ position:"relative", height:5, borderRadius:5, background:"var(--surface2)", overflow:"hidden", boxShadow:"inset 0 0 0 1px var(--border)" }}>
           <div style={{ width:`${pct}%`, height:"100%", borderRadius:5, transition:"width 0.5s",

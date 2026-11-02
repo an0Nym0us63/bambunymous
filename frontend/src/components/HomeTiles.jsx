@@ -1668,7 +1668,7 @@ function SpoolsZoom({ list, kg }) {
             <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{spoolName(x)}</span>
               <span data-tip={lv ? `≈ ${Math.round(lv.now)} g maintenant · ${Math.round(lv.target)} g à la fin de l'impression en cours` : undefined}
-                style={{ fontSize: 13.5, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{lv ? `≈ ${Math.round(lv.now)} g` : fmtG(x.remaining_weight_g)}</span><LiveTo lv={lv} size={11}/></div>
+                style={{ fontSize: 13.5, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{lv ? `≈ ${Math.round(lv.now)} g` : fmtG(x.remaining_weight_g)}</span><LiveTo lv={lv} size={11} color={c}/></div>
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
               {x.filament_manufacturer && pill(x.filament_manufacturer, "#8B5CF6")}
               {x.filament_material && pill(x.filament_material, "#F59E0B")}
@@ -3679,7 +3679,7 @@ function Spool({ status, o, sz }) {
             <div style={{ fontSize: 26, fontWeight: 900, color: "var(--text)", lineHeight: 1.1 }}>{name}</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text2)" }}>{[type, si.brand].filter(Boolean).join(" · ")}</div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 }}>
-              <span style={{ fontSize: 30, fontWeight: 900, color: light ? "var(--text)" : barCol }}>{weight}</span><LiveTo lv={lv} size={16}/>{pctPill(15)}
+              <span style={{ fontSize: 30, fontWeight: 900, color: light ? "var(--text)" : barCol }}>{weight}</span><LiveTo lv={lv} size={16} color={light ? undefined : barCol}/>{pctPill(15)}
               {tot && g != null && <Muted size={13}>sur {Math.round(tot)} g · {Math.round((pct ?? 0) * 100)} %</Muted>}</div>
             {bar(10)}
             {lv?.target != null && <Muted size={12.5}>→ {Math.round(lv.target)} g à la fin de l'impression · {Math.round(lv.row_used)} g consommés sur {Math.round(lv.row_planned)} g · suivi couche par couche (alpha)</Muted>}
@@ -3724,7 +3724,7 @@ function Spool({ status, o, sz }) {
             <span style={{ fontSize: 15, fontWeight: 900, color: "var(--text)", maxWidth: "100%", ...clamp(1) }}>{name}</span>
             <Muted size={11.5}>{slot}</Muted>
             <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 900, color: light ? "var(--text)" : barCol, whiteSpace: "nowrap" }}>{weight}</span><LiveTo lv={lv} size={10.5}/><div style={{ flex: 1 }}>{bar(6)}</div>
+              <span style={{ fontSize: 13, fontWeight: 900, color: light ? "var(--text)" : barCol, whiteSpace: "nowrap" }}>{weight}</span><LiveTo lv={lv} size={10.5} color={light ? undefined : barCol}/><div style={{ flex: 1 }}>{bar(6)}</div>
               {pctPill(11)}</div>
           </div>;
         }
@@ -3749,7 +3749,7 @@ function Spool({ status, o, sz }) {
             </> : <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {[type, si.brand, H < 80 && g != null ? `${Math.round(g)} g` : null].filter(Boolean).join(" · ")}</span>}
             {!narrow && H < 80 ? bar(6) : <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: narrow ? 12.5 : 15, fontWeight: 900, color: light ? "var(--text)" : barCol, whiteSpace: "nowrap" }}>{weight}</span><LiveTo lv={lv} size={narrow ? 10.5 : 12}/>
+              <span style={{ fontSize: narrow ? 12.5 : 15, fontWeight: 900, color: light ? "var(--text)" : barCol, whiteSpace: "nowrap" }}>{weight}</span><LiveTo lv={lv} size={narrow ? 10.5 : 12} color={light ? undefined : barCol}/>
               {(!narrow || W >= 175) && <div style={{ flex: 1, minWidth: 0 }}>{bar(narrow ? 5 : 7)}</div>}
               {narrow && <span style={{ marginLeft: "auto" }}>{pctPill(10.5)}</span>}</div>}
             {facts && facts.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>{facts}</div>}
@@ -4272,7 +4272,7 @@ function ColorsZoom({ units, on, mats, cur }) {
               <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
                 <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{trayName(t)}</span>
                 {si.remaining_weight_g != null && <span data-tip={lv ? `≈ ${Math.round(lv.now)} g maintenant · ${Math.round(lv.target)} g à la fin de l'impression en cours` : undefined}
-                  style={{ fontSize: 13, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{lv ? `≈ ${Math.round(lv.now)} g` : fmtG(si.remaining_weight_g)}</span>}<LiveTo lv={lv} size={11}/></div>
+                  style={{ fontSize: 13, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{lv ? `≈ ${Math.round(lv.now)} g` : fmtG(si.remaining_weight_g)}</span>}<LiveTo lv={lv} size={11} color={c}/></div>
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                 {pill(slotOf(t), on(t) ? "#3b82f6" : "#64748b")}
                 {si.brand && pill(si.brand, "#8B5CF6")}
