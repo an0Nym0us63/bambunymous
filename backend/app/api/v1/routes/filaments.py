@@ -1326,8 +1326,11 @@ async def update_spool(
         data["last_dried_at"] = d
 
     changed_price = "price_override" in data
+    before = s.remaining_weight_g
     for k, v in data.items():
         setattr(s, k, v)
+    if "remaining_weight_g" in data:
+        _log_weight(db, s, before, "Poids corrigé")
     await db.commit()
     _clear_match_cache()
     if changed_price:
@@ -1344,6 +1347,7 @@ async def archive_spool(
     s = await db.get(Spool, sid)
     if not s:
         raise HTTPException(404, "Bobine introuvable")
+    before = s.remaining_weight_g
     s.archived = True
     # Une bobine archivee sort du stock : on remet sa quantite a 0 et on la
     # replace en "Archives". Le worker spool_location ne touche plus aux
@@ -1351,8 +1355,20 @@ async def archive_spool(
     # sur son dernier tray AMS et son poids continuerait a fausser les cumuls.
     s.remaining_weight_g = 0.0
     s.location = "Archives"
+    _log_weight(db, s, before, "Bobine archivée")
     await db.commit()
     _clear_match_cache()
+
+
+def _log_weight(db, s, before, why: str) -> None:
+    """Tout changement du poids d'une bobine hors impression (02/11/2026) : dans son historique (kind « correction »,
+    grammes signes), avec l'avant et l'apres. Avant, une correction a la main ne laissait aucune trace."""
+    from ....models.spool_move import SpoolMove
+    before, after = float(before or 0), float(s.remaining_weight_g or 0)
+    d = round(after - before, 1)
+    if abs(d) >= 0.1:
+        db.add(SpoolMove(spool_id=s.id, grams=d, kind="correction",
+                         label=f"{why} · {before:.0f} → {after:.0f} g"[:250]))
 
 
 class WeightAdjust(BaseModel):
@@ -1381,14 +1397,18 @@ async def adjust_spool_weight(
     cur = s.remaining_weight_g or 0.0
     if body.mode == "set":
         s.remaining_weight_g = max(0.0, body.value)
+        _log_weight(db, s, cur, "Poids corrigé")
     elif body.mode == "add":
         s.remaining_weight_g = max(0.0, cur + body.value)
+        if not (body.print_id and body.value > 0):
+            _log_weight(db, s, cur, "Poids corrigé")
         if body.print_id and body.value > 0:
             from ....models.spool_move import SpoolMove
             db.add(SpoolMove(spool_id=sid, grams=round(body.value, 1), kind="rendu", print_id=body.print_id,
                              usage_id=body.usage_id, unlinked=bool(body.unlink), label=(body.label or "")[:250] or None))
     elif body.mode == "sub":
         s.remaining_weight_g = max(0.0, cur - body.value)
+        _log_weight(db, s, cur, "Poids corrigé")
     else:
         raise HTTPException(400, "mode invalide (set/add/sub)")
     await db.commit()
@@ -2153,6 +2173,12 @@ async def spool_usage_history(sid: int, _: str = Depends(get_current_user)):
             .order_by(_P.print_date.desc())
         )).all()
         moves = (await db.execute(_sel(SpoolMove).where(SpoolMove.spool_id == sid))).scalars().all()
+    # ce qui a ete rendu a chaque consommation (02/11/2026) : une impression echouee dit si sa part non imprimee est
+    # revenue a la bobine, ou pas
+    back = {}
+    for m in moves:
+        if m.usage_id and m.kind in ("rendu", "annule") and m.reverted_at is None:
+            back[m.usage_id] = round(back.get(m.usage_id, 0) + (m.grams or 0), 1)
     out = [
         {
             "kind":       "usage",
@@ -2165,6 +2191,7 @@ async def spool_usage_history(sid: int, _: str = Depends(get_current_user)):
             "cost":       r.cost,
             # suivi couche par couche : cette bobine a pris le relais d'une autre en cours d'impression (02/11/2026)
             "relay":      r.from_g is not None,
+            "returned":   back.get(r.id, 0),
         }
         for r in rows
     ]
@@ -2212,6 +2239,13 @@ async def spool_history_undo(sid: int, body: dict = Body({}), _: str = Depends(r
             m = await db.get(SpoolMove, oid)
             if not m or m.spool_id != sid or m.reverted_at is not None:
                 raise HTTPException(404, "Ligne introuvable ou déjà annulée")
+            if m.kind == "correction":
+                # une correction de poids : la bobine revient au poids d'avant
+                s.remaining_weight_g = round(max(0.0, (s.remaining_weight_g or 0) - (m.grams or 0)), 1)
+                m.reverted_at = _dt.utcnow()
+                await db.commit()
+                _clear_match_cache()
+                return {"ok": True, "message": "Poids d'avant remis"}
             if m.kind == "fin":
                 # une bobine mise a 0 en cours d'impression (suivi couche par couche) : ce qu'elle avait lui revient
                 s.remaining_weight_g = round((s.remaining_weight_g or 0) + (m.grams or 0), 1)

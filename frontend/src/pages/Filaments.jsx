@@ -917,9 +917,10 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
   const undoLine = async (kind, id, grams, back) => {
     const g = `${(grams || 0).toFixed(1).replace(".", ",")} g`;
     // back === "fin" : une bobine mise a 0 en cours d'impression (suivi couche par couche)
-    if (!(await showConfirm(back === "fin" ? `Remettre ${g} à la bobine (annuler sa mise à 0) ?`
+    if (!(await showConfirm(back === "correction" ? `Remettre la bobine au poids d'avant cette correction (${g}) ?`
+      : back === "fin" ? `Remettre ${g} à la bobine (annuler sa mise à 0) ?`
       : back ? `Rendre ${g} à la bobine ? L'impression ne comptera plus sur elle (ses coûts sont refaits).`
-      : `Reprendre ${g} à la bobine (annuler ce rendu) ?`, { title: "Annuler cette ligne ?", confirmLabel: back === "fin" ? "Remettre" : back ? "Rendre" : "Reprendre" }))) return;
+      : `Reprendre ${g} à la bobine (annuler ce rendu) ?`, { title: "Annuler cette ligne ?", confirmLabel: back === "fin" || back === "correction" ? "Remettre" : back ? "Rendre" : "Reprendre" }))) return;
     try {
       await client.post(`/filaments/spools/${spool.id}/history/undo`, { kind, id });
       egg("annule_ligne");
@@ -1178,7 +1179,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
               <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#8B5CF6" }}>📋 Historique · bobine #{spool.id}</div>
               <div style={{ fontSize:17, fontWeight:900, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
               <div style={{ fontSize:12, fontWeight:700, color:"var(--muted)" }}>
-                {(() => { const us = usageHistory.filter(u => (u.kind || "usage") === "usage"), back = usageHistory.filter(u => u.kind && u.kind !== "usage" && u.kind !== "fin" && !u.reverted);
+                {(() => { const us = usageHistory.filter(u => (u.kind || "usage") === "usage"), back = usageHistory.filter(u => u.kind && u.kind !== "usage" && u.kind !== "fin" && u.kind !== "correction" && !u.reverted);
                   return <>{us.length} impression{us.length !== 1 ? "s" : ""}
                     {us.length > 0 && ` · ${Math.round(us.reduce((t, u) => t + (u.grams_used || 0), 0))} g consommés`}
                     {back.length > 0 && ` · ${Math.round(back.reduce((t, u) => t + (u.grams || 0), 0))} g rendus`}</>; })()}</div>
@@ -1203,6 +1204,27 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                   <div style={{ textAlign:"right", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
                     <div style={{ fontSize:14, fontWeight:900, color:"#d97706" }}>−{(u.grams || 0).toFixed(1)} g</div>
                     {!u.reverted && isAdmin && <button onClick={() => undoLine("move", u.id, u.grams, "fin")} data-tip="Remettre ces grammes à la bobine"
+                      style={{ padding:"3px 9px", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer", border:"1px solid var(--border)",
+                        background:"var(--surface)", color:"var(--text2)" }}>↶ Annuler</button>}
+                  </div>
+                </div>;
+              }
+              // une correction de poids hors impression (a la main, au scan RFID, a l'archivage, 02/11/2026)
+              if (u.kind === "correction") {
+                const when = u.print_date ? new Date(u.print_date).toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" }) : null;
+                const up = (u.grams || 0) > 0, c = up ? "#16a34a" : "#64748b";
+                return <div key={`m${u.id}`} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:14, border:"1px solid var(--border)",
+                  background:"linear-gradient(135deg, rgba(100,116,139,0.12), transparent 55%), var(--surface2)", opacity: u.reverted ? 0.55 : 1 }}>
+                  <span style={{ width:46, height:46, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20,
+                    background:"rgba(100,116,139,0.15)" }}>✏️</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+                      textDecoration: u.reverted ? "line-through" : "none" }}>{u.file_name || "Poids corrigé"}</div>
+                    <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>{when}{u.reverted ? " · annulé" : ""}</div>
+                  </div>
+                  <div style={{ textAlign:"right", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
+                    <div style={{ fontSize:14, fontWeight:900, color:c }}>{up ? "+" : "−"}{Math.abs(u.grams || 0).toFixed(1)} g</div>
+                    {!u.reverted && isAdmin && <button onClick={() => undoLine("move", u.id, Math.abs(u.grams || 0), "correction")} data-tip="Remettre le poids d'avant"
                       style={{ padding:"3px 9px", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer", border:"1px solid var(--border)",
                         background:"var(--surface)", color:"var(--text2)" }}>↶ Annuler</button>}
                   </div>
@@ -1239,6 +1261,10 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                   <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>
                     {u.print_date && <span>{new Date(u.print_date).toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" })}</span>}
                     {st && <span style={{ color:st[1] }}>● {st[0]}</span>}
+                    {/* une impression echouee : sa part non imprimee est-elle revenue a la bobine ? (02/11/2026) */}
+                    {u.status === "FAILED" && (u.returned > 0
+                      ? <span data-tip="Rendu à la bobine après l'échec (ligne verte « Rendu à la bobine »)" style={{ color:"#16a34a" }}>↩ {u.returned.toFixed(1).replace(".", ",")} g rendus</span>
+                      : <span data-tip="Rien n'est revenu à la bobine : ouvre l'impression, ⚖ Restituer dans ses filaments" style={{ color:"#d97706" }}>rien de rendu</span>)}
                     {u.relay && <span data-tip="Elle a pris la suite d'une bobine finie en cours d'impression" style={{ color:"#8B5CF6" }}>🔁 a pris le relais</span>}</div>
                 </div>
                 <div style={{ textAlign:"right", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>

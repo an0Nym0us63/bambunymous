@@ -370,6 +370,7 @@ async def rfid_create(
         if spool.tag_number:
             raise HTTPException(409, "Cette bobine a deja un tag NFC")
 
+        before = spool.remaining_weight_g
         spool.tag_number = tray_uid                       # l'essentiel : le tag
         if body.spool_price is not None:
             spool.price_override = body.spool_price
@@ -388,6 +389,9 @@ async def rfid_create(
             spool.location = "Tiroir"
             spool.remaining_weight_g = body.remaining_weight_g if body.remaining_weight_g is not None else scan["spool_weight_g"]
             spool.last_dried_at = datetime.utcnow()
+        if before is not None:
+            from .filaments import _log_weight
+            _log_weight(db, spool, before, "Poids posé au scan RFID")
 
         await db.commit()
         await db.refresh(spool)

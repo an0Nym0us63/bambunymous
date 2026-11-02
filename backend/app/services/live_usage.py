@@ -424,9 +424,10 @@ async def switch(pid: int, slot: int, spool_id: int, auto: bool = False) -> dict
 
 
 # ── Fin d'impression ────────────────────────────────────────────────────────────────────────────────────────────────
-async def settle(pid: int) -> list:
+async def settle(pid: int, nothing: bool = False) -> list:
     """Echec ou annulation : la part non imprimee de chaque ligne revient a sa bobine (une fois). Sans progression
-    connue, rien ne change (tout reste retire, comme avant). Rend [(spool_id, grammes)]."""
+    connue, rien ne change (tout reste retire, comme avant) -- sauf « nothing » (02/11/2026) : annulee avant sa premiere
+    couche, suivie de bout en bout, rien n'a ete imprime et tout revient. Rend [(spool_id, grammes)]."""
     from ..models.print_history import Print
     from ..models.filament import Spool
     from ..models.spool_move import SpoolMove
@@ -437,7 +438,7 @@ async def settle(pid: int) -> list:
     if pid not in _PROG and st.get("layer"):
         _PROG[pid] = {"layer": int(st["layer"]), "pct": float(st.get("pct") or 0), "t": 0.0}
         _BEST.setdefault(pid, {}).update({int(s): float(g) for s, g in (st.get("best") or {}).items()})
-    if pid not in _PROG:
+    if pid not in _PROG and not nothing:
         logger.info(f"[LIVE] impression #{pid} ratee sans progression connue : rien n'est rendu")
         return []
     back = []
@@ -447,6 +448,9 @@ async def settle(pid: int) -> list:
             return []
         rows, used, _src = await _used(db, pid, p)
         label = f"{p.translated_name or p.file_name or f'Impression {pid}'} — échec : la part non imprimée"
+        if nothing and pid not in _PROG:
+            used = {}
+            label = f"{p.translated_name or p.file_name or f'Impression {pid}'} — annulée avant la première couche"
         for slot, rs in rows.items():
             for r in rs:
                 g = float(r.grams_used or 0)
@@ -470,6 +474,8 @@ async def settle(pid: int) -> list:
             logger.warning(f"[LIVE] report sur les objets de l'impression #{pid} : {e}")
         await db.commit()
     await _state_put(pid, {"settled": True, "back": [[s, g] for s, g in back]})
+    logger.info(f"[LIVE] impression #{pid} ratee : {', '.join(f'{g:g} g a la bobine #{s}' for s, g in back) or 'rien a rendre'}"
+                f" (couche {(_PROG.get(pid) or {}).get('layer', '?')}{', rien imprime' if nothing else ''})")
     if back:
         try:
             from ..core.mqtt import invalidate_tray_cache

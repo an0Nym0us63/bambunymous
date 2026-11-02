@@ -701,8 +701,11 @@ def on_finish(job_id: str, gcode_state: str):
         _err = int(getattr(get_state(), "print_error", 0) or 0)
     except Exception:
         _err = 0
+    # annulee avant la premiere couche (preparation, calibrage), suivie de bout en bout : rien n'a ete imprime
+    nothing = (final == "FAILED" and end_known and not st.get("restored") and not st.get("last_layer")
+               and int(st.get("last_pct", 0) or 0) == 0)
     _bg(_finalize(pid, job_id, final, st.get("start_time"), pct=int(st.get("last_pct", 0) or 0), print_error=_err,
-                  t_end=t0, paused=paused, end_known=end_known))
+                  t_end=t0, paused=paused, end_known=end_known, nothing=nothing))
     # le 3MF d'origine, s'il manque encore (premier essai rate, profil appris en cours de route)
     try:
         from .mw_source import for_print as _src
@@ -790,7 +793,7 @@ async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str, job_i
 
 async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float],
                     pct: int = 0, print_error: int = 0,
-                    t_end: Optional[float] = None, paused: float = 0.0, end_known: bool = True):
+                    t_end: Optional[float] = None, paused: float = 0.0, end_known: bool = True, nothing: bool = False):
     logger.info(f"[FINAL] ▶ Démarrage finalisation print #{pid} → {status}")
     try:
         async with AsyncSessionLocal() as db:
@@ -822,7 +825,7 @@ async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float],
         if live_usage.enabled():
             try:
                 if status == "FAILED":
-                    await live_usage.settle(pid)
+                    await live_usage.settle(pid, nothing=nothing)
                 else:
                     await live_usage.finished(pid)
             except Exception as e:
