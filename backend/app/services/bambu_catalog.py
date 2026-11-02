@@ -314,6 +314,13 @@ def catalog_entries() -> Tuple[Optional[list], Optional[dict]]:
     return c["data"], c["fr"]
 
 
+# Les noms francais que le catalogue n'a nulle part (ceux de la boutique Bambu Lab, donnes par l'utilisateur) : le
+# dernier recours avant l'anglais
+FR_MISSING = {
+    "dawn radiance": "Éclat de l'Aube",          # PLA Silk degrade M8 (13912), 02/11/2026
+}
+
+
 def fr_name(names: dict, en_to_fr: Optional[dict] = None) -> str:
     """Le nom francais d'une couleur du catalogue : le sien ; sinon celui d'une autre entree au meme nom anglais
     (casse ignoree : le catalogue n'a pas traduit toutes les entrees d'une meme couleur) ; sinon l'anglais."""
@@ -323,7 +330,8 @@ def fr_name(names: dict, en_to_fr: Optional[dict] = None) -> str:
     en = names.get("en") or ""
     if en_to_fr is None:
         en_to_fr = catalog_entries()[1] or {}
-    return en_to_fr.get(en) or en_to_fr.get(en.casefold()) or en or next(iter(names.values()), "")
+    return (en_to_fr.get(en) or en_to_fr.get(en.casefold()) or FR_MISSING.get(en.strip().casefold())
+            or en or next(iter(names.values()), ""))
 
 
 async def retranslate_filaments() -> int:

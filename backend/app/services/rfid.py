@@ -100,7 +100,8 @@ def catalog_match(scan: dict, lang: str = "fr") -> Optional[dict]:
     def build(entry: dict) -> dict:
         names = entry.get("fila_color_name", {})
         name_en = names.get("en") or names.get("fr") or next(iter(names.values()), "")
-        name_fr = names.get("fr") or en_to_fr.get(name_en, "") or name_en
+        from .bambu_catalog import FR_MISSING
+        name_fr = names.get("fr") or en_to_fr.get(name_en, "") or FR_MISSING.get(name_en.strip().casefold()) or name_en
         colors = [c.lstrip("#")[:8].lower() for c in (entry.get("fila_color") or [])]
         ctype = entry.get("fila_color_type", "")
         return {
