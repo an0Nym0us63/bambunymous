@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useLiveSpool } from "../store/liveUsage";
-import { LiveHatch } from "./LiveUsage";
+import { LiveHatch, LiveTo } from "./LiveUsage";
 import { useTrackDetail } from "../utils/track";
 import { Droplets, Sun, Thermometer, Timer, Clock, Package, Palette } from "lucide-react";
 import client from "../api/client";
@@ -387,7 +387,8 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
       <p style={{ fontSize:11, fontWeight:800, color:"var(--text)", height:14, fontVariantNumeric:"tabular-nums",
         display:"flex", alignItems:"center", justifyContent:"center", gap:4, whiteSpace:"nowrap" }}>
         {vide ? "" : posee ? (hasW ? wLabel : "") : wLabel}
-        {!vide && !posee && pct > 0 && size >= 80 && <span style={{ fontSize:10, fontWeight:700, color:"var(--muted)" }}>{Math.max(0, Math.min(100, pct))} %</span>}
+        {!vide && lv && size >= 64 && <LiveTo lv={lv} size={9.5}/>}
+        {!vide && !posee && !lv && pct > 0 && size >= 80 && <span style={{ fontSize:10, fontWeight:700, color:"var(--muted)" }}>{Math.max(0, Math.min(100, pct))} %</span>}
       </p>
       {showName && <p style={{ fontSize:10, color:"var(--text2)", textAlign:"center",
         whiteSpace:"normal", wordBreak:"break-word", maxWidth: size + 20, lineHeight:"12px",
@@ -454,6 +455,7 @@ function TrayRow({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loa
         </div>
         {!vide && <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, overflow: "hidden" }}>
           <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{w}</span>
+          <LiveTo lv={lv} size={10}/>
           {name && material && <span style={{ fontSize: 10.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{material}</span>}
         </div>}
         {!vide && size >= 40 && <div style={{ position: "relative", height: 4, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
@@ -770,6 +772,7 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
               <span style={{ fontSize:26, fontWeight:900, lineHeight:1.2, ...fGrad(gauge, `color-mix(in srgb, ${gauge} 60%, #ffffff)`), ...fOutline(gauge) }}
                 data-tip={lv ? `${Math.round(lv.target)} g à la fin de l'impression en cours` : undefined}>
                 {lv ? `≈ ${Math.round(lv.now)} g` : info?.remaining_weight_g ? `${info.remaining_weight_g.toFixed(0)} g` : `${pct} %`}</span>
+              <LiveTo lv={lv} size={14}/>
               {info?.remaining_weight_g ? <span style={{ fontSize:12.5, fontWeight:900, color:"#fff", padding:"2px 8px", borderRadius:20, background:gauge }}>{pct} %</span> : null}
             </div>
             <div style={{ position:"relative", height:8, borderRadius:5, background:"color-mix(in srgb, var(--border) 80%, transparent)", overflow:"hidden" }}>

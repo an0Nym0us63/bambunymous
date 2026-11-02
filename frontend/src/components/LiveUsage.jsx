@@ -35,6 +35,14 @@ export function LiveHatch({ a, b, r = 3 }) {
     background: "repeating-linear-gradient(135deg, rgba(255,255,255,.5) 0 3px, transparent 3px 6px)", pointerEvents: "none" }}/>;
 }
 
+// a cote d'un « ≈ 671 g » d'une bobine qui sert a l'impression en cours : sa valeur a la fin (« → 640 g »), plus petite
+// et plus pale (02/11/2026) ; rien hors impression
+export function LiveTo({ lv, size = "0.8em", style }) {
+  if (!lv || lv.target == null) return null;
+  return <span data-tip={`${Math.round(lv.target)} g à la fin de l'impression en cours`}
+    style={{ fontSize: size, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", WebkitTextFillColor: "var(--muted)", ...style }}>→ {Math.round(lv.target)} g</span>;
+}
+
 // la bobine qui imprime : son poids maintenant, et sa cible (son poids a la fin)
 export function liveOfSpool(d, spoolId) {
   return spoolId ? (d?.items || []).find(i => i.spool_id === spoolId && i.current) || null : null;
