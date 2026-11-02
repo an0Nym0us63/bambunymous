@@ -21,6 +21,7 @@ import AdminOnly from "../components/AdminOnly";
 import IncomingOrders, { OrderSheet } from "../components/IncomingOrders";
 import { useTrackDetail } from "../utils/track";
 import Select from "../components/Select";
+import CatalogPicker, { CatalogLinkSheet } from "../components/CatalogPicker";
 import { useIsAdmin } from "../store/auth";
 import { Pressable, openMenu } from "../components/ContextMenu";
 import { colorBg, parseColorsList, finishOf, autoFinishOf, FINISHES, COLOR_BUCKETS, BUCKET_FR, BUCKET_HEX, bucketsOf } from "../utils/colors";
@@ -1936,6 +1937,7 @@ function SpoolsView({ filaments, showArchived }) {
 export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
   useTrackDetail(f ? `Fiche filament · ${f.translated_name || f.name || "#" + f.id}` : null);
   const [addSpool, setAddSpool] = useState(false);
+  const [linking, setLinking] = useState(false);          // rattacher au catalogue Bambu (02/11/2026)
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -2073,6 +2075,8 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
     items: [
       { icon: "✏️", label: "Éditer", hint: "Nom, couleurs, poids, prix…", tone: "#3B82F6", onClick: () => setEditing(true) },
       { icon: "＋", label: "Créer une bobine", hint: "de ce filament", tone: "#22C55E", onClick: () => setAddSpool(true) },
+      { icon: "🧷", label: "Rattacher au catalogue", hint: f.fila_color_code ? `Bambu ${f.fila_color_code} : en choisir une autre` : "Noms, code et couleurs du catalogue Bambu",
+        tone: "#6366F1", onClick: () => setLinking(true) },
       "-",
       { icon: "🗑", label: "Supprimer…", danger: true, disabled: deleting, onClick: handleDelete },
     ],
@@ -2214,6 +2218,8 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
           onClose={() => setAddSpool(false)}
           onSave={() => { setAddSpool(false); onUpdated?.(); }}/>
       )}
+      {linking && <CatalogLinkSheet f={{ ...f, name }} onClose={() => setLinking(false)}
+        onDone={() => client.get(`/filaments/filaments/${f.id}`).then(r => onUpdated?.(r.data)).catch(() => onUpdated?.())}/>}
     </FSheet>
   );
 }
@@ -2601,14 +2607,6 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
   // support choisi a la main (ou deja fourni par prefill) : on ne le remplace plus d'apres la marque
   const tareTouched = useRef(!!(prefill && prefill.spool_weight_g));
 
-  // Catalogue Bambu
-  const [families, setFamilies] = useState([]);
-  const [typesByFamily, setTypesByFamily] = useState({});
-  const [selectedFamily, setSelectedFamily] = useState("");
-  const [selectedType, setSelectedType] = useState("");
-  const [catalogQ, setCatalogQ] = useState("");
-  const [catalogEntries, setCatalogEntries] = useState([]);
-  const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogEntry, setCatalogEntry] = useState(null); // entrée choisie
 
   // Formulaire libre
@@ -2645,50 +2643,6 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
   const liveColors = (form.colors_input||"").split(",")
     .map(c=>c.trim().replace(/^#/,"")).filter(c=>c.length>=6)
     .map(c=>hexToCss(c)).filter(Boolean);
-
-  // Charger les familles/types catalogue
-  useEffect(() => {
-    if (mode !== "catalog") return;
-    client.get("/filaments/catalog/types").then(({ data }) => {
-      setFamilies(data.families || []);
-      setTypesByFamily(data.types || {});
-    }).catch(() => {});
-  }, [mode]);
-
-  // Chercher dans le catalogue, un quart de seconde apres la derniere frappe (28/10/2026 : un appel par frappe)
-  const [catalogDq, setCatalogDq] = useState("");
-  useEffect(() => { const t = setTimeout(() => setCatalogDq(catalogQ), 250); return () => clearTimeout(t); }, [catalogQ]);
-  useEffect(() => {
-    if (mode !== "catalog") return;
-    setCatalogLoading(true);
-    const params = {};
-    if (selectedFamily) params.family = selectedFamily;
-    if (selectedType) params.fila_type = selectedType;
-    if (catalogDq.trim()) params.q = catalogDq.trim();
-    params.lang = "fr";
-    client.get("/filaments/catalog/search", { params })
-      .then(({ data }) => {
-        setCatalogEntries(data.entries || []);
-        if (!data.available) setCatalogEntries([]);
-      })
-      .catch(() => setCatalogEntries([]))
-      .finally(() => setCatalogLoading(false));
-  }, [mode, selectedFamily, selectedType, catalogDq]);
-
-  // Helper : affiche la couleur selon le type (gradient / coaxial / mono)
-  const colorSwatch = (e, size=28) => {
-    const cols = (e.colors || []).map(c => `#${c}`);
-    let bg;
-    if (e.color_type_fr === "gradient" && cols.length > 1) {
-      bg = `linear-gradient(135deg, ${cols.join(",")})`;
-    } else if (e.color_type_fr === "coaxial" && cols.length > 1) {
-      const pct = 100 / cols.length;
-      bg = `linear-gradient(90deg, ${cols.map((c,i)=>`${c} ${i*pct}%, ${c} ${(i+1)*pct}%`).join(",")})`;
-    } else {
-      bg = `#${e.color_hex || "888"}`;
-    }
-    return <div style={{ width:size, height:size, borderRadius:Math.round(size*0.22), flexShrink:0, background:bg }}/>;
-  };
 
   const pickFromCatalog = (entry) => {
     setCatalogEntry(entry);
@@ -2748,8 +2702,6 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
       } else { showAlert(e.response?.data?.detail || e.message); }
     } finally { setSaving(false); }
   };
-
-  const types = selectedFamily ? (typesByFamily[selectedFamily] || []) : Object.values(typesByFamily).flat();
 
   // l'apercu : la bobine aux couleurs saisies
   const heroCols = liveColors.length ? liveColors : null;
@@ -2813,59 +2765,8 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
             </div>
           )}
 
-          {mode === "catalog" && (
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                <Select value={selectedFamily} onChange={e => { setSelectedFamily(e.target.value); setSelectedType(""); }}
-                  style={{ ...field, flex:1, minWidth:120 }}
-                  options={[{ value:"", label:"Toutes familles" },
-                            ...families.map(f => ({ value:f, label:f }))]}/>
-                <Select value={selectedType} onChange={e => setSelectedType(e.target.value)}
-                  style={{ ...field, flex:1, minWidth:140 }}
-                  options={[{ value:"", label:"Tous types" },
-                            ...types.map(t => ({ value:t, label:t }))]}/>
-              </div>
-              <div style={{ position:"relative" }}>
-                <Search size={15} style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
-                <input value={catalogQ} onChange={e => setCatalogQ(e.target.value)}
-                  placeholder="Rechercher une couleur (Jade White, Orange…)"
-                  style={{ ...field, height:40, borderRadius:20, padding:"0 14px 0 38px", fontWeight:600, fontSize:13 }}/>
-              </div>
-              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                {catalogLoading && <p style={{ color:"var(--muted)", fontSize:12.5, fontWeight:700 }}>Recherche…</p>}
-                {!catalogLoading && catalogEntries.length === 0 &&
-                  <p style={{ color:"var(--muted)", fontSize:12.5, fontWeight:700 }}>
-                    {families.length === 0 ? "Catalogue non disponible (démarrage en cours…)" : "Aucun résultat"}
-                  </p>}
-                {catalogEntries.map((e,i) => (
-                  <button key={i} onClick={() => pickFromCatalog(e)}
-                    style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
-                      borderRadius:14, border:"1px solid var(--border)", background:`linear-gradient(135deg, #${e.color_hex || "888888"}22, transparent 55%), var(--surface2)`,
-                      cursor:"pointer", textAlign:"left" }}>
-                    <span style={{ borderRadius:9, boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.25)", display:"inline-flex" }}>{colorSwatch(e, 34)}</span>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:1 }}>
-                        <p style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", margin:0,
-                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{e.name}</p>
-                        {e.color_type_fr && e.color_type_fr !== "monochrome" && (
-                          <span style={{ fontSize:9, padding:"1px 6px", borderRadius:20, flexShrink:0,
-                            background: e.color_type_fr==="gradient" ? "rgba(139,92,246,0.15)" : "rgba(59,130,246,0.15)",
-                            color: e.color_type_fr==="gradient" ? "#8b5cf6" : "#3b82f6",
-                            fontWeight:800, textTransform:"uppercase" }}>
-                            {e.color_type_fr}
-                          </span>
-                        )}
-                      </div>
-                      <p style={{ fontSize:11, fontWeight:600, color:"var(--muted)", margin:0 }}>
-                        {e.fila_type} · <span style={{ fontFamily:"monospace" }}>{e.fila_color_code}</span>
-                      </p>
-                    </div>
-                    <span style={{ fontSize:14, color:"#22C55E", fontWeight:900, flexShrink:0 }}>›</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* le catalogue Bambu (02/11/2026 : composant partage avec « Rattacher au catalogue ») */}
+          {mode === "catalog" && <CatalogPicker onPick={pickFromCatalog} field={field}/>}
 
           {mode === "free" && (
             <>

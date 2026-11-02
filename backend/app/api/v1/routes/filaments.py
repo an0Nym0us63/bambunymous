@@ -1551,6 +1551,74 @@ def _get_catalog():
     return BambuCatalogSync(data_dir=settings.DATA_DIR)
 
 
+_CTYPE_FR = {"单色": "monochrome", "渐变色": "gradient", "多拼色": "coaxial"}
+
+
+def _apply_catalog(f, entry: dict, en_to_fr: dict, link: bool = False) -> list:
+    """Met le filament aux noms, type, code couleur et couleurs de cette entree du catalogue Bambu ; rend les champs
+    changes. link (rattachement a la main, 02/11/2026) : aussi le profil, la marque et la couleur, celle du catalogue
+    (la synchro, elle, a trouve l'entree par la couleur)."""
+    from ....services.bambu_catalog import fr_name
+    names = entry.get("fila_color_name", {})
+    name_en = names.get("en") or names.get("fr") or next(iter(names.values()), "")
+    name_fr = fr_name(names, en_to_fr) or name_en
+    colors = [c.lstrip("#")[:8] for c in entry.get("fila_color", [])]
+    ctype = _CTYPE_FR.get(entry.get("fila_color_type", ""), "monochrome")
+    changed: list = []
+
+    def upd(attr, val):
+        if getattr(f, attr, None) != val:
+            setattr(f, attr, val)
+            changed.append(attr)
+
+    upd("name", name_en)
+    upd("name_en", name_en)
+    upd("translated_name", name_fr)
+    # material = famille (PLA), fila_type = variante (PLA Basic)
+    _ft = entry.get("fila_type", "")
+    upd("material", family_of(_ft, f.material))
+    upd("fila_type", _ft)
+    upd("fila_color_code", entry.get("fila_color_code", ""))
+    upd("multicolor_type", ctype)
+    if ctype != "monochrome" and len(colors) > 1:
+        upd("colors_array", ",".join(f"#{c}" for c in colors))
+    if link:
+        upd("profile_id", entry.get("fila_id", ""))
+        if not (f.manufacturer or "").strip():
+            upd("manufacturer", "Bambu Lab")
+        if colors:
+            upd("color", colors[0])
+        if ctype == "monochrome":
+            upd("colors_array", None)
+    f.color_bucket = buckets_for(f.color, f.colors_array)
+    return changed
+
+
+@router.post("/filaments/{fid}/link-catalog")
+async def link_catalog(fid: int, body: dict = Body({}), db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    """Rattache un filament a une entree du catalogue Bambu choisie a la main (02/11/2026) : il prend ses noms, son type,
+    son code couleur, ses couleurs et son profil, comme la synchro, qui le retrouvera ensuite par ce code."""
+    from ....services.bambu_catalog import catalog_entries
+    data, en_to_fr = catalog_entries()
+    if data is None:
+        raise HTTPException(503, "Catalogue non disponible (téléchargé au démarrage de l'appli)")
+    pid, code = str(body.get("fila_id") or "").upper(), str(body.get("fila_color_code") or "")
+    entry = next((e for e in data if str(e.get("fila_id", "")).upper() == pid and str(e.get("fila_color_code", "")) == code), None)
+    if entry is None:
+        raise HTTPException(404, "Entrée introuvable dans le catalogue")
+    f = await db.get(Filament, fid)
+    if f is None:
+        raise HTTPException(404, "Filament introuvable")
+    changed = _apply_catalog(f, entry, en_to_fr, link=True)
+    # un autre filament deja rattache a la meme entree : dit, pour fusionner a la main si c'est un doublon
+    twin = (await db.execute(select(Filament.id, Filament.translated_name, Filament.name).where(
+        Filament.id != fid, Filament.profile_id == entry.get("fila_id"), Filament.fila_color_code == code))).first()
+    await db.commit()
+    _clear_match_cache()
+    return {"ok": True, "changes": changed, "name": f.translated_name or f.name,
+            "twin": {"id": twin[0], "name": twin[1] or twin[2]} if twin else None}
+
+
 @router.post("/filaments/enrich-from-catalog")
 async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
     """
@@ -1579,7 +1647,8 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
             )
         )
         no_profile = [
-            {"id": f.id, "name": f.name, "manufacturer": f.manufacturer}
+            {"id": f.id, "name": f.name, "manufacturer": f.manufacturer, "color": f.color, "material": f.material,
+             "fila_type": f.fila_type}
             for f in result_no_profile.scalars().all()
             if "bambu" in (f.manufacturer or "").lower()
         ]
@@ -1595,7 +1664,8 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
         for f in filaments:
             if not f.color:
-                skipped.append({"id": f.id, "name": f.name, "reason": "pas de couleur hex renseignée"})
+                skipped.append({"id": f.id, "name": f.name, "reason": "pas de couleur hex renseignée",
+                                "material": f.material, "fila_type": f.fila_type})
                 continue
 
             color_hex_raw = (f.color or "").lower().replace("#","")
@@ -1604,8 +1674,11 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
             # Multicolore en base = filament avec colors_array ou multicolor_type != monochrome
             is_multi = (f.multicolor_type or "monochrome") != "monochrome"
 
-            entry = None
-            for e in cat_data:
+            # le code couleur deja pose (rattachement a la main, 02/11/2026, ou synchro d'avant) l'emporte : l'entree choisie
+            # reste la sienne, meme si une autre a la meme couleur
+            entry = next((e for e in cat_data if f.fila_color_code and e.get("fila_id", "").upper() == (f.profile_id or "").upper()
+                          and str(e.get("fila_color_code", "")) == str(f.fila_color_code)), None)
+            for e in cat_data if entry is None else []:
                 if e.get("fila_id","").upper() != (f.profile_id or "").upper():
                     continue
                 e_colors = e.get("fila_color", [])
@@ -1640,38 +1713,15 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
                 break
 
             if entry:
-                names   = entry.get("fila_color_name", {})
-                name_en = names.get("en") or names.get("fr") or next(iter(names.values()),"")
-                name_fr = fr_name(names, en_to_fr) or name_en
-                colors  = [c.lstrip("#")[:8] for c in entry.get("fila_color", [])]
-                ctype   = COLOR_TYPE_FR.get(entry.get("fila_color_type",""), "monochrome")
-                fresh   = await db.get(Filament, f.id)
-                changed: dict = {}
-
-                def upd(attr, val):
-                    if getattr(fresh, attr, None) != val:
-                        setattr(fresh, attr, val)
-                        changed[attr] = val
-
-                upd("name",           name_en)
-                upd("name_en",        name_en)
-                upd("translated_name", name_fr)
-                # material = famille (PLA), fila_type = variante (PLA Basic)
-                _ft = entry.get("fila_type","")
-                upd("material",       family_of(_ft, f.material))
-                upd("fila_type",      _ft)
-                upd("fila_color_code", entry.get("fila_color_code",""))
-                upd("multicolor_type", ctype)
-                if ctype != "monochrome" and len(colors) > 1:
-                    upd("colors_array", ",".join(f"#{c}" for c in colors))
-                f.color_bucket = buckets_for(f.color, f.colors_array)
-
-                updated.append({"id": f.id, "name": name_en, "changes": list(changed.keys())})
+                fresh = await db.get(Filament, f.id)
+                changed = _apply_catalog(fresh, entry, en_to_fr)
+                updated.append({"id": f.id, "name": fresh.name, "changes": changed})
             else:
                 # N'afficher comme "introuvable" que les filaments Bambu Lab
                 # (les filaments tiers ne sont pas dans ce catalogue)
                 if "bambu" in (f.manufacturer or "").lower():
-                    not_found.append({"id": f.id, "name": f.name, "profile_id": f.profile_id, "color": f.color})
+                    not_found.append({"id": f.id, "name": f.name, "profile_id": f.profile_id, "color": f.color,
+                                      "material": f.material, "fila_type": f.fila_type})
 
         await db.commit()
 

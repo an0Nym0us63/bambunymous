@@ -6,6 +6,7 @@ import { Save, Wifi, RefreshCw, Sun, Moon, Users, KeyRound, Trash2, Activity } f
 import { useNavigate } from "react-router-dom";
 import { useUrlTab } from "../utils/useUrlTab";
 import TasksPanel from "../components/TasksPanel";
+import { CatalogLinkSheet } from "../components/CatalogPicker";
 import client from "../api/client";
 import { FriendsCard, FriendKeyButtons } from "../components/Friends";
 import { showAlert, showConfirm } from "../utils/dialog";
@@ -251,6 +252,21 @@ function SdProbeSection() {
 function EnrichFromCatalogSection() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState(null);
+  // un resultat touche : le rattacher a la main a une entree du catalogue (02/11/2026)
+  const [linkF, setLinkF] = useState(null);
+  const [linked, setLinked] = useState({});
+  const linkRow = (f, color, sub) => {
+    const done = linked[f.id];
+    return <button key={f.id} type="button" onClick={() => setLinkF(f)} data-tip="Le rattacher à une entrée du catalogue Bambu"
+      style={{ display:"flex", alignItems:"center", gap:8, width:"100%", textAlign:"left", padding:"6px 8px", margin:"2px 0", borderRadius:10,
+        border:"1px solid var(--border)", background:"var(--surface)", cursor:"pointer", fontSize:11.5, fontWeight:700, color: done ? "#16a34a" : color }}>
+      {f.color && <span style={{ width:14, height:14, borderRadius:4, flexShrink:0, background:`#${String(f.color).replace(/^#/, "").slice(0, 6)}`,
+        boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.2)" }}/>}
+      <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+        #{f.id} {done ? `${done} ✓` : f.name}{!done && sub ? <span style={{ color:"var(--muted)" }}> · {sub}</span> : null}</span>
+      <span style={{ flexShrink:0, color: done ? "#16a34a" : "#6366F1" }}>{done ? "rattaché" : "🧷 Rattacher ›"}</span>
+    </button>;
+  };
 
   const run = async () => {
     setRunning(true); setResult(null);
@@ -266,7 +282,8 @@ function EnrichFromCatalogSection() {
       <p style={cardTitle}>Enrichissement catalogue Bambu</p>
       <CardHelp title="Enrichissement catalogue Bambu">
         Pour tous les filaments Bambu en base (avec Profile ID), cherche leur fiche officielle
-        dans le catalogue et met à jour : nom, code couleur, type multicolore, couleurs…
+        dans le catalogue et met à jour : nom, code couleur, type multicolore, couleurs… Ceux qu'elle ne trouve pas se touchent
+        dans le résultat pour les rattacher à la main (aussi depuis la fiche d'un filament, ⋯ › Rattacher au catalogue).
       </CardHelp>
       <button onClick={run} disabled={running}
         style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 16px",
@@ -299,25 +316,30 @@ function EnrichFromCatalogSection() {
           {result.details?.not_found?.length > 0 && (
             <div style={{ marginTop:8 }}>
               <p style={{ color:"var(--muted)", margin:"0 0 4px", textTransform:"uppercase", fontSize:10, letterSpacing:"0.06em" }}>Introuvables</p>
-              {result.details.not_found.map(f => (
-                <div key={f.id} style={{ fontSize:11, color:"#f59e0b", padding:"2px 0" }}>
-                  #{f.id} {f.name} (profil {f.profile_id}, couleur #{f.color})
-                </div>
-              ))}
+              {result.details.not_found.map(f => linkRow(f, "#f59e0b", `profil ${f.profile_id}, couleur #${f.color}`))}
             </div>
           )}
           {result.details?.no_profile?.length > 0 && (
             <div style={{ marginTop:8 }}>
               <p style={{ color:"var(--muted)", margin:"0 0 4px", textTransform:"uppercase", fontSize:10, letterSpacing:"0.06em" }}>
-                Sans Profile ID — non enrichissables
+                Sans Profile ID — à rattacher
               </p>
-              {result.details.no_profile.map(f => (
-                <div key={f.id} style={{ fontSize:11, color:"var(--muted)", padding:"2px 0" }}>
-                  #{f.id} {f.name}{f.manufacturer ? ` · ${f.manufacturer}` : ""}
-                </div>
-              ))}
+              {result.details.no_profile.map(f => linkRow(f, "var(--text2)", f.manufacturer))}
             </div>
           )}
+          {result.details?.skipped?.length > 0 && (
+            <div style={{ marginTop:8 }}>
+              <p style={{ color:"var(--muted)", margin:"0 0 4px", textTransform:"uppercase", fontSize:10, letterSpacing:"0.06em" }}>
+                Sans couleur — ignorés
+              </p>
+              {result.details.skipped.map(f => linkRow(f, "var(--text2)", f.fila_type || f.material))}
+            </div>
+          )}
+          {(result.details?.not_found?.length > 0 || result.details?.no_profile?.length > 0 || result.details?.skipped?.length > 0) &&
+            <p style={{ fontSize:11, color:"var(--muted)", margin:"8px 0 0" }}>Touche un filament pour le rattacher toi-même à une entrée du catalogue
+              (recherche par matière, type, nom ou code couleur) : il est mis à jour comme par la synchro, qui le retrouvera ensuite.</p>}
+          {linkF && <CatalogLinkSheet f={linkF} onClose={() => setLinkF(null)}
+            onDone={d => setLinked(m => ({ ...m, [linkF.id]: d.name }))}/>}
         </div>
       )}
     </div>
