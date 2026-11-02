@@ -1877,7 +1877,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     return new THREE.Ray(ray.ray.origin.clone().applyMatrix4(inv), ray.ray.direction.clone().transformDirection(inv));
   };
   const onSlideDown = ev => {
-    if (ev.button !== 0 || !sel.size || tc.axis || mode === "cut") return;
+    if (ev.button !== 0 || !sel.size || mode === "cut") return;
+    // au doigt, aucun survol n'a marque la poignee (anneau, fleche) touchee : on la cherche ici, sinon le glisser de
+    // la piece collee partait a sa place (02/11/2026 : en « Tourner », le doigt deplacait la piece sous lui)
+    if (!tc.axis && tc.object && tc.enabled) { rayHolder(ev); tc.pointerHover({ x: mouse.x, y: mouse.y, button: -1 }); }
+    if (tc.axis) return;
     const j = jointOf([...sel]);
     if (!j) return;
     const pick = pickAt(ev);
