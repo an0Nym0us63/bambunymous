@@ -15,10 +15,11 @@ export const fGrad = (a, b) => ({ backgroundImage:`linear-gradient(135deg, ${a},
 // une couleur tres claire (blanc, jade…) se perd sur le fond : elle garde un contour et un texte sombre
 export const isLight = c => { const m = /^#?([0-9a-f]{6})/i.exec(c || ""); if (!m) return false; const n = parseInt(m[1], 16);
   return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.72; };
-// un liseré autour d'un poids en couleur (02/11/2026) : sombre pour une couleur claire, blanc sinon ; il se lit sur
-// tous les fonds (un orange sur un en-tete rose disparaissait)
-export const fOutline = c => ({ filter: isLight(c) ? "drop-shadow(0 0 0.6px rgba(15,23,42,.7)) drop-shadow(0 0 0.6px rgba(15,23,42,.5))"
-  : "drop-shadow(0 0 0.7px rgba(255,255,255,.95)) drop-shadow(0 0 0.7px rgba(255,255,255,.95)) drop-shadow(0 1px 2px rgba(0,0,0,.18))" });
+// un poids en couleur qui se lit sur tous les fonds (02/11/2026) : la meme couleur, un peu plus foncee, et une ombre
+// legere (un orange sur un en-tete rose disparaissait ; un lisere blanc faisait trop decoupe). A poser apres fGrad.
+export const fOutline = c => isLight(c) ? { filter: "drop-shadow(0 1px 1px rgba(15,23,42,.25))" } : {
+  backgroundImage: `linear-gradient(135deg, color-mix(in srgb, ${c} 80%, #000), color-mix(in srgb, ${c} 90%, #000))`,
+  filter: "drop-shadow(0 1px 1px rgba(0,0,0,.15))" };
 export const fChip = (txt, c, extra = {}) => <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"3px 9px", borderRadius:20, fontSize:11, fontWeight:800,
   whiteSpace:"nowrap", color:c, background:`${c}1f`, border:`1px solid ${c}33`, ...extra }}>{txt}</span>;
 export const dayFr = iso => iso ? new Date(String(iso).length <= 10 ? `${iso}T12:00:00` : iso).toLocaleDateString("fr-FR", { day:"numeric", month:"long", year:"numeric" }) : null;
