@@ -3639,7 +3639,9 @@ function Spool({ status, o, sz }) {
     style={{ position: "relative", height: h, borderRadius: h, background: "var(--surface2)", overflow: "hidden", boxShadow: "inset 0 0 0 1px var(--border)" }}>
     <div data-pk="" style={{ height: "100%", width: `${(pct ?? 0) * 100}%`, borderRadius: h, background: barCol,
       boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : `0 0 8px ${barCol}66` }}/>
-    {soon && <><div style={{ position: "absolute", top: 0, bottom: 0, left: `${tgt * 100}%`, width: `${(pct - tgt) * 100}%`, background: "repeating-linear-gradient(135deg, rgba(255,255,255,.5) 0 3px, transparent 3px 6px)" }}/></>}</div>;
+    {soon && <><div style={{ position: "absolute", top: 0, bottom: 0, left: `${tgt * 100}%`, width: `${(pct - tgt) * 100}%`,
+      // hachures sombres sur une bobine claire (02/11/2026 : blanches sur du blanc, on ne les voyait pas)
+      background: `repeating-linear-gradient(135deg, ${light ? "rgba(15,23,42,.3)" : "rgba(255,255,255,.5)"} 0 3px, transparent 3px 6px)` }}/></>}</div>;
   // le pourcentage restant, en pastille a la couleur de la bobine
   const pctPill = fs => pct == null ? null : <span data-pk="" style={{ display: "inline-flex", alignItems: "baseline", gap: 1, padding: `1px ${Math.round(fs * 0.55)}px`,
     borderRadius: 20, fontSize: fs, fontWeight: 900, whiteSpace: "nowrap", flexShrink: 0, lineHeight: 1.35,
@@ -3729,34 +3731,47 @@ function Spool({ status, o, sz }) {
             {lv && <LiveTo lv={lv} size={10.5} color={light ? undefined : barCol} style={{ lineHeight: 1.1 }}/>}
           </div>;
         }
+        // demi-colonne basse (telephone, 02/11/2026) : rien de perdu. La bobine et nom / matiere / marque · emplacement en
+        // haut ; dessous, sur toute la largeur, le poids, sa cible a la fin de l'impression et le %, puis la jauge comme sur
+        // PC (la part qui partira d'ici la fin, hachuree). Avant, la jauge et l'emplacement disparaissaient faute de place.
+        if (narrow) {
+          const sp = Math.floor(Math.max(34, Math.min(56, H - 40, W * 0.34)));
+          const one = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, lineHeight: 1.2 };
+          return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 5, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+              {spool(sp)}
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+                <span style={{ fontSize: 14, fontWeight: 900, color: "var(--text)", ...one, lineHeight: 1.15 }}>{name}</span>
+                {type && <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text2)", ...one }}>{type}</span>}
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", ...one }}>{[si.brand, slotOf(t)].filter(Boolean).join(" · ")}</span>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", columnGap: 6, rowGap: 2, minWidth: 0 }}>
+              <span style={{ fontSize: 13, fontWeight: 900, color: light ? "var(--text)" : barCol, whiteSpace: "nowrap" }}>{weight}</span>
+              {lv && <LiveTo lv={lv} size={11} color={light ? undefined : barCol}/>}
+              <span style={{ marginLeft: "auto" }}>{pctPill(10.5)}</span></div>
+            {bar(6)}
+          </div>;
+        }
         // sinon en ligne : la bobine a gauche (a la hauteur), le nom, la matiere, le poids et sa jauge
-        const sp = Math.floor(Math.max(36, Math.min(H - 4, narrow ? 64 : H >= 150 ? 150 : 104, W * 0.36)));
+        const sp = Math.floor(Math.max(36, Math.min(H - 4, H >= 150 ? 150 : 104, W * 0.36)));
         const price = si.price_override || si.price;
-        const facts = !narrow && H >= 150 && [price && g != null && tot && chip(`≈ ${fmtEur(price * g / tot)} restants`, "#16a34a"),
+        const facts = H >= 150 && [price && g != null && tot && chip(`≈ ${fmtEur(price * g / tot)} restants`, "#16a34a"),
           t.ams?.humidity > 0 && chip(`💧 ${t.ams.humidity} %`, "#0ea5e9"), si.needs_drying && chip("à sécher", "#0ea5e9"),
           si.swatch === false && chip("échantillon à faire", "#f59e0b")].filter(Boolean);
-        return <div style={{ flex: 1, display: "flex", alignItems: "center", gap: narrow ? 8 : 14, minWidth: 0 }}>
+        return <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
           {spool(sp)}
-          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: narrow ? 2 : 4 }}>
-            {!narrow && H >= 90 && <div>{chip(slot, "#8B5CF6")}</div>}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+            {H >= 90 && <div>{chip(slot, "#8B5CF6")}</div>}
             <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-              <span style={{ fontSize: narrow ? 14 : 20, fontWeight: 900, color: "var(--text)", lineHeight: 1.15, minWidth: 0, ...clamp(1) }}>{name}</span>
-              {!narrow && pctPill(H < 80 ? 12 : 14)}</span>
-            {narrow ? <>
-              {/* etroite : la matiere, puis la marque dessous ; l'emplacement seulement s'il reste de la place */}
-              {type && <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.2 }}>{type}</span>}
-              {si.brand && H >= 76 && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.2 }}>{si.brand}</span>}
-              {H >= 120 && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>{slot}</span>}
-            </> : <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {[type, si.brand, H < 80 && g != null ? `${Math.round(g)} g` : null].filter(Boolean).join(" · ")}</span>}
-            {!narrow && H < 80 ? bar(6) : <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: narrow ? 12.5 : 15, fontWeight: 900, color: light ? "var(--text)" : barCol, whiteSpace: "nowrap" }}>{weight}</span>
-              {!narrow && <LiveTo lv={lv} size={12} color={light ? undefined : barCol}/>}
-              {(!narrow || W >= 175) && <div style={{ flex: 1, minWidth: 0 }}>{bar(narrow ? 5 : 7)}</div>}
-              {narrow && <span style={{ marginLeft: "auto" }}>{pctPill(10.5)}</span>}</div>}
-            {/* etroite (telephone) : la valeur a la fin sur sa propre ligne, sous le poids (02/11/2026 : a la suite, elle
-                poussait la pastille du pourcentage hors de la tuile) */}
-            {narrow && lv && <LiveTo lv={lv} size={10.5} color={light ? undefined : barCol} style={{ lineHeight: 1.1 }}/>}
+              <span style={{ fontSize: 20, fontWeight: 900, color: "var(--text)", lineHeight: 1.15, minWidth: 0, ...clamp(1) }}>{name}</span>
+              {pctPill(H < 80 ? 12 : 14)}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {[type, si.brand, H < 80 && g != null ? `${Math.round(g)} g` : null].filter(Boolean).join(" · ")}</span>
+            {H < 80 ? bar(6) : <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 15, fontWeight: 900, color: light ? "var(--text)" : barCol, whiteSpace: "nowrap" }}>{weight}</span>
+              <LiveTo lv={lv} size={12} color={light ? undefined : barCol}/>
+              <div style={{ flex: 1, minWidth: 0 }}>{bar(7)}</div></div>}
             {facts && facts.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>{facts}</div>}
           </div>
         </div>;
