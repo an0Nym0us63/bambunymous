@@ -37,6 +37,8 @@ export function LiveBar({ now, target, full, color, h = 8 }) {
   const w = v => `${Math.max(0, Math.min(100, (v / full) * 100))}%`;
   return <div style={{ position: "relative", height: h, borderRadius: h, background: "var(--surface2)", overflow: "hidden", boxShadow: "inset 0 0 0 1px var(--border)" }}>
     <div style={{ position: "absolute", inset: 0, width: w(now), borderRadius: h, background: `linear-gradient(90deg, ${color}aa, ${color})` }}/>
+    {target != null && target < now && <div style={{ position: "absolute", top: 0, bottom: 0, left: w(target), width: w(now - target),
+      background: "repeating-linear-gradient(135deg, rgba(255,255,255,.55) 0 3px, transparent 3px 6px)" }}/>}
     {target != null && <div data-tip={`À la fin : ${g(target)}`} style={{ position: "absolute", top: 0, bottom: 0, left: w(target), width: 2, background: "var(--text)", opacity: .55 }}/>}
   </div>;
 }
@@ -112,9 +114,12 @@ export function LiveUsageCard({ printId }) {
               style={{ whiteSpace: "nowrap" }}>{f.source === "gcode" ? "" : "≈ "}{g(f.used)} / {g(f.planned)}</span>
           </div>
           <LiveBar now={f.used} full={f.planned} color={c} h={6}/>
-          {rows.map(r => <div key={r.row} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text2)", flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 700 }}>{r.current ? "Bobine" : "Bobine finie"}{r.spool_id ? ` #${r.spool_id}` : " (non associée)"}</span>
-            {r.now != null && <span>≈ {g(r.now)} maintenant <span style={{ color: "var(--muted)" }}>→ {g(r.target)} à la fin</span></span>}
+          {rows.map(r => <div key={r.row} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text2)", flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 700 }}>{r.current ? "Bobine" : "Bobine finie"}{r.spool_id ? ` #${r.spool_id}` : " (non associée)"}</span>
+              {r.now != null && <span>≈ {g(r.now)} maintenant <span style={{ color: "var(--muted)" }}>→ {g(r.target)} à la fin</span></span>}</div>
+            {/* la bobine : ce qui reste maintenant, et le repere de ce qui restera a la fin */}
+            {r.current && r.now > 0 && <LiveBar now={r.now} target={r.target} full={Math.max(r.now, r.spool_full || 0) || r.now} color={c} h={5}/>}
           </div>)}
           {isAdmin && cur.current && cur.row_used < cur.row_planned - 0.5 && <button onClick={() => setChoose(cur)}
             data-tip="La bobine est vide ou tu en as mis une autre : choisis celle qui porte la suite"

@@ -521,6 +521,7 @@ async def live(pid: int) -> dict:
                 "target": round(rem, 1) if rem is not None else None,
                 "source": src.get(slot, "estimate"), "color": r.color_hex, "type": r.filament_type,
                 "name": (getattr(fil, "translated_name", None) or getattr(fil, "name", None) or "") if fil else "",
+                "spool_full": float(fil.filament_weight_g) if fil and fil.filament_weight_g else None,
             })
     return {"print_id": pid, "layer": prog.get("layer"), "pct": prog.get("pct"), "items": items}
 

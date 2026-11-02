@@ -3604,9 +3604,16 @@ function Spool({ status, o, sz }) {
   // une couleur tres claire (blanc, jade…) se perd sur le fond : la barre garde un contour, le texte du % passe en sombre
   const light = (c => { const m = /^#?([0-9a-f]{6})/i.exec(c || ""); if (!m) return false; const n = parseInt(m[1], 16);
     return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.72; })(barCol);
-  const bar = h => <div style={{ height: h, borderRadius: h, background: "var(--surface2)", overflow: "hidden", boxShadow: "inset 0 0 0 1px var(--border)" }}>
+  // suivi couche par couche : la part qui partira d'ici la fin, hachuree, et un repere a la cible (02/11/2026)
+  const tgt = lv?.target != null && tot ? Math.max(0, Math.min(1, lv.target / tot)) : null;
+  const bar = h => <div style={{ position: "relative", height: h, borderRadius: h, background: "var(--surface2)", overflow: "hidden", boxShadow: "inset 0 0 0 1px var(--border)" }}>
     <div data-pk="" style={{ height: "100%", width: `${(pct ?? 0) * 100}%`, borderRadius: h, background: barCol,
-      boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : `0 0 8px ${barCol}66` }}/></div>;
+      boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : `0 0 8px ${barCol}66` }}/>
+    {tgt != null && pct != null && tgt < pct && <>
+      <div style={{ position: "absolute", top: 0, bottom: 0, left: `${tgt * 100}%`, width: `${(pct - tgt) * 100}%`,
+        background: "repeating-linear-gradient(135deg, rgba(255,255,255,.55) 0 3px, transparent 3px 6px)" }}/>
+      <div data-tip={`À la fin de l'impression : ${Math.round(lv.target)} g`} style={{ position: "absolute", top: 0, bottom: 0, left: `${tgt * 100}%`, width: 2,
+        marginLeft: -1, background: "var(--text)", opacity: .7 }}/></>}</div>;
   // le pourcentage restant, en pastille a la couleur de la bobine
   const pctPill = fs => pct == null ? null : <span data-pk="" style={{ display: "inline-flex", alignItems: "baseline", gap: 1, padding: `1px ${Math.round(fs * 0.55)}px`,
     borderRadius: 20, fontSize: fs, fontWeight: 900, whiteSpace: "nowrap", flexShrink: 0, lineHeight: 1.35,
