@@ -40,6 +40,15 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
   const [broken, setBroken] = useState(false);
   // une premiere vue est arrivee : avant, l'image vide montrait l'icone d'image cassee sur fond noir (02/11/2026)
   const [ready, setReady] = useState(false);
+  // en grand, la cadence reellement recue (02/11/2026) : « EN DIRECT · 7 img/s », pour savoir d'ou vient une saccade
+  const shown = useRef(0);
+  const [fps, setFps] = useState(null);
+  useEffect(() => {
+    if (!big) return undefined;
+    let last = shown.current, at = Date.now();
+    const t = setInterval(() => { const now = Date.now(); setFps((shown.current - last) * 1000 / (now - at)); last = shown.current; at = now; }, 2000);
+    return () => { clearInterval(t); setFps(null); };
+  }, [big]);
   useEffect(() => {
     const f = () => setHidden(document.hidden);
     document.addEventListener("visibilitychange", f);
@@ -57,6 +66,7 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
       const old = lastUrl;
       lastUrl = u;
       el.src = u;
+      shown.current++;
       setBroken(false); setReady(true);
       if (old) setTimeout(() => URL.revokeObjectURL(old), 1000);
     };
@@ -68,7 +78,7 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
         if (busy || !img.current) return;
         busy = true;
         const im = new Image();
-        im.onload = () => { busy = false; if (!dead && img.current) { img.current.src = im.src; setBroken(false); setReady(true); } };
+        im.onload = () => { busy = false; if (!dead && img.current) { img.current.src = im.src; shown.current++; setBroken(false); setReady(true); } };
         im.onerror = () => { busy = false; if (!dead) setBroken(true); };
         im.src = apiUrl(`/camera/snapshot?t=${Date.now()}`);
       };
@@ -163,7 +173,8 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
                 background: live === "stream" ? "rgba(239,68,68,0.28)" : "rgba(255,255,255,0.14)",
                 border: `1px solid ${live === "stream" ? "rgba(239,68,68,0.55)" : "rgba(255,255,255,0.22)"}` }}>
                 {live === "stream" && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#ef4444", animation: "livePulse 2s infinite" }}/>}
-                {live === "stream" ? "EN DIRECT" : "CAPTURES"}</span>
+                {live === "stream" ? "EN DIRECT" : "CAPTURES"}
+                {fps != null && <span style={{ fontWeight: 700, opacity: .8, letterSpacing: 0 }}>· {fps >= 1 ? `${Math.round(fps)} img/s` : fps > 0 ? `1 img / ${Math.round(1 / fps)} s` : "aucune image"}</span>}</span>
             </span>
             <button aria-label="Fermer" onClick={() => setBig(false)} style={{ width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
               border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.12)", backdropFilter: "blur(10px)", color: "#fff",

@@ -3,6 +3,7 @@ Proxy caméra Bambu Lab — supporte RTSP (X1/H2D) et TLS:6000 (P1S/A1/A1 Mini).
 Détection automatique par modèle imprimante.
 """
 import time, random, logging, asyncio, subprocess, socket, ssl, struct
+from collections import deque
 from threading import Lock
 import threading
 from fastapi import APIRouter, Depends, Request
@@ -133,6 +134,14 @@ class _Hub:
         self.fails = 0
         self.pulled = 0.0            # la derniere demande d'une image tiree (/frame)
         self.pullers = {}            # qui tire, et quand (le nombre de spectateurs des travaux)
+        # le releve (/stats, 02/11/2026) : la cadence reellement produite, les demarrages, la derniere erreur
+        self.times = deque(maxlen=120)
+        self.starts = 0
+        self.started_at = 0.0
+        self.method = ""
+        self.err = ""
+        self.err_at = 0.0
+        self.ff_log = deque(maxlen=8)
 
     def stop(self) -> bool:
         with self.lock:
@@ -150,6 +159,7 @@ class _Hub:
             self.frame, self.ts = jpg, time.monotonic()
             self.seq += 1
             self.fails = 0
+            self.times.append(self.ts)
 
 
 _HUB = _Hub()
@@ -159,7 +169,12 @@ def _rtsp_frames(ip: str, code: str, stop):
     url = f"rtsps://bblp:{code}@{ip}:322/streaming/live/1"
     proc = subprocess.Popen(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-rtsp_transport", "tcp",
                              "-i", url, "-an", "-r", str(_STREAM_FPS), "-f", "image2pipe", "-vcodec", "mjpeg",
-                             "-q:v", "6", "pipe:1"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                             "-q:v", "6", "pipe:1"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    def errors():                  # ce que dit ffmpeg, garde pour le releve (sans le code d'acces)
+        for line in iter(proc.stderr.readline, b""):
+            _HUB.ff_log.append(line.decode("utf-8", "ignore").strip().replace(code, "***")[:300])
+    threading.Thread(target=errors, name="camera-ffmpeg-log", daemon=True).start()
     buf = b""
     try:
         while not stop():
@@ -230,6 +245,9 @@ def _produce(ip: str, code: str, mode: str) -> None:
     order = (["rtsp"] if mode == "rtsp" else ["tls"] if mode == "tls" else ["rtsp", "tls"])
     err = None
     for m in order:
+        with _HUB.lock:
+            _HUB.starts += 1
+            _HUB.started_at, _HUB.method = time.monotonic(), m
         try:
             gen = _rtsp_frames(ip, code, _HUB.stop) if m == "rtsp" else _tls_frames(ip, code, _HUB.stop)
             for jpg in gen:
@@ -238,6 +256,8 @@ def _produce(ip: str, code: str, mode: str) -> None:
             break                                  # plus personne : arret normal
         except Exception as e:
             err = e
+            with _HUB.lock:
+                _HUB.err, _HUB.err_at = f"{m} : {e}".replace(code, "***")[:300], time.monotonic()
             logger.info(f"Camera flux {m}: {e}")
     with _HUB.lock:
         _HUB.thread = None
@@ -447,6 +467,33 @@ async def camera_frame(request: Request, after: int = 0, v: str = ""):
             _ensure_producer(ip, code, mode)
         await asyncio.sleep(0.03)
         touch()
+
+
+@router.get("/stats")
+async def camera_stats():
+    """Le releve du direct (02/11/2026), pour comprendre une camera saccadee : ce que le serveur recoit vraiment."""
+    now = time.monotonic()
+    with _HUB.lock:
+        t = [x for x in _HUB.times if now - x <= 10]
+        gaps = [round(b - a, 2) for a, b in zip(list(_HUB.times)[-11:], list(_HUB.times)[-10:])]
+        out = {"producteur": _HUB.thread is not None, "methode": _HUB.method or None, "demarrages": _HUB.starts,
+               "depuis_s": round(now - _HUB.started_at, 1) if _HUB.started_at else None,
+               "images_par_s_10s": round(len(t) / 10, 1), "derniers_ecarts_s": gaps,
+               "derniere_image_il_y_a_s": round(now - _HUB.ts, 1) if _HUB.ts else None,
+               "taille_derniere_ko": round(len(_HUB.frame) / 1024) if _HUB.frame else None,
+               "echecs": _HUB.fails, "nouvel_essai_dans_s": max(0, round(_HUB.retry_at - now, 1)),
+               "derniere_erreur": _HUB.err or None, "erreur_il_y_a_s": round(now - _HUB.err_at) if _HUB.err_at else None,
+               "ffmpeg": list(_HUB.ff_log), "spectateurs_flux": _HUB.subs,
+               "spectateurs_tires": len([1 for v in _HUB.pullers.values() if now - v < _IDLE_STOP])}
+    with _LOCK:
+        out["capture"] = {"ok": _CACHE["ok"], "echecs": _CACHE["fail_count"], "nouvel_essai_dans_s": max(0, round(_CACHE["retry_at"] - now, 1))}
+    try:
+        st = get_state()
+        out["modele"] = {"nom": getattr(st, "printer_model", "") or "", "id": getattr(st, "model_id", "") or ""}
+        out["mode_choisi"] = _select_grab(out["modele"]["nom"], out["modele"]["id"])
+    except Exception:
+        pass
+    return out
 
 
 @router.get("/stream")
