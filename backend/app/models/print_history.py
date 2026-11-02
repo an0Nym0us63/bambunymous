@@ -143,6 +143,9 @@ class FilamentUsage(Base):
     grams_used    = Column(Float, nullable=False, default=0.0)
 
     ams_slot      = Column(Integer, nullable=False, default=0)
+    # suivi couche par couche (02/11/2026) : une bobine qui a pris le relais d'une autre pour ce filament, a partir de
+    # ce nombre de grammes consommes du filament ; vide pour la premiere (la seule, sans changement de bobine)
+    from_g        = Column(Float, nullable=True)
     ams_id        = Column(Integer, nullable=True)
     tray_id       = Column(Integer, nullable=True)
 

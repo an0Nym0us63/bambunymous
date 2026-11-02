@@ -1291,11 +1291,14 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
             if len(cols) >= 2:
                 multi_by.setdefault(pid, {})[int(slot)] = {"type": mtype, "colors": cols[:3]}
         if slot:
-            used_by.setdefault(pid, {})[int(slot)] = h6(fcol or chex)
-            sliced_by.setdefault(pid, {})[int(slot)] = h6(chex) if len(h6(chex)) == 6 else None
-            grams_by.setdefault(pid, {})[int(slot)] = float(g or 0)
-            fin_by.setdefault(pid, {})[int(slot)] = (None if ffin == "none" else ffin) if ffin \
-                else T.finish_of(ffila, fname, ftype, color=fcol or chex)
+            # une bobine qui a pris le relais d'une autre pour ce filament (suivi couche par couche, 02/11/2026) : une
+            # ligne de plus ; la couleur reste celle de la premiere, les grammes s'additionnent
+            if int(slot) not in used_by.get(pid, {}):
+                used_by.setdefault(pid, {})[int(slot)] = h6(fcol or chex)
+                sliced_by.setdefault(pid, {})[int(slot)] = h6(chex) if len(h6(chex)) == 6 else None
+                fin_by.setdefault(pid, {})[int(slot)] = (None if ffin == "none" else ffin) if ffin \
+                    else T.finish_of(ffila, fname, ftype, color=fcol or chex)
+            grams_by.setdefault(pid, {})[int(slot)] = grams_by.get(pid, {}).get(int(slot), 0.0) + float(g or 0)
     # le poids de chaque filament sur chaque plateau du profil d'origine (fiche MakerWorld en cache) : quand le projet
     # imprime a renumerote ses filaments sans garder le nom des pieces, le plus lourd va avec le plus lourd
     plate_fils: dict = {}
@@ -1538,9 +1541,14 @@ async def _used_options(print_ids: list) -> list:
             .outerjoin(Spool, Spool.id == FU.spool_id).outerjoin(Filament, Filament.id == Spool.filament_id)
             .where(FU.print_id.in_(print_ids)).order_by(FU.print_id.desc(), FU.ams_slot))).all()
     out = []
+    seen: dict = {}
     for pid, slot, chex, fcol, g, ftype, ffila, fname, ftr, ffin, pname, pfile, brand, mat, mtype, carr, glow in rows:
         c = h6(fcol or chex)
         if not slot or len(c) != 6:
+            continue
+        # une bobine qui a pris le relais pour ce filament (02/11/2026) : une seule couleur, ses grammes ajoutes
+        if (pid, int(slot)) in seen:
+            seen[(pid, int(slot))]["grams"] = round(seen[(pid, int(slot))]["grams"] + float(g or 0), 1)
             continue
         # un multicolore (degrade, coaxial) : ses couleurs (01/11/2026 : pour peindre de lui dans l'assemblage)
         mcols = [h6(x) for x in str(carr or "").split(",") if len(h6(x)) == 6] if mtype in ("gradient", "coaxial") else []
@@ -1552,6 +1560,7 @@ async def _used_options(print_ids: list) -> list:
                     **({"multi": {"type": mtype, "colors": mcols[:3]}} if len(mcols) >= 2 else {}),
                     # un phosphorescent qui ne luit pas de sa couleur (fiche du filament, 01/11/2026)
                     **({"glow": h6(glow)} if len(h6(glow)) == 6 else {})})
+        seen[(pid, int(slot))] = out[-1]
     return out
 
 

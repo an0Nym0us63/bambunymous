@@ -3,7 +3,8 @@ import { colorBg, parseColorsList, finishOf, trayBg } from "../utils/colors";
 import { importRetry } from "../utils/importRetry";
 import AllAlertsModal from "./AllAlertsModal";
 import { Hide } from "./Cachettes";
-import { useFriend } from "../store/friend";
+import { useFriend, currentFriend } from "../store/friend";
+import { useLiveUsage, liveOfSpool } from "./LiveUsage";
 import { useIsAdmin } from "../store/auth";
 import { showAlert } from "../utils/dialog";
 import { relayed } from "./Friends";
@@ -3582,6 +3583,8 @@ function activeTray(status) {
 function Spool({ status, o, sz }) {
   const t = activeTray(status);
   const live = isLive(status);
+  // suivi couche par couche (alpha, 02/11/2026) : le poids de la bobine maintenant, et sa cible a la fin ; rien sur « Actuel »
+  const lv = liveOfSpool(useLiveUsage(live && !currentFriend()), t?.spool_id);
   if (!t) return (
     <Tile icon={<Disc3 size={15}/>} color="#8B5CF6" label="Filament en cours">
       <Empty>{live ? "Bobine inconnue" : "Pas d'impression en cours"}</Empty>
@@ -3593,10 +3596,10 @@ function Spool({ status, o, sz }) {
   const colors = (l => l.length ? l : [color])(parseColorsList(si.color || t.color, si.colors_array));
   const name = si.translated_name || si.name || t.filament_type || "Bobine";
   const type = si.fila_type || si.material || t.filament_type;
-  const g = si.remaining_weight_g, tot = si.initial_weight_g;
+  const g = lv?.now ?? si.remaining_weight_g, tot = si.initial_weight_g;
   const pct = g != null && tot ? Math.max(0, Math.min(1, g / tot)) : t.remain != null && t.remain >= 0 ? t.remain / 100 : null;
   const slot = `${slotOf(t)} · ${amsLab(t.ams)}`;
-  const weight = g != null ? `${Math.round(g)} g` : pct != null ? `${Math.round(pct * 100)} %` : "—";
+  const weight = g != null ? `${lv ? "≈ " : ""}${Math.round(g)} g` : pct != null ? `${Math.round(pct * 100)} %` : "—";
   const barCol = pct == null ? "#94a3b8" : pct < 0.15 ? "#ef4444" : pct < 0.35 ? "#f59e0b" : color;
   // une couleur tres claire (blanc, jade…) se perd sur le fond : la barre garde un contour, le texte du % passe en sombre
   const light = (c => { const m = /^#?([0-9a-f]{6})/i.exec(c || ""); if (!m) return false; const n = parseInt(m[1], 16);
@@ -3646,6 +3649,7 @@ function Spool({ status, o, sz }) {
               <span style={{ fontSize: 30, fontWeight: 900, color: light ? "var(--text)" : barCol }}>{weight}</span>{pctPill(15)}
               {tot && g != null && <Muted size={13}>sur {Math.round(tot)} g · {Math.round((pct ?? 0) * 100)} %</Muted>}</div>
             {bar(10)}
+            {lv?.target != null && <Muted size={12.5}>→ {Math.round(lv.target)} g à la fin de l'impression · {Math.round(lv.row_used)} g consommés sur {Math.round(lv.row_planned)} g · suivi couche par couche (alpha)</Muted>}
           </div>
         </div>
         {(() => {

@@ -110,6 +110,9 @@ async def lifespan(app: FastAPI):
     # Restaurer les prints IN_PROGRESS en mémoire après un redémarrage
     from app.services.print_tracker import restore_in_progress, resume_enrichment, enrichment_reconciler
     await restore_in_progress()
+    # suivi du filament couche par couche (alpha) : l'interrupteur, et ou en etaient les impressions en cours
+    from app.services import live_usage as _live
+    await _live.load()
     # Reprend les prints laisses sans 3MF par un redemarrage pendant la fenetre
     # de retry (les retries d'_enrich ne vivent qu'en memoire).
     await resume_enrichment()

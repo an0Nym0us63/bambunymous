@@ -28,6 +28,7 @@ import MwQueue from "../components/MwQueue";
 import { mwImg } from "../components/MwImg";
 import { toast } from "../store/toast";
 import ShareSheet from "../components/ShareSheet";
+import { LiveUsageCard } from "../components/LiveUsage";
 import { FSheet, fBtn, lighten } from "../components/FicheKit";
 import { useIsAdmin } from "../store/auth";
 import { useTrackDetail } from "../utils/track";
@@ -1634,6 +1635,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         onDeleteUpload={async filename => { await client.delete(`/prints/${p.id}/upload/${filename}`); loadUserPhotos(); }}
         onCountChange={setPhotoCount} coverPhoto={p.cover_photo}
         onCoverChange={name => { setP(prev => ({ ...prev, cover_photo: name })); onChanged?.(); }}/>
+      {/* en cours, suivi couche par couche (alpha) : ce que chaque filament a vraiment consomme ; rien sur « Actuel » */}
+      {p.status === "IN_PROGRESS" && !currentFriend() && <LiveUsageCard printId={p.id}/>}
       {/* les filaments ont deja leur titre repliable (et « Restituer ») */}
       {fils.length > 0 && <FilamentsV2 filaments={fils} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker}
         onRestore={() => setShowDeleteConfirm("restore")} onUnmap={setUnmapping}/>}

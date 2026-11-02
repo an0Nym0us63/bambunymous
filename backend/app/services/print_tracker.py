@@ -135,6 +135,8 @@ async def restore_in_progress():
                     st["start_time"] = (p.created_at.replace(tzinfo=timezone.utc).timestamp()
                                         if p.created_at else time.time())
                     st["paused"] = float(p.paused_seconds or 0)
+                    # reprise apres un redemarrage : la couche annoncee est celle de cette impression (suivi du filament)
+                    st["restored"] = True
                     # tant qu'on ne l'a pas revue tourner, une fin observee a pu arriver pendant l'arret
                     st["unseen"] = True
                     st["pause_since"] = (p.paused_since.replace(tzinfo=timezone.utc).timestamp()
@@ -613,6 +615,11 @@ def on_progress(job_id: str, pct: float, layer: int):
                 st["l3"] = True
                 logger.info(f"[MILESTONE] 📸 Snapshot layer2 couche={layer} print_id={pid}")
                 _bg(_snap(pid, "layer2"))
+    # suivi du filament couche par couche (alpha, 02/11/2026) : seulement une couche de CETTE impression (vue passer par
+    # la couche 0 ou 1, ou reprise apres un redemarrage) ; sur « Actuel », note() ne fait rien
+    if layer and (st.get("low") or st.get("restored")):
+        from . import live_usage
+        live_usage.note(pid, pct, layer)
 
 
 async def _save_pause(pid: int, paused: float, since: Optional[float]):
@@ -814,6 +821,18 @@ async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float],
             await _costs(db, p)
             # Note: déduction des bobines faite au démarrage dans _apply_meta/_enrich
             await db.commit()
+        # suivi couche par couche (alpha) : une impression ratee rend aux bobines ce qui n'a pas ete imprime
+        from . import live_usage
+        if live_usage.enabled():
+            try:
+                if status == "FAILED":
+                    await live_usage.settle(pid)
+                else:
+                    await live_usage.finished(pid)
+            except Exception as e:
+                logger.error(f"[LIVE] fin de l'impression #{pid} : {e}", exc_info=True)
+            finally:
+                live_usage.forget(pid)
         # Logger APRÈS le with pour éviter TypeError si total_weight_g/total_cost est None
         tw = p.total_weight_g or 0
         tc = p.total_cost or 0
