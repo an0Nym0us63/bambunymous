@@ -1069,16 +1069,19 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
           <span style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>sur {Math.round(total)} g</span>
         </div>
         <div style={{ position:"relative", height:10, borderRadius:10, background:"var(--surface)", overflow:"hidden", boxShadow:"inset 0 0 0 1px var(--border)" }}>
-          {/* en cours d'impression : ce qu'elle a maintenant, en pale ; ce qui restera a la fin, en plein */}
-          {live && <div style={{ position:"absolute", inset:0, width:`${Math.min(100, live.now / total * 100)}%`, borderRadius:10, background:`${barColor}55` }}/>}
-          <div style={{ position:"relative", height:"100%", width:`${pct}%`, borderRadius:10, background:barColor, transition:"width .5s",
-            boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : `0 0 8px ${barColor}66` }}/></div>
+          {/* en cours d'impression : ce qu'elle a maintenant, la part qui partira encore hachuree, un repere doux a la cible */}
+          <div style={{ position:"relative", height:"100%", width:`${live ? Math.min(100, live.now / total * 100) : pct}%`, borderRadius:10, background:barColor, transition:"width .5s",
+            boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : `0 0 8px ${barColor}66` }}/>
+          {live && live.now > remaining && <>
+            <div style={{ position:"absolute", top:0, bottom:0, left:`${pct}%`, width:`${Math.min(100, live.now / total * 100) - pct}%`, background:"repeating-linear-gradient(135deg, rgba(255,255,255,.5) 0 3px, transparent 3px 6px)" }}/>
+            <div style={{ position:"absolute", top:1, bottom:1, left:`${pct}%`, width:3, marginLeft:-1.5, borderRadius:3,
+              background:"var(--surface)", boxShadow:`0 0 0 1px ${barColor}88, 0 0 6px ${barColor}` }}/></>}</div>
         {live && <div style={{ display:"flex", alignItems:"flex-start", gap:8, marginTop:2, padding:"8px 10px", borderRadius:12, fontSize:12.5, lineHeight:1.45,
           color:"var(--text2)", background:"linear-gradient(135deg, rgba(139,92,246,.14), transparent 70%), var(--surface)", border:"1px solid rgba(139,92,246,.35)" }}>
           <span>🖨️</span>
           <span><b style={{ color:"var(--text)" }}>Impression en cours{liveD.print_name ? ` : ${liveD.print_name}` : ""}</b>{liveD.layer ? ` · couche ${liveD.layer}` : ""}<br/>
             Elle a <b style={{ color:"var(--text)" }}>≈ {Math.round(live.now)} g</b> maintenant ; les {Math.round(remaining)} g affichés sont sa cible, ce qui
-            restera à la fin ({Math.round(live.row_used)} g consommés sur {Math.round(live.row_planned)} g prévus, en pâle sur la barre).</span></div>}
+            restera à la fin ({Math.round(live.row_used)} g consommés sur {Math.round(live.row_planned)} g prévus ; hachurée sur la barre, la part qui partira encore).</span></div>}
       </FHero>
 
       <div style={{ padding:"12px 14px 18px", display:"flex", flexDirection:"column", gap:12 }}>

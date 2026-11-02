@@ -3626,16 +3626,17 @@ function Spool({ status, o, sz }) {
   // une couleur tres claire (blanc, jade…) se perd sur le fond : la barre garde un contour, le texte du % passe en sombre
   const light = (c => { const m = /^#?([0-9a-f]{6})/i.exec(c || ""); if (!m) return false; const n = parseInt(m[1], 16);
     return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.72; })(barCol);
-  // suivi couche par couche (02/11/2026) : ce qui restera a la fin en plein, la part qui partira d'ici la fin en pale
-  // (02/11/2026 : un trait sombre a la cible faisait tache)
+  // suivi couche par couche (02/11/2026) : la part qui partira d'ici la fin, hachuree, et un repere doux a la cible
+  // (un trait de la couleur du fond, avec un halo de la bobine : le trait noir faisait trop brut)
   const tgt = lv?.target != null && tot ? Math.max(0, Math.min(1, lv.target / tot)) : null;
   const soon = tgt != null && pct != null && tgt < pct;
   const bar = h => <div data-tip={soon ? `≈ ${Math.round(g)} g maintenant · ${Math.round(lv.target)} g à la fin de l'impression` : undefined}
     style={{ position: "relative", height: h, borderRadius: h, background: "var(--surface2)", overflow: "hidden", boxShadow: "inset 0 0 0 1px var(--border)" }}>
-    <div data-pk="" style={{ height: "100%", width: `${(pct ?? 0) * 100}%`, borderRadius: h, background: soon ? `${barCol}55` : barCol,
-      boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : soon ? "none" : `0 0 8px ${barCol}66` }}/>
-    {soon && <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: `${tgt * 100}%`, borderRadius: h, background: barCol,
-      boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : `0 0 8px ${barCol}66` }}/>}</div>;
+    <div data-pk="" style={{ height: "100%", width: `${(pct ?? 0) * 100}%`, borderRadius: h, background: barCol,
+      boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : `0 0 8px ${barCol}66` }}/>
+    {soon && <><div style={{ position: "absolute", top: 0, bottom: 0, left: `${tgt * 100}%`, width: `${(pct - tgt) * 100}%`, background: "repeating-linear-gradient(135deg, rgba(255,255,255,.5) 0 3px, transparent 3px 6px)" }}/>
+      <div style={{ position: "absolute", top: 1, bottom: 1, left: `${tgt * 100}%`, width: 3, marginLeft: -1.5, borderRadius: 3,
+        background: "var(--surface)", boxShadow: `0 0 0 1px ${barCol}88, 0 0 6px ${barCol}` }}/></>}</div>;
   // le pourcentage restant, en pastille a la couleur de la bobine
   const pctPill = fs => pct == null ? null : <span data-pk="" style={{ display: "inline-flex", alignItems: "baseline", gap: 1, padding: `1px ${Math.round(fs * 0.55)}px`,
     borderRadius: 20, fontSize: fs, fontWeight: 900, whiteSpace: "nowrap", flexShrink: 0, lineHeight: 1.35,
