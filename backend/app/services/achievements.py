@@ -6394,6 +6394,16 @@ def _evaluate_sync(series: dict, live: dict, st: dict, now: datetime) -> dict:
                 at = now
             if at is not None:
                 reached[str(i)] = at.isoformat()
+        # un palier paye avec un ticket est acquis, quoi qu'il arrive au compteur (02/11/2026) : un complement arrondi
+        # juste sous le seuil le faisait repartir, et le bouton proposait de le racheter
+        tt = (st.get("ticket_tiers") or {}).get(a["id"]) or []
+        if tt:
+            braw = bonus.get(a["id"]) or []
+            for j, lv in enumerate(tt):
+                d = _ts(braw[j][0]) if j < len(braw) and braw[j] else None
+                for i in range(0, min(int(lv), len(a["tiers"]) - 1) + 1):
+                    if str(i) not in reached and d is not None:
+                        reached[str(i)] = d.isoformat()
         out[a["id"]] = {"value": val, "reached": reached}
     _sets(out, st)
     _cards(out)
@@ -6435,9 +6445,13 @@ async def use_ticket(aid: str) -> dict:
         if w.get("tickets", 0) < cost:
             raise ValueError(f"Il faut {cost} tickets pour passer {tiers_of(a)[lvl + 1]['label']} "
                              f"(tu en as {w.get('tickets', 0)})")
-        add = round(a["tiers"][lvl + 1] - _num(r["value"]), 3)
-        if add <= 0:
-            add = 0
+        # arrondi AU-DESSUS (02/11/2026) : arrondi au plus proche, 0,0655 kg devenait 0,065, le compteur s'arretait a
+        # 0,0995 pour un palier de 0,1 (affiche « 0,10 sur 0,10 kg ») et le palier achete repartait au calcul suivant
+        import math
+        add = max(0.0, a["tiers"][lvl + 1] - _num(r["value"]))
+        add = math.ceil(add * 1000 - 1e-6) / 1000 if add > 0 else 0
+        if add and _num(r["value"]) + add < a["tiers"][lvl + 1]:
+            add = round(add + 0.001, 3)
         now = datetime.utcnow().isoformat()
         st.setdefault("bonus", {}).setdefault(aid, []).append([now, add])
         # le palier est date tout de suite : le passage ne le prendra pas pour une nouveaute (ni cle ni annonce)
@@ -6624,6 +6638,7 @@ async def _tick(notify: bool = True) -> list:
     first = st is None
     st = st or {"unlocked": {}, "best": {}}
     retired = [] if first else await _retire_android(st)
+    doubled = 0 if first else await _refund_double_tickets(st)
     # seuils changes depuis le dernier passage : on recalcule en silence
     silent = first or st.get("sig") != CATALOG_SIG
     new = []
@@ -6701,10 +6716,58 @@ async def _tick(notify: bool = True) -> list:
         await _notify_retro(*retro, st["wheel"]["spins"], st["wheel"].get("tickets", 0))
     if retired and notify:
         await _notify_retired(retired, st["wheel"].get("tickets", 0))
+    if doubled and notify:
+        await _notify_double_refund(doubled, st["wheel"].get("tickets", 0))
     if (spins or s_spins or s_tickets or w_tickets or p_spins or p_tickets) and notify:
         await _notify_spins(spins, st["wheel"]["spins"], s_spins, s_tickets, st["wheel"].get("tickets", 0), w_tickets,
                             p_spins, p_tickets)
     return new
+
+
+async def _refund_double_tickets(st: dict) -> int:
+    """Une fois (02/11/2026) : un palier achete plusieurs fois avec des tickets (le complement arrondi sous le seuil le
+    faisait repartir, et on le rachetait) : les achats en trop sont retires et leurs tickets rendus. Rend le nombre de
+    tickets rendus."""
+    if st.get("tickets_double_refund"):
+        return 0
+    back = 0
+    tts, paids, bonus = st.get("ticket_tiers") or {}, st.get("ticket_paid") or {}, st.get("bonus") or {}
+    for aid in list(tts):
+        tiers, paid, bl = list(tts.get(aid) or []), list(paids.get(aid) or []), list(bonus.get(aid) or [])
+        old = len(tiers) - len(paid)
+        seen, keep_t, keep_p, keep_b = set(), [], [], []
+        for j, lv in enumerate(tiers):
+            cost = int(paid[j - old]) if j >= old and j - old < len(paid) else OLD_TICKET_COST[min(max(int(lv), 0), 8)]
+            if lv in seen:
+                back += cost
+                continue
+            seen.add(lv)
+            keep_t.append(lv)
+            if j >= old and j - old < len(paid):
+                keep_p.append(paid[j - old])
+            if j < len(bl):
+                keep_b.append(bl[j])
+        if len(keep_t) != len(tiers):
+            tts[aid] = keep_t
+            paids[aid] = keep_p
+            bonus[aid] = keep_b + bl[len(tiers):]
+    if back:
+        w = _wheel_init(st)
+        w["tickets"] = w.get("tickets", 0) + back
+        w["tickets_used"] = max(0, w.get("tickets_used", 0) - back)
+    st["tickets_double_refund"] = {"at": datetime.utcnow().isoformat(), "tickets": back}
+    return back
+
+
+async def _notify_double_refund(n: int, total: int) -> None:
+    from . import notify as N
+    cfg = await N._load()
+    if not N.enabled_in(cfg, "wheel_spin"):
+        return
+    await N.notify("wheel_spin", f"🎟️ {n} ticket{'s' if n > 1 else ''} de palier rendu{'s' if n > 1 else ''}",
+                   "Un palier acheté avec un ticket pouvait repartir au calcul suivant, et le racheter dépensait un ticket "
+                   f"pour rien. C'est corrigé : les tickets dépensés en double te sont rendus.\nTu as {total} ticket"
+                   f"{'s' if total > 1 else ''} de palier.", click=N.app_link(cfg, "/stats?tab=achievements"), priority=2)
 
 
 async def _retire_android(st: dict) -> list:
