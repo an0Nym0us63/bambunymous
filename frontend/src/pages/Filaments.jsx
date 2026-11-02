@@ -1405,8 +1405,8 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
           {more > 0 && <Ghost side="right" size={64} off={9} top={3} colors={colorsList} finish={finishOf(s)} type={s.filament_multicolor_type}/>}
           {ord > 0 && <Ghost side="left" size={64} off={9} top={3} colors={colorsList} finish={finishOf(s)} type={s.filament_multicolor_type} ordered/>}
           <span style={{ position:"relative" }}><SpoolSVG colors={colorsList} finish={finishOf(s)} empty={false} size={70} type={s.filament_multicolor_type}/></span>
-          {more > 0 && <GhostBadge side="right" off={-14} bottom={6} tip={tipStock(more, s.sibling_weight_g ? fmtStock(s.sibling_weight_g) : null)}>+{more}</GhostBadge>}
-          {ord > 0 && <GhostBadge side="left" off={-14} bottom={6} color={ORD_C} bg={ORD_BG} tip={tipOrdered(ord)}>📬 +{ord}</GhostBadge>}
+          {more > 0 && <GhostBadge side="right" off={-20} bottom={1} tip={tipStock(more, s.sibling_weight_g ? fmtStock(s.sibling_weight_g) : null)}>+{more}</GhostBadge>}
+          {ord > 0 && <GhostBadge side="left" off={-20} bottom={1} color={ORD_C} bg={ORD_BG} tip={tipOrdered(ord)}>📬 +{ord}</GhostBadge>}
         </span>
       </div>
 
