@@ -120,6 +120,7 @@ def _grab_tls6000(ip: str, code: str, timeout_s: float = 8.0) -> bytes:
 _STREAM_FPS = 8
 _IDLE_STOP = 10.0
 _STALL_S = 8.0
+_START_S = 20.0
 
 
 class _Hub:
@@ -153,7 +154,13 @@ class _Hub:
         le producteur s'arrete sur une erreur et repart."""
         with self.lock:
             now = time.monotonic()
-            if self.thread is None or now - max(self.ts, self.started_at) < _STALL_S:
+            if self.thread is None:
+                return
+            # au demarrage, la premiere image peut tarder (connexion RTSP, image cle) : 20 s avant de couper
+            if self.ts < self.started_at:
+                if now - self.started_at < _START_S:
+                    return
+            elif now - self.ts < _STALL_S:
                 return
             proc, sock = self.proc, self.socket
             self.started_at = now                  # une seule coupure par blocage
@@ -191,13 +198,9 @@ _HUB = _Hub()
 
 def _rtsp_frames(ip: str, code: str, stop):
     url = f"rtsps://bblp:{code}@{ip}:322/streaming/live/1"
-    # 02/11/2026 : « -r 8 » seul DUPLIQUE des images pour tenir la cadence : apres un retard de lecture, ffmpeg crachait
-    # des rafales de copies (ecarts de 0 s, « 46 img/s » qui saccadait), puis plus rien. « -fps_mode vfr » : au plus
-    # 8 images/s, des images en trop ecartees, jamais copiees. Sans tampon a l'entree (nobuffer, low_delay) : l'image
-    # part des qu'elle est decodee. « -timeout » (5 s, en microsecondes) : une lecture RTSP muette finit en erreur.
+    # la commande d'origine (02/11/2026 : des options de faible latence essayees ce jour ont coupe le direct)
     proc = subprocess.Popen(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-rtsp_transport", "tcp",
-                             "-fflags", "nobuffer", "-flags", "low_delay", "-timeout", "5000000",
-                             "-i", url, "-an", "-fps_mode", "vfr", "-r", str(_STREAM_FPS), "-f", "image2pipe", "-vcodec", "mjpeg",
+                             "-i", url, "-an", "-r", str(_STREAM_FPS), "-f", "image2pipe", "-vcodec", "mjpeg",
                              "-q:v", "6", "pipe:1"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     _HUB.proc = proc
 
