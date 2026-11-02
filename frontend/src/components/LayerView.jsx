@@ -86,11 +86,17 @@ export function LayerExplorer({ status }) {
     const ro = new ResizeObserver(() => setW(el.clientWidth)); ro.observe(el); setW(el.clientWidth);
     return () => ro.disconnect();
   }, []);
+  // le dessin laisse la place au curseur et a la legende sans defiler (02/11/2026 : carre sur toute la largeur, il
+  // remplissait la fenetre et les commandes passaient sous le bord)
+  const [vh, setVh] = useState(() => window.innerHeight);
+  useEffect(() => { const f = () => setVh(window.innerHeight); window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, []);
   if (d && !d.ok) return <span style={{ fontSize: 13, color: "var(--muted)" }}>Pas de G-code pour cette impression (il vient du 3MF tranché).</span>;
-  const size = Math.min(W, 560);
+  // la hauteur suit l'ecran ; la largeur prend la place qu'il y a (le dessin s'y centre)
+  const size = Math.max(180, Math.min(W, 560, vh - 300));
+  const wide = Math.max(180, Math.min(W, 760));
   return <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
     <div ref={box} style={{ display: "flex", justifyContent: "center", borderRadius: 18, background: "var(--surface2)", border: "1px solid var(--border)", padding: 6 }}>
-      {d?.ok ? <LayerCanvas d={d} ghost={ghost} w={size - 12} h={size - 12}/> : <div style={{ height: size - 12 }}/>}
+      {d?.ok ? <LayerCanvas d={d} ghost={ghost} w={wide - 12} h={size - 12}/> : <div style={{ height: size - 12 }}/>}
     </div>
     {d?.ok && <>
       <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 800, color: "var(--text)" }}>
