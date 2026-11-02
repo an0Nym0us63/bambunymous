@@ -134,7 +134,10 @@ export function GroupToRate({ designs, name, enabled = true, label = null, ancho
   const items = (d?.items || []).filter(x => ids.has(String(x.design_id)));
   if (!items.length) return null;
   const ready = can ? items.filter(x => x.rating_id) : [];
-  const photos = [...new Set(items.flatMap(x => x.photos || []))];
+  // plusieurs modeles evalues d'un coup : toutes les photos d'abord, puis les vues 3D, puis les cartes des filaments
+  // (02/11/2026 : la carte du premier modele passait devant les photos du suivant)
+  const rank = u => u.includes("/rate-card/") ? 2 : /\/vue3d[^/]*$/i.test(u.split("?")[0]) ? 1 : 0;
+  const photos = [...new Set(items.flatMap(x => x.photos || []))].sort((a, b) => rank(a) - rank(b));
   const btn = { padding: "5px 11px", borderRadius: 10, fontSize: 11.5, fontWeight: 700, background: "#f59e0b", color: "white",
     border: "1px solid #f59e0b", textDecoration: "none" };
   return (

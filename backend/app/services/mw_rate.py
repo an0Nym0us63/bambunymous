@@ -166,8 +166,15 @@ async def rate_status(design_id: str, fresh: bool = False) -> dict:
     return {"state": "to_rate" if done else "no_print", "done": done}
 
 
+def is_vue3d(u: str) -> bool:
+    return u.split("?")[0].rsplit("/", 1)[-1].lower().startswith("vue3d")
+
+
 def imgs_of(g) -> list:
-    return [u for u in (g.get("photos") or []) if u.split("?")[0].lower().endswith(tuple(_MIME))]
+    # les vraies photos toujours en premier (02/11/2026), puis les vues prises dans la vue 3D (la carte des filaments
+    # vient apres, en dernier) ; chaque groupe garde son ordre
+    imgs = [u for u in (g.get("photos") or []) if u.split("?")[0].lower().endswith(tuple(_MIME))]
+    return sorted(imgs, key=is_vue3d)
 
 
 def card_url(print_ids) -> str:
