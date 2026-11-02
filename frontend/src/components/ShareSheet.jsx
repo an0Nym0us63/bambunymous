@@ -112,42 +112,19 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
   }, [message]);
 
   // Partage par une autre appli (01/11/2026, WhatsApp d'abord) : le meme contenu, prepare par le serveur ; le menu de
-  // partage du telephone choisit l'appli et la discussion. Dans l'appli Android, elle telecharge les fichiers et ouvre
-  // son menu (BambuScan.shareFiles) ; ailleurs, le partage du navigateur, en deux temps : il veut un geste tout frais,
-  // que la preparation (quelques secondes) aurait use.
-  const [other, setOther] = useState(null);   // null | "prep" | { text, files }
+  // partage du telephone choisit l'appli et la discussion. Dans l'appli Android seulement (02/11/2026) : elle telecharge
+  // les fichiers et ouvre son menu (BambuScan.shareFiles) ; le partage du navigateur, en deux temps, n'etait pas fiable.
+  const [other, setOther] = useState(null);   // null | "prep"
   const nativeShare = typeof window !== "undefined" && !!window.BambuScan?.shareFiles;
-  // le message ou les medias changent : ce qui etait pret ne correspond plus
-  useEffect(() => { setOther(o => o === "prep" ? o : null); }, [message, pick]);
   const prepOther = async () => {
     setOther("prep");
     try {
       const b = (await client.post(`/share/${kind}/${id}/bundle`, { message, tz: TZ, media: pick || undefined })).data;
-      if (nativeShare) {
-        window.BambuScan.shareFiles(JSON.stringify({ text: b.text, title: b.title,
-          files: b.files.map(f => ({ url: new URL(f.url, location.href).href, name: f.name, mime: f.mime })) }));
-        egg("partage_ailleurs");
-        setOther(null);
-        return;
-      }
-      const files = await Promise.all(b.files.map(async f => {
-        const blob = await fetch(f.url).then(r => { if (!r.ok) throw new Error("fichier indisponible"); return r.blob(); });
-        return new File([blob], f.name, { type: f.mime });
-      }));
-      setOther({ text: b.text, title: b.title, files });
-    } catch (e) { setOther(null); showAlert(e.response?.data?.detail || e.message); }
-  };
-  const openOther = async () => {
-    const { text, title, files } = other;
-    // le texte aussi dans le presse-papiers : une appli qui ne reprend pas la legende de plusieurs photos, on le colle
-    try { await navigator.clipboard?.writeText(text); } catch { /* presse-papiers refuse */ }
-    try {
-      if (files.length && navigator.canShare?.({ files })) await navigator.share({ files, text, title });
-      else if (navigator.share) await navigator.share({ text, title });
-      else { showAlert("Pas de menu de partage sur cet appareil : le texte est copié, colle-le où tu veux."); return; }
+      window.BambuScan.shareFiles(JSON.stringify({ text: b.text, title: b.title,
+        files: b.files.map(f => ({ url: new URL(f.url, location.href).href, name: f.name, mime: f.mime })) }));
       egg("partage_ailleurs");
-      setOther(null);
-    } catch (e) { if (e?.name !== "AbortError") showAlert(e.message); }
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    finally { setOther(null); }
   };
 
   // L'envoi part en arriere-plan (store global) : la fenetre se ferme tout de
@@ -174,13 +151,11 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
   return createPortal(
     <FSheet onClose={onClose} z={z} bottom={<>
       <button onClick={onClose} style={{ ...fBtn, flex: canSend ? "0 0 auto" : 1, padding: canSend ? "0 14px" : undefined }}>{done ? "Fermer" : "Annuler"}</button>
-      {preview && !preview.error && <button onClick={other && other !== "prep" ? openOther : prepOther} disabled={other === "prep"}
+      {nativeShare && preview && !preview.error && <button onClick={prepOther} disabled={other === "prep"}
         data-tip="WhatsApp, Messages, mail… : le même message et les mêmes photos, tu choisis l'appli et la discussion"
-        style={{ ...fBtn, flex: canSend ? 1 : 2, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", border: other && other !== "prep" ? "none" : `1px solid ${W}88`,
-          color: other && other !== "prep" ? "#fff" : other === "prep" ? "var(--muted)" : "#16A34A",
-          background: other && other !== "prep" ? `linear-gradient(135deg, ${W}, #16A34A)` : `${W}14`,
-          boxShadow: other && other !== "prep" ? `0 8px 18px -10px ${W}` : "none" }}>
-        {other === "prep" ? "Préparation…" : other ? "📲 Partager" : "📲 Autre appli"}</button>}
+        style={{ ...fBtn, flex: canSend ? 1 : 2, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", border: `1px solid ${W}88`,
+          color: other === "prep" ? "var(--muted)" : "#16A34A", background: `${W}14` }}>
+        {other === "prep" ? "Préparation…" : "📲 Autre appli"}</button>}
       {canSend && <button onClick={send} disabled={busy || !sel?.length || !!done}
         style={{ ...fBtn, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", border: "none", color: busy && !done ? "var(--muted)" : "#fff",
           cursor: busy || done ? "default" : "pointer", opacity: !sel?.length ? .55 : 1,
@@ -210,7 +185,7 @@ export default function ShareSheet({ kind, id, onClose, z = 1500 }) {
           {/* sans Telegram, « 📲 Autre appli » partage quand meme (01/11/2026) */}
           {dests.length === 0 ? <p style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5, margin: 0 }}>
             Telegram : aucune destination (relie ton compte et ajoute des discussions dans Paramètres › Notifs › Partage
-            Telegram). « 📲 Autre appli » partage le même contenu par WhatsApp ou une autre appli.</p>
+            Telegram).{nativeShare && " « 📲 Autre appli » partage le même contenu par WhatsApp ou une autre appli."}</p>
           : <FCard t="Destinations Telegram" i="💬" c={T}>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
               {dests.map(d => {
