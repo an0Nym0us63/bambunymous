@@ -6576,7 +6576,9 @@ def _cards(out: dict) -> None:
         dates = [got(m) for m in mem]
         ok = bool(mem) and all(dates)
         out[a["id"]] = {"value": 1 if ok else 0, "reached": {"0": max(dates)} if ok else {},
-                        "prog": [sum(1 for d in dates if d), len(mem)]}
+                        "prog": [sum(1 for d in dates if d), len(mem)],
+                        # les cartes qui manquent encore (02/11/2026 : « 24 / 25 » ne disait pas laquelle)
+                        "missing": [BY_ID[m]["name"] for m, d in zip(mem, dates) if not d]}
 
 
 def _completes(out: dict, st: dict) -> None:
@@ -7925,6 +7927,7 @@ async def _view(fresh: bool) -> dict:
                 "ticket_cost": ticket_cost(nxt) if nxt is not None and len(a["tiers"]) > 1 else None,
                 # carte : ou j'en suis (trouves / demandes)
                 **({"prog": r.get("prog")} if a.get("card_tier") else {}),
+                **({"missing": r.get("missing")} if a.get("joker") and r.get("missing") else {}),
             })
         # derniers succes : le plus haut cran de chacun ; pas ceux du releve au
         # present constates au premier calcul (ils n'ont pas de vraie date)

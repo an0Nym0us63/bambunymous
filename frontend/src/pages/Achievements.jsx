@@ -1830,6 +1830,11 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
           {it.prog && !got && (
             <div style={{ fontSize:11.5, color:"var(--text2)", marginTop:3 }}>Où tu en es : <b>{it.prog[0]} / {it.prog[1]}</b></div>
           )}
+          {/* un Joker : les cartes qui manquent encore */}
+          {sheet && it.missing?.length > 0 && !got && (
+            <div style={{ fontSize:11.5, color:"var(--text2)", marginTop:3, lineHeight:1.45 }}>
+              Il manque : <b>{it.missing.slice(0, 6).join(" · ")}</b>{it.missing.length > 6 ? ` et ${it.missing.length - 6} autres` : ""}</div>
+          )}
           {sheet && <Spent it={it}/>}
           {sheet && got && <SecretPlace it={it}/>}
         </div>
