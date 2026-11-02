@@ -1873,7 +1873,9 @@ function SpoolsView({ filaments, showArchived }) {
     return [
       { label:"bobines",  value: ordered ? `${here.length} +${ordered}` : here.length, accent:"#3b82f6" },
       { label:"marques",  value: marques || null, accent:"#8b5cf6" },
-      { label:"en stock", value: poids > 0 ? `${(poids/1000).toFixed(2)} kg` : filters.stock === "instock" ? "0 kg" : null, accent:"#f59e0b",
+      // en kilos, a la virgule, de moins en moins de decimales quand ca grossit (02/11/2026 : « 100.25… » coupe sur mobile) ;
+      // le poids exact en infobulle
+      { label:"en stock", value: poids > 0 ? <span data-tip={`${fmtStock(poids)} au total`}>{fmtKg(poids)}</span> : filters.stock === "instock" ? "0 kg" : null, accent:"#f59e0b",
         active: filters.stock === "instock", tip: filters.stock === "instock" ? "Retirer le filtre En stock" : "Ne garder que les bobines où il reste du filament",
         onClick: () => setFilters(f => ({ ...f, stock: f.stock === "instock" ? "all" : "instock" })) },
       { label:"valeur",   value: prix > 0 ? <span data-tip={`Ce qu'il reste des bobines, à leur prix\nachetées pour ${moneyVal(prix, 0)} €`}>{moneyVal(valeur, 0)} €</span> : noPrice ? `${moneyVal(0, 0)} €` : null, accent:"#22c55e",
@@ -2228,6 +2230,8 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
 // stock. Partagee par l'onglet Filaments et la galerie Photos, qui doivent se
 // lire pareil. `extra` ajoute une pastille en bas a droite.
 // Stock lisible : grammes sous le kilo, kilos au-dela.
+// la tuile : 1,25 kg ; 12,5 kg ; 100 kg
+const fmtKg = (g) => { const k = g / 1000; return `${k.toFixed(k < 10 ? 2 : k < 100 ? 1 : 0).replace(".", ",")} kg`; };
 const fmtStock = (g) => g >= 1000 ? `${(g / 1000).toFixed(2).replace(".", ",")} kg` : `${Math.round(g)} g`;
 
 // une teinte tres claire (blanc, ivoire…) se perd sur un fond clair : elle garde un liseré
