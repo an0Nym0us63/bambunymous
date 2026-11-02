@@ -227,6 +227,8 @@ async def load() -> None:
             _BEST[pid] = {int(s): float(g) for s, g in (e.get("best") or {}).items()}
             if e.get("layer"):
                 _PROG[pid] = {"layer": int(e["layer"]), "pct": float(e.get("pct") or 0), "t": 0.0}
+            if e.get("active"):
+                _REFILL[pid] = {"t": 0.0, "seen": None, "active": {int(x) for x in e["active"]}}
 
 
 async def set_mode(on: bool) -> None:
@@ -310,7 +312,9 @@ async def _tick(pid: int, save: bool, look: bool) -> None:
 async def _check_refill(pid: int) -> None:
     """L'emplacement actif porte une bobine qui n'est aucune de celles de l'impression : l'AMS a pris le relais d'une
     bobine vide. On bascule le filament de meme matiere (meme filament, sinon meme type et couleur) sur elle, apres
-    l'avoir vu deux fois de suite (une transition ne suffit pas)."""
+    l'avoir vu deux fois de suite (une transition ne suffit pas). Seulement une bobine qu'on a vue imprimer pendant ce
+    suivi (02/11/2026) : une bobine associee au lancement par sa matiere et sa couleur, mais qui n'est pas celle de
+    l'AMS, serait sinon prise pour une bobine videe, et mise a 0 a tort."""
     from ..core.mqtt import get_state
     from ..models.filament import Spool
     s = get_state()
@@ -322,6 +326,7 @@ async def _check_refill(pid: int) -> None:
             tray = next((t for t in a.trays if t.id == s.active_tray_id), None)
     sid = getattr(tray, "spool_id", None) if tray else None
     r = _REFILL.setdefault(pid, {"t": 0.0, "seen": None})
+    active = r.setdefault("active", set())
     if not sid:
         r["seen"] = None
         return
@@ -330,6 +335,9 @@ async def _check_refill(pid: int) -> None:
         cur = {slot: rs[-1] for slot, rs in rows.items() if rs}
         if any(row.spool_id == sid for row in cur.values()):
             r["seen"] = None
+            if sid not in active:
+                active.add(sid)
+                await _state_put(pid, {"active": sorted(active)})
             return
         new = await db.get(Spool, sid)
         if not new:
@@ -346,6 +354,7 @@ async def _check_refill(pid: int) -> None:
             # se vider) ; les autres tournent encore
             full = {t.spool_id for a in s.ams_list or [] for t in a.trays if t.spool_id and not getattr(t, "empty", False)}
             same = [slot for slot in same if cur[slot].spool_id not in full]
+        same = [slot for slot in same if cur[slot].spool_id in active]
         if len(same) != 1:
             r["seen"] = None
             return
