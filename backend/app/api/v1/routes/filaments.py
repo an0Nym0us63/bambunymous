@@ -1101,19 +1101,41 @@ async def drying_overview(db: AsyncSession = Depends(get_db), _: str = Depends(g
 
 @router.get("/catalog-names")
 async def catalog_names(_: str = Depends(get_current_user)):
-    """Nos correspondances de noms (02/11/2026) : un nom anglais du catalogue Bambu -> notre nom francais ; et les
-    quelques noms que l'appli connait deja (dernier recours avant l'anglais)."""
+    """Nos correspondances de noms (02/11/2026) : un nom anglais du catalogue Bambu -> notre nom francais ; les quelques
+    noms que l'appli connait deja (dernier recours avant l'anglais) ; et pour chacun, ce qu'en dit le catalogue (son nom
+    francais s'il en a un, les filaments qui portent ce nom). names : tous les noms anglais du catalogue, pour en
+    proposer un a la saisie."""
     import json
     from ....db.session import AsyncSessionLocal
     from ....services import bambu_catalog as BC
-    raw = sorted(({"en": en, "fr": fr} for en, fr in BC.names_map().items()), key=lambda x: x["en"])
+    from ....services.settings_service import get_setting
     async with AsyncSessionLocal() as db:
-        from ....services.settings_service import get_setting
         try:
             items = json.loads(await get_setting(db, BC.K_NAMES, "") or "[]")
         except ValueError:
-            items = raw
-    return {"items": items if isinstance(items, list) else raw,
+            items = []
+    items = items if isinstance(items, list) else []
+    data, en_to_fr = BC.catalog_entries()
+    TYPE_FR = {"单色": "", "渐变色": "dégradé", "多拼色": "multicolore"}
+    cat: dict = {}
+    for e in data or []:
+        n = e.get("fila_color_name") or {}
+        en = (n.get("en") or "").strip()
+        if not en:
+            continue
+        c = cat.setdefault(en.casefold(), {"en": en, "fr": "", "refs": []})
+        if n.get("fr") and not c["fr"]:
+            c["fr"] = n["fr"]
+        if len(c["refs"]) < 8:
+            c["refs"].append({"fila_id": e.get("fila_id", ""), "code": e.get("color_code", ""), "type": e.get("fila_type", ""),
+                              "kind": TYPE_FR.get(e.get("fila_color_type", ""), ""),
+                              "colors": [x.lstrip("#")[:6] for x in (e.get("fila_color") or [])][:4]})
+    info = lambda en: cat.get((en or "").strip().casefold()) or {"en": en, "fr": "", "refs": []}   # noqa: E731
+    ours = {str(it.get("en") or "").strip().casefold() for it in items}
+    rows = [{"en": it.get("en", ""), "fr": it.get("fr", ""), "source": "nous", "catalog": info(it.get("en"))} for it in items]
+    rows += [{"en": en, "fr": fr, "source": "appli", "catalog": info(en)} for en, fr in BC.FR_MISSING.items() if en.casefold() not in ours]
+    return {"items": items, "rows": rows,
+            "names": sorted(({"en": c["en"], "fr": c["fr"]} for c in cat.values()), key=lambda x: x["en"].casefold()),
             "builtin": [{"en": en, "fr": fr} for en, fr in BC.FR_MISSING.items()]}
 
 
