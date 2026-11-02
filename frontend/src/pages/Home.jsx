@@ -1,4 +1,6 @@
 import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
+import { LayerExplorer } from "../components/LayerView";
+import { currentFriend } from "../store/friend";
 import { trayBg, parseColorsList, finishOf, colorBg, bgWithTop, isDark } from "../utils/colors";
 import { stageLabel, stageIsPause } from "../utils/printStage";
 import { createPortal } from "react-dom";
@@ -1698,6 +1700,12 @@ function PrinterPopup({ status, img, name, onClose }) {
             </div>
           </div>}
         </div> : null}
+
+        {/* le dessin de la couche en cours (02/11/2026), lu dans le G-code du 3MF tranche ; un curseur parcourt les couches */}
+        {live && !currentFriend() && <>
+          {section("Couche en cours", Layers, "#8B5CF6", status?.total_layers > 0 ? `couche ${status.layer} / ${status.total_layers}` : null)}
+          <LayerExplorer status={status}/>
+        </>}
 
         {hasRack && <>
           {section("Rack Vortek", Layers, "#0ea5e9", rack.head_id >= 16 && rack.head_id <= 21 ? `buse ${rack.head_id - 15} sur la tête` : null)}
