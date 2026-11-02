@@ -288,7 +288,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
         onClick: doBoost },
       canHome && { icon: "🔖", label: "Ranger dans mes collections…", tone: "#14B8A6", onClick: () => setPick(true) },
       // comme le partage d'une impression : destinations, mot, photos, apercu exact
-      !friend && isAdmin && { icon: "📣", label: "Partager", hint: "Telegram", tone: "#229ED9", onClick: () => setSharing(true) },
+      !friend && isAdmin && { icon: "📣", label: "Partager", hint: "Telegram, WhatsApp…", tone: "#229ED9", onClick: () => setSharing(true) },
       !friend && isAdmin && "-",
       !friend && isAdmin && { icon: "🔗", label: "Associer à un print", hint: "Choisir les impressions de ce modèle dans l'historique", tone: "#8B5CF6",
         onClick: () => { startAssign(tile()); onClose(); } },

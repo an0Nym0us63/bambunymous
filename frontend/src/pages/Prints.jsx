@@ -1473,7 +1473,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
     title: p.file_name || "Sans nom", subtitle: `${stL} · ${day} ${hour.split(" · ")[0]}`, color: stC,
     items: [
       { icon: "✏️", label: "Éditer", hint: "Nom, date, état, quantité…", tone: "#3B82F6", onClick: () => setEditMode(true) },
-      { icon: "📣", label: "Partager", hint: "Telegram", tone: "#229ED9", onClick: () => setSharing(true) },
+      { icon: "📣", label: "Partager", hint: "Telegram, WhatsApp…", tone: "#229ED9", onClick: () => setSharing(true) },
       objQ && objQ.remaining > 0 ? { icon: "📦", label: "Créer des objets", hint: `${objQ.used} / ${objQ.total} déjà créés`, tone: "#22C55E",
         onClick: () => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine }) }
         : objQ ? { icon: "📦", label: "Objets : tous créés", hint: `${objQ.used} / ${objQ.total}`, tone: "#22C55E", onClick: () => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine }) } : null,
@@ -1987,7 +1987,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     title, subtitle: `${prints.length} impression${prints.length > 1 ? "s" : ""}`, color: "#A78BFA",
     items: [
       { icon: "✏️", label: "Éditer", hint: "Le nom du groupe", tone: "#3B82F6", onClick: () => setEditGroup(true) },
-      { icon: "📣", label: "Partager", hint: "Telegram", tone: "#229ED9", onClick: () => setSharing(true) },
+      { icon: "📣", label: "Partager", hint: "Telegram, WhatsApp…", tone: "#229ED9", onClick: () => setSharing(true) },
       objQ && { icon: "📦", label: objQ.remaining > 0 ? "Créer des objets" : "Objets : tous créés", hint: `${objQ.used} / ${objQ.total} déjà créés`, tone: "#22C55E",
         onClick: () => setObjCreate(true) },
       { icon: "📤", label: "Dégrouper", hint: "Les impressions restent", tone: "#A78BFA", onClick: handleUngroup },

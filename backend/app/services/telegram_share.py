@@ -933,6 +933,87 @@ async def _send_one(c, dest: dict, files: list, caption: str) -> None:
         raise ShareError(f"Telegram a refusé l'envoi vers « {dest['label']} » : {e}")
 
 
+async def gather_files(share: dict, tmp: Path) -> list[tuple[Path, bool]]:
+    """Les fichiers de l'album, prets a partir (chemin, est_video), prepares dans tmp : les memes pour Telegram et
+    pour un partage par une autre appli (01/11/2026)."""
+    files = await asyncio.to_thread(prepare_media, share["media"], tmp)
+    # les images de MakerWorld (couverture, avatar, modeles d'un createur) : en tete, dans l'ordre choisi
+    for k, url in reversed(list(enumerate(share.get("remote") or []))):
+        cov = await asyncio.to_thread(_download_cover, url, tmp / f"makerworld-{k}.jpg")
+        if cov:
+            files.insert(0, (cov, False))
+    files = files[:ALBUM_MAX]
+    if share.get("card"):
+        from . import filament_card
+        jpg = await asyncio.to_thread(filament_card.render, share["card"])
+        if jpg:
+            (tmp / "filaments.jpg").write_bytes(jpg)
+            files = files[:ALBUM_MAX - 1 - (1 if share["live"] and share.get("camera", True) else 0)] + [(tmp / "filaments.jpg", False)]
+    if share["live"] and share.get("camera", True):
+        jpg = await _camera_jpeg()
+        if jpg:
+            cam = tmp / "camera.jpg"
+            cam.write_bytes(jpg)
+            files.insert(0, (cam, False))
+    return files
+
+
+def caption_text(caption_html: str) -> str:
+    """La legende en texte simple, pour une autre appli (01/11/2026, WhatsApp d'abord) : le gras en *…*, un lien en
+    clair apres son texte, le mot ajoute en citation (« > »). Tire de la legende Telegram : le meme contenu."""
+    import re
+    t = re.sub(r"<b>(.*?)</b>", lambda m: f"*{m.group(1)}*", caption_html, flags=re.S)
+    t = re.sub(r'<a href="([^"]*)">(.*?)</a>', lambda m: f"{m.group(2)} : {html.unescape(m.group(1))}", t, flags=re.S)
+    t = re.sub(r"<blockquote>(.*?)</blockquote>", lambda m: "\n".join(f"> {l}" for l in m.group(1).split("\n")), t, flags=re.S)
+    return html.unescape(re.sub(r"<[^>]+>", "", t))
+
+
+# Un partage par une autre appli : les fichiers attendent ici, le temps que le telephone les telecharge, derriere une
+# adresse impossible a deviner ; on les efface apres BUNDLE_TTL (rien ne reste sur le disque des donnees).
+BUNDLE_DIR = Path(tempfile.gettempdir()) / "bn-share"
+BUNDLE_TTL = 15 * 60
+
+
+def _bundle_purge() -> None:
+    import shutil
+    import time
+    if not BUNDLE_DIR.exists():
+        return
+    for d in BUNDLE_DIR.iterdir():
+        try:
+            if time.time() - d.stat().st_mtime > BUNDLE_TTL:
+                shutil.rmtree(d, ignore_errors=True)
+        except OSError:
+            pass
+
+
+async def bundle(kind: str, obj_id: int, message: str = "", tz_offset_min: Optional[int] = None, chosen=None) -> dict:
+    """Le partage par une autre appli : le texte, et les fichiers a joindre (nom, type, jeton de leur adresse)."""
+    import mimetypes
+    import secrets
+    share = await build_share(kind, obj_id, tz_offset_min, chosen)
+    text = caption_text(render_caption(share, message))
+    await asyncio.to_thread(_bundle_purge)
+    token = secrets.token_urlsafe(24)
+    d = BUNDLE_DIR / token
+    d.mkdir(parents=True, exist_ok=True)
+    files = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for i, (f, video) in enumerate(await gather_files(share, Path(tmp))):
+            name = f"{i + 1:02d}-{f.name}"
+            (d / name).write_bytes(f.read_bytes())
+            files.append({"name": name, "mime": mimetypes.guess_type(name)[0] or ("video/mp4" if video else "image/jpeg"), "video": video})
+    return {"text": text, "token": token, "files": files, "title": share["title"]}
+
+
+def bundle_file(token: str, name: str) -> Optional[Path]:
+    """Un fichier d'un partage encore en attente ; None s'il n'existe pas (ou plus)."""
+    if not token.replace("-", "").replace("_", "").isalnum() or "/" in name or "\\" in name or name.startswith("."):
+        return None
+    f = BUNDLE_DIR / token / name
+    return f if f.is_file() else None
+
+
 async def send(kind: str, obj_id: int, destination_ids, message: str = "",
                tz_offset_min: Optional[int] = None, chosen=None) -> dict:
     """
@@ -950,25 +1031,7 @@ async def send(kind: str, obj_id: int, destination_ids, message: str = "",
     caption = render_caption(share, message)
     results = []
     with tempfile.TemporaryDirectory() as tmp:
-        files = await asyncio.to_thread(prepare_media, share["media"], Path(tmp))
-        # les images de MakerWorld (couverture, avatar, modeles d'un createur) : en tete, dans l'ordre choisi
-        for k, url in reversed(list(enumerate(share.get("remote") or []))):
-            cov = await asyncio.to_thread(_download_cover, url, Path(tmp) / f"makerworld-{k}.jpg")
-            if cov:
-                files.insert(0, (cov, False))
-        files = files[:ALBUM_MAX]
-        if share.get("card"):
-            from . import filament_card
-            jpg = await asyncio.to_thread(filament_card.render, share["card"])
-            if jpg:
-                (Path(tmp) / "filaments.jpg").write_bytes(jpg)
-                files = files[:ALBUM_MAX - 1 - (1 if share["live"] and share.get("camera", True) else 0)] + [(Path(tmp) / "filaments.jpg", False)]
-        if share["live"] and share.get("camera", True):
-            jpg = await _camera_jpeg()
-            if jpg:
-                cam = Path(tmp) / "camera.jpg"
-                cam.write_bytes(jpg)
-                files.insert(0, (cam, False))
+        files = await gather_files(share, Path(tmp))
         async with _lock:
             c = await _connected_client()
             for dest in dests:

@@ -86,3 +86,24 @@ async def share_send(kind: str, obj_id: int, body: dict = Body({}), _: str = Dep
     ids = body.get("destination_ids") or ([body["destination_id"]] if body.get("destination_id") else [])
     chosen = body.get("media") if isinstance(body.get("media"), list) else None
     return await _call(tg.send(_kind(kind), obj_id, ids, body.get("message", ""), body.get("tz"), chosen))
+
+
+# ── Partage par une autre appli (01/11/2026, WhatsApp d'abord) ──────────────────────────────────────────────────────
+# Le meme contenu que pour Telegram (texte et medias choisis), prepare sur le serveur ; le telephone le recupere et
+# ouvre son menu de partage, ou l'on choisit l'appli et la discussion. Les fichiers attendent quelques minutes derriere
+# une adresse impossible a deviner : l'appli Android les telecharge sans le jeton de connexion de la page.
+@router.post("/{kind}/{obj_id}/bundle")
+async def share_bundle(kind: str, obj_id: int, body: dict = Body({}), _: str = Depends(require_admin)):
+    chosen = body.get("media") if isinstance(body.get("media"), list) else None
+    b = await _call(tg.bundle(_kind(kind), obj_id, body.get("message", ""), body.get("tz"), chosen))
+    return {**b, "files": [{**f, "url": f"/api/v1/share/bundle/{b['token']}/{f['name']}"} for f in b["files"]]}
+
+
+@router.get("/bundle/{token}/{name}")
+async def share_bundle_file(token: str, name: str):
+    from fastapi.responses import FileResponse
+    import mimetypes
+    f = tg.bundle_file(token, name)
+    if not f:
+        raise HTTPException(404, "Partage expiré : relance-le")
+    return FileResponse(str(f), media_type=mimetypes.guess_type(f.name)[0] or "application/octet-stream", filename=f.name)

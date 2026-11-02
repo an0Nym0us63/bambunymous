@@ -90,7 +90,7 @@ export function CreatorPageHost() {
       style={{ ...fBtn, flex: 1, textDecoration: "none", color: "#fff", border: "none",
         background: `linear-gradient(135deg, ${C}, #3B82F6)`, boxShadow: `0 8px 18px -10px ${C}` }}>🌐 Voir sur MakerWorld ↗</a>
       {/* a droite, comme les autres partages : le megaphone */}
-      {isAdmin && !friend && <button onClick={() => setSharing(true)} data-tip="Partager sur Telegram"
+      {isAdmin && !friend && <button onClick={() => setSharing(true)} data-tip="Partager sur Telegram, WhatsApp…"
         style={{ ...fBtn, flex: "0 0 auto", color: "#229ED9", borderColor: "rgba(34,158,217,0.4)", background: "rgba(34,158,217,0.1)" }}>📣 Partager</button>}</> : null}>
       {/* le createur en vedette : son avatar, son nom, ses abonnes */}
       <div style={{ padding: "52px 18px 16px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap",

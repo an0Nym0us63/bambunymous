@@ -218,7 +218,7 @@
     <h3>Commentaire, actions et menu</h3>
     <ul>
       <li><b>💬 Commentaire</b> : la note de statut saisie dans l'édition (« Décollement du plateau à 37 % »), en citation.</li>
-      <li><b>En bas de l'écran</b>, toujours à portée du pouce <span class="admin">admin</span> : <span class="ui">✏️ Éditer</span>, <span class="ui">📣 Partager</span> (Telegram) et <span class="ui">⋯</span>.</li>
+      <li><b>En bas de l'écran</b>, toujours à portée du pouce <span class="admin">admin</span> : <span class="ui">✏️ Éditer</span>, <span class="ui">📣 Partager</span> (Telegram, WhatsApp…) et <span class="ui">⋯</span>.</li>
       <li><b>Le menu ⋯</b> (en bas et en haut) : <span class="ui">Éditer</span>, <span class="ui">Partager</span>, <span class="ui">📦 Créer des objets</span> (avec « N / T déjà créés », voir <a href="#objets">Objets</a>), <span class="ui">Retirer du groupe</span>, <span class="ui">📊 Retirer des classements des stats</span> (admin ; voir <a href="#stats-prints-classements">les classements</a> ; si son groupe en est déjà retiré, l'entrée le dit), <span class="ui" id="impressions-3mf">Télécharger le 3MF d'origine</span> (le projet du profil MakerWorld, à retrancher ; pour une impression dont l'imprimante n'a pas donné le profil, celui gardé pour ce modèle, par exemple par la vue 3D ; ou <span class="ui">Récupérer le 3MF d'origine</span> s'il manque), <span class="ui">📤 Importer le 3MF d'origine</span> <span class="admin">admin</span> (le projet Bambu Studio que tu as : pour une impression sans modèle MakerWorld, ou dont le 3MF ne se récupère pas, modèle retiré ou 404 ; il remplace alors celui de MakerWorld pour ce modèle et ce profil, la vue 3D se prépare en fond ; un 3MF tranché est refusé, il n'a plus que son G-code ; <span class="ui">Remplacer le 3MF d'origine</span> quand il y en a déjà un ; sans modèle MakerWorld, l'entrée <span class="ui">🧊 Vue 3D</span> ouvre alors sa vue 3D, avec l'édition de l'assemblage comme pour les autres ; une fois importé, la fiche de l'impression et celle du groupe montrent une carte <b>📦 Mon 3MF d'origine</b>, comme celle de MakerWorld : son titre et la vignette de son premier plateau, 🧊 pour la vue 3D, la correspondance des filaments (pour un modèle MakerWorld introuvable), et dépliée, ses plateaux lus dans le 3MF avec leur vignette, pour dire lequel chaque impression a fait ; quand le modèle MakerWorld est introuvable, elle remplace le simple lien « Voir sur MakerWorld », gardé dessous), <span class="ui">Télécharger le 3MF tranché</span> (celui envoyé à ton imprimante), <span class="ui">🖼 Reprendre la vignette du 3MF</span> <span class="admin">admin</span> (l'image du plateau supprimée par erreur : reprise du 3MF tranché, celle de son plateau, sinon du 3MF d'origine), <span class="ui">Identifiants</span> (travail, modèle et profil MakerWorld, numéro de l'impression, chacun à copier) et <span class="ui">Supprimer…</span>. Si des vues ont été prises dans la vue 3D (un plateau ou l'assemblage, jusqu'à 4) : <span class="ui">🧊 Vues 3D et vignette</span> les montre ; <span class="ui">⭐ Vignette</span> en met une à la place de l'image du plateau partout (listes, galerie, accueil), plusieurs défilent l'une après l'autre sur la tuile et en haut de la fiche, avec un filet très fin tout en bas, un segment par vue, plus foncé pour celle montrée (là où il ne faut qu'une image, comme l'accueil ou un partage, la première), <span class="ui">Par défaut</span> revient à l'image du plateau, <span class="ui">🗑 Supprimer</span> (en deux temps) en retire une (si c'était la vignette, l'image du plateau revient) <span class="admin">admin</span>. Quand la vignette est une vue 3D, l'image d'origine reste visible en petit dans le coin de l'image en tête de la fiche (<span class="ui">Original</span>) : la toucher l'affiche en grand, la toucher à nouveau revient à la vue 3D.</li>
     </ul>
     <p>Le 3MF d'origine est récupéré dès le lancement de l'impression (et de nouveau à la fin si besoin), une seule fois par profil ; sans profil connu, c'est celui du modèle le plus proche de ton imprimante. Il faut le compte MakerWorld connecté, et chaque récupération compte comme un téléchargement sur MakerWorld. Une impression lancée hors MakerWorld n'a que le 3MF tranché.</p>
@@ -259,8 +259,8 @@
   </section>
 
   <section id="impressions-partage">
-    <h3>Partager sur Telegram <span class="admin">admin</span></h3>
-    <p><span class="ui">📣 Partager</span> (sur un print ou un groupe) envoie une petite carte sur Telegram : titre, durée, poids, date, filaments, lien MakerWorld et photos.</p>
+    <h3>Partager sur Telegram, WhatsApp… <span class="admin">admin</span></h3>
+    <p><span class="ui">📣 Partager</span> (sur un print ou un groupe) envoie une petite carte sur Telegram, ou par WhatsApp et toute autre appli : titre, durée, poids, date, filaments, lien MakerWorld et photos.</p>
     <figure class="phone"><img src="img/impressions-partage.webp" alt="Fenêtre Partager sur Telegram : destinations, message, photos qui partiront, aperçu"><figcaption>Choisis les discussions, ajoute un mot, vérifie l'aperçu.</figcaption></figure>
     <ol>
       <li>Coche une ou plusieurs <b>Destinations</b> (l'appli se souvient de ton dernier choix).</li>
@@ -268,9 +268,18 @@
       <li>Sous <b>Ce qui partira</b>, touche les vignettes pour ajouter ou retirer des photos (10 au plus). Si la caméra est disponible, une tuile 📷 ajoute une photo en direct prise au moment de l'envoi.</li>
       <li>La <b>carte des filaments</b>, cochée d'office et placée en dernier dans l'album (dans le choix des médias, juste après ceux joints d'office, avant les captures et les photos non choisies), est une image façon nuancier : une carte par filament, avec un grand rond de sa matière dans sa vraie couleur (cerclé d'un trait, un filament blanc se voit) et avec sa finition (soie, métal, paillettes, galaxie, marbre, bois, carbone, phosphorescent, mat ; dégradé ou tranches pour un multicolore ; verre teinté pour un translucide ; les fines couches d'une pièce imprimée), puis son nom en entier, sa marque, son type et son code en pastilles, et son poids. Elle les montre <b>tous</b>, quel que soit leur nombre. Le texte de Telegram n'accepte aucune couleur : la légende ne peut montrer qu'un rond emoji approchant (🔴 🟠 🟡…). Quand la carte part, la légende ne répète pas la liste des filaments ; décoche-la et la liste revient dans la légende (l'aperçu suit). Elle liste alors tous les filaments ; si la légende dépasse la limite de Telegram (1 024 caractères), les derniers se résument en « ➕ et 3 autres (tous sur la carte des filaments) ». Touche la vignette pour retirer la carte.</li>
       <li>Le <b>timelapse</b> copié depuis l'imprimante n'est jamais joint d'office. Pour une impression, sa vignette (marquée 🎬) est proposée parmi les autres, décochée. Pour un groupe, <span class="ui">🎬 Joindre des timelapses</span> ouvre la liste des timelapses de ses impressions, chacun avec la vignette du plateau de son impression : coche ceux à joindre.</li>
-      <li>Touche <span class="ui">Envoyer</span> en bas (ou « Envoyer à 2 destinations ») : l'envoi part en arrière-plan, une pastille en haut de l'écran en suit l'avancement.</li>
+      <li>Touche <span class="ui">Telegram</span> en bas (« Telegram · 2 » pour deux destinations) : l'envoi part en arrière-plan, une pastille en haut de l'écran en suit l'avancement.</li>
     </ol>
-    <p>Sans destination, la fenêtre l'indique : relie ton compte Telegram et ajoute des discussions dans <a href="#notifications-telegram">Paramètres → Notifs → Partage Telegram</a>.</p>
+    <h4 id="impressions-partage-autre">Par WhatsApp ou une autre appli</h4>
+    <p><span class="ui">📲 Autre appli</span>, en bas de la même fenêtre, partage <b>le même contenu</b> (le message, les photos et vidéos cochées, la carte des filaments) par l'appli de ton choix, en ton nom : WhatsApp, Messages, un mail… Le texte y est mis en forme pour WhatsApp (titre en gras, ton mot en citation, lien MakerWorld en clair).</p>
+    <ul>
+      <li>Dans l'appli Android, le menu de partage du téléphone s'ouvre une fois les fichiers prêts : choisis l'appli, puis la discussion, et envoie depuis elle.</li>
+      <li>Dans un navigateur, c'est en deux temps : le bouton prépare les fichiers, puis devient <span class="ui">📲 Partager</span> ; touche-le pour ouvrir le menu de partage.</li>
+      <li>Le texte est aussi copié : si l'appli choisie ne le reprend pas avec plusieurs photos, colle-le dans la discussion.</li>
+      <li>Change le message ou les photos après la préparation, et le bouton redevient <span class="ui">📲 Autre appli</span> : ce qui part suit toujours la fenêtre.</li>
+      <li>Les fichiers préparés ne restent que quelques minutes sur le serveur, puis sont effacés.</li>
+    </ul>
+    <p>Sans destination Telegram, la fenêtre l'indique (relie ton compte et ajoute des discussions dans <a href="#notifications-telegram">Paramètres → Notifs → Partage Telegram</a>), et <span class="ui">📲 Autre appli</span> marche quand même.</p>
   </section>
 </section>
 
@@ -311,7 +320,7 @@
     <dl class="opts">
       <dt><span class="ui">✏️ Éditer</span></dt><dd>Renomme le groupe (champ « Nom du groupe »).</dd>
       <dt><span class="ui">📤 Dégrouper</span></dt><dd>Supprime le groupe et ses photos propres ; <b>les prints restent</b> dans l'historique, simplement sans groupe.</dd>
-      <dt><span class="ui">📣 Partager</span></dt><dd>Comme pour un print, voir <a href="#impressions-partage">Partager sur Telegram</a>.</dd>
+      <dt><span class="ui">📣 Partager</span></dt><dd>Comme pour un print, voir <a href="#impressions-partage">Partager sur Telegram, WhatsApp…</a>.</dd>
       <dt><span class="ui">🗑 Supprimer</span></dt><dd>Supprime le groupe <b>et tous ses prints</b> (« Supprimer le groupe … et ses 12 prints ? »). Définitif.</dd>
     </dl>
   </section>
