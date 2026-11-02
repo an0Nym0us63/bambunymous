@@ -30,8 +30,8 @@ async def live_current(_: str = Depends(get_current_user)):
 
 @router.get("/layer")
 async def live_layer(print_id: int | None = None, n: int | None = None, _: str = Depends(get_current_user)):
-    """Le dessin d'une couche (02/11/2026) : l'impression en cours par defaut, a la couche que l'imprimante annonce ;
-    sa part deja imprimee quand c'est la couche en cours. Affichage seulement, quel que soit le suivi choisi."""
+    """Le dessin d'une couche (02/11/2026) : l'impression en cours par defaut, a la couche que l'imprimante annonce.
+    Affichage seulement, quel que soit le suivi choisi."""
     from sqlalchemy import select
     from ....core.mqtt import get_state
     from ....db.session import AsyncSessionLocal
@@ -58,7 +58,7 @@ async def live_layer(print_id: int | None = None, n: int | None = None, _: str =
             colors[slot - 1] = "#" + str(fcol or chex or "94a3b8").lstrip("#")[:6]
     want = n if n is not None else (s.layer if live else None)
     try:
-        out = await LV.layer(pid, p, want, float(s.progress) if live and want == s.layer else None)
+        out = await LV.layer(pid, p, want)
     except Exception as e:
         raise HTTPException(502, f"G-code illisible : {e}")
     return {**out, "print_id": pid, "live": live, "now": s.layer if live else None, "total": s.total_layers if live else None,

@@ -3585,7 +3585,7 @@ function Countdown({ status, o, sz }) {
 // couche d'avant en fantome ; en grand, un curseur pour parcourir les couches
 function LayerTile({ status, sz }) {
   const live = isLive(status) && !currentFriend();
-  const { d, ghost } = useLayer(live, null, status?.layer, status?.progress);
+  const { d, ghost } = useLayer(live, null, status?.layer);
   const tot = status?.total_layers || d?.last;
   return (
     <Tile icon={<Layers size={15}/>} color="#8B5CF6" label="Couche en cours" zoom={live ? <LayerExplorer status={status}/> : null}
@@ -3596,7 +3596,7 @@ function LayerTile({ status, sz }) {
         : !d.ok ? <Empty>Pas de G-code pour cette impression</Empty>
         : <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 0 }}>
           <LayerCanvas d={d} ghost={ghost} w={Math.max(60, Math.floor(W))} h={Math.max(50, Math.floor(H) - 18)}/>
-          <Muted size={11.5}>couche {d.layer} / {tot}{d.frac != null ? ` · ${Math.round(d.frac * 100)} % de la couche` : ""}</Muted></div>}
+          <Muted size={11.5}>couche {d.layer} / {tot}</Muted></div>}
     </Tile>
   );
 }

@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import client from "../api/client";
 
-// Le dessin d'une couche (02/11/2026) : les traces de chaque filament, lus dans le G-code du 3MF tranche ; la part deja
-// imprimee de la couche en cours en plein, le reste en pale, et la couche d'avant en fantome. Affichage seulement.
+// Le dessin d'une couche (02/11/2026) : les traces de chaque filament, lus dans le G-code du 3MF tranche, et la couche
+// d'avant en fantome. Affichage seulement. Pas de « deja imprime » dans la couche : on sait l'ordre des traces, pas le
+// temps que prend chacun.
 
 // la couche : celle que l'imprimante annonce (n vide), ou une couche choisie ; relue quand la couche change
-export function useLayer(enabled, n = null, nowLayer = null, pct = null) {
+export function useLayer(enabled, n = null, nowLayer = null) {
   const [d, setD] = useState(null);
   const [ghost, setGhost] = useState(null);
   const last = useRef(null);
@@ -22,14 +23,14 @@ export function useLayer(enabled, n = null, nowLayer = null, pct = null) {
       setD(x);
     }).catch(() => { if (on) setD({ ok: false }); });
     return () => { on = false; };
-    // la couche en cours : relue a chaque couche, et de temps en temps pour la part imprimee (pct)
-  }, [enabled, n, nowLayer, n == null && pct != null ? Math.floor(pct / 2) : 0]); // eslint-disable-line react-hooks/exhaustive-deps
+    // la couche en cours : relue a chaque nouvelle couche
+  }, [enabled, n, nowLayer]); // eslint-disable-line react-hooks/exhaustive-deps
   return { d, ghost };
 }
 
 const unpack = p => { const out = [p[0], p[1]]; for (let k = 2; k < p.length; k += 2) out.push(out[k - 2] + p[k], out[k - 1] + p[k + 1]); return out; };
 
-export function LayerCanvas({ d, ghost, w, h, done = true }) {
+export function LayerCanvas({ d, ghost, w, h }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current;
@@ -58,14 +59,18 @@ export function LayerCanvas({ d, ghost, w, h, done = true }) {
     const muted = getComputedStyle(cv).getPropertyValue("--muted").trim() || "#94a3b8";
     if (ghost?.ok) { g.lineWidth = lw; g.globalAlpha = 0.18; stroke(ghost.paths, () => { g.strokeStyle = muted; }); }
     const col = t => d.colors?.[t] || "#94a3b8";
-    const cut = done && d.frac != null ? d.frac * (d.e_total || 0) : null;
+    const lightCol = c => { const m = /^#?([0-9a-f]{6})/i.exec(c || ""); if (!m) return false; const n = parseInt(m[1], 16);
+      return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.78; };
+    // un filament clair (blanc, jade...) : un fin contour gris dessous, sinon il disparait sur le fond clair
+    const pale = d.paths.filter(q => lightCol(col(q.t)));
+    if (pale.length) {
+      g.lineWidth = lw + 1.4;
+      stroke(pale, () => { g.strokeStyle = "#64748b"; g.globalAlpha = 0.55; });
+    }
     g.lineWidth = lw;
-    stroke(d.paths, q => {
-      g.strokeStyle = col(q.t);
-      g.globalAlpha = cut == null || q.e0 < cut ? 1 : 0.22;
-    });
+    stroke(d.paths, q => { g.strokeStyle = col(q.t); g.globalAlpha = 1; });
     g.globalAlpha = 1;
-  }, [d, ghost, w, h, done]);
+  }, [d, ghost, w, h]);
   return <canvas ref={ref} style={{ width: w, height: h, display: "block" }}/>;
 }
 
@@ -73,7 +78,7 @@ export function LayerCanvas({ d, ghost, w, h, done = true }) {
 export function LayerExplorer({ status }) {
   const [pick, setPick] = useState(null);           // une couche choisie ; null : celle de l'impression
   const now = status?.layer || null;
-  const { d, ghost } = useLayer(true, pick, now, status?.progress);
+  const { d, ghost } = useLayer(true, pick, now);
   const box = useRef(null);
   const [W, setW] = useState(320);
   useEffect(() => {
@@ -85,7 +90,7 @@ export function LayerExplorer({ status }) {
   const size = Math.min(W, 560);
   return <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
     <div ref={box} style={{ display: "flex", justifyContent: "center", borderRadius: 18, background: "var(--surface2)", border: "1px solid var(--border)", padding: 6 }}>
-      {d?.ok ? <LayerCanvas d={d} ghost={ghost} w={size - 12} h={size - 12} done={pick == null}/> : <div style={{ height: size - 12 }}/>}
+      {d?.ok ? <LayerCanvas d={d} ghost={ghost} w={size - 12} h={size - 12}/> : <div style={{ height: size - 12 }}/>}
     </div>
     {d?.ok && <>
       <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 800, color: "var(--text)" }}>
@@ -98,7 +103,6 @@ export function LayerExplorer({ status }) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 12, color: "var(--text2)" }}>
         {Object.entries(d.colors || {}).map(([t, c]) => <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
           <span style={{ width: 12, height: 12, borderRadius: "50%", background: c, border: "1px solid rgba(0,0,0,.2)" }}/>Filament {Number(t) + 1}</span>)}
-        {d.frac != null && pick == null && <span style={{ color: "var(--muted)" }}>· en plein : déjà imprimé ({Math.round(d.frac * 100)} % de la couche)</span>}
         {ghost && <span style={{ color: "var(--muted)" }}>· en gris : la couche d'avant</span>}
       </div>
     </>}

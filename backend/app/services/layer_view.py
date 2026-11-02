@@ -6,7 +6,7 @@ filament choisi dans les Parametres.
 Le G-code est decompresse une fois par impression (garde en memoire pour l'impression affichee) ; les couches y sont
 reperees par leurs marqueurs « M73 L<n> » et les changements de filament « T<n> », par une simple recherche. Une couche
 demandee ne relit que son passage : ses extrusions (G1/G2/G3 avec E > 0) deviennent des polylignes par filament, en
-dixiemes de millimetre, avec l'extrusion cumulee au debut de chacune (la page marque ce qui est deja imprime).
+dixiemes de millimetre.
 """
 from __future__ import annotations
 
@@ -200,10 +200,10 @@ def _tool_at(ix: dict, pos: int) -> Optional[int]:
     return ix["Tval"][i] if i >= 0 else None
 
 
-async def layer(pid: int, p, n: Optional[int], pct: Optional[float]) -> dict:
-    """La couche n (sinon la premiere), et la part deja imprimee de la couche si pct est l'avancement de l'impression
-    en cours (frac, 0 a 1 : au prorata de l'avancement entre les deux bornes de la couche). Points : le premier en
-    dixiemes de mm, puis les ecarts. La couche precedente (le fantome), la page l'a deja."""
+async def layer(pid: int, p, n: Optional[int]) -> dict:
+    """La couche n (sinon la premiere). Points : le premier en dixiemes de mm, puis les ecarts. La couche precedente
+    (le fantome), la page l'a deja. Pas de « part deja imprimee » de la couche (02/11/2026) : l'ordre des traces est
+    connu, pas le temps que prend chacun ; l'estimer aurait ete souvent faux."""
     ix = await _get(pid, p)
     if not ix:
         return {"ok": False}
@@ -222,12 +222,7 @@ async def layer(pid: int, p, n: Optional[int], pct: Optional[float]) -> dict:
         return [{"t": q["t"], "e0": q["e0"], "p": _deltas(_simplify(q["p"]))} for q in ps], e, bx
 
     paths, e_tot, box = await asyncio.to_thread(lean, i)
-    frac = None
-    if pct is not None:
-        p0 = P[i]
-        p1 = P[i + 1] if i + 1 < len(P) else 100
-        frac = 1.0 if p1 <= p0 else max(0.0, min(1.0, (pct - p0) / (p1 - p0)))
-    return {"ok": True, "layer": L[i], "first": L[0], "last": L[-1], "count": len(L), "e_total": e_tot, "frac": frac,
+    return {"ok": True, "layer": L[i], "first": L[0], "last": L[-1], "count": len(L), "e_total": e_tot,
             "box": [round(v, 1) for v in box] if math.isfinite(box[0]) else None, "paths": paths}
 
 
