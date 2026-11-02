@@ -150,6 +150,7 @@ class _Hub:
         # la methode qui a deja donne des images (02/11/2026) : un modele non reconnu (mode « both ») essayait aussi la
         # connexion des P1/A1 apres chaque blocage d'une X1/H2, en vain, et c'est son erreur qui restait
         self.good = None
+        self.stall_times = deque(maxlen=10)
 
     def unstick(self) -> None:
         """Le direct se fige sans erreur (02/11/2026 : plus une image depuis 33 s, ffmpeg vivant, le serveur attendait
@@ -168,6 +169,7 @@ class _Hub:
             proc, sock = self.proc, self.socket
             self.started_at = now                  # une seule coupure par blocage
             self.stalls += 1
+            self.stall_times.append(now)
         logger.info("Camera flux : fige, connexion coupee")
         try:
             if proc:
@@ -306,7 +308,12 @@ def _produce(ip: str, code: str, mode: str) -> None:
             _HUB.fails = min(_HUB.fails + 1, 6)
             _HUB.retry_at = time.monotonic() + min(5 * 2 ** (_HUB.fails - 1), 60)
             if _HUB.ts and _HUB.ts > _HUB.started_at - 60:     # il donnait des images il y a peu : on repart vite
-                _HUB.retry_at = time.monotonic() + 1
+                # ... mais pas en boucle (02/11/2026) : une imprimante dont le serveur ne suit pas se figeait toutes les
+                # quelques secondes, et chaque reconnexion immediate finissait par faire tomber sa vue en direct (alerte
+                # HMS « impossible d'obtenir la liveview »). 1 s au premier blocage, puis 5, 15, 30, 60 s s'ils se suivent.
+                now = time.monotonic()
+                n = len([t for t in _HUB.stall_times if now - t < 300])
+                _HUB.retry_at = now + (1, 1, 5, 15, 30, 60)[min(n, 5)]
 
 
 def _ensure_producer(ip: str, code: str, mode: str) -> None:
@@ -393,8 +400,10 @@ async def _serve(ip: str, code: str, model: str, model_id: str = "") -> Response
     if fr:
         return Response(fr, media_type="image/jpeg", headers={"Cache-Control": "no-store", "X-Camera-Status": "ok-stream"})
     with _HUB.lock:
-        busy = _HUB.thread is not None
-    if busy:                                   # le direct tourne mais n'a rien donne : pas de seconde connexion
+        busy = _HUB.thread is not None or (_HUB.good is not None and time.monotonic() < _HUB.retry_at)
+    # le direct tourne mais n'a rien donne, ou il a deja marche et attend son prochain essai : pas de seconde
+    # connexion (les captures de secours, toutes les 2 s, en ouvraient chacune une pendant cette attente)
+    if busy:
         with _LOCK:
             if _CACHE["data"]:
                 return Response(_CACHE["data"], media_type="image/jpeg", headers={"Cache-Control": "no-store", "X-Camera-Status": "stale"})
@@ -562,7 +571,7 @@ async def camera_stats():
                "images_par_s_10s": round(len(t) / 10, 1), "derniers_ecarts_s": gaps,
                "derniere_image_il_y_a_s": round(now - _HUB.ts, 1) if _HUB.ts else None,
                "taille_derniere_ko": round(len(_HUB.frame) / 1024) if _HUB.frame else None,
-               "echecs": _HUB.fails, "figes_coupes": _HUB.stalls, "nouvel_essai_dans_s": max(0, round(_HUB.retry_at - now, 1)),
+               "echecs": _HUB.fails, "figes_coupes": _HUB.stalls, "figes_5min": len([t for t in _HUB.stall_times if now - t < 300]), "nouvel_essai_dans_s": max(0, round(_HUB.retry_at - now, 1)),
                "derniere_erreur": _HUB.err or None, "erreur_il_y_a_s": round(now - _HUB.err_at) if _HUB.err_at else None,
                "ffmpeg": list(_HUB.ff_log), "methode_qui_marche": _HUB.good, "spectateurs_flux": _HUB.subs,
                "spectateurs_tires": len([1 for v in _HUB.pullers.values() if now - v < _IDLE_STOP])}
