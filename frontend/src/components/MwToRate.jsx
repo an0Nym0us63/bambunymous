@@ -234,7 +234,9 @@ export async function forgetIt(x, onDone) {
 function RateForm({ x, targets, onDone }) {
   const [score, setScore] = useState(5);
   const [text, setText] = useState("");
-  const [picked, setPicked] = useState(() => new Set((x.photos || []).slice(0, 8)));
+  // (03/11/2026) la carte des filaments est proposee, decochee : on la joint en la touchant
+  const isCard = u => u.includes("/rate-card/");
+  const [picked, setPicked] = useState(() => new Set((x.photos || []).filter(u => !isCard(u)).slice(0, 8)));
   // une photo qui arrive pendant que le formulaire est ouvert (liste relue) : cochee, dans la limite de 8
   const seenPh = useRef(new Set(x.photos || []));
   const phKey = (x.photos || []).join("|");
@@ -242,7 +244,7 @@ function RateForm({ x, targets, onDone }) {
     const fresh = (x.photos || []).filter(u => !seenPh.current.has(u));
     if (!fresh.length) return;
     fresh.forEach(u => seenPh.current.add(u));
-    setPicked(cur => { const n = new Set(cur); for (const u of fresh) { if (n.size >= 8) break; n.add(u); } return n; });
+    setPicked(cur => { const n = new Set(cur); for (const u of fresh) { if (n.size >= 8) break; if (!isCard(u)) n.add(u); } return n; });
   }, [phKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
