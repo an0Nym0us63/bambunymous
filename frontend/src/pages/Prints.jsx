@@ -2394,8 +2394,9 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
           <p style={{ fontWeight:800, fontSize:12.5, color:"#8B5CF6", margin:"0 0 3px",
             overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</p>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }}>
-            <span data-tip={fmtDate(latestDate)} style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-              {aggCfg && <span style={{ color:aggCfg.color, fontWeight:900 }}>● {aggCfg.label} · </span>}{gDay} {gHour.split(" · ")[0]}</span>
+            {/* le statut en pastille seule, son nom au survol (comme la carte d'une impression) */}
+            <span data-tip={`${aggCfg ? `${aggCfg.label} · ` : ""}${fmtDate(latestDate)}`} style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+              {aggCfg && <span style={{ color:aggCfg.color, fontWeight:900 }}>● </span>}{gDay} {gHour.split(" · ")[0]}</span>
             {duration_seconds > 0 && <span style={{ fontSize:10.5, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap" }}>{durFr(duration_seconds)}</span>}
           </div>
         </div>
