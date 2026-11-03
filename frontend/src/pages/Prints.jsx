@@ -2576,8 +2576,9 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
           {p.file_name || "Sans nom"}
         </p>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }}>
-          <span data-tip={fmtDate(p.print_date)} style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-            {p.status !== "SUCCESS" && <span style={{ color:stC, fontWeight:900 }}>{stI} {stL} · </span>}{day} {hour.split(" · ")[0]}</span>
+          {/* le statut en pastille seule, son nom au survol (03/11/2026 : « En cours · » mangeait l'heure sur une carte etroite) */}
+          <span data-tip={`${p.status !== "SUCCESS" ? `${stL} · ` : ""}${fmtDate(p.print_date)}`} style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+            {p.status !== "SUCCESS" && <span style={{ color:stC, fontWeight:900 }}>{stI} </span>}{day} {hour.split(" · ")[0]}</span>
           {/* Repli sur estimated_seconds, comme la fiche */}
           {dur > 0 && <span style={{ fontSize:10.5, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap", flexShrink:0 }}>{durFr(dur)}</span>}
         </div>
