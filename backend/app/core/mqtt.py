@@ -18,6 +18,8 @@ _CACHE_TS:    dict = {}   # timestamp de mise en cache par clé
 _CACHE_TTL = 60            # expiration auto 60s
 _MATCH_MODE_CACHE: dict = {}  # même clé → "rfid"/"auto"/"notfound" (persiste même sans spool_id)
 _SPOOL_INFO_CACHE: dict = {}  # même clé → dict spool_info
+_LOGGED_TRAYS: dict = {}      # (ams, case) → ce qu'on en a ecrit au journal (on ne le reecrit que s'il change)
+_LOGGED_RACK: dict = {}
 _DRYING_AMS: set = set()      # ams_id actuellement en séchage (détection de transition)
 
 def _persist_last_dried(spool_ids: list):
@@ -735,8 +737,11 @@ class MQTTManager:
                     t.cols  = tr.get("cols", []) or []
                     t.ctype = str(tr.get("ctype", "") or "")
 
-                    # ── Log détaillé par slot (1 seul log à l'init du tray) ──
-                    if not t.empty:
+                    # ── Log détaillé par slot : seulement quand la case change (03/11/2026 : chaque seconde, il
+                    # noyait le journal) ──
+                    _sig = (t.filament_type, _tray_color, _tag_uid, _tray_info, _tray_uuid)
+                    if not t.empty and _LOGGED_TRAYS.get((ams.id, t.id)) != _sig:
+                        _LOGGED_TRAYS[(ams.id, t.id)] = _sig
                         logger.debug(
                             f"[AMS] AMS{ams.id} tray{t.id} | "
                             f"type={t.filament_type!r} color={_tray_color!r} "
@@ -951,7 +956,11 @@ class MQTTManager:
                 except (TypeError, ValueError):
                     rack.reading = 0
                 exist_bits = nozzle.get("exist", 0)
-                logger.info(f"[RACK] nozzle.info brut: {nozzle['info'][:3]}")
+                # seulement quand il change, et en DEBUG (03/11/2026 : en INFO chaque seconde)
+                _raw = repr(nozzle['info'][:3])
+                if _raw != _LOGGED_RACK.get("v"):
+                    _LOGGED_RACK["v"] = _raw
+                    logger.debug(f"[RACK] nozzle.info brut: {_raw}")
                 for n in nozzle["info"]:
                     rack.hotends.append(HotendSlot(
                         id=int(n.get("id", 0)),

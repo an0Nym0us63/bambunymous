@@ -16,6 +16,7 @@ mimetypes.add_type("application/vnd.android.package-archive", ".apk")
 mimetypes.add_type("image/webp", ".webp")
 import time
 import os
+import re
 
 from app.core.config import settings
 from app.db.session import init_db
@@ -51,6 +52,23 @@ class _LogNoiseFilter(logging.Filter):
         return not any(x in msg for x in _NOISY_LOG_MSGS)
 
 
+# Un jeton dans une adresse (« ?_t=… », images et flux lus sans en-tete) ne s'ecrit jamais au journal (03/11/2026 : on
+# le lisait en clair dans le journal d'acces, et un journal se copie facilement)
+_TOKEN_IN_URL = re.compile(r"([?&]_t=)[^&\s\"']+")
+
+
+class _RedactTokenFilter(logging.Filter):
+    def filter(self, record):
+        try:
+            if isinstance(record.args, tuple) and record.args:
+                record.args = tuple(_TOKEN_IN_URL.sub(r"\1***", a) if isinstance(a, str) else a for a in record.args)
+            if isinstance(record.msg, str) and "_t=" in record.msg:
+                record.msg = _TOKEN_IN_URL.sub(r"\1***", record.msg)
+        except Exception:
+            pass
+        return True
+
+
 # Taches de fond lancees au demarrage (voir _bg dans lifespan)
 _BG_TASKS: set = set()
 
@@ -68,6 +86,9 @@ async def lifespan(app: FastAPI):
     _fh.setFormatter(_log_fmt)
     _fh.setLevel(logging.DEBUG)
     _fh.addFilter(_LogNoiseFilter())
+    _fh.addFilter(_RedactTokenFilter())
+    # et a la source, pour la console (docker logs) aussi
+    logging.getLogger("uvicorn.access").addFilter(_RedactTokenFilter())
     # Ajouter sur TOUS les loggers déjà créés + root
     root = logging.getLogger()
     root.addHandler(_fh)
