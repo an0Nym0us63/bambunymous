@@ -523,7 +523,7 @@ def gallery_touched() -> None:
 
 
 @router.get("/source-info")
-async def print_source_info(ids: str = "", _: str = Depends(get_current_user)):
+async def print_source_info(ids: str = "", group: int = 0, _: str = Depends(get_current_user)):
     """Ce que dit le 3MF d'origine importe a la main (31/10/2026), pour une carte comme celle de MakerWorld : son titre,
     ses plateaux (nom, vignette lue dans le 3MF) sous un profil (celui des impressions, sinon vide). 404 sans 3MF."""
     import re as _re
@@ -534,6 +534,10 @@ async def print_source_info(ids: str = "", _: str = Depends(get_current_user)):
         raise HTTPException(404)
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(Print.id, Print.design_id, Print.mw_profile_id, Print.mw_plates).where(Print.id.in_(pids)))).all()
+        meta = (await db.execute(select(Print.id, Print.translated_name, Print.file_name, Print.cover_photo, Print.group_id)
+                                 .where(Print.id.in_(pids)).order_by(Print.print_date.desc()))).all()
+        gids = {m[4] for m in meta}
+        grp = await db.get(Group, next(iter(gids))) if group and len(gids) == 1 and None not in gids else None
     f, prof = None, ""
     for r in rows:
         f = print_file(r[1], r[2], r[3], r[0])
@@ -570,7 +574,35 @@ async def print_source_info(ids: str = "", _: str = Depends(get_current_user)):
     except Exception:
         raise HTTPException(404, "3MF d'origine illisible")
     pid_ = str(prof or "")                 # sans profil connu : vide, le 3MF importe sert alors pour tout le modele
-    return {"key": iid, "title": title or f.stem, "cover": plates[0]["thumb"] if plates else None,
+    # (03/11/2026) comme la carte MakerWorld : un vrai titre (celui du projet, sinon celui de l'impression ou du groupe,
+    # jamais l'identifiant du fichier), une image (ma photo, sinon une vue 3D, sinon le plateau), et les fichiers joints
+    name = title or (grp.name if grp else None) or next((m[1] or m[2] for m in meta if m[1] or m[2]), None) or "Mon 3MF d'origine"
+    cover, kind = None, "plate"
+    if grp:
+        gd = DATA_DIR / "groups" / str(grp.id)
+        if grp.cover_photo and (gd / grp.cover_photo).is_file():
+            cover, kind = f"/api/v1/prints/groups/{grp.id}/photo/{grp.cover_photo}", "photo"
+        elif (sl := _v3slots(gd)):
+            n0 = min(sl)
+            cover, kind = f"/api/v1/prints/groups/{grp.id}/photo/{_v3name(n0)}?v={sl[n0]}", "vue3d"
+    for m in meta:
+        if cover:
+            break
+        d = DATA_DIR / "prints" / str(m[0])
+        photos = sorted(x.name for x in d.glob("Photo-*") if x.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")) if d.is_dir() else []
+        ph = m[3] if m[3] and (d / m[3]).is_file() else (photos[0] if photos else None)
+        if ph:
+            cover, kind = f"/api/v1/prints/{m[0]}/file/{ph}", "photo"
+        elif (sl := _v3slots(d)):
+            n0 = min(sl)
+            cover, kind = f"/api/v1/prints/{m[0]}/file/{_v3name(n0)}?v={sl[n0]}", "vue3d"
+    if not cover and plates:
+        cover = plates[0]["thumb"]
+    att = _attach_list("group", grp.id) if grp else []
+    for m in meta:
+        att += _attach_list("print", m[0])
+    return {"key": iid, "title": name, "cover": cover, "cover_kind": kind,
+            "attachments": [{"label": a["label"], "url": a["url"], "size": a["size"]} for a in att],
             "profiles": [{"profile_id": pid_, "title": "Mon 3MF d'origine", "default": True, "plates": plates}]}
 
 

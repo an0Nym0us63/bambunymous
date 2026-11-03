@@ -38,7 +38,7 @@ import { useKeyboardInset } from "../utils/keyboard";
 import PhotoAddButton from "../components/PhotoAddButton";
 import GroupMosaic from "../components/GroupMosaic";
 import ObjectCreateSheet from "../components/ObjectCreateSheet";
-import FilesSheet from "../components/FilesSheet";
+import FilesSheet, { openBlob, saveBlob } from "../components/FilesSheet";
 import Select from "../components/Select";
 import { useLongPress, openMenu } from "../components/ContextMenu";
 import NasChip from "../components/NasChip";
@@ -815,10 +815,11 @@ function OwnSourceCard({ designId, prints = [], group = false, url = null }) {
   const [open, setOpen] = useState(false);
   const [view3d, setView3d] = useState(false);
   const [shown, setShown] = useState(undefined);
+  const [docsOpen, setDocsOpen] = useState(false);
   const ids = prints.map(x => x.id).join(",");
   useEffect(() => {
     let alive = true;
-    client.get("/prints/source-info", { params: { ids } }).then(r => alive && setInfo(r.data)).catch(() => alive && setInfo(null));
+    client.get("/prints/source-info", { params: { ids, group: group ? 1 : 0 } }).then(r => alive && setInfo(r.data)).catch(() => alive && setInfo(null));
     return () => { alive = false; };
   }, [ids]);
   const link = url && <a href={url} target="_blank" rel="noopener noreferrer" style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6,
@@ -833,7 +834,9 @@ function OwnSourceCard({ designId, prints = [], group = false, url = null }) {
     <div style={{ borderRadius:18, border:`1px solid color-mix(in srgb, ${T} 28%, var(--border))`, overflow:"hidden",
       background:`linear-gradient(160deg, color-mix(in srgb, ${T} 10%, transparent), transparent 60%), var(--surface2)` }}>
       <div onClick={() => setOpen(o => !o)} style={{ display:"flex", gap:12, padding:12, cursor:"pointer", alignItems:"center" }}>
-        {info.cover && <img src={apiUrl(info.cover.replace(/^\/api\/v1/, ""))} alt="" style={{ width:58, height:58, borderRadius:14, objectFit:"contain", flexShrink:0,
+        {/* ma photo, sinon une vue 3D, sinon le plateau (03/11/2026, comme la carte MakerWorld) */}
+        {info.cover && <img src={info.cover_kind === "photo" ? apiThumb(apiUrl(info.cover.replace(/^\/api\/v1/, "")), 160) : apiUrl(info.cover.replace(/^\/api\/v1/, ""))} alt=""
+          style={{ width:58, height:58, borderRadius:14, objectFit: info.cover_kind === "photo" ? "cover" : "contain", flexShrink:0,
           background:"var(--surface)", boxShadow:"0 6px 16px rgba(0,0,0,.18)" }}/>}
         <div style={{ minWidth:0, flex:1 }}>
           <div style={{ fontSize:10.5, fontWeight:900, color:T, letterSpacing:".05em" }}>📦 MON 3MF D'ORIGINE</div>
@@ -844,6 +847,29 @@ function OwnSourceCard({ designId, prints = [], group = false, url = null }) {
           style={{ width:32, height:32, borderRadius:10, border:"1px solid rgba(14,165,233,0.4)", background:"rgba(14,165,233,0.1)", cursor:"pointer", flexShrink:0, fontSize:14 }}>🧊</button>
         <span style={{ fontSize:11, color:"var(--muted)", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s", flexShrink:0 }}>▶</span>
       </div>
+      {/* les fichiers joints (notices, PDF…) : visibles meme repliee, comme les documents d'un modele MakerWorld */}
+      {info.attachments?.length > 0 && <div onClick={e => e.stopPropagation()} style={{ padding:"0 12px 10px", display:"flex", flexDirection:"column", gap:6 }}>
+        <button type="button" onClick={() => setDocsOpen(o => !o)} aria-expanded={docsOpen} style={{ display:"flex", alignItems:"center", gap:6, width:"100%", padding:"6px 10px",
+          borderRadius:12, cursor:"pointer", border:"1px solid color-mix(in srgb, #8B5CF6 30%, var(--border))", textAlign:"left", font:"inherit",
+          background:"linear-gradient(135deg, color-mix(in srgb, #8B5CF6 12%, transparent), transparent 80%), var(--surface)" }}>
+          <span style={{ fontSize:12, fontWeight:900, color:"var(--text)" }}>📎 Fichiers joints</span>
+          <span style={{ fontSize:11, fontWeight:800, padding:"2px 8px", borderRadius:20, color:"#8B5CF6", background:"color-mix(in srgb, #8B5CF6 14%, transparent)" }}>
+            {info.attachments.length} fichier{info.attachments.length > 1 ? "s" : ""}</span>
+          <span style={{ marginLeft:"auto", fontSize:11, color:"var(--muted)", transform: docsOpen ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>
+        </button>
+        {docsOpen && <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+          {info.attachments.map(a => <span key={a.url} style={{ display:"inline-flex", alignItems:"stretch", maxWidth:"100%", minWidth:0, borderRadius:12, overflow:"hidden",
+            border:"1px solid #8B5CF640", background:"linear-gradient(135deg, #8B5CF61f, #8B5CF60a)" }}>
+            <button type="button" onClick={() => openBlob(a.url)} data-tip={`Ouvrir · ${a.label}`} style={{ display:"inline-flex", alignItems:"center", gap:6, minWidth:0,
+              padding:"5px 10px", border:"none", background:"none", cursor:"pointer", font:"inherit", fontSize:12, fontWeight:700, color:"var(--text)" }}>
+              <span>{/\.pdf$/i.test(a.label) ? "📕" : "📄"}</span>
+              <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.label}</span>
+              <span style={{ color:"var(--muted)", fontSize:11 }}>↗</span></button>
+            <button type="button" onClick={() => saveBlob(a.url, a.label)} data-tip="Télécharger" style={{ padding:"0 10px", border:"none", borderLeft:"1px solid #8B5CF640",
+              background:"none", cursor:"pointer", fontSize:13, fontWeight:900, color:"#8B5CF6" }}>⬇</button>
+          </span>)}
+        </div>}
+      </div>}
       {/* les couleurs du 3MF et ce qui les a remplacees (un modele MakerWorld seulement : la correspondance s'y range) */}
       {/^\d+$/.test(String(designId)) && <ColorMap designId={designId} profileId={shownProf || null} wait={shownProf === undefined} usedPrints={prints.map(x => x.id)}
         printId={(prints.find(x => x.mw_profile_id || x.mw_plates) || prints[0])?.id} scope={colorScope(prints)} style={{ padding:"0 12px 10px" }}/>}

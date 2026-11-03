@@ -17,7 +17,18 @@ const ICON_EXT = [[/\.(pdf)$/i, "📕"], [/\.(png|jpe?g|webp|gif|heic)$/i, "🖼
 const iconOf = n => (ICON_EXT.find(([re]) => re.test(n)) || [null, "📎"])[1];
 const size = b => b == null ? "sur le NAS" : b >= 1048576 ? `${(b / 1048576).toFixed(1).replace(".", ",")} Mo` : `${Math.max(1, Math.round(b / 1024))} Ko`;
 
-async function saveBlob(url, fallback) {
+// ouvrir un fichier de l'API dans un onglet (un PDF se lit, une image se voit) : le jeton part avec la demande
+export async function openBlob(url) {
+  const w = window.open("", "_blank");
+  try {
+    const r = await client.get(url.replace(/^\/api\/v1/, ""), { responseType: "blob", timeout: 600000 });
+    const u = URL.createObjectURL(r.data);
+    if (w) w.location.href = u; else window.open(u, "_blank");
+    setTimeout(() => URL.revokeObjectURL(u), 120000);
+  } catch (e) { w?.close(); showAlert(e.response?.status === 404 ? "Ce fichier n'est pas sur le serveur." : (e.message || "Ouverture impossible")); }
+}
+
+export async function saveBlob(url, fallback) {
   try {
     const r = await client.get(url.replace(/^\/api\/v1/, ""), { responseType: "blob", timeout: 600000 });
     const cd = r.headers?.["content-disposition"] || "";
