@@ -48,7 +48,10 @@ const Dot = ({ e, size = 26, on }) => {
     transform: on ? "scale(1.15)" : "none", transition: "transform .15s, box-shadow .15s" }}>{ic}</span>;
 };
 
-export default function MachineTimeline({ events, points, hours, end, pick, onPick, onZoom }) {
+// une fiche a ouvrir : l'impression, ou la bobine d'un filament
+export const linkOf = e => (e.print_id ? "print" : e.spool_id && e.filament_id ? "spool" : null);
+
+export default function MachineTimeline({ events, points, hours, end, pick, onPick, onZoom, onOpen }) {
   const [cat, setCat] = useState("all");
   const [more, setMore] = useState(false);
   const [ref, W] = useWidth();
@@ -107,7 +110,7 @@ export default function MachineTimeline({ events, points, hours, end, pick, onPi
       {/* l'axe du temps, au milieu de la bande */}
       <div style={{ position: "absolute", left: 10, right: 10, top: 8 + LANE / 2, height: 2, borderRadius: 2,
         background: "linear-gradient(90deg, transparent, var(--border) 6%, var(--border) 94%, transparent)" }}/>
-      {bands.map((b, i) => { const l = Math.max(0, x(b.a)), r = Math.min(100, x(b.b)), wpx = (r - l) / 100 * W;
+      {bands.filter(b => b.b > from && b.a < to).map((b, i) => { const l = Math.max(0, x(b.a)), r = Math.min(100, x(b.b)), wpx = (r - l) / 100 * W;
         return <div key={i} data-tip={b.name ? `${b.name} · ${hm(b.a)} → ${hm(b.b)}` : `Impression · ${hm(b.a)} → ${hm(b.b)}`}
           style={{ position: "absolute", left: `${l}%`, width: `${Math.max(0.6, r - l)}%`, top: 8, height: LANE, borderRadius: 12,
             background: "linear-gradient(180deg, rgba(59,130,246,.28), rgba(99,102,241,.14))", border: "1px solid rgba(59,130,246,.35)", overflow: "hidden" }}>
@@ -143,6 +146,9 @@ export default function MachineTimeline({ events, points, hours, end, pick, onPi
         <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis" }}>
           {dayOf(sel.ms)} à {hm(sel.ms)}{sel.before ? ` · avant : ${sel.before}` : ""}{sel.detail ? ` · ${sel.detail}` : ""}</div>
       </div>
+      {linkOf(sel) && onOpen && <button type="button" onClick={() => onOpen(sel)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 20, border: "none",
+        cursor: "pointer", fontSize: 12, fontWeight: 900, color: "#fff", background: `linear-gradient(135deg, ${colorOf(sel)}, color-mix(in srgb, ${colorOf(sel)} 60%, #6366F1))`,
+        boxShadow: `0 6px 14px -8px ${colorOf(sel)}`, whiteSpace: "nowrap" }}>{linkOf(sel) === "print" ? "Fiche de l'impression ›" : "Fiche de la bobine ›"}</button>}
       <button type="button" onClick={() => onPick?.(null)} aria-label="Fermer" style={{ border: "none", background: "none", color: "var(--muted)", fontSize: 18, cursor: "pointer" }}>×</button>
     </div>}
 
@@ -175,6 +181,12 @@ export default function MachineTimeline({ events, points, hours, end, pick, onPi
                   {e.kind === "filament" && e.color && <span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 3, background: c, marginRight: 5, verticalAlign: "-1px" }}/>}
                   {e.detail}{e.before ? `${e.detail ? " · " : ""}avant : ${e.before}` : ""}</span>}
               </span>
+              {/* la fiche, d'un toucher */}
+              {linkOf(e) && onOpen && <span role="button" tabIndex={0} onClick={ev => { ev.stopPropagation(); onOpen(e); }}
+                onKeyDown={ev => { if (ev.key === "Enter") { ev.stopPropagation(); onOpen(e); } }}
+                data-tip={linkOf(e) === "print" ? "Ouvrir la fiche de l'impression" : "Ouvrir la fiche de la bobine"}
+                style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 900,
+                  color: c, background: `color-mix(in srgb, ${c} 13%, transparent)`, cursor: "pointer", whiteSpace: "nowrap" }}>Fiche ›</span>}
             </button>; })}
         </div>
       </div>)}

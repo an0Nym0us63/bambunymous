@@ -104,7 +104,7 @@ def _watch(st) -> None:
         info = getattr(t, "_spool_info_cache", None) or {}
         what = info.get("translated_name") or info.get("name") or (t.filament_type if t else "") or ""
         _push("filament", "Filament " + _slot(*cur["tray"]), what, color=(t.color if t else "") or "",
-              before=_slot(*prev["tray"]) if prev["tray"] else "")
+              before=_slot(*prev["tray"]) if prev["tray"] else "", spool_id=getattr(t, "spool_id", None) if t else None)
     if busy and cur["nozzle"] != prev["nozzle"] and cur["nozzle"] is not None and prev["nozzle"] is not None:
         _push("nozzle", "Buse " + ("gauche" if cur["nozzle"] == 1 else "droite"), "devient la buse active")
     if cur["switch"] != prev["switch"] and cur["switch"] is not None and prev["switch"] is not None:
@@ -137,6 +137,33 @@ def _title_hms(e: dict) -> str:
         return ""
 
 
+PRINT_KINDS = ("prepare", "print_start", "pause", "resume", "finish", "fail")
+
+
+async def _link(db, e: dict) -> None:
+    """Ce qui permet d'ouvrir la fiche : l'impression (son vrai nom, celui de l'appli, et son numero) ; la bobine d'un
+    filament (et son filament). Le nom que donne l'imprimante est souvent celui du profil de tranchage."""
+    from sqlalchemy import select
+    from ..models.print_history import Print
+    from ..models.filament import Spool
+    if e["kind"] in PRINT_KINDS:
+        rows = (await db.execute(select(Print.id, Print.file_name, Print.translated_name, Print.print_date)
+                                 .order_by(Print.id.desc()).limit(8))).all()
+        raw = (e.get("detail") or "").strip()
+        hit = next((r for r in rows if raw and raw in ((r[1] or ""), (r[2] or ""))), None)
+        # sinon la plus recente lancee dans les 12 h autour de l'evenement
+        hit = hit or next((r for r in rows if r[3] and abs((r[3] - e["t"]).total_seconds()) < 12 * 3600), None)
+        if hit:
+            e["print_id"] = hit[0]
+            e["detail"] = hit[2] or hit[1] or raw
+    elif e["kind"] == "filament" and e.get("spool_id"):
+        sp = await db.get(Spool, e["spool_id"])
+        if sp:
+            e["filament_id"] = sp.filament_id
+        else:
+            e.pop("spool_id", None)
+
+
 def pending() -> list:
     with _LOCK:
         return list(_PENDING)
@@ -156,7 +183,11 @@ async def flush() -> int:
             e = dict(e)
             if e["kind"] == "hms":
                 e["detail"] = _title_hms(e)
-            extra = {k: v for k, v in e.items() if k not in ("t", "kind", "title", "detail", "hms", "model")}
+            try:
+                await _link(db, e)
+            except Exception as x:
+                logger.debug(f"[EVENEMENTS] lien vers la fiche : {x}")
+            extra = {k: v for k, v in e.items() if k not in ("t", "kind", "title", "detail", "hms", "model") and v not in (None, "")}
             db.add(MachineEvent(ts=e["t"], kind=e["kind"], title=e["title"], detail=e.get("detail") or "",
                                 extra=json.dumps(extra) if extra else None))
         await db.commit()
@@ -185,5 +216,5 @@ async def between(since: datetime, end: datetime) -> list:
     for e in pending():
         if since <= e["t"] <= end:
             out.append({"t": e["t"].isoformat() + "Z", "kind": e["kind"], "title": e["title"], "detail": e.get("detail") or "",
-                        **{k: v for k, v in e.items() if k in ("color", "before")}})
+                        **{k: v for k, v in e.items() if k in ("color", "before", "spool_id") and v not in (None, "")}})
     return out

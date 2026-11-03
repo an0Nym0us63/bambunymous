@@ -1,13 +1,16 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSensorHistory, useSensorEvents } from "../store/sensors";
 import MachineTimeline from "./MachineTimeline";
+import { PrintDetail, FilamentSheetFromSpool } from "./LazySheets";
+import client from "../api/client";
+import { showAlert } from "../utils/dialog";
 import { SensorChart, SensorLegend, amsLines, heatLines, fanLines, seriesOf } from "./SensorChart";
 import { egg } from "../eggs";
 
-// Stats › Machine (03/11/2026) : les releves des capteurs sur 24 h, 3 ou 7 jours (le serveur n'en garde pas plus).
+// Stats › Machine (03/11/2026) : les releves des capteurs de 3 h a 7 jours (le serveur n'en garde pas plus).
 // En tete le bilan de la periode, puis une carte par mesure : buse et plateau, chambre, humidite des AMS, leur
 // temperature, ventilateurs. Les impressions sont les bandes bleues pales des courbes.
-const PERIODS = [[3, "3 h"], [6, "6 h"], [12, "12 h"], [24, "24 h"], [72, "3 jours"], [168, "7 jours"]];
+const PERIODS = [[3, "3 h"], [6, "6 h"], [12, "12 h"], [24, "24 h"], [72, "3 j"], [168, "7 j"]];
 const KEEP_MS = 7 * 86400000;            // ce que le serveur garde
 // la fenetre en clair : « lun. 2 nov. 14:00 → 17:00 », ou deux jours quand elle les enjambe
 const winLabel = (from, to) => {
@@ -22,9 +25,6 @@ const card = c => ({ padding: "14px 14px 12px", borderRadius: 20, border: `1px s
   display: "flex", flexDirection: "column", gap: 10 });
 const title = c => ({ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: c });
 const n1 = v => v == null ? "—" : Number(v).toFixed(1).replace(".", ",");
-
-const nav = on => ({ width: 34, height: 32, borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", color: on ? "var(--text)" : "var(--muted)",
-  fontSize: 18, fontWeight: 900, cursor: on ? "pointer" : "default", opacity: on ? 1 : 0.45, flexShrink: 0, lineHeight: 1 });
 
 function Kpi({ v, l, c, sub }) {
   return <div style={{ minWidth: 0, padding: "9px 11px", borderRadius: 16, border: `1px solid color-mix(in srgb, ${c} 28%, transparent)`,
@@ -52,30 +52,171 @@ function Ranges({ lines, unit }) {
   </div>;
 }
 
+// les periodes : une barre segmentee, la pastille de la periode choisie glisse de l'une a l'autre
+function Periods({ value, onChange }) {
+  const i = Math.max(0, PERIODS.findIndex(p => p[0] === value)), n = PERIODS.length;
+  return <div role="tablist" style={{ position: "relative", display: "grid", gridTemplateColumns: `repeat(${n}, 1fr)`, padding: 4, borderRadius: 16,
+    background: "var(--surface2)", border: "1px solid var(--border)", maxWidth: 520, width: "100%" }}>
+    <span aria-hidden="true" style={{ position: "absolute", top: 4, bottom: 4, left: 4, width: `calc((100% - 8px) / ${n})`, borderRadius: 12,
+      transform: `translateX(${i * 100}%)`, transition: "transform .28s cubic-bezier(.3,1.3,.5,1)",
+      background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 6px 16px -8px #6366F1" }}/>
+    {PERIODS.map(([h, l]) => <button key={h} type="button" role="tab" aria-selected={value === h} onClick={() => onChange(h)}
+      style={{ position: "relative", zIndex: 1, padding: "7px 0", border: "none", background: "none", cursor: "pointer", borderRadius: 12,
+        fontSize: 12.5, fontWeight: 900, color: value === h ? "#fff" : "var(--text2)", transition: "color .2s", whiteSpace: "nowrap" }}>{l}</button>)}
+  </div>;
+}
+
+// la mini-carte des 7 jours : les impressions en bandes, la buse en fine courbe, et la fenetre regardee en cadre qu'on
+// fait glisser (ou qu'on pose d'un toucher)
+function Navigator({ hours, end, onEnd }) {
+  const all = useSensorHistory(168);
+  const ref = useRef(null);
+  const drag = useRef(null);
+  const now = Date.now(), lo = now - KEEP_MS, span = now - lo;
+  const to = end || now, from = to - hours * 3600000;
+  const x = t => ((t - lo) / span) * 100;
+  const { bands, line } = useMemo(() => {
+    const out = [], pts = all || [];
+    let s = null, last = null;
+    for (const p of pts) {
+      const t = Date.parse(p.t);
+      if (p.printing && s == null) s = t;
+      if ((!p.printing || (last && t - last > 40 * 60000)) && s != null) { out.push([s, last ?? t]); s = p.printing ? t : null; }
+      last = t;
+    }
+    if (s != null) out.push([s, last]);
+    const nz = pts.filter(p => p.nozzle != null), mx = Math.max(60, ...nz.map(p => p.nozzle));
+    return { bands: out, line: nz.map(p => `${x(Date.parse(p.t)).toFixed(2)},${(40 - 4 - (p.nozzle / mx) * 30).toFixed(1)}`).join(" ") };
+  }, [all]); // eslint-disable-line react-hooks/exhaustive-deps
+  const at = e => { const r = ref.current.getBoundingClientRect(); return lo + Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * span; };
+  const down = e => {
+    const t = at(e), inside = t >= from && t <= to;
+    ref.current.setPointerCapture?.(e.pointerId);
+    // dans le cadre : on le fait glisser ; ailleurs : la fenetre s'y centre, puis glisse
+    if (!inside) onEnd(t + hours * 1800000);
+    drag.current = { t0: t, end0: inside ? to : t + hours * 1800000 };
+  };
+  const move = e => { if (drag.current) onEnd(drag.current.end0 + at(e) - drag.current.t0); };
+  const up = () => { drag.current = null; };
+  const days = [];
+  for (let d = new Date(lo); d.getTime() < now + 86400000; d.setDate(d.getDate() + 1)) { const m = new Date(d); m.setHours(0, 0, 0, 0); if (m.getTime() > lo && m.getTime() < now) days.push(m.getTime()); }
+  return <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <div ref={ref} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+      data-tip="Les 7 derniers jours : fais glisser le cadre, ou touche un moment"
+      style={{ position: "relative", height: 40, borderRadius: 12, background: "var(--surface2)", border: "1px solid var(--border)",
+        overflow: "hidden", cursor: "grab", touchAction: "none", userSelect: "none" }}>
+      {bands.map(([a, b], i) => <span key={i} style={{ position: "absolute", top: 0, bottom: 0, left: `${x(a)}%`, width: `${Math.max(0.3, x(b) - x(a))}%`,
+        background: "rgba(59,130,246,.22)" }}/>)}
+      <svg viewBox="0 0 100 40" preserveAspectRatio="none" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} aria-hidden="true">
+        {line && <polyline points={line} fill="none" stroke="#F97316" strokeWidth="1.2" vectorEffect="non-scaling-stroke" opacity="0.8"/>}
+      </svg>
+      {days.map(t => <span key={t} style={{ position: "absolute", top: 0, bottom: 0, left: `${x(t)}%`, width: 1, background: "var(--border)" }}/>)}
+      {/* la fenetre regardee : le reste s'assombrit un peu */}
+      <span style={{ position: "absolute", top: 2, bottom: 2, left: `${x(from)}%`, width: `${Math.max(1.2, x(to) - x(from))}%`, minWidth: 10, borderRadius: 9,
+        border: "2px solid #6366F1", background: "rgba(99,102,241,.16)", boxShadow: "0 0 0 2000px rgba(15,23,42,.10), 0 4px 12px -4px #6366F1", pointerEvents: "none",
+        transition: drag.current ? "none" : "left .2s, width .2s" }}/>
+    </div>
+    <div style={{ position: "relative", height: 12 }}>
+      {days.map(t => <span key={t} style={{ position: "absolute", left: `${x(t)}%`, transform: "translateX(4px)", fontSize: 9.5, fontWeight: 800,
+        color: "var(--muted)", whiteSpace: "nowrap" }}>{new Date(t).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}</span>)}
+    </div>
+  </div>;
+}
+
 export default function MachineStats() {
   const [hours, setHours] = useState(24);
-  // end : la fin de la fenetre regardee (ms), null : maintenant. Les fleches reculent ou avancent d'une fenetre,
-  // jamais avant ce que le serveur garde ni apres maintenant
-  const [end, setEnd] = useState(null);
-  const pts = useSensorHistory(hours, true, end);
-  const events = useSensorEvents(hours, end, pts);
+  // end : la fin de la fenetre regardee (ms), null : maintenant. On la deplace en faisant glisser les courbes (souris,
+  // doigt, pave tactile) ou le cadre de la mini-carte ; jamais avant ce que le serveur garde ni apres maintenant
+  const [end, setEndRaw] = useState(null);
+  const hoursRef = useRef(hours); hoursRef.current = hours;
+  const setEnd = t => {
+    if (t == null) return setEndRaw(null);
+    const now = Date.now(), c = Math.max(now - KEEP_MS + hoursRef.current * 3600000, Math.min(now, t));
+    setEndRaw(c >= now - 30000 ? null : Math.round(c));
+  };
+  // les releves charges : la fenetre et de quoi la faire glisser de chaque cote (trois fenetres en tout, 7 jours au
+  // plus), relus seulement quand elle s'approche du bord
+  const fh = Math.min(168, hours * 3), m = (fh - hours) / 2 * 3600000;
+  const fe = (() => {
+    if (!end || m <= 0) return null;
+    const st = m / 2, e = Math.ceil((end + m) / st) * st;
+    return e >= Date.now() - 60000 ? null : e;
+  })();
+  const all = useSensorHistory(fh, true, fe);
+  const allEv = useSensorEvents(fh, fe, all);
   // l'evenement choisi dans la chronologie : son heure sur chaque courbe
   const [pick, setPick] = useState(null);
+  // la fiche ouverte depuis la chronologie : l'impression, ou la bobine d'un filament
+  const [sheet, setSheet] = useState(null);
+  const openSheet = async e => {
+    if (e.print_id) {
+      try { setSheet({ kind: "print", data: (await client.get(`/prints/${e.print_id}`)).data }); }
+      catch { showAlert("Cette impression n'existe plus"); }
+    } else if (e.spool_id) setSheet({ kind: "spool", spoolId: e.spool_id, filamentId: e.filament_id, hex: e.color });
+  };
   // des evenements reunis sur la frise : la plus petite fenetre qui les contient (3 h au moins), centree sur eux
   const zoomTo = (a, b) => {
     const h = PERIODS.map(p => p[0]).find(x => x * 3600000 >= (b - a) * 1.4 && x < hours) || 3;
     const e = Math.round(((a + b) / 2 + h * 1800000) / 60000) * 60000;
     setHours(h);
-    setEnd(e >= Date.now() - 60000 ? null : e);
+    setEndRaw(e >= Date.now() - 60000 ? null : e);
   };
   const to = end || Date.now(), from = to - hours * 3600000;
-  const canBack = from > Date.now() - KEEP_MS + 60000;
-  const step = dir => {
-    const t = Math.round((to + dir * hours * 3600000) / 60000) * 60000;
-    setEnd(t >= Date.now() - 60000 ? null : Math.max(Date.now() - KEEP_MS + hours * 3600000, t));
-  };
-  const choosePeriod = h => { setHours(h); if (end && end - h * 3600000 < Date.now() - KEEP_MS) setEnd(Date.now() - KEEP_MS + h * 3600000); };
+  const choosePeriod = h => { setHours(h); if (h >= 168) setEndRaw(null); else if (end && end - h * 3600000 < Date.now() - KEEP_MS) setEndRaw(Date.now() - KEEP_MS + h * 3600000); };
   useEffect(() => { egg("machine_vue"); }, []);
+  // ce qui tombe dans la fenetre (le bilan, les courbes et leurs legendes)
+  const pts = useMemo(() => all && all.filter(p => { const t = Date.parse(p.t); return t >= from - 60000 && t <= to + 60000; }), [all, from, to]);
+  const events = useMemo(() => allEv && allEv.filter(e => { const t = Date.parse(e.t); return t >= from && t <= to; }), [allEv, from, to]);
+
+  // faire glisser les courbes : a l'horizontale seulement (a la verticale, la page defile), avec un peu d'elan au lacher
+  const panRef = useRef(null);
+  const pan = useRef(null);
+  const anim = useRef(0);
+  const endRef = useRef(end); endRef.current = end;
+  const msPerPx = () => hoursRef.current * 3600000 / Math.max(200, panRef.current?.clientWidth || 600);
+  const onDown = e => {
+    if (hours >= 168 || e.button > 0) return;
+    cancelAnimationFrame(anim.current);
+    pan.current = { x: e.clientX, y: e.clientY, end0: endRef.current || Date.now(), axis: null, id: e.pointerId, vx: 0, lx: e.clientX, lt: performance.now() };
+  };
+  const onMove = e => {
+    const p = pan.current;
+    if (!p || p.id !== e.pointerId) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    if (!p.axis) {
+      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) { p.axis = "x"; panRef.current?.setPointerCapture?.(e.pointerId); }
+      else if (Math.abs(dy) > 8) { pan.current = null; return; }
+      else return;
+    }
+    const now = performance.now();
+    p.vx = (e.clientX - p.lx) / Math.max(1, now - p.lt); p.lx = e.clientX; p.lt = now;
+    setEnd(p.end0 - dx * msPerPx());
+  };
+  const onUp = () => {
+    const p = pan.current;
+    pan.current = null;
+    if (!p || p.axis !== "x") return;
+    // le clic qui suit un glissement ne doit rien ouvrir
+    panRef.current.dataset.dragged = "1";
+    setTimeout(() => { if (panRef.current) delete panRef.current.dataset.dragged; }, 0);
+    // l'elan : la vitesse du lacher, freinee peu a peu
+    let v = -p.vx * msPerPx(), t0 = performance.now(), cur = endRef.current || Date.now();
+    const step = t => {
+      const dt = Math.min(48, t - t0); t0 = t;
+      cur += v * dt; v *= Math.pow(0.9, dt / 16);
+      setEnd(cur);
+      if (Math.abs(v) * 16 > msPerPx() * 0.5 && cur < Date.now() - 30000) anim.current = requestAnimationFrame(step);
+    };
+    if (Math.abs(p.vx) > 0.15) anim.current = requestAnimationFrame(step);
+  };
+  const onWheel = e => {
+    // le pave tactile (ou maj + molette) : un glissement horizontal deplace la fenetre
+    if (hours >= 168 || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+    cancelAnimationFrame(anim.current);
+    setEnd((endRef.current || Date.now()) + e.deltaX * msPerPx());
+  };
+  useEffect(() => () => cancelAnimationFrame(anim.current), []);
+
   const d = useMemo(() => {
     if (!pts) return null;
     const hum = amsLines(pts, 0), amsT = amsLines(pts, 1);
@@ -95,20 +236,25 @@ export default function MachineStats() {
   }, [pts]);
 
   return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-      {PERIODS.map(([h, l]) => <button key={h} type="button" onClick={() => choosePeriod(h)}
-        style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 800, cursor: "pointer",
-          border: hours === h ? "none" : "1px solid var(--border)", color: hours === h ? "#fff" : "var(--text2)",
-          background: hours === h ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)" }}>{l}</button>)}
+    {sheet?.kind === "print" && <PrintDetail p={sheet.data} onClose={() => setSheet(null)} onDelete={() => setSheet(null)} onChanged={() => {}}/>}
+    {sheet?.kind === "spool" && <FilamentSheetFromSpool filamentId={sheet.filamentId} spoolId={sheet.spoolId} filamentColorHex={sheet.hex}
+      onClose={() => setSheet(null)}/>}
+    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <Periods value={hours} onChange={choosePeriod}/>
       <span style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
         <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: "rgba(59,130,246,.18)", verticalAlign: "-1px", marginRight: 5 }}/>en impression</span>
     </div>
-    {hours < 168 && <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <button type="button" onClick={() => step(-1)} disabled={!canBack} aria-label="Fenêtre précédente" data-tip="Plus tôt" style={nav(canBack)}>‹</button>
-      <span style={{ flex: 1, minWidth: 0, textAlign: "center", fontSize: 12.5, fontWeight: 800, color: end ? "var(--text)" : "var(--text2)",
-        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{winLabel(from, to)}{end ? "" : " · maintenant"}</span>
-      <button type="button" onClick={() => step(1)} disabled={!end} aria-label="Fenêtre suivante" data-tip="Plus tard" style={nav(!!end)}>›</button>
-      {end && <button type="button" onClick={() => setEnd(null)} style={{ ...nav(true), width: "auto", padding: "0 12px", fontSize: 12.5 }}>Maintenant</button>}
+    {hours < 168 && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 26 }}>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {winLabel(from, to)}</span>
+        {end ? <button type="button" onClick={() => { cancelAnimationFrame(anim.current); setEndRaw(null); }} style={{ flexShrink: 0, padding: "4px 12px", borderRadius: 20,
+          border: "none", cursor: "pointer", fontSize: 12, fontWeight: 900, color: "#fff", background: "linear-gradient(135deg, #0EA5E9, #6366F1)",
+          boxShadow: "0 6px 14px -8px #6366F1" }}>Maintenant ⟶</button>
+          : <span style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 900, color: "#22C55E" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", boxShadow: "0 0 0 3px rgba(34,197,94,.2)" }}/>en direct</span>}
+      </div>
+      <Navigator hours={hours} end={end} onEnd={t => { cancelAnimationFrame(anim.current); setEnd(t); }}/>
     </div>}
 
     {pts == null ? <div style={{ padding: 30, textAlign: "center", fontSize: 13, fontWeight: 700, color: "var(--muted)" }}>Chargement des relevés…</div>
@@ -124,11 +270,15 @@ export default function MachineStats() {
         <Kpi v={d.printed >= 3600000 ? `${n1(d.printed / 3600000)} h` : `${Math.round(d.printed / 60000)} min`} l="en impression" c="#3B82F6"/>
       </div>
 
+      {/* tout ce qui suit glisse dans le temps a l'horizontale (souris, doigt, pave tactile) */}
+      <div ref={panRef} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onWheel={onWheel}
+        onClickCapture={e => { if (panRef.current?.dataset.dragged) { e.stopPropagation(); e.preventDefault(); } }}
+        style={{ display: "flex", flexDirection: "column", gap: 12, touchAction: "pan-y", cursor: hours < 168 ? "grab" : undefined }}>
       <div style={card("#F43F5E")}>
         <div style={{ ...title("#E11D48"), display: "flex", alignItems: "center", gap: 8 }}>🕒 Chronologie
           {events?.length ? <span style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", letterSpacing: 0, textTransform: "none" }}>
             {events.length} événement{events.length > 1 ? "s" : ""}</span> : null}</div>
-        <MachineTimeline events={events} points={pts} hours={hours} end={end} pick={pick} onPick={setPick} onZoom={zoomTo}/>
+        <MachineTimeline events={events} points={pts} hours={hours} end={end} pick={pick} onPick={setPick} onZoom={zoomTo} onOpen={openSheet}/>
       </div>
       {d.heat.length > 0 && <div style={card("#F97316")}>
         <div style={title("#EA580C")}>🔥 Buse et plateau</div>
@@ -158,6 +308,7 @@ export default function MachineStats() {
         <SensorLegend lines={d.fans} unit="%"/>
         <SensorChart lines={d.fans} points={pts} hours={hours} end={end} mark={pick} height={160} unit="%" lo={0} hi={100}/>
       </div>}
+      </div>
     </>}
   </div>;
 }

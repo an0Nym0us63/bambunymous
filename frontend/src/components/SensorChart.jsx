@@ -110,7 +110,7 @@ export function SensorChart({ lines, points, hours = 24, height = 180, unit = ""
   // des reperes ronds a l'heure locale : minuit sur plusieurs jours, sinon toutes les 4 ou 6 heures
   const near = at == null ? null : lines.map(l => {
     let best = null;
-    for (const p of l.pts) if (p.t >= from && (!best || Math.abs(p.t - at) < Math.abs(best.t - at))) best = p;
+    for (const p of l.pts) if (p.t >= from && p.t <= to && (!best || Math.abs(p.t - at) < Math.abs(best.t - at))) best = p;
     return best && Math.abs(best.t - at) <= gapOf(l.pts) ? { l, p: best } : null;
   }).filter(Boolean);
   const move = e => {
@@ -122,7 +122,8 @@ export function SensorChart({ lines, points, hours = 24, height = 180, unit = ""
   return <div ref={ref} onMouseMove={move} onMouseLeave={() => setAt(null)} onTouchStart={move} onTouchMove={move} onTouchEnd={() => setAt(null)}
     style={{ position: "relative", height, touchAction: "pan-y", userSelect: "none" }}>
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} aria-hidden="true">
-      {bands.map(([a, c], i) => <rect key={i} x={x(Math.max(a, from))} y={0} width={Math.max(0.3, x(c) - x(Math.max(a, from)))} height={H - 18}
+      {/* les releves vont au-dela de la fenetre (de quoi la faire glisser) : seules les bandes qui y entrent */}
+      {bands.filter(([a, c]) => c > from && a < to).map(([a, c], i) => <rect key={i} x={x(Math.max(a, from))} y={0} width={Math.max(0.3, x(Math.min(c, to)) - x(Math.max(a, from)))} height={H - 18}
         fill="rgba(59,130,246,.10)"/>)}
       {grid.map(v => <line key={v} x1={0} x2={W} y1={y(v)} y2={y(v)} stroke="var(--border)" strokeWidth="1" vectorEffect="non-scaling-stroke" strokeDasharray="3 4"/>)}
       {[...lines.filter(l => l.dash), ...lines.filter(l => !l.dash)].map(l => paths(l.pts.filter(p => p.t >= from && p.t <= to), x, y).map((seg, i) => <React.Fragment key={`${l.key}${i}`}>
