@@ -401,6 +401,14 @@ async def _printer_conf():
         model, model_id = getattr(st, "printer_model", "") or "", getattr(st, "model_id", "") or ""
     except Exception:
         model = model_id = ""
+    if not model:
+        # l'etat MQTT ne porte pas le nom du modele (03/11/2026 : toujours vide, la camera essayait les deux methodes) :
+        # celui de l'appli (Parametres, sinon numero de serie, sinon historique), garde 5 min
+        try:
+            from .printer import _model
+            model = await _model() or ""
+        except Exception:
+            pass
     return ip, code, model, model_id
 
 
@@ -472,8 +480,8 @@ async def camera_stats():
     except (AttributeError, OSError):
         pass
     try:
-        st = get_state()
-        out["modele"] = {"nom": getattr(st, "printer_model", "") or "", "id": getattr(st, "model_id", "") or ""}
+        _ip, _code, nom, mid = await _printer_conf()
+        out["modele"] = {"nom": nom, "id": mid}
         out["mode_choisi"] = _select_grab(out["modele"]["nom"], out["modele"]["id"])
     except Exception:
         pass
