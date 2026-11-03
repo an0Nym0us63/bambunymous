@@ -1,9 +1,55 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import CardHelp from "./CardHelp";
 import { Trash2 } from "lucide-react";
 import client from "../api/client";
 import { showAlert } from "../utils/dialog";
 import { reloadSpoolTares } from "./TarePicker";
+import { FSheet, fBtn } from "./FicheKit";
+import SpoolSVG from "./SpoolSVG";
+import { FilamentSheetFromSpool } from "./LazySheets";
+import { parseColorsList, finishOf } from "../utils/colors";
+import { egg } from "../eggs";
+
+// (03/11/2026) les bobines en stock qui utilisent un support : celles dont le filament y est lie
+function TareUsers({ name, weight, spools, onClose }) {
+  const [open, setOpen] = useState(null);
+  const list = spools.filter(x => (x.filament_spool_tare_name || "") === name);
+  const byFil = [];
+  for (const x of list) {
+    let g = byFil.find(f => f.id === x.filament_id);
+    if (!g) byFil.push(g = { id: x.filament_id, s: x, list: [] });
+    g.list.push(x);
+  }
+  return createPortal(<>
+    <FSheet onClose={onClose} z={1000} bottom={<button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Fermer</button>}>
+      <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>🧺 {name}</div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>
+            Support de {weight} g · {list.length} bobine{list.length > 1 ? "s" : ""} en stock · {byFil.length} filament{byFil.length > 1 ? "s" : ""}</div>
+        </div>
+        {!list.length && <div style={{ padding: 20, textAlign: "center", fontSize: 13, fontWeight: 700, color: "var(--muted)" }}>
+          Aucune bobine en stock n'utilise ce support.</div>}
+        {byFil.map(g => <div key={g.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>
+            {g.s.filament_translated_name || g.s.filament_name} · {[g.s.filament_fila_type || g.s.filament_material, g.s.filament_manufacturer].filter(Boolean).join(" · ")}</div>
+          {g.list.map(x => <button key={x.id} type="button" onClick={() => setOpen(x)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
+            borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer", textAlign: "left", color: "var(--text)" }}>
+            <SpoolSVG colors={parseColorsList(x.filament_color, x.filament_colors_array)} finish={finishOf(x)} size={34} type={x.filament_multicolor_type}/>
+            <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: 13, fontWeight: 900 }}>Bobine #{x.id}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {[x.remaining_weight_g != null ? `${Math.round(x.remaining_weight_g)} g` : null, x.ams_tray || x.location].filter(Boolean).join(" · ")}</span>
+            </span>
+            <span style={{ color: "var(--muted)" }}>›</span>
+          </button>)}
+        </div>)}
+      </div>
+    </FSheet>
+    {open && <FilamentSheetFromSpool filamentId={open.filament_id} spoolId={open.id} filamentColorHex={open.filament_color} onClose={() => setOpen(null)}/>}
+  </>, document.body);
+}
 
 // Modeles de support vide : un nom (marque, modele de bobine) et son poids.
 // Proposes en liste a la pesee et sur la fiche filament (« Poids support »).
@@ -12,6 +58,12 @@ export default function SpoolTaresCard({ card, cardTitle }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [bilan, setBilan] = useState("");
+  // les bobines en stock : combien utilisent chaque support, et lesquelles (au toucher)
+  const [spools, setSpools] = useState(null);
+  const [users, setUsers] = useState(null);
+  useEffect(() => { client.get("/filaments/spools", { params: { archived: false } }).then(({ data }) => setSpools(Array.isArray(data) ? data : data?.items || []))
+    .catch(() => setSpools([])); }, []);
+  const count = useMemo(() => { const c = {}; for (const x of spools || []) if (x.filament_spool_tare_name) c[x.filament_spool_tare_name] = (c[x.filament_spool_tare_name] || 0) + 1; return c; }, [spools]);
 
   // from = nom d'origine de la ligne : un renommage garde les filaments lies.
   const toRows = tares => tares.map(t => ({ name: t.name, weight: String(t.weight_g), from: t.name }));
@@ -53,6 +105,11 @@ export default function SpoolTaresCard({ card, cardTitle }) {
         <div key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
           <input value={r.name} onChange={e => set(i, "name", e.target.value)} placeholder="Bambu Lab"
             maxLength={60} style={{ ...inp, flex:1, minWidth:0 }}/>
+          {/* les bobines qui l'utilisent (sous son nom enregistre) */}
+          {spools && r.from && <button type="button" onClick={() => { setUsers(r); egg("support_bobines"); }} data-tip="Les bobines en stock qui utilisent ce support"
+            style={{ flexShrink:0, padding:"4px 9px", borderRadius:20, cursor:"pointer", fontSize:11.5, fontWeight:800, whiteSpace:"nowrap",
+              border:"1px solid var(--border)", background: count[r.from] ? "rgba(59,130,246,.10)" : "var(--surface2)", color: count[r.from] ? "#3b82f6" : "var(--muted)" }}>
+            🧵 {count[r.from] || 0}</button>}
           <span style={{ display:"inline-flex", alignItems:"center", gap:6, flexShrink:0 }}>
             <input value={r.weight} onChange={e => set(i, "weight", e.target.value)} inputMode="decimal"
               placeholder="250" style={{ ...inp, width:64, textAlign:"right" }}/>
@@ -78,6 +135,7 @@ export default function SpoolTaresCard({ card, cardTitle }) {
         </button>
       </div>
       {bilan && <p style={{ fontSize:12, color:"#22c55e", margin:"10px 0 0" }}>{bilan}</p>}
+      {users && <TareUsers name={users.from} weight={users.weight} spools={spools || []} onClose={() => setUsers(null)}/>}
     </div>
   );
 }
