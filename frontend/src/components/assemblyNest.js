@@ -480,7 +480,13 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   if (!best) return blocked ? { blocked } : (mode === "nest" ? { M: new THREE.Matrix4(), sink: 0, moved: 0, turned: 0, contact: P.clone() } : null);
   const d = dOf(best);
   if (mode === "nest" && here !== Infinity && d > here - 0.05) return { M: new THREE.Matrix4(), sink: 0, moved: 0, turned: 0, contact: P.clone() };
-  const cov0 = mode === "align" ? iou(face, nu, nv, h, foot, 0, 0, 0) : 0, cov1 = mode === "align" ? iou(face, nu, nv, h, foot, best.th, best.su, best.sv) : 0;
+  // (03/11/2026) ce qui est dit et juge : la part de la face collee qui repose sur la face qui porte (avant : leur
+  // recouvrement mutuel, qui tombait sous 30 % des que la face qui porte etait bien plus grande que la piece -- une
+  // plaque sur le dessus d'un cadre : « pas de face plane ») ; et le gain de la note (tourner pour se mettre d'equerre
+  // ne change pas ce qui repose, mais compte)
+  const cov0 = mode === "align" ? onFace(face, nu, nv, h, foot, 0, 0, 0) : 0, cov1 = mode === "align" ? onFace(face, nu, nv, h, foot, best.th, best.su, best.sv) : 0;
+  // (la place seule : le chemin parcouru, recentrage compris, ne compte pas contre elle)
+  const gain = mode === "align" ? score(2, 0, 0, 0) - (score(2, best.th, best.su, best.sv) - 0.05 * Math.hypot(best.su, best.sv) - 0.004 * turn(best.th)) : 0;
   const clash1 = mode === "align" ? clash(H, nu, nv, h, cells, best.th, best.su, best.sv)[0] : 0;
   const M = matOf(best, d);
   // le point de contact : sous le centre de la piece, sur le dessus du support
@@ -488,5 +494,5 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   const zc = (i >= 0 && j >= 0 && i < nu && j < nv && !Number.isNaN(H[j * nu + i])) ? H[j * nu + i] : d;
   const contact = P.clone().addScaledVector(u, cu + best.su).addScaledVector(v, cv + best.sv).addScaledVector(w, zc);
   const tr = best.th * 180 / Math.PI;
-  return { M, sink: (here === Infinity ? 0 : here) - d, moved: Math.hypot(best.su, best.sv), turned: ((tr + 540) % 360) - 180, contact, cov0, cov1, clash: clash1, blocked };
+  return { M, sink: (here === Infinity ? 0 : here) - d, moved: Math.hypot(best.su, best.sv), turned: ((tr + 540) % 360) - 180, contact, cov0, cov1, gain, clash: clash1, blocked };
 }
