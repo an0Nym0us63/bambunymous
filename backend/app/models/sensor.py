@@ -33,3 +33,18 @@ class SensorSample(Base):
     ams      = Column(Text, nullable=True)      # JSON {ams_id: [humidite %, temperature °C]}
 
     __table_args__ = (Index("idx_sensor_samples_ts", "ts"),)
+
+
+class MachineEvent(Base):
+    """Un evenement de la machine (03/11/2026) : impression lancee ou finie, filament, aiguillage, buse du rack,
+    porte, alerte, sechage… Garde 7 jours comme les releves (services/machine_events.py)."""
+    __tablename__ = "machine_events"
+
+    id     = Column(Integer, primary_key=True, autoincrement=True)
+    ts     = Column(DateTime, nullable=False, default=datetime.utcnow)
+    kind   = Column(Text, nullable=False)
+    title  = Column(Text, nullable=False)
+    detail = Column(Text, nullable=True)
+    extra  = Column(Text, nullable=True)       # JSON : couleur du filament, emplacement d'avant…
+
+    __table_args__ = (Index("idx_machine_events_ts", "ts"),)

@@ -130,30 +130,34 @@ async def purge(now: datetime | None = None) -> int:
 
 
 async def loop() -> None:
-    """La boucle de fond (lancee au demarrage)."""
+    """La boucle de fond (lancee au demarrage) : toutes les 30 s, les evenements en attente ecrits ; un releve quand
+    son heure est venue (5 min, 1 min en impression) ; la purge chaque heure."""
+    import time
     from ..core import tasks as _tasks
     from ..core.mqtt import get_state
+    from . import machine_events as EV
     await load()
-    purged = 0.0
+    purged = last = 0.0
     while True:
-        wait = EVERY_IDLE
         try:
+            await EV.flush()
             s = get_state()
-            snap = snapshot(s)
-            if snap:
-                await record(snap)
-                if snap["printing"]:
-                    wait = EVERY_PRINTING
-            import time
+            due = EVERY_PRINTING if _printing(s) else EVERY_IDLE
+            if time.time() - last >= due - 1:
+                snap = snapshot(s)
+                if snap:
+                    await record(snap)
+                    last = time.time()
             if time.time() - purged > 3600:
                 purged = time.time()
                 n = await purge()
+                await EV.purge(KEEP_DAYS)
                 if n:
                     logger.debug(f"[CAPTEURS] {n} releve(s) de plus de {KEEP_DAYS} jours effaces")
         except Exception:
             _tasks.error("sensors")
             logger.exception("[CAPTEURS] releve")
-        await _tasks.sleep("sensors", wait)
+        await _tasks.sleep("sensors", 30)
 
 
 async def history(hours: float = 24, end: datetime | None = None) -> dict:
@@ -170,11 +174,13 @@ async def history(hours: float = 24, end: datetime | None = None) -> dict:
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(SensorSample).where(SensorSample.ts >= since, SensorSample.ts <= end)
                                  .order_by(SensorSample.ts))).scalars().all()
+    from .machine_events import between
+    events = await between(since, end)
     pts = [{"t": r.ts.isoformat() + "Z", "printing": bool(r.printing), "nozzle": r.nozzle, "nozzle2": r.nozzle2,
             "bed": r.bed, "chamber": r.chamber, **{k: getattr(r, k) for k in EXTRA},
             "ams": json.loads(r.ams) if r.ams else {}} for r in rows]
     if len(pts) <= MAX_POINTS:
-        return {"points": pts, "hours": hours, "end": end.isoformat() + "Z"}
+        return {"points": pts, "events": events, "hours": hours, "end": end.isoformat() + "Z"}
     step = -(-len(pts) // MAX_POINTS)
     out, i = [], 0
     while i < len(pts):
@@ -185,7 +191,7 @@ async def history(hours: float = 24, end: datetime | None = None) -> dict:
             j += 1
         out.append(_mean(chunk))
         i = j
-    return {"points": out, "hours": hours, "end": end.isoformat() + "Z"}
+    return {"points": out, "events": events, "hours": hours, "end": end.isoformat() + "Z"}
 
 
 def _gap(a: str, b: str) -> float:

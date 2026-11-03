@@ -27,7 +27,7 @@ CATALOG = {
     "notify_extra": ("Points d'attention", "Alertes, résumé de la semaine, imprimante au repos : toutes les 15 min.", "Notifications"),
     "update":       ("Nouvelle version", "Regarde si une nouvelle version de l'appli est publiée : toutes les 6 h.", "Notifications"),
     "ach_watch":    ("Relevés des succès", "Relève l'imprimante et les copains pour les succès.", "Succès"),
-    "sensors":      ("Relevés des capteurs", "Humidité et température des AMS, buses, plateau, chambre : toutes les 5 min (chaque minute en impression), gardés 7 jours.", "Impressions"),
+    "sensors":      ("Relevés des capteurs", "Humidité et température des AMS, buses, plateau, chambre : toutes les 5 min (chaque minute en impression), et les événements de la machine ; gardés 7 jours.", "Impressions"),
     "ach_warm":     ("Calcul des succès", "Prépare le gros calcul des succès au démarrage.", "Succès"),
     "db_upkeep":    ("Entretien de la base", "Statistiques au besoin, puis « PRAGMA optimize » : chaque heure.", "Serveur"),
     "loop_watch":   ("Surveillance du serveur", "Relève ce qui fige le serveur et la charge du processeur (Vitesse du serveur).", "Serveur"),

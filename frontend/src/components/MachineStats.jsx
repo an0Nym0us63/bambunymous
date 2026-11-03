@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useSensorHistory } from "../store/sensors";
+import { useSensorHistory, useSensorEvents } from "../store/sensors";
+import MachineTimeline from "./MachineTimeline";
 import { SensorChart, SensorLegend, amsLines, heatLines, fanLines, seriesOf } from "./SensorChart";
 import { egg } from "../eggs";
 
@@ -57,13 +58,23 @@ export default function MachineStats() {
   // jamais avant ce que le serveur garde ni apres maintenant
   const [end, setEnd] = useState(null);
   const pts = useSensorHistory(hours, true, end);
+  const events = useSensorEvents(hours, end, pts);
+  // l'evenement choisi dans la chronologie : son heure sur chaque courbe
+  const [pick, setPick] = useState(null);
+  // des evenements reunis sur la frise : la plus petite fenetre qui les contient (3 h au moins), centree sur eux
+  const zoomTo = (a, b) => {
+    const h = PERIODS.map(p => p[0]).find(x => x * 3600000 >= (b - a) * 1.4 && x < hours) || 3;
+    const e = Math.round(((a + b) / 2 + h * 1800000) / 60000) * 60000;
+    setHours(h);
+    setEnd(e >= Date.now() - 60000 ? null : e);
+  };
   const to = end || Date.now(), from = to - hours * 3600000;
   const canBack = from > Date.now() - KEEP_MS + 60000;
   const step = dir => {
     const t = Math.round((to + dir * hours * 3600000) / 60000) * 60000;
     setEnd(t >= Date.now() - 60000 ? null : Math.max(Date.now() - KEEP_MS + hours * 3600000, t));
   };
-  const pick = h => { setHours(h); if (end && end - h * 3600000 < Date.now() - KEEP_MS) setEnd(Date.now() - KEEP_MS + h * 3600000); };
+  const choosePeriod = h => { setHours(h); if (end && end - h * 3600000 < Date.now() - KEEP_MS) setEnd(Date.now() - KEEP_MS + h * 3600000); };
   useEffect(() => { egg("machine_vue"); }, []);
   const d = useMemo(() => {
     if (!pts) return null;
@@ -85,7 +96,7 @@ export default function MachineStats() {
 
   return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
     <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-      {PERIODS.map(([h, l]) => <button key={h} type="button" onClick={() => pick(h)}
+      {PERIODS.map(([h, l]) => <button key={h} type="button" onClick={() => choosePeriod(h)}
         style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 800, cursor: "pointer",
           border: hours === h ? "none" : "1px solid var(--border)", color: hours === h ? "#fff" : "var(--text2)",
           background: hours === h ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface)" }}>{l}</button>)}
@@ -113,33 +124,39 @@ export default function MachineStats() {
         <Kpi v={d.printed >= 3600000 ? `${n1(d.printed / 3600000)} h` : `${Math.round(d.printed / 60000)} min`} l="en impression" c="#3B82F6"/>
       </div>
 
+      <div style={card("#F43F5E")}>
+        <div style={{ ...title("#E11D48"), display: "flex", alignItems: "center", gap: 8 }}>🕒 Chronologie
+          {events?.length ? <span style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", letterSpacing: 0, textTransform: "none" }}>
+            {events.length} événement{events.length > 1 ? "s" : ""}</span> : null}</div>
+        <MachineTimeline events={events} points={pts} hours={hours} end={end} pick={pick} onPick={setPick} onZoom={zoomTo}/>
+      </div>
       {d.heat.length > 0 && <div style={card("#F97316")}>
         <div style={title("#EA580C")}>🔥 Buse et plateau</div>
         <SensorLegend lines={d.heat} unit="°"/>
-        <SensorChart lines={d.heat} points={pts} hours={hours} end={end} height={200} unit="°" lo={0}/>
+        <SensorChart lines={d.heat} points={pts} hours={hours} end={end} mark={pick} height={200} unit="°" lo={0}/>
         <Ranges lines={d.heat.filter(l => !l.dash)} unit="°"/>
       </div>}
       {d.ch.length > 0 && <div style={card("#3B82F6")}>
         <div style={title("#2563EB")}>📦 Chambre</div>
         {d.ch.some(l => l.dash) && <SensorLegend lines={d.ch} unit="°"/>}
-        <SensorChart lines={d.ch} points={pts} hours={hours} end={end} height={150} unit="°"/>
+        <SensorChart lines={d.ch} points={pts} hours={hours} end={end} mark={pick} height={150} unit="°"/>
         <Ranges lines={d.ch.filter(l => !l.dash)} unit="°"/>
       </div>}
       {d.hum.length > 0 && <div style={card("#06B6D4")}>
         <div style={title("#0891B2")}>💧 Humidité des AMS</div>
         <SensorLegend lines={d.hum} unit="%"/>
-        <SensorChart lines={d.hum} points={pts} hours={hours} end={end} height={190} unit="%"/>
+        <SensorChart lines={d.hum} points={pts} hours={hours} end={end} mark={pick} height={190} unit="%"/>
         <Ranges lines={d.hum} unit="%"/>
       </div>}
       {d.amsT.length > 0 && <div style={card("#8B5CF6")}>
         <div style={title("#7C3AED")}>🌡️ Température des AMS</div>
         <SensorLegend lines={d.amsT} unit="°"/>
-        <SensorChart lines={d.amsT} points={pts} hours={hours} end={end} height={160} unit="°"/>
+        <SensorChart lines={d.amsT} points={pts} hours={hours} end={end} mark={pick} height={160} unit="°"/>
       </div>}
       {d.fans.length > 0 && <div style={card("#14B8A6")}>
         <div style={title("#0D9488")}>🌀 Ventilateurs</div>
         <SensorLegend lines={d.fans} unit="%"/>
-        <SensorChart lines={d.fans} points={pts} hours={hours} end={end} height={160} unit="%" lo={0} hi={100}/>
+        <SensorChart lines={d.fans} points={pts} hours={hours} end={end} mark={pick} height={160} unit="%" lo={0} hi={100}/>
       </div>}
     </>}
   </div>;

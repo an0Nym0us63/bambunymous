@@ -70,7 +70,17 @@ export function SensorSpark({ lines, hours = 24, height = 34, lo, hi }) {
 const fmtH = (t, days) => new Date(t).toLocaleString("fr-FR", days > 2 ? { weekday: "short", day: "numeric" } : days > 1 ? { weekday: "short", hour: "2-digit" } : { hour: "2-digit", minute: "2-digit" });
 
 /** La grande courbe : grille, heures ou jours en bas, les impressions en bandes pales, la valeur de chaque serie au doigt. */
-export function SensorChart({ lines, points, hours = 24, height = 180, unit = "", lo, hi, end = null }) {
+// des reperes ronds a l'heure locale, comptes depuis minuit : 30 min sur 3 h, 1 h sur 6 h, 2 h sur 12 h, 4 h sur un
+// jour, 6 h sur deux, minuit au-dela
+export function timeTicks(from, to, hours) {
+  const out = [], tM = (hours <= 3 ? 0.5 : hours <= 6 ? 1 : hours <= 12 ? 2 : hours <= 24 ? 4 : hours <= 48 ? 6 : 24) * 3600000;
+  const m0 = new Date(from); m0.setHours(0, 0, 0, 0);
+  for (let t = m0.getTime(); t < to; t += tM) if (t > from) out.push(t);
+  return out;
+}
+export const fmtTick = (t, hours) => fmtH(t, hours / 24);
+
+export function SensorChart({ lines, points, hours = 24, height = 180, unit = "", lo, hi, end = null, mark = null }) {
   const ref = useRef(null);
   const [at, setAt] = useState(null);
   const to = end || Date.now(), from = to - hours * 3600000;
@@ -96,13 +106,8 @@ export function SensorChart({ lines, points, hours = 24, height = 180, unit = ""
   const grid = [];
   for (let v = Math.ceil(b[0] / step) * step; v <= b[1]; v += step) grid.push(v);
   const days = hours / 24;
-  const ticks = [];
+  const ticks = timeTicks(from, to, hours);
   // des reperes ronds a l'heure locale : minuit sur plusieurs jours, sinon toutes les 4 ou 6 heures
-  // des reperes ronds a l'heure locale, comptes depuis minuit : 30 min sur 3 h, 1 h sur 6 h, 2 h sur 12 h, 4 h sur un
-  // jour, 6 h sur deux, minuit au-dela
-  const tM = (hours <= 3 ? 0.5 : hours <= 6 ? 1 : hours <= 12 ? 2 : hours <= 24 ? 4 : hours <= 48 ? 6 : 24) * 3600000;
-  const m0 = new Date(from); m0.setHours(0, 0, 0, 0);
-  for (let t = m0.getTime(); t < to; t += tM) if (t > from) ticks.push(t);
   const near = at == null ? null : lines.map(l => {
     let best = null;
     for (const p of l.pts) if (p.t >= from && (!best || Math.abs(p.t - at) < Math.abs(best.t - at))) best = p;
@@ -125,6 +130,9 @@ export function SensorChart({ lines, points, hours = 24, height = 180, unit = ""
           vectorEffect="non-scaling-stroke" opacity={l.dash ? 0.22 : 1}/>
       </React.Fragment>))}
       {at != null && <line x1={x(at)} x2={x(at)} y1={0} y2={H - 18} stroke="var(--muted)" strokeWidth="1" vectorEffect="non-scaling-stroke"/>}
+      {/* l'evenement choisi dans la chronologie : son heure sur chaque courbe */}
+      {mark != null && mark >= from && mark <= to && <line x1={x(mark)} x2={x(mark)} y1={0} y2={H - 18} stroke="#F43F5E" strokeWidth="1.5"
+        strokeDasharray="4 3" vectorEffect="non-scaling-stroke"/>}
     </svg>
     {grid.map(v => <span key={v} style={{ position: "absolute", left: 2, top: y(v) - 13, fontSize: 9.5, fontWeight: 800, color: "var(--muted)" }}>{v}{unit}</span>)}
     {ticks.map(t => <span key={t} style={{ position: "absolute", bottom: 0, left: `${x(t)}%`, transform: "translateX(-50%)", fontSize: 9.5, fontWeight: 800,

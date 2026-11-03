@@ -13,11 +13,16 @@ const _cache = {};   // "hours|end" -> { at, p, v }
 function load(hours, end) {
   const key = `${hours}|${end || ""}`, c = _cache[key];
   if (c && (end || Date.now() - c.at < every(hours))) return c.p;
-  const e = { at: Date.now(), v: c?.v ?? null };
+  const e = { at: Date.now(), v: c?.v ?? null, ev: c?.ev ?? null };
   const params = end ? { hours, end: new Date(end).toISOString() } : { hours };
-  e.p = client.get("/sensors/history", { params }).then(r => (e.v = r.data?.points || [])).catch(() => { e.at = 0; if (end) delete _cache[key]; return e.v; });
+  e.p = client.get("/sensors/history", { params }).then(r => { e.ev = r.data?.events || []; return (e.v = r.data?.points || []); }).catch(() => { e.at = 0; if (end) delete _cache[key]; return e.v; });
   _cache[key] = e;
   return e.p;
+}
+
+/** Les evenements de la machine de la meme fenetre (la chronologie), une fois les releves arrives. */
+export function useSensorEvents(hours = 24, end = null, points = null) {
+  return points ? _cache[`${hours}|${end || ""}`]?.ev ?? [] : null;
 }
 
 /** Les releves des dernieres heures : [{t (Date), printing, nozzle, nozzle2, bed, chamber, ams: {id: [h, t]}}], ou null. */
