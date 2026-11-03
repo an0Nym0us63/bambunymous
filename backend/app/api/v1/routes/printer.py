@@ -5,6 +5,7 @@ from ....core.mqtt import get_state
 from ....db.session import AsyncSessionLocal
 from ....services.hms import decode_hms
 from ....services import sensors as _sensors
+from ....services.printer_details import ams_activity as _ams_activity
 from .auth import get_current_user, require_admin
 
 
@@ -235,6 +236,8 @@ class PrinterStatusOut(BaseModel):
     target_chamber_temp: float = 0.0
     # les ventilateurs en % ({"part", "aux", "chamber", "head"}, ceux que la machine dit seulement ; 03/11/2026)
     fans: dict = {}
+    # ce que fait l'AMS (chargement, dechargement et leur etape, lecture RFID…) ; None au repos (03/11/2026)
+    ams_activity: Optional[dict] = None
     door_open: Optional[bool] = None      # None : l'imprimante ne le dit pas
     light_on: Optional[bool] = None       # lumiere de la chambre
     top_open: Optional[bool] = None       # capot du haut (H2) : « stat », sinon ses alertes HMS
@@ -483,6 +486,7 @@ async def printer_status(_: str = Depends(get_current_user)):
         chamber_temp=s.chamber_temp,
         target_chamber_temp=getattr(s, "target_chamber_temp", 0.0) or 0.0,
         fans=_sensors.fans_of(s),
+        ams_activity=_ams_activity(s),
         door_open=_door(s),
         light_on=getattr(s, "light_on", None),
         top_open=_top(s),

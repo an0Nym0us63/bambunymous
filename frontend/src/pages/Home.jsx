@@ -999,10 +999,30 @@ function AmsHub({ st, fitH, o, rackTile, rackFull }) {
     border: `1px solid ${on ? "rgba(59,130,246,0.5)" : "var(--border)"}`, background: on ? "rgba(59,130,246,0.1)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--muted)" }}>
     {dot && <span style={{ width: 9, height: 9, borderRadius: "50%", background: dot, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2)" }}/>}{label}<ArrowLeftRight size={11}/></button>;
   const dryN = list.filter(isDrying).length;
+  // ce que fait l'AMS (03/11/2026) : chargement, dechargement (et son etape), lecture RFID, calibration… a la place du
+  // filament en cours, le temps que ca dure
+  const doing = st?.ams_activity;
+  const DOING_C = { load: "#3B82F6", unload: "#F59E0B", rfid: "#8B5CF6", calib: "#14B8A6", check: "#14B8A6", debug: "#64748B" };
+  const dc = doing && (DOING_C[doing.kind] || "#3B82F6");
   const head = !low && (
     <div style={{ display: "flex", alignItems: "center", gap: 8, height: 26, minWidth: 0, flexShrink: 0 }}>
       <span style={{ flex: 1, minWidth: 0, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden" }}>
-        {actT ? <><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#3b82f6", animation: "livePulse 2s infinite" }}/>
+        {doing ? <span data-tip={[doing.title, doing.target, doing.step, doing.count ? `étape ${doing.index} sur ${doing.count}` : null].filter(Boolean).join(" · ")}
+          style={{ display: "inline-flex", alignItems: "center", gap: 7, minWidth: 0, padding: "2px 10px 2px 4px", borderRadius: 20,
+            background: `linear-gradient(90deg, color-mix(in srgb, ${dc} 18%, transparent), transparent)`, color: dc }}>
+          <span style={{ width: 18, height: 18, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+            background: dc, color: "#fff", fontSize: 11, animation: "spin 1.6s linear infinite" }}>↻</span>
+          {/* l'activite, et son etape dessous (sur une demi-colonne, l'etape n'avait plus de place a cote) */}
+          <span style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.15, overflow: "hidden" }}>
+            <span style={{ fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis" }}>{doing.title}{doing.target ? ` → ${doing.target}` : ""}</span>
+            {doing.step && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis" }}>{doing.step}</span>}
+          </span>
+          {/* les etapes : une pastille par etape, pleines jusqu'a celle en cours */}
+          {doing.count > 0 && <span aria-hidden="true" style={{ display: "inline-flex", gap: 3, flexShrink: 0 }}>
+            {Array.from({ length: doing.count }, (_, i) => <span key={i} style={{ width: i + 1 === doing.index ? 12 : 5, height: 5, borderRadius: 3,
+              background: i < doing.index ? dc : "var(--border)", transition: "width .3s", animation: i + 1 === doing.index ? "livePulse 1.4s infinite" : undefined }}/>)}</span>}
+        </span>
+        : actT ? <><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#3b82f6", animation: "livePulse 2s infinite" }}/>
           <span style={{ color: "#3b82f6" }}>{slotLabel(act, actTray)}</span>
           <span style={{ width: 11, height: 11, borderRadius: 4, ...(trayBg(actT, null, 11) || { background: "var(--border)" }), border: "1px solid rgba(0,0,0,0.2)" }}/>
           <span style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.15, overflow: "hidden" }}>
@@ -1011,7 +1031,7 @@ function AmsHub({ st, fitH, o, rackTile, rackFull }) {
               overflow: "hidden", textOverflow: "ellipsis" }}>{[actT.spool_info?.fila_type || actT.spool_info?.material || actT.filament_type, actT.spool_info?.brand].filter(Boolean).join(" · ")}</span>}
           </span></>
           : <span style={{ color: "var(--muted)" }}>{list.filter(a => a.id !== 255).length} unités · {list.flatMap(a => a.trays || []).filter(t => trayHex(t)).length} bobines</span>}
-        {dryN > 0 && <span style={{ color: "#ea580c" }}>· {dryN} sèche{dryN > 1 ? "nt" : ""}</span>}
+        {dryN > 0 && !doing && <span style={{ color: "#ea580c" }}>· {dryN} sèche{dryN > 1 ? "nt" : ""}</span>}
       </span>
       {hasRack && pill(false, view === "rack" ? "AMS" : headNum ? `Rack · buse ${headNum}` : "Rack", null, () => go(view === "rack" ? "ams" : "rack"))}
     </div>
@@ -1688,7 +1708,8 @@ function PrinterPopup({ status, img, name, onClose }) {
         </>}
 
         {amsList.length > 0 && <>
-          {section("AMS", Disc3, "#8B5CF6", act >= 0 ? `● ${slotLabel(act, actTray)}` : `${amsList.filter(a => a.id !== 255).length} unité${amsList.length > 1 ? "s" : ""}`)}
+          {section("AMS", Disc3, "#8B5CF6", status?.ams_activity ? `↻ ${status.ams_activity.title}${status.ams_activity.target ? ` → ${status.ams_activity.target}` : ""}${status.ams_activity.step ? ` · ${status.ams_activity.step}` : ""}`
+            : act >= 0 ? `● ${slotLabel(act, actTray)}` : `${amsList.filter(a => a.id !== 255).length} unité${amsList.length > 1 ? "s" : ""}`)}
           <HubGrid list={amsList} order={order} act={act} actTray={actTray} H={Math.min(300, amsRows * (narrowPop ? 100 : 116))} climate big={!narrowPop} fs={switchRoutes(status)}/>
           {/* un AMS trop humide : une grenouille s'y plait */}
           {amsList.some(a => a.humidity >= 60) && !found.has("c_frog") && <div aria-hidden="true" style={{ textAlign: "right", marginTop: -10, lineHeight: 1 }}>

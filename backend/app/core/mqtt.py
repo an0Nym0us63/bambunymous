@@ -592,6 +592,21 @@ class MQTTManager:
         if "ctt" in p: state.target_chamber_temp = float(p["ctt"]); changed = True
 
         # ── AMS ─────────────────────────────────────────────────────────
+        # ce que fait l'AMS (chargement, dechargement, lecture RFID…) et le bac vise
+        if p.get("ams_status") is not None:
+            try:
+                _v = int(p["ams_status"])
+                if _v != state.ams_status:
+                    state.ams_status = _v; changed = True
+            except (TypeError, ValueError):
+                pass
+        if isinstance(p.get("ams"), dict) and p["ams"].get("tray_tar") is not None:
+            try:
+                _v = int(p["ams"]["tray_tar"])
+                if _v != state.ams_tray_tar:
+                    state.ams_tray_tar = _v; changed = True
+            except (TypeError, ValueError):
+                pass
         ams_data = p.get("ams", {})
         if "ams" in ams_data:
             # Source fiable de l'AMS+tray actif sur H2C (double buse) :

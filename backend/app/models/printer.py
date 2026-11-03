@@ -162,6 +162,11 @@ class PrinterState:
     # la buse servie par chaque sortie, calibration, filament present. Vide sans switch.
     fila_switch: dict = field(default_factory=dict)
 
+    # Ce que fait l'AMS (03/11/2026) : ams_status (octet haut : l'activite, bas : son etape) et le bac vise
+    # (tray_tar : 255 aucun -- un dechargement --, 254 bobine externe)
+    ams_status: int = -1
+    ams_tray_tar: int = -1
+
     # Erreurs
     hms_errors: list[dict] = field(default_factory=list)
     print_error: int = 0

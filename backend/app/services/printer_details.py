@@ -82,6 +82,45 @@ SPEED = {1: "Silencieux", 2: "Standard", 3: "Sport", 4: "Ludique"}
 AMS_MAIN = {0: "au repos", 1: "changement de filament", 2: "lecture RFID", 3: "assistance", 4: "calibration",
             0x10: "auto-contrôle", 0x20: "débogage", 0xFF: "inconnu"}
 SD = {0: "absent", 1: "présent", 2: "anomalie", 3: "en lecture seule"}
+
+# Ce que fait l'AMS, en clair (03/11/2026, d'apres Bambu Studio : FilamentStep et AmsStatusMain) : les etapes d'un
+# changement de filament (octet bas d'ams_status), celles d'un dechargement (bac vise : aucun) en etant une partie
+LOAD_STEPS = {2: "Chauffe de la buse", 3: "Coupe du filament", 4: "Retrait du filament en place", 5: "Poussée du nouveau filament",
+              6: "Purge de l'ancien filament", 7: "Alimentation depuis la bobine externe", 8: "Vérification de l'extrusion",
+              9: "Vérification de la position du filament"}
+UNLOAD_STEPS = {2: "Chauffe de la buse", 3: "Coupe du filament", 4: "Retrait du filament"}
+# (l'« assistance », 3, est l'etat ordinaire d'un AMS de H2 au repos : pas une activite a montrer)
+AMS_DOING = {2: ("rfid", "Lecture de la puce RFID"), 4: ("calib", "Calibration de l'AMS"),
+             0x10: ("check", "Auto-contrôle de l'AMS"), 0x20: ("debug", "Débogage de l'AMS")}
+
+
+def _tray_name(tt: int) -> str:
+    if tt is None or tt < 0 or tt == 255:
+        return ""
+    if tt == 254:
+        return "bobine externe"
+    if 128 <= tt < 254:
+        return f"HT-{chr(65 + tt - 128)}"
+    return f"AMS-{chr(65 + tt // 4)} {tt % 4 + 1}"
+
+
+def ams_activity(st):
+    """Ce que fait l'AMS en ce moment, ou None au repos : {kind, title, target, step, index, count, code}."""
+    v = getattr(st, "ams_status", -1)
+    if v is None or v < 0:
+        return None
+    main, sub = (v >> 8) & 0xFF, v & 0xFF
+    if main == 1:
+        unload = getattr(st, "ams_tray_tar", -1) in (255, -1)
+        steps = UNLOAD_STEPS if unload else LOAD_STEPS
+        keys = sorted(steps)
+        target = "" if unload else _tray_name(getattr(st, "ams_tray_tar", -1))
+        return {"kind": "unload" if unload else "load", "title": "Déchargement" if unload else "Chargement", "target": target,
+                "step": steps.get(sub, ""), "index": keys.index(sub) + 1 if sub in steps else 0, "count": len(keys), "code": v}
+    if main in AMS_DOING:
+        kind, title = AMS_DOING[main]
+        return {"kind": kind, "title": title, "target": "", "step": "", "index": 0, "count": 0, "code": v}
+    return None
 UPG = {0: "aucune", 1: "disponible", 2: "à jour"}
 # home_flag (X1, P1, A1) : les bits que Bambu Studio lit
 HOME_BITS = [
