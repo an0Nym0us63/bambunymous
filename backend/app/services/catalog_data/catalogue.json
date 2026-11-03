@@ -8,10 +8,15 @@
       "family": "PLA",
       "name": "Skin",
       "name_fr": "Peau",
-      "colors": ["FFDBAC"],
+      "colors": [
+        "FFDBAC"
+      ],
       "filament_weight_g": 1000,
       "gtin": "6974994172613",
-      "print_temp": [185, 215],
+      "print_temp": [
+        185,
+        215
+      ],
       "source": "3DJake, fiche GEEETECH PLA Skin (03/11/2026). Teinte FFDBAC : donnee par l'utilisateur d'apres sa bobine (03/11/2026)."
     },
     {
@@ -21,12 +26,59 @@
       "family": "PLA",
       "name": "Skin",
       "name_fr": "Peau",
-      "colors": ["E6BA83"],
+      "colors": [
+        "E6BA83"
+      ],
       "hex_approx": true,
       "filament_weight_g": 1000,
       "gtin": "6974994175041",
-      "print_temp": [210, 230],
+      "print_temp": [
+        210,
+        230
+      ],
       "source": "3DJake, fiche GEEETECH HS-PLA Skin (03/11/2026). Teinte non publiee : celle du Matte PLA Skin Geeetech (Open Filament Database)."
+    },
+    {
+      "id": "forshape-pla-silk-blue",
+      "brand": "Forshape",
+      "gamme": "PLA Silk",
+      "family": "PLA",
+      "name": "Silk Blue",
+      "name_fr": "Bleu soie",
+      "colors": [
+        "1F5FBF"
+      ],
+      "hex_approx": true,
+      "filament_weight_g": 1000,
+      "source": "Bobine de l'utilisateur (03/11/2026). Teinte non publiee par le fabricant : approchee, a confirmer d'apres l'AMS ou le slicer. Gamme : LDLC, Forshape PLA Silk Bleu (PB00509110)."
+    },
+    {
+      "id": "forshape-pla-silk-red",
+      "brand": "Forshape",
+      "gamme": "PLA Silk",
+      "family": "PLA",
+      "name": "Silk Red",
+      "name_fr": "Rouge soie",
+      "colors": [
+        "B3202A"
+      ],
+      "hex_approx": true,
+      "filament_weight_g": 1000,
+      "source": "Bobine de l'utilisateur (03/11/2026). Teinte non publiee par le fabricant : approchee, a confirmer d'apres l'AMS ou le slicer."
+    },
+    {
+      "id": "hictop-tpu-blue",
+      "brand": "HicTop",
+      "gamme": "TPU",
+      "family": "TPU",
+      "name": "Blue",
+      "name_fr": "Bleu",
+      "colors": [
+        "1E63C6"
+      ],
+      "hex_approx": true,
+      "filament_weight_g": 1000,
+      "source": "Bobine de l'utilisateur (03/11/2026). Teinte non publiee par le fabricant : approchee, a confirmer d'apres l'AMS ou le slicer."
     }
   ]
 }
