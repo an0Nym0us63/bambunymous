@@ -70,10 +70,10 @@ export function SensorSpark({ lines, hours = 24, height = 34, lo, hi }) {
 const fmtH = (t, days) => new Date(t).toLocaleString("fr-FR", days > 2 ? { weekday: "short", day: "numeric" } : days > 1 ? { weekday: "short", hour: "2-digit" } : { hour: "2-digit", minute: "2-digit" });
 
 /** La grande courbe : grille, heures ou jours en bas, les impressions en bandes pales, la valeur de chaque serie au doigt. */
-export function SensorChart({ lines, points, hours = 24, height = 180, unit = "", lo, hi }) {
+export function SensorChart({ lines, points, hours = 24, height = 180, unit = "", lo, hi, end = null }) {
   const ref = useRef(null);
   const [at, setAt] = useState(null);
-  const to = Date.now(), from = to - hours * 3600000;
+  const to = end || Date.now(), from = to - hours * 3600000;
   const b = bounds(lines, from, to, lo, hi);
   const bands = useMemo(() => {
     const out = [], gap = gapOf((points || []).map(p => ({ t: Date.parse(p.t) })));
@@ -98,9 +98,11 @@ export function SensorChart({ lines, points, hours = 24, height = 180, unit = ""
   const days = hours / 24;
   const ticks = [];
   // des reperes ronds a l'heure locale : minuit sur plusieurs jours, sinon toutes les 4 ou 6 heures
-  const tH = days > 2 ? 24 : days > 1 ? 6 : 4;
-  const t0 = new Date(from); t0.setMinutes(0, 0, 0); t0.setHours(Math.ceil((t0.getHours() + (from > t0.getTime() ? 1 : 0)) / tH) * tH);
-  for (let t = t0.getTime(); t < to; t += tH * 3600000) ticks.push(t);
+  // des reperes ronds a l'heure locale, comptes depuis minuit : 30 min sur 3 h, 1 h sur 6 h, 2 h sur 12 h, 4 h sur un
+  // jour, 6 h sur deux, minuit au-dela
+  const tM = (hours <= 3 ? 0.5 : hours <= 6 ? 1 : hours <= 12 ? 2 : hours <= 24 ? 4 : hours <= 48 ? 6 : 24) * 3600000;
+  const m0 = new Date(from); m0.setHours(0, 0, 0, 0);
+  for (let t = m0.getTime(); t < to; t += tM) if (t > from) ticks.push(t);
   const near = at == null ? null : lines.map(l => {
     let best = null;
     for (const p of l.pts) if (p.t >= from && (!best || Math.abs(p.t - at) < Math.abs(best.t - at))) best = p;
@@ -118,9 +120,9 @@ export function SensorChart({ lines, points, hours = 24, height = 180, unit = ""
       {bands.map(([a, c], i) => <rect key={i} x={x(Math.max(a, from))} y={0} width={Math.max(0.3, x(c) - x(Math.max(a, from)))} height={H - 18}
         fill="rgba(59,130,246,.10)"/>)}
       {grid.map(v => <line key={v} x1={0} x2={W} y1={y(v)} y2={y(v)} stroke="var(--border)" strokeWidth="1" vectorEffect="non-scaling-stroke" strokeDasharray="3 4"/>)}
-      {lines.map(l => paths(l.pts.filter(p => p.t >= from), x, y).map((seg, i) => <React.Fragment key={`${l.key}${i}`}>
-        <polyline points={seg.join(" ")} fill="none" stroke={l.color} strokeWidth={l.dash ? 1.5 : 2.2} strokeLinejoin="round" strokeLinecap="round"
-          vectorEffect="non-scaling-stroke" strokeDasharray={l.dash ? "5 4" : undefined} opacity={l.dash ? 0.8 : 1}/>
+      {[...lines.filter(l => l.dash), ...lines.filter(l => !l.dash)].map(l => paths(l.pts.filter(p => p.t >= from && p.t <= to), x, y).map((seg, i) => <React.Fragment key={`${l.key}${i}`}>
+        <polyline points={seg.join(" ")} fill="none" stroke={l.color} strokeWidth={l.dash ? 7 : 2.2} strokeLinejoin="round" strokeLinecap="round"
+          vectorEffect="non-scaling-stroke" opacity={l.dash ? 0.22 : 1}/>
       </React.Fragment>))}
       {at != null && <line x1={x(at)} x2={x(at)} y1={0} y2={H - 18} stroke="var(--muted)" strokeWidth="1" vectorEffect="non-scaling-stroke"/>}
     </svg>
@@ -144,7 +146,8 @@ export function SensorLegend({ lines, unit = "" }) {
   return <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
     {dashed && <span style={{ order: 1, display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 800,
       color: "var(--muted)", border: "1px dashed var(--border)" }}>
-      <svg width="16" height="4" aria-hidden="true"><line x1="0" y1="2" x2="16" y2="2" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3"/></svg>consignes</span>}
+      <svg width="18" height="8" aria-hidden="true"><line x1="2" y1="4" x2="16" y2="4" stroke="currentColor" strokeWidth="6" strokeLinecap="round" opacity="0.35"/>
+        <line x1="2" y1="4" x2="16" y2="4" stroke="currentColor" strokeWidth="1.6"/></svg>consignes</span>}
     {lines.filter(l => !l.dash).map(l => { const last = l.pts[l.pts.length - 1];
       return <span key={l.key} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 800,
         color: "var(--text2)", background: `color-mix(in srgb, ${l.color} 12%, transparent)`, border: `1px solid color-mix(in srgb, ${l.color} 30%, transparent)` }}>

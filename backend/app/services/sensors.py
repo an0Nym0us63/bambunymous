@@ -156,21 +156,25 @@ async def loop() -> None:
         await _tasks.sleep("sensors", wait)
 
 
-async def history(hours: float = 24) -> dict:
-    """Les releves des dernieres heures, du plus ancien au plus recent : {points: [{t, printing, nozzle, nozzle2, bed,
+async def history(hours: float = 24, end: datetime | None = None) -> dict:
+    """Les releves des dernieres heures (jusqu'a end, maintenant par defaut : pour remonter le temps), du plus ancien au
+    plus recent : {points: [{t, printing, nozzle, nozzle2, bed,
     chamber, ams: {id: [h, t]}}], every}. Au-dela de MAX_POINTS, moyennes par paquets consecutifs (un trou de plus de
     15 minutes coupe un paquet : la courbe garde ses trous)."""
     from ..db.session import AsyncSessionLocal
     from ..models.sensor import SensorSample
     hours = max(1.0, min(float(hours or 24), KEEP_DAYS * 24.0))
-    since = datetime.utcnow() - timedelta(hours=hours)
+    now = datetime.utcnow()
+    end = min(end, now) if end else now
+    since = end - timedelta(hours=hours)
     async with AsyncSessionLocal() as db:
-        rows = (await db.execute(select(SensorSample).where(SensorSample.ts >= since).order_by(SensorSample.ts))).scalars().all()
+        rows = (await db.execute(select(SensorSample).where(SensorSample.ts >= since, SensorSample.ts <= end)
+                                 .order_by(SensorSample.ts))).scalars().all()
     pts = [{"t": r.ts.isoformat() + "Z", "printing": bool(r.printing), "nozzle": r.nozzle, "nozzle2": r.nozzle2,
             "bed": r.bed, "chamber": r.chamber, **{k: getattr(r, k) for k in EXTRA},
             "ams": json.loads(r.ams) if r.ams else {}} for r in rows]
     if len(pts) <= MAX_POINTS:
-        return {"points": pts, "hours": hours}
+        return {"points": pts, "hours": hours, "end": end.isoformat() + "Z"}
     step = -(-len(pts) // MAX_POINTS)
     out, i = [], 0
     while i < len(pts):
@@ -181,7 +185,7 @@ async def history(hours: float = 24) -> dict:
             j += 1
         out.append(_mean(chunk))
         i = j
-    return {"points": out, "hours": hours}
+    return {"points": out, "hours": hours, "end": end.isoformat() + "Z"}
 
 
 def _gap(a: str, b: str) -> float:
