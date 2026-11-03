@@ -6,7 +6,7 @@ import { Hide } from "./Cachettes";
 import { useFriend, currentFriend } from "../store/friend";
 import { useSensorHistory } from "../store/sensors";
 import { SensorSpark, SensorChart, SensorLegend, amsLines, heatLines, fanLines } from "./SensorChart";
-import { liveOfSpool, LiveHatch, LiveTo, LiveSwitchButton, LiveBar, useLiveUsage } from "./LiveUsage";
+import { liveOfSpool, LiveHatch, LiveTo, LiveSwitchButton, LiveBar } from "./LiveUsage";
 import { egg } from "../eggs";
 import { useLiveSpool, useLiveCurrent } from "../store/liveUsage";
 import { useLayer, LayerCanvas, LayerExplorer } from "./LayerView";
@@ -3000,10 +3000,8 @@ function PcRing({ x, size, children }) {
 }
 const pcG = v => v == null ? "—" : `${Math.round(v)} g`;
 function PrintColors({ status, o, sz }) {
-  const visiting = useFriend(s => s.friend);
-  const mine = useLiveCurrent();
-  const theirs = useLiveUsage(!!visiting);          // chez un copain, son impression (le partage ne lit que chez moi)
-  const d = visiting ? theirs : mine;
+  // (chez un copain, le suivi partage lit le sien, 03/11/2026)
+  const d = useLiveCurrent();
   const [pick, setPick] = useState(null);
   const list = printColors(d, status);
   if (!list.length) return <TileEmpty icon={<PaintBucket size={15}/>} color={PC_C} label="Couleurs de l'impression" sz={sz}
@@ -3988,7 +3986,7 @@ function Spool({ status, o, sz }) {
   const t = activeTray(status);
   const live = isLive(status);
   // suivi couche par couche (02/11/2026) : le poids de la bobine maintenant, et sa cible a la fin
-  const lv = useLiveSpool(live && !currentFriend() ? t?.spool_id : null);
+  const lv = useLiveSpool(live ? t?.spool_id : null);
   if (!t) return (
     <Tile icon={<Disc3 size={15}/>} color="#8B5CF6" label="Filament en cours">
       <Empty>{live ? "Bobine inconnue" : "Pas d'impression en cours"}</Empty>
