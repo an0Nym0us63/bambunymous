@@ -923,6 +923,10 @@ async def _group_view(gid: int) -> dict:
         e["plates"].add(plate_id)
     if not srcs:
         raise HTTPException(404, "Aucun 3MF d'origine dans ce groupe : importe-les, ou ouvre la vue 3D de ses modèles")
+    # un 3MF remplace par celui sur lequel l'assemblage a ete monte (03/11/2026 : meme profil, autre fichier)
+    for old, new in (T.group_sel(f"grp{gid}").get("use") or {}).items():
+        if old in srcs and new not in srcs and path_of(new).is_file():
+            srcs[new] = {**srcs.pop(old), "path": path_of(new)}
     chosen = await _color_choices(f"group:{gid}")
     parts, fin_used, fin_orig, missing = [], {}, {}, []
     gkey = f"grp{gid}"
@@ -1006,7 +1010,17 @@ async def _group_view(gid: int) -> dict:
     if not meta:
         raise HTTPException(404, "Rien à montrer pour ce groupe")
     shown = T.plates_out(meta, gkey)[0]
-    # pas encore d'assemblage du groupe : celui deja monte sur ses modeles est repris (03/11/2026)
+    # pas encore d'assemblage du groupe : celui deja monte sur ses modeles est repris (03/11/2026) ; ou celui demande,
+    # en attente que le groupe prenne son fichier
+    try:
+        sel_ = T.group_sel(gkey)
+        pend = sel_.pop("pending", None)
+        if isinstance(pend, dict):
+            T.group_sel_save(gkey, sel_)
+            await asyncio.to_thread(T.seed_group, gkey, gid, True, str(pend.get("by") or ""),
+                                    (str(pend.get("view") or ""), str(pend.get("edit") or ""), pend.get("data")))
+    except Exception:
+        logger.exception("[3D] groupe : reprise de l'assemblage demande")
     try:
         await asyncio.to_thread(T.seed_group, gkey, gid)
     except Exception:
@@ -1982,6 +1996,11 @@ async def mw_3d_group_seed(gid: int, body: dict = Body({}), user: str = Depends(
     pick = (view, ed, data) if view else None
     try:
         n = await asyncio.to_thread(T.seed_group, f"grp{int(gid)}", gid, True, str(user or ""), pick)
+    except T.UseFile as u:
+        # monte sur un autre fichier que celui du groupe : le groupe prend ce fichier-la, et la reprise se fait des qu'il
+        # est recompose (a la prochaine lecture de sa vue)
+        T.group_use_file(f"grp{int(gid)}", u.src, view, {"view": view, "edit": ed, "data": data, "by": str(user or "")})
+        return {"ok": True, "pending": True, "replaced": u.src}
     except ValueError as e:
         raise HTTPException(404, str(e))
     if not n:

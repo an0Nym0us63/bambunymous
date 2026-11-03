@@ -1930,35 +1930,30 @@ def _slot_key(k, slot: int) -> str | None:
     return f"{slot * 100000 + int(m.group(1))}{m.group(2)}" if m and int(m.group(1)) < 100000 else None
 
 
-def _match_pieces(V: list, A: list, tol: float = 0.6) -> dict:
-    """Les pieces d'une vue assemblee retrouvees dans celle d'un autre fichier du meme modele : {cle de V : cle de A}.
-    La translation la plus souvent vue entre deux pieces de meme nom, puis chaque piece a la plus proche a cette place."""
-    from collections import Counter
-    pos = lambda p: [float(x) for x in (p.get("o") or [])[:3]]
-    V = [p for p in V if isinstance(p, dict) and len(p.get("o") or []) >= 3 and re.fullmatch(r"\d+:\d+:\d+", str(p.get("k")))]
-    A = [p for p in A if isinstance(p, dict) and len(p.get("o") or []) >= 3 and re.fullmatch(r"\d+:\d+:\d+", str(p.get("k")))]
-    by = {}
-    for a in A:
-        by.setdefault(a.get("name"), []).append(a)
-    cand = Counter(tuple(round(x - y, 1) for x, y in zip(pos(a), pos(v))) for v in V[:80] for a in (by.get(v.get("name")) or A[:80]))
-    best: dict = {}
-    for t, _n in cand.most_common(12):
-        used, mp = set(), {}
-        for v in V:
-            pv = pos(v)
-            hit, dmin = None, tol
-            for a in A:
-                if a["k"] in used:
-                    continue
-                d = max(abs(pa - (x + dt)) for pa, x, dt in zip(pos(a), pv, t)) - (0.01 if a.get("name") == v.get("name") else 0)
-                if d < dmin:
-                    hit, dmin = a, d
-            if hit:
-                mp[v["k"]] = hit["k"]
-                used.add(hit["k"])
-        if len(mp) > len(best):
-            best = mp
-    return best
+class UseFile(Exception):
+    """La vue d'ou l'on vient n'est pas un 3MF du groupe : le 3MF du groupe qui a les memes pieces (src) doit lui ceder
+    la place, puis l'assemblage se reprend tel quel."""
+    def __init__(self, src: str):
+        super().__init__(src)
+        self.src = src
+
+
+def group_use_file(gkey: str, src: str, view: str, pending: dict | None = None) -> None:
+    """Le groupe prend le 3MF « view » a la place de « src » (03/11/2026, le train : l'assemblage monte sur un autre
+    fichier du meme profil ; ses positions valent pour SES coordonnees, pas pour celles de l'autre). « view » garde le
+    numero et les plateaux choisis de « src » ; pending : la reprise a faire une fois le groupe recompose."""
+    if not (_KEY.fullmatch(src or "") and _KEY.fullmatch(view or "")):
+        raise ValueError("Vue inconnue")
+    sel = group_sel(gkey)
+    use = {k: v for k, v in (sel.get("use") or {}).items() if v != src}
+    use[src] = view
+    slots = dict(sel.get("slots") or {})
+    if src in slots:
+        slots[view] = slots.pop(src)
+    plates = dict(sel.get("plates") or {}) if isinstance(sel.get("plates"), dict) else {}
+    if src in plates:
+        plates[view] = plates.pop(src)
+    group_sel_save(gkey, {**sel, "use": use, "slots": slots, "plates": plates, **({"pending": pending} if pending else {})})
 
 
 def seed_group(gkey: str, gid: int, force: bool = False, by: str = "", pick: tuple | None = None) -> int:
@@ -1990,25 +1985,31 @@ def seed_group(gkey: str, gid: int, force: bool = False, by: str = "", pick: tup
         e = e or (_read(_edits_file(ekey)) if _KEY.fullmatch(str(ekey or "")) else None)
         asm = asm_of(vkey)
         slot = slots.get(vkey)
-        kmap, best = None, 0
-        if e and e.get("pieces") and asm and not str(slot).isdigit():
-            # un autre fichier : ses pieces n'ont pas les memes numeros (03/11/2026, le train : meme profil, autre 3MF) ;
-            # elles se retrouvent par leur nom et leur place dans la vue assemblee
-            for src in grec.get("sources") or []:
-                a2, s2 = asm_of(src.get("iid")), slots.get(src.get("iid"))
-                mp = _match_pieces(asm["pieces"], a2["pieces"]) if a2 and str(s2).isdigit() else {}
-                if len(mp) > best:
-                    best, slot, kmap = len(mp), s2, mp
-        logger.info(f"[3D] assemblage du groupe {gkey} : repris de la vue {vkey} (edition {ekey}) -> n° {slot}, "
-                    f"{len((e or {}).get('pieces') or {})} pieces, vue assemblee {'oui' if asm else 'non'}"
-                    + (f", {best}/{len(asm['pieces'])} pieces retrouvees dans un autre fichier" if kmap is not None else ""))
         if not e or not e.get("pieces"):
             raise ValueError(f"La vue d'où tu viens ({vkey}) n'a pas d'assemblage enregistré : enregistre-le, puis réessaie")
         if not asm:
             raise ValueError(f"La vue d'où tu viens ({vkey}) n'a plus sa vue assemblée : rouvre-la, puis réessaie")
         if not str(slot).isdigit():
-            raise ValueError(f"Aucun 3MF de ce groupe n'a les pièces de la vue d'où tu viens ({vkey})")
-        jobs.append((int(slot), e, asm, kmap))
+            # un autre fichier que ceux du groupe : celui du groupe qui a les memes pieces (par leur nom) lui cede la place
+            from collections import Counter
+            vn, best, src_ = Counter(str(p.get("name")) for p in asm["pieces"]), 0, None
+            for src in grec.get("sources") or []:
+                a2 = asm_of(src.get("iid"))
+                ov = sum((vn & Counter(str(p.get("name")) for p in a2["pieces"])).values()) if a2 and str(slots.get(src.get("iid"))).isdigit() else 0
+                if ov > best:
+                    best, src_ = ov, src.get("iid")
+            logger.info(f"[3D] assemblage du groupe {gkey} : vue {vkey} ({len(asm['pieces'])} pieces) hors du groupe ; "
+                        f"3MF du groupe aux memes pieces : {src_} ({best} en commun)")
+            if not src_ or best * 2 < len(asm["pieces"]):
+                # des noms qui different (une autre langue) : le seul 3MF du groupe qui a autant de pieces
+                same = [src.get("iid") for src in grec.get("sources") or [] if (a2 := asm_of(src.get("iid")))
+                        and len(a2["pieces"]) == len(asm["pieces"]) and str(slots.get(src.get("iid"))).isdigit()]
+                if len(same) == 1:
+                    raise UseFile(same[0])
+                raise ValueError(f"Aucun 3MF de ce groupe n'a les pièces de la vue d'où tu viens ({vkey})")
+            raise UseFile(src_)
+        logger.info(f"[3D] assemblage du groupe {gkey} : repris de la vue {vkey} (edition {ekey}) -> n° {slot}, {len(e['pieces'])} pieces")
+        jobs.append((int(slot), e, asm))
     for src in [] if pick else grec.get("sources") or []:
         iid, slot = src.get("iid"), slots.get(src.get("iid"))
         if not iid or not str(slot).isdigit():
@@ -2033,13 +2034,10 @@ def seed_group(gkey: str, gid: int, force: bool = False, by: str = "", pick: tup
             e = max(cands, key=lambda c: c.get("at") or 0) if cands else None
         logger.info(f"[3D] assemblage du groupe {gkey} : 3MF {iid} (n° {slot}) -> {len((e or {}).get('pieces') or {})} pieces a reprendre")
         if e and e.get("pieces"):
-            jobs.append((slot, e, asm, None))
-    for slot, e, asm, kmap in jobs:
-        def rk(k, slot=slot, kmap=kmap):
-            if kmap is None:
-                return _slot_key(k, slot)
-            m = re.fullmatch(r"(\d+:\d+:\d+)(.*)", str(k))
-            return _slot_key(kmap[m.group(1)] + m.group(2), slot) if m and m.group(1) in kmap else None
+            jobs.append((slot, e, asm))
+    for slot, e, asm in jobs:
+        def rk(k, slot=slot):
+            return _slot_key(k, slot)
 
         # le decalage du 3MF dans le groupe : le plus courant parmi ses pieces (une seule suffit quand c'est le meme fichier)
         ds = sorted(tuple(round(float(a) - float(b), 3) for a, b in zip(go[rk(pc.get("k"))], pc["o"]))
