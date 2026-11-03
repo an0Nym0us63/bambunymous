@@ -168,6 +168,14 @@ export function amsLines(points, k = 0) {
     pts: seriesOf(points, p => { const v = p.ams?.[id]?.[k]; return v ? v : null; }) })).filter(l => l.pts.length);
 }
 
+// les ventilateurs, en %
+export const FAN_COLORS = { fan_part: "#14B8A6", fan_aux: "#A855F7", fan_head: "#94A3B8", fan_chamber: "#0EA5E9" };
+export function fanLines(points) {
+  return [["fan_part", "Pièce", "P"], ["fan_aux", "Auxiliaire", "A"], ["fan_chamber", "Chambre", "C"], ["fan_head", "Tête", "T"]]
+    .map(([k, label, short]) => ({ key: k, label, short, color: FAN_COLORS[k], unit: "%", pts: seriesOf(points, p => p[k]) }))
+    .filter(l => l.pts.some(p => p.v > 0));
+}
+
 /** Les series de chaleur : buse(s), plateau, chambre ; avec targets, leurs consignes en pointilles a la meme couleur
  *  (seulement celles qui ont eu une consigne sur la periode). */
 export function heatLines(points, { chamber = true, only = null, targets = false } = {}) {

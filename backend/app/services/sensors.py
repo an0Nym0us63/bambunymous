@@ -19,6 +19,9 @@ EVERY_IDLE = 300.0
 EVERY_PRINTING = 60.0
 MAX_POINTS = 600                        # un historique rendu en plus de points est moyenne par paquets
 TARGETS = ("nozzle_t", "nozzle2_t", "bed_t", "chamber_t")   # les consignes (None : pas de consigne)
+# les ventilateurs : la cle du statut brut (vitesse de 0 a 15, comme « Plus d'infos »), rendue en %
+FANS = {"fan_part": "cooling_fan_speed", "fan_aux": "big_fan1_speed", "fan_chamber": "big_fan2_speed", "fan_head": "heatbreak_fan_speed"}
+EXTRA = (*TARGETS, *FANS)
 K_OFFSETS = "AMS_HUMIDITY_OFFSETS"      # JSON {ams_id: decalage en points de %}
 
 _OFFSETS: dict[int, float] = {}
@@ -88,7 +91,15 @@ def snapshot(s) -> dict | None:
             "nozzle_t": tgt(nz[0].target) if nz else None,
             "nozzle2_t": tgt(nz[1].target) if len(nz) > 1 else None,
             "bed_t": tgt(s.target_bed_temp), "chamber_t": tgt(s.target_chamber_temp),
+            **{k: _fan((getattr(s, "raw", None) or {}).get(src)) for k, src in FANS.items()},
             "ams": ams}
+
+
+def _fan(v):
+    try:
+        return round(max(0, min(15, int(v))) / 15 * 100)
+    except (TypeError, ValueError):
+        return None
 
 
 async def record(snap: dict, now: datetime | None = None) -> None:
@@ -97,7 +108,7 @@ async def record(snap: dict, now: datetime | None = None) -> None:
     async with AsyncSessionLocal() as db:
         db.add(SensorSample(ts=now or datetime.utcnow(), printing=snap["printing"], nozzle=snap["nozzle"],
                             nozzle2=snap["nozzle2"], bed=snap["bed"], chamber=snap["chamber"],
-                            **{k: snap.get(k) for k in TARGETS},
+                            **{k: snap.get(k) for k in EXTRA},
                             ams=json.dumps(snap["ams"]) if snap["ams"] else None))
         await db.commit()
 
@@ -149,7 +160,7 @@ async def history(hours: float = 24) -> dict:
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(SensorSample).where(SensorSample.ts >= since).order_by(SensorSample.ts))).scalars().all()
     pts = [{"t": r.ts.isoformat() + "Z", "printing": bool(r.printing), "nozzle": r.nozzle, "nozzle2": r.nozzle2,
-            "bed": r.bed, "chamber": r.chamber, **{k: getattr(r, k) for k in TARGETS},
+            "bed": r.bed, "chamber": r.chamber, **{k: getattr(r, k) for k in EXTRA},
             "ams": json.loads(r.ams) if r.ams else {}} for r in rows]
     if len(pts) <= MAX_POINTS:
         return {"points": pts, "hours": hours}
@@ -176,6 +187,6 @@ def _mean(chunk: list) -> dict:
         return round(sum(v) / len(v), 1) if v else None
     ids = {k for p in chunk for k in p["ams"]}
     return {"t": chunk[len(chunk) // 2]["t"], "printing": any(p["printing"] for p in chunk),
-            **{k: avg(p.get(k) for p in chunk) for k in ("nozzle", "nozzle2", "bed", "chamber", *TARGETS)},
+            **{k: avg(p.get(k) for p in chunk) for k in ("nozzle", "nozzle2", "bed", "chamber", *EXTRA)},
             "ams": {k: [avg(p["ams"].get(k, [None, None])[0] for p in chunk), avg(p["ams"].get(k, [None, None])[1] for p in chunk)]
                     for k in ids}}

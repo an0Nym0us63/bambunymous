@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSensorHistory } from "../store/sensors";
-import { SensorChart, SensorLegend, amsLines, heatLines, seriesOf } from "./SensorChart";
+import { SensorChart, SensorLegend, amsLines, heatLines, fanLines, seriesOf } from "./SensorChart";
 import { egg } from "../eggs";
 
 // Stats › Machine (03/11/2026) : les releves des capteurs sur 24 h, 3 ou 7 jours (le serveur n'en garde pas plus).
-// En tete le bilan de la periode, puis une carte par mesure : humidite des AMS, leur temperature, buse et plateau,
-// chambre. Les impressions sont les bandes bleues pales des courbes.
+// En tete le bilan de la periode, puis une carte par mesure : buse et plateau, chambre, humidite des AMS, leur
+// temperature, ventilateurs. Les impressions sont les bandes bleues pales des courbes.
 const PERIODS = [[24, "24 h"], [72, "3 jours"], [168, "7 jours"]];
 
 const card = c => ({ padding: "14px 14px 12px", borderRadius: 20, border: `1px solid color-mix(in srgb, ${c} 26%, var(--border))`,
@@ -55,7 +55,7 @@ export default function MachineStats() {
     const allH = hum.flatMap(l => l.pts.map(p => p.v));
     const wet = hum.map(l => ({ l, r: range(l.pts) })).filter(x => x.r).sort((a, b) => b.r.max - a.r.max)[0];
     const nz = range(seriesOf(pts, p => p.nozzle));
-    return { hum, amsT, heat, ch: ch.some(l => !l.dash) ? ch : [],
+    return { hum, amsT, heat, ch: ch.some(l => !l.dash) ? ch : [], fans: fanLines(pts),
       printed, avgH: allH.length ? allH.reduce((a, b) => a + b, 0) / allH.length : null, wet, nz };
   }, [pts]);
 
@@ -76,23 +76,12 @@ export default function MachineStats() {
         <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", maxWidth: 420 }}>Les capteurs de l'imprimante sont relevés toutes les 5 minutes (chaque minute pendant une impression) et gardés 7 jours. Les courbes arrivent avec les premiers relevés.</div>
       </div> : <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 6 }}>
+        {d.nz && <Kpi v={`${Math.round(d.nz.max)}°`} l="buse au plus chaud" c="#F97316"/>}
         <Kpi v={d.avgH != null ? `${Math.round(d.avgH)} %` : "—"} l="humidité moyenne" c="#06B6D4"/>
         {d.wet && <Kpi v={`${Math.round(d.wet.r.max)} %`} l="le plus humide" c={d.wet.r.max >= 40 ? "#EF4444" : d.wet.r.max >= 30 ? "#F59E0B" : "#22C55E"} sub={d.wet.l.label}/>}
-        {d.nz && <Kpi v={`${Math.round(d.nz.max)}°`} l="buse au plus chaud" c="#F97316"/>}
         <Kpi v={d.printed >= 3600000 ? `${n1(d.printed / 3600000)} h` : `${Math.round(d.printed / 60000)} min`} l="en impression" c="#3B82F6"/>
       </div>
 
-      {d.hum.length > 0 && <div style={card("#06B6D4")}>
-        <div style={title("#0891B2")}>💧 Humidité des AMS</div>
-        <SensorLegend lines={d.hum} unit="%"/>
-        <SensorChart lines={d.hum} points={pts} hours={hours} height={190} unit="%"/>
-        <Ranges lines={d.hum} unit="%"/>
-      </div>}
-      {d.amsT.length > 0 && <div style={card("#8B5CF6")}>
-        <div style={title("#7C3AED")}>🌡️ Température des AMS</div>
-        <SensorLegend lines={d.amsT} unit="°"/>
-        <SensorChart lines={d.amsT} points={pts} hours={hours} height={160} unit="°"/>
-      </div>}
       {d.heat.length > 0 && <div style={card("#F97316")}>
         <div style={title("#EA580C")}>🔥 Buse et plateau</div>
         <SensorLegend lines={d.heat} unit="°"/>
@@ -104,6 +93,22 @@ export default function MachineStats() {
         {d.ch.some(l => l.dash) && <SensorLegend lines={d.ch} unit="°"/>}
         <SensorChart lines={d.ch} points={pts} hours={hours} height={150} unit="°"/>
         <Ranges lines={d.ch.filter(l => !l.dash)} unit="°"/>
+      </div>}
+      {d.hum.length > 0 && <div style={card("#06B6D4")}>
+        <div style={title("#0891B2")}>💧 Humidité des AMS</div>
+        <SensorLegend lines={d.hum} unit="%"/>
+        <SensorChart lines={d.hum} points={pts} hours={hours} height={190} unit="%"/>
+        <Ranges lines={d.hum} unit="%"/>
+      </div>}
+      {d.amsT.length > 0 && <div style={card("#8B5CF6")}>
+        <div style={title("#7C3AED")}>🌡️ Température des AMS</div>
+        <SensorLegend lines={d.amsT} unit="°"/>
+        <SensorChart lines={d.amsT} points={pts} hours={hours} height={160} unit="°"/>
+      </div>}
+      {d.fans.length > 0 && <div style={card("#14B8A6")}>
+        <div style={title("#0D9488")}>🌀 Ventilateurs</div>
+        <SensorLegend lines={d.fans} unit="%"/>
+        <SensorChart lines={d.fans} points={pts} hours={hours} height={160} unit="%" lo={0} hi={100}/>
       </div>}
     </>}
   </div>;

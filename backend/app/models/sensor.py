@@ -25,6 +25,11 @@ class SensorSample(Base):
     nozzle2_t = Column(Float, nullable=True)
     bed_t     = Column(Float, nullable=True)
     chamber_t = Column(Float, nullable=True)
+    # les ventilateurs, en % (piece, auxiliaire, chambre, tete) ; None : la machine ne le dit pas
+    fan_part    = Column(Float, nullable=True)
+    fan_aux     = Column(Float, nullable=True)
+    fan_chamber = Column(Float, nullable=True)
+    fan_head    = Column(Float, nullable=True)
     ams      = Column(Text, nullable=True)      # JSON {ams_id: [humidite %, temperature °C]}
 
     __table_args__ = (Index("idx_sensor_samples_ts", "ts"),)
