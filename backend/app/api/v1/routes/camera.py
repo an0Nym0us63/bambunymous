@@ -28,6 +28,29 @@ _STALL_S = 8.0
 _START_S = 20.0
 
 
+def _end_ffmpeg(proc) -> None:
+    """Arreter ffmpeg proprement (03/11/2026) : un kill net ne laisse pas ffmpeg fermer la session RTSP (TEARDOWN) ;
+    l'imprimante la garde ouverte un moment, et apres quelques blocages suivis de reconnexions, son serveur video
+    plein ne repondait plus du tout (« Connection timed out » sur le port 322, chez un copain). Sur SIGTERM ffmpeg
+    ferme son entree, donc la session ; kill seulement s'il ne s'est pas arrete en 3 s."""
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        proc.terminate()
+    except Exception:
+        return
+
+    def finish():
+        try:
+            proc.wait(timeout=3)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+    threading.Thread(target=finish, name="camera-ffmpeg-stop", daemon=True).start()
+
+
 class _Hub:
     def __init__(self):
         self.lock = threading.Lock()
@@ -77,8 +100,7 @@ class _Hub:
             self.stall_times.append(now)
         logger.info("Camera flux : fige, connexion coupee")
         try:
-            if proc:
-                proc.kill()
+            _end_ffmpeg(proc)
             if sock:
                 sock.close()
         except Exception:
@@ -136,10 +158,7 @@ def _rtsp_frames(ip: str, code: str, stop):
                 buf = buf[b + 2:]
     finally:
         _HUB.proc = None
-        try:
-            proc.kill()
-        except Exception:
-            pass
+        _end_ffmpeg(proc)
 
 
 def _tls_frames(ip: str, code: str, stop):
@@ -215,10 +234,11 @@ def _produce(ip: str, code: str, mode: str) -> None:
             if _HUB.ts and _HUB.ts > _HUB.started_at - 60:     # il donnait des images il y a peu : on repart vite
                 # ... mais pas en boucle (02/11/2026) : une imprimante dont le serveur ne suit pas se figeait toutes les
                 # quelques secondes, et chaque reconnexion immediate finissait par faire tomber sa vue en direct (alerte
-                # HMS « impossible d'obtenir la liveview »). 1 s au premier blocage, puis 5, 15, 30, 60 s s'ils se suivent.
+                # HMS « impossible d'obtenir la liveview »). 03/11/2026 : 5 s au premier blocage (le temps que l'imprimante
+                # libere la session coupee), puis 10, 20, 30, 60 s s'ils se suivent.
                 now = time.monotonic()
                 n = len([t for t in _HUB.stall_times if now - t < 300])
-                _HUB.retry_at = now + (1, 1, 5, 15, 30, 60)[min(n, 5)]
+                _HUB.retry_at = now + (5, 5, 10, 20, 30, 60)[min(n, 5)]
 
 
 def _ensure_producer(ip: str, code: str, mode: str) -> None:
