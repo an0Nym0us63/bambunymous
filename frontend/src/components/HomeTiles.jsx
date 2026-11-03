@@ -682,7 +682,8 @@ export function useTilesData(status = null, want = null) {
       live: () => put("live", get("/prints", { status: "IN_PROGRESS", limit: 1 }).then(r => (r.prints || r.items || [])[0] || null)),
       spools: () => put("spools", get("/filaments/spools", { archived: false })),
       dry: () => put("dry", get("/filaments/drying/overview")),
-      friends: () => put("friends", get("/friends/shared/printing")),
+      // chez un copain : ni mes copains ni mon fil (les siens ne sont pas relayes), la tuile le dit
+      friends: () => { if (!currentFriend()) put("friends", get("/friends/shared/printing")); },
       ach: () => put("ach", get("/achievements")),
       month: () => {
         const now = new Date();
@@ -692,7 +693,7 @@ export function useTilesData(status = null, want = null) {
           .then(([cur, prev]) => ({ ...cur, prev })));
       },
       sales: () => put("sales", get("/objects/objects/stats")),
-      feed: () => put("feed", get("/notify/me/history")),
+      feed: () => { if (!currentFriend()) put("feed", get("/notify/me/history")); },
       attention: () => put("attention", get("/attention")),
       orders: () => put("orders", get("/filaments/incoming").then(r => r.orders || [])),
       // a evaluer : relu avec le reste (une impression qui vient de finir y entre sans recharger la page)
@@ -2006,6 +2007,11 @@ function FriendsZoom({ p, states, thumbs }) {
   </>;
 }
 function Friends({ f, o, sz }) {
+  const visiting = useFriend(s => s.friend);
+  if (visiting) return <TileEmpty icon={<Users size={15}/>} color={FR_C} label="Copains" sz={sz} text={`Les copains de ${visiting.name} ne sont pas partagés`}/>;
+  return <FriendsTile f={f} o={o} sz={sz}/>;
+}
+function FriendsTile({ f, o, sz }) {
   const p = f?.printing || [];
   const states = f?.states || {};
   const n = Object.keys(states).length;
@@ -3024,6 +3030,11 @@ function FeedRow({ x, h = 40, detail, narrow, time = true, nav, big = false }) {
   </div>;
 }
 function Feed({ f, o, sz }) {
+  const visiting = useFriend(s => s.friend);
+  if (visiting) return <TileEmpty icon={<Rss size={15}/>} color="#0EA5E9" label="Le fil du jour" sz={sz} text={`Le fil de ${visiting.name} n'est pas partagé`}/>;
+  return <FeedTile f={f} o={o} sz={sz}/>;
+}
+function FeedTile({ f, o, sz }) {
   const nav = useNavigate();
   if (!f) return null;
   const want = FEED_SECTIONS[o.section || "all"];
@@ -3618,7 +3629,7 @@ function activeTray(status) {
 function Spool({ status, o, sz }) {
   const t = activeTray(status);
   const live = isLive(status);
-  // suivi couche par couche (alpha, 02/11/2026) : le poids de la bobine maintenant, et sa cible a la fin ; rien sur « Actuel »
+  // suivi couche par couche (02/11/2026) : le poids de la bobine maintenant, et sa cible a la fin
   const lv = useLiveSpool(live && !currentFriend() ? t?.spool_id : null);
   if (!t) return (
     <Tile icon={<Disc3 size={15}/>} color="#8B5CF6" label="Filament en cours">
@@ -3694,7 +3705,7 @@ function Spool({ status, o, sz }) {
               <span style={{ fontSize: 30, fontWeight: 900, color: light ? "var(--text)" : barCol }}>{weight}</span><LiveTo lv={lv} size={16} color={light ? undefined : barCol}/>{pctPill(15)}
               {tot && g != null && <Muted size={13}>sur {Math.round(tot)} g · {Math.round((pct ?? 0) * 100)} %</Muted>}</div>
             {bar(10)}
-            {lv?.target != null && <Muted size={12.5}>→ {Math.round(lv.target)} g à la fin de l'impression · {Math.round(lv.row_used)} g consommés sur {Math.round(lv.row_planned)} g · suivi couche par couche (alpha)</Muted>}
+            {lv?.target != null && <Muted size={12.5}>→ {Math.round(lv.target)} g à la fin de l'impression · {Math.round(lv.row_used)} g consommés sur {Math.round(lv.row_planned)} g</Muted>}
             <LiveSwitchButton lv={lv} style={{ alignSelf: "flex-start", marginTop: 2 }}/>
           </div>
         </div>

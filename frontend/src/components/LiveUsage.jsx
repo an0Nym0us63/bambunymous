@@ -7,8 +7,8 @@ import { useIsAdmin } from "../store/auth";
 import { FSheet, FCard, fBtn } from "./FicheKit";
 import { useLiveStore, refreshLive } from "../store/liveUsage";
 
-// Suivi du filament couche par couche (alpha, 02/11/2026) : ce que chaque filament de l'impression en cours a vraiment
-// consomme, lu dans le G-code a la couche annoncee par l'imprimante. Rien sur « Actuel » (Parametres › Imprimante).
+// Suivi du filament couche par couche (02/11/2026, toujours actif depuis le 03/11/2026) : ce que chaque filament de l'impression en cours a vraiment
+// consomme, lu dans le G-code a la couche annoncee par l'imprimante.
 const EVERY = 15000;
 const g = v => v == null ? "—" : `${Math.round(v)} g`;
 const hex = c => { const m = /^#?([0-9a-f]{6})/i.exec(c || ""); return m ? `#${m[1]}` : "#94a3b8"; };
@@ -121,8 +121,7 @@ export function LiveUsageCard({ printId }) {
   const [choose, setChoose] = useState(null);
   if (!d || !(d.items || []).length) return null;
   const slots = [...new Set(d.items.map(i => i.slot))];
-  return <FCard t="Suivi du filament" i="🧵" c="#8B5CF6" aside={<span style={{ fontSize: 10.5, fontWeight: 900, color: "#fff", padding: "1px 7px", borderRadius: 999,
-    background: "linear-gradient(135deg, #8B5CF6, #EC4899)" }}>alpha</span>}>
+  return <FCard t="Suivi du filament" i="🧵" c="#8B5CF6">
     <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 6 }}>
       {d.layer ? <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Couche {d.layer} · {Math.round(d.pct || 0)} % — relu toutes les 15 s</span> : null}
       {slots.map(slot => {
@@ -165,31 +164,4 @@ export function LiveSwitchButton({ lv, style }) {
       style={{ ...fBtn, padding: "6px 10px", fontSize: 12, ...style }}>🔁 Bobine finie ? Choisir la suite</button>
     {open && <SpoolChoice item={lv} printId={printId} onClose={() => setOpen(false)} onDone={() => { setOpen(false); refreshLive(); }}/>}
   </>;
-}
-
-// l'interrupteur (Parametres › Imprimante)
-export function LiveModeCard({ card, cardTitle }) {
-  const [on, setOn] = useState(null);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { client.get("/live/mode").then(r => setOn(!!r.data?.on)).catch(() => setOn(false)); }, []);
-  const set = async v => {
-    if (busy || v === on) return;
-    setBusy(true);
-    try { setOn(!!(await client.put("/live/mode", { on: v })).data?.on); } catch (e) { showAlert(e.response?.data?.detail || e.message); }
-    finally { setBusy(false); }
-  };
-  const opt = (v, label, sub) => <button type="button" onClick={() => set(v)} disabled={busy} style={{ flex: "1 1 160px", textAlign: "left", padding: "10px 12px",
-    borderRadius: 12, cursor: "pointer", color: "var(--text)",
-    background: on === v ? "linear-gradient(135deg, rgba(139,92,246,.16), transparent 70%), var(--surface)" : "var(--surface)",
-    border: `1.5px solid ${on === v ? "#8B5CF6" : "var(--border)"}` }}>
-    <span style={{ display: "block", fontSize: 13.5, fontWeight: 900 }}>{on === v ? "● " : ""}{label}</span>
-    <span style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.4 }}>{sub}</span></button>;
-  return <div className="card" style={card}>
-    <div style={{ ...cardTitle, display: "flex", alignItems: "center", gap: 8 }}>🧵 Suivi du filament
-      <span style={{ fontSize: 10.5, fontWeight: 900, color: "#fff", padding: "1px 7px", borderRadius: 999, background: "linear-gradient(135deg, #8B5CF6, #EC4899)" }}>alpha</span></div>
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      {opt(false, "Actuel", "Tout le poids prévu est retiré des bobines au début de l'impression.")}
-      {opt(true, "Couche par couche", "Le poids réel pendant l'impression (lu dans le G-code), changement de bobine en cours de route, relais de l'AMS, et ce qui n'est pas imprimé rendu à l'échec.")}
-    </div>
-  </div>;
 }

@@ -11,8 +11,10 @@ const HOME_PREFIXES = ["/auth", "/friends", "/users", "/settings", "/notify",
   "/makerworld/mine", "/makerworld/model/", "/makerworld/similar/", "/makerworld/design/",
   // Mes evaluations (file de publication, messages tout faits) : toujours chez moi.
   "/makerworld/rate-queue", "/makerworld/rate-templates"];
-// Le ping d'activite part chez le copain visite : son journal suit ma visite.
-const isHome = (url) => !url.startsWith("/users/activity/ping") && HOME_PREFIXES.some(p => url === p || url.startsWith(p.endsWith("/") ? p : p + "/") || url.startsWith(p + "?"));
+// Le ping d'activite part chez le copain visite : son journal suit ma visite. La disposition de ses AMS aussi
+// (03/11/2026 : ses AMS s'affichaient dans l'ordre des miens, sous /settings comme mes reglages).
+const RELAYED = ["/users/activity/ping", "/settings/ams-order"];
+const isHome = (url) => !RELAYED.some(p => url.startsWith(p)) && HOME_PREFIXES.some(p => url === p || url.startsWith(p.endsWith("/") ? p : p + "/") || url.startsWith(p + "?"));
 
 /** URL d'une image (ou d'un fichier) de l'API, chez moi ou chez le copain
  *  visite. Une <img> n'envoie pas d'en-tete : le relais recoit le jeton en _t. */

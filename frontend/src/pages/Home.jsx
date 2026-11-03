@@ -2074,7 +2074,8 @@ function Greeting({ status, o = {} }) {
     const put = (k, p) => p.then(r => setX(v => ({ ...v, [k]: r.data }))).catch(() => {});
     if (opt("pToday", true)) put("today", client.get("/prints/kpis", { params: { date_from: new Date().toLocaleDateString("sv") } }));
     if (opt("pNext", false)) put("queue", client.get("/makerworld/queue"));
-    if (opt("pFriends", false)) put("friends", client.get("/friends/shared/printing"));
+    // chez un copain : pas mes copains (les siens ne sont pas relayes)
+    if (opt("pFriends", false) && !currentFriend()) put("friends", client.get("/friends/shared/printing"));
     if (opt("pGrade", false) || opt("pWheel", false)) put("ach", client.get("/achievements"));
   }, [st, !!o.pToday, !!o.pNext, !!o.pFriends, !!o.pGrade, !!o.pWheel]); // eslint-disable-line react-hooks/exhaustive-deps
   const h = new Date().getHours();

@@ -39,12 +39,13 @@ from .settings_service import get_setting, set_setting
 logger = logging.getLogger(__name__)
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
 
-K_MODE = "FILAMENT_TRACKING"          # "" : actuel ; "layer" : couche par couche (alpha)
 K_STATE = "FILAMENT_TRACKING_STATE"   # {print_id: {layer, pct, best: {slot: g}, at, settled}}
 STATE_KEEP = 20                       # impressions gardees dans l'etat (les plus recentes)
 REFILL_EVERY = 20.0                   # s entre deux regards sur l'emplacement actif (relais de l'AMS)
 
-ON = {"v": False}
+# toujours actif depuis le 03/11/2026 (avant : un interrupteur, « Actuel » par defaut ; le reglage
+# FILAMENT_TRACKING laisse en base n'est plus lu)
+ON = {"v": True}
 _LOCK = threading.Lock()
 _PROG: dict = {}      # print_id -> {"layer", "pct", "t"} : la derniere progression acceptee
 _BEST: dict = {}      # print_id -> {slot: g} : le plus loin atteint (jamais deux fois la meme matiere)
@@ -218,9 +219,7 @@ async def _state_put(pid: int, entry: dict) -> None:
 
 
 async def load() -> None:
-    """Au demarrage : l'interrupteur, et l'etat des impressions en cours (le plus loin atteint)."""
-    async with AsyncSessionLocal() as db:
-        ON["v"] = (await get_setting(db, K_MODE, "") or "") == "layer"
+    """Au demarrage : l'etat des impressions en cours (le plus loin atteint)."""
     for k, e in (await _state()).items():
         if k.isdigit() and isinstance(e, dict) and not e.get("settled"):
             pid = int(k)
@@ -229,13 +228,6 @@ async def load() -> None:
                 _PROG[pid] = {"layer": int(e["layer"]), "pct": float(e.get("pct") or 0), "t": 0.0}
             if e.get("active"):
                 _REFILL[pid] = {"t": 0.0, "seen": None, "active": {int(x) for x in e["active"]}}
-
-
-async def set_mode(on: bool) -> None:
-    async with AsyncSessionLocal() as db:
-        await set_setting(db, K_MODE, "layer" if on else "")
-    ON["v"] = bool(on)
-    logger.info(f"[LIVE] suivi du filament : {'couche par couche (alpha)' if on else 'actuel'}")
 
 
 # ── Lignes de consommation ───────────────────────────────────────────────────────────────────────────────────────────

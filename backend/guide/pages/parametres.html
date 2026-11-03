@@ -47,11 +47,10 @@
     <li>Changer le tarif relance en arrière-plan le calcul du coût de toutes les impressions réussies.</li>
     <li>Les comptes et mots de passe ne se règlent pas ici mais dans <a href="#parametres-accounts">Comptes</a>.</li>
   </ul>
-  <h4 id="suivi-filament">Carte « 🧵 Suivi du filament » (alpha)</h4>
-  <p>Comment le poids des bobines suit une impression. Le choix s'enregistre tout de suite (sans <span class="ui">Sauvegarder</span>), et se change à tout moment, même pendant une impression.</p>
+  <h4 id="suivi-filament">Suivi du filament, couche par couche</h4>
+  <p>Comment le poids des bobines suit une impression. Il n'y a rien à régler : c'est toujours actif (il y avait un choix « Actuel / Couche par couche » jusqu'au 3 novembre 2026).</p>
   <dl class="opts">
-    <dt>Actuel</dt><dd>Par défaut. Tout le poids prévu par le trancheur est retiré des bobines au début de l'impression ; une impression ratée garde tout ce poids retiré. Rien d'autre ne tourne.</dd>
-    <dt>Couche par couche</dt><dd>À l'essai. Le poids est toujours retiré au début (si quelque chose échappe au suivi, on en reste là, comme avant), mais pendant l'impression :
+    <dt>Couche par couche</dt><dd>Le poids prévu par le trancheur est retiré au début (si quelque chose échappe au suivi, on en reste là), puis pendant l'impression :
       <ul>
         <li>le G-code du 3MF tranché dit, couche par couche, combien chaque filament a consommé (purges comprises), calé sur les grammes prévus ; sans G-code lisible, c'est une estimation (grammes prévus × avancement, marquée « ≈ ») ;</li>
         <li>chaque bobine qui sert à l'impression montre son poids <b>maintenant</b> et, à côté en plus pâle, sa valeur <b>à la fin</b> (« ≈ 695 g → 663 g ») partout où son poids s'affiche : tuile « Filament en cours », fenêtres « Mes AMS », « Couleurs chargées » et « Bobines » de l'accueil, fiche d'un emplacement, grille et fiche des bobines, fenêtre de l'imprimante, carte <b>Suivi du filament</b> de la fiche de l'impression ; sa jauge garde en plein ce qu'elle a maintenant, hachurée la part qui partira d'ici la fin. Son poids enregistré est sa <b>cible</b> (ce qui restera à la fin), donné au survol et dans la fiche bobine ;</li>

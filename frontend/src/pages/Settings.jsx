@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { LiveModeCard } from "../components/LiveUsage";
 import CardHelp from "../components/CardHelp";
 import Cachettes from "../components/Cachettes";
 import { Save, Wifi, RefreshCw, Sun, Moon, Users, KeyRound, Trash2, Activity } from "lucide-react";
@@ -2266,8 +2265,6 @@ export default function Settings() {
           {saved ? "Sauvegardé ✓" : "Sauvegarder"}
         </button>
       </form>
-      {/* suivi du filament couche par couche (alpha, 02/11/2026) : enregistre tout de suite, hors du formulaire */}
-      <div style={{ marginTop:16 }}><LiveModeCard card={card} cardTitle={cardTitle}/></div>
       </div></AdminOnly>
       )}
 
