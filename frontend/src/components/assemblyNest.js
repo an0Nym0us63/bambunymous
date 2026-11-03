@@ -477,7 +477,12 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
         if (Number.isNaN(z)) continue;
         n++;
         const edge = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b2]) => { const x = i + a, y = j + b2; return x < 0 || y < 0 || x >= mu || y >= mv || Number.isNaN(La[y * mu + x]) || Math.abs(La[y * mu + x] - z) > 0.35; });
-        if (edge || z < tp - 0.35 || n % 4 === 0) probe.push(ga + i * h - cu, gb + j * h - cv, z);
+        // (un point du pourtour rentre de 0,05 mm vers la piece : pose pile sur son bord, son rayon touchait une piece
+        // voisine a fleur -- un panneau en place contre une boite plus haute se croyait enfonce de 14 mm)
+        let ex = 0, ey = 0;
+        if (edge) for (const [a, b2] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const x = i + a, y = j + b2; if (x >= 0 && y >= 0 && x < mu && y < mv && !Number.isNaN(La[y * mu + x])) { ex += a; ey += b2; } }
+        const el = Math.hypot(ex, ey) || 1;
+        if (edge || z < tp - 0.35 || n % 4 === 0) probe.push(ga + i * h - cu + 0.05 * ex / el, gb + j * h - cv + 0.05 * ey / el, z);
       }
     }
     const cs = Math.cos(b.th), sn = Math.sin(b.th), top = sb.hi[2] + 1, dn = w.clone().negate();
@@ -495,6 +500,12 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
     return on >= 0.5 * (probe.length / 3) ? d : Infinity;
   };
   let gBest = null, gHere = null;
+  // (03/11/2026) en collision, vraiment : aux vrais rayons, la piece traverse son support de plus de 0,3 mm a sa place
+  // de depart (posee en vrac). Elle a alors le droit de remonter, et sa descente se mesure depuis la hauteur ou elle
+  // ne traverse plus rien -- pas depuis sa place enfoncee, d'ou tout semblait « remonter »
+  const pen0 = mode === "nest" ? exactLift({ th: 0, su: 0, sv: 0 }) : -Infinity;
+  const colliding = pen0 !== Infinity && pen0 > 0.3;
+  const ref0 = colliding ? pen0 : 0;
   if (mode === "nest") {
     // (le dessous entier, sans rogner : une jupe de 1,2 mm rognee d'une maille perdait des morceaux, son centre se
     // decalait d'un demi-millimetre et le couvercle ne passait plus)
@@ -650,8 +661,10 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   const stay = () => {
     // descendre seulement (03/11/2026 : sur une piece imbriquee, la carte des hauteurs la croit un peu dans son support,
     // et « descendre au contact » la soulevait hors du plan de collage)
-    const dz = here !== Infinity && here <= -0.05 ? here : 0;
-    return { M: new THREE.Matrix4().makeTranslation(w.x * dz, w.y * dz, w.z * dz), sink: -dz, moved: 0, turned: 0, contact: P.clone().addScaledVector(w, dz), engaged };
+    // (en collision : sortir, juste au contact)
+    const dz = colliding ? pen0 : here !== Infinity && here <= -0.05 ? here : 0;
+    return { M: new THREE.Matrix4().makeTranslation(w.x * dz, w.y * dz, w.z * dz), sink: colliding ? -dz : ref0 - dz, depth: -dz, moved: 0, turned: 0, contact: P.clone().addScaledVector(w, dz),
+      engaged: engaged && !colliding, colliding, pen0 };
   };
   // la place « a la main », verifiee aux vrais rayons, l'emporte si elle descend plus bas (et ne traverse aucune
   // autre piece)
@@ -725,7 +738,7 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
     surround = dirs ? hit / dirs : 0;
   }
   const tr = best.th * 180 / Math.PI;
-  return { M, sink: -d, moved: Math.hypot(best.su, best.sv), turned: ((tr + 540) % 360) - 180, contact, cov0, cov1, gain, surround, clash: clash1, blocked, exact: forcedD !== null, engaged };
+  return { M, sink: ref0 - d, depth: colliding ? ref0 - d : -d, drop: -d, moved: Math.hypot(best.su, best.sv), turned: ((tr + 540) % 360) - 180, contact, cov0, cov1, gain, surround, clash: clash1, blocked, exact: forcedD !== null, engaged: engaged && !colliding, colliding, pen0 };
 }
 
 
@@ -740,16 +753,30 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
 export async function snapPlace(o) {
   const { THREE, moving, P, N, collides = null, lock = null, axis = null, reach = null } = o;
   const nest = await nestPlace({ ...o, mode: "nest", bounded: true });
-  let kind = null, r = null;
+  let kind = null, r = null, al;
+  const alignOk = a => a && a.M && (a.gain ?? 0) > 0.01 && (a.cov1 >= 0.2 || a.cov1 - (a.cov0 || 0) >= 0.2);
   // un logement : la piece y descend, et la face collee l'entoure encore (pas un plot dont elle tombe)
-  if (nest && nest.M && nest.sink >= 0.3 && (nest.surround ?? 1) >= 0.6) { kind = "nest"; r = nest; }
+  // (en collision, la profondeur se compte depuis la place hors collision : une reglette enfoncee dans le dessus a cote
+  // de sa rainure y va ; mais si la place trouvee n'est pas plus basse que celle de depart -- des tenons qui traversaient
+  // un mur --, l'alignement passe d'abord s'il la sort de la collision sans la soulever : il la met dans ses fentes, a fleur)
+  if (nest && nest.M && nest.sink >= 0.3 && (nest.depth ?? nest.sink) >= 0.3 && (nest.surround ?? 1) >= 0.6) {
+    if (nest.colliding && nest.drop < 0.3 && alignOk(al = await nestPlace({ ...o, mode: "align" })) && !((al.sink ?? 0) < -0.3)) { kind = "align"; r = al; }
+    else { kind = "nest"; r = nest; }
+  }
   else if (nest && nest.engaged) return { M: null, kind: null, r: nest, nest, align: null };   // deja engagee : rien de mieux
   else {
-    const al = await nestPlace({ ...o, mode: "align" });
+    al = al || await nestPlace({ ...o, mode: "align" });
     // aligner : seulement s'il porte vraiment (au moins 20 %, ou 20 points de mieux ; 03/11/2026 : un couvercle decale de
     // 6 mm pour reposer a 16 % au lieu de 4 % sur le bord fin d'une boite)
-    if (al && al.M && (al.gain ?? 0) > 0.01 && (al.cov1 >= 0.2 || al.cov1 - (al.cov0 || 0) >= 0.2) && !((al.sink ?? 0) < -0.5)) { kind = "align"; r = al; }
-    else if (nest && nest.M && nest.sink >= 0.05 && nest.moved < 0.05 && Math.abs(nest.turned) < 0.1) { kind = "nest"; r = nest; }   // au moins descendre au contact, sur place
+    if (alignOk(al) && (nest?.colliding || !((al.sink ?? 0) < -0.5))) { kind = "align"; r = al; }
+    // au moins descendre au contact, sur place ; en collision, en sortir
+    else if (nest && nest.M && nest.moved < 0.05 && Math.abs(nest.turned) < 0.1 && (nest.sink >= 0.05 || (nest.colliding && nest.sink <= -0.05))) { kind = "nest"; r = nest; }
+    // rien de mieux, mais en collision : au moins en sortir, juste au contact, sans la deplacer ni la tourner
+    else if (nest && nest.colliding && nest.pen0 > 0.3) {
+      const w = N.clone().normalize(), dz = nest.pen0;
+      const M = new THREE.Matrix4().makeTranslation(w.x * dz, w.y * dz, w.z * dz);
+      return { M, kind: "nest", r: { ...nest, M, sink: -dz, moved: 0, turned: 0, contact: P.clone().addScaledVector(w, dz) }, fine: null, nest };
+    }
     // rien : sans face plane du tout (une face courbe), l'editeur fera epouser la surface ; sinon, elle reste
     else return { M: null, kind: null, r: al || nest, nest, align: al, noface: !al || !al.M || (al.cov0 || 0) < 0.02 && (al.cov1 || 0) < 0.05 };
   }
