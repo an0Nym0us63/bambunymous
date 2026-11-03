@@ -71,7 +71,7 @@ export default function MwDocs({ docs = [], parts = [], otherParts = null, filam
         {docs.length > 0 && pill(`${docs.length} document${docs.length > 1 ? "s" : ""}`, "#3B82F6")}
         {filaments.length > 0 && pill(`${filaments.length} filament${filaments.length > 1 ? "s" : ""}${missing ? ` · ${missing} à commander` : " · tout en stock"}`,
           missing ? "#EA580C" : "#16A34A")}
-        {nParts > 0 && pill(`${nParts} à prévoir`, "#D97706")}
+        {nParts > 0 && pill(`${nParts} accessoire${nParts > 1 ? "s" : ""}`, "#D97706")}
         <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▶</span>
       </button>
       {open && <>
@@ -104,7 +104,7 @@ export default function MwDocs({ docs = [], parts = [], otherParts = null, filam
         {filaments.map((f, i) => <FilaLine key={i} f={f}/>)}
       </div>}
       {(parts.length > 0 || otherParts) && <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-        {head("À prévoir")}
+        {head(`Accessoires (${nParts})`)}
         {parts.map((p, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600, color: "var(--text2)", minWidth: 0 }}>
           <span style={{ flexShrink: 0, minWidth: 26, textAlign: "center", padding: "1px 6px", borderRadius: 8, fontWeight: 900, fontSize: 11,
             color: "#fff", background: "linear-gradient(135deg, #F59E0B, #EA580C)" }}>{p.quantity ? `${p.quantity}×` : "•"}</span>
