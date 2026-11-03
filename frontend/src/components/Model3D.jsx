@@ -469,6 +469,31 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           }
           // la vue assemblee, piece par piece : un groupe par piece (pour l'editer, et pour la place enregistree)
           const byPiece = pieces && groups.some(g => g.piece != null) ? new Map() : null;
+          // (03/11/2026) une couleur posee comme une piece encastree dans une autre (un motif blanc affleurant le dessus
+          // d'un plot bleu) : leurs faces tombent au meme endroit et la carte graphique alterne entre les deux, ca
+          // scintille. Dans une meme piece, les couleurs de detail (les plus petites) passent devant la principale sur
+          // une face commune (un decalage de profondeur infime, sans effet ailleurs)
+          const detailRank = new Map();
+          {
+            const byKey = new Map();
+            for (const g of groups) { const k = g.piece ?? -1; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(g); }
+            // (la surface, pas le nombre de triangles : un motif fait de petites pastilles en a plus que son plot)
+            const area = g => {
+              let s = 0;
+              const p = g.pos, ix = g.idx;
+              for (let i = 0; i < ix.length; i += 3) {
+                const a = ix[i] * 3, b = ix[i + 1] * 3, c = ix[i + 2] * 3;
+                const ux = p[b] - p[a], uy = p[b + 1] - p[a + 1], uz = p[b + 2] - p[a + 2], vx = p[c] - p[a], vy = p[c + 1] - p[a + 1], vz = p[c + 2] - p[a + 2];
+                s += Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx);
+              }
+              return s;
+            };
+            for (const list of byKey.values()) {
+              if (list.length < 2) continue;
+              const A = new Map(list.map(g => [g, area(g)]));
+              list.sort((a, b) => A.get(b) - A.get(a)).forEach((g, i) => detailRank.set(g, i));
+            }
+          }
           for (const g of groups) {
             const geo = new THREE.BufferGeometry();
             geo.setAttribute("position", new THREE.BufferAttribute(g.pos, 3));
@@ -488,6 +513,8 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             // des fissures d'un pixel laissaient voir le noir de l'interieur (des pointilles noirs sur la Nonne)
             const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.05, flatShading: true, envMapIntensity: 0, side: THREE.DoubleSide,
               ...(FINISH_MAT[fin] || {}) });
+            const rank = detailRank.get(g) || 0;
+            if (rank) { mat.polygonOffset = true; mat.polygonOffsetFactor = -1; mat.polygonOffsetUnits = -2 * Math.min(rank, 8); }
             // un filament multicolore (28/10/2026), en simili, la finition posee par-dessus comme pour les autres :
             // le degrade evolue le long du filament consomme, donc surtout avec la hauteur d'impression, et un peu dans
             // la couche elle-meme, le long du parcours (le remplissage du dessus change sur sa longueur) : couleur par
