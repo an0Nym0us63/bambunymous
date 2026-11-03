@@ -4,7 +4,7 @@ import { finishCanvas } from "../utils/finishTex";
 import { colorBg, FINISHES } from "../utils/colors";
 import { egg } from "../eggs";
 import { ColorPairs, chooseColor } from "./ColorMap";
-import { FSheet } from "./FicheKit";
+import { FSheet, fBtn } from "./FicheKit";
 import client, { apiUrl } from "../api/client";
 import { importRetry } from "../utils/importRetry";
 import { currentFriend } from "../store/friend";
@@ -1390,6 +1390,67 @@ function Swatches({ list, value, onPick, free = true }) {
   </div>;
 }
 
+// Les plateaux du groupe (03/11/2026) : pour chaque 3MF du groupe, les plateaux dont l'assemblage montre les pieces --
+// d'office ceux des impressions (devines, parfois mal : des pieces manquaient), ou choisis ici. L'assemblage commence
+// garde ses places (les pieces cachees les retrouvent une fois remontrees).
+function GroupPlates({ gid, sources, onClose, onSaved }) {
+  const init = () => Object.fromEntries((sources || []).filter(s => !s.no_view).map(s => [s.iid, { auto: !s.manual, on: new Set(s.kept || []) }]));
+  const [sel, setSel] = useState(init);
+  const [busy, setBusy] = useState(false);
+  const total = Object.values(sel).reduce((a, x) => a + x.on.size, 0);
+  const toggle = (iid, n) => setSel(o => { const x = o[iid], on = new Set(x.on); if (on.has(n)) on.delete(n); else on.add(n); return { ...o, [iid]: { auto: false, on } }; });
+  const auto = (iid, s) => setSel(o => ({ ...o, [iid]: { auto: true, on: new Set(s.printed?.length ? s.printed : s.plates.map(p => p.n)) } }));
+  const all = (iid, s) => setSel(o => ({ ...o, [iid]: { auto: false, on: new Set(s.plates.map(p => p.n)) } }));
+  const save = async () => {
+    setBusy(true);
+    try {
+      await client.put(`/makerworld/3d/group/${gid}/plates`, { plates: Object.fromEntries(Object.entries(sel).map(([k, x]) => [k, x.auto ? null : [...x.on].sort((a, b) => a - b)])) });
+      egg("plateaux_groupe");
+      onSaved();
+    } catch (e) {
+      showAlert(e?.response?.data?.detail || "Le choix n'a pas pu être enregistré");
+      setBusy(false);
+    }
+  };
+  const chip = on => ({ padding: "7px 12px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 800, textAlign: "left",
+    border: on ? "1.5px solid #6366F1" : "1px solid var(--border)", color: on ? "#6366F1" : "var(--muted)",
+    background: on ? "color-mix(in srgb, #6366F1 12%, transparent)" : "var(--surface2)" });
+  return createPortal(
+    <FSheet onClose={onClose} z={7000} bottom={<>
+      <button type="button" onClick={onClose} style={{ ...fBtn, flex: 1 }}>Fermer</button>
+      <button type="button" disabled={busy || !total} onClick={save} style={{ ...fBtn, flex: 2, color: "#fff", border: "none", opacity: busy || !total ? 0.5 : 1,
+        background: "linear-gradient(135deg, #0EA5E9, #6366F1)" }}>{busy ? "Assemblage…" : `🧩 Assembler (${total} plateau${total > 1 ? "x" : ""})`}</button>
+    </>}>
+      <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 14 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>🧩 Plateaux du groupe</div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>
+            Touche les plateaux dont tu veux les pièces, pour chaque modèle. Ton assemblage garde ses places : une pièce retirée retrouve la sienne quand tu la remets.</div>
+        </div>
+        {(sources || []).map(s => {
+          const x = sel[s.iid];
+          return <div key={s.iid} style={{ display: "flex", flexDirection: "column", gap: 7, padding: "10px 12px", borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 900, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name || s.iid}</span>
+              {x && <span style={{ fontSize: 11, fontWeight: 800, color: x.auto ? "#16a34a" : "#d97706" }}>{x.auto ? "d'après les impressions" : "choisis à la main"}</span>}
+            </div>
+            {s.no_view ? <div style={{ fontSize: 12, fontWeight: 700, color: "#d97706" }}>⚠ Pas de vue assemblée dans ce 3MF : ses pièces ne peuvent pas entrer dans l'assemblage</div> : <>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {s.plates.map(p => <button key={p.n} type="button" onClick={() => toggle(s.iid, p.n)} style={chip(x.on.has(p.n))}
+                  data-tip={(s.printed || []).includes(p.n) ? "Imprimé dans ce groupe" : "Pas d'impression de ce plateau dans le groupe"}>
+                  {x.on.has(p.n) ? "✓ " : ""}{p.n}{p.name ? ` · ${p.name}` : ""} <span style={{ opacity: 0.7 }}>({p.pieces} pièce{p.pieces > 1 ? "s" : ""}){(s.printed || []).includes(p.n) ? " 🖨" : ""}</span></button>)}
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button type="button" onClick={() => all(s.iid, s)} style={{ ...chip(false), fontSize: 11.5 }}>Tous</button>
+                <button type="button" onClick={() => auto(s.iid, s)} style={{ ...chip(false), fontSize: 11.5 }} data-tip="Revenir aux plateaux imprimés (devinés d'après les impressions)">🖨 Ceux imprimés</button>
+              </div>
+            </>}
+          </div>;
+        })}
+      </div>
+    </FSheet>, document.body);
+}
+
 function BarMenu({ label, tip, items, active = false, b, up = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -1805,6 +1866,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const [grpSeen, setGrpSeen] = useState(null);
   const gid = /^group:(\d+)$/.exec(scope || "")?.[1] || grpSeen;
   const [grpAll, setGrpAll] = useState(false);
+  // le choix des plateaux du groupe : ouvert des que la vue du groupe est la (pickGrp : a ouvrir)
+  const [pickGrp, setPickGrp] = useState(false);
   const did = grpAll && gid ? `g${gid}` : designId;
   const base = `/makerworld/3d/${encodeURIComponent(did)}`;
   useEffect(() => { if (meta?.group_id) setGrpSeen(String(meta.group_id)); }, [meta?.group_id]);
@@ -2167,10 +2230,16 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {meta?.plates?.length > 0 && (meta.plates.length > 1 || grpAll) && meta.plates.map((x, i) => <button key={x.n} type="button" onClick={() => setPlate(i)} style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer",
             fontSize: 12.5, fontWeight: 800, border: i === plate ? "none" : "1px solid var(--border)", color: i === plate ? "#fff" : "var(--text2)",
             background: i === plate ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" }}>{x.pending ? "⏳ " : ""}{x.assembled ? (grpAll ? "🧩 Tout le groupe" : "🧩 Assemblé") : x.name ? `${x.n} · ${x.name}` : `Plateau ${x.n}`}</button>)}
-          {gid && !fr && <button type="button" onClick={() => { setPlate(0); setGrpAll(v => !v); if (!grpAll) egg("assemblage_groupe"); }}
-            data-tip={grpAll ? "Revenir à ce modèle seul" : "L'assemblage du groupe : toutes ses pièces, de tous ses modèles et profils (seulement les plateaux imprimés), dans une seule vue à éditer"}
+          {gid && !fr && <button type="button" onClick={() => { setPlate(0); setGrpAll(v => !v); if (!grpAll) { egg("assemblage_groupe"); if (isAdmin) setPickGrp(true); } }}
+            data-tip={grpAll ? "Revenir à ce modèle seul" : "L'assemblage du groupe : choisis les plateaux de chacun de ses modèles et profils, puis tout est réuni dans une seule vue à éditer"}
             style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 800, border: "1px dashed color-mix(in srgb, #6366F1 55%, var(--border))",
-              color: "#6366F1", background: "color-mix(in srgb, #6366F1 8%, transparent)" }}>{grpAll ? "↩ Ce modèle seul" : "🧩 Tout le groupe"}</button>}
+              color: "#6366F1", background: "color-mix(in srgb, #6366F1 8%, transparent)" }}>{grpAll ? "↩ Ce modèle seul" : "🧩 Plateaux du groupe"}</button>}
+          {grpAll && isAdmin && !fr && !editing && meta?.group_sources && <button type="button" onClick={() => setPickGrp(true)}
+            data-tip="Les plateaux de chaque modèle du groupe dont l'assemblage montre les pièces"
+            style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 800, border: "1px solid var(--border)",
+              color: "var(--text2)", background: "var(--surface2)" }}>🗂 Choisir les plateaux</button>}
+          {pickGrp && grpAll && meta?.group_sources && <GroupPlates gid={gid} sources={meta.group_sources} onClose={() => setPickGrp(false)}
+            onSaved={() => { setPickGrp(false); setPlate(0); setAgain(a => a + 1); }}/>}
         </div>}
         <div ref={wrap} style={{ position: pfull ? "fixed" : "relative", ...(pfull ? { inset: 0, zIndex: 6000 } : {}),
           height: pfull ? "100dvh" : full ? "100vh" : "min(62dvh, 560px)", borderRadius: full || pfull ? 0 : 18, overflow: "hidden",

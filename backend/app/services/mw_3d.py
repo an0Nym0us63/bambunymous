@@ -1534,6 +1534,9 @@ def compose_group(gkey: str, parts: list, sig: str) -> dict | None:
             continue
         keep = part.get("keep")
         got = [g for g in got if keep is None or g[1] in keep]
+        # le numero de ce 3MF dans le groupe (03/11/2026) : garde d'une fois sur l'autre (group_sel), pas son rang -- un
+        # 3MF ajoute ou retire renumerotait les pieces des suivants, et l'assemblage commence ne les retrouvait plus
+        slot = int(part.get("slot") or pi + 1)
         if not got:
             continue
         lo = np.min([g[2].min(axis=0) for g in got], axis=0)
@@ -1546,7 +1549,7 @@ def compose_group(gkey: str, parts: list, sig: str) -> dict | None:
             if keep is not None and i not in keep:
                 continue
             k = str(pc.get("k") or "").split(":")
-            nk = ":".join([str((pi + 1) * 100000 + int(k[0]))] + k[1:]) if k and k[0].isdigit() else f"{(pi + 1) * 100000}:0:{i}"
+            nk = ":".join([str(slot * 100000 + int(k[0]))] + k[1:]) if k and k[0].isdigit() else f"{slot * 100000}:0:{i}"
             remap[i] = len(pieces)
             pieces.append({"k": nk, "name": pc.get("name") or f"Pièce {i + 1}", "src": pi,
                            "o": [float(a) + float(b) for a, b in zip(pc.get("o") or [0, 0, 0], D)]})
@@ -1892,6 +1895,32 @@ def _did_of(key: str) -> str | None:
     return None
 
 
+# Les choix d'un groupe (03/11/2026) : le numero garde de chacun de ses 3MF (slots : {iid : n}) et les plateaux dont on
+# veut les pieces (plates : {iid : [n, ...]} ; absent : ceux des impressions). A cote des assemblages (sauvegardes avec
+# eux), dans un sous-dossier : les vues d'un modele ne le lisent pas comme un assemblage.
+def _group_sel_file(gkey: str) -> Path:
+    from ..core.config import settings
+    return Path(settings.DATA_DIR) / "mw_3d_edits" / "_groups" / f"{gkey}.json"
+
+
+def group_sel(gkey: str) -> dict:
+    if not _KEY.fullmatch(gkey or ""):
+        return {}
+    try:
+        d = json.loads(_group_sel_file(gkey).read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def group_sel_save(gkey: str, d: dict) -> None:
+    if not _KEY.fullmatch(gkey or ""):
+        raise ValueError("Groupe inconnu")
+    f = _group_sel_file(gkey)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    _write(f, json.dumps(d).encode("utf-8"))
+
+
 def _read(f: Path) -> dict | None:
     try:
         d = json.loads(f.read_text(encoding="utf-8"))
@@ -1963,6 +1992,11 @@ def save_edit(key: str, pieces: dict, by: str = "", groups: list | None = None, 
     if not _KEY.fullmatch(key or ""):
         raise ValueError("Vue inconnue")
     clean = {}
+    # l'assemblage d'un groupe (03/11/2026) : les pieces des plateaux qu'on ne montre plus gardent leur place (remontrees,
+    # elles la retrouvent) -- enregistrer sans elles les effacait
+    if str(key).startswith("grp"):
+        old = _read(_edits_file(key)) or {}
+        pieces = {**{k: m for k, m in (old.get("pieces") or {}).items() if k not in (pieces or {})}, **(pieces or {})}
     for k, m in (pieces or {}).items():
         # « #n » : un exemplaire ajoute de la piece (30/10/2026)
         # « :n » : un morceau d'une piece separee, et ses sous-morceaux (separes a leur tour, 30/10/2026)

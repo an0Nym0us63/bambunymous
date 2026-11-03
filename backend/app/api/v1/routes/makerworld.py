@@ -903,19 +903,40 @@ async def _group_view(gid: int) -> dict:
         raise HTTPException(404, "Aucun 3MF d'origine dans ce groupe : importe-les, ou ouvre la vue 3D de ses modèles")
     chosen = await _color_choices(f"group:{gid}")
     parts, fin_used, fin_orig, missing = [], {}, {}, []
+    gkey = f"grp{gid}"
+    # les plateaux choisis a la main pour chaque 3MF (03/11/2026), sinon ceux des impressions
+    sel = T.group_sel(gkey)
+    picked = sel.get("plates") if isinstance(sel.get("plates"), dict) else {}
+    sources = []
     for iid, e in srcs.items():
         ok = await asyncio.to_thread(T._in_child, e["path"], iid, "view")
         meta = T._read_side(iid, "plates.json") if ok else None
         asm = next((p for p in (meta or {}).get("plates") or [] if p.get("assembled") and p.get("pieces") and p.get("size_mm")), None)
         if not asm:
             missing.append(e["name"] or iid)
+            sources.append({"iid": iid, "name": e["name"], "no_view": True, "plates": []})
             continue
         # les pieces des plateaux imprimes, quand chaque impression dit le sien (sinon toutes)
         pp = await asyncio.to_thread(T.piece_plates, e["path"])
         plate_of = [pp.get(":".join(str(pc.get("k") or "").split(":")[:2])) for pc in asm["pieces"]]
         keep = None
+        printed = sorted(n for n in e["plates"] if n is not None)
         if None not in e["plates"] and any(n is not None for n in plate_of):
             keep = {i for i, n in enumerate(plate_of) if n in e["plates"]} or None
+        # choisis a la main : ces plateaux-la (une piece sans plateau connu reste)
+        mine = picked.get(iid)
+        if isinstance(mine, list):
+            want = {int(n) for n in mine if str(n).lstrip("-").isdigit()}
+            keep = {i for i, n in enumerate(plate_of) if n is None or n in want}
+        # pour le choix : les plateaux de ce 3MF qui ont des pieces dans la vue assemblee, et ceux gardes
+        names = {int(p.get("n")): p.get("name") or "" for p in (meta or {}).get("plates") or [] if not p.get("assembled") and str(p.get("n", "")).isdigit()}
+        count: dict = {}
+        for n in plate_of:
+            if n is not None:
+                count[n] = count.get(n, 0) + 1
+        kept = sorted({n for i, n in enumerate(plate_of) if n is not None and (keep is None or i in keep)})
+        sources.append({"iid": iid, "name": e["name"], "manual": isinstance(mine, list), "printed": printed, "kept": kept,
+                        "plates": [{"n": n, "name": names.get(n, ""), "pieces": count[n]} for n in sorted(count)]})
         # les couleurs : celles de chaque plateau (ses impressions), a defaut celles de toutes
         pchoices = await _print_choices(e["ids"])
         detail: list = []
@@ -936,15 +957,27 @@ async def _group_view(gid: int) -> dict:
         for c, fz in (T.origin_finishes(e["path"]) or {}).items():
             if str(c)[:6].upper() not in mapped:
                 fin_orig.setdefault(str(c)[:6].upper(), fz)
-        parts.append({"iid": iid, "name": e["name"], "keep": keep,
+        parts.append({"iid": iid, "name": e["name"], "keep": keep, "slot": None,
                       "pal": {i: (per.get(n) if n is not None else None) or allp for i, n in enumerate(plate_of)}})
     if not parts:
         raise HTTPException(404, f"Pas de vue assemblée pour les 3MF de ce groupe ({', '.join(missing[:3])})")
     finishes = {**fin_orig, **fin_used}
-    sig_src = [(p["iid"], int((T._root() / p["iid"] / "plates.json").stat().st_mtime), sorted(p["keep"]) if p["keep"] else None,
+    # le numero garde de chaque 3MF : la premiere fois, son rang (les cles des assemblages deja faits), puis le suivant
+    slots = {str(k): int(v) for k, v in (sel.get("slots") or {}).items() if str(v).isdigit()}
+    if not slots:
+        slots = {p["iid"]: i + 1 for i, p in enumerate(parts)}
+    for p in parts:
+        if p["iid"] not in slots:
+            slots[p["iid"]] = max(slots.values(), default=0) + 1
+        p["slot"] = slots[p["iid"]]
+    if slots != sel.get("slots"):
+        try:
+            T.group_sel_save(gkey, {**sel, "slots": slots})
+        except Exception:
+            logger.exception("[3D] groupe : numeros des 3MF")
+    sig_src = [(p["iid"], p["slot"], int((T._root() / p["iid"] / "plates.json").stat().st_mtime), sorted(p["keep"]) if p["keep"] else None,
                 sorted((k, sorted(v.items())) for k, v in p["pal"].items())) for p in parts]
     sig = hashlib.sha1(_json.dumps(sig_src, default=str).encode()).hexdigest()[:16]
-    gkey = f"grp{gid}"
     meta = await asyncio.to_thread(T.compose_group, gkey, parts, sig)
     if not meta:
         raise HTTPException(404, "Rien à montrer pour ce groupe")
@@ -960,7 +993,7 @@ async def _group_view(gid: int) -> dict:
             "glows": {o["color"]: o["glow"] for o in used_options if o.get("glow")},
             "scope": None, "used_plates": {}, "used_details_plates": {}, "used_multi_plates": {}, "used_multi": {},
             "used_finishes_plates": {}, "finishes": finishes, "used_finishes": {}, "plates": shown, "skipped": [],
-            "piece_plates": {}, "key": gkey, "missing": missing,
+            "piece_plates": {}, "key": gkey, "missing": missing, "group_sources": sources,
             "assembly_edit": T.load_edit(gkey, None, {x.get("k") for p in shown for x in p.get("pieces") or [] if isinstance(x, dict)}),
             "pending": False}
 
@@ -1870,6 +1903,27 @@ async def mw_relink_search(body: dict = Body({}), _: str = Depends(require_admin
         return {"candidates": await R.search_for(str(body.get("key") or ""), q)}
     except ValueError as e:
         raise HTTPException(502, str(e))
+
+
+# ── Les plateaux d'un groupe (03/11/2026) ──
+@router.put("/3d/group/{gid}/plates")
+async def mw_3d_group_plates(gid: int, body: dict = Body({}), _: str = Depends(require_admin)):
+    """Choisir, pour chaque 3MF du groupe, les plateaux dont l'assemblage du groupe montre les pieces :
+    {plates: {iid: [n, ...] | null}} (null, ou absent : ceux des impressions)."""
+    from ....services import mw_3d as T
+    import re as _re
+    gkey = f"grp{int(gid)}"
+    sel = T.group_sel(gkey)
+    cur = dict(sel.get("plates") or {}) if isinstance(sel.get("plates"), dict) else {}
+    for iid, lst in (body.get("plates") or {}).items() if isinstance(body.get("plates"), dict) else []:
+        if not _re.fullmatch(r"[A-Za-z0-9_]{1,80}", str(iid)):
+            continue
+        if lst is None:
+            cur.pop(str(iid), None)
+        elif isinstance(lst, list):
+            cur[str(iid)] = sorted({int(n) for n in lst if isinstance(n, int) and 0 <= n < 1000})
+    T.group_sel_save(gkey, {**sel, "plates": cur})
+    return {"plates": cur}
 
 
 # ── L'assemblage edite a la main (29/10/2026) ──
