@@ -2268,6 +2268,15 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             data-tip="Les plateaux de chaque modèle du groupe dont l'assemblage montre les pièces"
             style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 800, border: "1px solid var(--border)",
               color: "var(--text2)", background: "var(--surface2)" }}>🗂 Choisir les plateaux</button>}
+          {/* l'assemblage monte sur le modele seul, repris ici (03/11/2026) : d'office tant que le groupe n'en a pas, sinon a la demande */}
+          {grpAll && isAdmin && !fr && !editing && meta?.group_sources && <button type="button" onClick={async () => {
+            if (!(await showConfirm("Reprendre ici l'assemblage monté sur le modèle seul ? Ses pièces retrouvent leur place, celles des autres modèles gardent la leur. L'assemblage actuel du groupe reste dans l'historique 🕘.",
+              { confirmLabel: "Reprendre" }))) return;
+            try { await client.post(`/makerworld/3d/group/${gid}/seed`); egg("assemblage_repris"); setPlate(0); setAgain(a => a + 1); }
+            catch (e) { showAlert(e?.response?.data?.detail || "L'assemblage n'a pas pu être repris"); }
+          }} data-tip="Reprendre l'assemblage monté sur le modèle seul : ses pièces retrouvent leur place dans le groupe"
+            style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 800, border: "1px solid var(--border)",
+              color: "var(--text2)", background: "var(--surface2)" }}>⤵ Reprendre mon assemblage</button>}
           {pickGrp && grpAll && meta?.group_sources && <GroupPlates gid={gid} sources={meta.group_sources} onClose={() => setPickGrp(false)}
             onSaved={() => { setPickGrp(false); setPlate(0); setAgain(a => a + 1); }}/>}
         </div>}

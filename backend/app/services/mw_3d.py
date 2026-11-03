@@ -1921,6 +1921,89 @@ def group_sel_save(gkey: str, d: dict) -> None:
     _write(f, json.dumps(d).encode("utf-8"))
 
 
+# L'assemblage d'un modele repris dans celui de son groupe (03/11/2026 : monte sur le modele seul, l'assemblage du groupe
+# repartait de zero). Une place enregistree S vaut pour (sommet - o) de la piece : la meme dans les deux vues ; seul le
+# decalage du 3MF dans le groupe (o_groupe - o_modele, le meme pour toutes ses pieces) s'y ajoute, et chaque cle prend le
+# numero du 3MF dans le groupe (slot * 100000 + objet).
+def _slot_key(k, slot: int) -> str | None:
+    m = re.fullmatch(r"(\d+)(:.*)", str(k))
+    return f"{slot * 100000 + int(m.group(1))}{m.group(2)}" if m and int(m.group(1)) < 100000 else None
+
+
+def seed_group(gkey: str, gid: int, force: bool = False, by: str = "") -> int:
+    """Reprend dans l'assemblage du groupe celui de chacun de ses 3MF (le sien dans ce groupe, sinon celui du modele) :
+    d'office tant que le groupe n'en a pas, ou a la demande (force : par-dessus, les pieces des autres 3MF gardees).
+    Rend le nombre de pieces reprises."""
+    if not _KEY.fullmatch(gkey or "") or (not force and _edits_file(gkey).is_file()):
+        return 0
+    gmeta = _read_side(gkey, "plates.json") or {}
+    grec = next(iter(gmeta.get("plates") or []), None) or {}
+    go = {p.get("k"): p.get("o") for p in grec.get("pieces") or [] if isinstance(p, dict)}
+    slots = group_sel(gkey).get("slots") or {}
+    cur = (_read(_edits_file(gkey)) or {}) if force else {}
+    pieces, groups, joints = dict(cur.get("pieces") or {}), list(cur.get("groups") or []), list(cur.get("joints") or [])
+    splits, excluded = list(cur.get("splits") or []), list(cur.get("excluded") or [])
+    cuts, colors, paints = dict(cur.get("cuts") or {}), dict(cur.get("colors") or {}), list(cur.get("paints") or [])
+    owns, n = own_keys(), 0
+    for src in grec.get("sources") or []:
+        iid, slot = src.get("iid"), slots.get(src.get("iid"))
+        if not iid or not str(slot).isdigit():
+            continue
+        slot = int(slot)
+        asm = next((p for p in (_read_side(iid, "plates.json") or {}).get("plates") or [] if p.get("assembled") and p.get("pieces")), None)
+        if not asm:
+            continue
+        ok = own_key(iid, f"g{int(gid)}")
+        e = _read(_edits_file(ok)) if ok in owns else load_edit(iid, _did_of(iid), {pc.get("k") for pc in asm["pieces"]})
+        if not e or not e.get("pieces"):
+            continue
+        delta = None
+        for pc in asm["pieces"]:
+            og = go.get(_slot_key(pc.get("k"), slot))
+            if og and pc.get("o"):
+                delta = [float(a) - float(b) for a, b in zip(og, pc["o"])]
+                break
+        if delta is None:
+            continue
+
+        def rk(k, slot=slot):
+            return _slot_key(k, slot)
+
+        # repris par-dessus : ce que le groupe avait pour les pieces de ce 3MF laisse la place (pas de doublons)
+        def mine(k, slot=slot):
+            h = str(k or "").split(":")[0]
+            return h.isdigit() and int(h) // 100000 == slot
+        pieces = {k: v for k, v in pieces.items() if not mine(k)}
+        groups = [g for g in groups if not any(mine(k) for k in g)]
+        joints = [j for j in joints if not (mine(j.get("a")) or mine(j.get("b")))]
+        splits, excluded = [k for k in splits if not mine(k)], [k for k in excluded if not mine(k)]
+        cuts, colors = {k: v for k, v in cuts.items() if not mine(k)}, {k: v for k, v in colors.items() if not mine(k)}
+        paints = [z for z in paints if not mine(z.get("k"))]
+        for k, m in e["pieces"].items():
+            nk = rk(k)
+            if nk and isinstance(m, list) and len(m) == 16:
+                m = [float(x) for x in m]
+                m[12], m[13], m[14] = m[12] + delta[0], m[13] + delta[1], m[14] + delta[2]
+                pieces[nk] = m
+                n += 1
+        groups += [[rk(k) for k in g if rk(k)] for g in e.get("groups") or [] if isinstance(g, list)]
+        for j in e.get("joints") or []:
+            if isinstance(j, dict) and rk(j.get("a")) and rk(j.get("b")):
+                joints.append({**j, "a": rk(j["a"]), "b": rk(j["b"]),
+                               "pins": [{**p, "ag": rk(p.get("ag")), "bg": rk(p.get("bg"))} for p in j.get("pins") or []
+                                        if isinstance(p, dict) and rk(p.get("ag")) and rk(p.get("bg"))]})
+        splits += [rk(k) for k in e.get("splits") or [] if rk(k)]
+        excluded += [rk(k) for k in e.get("excluded") or [] if rk(k)]
+        cuts.update({rk(k): v for k, v in (e.get("cuts") or {}).items() if rk(k)})
+        colors.update({rk(k): v for k, v in (e.get("colors") or {}).items() if rk(k)})
+        paints += [{**z, "k": rk(z.get("k"))} for z in e.get("paints") or [] if isinstance(z, dict) and rk(z.get("k"))]
+    if not n:
+        return 0
+    save_edit(gkey, pieces, by or "repris du modèle", groups, joints, sorted(set(splits)), None, sorted(set(excluded)), cuts, colors, paints)
+    logger.info(f"[3D] assemblage du groupe {gkey} : {n} places reprises de ses modeles")
+    return n
+
+
 def _read(f: Path) -> dict | None:
     try:
         d = json.loads(f.read_text(encoding="utf-8"))

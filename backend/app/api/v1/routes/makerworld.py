@@ -1004,6 +1004,11 @@ async def _group_view(gid: int) -> dict:
     if not meta:
         raise HTTPException(404, "Rien à montrer pour ce groupe")
     shown = T.plates_out(meta, gkey)[0]
+    # pas encore d'assemblage du groupe : celui deja monte sur ses modeles est repris (03/11/2026)
+    try:
+        await asyncio.to_thread(T.seed_group, gkey, gid)
+    except Exception:
+        logger.exception("[3D] groupe : reprise de l'assemblage des modeles")
     # les filaments de ses impressions, pour peindre ou recolorier une piece dans l'edition (01/11/2026 : il n'y en avait aucun)
     used_options = await _used_options(sorted({pid for e in srcs.values() for pid in e["ids"]}))
     try:
@@ -1961,6 +1966,17 @@ async def mw_3d_group_plates(gid: int, body: dict = Body({}), _: str = Depends(r
             cur[str(iid)] = sorted({int(n) for n in lst if isinstance(n, int) and 0 <= n < 1000})
     T.group_sel_save(gkey, {**sel, "plates": cur})
     return {"plates": cur}
+
+
+@router.post("/3d/group/{gid}/seed")
+async def mw_3d_group_seed(gid: int, user: str = Depends(get_current_user), _: str = Depends(require_admin)):
+    """Reprendre dans l'assemblage du groupe celui de ses modeles (03/11/2026) : leurs pieces y retrouvent la place
+    montee sur le modele seul ; celles des autres modeles gardent la leur (l'ancien est garde dans l'historique)."""
+    from ....services import mw_3d as T
+    n = await asyncio.to_thread(T.seed_group, f"grp{int(gid)}", gid, True, str(user or ""))
+    if not n:
+        raise HTTPException(404, "Aucun assemblage monté sur les modèles de ce groupe")
+    return {"ok": True, "pieces": n}
 
 
 # ── L'assemblage edite a la main (29/10/2026) ──
