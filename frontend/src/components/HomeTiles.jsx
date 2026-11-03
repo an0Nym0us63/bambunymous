@@ -5,7 +5,7 @@ import AllAlertsModal from "./AllAlertsModal";
 import { Hide } from "./Cachettes";
 import { useFriend, currentFriend } from "../store/friend";
 import { useSensorHistory } from "../store/sensors";
-import { SensorSpark, SensorChart, SensorLegend, amsLines, heatLines } from "./SensorChart";
+import { SensorSpark, SensorChart, SensorLegend, amsLines, heatLines, fanLines } from "./SensorChart";
 import { liveOfSpool, LiveHatch, LiveTo, LiveSwitchButton } from "./LiveUsage";
 import { useLiveSpool, useLiveCurrent } from "../store/liveUsage";
 import { useLayer, LayerCanvas, LayerExplorer } from "./LayerView";
@@ -2856,6 +2856,76 @@ function Temps({ status, o, sz }) {
     </Tile>
   );
 }
+// ── Ventilateurs (03/11/2026) ────────────────────────────────────────────────────────────────────────────────────
+// une helice par ventilateur que la machine declare, qui tourne a sa vitesse, l'anneau rempli a son pourcentage
+const FAN_DEFS = [["part", "Pièce", "#14B8A6", "Refroidit la pièce juste imprimée, sous la buse."],
+  ["aux", "Auxiliaire", "#A855F7", "Souffle de côté sur le plateau (PLA, ponts, surplombs)."],
+  ["chamber", "Chambre", "#0EA5E9", "Renouvelle l'air de la chambre (et la tempère)."],
+  ["head", "Tête", "#94A3B8", "Refroidit le haut de la buse, pour que le filament n'y fonde pas trop tôt."]];
+function FanRotor({ pct = 0, color, size = 64 }) {
+  const r = size / 2, ring = r - 3, C = 2 * Math.PI * ring, on = pct > 0;
+  // plus vite il tourne, plus le tour est court : 2,4 s au ralenti, 0,35 s a fond
+  const dur = on ? Math.max(0.35, 2.4 - (pct / 100) * 2.05) : 0;
+  const blade = `M0,-${r * 0.12} C${r * 0.32},-${r * 0.72} ${r * 0.62},-${r * 0.5} ${r * 0.58},-${r * 0.12} Z`;
+  return <svg data-pk="" width={size} height={size} viewBox={`${-r} ${-r} ${size} ${size}`} aria-hidden="true" style={{ display: "block", overflow: "visible" }}>
+    <circle r={ring} fill="none" stroke="var(--surface2)" strokeWidth="4"/>
+    <circle r={ring} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - Math.min(100, pct) / 100)}
+      transform="rotate(-90)" style={{ transition: "stroke-dashoffset .6s ease" }}/>
+    <g style={on ? { animation: `spin ${dur.toFixed(2)}s linear infinite`, transformOrigin: "0 0" } : undefined}>
+      {[0, 72, 144, 216, 288].map(a => <path key={a} d={blade} transform={`rotate(${a})`} fill={on ? color : "var(--muted)"} opacity={on ? 0.85 : 0.45}/>)}
+    </g>
+    <circle r={r * 0.14} fill={on ? color : "var(--muted)"}/>
+  </svg>;
+}
+function Fans({ status, o, sz }) {
+  const hist = useSensorHistory(24, o.spark !== false);
+  if (!status?.connected) return <TileEmpty icon={<Fan size={15}/>} color="#14B8A6" label="Ventilateurs" sz={sz} text="Imprimante injoignable"/>;
+  const f = status.fans || {};
+  const known = FAN_DEFS.filter(([k]) => f[k] != null);
+  if (!known.length) return <TileEmpty icon={<Fan size={15}/>} color="#14B8A6" label="Ventilateurs" sz={sz} text="L'imprimante ne dit pas ses ventilateurs"/>;
+  const rows = known.filter(([k]) => o.idle !== false || f[k] > 0);
+  const lines = o.spark !== false && hist ? fanLines(hist) : null;
+  return (
+    <Tile icon={<Fan size={15}/>} color="#14B8A6" label="Ventilateurs" to="/stats?tab=machine" mini={sz.h === 0.5}
+      summary={<span style={{ display: "inline-flex", gap: 10, fontSize: 13 }}>{known.map(([k, l, c]) =>
+        <span key={k} data-tip={l} style={{ color: f[k] > 0 ? c : "var(--muted)", fontWeight: 800 }}>{l[0]} {f[k]}%</span>)}</span>}
+      zoom={<FansZoom f={f} known={known}/>}>
+      {({ W, H: H0 }) => withSpark(lines, H0, H => {
+        if (!rows.length) return <Empty>Tout est à l'arrêt.</Empty>;
+        const g = fitGrid(rows.length, W, H, { ar: 1, extra: 30, max: 110, gap: 8 });
+        // tres bas, ou trop etroit pour le nom sous chaque helice (« Auxiliaire ») : une ligne par ventilateur
+        if (g.size < 40 || (W - 8 * (g.cols - 1)) / g.cols < 56) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly", gap: 2 }}>
+          {rows.map(([k, l, c]) => <div key={k} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+            <FanRotor pct={f[k]} color={c} size={18}/>
+            <span style={{ flex: 1, color: "var(--text2)", fontWeight: 700 }}>{l}</span>
+            <span data-pk="" style={{ fontWeight: 900, color: f[k] > 0 ? c : "var(--muted)" }}>{f[k]} %</span></div>)}</div>;
+        return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, auto)`, justifyContent: "space-evenly", alignContent: "center", gap: 8 }}>
+          {rows.map(([k, l, c]) => <div key={k} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+            <FanRotor pct={f[k]} color={c} size={g.size}/>
+            <span data-pk="" style={{ fontSize: Math.max(12, Math.min(16, g.size / 5)), fontWeight: 900, color: f[k] > 0 ? c : "var(--muted)", lineHeight: 1.1 }}>{f[k]} %</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", lineHeight: 1.1 }}>{l}</span>
+          </div>)}</div>;
+      })}
+    </Tile>
+  );
+}
+function FansZoom({ f, known }) {
+  const hist = useSensorHistory(72);
+  const lines = hist ? fanLines(hist) : [];
+  return <>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
+      {known.map(([k, l, c, why]) => <div key={k} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "14px 12px", borderRadius: 18,
+        textAlign: "center", border: `1px solid ${c}33`, background: `radial-gradient(90% 80% at 50% 0%, ${c}22, transparent 70%), var(--surface2)` }}>
+        <FanRotor pct={f[k]} color={c} size={96}/>
+        <span style={{ fontSize: 22, fontWeight: 900, color: f[k] > 0 ? c : "var(--muted)" }}>{f[k]} %</span>
+        <span style={{ fontSize: 14, fontWeight: 900, color: "var(--text)" }}>{l}</span>
+        <Muted size={11.5} style={{ lineHeight: 1.35 }}>{why}</Muted>
+      </div>)}
+    </div>
+    {lines.length > 0 && <><H2>Les 3 derniers jours</H2><SensorLegend lines={lines} unit="%"/>
+      <SensorChart lines={lines} points={hist} hours={72} height={170} unit="%" lo={0} hi={100}/></>}
+  </>;
+}
 const statsH3 = W => statsH(3, W);
 // le mois : le compte (le mois est dit dans la tuile meme : titre masque, on sait de quoi on parle),
 // la reussite, l'ecart avec le mois dernier, les chiffres du mois et les barres par jour
@@ -4686,6 +4756,8 @@ export const TILES = {
   spool: { label: "Filament en cours", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Spool status={st} o={o} sz={sz(it)}/> },
   layer: { label: "Couche en cours", w: [1, 2], h: [2, 1, 3, 0.5], render: (d, st, o, it) => <LayerTile status={st} sz={sz(it)}/> },
   head: { label: "Tête d'impression", w: [1, 2], h: [2, 1, 3], render: (d, st, o, it) => <Toolhead status={st} sz={sz(it)}/> },
+  fans: { label: "Ventilateurs", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Fans status={st} o={o} sz={sz(it)}/>,
+    options: [B("idle", "Ceux à l'arrêt", true), B("spark", "Courbe des 24 h", true, { hint: "Une ligne par ventilateur, sous les hélices, quand la tuile a la hauteur." })] },
   switch: { label: "Aiguillage (Track Switch)", w: [2, 1], h: [2, 1, 3, 0.5], render: (d, st, o, it) => <FilaSwitch status={st} o={o} sz={sz(it)}/> },
   colors: { label: "Couleurs chargées", w: [2, 1], h: [1, 2, 0.5], render: (d, st, o, it) => <Colors status={st} o={o} sz={sz(it)}/> },
   streak: { label: "Série", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Streak o={o} sz={sz(it)}/>,
@@ -4727,6 +4799,7 @@ const WAIT = {
   layer: ["status", "Le dessin de la couche en cours d'impression."],
   spool: ["status", "La bobine qui imprime en ce moment."],
   head: ["status", "Les buses de la tête d'impression."],
+  fans: ["status", "La vitesse de chaque ventilateur de l'imprimante."],
   switch: ["status", "Le chemin du filament dans l'aiguillage."],
   colors: ["status", "Les couleurs chargées dans les AMS."],
 };

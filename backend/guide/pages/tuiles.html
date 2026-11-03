@@ -12,7 +12,7 @@
 
   <section id="tuiles-principe-defaut">
     <h3>Celles qui sont là d'office, celles à ajouter</h3>
-    <p>Un accueil jamais réglé montre, sous l'imprimante et l'AMS : <span class="ui">Aujourd'hui</span>, <span class="ui">7 derniers jours</span>, <span class="ui">À faire</span>, <span class="ui">Dernières impressions</span>, <span class="ui">Stock</span>, <span class="ui">Séchage</span>, <span class="ui">Humidité des AMS</span>, <span class="ui">Copains</span>, <span class="ui">MakerWorld</span>, <span class="ui">À évaluer</span>, <span class="ui">Roue et clés</span> et <span class="ui">Succès</span>. Les seize autres tuiles (de <span class="ui">Caméra</span> à <span class="ui">Objectif</span>) sont « au choix » : elles attendent dans la ligne <span class="ui">Ajouter :</span> du mode personnalisation.</p>
+    <p>Un accueil jamais réglé montre, sous l'imprimante et l'AMS : <span class="ui">Aujourd'hui</span>, <span class="ui">7 derniers jours</span>, <span class="ui">À faire</span>, <span class="ui">Dernières impressions</span>, <span class="ui">Stock</span>, <span class="ui">Séchage</span>, <span class="ui">Humidité des AMS</span>, <span class="ui">Copains</span>, <span class="ui">MakerWorld</span>, <span class="ui">À évaluer</span>, <span class="ui">Roue et clés</span> et <span class="ui">Succès</span>. Les dix-sept autres tuiles (de <span class="ui">Caméra</span> à <span class="ui">Objectif</span>) sont « au choix » : elles attendent dans la ligne <span class="ui">Ajouter :</span> du mode personnalisation.</p>
   </section>
 
   <section id="tuiles-principe-tailles">
@@ -67,6 +67,7 @@
       <tr><td><a href="#tuiles-spool">Filament en cours</a></td><td>La bobine qui imprime et ce qu'il en reste</td><td>demi · 1</td></tr>
       <tr><td><a href="#tuiles-layer">Couche en cours</a></td><td>Le dessin de la couche qui s'imprime, lu dans le G-code</td><td>demi · 1</td></tr>
       <tr><td><a href="#tuiles-head">Tête d'impression</a></td><td>Les deux buses en dessin (machines à deux buses)</td><td>demi · 2</td></tr>
+      <tr><td><a href="#tuiles-fans">Ventilateurs</a></td><td>Une hélice par ventilateur, qui tourne à sa vitesse</td><td>demi · 1</td></tr>
       <tr><td><a href="#tuiles-switch">Aiguillage (Track Switch)</a> (« Aiguillage »)</td><td>Quelle entrée alimente quelle buse</td><td>toute · 2</td></tr>
       <tr><td><a href="#tuiles-colors">Couleurs chargées</a></td><td>Toutes les bobines en place, en carrés de couleur</td><td>toute · 1</td></tr>
       <tr><td><a href="#tuiles-today">Aujourd'hui</a></td><td>Les impressions du jour, la réussite, l'écart avec hier</td><td>demi · 1</td></tr>
@@ -171,6 +172,16 @@
     <figure><img src="img/tuiles-head.webp" alt="Tuile Tête d'impression avec le dessin des deux buses"><figcaption>Demi-colonne sur 2 rangées, et toute la colonne sur 3 rangées avec les cartes Gauche / Droite : la buse droite imprime.</figcaption></figure>
     <p><b>Options</b> : aucune en dehors du titre et du fond.</p>
     <p><b>Au toucher</b> : le dessin en grand et deux cartes détaillées <span class="ui">Gauche</span> / <span class="ui">Droite</span> (état, température et consigne, emplacement, filament, matière et marque). Pas de bouton <span class="ui">Ouvrir</span>.</p>
+  </section>
+
+  <section id="tuiles-fans">
+    <h3>Ventilateurs</h3>
+    <p><b>Ce qu'elle montre</b> : une <b>hélice</b> par ventilateur que l'imprimante déclare (<span class="ui">Pièce</span>, <span class="ui">Auxiliaire</span>, <span class="ui">Chambre</span>, <span class="ui">Tête</span>), qui tourne d'autant plus vite qu'il souffle, entourée d'un anneau rempli à sa vitesse, le pourcentage et le nom dessous. Un ventilateur à l'arrêt est gris et immobile. Quand la tuile est trop basse ou trop étroite pour un nom sous chaque hélice : une ligne par ventilateur (petite hélice, nom, %). Imprimante injoignable : <span class="ui">Imprimante injoignable</span> ; une machine qui ne dit pas ses ventilateurs : <span class="ui">L'imprimante ne dit pas ses ventilateurs</span>.</p>
+    <dl class="opts">
+      <dt><span class="ui">Ceux à l'arrêt</span> (oui)</dt><dd>Montre aussi les ventilateurs à 0 % ; tous arrêtés et masqués : « Tout est à l'arrêt ».</dd>
+      <dt><span class="ui">Courbe des 24 h</span> (oui)</dt><dd>Sous les hélices, quand la tuile a la hauteur : une ligne par ventilateur qui a tourné, sa lettre au bout.</dd>
+    </dl>
+    <p><b>Au toucher</b> : une carte par ventilateur, l'hélice en grand, sa vitesse et à quoi il sert ; puis la courbe des 3 derniers jours (survol : l'heure et chaque vitesse). <span class="ui">Ouvrir</span> mène à <a href="#stats-machine">Stats → Machine</a> (7 jours).</p>
   </section>
 
   <section id="tuiles-switch">

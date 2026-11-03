@@ -95,6 +95,13 @@ def snapshot(s) -> dict | None:
             "ams": ams}
 
 
+def fans_of(s) -> dict:
+    """Les ventilateurs de l'etat courant, en % : {"part", "aux", "chamber", "head"} (absents : la machine ne les dit pas)."""
+    raw = getattr(s, "raw", None) or {}
+    out = {k[4:]: _fan(raw.get(src)) for k, src in FANS.items()}
+    return {k: v for k, v in out.items() if v is not None}
+
+
 def _fan(v):
     try:
         return round(max(0, min(15, int(v))) / 15 * 100)
