@@ -22,6 +22,7 @@ class SensorSample(Base):
     chamber  = Column(Float, nullable=True)
     # les consignes, quand il y en a une (0 sur l'imprimante : rien)
     nozzle_t  = Column(Float, nullable=True)
+    nozzle_act = Column(Integer, nullable=True)  # sur une bi-buse : laquelle imprime (0 droite, 1 gauche)
     nozzle2_t = Column(Float, nullable=True)
     bed_t     = Column(Float, nullable=True)
     chamber_t = Column(Float, nullable=True)

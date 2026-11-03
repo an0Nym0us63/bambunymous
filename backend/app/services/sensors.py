@@ -18,7 +18,7 @@ KEEP_DAYS = 7
 EVERY_IDLE = 300.0
 EVERY_PRINTING = 60.0
 MAX_POINTS = 600                        # un historique rendu en plus de points est moyenne par paquets
-TARGETS = ("nozzle_t", "nozzle2_t", "bed_t", "chamber_t")   # les consignes (None : pas de consigne)
+TARGETS = ("nozzle_t", "nozzle2_t", "bed_t", "chamber_t", "nozzle_act")   # les consignes (None : pas de consigne)
 # les ventilateurs : la cle du statut brut (vitesse de 0 a 15, comme « Plus d'infos »), rendue en %
 FANS = {"fan_part": "cooling_fan_speed", "fan_aux": "big_fan1_speed", "fan_chamber": "big_fan2_speed", "fan_head": "heatbreak_fan_speed"}
 # (03/11/2026) les H2 declarent leurs ventilateurs dans device.airduct.parts : id >> 4 = leur rang dans Bambu Studio
@@ -84,7 +84,10 @@ def snapshot(s) -> dict | None:
     if not getattr(s, "connected", False):
         return None
     from ..core.mqtt import EXT_AMS_ID
-    nz = sorted(s.nozzles or [], key=lambda n: (not n.active, n.id))
+    # (03/11/2026) chaque buse a sa place : nozzle = la droite (id 0, ou la seule), nozzle2 = la gauche (id 1) ; laquelle
+    # imprime, a part (avant : la buse active, puis l'autre -- les courbes sautaient d'une buse a l'autre)
+    nz = sorted(s.nozzles or [], key=lambda n: n.id)
+    act = next((n.id for n in nz if n.active), None) if len(nz) > 1 else None
     ams = {str(a.id): [a.humidity, round(a.temp, 1)] for a in (s.ams_list or [])
            if a.id not in (EXT_AMS_ID, 254) and (a.humidity or a.temp)}
     tgt = lambda v: round(v, 1) if v and v > 0 else None
@@ -95,6 +98,7 @@ def snapshot(s) -> dict | None:
             "chamber": round(s.chamber_temp, 1) if s.chamber_temp else None,
             "nozzle_t": tgt(nz[0].target) if nz else None,
             "nozzle2_t": tgt(nz[1].target) if len(nz) > 1 else None,
+            "nozzle_act": act,
             "bed_t": tgt(s.target_bed_temp), "chamber_t": tgt(s.target_chamber_temp),
             **{f"fan_{k}": v for k, v in ((k, fans_of(s).get(k)) for k in FAN_KEYS)},
             "ams": ams}

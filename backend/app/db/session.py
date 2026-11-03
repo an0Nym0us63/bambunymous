@@ -194,6 +194,7 @@ async def _migrate():
         ("sensor_samples", "fan_chamber",     "REAL"),
         ("sensor_samples", "fan_head",        "REAL"),
         ("sensor_samples", "fan_head2",       "REAL"),
+        ("sensor_samples", "nozzle_act",      "INTEGER"),
         ("sensor_samples", "fan_board",       "REAL"),
         ("sensor_samples", "fan_loop",        "REAL"),
         ("filament_usage", "from_g",          "REAL"),

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useId, useMemo, useRef, useState } from "react";
 
 // Les courbes des releves de capteurs (03/11/2026) : la petite des tuiles (SensorSpark) et la grande de la page
 // Machine (SensorChart). Une courbe par serie, a sa couleur, sur le temps reel (un trou de plus de 15 minutes, une
@@ -19,14 +19,37 @@ export function seriesOf(points, pick) {
 }
 
 // les morceaux d'une serie (coupee aux trous), en coordonnees 0..100 x 0..h
-function paths(pts, x, y) {
+function segs(pts, x, y) {
   const out = [], gap = gapOf(pts);
   let cur = [];
   pts.forEach((p, i) => {
     if (i && p.t - pts[i - 1].t > gap) { if (cur.length) out.push(cur); cur = []; }
-    cur.push(`${x(p.t).toFixed(2)},${y(p.v).toFixed(2)}`);
+    cur.push([x(p.t), y(p.v)]);
   });
   if (cur.length) out.push(cur);
+  return out;
+}
+const paths = (pts, x, y) => segs(pts, x, y).map(sg => sg.map(([a, b]) => `${a.toFixed(2)},${b.toFixed(2)}`));
+// une courbe lissee qui ne depasse jamais ses points (Fritsch-Carlson, 03/11/2026 : les lignes brisees faisaient
+// tableur) : une chauffe qui monte puis tient ne fait ni bosse ni creux
+export function monoPath(P) {
+  const n = P.length, f = v => v.toFixed(2);
+  if (!n) return "";
+  if (n < 3) return P.map(([a, b], i) => `${i ? "L" : "M"}${f(a)},${f(b)}`).join(" ");
+  const d = [], m = new Array(n);
+  for (let i = 0; i < n - 1; i++) d.push((P[i + 1][1] - P[i][1]) / ((P[i + 1][0] - P[i][0]) || 1e-6));
+  m[0] = d[0]; m[n - 1] = d[n - 2];
+  for (let i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
+    const a = m[i] / d[i], b = m[i + 1] / d[i], h = a * a + b * b;
+    if (h > 9) { const t = 3 / Math.sqrt(h); m[i] = t * a * d[i]; m[i + 1] = t * b * d[i]; }
+  }
+  let out = `M${f(P[0][0])},${f(P[0][1])}`;
+  for (let i = 0; i < n - 1; i++) {
+    const dx = (P[i + 1][0] - P[i][0]) / 3;
+    out += ` C${f(P[i][0] + dx)},${f(P[i][1] + m[i] * dx)} ${f(P[i + 1][0] - dx)},${f(P[i + 1][1] - m[i + 1] * dx)} ${f(P[i + 1][0])},${f(P[i + 1][1])}`;
+  }
   return out;
 }
 
@@ -58,8 +81,8 @@ export function SensorSpark({ lines, hours = 24, height = 34, lo, hi }) {
   const tip = live.map(l => { const last = l.pts[l.pts.length - 1]; return `${l.label} ${Math.round(last.v)}${l.unit || ""}`; }).join(" · ");
   return <div data-tip={`${hours} dernières heures · ${tip}`} style={{ position: "relative", height, flexShrink: 0, paddingRight: live.some(l => l.short) ? 18 : 0 }}>
     <svg data-pk="" viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block", overflow: "visible" }} aria-hidden="true">
-      {live.map(l => paths(l.pts.filter(p => p.t >= from), x, y).map((seg, i) =>
-        <polyline key={`${l.key}${i}`} points={seg.join(" ")} fill="none" stroke={l.color} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round"
+      {live.map(l => segs(l.pts.filter(p => p.t >= from), x, y).map((sg, i) =>
+        <path key={`${l.key}${i}`} d={monoPath(sg)} fill="none" stroke={l.color} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round"
           vectorEffect="non-scaling-stroke" opacity={0.95}/>))}
     </svg>
     {ends(live, y, height).map(({ l, top }) => <span key={l.key} style={{ position: "absolute", right: 0, top,
@@ -83,6 +106,7 @@ export const fmtTick = (t, hours) => fmtH(t, hours / 24);
 
 export function SensorChart({ lines, points, hours = 24, height = 180, unit = "", lo, hi, end = null, mark = null }) {
   const ref = useRef(null);
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");          // les degrades de cette courbe (plusieurs courbes par page)
   const [at, setAt] = useState(null);
   const to = end || Date.now(), from = to - hours * 3600000;
   const b = bounds(lines, from, to, lo, hi);
@@ -100,15 +124,14 @@ export function SensorChart({ lines, points, hours = 24, height = 180, unit = ""
   }, [points]);
   if (!b) return <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>
     Pas encore de relevé sur cette période</div>;
-  const W = 100, H = height;
+  const W = 100, H = height, BASE = H - 20;
   const x = t => ((t - from) / (to - from)) * W;
-  const y = v => H - 18 - ((v - b[0]) / (b[1] - b[0] || 1)) * (H - 26);
+  const y = v => BASE - ((v - b[0]) / (b[1] - b[0] || 1)) * (BASE - 10);
   const step = [1, 2, 5, 10, 20, 25, 50, 100].find(s => (b[1] - b[0]) / s <= 5) || 100;
   const grid = [];
   for (let v = Math.ceil(b[0] / step) * step; v <= b[1]; v += step) grid.push(v);
   const days = hours / 24;
   const ticks = timeTicks(from, to, hours);
-  // des reperes ronds a l'heure locale : minuit sur plusieurs jours, sinon toutes les 4 ou 6 heures
   const near = at == null ? null : lines.map(l => {
     let best = null;
     for (const p of l.pts) if (p.t >= from && p.t <= to && (!best || Math.abs(p.t - at) < Math.abs(best.t - at))) best = p;
@@ -120,32 +143,55 @@ export function SensorChart({ lines, points, hours = 24, height = 180, unit = ""
     const cx = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
     setAt(from + Math.max(0, Math.min(1, cx / r.width)) * (to - from));
   };
+  const main = lines.filter(l => !l.dash), tgt = lines.filter(l => l.dash);
+  const inWin = l => l.pts.filter(p => p.t >= from && p.t <= to);
   return <div ref={ref} onMouseMove={move} onMouseLeave={() => setAt(null)} onTouchStart={move} onTouchMove={move} onTouchEnd={() => setAt(null)}
     style={{ position: "relative", height, touchAction: "pan-y", userSelect: "none" }}>
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} aria-hidden="true">
-      {/* les releves vont au-dela de la fenetre (de quoi la faire glisser) : seules les bandes qui y entrent */}
-      {bands.filter(([a, c]) => c > from && a < to).map(([a, c], i) => <rect key={i} x={x(Math.max(a, from))} y={0} width={Math.max(0.3, x(Math.min(c, to)) - x(Math.max(a, from)))} height={H - 18}
-        fill="rgba(59,130,246,.10)"/>)}
-      {grid.map(v => <line key={v} x1={0} x2={W} y1={y(v)} y2={y(v)} stroke="var(--border)" strokeWidth="1" vectorEffect="non-scaling-stroke" strokeDasharray="3 4"/>)}
-      {[...lines.filter(l => l.dash), ...lines.filter(l => !l.dash)].map(l => paths(l.pts.filter(p => p.t >= from && p.t <= to), x, y).map((seg, i) => <React.Fragment key={`${l.key}${i}`}>
-        <polyline points={seg.join(" ")} fill="none" stroke={l.color} strokeWidth={l.dash ? 7 : 2.2} strokeLinejoin="round" strokeLinecap="round"
-          vectorEffect="non-scaling-stroke" opacity={l.dash ? 0.22 : 1}/>
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible" }} aria-hidden="true">
+      <defs>
+        <linearGradient id={`${uid}band`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#3B82F6" stopOpacity=".16"/><stop offset="1" stopColor="#6366F1" stopOpacity=".04"/></linearGradient>
+        {main.map(l => <linearGradient key={l.key} id={`${uid}${l.key}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={l.color} stopOpacity={main.length > 2 ? ".14" : ".26"}/><stop offset="1" stopColor={l.color} stopOpacity="0"/></linearGradient>)}
+      </defs>
+      {/* les impressions : des bandes en degrade, un trait en haut */}
+      {bands.filter(([a, c]) => c > from && a < to).map(([a, c], i) => { const x0 = x(Math.max(a, from)), x1 = x(Math.min(c, to));
+        return <React.Fragment key={i}>
+          <rect x={x0} y={0} width={Math.max(0.3, x1 - x0)} height={BASE} fill={`url(#${uid}band)`}/>
+          <line x1={x0} x2={x1} y1={0.5} y2={0.5} stroke="#3B82F6" strokeOpacity=".45" strokeWidth="2" vectorEffect="non-scaling-stroke"/>
+        </React.Fragment>; })}
+      {grid.map(v => <line key={v} x1={0} x2={W} y1={y(v)} y2={y(v)} stroke="var(--border)" strokeOpacity=".7" strokeWidth="1" vectorEffect="non-scaling-stroke" strokeDasharray="2 5"/>)}
+      {/* les consignes : un large trait pale, dessous */}
+      {tgt.map(l => segs(inWin(l), x, y).map((sg, i) => <path key={`${l.key}${i}`} d={monoPath(sg)} fill="none" stroke={l.color} strokeWidth="8"
+        strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" opacity=".18"/>))}
+      {/* l'aire sous chaque courbe, en degrade, puis la courbe et son halo */}
+      {main.map(l => segs(inWin(l), x, y).map((sg, i) => sg.length > 1 && <path key={`a${l.key}${i}`}
+        d={`${monoPath(sg)} L${sg[sg.length - 1][0].toFixed(2)},${BASE} L${sg[0][0].toFixed(2)},${BASE} Z`} fill={`url(#${uid}${l.key})`}/>))}
+      {main.map(l => segs(inWin(l), x, y).map((sg, i) => <React.Fragment key={`c${l.key}${i}`}>
+        <path d={monoPath(sg)} fill="none" stroke={l.color} strokeWidth="6" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" opacity=".12"/>
+        <path d={monoPath(sg)} fill="none" stroke={l.color} strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>
       </React.Fragment>))}
-      {at != null && <line x1={x(at)} x2={x(at)} y1={0} y2={H - 18} stroke="var(--muted)" strokeWidth="1" vectorEffect="non-scaling-stroke"/>}
+      {at != null && <line x1={x(at)} x2={x(at)} y1={0} y2={BASE} stroke="var(--text2)" strokeOpacity=".5" strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke"/>}
       {/* l'evenement choisi dans la chronologie : son heure sur chaque courbe */}
-      {mark != null && mark >= from && mark <= to && <line x1={x(mark)} x2={x(mark)} y1={0} y2={H - 18} stroke="#F43F5E" strokeWidth="1.5"
+      {mark != null && mark >= from && mark <= to && <line x1={x(mark)} x2={x(mark)} y1={0} y2={BASE} stroke="#F43F5E" strokeWidth="1.5"
         strokeDasharray="4 3" vectorEffect="non-scaling-stroke"/>}
     </svg>
-    {grid.map(v => <span key={v} style={{ position: "absolute", left: 2, top: y(v) - 13, fontSize: 9.5, fontWeight: 800, color: "var(--muted)" }}>{v}{unit}</span>)}
+    {grid.map(v => <span key={v} style={{ position: "absolute", left: 0, top: y(v) - 15, padding: "0 4px", borderRadius: 6, fontSize: 9.5, fontWeight: 800,
+      color: "var(--muted)", background: "color-mix(in srgb, var(--surface) 70%, transparent)" }}>{v}{unit}</span>)}
     {ticks.map(t => <span key={t} style={{ position: "absolute", bottom: 0, left: `${x(t)}%`, transform: "translateX(-50%)", fontSize: 9.5, fontWeight: 800,
       color: "var(--muted)", whiteSpace: "nowrap" }}>{fmtH(t, days)}</span>)}
-    {near && near.length > 0 && <div style={{ position: "absolute", top: 4, [x(at) > 60 ? "right" : "left"]: x(at) > 60 ? `${100 - x(at) + 1.5}%` : `${x(at) + 1.5}%`,
-      padding: "6px 9px", borderRadius: 10, background: "var(--sheet-bg, var(--surface))", border: "1px solid var(--border)", boxShadow: "0 6px 16px -8px rgba(0,0,0,.4)",
-      fontSize: 11.5, fontWeight: 800, pointerEvents: "none", whiteSpace: "nowrap", zIndex: 1 }}>
-      <div style={{ color: "var(--muted)", marginBottom: 2 }}>{new Date(at).toLocaleString("fr-FR", { weekday: "short", hour: "2-digit", minute: "2-digit" })}</div>
-      {near.map(({ l, p }) => <div key={l.key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ width: 8, height: 8, borderRadius: "50%", background: l.color }}/><span style={{ color: "var(--text2)" }}>{l.label}</span>
-        <span style={{ marginLeft: "auto", paddingLeft: 8, color: l.color }}>{Number(p.v).toFixed(unit === "%" ? 0 : 1).replace(".", ",")}{unit}</span></div>)}
+    {/* au survol : un point sur chaque courbe, et la bulle */}
+    {near && near.filter(n => !n.l.dash).map(({ l, p }) => <span key={l.key} style={{ position: "absolute", left: `${x(p.t)}%`, top: y(p.v), width: 10, height: 10,
+      borderRadius: "50%", background: l.color, transform: "translate(-50%, -50%)", boxShadow: `0 0 0 2.5px var(--surface), 0 0 10px ${l.color}`, pointerEvents: "none" }}/>)}
+    {near && near.length > 0 && <div style={{ position: "absolute", top: 6, [x(at) > 60 ? "right" : "left"]: x(at) > 60 ? `${100 - x(at) + 2}%` : `${x(at) + 2}%`,
+      padding: "8px 11px", borderRadius: 14, background: "color-mix(in srgb, var(--sheet-bg, var(--surface)) 88%, transparent)", backdropFilter: "blur(8px)",
+      border: "1px solid var(--border)", boxShadow: "0 12px 28px -14px rgba(0,0,0,.5)",
+      fontSize: 11.5, fontWeight: 800, pointerEvents: "none", whiteSpace: "nowrap", zIndex: 1, minWidth: 150 }}>
+      <div style={{ color: "var(--muted)", marginBottom: 4, fontSize: 11 }}>{new Date(at).toLocaleString("fr-FR", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+      {near.map(({ l, p }) => <div key={l.key} style={{ display: "flex", alignItems: "center", gap: 7, padding: "1px 0", opacity: l.dash ? 0.75 : 1 }}>
+        <span style={{ width: l.dash ? 10 : 8, height: l.dash ? 4 : 8, borderRadius: l.dash ? 2 : "50%", background: l.color, opacity: l.dash ? 0.6 : 1 }}/>
+        <span style={{ color: "var(--text2)", fontWeight: l.dash ? 700 : 800 }}>{l.label}</span>
+        <span style={{ marginLeft: "auto", paddingLeft: 10, color: l.color, fontWeight: 900, fontVariantNumeric: "tabular-nums" }}>{Number(p.v).toFixed(unit === "%" ? 0 : 1).replace(".", ",")}{unit}</span></div>)}
     </div>}
   </div>;
 }
@@ -195,7 +241,8 @@ export function fanLines(points) {
  *  (seulement celles qui ont eu une consigne sur la periode). */
 export function heatLines(points, { chamber = true, only = null, targets = false } = {}) {
   const two = (points || []).some(p => p.nozzle2 != null);
-  const src = [["nozzle", two ? "Buse active" : "Buse", "B"], ...(two ? [["nozzle2", "Autre buse", "B2"]] : []), ["bed", "Plateau", "P"], ...(chamber ? [["chamber", "Chambre", "C"]] : [])]
+  // sur une bi-buse, chaque buse a sa courbe (droite : id 0, gauche : id 1)
+  const src = [["nozzle", two ? "Buse droite" : "Buse", two ? "D" : "B"], ...(two ? [["nozzle2", "Buse gauche", "G"]] : []), ["bed", "Plateau", "P"], ...(chamber ? [["chamber", "Chambre", "C"]] : [])]
     .filter(([k]) => !only || only.includes(k));
   const main = src.map(([k, label, short]) => ({ key: k, label, short, color: HEAT_COLORS[k], unit: "°", pts: seriesOf(points, p => p[k]) }));
   const tgt = targets ? src.map(([k, label]) => ({ key: `${k}_t`, label: `Consigne ${label.toLowerCase()}`, color: HEAT_COLORS[k], unit: "°", dash: true,
