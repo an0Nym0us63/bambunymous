@@ -868,7 +868,8 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       if (mode !== "snap") return nestPlace({ THREE, collider: col, moving, base, P, N, mode, collides: co, ...cons });
       const sp = await snapPlace({ THREE, collider: col, moving, base, P, N, collides: co, ...cons });
       if (sp.M) return { ...sp.r, M: sp.M, kind: sp.kind };
-      return sp.r && sp.r.blocked ? { blocked: sp.r.blocked } : null;
+      if (sp.r && sp.r.blocked) return { blocked: sp.r.blocked };
+      return sp.noface ? null : { M: new THREE.Matrix4(), moved: 0, turned: 0, sink: 0, kind: null };   // rien de mieux : elle reste
     };
     let r = await run(collides);
     // toutes les places touchent une autre piece : la meilleure quand meme, en le disant (refuser tout ne laissait rien a faire)
@@ -908,7 +909,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     try {
       const f = await fitCore(mode, quiet);
       // caler : ni logement ni face plane (une face courbe, un relief) -- la piece epouse la surface a la place
-      if (mode === "snap" && (f.why === "none" || (f.still && f.r && f.r.kind === "align" && f.r.cov1 < 0.1))) { say(null); return api.refine("Calée en épousant la surface"); }
+      if (mode === "snap" && f.why === "none") { say(null); return api.refine("Calée en épousant la surface"); }
       if (mode === "snap" && f.still) return say("Déjà calée : rien de mieux autour de là où elle est collée");
       if (f.why === "none") return say(mode === "align" ? "Pas de place où elle repose à plat sur cette face, autour de là où elle est collée (une face courbe : Caler ▾ 〰 Épouser la surface)"
         : "Pas de place trouvée autour de là où elle est collée : la pièce déborde de son support partout");

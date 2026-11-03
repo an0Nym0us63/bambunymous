@@ -500,7 +500,9 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   // rien de mieux qu'a sa place : elle y reste, mais descend jusqu'au contact (03/11/2026 : une piece collee au-dessus
   // d'un logement restait en l'air, « deja a la meilleure place »)
   const stay = () => {
-    const dz = here !== Infinity && Math.abs(here) >= 0.05 ? here : 0;
+    // descendre seulement (03/11/2026 : sur une piece imbriquee, la carte des hauteurs la croit un peu dans son support,
+    // et « descendre au contact » la soulevait hors du plan de collage)
+    const dz = here !== Infinity && here <= -0.05 ? here : 0;
     return { M: new THREE.Matrix4().makeTranslation(w.x * dz, w.y * dz, w.z * dz), sink: -dz, moved: 0, turned: 0, contact: P.clone().addScaledVector(w, dz) };
   };
   if (!best) return blocked ? { blocked } : (mode === "nest" ? stay() : null);
@@ -526,8 +528,11 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   // dessous n'est pas s'emboiter)
   let surround = null;
   if (mode === "nest") {
-    const cs = Math.cos(best.th), sn = Math.sin(best.th), occ = new Uint8Array(nu * nv);
+    // la partie qui entre (03/11/2026) : ce qui passe sous la face collee une fois descendue -- la jupe d'un couvercle,
+    // pas le couvercle entier, qui deborde de la boite ; toute la reglette dans sa rainure
+    const cs = Math.cos(best.th), sn = Math.sin(best.th), occ = new Uint8Array(nu * nv), dB = dOf(best);
     for (let k = 0; k < exact.length; k += 3) {
+      if (exact[k + 2] + dB >= -0.35) continue;
       const x = cu + cs * exact[k] - sn * exact[k + 1] + best.su, y = cv + sn * exact[k] + cs * exact[k + 1] + best.sv;
       const i = Math.round((x - bu0) / h), j = Math.round((y - bv0) / h);
       if (i >= 0 && j >= 0 && i < nu && j < nv) occ[j * nu + i] = 1;
@@ -581,9 +586,12 @@ export async function snapPlace(o) {
   if (nest && nest.M && nest.sink >= 0.3 && (nest.surround ?? 1) >= 0.6) { kind = "nest"; r = nest; }
   else {
     const al = await nestPlace({ ...o, mode: "align" });
-    if (al && al.M && al.cov1 >= 0.1 && (al.gain ?? 0) > 0.01) { kind = "align"; r = al; }
-    else if (nest && nest.M && Math.abs(nest.sink) >= 0.05) { kind = "nest"; r = nest; }      // au moins descendre au contact
-    else return { M: null, kind: null, r: al || nest, nest, align: al };
+    // aligner : seulement s'il porte vraiment (au moins 20 %, ou 20 points de mieux ; 03/11/2026 : un couvercle decale de
+    // 6 mm pour reposer a 16 % au lieu de 4 % sur le bord fin d'une boite)
+    if (al && al.M && (al.gain ?? 0) > 0.01 && (al.cov1 >= 0.2 || al.cov1 - (al.cov0 || 0) >= 0.2) && !((al.sink ?? 0) < -0.5)) { kind = "align"; r = al; }
+    else if (nest && nest.M && nest.sink >= 0.05 && nest.moved < 0.05 && Math.abs(nest.turned) < 0.1) { kind = "nest"; r = nest; }   // au moins descendre au contact, sur place
+    // rien : sans face plane du tout (une face courbe), l'editeur fera epouser la surface ; sinon, elle reste
+    else return { M: null, kind: null, r: al || nest, nest, align: al, noface: !al || !al.M || (al.cov0 || 0) < 0.02 && (al.cov1 || 0) < 0.05 };
   }
   // la passe fine : la piece posee a la place trouvee, puis cherchee de pres
   const saved = moving.map(g => { g.updateMatrix(); return [g, g.matrix.clone()]; });
@@ -600,7 +608,8 @@ export async function snapPlace(o) {
     for (const [g, m0] of saved) { m0.decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); }
   }
   // garder la passe fine si elle trouve (et ne recule pas : un emboitement reste au moins aussi bas)
-  if (fine && fine.M && !(kind === "nest" && fine.sink < -0.05)) {
+  // (jamais vers le haut : ni un emboitement ni un alignement ne soulevent la piece hors de son plan)
+  if (fine && fine.M && !(fine.sink < -0.05)) {
     const M = fine.M.clone().multiply(r.M);
     // les deux passes s'ajoutent : le chemin, le tour et la descente de l'ensemble (a peu de chose pres)
     return { M, kind, r: { ...r, M, contact: fine.contact || r.contact, cov1: fine.cov1 ?? r.cov1, moved: r.moved + (fine.moved || 0),
