@@ -94,7 +94,7 @@ function StatusBanner({ status, friend = null, switcher = null }) {
   // Adresse de la camera lue a chaque image : changer de machine (moi / un
   // copain) ne laisse jamais tourner le flux de l'autre.
   const camUrl = useRef(null);
-  camUrl.current = () => img(`/camera/snapshot?t=${Date.now()}`);
+  camUrl.current = () => img(`/camera/snapshot?fresh=1&t=${Date.now()}`);
 
   const stopCam = () => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }

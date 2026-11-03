@@ -313,7 +313,7 @@ async def grab_jpeg() -> bytes:
     return r.body
 
 
-async def _serve(ip: str, code: str, model: str, model_id: str = "") -> Response:
+async def _serve(ip: str, code: str, model: str, model_id: str = "", fresh: bool = False) -> Response:
     now = time.monotonic()
     # un flux tourne : sa derniere image, sans relancer de capture
     with _HUB.lock:
@@ -330,9 +330,11 @@ async def _serve(ip: str, code: str, model: str, model_id: str = "") -> Response
     # connexion a cote : une capture a part (son propre ffmpeg) s'ouvrait quand le direct n'avait pas encore donne
     # d'image ; sur un reseau qui hoquette, ces connexions en plus finissaient par faire tomber la vue en direct de
     # l'imprimante (alerte HMS « impossible d'obtenir la liveview »).
+    # fresh (03/11/2026) : la camera de la page ne veut que du frais ; une ancienne image laissait croire un moment
+    # que tout allait bien, avant « injoignable »
     with _HUB.lock:
         fr, ts = _HUB.frame, _HUB.ts
-    if fr and time.monotonic() - ts < 300:
+    if fr and time.monotonic() - ts < 300 and not fresh:
         return Response(fr, media_type="image/jpeg", headers={"Cache-Control": "no-store", "X-Camera-Status": "stale"})
     return Response(status_code=503, content=(_HUB.err or "camera muette").encode())
 
@@ -380,12 +382,14 @@ def _watch_tick(request: Request | None = None, printing: bool | None = None):
 
 
 @router.get("/snapshot")
-async def camera_snapshot(request: Request):
-    _watch_tick(request)
+async def camera_snapshot(request: Request, fresh: int = 0):
     ip, code, model, model_id = await _printer_conf()
     if not ip or not code:
         return Response(status_code=503, content=b"non configure")
-    return await _serve(ip, code, model, model_id)
+    r = await _serve(ip, code, model, model_id, fresh=bool(fresh))
+    if r.status_code == 200:
+        _watch_tick(request)                 # le temps regarde : seulement une vraie image montree
+    return r
 
 
 async def _printer_conf():

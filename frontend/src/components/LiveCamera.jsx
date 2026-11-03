@@ -117,7 +117,8 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
         const im = new Image();
         im.onload = () => { busy = false; if (!dead && img.current) { img.current.src = im.src; shown.current++; setBroken(false); setReady(true); } };
         im.onerror = () => { busy = false; if (!dead) setBroken(true); };
-        im.src = apiUrl(`/camera/snapshot?t=${Date.now()}`);
+        // fresh : une image recente ou rien (03/11/2026 : l'ancienne image s'affichait un moment avant « injoignable »)
+        im.src = apiUrl(`/camera/snapshot?fresh=1&t=${Date.now()}`);
       };
       tick();
       poll = setInterval(tick, PERIOD_MS);
