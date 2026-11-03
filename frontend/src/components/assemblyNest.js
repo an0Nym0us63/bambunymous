@@ -174,24 +174,92 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
       const d = (i - i0) ** 2 + (j - j0) ** 2;
       if (d < bd) { bd = d; start = j * nu + i; }
     }
-    if (start >= 0) {
-      const st = [start]; face[start] = 1;
+    // un morceau de face, d'un seul tenant (une fente, une rainure etroite ne le coupe pas)
+    const grow = (seed, mark) => {
+      const st = [seed], got = [seed]; mark[seed] = 1;
       while (st.length) {
         const k = st.pop(), i = k % nu, j = (k - i) / nu;
-        faceN++;
         // une fente, une rainure etroite (5 mm au plus) ne coupe pas la face (30/10/2026 : le cote d'une boite a
         // fentes ne comptait que son morceau sous le point de collage, le panneau se calait de travers)
         for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
           for (let r = 1; r <= gap; r++) {
             const x = i + a * r, y = j + b * r, q = y * nu + x;
             if (x < 0 || y < 0 || x >= nu || y >= nv) break;
-            if (face[q]) break;
-            if (ok(q)) { face[q] = 1; st.push(q); break; }
+            if (mark[q]) break;
+            if (ok(q)) { mark[q] = 1; st.push(q); got.push(q); break; }
           }
+        }
+      }
+      return got;
+    };
+    if (start >= 0) faceN = grow(start, face).length;
+    {
+      // les autres morceaux a plat a la meme hauteur, sous la piece et sa marge (03/11/2026 : une traverse posee sur
+      // deux montants ne voyait que le dessus de celui touche ; elle glissait pour s'y centrer, et de biais). Pas les
+      // miettes (un relief qui passe par cette hauteur) : un morceau compte s'il fait au moins 4 % de la face collee
+      if (mode === "align") {
+        const minC = Math.max(4, Math.round(foot.length / 3 * 0.04)), seen = new Uint8Array(nu * nv);
+        for (let k = 0; k < nu * nv; k++) {
+          if (face[k] || seen[k] || !ok(k)) continue;
+          const part = grow(k, seen);
+          if (part.length >= minC) for (const q of part) { if (!face[q]) { face[q] = 1; faceN++; } }
         }
       }
     }
   }
+
+  // l'orientation des bords (03/11/2026) : une piece aux bords droits se pose parallele (ou d'equerre) aux bords du
+  // support -- une traverse sur un cadre, un panneau sur une boite. L'angle dominant, a 90° pres, des bords d'une
+  // silhouette (m : 1 dedans, 0 dehors) : la direction de chaque bord (le gradient de la silhouette adoucie, pour qu'un
+  // bord de biais ne se lise pas en escalier), comptee quatre fois (a 90° pres), ponderee par sa nettete. r : de 0 (des
+  // bords dans tous les sens, une forme ronde ou a relief) a 1 (tous les bords d'equerre entre eux)
+  const orient = (m0, nI0, nJ0, pad = 0) => {
+    // pad : une marge vide autour (la carte du dessous colle a la piece, ses bords tomberaient sur celui de la carte)
+    const nI = nI0 + 2 * pad, nJ = nJ0 + 2 * pad;
+    let b = m0;
+    if (pad) { b = new Float32Array(nI * nJ); for (let j = 0; j < nJ0; j++) for (let i = 0; i < nI0; i++) b[(j + pad) * nI + i + pad] = m0[j * nI0 + i]; }
+    for (let pass = 0; pass < 2; pass++) {
+      const o = new Float32Array(nI * nJ);
+      for (let j = 0; j < nJ; j++) for (let i = 0; i < nI; i++) {
+        let sum = 0, c = 0;
+        for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) {
+          const x = i + di, y = j + dj;
+          if (x < 0 || y < 0 || x >= nI || y >= nJ) continue;     // le bord de la carte n'est pas un bord de la piece
+          sum += b[y * nI + x]; c++;
+        }
+        o[j * nI + i] = sum / c;
+      }
+      b = o;
+    }
+    let C = 0, S = 0, T = 0;
+    for (let j = 1; j < nJ - 1; j++) for (let i = 1; i < nI - 1; i++) {
+      const gx = b[j * nI + i + 1] - b[j * nI + i - 1], gy = b[(j + 1) * nI + i] - b[(j - 1) * nI + i], g = Math.hypot(gx, gy);
+      if (g < 0.05) continue;
+      const f = Math.atan2(gy, gx);
+      C += g * Math.cos(4 * f); S += g * Math.sin(4 * f); T += g;
+    }
+    return T ? { a: Math.atan2(S, C) / 4, r: Math.hypot(C, S) / T } : null;
+  };
+  let oA = null, oB = null;
+  if (mode === "align") {
+    // la piece : le dessous tout entier ; le support : ce qui affleure a la hauteur du contact (2 mm sous elle au plus)
+    let lmin = Infinity;
+    for (let k = 0; k < mu * mv; k++) if (!Number.isNaN(La[k])) lmin = Math.min(lmin, La[k]);
+    const mA = new Float32Array(mu * mv), mB = new Float32Array(nu * nv);
+    for (let k = 0; k < mu * mv; k++) mA[k] = !Number.isNaN(La[k]) && La[k] <= lmin + 2 ? 1 : 0;
+    for (let k = 0; k < nu * nv; k++) mB[k] = !Number.isNaN(H[k]) && H[k] >= -2 ? 1 : 0;
+    oA = orient(mA, mu, mv, 4); oB = orient(mB, nu, nv);
+  }
+  // les bords des deux nets (r > 0,5) : l'ecart (degres) entre ceux de la piece tournee de th et ceux du support, a 90°
+  // pres ; sinon 0 (rien a aligner, la forme de la face decide seule)
+  const sharp = oA && oB && oA.r > 0.5 && oB.r > 0.5 ? Math.min(oA.r, oB.r) : 0;
+  const skew = th => {
+    if (!sharp) return 0;
+    const d = ((th + oA.a - oB.a) * 180 / Math.PI) % 90;
+    return Math.abs(((d % 90) + 135) % 90 - 45);
+  };
+  // l'angle qui met les bords d'equerre (le plus proche de zero ; les autres, a 90° pres, s'en deduisent)
+  const square = sharp ? (() => { const t = oB.a - oA.a; return t - Math.round(t / (Math.PI / 2)) * (Math.PI / 2); })() : null;
 
   // une place : la hauteur ou elle se pose (Infinity : hors du support). Les mailles de la piece hors du support ne
   // comptent pas (une piece plus large que ce qui la porte), mais elle doit rester au moins autant sur son support qu'a
@@ -289,7 +357,9 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
       // tolere : un relief, un tenon) ; tourner ou glisser doit rapporter : 1° coute quatre dix-milliemes de
       // recouvrement, 1 mm un demi-centieme (sinon un bec presque bien pose faisait un quart de tour pour rien)
       const o = iou(F, nU_, nV_, hh, fl, th, su - s0, sv - s0), [x, xp] = clash(Hm, nU_, nV_, hh, cl, th, su - s0, sv - s0);
-      return -10 * o + 12 * x + 2 * xp + 0.05 * Math.hypot(su, sv) + 0.004 * turn(th);
+      // des bords nets de part et d'autre : 1° de biais coute trois centiemes (un quart de point de recouvrement pour
+      // 8°) : a recouvrement presque egal, d'equerre l'emporte
+      return -10 * o + 12 * x + 2 * xp + 0.05 * Math.hypot(su, sv) + 0.004 * turn(th) + 0.03 * sharp * skew(th);
     }
     const d = lift(Hm, nU_, nV_, hh, cl, th, su - s0, sv - s0);
     if (d === Infinity) return Infinity;
@@ -301,6 +371,11 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   const R = reach !== null ? Math.min(W, reach) : W;
   const angs = lock === null ? Array.from({ length: 36 }, (_, a) => a * Math.PI / 18)
     : Array.from({ length: 2 * Math.floor(lock / (Math.PI / 18)) + 1 }, (_, a) => (a - Math.floor(lock / (Math.PI / 18))) * Math.PI / 18);
+  // et les angles qui mettent les bords d'equerre, essayes tels quels (ils tombent rarement sur un pas de 10°)
+  if (square !== null) for (let q = 0; q < 4; q++) {
+    const t = square + q * Math.PI / 2;
+    if (lock === null || Math.abs(wrap(t)) <= lock) angs.push(lock === null ? t : wrap(t));
+  }
   for (const th of angs) {
     if (ax) {
       for (let s = -R; s <= R + 1e-9; s += Math.min(ss, Math.max(h, R / 4))) {
@@ -379,6 +454,15 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
     const c0 = { ...b };
     for (let it = 0; it < 2; it++) {
       b.th = mid(t => okp(t, b.su, b.sv), b.th, Math.PI / 360, 120);
+      b.su = mid(x => okp(b.th, x, b.sv), b.su, h, 400);
+      b.sv = mid(y => okp(b.th, b.su, y), b.sv, h, 400);
+    }
+    // presque d'equerre : tout a fait, si ca ne coute rien d'autre (les pas d'un demi-degre laissaient un reste)
+    if (sharp && skew(b.th) > 0 && skew(b.th) < 3) {
+      for (let q = -1; q <= 1; q++) {
+        const t = square + Math.round((b.th - square) / (Math.PI / 2) + q) * Math.PI / 2;
+        if (skew(t) < 0.01 && Math.abs(t - b.th) < 3.5 * Math.PI / 180 && raw(t, b.su, b.sv) <= raw(b.th, b.su, b.sv) + 0.02) { b.th = t; break; }
+      }
       b.su = mid(x => okp(b.th, x, b.sv), b.su, h, 400);
       b.sv = mid(y => okp(b.th, b.su, y), b.sv, h, 400);
     }
