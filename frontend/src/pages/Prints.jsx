@@ -1896,6 +1896,20 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   const nSources = new Set(prints.filter(x => x.source_3mf || String(x.design_id || "").trim())
     .map(x => `${String(x.design_id || "").trim() || `p${x.id}`}:${x.mw_profile_id || ""}`)).size;
   const [files, setFiles] = useState(false);       // les fichiers associes (03/11/2026)
+  // delier le groupe de son modele MakerWorld (03/11/2026) : puis les fichiers associes, pour y importer son 3MF d'origine
+  const unlinkMw = async () => {
+    const ds = [...new Set(prints.map(x => String(x.design_id || "").trim()).filter(Boolean))];
+    if (!(await showConfirm(`Délier les ${prints.length} impressions du groupe de ${ds.length > 1 ? `leurs ${ds.length} modèles` : `leur modèle (${ds[0]})`} MakerWorld ? Sa fiche, ses plateaux et ses couleurs du créateur ne s'afficheront plus ; tu pourras importer ton propre 3MF d'origine pour la vue 3D.`,
+      { confirmLabel: "⛓ Délier" }))) return;
+    try {
+      const { data } = await client.post(`/prints/groups/${groupId}/unlink-makerworld`);
+      setPrints(ps => ps.map(x => ({ ...x, design_id: null, mw_profile_id: null, mw_plates: null, source_3mf: false })));
+      toast(`${data.count} impression${data.count > 1 ? "s" : ""} déliée${data.count > 1 ? "s" : ""} : importe ton 3MF d'origine`);
+      egg("delie_mw");
+      loadPrints(); onUpdated?.();
+      setFiles(true);
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
   // file : deja choisi (les fichiers associes) ; rend une promesse tenue une fois envoye
   const importGroupSource = (m, file = null) => new Promise(resolve => {
     const send = async f => {
@@ -2014,6 +2028,9 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       { icon: "📤", label: "Dégrouper", hint: "Les impressions restent", tone: "#A78BFA", onClick: handleUngroup },
       isAdmin && { icon: "🔗", label: "Lier toutes au modèle MakerWorld", hint: "Le même ID MakerWorld pour toutes les impressions du groupe", tone: "#00AE42",
         onClick: () => setMwAll(true) },
+      // (03/11/2026) l'inverse : plus de modele MakerWorld, mon 3MF d'origine pour la vue 3D (dans les fichiers associes)
+      isAdmin && prints.some(x => String(x.design_id || "").trim()) && { icon: "⛓", label: "Délier du modèle MakerWorld", hint: "Toutes ses impressions ; puis ton propre 3MF d'origine pour la vue 3D",
+        tone: "#64748B", onClick: unlinkMw },
       "-",
       // les fichiers associes (03/11/2026) : 3MF tranches et d'origine, vues 3D, documents des modeles, fichiers joints
       !groupVisiting && { icon: "🗂", label: "Fichiers associés", hint: "3MF, vues 3D, documents, fichiers joints", tone: "#8B5CF6", onClick: () => setFiles(true) },

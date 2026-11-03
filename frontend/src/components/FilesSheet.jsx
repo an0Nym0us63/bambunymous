@@ -66,6 +66,16 @@ export default function FilesSheet({ kind, id, title, isAdmin, actions = {}, onC
     };
     inp.click();
   };
+  // un document du modele retire (celui d'un modele lie par erreur) : plus montre, plus garde
+  const hideDoc = async x => {
+    if (!(await showConfirm(`Retirer « ${x.name || x.label} » des documents du modèle ? Il ne sera plus montré ni gardé (« ↺ Remettre » le fait revenir).`,
+      { confirmLabel: "Retirer" }))) return;
+    try { await client.delete(`/makerworld/doc/${x.design_id}/${x.id}`); refresh(); } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
+  const restoreDocs = async did => {
+    try { await client.post(`/makerworld/doc/${did}/restore`); toast("Documents remis : ils se gardent de nouveau à la prochaine lecture du modèle"); refresh(); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
   const del = async a => {
     if (!(await showConfirm(`Supprimer « ${a.label} » ?`, { confirmLabel: "Supprimer" }))) return;
     try { await client.delete(`${base}/attachments/${encodeURIComponent(a.name)}`); refresh(); } catch (e) { showAlert(e.response?.data?.detail || e.message); }
@@ -138,8 +148,11 @@ export default function FilesSheet({ kind, id, title, isAdmin, actions = {}, onC
           {sec("📄", "Documents du modèle", docs.length, docs.length
             ? docs.map((x, i) => row(KIND_DOC[x.kind] || "📄", x.name || x.label, `${x.label || "document"}${x.kept ? " · gardé ici" : " · chez MakerWorld"}${g && x.model ? ` · ${x.model}` : ""}`,
                 <>{btn("↗", () => window.open(x.kept ? x.href : x.url, "_blank", "noopener"), "Ouvrir")}
-                  {x.kept && btn("⤓", () => saveBlob(x.href + "?dl=1", x.name || "document"), "Télécharger")}</>, `d${i}`))
-            : empty(d.design_id || g ? "Le créateur n'a joint aucun document" : "Pas de modèle MakerWorld lié"))}
+                  {x.kept && btn("⤓", () => saveBlob(x.href + "?dl=1", x.name || "document"), "Télécharger")}
+                  {isAdmin && btn("🗑", () => hideDoc(x), "Retirer ce document du modèle", "#EF4444")}</>, `d${i}`))
+            : empty(d.design_id || g ? "Le créateur n'a joint aucun document" : "Pas de modèle MakerWorld lié"),
+            isAdmin && Object.keys(d.docs_hidden || {}).length ? <span style={{ display: "flex", gap: 6 }}>{Object.entries(d.docs_hidden).map(([did, n]) =>
+              <React.Fragment key={did}>{btn(`↺ Remettre ${n}`, () => restoreDocs(did), `${n} document${n > 1 ? "s" : ""} retiré${n > 1 ? "s" : ""} du modèle ${did}`, "#64748B")}</React.Fragment>)}</span> : null)}
           {sec("📎", "Fichiers joints", atts.length, atts.length
             ? atts.map(a => row(iconOf(a.label), a.label, `${size(a.size)}${a.at ? ` · ${new Date(a.at * 1000).toLocaleDateString("fr-FR")}` : ""}`,
                 <>{btn("⤓", () => saveBlob(a.url, a.label), "Télécharger")}

@@ -3045,6 +3045,21 @@ async def print_source_upload(print_id: int, file: UploadFile = File(...), _: st
     return {"ok": True, "iid": iid, "own": not p.design_id}
 
 
+@router.post("/groups/{group_id}/unlink-makerworld")
+async def group_unlink_makerworld(group_id: int, _: str = Depends(require_admin)):
+    """Delier du modele MakerWorld toutes les impressions d'un groupe (03/11/2026) : leur modele, son profil et les
+    plateaux choisis pour lui sont oublies ; le 3MF d'origine importe pour elles (« - » : sans modele) sert alors a la
+    vue 3D."""
+    async with AsyncSessionLocal() as db:
+        if not await db.get(Group, group_id):
+            raise HTTPException(404, "Groupe introuvable")
+        n = (await db.execute(update(Print).where(Print.group_id == group_id, Print.design_id.isnot(None))
+                              .values(design_id=None, mw_profile_id=None, mw_plates=None))).rowcount
+        await db.commit()
+    logging.getLogger(__name__).info(f"[MW] groupe {group_id} delie de son modele ({n} impression(s))")
+    return {"ok": True, "count": n}
+
+
 @router.post("/groups/{group_id}/source-3mf")
 async def group_source_upload(group_id: int, file: UploadFile = File(...), design: str = Form("*"),
                               _: str = Depends(require_admin)):
@@ -3230,6 +3245,11 @@ def _attach_file(kind: str, oid: int, name: str):
     return path
 
 
+def _docs_hidden(dids: list) -> dict:
+    from ....services.mw_docs import hidden
+    return {str(d): len(hidden(d)) for d in dids if hidden(d)}
+
+
 async def _model_docs(dids: list) -> list:
     """Les documents joints par les createurs des modeles (notices, nomenclatures…), comme sur la carte MakerWorld."""
     from ....models.print_history import MakerWorldDesign
@@ -3258,7 +3278,8 @@ async def print_files(print_id: int, _: str = Depends(get_current_user)):
     return {"sliced": bool(p.model_3mf), "source": bool(src and src.is_file()), "design_id": did or None,
             "can_fetch_source": bool(did and p.mw_profile_id),
             "vue3d": _v3list("print", print_id, DATA_DIR / "prints" / str(print_id), p.thumb_3d or 0).get("slots", []),
-            "docs": await _model_docs([did] if did.isdigit() else []), "attachments": _attach_list("print", print_id)}
+            "docs": await _model_docs([did] if did.isdigit() else []), "docs_hidden": _docs_hidden([did] if did.isdigit() else []),
+            "attachments": _attach_list("print", print_id)}
 
 
 @router.get("/groups/{group_id}/files")
@@ -3271,7 +3292,7 @@ async def group_files(group_id: int, _: str = Depends(get_current_user)):
     dids = sorted({str(d).strip() for _i, d, _m in rows if str(d or "").strip().isdigit()})
     return {"sliced": sum(1 for r in rows if r[2]), "prints": len(rows),
             "vue3d": _v3list("group", group_id, DATA_DIR / "groups" / str(group_id), g.thumb_3d or 0).get("slots", []),
-            "docs": await _model_docs(dids), "attachments": _attach_list("group", group_id)}
+            "docs": await _model_docs(dids), "docs_hidden": _docs_hidden(dids), "attachments": _attach_list("group", group_id)}
 
 
 @router.post("/{print_id}/attachments")

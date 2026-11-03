@@ -623,7 +623,9 @@ def _docs_sync(root: Path, idx: dict, mws: dict, rep: dict) -> dict:
     from .makerworld import extras_of
     out: dict = {}
     for did, m in mws.items():
-        docs = [d for d in (extras_of(getattr(m, "extras", None)).get("docs") or []) if isinstance(d, dict) and d.get("url")]
+        gone = D.hidden(did)                       # retires a la main (03/11/2026) : pas sur le NAS
+        docs = [d for d in (extras_of(getattr(m, "extras", None)).get("docs") or []) if isinstance(d, dict) and d.get("url")
+                and D.doc_id(d["url"]) not in gone]
         if not docs or m.status != "ok":
             continue
         base = f"{LIB}/{_two(m.title_fr, m.title) if (m.title_fr or m.title) else f'Modèle {did}'}/Documents"
@@ -801,7 +803,9 @@ def _extras_txt(m, docs_plan: dict, indent: str = "") -> str:
     lines = []
     # tous ses documents : sur le NAS quand ils y sont, sinon leur adresse chez MakerWorld
     on_nas = {d.get("url"): rel for d, rel in docs_plan.get(str(m.design_id)) or []}
-    docs = [(d, on_nas.get(d.get("url"))) for d in x.get("docs") or [] if isinstance(d, dict) and d.get("url")]
+    gone = D.hidden(m.design_id)
+    docs = [(d, on_nas.get(d.get("url"))) for d in x.get("docs") or [] if isinstance(d, dict) and d.get("url")
+            and D.doc_id(d["url"]) not in gone]
     if docs:
         lines += [f"{indent}Documents :"] + [
             f"{indent}  - {D.KIND_LABEL.get(d.get('kind'), 'Document')}{' (profil ' + d['profile'] + ')' if d.get('profile') else ''} : "

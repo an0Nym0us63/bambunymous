@@ -609,6 +609,26 @@ async def mw_doc(design_id: str, doc_id: str, dl: bool = False):
         "Cache-Control": "private, max-age=86400"})
 
 
+@router.delete("/doc/{design_id}/{doc_id}")
+async def mw_doc_hide(design_id: str, doc_id: str, _: str = Depends(require_admin)):
+    """Retirer un document d'un modele (03/11/2026 : celui d'un modele lie par erreur) : plus montre, sa copie gardee
+    supprimee, plus re-telecharge ni copie sur le NAS."""
+    from ....services import mw_docs as D
+    if not design_id.isdigit() or not doc_id.isalnum():
+        raise HTTPException(404, "Document inconnu")
+    D.hide(design_id, doc_id)
+    return {"ok": True}
+
+
+@router.post("/doc/{design_id}/restore")
+async def mw_doc_restore(design_id: str, _: str = Depends(require_admin)):
+    """Remettre les documents retires d'un modele (ils se gardent de nouveau a la prochaine relecture)."""
+    from ....services import mw_docs as D
+    if not design_id.isdigit():
+        raise HTTPException(404, "Modèle inconnu")
+    return {"ok": True, "restored": D.unhide_all(design_id)}
+
+
 # ── La vue 3D d'un modele (27/10/2026) : son 3MF d'origine garde ici, sinon l'apercu 3D de MakerWorld ──
 @router.get("/3d/{design_id}/progress")
 async def mw_model_3d_progress(design_id: str, _: str = Depends(get_current_user)):

@@ -60,13 +60,55 @@ def kept(did, doc: dict) -> bool:
     return kept_path(did, doc) is not None
 
 
+# Les documents retires a la main (03/11/2026 : ceux d'un modele MakerWorld lie par erreur) : ni montres, ni gardes,
+# ni re-telecharges, ni copies sur le NAS. DATA_DIR/mw_docs/<design_id>/_retires.json : [id, ...]
+def _hidden_file(did) -> Path:
+    return _root() / str(did) / "_retires.json"
+
+
+def hidden(did) -> set:
+    import json
+    try:
+        v = json.loads(_hidden_file(did).read_text(encoding="utf-8"))
+        return {str(x) for x in v} if isinstance(v, list) else set()
+    except (OSError, ValueError):
+        return set()
+
+
+def hide(did, docid: str) -> None:
+    """Retire ce document du modele : sa copie gardee ici est supprimee."""
+    import json
+    h = hidden(did) | {str(docid)}
+    f = _hidden_file(did)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(sorted(h)), encoding="utf-8")
+    d = _root() / str(did)
+    for p in (d.glob(f"{docid}-*") if d.is_dir() else []):
+        try:
+            p.unlink()
+        except OSError:
+            pass
+
+
+def unhide_all(did) -> int:
+    n = len(hidden(did))
+    try:
+        _hidden_file(did).unlink()
+    except OSError:
+        pass
+    return n
+
+
 def view(did, docs: list) -> list:
     """Les documents d'un modele pour l'appli : ou les ouvrir (ici si gardes, sinon chez MakerWorld)."""
     out = []
+    gone = hidden(did)
     for d in docs or []:
         if not isinstance(d, dict) or not d.get("url"):
             continue
         i = doc_id(d["url"])
+        if i in gone:
+            continue
         out.append({"id": i, "kind": d.get("kind") or "other", "label": KIND_LABEL.get(d.get("kind"), "Document"),
                     "name": d.get("name"), "profile_id": d.get("profile_id"), "profile": d.get("profile"),
                     "kept": kept(did, d), "href": f"/api/v1/makerworld/doc/{did}/{i}", "url": d["url"]})
@@ -96,8 +138,9 @@ def _download(url: str, dest: Path) -> int:
 def keep(did, docs: list) -> dict:
     """Garde ici les documents qui ne le sont pas encore. {kept, fetched, failed, bytes}."""
     res = {"kept": 0, "fetched": 0, "failed": 0, "bytes": 0}
+    gone = hidden(did)
     for d in docs or []:
-        if not isinstance(d, dict) or not d.get("url"):
+        if not isinstance(d, dict) or not d.get("url") or doc_id(d["url"]) in gone:
             continue
         if kept(did, d):
             res["kept"] += 1
@@ -116,7 +159,7 @@ def _kept_files(did) -> dict:
     """Les documents gardes d'un modele : {nom de fichier: taille}."""
     d = _root() / str(did)
     try:
-        return {f.name: f.stat().st_size for f in d.iterdir() if f.is_file() and not f.name.endswith(".part")} if d.is_dir() else {}
+        return {f.name: f.stat().st_size for f in d.iterdir() if f.is_file() and not f.name.endswith(".part") and f.name != "_retires.json"} if d.is_dir() else {}
     except OSError:
         return {}
 
@@ -411,6 +454,8 @@ async def find(did: str, docid: str):
     from .makerworld import extras_of
     async with AsyncSessionLocal() as db:
         m = await db.get(MW, str(did))
+    if str(docid) in hidden(did):
+        return None, None
     for d in (extras_of(m.extras).get("docs") or []) if m is not None else []:
         if isinstance(d, dict) and d.get("url") and doc_id(d["url"]) == docid:
             return d, kept_path(did, d)
