@@ -846,7 +846,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const list = [...sel], j = jointOf(list);
     if (!j) return { why: "nojoint" };
     const col = await getCollider();
-    const { nestPlace } = await import("./assemblyNest");
+    const { nestPlace, snapPlace } = await import("./assemblyNest");
     const moving = withKids(list), { P, N } = contact(j);
     // les autres pieces ne se traversent pas (la piece support ne compte pas : le contact avec elle est deja regle par
     // les cartes de hauteur, et son relief -- un tricot autour de l'empreinte d'un bec -- faisait refuser toutes les
@@ -863,16 +863,24 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const pinsN = keepPins.filter(k => k.jt === j.t).length, { E } = contact(j);
     const cons = j.kind === "edge" && E ? { lock: pinsN ? 3 * Math.PI / 180 : 0, axis: E, reach: pinsN ? 2 : null }
       : pinsN ? { lock: 3 * Math.PI / 180, axis: null, reach: 2 } : {};
-    let r = await nestPlace({ THREE, collider: col, moving, base, P, N, mode, collides, ...cons });
+    // caler (03/11/2026) : emboiter s'il y a un logement, sinon aligner, puis une passe fine (assemblyNest.snapPlace)
+    const run = async co => {
+      if (mode !== "snap") return nestPlace({ THREE, collider: col, moving, base, P, N, mode, collides: co, ...cons });
+      const sp = await snapPlace({ THREE, collider: col, moving, base, P, N, collides: co, ...cons });
+      if (sp.M) return { ...sp.r, M: sp.M, kind: sp.kind };
+      return sp.r && sp.r.blocked ? { blocked: sp.r.blocked } : null;
+    };
+    let r = await run(collides);
     // toutes les places touchent une autre piece : la meilleure quand meme, en le disant (refuser tout ne laissait rien a faire)
     let touching = false;
-    if (r && !r.M) { r = await nestPlace({ THREE, collider: col, moving, base, P, N, mode, ...cons }); touching = true; }
+    if (r && !r.M) { r = await run(null); touching = true; }
     if (!r) return { why: "none" };
     // rien ne bouge sans un gain net (32 mm de chemin pour 0,1 mm plus bas ; un alignement sans face trouvee tournait
     // quand meme la piece) : emboiter, au moins 0,3 mm plus bas ; aligner, une face reellement recouverte, et mieux
     const still = (r.moved < 0.05 && Math.abs(r.turned) < 0.1 && Math.abs(r.sink) < 0.05)
       || (mode === "nest" && r.sink < 0.3)
-      || (mode === "align" && (r.cov1 < (quiet ? 0.3 : 0.1) || (r.gain ?? r.cov1 - r.cov0) < (quiet ? 0.08 : 0.01)));
+      || (mode === "align" && (r.cov1 < (quiet ? 0.3 : 0.1) || (r.gain ?? r.cov1 - r.cov0) < (quiet ? 0.08 : 0.01)))
+      || (mode === "snap" && r.moved < 0.03 && Math.abs(r.turned) < 0.05 && Math.abs(r.sink) < 0.03);
     return { r, j, N, moving, touching, still, held: j.kind === "edge" ? "le long de son arête" : pinsN ? `tenue par ses ${pinsN + 1} points de colle` : null };
   };
   // une place trouvee, appliquee : la piece, son point de contact (dans le repere du support), l'axe des rotations
@@ -892,21 +900,27 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   const fitOnContact = async (mode, quiet = false) => {
     const said = fitMsg;
     const say = m => { fitMsg = quiet && m !== null ? (said || fitMsg) : m; onChange?.(state()); return false; };
-    if (!jointOf([...sel])) return say(mode === "align" ? "Colle d'abord la pièce sur la face où l'aligner (🧲 Coller), puis 📐 Aligner"
+    if (!jointOf([...sel])) return say(mode === "snap" ? "Colle d'abord la pièce à peu près où elle va (🧲 Coller), puis 🎯 Caler — ou 🎯 Caler sur… sans coller"
+      : mode === "align" ? "Colle d'abord la pièce sur la face où l'aligner (🧲 Coller), puis 📐 Aligner"
       : "Colle d'abord la pièce sur celle où elle doit s'emboîter (🧲 Coller), puis 🧩 Emboîter");
-    say(mode === "align" ? "Recherche de la place où la pièce déborde le moins…" : "Recherche de la place où la pièce s'emboîte…");
+    say(mode === "snap" ? "Recherche de la place où la pièce se cale…" : mode === "align" ? "Recherche de la place où la pièce déborde le moins…" : "Recherche de la place où la pièce s'emboîte…");
     await new Promise(r => setTimeout(r, 30));
     try {
       const f = await fitCore(mode, quiet);
-      if (f.why === "none") return say(mode === "align" ? "Pas de place où elle repose à plat sur cette face, autour de là où elle est collée (une face courbe : 🎯 Ajuster)"
+      // caler : ni logement ni face plane (une face courbe, un relief) -- la piece epouse la surface a la place
+      if (mode === "snap" && (f.why === "none" || (f.still && f.r && f.r.kind === "align" && f.r.cov1 < 0.1))) { say(null); return api.refine("Calée en épousant la surface"); }
+      if (mode === "snap" && f.still) return say("Déjà calée : rien de mieux autour de là où elle est collée");
+      if (f.why === "none") return say(mode === "align" ? "Pas de place où elle repose à plat sur cette face, autour de là où elle est collée (une face courbe : Caler ▾ 〰 Épouser la surface)"
         : "Pas de place trouvée autour de là où elle est collée : la pièce déborde de son support partout");
       if (f.why) return say(null);
-      if (f.still) return say(mode === "align" ? (f.r.cov1 < 0.3 ? "Pas de face plane à épouser sous la pièce : elle reste où elle est (🎯 Ajuster pour une face courbe)" : "Déjà alignée au mieux")
+      if (f.still) return say(mode === "align" ? (f.r.cov1 < 0.3 ? "Pas de face plane à épouser sous la pièce : elle reste où elle est (une face courbe : Caler ▾ 〰 Épouser la surface)" : "Déjà alignée au mieux")
         : "Déjà à la meilleure place : elle ne descend pas plus bas autour de là où elle est collée");
       applyFit(f);
       showContact(); placeHandle(); push(); render();
-      egg(mode === "align" ? "aligne" : "emboite");
-      fitMsg = (quiet ? "Collée, puis " : "") + fitText(mode, f.r);
+      const kind = mode === "snap" ? f.r.kind : mode;
+      egg(kind === "align" ? "aligne" : "emboite");
+      if (mode === "snap") egg("cale");
+      fitMsg = (quiet ? "Collée, puis " : "") + (mode === "snap" ? "calée : " : "") + fitText(kind, f.r);
       if (!quiet) fitMsg = fitMsg[0].toUpperCase() + fitMsg.slice(1);
       if (f.held) fitMsg += ` (${f.held})`;
       if (f.touching) fitMsg += " — elle touche une autre pièce à cette place";
@@ -1265,7 +1279,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       egg("redresse");
       onChange?.(state()); return;
     }
-    if (what === "nest" || what === "align") { pairFit(what, pick.group); return; }
+    if (what === "nest" || what === "align" || what === "snap") { pairFit(what, pick.group); return; }
     onChange?.(state());
   };
   // sortir une piece de celles qu'elle traverse : le plus petit pas qui la libere, dans l'un des six axes
@@ -2153,6 +2167,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     pickTool: what => { pickFor = pickFor === what ? null : what; first = null; clearMarks();
       fitMsg = !pickFor ? null : { line: "Touche une arête (la ligne) ou une face (sa normale) : la pièce glissera le long", axis: "Touche l'arête ou la face de la pièce à mettre dans l'axe X, Y ou Z le plus proche",
         view: "Touche une face : la vue se place juste en face", nest: "Touche la pièce où l'emboîter", align: "Touche la pièce sur laquelle l'aligner",
+        snap: "Touche la pièce sur laquelle la caler",
         fall: "Touche la pièce à faire descendre : elle tombe tout droit jusqu'au sol ou sur une autre pièce" }[what];
       render(); onChange?.(state()); },
     clearLine: () => { lineAxis = null; fitMsg = null; placeHandle(); render(); onChange?.(state()); },
@@ -2337,7 +2352,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     nest: () => fitOnContact("nest"),
     tell: m => { fitMsg = m; onChange?.(state()); },
     align: () => fitOnContact("align"),
-    refine: async () => {
+    // caler (03/11/2026) : un seul geste -- emboiter s'il y a un logement, sinon aligner, sinon epouser la surface
+    snap: () => fitOnContact("snap"),
+    refine: async (doneMsg = null) => {
       const list = [...sel], j = jointOf(list);
       if (!j) { fitMsg = "Colle d'abord la pièce (Coller ou Points) : l'ajustement part de son collage"; onChange?.(state()); return; }
       const col = await getCollider();
@@ -2482,7 +2499,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       j.b.updateMatrix();
       j.p.copy(P.clone().applyMatrix4(new THREE.Matrix4().makeTranslation(out.x * hi, out.y * hi, out.z * hi).multiply(D)).applyMatrix4(j.b.matrix.clone().invert()));
       egg("sur_mesure");
-      fitMsg = `Ajustée : écart ${fmt(before)} → ${fmt(after)} mm · ${c1} points en contact (avant ${c0})${hi > 0.05 ? ` · reculée de ${fmt(hi)} mm pour ne rien traverser` : ""}`;
+      fitMsg = `${typeof doneMsg === "string" ? doneMsg : "Ajustée"} : écart ${fmt(before)} → ${fmt(after)} mm · ${c1} points en contact (avant ${c0})${hi > 0.05 ? ` · reculée de ${fmt(hi)} mm pour ne rien traverser` : ""}`;
       showContact(); placeHandle(); push(); render();
     },
     unglue: () => {

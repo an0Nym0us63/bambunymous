@@ -1259,7 +1259,7 @@ const EDIT_HELP = [
     ["Panneau de droite", "la position exacte du centre (X, Y, Z en mm), puis Entrée"],
     ["╱ Le long d'une ligne", "touche une arête (ou une face : sa normale) ; la flèche rouge suit alors cette ligne, quelle qu'elle soit ; ✕ Ligne libre revient aux axes"],
     ["⟂ Redresser sur un axe", "touche une arête ou une face de la pièce : elle tourne pour la mettre dans l'axe X, Y ou Z le plus proche"],
-    ["🧩 Emboîter sur… / 📐 Aligner sur…", "sans collage : choisis la pièce, puis touche celle où la poser ; elle vient au contact (dans l'axe qui les sépare le plus), s'y colle et s'emboîte ou s'aligne"],
+    ["🎯 Caler sur…", "sans collage : choisis la pièce, puis touche celle où la poser ; elle vient au contact (dans l'axe qui les sépare le plus), s'y colle et se cale"],
     ["🛡 Anti-collision (⚙)", "déplacée à la poignée, au doigt ou aux flèches, la pièce s'arrête au contact d'une autre au lieu de la traverser ; 🧩 Pièce ▾ ↥ Dégager sort une pièce coincée par le plus court chemin"],
     ["🎥 Vue", "de dessus, de dessous, de face, de derrière, de gauche, de droite, ou ⊥ face à une face que tu touches"],
   ]],
@@ -1274,7 +1274,7 @@ const EDIT_HELP = [
     ["Par 3 points : trois clics", "à peu près sur les trois appuis (les roues d'un tricycle) : le vrai point d'appui est cherché autour de chaque clic, et la pièce repose dessus"]]],
   ["La barre", [
     ["En haut", "les modes, ▭ (choisir au rectangle), ⚙ (aimanter, collage assisté, choix multiple, crans des déplacements et des rotations), ↶ ↷, 🕘 (versions, vue du 3MF), 💾, ?, ✕"],
-    ["Dessous", "selon le mode et la sélection : ses actions (points, pose au sol), 🔗 Grouper ▾, 🧩 Pièce ▾ (séparer, réunir, masquer), et pour une pièce collée 🎯 Ajuster, ⟳ Contact ▾, ✂ Décoller"],
+    ["Dessous", "selon le mode et la sélection : ses actions (points, pose au sol), 🔗 Grouper ▾, 🧩 Pièce ▾ (séparer, réunir, masquer), et pour une pièce collée 🎯 Caler (et ▾), ⟳ Contact ▾, ✂ Décoller"],
   ]],
   ["Peindre (B)", [
     ["Une pastille", "la couleur à poser : les filaments des impressions du modèle, ou l'arc-en-ciel pour une couleur libre ; 🧽 Gomme : la couleur d'origine"],
@@ -1287,8 +1287,8 @@ const EDIT_HELP = [
     ["Clic sur une pièce", "la pièce à couper (une seule)"],
     ["Glisser à travers elle", "un trait rouge : la pièce est tranchée sur la longueur du trait, dans toute l'épaisseur que voit l'écran (rien au-delà des bouts du trait) ; les parties qui ne tiennent plus ensemble deviennent des morceaux, chacun de sa couleur"],
     ["Plusieurs traits", "un support tenu par plusieurs ponts : un trait par pont ; chacun reste marqué en rouge, et la pièce se sépare quand tous sont tranchés ; tourne la vue au clic droit entre deux traits ; ✕ efface les traits"],
-    ["📐 Aligner", "une pièce collée sur une face glisse et tourne pour que sa face collée et celle qui la porte se recouvrent au mieux, avec le moins de matière qui se traverse (un panneau sur le côté d'une boîte : ses tenons dans leurs fentes), puis se centre"],
-    ["🧩 Emboîter", "une pièce collée (🧲 Coller, même au jugé) glisse et tourne sur son contact jusqu'à la place où elle descend le plus, sans rien traverser : un bloc vient dans son logement, un tenon dans son trou"],
+    ["🎯 Caler", "une pièce collée (🧲 Coller, même au jugé) trouve sa place autour du contact : dans son logement s'il y en a un (une réglette dans sa rainure, un bloc dans sa poche, même à 0,2 mm de jeu), sinon à plat, d'équerre et centrée sur ce qui la porte (une plaque sur un cadre, un panneau sur une boîte), sinon elle épouse la surface (une face courbe) ; puis une passe fine, au dixième de millimètre"],
+    ["▾ (à côté de Caler)", "forcer une seule façon : 🧩 Emboîter seulement, 📐 Aligner seulement, 〰 Épouser la surface"],
     ["🧹 Nettoyer", "retire d'un coup les petits restes de la pièce choisie (ce qui ne tient que par un coin, les ailettes et aiguilles qui pendent), proposés en rouge à valider"],
     ["🧽 Gomme", "allumée, le glisser peint en rouge ce qu'il touche sur la pièce choisie (ou sur les morceaux proposés) : les bouts de support restés collés, une bavure ; au lâcher, c'est détaché, et ✓ le retire de l'assemblage (📋 Pièces : ↩ le remet)"],
     ["🪄 Détacher les supports", "les supports intégrés au modèle (parois et plaques fines, à faces planes, fondues à la pièce) sont repérés d'eux-mêmes et proposés en couleur, sans trait à tracer"],
@@ -1314,7 +1314,7 @@ const EDIT_HELP = [
     ["⟲ / ⟳ 90° 15°", "tourner d'un cran autour du contact"],
     ["Les pièces collées", "suivent celle sur laquelle elles sont collées"],
     ["✂ Décoller", "libérer la pièce (écartée de 2 mm)"],
-    ["🎯 Ajuster", "après un collage (face ou points) : la pièce épouse au mieux la surface de l'autre près du contact, puis recule juste assez pour ne rien traverser"],
+    ["〰 Épouser la surface (Caler ▾)", "après un collage (face ou points) : la pièce épouse au mieux la surface de l'autre près du contact, puis recule juste assez pour ne rien traverser ; Caler le fait seul sur une face courbe"],
     ["🛡 Anti-collision", "en coulissant, la pièce collée s'arrête au contact de la matière"],
   ]],
   ["Toujours", [
@@ -1539,10 +1539,9 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         { label: "↥ Dégager", onClick: () => api?.freeOut(), tip: "Elle traverse une autre pièce : la sortir par le plus court chemin" },
       ]}/>
       {!est.glued && <>
-        <button type="button" onClick={() => api?.pickTool("nest")} style={b(est.pickFor === "nest")}
-          data-tip="Sans collage : touche ensuite la pièce où l'emboîter ; elle vient au contact, s'y colle et s'emboîte">🧩 Emboîter sur…</button>
-        <button type="button" onClick={() => api?.pickTool("align")} style={b(est.pickFor === "align")}
-          data-tip="Sans collage : touche ensuite la pièce sur laquelle l'aligner ; elle vient au contact, s'y colle et s'aligne">📐 Aligner sur…</button>
+        {/* (03/11/2026) un seul geste : caler -- emboiter s'il y a un logement, sinon poser a plat d'equerre, sinon epouser */}
+        <button type="button" onClick={() => api?.pickTool("snap")} style={b(est.pickFor === "snap")}
+          data-tip="Sans collage : touche ensuite la pièce où la caler ; elle vient au contact, s'y colle et se cale (dans son logement, ou à plat et d'équerre)">🎯 Caler sur…</button>
       </>}
       {est.glued && <>
         {sep}
@@ -1550,12 +1549,13 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
           data-tip="Sur la même face jumelle, la position suivante qui va aussi bien (une face carrée, ronde, symétrique)">↻ Autre position {est.twinPos}</button>}
         {est.mode !== "mate" && <button type="button" onClick={() => api?.setMode("mate")} style={b(false)}
           data-tip="Ajouter un point de colle : en 🧲 Coller, touche un point de la pièce puis sa cible ; le premier collage tient">➕ Point de colle</button>}
-        <button type="button" onClick={() => api?.align()} style={b(false)}
-          data-tip="Faire glisser et tourner la pièce sur la face où elle est collée : les deux faces se recouvrent au mieux, sans conflit (un panneau sur le côté d'une boîte)">📐 Aligner</button>
-        <button type="button" onClick={() => api?.nest()} style={b(false)}
-          data-tip="Faire glisser et tourner la pièce sur son contact jusqu'à la place où elle descend le plus (un bloc dans son logement), sans rien traverser">🧩 Emboîter</button>
-        <button type="button" onClick={() => api?.refine()} style={b(false)}
-          data-tip="Chercher le meilleur ajustement : la pièce épouse au mieux l'autre surface près du contact, sans la traverser">🎯 Ajuster</button>
+        <button type="button" onClick={() => api?.snap()} style={b(true)}
+          data-tip="La pièce trouve sa place autour de là où elle est collée : dans son logement s'il y en a un (une réglette dans sa rainure, un bloc dans sa poche), sinon à plat, d'équerre et centrée sur ce qui la porte, sinon elle épouse la surface (une face courbe) ; au dixième de millimètre">🎯 Caler</button>
+        <BarMenu b={b} up={compact} label="▾" tip="Forcer une seule façon de caler" items={[
+          { label: "🧩 Emboîter seulement", onClick: () => api?.nest(), tip: "La place où elle descend le plus (un bloc dans son logement), sans rien traverser" },
+          { label: "📐 Aligner seulement", onClick: () => api?.align(), tip: "À plat sur la face qui la porte, d'équerre et centrée, même s'il y a un logement" },
+          { label: "〰 Épouser la surface", onClick: () => api?.refine(), tip: "Pour une face courbe : la pièce épouse au mieux l'autre surface près du contact, sans la traverser" },
+        ]}/>
         <BarMenu b={b} up={compact} label="⟳ Contact" tip="Tourner autour du contact, glisser sans traverser" items={[
           ...(est.pivot ? [[-90, "⟲ 90°"], [-15, "⟲ 15°"], [15, "⟳ 15°"], [90, "⟳ 90°"]].map(([d, l]) =>
             ({ label: `${l} autour du contact`, onClick: () => api?.turn(d), keep: true })) : []),
