@@ -19,6 +19,15 @@ logger = logging.getLogger(__name__)
 _LOCK = threading.Lock()
 _PENDING: deque = deque(maxlen=500)
 _LAST: dict = {}
+# (03/11/2026) au demarrage ou a la reconnexion, l'etat se remplit message apres message : ce ne sont pas des
+# changements (« impression lancee » a 12 h 29 pour une impression commencee a 11 h 33). Rien n'est raconte pendant
+# WARM secondes, l'etat garde suit seulement
+WARM = 45.0
+_WARM = {"until": 0.0}
+# un changement de filament ne compte que s'il tient STEADY secondes en impression (en fin d'impression, l'imprimante
+# passe un instant sur la bobine externe : ce n'est pas un changement)
+STEADY = 20.0
+_TRAY = {"cand": None, "since": 0.0, "from": None}
 
 LIVE = ("RUNNING", "PREPARE", "SLICING")
 
@@ -38,9 +47,14 @@ def _tray(st, ams_id, tray_id):
     return next((t for t in (a.trays if a else []) if t.id == tray_id), None)
 
 
-def _push(kind: str, title: str, detail: str = "", **extra) -> None:
+def _push(kind: str, title: str, detail: str = "", at: datetime | None = None, **extra) -> None:
     with _LOCK:
-        _PENDING.append({"t": datetime.utcnow(), "kind": kind, "title": title, "detail": detail, **extra})
+        _PENDING.append({"t": at or datetime.utcnow(), "kind": kind, "title": title, "detail": detail, **extra})
+
+
+def started() -> None:
+    """BambuNymous vient de demarrer (03/11/2026) : la chronologie le dit (une mise a jour, un redemarrage du serveur)."""
+    _push("app_start", "BambuNymous démarré")
 
 
 def watch(st) -> None:
@@ -75,12 +89,19 @@ def _watch(st) -> None:
     }
     prev = _LAST.copy()
     _LAST.update(cur)
+    now = time.time()
     if not prev:
-        return                                   # le premier etat : la reference, rien a raconter
+        _WARM["until"] = now + WARM              # le premier etat : la reference, rien a raconter
+        return
     if cur["conn"] != prev["conn"]:
         _push("online" if cur["conn"] else "offline", "Imprimante joignable" if cur["conn"] else "Imprimante injoignable")
+        if cur["conn"]:
+            _WARM["until"] = now + WARM
     if not cur["conn"]:
         return                                   # sans connexion, l'etat garde est perime
+    if now < _WARM["until"] or not status:
+        _TRAY["cand"] = None
+        return
     # l'impression
     s0, s1, name = prev["status"], status, st.print_name or ""
     if s1 != s0:
@@ -99,15 +120,28 @@ def _watch(st) -> None:
     # le filament (le bac qui alimente) et la buse active : en impression seulement (au repos, l'imprimante remet ses
     # reperes a zero a la fin, ce n'est pas un changement)
     busy = status in LIVE + ("PAUSE", "PAUSED")
-    if busy and cur["tray"] != prev["tray"] and cur["tray"]:
-        t = _tray(st, *cur["tray"])
-        info = getattr(t, "_spool_info_cache", None) or {}
-        what = info.get("translated_name") or info.get("name") or (t.filament_type if t else "") or ""
-        _push("filament", "Filament " + _slot(*cur["tray"]), what, color=(t.color if t else "") or "",
-              before=_slot(*prev["tray"]) if prev["tray"] else "", spool_id=getattr(t, "spool_id", None) if t else None)
+    # le filament : un nouveau bac devient candidat, raconte s'il tient STEADY secondes en impression (date de son
+    # arrivee) ; la fin de l'impression avant, ou un retour au bac d'avant : rien
+    if not busy:
+        _TRAY["cand"] = None
+    elif cur["tray"] != prev["tray"] and cur["tray"]:
+        if _TRAY["cand"] is None:
+            _TRAY["from"] = prev["tray"]
+        _TRAY.update(cand=cur["tray"], since=now)
+    if busy and _TRAY["cand"] is not None and now - _TRAY["since"] >= STEADY:
+        c, before = _TRAY["cand"], _TRAY["from"]
+        _TRAY["cand"] = None
+        if c == cur["tray"] and c != before:
+            t = _tray(st, *c)
+            info = getattr(t, "_spool_info_cache", None) or {}
+            what = info.get("translated_name") or info.get("name") or (t.filament_type if t else "") or ""
+            _push("filament", "Filament " + _slot(*c), what, color=(t.color if t else "") or "",
+                  before=_slot(*before) if before else "", spool_id=getattr(t, "spool_id", None) if t else None,
+                  at=datetime.utcfromtimestamp(_TRAY["since"]))
     if busy and cur["nozzle"] != prev["nozzle"] and cur["nozzle"] is not None and prev["nozzle"] is not None:
         _push("nozzle", "Buse " + ("gauche" if cur["nozzle"] == 1 else "droite"), "devient la buse active")
-    if cur["switch"] != prev["switch"] and cur["switch"] is not None and prev["switch"] is not None:
+    # l'aiguillage : un changement de ce qui y entre (vide des deux cotes, en fin d'impression : rien)
+    if cur["switch"] != prev["switch"] and cur["switch"] is not None and prev["switch"] is not None and cur["switch"][:2] != (-1, -1):
         fs = st.fila_switch or {}
         side = lambda s: _slot((s or {}).get("ams", -1), (s or {}).get("tray", 0)) or "rien"
         _push("switch", "Aiguillage", f"A : {side(fs.get('in_a'))} · B : {side(fs.get('in_b'))}")

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { timeTicks, fmtTick } from "./SensorChart";
+import { FSheet, fBtn } from "./FicheKit";
 
 // La chronologie de la machine (03/11/2026), en tete de Stats › Machine : ce qui s'est passe sur la fenetre regardee.
 // En haut une frise (les impressions en bandes, une pastille par evenement a son heure, les pastilles trop proches
@@ -13,12 +15,14 @@ export const KINDS = {
   hms:         ["⚠️", "#EF4444", "alert"],
   door:        ["🚪", "#64748B", "door"],
   dry_start:   ["🔥", "#06B6D4", "dry"], dry_end: ["💧", "#06B6D4", "dry"],
-  offline:     ["📴", "#94A3B8", "link"], online: ["📶", "#22C55E", "link"],
+  offline:     ["📴", "#94A3B8", "link"], online: ["📶", "#22C55E", "link"], app_start: ["🚀", "#8B5CF6", "link"],
 };
 const CATS = [["all", "Tout"], ["print", "Impressions"], ["filament", "Filament"], ["hard", "Matériel"], ["alert", "Alertes"],
   ["door", "Porte"], ["dry", "Séchage"], ["link", "Connexion"]];
 const meta = e => KINDS[e.kind] || ["•", "#64748B", "other"];
 const hm = t => new Date(t).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+const dShort = t => new Date(t).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+const winOf = (a, b) => (dShort(a) === dShort(b) ? `${dShort(a)} · ${hm(a)} → ${hm(b)}` : `${dShort(a)} ${hm(a)} → ${dShort(b)} ${hm(b)}`);
 const dayOf = t => {
   const d = new Date(t), today = new Date(); today.setHours(0, 0, 0, 0);
   const d0 = new Date(d); d0.setHours(0, 0, 0, 0);
@@ -51,7 +55,8 @@ const Dot = ({ e, size = 26, on }) => {
 // une fiche a ouvrir : l'impression, ou la bobine d'un filament
 export const linkOf = e => (e.print_id ? "print" : e.spool_id && e.filament_id ? "spool" : null);
 
-export default function MachineTimeline({ events, points, hours, end, pick, onPick, onZoom, onOpen }) {
+export default function MachineTimeline({ events, points, hours, end, pick, onPick, onZoom, onOpen, listInSheet = false }) {
+  const [listOpen, setListOpen] = useState(false);
   const [cat, setCat] = useState("all");
   // un regroupement eclate (au zoom le plus serre, ou des evenements a la meme seconde) : ses evenements en eventail
   const [burst, setBurst] = useState(null);
@@ -90,7 +95,8 @@ export default function MachineTimeline({ events, points, hours, end, pick, onPi
   }, [evs, W, from, to]);
   const counts = useMemo(() => { const n = { all: evs.length }; for (const e of evs) n[meta(e)[2]] = (n[meta(e)[2]] || 0) + 1; return n; }, [evs]);
   const shown = useMemo(() => evs.filter(e => cat === "all" || meta(e)[2] === cat).slice().reverse(), [evs, cat]);
-  const LIMIT = 12, list = more ? shown : shown.slice(0, LIMIT);
+  // dans la fenetre a part : tout ; dans la page : les 12 plus recents d'abord
+  const LIMIT = 12, list = more || listOpen ? shown : shown.slice(0, LIMIT);
   const days = [];
   for (const e of list) { const d = dayOf(e.ms); if (!days.length || days[days.length - 1].d !== d) days.push({ d, list: [] }); days[days.length - 1].list.push(e); }
   const sel = pick != null ? evs.find(e => e.ms === pick) : null;
@@ -104,6 +110,50 @@ export default function MachineTimeline({ events, points, hours, end, pick, onPi
   };
   const ticks = timeTicks(from, to, hours);
   const H = 96, LANE = 52;
+  const listBody = () => <>
+    {/* les sortes */}
+    {evs.length > 0 && <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 2 }}>
+      {CATS.filter(([k]) => k === "all" || counts[k]).map(([k, l]) => { const on = cat === k;
+        return <button key={k} type="button" onClick={() => { setCat(k); setMore(false); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0,
+          padding: "5px 11px", borderRadius: 20, fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
+          border: on ? "none" : "1px solid var(--border)", color: on ? "#fff" : "var(--text2)",
+          background: on ? "linear-gradient(135deg, #F43F5E, #8B5CF6)" : "var(--surface)" }}>{l}
+          <span style={{ fontSize: 10.5, fontWeight: 900, padding: "0 6px", borderRadius: 10, background: on ? "rgba(255,255,255,.25)" : "var(--surface2)",
+            color: on ? "#fff" : "var(--muted)" }}>{counts[k]}</span></button>; })}
+    </div>}
+
+    {/* la liste, par jour, la plus recente d'abord : une ligne de temps verticale */}
+    <div ref={listRef} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {days.map(({ d, list: l }) => <div key={d} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", padding: "0 2px" }}>{d}</div>
+        <div style={{ position: "relative", display: "flex", flexDirection: "column" }}>
+          <span aria-hidden="true" style={{ position: "absolute", left: 58, top: 10, bottom: 10, width: 2, borderRadius: 2, background: "var(--border)" }}/>
+          {l.map(e => { const c = colorOf(e), on = e.ms === pick;
+            return <button key={e.i} data-ev={e.i} type="button" onClick={() => { choose(e); if (listOpen && pick !== e.ms) setListOpen(false); }} style={{ position: "relative", display: "flex", alignItems: "center", gap: 10,
+              padding: "6px 8px", border: "none", borderRadius: 12, textAlign: "left", cursor: "pointer", color: "var(--text)",
+              background: on ? `color-mix(in srgb, ${c} 14%, transparent)` : "transparent" }}>
+              <span style={{ width: 40, flexShrink: 0, fontSize: 12, fontWeight: 800, color: on ? c : "var(--muted)", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{hm(e.ms)}</span>
+              <span style={{ position: "relative", zIndex: 1, flexShrink: 0, display: "inline-flex" }}><Dot e={e} size={22} on={on}/></span>
+              <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+                <span style={{ fontSize: 13, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.title}</span>
+                {(e.detail || e.before) && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {e.kind === "filament" && e.color && <span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 3, background: c, marginRight: 5, verticalAlign: "-1px" }}/>}
+                  {e.detail}{e.before ? `${e.detail ? " · " : ""}avant : ${e.before}` : ""}</span>}
+              </span>
+              {/* la fiche, d'un toucher */}
+              {linkOf(e) && onOpen && <span role="button" tabIndex={0} onClick={ev => { ev.stopPropagation(); setListOpen(false); onOpen(e); }}
+                onKeyDown={ev => { if (ev.key === "Enter") { ev.stopPropagation(); onOpen(e); } }}
+                data-tip={linkOf(e) === "print" ? "Ouvrir la fiche de l'impression" : "Ouvrir la fiche de la bobine"}
+                style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 900,
+                  color: c, background: `color-mix(in srgb, ${c} 13%, transparent)`, cursor: "pointer", whiteSpace: "nowrap" }}>Fiche ›</span>}
+            </button>; })}
+        </div>
+      </div>)}
+      {shown.length > LIMIT && !listOpen && <button type="button" onClick={() => setMore(m => !m)} style={{ alignSelf: "center", padding: "7px 16px", borderRadius: 20,
+        border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>
+        {more ? "Moins" : `Voir les ${shown.length - LIMIT} autres`}</button>}
+    </div>
+  </>;
 
   return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
     {/* la frise */}
@@ -172,47 +222,20 @@ export default function MachineTimeline({ events, points, hours, end, pick, onPi
       <button type="button" onClick={() => onPick?.(null)} aria-label="Fermer" style={{ border: "none", background: "none", color: "var(--muted)", fontSize: 18, cursor: "pointer" }}>×</button>
     </div>}
 
-    {/* les sortes */}
-    {evs.length > 0 && <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 2 }}>
-      {CATS.filter(([k]) => k === "all" || counts[k]).map(([k, l]) => { const on = cat === k;
-        return <button key={k} type="button" onClick={() => { setCat(k); setMore(false); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0,
-          padding: "5px 11px", borderRadius: 20, fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
-          border: on ? "none" : "1px solid var(--border)", color: on ? "#fff" : "var(--text2)",
-          background: on ? "linear-gradient(135deg, #F43F5E, #8B5CF6)" : "var(--surface)" }}>{l}
-          <span style={{ fontSize: 10.5, fontWeight: 900, padding: "0 6px", borderRadius: 10, background: on ? "rgba(255,255,255,.25)" : "var(--surface2)",
-            color: on ? "#fff" : "var(--muted)" }}>{counts[k]}</span></button>; })}
-    </div>}
-
-    {/* la liste, par jour, la plus recente d'abord : une ligne de temps verticale */}
-    <div ref={listRef} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {days.map(({ d, list: l }) => <div key={d} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", padding: "0 2px" }}>{d}</div>
-        <div style={{ position: "relative", display: "flex", flexDirection: "column" }}>
-          <span aria-hidden="true" style={{ position: "absolute", left: 58, top: 10, bottom: 10, width: 2, borderRadius: 2, background: "var(--border)" }}/>
-          {l.map(e => { const c = colorOf(e), on = e.ms === pick;
-            return <button key={e.i} data-ev={e.i} type="button" onClick={() => choose(e)} style={{ position: "relative", display: "flex", alignItems: "center", gap: 10,
-              padding: "6px 8px", border: "none", borderRadius: 12, textAlign: "left", cursor: "pointer", color: "var(--text)",
-              background: on ? `color-mix(in srgb, ${c} 14%, transparent)` : "transparent" }}>
-              <span style={{ width: 40, flexShrink: 0, fontSize: 12, fontWeight: 800, color: on ? c : "var(--muted)", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{hm(e.ms)}</span>
-              <span style={{ position: "relative", zIndex: 1, flexShrink: 0, display: "inline-flex" }}><Dot e={e} size={22} on={on}/></span>
-              <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-                <span style={{ fontSize: 13, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.title}</span>
-                {(e.detail || e.before) && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {e.kind === "filament" && e.color && <span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 3, background: c, marginRight: 5, verticalAlign: "-1px" }}/>}
-                  {e.detail}{e.before ? `${e.detail ? " · " : ""}avant : ${e.before}` : ""}</span>}
-              </span>
-              {/* la fiche, d'un toucher */}
-              {linkOf(e) && onOpen && <span role="button" tabIndex={0} onClick={ev => { ev.stopPropagation(); onOpen(e); }}
-                onKeyDown={ev => { if (ev.key === "Enter") { ev.stopPropagation(); onOpen(e); } }}
-                data-tip={linkOf(e) === "print" ? "Ouvrir la fiche de l'impression" : "Ouvrir la fiche de la bobine"}
-                style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 900,
-                  color: c, background: `color-mix(in srgb, ${c} 13%, transparent)`, cursor: "pointer", whiteSpace: "nowrap" }}>Fiche ›</span>}
-            </button>; })}
-        </div>
-      </div>)}
-      {shown.length > LIMIT && <button type="button" onClick={() => setMore(m => !m)} style={{ alignSelf: "center", padding: "7px 16px", borderRadius: 20,
-        border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>
-        {more ? "Moins" : `Voir les ${shown.length - LIMIT} autres`}</button>}
-    </div>
+    {/* la liste : dans une fenetre a part (03/11/2026 : dans la page, elle devenait vite tres haute) */}
+    {listInSheet ? evs.length > 0 && <button type="button" onClick={() => setListOpen(true)} style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center",
+      gap: 8, padding: "8px 14px", borderRadius: 20, border: "1px solid color-mix(in srgb, #F43F5E 30%, var(--border))", cursor: "pointer", fontSize: 12.5, fontWeight: 900,
+      color: "var(--text)", background: "linear-gradient(135deg, rgba(244,63,94,.10), rgba(139,92,246,.10)), var(--surface)" }}>
+      📜 Tous les événements
+      <span style={{ padding: "0 8px", borderRadius: 10, fontSize: 11, color: "#fff", background: "linear-gradient(135deg, #F43F5E, #8B5CF6)" }}>{evs.length}</span>
+      <span style={{ color: "var(--muted)" }}>›</span></button> : listBody()}
+    {listInSheet && listOpen && createPortal(<FSheet onClose={() => setListOpen(false)} z={1000}
+      bottom={<button onClick={() => setListOpen(false)} style={{ ...fBtn, flex: 1 }}>Fermer</button>}>
+      <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>🕒 Chronologie
+          <span style={{ marginLeft: 8, fontSize: 12.5, fontWeight: 800, color: "var(--muted)" }}>{winOf(from, to)}</span></div>
+        {listBody()}
+      </div>
+    </FSheet>, document.body)}
   </div>;
 }

@@ -221,6 +221,7 @@ async def lifespan(app: FastAPI):
     _tasks.track("sensors", _bg(_sensors.loop()))             # capteurs (AMS, buses, plateau, chambre) : 7 jours de releves
     from app.services import machine_events as _mev
     _sub(_mev.watch)                                          # les evenements de la machine (chronologie)
+    _mev.started()
     from app.services import sd_card as _sd
     _tasks.track("sd_card", _bg(_sd.auto_loop()))             # timelapse de chaque impression, copie de la carte SD apres la fin
     from app.services import archive as _arch
