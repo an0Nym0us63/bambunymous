@@ -409,17 +409,18 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
           : (name || "")}
       </p>}
       {sansEchantillon(tray, spoolInfo) && (
-        <span title={SWATCH_TITLE} style={{ display:"inline-flex", alignItems:"center", gap:3,
-          padding:"1px 6px", borderRadius:20, fontSize:9, fontWeight:700, whiteSpace:"nowrap",
+        // 03/11/2026 : « Échantillon à faire » debordait de la colonne sur mobile ; le libelle court, borne a la colonne
+        <span data-tip={SWATCH_TITLE} style={{ display:"inline-flex", alignItems:"center", gap:3, maxWidth:"100%", boxSizing:"border-box",
+          padding:"1px 6px", borderRadius:20, fontSize:9, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden",
           color:SWATCH_COLOR, background:"rgba(245,158,11,0.12)", border:"1px solid rgba(245,158,11,0.35)" }}>
-          <Palette size={9}/> Échantillon à faire
+          <Palette size={9} style={{ flexShrink:0 }}/><span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>Échantillon</span>
         </span>
       )}
       {aSecher(tray, spoolInfo) && (
-        <span title={DRY_TITLE} style={{ display:"inline-flex", alignItems:"center", gap:3,
-          padding:"1px 6px", borderRadius:20, fontSize:9, fontWeight:700, whiteSpace:"nowrap",
+        <span data-tip={DRY_TITLE} style={{ display:"inline-flex", alignItems:"center", gap:3, maxWidth:"100%", boxSizing:"border-box",
+          padding:"1px 6px", borderRadius:20, fontSize:9, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden",
           color:DRY_COLOR, background:"rgba(14,165,233,0.12)", border:"1px solid rgba(14,165,233,0.35)" }}>
-          <Droplets size={9}/> À sécher
+          <Droplets size={9} style={{ flexShrink:0 }}/><span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>À sécher</span>
         </span>
       )}
     </div>
