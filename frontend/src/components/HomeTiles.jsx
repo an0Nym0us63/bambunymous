@@ -2877,6 +2877,19 @@ function FanRotor({ pct = 0, color, size = 64 }) {
     <circle r={r * 0.14} fill={on ? color : "var(--muted)"}/>
   </svg>;
 }
+// la rangee des ventilateurs de la fenetre de l'imprimante : une petite carte par ventilateur declare
+export function FanStrip({ fans }) {
+  const known = FAN_DEFS.filter(([k]) => fans?.[k] != null);
+  if (!known.length) return null;
+  return <div style={{ display: "grid", gridTemplateColumns: `repeat(${known.length}, minmax(0, 1fr))`, gap: 8 }}>
+    {known.map(([k, l, c, why]) => <div key={k} data-tip={why} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "10px 6px 8px",
+      borderRadius: 14, background: fans[k] > 0 ? `radial-gradient(90% 80% at 50% 0%, ${c}1f, transparent 70%), var(--surface2)` : "var(--surface2)" }}>
+      <FanRotor pct={fans[k]} color={c} size={44}/>
+      <span style={{ fontSize: 14, fontWeight: 900, color: fans[k] > 0 ? c : "var(--muted)", lineHeight: 1.1 }}>{fans[k]} %</span>
+      <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", lineHeight: 1.1 }}>{l}</span>
+    </div>)}
+  </div>;
+}
 function Fans({ status, o, sz }) {
   const hist = useSensorHistory(24, o.spark !== false);
   if (!status?.connected) return <TileEmpty icon={<Fan size={15}/>} color="#14B8A6" label="Ventilateurs" sz={sz} text="Imprimante injoignable"/>;

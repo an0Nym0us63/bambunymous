@@ -20,7 +20,7 @@ import Lightbox from "../components/Lightbox";
 import AmsOrderEditor from "../components/AmsOrderEditor";
 import { relayed } from "../components/Friends";
 import { AMSBox, AMSDetail, TrayBottomSheet, DryCard, amsRoute } from "../components/AMSSection";
-import { Zoom, TempStrip, SwitchArt, switchModel } from "../components/HomeTiles";
+import { Zoom, TempStrip, SwitchArt, switchModel, FanStrip } from "../components/HomeTiles";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel, amsName, switchRoutes, trayPct } from "../utils/ams";
 import { FitBox } from "../components/FitThumb";
 
@@ -1680,6 +1680,11 @@ function PrinterPopup({ status, img, name, onClose }) {
           {/* atelier glacial : un bonhomme de neige se cache sous les temperatures */}
           {status.chamber_temp > 0 && status.chamber_temp < 15 && !found.has("snowman") && <div aria-hidden="true" style={{ textAlign: "right", marginTop: -10, lineHeight: 1 }}>
             <span data-egg="snowman" style={{ fontSize: 9, opacity: 0.2, cursor: "default", userSelect: "none" }}>⛄</span></div>}
+          {/* les ventilateurs (03/11/2026), ceux que la machine declare */}
+          {Object.keys(status.fans || {}).length > 0 && <>
+            {section("Ventilateurs", Wind, "#14B8A6")}
+            <FanStrip fans={status.fans}/>
+          </>}
         </>}
 
         {amsList.length > 0 && <>
