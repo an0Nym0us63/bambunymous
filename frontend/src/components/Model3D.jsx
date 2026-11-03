@@ -1985,6 +1985,9 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const alt = (p && (asm ? merged(platePalettes) : platePalettes?.[p.n])) || palette || usedPal || null;
   const altLabel = altName || (palette || platePalettes ? "Retenues" : "Utilisées");
   const [own, setOwn] = useState(false);
+  // les choix de correspondance, plateau par plateau (03/11/2026) : le plateau montre, s'il y en a plusieurs
+  const [perPlate, setPerPlate] = useState(true);
+  const plateOnly = p && !p.assembled && (meta?.plates || []).filter(x => !x.assembled).length > 1 ? p.n : null;
   // comparer (30/10/2026) : la vue assemblee du 3MF d'origine, a cote de mon assemblage enregistre (la vue seulement)
   // quel assemblage voir (30/10/2026) : le mien, celui du 3MF, ou celui d'un copain qui a le meme modele
   const [viewSel, setViewSel] = useState("mine");
@@ -2415,8 +2418,20 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         </div>}
         {/* les couleurs utilisees : chaque couleur du createur et ce qui l'a remplacee (ou rien de trouve) ; avec une
             portee (impression ou groupe), toucher une paire pour choisir soi-meme */}
+        {/* (03/11/2026) sur un plateau d'un modele qui en a plusieurs : le choix vaut pour ce plateau (d'office), ou pour tous ;
+            l'assemble prend, piece par piece, les couleurs de son plateau */}
+        {shown && !palette && usedDetail.length > 0 && !fr && meta?.scope && plateOnly != null && <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+          <span>Mes choix :</span>
+          {[[true, `📐 Pour le plateau ${p.n}`, "Ce que tu choisis ne vaut que pour ce plateau (et ses pièces dans l'assemblé)"], [false, "🧩 Pour tous les plateaux", "Ce que tu choisis vaut pour tous les plateaux du modèle"]].map(([v, l, tip]) =>
+            <button key={l} type="button" onClick={() => setPerPlate(v)} data-tip={tip} style={{ padding: "3px 10px", borderRadius: 12, cursor: "pointer", fontSize: 11.5, fontWeight: 800,
+              border: perPlate === v ? "1px solid color-mix(in srgb, #0EA5E9 55%, transparent)" : "1px solid var(--border)",
+              background: perPlate === v ? "color-mix(in srgb, #0EA5E9 14%, var(--surface2))" : "var(--surface2)", color: perPlate === v ? "#0EA5E9" : "var(--muted)" }}>{l}</button>)}
+        </div>}
         {shown && !palette && usedDetail.length > 0 && <ColorPairs detail={usedDetail} options={meta?.used_options || []} chosen={meta?.chosen || {}}
-          scope={fr ? null : meta?.scope || null} onChoose={async (o, body) => { try { await chooseColor(meta.scope, o, body); } catch { /* rien */ } setTick(t => t + 1); }}/>}
+          plate={plateOnly != null && perPlate ? plateOnly : null}
+          scope={fr ? null : meta?.scope || null} onChoose={async (o, body) => {
+            try { await chooseColor(meta.scope, o, { ...body, ...(plateOnly != null && perPlate ? { plate: plateOnly } : {}) }); if (plateOnly != null && perPlate && !body.auto) egg("couleur_plateau"); } catch { /* rien */ }
+            setTick(t => t + 1); }}/>}
         <p style={{ margin: 0, fontSize: 11.5, color: "var(--muted)" }}>Un doigt pour tourner, deux pour zoomer et déplacer ; ⟲ recentre.</p>
       </div>
     </FSheet>,

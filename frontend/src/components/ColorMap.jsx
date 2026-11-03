@@ -13,9 +13,11 @@ const HOW = { "pièces": "trouvé par les pièces de même nom", tranchage: "mê
 const Sw = ({ c, size = 14 }) => <span style={{ width: size, height: size, borderRadius: "50%", display: "inline-block", flexShrink: 0,
   border: "1px solid var(--border)", background: c ? `#${c}` : "repeating-linear-gradient(45deg, var(--surface2) 0 3px, var(--border) 3px 6px)" }}/>;
 
-// la rangee de paires ; scope : on peut choisir (onChoose(origin, body) envoie le choix)
-export function ColorPairs({ detail = [], options = [], chosen = {}, scope = null, onChoose = null, label = "Correspondance :" }) {
+// la rangee de paires ; scope : on peut choisir (onChoose(origin, body) envoie le choix) ; plate : le choix vaut pour ce
+// plateau seulement (03/11/2026 : l'assemble prend les couleurs de chaque plateau)
+export function ColorPairs({ detail = [], options = [], chosen = {}, scope = null, onChoose = null, label = "Correspondance :", plate = null }) {
   if (!detail.length) return null;
+  const ck = o => (plate != null ? `${o}@${plate}` : o);
   const pick = (e, x) => {
     if (!scope || !onChoose) return;
     // le meme filament (couleur, nom, marque et type) utilise par plusieurs impressions : une seule ligne, la plus
@@ -33,8 +35,9 @@ export function ColorPairs({ detail = [], options = [], chosen = {}, scope = nul
     openMenu(e, { title: `Couleur n°${x.e} du créateur : quelle bobine l'a remplacée ?`, items: [
       ...items, items.length ? "-" : null,
       { icon: "🚫", label: "Aucune", hint: "Cette couleur n'a pas été imprimée", onClick: () => onChoose(x.from, { none: true }) },
-      chosen?.[x.from] && !chosen[x.from].group ? { icon: "✨", label: "Automatique", hint: "Revenir à la déduction de l'appli", onClick: () => onChoose(x.from, { auto: true }) } : null,
-      chosen?.[x.from]?.group ? { icon: "👥", label: "Comme le groupe", hint: "Ce choix vient du groupe : retirer celui de cette impression", disabled: true } : null,
+      chosen?.[ck(x.from)] && !chosen[ck(x.from)].group ? { icon: "✨", label: plate != null ? "Comme les autres plateaux" : "Automatique",
+        hint: plate != null ? "Retirer le choix propre à ce plateau" : "Revenir à la déduction de l'appli", onClick: () => onChoose(x.from, { auto: true }) } : null,
+      chosen?.[ck(x.from)]?.group ? { icon: "👥", label: "Comme le groupe", hint: "Ce choix vient du groupe : retirer celui de cette impression", disabled: true } : null,
     ] });
   };
   return <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
@@ -42,13 +45,14 @@ export function ColorPairs({ detail = [], options = [], chosen = {}, scope = nul
     {detail.map(x => {
       const tip = (x.to ? `Filament n°${x.e} du projet → n°${x.es} de l'impression (${HOW[x.how] || "par son numéro"})`
         : `Filament n°${x.e} : ${x.how === "choisi" ? "aucune, choisi à la main" : "aucune de ces impressions ne l'a utilisé"}`)
-        + (x.other_profile ? " · impression d'un autre profil du modèle" : "") + (x.group ? " · choix fait sur le groupe" : "") + (scope ? " · touche pour choisir" : "");
+        + (x.other_profile ? " · impression d'un autre profil du modèle" : "") + (x.group ? " · choix fait sur le groupe" : "")
+        + (x.plate != null ? ` · choisi pour le plateau ${x.plate} seulement` : "") + (scope ? " · touche pour choisir" : "");
       const hand = x.how === "choisi";
       return <span key={`${x.from}-${x.e}`} data-tip={tip} onClick={e => { e.stopPropagation(); pick(e, x); }} role={scope ? "button" : undefined}
         style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 7px", borderRadius: 12, cursor: scope ? "pointer" : "default",
           background: hand ? "color-mix(in srgb, #0EA5E9 14%, var(--surface2))" : "var(--surface2)",
           border: hand ? "1px solid color-mix(in srgb, #0EA5E9 45%, transparent)" : "1px solid transparent" }}>
-        <Sw c={x.from}/><span>→</span><Sw c={x.to}/>{hand && <span style={{ fontSize: 10 }}>{x.group ? "👥" : "✋"}</span>}</span>;
+        <Sw c={x.from}/><span>→</span><Sw c={x.to}/>{hand && <span style={{ fontSize: 10 }}>{x.group ? "👥" : "✋"}{x.plate != null ? <b style={{ fontSize: 9.5, color: "#0EA5E9" }}> P{x.plate}</b> : null}</span>}</span>;
     })}
   </div>;
 }

@@ -793,9 +793,11 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
                     # ce que les impressions de ce plateau ne disent pas, la correspondance de toutes (celle de la carte)
                     # le complete (28/10/2026 : la vue d'un plateau disait « rien » la ou la carte disait noir -> noir)
                     if used_palette:
-                        pal = {**{a: b for a, b in used_palette.items() if a not in (pal or {})}, **(pal or {})}
-                        got = {x["from"] for x in dd if x.get("to")}
-                        dd = [x for x in dd if x.get("to")] + [x for x in used_detail or [] if x["from"] not in got]
+                        # (un choix fait pour ce plateau -- « aucune » compris -- n'est pas complete par celui de tous)
+                        forced = {x["from"] for x in dd if x.get("how") == "choisi"}
+                        pal = {**{a: b for a, b in used_palette.items() if a not in (pal or {}) and a not in forced}, **(pal or {})}
+                        got = {x["from"] for x in dd if x.get("to")} | forced
+                        dd = [x for x in dd if x.get("to") or x["from"] in forced] + [x for x in used_detail or [] if x["from"] not in got]
                         dd.sort(key=lambda x: x.get("e") or 0)
                     if pal:
                         used_plates[str(n)], used_details_plates[str(n)] = pal, dd
@@ -1438,13 +1440,19 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
         for a, ch in ((print_choices or {}).get(pid) or {}).items():
             if isinstance(ch, dict) and not ch.get("group"):
                 merged_choices[h6(a)] = ch
-    merged_choices.update({h6(a): ch for a, ch in (chosen or {}).items()})
+    merged_choices.update({h6(a): ch for a, ch in (chosen or {}).items() if "@" not in str(a)})
+    # (03/11/2026) un choix propre a un plateau (« RRGGBB@n ») passe avant, pour ce plateau seulement
+    if plate is not None:
+        merged_choices.update({h6(str(a).split("@")[0]): {**ch, "plate": int(plate)} for a, ch in (chosen or {}).items()
+                               if "@" in str(a) and str(a).split("@")[1] == str(plate) and isinstance(ch, dict)})
     for a, ch in merged_choices.items():
         a = h6(a)
         if a not in o_cols or not isinstance(ch, dict):
             continue
         e = o_cols.index(a) + 1
         grp = {"group": ch["group"]} if ch.get("group") else {}
+        if ch.get("plate") is not None:
+            grp["plate"] = ch["plate"]
         if ch.get("none"):
             out.pop(a, None)
             detail = [d for d in detail if d["from"] != a] + [{"from": a, "to": None, "e": e, "how": "choisi", **grp}]
@@ -1469,7 +1477,8 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
 # ── Les correspondances de couleurs choisies a la main (28/10/2026) ──
 # La deduction fait le gros du travail ; quand elle se trompe, on choisit soi-meme, pour une impression ou un groupe,
 # quelle bobine de ces impressions remplace une couleur du createur (ou aucune). Garde en reglage :
-# MW_COLORS:<print|group>:<id> = {"RRGGBB": {"print": id, "slot": n} | {"none": true}}.
+# MW_COLORS:<print|group>:<id> = {"RRGGBB": {"print": id, "slot": n} | {"none": true}} ; « RRGGBB@n » : pour le plateau n
+# seulement (03/11/2026, pour colorer l'assemble plateau par plateau).
 import re as _re_scope
 _SCOPE = _re_scope.compile(r"(print|group):\d{1,9}")
 
@@ -1517,13 +1526,14 @@ async def _print_choices(ids: list) -> dict:
     return out
 
 
-async def _save_color_choice(scope: str, origin: str, choice: dict | None) -> dict:
-    """choice : {"print", "slot"} ou {"none": true} ; None : retour a la deduction automatique."""
+async def _save_color_choice(scope: str, origin: str, choice: dict | None, plate: int | None = None) -> dict:
+    """choice : {"print", "slot"} ou {"none": true} ; None : retour a la deduction automatique. plate : pour ce plateau
+    seulement."""
     import json as _json
     from ....db.session import AsyncSessionLocal
     from ....services.settings_service import set_setting
     d = {k: v for k, v in (await _color_choices(scope)).items() if not (isinstance(v, dict) and v.get("group"))}
-    a = str(origin or "").lstrip("#")[:6].upper()
+    a = str(origin or "").lstrip("#")[:6].upper() + (f"@{int(plate)}" if plate is not None else "")
     if choice is None:
         d.pop(a, None)
     else:
@@ -1711,7 +1721,8 @@ async def mw_model_3d_td_set(design_id: str, body: dict = Body(...), _=Depends(r
 @router.post("/3d/colors/set")
 async def mw_model_3d_colors_set(body: dict = Body(...), _=Depends(require_own_account)):
     """Choisir a la main ce qui remplace une couleur du createur : {scope, origin, print, slot} (cette bobine),
-    {scope, origin, none: true} (aucune), {scope, origin, auto: true} (retour a la deduction)."""
+    {scope, origin, none: true} (aucune), {scope, origin, auto: true} (retour a la deduction) ; plate : pour ce plateau
+    seulement (03/11/2026)."""
     scope = str(body.get("scope") or "")
     origin = str(body.get("origin") or "").lstrip("#")[:6].upper()
     if not _SCOPE.fullmatch(scope) or len(origin) != 6:
@@ -1725,7 +1736,13 @@ async def mw_model_3d_colors_set(body: dict = Body(...), _=Depends(require_own_a
             choice = {"print": int(body.get("print")), "slot": int(body.get("slot"))}
         except (TypeError, ValueError):
             raise HTTPException(400, "Choix incomplet")
-    return {"chosen": await _save_color_choice(scope, origin, choice)}
+    try:
+        plate = int(body["plate"]) if body.get("plate") is not None else None
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Plateau inconnu")
+    if plate is not None and not 0 <= plate < 1000:
+        raise HTTPException(400, "Plateau inconnu")
+    return {"chosen": await _save_color_choice(scope, origin, choice, plate)}
 
 
 def _manual_plates(mwpl) -> list | None:
