@@ -2866,13 +2866,14 @@ const FAN_DEFS = [["part", "Pièce", "#14B8A6", "Refroidit la pièce juste impri
   ["head2", "Tête 2", "#64748B", "Le même, pour la seconde buse."],
   ["board", "Carte", "#F59E0B", "Refroidit la carte de commande de l'imprimante."]];
 function FanRotor({ pct = 0, color, size = 64 }) {
-  const r = size / 2, ring = r - 3, C = 2 * Math.PI * ring, on = pct > 0;
+  // l'anneau a la mesure de l'helice (03/11/2026 : 4 px partout, enorme sur les petites helices d'une demi-colonne)
+  const r = size / 2, sw = Math.max(1.6, Math.min(4, size * 0.065)), ring = r - sw / 2 - 0.5, C = 2 * Math.PI * ring, on = pct > 0;
   // plus vite il tourne, plus le tour est court : 2,4 s au ralenti, 0,35 s a fond
   const dur = on ? Math.max(0.35, 2.4 - (pct / 100) * 2.05) : 0;
   const blade = `M0,-${r * 0.12} C${r * 0.32},-${r * 0.72} ${r * 0.62},-${r * 0.5} ${r * 0.58},-${r * 0.12} Z`;
   return <svg data-pk="" width={size} height={size} viewBox={`${-r} ${-r} ${size} ${size}`} aria-hidden="true" style={{ display: "block", overflow: "visible" }}>
-    <circle r={ring} fill="none" stroke="var(--surface2)" strokeWidth="4"/>
-    <circle r={ring} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - Math.min(100, pct) / 100)}
+    <circle r={ring} fill="none" stroke="var(--surface2)" strokeWidth={sw}/>
+    <circle r={ring} fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - Math.min(100, pct) / 100)}
       transform="rotate(-90)" style={{ transition: "stroke-dashoffset .6s ease" }}/>
     <g style={on ? { animation: `spin ${dur.toFixed(2)}s linear infinite`, transformOrigin: "0 0" } : undefined}>
       {[0, 72, 144, 216, 288].map(a => <path key={a} d={blade} transform={`rotate(${a})`} fill={on ? color : "var(--muted)"} opacity={on ? 0.85 : 0.45}/>)}
