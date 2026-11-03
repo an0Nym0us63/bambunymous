@@ -4,7 +4,7 @@ import { importRetry } from "../utils/importRetry";
 import AllAlertsModal from "./AllAlertsModal";
 import { Hide } from "./Cachettes";
 import { useFriend, currentFriend } from "../store/friend";
-import { liveOfSpool, LiveHatch, LiveTo } from "./LiveUsage";
+import { liveOfSpool, LiveHatch, LiveTo, LiveSwitchButton } from "./LiveUsage";
 import { useLiveSpool, useLiveCurrent } from "../store/liveUsage";
 import { useLayer, LayerCanvas, LayerExplorer } from "./LayerView";
 import { useIsAdmin } from "../store/auth";
@@ -3693,6 +3693,7 @@ function Spool({ status, o, sz }) {
               {tot && g != null && <Muted size={13}>sur {Math.round(tot)} g · {Math.round((pct ?? 0) * 100)} %</Muted>}</div>
             {bar(10)}
             {lv?.target != null && <Muted size={12.5}>→ {Math.round(lv.target)} g à la fin de l'impression · {Math.round(lv.row_used)} g consommés sur {Math.round(lv.row_planned)} g · suivi couche par couche (alpha)</Muted>}
+            <LiveSwitchButton lv={lv} style={{ alignSelf: "flex-start", marginTop: 2 }}/>
           </div>
         </div>
         {(() => {

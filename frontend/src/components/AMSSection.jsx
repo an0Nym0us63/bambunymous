@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useLiveSpool } from "../store/liveUsage";
-import { LiveHatch, LiveTo } from "./LiveUsage";
+import { LiveHatch, LiveTo, LiveSwitchButton } from "./LiveUsage";
 import { useTrackDetail } from "../utils/track";
 import { Droplets, Sun, Thermometer, Timer, Clock, Package, Palette } from "lucide-react";
 import client from "../api/client";
@@ -782,6 +782,7 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
             </div>
             {lv && <div style={{ fontSize:12, fontWeight:700, color:"var(--text2)" }}>🖨️ Impression en cours : {Math.round(lv.target)} g à la fin
               ({Math.round(lv.row_used)} g consommés sur {Math.round(lv.row_planned)} g) ; hachurée sur la barre, la part qui partira encore.</div>}
+            <LiveSwitchButton lv={lv} style={{ alignSelf: "flex-start" }}/>
           </div>}
         </div>
       </div>

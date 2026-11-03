@@ -367,6 +367,26 @@ async def _check_refill(pid: int) -> None:
 
 
 # ── Changement de bobine ────────────────────────────────────────────────────────────────────────────────────────────
+async def _follow_tray(old_id: int, new_id: int) -> None:
+    """La bobine choisie a la main a ete posee a la place de l'ancienne (03/11/2026) : l'AMS ne relit pas l'emplacement
+    en pleine impression, il montrerait encore l'ancienne (a 0 g). L'emplacement de l'ancienne est associe a la
+    nouvelle, tant que l'AMS y voit le meme filament (ou la meme puce) ; une relecture l'efface d'elle-meme. Rien si la
+    nouvelle est deja vue dans un autre emplacement (elle n'a pas pris la place de l'ancienne)."""
+    try:
+        from ..core.mqtt import get_state
+        from .slot_override import set_override, tray_signature
+        s = get_state()
+        trays = [(a.id, t) for a in (s.ams_list or []) for t in a.trays if not getattr(t, "empty", False)] if s else []
+        if any(t.spool_id == new_id for _a, t in trays):
+            return
+        for ams_id, t in trays:
+            if t.spool_id == old_id:
+                await set_override(ams_id, t.id, tray_signature(t), new_id)
+    except Exception:
+        logger.exception("[LIVE] emplacement de la nouvelle bobine non associe")
+
+
+
 async def switch(pid: int, slot: int, spool_id: int, auto: bool = False) -> dict:
     """La bobine de ce filament est finie, la suite vient de spool_id : l'ancienne passe a 0, la nouvelle porte le
     reste (retire de son poids), a partir du point atteint."""
@@ -413,6 +433,8 @@ async def switch(pid: int, slot: int, spool_id: int, auto: bool = False) -> dict
         await db.flush()
         await _costs(db, p)
         await db.commit()
+    if not auto and last.spool_id:
+        await _follow_tray(last.spool_id, spool_id)
     try:
         from ..core.mqtt import invalidate_tray_cache
         invalidate_tray_cache()

@@ -34,6 +34,13 @@ function useLiveFeed() {
   }, []);
 }
 
+// relire tout de suite (apres un changement de bobine), sans attendre les 15 s
+export function refreshLive() {
+  if (busy) return;
+  if (timer) { clearTimeout(timer); timer = null; }
+  tick();
+}
+
 // l'etat de l'impression en cours (ou null)
 export function useLiveCurrent() {
   useLiveFeed();

@@ -30,6 +30,19 @@ def signature(tray_info: str, color: str) -> str:
     return f"{(tray_info or '').strip()}|{(color or '').strip().lstrip('#')[:6].lower()}"
 
 
+def rfid_signature(tag: str) -> str:
+    """Un emplacement a puce : la bobine posee a la main ne vaut que tant que la meme puce y est lue (03/11/2026)."""
+    return f"rfid:{(tag or '').strip().lower()}"
+
+
+def tray_signature(tray) -> str:
+    """La signature d'un emplacement tel que l'etat MQTT le montre (comme la detection la calcule)."""
+    tag = getattr(tray, "uuid", "") or getattr(tray, "tray_uuid", "") or ""
+    if has_rfid(tag):
+        return rfid_signature(tag)
+    return signature(getattr(tray, "tray_info_idx", "") or "", getattr(tray, "raw_color", "") or getattr(tray, "color", "") or "")
+
+
 def has_rfid(tag: str) -> bool:
     t = (tag or "").strip()
     return bool(t and t.replace("0", "") and t.lower() not in ("none", "null"))

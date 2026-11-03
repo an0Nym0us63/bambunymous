@@ -778,15 +778,18 @@ class MQTTManager:
                                 lp = _mio.new_event_loop()
                                 async def _go():
                                     from ..services.spool_matcher import match_spool
-                                    from ..services.slot_override import get_override, signature, has_rfid
+                                    from ..services.slot_override import get_override, signature, has_rfid, rfid_signature
                                     spool_id, mode = None, None
                                     # Sans RFID, une association faite a la main pour cet
                                     # emplacement (meme filament present) prime sur la
                                     # detection par profil + couleur.
-                                    if not has_rfid(_tag):
-                                        _ov = await get_override(_ams_id, _tray_slot, signature(_tinfo, _tc))
-                                        if _ov:
-                                            spool_id, mode = _ov, "linked"
+                                    # Avec RFID : seulement une bobine qui a pris la suite en
+                                    # pleine impression (live_usage.switch), tant que l'AMS n'a
+                                    # pas relu la puce (03/11/2026) ; une puce relue l'efface.
+                                    _ov = await get_override(_ams_id, _tray_slot,
+                                                             rfid_signature(_tag) if has_rfid(_tag) else signature(_tinfo, _tc))
+                                    if _ov:
+                                        spool_id, mode = _ov, "linked"
                                     if spool_id is None:
                                         spool_id, mode = await match_spool(_tag, _tinfo, _tc)
                                     _MATCH_CACHE[_key] = spool_id if spool_id else -1

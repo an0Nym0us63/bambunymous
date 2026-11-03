@@ -5,6 +5,7 @@ import { showAlert } from "../utils/dialog";
 import { egg } from "../eggs";
 import { useIsAdmin } from "../store/auth";
 import { FSheet, FCard, fBtn } from "./FicheKit";
+import { useLiveStore, refreshLive } from "../store/liveUsage";
 
 // Suivi du filament couche par couche (alpha, 02/11/2026) : ce que chaque filament de l'impression en cours a vraiment
 // consomme, lu dans le G-code a la couche annoncee par l'imprimante. Rien sur « Actuel » (Parametres › Imprimante).
@@ -144,8 +145,23 @@ export function LiveUsageCard({ printId }) {
         </div>;
       })}
     </div>
-    {choose && <SpoolChoice item={choose} printId={printId} onClose={() => setChoose(null)} onDone={() => { setChoose(null); setTick(t => t + 1); }}/>}
+    {choose && <SpoolChoice item={choose} printId={printId} onClose={() => setChoose(null)} onDone={() => { setChoose(null); setTick(t => t + 1); refreshLive(); }}/>}
   </FCard>;
+}
+
+// « Bobine finie ? » ailleurs que sur la fiche de l'impression (03/11/2026) : l'emplacement de l'AMS et la tuile
+// « Filament en cours ». lv : la bobine telle que useLiveSpool la rend (elle sert maintenant a l'impression en cours).
+export function LiveSwitchButton({ lv, style }) {
+  const isAdmin = useIsAdmin();
+  const printId = useLiveStore(s => s.d?.print_id);
+  const [open, setOpen] = useState(false);
+  if (!isAdmin || !lv || !printId || !(lv.row_used < lv.row_planned - 0.5)) return null;
+  return <>
+    <button type="button" onClick={e => { e.stopPropagation(); setOpen(true); }}
+      data-tip="La bobine est vide ou tu en as mis une autre : choisis celle qui porte la suite de l'impression"
+      style={{ ...fBtn, padding: "6px 10px", fontSize: 12, ...style }}>🔁 Bobine finie ? Choisir la suite</button>
+    {open && <SpoolChoice item={lv} printId={printId} onClose={() => setOpen(false)} onDone={() => { setOpen(false); refreshLive(); }}/>}
+  </>;
 }
 
 // l'interrupteur (Parametres › Imprimante)
