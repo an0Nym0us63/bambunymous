@@ -2958,10 +2958,12 @@ function printColors(d, status) {
     const rows = items.filter(i => i.slot === slot), f = rows[0], cur = rows[rows.length - 1];
     const tray = cur.spool_id ? trays.find(t => t.spool_id === cur.spool_id) : null;
     const on = !!tray && tray.ams.id === status?.active_ams_id && tray.id === status?.active_tray_id;
-    const c = hexCss(cur.fil_color || cur.color || f.color);
+    // une matiere translucide (« Nature », alpha bas) n'a pas de teinte : un beige ficelle plutot que du noir
+    const raw = String(cur.fil_color || cur.color || f.color || "").replace("#", "");
+    const c = raw.length === 8 && parseInt(raw.slice(6), 16) < 0x80 ? "#D6C9AE" : hexCss(raw);
     const pct = f.planned > 0 ? Math.max(0, Math.min(1, f.used / f.planned)) : 0;
     return { slot, rows, f, cur, tray, on, c, pct, name: cur.name || f.type || `Filament ${slot}`,
-      where: tray ? slotOf(tray) : cur.ams_tray ? `AMS ${cur.ams_tray}` : null,
+      where: tray ? slotOf(tray) : cur.ams_tray || null,
       finish: finishOf({ fila_finish: cur.finish, name: cur.name, fila_type: cur.sub || cur.type }) };
   });
 }
@@ -2972,14 +2974,28 @@ function PcSwatch({ x, size = 18, ring = false }) {
     border: `1px solid ${lum(x.c) > 200 ? "rgba(15,23,42,0.28)" : "rgba(0,0,0,0.15)"}`,
     boxShadow: ring ? `0 0 0 2px var(--surface), 0 0 0 3.5px ${x.c}, 0 0 10px ${x.c}88` : "none" }}/>;
 }
-// la barre consomme / prevu, a la couleur du filament (pastel au depart, franche au bout)
+// l'encre d'une couleur : sa teinte, assombrie quand elle est trop claire pour se voir sur le fond (blanc, beige…)
+const pcInk = x => lum(x.c) > 190 ? `color-mix(in srgb, ${x.c} 45%, #64748B)` : x.c;
+// la barre consomme / prevu, a l'encre du filament (pastel au depart, franche au bout)
 function PcBar({ x, h = 7 }) {
-  const pale = lum(x.c) > 200;
+  const ink = pcInk(x);
   return <span style={{ position: "relative", display: "block", height: h, borderRadius: h, overflow: "hidden", flexShrink: 0,
-    background: `color-mix(in srgb, ${x.c} 14%, var(--surface2))`, boxShadow: pale ? "inset 0 0 0 1px var(--border)" : "none" }}>
-    <span style={{ position: "absolute", inset: 0, width: `${x.pct * 100}%`, borderRadius: h, transition: "width .6s ease",
-      background: `linear-gradient(90deg, color-mix(in srgb, ${x.c} 45%, #ffffff), ${x.c})`,
-      boxShadow: pale ? "inset 0 0 0 1px rgba(15,23,42,0.18)" : `0 0 6px ${x.c}55` }}/>
+    background: `color-mix(in srgb, ${ink} 16%, var(--surface2))`, boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--border) 70%, transparent)" }}>
+    <span style={{ position: "absolute", inset: 0, width: `${Math.max(x.pct > 0 ? 4 : 0, x.pct * 100)}%`, borderRadius: h, transition: "width .6s ease",
+      background: `linear-gradient(90deg, color-mix(in srgb, ${ink} 50%, #ffffff), ${ink})` }}/>
+  </span>;
+}
+// l'anneau d'une couleur : consomme / prevu, a son encre ; au centre le % ou la pastille
+function PcRing({ x, size, children }) {
+  const sw = Math.max(3, Math.round(size / 10)), r = (size - sw) / 2, C = 2 * Math.PI * r, ink = pcInk(x);
+  return <span data-pk="" style={{ position: "relative", width: size, height: size, flexShrink: 0, display: "inline-flex" }}>
+    <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }} aria-hidden="true">
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={`color-mix(in srgb, ${ink} 16%, var(--surface2))`} strokeWidth={sw}/>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={ink} strokeWidth={sw} strokeLinecap="round" strokeDasharray={C}
+        strokeDashoffset={C * (1 - Math.max(x.pct > 0 ? 0.02 : 0, x.pct))} style={{ transition: "stroke-dashoffset .6s" }}/>
+    </svg>
+    <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>{children}</span>
+    {x.on && <span aria-hidden="true" style={{ position: "absolute", inset: -3, borderRadius: "50%", boxShadow: `0 0 12px ${ink}`, opacity: .45, pointerEvents: "none" }}/>}
   </span>;
 }
 const pcG = v => v == null ? "—" : `${Math.round(v)} g`;
@@ -2995,7 +3011,7 @@ function PrintColors({ status, o, sz }) {
   const used = list.reduce((t, x) => t + (x.f.used || 0), 0), planned = list.reduce((t, x) => t + (x.f.planned || 0), 0);
   const open = x => e => { e.stopPropagation(); setPick(x.slot); };
   const sel = list.find(x => x.slot === pick);
-  const head = <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
+  const pcHead = <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0, flexShrink: 0 }}>
     <span data-pk="" style={{ fontSize: 22, fontWeight: 900, lineHeight: 1.05, ...gradText("#9333EA", "#EC4899") }}>{pcG(used)}</span>
     <Muted size={12}>sur {pcG(planned)}</Muted>
     <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>
@@ -3006,32 +3022,73 @@ function PrintColors({ status, o, sz }) {
         {list.slice(0, 8).map(x => <span key={x.slot} role="button" onClick={open(x)} data-tip={`${x.name} · ${pcG(x.f.used)} / ${pcG(x.f.planned)}`}
           style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12 }}><PcSwatch x={x} size={13} ring={x.on}/>{Math.round(x.pct * 100)}%</span>)}</span>}>
       {({ W, H }) => {
-        const hh = H >= list.length * 30 + 34 ? 32 : 0;
-        // une ligne par couleur quand chacune a 24 px ; sinon des anneaux, autant qu'il en tient
-        if ((H - hh) / list.length >= 24) {
-          const rowH = Math.min(64, (H - hh) / list.length), two = rowH >= 38 && W >= 150, big = rowH >= 56 && W >= 240;
-          return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4, minWidth: 0 }}>
-            {hh > 0 && head}
-            {list.map(x => <div key={x.slot} role="button" tabIndex={0} onClick={open(x)} data-tip="Le détail de cette couleur"
-              onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(x)(e); } }}
-              style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, height: rowH - 4, padding: "0 6px", margin: "0 -6px", borderRadius: 10, cursor: "pointer",
-                background: x.on ? `linear-gradient(90deg, ${x.c}1f, transparent 80%)` : "transparent" }}>
-              <PcSwatch x={x} size={big ? 30 : two ? 22 : 16} ring={x.on}/>
-              <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: two ? 4 : 3 }}>
-                <span style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0, fontSize: big ? 13.5 : 12 }}>
-                  {(two || W >= 170) && <span style={{ flex: 1, minWidth: 0, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {x.where && <span style={{ color: x.on ? x.c : "var(--muted)", fontWeight: 900, marginRight: 5 }}>{x.where}</span>}{x.name}</span>}
-                  {!(two || W >= 170) && x.where && <span style={{ color: x.on ? x.c : "var(--muted)", fontWeight: 900, whiteSpace: "nowrap" }}>{x.where}</span>}
-                  <span data-pk="" style={{ marginLeft: "auto", fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>
-                    {Math.round(x.f.used)}<Muted size={11}> / {pcG(x.f.planned)}</Muted></span></span>
-                <PcBar x={x} h={big ? 10 : two ? 7 : 5}/>
+        const n = list.length;
+        const tap = x => ({ role: "button", tabIndex: 0, onClick: open(x), "data-tip": `${x.name} · le détail de cette couleur`,
+          onKeyDown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(x)(e); } } });
+        const slotTag = (x, fs = 11) => x.where && <span style={{ fontSize: fs, fontWeight: 900, color: x.on ? pcInk(x) : "var(--muted)", whiteSpace: "nowrap" }}>{x.where}</span>;
+        const grams = (x, fs) => <span data-pk="" style={{ fontSize: fs, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>
+          {Math.round(x.f.used)}<span style={{ fontSize: fs * 0.78, fontWeight: 700, color: "var(--muted)" }}> / {pcG(x.f.planned)}</span></span>;
+        const pctTxt = (x, size) => <span style={{ fontSize: Math.max(10, size * 0.24), fontWeight: 900, color: "var(--text)" }}>{Math.round(x.pct * 100)}%</span>;
+        const card = x => ({ ...tap(x), style: { minWidth: 0, minHeight: 0, borderRadius: 14, cursor: "pointer", boxSizing: "border-box", overflow: "hidden",
+          background: `linear-gradient(150deg, color-mix(in srgb, ${x.c} 22%, transparent), transparent 70%), var(--surface2)`,
+          border: `1px solid ${x.on ? pcInk(x) : `color-mix(in srgb, ${x.c} 30%, var(--border))`}` } });
+        // 1) de 1 a 4 couleurs : une carte chacune, son anneau et ses chiffres ; cote a cote, sinon les unes sous les autres
+        if (n <= 4) {
+          const cw = (W - 8 * (n - 1)) / n, side = cw >= 160;
+          const withHead = n > 1 && H >= (side ? 130 : 170), one = n === 1;
+          const hH = H - (withHead ? 38 : 0);
+          const rH = side ? Math.min(hH - 16, one ? 132 : 84, cw * 0.4) : Math.min(cw - 18, hH - 54, 84);
+          const ch = (H - 8 * (n - 1)) / n, rV = Math.min(ch - 12, 64);
+          if (rH >= 42) return <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, minWidth: 0, minHeight: 0 }}>
+            {withHead && pcHead}
+            <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`, gap: 8, minHeight: 0 }}>
+              {list.map(x => <div key={x.slot} {...card(x)}>
+                <div style={{ height: "100%", display: "flex", flexDirection: side ? "row" : "column", alignItems: "center", justifyContent: "center",
+                  gap: side ? 12 : 4, padding: side ? "6px 12px" : "6px", boxSizing: "border-box", minWidth: 0, textAlign: side ? "left" : "center" }}>
+                  <PcRing x={x} size={Math.floor(rH)}>{pctTxt(x, rH)}</PcRing>
+                  <div style={{ minWidth: 0, maxWidth: "100%", flex: side ? 1 : "none", display: "flex", flexDirection: "column", alignItems: side ? "flex-start" : "center", gap: 2 }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, maxWidth: "100%" }}>
+                      <PcSwatch x={x} size={side ? 14 : 11}/>{slotTag(x, side ? 12 : 10.5)}</span>
+                    <span style={{ fontSize: one && side ? 16 : side ? 13 : 11.5, fontWeight: 800, color: "var(--text2)", maxWidth: "100%",
+                      ...(side && hH >= 100 ? clamp(2) : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }) }}>{x.name}</span>
+                    {grams(x, one && side ? 22 : side ? 15 : 12.5)}
+                    {one && side && rH >= 70 && <><span style={{ width: "min(100%, 260px)", marginTop: 4 }}><PcBar x={x} h={8}/></span>
+                      <Muted size={11.5}>{pcG(Math.max(0, x.f.planned - x.f.used))} encore à imprimer{x.cur.brand ? ` · ${x.cur.brand}` : ""}</Muted></>}
+                  </div></div></div>)}</div></div>;
+          if (rV >= 40 && W >= 130) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly", gap: 8, minWidth: 0 }}>
+            {list.map(x => <div key={x.slot} {...card(x)}><div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", minWidth: 0 }}>
+              <PcRing x={x} size={Math.floor(rV)}>{pctTxt(x, rV)}</PcRing>
+              <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 5 }}><PcSwatch x={x} size={12}/>{slotTag(x)}</span>
+                <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</span>
+                {grams(x, 13)}</span></div></div>)}</div>;
+        }
+        // 2) une ligne par couleur quand chacune a 30 px : la pastille, l'emplacement, le nom, les grammes, et la barre dessous
+        const withHead = H >= n * 36 + 40, rowH = (H - (withHead ? 36 : 0)) / n;
+        if (rowH >= 30) {
+          const big = rowH >= 44, name = W >= 190;
+          return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly", minWidth: 0 }}>
+            {withHead && pcHead}
+            {list.map(x => <div key={x.slot} {...tap(x)} style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0, padding: `${big ? 5 : 3}px 7px`, margin: "0 -7px",
+              borderRadius: 10, cursor: "pointer", background: x.on ? `linear-gradient(90deg, color-mix(in srgb, ${x.c} 22%, transparent), transparent 85%)` : "transparent" }}>
+              <PcSwatch x={x} size={big ? 24 : 18} ring={x.on}/>
+              <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: big ? 6 : 4 }}>
+                <span style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0, lineHeight: 1.1 }}>
+                  {slotTag(x, big ? 12 : 11)}
+                  {name && <span style={{ flex: 1, minWidth: 0, fontSize: big ? 13 : 12, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</span>}
+                  <span style={{ marginLeft: "auto" }}>{grams(x, big ? 13.5 : 12)}</span></span>
+                <PcBar x={x} h={big ? 8 : 6}/>
               </span></div>)}</div>;
         }
-        const g = fitGrid(list.length, W, H, { ar: 1, extra: 14, max: 72, gap: 6 });
-        return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, auto)`, justifyContent: "space-evenly", alignContent: "center", gap: 6 }}>
-          {list.map(x => <span key={x.slot} role="button" onClick={open(x)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, cursor: "pointer" }}>
-            <Ring value={x.pct} size={g.size} color={x.c}><PcSwatch x={x} size={Math.round(g.size * 0.42)} ring={x.on}/></Ring>
-            <span data-pk="" style={{ fontSize: 10.5, fontWeight: 900, color: "var(--text2)" }}>{Math.round(x.f.used)}/{Math.round(x.f.planned)} g</span></span>)}</div>;
+        // 3) beaucoup de couleurs : une grille d'anneaux, la pastille au centre, l'emplacement et les grammes dessous quand ils tiennent
+        // trop petit pour les grammes dessous : des anneaux seuls, plus grands (le detail est au toucher)
+        const g1 = fitGrid(n, W, H, { ar: 1, extra: 16, max: 76, gap: 8 }), lab = g1.size >= 34;
+        const g = lab ? g1 : fitGrid(n, W, H, { ar: 1, extra: 0, max: 76, gap: 6 });
+        return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, auto)`, justifyContent: "space-evenly", alignContent: "space-evenly", gap: 6 }}>
+          {list.map(x => <span key={x.slot} {...tap(x)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, cursor: "pointer" }}>
+            <PcRing x={x} size={g.size}><PcSwatch x={x} size={Math.round(g.size * (lab ? 0.5 : 0.56))}/></PcRing>
+            {lab && <span data-pk="" style={{ fontSize: 10.5, fontWeight: 900, color: "var(--text2)", whiteSpace: "nowrap" }}>
+              {x.where ? <span style={{ color: x.on ? pcInk(x) : "var(--muted)" }}>{x.where} </span> : null}{Math.round(x.f.used)}/{Math.round(x.f.planned)} g</span>}</span>)}</div>;
       }}
     </Tile>
     {/* la popup d'une couleur, hors de la tuile : en demi-rangee aussi */}
@@ -3053,7 +3110,9 @@ function PcDetail({ x, d, compact = false }) {
   return <div ref={ref} onClick={e => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: compact ? 10 : 14 }}>
     <div style={{ display: "flex", alignItems: "center", gap: compact ? 12 : 18, padding: compact ? "10px 12px" : "16px 18px", borderRadius: 20, flexWrap: "wrap",
       background: `radial-gradient(120% 120% at 0% 0%, ${x.c}2e, transparent 60%), var(--surface2)`, border: `1px solid ${x.c}38` }}>
-      <Ring value={x.pct} size={compact ? 76 : 112} color={x.c} cap="consommés">{Math.round(x.pct * 100)}%</Ring>
+      <PcRing x={x} size={compact ? 76 : 112}><span style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.05 }}>
+        <span style={{ fontSize: compact ? 18 : 26, fontWeight: 900, color: "var(--text)" }}>{Math.round(x.pct * 100)}%</span>
+        <span style={{ fontSize: compact ? 9.5 : 11, fontWeight: 700, color: "var(--muted)" }}>consommés</span></span></PcRing>
       <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
           <PcSwatch x={x} size={compact ? 20 : 26} ring={x.on}/>
@@ -3100,7 +3159,7 @@ function PrintColorsZoom({ d, list }) {
     <div style={{ display: "flex", height: 14, borderRadius: 8, overflow: "hidden", gap: 2 }}>
       {list.map(x => <span key={x.slot} data-tip={`${x.name} : ${pcG(x.f.planned)} prévus`} style={{ flex: Math.max(x.f.planned || 0, planned * 0.02), position: "relative",
         background: `color-mix(in srgb, ${x.c} 22%, var(--surface2))` }}>
-        <span style={{ position: "absolute", inset: 0, width: `${x.pct * 100}%`, background: x.c }}/></span>)}</div>
+        <span style={{ position: "absolute", inset: 0, width: `${x.pct * 100}%`, background: pcInk(x) }}/></span>)}</div>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
       {list.map(x => <button key={x.slot} type="button" onClick={() => setOpen(o => o === x.slot ? null : x.slot)} style={{ display: "flex", flexDirection: "column", gap: 6,
         padding: "10px 12px", borderRadius: 16, cursor: "pointer", textAlign: "left", color: "var(--text)", font: "inherit",
