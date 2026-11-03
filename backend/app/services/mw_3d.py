@@ -1953,8 +1953,21 @@ def seed_group(gkey: str, gid: int, force: bool = False, by: str = "") -> int:
         asm = next((p for p in (_read_side(iid, "plates.json") or {}).get("plates") or [] if p.get("assembled") and p.get("pieces")), None)
         if not asm:
             continue
+        # le sien dans ce groupe d'abord ; sinon le plus recent de ceux de ce 3MF : le partage (ou celui d'une autre vue du
+        # meme modele, comme l'ouvre la vue du modele : il faut son numero de modele, note par la vue du groupe), et ceux
+        # propres a une impression (« Variante maison », 03/11/2026 : ils n'etaient pas cherches)
         ok = own_key(iid, f"g{int(gid)}")
-        e = _read(_edits_file(ok)) if ok in owns else load_edit(iid, _did_of(iid), {pc.get("k") for pc in asm["pieces"]})
+        e = _read(_edits_file(ok)) if ok in owns else None
+        if not e or not e.get("pieces"):
+            did = str((group_sel(gkey).get("dids") or {}).get(iid) or "") or _did_of(iid)
+            cands = [load_edit(iid, did, {pc.get("k") for pc in asm["pieces"]})]
+            try:
+                cands += [_read(f) for f in _edits_file(iid).parent.glob(f"{iid}__p*.json") if f.stem in owns]
+            except OSError:
+                pass
+            cands = [c for c in cands if c and c.get("pieces")]
+            e = max(cands, key=lambda c: c.get("at") or 0) if cands else None
+        logger.info(f"[3D] assemblage du groupe {gkey} : 3MF {iid} (n° {slot}) -> {len((e or {}).get('pieces') or {})} pieces a reprendre")
         if not e or not e.get("pieces"):
             continue
         delta = None

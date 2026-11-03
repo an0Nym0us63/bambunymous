@@ -992,9 +992,11 @@ async def _group_view(gid: int) -> dict:
         if p["iid"] not in slots:
             slots[p["iid"]] = max(slots.values(), default=0) + 1
         p["slot"] = slots[p["iid"]]
-    if slots != sel.get("slots"):
+    # et le modele de chacun (03/11/2026) : la reprise de l'assemblage monte sur le modele seul le cherche par lui
+    dids = {iid: e["did"] for iid, e in srcs.items() if str(e.get("did") or "").isdigit()}
+    if slots != sel.get("slots") or dids != (sel.get("dids") or {}):
         try:
-            T.group_sel_save(gkey, {**sel, "slots": slots})
+            T.group_sel_save(gkey, {**sel, "slots": slots, "dids": dids})
         except Exception:
             logger.exception("[3D] groupe : numeros des 3MF")
     sig_src = [(p["iid"], p["slot"], int((T._root() / p["iid"] / "plates.json").stat().st_mtime), sorted(p["keep"]) if p["keep"] else None,
@@ -1975,7 +1977,7 @@ async def mw_3d_group_seed(gid: int, user: str = Depends(get_current_user), _: s
     from ....services import mw_3d as T
     n = await asyncio.to_thread(T.seed_group, f"grp{int(gid)}", gid, True, str(user or ""))
     if not n:
-        raise HTTPException(404, "Aucun assemblage monté sur les modèles de ce groupe")
+        raise HTTPException(404, "Aucun assemblage enregistré trouvé pour les 3MF de ce groupe : ouvre une fois « Tout le groupe », puis réessaie")
     return {"ok": True, "pieces": n}
 
 
