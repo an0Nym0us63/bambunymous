@@ -56,8 +56,9 @@ const Dot = ({ e, size = 26, on }) => {
 // une fiche a ouvrir : l'impression, ou la bobine d'un filament
 export const linkOf = e => (e.print_id ? "print" : e.spool_id && e.filament_id ? "spool" : null);
 
-export default function MachineTimeline({ events, points, hours, end, pick, onPick, onZoom, onOpen, listInSheet = false }) {
-  const [listOpen, setListOpen] = useState(false);
+// listInSheet : la liste dans une fenetre a part, ouverte par la page (listOpen / onListOpen : depuis l'en-tete de la carte)
+export default function MachineTimeline({ events, points, hours, end, pick, onPick, onZoom, onOpen, listInSheet = false, listOpen: lo = false, onListOpen }) {
+  const listOpen = listInSheet && lo, setListOpen = v => onListOpen?.(v);
   const [cat, setCat] = useState("all");
   // un regroupement eclate (au zoom le plus serre, ou des evenements a la meme seconde) : ses evenements en eventail
   const [burst, setBurst] = useState(null);
@@ -110,7 +111,24 @@ export default function MachineTimeline({ events, points, hours, end, pick, onPi
     }
   };
   const ticks = timeTicks(from, to, hours);
-  const H = 96, LANE = 52;
+  // les etiquettes (03/11/2026) : au-dessus de chaque pastille isolee qui a la place, son icone, son titre et son
+  // heure, sur un fil ; deux rangs, la premiere place libre (de gauche a droite), sinon pas d'etiquette
+  const px = c => (W ? Math.min(W - 16, Math.max(16, x(c.ms) / 100 * W)) : 0);
+  const labels = [];
+  if (W) {
+    const ends = [-Infinity, -Infinity];
+    clusters.forEach((c, k) => {
+      if (c.list.length !== 1) return;
+      const e = c.list[0], w = Math.min(220, Math.max(76, (e.title.length + 6) * 7 + 30)), cx = px(c);
+      const l = Math.max(0, Math.min(W - w, cx - w / 2));
+      const row = ends.findIndex(r => l > r + 6);
+      if (row < 0) return;
+      ends[row] = l + w;
+      labels.push({ k, e, l, w, row, cx });
+    });
+  }
+  const TOP = labels.length ? (labels.some(b => b.row === 1) ? 52 : 28) : 8;   // la bande, sous les etiquettes
+  const H = TOP + 44 + 22, LANE = 44;
   const listBody = () => <>
     {/* les sortes */}
     {evs.length > 0 && <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 2 }}>
@@ -159,25 +177,40 @@ export default function MachineTimeline({ events, points, hours, end, pick, onPi
   return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
     {/* la frise */}
     <div ref={ref} style={{ position: "relative", height: H, userSelect: "none" }}>
-      <div style={{ position: "absolute", left: 0, right: 0, top: 8, height: LANE, borderRadius: 14,
+      <div style={{ position: "absolute", left: 0, right: 0, top: TOP, height: LANE, borderRadius: 14,
         background: "linear-gradient(180deg, color-mix(in srgb, var(--surface2) 80%, transparent), var(--surface2))", border: "1px solid var(--border)" }}/>
       {/* l'axe du temps, au milieu de la bande */}
-      <div style={{ position: "absolute", left: 10, right: 10, top: 8 + LANE / 2, height: 2, borderRadius: 2,
+      <div style={{ position: "absolute", left: 10, right: 10, top: TOP + LANE / 2, height: 2, borderRadius: 2,
         background: "linear-gradient(90deg, transparent, var(--border) 6%, var(--border) 94%, transparent)" }}/>
       {bands.filter(b => b.b > from && b.a < to).map((b, i) => { const l = Math.max(0, x(b.a)), r = Math.min(100, x(b.b)), wpx = (r - l) / 100 * W;
         return <div key={i} data-tip={b.name ? `${b.name} · ${hm(b.a)} → ${hm(b.b)}` : `Impression · ${hm(b.a)} → ${hm(b.b)}`}
-          style={{ position: "absolute", left: `${l}%`, width: `${Math.max(0.6, r - l)}%`, top: 8, height: LANE, borderRadius: 12,
+          style={{ position: "absolute", left: `${l}%`, width: `${Math.max(0.6, r - l)}%`, top: TOP, height: LANE, borderRadius: 12,
             background: "linear-gradient(180deg, rgba(59,130,246,.28), rgba(99,102,241,.14))", border: "1px solid rgba(59,130,246,.35)", overflow: "hidden" }}>
           {wpx > 70 && b.name && <span style={{ position: "absolute", left: 8, right: 6, bottom: 3, fontSize: 10.5, fontWeight: 800, color: "#3B82F6",
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>🖨️ {b.name}</span>}
         </div>; })}
+      {labels.map(b => { const c = colorOf(b.e), on = b.e.ms === pick, top = b.row ? 26 : 2;
+        return <React.Fragment key={`l${b.k}`}>
+          <span aria-hidden="true" style={{ position: "absolute", left: b.cx, top: top + 20, height: TOP + LANE / 2 - 13 - (top + 20), width: 1.5,
+            background: `linear-gradient(${c}, color-mix(in srgb, ${c} 25%, transparent))`, transform: "translateX(-50%)" }}/>
+          <button type="button" onClick={() => choose(b.e)} data-tip={`${hm(b.e.ms)} · ${b.e.title}${b.e.detail ? ` · ${b.e.detail}` : ""}`}
+            style={{ position: "absolute", left: b.l, top, width: b.w, height: 20, display: "inline-flex", alignItems: "center", gap: 5, padding: "0 8px 0 4px",
+              borderRadius: 10, cursor: "pointer", fontSize: 11, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden",
+              border: `1px solid color-mix(in srgb, ${c} ${on ? 70 : 35}%, transparent)`,
+              background: `linear-gradient(90deg, color-mix(in srgb, ${c} ${on ? 26 : 14}%, var(--surface)), var(--surface))`,
+              boxShadow: on ? `0 4px 12px -6px ${c}` : "none" }}>
+            <span style={{ fontSize: 11, flexShrink: 0 }}>{meta(b.e)[0]}</span>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{b.e.title}</span>
+            <span style={{ marginLeft: "auto", paddingLeft: 4, fontSize: 10, color: "var(--muted)", flexShrink: 0 }}>{hm(b.e.ms)}</span>
+          </button>
+        </React.Fragment>; })}
       {clusters.map((c, k) => { const one = c.list.length === 1, e = c.list[0], on = c.list.some(z => z.ms === pick);
         // plusieurs reunis : la fenetre se resserre autour d'eux (ils s'y separent peu a peu) ; au plus serre, ou a la
         // meme seconde, ils eclatent en eventail
         const zoom = !one && onZoom && c.last - c.list[0].ms > 1000;
         return <button key={k} type="button" onClick={() => (one ? choose(e) : zoom ? onZoom(c.list[0].ms, c.last) : setBurst(burst === k ? null : k))}
           data-tip={one ? `${hm(e.ms)} · ${e.title}${e.detail ? ` · ${e.detail}` : ""}` : `${c.list.length} événements · ${hm(c.list[0].ms)} → ${hm(c.last)}${zoom ? " · toucher pour les voir de plus près" : ""}`}
-          style={{ position: "absolute", left: W ? Math.min(W - 16, Math.max(16, x(c.ms) / 100 * W)) : `${x(c.ms)}%`, top: 8 + LANE / 2, transform: "translate(-50%, -50%)", padding: 0, border: "none",
+          style={{ position: "absolute", left: W ? px(c) : `${x(c.ms)}%`, top: TOP + LANE / 2, transform: "translate(-50%, -50%)", padding: 0, border: "none",
             background: "none", cursor: "pointer", zIndex: on ? 3 : 2, opacity: burst === k ? 0.25 : 1, transition: "opacity .2s" }}>
           {one ? <Dot e={e} on={on}/> : <span style={{ position: "relative", display: "inline-flex" }}>
             <Dot e={c.list[c.list.length - 1]} on={on}/>
@@ -186,16 +219,16 @@ export default function MachineTimeline({ events, points, hours, end, pick, onPi
               boxShadow: "0 0 0 2px var(--surface)" }}>{c.list.length}</span></span>}
         </button>; })}
       {burst != null && clusters[burst] && (() => {
-        const c = clusters[burst], n = c.list.length, cx = W ? Math.min(W - 16, Math.max(16, x(c.ms) / 100 * W)) : 0;
+        const c = clusters[burst], n = c.list.length, cx = px(c);
         // en arc au-dessus du regroupement, ramene dans la largeur de la frise
         const R = 52 + n * 6, span = Math.min(170, 50 + n * 30) * Math.PI / 180;
         return <>
           <span aria-hidden="true" onClick={() => setBurst(null)} style={{ position: "fixed", inset: 0, zIndex: 4 }}/>
           {c.list.map((z, j) => { const a = -Math.PI / 2 + (n > 1 ? (j / (n - 1) - 0.5) * span : 0);
-            const px = Math.min(W - 14, Math.max(14, cx + Math.cos(a) * R)), py = 8 + LANE / 2 + Math.sin(a) * R * 0.75;
+            const bx = Math.min(W - 14, Math.max(14, cx + Math.cos(a) * R)), py = TOP + LANE / 2 + Math.sin(a) * R * 0.75;
             return <button key={z.i} type="button" onClick={() => { setBurst(null); choose(z); }} data-tip={`${hm(z.ms)} · ${z.title}${z.detail ? ` · ${z.detail}` : ""}`}
-              style={{ position: "absolute", left: px, top: py, transform: "translate(-50%, -50%)", padding: 0, border: "none", background: "none", cursor: "pointer",
-                zIndex: 5, animation: `tl-burst .32s cubic-bezier(.3,1.5,.5,1) ${j * 0.03}s both`, ["--bx"]: `${cx - px}px`, ["--by"]: `${8 + LANE / 2 - py}px` }}>
+              style={{ position: "absolute", left: bx, top: py, transform: "translate(-50%, -50%)", padding: 0, border: "none", background: "none", cursor: "pointer",
+                zIndex: 5, animation: `tl-burst .32s cubic-bezier(.3,1.5,.5,1) ${j * 0.03}s both`, ["--bx"]: `${cx - bx}px`, ["--by"]: `${TOP + LANE / 2 - py}px` }}>
               <Dot e={z} size={28} on={z.ms === pick}/></button>; })}
         </>;
       })()}
@@ -203,7 +236,7 @@ export default function MachineTimeline({ events, points, hours, end, pick, onPi
         to { transform: translate(-50%, -50%) scale(1); opacity: 1 } }`}</style>
       {ticks.map(t => <span key={t} style={{ position: "absolute", bottom: 4, left: `${x(t)}%`, transform: "translateX(-50%)", fontSize: 9.5, fontWeight: 800,
         color: "var(--muted)", whiteSpace: "nowrap" }}>{fmtTick(t, hours)}</span>)}
-      {!evs.length && <span style={{ position: "absolute", left: 0, right: 0, top: 8 + LANE / 2 - 9, textAlign: "center", fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>
+      {!evs.length && <span style={{ position: "absolute", left: 0, right: 0, top: TOP + LANE / 2 - 9, textAlign: "center", fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>
         Rien de notable sur cette période</span>}
     </div>
 
@@ -224,12 +257,7 @@ export default function MachineTimeline({ events, points, hours, end, pick, onPi
     </div>}
 
     {/* la liste : dans une fenetre a part (03/11/2026 : dans la page, elle devenait vite tres haute) */}
-    {listInSheet ? evs.length > 0 && <button type="button" onClick={() => setListOpen(true)} style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center",
-      gap: 8, padding: "8px 14px", borderRadius: 20, border: "1px solid color-mix(in srgb, #F43F5E 30%, var(--border))", cursor: "pointer", fontSize: 12.5, fontWeight: 900,
-      color: "var(--text)", background: "linear-gradient(135deg, rgba(244,63,94,.10), rgba(139,92,246,.10)), var(--surface)" }}>
-      📜 Tous les événements
-      <span style={{ padding: "0 8px", borderRadius: 10, fontSize: 11, color: "#fff", background: "linear-gradient(135deg, #F43F5E, #8B5CF6)" }}>{evs.length}</span>
-      <span style={{ color: "var(--muted)" }}>›</span></button> : listBody()}
+    {!listInSheet && listBody()}
     {listInSheet && listOpen && createPortal(<FSheet onClose={() => setListOpen(false)} z={1000}
       bottom={<button onClick={() => setListOpen(false)} style={{ ...fBtn, flex: 1 }}>Fermer</button>}>
       <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>

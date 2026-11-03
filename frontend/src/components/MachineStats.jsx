@@ -247,16 +247,21 @@ function TimelineCard({ pageHours, pick, onPick, onOpen }) {
     view.animateTo(h1, (a + b) / 2 + h1 * 1800000);
   };
   const zoomed = Math.abs(view.hours - pageHours) > 1e-6 && !view.moving;
+  const [listOpen, setListOpen] = useState(false);
   return <div style={card("#F43F5E")}>
     <CardHead icon="🕒" label="Chronologie" color="#E11D48" view={view} pan={pan}
       extra={<>
-        {view.events?.length ? <span style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)" }}>{view.events.length} événement{view.events.length > 1 ? "s" : ""}</span> : null}
+        {/* le nombre d'evenements : il ouvre leur liste */}
+        {view.events?.length ? <button type="button" onClick={() => setListOpen(true)} data-tip="La liste des événements de la fenêtre"
+          style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 9px", borderRadius: 20, border: "1px solid color-mix(in srgb, #F43F5E 30%, var(--border))",
+            background: "var(--surface)", cursor: "pointer", fontSize: 11, fontWeight: 800, color: "var(--text2)" }}>
+          {view.events.length} événement{view.events.length > 1 ? "s" : ""} <span style={{ color: "#E11D48", fontWeight: 900 }}>›</span></button> : null}
         {zoomed && <span style={{ padding: "2px 9px", borderRadius: 20, fontSize: 11, fontWeight: 900, color: "#fff", background: "linear-gradient(135deg, #F43F5E, #8B5CF6)" }}>
           🔍 {durLabel(view.hours)}</span>}
       </>}/>
     <div ref={pan.ref} {...pan.props}>
       <MachineTimeline events={view.events} points={view.pts} hours={view.hours} end={view.end} pick={pick} onPick={onPick}
-        onZoom={view.hours > MIN_H * 1.01 ? zoomTo : null} onOpen={onOpen} listInSheet/>
+        onZoom={view.hours > MIN_H * 1.01 ? zoomTo : null} onOpen={onOpen} listInSheet listOpen={listOpen} onListOpen={setListOpen}/>
     </div>
   </div>;
 }

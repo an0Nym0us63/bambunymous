@@ -259,16 +259,7 @@ async def _link(db, e: dict) -> None:
         sp = await db.get(Spool, e["spool_id"])
         if sp:
             e["filament_id"] = sp.filament_id
-            # le detail : la bobine telle que l'appli la connait (03/11/2026 : l'imprimante ne disait que « Gris »)
-            from ..models.filament import Filament
-            f = await db.get(Filament, sp.filament_id)
-            if f:
-                name = getattr(f, "translated_name", None) or f.name or ""
-                kind = f.fila_type or f.material or ""
-                bits = [name if not kind or kind.lower() in name.lower() else f"{kind} {name}", f.manufacturer or "",
-                        f"reste {round(sp.remaining_weight_g)} g" if sp.remaining_weight_g is not None else "", f"bobine #{sp.id}"]
-                slot = e["detail"].split(" · ")[0] if e["kind"] == "load" and " · " in (e.get("detail") or "") else ""
-                e["detail"] = " · ".join(x for x in [slot, *bits] if x)
+            # le detail est recompose a la lecture (between), d'apres la bobine telle que l'appli la connait
         else:
             e.pop("spool_id", None)
 
@@ -312,6 +303,42 @@ async def purge(days: int) -> None:
         await db.commit()
 
 
+SPOOL_KINDS = ("filament", "load", "spool_in")
+
+
+def spool_text(sp, f) -> str:
+    """Une bobine en clair : « Gris · PLA Basic · Bambu Lab · reste 640 g » (sa couleur ou son nom, la matiere et le
+    sous-type, la marque, ce qu'il en reste)."""
+    name = (getattr(f, "translated_name", None) or f.name or "").strip()
+    mat, sub = (f.material or "").strip(), (f.fila_type or "").strip()
+    kind = sub if sub and (not mat or mat.lower() in sub.lower()) else " ".join(x for x in (mat, sub) if x)
+    # le nom reprend souvent la matiere (« PLA Basic Gris ») : la couleur seule, la matiere a cote
+    short = name[len(kind):].strip(" -·") if kind and name.lower().startswith(kind.lower()) else name
+    left = round(sp.remaining_weight_g) if sp.remaining_weight_g is not None else None
+    return " · ".join(x for x in (short or name, kind, f.manufacturer or "", f"reste {left} g" if left is not None else "") if x)
+
+
+async def _spool_details(out: list) -> None:
+    """Le detail des evenements de bobine, recompose a la lecture (03/11/2026 : ceux ecrits avant ne disaient que
+    « Gris » ; et le reste suit la bobine) : l'emplacement d'un chargement d'abord, puis la bobine."""
+    ids = {e["spool_id"] for e in out if e["kind"] in SPOOL_KINDS and e.get("spool_id")}
+    if not ids:
+        return
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.filament import Spool, Filament
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Spool, Filament).join(Filament, Filament.id == Spool.filament_id).where(Spool.id.in_(ids)))).all()
+    text = {sp.id: spool_text(sp, f) for sp, f in rows}
+    fil = {sp.id: sp.filament_id for sp, f in rows}
+    for e in out:
+        sid = e.get("spool_id")
+        if e["kind"] in SPOOL_KINDS and sid in text:
+            slot = (e.get("detail") or "").split(" · ")[0] if e["kind"] == "load" else ""
+            e["detail"] = " · ".join(x for x in (slot if slot.startswith(("AMS", "HT", "bobine")) else "", text[sid]) if x)
+            e["filament_id"] = fil[sid]
+
+
 async def between(since: datetime, end: datetime) -> list:
     """Les evenements de la fenetre, du plus ancien au plus recent (ceux qui attendent encore d'etre ecrits aussi)."""
     from sqlalchemy import select
@@ -326,4 +353,8 @@ async def between(since: datetime, end: datetime) -> list:
         if since <= e["t"] <= end:
             out.append({"t": e["t"].isoformat() + "Z", "kind": e["kind"], "title": e["title"], "detail": e.get("detail") or "",
                         **{k: v for k, v in e.items() if k in ("color", "before", "spool_id") and v not in (None, "")}})
+    try:
+        await _spool_details(out)
+    except Exception as x:
+        logger.debug(f"[EVENEMENTS] detail des bobines : {x}")
     return out
