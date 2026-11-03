@@ -1077,12 +1077,11 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
             boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : `0 0 8px ${barColor}66` }}/>
           {live && live.now > remaining && <>
             <div style={{ position:"absolute", top:0, bottom:0, left:`${pct}%`, width:`${Math.min(100, live.now / total * 100) - pct}%`, background:"repeating-linear-gradient(135deg, rgba(255,255,255,.5) 0 3px, transparent 3px 6px)" }}/></>}</div>
-        {live && <div style={{ display:"flex", alignItems:"flex-start", gap:8, marginTop:2, padding:"8px 10px", borderRadius:12, fontSize:12.5, lineHeight:1.45,
-          color:"var(--text2)", background:"linear-gradient(135deg, rgba(139,92,246,.14), transparent 70%), var(--surface)", border:"1px solid rgba(139,92,246,.35)" }}>
-          <span>🖨️</span>
-          <span><b style={{ color:"var(--text)" }}>Impression en cours{liveD.print_name ? ` : ${liveD.print_name}` : ""}</b>{liveD.layer ? ` · couche ${liveD.layer}` : ""}<br/>
-            Elle a <b style={{ color:"var(--text)" }}>≈ {Math.round(live.now)} g</b> maintenant ; les {Math.round(remaining)} g affichés sont sa cible, ce qui
-            restera à la fin ({Math.round(live.row_used)} g consommés sur {Math.round(live.row_planned)} g prévus ; hachurée sur la barre, la part qui partira encore).</span></div>}
+        {/* en cours d'impression : une ligne (03/11/2026 : l'encart de trois lignes faisait trop) ; le detail au survol */}
+        {live && <div data-tip={`${liveD.print_name || "Impression en cours"}${liveD.layer ? ` · couche ${liveD.layer}` : ""} — ${Math.round(live.row_used)} g consommés sur ${Math.round(live.row_planned)} g prévus ; les ${Math.round(remaining)} g affichés sont ce qui restera à la fin, la part hachurée partira encore`}
+          style={{ display:"flex", alignItems:"center", gap:6, minWidth:0, fontSize:12, fontWeight:700, color:"var(--text2)", whiteSpace:"nowrap" }}>
+          <span style={{ flexShrink:0 }}>🖨️ <b style={{ color:"var(--text)" }}>≈ {Math.round(live.now)} g</b> maintenant</span>
+          {liveD.print_name && <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", color:"var(--muted)" }}>· {liveD.print_name}</span>}</div>}
       </FHero>
 
       <div style={{ padding:"12px 14px 18px", display:"flex", flexDirection:"column", gap:12 }}>
