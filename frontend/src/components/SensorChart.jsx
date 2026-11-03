@@ -144,7 +144,21 @@ export function SensorChart({ lines, points, hours = 24, height = 180, unit = ""
     setAt(from + Math.max(0, Math.min(1, cx / r.width)) * (to - from));
   };
   const main = lines.filter(l => !l.dash), tgt = lines.filter(l => l.dash);
-  const inWin = l => l.pts.filter(p => p.t >= from && p.t <= to);
+  // le trace se fait sur des moyennes par tranche (~240 sur la largeur, 03/11/2026) : un ventilateur ou une buse qui
+  // oscille a chaque releve faisait un pave plein ; la bulle, elle, lit toujours les vrais points
+  const slot = (to - from) / 240;
+  const inWin = l => {
+    const out = [];
+    let k = null, s = 0, ts = 0, n = 0;
+    for (const p of l.pts) {
+      if (p.t < from || p.t > to) continue;
+      const kk = Math.floor((p.t - from) / slot);
+      if (kk !== k) { if (n) out.push({ t: ts / n, v: s / n }); k = kk; s = ts = n = 0; }
+      s += p.v; ts += p.t; n++;
+    }
+    if (n) out.push({ t: ts / n, v: s / n });
+    return out;
+  };
   return <div ref={ref} onMouseMove={move} onMouseLeave={() => setAt(null)} onTouchStart={move} onTouchMove={move} onTouchEnd={() => setAt(null)}
     style={{ position: "relative", height, touchAction: "pan-y", userSelect: "none" }}>
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible" }} aria-hidden="true">
@@ -152,7 +166,7 @@ export function SensorChart({ lines, points, hours = 24, height = 180, unit = ""
         <linearGradient id={`${uid}band`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#3B82F6" stopOpacity=".16"/><stop offset="1" stopColor="#6366F1" stopOpacity=".04"/></linearGradient>
         {main.map(l => <linearGradient key={l.key} id={`${uid}${l.key}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor={l.color} stopOpacity={main.length > 2 ? ".14" : ".26"}/><stop offset="1" stopColor={l.color} stopOpacity="0"/></linearGradient>)}
+          <stop offset="0" stopColor={l.color} stopOpacity={main.length > 2 ? ".06" : ".2"}/><stop offset="1" stopColor={l.color} stopOpacity="0"/></linearGradient>)}
       </defs>
       {/* les impressions : des bandes en degrade, un trait en haut */}
       {bands.filter(([a, c]) => c > from && a < to).map(([a, c], i) => { const x0 = x(Math.max(a, from)), x1 = x(Math.min(c, to));
@@ -162,14 +176,13 @@ export function SensorChart({ lines, points, hours = 24, height = 180, unit = ""
         </React.Fragment>; })}
       {grid.map(v => <line key={v} x1={0} x2={W} y1={y(v)} y2={y(v)} stroke="var(--border)" strokeOpacity=".7" strokeWidth="1" vectorEffect="non-scaling-stroke" strokeDasharray="2 5"/>)}
       {/* les consignes : un large trait pale, dessous */}
-      {tgt.map(l => segs(inWin(l), x, y).map((sg, i) => <path key={`${l.key}${i}`} d={monoPath(sg)} fill="none" stroke={l.color} strokeWidth="8"
+      {tgt.map(l => segs(inWin(l), x, y).map((sg, i) => <path key={`${l.key}${i}`} d={monoPath(sg)} fill="none" stroke={l.color} strokeWidth="4"
         strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" opacity=".18"/>))}
-      {/* l'aire sous chaque courbe, en degrade, puis la courbe et son halo */}
+      {/* l'aire sous chaque courbe, en degrade, puis la courbe (fine, sans halo : a plusieurs, elles se noyaient) */}
       {main.map(l => segs(inWin(l), x, y).map((sg, i) => sg.length > 1 && <path key={`a${l.key}${i}`}
         d={`${monoPath(sg)} L${sg[sg.length - 1][0].toFixed(2)},${BASE} L${sg[0][0].toFixed(2)},${BASE} Z`} fill={`url(#${uid}${l.key})`}/>))}
       {main.map(l => segs(inWin(l), x, y).map((sg, i) => <React.Fragment key={`c${l.key}${i}`}>
-        <path d={monoPath(sg)} fill="none" stroke={l.color} strokeWidth="6" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" opacity=".12"/>
-        <path d={monoPath(sg)} fill="none" stroke={l.color} strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>
+        <path d={monoPath(sg)} fill="none" stroke={l.color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>
       </React.Fragment>))}
       {at != null && <line x1={x(at)} x2={x(at)} y1={0} y2={BASE} stroke="var(--text2)" strokeOpacity=".5" strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke"/>}
       {/* l'evenement choisi dans la chronologie : son heure sur chaque courbe */}
