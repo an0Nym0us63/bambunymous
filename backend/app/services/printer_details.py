@@ -61,6 +61,11 @@ def _yes(v, on="activé", off="désactivé"):
     return None if b is None else (on if b is True else off if b is False else str(b))
 
 
+AIRDUCT_NAMES = {0: "Ventilateur de tête (conduit)", 1: "Ventilateur de pièce (conduit)", 2: "Ventilateur auxiliaire (conduit)",
+                 3: "Ventilateur de chambre (conduit)", 4: "Ventilateur de tête, 2e buse", 5: "Ventilateur de la carte de commande",
+                 6: "Circulation intérieure de la chambre"}
+
+
 def _fan(v):
     n = _int(v)
     return None if n is None else f"{round(n / 15 * 100)} %"
@@ -164,7 +169,12 @@ def build(state) -> dict:
         _row(r, "Conduit d'air (mode)", air.get("modeCur"))
         for part in air.get("parts") or []:
             if isinstance(part, dict) and part.get("id") is not None:
-                _row(r, f"Ventilateur {part.get('id')}", f"{part.get('state')} %" if part.get("state") is not None else None)
+                # le nom d'apres son rang (id >> 4, comme Bambu Studio), son numero sinon
+                try:
+                    nm = AIRDUCT_NAMES.get(int(part.get("id")) >> 4)
+                except (TypeError, ValueError):
+                    nm = None
+                _row(r, nm or f"Ventilateur {part.get('id')}", f"{part.get('state')} %" if part.get("state") is not None else None)
     groups.append({"id": "fans", "title": "Ventilation", "icon": "wind", "rows": r})
 
     # ── Buse ──

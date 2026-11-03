@@ -21,7 +21,12 @@ MAX_POINTS = 600                        # un historique rendu en plus de points 
 TARGETS = ("nozzle_t", "nozzle2_t", "bed_t", "chamber_t")   # les consignes (None : pas de consigne)
 # les ventilateurs : la cle du statut brut (vitesse de 0 a 15, comme « Plus d'infos »), rendue en %
 FANS = {"fan_part": "cooling_fan_speed", "fan_aux": "big_fan1_speed", "fan_chamber": "big_fan2_speed", "fan_head": "heatbreak_fan_speed"}
-EXTRA = (*TARGETS, *FANS)
+# (03/11/2026) les H2 declarent leurs ventilateurs dans device.airduct.parts : id >> 4 = leur rang dans Bambu Studio
+# (AIR_FUN : 0 dissipateur, 1 piece, 2 auxiliaire, 3 chambre, 4 dissipateur de la 2e buse, 5 carte de commande,
+# 6 circulation interieure), state = leur vitesse en %. Ils priment sur les anciens champs
+AIRDUCT = {1: "part", 2: "aux", 3: "chamber", 4: "head2", 5: "board", 6: "loop"}
+FAN_KEYS = ("part", "aux", "chamber", "head", "head2", "board", "loop")
+EXTRA = (*TARGETS, *(f"fan_{k}" for k in FAN_KEYS))
 K_OFFSETS = "AMS_HUMIDITY_OFFSETS"      # JSON {ams_id: decalage en points de %}
 
 _OFFSETS: dict[int, float] = {}
@@ -91,7 +96,7 @@ def snapshot(s) -> dict | None:
             "nozzle_t": tgt(nz[0].target) if nz else None,
             "nozzle2_t": tgt(nz[1].target) if len(nz) > 1 else None,
             "bed_t": tgt(s.target_bed_temp), "chamber_t": tgt(s.target_chamber_temp),
-            **{k: _fan((getattr(s, "raw", None) or {}).get(src)) for k, src in FANS.items()},
+            **{f"fan_{k}": v for k, v in ((k, fans_of(s).get(k)) for k in FAN_KEYS)},
             "ams": ams}
 
 
@@ -99,6 +104,14 @@ def fans_of(s) -> dict:
     """Les ventilateurs de l'etat courant, en % : {"part", "aux", "chamber", "head"} (absents : la machine ne les dit pas)."""
     raw = getattr(s, "raw", None) or {}
     out = {k[4:]: _fan(raw.get(src)) for k, src in FANS.items()}
+    air = (raw.get("device") or {}).get("airduct") or {}
+    for part in (air.get("parts") or []) if isinstance(air, dict) else []:
+        try:
+            k = AIRDUCT.get(int(part.get("id")) >> 4)
+            if k and part.get("state") is not None:
+                out[k] = max(0, min(100, int(round(float(part["state"])))))
+        except (TypeError, ValueError, AttributeError):
+            continue
     return {k: v for k, v in out.items() if v is not None}
 
 

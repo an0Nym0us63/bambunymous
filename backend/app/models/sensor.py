@@ -30,6 +30,9 @@ class SensorSample(Base):
     fan_aux     = Column(Float, nullable=True)
     fan_chamber = Column(Float, nullable=True)
     fan_head    = Column(Float, nullable=True)
+    fan_head2   = Column(Float, nullable=True)     # (H2) dissipateur de la 2e buse, carte de commande, circulation
+    fan_board   = Column(Float, nullable=True)
+    fan_loop    = Column(Float, nullable=True)
     ams      = Column(Text, nullable=True)      # JSON {ams_id: [humidite %, temperature °C]}
 
     __table_args__ = (Index("idx_sensor_samples_ts", "ts"),)

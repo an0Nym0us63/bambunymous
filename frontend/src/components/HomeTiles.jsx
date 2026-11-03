@@ -2861,7 +2861,10 @@ function Temps({ status, o, sz }) {
 const FAN_DEFS = [["part", "Pièce", "#14B8A6", "Refroidit la pièce juste imprimée, sous la buse."],
   ["aux", "Auxiliaire", "#A855F7", "Souffle de côté sur le plateau (PLA, ponts, surplombs)."],
   ["chamber", "Chambre", "#0EA5E9", "Renouvelle l'air de la chambre (et la tempère)."],
-  ["head", "Tête", "#94A3B8", "Refroidit le haut de la buse, pour que le filament n'y fonde pas trop tôt."]];
+  ["loop", "Circulation", "#22C55E", "Fait tourner l'air dans la chambre fermée, pour une chaleur égale partout."],
+  ["head", "Tête", "#94A3B8", "Refroidit le haut de la buse, pour que le filament n'y fonde pas trop tôt."],
+  ["head2", "Tête 2", "#64748B", "Le même, pour la seconde buse."],
+  ["board", "Carte", "#F59E0B", "Refroidit la carte de commande de l'imprimante."]];
 function FanRotor({ pct = 0, color, size = 64 }) {
   const r = size / 2, ring = r - 3, C = 2 * Math.PI * ring, on = pct > 0;
   // plus vite il tourne, plus le tour est court : 2,4 s au ralenti, 0,35 s a fond
@@ -2881,7 +2884,8 @@ function FanRotor({ pct = 0, color, size = 64 }) {
 export function FanStrip({ fans }) {
   const known = FAN_DEFS.filter(([k]) => fans?.[k] != null);
   if (!known.length) return null;
-  return <div style={{ display: "grid", gridTemplateColumns: `repeat(${known.length}, minmax(0, 1fr))`, gap: 8 }}>
+  // jusqu'a sept ventilateurs sur un H2 : autant par ligne qu'il en tient
+  return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(76px, 1fr))", gap: 8 }}>
     {known.map(([k, l, c, why]) => <div key={k} data-tip={why} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "10px 6px 8px",
       borderRadius: 14, background: fans[k] > 0 ? `radial-gradient(90% 80% at 50% 0%, ${c}1f, transparent 70%), var(--surface2)` : "var(--surface2)" }}>
       <FanRotor pct={fans[k]} color={c} size={44}/>

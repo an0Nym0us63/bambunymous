@@ -182,9 +182,11 @@ export function amsLines(points, k = 0) {
 }
 
 // les ventilateurs, en %
-export const FAN_COLORS = { fan_part: "#14B8A6", fan_aux: "#A855F7", fan_head: "#94A3B8", fan_chamber: "#0EA5E9" };
+export const FAN_COLORS = { fan_part: "#14B8A6", fan_aux: "#A855F7", fan_head: "#94A3B8", fan_chamber: "#0EA5E9",
+  fan_loop: "#22C55E", fan_head2: "#64748B", fan_board: "#F59E0B" };
 export function fanLines(points) {
-  return [["fan_part", "Pièce", "P"], ["fan_aux", "Auxiliaire", "A"], ["fan_chamber", "Chambre", "C"], ["fan_head", "Tête", "T"]]
+  return [["fan_part", "Pièce", "P"], ["fan_aux", "Auxiliaire", "A"], ["fan_chamber", "Chambre", "C"], ["fan_loop", "Circulation", "Ci"],
+    ["fan_head", "Tête", "T"], ["fan_head2", "Tête 2e buse", "T2"], ["fan_board", "Carte", "Ca"]]
     .map(([k, label, short]) => ({ key: k, label, short, color: FAN_COLORS[k], unit: "%", pts: seriesOf(points, p => p[k]) }))
     .filter(l => l.pts.some(p => p.v > 0));
 }
