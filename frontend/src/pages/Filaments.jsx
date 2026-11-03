@@ -1857,7 +1857,7 @@ function ArchiveWall({ spools, onOpen, menu }) {
       {groups.slice(0, limit).map(g => {
         const main = paleHex(g.s.filament_color) ? "#94a3b8" : (hexToCss(g.s.filament_color) || "#94a3b8");
         const span = g.first && g.last ? (_monthFr(g.first) === _monthFr(g.last) ? _monthFr(g.last) : `${_monthFr(g.first)} → ${_monthFr(g.last)}`) : null;
-        return <Pressable key={g.key} onClick={() => g.n === 1 ? onOpen(g.s) : setOpen(g.key)} menu={() => menu(g.s)} className="card-sm"
+        return <Pressable key={g.key} onClick={() => { if (g.n === 1) onOpen(g.s); else { setOpen(g.key); egg("pile_ouverte"); } }} menu={() => menu(g.s)} className="card-sm"
           style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 18, cursor: "pointer", minWidth: 0,
             border: `1px solid color-mix(in srgb, ${main} 28%, var(--border))`,
             background: `radial-gradient(90% 120% at 0% 50%, ${main}26, transparent 65%), var(--surface)` }}>
