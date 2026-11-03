@@ -1977,10 +1977,15 @@ async def mw_3d_group_seed(gid: int, body: dict = Body({}), user: str = Depends(
     from ....services import mw_3d as T
     # la vue du modele d'ou l'on vient (sa cle, et celle de l'assemblage qu'elle montrait) : c'est celui-la qu'on reprend
     view, ed = str(body.get("view") or ""), str(body.get("edit") or body.get("view") or "")
-    pick = (view, ed) if view else None
-    n = await asyncio.to_thread(T.seed_group, f"grp{int(gid)}", gid, True, str(user or ""), pick)
+    # et l'assemblage tel qu'elle le montrait (03/11/2026) : repris tel quel, ou qu'il soit enregistre
+    data = body.get("data") if isinstance(body.get("data"), dict) and isinstance(body["data"].get("pieces"), dict) else None
+    pick = (view, ed, data) if view else None
+    try:
+        n = await asyncio.to_thread(T.seed_group, f"grp{int(gid)}", gid, True, str(user or ""), pick)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
     if not n:
-        raise HTTPException(404, "Aucun assemblage enregistré trouvé pour les 3MF de ce groupe : ouvre une fois « Tout le groupe », puis réessaie")
+        raise HTTPException(404, "Aucun assemblage enregistré trouvé pour les 3MF de ce groupe : ouvre d'abord la vue « Assemblé » où il est monté, puis « 🧩 Plateaux du groupe », et réessaie")
     return {"ok": True, "pieces": n}
 
 

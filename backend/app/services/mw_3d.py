@@ -1954,8 +1954,10 @@ def seed_group(gkey: str, gid: int, force: bool = False, by: str = "", pick: tup
     if pick:
         # celui de la vue d'ou l'on vient (03/11/2026) : sa vue n'est pas forcement un des 3MF du groupe (un 3MF importe,
         # un autre fichier du meme profil) ; ses pieces vont au 3MF du groupe qui a les memes (objet:instance)
-        vkey, ekey = pick
-        e, asm = (_read(_edits_file(ekey)) if _KEY.fullmatch(str(ekey or "")) else None), asm_of(vkey)
+        vkey, ekey, data = (list(pick) + [None])[:3]
+        e = data if isinstance(data, dict) and isinstance(data.get("pieces"), dict) and data["pieces"] else None
+        e = e or (_read(_edits_file(ekey)) if _KEY.fullmatch(str(ekey or "")) else None)
+        asm = asm_of(vkey)
         slot = slots.get(vkey)
         if e and e.get("pieces") and asm and not str(slot).isdigit():
             ks, best = {":".join(str(k).split(":")[:2]) for k in e["pieces"]}, 0
@@ -1966,8 +1968,13 @@ def seed_group(gkey: str, gid: int, force: bool = False, by: str = "", pick: tup
                     best, slot = ov, s2
         logger.info(f"[3D] assemblage du groupe {gkey} : repris de la vue {vkey} (edition {ekey}) -> n° {slot}, "
                     f"{len((e or {}).get('pieces') or {})} pieces, vue assemblee {'oui' if asm else 'non'}")
-        if e and e.get("pieces") and asm and str(slot).isdigit():
-            jobs.append((int(slot), e, asm))
+        if not e or not e.get("pieces"):
+            raise ValueError(f"La vue d'où tu viens ({vkey}) n'a pas d'assemblage enregistré : enregistre-le, puis réessaie")
+        if not asm:
+            raise ValueError(f"La vue d'où tu viens ({vkey}) n'a plus sa vue assemblée : rouvre-la, puis réessaie")
+        if not str(slot).isdigit():
+            raise ValueError(f"Aucun 3MF de ce groupe n'a les pièces de la vue d'où tu viens ({vkey})")
+        jobs.append((int(slot), e, asm))
     for src in [] if pick else grec.get("sources") or []:
         iid, slot = src.get("iid"), slots.get(src.get("iid"))
         if not iid or not str(slot).isdigit():
@@ -1998,6 +2005,8 @@ def seed_group(gkey: str, gid: int, force: bool = False, by: str = "", pick: tup
         ds = sorted(tuple(round(float(a) - float(b), 3) for a, b in zip(go[_slot_key(pc.get("k"), slot)], pc["o"]))
                     for pc in asm["pieces"] if pc.get("o") and go.get(_slot_key(pc.get("k"), slot)))
         if not ds:
+            if pick:
+                raise ValueError("Les pièces de cet assemblage ne sont pas dans la vue du groupe : choisis leurs plateaux, puis réessaie")
             continue
         delta = list(max(set(ds), key=ds.count))
 
@@ -2033,6 +2042,8 @@ def seed_group(gkey: str, gid: int, force: bool = False, by: str = "", pick: tup
         colors.update({rk(k): v for k, v in (e.get("colors") or {}).items() if rk(k)})
         paints += [{**z, "k": rk(z.get("k"))} for z in e.get("paints") or [] if isinstance(z, dict) and rk(z.get("k"))]
     if not n:
+        if pick:
+            raise ValueError("Aucune pièce de cet assemblage n'a pu être reprise (clés de pièces inconnues)")
         return 0
     save_edit(gkey, pieces, by or "repris du modèle", groups, joints, sorted(set(splits)), None, sorted(set(excluded)), cuts, colors, paints)
     logger.info(f"[3D] assemblage du groupe {gkey} : {n} places reprises de ses modeles")
