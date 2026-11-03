@@ -3037,20 +3037,28 @@ function PrintColors({ status, o, sz }) {
           const cw = (W - 8 * (n - 1)) / n, side = cw >= 160;
           const withHead = n > 1 && H >= (side ? 130 : 170), one = n === 1;
           const hH = H - (withHead ? 38 : 0);
-          const rH = side ? Math.min(hH - 16, one ? 132 : 84, cw * 0.4) : Math.min(cw - 18, hH - 54, 84);
+          // en carte etroite, sous l'anneau : une ligne emplacement + nom, une ligne de grammes (~56 px avec les marges)
+          const rH = side ? Math.min(hH - 16, one ? 132 : 84, cw * 0.4) : Math.min(cw - 18, hH - 58, 84);
           const ch = (H - 8 * (n - 1)) / n, rV = Math.min(ch - 12, 64);
-          if (rH >= 42) return <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, minWidth: 0, minHeight: 0 }}>
+          const inRing = rH >= 44;                              // l'emplacement sous le %, dans l'anneau : le nom garde sa ligne
+          if (rH >= (side ? 42 : 36)) return <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, minWidth: 0, minHeight: 0 }}>
             {withHead && pcHead}
             <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`, gap: 8, minHeight: 0 }}>
               {list.map(x => <div key={x.slot} {...card(x)}>
                 <div style={{ height: "100%", display: "flex", flexDirection: side ? "row" : "column", alignItems: "center", justifyContent: "center",
-                  gap: side ? 12 : 4, padding: side ? "6px 12px" : "6px", boxSizing: "border-box", minWidth: 0, textAlign: side ? "left" : "center" }}>
-                  <PcRing x={x} size={Math.floor(rH)}>{pctTxt(x, rH)}</PcRing>
+                  gap: side ? 12 : 3, padding: side ? "6px 12px" : "5px 6px", boxSizing: "border-box", minWidth: 0, minHeight: 0, textAlign: side ? "left" : "center" }}>
+                  <PcRing x={x} size={Math.floor(rH)}>{!side && inRing && x.where
+                    ? <span style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.05 }}>{pctTxt(x, rH * 0.9)}{slotTag(x, Math.max(9, rH * 0.17))}</span>
+                    : pctTxt(x, rH)}</PcRing>
                   <div style={{ minWidth: 0, maxWidth: "100%", flex: side ? 1 : "none", display: "flex", flexDirection: "column", alignItems: side ? "flex-start" : "center", gap: 2 }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, maxWidth: "100%" }}>
-                      <PcSwatch x={x} size={side ? 14 : 11}/>{slotTag(x, side ? 12 : 10.5)}</span>
-                    <span style={{ fontSize: one && side ? 16 : side ? 13 : 11.5, fontWeight: 800, color: "var(--text2)", maxWidth: "100%",
-                      ...(side && hH >= 100 ? clamp(2) : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }) }}>{x.name}</span>
+                    {side ? <>
+                      <span style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, maxWidth: "100%" }}>
+                        <PcSwatch x={x} size={14}/>{slotTag(x, 12)}</span>
+                      <span style={{ fontSize: one ? 16 : 13, fontWeight: 800, color: "var(--text2)", maxWidth: "100%",
+                        ...(hH >= 100 ? clamp(2) : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }) }}>{x.name}</span></>
+                    : <span style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0, maxWidth: "100%", lineHeight: 1.2 }}>
+                      <PcSwatch x={x} size={10}/>{!inRing && slotTag(x, 10.5)}
+                      <span style={{ minWidth: 0, fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</span></span>}
                     {grams(x, one && side ? 22 : side ? 15 : 12.5)}
                     {one && side && rH >= 70 && <><span style={{ width: "min(100%, 260px)", marginTop: 4 }}><PcBar x={x} h={8}/></span>
                       <Muted size={11.5}>{pcG(Math.max(0, x.f.planned - x.f.used))} encore à imprimer{x.cur.brand ? ` · ${x.cur.brand}` : ""}</Muted></>}
