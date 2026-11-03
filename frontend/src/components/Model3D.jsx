@@ -1893,6 +1893,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const [grpSeen, setGrpSeen] = useState(null);
   const gid = /^group:(\d+)$/.exec(scope || "")?.[1] || grpSeen;
   const [grpAll, setGrpAll] = useState(false);
+  const fromView = useRef(null);                        // la vue du modele seul quittee pour le groupe : son assemblage se reprend
   // le choix des plateaux du groupe : ouvert des que la vue du groupe est la (pickGrp : a ouvrir)
   const [pickGrp, setPickGrp] = useState(false);
   const did = grpAll && gid ? `g${gid}` : designId;
@@ -2260,7 +2261,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {meta?.plates?.length > 0 && (meta.plates.length > 1 || grpAll) && meta.plates.map((x, i) => <button key={x.n} type="button" onClick={() => setPlate(i)} style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer",
             fontSize: 12.5, fontWeight: 800, border: i === plate ? "none" : "1px solid var(--border)", color: i === plate ? "#fff" : "var(--text2)",
             background: i === plate ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" }}>{x.pending ? "⏳ " : ""}{x.assembled ? (grpAll ? "🧩 Tout le groupe" : "🧩 Assemblé") : x.name ? `${x.n} · ${x.name}` : `Plateau ${x.n}`}</button>)}
-          {gid && !fr && <button type="button" onClick={() => { setPlate(0); setGrpAll(v => !v); if (!grpAll) { egg("assemblage_groupe"); if (isAdmin) setPickGrp(true); } }}
+          {gid && !fr && <button type="button" onClick={() => { if (!grpAll && meta?.key) fromView.current = { view: meta.key, edit: meta.edit_key || meta.key }; setPlate(0); setGrpAll(v => !v); if (!grpAll) { egg("assemblage_groupe"); if (isAdmin) setPickGrp(true); } }}
             data-tip={grpAll ? "Revenir à ce modèle seul" : "L'assemblage du groupe : choisis les plateaux de chacun de ses modèles et profils, puis tout est réuni dans une seule vue à éditer"}
             style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 800, border: "1px dashed color-mix(in srgb, #6366F1 55%, var(--border))",
               color: "#6366F1", background: "color-mix(in srgb, #6366F1 8%, transparent)" }}>{grpAll ? "↩ Ce modèle seul" : "🧩 Plateaux du groupe"}</button>}
@@ -2272,7 +2273,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
           {grpAll && isAdmin && !fr && !editing && meta?.group_sources && <button type="button" onClick={async () => {
             if (!(await showConfirm("Reprendre ici l'assemblage monté sur le modèle seul ? Ses pièces retrouvent leur place, celles des autres modèles gardent la leur. L'assemblage actuel du groupe reste dans l'historique 🕘.",
               { confirmLabel: "Reprendre" }))) return;
-            try { await client.post(`/makerworld/3d/group/${gid}/seed`); egg("assemblage_repris"); setPlate(0); setAgain(a => a + 1); }
+            try { await client.post(`/makerworld/3d/group/${gid}/seed`, fromView.current || {}); egg("assemblage_repris"); setPlate(0); setAgain(a => a + 1); }
             catch (e) { showAlert(e?.response?.data?.detail || "L'assemblage n'a pas pu être repris"); }
           }} data-tip="Reprendre l'assemblage monté sur le modèle seul : ses pièces retrouvent leur place dans le groupe"
             style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 800, border: "1px solid var(--border)",

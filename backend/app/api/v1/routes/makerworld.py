@@ -1971,11 +1971,14 @@ async def mw_3d_group_plates(gid: int, body: dict = Body({}), _: str = Depends(r
 
 
 @router.post("/3d/group/{gid}/seed")
-async def mw_3d_group_seed(gid: int, user: str = Depends(get_current_user), _: str = Depends(require_admin)):
+async def mw_3d_group_seed(gid: int, body: dict = Body({}), user: str = Depends(get_current_user), _: str = Depends(require_admin)):
     """Reprendre dans l'assemblage du groupe celui de ses modeles (03/11/2026) : leurs pieces y retrouvent la place
     montee sur le modele seul ; celles des autres modeles gardent la leur (l'ancien est garde dans l'historique)."""
     from ....services import mw_3d as T
-    n = await asyncio.to_thread(T.seed_group, f"grp{int(gid)}", gid, True, str(user or ""))
+    # la vue du modele d'ou l'on vient (sa cle, et celle de l'assemblage qu'elle montrait) : c'est celui-la qu'on reprend
+    view, ed = str(body.get("view") or ""), str(body.get("edit") or body.get("view") or "")
+    pick = (view, ed) if view else None
+    n = await asyncio.to_thread(T.seed_group, f"grp{int(gid)}", gid, True, str(user or ""), pick)
     if not n:
         raise HTTPException(404, "Aucun assemblage enregistré trouvé pour les 3MF de ce groupe : ouvre une fois « Tout le groupe », puis réessaie")
     return {"ok": True, "pieces": n}

@@ -1930,7 +1930,7 @@ def _slot_key(k, slot: int) -> str | None:
     return f"{slot * 100000 + int(m.group(1))}{m.group(2)}" if m and int(m.group(1)) < 100000 else None
 
 
-def seed_group(gkey: str, gid: int, force: bool = False, by: str = "") -> int:
+def seed_group(gkey: str, gid: int, force: bool = False, by: str = "", pick: tuple | None = None) -> int:
     """Reprend dans l'assemblage du groupe celui de chacun de ses 3MF (le sien dans ce groupe, sinon celui du modele) :
     d'office tant que le groupe n'en a pas, ou a la demande (force : par-dessus, les pieces des autres 3MF gardees).
     Rend le nombre de pieces reprises."""
@@ -1945,12 +1945,35 @@ def seed_group(gkey: str, gid: int, force: bool = False, by: str = "") -> int:
     splits, excluded = list(cur.get("splits") or []), list(cur.get("excluded") or [])
     cuts, colors, paints = dict(cur.get("cuts") or {}), dict(cur.get("colors") or {}), list(cur.get("paints") or [])
     owns, n = own_keys(), 0
-    for src in grec.get("sources") or []:
+
+    def asm_of(k):
+        if not _KEY.fullmatch(str(k or "")):
+            return None
+        return next((p for p in (_read_side(k, "plates.json") or {}).get("plates") or [] if p.get("assembled") and p.get("pieces")), None)
+    jobs = []
+    if pick:
+        # celui de la vue d'ou l'on vient (03/11/2026) : sa vue n'est pas forcement un des 3MF du groupe (un 3MF importe,
+        # un autre fichier du meme profil) ; ses pieces vont au 3MF du groupe qui a les memes (objet:instance)
+        vkey, ekey = pick
+        e, asm = (_read(_edits_file(ekey)) if _KEY.fullmatch(str(ekey or "")) else None), asm_of(vkey)
+        slot = slots.get(vkey)
+        if e and e.get("pieces") and asm and not str(slot).isdigit():
+            ks, best = {":".join(str(k).split(":")[:2]) for k in e["pieces"]}, 0
+            for src in grec.get("sources") or []:
+                a2, s2 = asm_of(src.get("iid")), slots.get(src.get("iid"))
+                ov = len(ks & {":".join(str(pc.get("k")).split(":")[:2]) for pc in a2["pieces"]}) if a2 and str(s2).isdigit() else 0
+                if ov > best:
+                    best, slot = ov, s2
+        logger.info(f"[3D] assemblage du groupe {gkey} : repris de la vue {vkey} (edition {ekey}) -> n° {slot}, "
+                    f"{len((e or {}).get('pieces') or {})} pieces, vue assemblee {'oui' if asm else 'non'}")
+        if e and e.get("pieces") and asm and str(slot).isdigit():
+            jobs.append((int(slot), e, asm))
+    for src in [] if pick else grec.get("sources") or []:
         iid, slot = src.get("iid"), slots.get(src.get("iid"))
         if not iid or not str(slot).isdigit():
             continue
         slot = int(slot)
-        asm = next((p for p in (_read_side(iid, "plates.json") or {}).get("plates") or [] if p.get("assembled") and p.get("pieces")), None)
+        asm = asm_of(iid)
         if not asm:
             continue
         # le sien dans ce groupe d'abord ; sinon le plus recent de ceux de ce 3MF : le partage (ou celui d'une autre vue du
@@ -1968,16 +1991,15 @@ def seed_group(gkey: str, gid: int, force: bool = False, by: str = "") -> int:
             cands = [c for c in cands if c and c.get("pieces")]
             e = max(cands, key=lambda c: c.get("at") or 0) if cands else None
         logger.info(f"[3D] assemblage du groupe {gkey} : 3MF {iid} (n° {slot}) -> {len((e or {}).get('pieces') or {})} pieces a reprendre")
-        if not e or not e.get("pieces"):
+        if e and e.get("pieces"):
+            jobs.append((slot, e, asm))
+    for slot, e, asm in jobs:
+        # le decalage du 3MF dans le groupe : le plus courant parmi ses pieces (une seule suffit quand c'est le meme fichier)
+        ds = sorted(tuple(round(float(a) - float(b), 3) for a, b in zip(go[_slot_key(pc.get("k"), slot)], pc["o"]))
+                    for pc in asm["pieces"] if pc.get("o") and go.get(_slot_key(pc.get("k"), slot)))
+        if not ds:
             continue
-        delta = None
-        for pc in asm["pieces"]:
-            og = go.get(_slot_key(pc.get("k"), slot))
-            if og and pc.get("o"):
-                delta = [float(a) - float(b) for a, b in zip(og, pc["o"])]
-                break
-        if delta is None:
-            continue
+        delta = list(max(set(ds), key=ds.count))
 
         def rk(k, slot=slot):
             return _slot_key(k, slot)
