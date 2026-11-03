@@ -28,6 +28,11 @@ _WARM = {"until": 0.0}
 # passe un instant sur la bobine externe : ce n'est pas un changement)
 STEADY = 20.0
 _TRAY = {"cand": None, "since": 0.0, "from": None}
+# (03/11/2026) hors impression : le filament charge ou decharge dans une buse, une bobine posee ou retiree d'un AMS.
+# Chacun ne compte que s'il tient SETTLE secondes (le chargement passe par des etats intermediaires) ; _CAND : par
+# cle, {v : la valeur candidate, since, before : la valeur d'avant}
+SETTLE = 8.0
+_CAND: dict = {}
 
 LIVE = ("RUNNING", "PREPARE", "SLICING")
 
@@ -86,6 +91,12 @@ def _watch(st) -> None:
         "switch": _switch_sig(st.fila_switch), "rack": _rack_sig(st), "door": st.door_open,
         "hms": {f"{e.get('attr')}-{e.get('code')}" for e in (st.hms_errors or [])},
         "dry": {a.id for a in (st.ams_list or []) if (a.dry_time or 0) > 0},
+        # ce que chaque buse a de charge : son emplacement, ou None (vide) ; la machine qui ne le dit pas : rien
+        "load": {n.id: ((n.slot_ams, n.slot_tray) if n.slot_ams is not None and n.slot_ams >= 0 and n.has_filament is not False else None)
+                 for n in nz if getattr(n, "has_filament", None) is not None or (getattr(n, "slot_ams", -1) or -1) >= 0},
+        # ce qu'il y a dans chaque emplacement des AMS : (matiere, couleur), ou None (vide)
+        "slots": {(a.id, t.id): (None if getattr(t, "empty", False) else (getattr(t, "filament_type", "") or "", (getattr(t, "color", "") or "")[:7]))
+                  for a in (st.ams_list or []) if a.id not in (254, 255) for t in (a.trays or [])},
     }
     prev = _LAST.copy()
     _LAST.update(cur)
@@ -140,6 +151,40 @@ def _watch(st) -> None:
                   at=datetime.utcfromtimestamp(_TRAY["since"]))
     if busy and cur["nozzle"] != prev["nozzle"] and cur["nozzle"] is not None and prev["nozzle"] is not None:
         _push("nozzle", "Buse " + ("gauche" if cur["nozzle"] == 1 else "droite"), "devient la buse active")
+    # hors impression : le filament charge ou decharge dans chaque buse, une bobine posee ou retiree (chacun s'il tient)
+    two = len(nz) > 1
+    for nid in set(cur["load"]) | set(prev.get("load") or {}):
+        v, v0 = cur["load"].get(nid), (prev.get("load") or {}).get(nid)
+        if busy:
+            _CAND.pop(("load", nid), None)
+            continue
+        done = _settle(("load", nid), v, v0, now)
+        if done:
+            before, after, at = done
+            who = (" · buse " + ("gauche" if nid == 1 else "droite")) if two else ""
+            if after:
+                t = _tray(st, *after)
+                info = getattr(t, "_spool_info_cache", None) or {}
+                what = info.get("translated_name") or info.get("name") or (t.filament_type if t else "") or ""
+                _push("load", f"Filament chargé{who}", f"{_slot(*after)}{' · ' + what if what else ''}", color=(t.color if t else "") or "",
+                      before=_slot(*before) if before else "", spool_id=getattr(t, "spool_id", None) if t else None, at=at)
+            else:
+                _push("unload", f"Filament déchargé{who}", _slot(*before) if before else "", at=at)
+    for key in set(cur["slots"]) | set(prev.get("slots") or {}):
+        if key not in cur["slots"] or key not in (prev.get("slots") or {}):
+            continue                                   # un AMS qui apparait ou disparait : pas une bobine
+        done = _settle(("slot",) + key, cur["slots"][key], prev["slots"][key], now)
+        if done:
+            before, after, at = done
+            t = _tray(st, *key)
+            if after and not before:
+                _push("spool_in", f"Bobine posée · {_slot(*key)}", " ".join(x for x in after if x and not x.startswith("#")),
+                      color=after[1], spool_id=getattr(t, "spool_id", None) if t else None, at=at)
+            elif before and not after:
+                _push("spool_out", f"Bobine retirée · {_slot(*key)}", before[0], color=before[1], at=at)
+            elif before and after and (before[0] != after[0] or before[1].lower() != after[1].lower()):
+                _push("spool_in", f"Bobine changée · {_slot(*key)}", " ".join(x for x in after if x and not x.startswith("#")),
+                      color=after[1], spool_id=getattr(t, "spool_id", None) if t else None, at=at)
     # l'aiguillage : un changement de ce qui y entre (vide des deux cotes, en fin d'impression : rien)
     if cur["switch"] != prev["switch"] and cur["switch"] is not None and prev["switch"] is not None and cur["switch"][:2] != (-1, -1):
         fs = st.fila_switch or {}
@@ -160,6 +205,26 @@ def _watch(st) -> None:
         _push("dry_start", f"Séchage {_slot(a, 0).rsplit(' ', 1)[0] if a < 128 else _slot(a, 0)}")
     for a in prev["dry"] - cur["dry"]:
         _push("dry_end", f"Séchage fini {_slot(a, 0).rsplit(' ', 1)[0] if a < 128 else _slot(a, 0)}")
+
+
+def _settle(key, v, v0, now: float):
+    """Une valeur qui change : candidate tant qu'elle ne tient pas SETTLE secondes ; rend (avant, apres, heure du
+    changement) quand elle a tenu, None sinon (un retour a la valeur d'avant efface la candidate)."""
+    c = _CAND.get(key)
+    if v != v0:
+        if c is None:
+            _CAND[key] = c = {"v": v, "since": now, "before": v0}
+        else:
+            c.update(v=v, since=now)
+    if c is None:
+        return None
+    if c["v"] == c["before"]:
+        _CAND.pop(key, None)
+        return None
+    if now - c["since"] >= SETTLE:
+        _CAND.pop(key, None)
+        return c["before"], c["v"], datetime.utcfromtimestamp(c["since"])
+    return None
 
 
 def _title_hms(e: dict) -> str:
@@ -190,7 +255,7 @@ async def _link(db, e: dict) -> None:
         if hit:
             e["print_id"] = hit[0]
             e["detail"] = hit[2] or hit[1] or raw
-    elif e["kind"] == "filament" and e.get("spool_id"):
+    elif e["kind"] in ("filament", "load", "spool_in") and e.get("spool_id"):
         sp = await db.get(Spool, e["spool_id"])
         if sp:
             e["filament_id"] = sp.filament_id

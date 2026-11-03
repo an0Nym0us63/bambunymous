@@ -10,7 +10,8 @@ import { FSheet, fBtn } from "./FicheKit";
 export const KINDS = {
   prepare:     ["⏳", "#60A5FA", "print"], print_start: ["▶️", "#3B82F6", "print"], pause: ["⏸️", "#F59E0B", "print"],
   resume:      ["⏯️", "#3B82F6", "print"], finish: ["✅", "#22C55E", "print"], fail: ["❌", "#EF4444", "print"],
-  filament:    ["🧵", "#F97316", "filament"],
+  filament:    ["🧵", "#F97316", "filament"], load: ["⬇️", "#F97316", "filament"], unload: ["⬆️", "#94A3B8", "filament"],
+  spool_in:    ["🧶", "#F97316", "filament"], spool_out: ["📤", "#94A3B8", "filament"],
   nozzle:      ["🔀", "#A855F7", "hard"], switch: ["🛤️", "#8B5CF6", "hard"], rack: ["🔧", "#EC4899", "hard"],
   hms:         ["⚠️", "#EF4444", "alert"],
   door:        ["🚪", "#64748B", "door"],
@@ -29,7 +30,7 @@ const dayOf = t => {
   const n = Math.round((today - d0) / 86400000);
   return n === 0 ? "Aujourd'hui" : n === 1 ? "Hier" : d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 };
-const colorOf = e => (e.kind === "filament" || e.kind === "rack") && /^#?[0-9a-f]{6}/i.test(e.color || "") ? `#${e.color.replace("#", "").slice(0, 6)}` : meta(e)[1];
+const colorOf = e => ["filament", "rack", "load", "spool_in", "spool_out"].includes(e.kind) && /^#?[0-9a-f]{6}/i.test(e.color || "") ? `#${e.color.replace("#", "").slice(0, 6)}` : meta(e)[1];
 
 function useWidth() {
   const ref = useRef(null);
@@ -137,7 +138,7 @@ export default function MachineTimeline({ events, points, hours, end, pick, onPi
               <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
                 <span style={{ fontSize: 13, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.title}</span>
                 {(e.detail || e.before) && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {e.kind === "filament" && e.color && <span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 3, background: c, marginRight: 5, verticalAlign: "-1px" }}/>}
+                  {["filament", "load", "spool_in", "spool_out"].includes(e.kind) && e.color && <span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 3, background: c, marginRight: 5, verticalAlign: "-1px" }}/>}
                   {e.detail}{e.before ? `${e.detail ? " · " : ""}avant : ${e.before}` : ""}</span>}
               </span>
               {/* la fiche, d'un toucher */}
