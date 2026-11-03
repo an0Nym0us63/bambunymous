@@ -12,6 +12,7 @@ import { egg } from "../eggs";
 // temperature, ventilateurs. Les impressions sont les bandes bleues pales des courbes.
 const PERIODS = [[3, "3 h"], [6, "6 h"], [12, "12 h"], [24, "24 h"], [72, "3 j"], [168, "7 j"]];
 const KEEP_MS = 7 * 86400000;            // ce que le serveur garde
+const MIN_H = 5 / 60;                    // le zoom le plus serre : 5 minutes
 // la fenetre en clair : « lun. 2 nov. 14:00 → 17:00 », ou deux jours quand elle les enjambe
 const winLabel = (from, to) => {
   const a = new Date(from), b = new Date(to), same = a.toDateString() === b.toDateString();
@@ -53,14 +54,18 @@ function Ranges({ lines, unit }) {
 }
 
 // les periodes : une barre segmentee, la pastille de la periode choisie glisse de l'une a l'autre
+// la duree d'une fenetre en clair : « 45 min », « 1 h 30 »
+const durLabel = h => { const mn = Math.round(h * 60); return mn < 60 ? `${mn} min` : `${Math.floor(mn / 60)} h${mn % 60 ? ` ${String(mn % 60).padStart(2, "0")}` : ""}`; };
+
 function Periods({ value, onChange }) {
-  const i = Math.max(0, PERIODS.findIndex(p => p[0] === value)), n = PERIODS.length;
+  // une fenetre zoomee (hors des periodes) : pas de pastille
+  const i = PERIODS.findIndex(p => Math.abs(p[0] - value) < 1e-6), n = PERIODS.length;
   return <div role="tablist" style={{ position: "relative", display: "grid", gridTemplateColumns: `repeat(${n}, 1fr)`, padding: 4, borderRadius: 16,
     background: "var(--surface2)", border: "1px solid var(--border)", maxWidth: 520, width: "100%" }}>
     <span aria-hidden="true" style={{ position: "absolute", top: 4, bottom: 4, left: 4, width: `calc((100% - 8px) / ${n})`, borderRadius: 12,
-      transform: `translateX(${i * 100}%)`, transition: "transform .28s cubic-bezier(.3,1.3,.5,1)",
+      transform: `translateX(${Math.max(0, i) * 100}%)`, transition: "transform .28s cubic-bezier(.3,1.3,.5,1), opacity .2s", opacity: i < 0 ? 0 : 1,
       background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 6px 16px -8px #6366F1" }}/>
-    {PERIODS.map(([h, l]) => <button key={h} type="button" role="tab" aria-selected={value === h} onClick={() => onChange(h)}
+    {PERIODS.map(([h, l]) => <button key={h} type="button" role="tab" aria-selected={i >= 0 && value === h} onClick={() => onChange(h)}
       style={{ position: "relative", zIndex: 1, padding: "7px 0", border: "none", background: "none", cursor: "pointer", borderRadius: 12,
         fontSize: 12.5, fontWeight: 900, color: value === h ? "#fff" : "var(--text2)", transition: "color .2s", whiteSpace: "nowrap" }}>{l}</button>)}
   </div>;
@@ -136,10 +141,13 @@ export default function MachineStats() {
   };
   // les releves charges : la fenetre et de quoi la faire glisser de chaque cote (trois fenetres en tout, 7 jours au
   // plus), relus seulement quand elle s'approche du bord
-  const fh = Math.min(168, hours * 3), m = (fh - hours) / 2 * 3600000;
+  // (pendant l'animation d'un zoom, ceux d'avant : la fenetre d'arrivee y est deja ; une requete par image sinon)
+  const [moving, setMoving] = useState(null);
+  const vh = moving ? moving.h : hours, ve = moving ? moving.e : end;
+  const fh = Math.min(168, vh * 3), m = (fh - vh) / 2 * 3600000;
   const fe = (() => {
-    if (!end || m <= 0) return null;
-    const st = m / 2, e = Math.ceil((end + m) / st) * st;
+    if (!ve || m <= 0) return null;
+    const st = m / 2, e = Math.ceil((ve + m) / st) * st;
     return e >= Date.now() - 60000 ? null : e;
   })();
   const all = useSensorHistory(fh, true, fe);
@@ -154,15 +162,29 @@ export default function MachineStats() {
       catch { showAlert("Cette impression n'existe plus"); }
     } else if (e.spool_id) setSheet({ kind: "spool", spoolId: e.spool_id, filamentId: e.filament_id, hex: e.color });
   };
-  // des evenements reunis sur la frise : la plus petite fenetre qui les contient (3 h au moins), centree sur eux
+  // des evenements reunis sur la frise : la fenetre se resserre autour d'eux, peu a peu (au plus le quart de la
+  // precedente, au moins ce qu'il faut pour les contenir), jusqu'a 5 minutes ; le passage est anime (la duree en
+  // logarithme : le zoom va a la meme allure du debut a la fin)
+  const tween = useRef(0);
   const zoomTo = (a, b) => {
-    const h = PERIODS.map(p => p[0]).find(x => x * 3600000 >= (b - a) * 1.4 && x < hours) || 3;
-    const e = Math.round(((a + b) / 2 + h * 1800000) / 60000) * 60000;
-    setHours(h);
-    setEndRaw(e >= Date.now() - 60000 ? null : e);
+    // un cran a la fois : quatre fois plus serre au plus, que les pastilles s'ecartent petit a petit
+    const h1 = Math.max(MIN_H, (b - a) * 2.2 / 3600000, hours / 4);
+    const e1 = (a + b) / 2 + h1 * 1800000, live1 = e1 >= Date.now() - 30000;
+    const h0 = hours, e0 = end || Date.now(), E1 = live1 ? Date.now() : e1, t0 = performance.now();
+    cancelAnimationFrame(tween.current); cancelAnimationFrame(anim.current);
+    setMoving({ h: h0, e: end });
+    const step = t => {
+      const k = Math.min(1, (t - t0) / 420), q = 1 - Math.pow(1 - k, 3);
+      setHours(Math.exp(Math.log(h0) + (Math.log(h1) - Math.log(h0)) * q));
+      setEndRaw(e0 + (E1 - e0) * q);
+      if (k < 1) tween.current = requestAnimationFrame(step);
+      else { setHours(h1); setEndRaw(live1 ? null : Math.round(E1)); setMoving(null); }
+    };
+    tween.current = requestAnimationFrame(step);
   };
+  useEffect(() => () => cancelAnimationFrame(tween.current), []);
   const to = end || Date.now(), from = to - hours * 3600000;
-  const choosePeriod = h => { setHours(h); if (h >= 168) setEndRaw(null); else if (end && end - h * 3600000 < Date.now() - KEEP_MS) setEndRaw(Date.now() - KEEP_MS + h * 3600000); };
+  const choosePeriod = h => { cancelAnimationFrame(tween.current); setMoving(null); setHours(h); if (h >= 168) setEndRaw(null); else if (end && end - h * 3600000 < Date.now() - KEEP_MS) setEndRaw(Date.now() - KEEP_MS + h * 3600000); };
   useEffect(() => { egg("machine_vue"); }, []);
   // ce qui tombe dans la fenetre (le bilan, les courbes et leurs legendes)
   const pts = useMemo(() => all && all.filter(p => { const t = Date.parse(p.t); return t >= from - 60000 && t <= to + 60000; }), [all, from, to]);
@@ -241,6 +263,11 @@ export default function MachineStats() {
       onClose={() => setSheet(null)}/>}
     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
       <Periods value={hours} onChange={choosePeriod}/>
+      {/* un zoom de la chronologie : sa duree, et de quoi en sortir */}
+      {!PERIODS.some(p => Math.abs(p[0] - hours) < 1e-6) && !moving && <button type="button" onClick={() => choosePeriod(3)} data-tip="Revenir à 3 h"
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 12.5,
+          fontWeight: 900, color: "#fff", background: "linear-gradient(135deg, #F43F5E, #8B5CF6)", boxShadow: "0 6px 14px -8px #F43F5E" }}>
+        🔍 Zoom {durLabel(hours)} <span style={{ opacity: 0.8 }}>✕</span></button>}
       <span style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
         <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: "rgba(59,130,246,.18)", verticalAlign: "-1px", marginRight: 5 }}/>en impression</span>
     </div>
@@ -278,7 +305,7 @@ export default function MachineStats() {
         <div style={{ ...title("#E11D48"), display: "flex", alignItems: "center", gap: 8 }}>🕒 Chronologie
           {events?.length ? <span style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", letterSpacing: 0, textTransform: "none" }}>
             {events.length} événement{events.length > 1 ? "s" : ""}</span> : null}</div>
-        <MachineTimeline events={events} points={pts} hours={hours} end={end} pick={pick} onPick={setPick} onZoom={zoomTo} onOpen={openSheet}/>
+        <MachineTimeline events={events} points={pts} hours={hours} end={end} pick={pick} onPick={setPick} onZoom={hours > MIN_H * 1.01 ? zoomTo : null} onOpen={openSheet}/>
       </div>
       {d.heat.length > 0 && <div style={card("#F97316")}>
         <div style={title("#EA580C")}>🔥 Buse et plateau</div>

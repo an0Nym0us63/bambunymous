@@ -73,7 +73,8 @@ const fmtH = (t, days) => new Date(t).toLocaleString("fr-FR", days > 2 ? { weekd
 // des reperes ronds a l'heure locale, comptes depuis minuit : 30 min sur 3 h, 1 h sur 6 h, 2 h sur 12 h, 4 h sur un
 // jour, 6 h sur deux, minuit au-dela
 export function timeTicks(from, to, hours) {
-  const out = [], tM = (hours <= 3 ? 0.5 : hours <= 6 ? 1 : hours <= 12 ? 2 : hours <= 24 ? 4 : hours <= 48 ? 6 : 24) * 3600000;
+  const out = [], tM = (hours <= 0.1 ? 1 / 60 : hours <= 0.25 ? 2 / 60 : hours <= 0.5 ? 5 / 60 : hours <= 1 ? 10 / 60 : hours <= 2 ? 0.25
+    : hours <= 3 ? 0.5 : hours <= 6 ? 1 : hours <= 12 ? 2 : hours <= 24 ? 4 : hours <= 48 ? 6 : 24) * 3600000;
   const m0 = new Date(from); m0.setHours(0, 0, 0, 0);
   for (let t = m0.getTime(); t < to; t += tM) if (t > from) out.push(t);
   return out;

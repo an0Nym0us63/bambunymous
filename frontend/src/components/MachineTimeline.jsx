@@ -53,6 +53,9 @@ export const linkOf = e => (e.print_id ? "print" : e.spool_id && e.filament_id ?
 
 export default function MachineTimeline({ events, points, hours, end, pick, onPick, onZoom, onOpen }) {
   const [cat, setCat] = useState("all");
+  // un regroupement eclate (au zoom le plus serre, ou des evenements a la meme seconde) : ses evenements en eventail
+  const [burst, setBurst] = useState(null);
+  useEffect(() => { setBurst(null); }, [hours, end]);
   const [more, setMore] = useState(false);
   const [ref, W] = useWidth();
   const listRef = useRef(null);
@@ -118,18 +121,35 @@ export default function MachineTimeline({ events, points, hours, end, pick, onPi
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>🖨️ {b.name}</span>}
         </div>; })}
       {clusters.map((c, k) => { const one = c.list.length === 1, e = c.list[0], on = c.list.some(z => z.ms === pick);
-        // plusieurs reunis : la fenetre se resserre autour d'eux (ils s'y separent) ; deja au plus serre, le dernier
-        const zoom = !one && onZoom && hours > 3;
-        return <button key={k} type="button" onClick={() => (zoom ? onZoom(c.list[0].ms, c.last) : choose(one ? e : c.list[c.list.length - 1]))}
+        // plusieurs reunis : la fenetre se resserre autour d'eux (ils s'y separent peu a peu) ; au plus serre, ou a la
+        // meme seconde, ils eclatent en eventail
+        const zoom = !one && onZoom && c.last - c.list[0].ms > 1000;
+        return <button key={k} type="button" onClick={() => (one ? choose(e) : zoom ? onZoom(c.list[0].ms, c.last) : setBurst(burst === k ? null : k))}
           data-tip={one ? `${hm(e.ms)} · ${e.title}${e.detail ? ` · ${e.detail}` : ""}` : `${c.list.length} événements · ${hm(c.list[0].ms)} → ${hm(c.last)}${zoom ? " · toucher pour les voir de plus près" : ""}`}
           style={{ position: "absolute", left: W ? Math.min(W - 16, Math.max(16, x(c.ms) / 100 * W)) : `${x(c.ms)}%`, top: 8 + LANE / 2, transform: "translate(-50%, -50%)", padding: 0, border: "none",
-            background: "none", cursor: "pointer", zIndex: on ? 3 : 2 }}>
+            background: "none", cursor: "pointer", zIndex: on ? 3 : 2, opacity: burst === k ? 0.25 : 1, transition: "opacity .2s" }}>
           {one ? <Dot e={e} on={on}/> : <span style={{ position: "relative", display: "inline-flex" }}>
             <Dot e={c.list[c.list.length - 1]} on={on}/>
             <span style={{ position: "absolute", right: -7, top: -7, minWidth: 16, height: 16, padding: "0 4px", borderRadius: 10, fontSize: 10, fontWeight: 900,
               color: "#fff", background: "linear-gradient(135deg, #F43F5E, #EC4899)", display: "inline-flex", alignItems: "center", justifyContent: "center",
               boxShadow: "0 0 0 2px var(--surface)" }}>{c.list.length}</span></span>}
         </button>; })}
+      {burst != null && clusters[burst] && (() => {
+        const c = clusters[burst], n = c.list.length, cx = W ? Math.min(W - 16, Math.max(16, x(c.ms) / 100 * W)) : 0;
+        // en arc au-dessus du regroupement, ramene dans la largeur de la frise
+        const R = 52 + n * 6, span = Math.min(170, 50 + n * 30) * Math.PI / 180;
+        return <>
+          <span aria-hidden="true" onClick={() => setBurst(null)} style={{ position: "fixed", inset: 0, zIndex: 4 }}/>
+          {c.list.map((z, j) => { const a = -Math.PI / 2 + (n > 1 ? (j / (n - 1) - 0.5) * span : 0);
+            const px = Math.min(W - 14, Math.max(14, cx + Math.cos(a) * R)), py = 8 + LANE / 2 + Math.sin(a) * R * 0.75;
+            return <button key={z.i} type="button" onClick={() => { setBurst(null); choose(z); }} data-tip={`${hm(z.ms)} · ${z.title}${z.detail ? ` · ${z.detail}` : ""}`}
+              style={{ position: "absolute", left: px, top: py, transform: "translate(-50%, -50%)", padding: 0, border: "none", background: "none", cursor: "pointer",
+                zIndex: 5, animation: `tl-burst .32s cubic-bezier(.3,1.5,.5,1) ${j * 0.03}s both`, ["--bx"]: `${cx - px}px`, ["--by"]: `${8 + LANE / 2 - py}px` }}>
+              <Dot e={z} size={28} on={z.ms === pick}/></button>; })}
+        </>;
+      })()}
+      <style>{`@keyframes tl-burst { from { transform: translate(calc(-50% + var(--bx)), calc(-50% + var(--by))) scale(.3); opacity: 0 }
+        to { transform: translate(-50%, -50%) scale(1); opacity: 1 } }`}</style>
       {ticks.map(t => <span key={t} style={{ position: "absolute", bottom: 4, left: `${x(t)}%`, transform: "translateX(-50%)", fontSize: 9.5, fontWeight: 800,
         color: "var(--muted)", whiteSpace: "nowrap" }}>{fmtTick(t, hours)}</span>)}
       {!evs.length && <span style={{ position: "absolute", left: 0, right: 0, top: 8 + LANE / 2 - 9, textAlign: "center", fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>
