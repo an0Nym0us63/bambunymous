@@ -1486,8 +1486,8 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         ({ label: `${r} mm`, on: est.paintR === r, onClick: () => api?.setPaint({ r }) }))}/>}
       {sep}
       <Swatches list={swatches} value={est.paintColor} onPick={c => api?.setPaint({ color: c })}/>
-      <button type="button" onClick={() => api?.setPaint({ color: null })} style={b(!est.paintColor)}
-        data-tip="La gomme : ce que tu touches reprend sa couleur d'origine">🧽 Gomme</button>
+      <button type="button" onClick={() => api?.setPaint({ color: est.paintColor ? null : (est.lastPaint || swatches[0]?.c || null) })} style={b(!est.paintColor)}
+        data-tip={est.paintColor ? "La gomme : ce que tu touches reprend sa couleur d'origine" : "Gomme allumée : touche-la de nouveau (ou une pastille) pour reprendre la couleur"}>🧽 Gomme</button>
       {est.painted > 0 && <button type="button" onClick={() => api?.clearPaint()} style={b(false, { color: "#ef4444" })}
         data-tip={hasSel ? "Retirer toute la peinture des pièces choisies" : "Retirer toute la peinture de l'assemblage"}>↺ Tout effacer</button>}
     </>
@@ -1550,8 +1550,10 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
           data-tip="Sur la même face jumelle, la position suivante qui va aussi bien (une face carrée, ronde, symétrique)">↻ Autre position {est.twinPos}</button>}
         {est.mode !== "mate" && <button type="button" onClick={() => api?.setMode("mate")} style={b(false)}
           data-tip="Ajouter un point de colle : en 🧲 Coller, touche un point de la pièce puis sa cible ; le premier collage tient">➕ Point de colle</button>}
-        <button type="button" onClick={() => api?.snap()} style={b(true)}
-          data-tip="La pièce trouve sa place autour de là où elle est collée : dans son logement s'il y en a un (une réglette dans sa rainure, un bloc dans sa poche), sinon à plat, d'équerre et centrée sur ce qui la porte, sinon elle épouse la surface (une face courbe) ; au dixième de millimètre">🎯 Caler</button>
+        {est.fitBusy ? <button type="button" onClick={() => api?.stopFit()} style={b(true, { background: "linear-gradient(135deg, #ef4444, #f97316)" })}
+          data-tip="Arrêter la recherche : la pièce reste où elle est">⏹ Arrêter</button>
+        : <button type="button" onClick={() => api?.snap()} style={b(true)}
+          data-tip="La pièce trouve sa place autour de là où elle est collée : dans son logement s'il y en a un (une réglette dans sa rainure, un bloc dans sa poche), sinon à plat, d'équerre et centrée sur ce qui la porte, sinon elle épouse la surface (une face courbe) ; au dixième de millimètre">🎯 Caler</button>}
         <BarMenu b={b} up={compact} label="▾" tip="Forcer une seule façon de caler" items={[
           { label: "↔ Dégager dans le plan", onClick: () => api?.plane(), tip: "Collée face contre face mais à travers l'autre pièce : elle glisse et tourne dans son plan de collage jusqu'à la place libre la plus proche (une glissière dans son canal), sans monter" },
           { label: "🧩 Emboîter seulement", onClick: () => api?.nest(), tip: "La place où elle descend le plus (un bloc dans son logement), sans rien traverser" },

@@ -228,9 +228,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     firstOn: first ? first.group.userData.name : null, firstMoves: first ? (sel.has(first.group) ? sel.size : unitOf(first.group).length) : 0,
     firstGlued: first ? (jointOf(sel.has(first.group) ? [...sel] : unitOf(first.group))?.b.userData.name || null) : null,
     pickFor, lineAxis: !!lineAxis,
-    paintTool, paintColor, paintR, paintCrease, painted: paints.length,
+    paintTool, paintColor, lastPaint, paintR, paintCrease, painted: paints.length,
     pieceColor: sel.size ? (([...sel].map(g => colors[g.userData.k] || null).every((c, _i, a) => c === a[0])) ? colors[[...sel][0].userData.k] || null : "mix") : null,
-    twinBusy, canTwins: mode === "mate" && !!first && first.kind === "face" && !twinDone,
+    twinBusy, fitBusy, canTwins: mode === "mate" && !!first && first.kind === "face" && !twinDone,
     canSplit: !pendingSplit && (sel.size === 1 || [...sel].some(g => groupOf(g))), canReunite: [...sel].some(g => g.userData.from),
     canGroup: sel.size > 1 && !groups.some(gr => gr.length === sel.size && gr.every(g => sel.has(g))),
     // de la selection part au moins un collage (vers une piece hors d'elle) : « Grouper le colle » a un sens
@@ -788,6 +788,17 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   // la recherche des jumelles (30/10/2026) : lancee a la demande (« 🔍 Faces jumelles »), elle tourne sans bloquer et
   // s'arrete (« ⏹ Arreter », ou un autre clic) ; twinDone : son resultat, pour la face prise
   let twinDone = null, twinBusy = false, twinStop = false;
+  // caler, emboiter, aligner, degager (03/11/2026) : la recherche rend la main a la page toutes les 30 ms (sinon la page
+  // restait figee plusieurs secondes, jusqu'a l'ecran noir) ; ⏹ Arreter l'interrompt, la piece reste ou elle est
+  let fitBusy = false, fitStop = false, fitLast = 0;
+  const fitHalt = new Error("arret");
+  const fitTick = async () => {
+    if (performance.now() - fitLast < 30) return;
+    // (un message plutot qu'un minuteur : setTimeout(0) attend au moins 4 ms une fois imbrique)
+    await new Promise(r => { const c = new MessageChannel(); c.port1.onmessage = () => { c.port1.close(); r(); }; c.port2.postMessage(0); });
+    fitLast = performance.now();
+    if (fitStop) throw fitHalt;
+  };
   const twinMarks = new THREE.Group(); twinMarks.renderOrder = 998; holder.add(twinMarks);
   const twinMat = new THREE.MeshBasicMaterial({ color: 0x22c55e, transparent: true, opacity: 0.5, depthTest: false, side: THREE.DoubleSide });
   const clearTwins = () => {
@@ -867,11 +878,11 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     const run = async co => {
       // degager dans le plan : rien a faire si elle ne traverse rien
       if (mode === "plane") {
-        const pf = await planeFree({ THREE, collider: col, moving, base, P, N, collides: co, ...cons });
+        const pf = await planeFree({ THREE, collider: col, moving, base, P, N, collides: co, tick: fitTick, ...cons });
         return pf && pf.free ? { M: new THREE.Matrix4(), moved: 0, turned: 0, sink: 0, kind: "plane" } : pf;
       }
-      if (mode !== "snap") return nestPlace({ THREE, collider: col, moving, base, P, N, mode, collides: co, ...cons });
-      const sp = await snapPlace({ THREE, collider: col, moving, base, P, N, collides: co, ...cons });
+      if (mode !== "snap") return nestPlace({ THREE, collider: col, moving, base, P, N, mode, collides: co, tick: fitTick, ...cons });
+      const sp = await snapPlace({ THREE, collider: col, moving, base, P, N, collides: co, tick: fitTick, ...cons });
       if (sp.M) return { ...sp.r, M: sp.M, kind: sp.kind };
       if (sp.r && sp.r.blocked) return { blocked: sp.r.blocked };
       return sp.noface ? null : { M: new THREE.Matrix4(), moved: 0, turned: 0, sink: 0, kind: null };   // rien de mieux : elle reste
@@ -910,10 +921,14 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     if (!jointOf([...sel])) return say(mode === "snap" ? "Colle d'abord la pièce à peu près où elle va (🧲 Coller), puis 🎯 Caler — ou 🎯 Caler sur… sans coller"
       : mode === "align" ? "Colle d'abord la pièce sur la face où l'aligner (🧲 Coller), puis 📐 Aligner"
       : "Colle d'abord la pièce sur celle où elle doit s'emboîter (🧲 Coller), puis 🧩 Emboîter");
-    say(mode === "snap" ? "Recherche de la place où la pièce se cale…" : mode === "plane" ? "Recherche de la place libre la plus proche, dans son plan…" : mode === "align" ? "Recherche de la place où la pièce déborde le moins…" : "Recherche de la place où la pièce s'emboîte…");
+    if (fitBusy) return false;                                   // une recherche tourne deja
+    fitBusy = true; fitStop = false; fitLast = performance.now();
+    say((mode === "snap" ? "Recherche de la place où la pièce se cale…" : mode === "plane" ? "Recherche de la place libre la plus proche, dans son plan…" : mode === "align" ? "Recherche de la place où la pièce déborde le moins…" : "Recherche de la place où la pièce s'emboîte…")
+      + (quiet ? "" : " (⏹ Arrêter pour l'interrompre)"));
     await new Promise(r => setTimeout(r, 30));
     try {
       const f = await fitCore(mode, quiet);
+      if (fitStop) throw fitHalt;                                  // arretee pendant une etape qui avale ses erreurs
       // caler : ni logement ni face plane (une face courbe, un relief) -- la piece epouse la surface a la place
       if (mode === "snap" && f.why === "none") { say(null); return api.refine("Calée en épousant la surface"); }
       if (mode === "snap" && f.still) return say("Déjà calée : rien de mieux autour de là où elle est collée");
@@ -935,7 +950,10 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       if (f.touching) fitMsg += " — elle touche une autre pièce à cette place";
       onChange?.(state());
       return true;
-    } catch (e) { console.error("[3D] emboiter / aligner", e); return say("La recherche a échoué"); }
+    } catch (e) {
+      if (e === fitHalt) return say(quiet ? null : "Recherche arrêtée : la pièce n'a pas bougé");
+      console.error("[3D] emboiter / aligner", e); return say("La recherche a échoué");
+    } finally { fitBusy = false; fitStop = false; onChange?.(state()); }
   };
   // un point de colle de plus, le premier collage tenu : la piece tourne autour de la normale du contact et glisse dans
   // son plan, jusqu'a ce que la nouvelle prise vienne sur sa cible -- deux aretes : alignees (et l'une sur l'autre), deux
@@ -1676,6 +1694,9 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
   // paintCrease (31/10/2026) : le seuil de la zone, l'angle a partir duquel une arete l'arrete (plus petit : des zones plus
   // petites, qui s'arretent aux moindres plis ; plus grand : elles debordent sur les arrondis)
   let paintTool = "zone", paintColor = null, paintR = 2, paintStroke = null, paintCrease = 35;
+  // la derniere couleur posee : la gomme de la peinture s'eteint en y revenant (03/11/2026 : allumee, rien ne l'eteignait
+  // qu'une pastille)
+  let lastPaint = null;
   const paintHit = ev => {
     const r = el.getBoundingClientRect();
     mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
@@ -2048,7 +2069,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
 
   const api = {
     setGround3: on => { ground3 = on; gPts = []; gUnit = []; drawGround(); onChange?.(state()); },
-    setMode: m => { pickFor = null; if (m !== "cut") { cutCancel(); dropStroke(); clearRub(); } knifeView(m === "cut" || m === "paint"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
+    setMode: m => { pickFor = null; if (m !== "cut") { cutCancel(); dropStroke(); clearRub(); eraser = false; } knifeView(m === "cut" || m === "paint"); if (m !== "pins") pinsClear(); if (m !== "ground") { gPts = []; gUnit = []; drawGround(); } mode = m; first = null; clearTwins(); pivot = m === "mate" ? pivot : null; clearMarks(); placeHandle(); shade(); render(); onChange?.(state()); },
     setMagnet: on => { magnet = on; applySnap(); onChange?.(state()); },
     // 🎨 la couleur de la selection entiere (null : sa couleur d'origine) ; 🖌 les reglages de la peinture
     setPieceColor: hex => {
@@ -2064,7 +2085,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     },
     setPaint: ({ tool, color, r, crease } = {}) => {
       if (tool) paintTool = tool;
-      if (color !== undefined) paintColor = color;
+      if (color !== undefined) { paintColor = color; if (color) lastPaint = color; }
       if (r) paintR = r;
       if (crease) paintCrease = crease;
       onChange?.(state());
@@ -2185,6 +2206,7 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     freeOut,
     findTwins: () => { if (first && first.kind === "face" && !twinBusy) startTwins(first); },
     stopTwins: () => { if (twinBusy) { twinStop = true; onChange?.(state()); } },
+    stopFit: () => { if (fitBusy) { fitStop = true; onChange?.(state()); } },
     setEdgeMode: on => { edgeMode = on; onChange?.(state()); },
     setEraser: on => { eraser = on; if (!on) clearRub(); onChange?.(state()); },
     // detacher les supports integres de la piece choisie : proposes en couleur, a valider comme une coupe

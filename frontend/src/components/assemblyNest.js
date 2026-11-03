@@ -18,8 +18,11 @@
 // a l'autre bout de la face, ou un demi-tour, l'emportait)
 // res : la maille voulue (mm ; la passe fine de snapPlace), sinon a la mesure de la zone ; center : a profondeur egale,
 // se centrer quand meme (la passe fine)
+// tick (03/11/2026) : appele souvent pendant la recherche (async) -- l'editeur y rend la main a la page (sinon figee,
+// jusqu'a l'ecran noir) et y leve l'arret demande
 export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "nest", collides = null, lock = null, axis = null, reach = null, res = null, center = false,
-                                 erodeMm = 0.6, bounded = false }) {
+                                 erodeMm = 0.6, bounded = false, tick = null }) {
+  const tk = tick || (() => null);
   const { MeshBVH } = await import("three-mesh-bvh");
   const w = N.clone().normalize();
   const u = (Math.abs(w.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0)).cross(w).normalize();
@@ -90,10 +93,13 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   const bu0 = zlo[0], bv0 = zlo[1], nu = Math.ceil((zhi[0] - bu0) / h) + 1, nv = Math.ceil((zhi[1] - bv0) / h) + 1;
   const H = new Float32Array(nu * nv).fill(NaN), top = sb.hi[2] + 1;
   dir.copy(w).negate();
-  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
-    o.copy(P).addScaledVector(u, bu0 + i * h).addScaledVector(v, bv0 + j * h).addScaledVector(w, top);
-    const t = first(B, o, dir);
-    if (t < Infinity) H[j * nu + i] = top - t;
+  for (let j = 0; j < nv; j++) {
+    await tk();
+    for (let i = 0; i < nu; i++) {
+      o.copy(P).addScaledVector(u, bu0 + i * h).addScaledVector(v, bv0 + j * h).addScaledVector(w, top);
+      const t = first(B, o, dir);
+      if (t < Infinity) H[j * nu + i] = top - t;
+    }
   }
   // la carte du dessous de la piece posee : des cellules (du, dv, L) autour de son centre
   const bottom = sa.lo[2] - 1;
@@ -103,10 +109,13 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   const ga = sa.lo[0] + ((sa.hi[0] - sa.lo[0]) - (mu - 1) * h) / 2, gb = sa.lo[1] + ((sa.hi[1] - sa.lo[1]) - (mv - 1) * h) / 2;
   const La = new Float32Array(mu * mv).fill(NaN);
   dir.copy(w);
-  for (let j = 0; j < mv; j++) for (let i = 0; i < mu; i++) {
-    o.copy(P).addScaledVector(u, ga + i * h).addScaledVector(v, gb + j * h).addScaledVector(w, bottom);
-    const t = first(A, o, dir);
-    if (t < Infinity) La[j * mu + i] = bottom + t;
+  for (let j = 0; j < mv; j++) {
+    await tk();
+    for (let i = 0; i < mu; i++) {
+      o.copy(P).addScaledVector(u, ga + i * h).addScaledVector(v, gb + j * h).addScaledVector(w, bottom);
+      const t = first(A, o, dir);
+      if (t < Infinity) La[j * mu + i] = bottom + t;
+    }
   }
   // le bord du dessous rogne d'une maille : le jeu d'impression (une piece faite pour entrer juste n'y entrait pas, les
   // mailles du bord tombant sur la paroi)
@@ -280,7 +289,7 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
     const mA = new Float32Array(mu * mv), mB = new Float32Array(nu * nv);
     for (let k = 0; k < mu * mv; k++) mA[k] = !Number.isNaN(La[k]) && La[k] <= lmin + 2 ? 1 : 0;
     for (let k = 0; k < nu * nv; k++) mB[k] = !Number.isNaN(H[k]) && H[k] >= -2 ? 1 : 0;
-    oA = orient(mA, mu, mv, 4); oB = orient(mB, nu, nv);
+    await tk(); oA = orient(mA, mu, mv, 4); await tk(); oB = orient(mB, nu, nv);
   }
   // les bords des deux nets (r > 0,5) : l'ecart (degres) entre ceux de la piece tournee de th et ceux du support, a 90°
   // pres ; sinon 0 (rien a aligner, la forme de la face decide seule)
@@ -370,6 +379,7 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
     for (const g of gs.values()) out.push(g[0] / g[2], g[1] / g[2], g[3]);
     return out;
   };
+  await tk();
   const cc = coarse(cells), fc = coarse(foot);
   // ce qui porte la piece a sa place de depart (un peu de marge)
   // (03/11/2026) chaque niveau mesure la part portee a sa facon : son seuil est pris a la place de depart, avec ses
@@ -421,6 +431,7 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
     if (lock === null || Math.abs(wrap(t)) <= lock) angs.push(lock === null ? t : wrap(t));
   }
   for (const th of angs) {
+    await tk();
     if (ax) {
       for (let s = -R; s <= R + 1e-9; s += Math.min(ss, Math.max(h, R / 4))) {
         const c = score(0, th, s * ax[0], s * ax[1]);
@@ -449,6 +460,7 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   for (const t of tops) {
     let b = null;
     for (let da = -6; da <= 6; da += 1.5) {
+      await tk();
       const th = t.th + da * Math.PI / 180;
       for (let dv = -ss; dv <= ss + 1e-9; dv += fs) for (let du = -ss; du <= ss + 1e-9; du += fs) {
         const su = t.su + du, sv = t.sv + dv, c = score(1, th, su, sv);
@@ -555,20 +567,20 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
             // de 0,25° en 0,25° sur ±4° (l'equerre estimee se trompe parfois de 3°), puis de 0,05° sur la plage des angles
             // qui descendent aussi bas : son milieu (le meme jeu des deux cotes)
             const res = [];
-            for (let da = -4; da <= 4.0001; da += 0.25) res.push([da, exactLift(at(th + da * Math.PI / 180))]);
+            for (let da = -4; da <= 4.0001; da += 0.25) { await tk(); res.push([da, exactLift(at(th + da * Math.PI / 180))]); }
             const low = Math.min(...res.map(x => x[1]));
             // (elle descend sous la face collee, d'au moins 0,3 mm : meme si la piece flottait deja au-dessus)
             if (low < Infinity && low >= -maxSink && low < -0.3 && low <= here0 + 0.05) {
               const ok = res.filter(x => x[1] <= low + 0.05).map(x => x[0]);
               const fine = [];
-              for (let da = Math.min(...ok) - 0.25; da <= Math.max(...ok) + 0.2501; da += 0.05) { const dl = exactLift(at(th + da * Math.PI / 180)); if (dl <= low + 0.05) fine.push(da); }
+              for (let da = Math.min(...ok) - 0.25; da <= Math.max(...ok) + 0.2501; da += 0.05) { await tk(); const dl = exactLift(at(th + da * Math.PI / 180)); if (dl <= low + 0.05) fine.push(da); }
               if (fine.length) {
                 let b = at(th + ((Math.min(...fine) + Math.max(...fine)) / 2) * Math.PI / 180);
                 // puis la position, aux vrais rayons aussi : sur ±1 mm dans chaque sens, le milieu de la plage ou elle
                 // descend aussi bas (le centre du creux, lu sur la carte, l'etait a une demi-maille pres)
                 for (const ax of ["su", "sv"]) {
                   const okp = [];
-                  for (let dd = -1; dd <= 1.0001; dd += 0.05) { const c2 = fix({ ...b, [ax]: b[ax] + dd }); if (exactLift(c2) <= low + 0.05) okp.push(dd); }
+                  for (let dd = -1; dd <= 1.0001; dd += 0.05) { await tk(); const c2 = fix({ ...b, [ax]: b[ax] + dd }); if (exactLift(c2) <= low + 0.05) okp.push(dd); }
                   if (okp.length) b = fix({ ...b, [ax]: b[ax] + (Math.min(...okp) + Math.max(...okp)) / 2 });
                 }
                 const dl = exactLift(b);
@@ -587,10 +599,10 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
   const here = mode === "align" ? Infinity : lift(H, nu, nv, h, exact, 0, 0, 0);
   // la hauteur d'une place : aligner pose la face collee sur la face qui porte ; emboiter descend jusqu'au contact
   const dOf = b => (mode === "align" ? fLev - lvl : lift(H, nu, nv, h, exact, b.th, b.su, b.sv));
-  const mid = (f, x0, step, lim) => {
+  const mid = async (f, x0, step, lim) => {
     let a = 0, b = 0;
-    while (a < lim && f(x0 - (a + 1) * step)) a++;
-    while (b < lim && f(x0 + (b + 1) * step)) b++;
+    while (a < lim && f(x0 - (a + 1) * step)) { a++; if (a % 8 === 0) await tk(); }
+    while (b < lim && f(x0 + (b + 1) * step)) { b++; if (b % 8 === 0) await tk(); }
     return x0 + (b - a) / 2 * step;
   };
   // une place -> la transformation (repere du support du modele) : tourner autour de la normale par le centre de la
@@ -619,7 +631,9 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
     // a la maille et au demi-degre pres autour d'elle
     for (let it = 0; it < 3; it++) {
       const b0 = { ...b }, r = it ? 2 * h : fs;
+      await tk();
       for (let da = -1.5; da <= 1.5; da += 0.5) for (let dv = -r; dv <= r + 1e-9; dv += r / 2) for (let du = -r; du <= r + 1e-9; du += r / 2) {
+        if (du === -r) await tk();
         const th = b0.th + da * Math.PI / 180, su = b0.su + du, sv = b0.sv + dv, c = score(2, th, su, sv);
         if (c < b.c) b = { th, su, sv, c };
       }
@@ -630,9 +644,10 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
     const ref = raw(b.th, b.su, b.sv), okp = (th, su, sv) => raw(th, su, sv) <= ref + 0.05;
     const c0 = { ...b };
     for (let it = 0; it < 2; it++) {
-      b.th = mid(t => okp(t, b.su, b.sv), b.th, Math.PI / 360, 120);
-      b.su = mid(x => okp(b.th, x, b.sv), b.su, h, 400);
-      b.sv = mid(y => okp(b.th, b.su, y), b.sv, h, 400);
+      await tk();
+      b.th = await mid(t => okp(t, b.su, b.sv), b.th, Math.PI / 360, 120);
+      b.su = await mid(x => okp(b.th, x, b.sv), b.su, h, 400);
+      b.sv = await mid(y => okp(b.th, b.su, y), b.sv, h, 400);
     }
     // presque d'equerre : tout a fait, si ca ne coute rien d'autre (les pas d'un demi-degre laissaient un reste)
     if (sharp && skew(b.th) > 0 && skew(b.th) < 3) {
@@ -640,8 +655,8 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
         const t = square + Math.round((b.th - square) / (Math.PI / 2) + q) * Math.PI / 2;
         if (skew(t) < 0.01 && Math.abs(t - b.th) < 3.5 * Math.PI / 180 && raw(t, b.su, b.sv) <= raw(b.th, b.su, b.sv) + 0.02) { b.th = t; break; }
       }
-      b.su = mid(x => okp(b.th, x, b.sv), b.su, h, 400);
-      b.sv = mid(y => okp(b.th, b.su, y), b.sv, h, 400);
+      b.su = await mid(x => okp(b.th, x, b.sv), b.su, h, 400);
+      b.sv = await mid(y => okp(b.th, b.su, y), b.sv, h, 400);
     }
     b = fix(b);
     // plus rien a gagner (center : la passe fine, ou se centrer a la meme profondeur est le but)
@@ -749,7 +764,8 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
 // canal) n'y avait pas de place. Ici chaque colonne garde toute sa matiere, couche par couche (les entrees et sorties
 // d'un rayon qui traverse la piece) : une place est libre si, colonne par colonne, rien de la piece ne croise rien du
 // support. Rend null si la piece ne traverse rien a sa place (rien a faire ici) ou si aucune place libre n'est proche.
-export async function planeFree({ THREE, collider, moving, base, P, N, collides = null, lock = null, axis = null, reach = null }) {
+export async function planeFree({ THREE, collider, moving, base, P, N, collides = null, lock = null, axis = null, reach = null, tick = null }) {
+  const tk = tick || (() => null);
   const { MeshBVH } = await import("three-mesh-bvh");
   const w = N.clone().normalize();
   const u = (Math.abs(w.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0)).cross(w).normalize();
@@ -802,13 +818,17 @@ export async function planeFree({ THREE, collider, moving, base, P, N, collides 
   };
   // la piece : ses colonnes sur une grille centree (pas hp), autour de son centre
   const cu = (sa.lo[0] + sa.hi[0]) / 2, cv = (sa.lo[1] + sa.hi[1]) / 2, ptop = sa.hi[2] + 1;
-  const pieceGrid = hp => {
+  const pieceGrid = async hp => {
     const mu = Math.floor((sa.hi[0] - sa.lo[0]) / hp) + 1, mv = Math.floor((sa.hi[1] - sa.lo[1]) / hp) + 1;
     const ga = sa.lo[0] + ((sa.hi[0] - sa.lo[0]) - (mu - 1) * hp) / 2, gb = sa.lo[1] + ((sa.hi[1] - sa.lo[1]) - (mv - 1) * hp) / 2;
     const iv = [];
-    for (let j = 0; j < mv; j++) for (let i = 0; i < mu; i++) iv.push(column(A, ga + i * hp, gb + j * hp, ptop));
+    for (let j = 0; j < mv; j++) { await tk(); for (let i = 0; i < mu; i++) iv.push(column(A, ga + i * hp, gb + j * hp, ptop)); }
     return { mu, mv, ga, gb, hp, iv };
   };
+  // les mailles a la mesure de la piece (03/11/2026 : au quart de millimetre partout, une grande piece faisait des
+  // centaines de milliers de colonnes -- la page figee, puis l'ecran noir) : 40 000 colonnes au plus en fin, 8 000 en gros
+  const area = Math.max(1, (sa.hi[0] - sa.lo[0]) * (sa.hi[1] - sa.lo[1]));
+  const hpF = Math.max(0.25, Math.sqrt(area / 40000)), hpC = Math.max(0.5, Math.sqrt(area / 8000));
   // l'intersection de deux listes de couches
   const inter = (a, b) => {
     const out = [];
@@ -875,14 +895,16 @@ export async function planeFree({ THREE, collider, moving, base, P, N, collides 
     }
     return false;
   };
-  const gF = pieceGrid(0.25), fine = cellsOf(gF, 1, 0.05, 3), colF = baseGrid(0.2);
+  const gF = await pieceGrid(hpF), fine = cellsOf(gF, 1, 0.05, 3), colF = baseGrid(Math.max(0.2, 0.8 * hpF));
   // en collision pour de bon a sa place (plus de 0,3 mm : une piece imbriquee, que les rayons voient un peu dans son
   // support, n'en est pas une)
   const firm = cellsOf(gF, 1, 0.3, 1);
   if (!firm.length || !hits(firm, colF, 0, 0, 0, 0)) return { M: null, free: true };
-  // la grosse recherche : des angles du plus petit au plus grand, des glissements de 1 mm, la piece rognee de 1 mm
-  // (optimiste : rien de bon n'est manque, la recherche fine verifie)
-  const gC = pieceGrid(0.5), coarse = cellsOf(gC, 2, 0.15, 4), colC = baseGrid(0.5);
+  // la grosse recherche : des angles du plus petit au plus grand, des glissements de 1 mm (plus pour une grande piece),
+  // la piece rognee d'autant que la moitie d'un pas et d'une maille du support (optimiste : rien de bon n'est manque, la
+  // recherche fine verifie)
+  const st = Math.max(1, hpC), hbC = Math.max(0.5, hpC);
+  const gC = await pieceGrid(hpC), coarse = cellsOf(gC, Math.ceil((st / 2 + hbC / 2) / hpC), 0.15, 4), colC = baseGrid(hbC);
   const R = reach !== null ? Math.min(reach, 15) : 15, maxA = lock === null ? 30 : Math.min(30, lock * 180 / Math.PI);
   const angs = [0];
   for (const a of [1, 2, 3, 4, 5, 6, 7.5, 9, 10.5, 12, 15, 17.5, 20, 22.5, 25, 27.5, 30]) if (a <= maxA + 1e-9) angs.push(a, -a);
@@ -892,15 +914,18 @@ export async function planeFree({ THREE, collider, moving, base, P, N, collides 
   const poses = [];
   for (const a of angs) {
     const th = a * Math.PI / 180;
-    if (ax) for (let s = -R; s <= R + 1e-9; s += 1) poses.push({ th, su: s * ax[0], sv: s * ax[1] });
-    else for (let sv = -R; sv <= R + 1e-9; sv += 1) for (let su = -R; su <= R + 1e-9; su += 1) if (Math.hypot(su, sv) <= R + 1e-9) poses.push({ th, su, sv });
+    if (ax) for (let s = -R; s <= R + 1e-9; s += st) poses.push({ th, su: s * ax[0], sv: s * ax[1] });
+    else for (let sv = -R; sv <= R + 1e-9; sv += st) for (let su = -R; su <= R + 1e-9; su += st) if (Math.hypot(su, sv) <= R + 1e-9) poses.push({ th, su, sv });
   }
+  await tk();
   for (const q of poses) q.c = cost(q.th, q.su, q.sv);
   poses.sort((a, b) => a.c - b.c);
   const tops = [];
-  for (const q of poses) {
+  for (let k = 0; k < poses.length; k++) {
+    const q = poses[k];
+    if (k % 16 === 0) await tk();
     if (tops.length >= 8 || (tops.length && q.c > tops[0].c + 4)) break;
-    if (tops.some(t => Math.hypot(t.su - q.su, t.sv - q.sv) < 2 && Math.abs(t.th - q.th) < 2 * Math.PI / 180)) continue;
+    if (tops.some(t => Math.hypot(t.su - q.su, t.sv - q.sv) < 2 * st && Math.abs(t.th - q.th) < 2 * Math.PI / 180)) continue;
     if (!hits(coarse, colC, q.th, q.su, q.sv, 0)) tops.push(q);
   }
   if (!tops.length) return null;
@@ -908,10 +933,10 @@ export async function planeFree({ THREE, collider, moving, base, P, N, collides 
   const prj = (su, sv) => (ax ? [(su * ax[0] + sv * ax[1]) * ax[0], (su * ax[0] + sv * ax[1]) * ax[1]] : [su, sv]);
   // le milieu de ce qui est libre autour de x0 (pas step, au plus lim pas de chaque cote) ; libre jusqu'au bout d'un
   // cote : pas de jeu a partager, x0 reste
-  const mid = (f, x0, step, lim) => {
+  const mid = async (f, x0, step, lim) => {
     let a = 0, b = 0;
-    while (a < lim && f(x0 - (a + 1) * step)) a++;
-    while (b < lim && f(x0 + (b + 1) * step)) b++;
+    while (a < lim && f(x0 - (a + 1) * step)) { a++; if (a % 16 === 0) await tk(); }
+    while (b < lim && f(x0 + (b + 1) * step)) { b++; if (b % 16 === 0) await tk(); }
     return a >= lim || b >= lim ? x0 : x0 + (b - a) / 2 * step;
   };
   // le point de rotation : le centre de la piece, sur la face collee
@@ -925,10 +950,10 @@ export async function planeFree({ THREE, collider, moving, base, P, N, collides 
   // descendre seulement si elle flotte au-dessus d'un fond (pas plus bas que son epaisseur : elle ne tombe pas a travers
   // une fente) ; posee face contre face, elle ne bouge pas
   const maxSink = sa.hi[2] - sa.lo[2] + 0.5;
-  const dropOf = b => {
-    let lo = 0;
+  const dropOf = async b => {
+    let lo = 0, n = 0;
     const step = 0.05;
-    while (lo - step >= -maxSink && !hits(fine, colF, b.th, b.su, b.sv, lo - step)) lo -= step;
+    while (lo - step >= -maxSink && !hits(fine, colF, b.th, b.su, b.sv, lo - step)) { lo -= step; if (++n % 16 === 0) await tk(); }
     // (la piece testee est amincie de 0,05 mm en hauteur : autant de moins, sinon posee a plat elle « descendait » d'autant)
     return lo - step < -maxSink ? 0 : Math.min(0, lo + 0.05);
   };
@@ -944,20 +969,21 @@ export async function planeFree({ THREE, collider, moving, base, P, N, collides 
       near.push({ th, su, sv, c: cost(th, su, sv) });
     }
     near.sort((a, b) => a.c - b.c);
-    const b = near.find(q => okF(q.th, q.su, q.sv));
+    let b = null;
+    for (let k = 0; k < near.length && !b; k++) { if (k % 32 === 0) await tk(); if (okF(near[k].th, near[k].su, near[k].sv)) b = near[k]; }
     if (!b) continue;
     // centree dans son jeu : en angle (sur ±15° : des tenons dans leurs fentes se remettent d'equerre), puis le long de
     // ses propres cotes (une glissiere dans son canal), deux fois
     for (let it = 0; it < 2; it++) {
-      if (lock !== 0) b.th = mid(t2 => (lock === null || Math.abs(t2) <= lock + 1e-9) && okF(t2, b.su, b.sv), b.th, 0.1 * Math.PI / 180, 150);
+      if (lock !== 0) b.th = await mid(t2 => (lock === null || Math.abs(t2) <= lock + 1e-9) && okF(t2, b.su, b.sv), b.th, 0.1 * Math.PI / 180, 150);
       for (const [ex, ey] of [[Math.cos(b.th), Math.sin(b.th)], [-Math.sin(b.th), Math.cos(b.th)]]) {
         if (ax && Math.abs(ex * ax[0] + ey * ax[1]) < 0.99) continue;
-        const s = mid(k => okF(b.th, b.su + k * ex, b.sv + k * ey), 0, 0.05, 60);
+        const s = await mid(k => okF(b.th, b.su + k * ex, b.sv + k * ey), 0, 0.05, 60);
         b.su += s * ex; b.sv += s * ey;
       }
     }
     if (!okF(b.th, b.su, b.sv)) continue;
-    const d = dropOf(b), M = matOf(b, d);
+    const d = await dropOf(b), M = matOf(b, d);
     if (collides && await collides(M)) { blocked++; continue; }
     const tr = b.th * 180 / Math.PI;
     return { M, kind: "plane", sink: -d, depth: -d, drop: -d, moved: Math.hypot(b.su, b.sv), turned: ((tr + 540) % 360) - 180,
