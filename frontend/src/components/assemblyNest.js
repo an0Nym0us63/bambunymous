@@ -742,16 +742,266 @@ export async function nestPlace({ THREE, collider, moving, base, P, N, mode = "n
 }
 
 
+// Caler dans le plan (03/11/2026) : collee face contre face mais en collision (posee en vrac, a cheval sur une paroi),
+// la piece garde son plan de collage -- elle glisse et tourne seulement, jusqu'a la place libre la plus proche, puis se
+// centre dans son jeu, et ne descend que si elle flotte au-dessus d'un fond. Les cartes de hauteur d'emboiter ne voient
+// que le dessus des pieces : une glissiere en queue d'aronde (son pied plus large que l'ouverture, sous les levres du
+// canal) n'y avait pas de place. Ici chaque colonne garde toute sa matiere, couche par couche (les entrees et sorties
+// d'un rayon qui traverse la piece) : une place est libre si, colonne par colonne, rien de la piece ne croise rien du
+// support. Rend null si la piece ne traverse rien a sa place (rien a faire ici) ou si aucune place libre n'est proche.
+export async function planeFree({ THREE, collider, moving, base, P, N, collides = null, lock = null, axis = null, reach = null }) {
+  const { MeshBVH } = await import("three-mesh-bvh");
+  const w = N.clone().normalize();
+  const u = (Math.abs(w.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0)).cross(w).normalize();
+  const v = w.clone().cross(u);
+  const fr = p => { const d = p.clone().sub(P); return [d.dot(u), d.dot(v), d.dot(w)]; };
+  const ax = axis ? (() => { const a = [axis.dot(u), axis.dot(v)], l = Math.hypot(a[0], a[1]); return l > 1e-6 ? [a[0] / l, a[1] / l] : null; })() : null;
+  const bvhOf = g => {
+    const geo = collider.geoOf(g);
+    if (!geo.boundsTree) geo.boundsTree = new MeshBVH(geo);
+    g.updateMatrix();
+    return { bvh: geo.boundsTree, m: g.matrix.clone(), inv: g.matrix.clone().invert() };
+  };
+  const A = moving.map(bvhOf), B = base.map(bvhOf);
+  const span = list => {
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const g of list) {
+      const b = new THREE.Box3();
+      g.children.forEach(m => { if (m.isMesh) { m.geometry.computeBoundingBox(); b.union(m.geometry.boundingBox.clone().applyMatrix4(g.matrix)); } });
+      for (let i = 0; i < 8; i++) {
+        const q = fr(new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z));
+        for (let c = 0; c < 3; c++) { lo[c] = Math.min(lo[c], q[c]); hi[c] = Math.max(hi[c], q[c]); }
+      }
+    }
+    return { lo, hi };
+  };
+  const sa = span(moving), sb = span(base);
+  if (!(sb.hi[0] > sb.lo[0])) return null;
+  // la matiere d'une colonne, en w : [bas, haut, bas, haut, ...] (un rayon qui descend : il entre dans la matiere par
+  // une face tournee vers lui, en sort par une face tournee a l'oppose ; un leger decalage evite de passer pile sur une
+  // arete, comptee deux fois)
+  const ray = new THREE.Ray(), o = new THREE.Vector3(), lp = new THREE.Vector3(), dn = w.clone().negate();
+  const column = (list, x, y, top) => {
+    o.copy(P).addScaledVector(u, x + 1.37e-4).addScaledVector(v, y + 2.91e-4).addScaledVector(w, top);
+    const ev = [];
+    for (const { bvh, m, inv } of list) {
+      ray.origin.copy(o).applyMatrix4(inv); ray.direction.copy(dn).transformDirection(inv);
+      for (const hit of bvh.raycast(ray, THREE.DoubleSide)) {
+        lp.copy(hit.point).applyMatrix4(m);
+        ev.push([lp.sub(P).dot(w), hit.face.normal.dot(ray.direction) < 0 ? 1 : -1]);
+      }
+    }
+    ev.sort((a, b) => b[0] - a[0] || b[1] - a[1]);
+    const out = [];
+    let n = 0, hi = 0;
+    for (const [z, e] of ev) {
+      if (e > 0) { if (n++ === 0) hi = z; }
+      else if (n > 0 && --n === 0 && hi - z > 1e-4) out.push(z, hi);
+    }
+    return out;
+  };
+  // la piece : ses colonnes sur une grille centree (pas hp), autour de son centre
+  const cu = (sa.lo[0] + sa.hi[0]) / 2, cv = (sa.lo[1] + sa.hi[1]) / 2, ptop = sa.hi[2] + 1;
+  const pieceGrid = hp => {
+    const mu = Math.floor((sa.hi[0] - sa.lo[0]) / hp) + 1, mv = Math.floor((sa.hi[1] - sa.lo[1]) / hp) + 1;
+    const ga = sa.lo[0] + ((sa.hi[0] - sa.lo[0]) - (mu - 1) * hp) / 2, gb = sa.lo[1] + ((sa.hi[1] - sa.lo[1]) - (mv - 1) * hp) / 2;
+    const iv = [];
+    for (let j = 0; j < mv; j++) for (let i = 0; i < mu; i++) iv.push(column(A, ga + i * hp, gb + j * hp, ptop));
+    return { mu, mv, ga, gb, hp, iv };
+  };
+  // l'intersection de deux listes de couches
+  const inter = (a, b) => {
+    const out = [];
+    for (let i = 0; i < a.length; i += 2) for (let j = 0; j < b.length; j += 2) {
+      const lo = Math.max(a[i], b[j]), hi = Math.min(a[i + 1], b[j + 1]);
+      if (hi > lo) out.push(lo, hi);
+    }
+    return out;
+  };
+  const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  // les cellules a tester : rognees de n cellules sur les cotes (la grosse recherche, optimiste : elle avance a pas
+  // d'un millimetre), et amincies de tol en hauteur ; d'abord celles ou la forme change (bords, levres, pieds), puis
+  // une sur « every » des autres
+  const cellsOf = (g, n, tol, every) => {
+    let iv = g.iv;
+    for (let it = 0; it < n; it++) {
+      const nx = [];
+      for (let j = 0; j < g.mv; j++) for (let i = 0; i < g.mu; i++) {
+        let c = iv[j * g.mu + i];
+        for (const [a, b] of N4) { const x = i + a, y = j + b; c = c.length ? inter(c, x < 0 || y < 0 || x >= g.mu || y >= g.mv ? [] : iv[y * g.mu + x]) : c; }
+        nx.push(c);
+      }
+      iv = nx;
+    }
+    const edge = [], rest = [];
+    let k = 0;
+    for (let j = 0; j < g.mv; j++) for (let i = 0; i < g.mu; i++) {
+      const c = iv[j * g.mu + i];
+      const s = [];
+      for (let q = 0; q < c.length; q += 2) if (c[q + 1] - c[q] > 2 * tol) s.push(c[q] + tol, c[q + 1] - tol);
+      if (!s.length) continue;
+      const cell = { x: g.ga + i * g.hp - cu, y: g.gb + j * g.hp - cv, s };
+      const diff = N4.some(([a, b]) => {
+        const x = i + a, y = j + b;
+        if (x < 0 || y < 0 || x >= g.mu || y >= g.mv) return true;
+        const o2 = iv[y * g.mu + x];
+        return o2.length !== c.length || o2.some((z, q) => Math.abs(z - c[q]) > 0.3);
+      });
+      if (diff) edge.push(cell); else if (k++ % every === 0) rest.push(cell);
+    }
+    return edge.concat(rest);
+  };
+  // le support : ses colonnes a la demande, sur une grille de pas hb
+  const btop = sb.hi[2] + 1;
+  const baseGrid = hb => {
+    const cache = new Map();
+    return (x, y) => {
+      const i = Math.round(x / hb), j = Math.round(y / hb), key = i * 100003 + j;
+      let c = cache.get(key);
+      if (!c) { c = x < sb.lo[0] - hb || x > sb.hi[0] + hb || y < sb.lo[1] - hb || y > sb.hi[1] + hb ? [] : column(B, i * hb, j * hb, btop); cache.set(key, c); }
+      return c;
+    };
+  };
+  // une place (angle th autour de w par le centre de la piece, glissement su, sv, hauteur d) traverse-t-elle le support ?
+  const hits = (cells, col, th, su, sv, d) => {
+    const cs = Math.cos(th), sn = Math.sin(th);
+    for (const c of cells) {
+      const b = col(cu + cs * c.x - sn * c.y + su, cv + sn * c.x + cs * c.y + sv);
+      if (!b.length) continue;
+      for (let q = 0; q < c.s.length; q += 2) {
+        const lo = c.s[q] + d, hi = c.s[q + 1] + d;
+        for (let r = 0; r < b.length; r += 2) if (lo < b[r + 1] && b[r] < hi) return true;
+      }
+    }
+    return false;
+  };
+  const gF = pieceGrid(0.25), fine = cellsOf(gF, 1, 0.05, 3), colF = baseGrid(0.2);
+  // en collision pour de bon a sa place (plus de 0,3 mm : une piece imbriquee, que les rayons voient un peu dans son
+  // support, n'en est pas une)
+  const firm = cellsOf(gF, 1, 0.3, 1);
+  if (!firm.length || !hits(firm, colF, 0, 0, 0, 0)) return { M: null, free: true };
+  // la grosse recherche : des angles du plus petit au plus grand, des glissements de 1 mm, la piece rognee de 1 mm
+  // (optimiste : rien de bon n'est manque, la recherche fine verifie)
+  const gC = pieceGrid(0.5), coarse = cellsOf(gC, 2, 0.15, 4), colC = baseGrid(0.5);
+  const R = reach !== null ? Math.min(reach, 15) : 15, maxA = lock === null ? 30 : Math.min(30, lock * 180 / Math.PI);
+  const angs = [0];
+  for (const a of [1, 2, 3, 4, 5, 6, 7.5, 9, 10.5, 12, 15, 17.5, 20, 22.5, 25, 27.5, 30]) if (a <= maxA + 1e-9) angs.push(a, -a);
+  const cost = (th, su, sv) => Math.hypot(su, sv) + 0.15 * Math.abs(th * 180 / Math.PI);
+  // essayees de la plus proche a la plus lointaine : on s'arrete a huit places libres distinctes, ou a 4 mm (ou 27°)
+  // au-dela de la premiere
+  const poses = [];
+  for (const a of angs) {
+    const th = a * Math.PI / 180;
+    if (ax) for (let s = -R; s <= R + 1e-9; s += 1) poses.push({ th, su: s * ax[0], sv: s * ax[1] });
+    else for (let sv = -R; sv <= R + 1e-9; sv += 1) for (let su = -R; su <= R + 1e-9; su += 1) if (Math.hypot(su, sv) <= R + 1e-9) poses.push({ th, su, sv });
+  }
+  for (const q of poses) q.c = cost(q.th, q.su, q.sv);
+  poses.sort((a, b) => a.c - b.c);
+  const tops = [];
+  for (const q of poses) {
+    if (tops.length >= 8 || (tops.length && q.c > tops[0].c + 4)) break;
+    if (tops.some(t => Math.hypot(t.su - q.su, t.sv - q.sv) < 2 && Math.abs(t.th - q.th) < 2 * Math.PI / 180)) continue;
+    if (!hits(coarse, colC, q.th, q.su, q.sv, 0)) tops.push(q);
+  }
+  if (!tops.length) return null;
+  const okF = (th, su, sv) => !hits(fine, colF, th, su, sv, 0);
+  const prj = (su, sv) => (ax ? [(su * ax[0] + sv * ax[1]) * ax[0], (su * ax[0] + sv * ax[1]) * ax[1]] : [su, sv]);
+  // le milieu de ce qui est libre autour de x0 (pas step, au plus lim pas de chaque cote) ; libre jusqu'au bout d'un
+  // cote : pas de jeu a partager, x0 reste
+  const mid = (f, x0, step, lim) => {
+    let a = 0, b = 0;
+    while (a < lim && f(x0 - (a + 1) * step)) a++;
+    while (b < lim && f(x0 + (b + 1) * step)) b++;
+    return a >= lim || b >= lim ? x0 : x0 + (b - a) / 2 * step;
+  };
+  // le point de rotation : le centre de la piece, sur la face collee
+  const C = P.clone().addScaledVector(u, cu).addScaledVector(v, cv);
+  const matOf = (b, d) => {
+    const Rm = new THREE.Matrix4().makeTranslation(C.x, C.y, C.z).multiply(new THREE.Matrix4().makeRotationAxis(w, b.th))
+      .multiply(new THREE.Matrix4().makeTranslation(-C.x, -C.y, -C.z));
+    const sh = u.clone().multiplyScalar(b.su).addScaledVector(v, b.sv).addScaledVector(w, d);
+    return new THREE.Matrix4().makeTranslation(sh.x, sh.y, sh.z).multiply(Rm);
+  };
+  // descendre seulement si elle flotte au-dessus d'un fond (pas plus bas que son epaisseur : elle ne tombe pas a travers
+  // une fente) ; posee face contre face, elle ne bouge pas
+  const maxSink = sa.hi[2] - sa.lo[2] + 0.5;
+  const dropOf = b => {
+    let lo = 0;
+    const step = 0.05;
+    while (lo - step >= -maxSink && !hits(fine, colF, b.th, b.su, b.sv, lo - step)) lo -= step;
+    // (la piece testee est amincie de 0,05 mm en hauteur : autant de moins, sinon posee a plat elle « descendait » d'autant)
+    return lo - step < -maxSink ? 0 : Math.min(0, lo + 0.05);
+  };
+  // de la plus proche a la plus lointaine : la premiere libre, centree, qui ne traverse aucune autre piece
+  let blocked = 0;
+  for (const t of tops) {
+    // la place libre la plus proche autour (au quart de millimetre, au quart de degre)
+    const near = [];
+    for (let da = -1.5; da <= 1.5001; da += 0.25) for (let dv = -1.25; dv <= 1.2501; dv += 0.25) for (let du = -1.25; du <= 1.2501; du += 0.25) {
+      const th = t.th + da * Math.PI / 180;
+      if (lock !== null && Math.abs(th) > lock + 1e-9) continue;
+      const [su, sv] = prj(t.su + du, t.sv + dv);
+      near.push({ th, su, sv, c: cost(th, su, sv) });
+    }
+    near.sort((a, b) => a.c - b.c);
+    const b = near.find(q => okF(q.th, q.su, q.sv));
+    if (!b) continue;
+    // centree dans son jeu : en angle (sur ±15° : des tenons dans leurs fentes se remettent d'equerre), puis le long de
+    // ses propres cotes (une glissiere dans son canal), deux fois
+    for (let it = 0; it < 2; it++) {
+      if (lock !== 0) b.th = mid(t2 => (lock === null || Math.abs(t2) <= lock + 1e-9) && okF(t2, b.su, b.sv), b.th, 0.1 * Math.PI / 180, 150);
+      for (const [ex, ey] of [[Math.cos(b.th), Math.sin(b.th)], [-Math.sin(b.th), Math.cos(b.th)]]) {
+        if (ax && Math.abs(ex * ax[0] + ey * ax[1]) < 0.99) continue;
+        const s = mid(k => okF(b.th, b.su + k * ex, b.sv + k * ey), 0, 0.05, 60);
+        b.su += s * ex; b.sv += s * ey;
+      }
+    }
+    if (!okF(b.th, b.su, b.sv)) continue;
+    const d = dropOf(b), M = matOf(b, d);
+    if (collides && await collides(M)) { blocked++; continue; }
+    const tr = b.th * 180 / Math.PI;
+    return { M, kind: "plane", sink: -d, depth: -d, drop: -d, moved: Math.hypot(b.su, b.sv), turned: ((tr + 540) % 360) - 180,
+      contact: P.clone().addScaledVector(u, cu + b.su).addScaledVector(v, cv + b.sv).addScaledVector(w, d), exact: true };
+  }
+  return blocked ? { blocked } : null;
+}
+
+
 // Caler (03/11/2026) : un seul geste a la place d'emboiter, aligner (et du choix entre eux). La piece collee :
 //  1. s'emboite si elle trouve un logement (elle y descend d'au moins 0,3 mm : une reglette dans sa rainure, un tenon
 //     dans son trou) ;
 //  2. sinon s'aligne sur la face qui la porte (une plaque sur un dessus, un panneau sur un flanc), si ca rapporte ;
 //  3. puis une passe fine : la meme recherche, a 0,2 mm pres et a 3° pres, autour de la place trouvee (la premiere
 //     passe, a la maille de la zone, laissait une reglette de 140 mm decalee de 0,5 a 0,7 mm dans sa rainure).
-// Rend { M (depuis la place de depart), kind : "nest" | "align" | null, r (le resultat de l'etape retenue), fine }.
+//  0. (03/11/2026) d'abord, si elle traverse l'autre piece a sa place : dans son plan de collage (planeFree), glissee et
+//     tournee jusqu'a la place libre la plus proche -- une glissiere posee a cheval sur la levre de son canal ;
+// Rend { M (depuis la place de depart), kind : "plane" | "nest" | "align" | null, r (le resultat de l'etape retenue), fine }.
 // moving : leurs matrices sont deplacees le temps de la passe fine, puis remises.
 export async function snapPlace(o) {
   const { THREE, moving, P, N, collides = null, lock = null, axis = null, reach = null } = o;
+  const pf = await planeFree(o);
+  if (pf && pf.M) {
+    // degagee : puis alignee de la, si ca rapporte sans rien traverser ni changer de plan (un panneau a tenons, dans ses
+    // fentes, se met a fleur de la boite ; une glissiere en queue d'aronde, que les cartes de hauteur croient a travers
+    // les levres, reste ou elle est)
+    const saved = moving.map(g => { g.updateMatrix(); return [g, g.matrix.clone()]; });
+    let al = null;
+    try {
+      for (const [g, m0] of saved) pf.M.clone().multiply(m0).decompose(g.position, g.quaternion, g.scale);
+      const c2 = collides ? (M2 => collides(M2.clone().multiply(pf.M))) : null;
+      al = await nestPlace({ ...o, P: pf.contact.clone(), mode: "align", collides: c2, lock: lock === 0 ? 0 : 15 * Math.PI / 180,
+        reach: reach === null ? 15 : Math.min(15, reach) });
+    } catch (e) {
+      al = null;
+    } finally {
+      for (const [g, m0] of saved) { m0.decompose(g.position, g.quaternion, g.scale); g.updateMatrix(); }
+    }
+    if (al && al.M && (al.gain ?? 0) > 0.01 && al.cov1 >= 0.2 && (al.clash ?? 1) < 0.005 && Math.abs(al.sink ?? 0) < 0.05) {
+      const M = al.M.clone().multiply(pf.M);
+      return { M, kind: "plane", r: { ...pf, M, moved: pf.moved + (al.moved || 0), turned: pf.turned + (al.turned || 0), cov0: al.cov0, cov1: al.cov1 }, fine: null, nest: null, align: al };
+    }
+    return { M: pf.M, kind: "plane", r: pf, fine: null, nest: null };
+  }
   const nest = await nestPlace({ ...o, mode: "nest", bounded: true });
   let kind = null, r = null, al;
   const alignOk = a => a && a.M && (a.gain ?? 0) > 0.01 && (a.cov1 >= 0.2 || a.cov1 - (a.cov0 || 0) >= 0.2);

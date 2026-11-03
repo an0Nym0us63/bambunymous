@@ -1288,7 +1288,7 @@ const EDIT_HELP = [
     ["Glisser à travers elle", "un trait rouge : la pièce est tranchée sur la longueur du trait, dans toute l'épaisseur que voit l'écran (rien au-delà des bouts du trait) ; les parties qui ne tiennent plus ensemble deviennent des morceaux, chacun de sa couleur"],
     ["Plusieurs traits", "un support tenu par plusieurs ponts : un trait par pont ; chacun reste marqué en rouge, et la pièce se sépare quand tous sont tranchés ; tourne la vue au clic droit entre deux traits ; ✕ efface les traits"],
     ["🎯 Caler", "une pièce collée (🧲 Coller, même au jugé) trouve sa place autour du contact : dans son logement s'il y en a un (une réglette dans sa rainure, un bloc dans sa poche, même à 0,2 mm de jeu), sinon à plat, d'équerre et centrée sur ce qui la porte (une plaque sur un cadre, un panneau sur une boîte), sinon elle épouse la surface (une face courbe) ; puis une passe fine, au dixième de millimètre"],
-    ["▾ (à côté de Caler)", "forcer une seule façon : 🧩 Emboîter seulement, 📐 Aligner seulement, 〰 Épouser la surface"],
+    ["▾ (à côté de Caler)", "forcer une seule façon : ↔ Dégager dans le plan, 🧩 Emboîter seulement, 📐 Aligner seulement, 〰 Épouser la surface"],
     ["🧹 Nettoyer", "retire d'un coup les petits restes de la pièce choisie (ce qui ne tient que par un coin, les ailettes et aiguilles qui pendent), proposés en rouge à valider"],
     ["🧽 Gomme", "allumée, le glisser peint en rouge ce qu'il touche sur la pièce choisie (ou sur les morceaux proposés) : les bouts de support restés collés, une bavure ; au lâcher, c'est détaché, et ✓ le retire de l'assemblage (📋 Pièces : ↩ le remet)"],
     ["🪄 Détacher les supports", "les supports intégrés au modèle (parois et plaques fines, à faces planes, fondues à la pièce) sont repérés d'eux-mêmes et proposés en couleur, sans trait à tracer"],
@@ -1314,6 +1314,7 @@ const EDIT_HELP = [
     ["⟲ / ⟳ 90° 15°", "tourner d'un cran autour du contact"],
     ["Les pièces collées", "suivent celle sur laquelle elles sont collées"],
     ["✂ Décoller", "libérer la pièce (écartée de 2 mm)"],
+    ["↔ Dégager dans le plan (Caler ▾)", "collée face contre face mais à travers l'autre pièce (posée à cheval sur une paroi, une lèvre) : elle garde son plan de collage, glisse et tourne jusqu'à la place libre la plus proche, s'y centre dans son jeu, et ne descend que si elle flotte au-dessus d'un fond ; Caler le fait seul en premier"],
     ["〰 Épouser la surface (Caler ▾)", "après un collage (face ou points) : la pièce épouse au mieux la surface de l'autre près du contact, puis recule juste assez pour ne rien traverser ; Caler le fait seul sur une face courbe"],
     ["🛡 Anti-collision", "en coulissant, la pièce collée s'arrête au contact de la matière"],
   ]],
@@ -1552,6 +1553,7 @@ function EditBar({ est, api, onSave, onReset, onClose, saving, onVersions, compa
         <button type="button" onClick={() => api?.snap()} style={b(true)}
           data-tip="La pièce trouve sa place autour de là où elle est collée : dans son logement s'il y en a un (une réglette dans sa rainure, un bloc dans sa poche), sinon à plat, d'équerre et centrée sur ce qui la porte, sinon elle épouse la surface (une face courbe) ; au dixième de millimètre">🎯 Caler</button>
         <BarMenu b={b} up={compact} label="▾" tip="Forcer une seule façon de caler" items={[
+          { label: "↔ Dégager dans le plan", onClick: () => api?.plane(), tip: "Collée face contre face mais à travers l'autre pièce : elle glisse et tourne dans son plan de collage jusqu'à la place libre la plus proche (une glissière dans son canal), sans monter" },
           { label: "🧩 Emboîter seulement", onClick: () => api?.nest(), tip: "La place où elle descend le plus (un bloc dans son logement), sans rien traverser" },
           { label: "📐 Aligner seulement", onClick: () => api?.align(), tip: "À plat sur la face qui la porte, d'équerre et centrée, même s'il y a un logement" },
           { label: "〰 Épouser la surface", onClick: () => api?.refine(), tip: "Pour une face courbe : la pièce épouse au mieux l'autre surface près du contact, sans la traverser" },
