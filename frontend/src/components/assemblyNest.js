@@ -1155,6 +1155,173 @@ export async function planeFree({ THREE, collider, moving, base, P, N, collides 
 }
 
 
+// Ajuster en 3D (03/11/2026) : la piece collee pres de sa place, de travers, glisse et tourne dans les trois dimensions
+// (6 degres de liberte, autour de la ou elle est collee) jusqu'a ce que la face tournee vers l'autre piece la touche
+// partout sans rien traverser -- une plaque au dessous a plusieurs pans dans son logement pyramidal d'une coque (le
+// dessus d'une carapace) : ni emboiter (une seule direction de descente) ni aligner (une seule face plane) ne savent.
+// La distance signee au support (< 0 dans sa matiere), lue au plus proche triangle, gardee sur une grille de 0,4 mm et
+// interpolee ; l'energie : 6 x la penetration moyenne (au-dela de 0,1 mm) moins la part de la face d'appui a moins de
+// 0,3 mm du support (en cloche) ; des pas sur chaque axe (trois rotations, trois glissements), de plus en plus fins.
+// reach (mm) et turn (degres) bornent le chemin. Rend null si rien ne s'ameliore.
+export async function fit3D({ THREE, collider, moving, base, P, N, collides = null, tick = null, reach = 6, turn = 25 }) {
+  const tk = tick || (() => null);
+  const { MeshBVH } = await import("three-mesh-bvh");
+  const w = N.clone().normalize();
+  const bases = base.map(g => {
+    const geo = collider.geoOf(g);
+    if (!geo.boundsTree) geo.boundsTree = new MeshBVH(geo);
+    g.updateMatrix();
+    return { geo, bvh: geo.boundsTree, m: g.matrix.clone(), inv: g.matrix.clone().invert(), nm: new THREE.Matrix3().getNormalMatrix(g.matrix) };
+  });
+  // la distance signee en un point (repere du modele) : au plus proche triangle des pieces support, du cote de sa normale
+  const lp = new THREE.Vector3(), tgt = { point: new THREE.Vector3(), distance: 0, faceIndex: 0 };
+  const A_ = new THREE.Vector3(), B_ = new THREE.Vector3(), C_ = new THREE.Vector3(), nf = new THREE.Vector3(), wp = new THREE.Vector3();
+  const BAND = 3;
+  const sdfAt = (x, y, z) => {
+    let best = BAND, sgn = 1;
+    for (const b of bases) {
+      lp.set(x, y, z).applyMatrix4(b.inv);
+      const r = b.bvh.closestPointToPoint(lp, tgt, 0, BAND);
+      if (!r || !Number.isFinite(r.distance)) continue;
+      wp.copy(r.point).applyMatrix4(b.m);
+      const d = Math.hypot(wp.x - x, wp.y - y, wp.z - z);
+      if (d >= best) continue;
+      const ix = b.geo.index ? b.geo.index.array : null, pa = b.geo.attributes.position, f = r.faceIndex * 3;
+      A_.fromBufferAttribute(pa, ix ? ix[f] : f); B_.fromBufferAttribute(pa, ix ? ix[f + 1] : f + 1); C_.fromBufferAttribute(pa, ix ? ix[f + 2] : f + 2);
+      nf.subVectors(C_, B_).cross(A_.clone().sub(B_)).normalize();
+      // (le point, dans le repere de la piece : la normale du triangle y est)
+      best = d; sgn = (lp.x - r.point.x) * nf.x + (lp.y - r.point.y) * nf.y + (lp.z - r.point.z) * nf.z >= 0 ? 1 : -1;
+    }
+    return best * sgn;
+  };
+  // gardee sur une grille (interpolee) : les poses voisines relisent les memes noeuds ; un tableau sur la zone ou la
+  // piece peut aller (un dictionnaire prenait le tiers du temps), un dictionnaire au-dela
+  const H = 0.4, cache = new Map();
+  const mb = new THREE.Box3();
+  for (const g of moving) { g.updateMatrix(); g.children.forEach(m => { if (m.isMesh) { m.geometry.computeBoundingBox(); mb.union(m.geometry.boundingBox.clone().applyMatrix4(g.matrix)); } }); }
+  const ext = reach + Math.max(...mb.getSize(new THREE.Vector3()).toArray()) * Math.sin(Math.min(Math.PI / 2, turn * Math.PI / 180)) / 2 + 1.5;
+  const gi0 = Math.floor((mb.min.x - ext) / H), gj0 = Math.floor((mb.min.y - ext) / H), gk0 = Math.floor((mb.min.z - ext) / H);
+  let gnx = Math.ceil((mb.max.x + ext) / H) - gi0 + 2, gny = Math.ceil((mb.max.y + ext) / H) - gj0 + 2, gnz = Math.ceil((mb.max.z + ext) / H) - gk0 + 2;
+  const big = gnx * gny * gnz > 8e6;                           // trop grand : le dictionnaire seul
+  const grid = big ? null : new Float32Array(gnx * gny * gnz).fill(NaN);
+  const node = (i, j, k) => {
+    const a = i - gi0, b2 = j - gj0, c = k - gk0;
+    if (grid && a >= 0 && b2 >= 0 && c >= 0 && a < gnx && b2 < gny && c < gnz) {
+      const q = (c * gny + b2) * gnx + a;
+      let v = grid[q];
+      if (v !== v) v = grid[q] = sdfAt(i * H, j * H, k * H);
+      return v;
+    }
+    const key = (i * 73856093) ^ (j * 19349663) ^ (k * 83492791);
+    let e = cache.get(key);
+    if (e === undefined || e[0] !== i || e[1] !== j || e[2] !== k) { e = [i, j, k, sdfAt(i * H, j * H, k * H)]; cache.set(key, e); }
+    return e[3];
+  };
+  const sdf = (x, y, z) => {
+    const gx = x / H, gy = y / H, gz = z / H, i = Math.floor(gx), j = Math.floor(gy), k = Math.floor(gz), fx = gx - i, fy = gy - j, fz = gz - k;
+    const c00 = node(i, j, k) * (1 - fx) + node(i + 1, j, k) * fx, c10 = node(i, j + 1, k) * (1 - fx) + node(i + 1, j + 1, k) * fx;
+    const c01 = node(i, j, k + 1) * (1 - fx) + node(i + 1, j, k + 1) * fx, c11 = node(i, j + 1, k + 1) * (1 - fx) + node(i + 1, j + 1, k + 1) * fx;
+    return (c00 * (1 - fy) + c10 * fy) * (1 - fz) + (c01 * (1 - fy) + c11 * fy) * fz;
+  };
+  // des points de la surface de la piece (au hasard, selon l'aire, toujours les memes), et leur normale
+  let seed = 12345;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  const tris = [];
+  let area = 0;
+  for (const g of moving) {
+    const geo = collider.geoOf(g);
+    g.updateMatrix();
+    const pa = geo.attributes.position, ix = geo.index ? geo.index.array : null, n = ix ? ix.length / 3 : pa.count / 3;
+    for (let t = 0; t < n; t++) {
+      if (t % 10000 === 0) await tk();
+      const a = new THREE.Vector3().fromBufferAttribute(pa, ix ? ix[3 * t] : 3 * t).applyMatrix4(g.matrix);
+      const b = new THREE.Vector3().fromBufferAttribute(pa, ix ? ix[3 * t + 1] : 3 * t + 1).applyMatrix4(g.matrix);
+      const c = new THREE.Vector3().fromBufferAttribute(pa, ix ? ix[3 * t + 2] : 3 * t + 2).applyMatrix4(g.matrix);
+      const cr = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a)), ar = cr.length() / 2;
+      if (ar < 1e-9) continue;
+      area += ar;
+      tris.push([a, b, c, cr.normalize(), area]);
+    }
+  }
+  if (!tris.length) return null;
+  const NP = 1500, pts = new Float64Array(NP * 3), und = [];
+  for (let q = 0; q < NP; q++) {
+    const u = rnd() * area;
+    let lo = 0, hi = tris.length - 1;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (tris[m][4] < u) lo = m + 1; else hi = m; }
+    const [a, b, c, n] = tris[lo], r1 = Math.sqrt(rnd()), r2 = rnd();
+    for (let e = 0; e < 3; e++) { const ax = ["x", "y", "z"][e]; pts[3 * q + e] = (1 - r1) * a[ax] + r1 * (1 - r2) * b[ax] + r1 * r2 * c[ax]; }
+    // la face d'appui : tournee vers le support
+    if (n.dot(w) < -0.2) und.push(q);
+  }
+  if (und.length < 20) return null;
+  // le pivot : le milieu de la face d'appui
+  const piv = new THREE.Vector3();
+  for (const q of und) piv.x += pts[3 * q], piv.y += pts[3 * q + 1], piv.z += pts[3 * q + 2];
+  piv.divideScalar(und.length);
+  const isU = new Uint8Array(NP);
+  for (const q of und) isU[q] = 1;
+  // une pose : rotation (vecteur axe x angle, radians) autour du pivot, puis glissement
+  const R = new THREE.Matrix4(), q4 = new THREE.Quaternion(), ax3 = new THREE.Vector3();
+  const matOf = x => {
+    const th = Math.hypot(x[0], x[1], x[2]);
+    if (th > 1e-12) q4.setFromAxisAngle(ax3.set(x[0] / th, x[1] / th, x[2] / th), th); else q4.identity();
+    R.makeRotationFromQuaternion(q4);
+    const M = new THREE.Matrix4().makeTranslation(piv.x + x[3], piv.y + x[4], piv.z + x[5]).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-piv.x, -piv.y, -piv.z));
+    return M;
+  };
+  // l'energie d'une pose, sur un point sur « every »
+  const E = (x, every = 1, sig = 0.3) => {
+    const M = matOf(x).elements;
+    let pen = 0, np = 0, con = 0, nu = 0;
+    for (let q = 0; q < NP; q += every) {
+      const px = pts[3 * q], py = pts[3 * q + 1], pz = pts[3 * q + 2];
+      const s = sdf(M[0] * px + M[4] * py + M[8] * pz + M[12], M[1] * px + M[5] * py + M[9] * pz + M[13], M[2] * px + M[6] * py + M[10] * pz + M[14]);
+      np++;
+      if (s < -0.1) pen += -s - 0.1;
+      if (isU[q]) { nu++; con += Math.exp(-((s / sig) ** 2)); }
+    }
+    return { e: 6 * pen / np - (nu ? con / nu : 0), pen: pen / np, cov: nu ? con / nu : 0 };
+  };
+  // (la grille d'abord remplie sous la piece, par paquets : sinon la premiere energie bloquait la page une demi-seconde)
+  for (let q = 0; q < NP; q++) { if (q % 64 === 0) await tk(); sdf(pts[3 * q], pts[3 * q + 1], pts[3 * q + 2]); }
+  const x0 = [0, 0, 0, 0, 0, 0];
+  const e0 = E(x0);
+  let x = x0.slice(), cur;
+  // pas sur chaque axe, de plus en plus fins (rotation : 4° par mm de pas)
+  const dirs = [];
+  for (let d = 0; d < 6; d++) for (const sg of [1, -1]) { const v = [0, 0, 0, 0, 0, 0]; v[d] = sg; dirs.push(v); }
+  const ok = y => Math.hypot(y[3], y[4], y[5]) <= reach && Math.hypot(y[0], y[1], y[2]) <= turn * Math.PI / 180;
+  // (la cloche du contact large aux grands pas : la piece « sent » la surface de plus loin, puis se resserre ; et des
+  // directions au hasard en plus des axes -- sur les seuls axes, une plaque partie de 6° de travers restait coincee)
+  for (const [st, every, sig] of [[1.5, 3, 1.2], [1, 3, 0.8], [0.5, 2, 0.5], [0.25, 1, 0.3], [0.12, 1, 0.3], [0.06, 1, 0.3]]) {
+    cur = E(x, every, sig).e;
+    for (let it = 0; it < 40; it++) {
+      await tk();
+      let bx = null, be = cur;
+      const rd = [];
+      for (let r = 0; r < 12; r++) { const v = [0, 0, 0, 0, 0, 0].map(() => rnd() * 2 - 1), l = Math.hypot(...v) || 1; rd.push(v.map(a => a / l * 1.5)); }
+      for (const v of dirs.concat(rd)) {
+        await tk();
+        const y = x.map((a, d) => a + v[d] * (d < 3 ? st * 4 * Math.PI / 180 : st));
+        if (!ok(y)) continue;
+        const e = E(y, every, sig).e;
+        if (e < be - 1e-6) { be = e; bx = y; }
+      }
+      if (!bx) break;
+      x = bx; cur = be;
+    }
+  }
+  const e1 = E(x);
+  // rien de mieux, ou encore a travers le support
+  if (!(e1.e < e0.e - 0.02) || e1.pen > 0.05) return null;
+  const M = matOf(x);
+  if (collides && await collides(M)) return { blocked: 1 };
+  const th = Math.hypot(x[0], x[1], x[2]) * 180 / Math.PI;
+  return { M, kind: "fit3d", moved: Math.hypot(x[3], x[4], x[5]), turned: th, cov0: e0.cov, cov1: e1.cov, pen: e1.pen, e0: e0.e, e1: e1.e,
+    contact: piv.clone().applyMatrix4(M), exact: true, sink: 0 };
+}
+
 // Caler (03/11/2026) : un seul geste a la place d'emboiter, aligner (et du choix entre eux). La piece collee :
 //  1. s'emboite si elle trouve un logement (elle y descend d'au moins 0,3 mm : une reglette dans sa rainure, un tenon
 //     dans son trou) ;
@@ -1163,9 +1330,48 @@ export async function planeFree({ THREE, collider, moving, base, P, N, collides 
 //     passe, a la maille de la zone, laissait une reglette de 140 mm decalee de 0,5 a 0,7 mm dans sa rainure).
 //  0. (03/11/2026) d'abord, si elle traverse l'autre piece a sa place : dans son plan de collage (planeFree), glissee et
 //     tournee jusqu'a la place libre la plus proche -- une glissiere posee a cheval sur la levre de son canal ;
-// Rend { M (depuis la place de depart), kind : "plane" | "nest" | "align" | null, r (le resultat de l'etape retenue), fine }.
+//  (03/11/2026) avant tout, une piece au dessous a plusieurs pans (une plaque de carapace dans son logement pyramidal)
+//     s'ajuste en 3D (fit3D) ; la suite habituelle seulement si ca n'apporte rien.
+// Rend { M (depuis la place de depart), kind : "plane" | "nest" | "align" | "fit3d" | null, r (le resultat de l'etape
+// retenue), fine }.
 // moving : leurs matrices sont deplacees le temps de la passe fine, puis remises.
 export async function snapPlace(o) {
+  const { THREE, moving, collides = null } = o;
+  // a plusieurs pans : la part (en aire) de ce qui regarde l'autre piece et s'ecarte de plus de 15° de la normale du
+  // collage -- une plaque de carapace (dessous en pointe de diamant) ; une glissiere, une reglette, un couvercle ont un
+  // dessous plat (leurs flancs, a 90°, ne regardent pas l'autre piece)
+  const w = o.N.clone().normalize();
+  let down = 0, tilt = 0;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3();
+  for (const g of moving) {
+    const geo = o.collider.geoOf(g), pa = geo.attributes.position, ix = geo.index ? geo.index.array : null, nt = ix ? ix.length / 3 : pa.count / 3;
+    g.updateMatrix();
+    const nm = new THREE.Matrix3().getNormalMatrix(g.matrix);
+    for (let t = 0; t < nt; t++) {
+      if (t % 20000 === 0 && o.tick) await o.tick();
+      a.fromBufferAttribute(pa, ix ? ix[3 * t] : 3 * t); b.fromBufferAttribute(pa, ix ? ix[3 * t + 1] : 3 * t + 1); c.fromBufferAttribute(pa, ix ? ix[3 * t + 2] : 3 * t + 2);
+      n.subVectors(b, a).cross(c.sub(a));
+      const ar = n.length() / 2;
+      if (ar < 1e-12) continue;
+      n.applyMatrix3(nm).normalize();
+      const d = -n.dot(w);
+      if (d < 0.2) continue;
+      down += ar;
+      if (d < Math.cos(15 * Math.PI / 180)) tilt += ar;
+    }
+  }
+  const facets = down > 0 && tilt / down >= 0.3 && o.lock !== 0 && !o.axis;
+  // (03/11/2026) a plusieurs pans : ajuster en 3D d'abord (les etapes d'une seule direction l'emmenaient a 13 mm, dans
+  // un autre logement) ; s'il n'apporte rien, la suite habituelle
+  if (facets) {
+    const f = await fit3D({ ...o, reach: o.reach === null || o.reach === undefined ? 6 : Math.min(6, o.reach) });
+    if (f && f.M && f.cov1 >= 0.5 && f.pen < 0.03) return { M: f.M, kind: "fit3d", r: f, fine: null, nest: null };
+    if (f && f.blocked) return { M: null, kind: null, r: { blocked: f.blocked }, nest: null };
+  }
+  return snapCore(o);
+}
+
+async function snapCore(o) {
   const { THREE, moving, P, N, collides = null, lock = null, axis = null, reach = null } = o;
   const pf = await planeFree(o);
   // (03/11/2026) seulement soulevee sur place (rien de libre a cote, a sa hauteur) : emboiter cherche d'abord un logement
