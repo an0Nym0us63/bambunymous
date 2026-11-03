@@ -672,9 +672,11 @@ class MQTTManager:
             _ext = _external_unit(p)
             if _ext:
                 _units.append(_ext)
+            from ..services.sensors import humidity as _sensors_humidity
             for ams_raw in _units:
                 ams = AMS(id=int(ams_raw.get("id", 0)),
-                          humidity=int(ams_raw.get("humidity_raw", 0)),
+                          # decalage d'humidite par AMS (Parametres › Imprimante), applique a la source
+                          humidity=_sensors_humidity(int(ams_raw.get("id", 0)), int(ams_raw.get("humidity_raw", 0))),
                           temp=float(ams_raw.get("temp", 0)),
                           dry_time=int(ams_raw.get("dry_time", 0)))
                 # info (hexa) : bits 8-11 = buse alimentee (0xE : par l'aiguillage),

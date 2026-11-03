@@ -4,6 +4,8 @@ import { importRetry } from "../utils/importRetry";
 import AllAlertsModal from "./AllAlertsModal";
 import { Hide } from "./Cachettes";
 import { useFriend, currentFriend } from "../store/friend";
+import { useSensorHistory } from "../store/sensors";
+import { SensorSpark, SensorChart, SensorLegend, amsLines, heatLines } from "./SensorChart";
 import { liveOfSpool, LiveHatch, LiveTo, LiveSwitchButton } from "./LiveUsage";
 import { useLiveSpool, useLiveCurrent } from "../store/liveUsage";
 import { useLayer, LayerCanvas, LayerExplorer } from "./LayerView";
@@ -408,6 +410,22 @@ function ThermoGauge({ v, t, max, size = 90, c, label, sub, active = false, targ
   );
 }
 // la vue en grand de l'humidite : des gouttes a la largeur reelle de la fenetre
+// les releves des trois derniers jours, dans le detail des tuiles Humidite et Temperatures (03/11/2026)
+function HumHistory() {
+  const hist = useSensorHistory(72);
+  const lines = hist ? amsLines(hist) : [];
+  if (!lines.length) return null;
+  return <><H2>Les 3 derniers jours</H2><SensorLegend lines={lines} unit="%"/>
+    <SensorChart lines={lines} points={hist} hours={72} height={170} unit="%"/></>;
+}
+function TempHistory({ chamber }) {
+  const hist = useSensorHistory(72);
+  const lines = hist ? heatLines(hist, { chamber }) : [];
+  if (!lines.length) return null;
+  return <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+    <H2>Les 3 derniers jours</H2><SensorLegend lines={lines} unit="°"/>
+    <SensorChart lines={lines} points={hist} hours={72} height={190} unit="°" lo={0}/></div>;
+}
 function HumZoom({ list, col, o, lo, hi }) {
   const { W } = useBox();
   const g = fitGrid(list.length, W, 360, { ar: DROP_AR, extra: DROP_EXTRA + 14, max: 130, gap: 16 });
@@ -415,6 +433,7 @@ function HumZoom({ list, col, o, lo, hi }) {
     <div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, auto)`, justifyContent: "space-evenly", gap: 16, padding: "8px 0" }}>
       {list.map(a => <DropGauge key={a.id} value={a.humidity} color={col(a.humidity)} size={Math.max(60, g.size)} label={amsLab(a)}
         sub={a.temp ? `${Number(a.temp).toFixed(1).replace(".", ",")} °C` : null}/>)}</div>
+    <HumHistory/>
     <H2>Unité par unité</H2>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 10 }}>
       {list.map(a => { const c = col(a.humidity), trays = (a.trays || []).filter(trayCol);
@@ -1863,8 +1882,18 @@ function amsArranged(list, order) {
   return { cols, rows, flat: flat.length === list.length ? flat : list };
 }
 // l'humidite : des jauges (qui remplissent la case) ou des barres, avec ses seuils
+// la courbe des 24 dernieres heures sous le contenu d'une tuile, quand elle a la hauteur (03/11/2026)
+const SPARK_H = 36;
+const withSpark = (lines, H, body, opts) => {
+  const sp = lines && lines.length && H >= 118 ? SPARK_H + 6 : 0;
+  const inner = body(H - sp);
+  return sp ? <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>{inner}</div>
+    <SensorSpark lines={lines} height={SPARK_H} {...opts}/></div> : inner;
+};
 function Humidity({ status, o, sz }) {
   const order = useAmsOrder();
+  const hist = useSensorHistory(24, o.spark !== false);
   const raw = (status?.ams_list || []).filter(a => a.humidity > 0 && a.id !== 255 && a.id !== 254);
   const lay = amsArranged(raw, order);
   const list = lay.flat;
@@ -1910,7 +1939,7 @@ function Humidity({ status, o, sz }) {
     <Tile icon={<Droplets size={15}/>} color="#06B6D4" label="Humidité des AMS" to="/stats?tab=drying"
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 8 }}>{list.map(a => <span key={a.id} style={{ color: col(a.humidity) }}>{a.humidity}%</span>)}</span>}
       zoom={<HumZoom list={list} col={col} o={o} lo={lo} hi={hi}/>}>
-      {({ W, H }) => {
+      {({ W, H: H0 }) => withSpark(o.spark !== false && hist ? amsLines(hist) : null, H0, H => {
         const fitsBars = H >= list.length * 19;
         if (o.style === "bars") return fitsBars ? bars(H) : columns(W);
         const wet = list.reduce((b, a) => a.humidity > b.humidity ? a : b, list[0]);
@@ -1926,7 +1955,7 @@ function Humidity({ status, o, sz }) {
             <span>moyenne <b style={{ color: col(avg) }}>{avg} %</b></span>
             {wet.humidity >= lo && W >= 215 && <span>· le plus humide <b style={{ color: col(wet.humidity) }}>{amsLab(wet)}</b></span>}</div></div>;
         return fitGrid(list.length, W, H, { ar: DROP_AR, extra: DROP_EXTRA - (o.temp ? 0 : 14), gap: 8 }).size >= 46 ? drops(W, H) : fitsBars ? bars(H) : columns(W);
-      }}
+      })}
     </Tile>
   );
 }
@@ -2751,6 +2780,7 @@ export function TempPanel({ status, chamber = true, cardH = 190 }) {
       </div>; })}</div>;
 }
 function Temps({ status, o, sz }) {
+  const hist = useSensorHistory(24, o.spark !== false);
   if (!status?.connected) return <TileEmpty icon={<Thermometer size={15}/>} color="#F97316" label="Températures" sz={sz} text="Imprimante injoignable"/>;
   const rows = tempRows(status, o);
   const hot = r => (r.v || 0) > 40;
@@ -2809,18 +2839,20 @@ function Temps({ status, o, sz }) {
   };
   return (
     <Tile icon={<Thermometer size={15}/>} color="#F97316" label="Températures" zoom={({ W, H }) => { const n = tempRows(status, o).length, r = W >= 520 ? 1 : Math.ceil(n / 2);
-      return <TempPanel status={status} chamber={o.chamber} cardH={Math.max(170, Math.min(360, Math.floor((H - 10 * (r - 1)) / r)))}/>; }}
+      return <><TempPanel status={status} chamber={o.chamber} cardH={Math.max(170, Math.min(360, Math.floor((H - 10 * (r - 1)) / r)))}/>
+        <TempHistory chamber={o.chamber !== false}/></>; }}
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 10, fontSize: 13.5 }}>{rows.map(r =>
         <span key={r.k} title={r.l} style={{ display: "inline-flex", alignItems: "center", gap: 3, color: hot(r) ? r.c : "var(--muted)" }}>
           <r.ico s={13}/>{r.s && <span style={{ fontSize: 10, fontWeight: 900 }}>{r.s}</span>}<span style={tempGrad(r)}>{Math.round(r.v || 0)}°</span></span>)}</span>}>
-      {({ W, H }) => {
+      {/* la courbe sur une tuile large seulement : en demi-colonne, elle tasserait les thermometres cote a cote */}
+      {({ W, H: H0 }) => withSpark(o.spark !== false && hist && W >= 300 ? heatLines(hist, { chamber: o.chamber !== false }) : null, H0, H => {
         // des thermometres en verre (par defaut), des cadrans en cartes, des jauges, sinon des lignes
         if (!o.style || o.style === "glass") { const gl = glass(W, H); if (gl) return gl; }
         if (o.style === "thermo") { const th = thermo(W, H); if (th) return th; }
         const g = fitGrid(rows.length, W, H, { ar: GAUGE_AR, extra: GAUGE_EXTRA, gap: 8 });
         if (o.style === "gauges" && g.size >= 50) return gauges(W, H);
         return H >= rows.length * 22 ? lines : cells(W, H);
-      }}
+      }, { lo: 0 })}
     </Tile>
   );
 }
@@ -4602,7 +4634,7 @@ export const TILES = {
   humidity: { label: "Humidité des AMS", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Humidity status={st} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "gauges", [["gauges", "gouttes"], ["bars", "barres"]], { hint: "Les gouttes passent en barres quand la tuile est trop basse." }),
       C("thr", "Seuils", "std", [["strict", "stricts (20/30 %)"], ["std", "normaux (30/40 %)"], ["loose", "souples (40/55 %)"]]),
-      B("temp", "Température de l'AMS", false)] },
+      B("temp", "Température de l'AMS", false), B("spark", "Courbe des 24 h", true, { hint: "Une ligne par AMS, sous les gouttes, quand la tuile a la hauteur." })] },
   friends: { label: "Copains", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Friends f={d.friends} o={o} sz={sz(it)}/>,
     options: [B("thumbs", "Vignette de leur impression", true), B("idle", "Ceux au repos", true), SCROLL(false)] },
   mw: { label: "MakerWorld", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <MwPoints c={d.mw} o={o} sz={sz(it)}/>,
@@ -4623,7 +4655,8 @@ export const TILES = {
   temps: { label: "Températures", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Temps status={st} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "glass", [["glass", "thermomètres"], ["thermo", "cadrans"], ["gauges", "jauges"], ["list", "lignes"]],
       { hint: "Thermomètres : un tube qui se remplit du froid à la chaleur, la consigne en repère. Cadrans : une carte par source. Tout passe en lignes quand ce serait trop petit." }),
-      B("targets", "Consignes", true), B("chamber", "Chambre", true)] },
+      B("targets", "Consignes", true), B("chamber", "Chambre", true),
+      B("spark", "Courbe des 24 h", true, { hint: "Buse, plateau et chambre, sous les thermomètres, quand la tuile a la hauteur." })] },
   month: { label: "Ce mois-ci", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Month v={d.month} o={o} sz={sz(it)}/>,
     options: [B("ring", "Anneau de réussite", true), B("compare", "Comparer au mois dernier", true), B("cost", "Coût", true), B("chart", "Barres par jour", true, { hint: "Quand la tuile a la place." })] },
   sales: { label: "Objets et ventes", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Sales v={d.sales} o={o} sz={sz(it)}/>,

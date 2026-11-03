@@ -217,6 +217,8 @@ async def lifespan(app: FastAPI):
     _tasks.track("ach_warm", _bg(_ach.warm()))                 # succes : gros calcul prepare d'avance
     from app.services import ach_watch as _aw
     _tasks.track("ach_watch", _bg(_aw.loop()))                  # succes : releves de l'imprimante et des copains
+    from app.services import sensors as _sensors
+    _tasks.track("sensors", _bg(_sensors.loop()))             # capteurs (AMS, buses, plateau, chambre) : 7 jours de releves
     from app.services import sd_card as _sd
     _tasks.track("sd_card", _bg(_sd.auto_loop()))             # timelapse de chaque impression, copie de la carte SD apres la fin
     from app.services import archive as _arch

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import HumidityOffsetCard from "../components/HumidityOffsetCard";
 import CardHelp from "../components/CardHelp";
 import Cachettes from "../components/Cachettes";
 import { Save, Wifi, RefreshCw, Sun, Moon, Users, KeyRound, Trash2, Activity } from "lucide-react";
@@ -2265,6 +2266,8 @@ export default function Settings() {
           {saved ? "Sauvegardé ✓" : "Sauvegarder"}
         </button>
       </form>
+      {/* le decalage d'humidite de chaque AMS (03/11/2026) : enregistre tout de suite, hors du formulaire */}
+      <div style={{ marginTop:16 }}><HumidityOffsetCard card={card} cardTitle={cardTitle}/></div>
       </div></AdminOnly>
       )}
 

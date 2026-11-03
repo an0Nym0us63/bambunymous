@@ -8,10 +8,11 @@
     <dt>🖨️ Impressions</dt><dd>Tes impressions : volume, réussite, temps, coûts, habitudes, évolution et classements. Onglet par défaut. Voir <a href="#stats-prints">Onglet Impressions</a>.</dd>
     <dt>🧵 Filaments</dt><dd>Ton stock de bobines et ta consommation. Voir <a href="#stats-filaments">Onglet Filaments</a>.</dd>
     <dt>💧 Séchage</dt><dd>L'état de séchage de tes bobines. Voir <a href="#stats-sechage">Onglet Séchage</a>.</dd>
+    <dt>📈 Machine</dt><dd>Les relevés des capteurs de l'imprimante sur 7 jours : humidité et température des AMS, buse, plateau, chambre. Voir <a href="#stats-machine">Onglet Machine</a>.</dd>
     <dt>🎁 Objets</dt><dd>Ton inventaire d'objets, tes ventes, tes marges et tes accessoires. Voir <a href="#stats-objets">Onglet Objets</a>.</dd>
     <dt>🏆 Succès</dt><dd>Tes succès et la roue. Ils sont décrits dans le chapitre <a href="#succes">Succès</a>.</dd>
   </dl>
-  <p>L'onglet choisi s'inscrit dans l'adresse de la page (<code>/stats?tab=filaments</code>, <code>?tab=drying</code>, <code>?tab=objects</code>, <code>?tab=achievements</code>) : tu peux mettre un onglet en favori.</p>
+  <p>L'onglet choisi s'inscrit dans l'adresse de la page (<code>/stats?tab=filaments</code>, <code>?tab=drying</code>, <code>?tab=machine</code>, <code>?tab=objects</code>, <code>?tab=achievements</code>) : tu peux mettre un onglet en favori.</p>
   <figure class="phone"><img src="img/stats-telephone.webp" alt="Page Statistiques sur téléphone, onglet Impressions"><figcaption>Sur téléphone, le bouton de période (« Tout ») est dans l'en-tête, à côté du titre.</figcaption></figure>
   <p>Chaque onglet (sauf Succès) s'ouvre sur un <b>en-tête</b> : le chiffre qui compte en grand, quelques pastilles, et un anneau de taux (la réussite des impressions, les bobines à jour de séchage, les objets vendus). Viennent ensuite les sections, chacune avec son icône. Les chiffres sont présentés en <b>cartes</b> teintées de leur couleur (un libellé, une valeur, parfois une précision en dessous) et en graphiques (barres, anneaux). Les durées s'écrivent « 3h 12min », les poids « 1.23 kg » ou « 97.4 g », les montants « 12.34 € ». Un tiret « — » signifie qu'il n'y a pas de valeur.</p>
   <p>Certaines sections portent une pastille <span class="ui">🌐 toutes périodes</span> : elles ne dépendent pas de la période choisie.</p>
@@ -173,6 +174,17 @@
     <p><b>Par famille</b> donne, pour chaque matière, « a/n à sécher · âge moyen X » avec une barre bleue s'il y a des bobines à sécher, verte sinon.</p>
     <p>Si les données ne se chargent pas : « Impossible de charger l'état du séchage. »</p>
   </section>
+</section>
+
+<section id="stats-machine">
+  <h2>Onglet Machine</h2>
+  <p>Ce que les capteurs de l'imprimante ont mesuré : l'appli les relève toutes les 5 minutes, chaque minute pendant une impression, et garde <b>7 jours</b> (au-delà, effacé). Rien n'est relevé quand l'imprimante est injoignable : la courbe a un trou plutôt qu'un faux zéro. Il ne dépend pas de la période de la page : en haut, <span class="ui">24 h</span> (défaut), <span class="ui">3 jours</span> ou <span class="ui">7 jours</span>.</p>
+  <ul>
+    <li><b>Le bilan</b> : l'humidité moyenne des AMS, le plus humide (sa pointe et son nom), la buse au plus chaud, et le temps passé à imprimer.</li>
+    <li><b>💧 Humidité des AMS</b> et <b>🌡️ Température des AMS</b> : une courbe par AMS, à sa couleur, avec sa dernière valeur en pastille ; dessous, pour chacun, le plus bas, le plus haut et la moyenne.</li>
+    <li><b>🔥 Buse et plateau</b> (les deux buses sur une bi-buse) et <b>📦 Chambre</b> si la machine en a une.</li>
+  </ul>
+  <p>Les impressions sont les <b>bandes bleues pâles</b> derrière les courbes. Au survol (ou au doigt), une bulle donne l'heure et la valeur de chaque courbe à cet instant. Sans relevé encore : « Pas encore de relevé ». Chez un copain, ses relevés à lui (si son BambuNymous est à jour).</p>
 </section>
 
 <section id="stats-objets">

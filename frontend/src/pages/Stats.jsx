@@ -17,6 +17,7 @@ import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 import { PrintDetail, GroupBottomSheet, ObjectSheet, AccessorySheet, FilamentSheetFromSpool } from "../components/LazySheets";
 import { importRetry } from "../utils/importRetry";
 const Achievements = React.lazy(() => importRetry(() => import("./Achievements")));
+const MachineStats = React.lazy(() => importRetry(() => import("../components/MachineStats")));
 import { FSheet, fBtn, fGrad } from "../components/FicheKit";
 
 const fmtH = s => {
@@ -962,7 +963,7 @@ export default function Stats() {
   const [groupPrints, setGroupPrints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [tab, setTab] = useUrlTab("tab", "prints", ["prints", "filaments", "drying", "objects", "achievements"]);
+  const [tab, setTab] = useUrlTab("tab", "prints", ["prints", "filaments", "drying", "machine", "objects", "achievements"]);
   useTrackDetail(`Stats · ${ {prints:"Impressions", filaments:"Filaments",
     objects:"Objets"}[tab] || tab }`);
   const [objStats, setObjStats] = useState(null);
@@ -1070,7 +1071,7 @@ export default function Stats() {
   );
 
   const tabs = [{ id:"prints", label:"Impressions", ic:"🖨️", c:"#3B82F6" }, { id:"filaments", label:"Filaments", ic:"🧵", c:"#F97316" },
-    { id:"drying", label:"Séchage", ic:"💧", c:"#06B6D4" }, { id:"objects", label:"Objets", ic:"🎁", c:"#8B5CF6" },
+    { id:"drying", label:"Séchage", ic:"💧", c:"#06B6D4" }, { id:"machine", label:"Machine", ic:"📈", c:"#0EA5E9" }, { id:"objects", label:"Objets", ic:"🎁", c:"#8B5CF6" },
     { id:"achievements", label:"Succès", ic:"🏆", c:"#F59E0B" }];
 
   return (
@@ -1353,6 +1354,7 @@ export default function Stats() {
       </>)}
 
       {tab === "drying" && <DryingStats/>}
+      {tab === "machine" && <React.Suspense fallback={null}><MachineStats/></React.Suspense>}
 
       {tab === "achievements" && <React.Suspense fallback={null}><Achievements embedded/></React.Suspense>}
 
