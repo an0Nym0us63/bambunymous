@@ -38,6 +38,7 @@ import { useKeyboardInset } from "../utils/keyboard";
 import PhotoAddButton from "../components/PhotoAddButton";
 import GroupMosaic from "../components/GroupMosaic";
 import ObjectCreateSheet from "../components/ObjectCreateSheet";
+import FilesSheet from "../components/FilesSheet";
 import Select from "../components/Select";
 import { useLongPress, openMenu } from "../components/ContextMenu";
 import NasChip from "../components/NasChip";
@@ -1409,14 +1410,12 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
   const [, setPhotoCount] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [own3d, setOwn3d] = useState(false);       // la vue 3D de mon 3MF d'origine (impression sans modele MakerWorld)
-  // importer le 3MF d'origine (31/10/2026) : le projet Bambu Studio (pas le tranche, qui n'a plus que son G-code)
-  const importSource = () => {
-    const inp = document.createElement("input");
-    inp.type = "file"; inp.accept = ".3mf";
-    inp.onchange = async () => {
-      const f = inp.files?.[0];
-      if (!f) return;
-      if (p.source_3mf && !(await showConfirm(`Remplacer le 3MF d'origine de cette impression par « ${f.name} » ?`, { confirmLabel: "Remplacer" }))) return;
+  const [files, setFiles] = useState(false);       // les fichiers associes (03/11/2026)
+  // importer le 3MF d'origine (31/10/2026) : le projet Bambu Studio (pas le tranche, qui n'a plus que son G-code) ;
+  // file : deja choisi (les fichiers associes), sinon on le demande. Rend une promesse tenue une fois envoye
+  const importSource = (file = null) => new Promise(resolve => {
+    const send = async f => {
+      if (p.source_3mf && !(await showConfirm(`Remplacer le 3MF d'origine de cette impression par « ${f.name} » ?`, { confirmLabel: "Remplacer" }))) return resolve(false);
       const fd = new FormData(); fd.append("file", f);
       toast("Envoi du 3MF d'origine…");
       try {
@@ -1425,9 +1424,18 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         egg("mon_3mf");
         toast("3MF d'origine importé : la vue 3D se prépare");
         onChanged?.();
-      } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+        resolve(true);
+      } catch (e) { showAlert(e.response?.data?.detail || e.message); resolve(false); }
     };
+    if (file) return send(file);
+    const inp = document.createElement("input");
+    inp.type = "file"; inp.accept = ".3mf";
+    inp.onchange = () => { const f = inp.files?.[0]; if (f) send(f); else resolve(false); };
     inp.click();
+  });
+  const fetchSource = async () => {
+    try { await client.post(`/makerworld/source3mf/print/${p.id}`); setP(prev => ({ ...prev, source_3mf: true })); toast("3MF d'origine récupéré"); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
   const [selSpool, setSelSpool] = useState(null);
   // le detail du cout : ouvert par defaut (comme l'ancien bloc) ; l'appareil retient le choix
@@ -1483,17 +1491,11 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         ? { icon: "📊", label: "Hors classements des stats", hint: "Imposé par son groupe", tone: "#64748B", disabled: true }
         : { icon: "📊", label: p.stats_excluded ? "Remettre dans les classements des stats" : "Retirer des classements des stats",
             hint: p.stats_excluded ? "Il compte de nouveau dans les tops" : "Les totaux le comptent toujours", tone: "#64748B", onClick: toggleRanked }),
-      (isAdmin || p.source_3mf || p.model_3mf || (p.design_id && p.mw_profile_id)) && "-",
-      // sans modele MakerWorld, sa vue 3D vient du 3MF d'origine importe a la main (31/10/2026)
-      !p.design_id && p.source_3mf && { icon: "🧊", label: "Vue 3D", hint: "depuis mon 3MF d'origine", tone: "#0EA5E9", onClick: () => setOwn3d(true) },
-      p.source_3mf && { icon: "⤓", label: "Télécharger le 3MF d'origine", hint: "MakerWorld · à retrancher", tone: "#F97316", onClick: () => download3mf(p.id, "source") },
-      !p.source_3mf && p.design_id && p.mw_profile_id && { icon: "⇣", label: "Récupérer le 3MF d'origine", hint: "depuis MakerWorld", tone: "#F97316",
-        onClick: async () => { try { await client.post(`/makerworld/source3mf/print/${p.id}`); setP(prev => ({ ...prev, source_3mf: true })); toast("3MF d'origine récupéré"); }
-          catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
-      // le 3MF d'origine importe soi-meme (31/10/2026) : sans modele MakerWorld, ou quand le sien ne se recupere pas
-      isAdmin && { icon: "📤", label: p.source_3mf ? "Remplacer le 3MF d'origine" : "Importer le 3MF d'origine",
-        hint: p.design_id ? "le mien, si MakerWorld ne le donne pas" : "le projet Bambu Studio, pour la vue 3D", tone: "#F97316", onClick: importSource },
-      p.model_3mf && { icon: "⤓", label: "Télécharger le 3MF tranché", hint: "pour mon imprimante", tone: "#F59E0B", onClick: () => download3mf(p.id, "sliced") },
+      "-",
+      // les fichiers associes (03/11/2026) : 3MF tranche et d'origine (telecharger, recuperer, importer), vues 3D,
+      // documents du modele, fichiers joints -- a la place de leurs entrees eparses
+      !visiting && { icon: "🗂", label: "Fichiers associés", hint: [p.model_3mf && "3MF tranché", p.source_3mf && "3MF d'origine", p.has_vue3d && "vues 3D", "documents, fichiers joints"].filter(Boolean).join(" · "),
+        tone: "#8B5CF6", onClick: () => setFiles(true) },
       // la vignette du plateau, reprise du 3MF (31/10/2026 : supprimee par erreur, elle ne revenait pas)
       isAdmin && (p.model_3mf || p.source_3mf) && { icon: "🖼", label: "Reprendre la vignette du 3MF", hint: p.model_3mf ? "l'image du plateau, depuis le 3MF tranché" : "l'image du plateau, depuis le 3MF d'origine",
         tone: "#0EA5E9", onClick: async () => {
@@ -1501,10 +1503,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
             setP(prev => ({ ...prev, plate_image: r.data.plate_image, updated_at: r.data.updated_at || new Date().toISOString() })); setRefreshKey(k => k + 1); onChanged?.();
             toast(`Vignette reprise du 3MF ${r.data.from}`); }
           catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
-      isAdmin && p.has_vue3d && { icon: "🧊", label: "Vues 3D et vignette", hint: p.thumb_3d ? "Vignette : une vue 3D" : "Vignette : l'image du plateau", tone: "#0EA5E9",
-        onClick: () => openVue3D({ kind: "print", id: p.id, onDone: async () => {
-          try { const r = await client.get(`/prints/${p.id}/vue3d`); setP(prev => ({ ...prev, thumb_3d: r.data.sel.length ? 1 : 0, has_vue3d: r.data.slots.length > 0, updated_at: new Date().toISOString() })); }
-          catch { /* rien */ } } }) },
+
       (p.job_id || p.design_id) && { icon: "#", label: "Identifiants", hint: "Travail, modèle MakerWorld", tone: "#64748B", onClick: () => setIdsOpen(true) },
       "-",
       { icon: "🗑", label: "Supprimer…", danger: true, onClick: () => setShowDeleteConfirm(true) },
@@ -1716,6 +1715,11 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={() => setSelSpool(null)} zIndex={2000}/>}
       {own3d && <Model3D designId={`p${p.id}`} title={p.translated_name || p.file_name} printId={p.id} usedPrints={[p.id]}
         scope={`print:${p.id}`} onClose={() => setOwn3d(false)}/>}
+      {files && <FilesSheet kind="print" id={p.id} title={p.translated_name || p.file_name || "Sans nom"} isAdmin={isAdmin} onClose={() => setFiles(false)} actions={{
+        download: k => download3mf(p.id, k), importSource, fetchSource, own3d: () => setOwn3d(true),
+        manageViews: () => openVue3D({ kind: "print", id: p.id, onDone: async () => {
+          try { const r = await client.get(`/prints/${p.id}/vue3d`); setP(prev => ({ ...prev, thumb_3d: r.data.sel.length ? 1 : 0, has_vue3d: r.data.slots.length > 0, updated_at: new Date().toISOString() })); }
+          catch { /* rien */ } } }) }}/>}
       {editMode && <PrintEditSheet p={p} onClose={() => setEditMode(false)} onSaved={updated => { setP(prev => ({ ...prev, ...updated })); setEditMode(false); onChanged?.(); }}/>}
       {unmapping && <UnmapFilamentConfirm f={unmapping} printId={p.id} onClose={() => setUnmapping(null)} onDone={() => { setUnmapping(null); reload(); onChanged?.(); }}/>}
       {showDeleteConfirm && <DeletePrintConfirm p={p} restoreOnly={showDeleteConfirm === "restore"} onCancel={() => setShowDeleteConfirm(false)}
@@ -1891,13 +1895,11 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   const [grpAsm, setGrpAsm] = useState(false);
   const nSources = new Set(prints.filter(x => x.source_3mf || String(x.design_id || "").trim())
     .map(x => `${String(x.design_id || "").trim() || `p${x.id}`}:${x.mw_profile_id || ""}`)).size;
-  const importGroupSource = m => {
-    const inp = document.createElement("input");
-    inp.type = "file"; inp.accept = ".3mf";
-    inp.onchange = async () => {
-      const f = inp.files?.[0];
-      if (!f) return;
-      if (m.has && !(await showConfirm(`Remplacer le 3MF d'origine (${m.label}) par « ${f.name} » ?`, { confirmLabel: "Remplacer" }))) return;
+  const [files, setFiles] = useState(false);       // les fichiers associes (03/11/2026)
+  // file : deja choisi (les fichiers associes) ; rend une promesse tenue une fois envoye
+  const importGroupSource = (m, file = null) => new Promise(resolve => {
+    const send = async f => {
+      if (m.has && !(await showConfirm(`Remplacer le 3MF d'origine (${m.label}) par « ${f.name} » ?`, { confirmLabel: "Remplacer" }))) return resolve(false);
       const fd = new FormData(); fd.append("file", f); fd.append("design", m.key);
       toast("Envoi du 3MF d'origine…");
       try {
@@ -1907,10 +1909,15 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
         egg("mon_3mf");
         toast(`3MF d'origine importé pour ${ids.size} impression${ids.size > 1 ? "s" : ""} : la vue 3D se prépare`);
         onUpdated?.();
-      } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+        resolve(true);
+      } catch (e) { showAlert(e.response?.data?.detail || e.message); resolve(false); }
     };
+    if (file) return send(file);
+    const inp = document.createElement("input");
+    inp.type = "file"; inp.accept = ".3mf";
+    inp.onchange = () => { const f = inp.files?.[0]; if (f) send(f); else resolve(false); };
     inp.click();
-  };
+  });
   const [sharing, setSharing] = useState(false);
   const [nbItems, setNbItems] = useState(nbItemsProp || 1);
   const [editNb, setEditNb] = useState(false);
@@ -2007,24 +2014,12 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       { icon: "📤", label: "Dégrouper", hint: "Les impressions restent", tone: "#A78BFA", onClick: handleUngroup },
       isAdmin && { icon: "🔗", label: "Lier toutes au modèle MakerWorld", hint: "Le même ID MakerWorld pour toutes les impressions du groupe", tone: "#00AE42",
         onClick: () => setMwAll(true) },
-      isAdmin && prints[0]?.group_has_vue3d && { icon: "🧊", label: "Vues 3D et vignette", hint: thumb3d ? "Vignette : une vue 3D" : "Vignette : la mosaïque", tone: "#0EA5E9",
-        onClick: () => openVue3D({ kind: "group", id: groupId, onDone: async () => {
-          try { const r = await client.get(`/prints/groups/${groupId}/vue3d`), cv = r.data.cover;
-            setPrints(ps => ps.map(x => ({ ...x, group_thumb_3d: cv ? 1 : 0, group_has_vue3d: r.data.slots.length > 0, group_vue3d_name: cv?.name || null,
-              group_vue3d_v: cv?.v || null })));
-            onUpdated?.(); } catch { /* rien */ } } }) },
-      (isAdmin || prints.some(x => x.source_3mf) || prints.some(x => x.model_3mf)) && "-",
-      // sans modele MakerWorld, la vue 3D du 3MF d'origine importe (31/10/2026)
-      ...(own3dPrint ? [{ icon: "🧊", label: "Vue 3D", hint: "depuis le 3MF d'origine importé", tone: "#0EA5E9", onClick: () => setOwn3d(own3dPrint) }] : []),
+      "-",
+      // les fichiers associes (03/11/2026) : 3MF tranches et d'origine, vues 3D, documents des modeles, fichiers joints
+      !groupVisiting && { icon: "🗂", label: "Fichiers associés", hint: "3MF, vues 3D, documents, fichiers joints", tone: "#8B5CF6", onClick: () => setFiles(true) },
       ...(nSources > 1 || prints.filter(x => x.source_3mf || String(x.design_id || "").trim()).length > 1 ? [{ icon: "🧩", label: "Assemblage du groupe", hint: "toutes ses pièces, de tous ses modèles et profils, dans une seule vue", tone: "#6366F1",
         onClick: () => { setGrpAsm(true); egg("assemblage_groupe"); } }] : []),
-      // importer le 3MF d'origine pour le groupe : un par modele s'il en melange plusieurs
-      ...(isAdmin ? groupModels.map(m => ({ icon: "📤", label: groupModels.length > 1 ? `3MF d'origine · ${m.label}` : (m.has ? "Remplacer le 3MF d'origine" : "Importer le 3MF d'origine"),
-        hint: m.key === "-" ? "le projet Bambu Studio, pour la vue 3D" : "le mien, si MakerWorld ne le donne pas", tone: "#F97316", onClick: () => importGroupSource(m) })) : []),
-      prints.some(x => x.source_3mf) && { icon: "⤓", label: "Télécharger les 3MF d'origine", hint: "Un fichier s'ils sont identiques, sinon un zip",
-        tone: "#F97316", onClick: () => download3mf(groupId, "source", true) },
-      prints.some(x => x.model_3mf) && { icon: "⤓", label: "Télécharger les 3MF tranchés", hint: "Un fichier s'ils sont identiques, sinon un zip",
-        tone: "#F59E0B", onClick: () => download3mf(groupId, "sliced", true) },
+
       isAdmin && { icon: "📊", label: groupRankedOff ? "Remettre le groupe dans les classements" : "Retirer le groupe des classements des stats",
         hint: groupRankedOff ? "Ses impressions comptent de nouveau dans les tops" : "Toutes ses impressions ; les totaux les comptent toujours",
         tone: "#64748B", onClick: toggleGroupRanked },
@@ -2261,6 +2256,17 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       {grpAsm && <Model3D designId={`g${groupId}`} title={name} onClose={() => setGrpAsm(false)}/>}
       {own3d && <Model3D designId={`p${own3d.id}`} title={name} printId={own3d.id}
         usedPrints={prints.filter(x => !String(x.design_id || "").trim()).map(x => x.id)} scope={`group:${groupId}`} onClose={() => setOwn3d(null)}/>}
+      {files && <FilesSheet kind="group" id={groupId} title={name} isAdmin={isAdmin} onClose={() => setFiles(false)} actions={{
+        download: k => download3mf(groupId, k, true), sourceRows: groupModels,
+        importGroupSource: m => importGroupSource(m),
+        // un 3MF joint qui devient le 3MF d'origine : pour le seul modele du groupe (s'il en melange plusieurs, par sa ligne)
+        importSource: groupModels.length === 1 ? f => importGroupSource(groupModels[0], f) : null,
+        own3d: own3dPrint ? () => setOwn3d(own3dPrint) : null,
+        manageViews: () => openVue3D({ kind: "group", id: groupId, onDone: async () => {
+          try { const r = await client.get(`/prints/groups/${groupId}/vue3d`), cv = r.data.cover;
+            setPrints(ps => ps.map(x => ({ ...x, group_thumb_3d: cv ? 1 : 0, group_has_vue3d: r.data.slots.length > 0, group_vue3d_name: cv?.name || null,
+              group_vue3d_v: cv?.v || null })));
+            onUpdated?.(); } catch { /* rien */ } } }) }}/>}
       {mwAll && <GroupMwLink prints={prints} onClose={() => setMwAll(false)} onDone={() => { setMwAll(false); loadPrints(); onUpdated?.(); }}/>}
       {unmapping && <UnmapFilamentConfirm f={unmapping} printId={unmapping.print_id} onClose={() => setUnmapping(null)} onDone={() => { setUnmapping(null); loadPrints(); onUpdated?.(); }}/>}
       {editGroup && <GroupEditSheet groupId={groupId} name={title} onClose={() => setEditGroup(false)} onSaved={() => { setEditGroup(false); loadPrints(); onUpdated?.(); }}/>}

@@ -869,7 +869,7 @@ async def group_photos(group_id: int):
         return {"files": [], "cover_photo": cover}
     files = []
     for f in sorted(d.iterdir()):
-        if not _V3RE.fullmatch(f.name) and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v"):
+        if not _V3RE.fullmatch(f.name) and not f.name.startswith("Joint-") and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v"):
             files.append({"name": f.name, "url": f"/api/v1/prints/groups/{group_id}/photo/{f.name}"})
     return {"files": files, "cover_photo": cover}
 
@@ -2278,7 +2278,7 @@ async def print_snapshots_list(print_id: int):
     names = set(f.name for f in print_dir.iterdir()) if print_dir.exists() else set()
     names |= set(archived_names(f"prints/{print_id}"))          # captures videes du local : sur le NAS
     files = [{"name": n, "url": f"/api/v1/prints/{print_id}/file/{n}"} for n in sorted(names)
-             if os.path.splitext(n)[1].lower() in (".png", ".jpg", ".jpeg", ".webp") and n != "plate.png"]
+             if os.path.splitext(n)[1].lower() in (".png", ".jpg", ".jpeg", ".webp") and n != "plate.png" and not n.startswith("Joint-")]
     return {"files": files}
 
 
@@ -3156,3 +3156,167 @@ async def print_3mf(print_id: int, kind: str = Query("sliced", pattern="^(sliced
         raise HTTPException(404, "Pas de 3MF pour cette impression")
     name = _re.sub(r'[\\/:*?"<>|]+', "_", (p.translated_name or p.file_name or f"impression-{print_id}").strip())[:120]
     return FileResponse(str(f), media_type="application/vnd.ms-package.3dmanufacturing-3dmodel+xml", filename=f"{name}{suffix}.3mf")
+
+
+# ── Les fichiers associes (03/11/2026) : ce qu'on joint soi-meme a une impression ou a un groupe (un document, un 3MF
+# de plus, une photo de la notice, n'importe quoi) ; ranges dans son dossier, nommes « Joint-<nom> » (la sauvegarde sur le
+# NAS les copie avec le reste, dans « Fichiers joints » ; ils partent avec l'impression ou le groupe) ──
+ATTACH_PREFIX = "Joint-"
+ATTACH_MAX = 300 * 1024 * 1024
+
+
+def _attach_dir(kind: str, oid: int) -> Path:
+    return DATA_DIR / ("prints" if kind == "print" else "groups") / str(int(oid))
+
+
+def _attach_list(kind: str, oid: int) -> list:
+    from ....services.archive import archived_names
+    d = _attach_dir(kind, oid)
+    rel = f"{'prints' if kind == 'print' else 'groups'}/{int(oid)}"
+    local = {f.name: f for f in d.iterdir() if f.is_file() and f.name.startswith(ATTACH_PREFIX)} if d.is_dir() else {}
+    names = set(local) | {n for n in archived_names(rel) if n.startswith(ATTACH_PREFIX)}
+    base = f"/api/v1/prints/{'' if kind == 'print' else 'groups/'}{int(oid)}/attachments/"
+    out = []
+    for n in sorted(names, key=lambda x: x.lower()):
+        f = local.get(n)
+        st = f.stat() if f else None
+        out.append({"name": n, "label": n[len(ATTACH_PREFIX):], "size": st.st_size if st else None,
+                    "at": int(st.st_mtime) if st else None, "url": base + n, "on_nas_only": f is None})
+    return out
+
+
+def _attach_name(d: Path, raw: str) -> str:
+    base = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", os.path.basename(raw or "fichier")).strip(" .") or "fichier"
+    stem, ext = os.path.splitext(base)
+    stem, ext = stem[:120], ext[:12]
+    name, k = f"{ATTACH_PREFIX}{stem}{ext}", 2
+    while (d / name).exists():
+        name, k = f"{ATTACH_PREFIX}{stem} ({k}){ext}", k + 1
+    return name
+
+
+async def _attach_save(kind: str, oid: int, file: UploadFile) -> dict:
+    d = _attach_dir(kind, oid)
+    d.mkdir(parents=True, exist_ok=True)
+    name = _attach_name(d, file.filename or "fichier")
+    tmp = d / f".{name}.part"
+    size = 0
+    try:
+        with open(tmp, "wb") as fh:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > ATTACH_MAX:
+                    raise HTTPException(413, "Fichier trop lourd (300 Mo au plus)")
+                fh.write(chunk)
+        if not size:
+            raise HTTPException(400, "Fichier vide")
+        tmp.replace(d / name)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+    return {"name": name, "label": name[len(ATTACH_PREFIX):], "size": size}
+
+
+def _attach_file(kind: str, oid: int, name: str):
+    from ....services.archive import local_or_archive
+    if not name.startswith(ATTACH_PREFIX) or ".." in name or "/" in name or "\\" in name:
+        raise HTTPException(400, "Nom de fichier invalide")
+    path = local_or_archive(f"{'prints' if kind == 'print' else 'groups'}/{int(oid)}/{name}")
+    if not path:
+        raise HTTPException(404, "Fichier introuvable")
+    return path
+
+
+async def _model_docs(dids: list) -> list:
+    """Les documents joints par les createurs des modeles (notices, nomenclatures…), comme sur la carte MakerWorld."""
+    from ....models.print_history import MakerWorldDesign
+    from ....services.makerworld import _docs_view
+    out = []
+    async with AsyncSessionLocal() as db:
+        for did in dids:
+            m = (await db.execute(select(MakerWorldDesign).where(MakerWorldDesign.design_id == str(did)))).scalar_one_or_none()
+            if m:
+                for d in _docs_view(m.design_id, m.extras).get("docs") or []:
+                    out.append({**d, "design_id": str(did), "model": m.title_fr or m.title})
+    return out
+
+
+@router.get("/{print_id}/files")
+async def print_files(print_id: int, _: str = Depends(get_current_user)):
+    """Les fichiers associes a une impression, par sorte : 3MF tranche, 3MF d'origine, vues 3D, documents du modele,
+    fichiers joints."""
+    from ....services.mw_source import print_file as _pf
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+    if not p:
+        raise HTTPException(404, "Impression introuvable")
+    src = _pf(p.design_id, p.mw_profile_id, p.mw_plates, p.id)
+    did = str(p.design_id or "").strip()
+    return {"sliced": bool(p.model_3mf), "source": bool(src and src.is_file()), "design_id": did or None,
+            "can_fetch_source": bool(did and p.mw_profile_id),
+            "vue3d": _v3list("print", print_id, DATA_DIR / "prints" / str(print_id), p.thumb_3d or 0).get("slots", []),
+            "docs": await _model_docs([did] if did.isdigit() else []), "attachments": _attach_list("print", print_id)}
+
+
+@router.get("/groups/{group_id}/files")
+async def group_files(group_id: int, _: str = Depends(get_current_user)):
+    async with AsyncSessionLocal() as db:
+        g = await db.get(Group, group_id)
+        if not g:
+            raise HTTPException(404, "Groupe introuvable")
+        rows = (await db.execute(select(Print.id, Print.design_id, Print.model_3mf).where(Print.group_id == group_id))).all()
+    dids = sorted({str(d).strip() for _i, d, _m in rows if str(d or "").strip().isdigit()})
+    return {"sliced": sum(1 for r in rows if r[2]), "prints": len(rows),
+            "vue3d": _v3list("group", group_id, DATA_DIR / "groups" / str(group_id), g.thumb_3d or 0).get("slots", []),
+            "docs": await _model_docs(dids), "attachments": _attach_list("group", group_id)}
+
+
+@router.post("/{print_id}/attachments")
+async def print_attach(print_id: int, file: UploadFile = File(...), _: str = Depends(require_admin)):
+    async with AsyncSessionLocal() as db:
+        if not await db.get(Print, print_id):
+            raise HTTPException(404, "Impression introuvable")
+    return await _attach_save("print", print_id, file)
+
+
+@router.post("/groups/{group_id}/attachments")
+async def group_attach(group_id: int, file: UploadFile = File(...), _: str = Depends(require_admin)):
+    async with AsyncSessionLocal() as db:
+        if not await db.get(Group, group_id):
+            raise HTTPException(404, "Groupe introuvable")
+    return await _attach_save("group", group_id, file)
+
+
+@router.get("/{print_id}/attachments/{name}")
+async def print_attach_get(print_id: int, name: str, _: str = Depends(get_current_user)):
+    import mimetypes
+    f = _attach_file("print", print_id, name)
+    return FileResponse(str(f), media_type=mimetypes.guess_type(name)[0] or "application/octet-stream", filename=name[len(ATTACH_PREFIX):])
+
+
+@router.get("/groups/{group_id}/attachments/{name}")
+async def group_attach_get(group_id: int, name: str, _: str = Depends(get_current_user)):
+    import mimetypes
+    f = _attach_file("group", group_id, name)
+    return FileResponse(str(f), media_type=mimetypes.guess_type(name)[0] or "application/octet-stream", filename=name[len(ATTACH_PREFIX):])
+
+
+@router.delete("/{print_id}/attachments/{name}")
+async def print_attach_del(print_id: int, name: str, _: str = Depends(require_admin)):
+    _attach_file("print", print_id, name)
+    f = _attach_dir("print", print_id) / name
+    if f.is_file():
+        f.unlink()
+    return {"ok": True}
+
+
+@router.delete("/groups/{group_id}/attachments/{name}")
+async def group_attach_del(group_id: int, name: str, _: str = Depends(require_admin)):
+    _attach_file("group", group_id, name)
+    f = _attach_dir("group", group_id) / name
+    if f.is_file():
+        f.unlink()
+    return {"ok": True}

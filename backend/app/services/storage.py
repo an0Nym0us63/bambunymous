@@ -21,6 +21,7 @@ CATS = [
     ("tmf", "Fichiers 3MF tranchés", "#F59E0B"),
     ("mw_tmf", "3MF d'origine MakerWorld", "#FB923C"),
     ("mw_docs", "Documents joints MakerWorld", "#2563EB"),
+    ("attach", "Fichiers joints aux impressions et groupes", "#7C3AED"),
     ("videos", "Vidéos", "#EF4444"),
     ("groups", "Photos de groupes", "#EC4899"),
     ("objects", "Photos d'objets", "#22C55E"),
@@ -48,6 +49,8 @@ def _cat(parts: tuple, name: str) -> str:
         return "sd_cache"
     if ext in VID:
         return "videos"
+    if top in ("prints", "groups") and low.startswith("joint-"):   # fichiers joints a la main (03/11/2026)
+        return "attach"
     if top in ("prints", "groups") and low.startswith("vue3d"):    # vues prises dans la vue 3D, leur mosaique (30/10)
         return "vue3d"
     if top == "mw_3d_edits":                    # assemblages edites et leurs versions (30/10/2026)

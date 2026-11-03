@@ -169,6 +169,8 @@ def human_name(rel_name: str, model: str) -> str | None:
     """Le chemin, dans le dossier d'une impression, d'un fichier de son dossier de donnees (None : ne pas copier)."""
     low = rel_name.lower()
     ext = os.path.splitext(rel_name)[1].lower()
+    if low.startswith("joint-"):                    # les fichiers joints a la main (03/11/2026)
+        return f"Fichiers joints/{rel_name[len('Joint-'):]}"
     if low.startswith("snapshot-"):
         trig = low[len("snapshot-"):].rsplit(".", 1)[0]
         return f"Couches/{LAYERS.get(trig, trig)}{ext}"
