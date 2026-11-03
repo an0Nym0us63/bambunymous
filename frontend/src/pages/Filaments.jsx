@@ -24,7 +24,7 @@ import Select from "../components/Select";
 import CatalogPicker, { CatalogLinkSheet } from "../components/CatalogPicker";
 import { useIsAdmin } from "../store/auth";
 import { Pressable, openMenu } from "../components/ContextMenu";
-import { colorBg, parseColorsList, finishOf, autoFinishOf, FINISHES, COLOR_BUCKETS, BUCKET_FR, BUCKET_HEX, bucketsOf } from "../utils/colors";
+import { colorBg, parseColorsList, finishOf, isDark, autoFinishOf, FINISHES, COLOR_BUCKETS, BUCKET_FR, BUCKET_HEX, bucketsOf } from "../utils/colors";
 import SpoolSVG from "../components/SpoolSVG";
 import { Ghost, GhostBadge, HeroSpool, ORD_C, ORD_BG, tipStock, tipOrdered } from "../components/SpoolGhost";
 import { EmptyCard, FCard, FLAB, FROW, FRow, FSheet, FTile, FVAL, PageTabs, SearchRow, agoFr, dayFr, fBtn, fChip, fGrad, fRound, isLight, lighten, fOutline } from "../components/FicheKit";
@@ -1872,45 +1872,87 @@ function ArchiveWall({ spools, onOpen, menu }) {
               {g.life != null && <span data-tip="Durée moyenne d'une bobine, de sa première à sa dernière impression" style={{ color: "#8B5CF6" }}>⏱ {_dur(g.life)}</span>}
               {g.price > 0 && <span style={{ color: "#16A34A" }}>{moneyVal(g.price, 0)} €</span>}
             </div>
-            {span && <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>{g.n > 1 ? span : `finie ${_dayFr(g.last)}`}</div>}
+            {span && <span style={{ alignSelf: "flex-start", maxWidth: "100%", marginTop: 3, padding: "1px 8px", borderRadius: 20, fontSize: 10.5, fontWeight: 800,
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              color: `color-mix(in srgb, ${isDark(g.s.filament_color) ? "#94a3b8" : main} 62%, var(--text2))`,
+              background: `color-mix(in srgb, ${isDark(g.s.filament_color) ? "#94a3b8" : main} 16%, transparent)` }}>
+              {g.n > 1 ? `📅 ${span}` : `🏁 finie ${_dayFr(g.last)}`}</span>}
           </div>
           {g.n > 1 && <span style={{ fontSize: 16, color: "var(--muted)", flexShrink: 0 }}>›</span>}
         </Pressable>;
       })}
     </div>
-    {groups.length > limit && <button type="button" onClick={() => setLimit(l => l + 24)} style={{ ...fBtn, alignSelf: "center", padding: "0 18px" }}>
-      Voir {Math.min(24, groups.length - limit)} de plus · {groups.length - limit} restant{groups.length - limit > 1 ? "s" : ""}</button>}
+    {groups.length > limit && <button type="button" onClick={() => setLimit(l => l + 24)} style={{ alignSelf: "center", display: "inline-flex", alignItems: "center", gap: 8,
+      padding: "9px 18px", borderRadius: 20, cursor: "pointer", fontSize: 13, fontWeight: 800, color: "var(--text2)",
+      border: "1px solid color-mix(in srgb, #64748B 30%, var(--border))", background: "linear-gradient(135deg, rgba(100,116,139,.14), rgba(139,92,246,.10)), var(--surface)" }}>
+      ⬇ Voir {Math.min(24, groups.length - limit)} de plus
+      <span style={{ padding: "1px 8px", borderRadius: 20, fontSize: 11, fontWeight: 900, color: "#fff", background: "linear-gradient(135deg, #64748B, #334155)" }}>
+        {groups.length - limit} restant{groups.length - limit > 1 ? "s" : ""}</span></button>}
 
-    {/* l'histoire d'une pile : ses bobines, de la plus recente a la plus ancienne */}
+    {/* l'histoire d'une pile : ses bobines, de la plus recente a la plus ancienne, par annee (03/11/2026 : en-tete
+        a la couleur du filament, duree de chaque bobine en barre, a l'echelle de la plus longue) */}
     {og && createPortal(<FSheet onClose={() => setOpen(null)} z={1000} bottom={<button onClick={() => setOpen(null)} style={{ ...fBtn, flex: 1 }}>Fermer</button>}>
-      <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <ArchivePile g={og} size={72}/>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 19, fontWeight: 900, color: "var(--text)" }}>{og.s.filament_translated_name || og.s.filament_name}</div>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>{[og.s.filament_manufacturer, og.s.filament_fila_type || og.s.filament_material].filter(Boolean).join(" · ")}</div>
+      {(() => {
+        const main = paleHex(og.s.filament_color) || isDark(og.s.filament_color) ? "#94a3b8" : (hexToCss(og.s.filament_color) || "#94a3b8");
+        const life = x => { const a = _date(x.first_used_at), b = _date(x.last_used_at); return a && b && b > a ? (b - a) / 86400000 : null; };
+        const longest = Math.max(1, ...og.list.map(x => life(x) || 0));
+        const years = [];
+        for (const x of og.list) {
+          const y = _endOf(x)?.getFullYear() ?? "—";
+          if (!years.length || years[years.length - 1].y !== y) years.push({ y, list: [] });
+          years[years.length - 1].list.push(x);
+        }
+        const tint = (c, k) => `color-mix(in srgb, ${c} ${k}%, transparent)`;
+        const stat = (v, l, c) => <div style={{ minWidth: 0, padding: "9px 11px", borderRadius: 16,
+          background: `linear-gradient(135deg, ${tint(c, 14)}, transparent 80%), var(--surface)`, border: `1px solid ${tint(c, 28)}` }}>
+          <div style={{ fontSize: 19, fontWeight: 900, color: c, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v}</div>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em" }}>{l}</div></div>;
+        return <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* l'en-tete, a la couleur du filament */}
+          <div style={{ padding: "54px 16px 16px", display: "flex", alignItems: "center", gap: 16,
+            background: `radial-gradient(110% 120% at 0% 0%, ${tint(main, 34)}, transparent 70%), linear-gradient(180deg, ${tint(main, 10)}, transparent)` }}>
+            <ArchivePile g={og} size={78}/>
+            <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ fontSize: 20, fontWeight: 900, color: "var(--text)", lineHeight: 1.15 }}>{og.s.filament_translated_name || og.s.filament_name}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>{[og.s.filament_manufacturer, og.s.filament_fila_type || og.s.filament_material].filter(Boolean).join(" · ")}</div>
+              {og.first && og.last && <span style={{ alignSelf: "flex-start", marginTop: 2, padding: "2px 9px", borderRadius: 20, fontSize: 11.5, fontWeight: 800,
+                color: `color-mix(in srgb, ${main} 62%, var(--text2))`, background: tint(main, 15) }}>📅 {_dayFr(og.first)} → {_dayFr(og.last)}</span>}
+            </div>
           </div>
-        </div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {stat(og.n, "bobines vidées", "var(--text)")}{stat(fmtKg(og.kg * 1000), "imprimés", "#F59E0B")}
-          {og.price > 0 && stat(`${moneyVal(og.price, 0)} €`, "dépensés", "#16A34A")}{og.life != null && stat(_dur(og.life), "par bobine", "#8B5CF6")}
-        </div>
-        <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 8, paddingLeft: 18 }}>
-          <span aria-hidden="true" style={{ position: "absolute", left: 6, top: 6, bottom: 6, width: 2, borderRadius: 2, background: "var(--border)" }}/>
-          {og.list.map(x => { const a = _date(x.first_used_at), b = _date(x.last_used_at), end = _endOf(x), pr = x.price_override ?? x.filament_price;
-            return <button key={x.id} type="button" onClick={() => { setOpen(null); onOpen(x); }} style={{ position: "relative", display: "flex", alignItems: "center", gap: 10,
-              textAlign: "left", padding: "9px 11px", borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer" }}>
-              <span aria-hidden="true" style={{ position: "absolute", left: -17, top: "50%", marginTop: -6, width: 12, height: 12, borderRadius: "50%",
-                background: hexToCss(x.filament_color) || "#94a3b8", boxShadow: "0 0 0 3px var(--surface2)" }}/>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text)" }}>Bobine #{x.id}{end ? <span style={{ fontWeight: 700, color: "var(--muted)" }}> · finie {_dayFr(end)}</span> : null}</div>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
-                  {[a && b && b > a ? `en ${_dur((b - a) / 86400000)}` : null, a ? `entamée ${_dayFr(a)}` : null, pr ? `${moneyVal(pr, 2).replace(".", ",")} €` : null].filter(Boolean).join(" · ") || "jamais suivie en impression"}</div>
-              </div>
-              <span style={{ fontSize: 15, color: "var(--muted)" }}>›</span>
-            </button>; })}
-        </div>
-      </div>
+          {/* deux par ligne sur un telephone, quatre au-dela */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 6, padding: "0 16px" }}>
+            {stat(og.n, "bobines vidées", "#94A3B8")}{stat(fmtKg(og.kg * 1000), "imprimés", "#F59E0B")}
+            {og.price > 0 && stat(`${moneyVal(og.price, 0)} €`, "dépensés", "#16A34A")}{og.life != null && stat(_dur(og.life), "par bobine", "#8B5CF6")}
+          </div>
+          {/* la frise des bobines, par annee */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "0 16px 18px" }}>
+            {years.map(({ y, list }) => <div key={y} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 900, letterSpacing: ".07em", color: "#64748B" }}>
+                {y}<span style={{ flex: 1, height: 1, background: "var(--border)" }}/><span style={{ fontWeight: 800, letterSpacing: 0 }}>{list.length} bobine{list.length > 1 ? "s" : ""}</span></div>
+              {list.map(x => { const a = _date(x.first_used_at), end = _endOf(x), pr = x.price_override ?? x.filament_price, d = life(x);
+                return <button key={x.id} type="button" onClick={() => { setOpen(null); onOpen(x); }} style={{ display: "flex", alignItems: "center", gap: 11,
+                  textAlign: "left", padding: "9px 11px", borderRadius: 16, cursor: "pointer", border: `1px solid ${tint(main, 22)}`,
+                  background: `linear-gradient(90deg, ${tint(main, 9)}, transparent 55%), var(--surface)` }}>
+                  <SpoolSVG colors={parseColorsList(x.filament_color, x.filament_colors_array)} finish={finishOf(x)} empty={false} size={34} type={x.filament_multicolor_type}/>
+                  <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{end ? `Finie ${_dayFr(end)}` : "Finie"}</span>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>#{x.id}</span>
+                      {pr ? <span style={{ marginLeft: "auto", padding: "1px 7px", borderRadius: 20, fontSize: 11, fontWeight: 900, color: "#16A34A", background: tint("#16A34A", 12), whiteSpace: "nowrap" }}>
+                        {moneyVal(pr, 2).replace(".", ",")} €</span> : null}
+                    </div>
+                    {d != null ? <div style={{ display: "flex", alignItems: "center", gap: 8 }} data-tip={a ? `Entamée ${_dayFr(a)}` : undefined}>
+                      <span style={{ flex: 1, height: 6, borderRadius: 6, background: "var(--surface2)", overflow: "hidden" }}>
+                        <span style={{ display: "block", height: "100%", width: `${Math.max(6, d / longest * 100)}%`, borderRadius: 6, background: "linear-gradient(90deg, #A78BFA, #8B5CF6)" }}/></span>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: "#8B5CF6", whiteSpace: "nowrap" }}>⏱ {_dur(d)}</span>
+                    </div> : <span style={{ fontSize: 11, fontWeight: 700, fontStyle: "italic", color: "var(--muted)" }}>{a ? `entamée ${_dayFr(a)}` : "pas suivie en impression"}</span>}
+                  </div>
+                  <span style={{ fontSize: 15, color: "var(--muted)" }}>›</span>
+                </button>; })}
+            </div>)}
+          </div>
+        </div>;
+      })()}
     </FSheet>, document.body)}
   </div>;
 }
