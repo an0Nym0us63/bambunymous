@@ -68,6 +68,7 @@
       <tr><td><a href="#tuiles-layer">Couche en cours</a></td><td>Le dessin de la couche qui s'imprime, lu dans le G-code</td><td>demi · 1</td></tr>
       <tr><td><a href="#tuiles-head">Tête d'impression</a></td><td>Les deux buses en dessin (machines à deux buses)</td><td>demi · 2</td></tr>
       <tr><td><a href="#tuiles-fans">Ventilateurs</a></td><td>Une hélice par ventilateur, qui tourne à sa vitesse</td><td>demi · 1</td></tr>
+      <tr><td><a href="#tuiles-printcolors">Couleurs de l'impression</a></td><td>Chaque couleur de l'impression en cours, consommé et prévu</td><td>demi · 1</td></tr>
       <tr><td><a href="#tuiles-switch">Aiguillage (Track Switch)</a> (« Aiguillage »)</td><td>Quelle entrée alimente quelle buse</td><td>toute · 2</td></tr>
       <tr><td><a href="#tuiles-colors">Couleurs chargées</a></td><td>Toutes les bobines en place, en carrés de couleur</td><td>toute · 1</td></tr>
       <tr><td><a href="#tuiles-today">Aujourd'hui</a></td><td>Les impressions du jour, la réussite, l'écart avec hier</td><td>demi · 1</td></tr>
@@ -182,6 +183,15 @@
       <dt><span class="ui">Courbe des 24 h</span> (oui)</dt><dd>Sous les hélices, quand la tuile a la hauteur : une ligne par ventilateur qui a tourné, sa lettre au bout.</dd>
     </dl>
     <p><b>Au toucher</b> : une carte par ventilateur, l'hélice en grand, sa vitesse et à quoi il sert ; puis la courbe des 3 derniers jours (survol : l'heure et chaque vitesse). <span class="ui">Ouvrir</span> mène à <a href="#stats-machine">Stats → Machine</a> (7 jours).</p>
+  </section>
+
+  <section id="tuiles-printcolors">
+    <h3>Couleurs de l'impression</h3>
+    <p><b>Ce qu'elle montre</b> : chaque filament de l'impression en cours, lu par le <a href="#suivi-filament">suivi couche par couche</a> : une pastille à sa couleur (et à sa finition : soie, paillettes, marbre…), son emplacement (« A2 ») et son nom, les grammes déjà consommés sur ceux prévus (« 12 / 40 g ») et une barre à sa couleur qui se remplit au fil des couches. La couleur qui imprime en ce moment est cerclée et surlignée. Avec de la hauteur, le total en tête (« 34 g sur 120 g · 3 couleurs »). Quand il y a trop de couleurs pour une ligne chacune, elles passent en anneaux (la pastille au centre, l'anneau rempli à ce qui est consommé). Réduite à son résumé, une pastille et un pourcentage par couleur. Rien en cours : <span class="ui">Rien en cours d'impression</span> ; une impression sans suivi encore : <span class="ui">Pas encore de suivi du filament pour cette impression</span>.</p>
+    <p>Chez un copain, la tuile montre <b>son</b> impression en cours, ses couleurs et ses bobines.</p>
+    <p><b>Options</b> : aucune en dehors du titre et du fond.</p>
+    <p><b>Toucher une couleur</b> ouvre son détail : un anneau du consommé, la pastille et le nom ; l'emplacement de l'AMS (<span class="ui">📍 A2</span>, <span class="ui">● imprime maintenant</span>), le sous-type, la marque, la finition, et d'où vient le chiffre (<span class="ui">lu dans le G-code</span> ou <span class="ui">≈ estimation</span>) ; les chiffres <span class="ui">Prévus</span>, <span class="ui">Consommés</span>, <span class="ui">Restent à imprimer</span>, <span class="ui">Bobine maintenant → à la fin</span> ; puis la bobine (ou chaque bobine, après un relais) : sa part de l'impression, sa jauge (hachurée sur ce qui partira encore) et son poids maintenant → à la fin. Chez toi, en admin, <span class="ui">🔁 Bobine finie ? Choisir la suite</span> y est aussi. Un succès secret attend la première couleur ouverte.</p>
+    <p><b>Au toucher</b> (le fond de la tuile) : le nom de l'impression, les totaux, une barre de la palette (chaque couleur à sa part du poids prévu), puis une carte par couleur ; toucher une carte déplie son détail dessous. Pas de bouton <span class="ui">Ouvrir</span>.</p>
   </section>
 
   <section id="tuiles-switch">

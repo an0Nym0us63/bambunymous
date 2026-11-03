@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { colorBg, parseColorsList, finishOf, trayBg } from "../utils/colors";
+import { colorBg, parseColorsList, finishOf, trayBg, FINISHES } from "../utils/colors";
 import { importRetry } from "../utils/importRetry";
 import AllAlertsModal from "./AllAlertsModal";
 import { Hide } from "./Cachettes";
 import { useFriend, currentFriend } from "../store/friend";
 import { useSensorHistory } from "../store/sensors";
 import { SensorSpark, SensorChart, SensorLegend, amsLines, heatLines, fanLines } from "./SensorChart";
-import { liveOfSpool, LiveHatch, LiveTo, LiveSwitchButton } from "./LiveUsage";
+import { liveOfSpool, LiveHatch, LiveTo, LiveSwitchButton, LiveBar, useLiveUsage } from "./LiveUsage";
+import { egg } from "../eggs";
 import { useLiveSpool, useLiveCurrent } from "../store/liveUsage";
 import { useLayer, LayerCanvas, LayerExplorer } from "./LayerView";
 import { useIsAdmin } from "../store/auth";
@@ -18,7 +19,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets, Coins, Star, Users, Trophy,
          Dices, ChevronRight, Camera, Video, Thermometer, CalendarDays, ShoppingBag, Rss, Images, Zap, Medal as MedalIcon,
-         BellRing, Split, Fan, Wrench, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck, Maximize2, PackageOpen, Layers } from "lucide-react";
+         BellRing, Split, Fan, Wrench, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck, Maximize2, PackageOpen, Layers, PaintBucket } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
 import StoreLink from "./StoreLink";
 import { RateButton } from "./MwToRate";
@@ -2944,6 +2945,176 @@ function FansZoom({ f, known }) {
       <SensorChart lines={lines} points={hist} hours={72} height={170} unit="%" lo={0} hi={100}/></>}
   </>;
 }
+// ── Couleurs de l'impression (03/11/2026) ────────────────────────────────────────────────────────────────────────
+// chaque filament de l'impression en cours (suivi couche par couche) : sa couleur, une barre consomme / prevu ; une
+// couleur touchee ouvre son detail (bobine, emplacement, grammes, marque, finition). Chez un copain : son impression.
+const PC_C = "#A855F7";
+const FINISH_FR = Object.fromEntries(FINISHES.map(([k, l]) => [k, l.replace(/ \(.*\)$/, "")]));
+// les filaments, un par emplacement du trancheur : le premier rang porte prevu / consomme, le dernier la bobine en cours
+function printColors(d, status) {
+  const items = d?.items || [];
+  const trays = (status?.ams_list || []).flatMap(a => (a.trays || []).map(t => ({ ...t, ams: a })));
+  return [...new Set(items.map(i => i.slot))].map(slot => {
+    const rows = items.filter(i => i.slot === slot), f = rows[0], cur = rows[rows.length - 1];
+    const tray = cur.spool_id ? trays.find(t => t.spool_id === cur.spool_id) : null;
+    const on = !!tray && tray.ams.id === status?.active_ams_id && tray.id === status?.active_tray_id;
+    const c = hexCss(cur.fil_color || cur.color || f.color);
+    const pct = f.planned > 0 ? Math.max(0, Math.min(1, f.used / f.planned)) : 0;
+    return { slot, rows, f, cur, tray, on, c, pct, name: cur.name || f.type || `Filament ${slot}`,
+      where: tray ? slotOf(tray) : cur.ams_tray ? `AMS ${cur.ams_tray}` : null,
+      finish: finishOf({ fila_finish: cur.finish, name: cur.name, fila_type: cur.sub || cur.type }) };
+  });
+}
+// la pastille d'une couleur : sa teinte, sa finition (soie, paillettes…), un liseré quand elle est trop claire
+function PcSwatch({ x, size = 18, ring = false }) {
+  return <span data-pk="" style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "inline-block",
+    ...colorBg(parseColorsList(x.cur.fil_color || x.c, x.cur.colors), x.cur.multicolor, x.finish, { size }),
+    border: `1px solid ${lum(x.c) > 200 ? "rgba(15,23,42,0.28)" : "rgba(0,0,0,0.15)"}`,
+    boxShadow: ring ? `0 0 0 2px var(--surface), 0 0 0 3.5px ${x.c}, 0 0 10px ${x.c}88` : "none" }}/>;
+}
+// la barre consomme / prevu, a la couleur du filament (pastel au depart, franche au bout)
+function PcBar({ x, h = 7 }) {
+  const pale = lum(x.c) > 200;
+  return <span style={{ position: "relative", display: "block", height: h, borderRadius: h, overflow: "hidden", flexShrink: 0,
+    background: `color-mix(in srgb, ${x.c} 14%, var(--surface2))`, boxShadow: pale ? "inset 0 0 0 1px var(--border)" : "none" }}>
+    <span style={{ position: "absolute", inset: 0, width: `${x.pct * 100}%`, borderRadius: h, transition: "width .6s ease",
+      background: `linear-gradient(90deg, color-mix(in srgb, ${x.c} 45%, #ffffff), ${x.c})`,
+      boxShadow: pale ? "inset 0 0 0 1px rgba(15,23,42,0.18)" : `0 0 6px ${x.c}55` }}/>
+  </span>;
+}
+const pcG = v => v == null ? "—" : `${Math.round(v)} g`;
+function PrintColors({ status, o, sz }) {
+  const visiting = useFriend(s => s.friend);
+  const mine = useLiveCurrent();
+  const theirs = useLiveUsage(!!visiting);          // chez un copain, son impression (le partage ne lit que chez moi)
+  const d = visiting ? theirs : mine;
+  const [pick, setPick] = useState(null);
+  const list = printColors(d, status);
+  if (!list.length) return <TileEmpty icon={<PaintBucket size={15}/>} color={PC_C} label="Couleurs de l'impression" sz={sz}
+    text={!isLive(status) ? "Rien en cours d'impression" : d ? "Pas encore de suivi du filament pour cette impression" : "Lecture du suivi du filament…"}/>;
+  const used = list.reduce((t, x) => t + (x.f.used || 0), 0), planned = list.reduce((t, x) => t + (x.f.planned || 0), 0);
+  const open = x => e => { e.stopPropagation(); setPick(x.slot); };
+  const sel = list.find(x => x.slot === pick);
+  const head = <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
+    <span data-pk="" style={{ fontSize: 22, fontWeight: 900, lineHeight: 1.05, ...gradText("#9333EA", "#EC4899") }}>{pcG(used)}</span>
+    <Muted size={12}>sur {pcG(planned)}</Muted>
+    <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>
+      {list.length} couleur{list.length > 1 ? "s" : ""}</span></div>;
+  return (<>
+    <Tile icon={<PaintBucket size={15}/>} color={PC_C} label="Couleurs de l'impression" zoom={<PrintColorsZoom d={d} list={list}/>}
+      mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+        {list.slice(0, 8).map(x => <span key={x.slot} role="button" onClick={open(x)} data-tip={`${x.name} · ${pcG(x.f.used)} / ${pcG(x.f.planned)}`}
+          style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12 }}><PcSwatch x={x} size={13} ring={x.on}/>{Math.round(x.pct * 100)}%</span>)}</span>}>
+      {({ W, H }) => {
+        const hh = H >= list.length * 30 + 34 ? 32 : 0;
+        // une ligne par couleur quand chacune a 24 px ; sinon des anneaux, autant qu'il en tient
+        if ((H - hh) / list.length >= 24) {
+          const rowH = Math.min(64, (H - hh) / list.length), two = rowH >= 38 && W >= 150, big = rowH >= 56 && W >= 240;
+          return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4, minWidth: 0 }}>
+            {hh > 0 && head}
+            {list.map(x => <div key={x.slot} role="button" tabIndex={0} onClick={open(x)} data-tip="Le détail de cette couleur"
+              onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(x)(e); } }}
+              style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, height: rowH - 4, padding: "0 6px", margin: "0 -6px", borderRadius: 10, cursor: "pointer",
+                background: x.on ? `linear-gradient(90deg, ${x.c}1f, transparent 80%)` : "transparent" }}>
+              <PcSwatch x={x} size={big ? 30 : two ? 22 : 16} ring={x.on}/>
+              <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: two ? 4 : 3 }}>
+                <span style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0, fontSize: big ? 13.5 : 12 }}>
+                  {(two || W >= 170) && <span style={{ flex: 1, minWidth: 0, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {x.where && <span style={{ color: x.on ? x.c : "var(--muted)", fontWeight: 900, marginRight: 5 }}>{x.where}</span>}{x.name}</span>}
+                  {!(two || W >= 170) && x.where && <span style={{ color: x.on ? x.c : "var(--muted)", fontWeight: 900, whiteSpace: "nowrap" }}>{x.where}</span>}
+                  <span data-pk="" style={{ marginLeft: "auto", fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>
+                    {Math.round(x.f.used)}<Muted size={11}> / {pcG(x.f.planned)}</Muted></span></span>
+                <PcBar x={x} h={big ? 10 : two ? 7 : 5}/>
+              </span></div>)}</div>;
+        }
+        const g = fitGrid(list.length, W, H, { ar: 1, extra: 14, max: 72, gap: 6 });
+        return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, auto)`, justifyContent: "space-evenly", alignContent: "center", gap: 6 }}>
+          {list.map(x => <span key={x.slot} role="button" onClick={open(x)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, cursor: "pointer" }}>
+            <Ring value={x.pct} size={g.size} color={x.c}><PcSwatch x={x} size={Math.round(g.size * 0.42)} ring={x.on}/></Ring>
+            <span data-pk="" style={{ fontSize: 10.5, fontWeight: 900, color: "var(--text2)" }}>{Math.round(x.f.used)}/{Math.round(x.f.planned)} g</span></span>)}</div>;
+      }}
+    </Tile>
+    {/* la popup d'une couleur, hors de la tuile : en demi-rangee aussi */}
+    {sel && <Zoom icon={<PaintBucket size={15}/>} color={sel.c} label={sel.name} onClose={() => setPick(null)}>
+      <PcDetail x={sel} d={d}/></Zoom>}</>
+  );
+}
+// le detail d'une couleur : l'anneau consomme / prevu, les chiffres, d'ou elle vient, et chaque bobine qui y a servi
+function PcDetail({ x, d, compact = false }) {
+  const visiting = useFriend(s => s.friend);
+  const ref = useRef(null);
+  useEffect(() => { egg("palette_en_cours"); }, []);
+  // deplie sous les cartes : on le fait voir (sur telephone, il tomberait sous le pli)
+  useEffect(() => { if (compact) ref.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }); }, [compact, x.slot]);
+  const { f, cur } = x, left = Math.max(0, (f.planned || 0) - (f.used || 0));
+  const pill = (t, c, tip) => <span data-tip={tip} style={{ fontSize: 11.5, fontWeight: 800, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap", color: c,
+    background: `${c}1a`, border: `1px solid ${c}40` }}>{t}</span>;
+  const ink = lum(x.c) > 200 ? "#64748B" : x.c;
+  return <div ref={ref} onClick={e => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: compact ? 10 : 14 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: compact ? 12 : 18, padding: compact ? "10px 12px" : "16px 18px", borderRadius: 20, flexWrap: "wrap",
+      background: `radial-gradient(120% 120% at 0% 0%, ${x.c}2e, transparent 60%), var(--surface2)`, border: `1px solid ${x.c}38` }}>
+      <Ring value={x.pct} size={compact ? 76 : 112} color={x.c} cap="consommés">{Math.round(x.pct * 100)}%</Ring>
+      <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <PcSwatch x={x} size={compact ? 20 : 26} ring={x.on}/>
+          <span style={{ flex: 1, minWidth: 0, fontSize: compact ? 14.5 : 17, fontWeight: 900, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</span></div>
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+          {x.where && pill(`📍 ${x.where}`, x.on ? "#3B82F6" : "#64748B", "L'emplacement de l'AMS d'où vient ce filament")}
+          {x.on && pill("● imprime maintenant", "#3B82F6")}
+          {(cur.sub || f.type) && pill(cur.sub || f.type, "#0EA5E9")}
+          {cur.brand && pill(cur.brand, "#8B5CF6")}
+          {x.finish && pill(`✨ ${FINISH_FR[x.finish] || x.finish}`, "#EC4899", "La finition")}
+          {pill(f.source === "gcode" ? "lu dans le G-code" : "≈ estimation", f.source === "gcode" ? "#16A34A" : "#D97706",
+            f.source === "gcode" ? "Consommation lue dans le G-code, couche par couche" : "G-code illisible : grammes prévus × avancement")}
+        </div>
+        <PcBar x={x} h={10}/>
+      </div>
+    </div>
+    <Stats items={[["Prévus", pcG(f.planned)], ["Consommés", `${f.source === "gcode" ? "" : "≈ "}${pcG(f.used)}`, ink], ["Restent à imprimer", pcG(left), "#D97706"],
+      cur.now != null && ["Bobine maintenant → à la fin", `${Math.round(cur.now)} → ${pcG(cur.target)}`, cur.target < 50 ? "#EF4444" : "#16A34A"]].filter(Boolean)}/>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <H2>{x.rows.length > 1 ? "Les bobines qui y ont servi" : "La bobine"}</H2>
+      {x.rows.map(r => <div key={r.row} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", borderRadius: 14, background: "var(--surface2)",
+        border: "1px solid var(--border)" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", fontSize: 13 }}>
+          <span style={{ fontWeight: 900, color: "var(--text)" }}>{r.spool_id ? `Bobine #${r.spool_id}` : "Bobine non associée"}</span>
+          {!r.current && <Muted size={11.5}>finie, relayée</Muted>}
+          <span style={{ marginLeft: "auto", fontWeight: 800, color: "var(--text2)" }}>{pcG(r.row_used)}<Muted size={11.5}> / {pcG(r.row_planned)} pour cette impression</Muted></span></div>
+        {r.now != null && <><LiveBar now={r.now} target={r.target} full={Math.max(r.now, r.spool_full || 0) || r.now} color={x.c} h={7}/>
+          <Muted size={11.5}>≈ {pcG(r.now)} maintenant → {pcG(r.target)} à la fin{r.spool_full ? ` · bobine de ${pcG(r.spool_full)}` : ""}</Muted></>}
+      </div>)}
+      {!visiting && <LiveSwitchButton lv={cur.current && cur.now != null ? cur : null} style={{ alignSelf: "flex-start" }}/>}
+    </div>
+    {d?.layer ? <Muted size={11.5}>Couche {d.layer} · {Math.round(d.pct || 0)} % de l'impression — relu toutes les 15 s</Muted> : null}
+  </div>;
+}
+// en grand : l'impression, le total, puis chaque couleur ; une couleur touchee deplie son detail
+function PrintColorsZoom({ d, list }) {
+  const [open, setOpen] = useState(null);
+  const used = list.reduce((t, x) => t + (x.f.used || 0), 0), planned = list.reduce((t, x) => t + (x.f.planned || 0), 0);
+  const sel = list.find(x => x.slot === open);
+  return <>
+    {d?.print_name && <div style={{ fontSize: 15, fontWeight: 900, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.print_name}</div>}
+    <Stats items={[["Consommés", pcG(used), PC_C], ["Prévus", pcG(planned)], ["Restent", pcG(Math.max(0, planned - used)), "#D97706"], ["Couleurs", list.length, "#EC4899"]]}/>
+    {/* la palette : une barre empilee, chaque couleur a sa part du poids prevu */}
+    <div style={{ display: "flex", height: 14, borderRadius: 8, overflow: "hidden", gap: 2 }}>
+      {list.map(x => <span key={x.slot} data-tip={`${x.name} : ${pcG(x.f.planned)} prévus`} style={{ flex: Math.max(x.f.planned || 0, planned * 0.02), position: "relative",
+        background: `color-mix(in srgb, ${x.c} 22%, var(--surface2))` }}>
+        <span style={{ position: "absolute", inset: 0, width: `${x.pct * 100}%`, background: x.c }}/></span>)}</div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
+      {list.map(x => <button key={x.slot} type="button" onClick={() => setOpen(o => o === x.slot ? null : x.slot)} style={{ display: "flex", flexDirection: "column", gap: 6,
+        padding: "10px 12px", borderRadius: 16, cursor: "pointer", textAlign: "left", color: "var(--text)", font: "inherit",
+        background: `linear-gradient(135deg, ${x.c}26, transparent 60%), var(--surface2)`, border: `1px solid ${open === x.slot ? x.c : x.on ? "#3b82f6" : "var(--border)"}` }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <PcSwatch x={x} size={22} ring={x.on}/>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</span>
+          <span data-pk="" style={{ fontSize: 13, fontWeight: 900, whiteSpace: "nowrap" }}>{Math.round(x.pct * 100)} %</span></span>
+        <PcBar x={x} h={7}/>
+        <Muted size={11.5}>{[x.where, `${pcG(x.f.used)} / ${pcG(x.f.planned)}`, x.cur.brand].filter(Boolean).join(" · ")}</Muted>
+      </button>)}</div>
+    {sel && <PcDetail key={sel.slot} x={sel} d={d} compact/>}
+  </>;
+}
 const statsH3 = W => statsH(3, W);
 // le mois : le compte (le mois est dit dans la tuile meme : titre masque, on sait de quoi on parle),
 // la reussite, l'ecart avec le mois dernier, les chiffres du mois et les barres par jour
@@ -4776,6 +4947,7 @@ export const TILES = {
   head: { label: "Tête d'impression", w: [1, 2], h: [2, 1, 3], render: (d, st, o, it) => <Toolhead status={st} sz={sz(it)}/> },
   fans: { label: "Ventilateurs", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Fans status={st} o={o} sz={sz(it)}/>,
     options: [B("idle", "Ceux à l'arrêt", true), B("spark", "Courbe des 24 h", true, { hint: "Une ligne par ventilateur, sous les hélices, quand la tuile a la hauteur." })] },
+  printcolors: { label: "Couleurs de l'impression", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <PrintColors status={st} o={o} sz={sz(it)}/> },
   switch: { label: "Aiguillage (Track Switch)", w: [2, 1], h: [2, 1, 3, 0.5], render: (d, st, o, it) => <FilaSwitch status={st} o={o} sz={sz(it)}/> },
   colors: { label: "Couleurs chargées", w: [2, 1], h: [1, 2, 0.5], render: (d, st, o, it) => <Colors status={st} o={o} sz={sz(it)}/> },
   streak: { label: "Série", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Streak o={o} sz={sz(it)}/>,
@@ -4818,6 +4990,7 @@ const WAIT = {
   spool: ["status", "La bobine qui imprime en ce moment."],
   head: ["status", "Les buses de la tête d'impression."],
   fans: ["status", "La vitesse de chaque ventilateur de l'imprimante."],
+  printcolors: ["status", "Chaque couleur de l'impression en cours : consommé et prévu."],
   switch: ["status", "Le chemin du filament dans l'aiguillage."],
   colors: ["status", "Les couleurs chargées dans les AMS."],
 };

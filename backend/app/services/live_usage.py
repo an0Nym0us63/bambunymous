@@ -590,6 +590,11 @@ async def live(pid: int) -> dict:
                 "source": src.get(slot, "estimate"), "color": r.color_hex, "type": r.filament_type,
                 "name": (getattr(fil, "translated_name", None) or getattr(fil, "name", None) or "") if fil else "",
                 "spool_full": float(fil.filament_weight_g) if fil and fil.filament_weight_g else None,
+                # pour la tuile « Couleurs de l'impression » (03/11/2026) : l'emplacement, la marque, le sous-type, la finition
+                "ams_tray": sp.ams_tray if sp else None, "brand": fil.manufacturer if fil else None,
+                "sub": (fil.fila_type or fil.material) if fil else None, "finish": fil.fila_finish if fil else None,
+                "colors": fil.colors_array if fil else None, "multicolor": fil.multicolor_type if fil else None,
+                "fil_color": fil.color if fil else None,
             })
     return {"print_id": pid, "print_name": p.translated_name or p.file_name, "layer": prog.get("layer"), "pct": prog.get("pct"),
             "items": items}
