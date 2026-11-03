@@ -777,36 +777,7 @@ class MQTTManager:
                                              _key=_cache_key):
                                 lp = _mio.new_event_loop()
                                 async def _go():
-                                    from ..services.spool_matcher import match_spool
-                                    from ..services.slot_override import get_override, signature, has_rfid, rfid_signature
-                                    spool_id, mode = None, None
-                                    # Sans RFID, une association faite a la main pour cet
-                                    # emplacement (meme filament present) prime sur la
-                                    # detection par profil + couleur.
-                                    # Avec RFID : seulement une bobine qui a pris la suite en
-                                    # pleine impression (live_usage.switch), tant que l'AMS n'a
-                                    # pas relu la puce (03/11/2026) ; une puce relue l'efface.
-                                    _ov, _kind = await get_override(_ams_id, _tray_slot,
-                                                                    rfid_signature(_tag) if has_rfid(_tag) else signature(_tinfo, _tc),
-                                                                    with_kind=True)
-                                    if _ov:
-                                        spool_id, mode = _ov, ("suite" if _kind == "suite" else "linked")
-                                    if spool_id is None:
-                                        spool_id, mode = await match_spool(_tag, _tinfo, _tc)
-                                        # la bobine trouvee (ou la puce lue) a ete finie dans
-                                        # l'impression en cours : la case montre celle qui a pris
-                                        # la suite, et la garde ensuite (association a la main)
-                                        try:
-                                            from ..services.live_usage import successor
-                                            _nx = await successor(spool_id, _tag if has_rfid(_tag) else "", (_ams_id, _tray_slot))
-                                            if _nx:
-                                                from ..services.slot_override import set_override, rfid_signature
-                                                await set_override(_ams_id, _tray_slot,
-                                                                   rfid_signature(_tag) if has_rfid(_tag) else signature(_tinfo, _tc), _nx,
-                                                                   kind="suite")
-                                                spool_id, mode = _nx, "suite"
-                                        except Exception as _se:
-                                            logger.debug(f"[AMS] bobine suivante : {_se}")
+                                    spool_id, mode = await resolve_tray(_ams_id, _tray_slot, _tag, _tinfo, _tc)
                                     _MATCH_CACHE[_key] = spool_id if spool_id else -1
                                     _CACHE_TS[_key] = __import__('time').time()
                                     # mode est mis en cache même sans spool_id (ex: "notfound")
@@ -1062,6 +1033,34 @@ def clear_match_cache() -> None:
         logger.exception("[CACHE] invalidation impossible")
 
 
+async def resolve_tray(ams_id: int, tray_id: int, tag: str, tray_info: str, color: str) -> tuple:
+    """La bobine d'un emplacement de l'AMS : (spool_id, mode). La seule regle, pour la detection a reception de l'AMS
+    comme pour la relance apres une modification de bobine (03/11/2026 : la relance passait par un autre calcul, qui
+    ignorait les associations a la main et la bobine qui a pris la suite ; l'accueil restait sur l'ancienne).
+      - Sans RFID, une association faite a la main pour cet emplacement (meme filament present) prime sur la
+        detection par profil + couleur. Avec RFID : seulement une bobine qui a pris la suite en pleine impression,
+        tant que l'AMS n'a pas relu la puce ; une puce relue l'efface.
+      - La bobine trouvee (ou la puce lue) a ete finie dans l'impression en cours : l'emplacement montre celle qui a
+        pris la suite, et la garde ensuite (association « suite »)."""
+    from ..services.spool_matcher import match_spool
+    from ..services.slot_override import get_override, set_override, signature, has_rfid, rfid_signature
+    tag = (tag or "").strip()
+    sig = rfid_signature(tag) if has_rfid(tag) else signature(tray_info, color)
+    ov, kind = await get_override(ams_id, tray_id, sig, with_kind=True)
+    if ov:
+        return ov, ("suite" if kind == "suite" else "linked")
+    spool_id, mode = await match_spool(tag, tray_info, color)
+    try:
+        from ..services.live_usage import successor
+        nx = await successor(spool_id, tag if has_rfid(tag) else "", (ams_id, tray_id))
+        if nx:
+            await set_override(ams_id, tray_id, sig, nx, kind="suite")
+            return nx, "suite"
+    except Exception as e:
+        logger.debug(f"[AMS] bobine suivante : {e}")
+    return spool_id, mode
+
+
 def force_rematch_all_trays():
     """Relance le matching spool sur tous les trays connus en mémoire (après invalidation cache)."""
     import threading as _th
@@ -1071,22 +1070,26 @@ def force_rematch_all_trays():
         for ams in (s.ams_list or []):
             for t in (ams.trays or []):
                 if getattr(t, "empty", True): continue
+                # les memes champs bruts que la detection a reception de l'AMS (03/11/2026 : celle-ci lisait
+                # color_hex / tray_uuid, absents du tray, et prenait le numero de case pour un filament du 3MF)
                 _tinfo = getattr(t, "tray_info_idx", "") or ""
-                _color = getattr(t, "color_hex", "") or ""
-                _tag   = getattr(t, "tag_uid", "") or ""
-                _tuuid = getattr(t, "tray_uuid", "") or ""
-                def _rematch(_t=t, _ti=_tinfo, _c=_color, _tg=_tag, _tu=_tuuid):
+                _color = getattr(t, "raw_color", "") or ""
+                _tuuid = (getattr(t, "uuid", "") or "").strip()
+                def _rematch(_t=t, _a=ams.id, _ti=_tinfo, _c=_color, _tu=_tuuid):
                     try:
-                        from ..services.print_tracker import _spool_from_slot_or_match as _sfm
                         import asyncio as _aio
                         loop = _aio.new_event_loop()
                         try:
-                            sid, mode = loop.run_until_complete(
-                                _sfm(int(getattr(_t, "id", 0) or 0), _ti, _c, tag_uid=_tg, tray_uuid=_tu)
-                            )
+                            sid, mode = loop.run_until_complete(resolve_tray(_a, int(_t.id), _tu, _ti, _c))
                             _t.spool_id   = sid
                             _t.match_mode = mode or ""
                             _t._spool_info_cache = None
+                            _k = (_a, _t.id, _tu or _ti or "")
+                            _MATCH_CACHE[_k] = sid if sid else -1
+                            _CACHE_TS[_k] = __import__('time').time()
+                            if mode:
+                                _MATCH_MODE_CACHE[_k] = mode
+                            _SPOOL_INFO_CACHE.pop(_k, None)
                         finally: loop.close()
                     except Exception: pass
                 _th.Thread(target=_rematch, daemon=True).start()

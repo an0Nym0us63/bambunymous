@@ -368,20 +368,24 @@ async def _check_refill(pid: int) -> None:
 
 # ── Changement de bobine ────────────────────────────────────────────────────────────────────────────────────────────
 async def successor(spool_id: Optional[int], tag: str = "", here: tuple = ()) -> Optional[int]:
-    """La bobine qui a pris la suite de celle-ci dans l'impression en cours (03/11/2026), pour l'emplacement qui la
-    montre encore : l'AMS ne relit pas une case en pleine impression. spool_id : la bobine que la detection y trouve ;
+    """La bobine qui a pris la suite de celle-ci dans la derniere impression ou elle a servi (03/11/2026), pour
+    l'emplacement qui la montre encore : l'AMS ne relit pas une case en pleine impression. spool_id : la bobine que la detection y trouve ;
     sans elle, la puce lue (tag), cherchee aussi parmi les bobines archivees (une bobine finie qu'on a rangee). Rien si
     la suivante est deja vue dans un autre emplacement (relais de l'AMS : elle n'a pas pris la place de l'ancienne).
     here : (ams, emplacement) de la case regardee."""
     from ..models.filament import Spool
-    pid = await current_print_id()
-    if not pid:
-        return None
+    from ..models.print_history import FilamentUsage
     async with AsyncSessionLocal() as db:
         if not spool_id and tag:
             spool_id = (await db.execute(select(Spool.id).where(Spool.tag_number == tag)
                                          .order_by(Spool.id.desc()).limit(1))).scalar()
         if not spool_id:
+            return None
+        # la derniere impression ou elle a servi (en cours, ou finie : la case la lit encore tant que l'AMS ne l'a
+        # pas relue, 03/11/2026)
+        pid = (await db.execute(select(FilamentUsage.print_id).where(FilamentUsage.spool_id == spool_id)
+                                .order_by(FilamentUsage.print_id.desc()).limit(1))).scalar()
+        if not pid:
             return None
         rows = await _rows(db, pid)
     new = None
