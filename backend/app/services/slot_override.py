@@ -57,28 +57,30 @@ async def _load(db) -> dict:
     return val if isinstance(val, dict) else {}
 
 
-async def set_override(ams_id: int, tray_id: int, sig: str, spool_id: int) -> None:
+async def set_override(ams_id: int, tray_id: int, sig: str, spool_id: int, kind: str = "") -> None:
+    """kind « suite » : la bobine qui a pris la suite d'une bobine finie en pleine impression (03/11/2026), pas lue
+    par l'AMS ; l'emplacement l'affiche a part (match_mode « suite »)."""
     async with AsyncSessionLocal() as db:
         data = await _load(db)
-        data[f"{int(ams_id)}:{int(tray_id)}"] = {"spool_id": int(spool_id), "sig": sig}
+        data[f"{int(ams_id)}:{int(tray_id)}"] = {"spool_id": int(spool_id), "sig": sig, **({"kind": kind} if kind else {})}
         await set_setting(db, KEY, json.dumps(data))
     logger.info(f"[SLOT] {ams_id}/{tray_id} associe a la main a la bobine #{spool_id} ({sig})")
 
 
-async def get_override(ams_id: int, tray_id: int, sig: str) -> Optional[int]:
-    """Bobine choisie a la main pour cet emplacement, si le meme filament y est toujours."""
+async def get_override(ams_id: int, tray_id: int, sig: str, with_kind: bool = False):
+    """Bobine choisie a la main pour cet emplacement, si le meme filament y est toujours (with_kind : (id, kind))."""
     from ..models.filament import Spool
     key = f"{int(ams_id)}:{int(tray_id)}"
     async with AsyncSessionLocal() as db:
         data = await _load(db)
         entry = data.get(key)
         if not entry:
-            return None
+            return (None, "") if with_kind else None
         spool = await db.get(Spool, int(entry.get("spool_id") or 0))
         if entry.get("sig") != sig or spool is None or spool.archived or spool.ordered:
             # Filament change (ou bobine archivee) : le choix ne vaut plus.
             data.pop(key, None)
             await set_setting(db, KEY, json.dumps(data))
             logger.info(f"[SLOT] {ams_id}/{tray_id} : association manuelle oubliee (emplacement change)")
-            return None
-        return spool.id
+            return (None, "") if with_kind else None
+        return (spool.id, entry.get("kind") or "") if with_kind else spool.id

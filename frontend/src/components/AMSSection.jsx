@@ -147,7 +147,7 @@ function ColorPill({ tray, spoolInfo, active, h = 28 }) {
   return (
     <div style={{ flex:1, height:h, borderRadius:6, transition:"all 0.2s",
       boxShadow: active ? `0 0 0 2px ${ringColor}` : `0 0 0 1px ${ringColor}`,
-      position:"relative", ...bg }}>
+      position:"relative", ...bg, ...(!isEmpty && suiteRing(tray)) }}>
       {/* Slot vide : aucun indicateur de detection. Un slot sans filament
           conservait parfois le dernier match_mode connu, laissant une pastille
           grise/verte "a verifier" sur du vide. La grande vue filtrait deja sur
@@ -184,6 +184,11 @@ function ColorPill({ tray, spoolInfo, active, h = 28 }) {
 }
 
 // ── Icône de détection filament ─────────────────────────────────────────────
+// la bobine qui a pris la suite d'une bobine finie en pleine impression (03/11/2026) : choisie, pas lue par l'AMS ;
+// en pointilles cyan partout ou la case se montre
+const SUITE_COLOR = "#06B6D4";
+const suiteRing = tray => tray?.match_mode === "suite" ? { outline: `1.5px dashed ${SUITE_COLOR}`, outlineOffset: 2 } : null;
+
 function MatchIcon({ mode, size = 10 }) {
   if (!mode) return null;
   const cfg = {
@@ -192,6 +197,7 @@ function MatchIcon({ mode, size = 10 }) {
     notfound: { symbol: "⚠", color: "#ef4444", title: "Filament identifié par l'imprimante mais introuvable en base" },
     manual:   { symbol: "◇", color: "#94a3b8", title: "Non identifié" },
     linked:   { symbol: "◆", color: "#8b5cf6", title: "Attribuée à la main" },
+    suite:    { symbol: "↻", color: SUITE_COLOR, title: "Suite d'une bobine finie en pleine impression : choisie, pas lue par l'AMS" },
   }[mode];
   if (!cfg) return null;
   return (
@@ -368,6 +374,9 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
         ) : (
           <SpoolSVG colors={empty?null:colors} finish={finishOf(spoolInfo, tray)} empty={empty} size={size} active={isActive} type={mcType}/>
         )}
+        {/* suite d'une bobine finie, pas lue par l'AMS : un cercle en pointilles */}
+        {!empty && tray.match_mode === "suite" && <span aria-hidden="true" style={{ position:"absolute", left:"50%", top:"50%", width:size + 6, height:size + 6,
+          transform:"translate(-50%,-50%)", borderRadius:"50%", border:`1.5px dashed ${SUITE_COLOR}`, pointerEvents:"none" }}/>}
         {/* Label slot */}
         <div style={{ position:"absolute", bottom: Math.round(size * 0.14), left:"50%",
           transform:"translateX(-50%)", padding:"1px 7px", borderRadius:20,
@@ -442,7 +451,7 @@ function TrayRow({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loa
     <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, height: size + 4, cursor: onClick ? "pointer" : "default",
       borderRadius: 14, padding: "2px 10px 2px 2px", boxSizing: "border-box", background: isActive ? "rgba(59,130,246,0.08)" : "transparent",
       border: `1px solid ${isActive ? "rgba(59,130,246,0.45)" : "transparent"}` }}>
-      <div style={{ position: "relative", flexShrink: 0, opacity: posee ? 0.6 : 1 }}>
+      <div style={{ position: "relative", flexShrink: 0, opacity: posee ? 0.6 : 1, borderRadius: "50%", ...(!vide && suiteRing(tray)) }}>
         <SpoolSVG colors={vide ? null : (posee ? parseColors({}, posee) : colors)} finish={posee ? finishOf(posee) : finishOf(spoolInfo, tray)} empty={vide} size={size} active={isActive} type={posee ? multicolorType({}, posee) : mcType}/>
       </div>
       <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -704,6 +713,7 @@ const MATCH_LABEL = {
   notfound: { text:"Introuvable",  color:"#ef4444" },
   manual:   { text:"Manuel",       color:"#94a3b8" },
   linked:   { text:"Attribuée à la main", color:"#8b5cf6" },
+  suite:    { text:"Suite · pas lue", color:SUITE_COLOR },
 };
 
 function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
@@ -764,6 +774,10 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
               color:match.color, background:`${match.color}1f`, border:`1px solid ${match.color}33` }}><MatchIcon mode={tray.match_mode} size={11}/>{match.text}</span>}
             {info?.needs_drying && fChip("💧 à sécher", DRY_COLOR)}
           </div>
+          {!isEmpty && tray.match_mode === "suite" && <div style={{ fontSize:12, fontWeight:700, lineHeight:1.4, color:"var(--text2)", padding:"6px 10px",
+            borderRadius:10, border:`1.5px dashed ${SUITE_COLOR}`, background:`${SUITE_COLOR}12` }}>
+            ↻ Suite virtuelle : la bobine d'avant s'est finie en pleine impression et celle-ci a été choisie pour la suite. L'AMS n'a pas
+            relu l'emplacement ; il reprend la main dès qu'il le relit.</div>}
           <div style={{ fontSize:23, fontWeight:900, color:"var(--text)", lineHeight:1.12, overflowWrap:"anywhere" }}>{name}</div>
           {!isEmpty && (info?.brand || info?.fila_type || tray.filament_type) && <div style={{ fontSize:13, fontWeight:700, color:"var(--muted)" }}>
             {[info?.brand, info?.fila_type || tray.filament_type].filter(Boolean).join(" · ")}</div>}

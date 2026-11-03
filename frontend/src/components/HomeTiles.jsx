@@ -3683,6 +3683,8 @@ function Spool({ status, o, sz }) {
           {stacked(140)}
           <div style={{ flex: "1 1 180px", minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{chip(slot, "#8B5CF6")}{live && chip("● en cours", "#22c55e")}
+              {t.match_mode === "suite" && <span data-tip="Elle a pris la suite d'une bobine finie en pleine impression : choisie, pas lue par l'AMS">
+                {chip("↻ suite · pas lue", "#06B6D4")}</span>}
               {more > 0 && chip(`🧵 +${more} en stock${moreG ? ` · ${fmtG(moreG)}` : ""}`, "#22C55E")}
               {si.filament_ordered > 0 && chip(`📬 +${si.filament_ordered} en commande`, "#0EA5E9")}
               {si.needs_drying && chip("à sécher", "#0ea5e9")}{si.swatch === false && chip("échantillon à faire", "#f59e0b")}</div>

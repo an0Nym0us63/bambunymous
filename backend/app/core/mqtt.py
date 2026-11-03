@@ -786,12 +786,27 @@ class MQTTManager:
                                     # Avec RFID : seulement une bobine qui a pris la suite en
                                     # pleine impression (live_usage.switch), tant que l'AMS n'a
                                     # pas relu la puce (03/11/2026) ; une puce relue l'efface.
-                                    _ov = await get_override(_ams_id, _tray_slot,
-                                                             rfid_signature(_tag) if has_rfid(_tag) else signature(_tinfo, _tc))
+                                    _ov, _kind = await get_override(_ams_id, _tray_slot,
+                                                                    rfid_signature(_tag) if has_rfid(_tag) else signature(_tinfo, _tc),
+                                                                    with_kind=True)
                                     if _ov:
-                                        spool_id, mode = _ov, "linked"
+                                        spool_id, mode = _ov, ("suite" if _kind == "suite" else "linked")
                                     if spool_id is None:
                                         spool_id, mode = await match_spool(_tag, _tinfo, _tc)
+                                        # la bobine trouvee (ou la puce lue) a ete finie dans
+                                        # l'impression en cours : la case montre celle qui a pris
+                                        # la suite, et la garde ensuite (association a la main)
+                                        try:
+                                            from ..services.live_usage import successor
+                                            _nx = await successor(spool_id, _tag if has_rfid(_tag) else "", (_ams_id, _tray_slot))
+                                            if _nx:
+                                                from ..services.slot_override import set_override, rfid_signature
+                                                await set_override(_ams_id, _tray_slot,
+                                                                   rfid_signature(_tag) if has_rfid(_tag) else signature(_tinfo, _tc), _nx,
+                                                                   kind="suite")
+                                                spool_id, mode = _nx, "suite"
+                                        except Exception as _se:
+                                            logger.debug(f"[AMS] bobine suivante : {_se}")
                                     _MATCH_CACHE[_key] = spool_id if spool_id else -1
                                     _CACHE_TS[_key] = __import__('time').time()
                                     # mode est mis en cache même sans spool_id (ex: "notfound")

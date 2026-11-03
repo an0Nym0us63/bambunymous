@@ -63,10 +63,12 @@ export function LiveBar({ now, target, full, color, h = 8 }) {
 
 function SpoolChoice({ item, printId, onClose, onDone }) {
   const [spools, setSpools] = useState(null);
+  const [err, setErr] = useState(null);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    client.get("/filaments/spools", { params: { limit: 500, archived: false } }).then(r => setSpools(r.data || [])).catch(() => setSpools([]));
+    client.get("/filaments/spools", { params: { limit: 500, archived: false } }).then(r => setSpools(Array.isArray(r.data) ? r.data : []))
+      .catch(e => { setErr(e.response?.data?.detail || e.message || "erreur"); setSpools([]); });
   }, []);
   const same = s => (s.filament_fila_type || s.filament_material || "").toUpperCase() === String(item.type || "").toUpperCase()
     && hex(s.color_hex || s.filament_color).toUpperCase() === hex(item.color).toUpperCase();
@@ -92,7 +94,8 @@ function SpoolChoice({ item, printId, onClose, onDone }) {
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher une bobine…" autoComplete="off"
         style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 14 }}/>
       {spools == null ? <span style={{ fontSize: 13, color: "var(--muted)" }}>…</span>
-        : list.length === 0 ? <span style={{ fontSize: 13, color: "var(--muted)" }}>Aucune bobine</span>
+        : err ? <span style={{ fontSize: 13, fontWeight: 700, color: "#dc2626" }}>Liste des bobines illisible : {String(err)}</span>
+        : list.length === 0 ? <span style={{ fontSize: 13, color: "var(--muted)" }}>{q.trim() ? "Aucune bobine ne correspond" : "Aucune autre bobine en stock"}</span>
         : list.slice(0, 60).map(s => <button key={s.id} disabled={busy} onClick={() => pick(s)} style={{ display: "flex", alignItems: "center", gap: 10,
           padding: "10px 12px", borderRadius: 14, cursor: "pointer", textAlign: "left", color: "var(--text)",
           background: same(s) ? "linear-gradient(135deg, rgba(34,197,94,.12), transparent 70%), var(--surface)" : "var(--surface)",
