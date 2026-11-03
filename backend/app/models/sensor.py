@@ -20,6 +20,11 @@ class SensorSample(Base):
     nozzle2  = Column(Float, nullable=True)     # la seconde buse, sur une bi-buse
     bed      = Column(Float, nullable=True)
     chamber  = Column(Float, nullable=True)
+    # les consignes, quand il y en a une (0 sur l'imprimante : rien)
+    nozzle_t  = Column(Float, nullable=True)
+    nozzle2_t = Column(Float, nullable=True)
+    bed_t     = Column(Float, nullable=True)
+    chamber_t = Column(Float, nullable=True)
     ams      = Column(Text, nullable=True)      # JSON {ams_id: [humidite %, temperature °C]}
 
     __table_args__ = (Index("idx_sensor_samples_ts", "ts"),)

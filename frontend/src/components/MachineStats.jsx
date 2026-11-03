@@ -44,8 +44,8 @@ export default function MachineStats() {
   const d = useMemo(() => {
     if (!pts) return null;
     const hum = amsLines(pts, 0), amsT = amsLines(pts, 1);
-    const heat = heatLines(pts, { chamber: false });
-    const ch = seriesOf(pts, p => p.chamber);
+    const heat = heatLines(pts, { chamber: false, targets: true });
+    const ch = heatLines(pts, { only: ["chamber"], targets: true });
     // le temps passe a imprimer : la somme des intervalles entre deux releves « en impression » (au plus 15 min chacun)
     let printed = 0;
     for (let i = 1; i < pts.length; i++) {
@@ -55,7 +55,7 @@ export default function MachineStats() {
     const allH = hum.flatMap(l => l.pts.map(p => p.v));
     const wet = hum.map(l => ({ l, r: range(l.pts) })).filter(x => x.r).sort((a, b) => b.r.max - a.r.max)[0];
     const nz = range(seriesOf(pts, p => p.nozzle));
-    return { hum, amsT, heat, ch: ch.length ? [{ key: "chamber", label: "Chambre", short: "C", color: "#3B82F6", unit: "°", pts: ch }] : [],
+    return { hum, amsT, heat, ch: ch.some(l => !l.dash) ? ch : [],
       printed, avgH: allH.length ? allH.reduce((a, b) => a + b, 0) / allH.length : null, wet, nz };
   }, [pts]);
 
@@ -97,12 +97,13 @@ export default function MachineStats() {
         <div style={title("#EA580C")}>🔥 Buse et plateau</div>
         <SensorLegend lines={d.heat} unit="°"/>
         <SensorChart lines={d.heat} points={pts} hours={hours} height={200} unit="°" lo={0}/>
-        <Ranges lines={d.heat} unit="°"/>
+        <Ranges lines={d.heat.filter(l => !l.dash)} unit="°"/>
       </div>}
       {d.ch.length > 0 && <div style={card("#3B82F6")}>
         <div style={title("#2563EB")}>📦 Chambre</div>
+        {d.ch.some(l => l.dash) && <SensorLegend lines={d.ch} unit="°"/>}
         <SensorChart lines={d.ch} points={pts} hours={hours} height={150} unit="°"/>
-        <Ranges lines={d.ch} unit="°"/>
+        <Ranges lines={d.ch.filter(l => !l.dash)} unit="°"/>
       </div>}
     </>}
   </div>;

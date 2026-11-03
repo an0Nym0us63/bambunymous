@@ -184,6 +184,11 @@ async def _migrate():
         # ne trouve alors plus rien a corriger. Les nouvelles lignes recoivent
         # leur valeur par le modele SQLAlchemy.
         ("accessories", "category",           "TEXT"),
+        # les consignes des releves de capteurs (03/11/2026, la table venait de naitre sans elles)
+        ("sensor_samples", "nozzle_t",        "REAL"),
+        ("sensor_samples", "nozzle2_t",       "REAL"),
+        ("sensor_samples", "bed_t",           "REAL"),
+        ("sensor_samples", "chamber_t",       "REAL"),
         ("filament_usage", "from_g",          "REAL"),
         ("objects",   "status",               "TEXT"),
         ("users",     "tokens_valid_from",    "TIMESTAMP"),

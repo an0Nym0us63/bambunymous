@@ -119,7 +119,8 @@ export function SensorChart({ lines, points, hours = 24, height = 180, unit = ""
         fill="rgba(59,130,246,.10)"/>)}
       {grid.map(v => <line key={v} x1={0} x2={W} y1={y(v)} y2={y(v)} stroke="var(--border)" strokeWidth="1" vectorEffect="non-scaling-stroke" strokeDasharray="3 4"/>)}
       {lines.map(l => paths(l.pts.filter(p => p.t >= from), x, y).map((seg, i) => <React.Fragment key={`${l.key}${i}`}>
-        <polyline points={seg.join(" ")} fill="none" stroke={l.color} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>
+        <polyline points={seg.join(" ")} fill="none" stroke={l.color} strokeWidth={l.dash ? 1.5 : 2.2} strokeLinejoin="round" strokeLinecap="round"
+          vectorEffect="non-scaling-stroke" strokeDasharray={l.dash ? "5 4" : undefined} opacity={l.dash ? 0.8 : 1}/>
       </React.Fragment>))}
       {at != null && <line x1={x(at)} x2={x(at)} y1={0} y2={H - 18} stroke="var(--muted)" strokeWidth="1" vectorEffect="non-scaling-stroke"/>}
     </svg>
@@ -137,10 +138,14 @@ export function SensorChart({ lines, points, hours = 24, height = 180, unit = ""
   </div>;
 }
 
-/** La legende : une pastille par serie, sa derniere valeur. */
+/** La legende : une pastille par serie, sa derniere valeur (les consignes, en pointilles, en une seule pastille). */
 export function SensorLegend({ lines, unit = "" }) {
+  const dashed = lines.some(l => l.dash);
   return <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-    {lines.map(l => { const last = l.pts[l.pts.length - 1];
+    {dashed && <span style={{ order: 1, display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 800,
+      color: "var(--muted)", border: "1px dashed var(--border)" }}>
+      <svg width="16" height="4" aria-hidden="true"><line x1="0" y1="2" x2="16" y2="2" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3"/></svg>consignes</span>}
+    {lines.filter(l => !l.dash).map(l => { const last = l.pts[l.pts.length - 1];
       return <span key={l.key} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 800,
         color: "var(--text2)", background: `color-mix(in srgb, ${l.color} 12%, transparent)`, border: `1px solid color-mix(in srgb, ${l.color} 30%, transparent)` }}>
         <span style={{ width: 8, height: 8, borderRadius: "50%", background: l.color }}/>{l.label}
@@ -163,9 +168,14 @@ export function amsLines(points, k = 0) {
     pts: seriesOf(points, p => { const v = p.ams?.[id]?.[k]; return v ? v : null; }) })).filter(l => l.pts.length);
 }
 
-/** Les series de chaleur : buse(s), plateau, chambre. */
-export function heatLines(points, { chamber = true } = {}) {
+/** Les series de chaleur : buse(s), plateau, chambre ; avec targets, leurs consignes en pointilles a la meme couleur
+ *  (seulement celles qui ont eu une consigne sur la periode). */
+export function heatLines(points, { chamber = true, only = null, targets = false } = {}) {
   const two = (points || []).some(p => p.nozzle2 != null);
-  return [["nozzle", two ? "Buse active" : "Buse", "B"], ...(two ? [["nozzle2", "Autre buse", "B2"]] : []), ["bed", "Plateau", "P"], ...(chamber ? [["chamber", "Chambre", "C"]] : [])]
-    .map(([k, label, short]) => ({ key: k, label, short, color: HEAT_COLORS[k], unit: "°", pts: seriesOf(points, p => p[k]) })).filter(l => l.pts.length);
+  const src = [["nozzle", two ? "Buse active" : "Buse", "B"], ...(two ? [["nozzle2", "Autre buse", "B2"]] : []), ["bed", "Plateau", "P"], ...(chamber ? [["chamber", "Chambre", "C"]] : [])]
+    .filter(([k]) => !only || only.includes(k));
+  const main = src.map(([k, label, short]) => ({ key: k, label, short, color: HEAT_COLORS[k], unit: "°", pts: seriesOf(points, p => p[k]) }));
+  const tgt = targets ? src.map(([k, label]) => ({ key: `${k}_t`, label: `Consigne ${label.toLowerCase()}`, color: HEAT_COLORS[k], unit: "°", dash: true,
+    pts: seriesOf(points, p => p[`${k}_t`]) })) : [];
+  return [...main, ...tgt].filter(l => l.pts.length);
 }

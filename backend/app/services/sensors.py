@@ -18,6 +18,7 @@ KEEP_DAYS = 7
 EVERY_IDLE = 300.0
 EVERY_PRINTING = 60.0
 MAX_POINTS = 600                        # un historique rendu en plus de points est moyenne par paquets
+TARGETS = ("nozzle_t", "nozzle2_t", "bed_t", "chamber_t")   # les consignes (None : pas de consigne)
 K_OFFSETS = "AMS_HUMIDITY_OFFSETS"      # JSON {ams_id: decalage en points de %}
 
 _OFFSETS: dict[int, float] = {}
@@ -78,11 +79,15 @@ def snapshot(s) -> dict | None:
     nz = sorted(s.nozzles or [], key=lambda n: (not n.active, n.id))
     ams = {str(a.id): [a.humidity, round(a.temp, 1)] for a in (s.ams_list or [])
            if a.id not in (EXT_AMS_ID, 254) and (a.humidity or a.temp)}
+    tgt = lambda v: round(v, 1) if v and v > 0 else None
     return {"printing": _printing(s),
             "nozzle": round(nz[0].temp, 1) if nz else None,
             "nozzle2": round(nz[1].temp, 1) if len(nz) > 1 else None,
             "bed": round(s.bed_temp, 1) if s.bed_temp is not None else None,
             "chamber": round(s.chamber_temp, 1) if s.chamber_temp else None,
+            "nozzle_t": tgt(nz[0].target) if nz else None,
+            "nozzle2_t": tgt(nz[1].target) if len(nz) > 1 else None,
+            "bed_t": tgt(s.target_bed_temp), "chamber_t": tgt(s.target_chamber_temp),
             "ams": ams}
 
 
@@ -92,6 +97,7 @@ async def record(snap: dict, now: datetime | None = None) -> None:
     async with AsyncSessionLocal() as db:
         db.add(SensorSample(ts=now or datetime.utcnow(), printing=snap["printing"], nozzle=snap["nozzle"],
                             nozzle2=snap["nozzle2"], bed=snap["bed"], chamber=snap["chamber"],
+                            **{k: snap.get(k) for k in TARGETS},
                             ams=json.dumps(snap["ams"]) if snap["ams"] else None))
         await db.commit()
 
@@ -143,7 +149,8 @@ async def history(hours: float = 24) -> dict:
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(SensorSample).where(SensorSample.ts >= since).order_by(SensorSample.ts))).scalars().all()
     pts = [{"t": r.ts.isoformat() + "Z", "printing": bool(r.printing), "nozzle": r.nozzle, "nozzle2": r.nozzle2,
-            "bed": r.bed, "chamber": r.chamber, "ams": json.loads(r.ams) if r.ams else {}} for r in rows]
+            "bed": r.bed, "chamber": r.chamber, **{k: getattr(r, k) for k in TARGETS},
+            "ams": json.loads(r.ams) if r.ams else {}} for r in rows]
     if len(pts) <= MAX_POINTS:
         return {"points": pts, "hours": hours}
     step = -(-len(pts) // MAX_POINTS)
@@ -169,6 +176,6 @@ def _mean(chunk: list) -> dict:
         return round(sum(v) / len(v), 1) if v else None
     ids = {k for p in chunk for k in p["ams"]}
     return {"t": chunk[len(chunk) // 2]["t"], "printing": any(p["printing"] for p in chunk),
-            **{k: avg(p[k] for p in chunk) for k in ("nozzle", "nozzle2", "bed", "chamber")},
+            **{k: avg(p.get(k) for p in chunk) for k in ("nozzle", "nozzle2", "bed", "chamber", *TARGETS)},
             "ams": {k: [avg(p["ams"].get(k, [None, None])[0] for p in chunk), avg(p["ams"].get(k, [None, None])[1] for p in chunk)]
                     for k in ids}}
