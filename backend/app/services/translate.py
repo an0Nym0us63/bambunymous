@@ -117,6 +117,17 @@ def _deepl_batch(payload: list, key: str):
     return out if len(out) == len(payload) else None
 
 
+def _drifted(src: str, out: str) -> bool:
+    """Une « traduction » MyMemory qui n'en est pas une (03/11/2026) : sa memoire rend parfois la phrase voisine la
+    plus proche, sans rapport (« Twisted Filament Swatch | 1.85 g · 10 min » -> « HLMI < 0,1 g/10 min. »). Un nom
+    traduit garde ses nombres (virgule ou point) et a peu pres sa longueur."""
+    import re as _re
+    norm = lambda s: {x.replace(",", ".") for x in _re.findall(r"\d+(?:[.,]\d+)?", s)}
+    if not norm(src) <= norm(out):
+        return True
+    return len(src) >= 12 and not (0.5 <= len(out) / len(src) <= 2.5)
+
+
 def _mymemory_one(txt: str):
     """Traduit UNE chaine via MyMemory (gratuit, sans cle). None si echec."""
     if time.time() < _MYMEMORY_PAUSE["until"]:
@@ -131,7 +142,7 @@ def _mymemory_one(txt: str):
             if "TooManyRequests" in type(e).__name__ or "quota" in str(e).lower():
                 break
             continue
-        if r and not _looks_bogus(r):
+        if r and not _looks_bogus(r) and not _drifted(txt, r):
             return r
         if r and "you used all available" in r.lower():
             break

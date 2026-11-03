@@ -608,9 +608,14 @@ class MQTTManager:
                 if int(ext.get("id", -1)) == active_nozzle_idx and "snow" in ext:
                     try:
                         snow_val = int(ext.get("snow"))
-                        new_ams  = snow_val >> 8
-                        new_tray = snow_val & 0x3
-                        source = "snow"
+                        # octet bas a 0xFF : rien de charge dans la buse (65535 au repos ou pendant la
+                        # mise en route, 65279 sur la buse inactive). 03/11/2026 : lu tel quel, 65535
+                        # donnait l'AMS 255 = le support externe, et la bobine active sautait chaque
+                        # seconde entre l'externe et la vraie case (le repli « mapping » la remettait).
+                        if (snow_val & 0xFF) != 0xFF:
+                            new_ams  = snow_val >> 8
+                            new_tray = snow_val & 0x3
+                            source = "snow"
                     except (TypeError, ValueError):
                         pass
                     break
