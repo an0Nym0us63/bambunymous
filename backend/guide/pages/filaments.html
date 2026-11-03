@@ -109,8 +109,15 @@
 
   <section id="filaments-archivees">
     <h3>Onglet Archivées</h3>
-    <p>Les bobines terminées ou sorties du stock. Même grille, même recherche, mêmes filtres que <span class="ui">Stock</span>, sans bouton <span class="ui">+ Bobine</span>. Les tuiles indiquent le nombre d'archivées et leur <b>💶 Valeur d'achat</b> (la somme de leurs prix : celui de la bobine, à défaut le prix catalogue du filament ; une archivée étant à 0 g, ce qu'il en reste n'aurait pas de sens). Une bobine archivée garde tout son historique d'utilisation : c'est ce qui permet aux statistiques de continuer à compter ce qu'elle a imprimé.</p>
-    <figure class="phone"><img src="img/filaments-archivees.webp" alt="Onglet Archivées"><figcaption>Les bobines archivées sont à 0 g.</figcaption></figure>
+    <p>Les bobines terminées ou sorties du stock, en <b>mur des bobines finies</b>, regroupées par filament (les bobines identiques font une seule pile), pour rester lisible quand les archives grossissent. La recherche et les filtres de <span class="ui">Stock</span> s'appliquent ; pas de bouton <span class="ui">+ Bobine</span>.</p>
+    <ul>
+      <li><b>Le bilan</b>, en tête : le nombre de bobines vidées, les kilos imprimés (leur poids net), ce qu'elles ont coûté (le prix de la bobine, à défaut le prix catalogue du filament) et la durée moyenne d'une bobine (de sa première à sa dernière impression) ; <b>🏆 Ta favorite</b>, le filament le plus souvent vidé.</li>
+      <li><b>La frise</b> : une colonne par mois (les douze derniers, ou depuis la première bobine finie), une pastille à la couleur de chaque bobine terminée ce mois-là ; au-delà de huit, « +n ». Le survol d'un mois liste ses bobines.</li>
+      <li><b>Le tri</b> : <span class="ui">🏆 Les plus vidées</span> (par défaut), <span class="ui">🕒 Récentes</span>, <span class="ui">🎨 Teintes</span>, <span class="ui">🏷️ Marques</span>, avec le nombre de filaments ; le choix est retenu le temps de la session.</li>
+      <li><b>Une pile par filament</b> : ses bobines empilées à sa couleur (« ×5 »), son nom, sa marque et son sous-type, « 5 vidées · 5,00 kg », la durée moyenne d'une bobine (⏱), ce qu'elles ont coûté, et la période (« sept. 25 → oct. 26 », ou « finie le … » pour une seule). Les piles arrivent par 24 : <span class="ui">Voir 24 de plus</span> en bas.</li>
+      <li>Toucher une pile ouvre <b>son histoire</b> : le même bilan pour ce filament, puis ses bobines de la plus récente à la plus ancienne, sur une ligne de temps (« Bobine #530 · finie 3 oct. 2026 », « en 2,8 mois · entamée 10 juil. 2026 · 22,99 € ») ; toucher une bobine ouvre sa fiche. Une pile d'une seule bobine ouvre directement sa fiche ; l'appui long garde le menu de la bobine.</li>
+    </ul>
+    <p>Une bobine archivée garde tout son historique d'utilisation : c'est ce qui permet aux statistiques de continuer à compter ce qu'elle a imprimé.</p>
   </section>
 </section>
 

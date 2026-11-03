@@ -1733,6 +1733,189 @@ function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose,
 const _KEEP = { lists: {}, ui: {} };
 const _kept = (k, dflt) => (k in _KEEP.ui ? _KEEP.ui[k] : dflt);
 
+// ── Archivées : le mur des bobines finies (03/11/2026) ─────────────────────────────────────────────────────────
+// Regroupees par filament (des bobines identiques), pour que la page reste lisible quand les archives grossissent :
+// en tete le bilan (bobines videes, kilos imprimes, depense) et une frise, mois par mois, d'une pastille a la couleur de
+// chaque bobine terminee ; puis une pile par filament (combien, la periode, la duree d'une bobine), triee au choix, par
+// paquets. Une pile ouvre l'histoire de ses bobines, chacune ouvre sa fiche.
+const _date = v => v ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(String(v)) ? v : `${v}Z`) : null;
+const _endOf = s => _date(s.last_used_at) || _date(s.first_used_at) || _date(s.created_at);
+const _monthFr = d => d.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
+const _dayFr = d => d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+const _dur = days => days == null ? null : days < 14 ? `${Math.max(1, Math.round(days))} j` : days < 70 ? `${Math.round(days / 7)} sem.` : `${(days / 30.4).toFixed(days < 300 ? 1 : 0).replace(".", ",")} mois`;
+const ARCH_ORDERS = [["count", "🏆 Les plus vidées"], ["recent", "🕒 Récentes"], ["hue", "🎨 Teintes"], ["brand", "🏷️ Marques"]];
+
+function archiveGroups(spools) {
+  const by = new Map();
+  for (const s of spools) {
+    const g = by.get(s.filament_id) || { key: s.filament_id, s, list: [] };
+    g.list.push(s);
+    by.set(s.filament_id, g);
+  }
+  return [...by.values()].map(g => {
+    const list = [...g.list].sort((a, b) => (_endOf(b) || 0) - (_endOf(a) || 0));
+    const lives = list.map(x => { const a = _date(x.first_used_at), b = _date(x.last_used_at); return a && b && b > a ? (b - a) / 86400000 : null; }).filter(x => x != null);
+    const starts = list.map(x => _date(x.first_used_at) || _date(x.created_at)).filter(Boolean);
+    const price = list.reduce((t, x) => t + (x.price_override ?? x.filament_price ?? 0), 0);
+    return { ...g, list, n: list.length, s: list[0], last: _endOf(list[0]), first: starts.length ? new Date(Math.min(...starts)) : null,
+      kg: list.reduce((t, x) => t + (x.filament_weight_g || 1000), 0) / 1000, price, life: lives.length ? lives.reduce((a, b) => a + b, 0) / lives.length : null };
+  });
+}
+
+function ArchivePile({ g, size = 64 }) {
+  const cols = parseColorsList(g.s.filament_color, g.s.filament_colors_array);
+  const main = paleHex(g.s.filament_color) ? "#94a3b8" : (hexToCss(g.s.filament_color) || "#94a3b8");
+  const ghosts = Math.min(g.n - 1, 3);
+  return <span style={{ position: "relative", display: "inline-flex", flexShrink: 0, marginRight: ghosts * size * 0.16, filter: `drop-shadow(0 8px 14px ${main}55)` }}>
+    {Array.from({ length: ghosts }, (_, i) => ghosts - i).map(k => <span key={k} aria-hidden="true" style={{ position: "absolute", left: k * size * 0.16, top: k * 2, opacity: 0.7 - k * 0.15 }}>
+      <SpoolSVG colors={cols} finish={finishOf(g.s)} empty={false} size={size} type={g.s.filament_multicolor_type}/></span>)}
+    <span style={{ position: "relative" }}><SpoolSVG colors={cols} finish={finishOf(g.s)} empty={false} size={size} type={g.s.filament_multicolor_type}/></span>
+    {g.n > 1 && <span style={{ position: "absolute", right: -ghosts * size * 0.16 - 4, bottom: -2, padding: "1px 7px", borderRadius: 20, fontSize: 11.5, fontWeight: 900,
+      color: "#fff", background: "linear-gradient(135deg, #64748B, #334155)", boxShadow: "0 3px 8px rgba(0,0,0,.25)" }}>×{g.n}</span>}
+  </span>;
+}
+
+function ArchiveWall({ spools, onOpen, menu }) {
+  const [order, setOrder] = useState(() => _kept("arch:o", "count"));
+  const [limit, setLimit] = useState(24);
+  const [open, setOpen] = useState(null);
+  useEffect(() => { _KEEP.ui["arch:o"] = order; }, [order]);
+  const groups = useMemo(() => {
+    const gs = archiveGroups(spools);
+    const name = g => g.s.filament_translated_name || g.s.filament_name || "";
+    return gs.sort((a, b) => order === "recent" ? (b.last || 0) - (a.last || 0)
+      : order === "hue" ? compareHue(a.s.filament_color, b.s.filament_color)
+      : order === "brand" ? (a.s.filament_manufacturer || "").localeCompare(b.s.filament_manufacturer || "") || name(a).localeCompare(name(b))
+      : b.n - a.n || (b.last || 0) - (a.last || 0));
+  }, [spools, order]);
+  // la frise : les 12 derniers mois (ou depuis la premiere bobine finie), une pastille par bobine terminee
+  const months = useMemo(() => {
+    const ends = spools.map(x => ({ s: x, d: _endOf(x) })).filter(x => x.d);
+    if (!ends.length) return [];
+    const now = new Date(), from = new Date(Math.max(Math.min(...ends.map(x => x.d)), new Date(now.getFullYear(), now.getMonth() - 11, 1)));
+    const out = [];
+    for (let y = from.getFullYear(), m = from.getMonth(); y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth()); m === 11 ? (y++, m = 0) : m++)
+      out.push({ y, m, list: ends.filter(x => x.d.getFullYear() === y && x.d.getMonth() === m).map(x => x.s) });
+    return out;
+  }, [spools]);
+  const total = useMemo(() => {
+    const gs = archiveGroups(spools);
+    const lives = gs.filter(g => g.life != null);
+    return { n: spools.length, kg: gs.reduce((t, g) => t + g.kg, 0), price: gs.reduce((t, g) => t + g.price, 0), refs: gs.length,
+      fav: gs.reduce((a, b) => (!a || b.n > a.n ? b : a), null), life: lives.length ? lives.reduce((t, g) => t + g.life, 0) / lives.length : null };
+  }, [spools]);
+  const maxM = Math.max(1, ...months.map(m => m.list.length));
+  const stat = (v, l, c) => <div style={{ flex: "1 1 90px", minWidth: 0, padding: "8px 10px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)" }}>
+    <div style={{ fontSize: 19, fontWeight: 900, color: c, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v}</div>
+    <div style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em" }}>{l}</div></div>;
+  const og = open && groups.find(g => g.key === open);
+
+  return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    {/* le bilan */}
+    <div style={{ padding: "14px 14px 12px", borderRadius: 20, border: "1px solid var(--border)",
+      background: "radial-gradient(120% 90% at 0% 0%, rgba(100,116,139,.16), transparent 60%), var(--surface2)" }}>
+      <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".07em", textTransform: "uppercase", color: "#64748B", marginBottom: 8 }}>🗄 Le mur des bobines finies</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {stat(total.n, `bobine${total.n > 1 ? "s" : ""} vidée${total.n > 1 ? "s" : ""}`, "var(--text)")}
+        {stat(fmtKg(total.kg * 1000), "imprimés", "#F59E0B")}
+        {total.price > 0 && stat(`${moneyVal(total.price, 0)} €`, "dépensés", "#16A34A")}
+        {total.life != null && stat(_dur(total.life), "par bobine", "#8B5CF6")}
+      </div>
+      {total.fav && total.fav.n > 1 && <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>
+        <span>🏆 Ta favorite :</span>
+        <span style={{ width: 12, height: 12, borderRadius: 4, background: hexToCss(total.fav.s.filament_color) || "#94a3b8", boxShadow: "inset 0 0 0 1px rgba(0,0,0,.2)" }}/>
+        <span style={{ fontWeight: 900, color: "var(--text)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {total.fav.s.filament_translated_name || total.fav.s.filament_name}</span>
+        <span style={{ color: "var(--muted)", flexShrink: 0 }}>· {total.fav.n} bobines</span></div>}
+      {/* la frise : une colonne par mois, une pastille par bobine finie, a sa couleur */}
+      {months.length > 1 && <div style={{ display: "flex", alignItems: "flex-end", gap: 4, marginTop: 12, overflowX: "auto", paddingBottom: 2, scrollbarWidth: "none" }}>
+        {months.map(m => <div key={`${m.y}-${m.m}`} data-tip={m.list.length ? `${_monthFr(new Date(m.y, m.m, 1))} : ${m.list.map(x => x.filament_translated_name || x.filament_name).join(", ")}` : undefined}
+          style={{ flex: "1 0 22px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+          <div style={{ display: "flex", flexDirection: "column-reverse", alignItems: "center", gap: 2, height: Math.min(8, maxM) * 9, justifyContent: "flex-start" }}>
+            {m.list.slice(0, 8).map((x, i) => <span key={x.id} style={{ width: 9, height: 9, borderRadius: "50%", background: hexToCss(x.filament_color) || "#94a3b8",
+              boxShadow: paleHex(x.filament_color) ? "inset 0 0 0 1px rgba(0,0,0,.3)" : `0 0 6px ${hexToCss(x.filament_color)}66` }}/>)}
+          </div>
+          {m.list.length > 8 && <span style={{ fontSize: 9, fontWeight: 900, color: "#64748B" }}>+{m.list.length - 8}</span>}
+          <span style={{ fontSize: 9, fontWeight: 800, color: m.list.length ? "var(--text2)" : "var(--muted)", whiteSpace: "nowrap" }}>
+            {new Date(m.y, m.m, 1).toLocaleDateString("fr-FR", { month: "narrow" })}</span>
+        </div>)}
+      </div>}
+    </div>
+
+    {/* le tri */}
+    <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none" }}>
+      {ARCH_ORDERS.map(([k, l]) => <button key={k} type="button" onClick={() => { setOrder(k); setLimit(24); }}
+        style={{ padding: "6px 12px", borderRadius: 20, fontSize: 12.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+          border: order === k ? "none" : "1px solid var(--border)", color: order === k ? "#fff" : "var(--text2)",
+          background: order === k ? "linear-gradient(135deg, #64748B, #334155)" : "var(--surface)" }}>{l}</button>)}
+      <span style={{ marginLeft: "auto", alignSelf: "center", fontSize: 11.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", paddingLeft: 6 }}>
+        {groups.length} filament{groups.length > 1 ? "s" : ""}</span>
+    </div>
+
+    {/* les piles */}
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))", gap: 8 }}>
+      {groups.slice(0, limit).map(g => {
+        const main = paleHex(g.s.filament_color) ? "#94a3b8" : (hexToCss(g.s.filament_color) || "#94a3b8");
+        const span = g.first && g.last ? (_monthFr(g.first) === _monthFr(g.last) ? _monthFr(g.last) : `${_monthFr(g.first)} → ${_monthFr(g.last)}`) : null;
+        return <Pressable key={g.key} onClick={() => g.n === 1 ? onOpen(g.s) : setOpen(g.key)} menu={() => menu(g.s)} className="card-sm"
+          style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 18, cursor: "pointer", minWidth: 0,
+            border: `1px solid color-mix(in srgb, ${main} 28%, var(--border))`,
+            background: `radial-gradient(90% 120% at 0% 50%, ${main}26, transparent 65%), var(--surface)` }}>
+          {/* largeur fixe : le texte des cartes reste aligne, quelle que soit la hauteur de la pile */}
+          <span style={{ width: Math.round(54 * 1.48) + 6, flexShrink: 0, display: "inline-flex" }}><ArchivePile g={g} size={54}/></span>
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {g.s.filament_translated_name || g.s.filament_name}</div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {[g.s.filament_manufacturer, g.s.filament_fila_type || g.s.filament_material].filter(Boolean).join(" · ")}</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 11, fontWeight: 800, color: "var(--text2)", marginTop: 2 }}>
+              <span>{g.n} vidée{g.n > 1 ? "s" : ""} · {fmtKg(g.kg * 1000)}</span>
+              {g.life != null && <span data-tip="Durée moyenne d'une bobine, de sa première à sa dernière impression" style={{ color: "#8B5CF6" }}>⏱ {_dur(g.life)}</span>}
+              {g.price > 0 && <span style={{ color: "#16A34A" }}>{moneyVal(g.price, 0)} €</span>}
+            </div>
+            {span && <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>{g.n > 1 ? span : `finie ${_dayFr(g.last)}`}</div>}
+          </div>
+          {g.n > 1 && <span style={{ fontSize: 16, color: "var(--muted)", flexShrink: 0 }}>›</span>}
+        </Pressable>;
+      })}
+    </div>
+    {groups.length > limit && <button type="button" onClick={() => setLimit(l => l + 24)} style={{ ...fBtn, alignSelf: "center", padding: "0 18px" }}>
+      Voir {Math.min(24, groups.length - limit)} de plus · {groups.length - limit} restant{groups.length - limit > 1 ? "s" : ""}</button>}
+
+    {/* l'histoire d'une pile : ses bobines, de la plus recente a la plus ancienne */}
+    {og && createPortal(<FSheet onClose={() => setOpen(null)} z={1000} bottom={<button onClick={() => setOpen(null)} style={{ ...fBtn, flex: 1 }}>Fermer</button>}>
+      <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <ArchivePile g={og} size={72}/>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 19, fontWeight: 900, color: "var(--text)" }}>{og.s.filament_translated_name || og.s.filament_name}</div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>{[og.s.filament_manufacturer, og.s.filament_fila_type || og.s.filament_material].filter(Boolean).join(" · ")}</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {stat(og.n, "bobines vidées", "var(--text)")}{stat(fmtKg(og.kg * 1000), "imprimés", "#F59E0B")}
+          {og.price > 0 && stat(`${moneyVal(og.price, 0)} €`, "dépensés", "#16A34A")}{og.life != null && stat(_dur(og.life), "par bobine", "#8B5CF6")}
+        </div>
+        <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 8, paddingLeft: 18 }}>
+          <span aria-hidden="true" style={{ position: "absolute", left: 6, top: 6, bottom: 6, width: 2, borderRadius: 2, background: "var(--border)" }}/>
+          {og.list.map(x => { const a = _date(x.first_used_at), b = _date(x.last_used_at), end = _endOf(x), pr = x.price_override ?? x.filament_price;
+            return <button key={x.id} type="button" onClick={() => { setOpen(null); onOpen(x); }} style={{ position: "relative", display: "flex", alignItems: "center", gap: 10,
+              textAlign: "left", padding: "9px 11px", borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer" }}>
+              <span aria-hidden="true" style={{ position: "absolute", left: -17, top: "50%", marginTop: -6, width: 12, height: 12, borderRadius: "50%",
+                background: hexToCss(x.filament_color) || "#94a3b8", boxShadow: "0 0 0 3px var(--surface2)" }}/>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text)" }}>Bobine #{x.id}{end ? <span style={{ fontWeight: 700, color: "var(--muted)" }}> · finie {_dayFr(end)}</span> : null}</div>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+                  {[a && b && b > a ? `en ${_dur((b - a) / 86400000)}` : null, a ? `entamée ${_dayFr(a)}` : null, pr ? `${moneyVal(pr, 2).replace(".", ",")} €` : null].filter(Boolean).join(" · ") || "jamais suivie en impression"}</div>
+              </div>
+              <span style={{ fontSize: 15, color: "var(--muted)" }}>›</span>
+            </button>; })}
+        </div>
+      </div>
+    </FSheet>, document.body)}
+  </div>;
+}
+
 function SpoolsView({ filaments, showArchived }) {
   const isAdmin = useIsAdmin();
   const KEY = `spools:${showArchived ? 1 : 0}`;
@@ -1886,7 +2069,7 @@ function SpoolsView({ filaments, showArchived }) {
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-      <KpiTiles kpis={kpis} icons={KPI_ICON}/>
+      {!showArchived && <KpiTiles kpis={kpis} icons={KPI_ICON}/>}
       {!showArchived && <IncomingOrders/>}
       {/* Pas de « + Bobine » dans l'onglet Archivees : on y consulte un historique, une
           bobine neuve n'a aucune raison d'y naitre -- elle apparaitrait
@@ -1910,14 +2093,15 @@ function SpoolsView({ filaments, showArchived }) {
           sur tablette et bureau -- aucun point de rupture a maintenir. */}
       {!loading && !spools.length && <EmptyCard icon={showArchived ? "🗄" : "🧵"} text={allSpools.length ? "Aucune bobine ne correspond." : showArchived ? "Aucune bobine archivée." : "Aucune bobine en stock."}/>}
       {/* 01/11/2026 : plus larges des que l'ecran le permet (136px sur ordinateur), pour lire le sous-type en entier */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(clamp(108px, 28vw, 136px),1fr))", gap:8 }}>
+      {showArchived && spools.length > 0 && <ArchiveWall spools={spools} onOpen={setSelected} menu={spoolMenu}/>}
+      {!showArchived && <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(clamp(108px, 28vw, 136px),1fr))", gap:8 }}>
         {spools.map(s => {
           const colorsList = parseColorsList(s.filament_color, s.filament_colors_array);
           return (
             <SpoolCard key={s.id} s={s} colorsList={colorsList} onClick={()=>setSelected(s)} menu={() => spoolMenu(s)}/>
           );
         })}
-      </div>
+      </div>}
       {showAdd && <AddSpoolModal filaments={filaments} preselect={showAdd === true ? undefined : showAdd}
         onSave={()=>{ setShowAdd(false); load(); }} onClose={()=>setShowAdd(false)}/>}
       {selFil && <FilamentSheet f={selFil} onClose={() => setSelFil(null)} onDeleted={() => { setSelFil(null); load(); }}/>}
