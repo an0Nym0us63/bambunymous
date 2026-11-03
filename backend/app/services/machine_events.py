@@ -244,7 +244,7 @@ async def between(since: datetime, end: datetime) -> list:
     from ..models.sensor import MachineEvent
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(MachineEvent).where(MachineEvent.ts >= since, MachineEvent.ts <= end)
-                                 .order_by(MachineEvent.ts))).scalars().all()
+                                 .order_by(MachineEvent.ts, MachineEvent.id))).scalars().all()   # a la meme seconde : dans l'ordre d'arrivee
     out = [{"t": r.ts.isoformat() + "Z", "kind": r.kind, "title": r.title, "detail": r.detail or "",
             **(json.loads(r.extra) if r.extra else {})} for r in rows]
     for e in pending():
