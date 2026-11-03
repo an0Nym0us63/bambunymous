@@ -11,7 +11,7 @@ import { egg } from "../eggs";
 // En tete la periode (un menu) et le bilan, puis la chronologie et une carte par mesure : buse et plateau, chambre,
 // humidite des AMS, leur temperature, ventilateurs. Chaque carte glisse dans le temps sans les autres. Les impressions
 // sont les bandes bleues pales des courbes.
-const PERIODS = [[3, "3 h"], [6, "6 h"], [12, "12 h"], [24, "24 h"], [72, "3 j"], [168, "7 j"]];
+const PERIODS = [[0.5, "30 min"], [1, "1 h"], [2, "2 h"], [3, "3 h"], [6, "6 h"], [12, "12 h"], [24, "24 h"], [72, "3 j"], [168, "7 j"]];
 const KEEP_MS = 7 * 86400000;            // ce que le serveur garde
 const MIN_H = 5 / 60;                    // le zoom le plus serre : 5 minutes
 // la fenetre en clair : « lun. 2 nov. 14:00 → 17:00 », ou deux jours quand elle les enjambe
@@ -56,8 +56,8 @@ function Ranges({ lines, unit }) {
 
 // la duree d'une fenetre en clair : « 45 min », « 1 h 30 »
 const durLabel = h => { const mn = Math.round(h * 60); return mn < 60 ? `${mn} min` : `${Math.floor(mn / 60)} h${mn % 60 ? ` ${String(mn % 60).padStart(2, "0")}` : ""}`; };
-const PERIOD_SUB = { 3: "à la minute près", 6: "la matinée, l'après-midi", 12: "une demi-journée", 24: "la journée", 72: "les trois derniers jours", 168: "tout ce qui est gardé" };
-const PERIOD_LONG = { 3: "3 heures", 6: "6 heures", 12: "12 heures", 24: "24 heures", 72: "3 jours", 168: "7 jours" };
+const PERIOD_SUB = { 0.5: "le tout dernier moment", 1: "la dernière heure", 2: "une impression courte", 3: "une impression moyenne", 6: "la matinée, l'après-midi", 12: "une demi-journée", 24: "la journée", 72: "les trois derniers jours", 168: "tout ce qui est gardé" };
+const PERIOD_LONG = { 0.5: "30 minutes", 1: "1 heure", 2: "2 heures", 3: "3 heures", 6: "6 heures", 12: "12 heures", 24: "24 heures", 72: "3 jours", 168: "7 jours" };
 
 // la periode : une pastille qui ouvre sa liste, chaque duree avec ce qu'elle montre
 function PeriodSelect({ value, onChange }) {
@@ -89,7 +89,7 @@ function PeriodSelect({ value, onChange }) {
         return <button key={h} type="button" role="option" aria-selected={on} onClick={() => { onChange(h); setOpen(false); }}
           style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 10px", border: "none", borderRadius: 12, cursor: "pointer", textAlign: "left",
             background: on ? "linear-gradient(135deg, rgba(14,165,233,.16), rgba(99,102,241,.16))" : "transparent", color: "var(--text)" }}>
-          <span style={{ width: 40, flexShrink: 0, fontSize: 13.5, fontWeight: 900, color: on ? "#6366F1" : "var(--text)" }}>{l}</span>
+          <span style={{ width: 54, flexShrink: 0, fontSize: 13.5, fontWeight: 900, color: on ? "#6366F1" : "var(--text)" }}>{l}</span>
           <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{PERIOD_SUB[h]}</span>
           {on && <span style={{ color: "#6366F1", fontWeight: 900 }}>✓</span>}
         </button>; })}

@@ -259,6 +259,16 @@ async def _link(db, e: dict) -> None:
         sp = await db.get(Spool, e["spool_id"])
         if sp:
             e["filament_id"] = sp.filament_id
+            # le detail : la bobine telle que l'appli la connait (03/11/2026 : l'imprimante ne disait que « Gris »)
+            from ..models.filament import Filament
+            f = await db.get(Filament, sp.filament_id)
+            if f:
+                name = getattr(f, "translated_name", None) or f.name or ""
+                kind = f.fila_type or f.material or ""
+                bits = [name if not kind or kind.lower() in name.lower() else f"{kind} {name}", f.manufacturer or "",
+                        f"reste {round(sp.remaining_weight_g)} g" if sp.remaining_weight_g is not None else "", f"bobine #{sp.id}"]
+                slot = e["detail"].split(" · ")[0] if e["kind"] == "load" and " · " in (e.get("detail") or "") else ""
+                e["detail"] = " · ".join(x for x in [slot, *bits] if x)
         else:
             e.pop("spool_id", None)
 
