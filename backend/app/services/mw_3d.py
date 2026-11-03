@@ -1930,6 +1930,11 @@ def _slot_key(k, slot: int) -> str | None:
     return f"{slot * 100000 + int(m.group(1))}{m.group(2)}" if m and int(m.group(1)) < 100000 else None
 
 
+def _safe_name(k) -> bool:
+    k = str(k or "")
+    return bool(k) and len(k) <= 200 and ".." not in k and not re.search(r"[/\\\x00-\x1f]", k)
+
+
 class UseFile(Exception):
     """La vue d'ou l'on vient n'est pas un 3MF du groupe : le 3MF du groupe qui a les memes pieces (src) doit lui ceder
     la place, puis l'assemblage se reprend tel quel."""
@@ -1942,7 +1947,7 @@ def group_use_file(gkey: str, src: str, view: str, pending: dict | None = None) 
     """Le groupe prend le 3MF « view » a la place de « src » (03/11/2026, le train : l'assemblage monte sur un autre
     fichier du meme profil ; ses positions valent pour SES coordonnees, pas pour celles de l'autre). « view » garde le
     numero et les plateaux choisis de « src » ; pending : la reprise a faire une fois le groupe recompose."""
-    if not (_KEY.fullmatch(src or "") and _KEY.fullmatch(view or "")):
+    if not (_safe_name(src) and _safe_name(view)):
         raise ValueError("Vue inconnue")
     sel = group_sel(gkey)
     use = {k: v for k, v in (sel.get("use") or {}).items() if v != src}
@@ -1966,14 +1971,22 @@ def seed_group(gkey: str, gid: int, force: bool = False, by: str = "", pick: tup
     grec = next(iter(gmeta.get("plates") or []), None) or {}
     go = {p.get("k"): p.get("o") for p in grec.get("pieces") or [] if isinstance(p, dict)}
     slots = group_sel(gkey).get("slots") or {}
+    # numeros pas (encore) enregistres : ceux que la vue du groupe donne alors, leur rang
+    for i, src in enumerate(grec.get("sources") or []):
+        if src.get("iid") and not str(slots.get(src["iid"])).isdigit() and not slots:
+            slots = {s_.get("iid"): j + 1 for j, s_ in enumerate(grec.get("sources") or []) if s_.get("iid")}
+            logger.info(f"[3D] assemblage du groupe {gkey} : numeros des 3MF absents, pris dans l'ordre : {slots}")
+            break
     cur = (_read(_edits_file(gkey)) or {}) if force else {}
     pieces, groups, joints = dict(cur.get("pieces") or {}), list(cur.get("groups") or []), list(cur.get("joints") or [])
     splits, excluded = list(cur.get("splits") or []), list(cur.get("excluded") or [])
     cuts, colors, paints = dict(cur.get("cuts") or {}), dict(cur.get("colors") or {}), list(cur.get("paints") or [])
     owns, n = own_keys(), 0
 
+    # les 3MF du groupe sont nommes comme leur fichier (03/11/2026 : « Source-… », tirets et points : _KEY les refusait,
+    # et la reprise ne voyait aucun 3MF du groupe)
     def asm_of(k):
-        if not _KEY.fullmatch(str(k or "")):
+        if not _safe_name(k):
             return None
         return next((p for p in (_read_side(k, "plates.json") or {}).get("plates") or [] if p.get("assembled") and p.get("pieces")), None)
     jobs = []
@@ -2000,13 +2013,18 @@ def seed_group(gkey: str, gid: int, force: bool = False, by: str = "", pick: tup
                     best, src_ = ov, src.get("iid")
             logger.info(f"[3D] assemblage du groupe {gkey} : vue {vkey} ({len(asm['pieces'])} pieces) hors du groupe ; "
                         f"3MF du groupe aux memes pieces : {src_} ({best} en commun)")
+            seen = "; ".join(f"{src.get('iid')} n° {slots.get(src.get('iid'))} "
+                             f"{len((asm_of(src.get('iid')) or {}).get('pieces') or []) if asm_of(src.get('iid')) else 'sans vue'}"
+                             for src in grec.get("sources") or []) or "aucun 3MF lu"
+            logger.info(f"[3D] assemblage du groupe {gkey} : 3MF du groupe : {seen} ; numeros : {slots}")
             if not src_ or best * 2 < len(asm["pieces"]):
                 # des noms qui different (une autre langue) : le seul 3MF du groupe qui a autant de pieces
                 same = [src.get("iid") for src in grec.get("sources") or [] if (a2 := asm_of(src.get("iid")))
                         and len(a2["pieces"]) == len(asm["pieces"]) and str(slots.get(src.get("iid"))).isdigit()]
                 if len(same) == 1:
                     raise UseFile(same[0])
-                raise ValueError(f"Aucun 3MF de ce groupe n'a les pièces de la vue d'où tu viens ({vkey})")
+                raise ValueError(f"Aucun 3MF de ce groupe n'a les pièces de la vue d'où tu viens ({vkey}, {len(asm['pieces'])} pièces). "
+                                 f"Vus dans le groupe : {seen}")
             raise UseFile(src_)
         logger.info(f"[3D] assemblage du groupe {gkey} : repris de la vue {vkey} (edition {ekey}) -> n° {slot}, {len(e['pieces'])} pieces")
         jobs.append((int(slot), e, asm))
