@@ -106,14 +106,14 @@ export default function CatalogPicker({ onPick, field, family0 = "", type0 = "",
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", gap: 6 }}>{tab("bambu", "Bambu Lab")}{tab("ofd", "🌍 Autres marques")}</div>
-      {ofd && <Select value={brand} onChange={e => { setBrand(e.target.value); setFamily(""); setType(""); }} style={field}
+      {ofd && <Select searchable value={brand} onChange={e => { setBrand(e.target.value); setFamily(""); setType(""); }} style={field}
         options={[{ value: "", label: brands == null ? "Chargement des marques…" : "Choisis une marque" },
                   ...(brands || []).map(b => ({ value: b.name, label: `${b.name} · ${b.count}` }))]}/>}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <Select value={family} onChange={e => { setFamily(e.target.value); setType(""); }}
+        <Select searchable value={family} onChange={e => { setFamily(e.target.value); setType(""); }}
           style={{ ...field, flex: 1, minWidth: 120 }}
           options={[{ value: "", label: "Toutes familles" }, ...famList.map(f => ({ value: f, label: f }))]}/>
-        <Select value={type} onChange={e => setType(e.target.value)}
+        <Select searchable value={type} onChange={e => setType(e.target.value)}
           style={{ ...field, flex: 1, minWidth: 140 }}
           options={[{ value: "", label: ofd ? "Toutes gammes" : "Tous types" }, ...types.map(t => ({ value: t, label: t }))]}/>
       </div>

@@ -17,11 +17,24 @@ import { createPortal } from "react-dom";
  * L'API reprend celle de <select> a dessein -- value, onChange avec
  * e.target.value, options en {value,label} -- pour que la substitution ne
  * demande pas de reecrire les appelants.
+ *
+ * Une longue liste (plus de 10 choix, ou searchable) a un champ en tete pour la
+ * prefiltrer en tapant (03/11/2026 : marques des catalogues), sans accents ni
+ * casse ; Entree prend le premier choix restant.
  */
+const norm = s => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
 export default function Select({ value, onChange, options = [], style = {},
-                                 placeholder = "—", disabled = false, title }) {
+                                 placeholder = "—", disabled = false, title, searchable }) {
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
   const btnRef = useRef(null);
+  const canSearch = searchable ?? options.length > 10;
+  useEffect(() => { if (!open) setQ(""); }, [open]);
+  const words = norm(q).split(/\s+/).filter(Boolean);
+  const shown = words.length ? options.filter(o => { const l = norm(o.label); return words.every(w => l.includes(w)); }) : options;
+  // le clavier ne s'ouvre de lui-meme qu'avec une souris (au doigt, il cacherait la moitie de la liste)
+  const fine = typeof window !== "undefined" && window.matchMedia?.("(pointer: fine)").matches;
 
   // Une liste ouverte ne doit pas survivre a un changement d'ecran.
   useEffect(() => {
@@ -65,7 +78,14 @@ export default function Select({ value, onChange, options = [], style = {},
             <div style={{ width:38, height:4, borderRadius:2, background:"rgba(148,163,184,.6)",
               margin:"0 auto 12px" }}/>
             {title && <p style={{ fontSize:15, fontWeight:900, color:"var(--text)", margin:"0 10px 8px" }}>{title}</p>}
-            {options.map(o => {
+            {canSearch && <div style={{ position:"sticky", top:-12, zIndex:1, padding:"4px 2px 8px", background:"var(--sheet-bg)" }}>
+              <input value={q} onChange={e => setQ(e.target.value)} autoFocus={fine} placeholder="Taper pour filtrer…"
+                aria-label="Filtrer la liste" autoComplete="off"
+                onKeyDown={e => { if (e.key === "Enter" && shown.length) { e.preventDefault(); pick(shown[0].value); } }}
+                style={{ width:"100%", boxSizing:"border-box", padding:"10px 14px", borderRadius:12, fontSize:14.5,
+                  border:"1px solid var(--border)", background:"var(--surface)", color:"var(--text)" }}/></div>}
+            {canSearch && shown.length === 0 && <p style={{ fontSize:13, color:"var(--muted)", margin:"8px 14px" }}>Aucun choix ne correspond</p>}
+            {shown.map(o => {
               const sel = String(o.value) === String(value);
               return (
                 <button key={String(o.value)} type="button" onClick={() => pick(o.value)}
