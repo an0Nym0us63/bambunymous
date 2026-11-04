@@ -118,7 +118,57 @@ def _clean(body: dict, cur: dict) -> dict:
     return out
 
 
+# La vitrine s'ouvre vite (04/11/2026) : les pieces possibles sont gardees CAND_TTL secondes (la galerie entiere a
+# reconstruire a chaque visite), et savoir si une piece a sa vue 3D (une verification par piece, et pour un groupe la
+# deduction de son profil) se fait apres coup, en fond : la page s'affiche aussitot, les badges 3D suivent
+# (/public/{lien}/ready3d) ; la reponse de chaque piece est gardee READY_TTL secondes.
+CAND_TTL = 90
+READY_TTL = 20 * 60
+_CAND: dict = {"t": 0.0, "v": None}
+_READY: dict = {}                                     # (cle, modele) -> (horodatage, vue prete)
+_FILL: dict = {}                                      # vitrine -> la verification en cours
+
+
 async def _candidates() -> dict:
+    import time
+    if _CAND["v"] is None or time.time() - _CAND["t"] > CAND_TTL:
+        _CAND["v"], _CAND["t"] = await _candidates_build(), time.time()
+    return _CAND["v"]
+
+
+def _ready_known(cs: list) -> tuple:
+    """Ce qu'on sait deja : les pieces pretes, et celles a verifier."""
+    import time
+    now, ready, todo = time.time(), set(), []
+    for c in cs:
+        if not c.get("design"):
+            continue
+        hit = _READY.get((c["k"], c["design"]))
+        if hit and now - hit[0] < READY_TTL:
+            if hit[1]:
+                ready.add(c["k"])
+        else:
+            todo.append(c)
+    return ready, todo
+
+
+def _ready_start(sid: str, todo: list):
+    import asyncio
+    import time
+    t = _FILL.get(sid)
+    if t and not t.done():
+        return t
+
+    async def run():
+        ok = await _ready3d(todo)
+        now = time.time()
+        for c in todo:
+            _READY[(c["k"], c["design"])] = (now, c["k"] in ok)
+    _FILL[sid] = asyncio.create_task(run())
+    return _FILL[sid]
+
+
+async def _candidates_build() -> dict:
     """Toutes les pieces possibles, avec ce que les regles et les sources lisent : date (la plus recente), modele
     MakerWorld, createur, categories ; real (le nombre de vraies photos), v3 (une vue 3D prise en vignette), cover (rien
     que l'image du plateau : une impression sans photo). Les impressions et groupes de la galerie (photos et vues 3D),
@@ -281,6 +331,7 @@ async def showcase_put(sid: str, body: dict = Body({}), _: str = Depends(require
     n = _clean(body or {}, s)
     lst[lst.index(s)] = n
     await _save(lst)
+    _CAND["v"] = None                                 # la vitrine changee se voit tout de suite
     t, _v = await PL.find("showcase", sid)
     if t:                                             # le titre du lien suit celui de la vitrine
         await PL.put("showcase", sid, n["title"])
@@ -350,7 +401,9 @@ async def showcase_public(token: str, request: Request):
                                        .order_by(Object.created_at.desc()).limit(60))).all():
                 sale.append({"id": o.id, "title": o.translated_name or o.name, "price": round(float(o.desired_price), 2),
                              "img": f"/api/v1/objects/objects/{o.id}/image"})
-    ready = await _ready3d([cands[it["k"]] for it in keys])
+    ready, todo = _ready_known([cands[it["k"]] for it in keys])
+    if todo:
+        _ready_start(s["id"], todo)
     items = []
     for it in keys:
         c = cands[it["k"]]
@@ -365,7 +418,31 @@ async def showcase_public(token: str, request: Request):
                       "count": len(c["pids"]) if c["group"] else 1, "categories": c["categories"][:3],
                       "model": ({"title": c["model"] or "", "creator": c["creator"], "url": f"https://makerworld.com/fr/models/{c['design']}"}
                                 if c["design"] and c["model"] is not None and s.get("show_credit") else None)})
-    return {"title": s["title"], "tagline": s["tagline"], "accent": s["accent"], "contact": s["contact"], "items": items, "sale": sale}
+    return {"title": s["title"], "tagline": s["tagline"], "accent": s["accent"], "contact": s["contact"], "items": items, "sale": sale,
+            "pending3d": bool(todo)}
+
+
+@router.get("/public/{token}/ready3d")
+async def showcase_public_ready(token: str):
+    """Les pieces de la vitrine qui ont leur vue 3D, une fois la verification en fond finie (25 s au plus)."""
+    import asyncio
+    reg = await PL.load()
+    v = reg.get(token) if token and len(token) <= 40 else None
+    if not v or v.get("kind") != "showcase" or PL.expired(v):
+        raise HTTPException(404, "Cette vitrine n'existe pas, a expiré ou a été retirée")
+    s = next((s for s in await _load() if s["id"] == (v.get("ref") or "1")), None)
+    if not s:
+        raise HTTPException(404, "Cette vitrine n'existe pas")
+    cands = _pool(await _candidates(), s.get("source"))
+    cs = [cands[it["k"]] for it in _resolve(s, cands)]
+    ready, todo = _ready_known(cs)
+    if todo:
+        try:
+            await asyncio.wait_for(asyncio.shield(_ready_start(s["id"], todo)), 25)
+        except asyncio.TimeoutError:
+            pass
+        ready, todo = _ready_known(cs)
+    return {"keys": sorted(ready), "pending": bool(todo)}
 
 
 def _view_args(c: dict) -> dict:

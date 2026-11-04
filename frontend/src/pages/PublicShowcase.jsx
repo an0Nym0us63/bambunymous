@@ -127,42 +127,28 @@ function Deck({ items, accent, onOpen }) {
   </div>;
 }
 
-// une carte de la collection : elle s'incline sous la souris avec un reflet ; au survol, la deuxieme photo
+// une carte de la collection, legere : la photo sans voile, le nom et la date dessous ; au survol, elle se souleve un
+// peu et montre sa deuxieme photo
 function Card({ it, accent, onOpen, i }) {
   const [hov, setHov] = useState(false);
-  const [p, setP] = useState({ x: .5, y: .5 });
-  const move = e => {
-    if (!fine() || calm()) return;
-    const r = e.currentTarget.getBoundingClientRect();
-    setP({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height });
-  };
-  const rx = hov ? (p.y - .5) * -10 : 0, ry = hov ? (p.x - .5) * 12 : 0;
-  return <Reveal delay={(i % 6) * 70} style={{ breakInside: "avoid", marginBottom: "var(--sc-gap)" }}>
-    <button type="button" onClick={() => onOpen(it)} onMouseEnter={() => setHov(true)} onMouseLeave={() => { setHov(false); setP({ x: .5, y: .5 }); }} onMouseMove={move}
-      style={{ display: "block", width: "100%", padding: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", color: "inherit", perspective: 900 }}>
-      <div style={{ position: "relative", borderRadius: 20, overflow: "hidden", background: "#15151B", transformStyle: "preserve-3d",
-        transform: `rotateX(${rx}deg) rotateY(${ry}deg) translateZ(0) ${hov ? "scale(1.015)" : ""}`, transition: hov ? "transform .12s linear, box-shadow .5s" : "transform .7s cubic-bezier(.2,.8,.2,1), box-shadow .5s",
-        boxShadow: hov ? `0 40px 70px -30px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.12), 0 20px 60px -40px ${accent}` : "0 12px 30px -20px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.05)" }}>
-        <img src={mid(it.photos[0])} alt={it.title} loading="lazy" style={{ display: "block", width: "100%", height: "auto", minHeight: 120,
-          transform: hov ? "scale(1.06)" : "scale(1)", transition: "transform 1.2s cubic-bezier(.2,.8,.2,1)" }}/>
+  return <Reveal delay={(i % 6) * 60} style={{ breakInside: "avoid", marginBottom: "var(--sc-gap)" }}>
+    <button type="button" onClick={() => onOpen(it)} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{ display: "block", width: "100%", padding: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", color: "inherit" }}>
+      <div style={{ position: "relative", borderRadius: 14, overflow: "hidden", background: "#121217", transform: hov ? "translateY(-3px)" : "none",
+        boxShadow: hov ? `0 22px 40px -24px rgba(0,0,0,.9), 0 0 0 1px color-mix(in srgb, ${accent} 35%, transparent)` : "0 0 0 1px rgba(255,255,255,.05)",
+        transition: "transform .5s cubic-bezier(.2,.8,.2,1), box-shadow .5s" }}>
+        <img src={mid(it.photos[0])} alt={it.title} loading="lazy" style={{ display: "block", width: "100%", height: "auto", maxHeight: 520, minHeight: 110, objectFit: "cover",
+          transform: hov ? "scale(1.03)" : "none", transition: "transform 1s cubic-bezier(.2,.8,.2,1)" }}/>
         {it.photos[1] && <img src={mid(it.photos[1])} alt="" loading="lazy" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
-          opacity: hov ? 1 : 0, transition: "opacity .7s" }}/>}
-        <span aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity: hov ? 1 : 0, transition: "opacity .4s", mixBlendMode: "screen",
-          background: `radial-gradient(50% 40% at ${p.x * 100}% ${p.y * 100}%, rgba(255,255,255,.22), transparent 70%)` }}/>
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, transparent 50%, rgba(5,5,8,.85))", opacity: hov ? 1 : .85, transition: "opacity .5s" }}/>
-        <div style={{ position: "absolute", top: 10, left: 10, right: 10, display: "flex", gap: 6, justifyContent: "space-between", pointerEvents: "none" }}>
-          {it.has3d ? <span style={chip3d}>🧊 3D</span> : <span/>}
-          {it.photos.length > 1 && <span style={glassTag}>{it.photos.length} photos</span>}
-        </div>
-        <div style={{ position: "absolute", left: 14, right: 14, bottom: 12, transform: hov ? "translateY(-4px)" : "none", transition: "transform .5s" }}>
-          <div style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 600, color: "#fff", lineHeight: 1.2, textShadow: "0 2px 14px rgba(0,0,0,.6)" }}>{it.title}</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 10.5, letterSpacing: ".18em", textTransform: "uppercase", color: hov ? accent : "rgba(255,255,255,.6)", transition: "color .4s",
-              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[it.categories?.[0], monthFr(it.date)].filter(Boolean).join(" · ")}</span>
-            <Dots colors={it.colors} size={10} max={5}/>
-          </div>
-        </div>
+          opacity: hov ? 1 : 0, transition: "opacity .6s" }}/>}
+        {it.has3d && <span style={{ position: "absolute", top: 8, left: 8, ...glassTag, fontSize: 10, padding: "3px 8px" }}>3D</span>}
       </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "10px 2px 0" }}>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: hov ? "#fff" : "rgba(255,255,255,.88)", lineHeight: 1.3, transition: "color .3s" }}>{it.title}</span>
+        <Dots colors={it.colors} size={8} max={4}/>
+      </div>
+      {(it.categories?.[0] || it.date) && <div style={{ padding: "3px 2px 0", fontSize: 11.5, color: hov ? accent : "rgba(255,255,255,.42)", transition: "color .3s" }}>
+        {[it.categories?.[0], monthFr(it.date)].filter(Boolean).join(" · ")}</div>}
     </button>
   </Reveal>;
 }
@@ -326,7 +312,16 @@ export default function PublicShowcase() {
   useEffect(() => {
     let alive = true;
     fetch(`/api/v1/showcase/public/${encodeURIComponent(token || "")}`)
-      .then(r => (r.ok ? r.json() : Promise.reject(r.status))).then(x => alive && setD(x)).catch(() => alive && setD({ error: true }));
+      .then(r => (r.ok ? r.json() : Promise.reject(r.status))).then(x => {
+        if (!alive) return;
+        setD(x);
+        // les badges 3D arrivent apres la page : le serveur verifie chaque piece en fond
+        if (x.pending3d) fetch(`/api/v1/showcase/public/${encodeURIComponent(token || "")}/ready3d`).then(r => (r.ok ? r.json() : null)).then(y => {
+          if (!alive || !y) return;
+          const k = new Set(y.keys || []);
+          setD(o => (o ? { ...o, items: (o.items || []).map(it => ({ ...it, has3d: it.has3d || k.has(it.key) })) } : o));
+        }).catch(() => {});
+      }).catch(() => alive && setD({ error: true }));
     return () => { alive = false; };
   }, [token]);
   useEffect(() => { if (d?.title) document.title = d.title; }, [d?.title]);
@@ -384,9 +379,9 @@ export default function PublicShowcase() {
       .sc-hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: clamp(30px, 5vw, 80px); align-items: center; }
       .sc-deck { width: min(440px, 100%); aspect-ratio: 4 / 5; margin: 0 auto 60px; }
       @media (max-width: 900px) { .sc-hero { grid-template-columns: 1fr; } .sc-deck { width: min(340px, 82vw); } }
-      .sc-masonry { --sc-gap: clamp(14px, 2vw, 24px); columns: 4; column-gap: var(--sc-gap); }
+      .sc-masonry { --sc-gap: clamp(18px, 2.4vw, 32px); columns: 4; column-gap: var(--sc-gap); }
       @media (max-width: 1200px) { .sc-masonry { columns: 3; } }
-      @media (max-width: 760px) { .sc-masonry { columns: 2; --sc-gap: 12px; } }
+      @media (max-width: 760px) { .sc-masonry { columns: 2; --sc-gap: 14px; } }
       .sc-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent); }
       .sc-chips::-webkit-scrollbar { display: none; }
       .sc-shine { background: linear-gradient(100deg, #fff 20%, ${accent} 40%, #fff 60%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text;
@@ -439,48 +434,38 @@ export default function PublicShowcase() {
         <Reveal delay={200}><Deck items={hero} accent={accent} onOpen={openIt}/></Reveal>
       </section>
 
-      {/* le ruban des noms */}
-      {items.length > 2 && <div aria-hidden="true" style={{ overflow: "hidden", borderTop: "1px solid rgba(255,255,255,.06)", borderBottom: "1px solid rgba(255,255,255,.06)", padding: "16px 0",
-        background: "rgba(255,255,255,.015)" }}>
-        <div className="sc-marquee" style={{ display: "flex", gap: 34, width: "max-content" }}>
-          {[0, 1].map(r => <div key={r} style={{ display: "flex", gap: 34, alignItems: "center" }}>
-            {items.slice(0, 24).map(it => <span key={it.key} style={{ display: "inline-flex", alignItems: "center", gap: 34, fontFamily: SERIF, fontSize: "clamp(20px, 2.4vw, 30px)",
-              color: "transparent", WebkitTextStroke: "1px rgba(255,255,255,.35)", whiteSpace: "nowrap" }}>{it.title}<span style={{ color: accent, WebkitTextStroke: 0, fontSize: 16 }}>✦</span></span>)}
-          </div>)}
-        </div>
-      </div>}
-
       {/* la collection */}
-      <section ref={colRef} style={{ maxWidth: 1440, margin: "0 auto", padding: "clamp(50px, 8vw, 100px) clamp(14px, 4vw, 56px) clamp(60px, 9vw, 120px)", scrollMarginTop: 60 }}>
-        <Reveal style={{ display: "flex", alignItems: "flex-end", flexWrap: "wrap", gap: 14, marginBottom: 18 }}>
-          <h2 style={{ margin: 0, fontFamily: SERIF, fontWeight: 500, fontSize: "clamp(30px, 4vw, 52px)", color: "#fff", lineHeight: 1 }}>La collection</h2>
-          <span style={{ fontSize: 12, letterSpacing: ".22em", textTransform: "uppercase", color: "rgba(255,255,255,.45)", paddingBottom: 6 }}>
+      <section ref={colRef} style={{ maxWidth: 1360, margin: "0 auto", padding: "clamp(30px, 6vw, 70px) clamp(16px, 4vw, 56px) clamp(60px, 9vw, 120px)", scrollMarginTop: 60 }}>
+        <Reveal style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+          <h2 style={{ margin: 0, fontFamily: SERIF, fontWeight: 500, fontSize: "clamp(24px, 3vw, 34px)", color: "#fff", lineHeight: 1 }}>La collection</h2>
+          <span style={{ fontSize: 12.5, color: "rgba(255,255,255,.45)" }}>
             {shown.length} pièce{shown.length > 1 ? "s" : ""}{shown.length !== items.length ? ` sur ${items.length}` : ""}</span>
         </Reveal>
-        {/* la barre de recherche et de tri, qui reste en haut */}
-        <div style={{ position: "sticky", top: scrolled ? 58 : 70, zIndex: 20, display: "flex", flexDirection: "column", gap: 10, padding: "10px 0 14px", marginBottom: 8,
-          background: "linear-gradient(#08080B 70%, transparent)", transition: "top .4s" }}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <label style={{ flex: "1 1 260px", position: "relative", display: "flex", alignItems: "center" }}>
-              <span style={{ position: "absolute", left: 16, color: "rgba(255,255,255,.5)", display: "flex", pointerEvents: "none" }}>{LENS}</span>
-              <input ref={searchRef} value={q} onChange={e => setQ(e.target.value)} placeholder="Chercher une pièce, un modèle, un créateur…" aria-label="Rechercher"
-                style={{ width: "100%", height: 46, padding: "0 40px 0 42px", borderRadius: 30, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.05)",
-                  color: "#fff", fontSize: 14.5, outline: "none", backdropFilter: "blur(10px)", boxShadow: q ? `0 0 0 3px color-mix(in srgb, ${accent} 30%, transparent)` : "none", transition: "box-shadow .3s" }}/>
-              {q && <button type="button" onClick={() => setQ("")} aria-label="Effacer" style={{ position: "absolute", right: 10, ...roundBtn, width: 28, height: 28, fontSize: 14 }}>×</button>}
+        {/* la recherche, les categories, la 3D et le tri : une pilule fine qui reste en haut */}
+        <div style={{ position: "sticky", top: scrolled ? 62 : 74, zIndex: 20, marginBottom: 22, transition: "top .4s" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: 5, borderRadius: 30, background: "rgba(14,14,19,.72)", border: "1px solid rgba(255,255,255,.08)",
+            backdropFilter: "blur(16px) saturate(1.3)", WebkitBackdropFilter: "blur(16px) saturate(1.3)", boxShadow: q ? `0 0 0 2px color-mix(in srgb, ${accent} 35%, transparent)` : "none", transition: "box-shadow .3s" }}>
+            <label style={{ flex: "1 1 200px", minWidth: 120, position: "relative", display: "flex", alignItems: "center" }}>
+              <span style={{ position: "absolute", left: 12, color: "rgba(255,255,255,.45)", display: "flex", pointerEvents: "none" }}>{LENS}</span>
+              <input ref={searchRef} value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher…" aria-label="Rechercher"
+                style={{ width: "100%", height: 34, padding: "0 30px 0 36px", border: "none", background: "transparent", color: "#fff", fontSize: 14, outline: "none" }}/>
+              {q && <button type="button" onClick={() => setQ("")} aria-label="Effacer" style={{ position: "absolute", right: 4, border: "none", background: "none", color: "rgba(255,255,255,.6)",
+                cursor: "pointer", fontSize: 16 }}>×</button>}
             </label>
-            {n3d > 0 && <button type="button" onClick={() => setOnly3d(v => !v)} aria-pressed={only3d} style={{ ...pillBtn, height: 46, padding: "0 18px",
-              background: only3d ? accent : "rgba(255,255,255,.05)", color: only3d ? "#0B0B0F" : "#fff", borderColor: only3d ? accent : "rgba(255,255,255,.12)" }}>🧊 En 3D · {n3d}</button>}
-            <select value={sort} onChange={e => setSort(e.target.value)} aria-label="Trier" style={{ ...pillBtn, height: 46, padding: "0 16px", appearance: "none", WebkitAppearance: "none" }}>
-              <option value="recent" style={{ color: "#111" }}>Les plus récentes</option>
-              <option value="old" style={{ color: "#111" }}>Les plus anciennes</option>
-              <option value="az" style={{ color: "#111" }}>De A à Z</option>
+            {cats.length > 1 && <div className="sc-chips sc-hide-sm" style={{ flex: "0 1 auto", maxWidth: "50%" }}>
+              {[["", 0], ...cats].map(([c]) => <button key={c || "_"} type="button" onClick={() => setCat(c)} style={{ ...seg, ...(cat === c ? segOn(accent) : null) }}>{c || "Tout"}</button>)}
+            </div>}
+            {n3d > 0 && <button type="button" onClick={() => setOnly3d(v => !v)} aria-pressed={only3d} style={{ ...seg, ...(only3d ? segOn(accent) : null) }}>3D</button>}
+            <select value={sort} onChange={e => setSort(e.target.value)} aria-label="Trier" style={{ ...seg, appearance: "none", WebkitAppearance: "none", paddingRight: 12 }}>
+              <option value="recent" style={{ color: "#111" }}>Récentes</option>
+              <option value="old" style={{ color: "#111" }}>Anciennes</option>
+              <option value="az" style={{ color: "#111" }}>A → Z</option>
             </select>
           </div>
-          {cats.length > 1 && <div className="sc-chips">
-            {[["", items.length], ...cats].map(([c, nn]) => <button key={c || "_"} type="button" onClick={() => setCat(c)} style={{ flexShrink: 0, padding: "8px 15px", borderRadius: 30,
-              cursor: "pointer", fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", fontWeight: 800, border: `1px solid ${cat === c ? accent : "rgba(255,255,255,.14)"}`,
-              background: cat === c ? accent : "rgba(255,255,255,.03)", color: cat === c ? "#0B0B0F" : "rgba(255,255,255,.75)", transition: "all .3s" }}>
-              {c || "Tout"} <span style={{ opacity: .6, fontWeight: 700 }}>{nn}</span></button>)}
+          {/* sur telephone, les categories passent sous la pilule */}
+          {cats.length > 1 && <div className="sc-chips sc-only-sm" style={{ marginTop: 8 }}>
+            {[["", 0], ...cats].map(([c]) => <button key={c || "_"} type="button" onClick={() => setCat(c)}
+              style={{ ...seg, flexShrink: 0, border: "1px solid rgba(255,255,255,.1)", ...(cat === c ? segOn(accent) : null) }}>{c || "Tout"}</button>)}
           </div>}
         </div>
         {shown.length ? <div className="sc-masonry" key={`${cat}|${only3d}|${sort}`}>
@@ -536,7 +521,8 @@ const baseCss = `
   .sc-marquee { animation: scMarquee 60s linear infinite; }
   .sc-marquee:hover { animation-play-state: paused; }
   .sc-spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,.12); animation: scSpin .9s linear infinite; display: inline-block; }
-  @media (max-width: 640px) { .sc-hide-sm { display: none !important; } }
+  .sc-only-sm { display: none !important; }
+  @media (max-width: 640px) { .sc-hide-sm { display: none !important; } .sc-only-sm { display: flex !important; } }
   @media (prefers-reduced-motion: reduce) { .sc-blob, .sc-marquee, .sc-shine { animation: none !important; } }
 `;
 const roundBtn = { width: 44, height: 44, borderRadius: "50%", border: "1px solid rgba(255,255,255,.18)", background: "rgba(10,10,14,.45)", color: "#fff", fontSize: 24, lineHeight: 1,
@@ -548,4 +534,7 @@ const glassTag = { fontSize: 10.5, fontWeight: 800, letterSpacing: ".08em", padd
   backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" };
 const chip3d = { fontSize: 10.5, fontWeight: 900, letterSpacing: ".08em", padding: "4px 9px", borderRadius: 20, color: "#0B0B0F", background: "var(--sc-accent, #C9A96E)",
   boxShadow: "0 6px 18px -6px var(--sc-accent, #C9A96E)" };
+const seg = { height: 34, padding: "0 14px", borderRadius: 24, border: "none", background: "transparent", color: "rgba(255,255,255,.7)", fontSize: 12.5,
+  fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, transition: "all .25s" };
+const segOn = a => ({ background: a, color: "#0B0B0F" });
 const label = { fontSize: 11, letterSpacing: ".24em", textTransform: "uppercase", color: "rgba(255,255,255,.5)" };
