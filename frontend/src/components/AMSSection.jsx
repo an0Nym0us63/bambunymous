@@ -795,8 +795,6 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
                 background:`linear-gradient(90deg, ${gauge}, color-mix(in srgb, ${gauge} 60%, #ffffff))` }}/>
               {lv && info?.initial_weight_g && <LiveHatch a={lv.target / info.initial_weight_g} b={lv.now / info.initial_weight_g} r={5}/>}
             </div>
-            {lv && <div style={{ fontSize:12, fontWeight:700, color:"var(--text2)" }}>🖨️ Impression en cours : {Math.round(lv.target)} g à la fin
-              ({Math.round(lv.row_used)} g consommés sur {Math.round(lv.row_planned)} g) ; hachurée sur la barre, la part qui partira encore.</div>}
             <LiveSwitchButton lv={lv} style={{ alignSelf: "flex-start" }}/>
           </div>}
         </div>
