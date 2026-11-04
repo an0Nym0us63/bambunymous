@@ -409,8 +409,13 @@ async def mw_print_profiles(design_id: str, ids: str = "", _: str = Depends(get_
     l'assemblage du groupe -- choisi a la main, donne par l'imprimante s'il existe encore, sinon deduit (nom de la
     tache, apercu, plateau). La fiche d'un groupe en fait une carte par profil."""
     from ....services import mw_plate_guess as _G
+    from ....services.mw_source import _disk_profiles
     got = await _G.profile_per_print(design_id, [x for x in ids.split(",") if x.strip().isdigit()][:60])
-    return {"profiles": {str(k): v.get("profile") for k, v in got.items() if v.get("profile")}}
+    out = {str(k): v.get("profile") for k, v in got.items() if v.get("profile")}
+    # et le titre (traduit) de ces profils, pour nommer les lignes des fichiers associes
+    titles = {str(x.get("profile_id")): x.get("title") or x.get("title_original") for x in _disk_profiles(design_id)
+              if str(x.get("profile_id")) in set(out.values())}
+    return {"profiles": out, "titles": titles}
 
 
 @router.get("/rate-templates")

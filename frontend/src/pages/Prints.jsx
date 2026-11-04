@@ -1913,9 +1913,6 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   const [mwAll, setMwAll] = useState(false);          // « Lier toutes au modele MakerWorld »
   // le 3MF d'origine importe pour le groupe (31/10/2026) : ses modeles (ID MakerWorld, ou « - » sans modele)
   const [own3d, setOwn3d] = useState(null);
-  const groupModels = [...new Map(prints.map(x => { const k = String(x.design_id || "").trim() || "-";
-    return [k, { key: k, label: k === "-" ? "sans modèle MakerWorld" : (x.translated_name || x.file_name || `modèle ${k}`),
-      has: prints.filter(y => (String(y.design_id || "").trim() || "-") === k).every(y => y.source_3mf) }]; })).values()];
   const own3dPrint = prints.find(x => !String(x.design_id || "").trim() && x.source_3mf) || null;
   // l'assemblage du groupe (31/10/2026) : les pieces de plusieurs modeles, ou de plusieurs profils d'un meme modele, qui
   // font un seul objet, reunies dans une seule vue ; propose des que le groupe melange au moins deux 3MF
@@ -1941,7 +1938,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   const importGroupSource = (m, file = null) => new Promise(resolve => {
     const send = async f => {
       if (m.has && !(await showConfirm(`Remplacer le 3MF d'origine (${m.label}) par « ${f.name} » ?`, { confirmLabel: "Remplacer" }))) return resolve(false);
-      const fd = new FormData(); fd.append("file", f); fd.append("design", m.key);
+      const fd = new FormData(); fd.append("file", f); fd.append("design", m.design || m.key);
+      if (m.ids?.length) fd.append("prints", m.ids.join(","));
       toast("Envoi du 3MF d'origine…");
       try {
         const { data } = await client.post(`/prints/groups/${groupId}/source-3mf`, fd, { timeout: 600000 });
@@ -2009,8 +2007,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     let alive = true;
     Promise.all(designs.map(([d]) => client.get(`/makerworld/model/${encodeURIComponent(d)}/print-profiles`,
       { params: { ids: prints.filter(x => String(x.design_id || "").trim() === d).map(x => x.id).join(",") } })
-      .then(r => r.data?.profiles || {}).catch(() => ({}))))
-      .then(all => alive && setProfOfPrint(Object.assign({}, ...all)));
+      .then(r => r.data || {}).catch(() => ({}))))
+      .then(all => alive && setProfOfPrint(Object.assign({}, ...all.map(x => x.profiles || {}), { _titles: Object.assign({}, ...all.map(x => x.titles || {})) })));
     return () => { alive = false; };
   }, [profKey]);   // eslint-disable-line react-hooks/exhaustive-deps
   const cards = designs.flatMap(([d]) => {
@@ -2021,6 +2019,16 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     if (by.has("") && by.size === 2) { const [k] = [...by.keys()].filter(x => x); by.set(k, [...by.get(k), ...by.get("")]); by.delete(""); }
     return [...by.entries()].sort((a, b) => b[1].length - a[1].length).map(([prof, list]) => ({ d, prof: prof || null, list }));
   });
+  // les 3MF d'origine des fichiers associes : un par modele, et par profil quand le groupe en melange plusieurs d'un
+  // meme modele (04/11/2026 : un seul s'affichait, celui du modele) ; puis celles sans modele MakerWorld
+  const groupModels = [...cards.map(({ d, prof, list }) => {
+    const several = cards.filter(c => c.d === d).length > 1, x = list[0];
+    const ptitle = prof && profOfPrint._titles?.[prof];
+    return { key: `${d}:${prof || ""}`, design: d, ids: list.map(y => y.id),
+      label: `${x.translated_name || x.file_name || `modèle ${d}`}${several && ptitle ? ` · ${ptitle}` : ""}`,
+      has: list.every(y => y.source_3mf) };
+  }), ...(own => own.length ? [{ key: "-", design: "-", ids: own.map(y => y.id), label: "sans modèle MakerWorld",
+    has: own.every(y => y.source_3mf) }] : [])(prints.filter(x => !String(x.design_id || "").trim()))];
   const saveNb = async () => {
     const n = parseInt(nbVal);
     if (!isNaN(n) && n >= 1) { try { await client.patch(`/prints/groups/${groupId}`, { number_of_items: n }); setNbItems(n); onUpdated?.(); } catch { /* garde l'ancien */ } }

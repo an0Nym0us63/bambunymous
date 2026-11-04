@@ -2770,7 +2770,7 @@ async def group_3mf(group_id: int, kind: str = Query("sliced", pattern="^(sliced
     def collect():
         seen, out = {}, []
         for p in prints:
-            f = print_file(p.design_id, p.mw_profile_id, p.mw_plates) if kind == "source" else \
+            f = print_file(p.design_id, p.mw_profile_id, p.mw_plates, p.id, p.task_name) if kind == "source" else \
                 (local_or_archive(p.model_3mf) if p.model_3mf else None)
             if not f or not f.is_file():
                 continue
@@ -3093,18 +3093,22 @@ async def group_unlink_makerworld(group_id: int, _: str = Depends(require_admin)
 
 
 @router.post("/groups/{group_id}/source-3mf")
-async def group_source_upload(group_id: int, file: UploadFile = File(...), design: str = Form("*"),
+async def group_source_upload(group_id: int, file: UploadFile = File(...), design: str = Form("*"), prints: str = Form(""),
                               _: str = Depends(require_admin)):
     """Le 3MF d'origine importe pour un groupe (31/10/2026) : rattache a ses impressions d'un modele (design : son ID
-    MakerWorld ; « - » : celles sans modele ; « * » : toutes)."""
+    MakerWorld ; « - » : celles sans modele ; « * » : toutes) ; prints (« 12,13 », 04/11/2026) : seulement celles-la,
+    celles d'un profil quand le groupe en melange plusieurs d'un meme modele."""
     import asyncio as _aio
     import tempfile
     from ....services import mw_source as S
     async with AsyncSessionLocal() as db:
-        rows = (await db.execute(select(Print.id, Print.design_id, Print.mw_profile_id, Print.mw_plates)
+        rows = (await db.execute(select(Print.id, Print.design_id, Print.mw_profile_id, Print.mw_plates, Print.task_name)
                                  .where(Print.group_id == group_id))).all()
     d = str(design or "*").strip()
     rows = [r for r in rows if d == "*" or (d == "-" and not str(r[1] or "").strip()) or str(r[1] or "").strip() == d]
+    only = {int(x) for x in str(prints or "").split(",") if x.strip().isdigit()}
+    if only:
+        rows = [r for r in rows if r[0] in only]
     if not rows:
         raise HTTPException(404, "Aucune impression de ce groupe pour ce modèle")
     tmp = Path(tempfile.mkstemp(suffix=".3mf")[1])
@@ -3117,7 +3121,7 @@ async def group_source_upload(group_id: int, file: UploadFile = File(...), desig
                     raise HTTPException(413, "Fichier trop gros (600 Mo au plus)")
                 fh.write(chunk)
         try:
-            iid = await _aio.to_thread(S.save_upload_many, [(r[0], r[1], S._profile(r[2], r[3])) for r in rows], tmp)
+            iid = await _aio.to_thread(S.save_upload_many, [(r[0], r[1], S._profile(r[2], r[3], str(r[1] or "").strip() or None, r[4])) for r in rows], tmp)
         except ValueError as e:
             raise HTTPException(400, str(e))
     finally:
@@ -3146,7 +3150,7 @@ async def print_plate_image_restore(print_id: int, _: str = Depends(require_admi
         if sliced and sliced.is_file():
             srcs.append(("tranché", sliced))
         try:
-            orig = print_file(p.design_id, p.mw_profile_id, p.mw_plates, p.id)
+            orig = print_file(p.design_id, p.mw_profile_id, p.mw_plates, p.id, p.task_name)
             if orig and orig.is_file():
                 srcs.append(("d'origine", orig))
         except Exception:
@@ -3193,7 +3197,7 @@ async def print_3mf(print_id: int, kind: str = Query("sliced", pattern="^(sliced
     if not p:
         raise HTTPException(404, "Impression introuvable")
     if kind == "source":
-        f = print_file(p.design_id, p.mw_profile_id, p.mw_plates, p.id)
+        f = print_file(p.design_id, p.mw_profile_id, p.mw_plates, p.id, p.task_name)
         suffix = " (MakerWorld)" if p.design_id else " (origine)"
     else:
         from ....services.archive import local_or_archive

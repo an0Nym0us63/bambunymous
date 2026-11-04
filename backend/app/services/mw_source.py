@@ -405,13 +405,13 @@ def save_upload_many(targets: list, raw_path: Path) -> str:
     return iid
 
 
-def print_file(design_id, profile_id, manual=None, pid=None) -> Path | None:
+def print_file(design_id, profile_id, manual=None, pid=None, task=None) -> Path | None:
     """Le 3MF d'origine d'une impression : celui de son profil, sinon celui retenu pour le modele ; sans modele
     MakerWorld, celui importe a la main pour elle (pid)."""
     if not design_id:
         iid = known(own_key(pid), "") if pid else None
         return path_of(iid) if iid else None
-    prof = _profile(profile_id, manual)
+    prof = _profile(profile_id, manual, design_id, task)       # task : le nom de la tache retrouve un profil disparu
     iid = (known(design_id, prof) if prof else None) or known(design_id, "")
     if not iid and prof and path_of(prof).is_file():
         iid = prof                                   # l'imprimante a donne l'identifiant d'instance : c'est le fichier
