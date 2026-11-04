@@ -5,6 +5,7 @@ import { FSheet, FCard, fBtn } from "./FicheKit";
 import { toast } from "../store/toast";
 import { showConfirm } from "../utils/dialog";
 import { egg } from "../eggs";
+import { AccessLog } from "./PublicLinksCard";
 
 // « Mes vitrines » (04/11/2026) : des portfolios publics, chacun nomme et avec son lien. Les pieces viennent de deux
 // sources : celles choisies a la main (ordre, ★ du grand carrousel, un mot), et des regles (toutes mes pieces, tout
@@ -57,6 +58,7 @@ export default function ShowcaseManager({ sid, onClose, onChanged }) {
   const [days, setDays] = useState(0);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [log, setLog] = useState(false);              // le journal des acces du lien
   useEffect(() => {
     client.get(`/showcase/${sid}`).then(r => setCfg(r.data)).catch(() => setCfg({ error: true }));
     egg("vitrine");
@@ -186,6 +188,7 @@ export default function ShowcaseManager({ sid, onClose, onChanged }) {
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <button type="button" onClick={makeLink} disabled={busy} style={chip(false)}>📋 Copier</button>
               <a href={link} target="_blank" rel="noopener noreferrer" style={chip(false)}>↗ Ouvrir</a>
+              <button type="button" onClick={() => setLog(true)} style={chip(false)}>👁 Accès</button>
               <button type="button" onClick={unlink} style={{ ...chip(false), color: "#ef4444" }}>Retirer</button>
             </div>
           </div> : <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
@@ -298,6 +301,7 @@ export default function ShowcaseManager({ sid, onClose, onChanged }) {
         <button type="button" onClick={remove} style={{ ...chip(false), alignSelf: "center", color: "#ef4444" }}>Supprimer cette vitrine</button>
       </>}
     </div>
+    {log && cfg?.token && <AccessLog token={cfg.token} label={cfg.title} onClose={() => setLog(false)}/>}
   </FSheet>, document.body);
 }
 

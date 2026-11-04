@@ -9,7 +9,7 @@ import html as _html
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from sqlalchemy import extract, func, select
 
 from ....db.session import AsyncSessionLocal
@@ -233,9 +233,9 @@ async def wrapped_unshare(token: str, _: str = Depends(require_admin)):
 
 
 @router.get("/public/{token}")
-async def wrapped_public(token: str):
+async def wrapped_public(token: str, request: Request):
     """L'annee partagee, telle que figee : sans compte (le lien est la cle), tant qu'il n'a pas expire."""
-    v = await PL.open_(token, ("year", "all"))
+    v = await PL.open_(token, ("year", "all"), request)
     if not v:
         raise HTTPException(404, "Ce lien n'existe pas, a expiré ou a été retiré")
     return {**(v.get("data") or {}), "shared_at": v.get("updated") or v.get("created")}

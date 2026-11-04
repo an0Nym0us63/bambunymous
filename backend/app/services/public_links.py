@@ -94,7 +94,7 @@ async def find(kind: str, ref) -> tuple[str | None, dict | None]:
     return t, (d[t] if t else None)
 
 
-async def open_(token: str, kinds: tuple) -> dict | None:
+async def open_(token: str, kinds: tuple, request=None) -> dict | None:
     """Une ouverture publique : l'entree si le lien existe, est de ce type et n'a pas expire (et elle est comptee)."""
     if not token or len(token) > 40:
         return None
@@ -105,13 +105,67 @@ async def open_(token: str, kinds: tuple) -> dict | None:
     v["views"] = int(v.get("views") or 0) + 1
     v["last_view"] = datetime.utcnow().isoformat(timespec="seconds")
     await save(d)
+    if request is not None:
+        await _log_add(token, request)
     return v
+
+
+# Le journal des acces (04/11/2026) : chaque ouverture d'un lien, avec l'heure, l'adresse IP, l'appareil et la page
+# d'ou l'on vient ; Parametres le montre par lien, avec la zone de chaque adresse (services/ipgeo). Range a part du
+# registre (PUBLIC_LINKS_LOG), les LOG_MAX dernieres de chaque lien sur LOG_DAYS jours ; supprimer un lien efface son journal.
+LOG_KEY = "PUBLIC_LINKS_LOG"
+LOG_MAX = 300
+LOG_DAYS = 180
+
+
+async def _log_load() -> dict:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, LOG_KEY, "")
+    try:
+        d = json.loads(raw) if raw else {}
+    except ValueError:
+        d = {}
+    return d if isinstance(d, dict) else {}
+
+
+async def _log_save(d: dict) -> None:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, LOG_KEY, json.dumps(d, ensure_ascii=False))
+
+
+async def _log_add(token: str, request) -> None:
+    from urllib.parse import urlparse
+    from .login_watch import client_ip, device_of
+    try:
+        ua = request.headers.get("user-agent") or ""
+        ref = urlparse(request.headers.get("referer") or "").netloc
+        d = await _log_load()
+        lim = (datetime.utcnow() - timedelta(days=LOG_DAYS)).isoformat(timespec="seconds")
+        lst = [e for e in d.get(token) or [] if (e.get("at") or "") >= lim]
+        lst.append({"at": datetime.utcnow().isoformat(timespec="seconds"), "ip": client_ip(request), "dev": device_of(ua),
+                    "ua": ua[:240], "ref": ref[:120] or None})
+        d[token] = lst[-LOG_MAX:]
+        await _log_save(d)
+    except Exception:
+        pass                                          # le journal ne bloque jamais l'ouverture
+
+
+async def log_of(token: str) -> list:
+    """Les ouvertures de ce lien, la plus recente d'abord."""
+    return list(reversed((await _log_load()).get(token) or []))
 
 
 async def remove(token: str) -> None:
     d = await load()
     d.pop(token, None)
     await save(d)
+    lg = await _log_load()
+    if lg.pop(token, None) is not None:
+        await _log_save(lg)
 
 
 async def set_expiry(token: str, days) -> dict | None:

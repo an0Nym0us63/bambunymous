@@ -19,7 +19,7 @@ import re
 import secrets
 from collections import Counter
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlalchemy import select
 
 from ....db.session import AsyncSessionLocal
@@ -319,12 +319,12 @@ async def showcase_unlink(sid: str, _: str = Depends(require_admin)):
 
 
 @router.get("/public/{token}")
-async def showcase_public(token: str):
+async def showcase_public(token: str, request: Request):
     """La vitrine, sans compte (le lien est la cle) : seulement ses pieces, leurs photos, la date (mois), les couleurs
     de filament, le modele et son createur (si le credit est voulu), le mot ; jamais un cout."""
     from ....models.print_history import FilamentUsage
     from ....models.object_history import Object
-    v = await PL.open_(token, ("showcase",))
+    v = await PL.open_(token, ("showcase",), request)
     if not v:
         raise HTTPException(404, "Cette vitrine n'existe pas, a expiré ou a été retirée")
     lst = await _load()

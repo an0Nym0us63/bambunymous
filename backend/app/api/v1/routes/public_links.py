@@ -23,6 +23,17 @@ async def public_links_expiry(token: str, body: dict = Body({}), _: str = Depend
     return v
 
 
+@router.get("/{token}/log")
+async def public_links_log(token: str, _: str = Depends(require_admin)):
+    """Le journal des ouvertures de ce lien (la plus recente d'abord), avec la zone de chaque adresse IP."""
+    from ....services.ipgeo import lookup
+    if token not in await PL.load():
+        raise HTTPException(404, "Lien inconnu")
+    lst = await PL.log_of(token)
+    geo = await lookup([e.get("ip") for e in lst])
+    return {"entries": [{**e, "geo": geo.get(e.get("ip")) or {}} for e in lst], "max": PL.LOG_MAX, "days": PL.LOG_DAYS}
+
+
 @router.delete("/{token}")
 async def public_links_delete(token: str, _: str = Depends(require_admin)):
     await PL.remove(token)
