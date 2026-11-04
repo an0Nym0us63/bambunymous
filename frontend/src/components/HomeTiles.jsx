@@ -3053,13 +3053,15 @@ function PrintColors({ status, o, sz }) {
                       <span style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, maxWidth: "100%" }}>
                         <PcSwatch x={x} size={14}/>{slotTag(x, 12)}</span>
                       <span style={{ fontSize: one ? 16 : 13, fontWeight: 800, color: "var(--text2)", maxWidth: "100%",
-                        ...(hH >= 100 ? clamp(2) : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }) }}>{x.name}</span></>
+                        ...(hH >= (one ? 150 : 100) ? clamp(2) : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }) }}>{x.name}</span></>
                     : <span style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0, maxWidth: "100%", lineHeight: 1.2 }}>
                       <PcSwatch x={x} size={10}/>{!inRing && slotTag(x, 10.5)}
                       <span style={{ minWidth: 0, fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</span></span>}
                     {grams(x, one && side ? 22 : side ? 15 : 12.5)}
-                    {one && side && rH >= 70 && <><span style={{ width: "min(100%, 260px)", marginTop: 4 }}><PcBar x={x} h={8}/></span>
-                      <Muted size={11.5}>{pcG(Math.max(0, x.f.planned - x.f.used))} encore à imprimer{x.cur.brand ? ` · ${x.cur.brand}` : ""}</Muted></>}
+                    {/* la barre puis le reste, seulement s'ils tiennent (04/11/2026 : a ~115 px, le texte centre debordait en haut
+                        et en bas) : emplacement, nom, grammes et marges font ~80 px, la barre 14, la ligne du reste 18 */}
+                    {one && side && rH >= 70 && hH >= 100 && <span style={{ width: "min(100%, 260px)", marginTop: 4 }}><PcBar x={x} h={8}/></span>}
+                    {one && side && rH >= 70 && hH >= 124 && <Muted size={11.5}>{pcG(Math.max(0, x.f.planned - x.f.used))} encore à imprimer{x.cur.brand ? ` · ${x.cur.brand}` : ""}</Muted>}
                   </div></div></div>)}</div></div>;
           if (rV >= 40 && W >= 130) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly", gap: 8, minWidth: 0 }}>
             {list.map(x => <div key={x.slot} {...card(x)}><div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", minWidth: 0 }}>
