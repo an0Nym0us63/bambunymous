@@ -91,8 +91,11 @@ export function LayerExplorer({ status }) {
   const [vh, setVh] = useState(() => window.innerHeight);
   useEffect(() => { const f = () => setVh(window.innerHeight); window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, []);
   if (d && !d.ok) return <span style={{ fontSize: 13, color: "var(--muted)" }}>Pas de G-code pour cette impression (il vient du 3MF tranché).</span>;
-  // la hauteur suit l'ecran ; la largeur prend la place qu'il y a (le dessin s'y centre)
-  const size = Math.max(180, Math.min(W, 560, vh - 300));
+  // la hauteur suit la fenetre (min(640 px, 86 % de l'ecran), 88 % au telephone) ; la largeur prend la place qu'il y a
+  // (le dessin s'y centre). 04/11/2026 : calee sur l'ecran (vh - 300), elle laissait le curseur sous le bord de la
+  // fenetre ; son en-tete, ses marges, le curseur et la legende prennent pres de 220 px
+  const sheet = window.innerWidth < 560 ? vh * 0.88 : Math.min(640, vh * 0.86);
+  const size = Math.max(160, Math.min(W, 520, sheet - 220));
   const wide = Math.max(180, Math.min(W, 760));
   return <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
     <div ref={box} style={{ display: "flex", justifyContent: "center", borderRadius: 18, background: "var(--surface2)", border: "1px solid var(--border)", padding: 6 }}>
