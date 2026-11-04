@@ -43,17 +43,21 @@ async def live_layer(print_id: int | None = None, n: int | None = None, _: str =
         p = await db.get(Print, pid)
         if not p:
             raise HTTPException(404)
-        rows = (await db.execute(select(FilamentUsage.ams_slot, FilamentUsage.color_hex, Filament.color, Filament.name, FilamentUsage.filament_type)
+        rows = (await db.execute(select(FilamentUsage.ams_slot, FilamentUsage.color_hex, Filament.color, Filament.translated_name, Filament.name,
+                                        Filament.manufacturer, Filament.material, Filament.fila_type, FilamentUsage.filament_type)
                                  .outerjoin(Spool, Spool.id == FilamentUsage.spool_id)
                                  .outerjoin(Filament, Filament.id == Spool.filament_id)
                                  .where(FilamentUsage.print_id == pid).order_by(FilamentUsage.id))).all()
-    # et leur nom (04/11/2026 : la legende disait « Filament 15 ») : celui de la bobine, sinon la matiere relevee
+    # et leur nom (04/11/2026 : la legende disait « Filament 15 ») : le nom traduit de la bobine (comme le suivi), sa
+    # marque, sa matiere et son sous-type ; sans bobine, la matiere relevee
     colors, names = {}, {}
-    for slot, chex, fcol, fname, ftype in rows:
+    for slot, chex, fcol, tname, fname, brand, mat, sub, ftype in rows:
         if slot and (slot - 1) not in colors:
             colors[slot - 1] = "#" + str(fcol or chex or "94a3b8").lstrip("#")[:6]
-            if fname or ftype:
-                names[slot - 1] = fname or ftype
+            kind = sub if sub and mat and sub.lower().startswith(mat.lower()) else " ".join(x for x in (mat, sub) if x)
+            label = " · ".join(x for x in (tname or fname, brand, kind or ftype) if x)
+            if label:
+                names[slot - 1] = label
     want = n if n is not None else (s.layer if live else None)
     try:
         out = await LV.layer(pid, p, want)
