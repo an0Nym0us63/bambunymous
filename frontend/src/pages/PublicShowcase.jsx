@@ -508,7 +508,8 @@ export default function PublicShowcase() {
             <div className="sc-cta" style={{ position: "relative", aspectRatio: "4 / 5", overflow: "hidden", borderRadius: 22, background: "#15151B", boxShadow: "0 24px 50px -30px rgba(0,0,0,.9)" }}>
               <Framed src={mid(o.img)} alt={o.title} style={{ position: "absolute", inset: 0 }}/>
               <span style={{ position: "absolute", top: 12, left: 12, padding: "7px 13px", borderRadius: 30, fontSize: 14, fontWeight: 900, background: accent, color: "#0B0B0F",
-                boxShadow: `0 10px 30px -10px ${accent}` }}>{price(o.price)}</span>
+                boxShadow: `0 10px 30px -10px ${accent}` }}>{o.price != null ? `${o.from ? "dès " : ""}${price(o.price)}` : "Prix sur demande"}</span>
+              {o.qty > 1 && <span style={{ position: "absolute", top: 12, right: 12, ...glassTag, fontSize: 12, padding: "6px 11px" }}>{o.qty} disponibles</span>}
             </div>
             <div style={{ padding: "12px 4px 0", fontFamily: SERIF, fontSize: 18, color: "#F5F5F4" }}>{o.title}</div>
           </Reveal>)}

@@ -141,7 +141,7 @@ def _ready_known(cs: list) -> tuple:
     import time
     now, ready, todo = time.time(), set(), []
     for c in cs:
-        if not c.get("design"):
+        if not c.get("design") and not c["group"]:
             continue
         hit = _READY.get((c["k"], c["design"]))
         if hit and now - hit[0] < READY_TTL:
@@ -396,11 +396,20 @@ async def showcase_public(token: str, request: Request):
                     cols[pid][h] = cols[pid].get(h, 0) + float(g or 0)
         sale = []
         if s.get("show_sale"):
+            # la boutique (04/11/2026) : les objets « à vendre » et eux seuls (statut available), avec ou sans prix ; les
+            # exemplaires d'un meme objet (meme nom) n'en font qu'un, avec leur nombre et leur prix (le plus bas s'ils different)
+            by: dict = {}
             for o in (await db.execute(select(Object.id, Object.name, Object.translated_name, Object.desired_price)
-                                       .where(Object.status == "available", Object.personal.isnot(True), Object.desired_price > 0)
-                                       .order_by(Object.created_at.desc()).limit(60))).all():
-                sale.append({"id": o.id, "title": o.translated_name or o.name, "price": round(float(o.desired_price), 2),
-                             "img": f"/api/v1/objects/objects/{o.id}/image"})
+                                       .where(Object.status == "available").order_by(Object.created_at.desc()).limit(500))).all():
+                title = (o.translated_name or o.name or "").strip() or "Sans nom"
+                e = by.setdefault(title.lower(), {"id": o.id, "title": title, "qty": 0, "prices": set(),
+                                                  "img": f"/api/v1/objects/objects/{o.id}/image"})
+                e["qty"] += 1
+                if o.desired_price and o.desired_price > 0:
+                    e["prices"].add(round(float(o.desired_price), 2))
+            for e in by.values():
+                ps = sorted(e.pop("prices"))
+                sale.append({**e, "price": ps[0] if ps else None, "from": len(ps) > 1})
     ready, todo = _ready_known([cands[it["k"]] for it in keys])
     if todo:
         _ready_start(s["id"], todo)
@@ -445,6 +454,19 @@ async def showcase_public_ready(token: str):
     return {"keys": sorted(ready), "pending": bool(todo)}
 
 
+def _group_asm(c: dict):
+    """L'assemblage du groupe tel que l'appli l'a monte (04/11/2026) : les pieces de tous ses 3MF, avec les plateaux
+    choisis a la main et les couleurs de ses impressions (« grp<groupe> »), lu tel quel sur le disque -- rien n'est
+    recalcule pour un visiteur. Sans lui (jamais ouvert dans l'appli), la vue du modele le plus imprime."""
+    from ....services import mw_3d as T
+    if not c.get("group"):
+        return None
+    meta = T._read_side(f"grp{c['k'][1:]}", "plates.json")
+    if isinstance(meta, dict) and meta.get("v") == T.FORMAT_V and meta.get("plates"):
+        return meta
+    return None
+
+
 def _view_args(c: dict) -> dict:
     """La vue 3D d'une piece, comme sa fiche l'ouvre : le modele (pour un groupe, celui qu'il a le plus imprime), le
     profil de l'impression, et les couleurs de ses impressions."""
@@ -460,6 +482,8 @@ async def _ready3d(cs: list) -> set:
     sem = asyncio.Semaphore(6)
 
     async def one(c):
+        if c["group"] and _group_asm(c):
+            return c["k"]
         if not c.get("design"):
             return None
         async with sem:
@@ -483,7 +507,16 @@ async def showcase_public_3d(token: str, key: str):
     if not s:
         raise HTTPException(404, "Cette vitrine n'existe pas")
     cands = _pool(await _candidates(), s.get("source"))
-    if key not in {it["k"] for it in _resolve(s, cands)} or not cands[key].get("design"):
+    if key not in {it["k"] for it in _resolve(s, cands)}:
+        raise HTTPException(404, "Pas de vue 3D pour cette pièce")
+    gm = _group_asm(cands[key])
+    if gm:
+        from ....services import mw_3d as T
+        gkey = f"grp{key[1:]}"
+        shown = T.plates_out(gm, gkey)[0]
+        return {"plates": shown, "assembly_edit": T.load_edit(gkey, None, {x.get("k") for pl in shown for x in pl.get("pieces") or [] if isinstance(x, dict)}),
+                "used_palette": None, "used_plates": {}, "finishes": {}, "glows": {}, "piece_plates": {}}
+    if not cands[key].get("design"):
         raise HTTPException(404, "Pas de vue 3D pour cette pièce")
     from .makerworld import mw_model_3d
     r = await mw_model_3d(**_view_args(cands[key]), peek=0, _="", token="fk_vitrine")

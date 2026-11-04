@@ -209,7 +209,7 @@ export default function ShowcaseManager({ sid, onClose, onChanged }) {
             </div>
             <input value={cfg.contact || ""} onChange={e => set({ contact: e.target.value })} placeholder="Contact (Instagram, e-mail…), facultatif" maxLength={200} style={input}/>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5, fontWeight: 700, color: "var(--text2)" }}>
-              <input type="checkbox" checked={!!cfg.show_sale} onChange={e => set({ show_sale: e.target.checked })} style={{ width: 18, height: 18 }}/>La boutique : mes objets disponibles avec un prix souhaité</label>
+              <input type="checkbox" checked={!!cfg.show_sale} onChange={e => set({ show_sale: e.target.checked })} style={{ width: 18, height: 18 }}/>La boutique : mes objets à vendre (les exemplaires d'un même objet regroupés)</label>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5, fontWeight: 700, color: "var(--text2)" }}>
               <input type="checkbox" checked={!!cfg.show_credit} onChange={e => set({ show_credit: e.target.checked })} style={{ width: 18, height: 18 }}/>Créditer le modèle MakerWorld et son créateur</label>
           </div>
