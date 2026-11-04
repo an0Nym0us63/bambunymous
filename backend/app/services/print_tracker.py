@@ -832,6 +832,11 @@ async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float],
                 logger.error(f"[LIVE] fin de l'impression #{pid} : {e}", exc_info=True)
             finally:
                 live_usage.forget(pid)
+        elif status != "FAILED":
+            try:
+                await live_usage.overrun(pid)          # le negatif d'une bobine a 0 g se garde aussi sans le suivi
+            except Exception as e:
+                logger.error(f"[DERIVE] fin de l'impression #{pid} : {e}", exc_info=True)
         # Logger APRÈS le with pour éviter TypeError si total_weight_g/total_cost est None
         tw = p.total_weight_g or 0
         tc = p.total_cost or 0

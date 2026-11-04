@@ -189,6 +189,7 @@ class SpoolOut(BaseModel):
     drift_kind: Optional[str] = None
     drift_off: Optional[str] = None
     end_reason: Optional[str] = None
+    overrun_g: Optional[float] = None
 
 class SpoolCreate(BaseModel):
     filament_id: int
@@ -1641,6 +1642,7 @@ def _spool_out(s: Spool, sib: tuple | None = None) -> SpoolOut:
         drift_kind=getattr(s, "drift_kind", None),
         drift_off=getattr(s, "drift_off", None),
         end_reason=getattr(s, "end_reason", None),
+        overrun_g=getattr(s, "overrun_g", None),
         created_at=s.created_at,
     )
 

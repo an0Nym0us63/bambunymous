@@ -544,7 +544,7 @@ async def settle(pid: int, nothing: bool = False) -> list:
         await db.commit()
     await _state_put(pid, {"settled": True, "back": [[s, g] for s, g in back]})
     if pid in _PROG or nothing:
-        await _overrun(pid)
+        await overrun(pid)
     logger.info(f"[LIVE] impression #{pid} ratee : {', '.join(f'{g:g} g a la bobine #{s}' for s, g in back) or 'rien a rendre'}"
                 f" (couche {(_PROG.get(pid) or {}).get('layer', '?')}{', rien imprime' if nothing else ''})")
     if back:
@@ -557,9 +557,10 @@ async def settle(pid: int, nothing: bool = False) -> list:
     return back
 
 
-async def _overrun(pid: int) -> None:
+async def overrun(pid: int) -> None:
     """Fin d'impression (05/11/2026) : ce que chaque bobine a imprime sous notre zero (le decompte s'arrete a 0) est
-    cumule sur elle, pour sa derive a sa fin. Une fois par impression ; la bobine relayee en cours de route a deja sa
+    cumule sur elle, pour sa derive a sa fin ; une bobine affichee a 0 g garde ainsi son negatif. Aussi sans le suivi
+    couche par couche (une impression reussie a tout consomme). Une fois par impression ; la bobine relayee en cours de route a deja sa
     mesure (seule la derniere de chaque filament compte)."""
     from ..models.filament import Spool
     from . import drift
@@ -591,7 +592,7 @@ def forget(pid: int) -> None:
 
 async def finished(pid: int) -> None:
     """Impression finie (reussie) : son etat est clos ; plus rien a rattraper."""
-    await _overrun(pid)
+    await overrun(pid)
     await _state_put(pid, {"settled": True})
     forget(pid)
 

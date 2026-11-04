@@ -1152,6 +1152,9 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
             <FRow l="Rythme" v={rythme ? rythme.v : (spool.first_used_at ? null : "pas encore utilisée")} d={rythme?.d}/>
             <DryEditRow spoolId={spool.id} spoolName={name} current={spool.last_dried_at} aSecher={aSecher} onUpdated={refresh}/>
             {spool.drift_g != null && <DriftRow spool={spool} onUpdated={refresh}/>}
+            {/* a 0 g chez nous mais elle imprime encore : ce qu'elle a deja imprime en dessous, garde pour sa fin */}
+            {spool.drift_g == null && spool.overrun_g > 0 && <FRow l="Sous notre zéro" v={driftTxt(-spool.overrun_g)} vc="#EF4444"
+              d="imprimé une fois à 0 g chez nous ; compté dans son écart à sa fin"/>}
             <div style={FROW}>
               <span style={FLAB}>Utilisation</span>
               <button onClick={loadUsage} disabled={loadingUsage} style={{ padding:"4px 11px", borderRadius:9, fontSize:12, fontWeight:800, cursor:"pointer",
