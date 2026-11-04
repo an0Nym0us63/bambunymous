@@ -259,6 +259,7 @@ async def _migrate():
         ("filament_usage", "tray_id",         "INTEGER"),
         ("filament_usage", "normal_cost",     "REAL DEFAULT 0"),
         ("filament_usage", "spool_id",        "INTEGER"),
+        ("filament_usage", "spool_before_g",  "REAL"),
         ("filaments",      "fila_color_code",  "TEXT"),
         ("filaments",      "name_en",          "TEXT"),
         ("filaments",      "fila_type",        "TEXT"),

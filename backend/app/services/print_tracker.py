@@ -877,6 +877,7 @@ async def _deduct_spool_weights(db, p: Print):
                 logger.warning(f"[SPOOL] Bobine #{spool.id} : remaining_weight_g est None → skip")
                 continue
             before = spool.remaining_weight_g
+            u.spool_before_g = float(before)          # le suivi en direct et le rendu d'un echec partent de lui (04/11/2026)
             spool.remaining_weight_g = max(0.0, before - u.grams_used)
             changes.append({"spool_id": spool.id, "filament_id": spool.filament_id, "before": before,
                             "after": spool.remaining_weight_g, "grams": u.grams_used})

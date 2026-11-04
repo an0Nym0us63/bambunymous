@@ -457,6 +457,7 @@ async def switch(pid: int, slot: int, spool_id: int, auto: bool = False) -> dict
         last.grams_used = round(part, 2)
         row = FilamentUsage(print_id=pid, spool_id=spool_id, filament_type=last.filament_type, color_hex=last.color_hex,
                             grams_used=left, ams_slot=int(slot), from_g=round(float(last.from_g or 0) + part, 2))
+        row.spool_before_g = float(new.remaining_weight_g or 0)    # avant son decompte (le suivi en direct part de lui)
         db.add(row)
         new.remaining_weight_g = max(0.0, float(new.remaining_weight_g or 0) - left)
         now = datetime.utcnow()
@@ -508,14 +509,21 @@ async def settle(pid: int, nothing: bool = False) -> list:
         for slot, rs in rows.items():
             for r in rs:
                 g = float(r.grams_used or 0)
-                give = round(g - _row_used(r, used.get(slot, 0.0)), 1)
-                if give < 0.1 or not r.spool_id:
+                ru = _row_used(r, used.get(slot, 0.0))
+                if g - ru < 0.1 or not r.spool_id:
                     continue
                 sp = await db.get(Spool, r.spool_id)
                 if not sp or sp.archived:
                     continue
+                # on ne rend que ce qui a vraiment ete retire au lancement (04/11/2026) : le decompte s'arrete a 0, une
+                # bobine de 55 g pour 230 prevus n'a perdu que 55 g ; lui rendre « 230 - imprime » lui inventait du filament
+                bef = getattr(r, "spool_before_g", None)
+                taken = min(g, max(0.0, float(bef))) if bef is not None else g
+                give = round(max(0.0, taken - ru), 1)
+                r.grams_used = round(ru, 2)
+                if give < 0.1:
+                    continue
                 sp.remaining_weight_g = round(float(sp.remaining_weight_g or 0) + give, 1)
-                r.grams_used = round(g - give, 2)
                 db.add(SpoolMove(spool_id=r.spool_id, grams=give, kind="rendu", print_id=pid, usage_id=r.id,
                                  label=label[:250]))
                 back.append((r.spool_id, give))
@@ -581,12 +589,23 @@ async def live(pid: int) -> dict:
             ru = _row_used(r, u)
             sp, fil = spools.get(r.spool_id, (None, None))
             rem = float(sp.remaining_weight_g) if sp and sp.remaining_weight_g is not None else None
+            # le poids de la bobine juste avant le decompte du lancement (04/11/2026) : le decompte s'arrete a 0, et
+            # « reste + prevu - consomme » repartait de 0 pour une bobine qui n'avait pas assez (55 g pour 230 prevus :
+            # 175 g « maintenant ») ; on part donc de lui, et ce qui manquera se dit a part (short)
+            bef = getattr(r, "spool_before_g", None)
+            if bef is not None:
+                now_g, tgt_g = float(bef) - ru, float(bef) - float(r.grams_used or 0)
+            elif rem is not None:
+                now_g, tgt_g = rem + float(r.grams_used or 0) - ru, rem
+            else:
+                now_g = tgt_g = None
             items.append({
                 "slot": slot, "row": r.id, "spool_id": r.spool_id, "current": k == len(rs) - 1,
                 "planned": round(planned, 1), "used": round(u, 1),
                 "row_planned": round(float(r.grams_used or 0), 1), "row_used": round(ru, 1),
-                "now": round(rem + float(r.grams_used or 0) - ru, 1) if rem is not None else None,
-                "target": round(rem, 1) if rem is not None else None,
+                "now": round(max(0.0, now_g), 1) if now_g is not None else None,
+                "target": round(max(0.0, tgt_g), 1) if tgt_g is not None else None,
+                "short": round(-tgt_g, 1) if tgt_g is not None and tgt_g < -0.5 else None,
                 "source": src.get(slot, "estimate"), "color": r.color_hex, "type": r.filament_type,
                 "name": (getattr(fil, "translated_name", None) or getattr(fil, "name", None) or "") if fil else "",
                 "spool_full": float(fil.filament_weight_g) if fil and fil.filament_weight_g else None,

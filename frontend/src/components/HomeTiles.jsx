@@ -3138,7 +3138,8 @@ function PcDetail({ x, d, compact = false }) {
       </div>
     </div>
     <Stats items={[["Prévus", pcG(f.planned)], ["Consommés", `${f.source === "gcode" ? "" : "≈ "}${pcG(f.used)}`, ink], ["Restent à imprimer", pcG(left), "#D97706"],
-      cur.now != null && ["Bobine maintenant → à la fin", `${Math.round(cur.now)} → ${pcG(cur.target)}`, cur.target < 50 ? "#EF4444" : "#16A34A"]].filter(Boolean)}/>
+      cur.now != null && ["Bobine maintenant → à la fin", `${Math.round(cur.now)} → ${cur.short ? `vide, il manque ${pcG(cur.short)}` : pcG(cur.target)}`,
+        cur.short || cur.target < 50 ? "#EF4444" : "#16A34A"]].filter(Boolean)}/>
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <H2>{x.rows.length > 1 ? "Les bobines qui y ont servi" : "La bobine"}</H2>
       {x.rows.map(r => <div key={r.row} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", borderRadius: 14, background: "var(--surface2)",
@@ -3148,7 +3149,8 @@ function PcDetail({ x, d, compact = false }) {
           {!r.current && <Muted size={11.5}>finie, relayée</Muted>}
           <span style={{ marginLeft: "auto", fontWeight: 800, color: "var(--text2)" }}>{pcG(r.row_used)}<Muted size={11.5}> / {pcG(r.row_planned)} pour cette impression</Muted></span></div>
         {r.now != null && <><LiveBar now={r.now} target={r.target} full={Math.max(r.now, r.spool_full || 0) || r.now} color={x.c} h={7}/>
-          <Muted size={11.5}>≈ {pcG(r.now)} maintenant → {pcG(r.target)} à la fin{r.spool_full ? ` · bobine de ${pcG(r.spool_full)}` : ""}</Muted></>}
+          <Muted size={11.5}>≈ {pcG(r.now)} maintenant → {r.short ? <b style={{ color: "#EF4444" }}>vide avant la fin, il manque {pcG(r.short)}</b> : `${pcG(r.target)} à la fin`}
+            {r.spool_full ? ` · bobine de ${pcG(r.spool_full)}` : ""}</Muted></>}
       </div>)}
       {!visiting && <LiveSwitchButton lv={cur.current && cur.now != null ? cur : null} style={{ alignSelf: "flex-start" }}/>}
     </div>

@@ -146,6 +146,9 @@ class FilamentUsage(Base):
     # suivi couche par couche (02/11/2026) : une bobine qui a pris le relais d'une autre pour ce filament, a partir de
     # ce nombre de grammes consommes du filament ; vide pour la premiere (la seule, sans changement de bobine)
     from_g        = Column(Float, nullable=True)
+    # le poids de la bobine juste avant le decompte du lancement (04/11/2026) : le decompte s'arrete a 0, le suivi en
+    # direct et le rendu d'un echec partent de lui (vide pour les impressions d'avant)
+    spool_before_g = Column(Float, nullable=True)
     ams_id        = Column(Integer, nullable=True)
     tray_id       = Column(Integer, nullable=True)
 

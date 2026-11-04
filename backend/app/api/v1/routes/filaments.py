@@ -2551,8 +2551,12 @@ async def spool_history_undo(sid: int, body: dict = Body({}), _: str = Depends(r
             if not fu or fu.spool_id != sid:
                 raise HTTPException(404, "Consommation introuvable")
             g = round(fu.grams_used or 0, 1)
+            # seulement ce qui avait vraiment ete retire (04/11/2026) : le decompte du lancement s'arrete a 0
+            if fu.spool_before_g is not None:
+                g = round(min(g, max(0.0, fu.spool_before_g)), 1)
             s.remaining_weight_g = round((s.remaining_weight_g or 0) + g, 1)
             fu.spool_id = None
+            fu.spool_before_g = None
             pid = fu.print_id
             p = await db.get(_P, pid)
             db.add(SpoolMove(spool_id=sid, grams=g, kind="annule", print_id=pid, usage_id=fu.id, unlinked=True,
