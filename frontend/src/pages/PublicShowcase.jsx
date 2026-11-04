@@ -161,8 +161,11 @@ function Card({ it, accent, onOpen, i, big }) {
 }
 
 // la vue 3D d'une piece (l'assemblage s'il y en a un), avec le moteur de l'appli, charge seulement a la demande
+// les effets comme dans la vue de l'appli (04/11/2026) : finitions et multicolores du plateau montre, ceux de chaque
+// piece d'un assemblage (le plateau d'ou elle vient), la lueur des phosphorescents, les couleurs par hauteur d'un lithophane
 function Piece3D({ token, it, accent }) {
   const [st, setSt] = useState({ load: true });
+  const [vs, setVs] = useState({});                   // ce que le moteur dit de la vue (dont « glow » : des phosphorescents)
   const [V, setV] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -188,12 +191,31 @@ function Piece3D({ token, it, accent }) {
     }
     return Object.keys(out).length ? out : null;
   }, [m, plate, pal]);
+  const pieceFx = useMemo(() => {
+    if (!plate?.assembled || !pal || !plate.pieces) return null;
+    const fin = {}, mul = {};
+    for (const pc of Object.values(plate.pieces)) {
+      const pn = m.piece_plates?.[String(pc.k || "").split(":").slice(0, 2).join(":")];
+      if (pn == null || !m.used_plates?.[String(pn)]) continue;
+      fin[pc.k] = m.used_finishes_plates?.[String(pn)] || {};
+      mul[pc.k] = m.used_multi_plates?.[String(pn)] || {};
+    }
+    return Object.keys(fin).length ? { fin, mul } : null;
+  }, [m, plate, pal]);
+  // les finitions et multicolores du plateau montre (une seule fois par vue : le moteur ne doit pas recevoir un objet neuf
+  // a chaque rendu)
+  const fx = useMemo(() => {
+    if (!m || !plate) return {};
+    const byPlate = m.used_plates && Object.keys(m.used_plates).length > 0;
+    return { fin: pal ? (byPlate ? m.used_finishes_plates?.[n] || {} : m.used_finishes) : m.finishes,
+             multi: pal ? (byPlate ? m.used_multi_plates?.[n] || {} : m.used_multi) : null,
+             hue: plate.litho && (plate.z_colors || []).length ? plate.z_colors : null };
+  }, [m, plate, pal, n]);
   if (st.error || (!st.load && V && !plate)) return <Center>La vue 3D n'est pas disponible pour cette pièce.</Center>;
   if (st.load || !V) return <Center><span className="sc-spin" style={{ borderTopColor: accent }}/>Préparation de la vue 3D…</Center>;
-  const fin = pal ? { ...(m.finishes || {}), ...((m.used_finishes_plates || {})[n] || m.used_finishes || {}) } : m.finishes;
-  const multi = pal ? ((m.used_multi_plates || {})[n] || m.used_multi || null) : null;
   return <div style={{ position: "absolute", inset: 0 }}>
-    <V url={plate.url} glb={st.isGlb(plate.url)} onState={() => {}} palette={pal} piecePalettes={piecePal} finishes={fin} multi={multi} glows={m.glows || null}
+    <V url={plate.url} glb={st.isGlb(plate.url)} onState={setVs} palette={pal} piecePalettes={piecePal} finishes={fx.fin} multi={fx.multi} glows={m.glows || null}
+      glow={!!vs.glow} pieceFinishes={pieceFx?.fin || null} pieceMulti={pieceFx?.mul || null} hue={fx.hue}
       pieces={plate.assembled ? plate.pieces : null} edit={plate.assembled ? m.assembly_edit : null} litho={!!plate.litho} bare/>
     <span style={{ position: "absolute", left: 14, bottom: 14, ...glassTag, pointerEvents: "none" }}>
       {plate.assembled ? "Assemblage · " : ""}glisser pour tourner · molette ou pincer pour zoomer</span>

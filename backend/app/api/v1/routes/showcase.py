@@ -539,8 +539,9 @@ async def showcase_public_3d(token: str, key: str):
         from ....services import mw_3d as T
         gkey = f"grp{key[1:]}"
         shown = T.plates_out(gm, gkey)[0]
+        fx = T._read_side(gkey, "fx.json") or {}         # les finitions et lueurs gardees par l'appli a cote de l'assemblage
         return {"plates": shown, "assembly_edit": T.load_edit(gkey, None, {x.get("k") for pl in shown for x in pl.get("pieces") or [] if isinstance(x, dict)}),
-                "used_palette": None, "used_plates": {}, "finishes": {}, "glows": {}, "piece_plates": {}}
+                "used_palette": None, "used_plates": {}, "finishes": fx.get("finishes") or {}, "glows": fx.get("glows") or {}, "piece_plates": {}}
     if not cands[key].get("design"):
         raise HTTPException(404, "Pas de vue 3D pour cette pièce")
     from .makerworld import mw_model_3d

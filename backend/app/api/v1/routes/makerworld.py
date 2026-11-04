@@ -1069,6 +1069,9 @@ async def _group_view(gid: int) -> dict:
         logger.exception("[3D] groupe : reprise de l'assemblage des modeles")
     # les filaments de ses impressions, pour peindre ou recolorier une piece dans l'edition (01/11/2026 : il n'y en avait aucun)
     used_options = await _used_options(sorted({pid for e in srcs.values() for pid in e["ids"]}))
+    # les effets (finitions, lueurs) gardes a cote de l'assemblage (04/11/2026) : la vitrine, qui le lit tel quel sans
+    # rien recalculer, les montre aussi
+    T._side(gkey, "fx.json", {"finishes": finishes, "glows": {o["color"]: o["glow"] for o in used_options if o.get("glow")}})
     try:
         bed = mw.bed_of(await mw.my_printer())
     except Exception:
