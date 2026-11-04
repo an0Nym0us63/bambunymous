@@ -895,16 +895,30 @@ async def _apply(m: dict, notify: bool = True) -> str:
                 o.items_json = json.dumps(items, ensure_ascii=False)
                 o.ordered_at = o.ordered_at or m["date"]
             elif kind == "confirmed" and items:
-                # une commande deja connue relue : les prix (lus depuis le 28/10/2026) completent les lignes qui n'en ont pas
+                # une commande deja connue relue (04/11/2026) : ses lignes se mettent a jour d'apres la lecture du jour --
+                # nom, type, couleur, prix -- et celles que l'ancienne lecture avait manquees s'ajoutent ; ce qui a ete
+                # fait dessus (recu, bobines creees, envoyees, confirmees) reste. Avant, seuls les prix manquants se
+                # completaient : une bobine sautee par l'ancienne lecture ne revenait jamais
                 cur = json.loads(o.items_json or "[]")
+                used = set()
                 for p_ in items:
-                    tgt = next((i for i in cur if i.get("kind") == "filament" and i.get("price") is None
-                                and ((p_.get("fila_color_code") and p_["fila_color_code"] == i.get("fila_color_code"))
-                                     or _fold(p_["title"]) == _fold(i.get("title")))), None)
-                    if tgt is not None:
-                        for k in ("price", "list_price", "gift", "currency"):
-                            tgt[k] = p_.get(k)
-                        touched.append(tgt)
+                    k = next((n for n, i in enumerate(cur) if n not in used
+                              and ((p_.get("fila_color_code") and p_["fila_color_code"] == i.get("fila_color_code"))
+                                   or _fold(p_["title"]) == _fold(i.get("title")))), None)
+                    if k is None:
+                        cur.append(p_)
+                        used.add(len(cur) - 1)
+                        continue
+                    used.add(k)
+                    tgt = cur[k]
+                    for f_ in ("title", "product", "color_name", "kind", "fila_id", "fila_type", "name_fr", "color_hex", "refill",
+                               "weight", "price", "list_price", "gift", "currency", "variant"):
+                        if f_ in p_:
+                            tgt[f_] = p_[f_]
+                    # la fiche rattachee ne change que tant qu'aucune bobine n'a ete creee pour la ligne
+                    if not tgt.get("spools") and "filament_id" in p_:
+                        tgt["filament_id"] = p_["filament_id"]
+                    touched.append(tgt)
                 o.items_json = json.dumps(cur, ensure_ascii=False)
             if tot:
                 # une relecture remet les totaux a jour (29/10/2026 : une remise de ligne avait ete comptee en remise de
