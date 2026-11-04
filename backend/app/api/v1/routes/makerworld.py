@@ -2013,6 +2013,65 @@ async def mw_3d_group_plates(gid: int, body: dict = Body({}), _: str = Depends(r
     return {"plates": cur}
 
 
+@router.get("/diag")
+async def mw_diag(design: str = "", group: int = 0, _: str = Depends(get_current_user)):
+    """Ce que le serveur a en main pour un modele ou un groupe (04/11/2026), en lecture seule, pour comprendre un cas
+    particulier sans rien toucher : les impressions et le profil retenu pour chacune (donne, choisi a la main, deduit),
+    les profils de la fiche MakerWorld gardee, les 3MF d'origine connus (cle -> fichier, present, vue 3D prete) et,
+    pour un groupe, son choix enregistre (numeros, plateaux, fichiers remplaces). Aucun secret, aucune ecriture,
+    rien demande a MakerWorld."""
+    from sqlalchemy import select
+    from ....db.session import AsyncSessionLocal
+    from ....models.print_history import Print
+    from ....services import mw_3d as T
+    from ....services import mw_plate_guess as _G
+    from ....services.mw_source import _index, _IDX, _profile, _disk_profiles, path_of, local_path_of
+    async with AsyncSessionLocal() as db:
+        q = select(Print.id, Print.design_id, Print.mw_profile_id, Print.mw_plates, Print.plate_id, Print.task_name,
+                   Print.group_id, Print.status, Print.model_3mf)
+        if group:
+            q = q.where(Print.group_id == int(group))
+        elif str(design).strip().isdigit():
+            q = q.where(Print.design_id == str(design).strip())
+        else:
+            raise HTTPException(400, "design ou group")
+        rows = (await db.execute(q.order_by(Print.print_date, Print.id).limit(200))).all()
+    dids = sorted({str(r.design_id).strip() for r in rows if str(r.design_id or "").strip().isdigit()}
+                  | ({str(design).strip()} if str(design).strip().isdigit() else set()))
+    guessed: dict = {}
+    for did in dids:
+        try:
+            guessed.update(await _G.profile_per_print(did, [r.id for r in rows if str(r.design_id or "").strip() == did]))
+        except Exception as e:
+            guessed[f"erreur {did}"] = str(e)[:200]
+    _index()
+
+    def file_info(iid):
+        if not iid:
+            return None
+        f = path_of(iid)
+        return {"iid": iid, "present": f.is_file(), "nas": f.is_file() and not local_path_of(iid).is_file(),
+                "size_kb": f.stat().st_size // 1024 if f.is_file() else None,
+                "vue3d_prete": bool(f.is_file() and T.ready(f, iid))}
+    models = {}
+    for did in dids:
+        profs = _disk_profiles(did)
+        models[did] = {
+            "profils": [{k: x.get(k) for k in ("profile_id", "instance_id", "title", "title_original", "default")} for x in profs],
+            "3mf_connus": {k.split(":", 1)[1] or "(modele)": file_info(v) for k, v in list(_IDX["v"].items()) if k.split(":", 1)[0] == did}}
+    prints = [{"id": r.id, "design": r.design_id, "groupe": r.group_id, "statut": r.status, "plateau": r.plate_id, "tache": r.task_name,
+               "profil_imprimante": r.mw_profile_id, "choix_main": r.mw_plates,
+               "profil_retenu": _profile(r.mw_profile_id, r.mw_plates, str(r.design_id or "").strip() or None, r.task_name) or None,
+               "profil_deduit": guessed.get(r.id), "3mf_tranche": bool(r.model_3mf)} for r in rows]
+    out = {"impressions": prints, "modeles": models}
+    if group:
+        sel = T.group_sel(f"grp{int(group)}")
+        out["groupe"] = {k: sel.get(k) for k in ("slots", "plates", "use", "dids") if sel.get(k) is not None}
+        out["groupe"]["pending"] = bool(sel.get("pending"))
+        out["groupe"]["assemblage_enregistre"] = T._edits_file(f"grp{int(group)}").is_file()
+    return out
+
+
 @router.get("/3d/group/{gid}/thumb/{h}/{n}")
 async def mw_3d_group_thumb(gid: int, h: str, n: int, _=Depends(_img_user)):
     """La vignette d'un plateau d'un 3MF du groupe (04/11/2026), pour le choix des plateaux, copiee a la composition
