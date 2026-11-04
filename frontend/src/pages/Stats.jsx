@@ -10,6 +10,7 @@ import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2, Shop
 import client from "../api/client";
 import { egg } from "../eggs";
 import HeaderAction from "../components/HeaderAction";
+import { WrappedBanner } from "../components/YearWrapped";
 import { useTrackDetail } from "../utils/track";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 // les fiches viennent des autres pages, chargees a l'ouverture seulement (28/10/2026 : importees en dur, la page
@@ -1108,6 +1109,8 @@ export default function Stats() {
         />
       )}
 
+      {/* « Ton annee en impressions » (04/11/2026) : le recapitulatif de l'annee, en diapositives */}
+      {tab === "prints" && <WrappedBanner/>}
       {tab === "prints" && (!data || !data.total_prints ? (
         <p style={{ textAlign:"center", color:"var(--muted)", padding:60 }}>
           Aucune impression terminée sur cette période.
