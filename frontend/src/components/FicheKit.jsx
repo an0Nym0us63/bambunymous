@@ -77,11 +77,15 @@ export function FCard({ t, i, c, aside = null, fold = false, open = true, onTogg
   return (
     <div style={{ borderRadius:18, padding:"12px 14px", background:`linear-gradient(160deg, ${c}1a, transparent 55%), var(--surface2)`,
       border:`1px solid ${c}33`, display:"flex", flexDirection:"column", minWidth:0 }}>
-      <div onClick={fold ? onToggle : undefined} style={{ display:"flex", alignItems:"center", gap:8, marginBottom: shut ? 0 : 4, cursor: fold ? "pointer" : "default" }}>
+      {/* le titre reste sur une ligne ; sur un telephone, ce qui l'accompagne passe dessous plutot que de le chevaucher
+          (05/11/2026 : « Le filament #143 » coupe en trois sous ses pastilles) */}
+      <div onClick={fold ? onToggle : undefined} style={{ display:"flex", alignItems:"center", gap:8, rowGap:6, flexWrap:"wrap", marginBottom: shut ? 0 : 4, cursor: fold ? "pointer" : "default" }}>
         <span style={{ width:28, height:28, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, background:`${c}26`, flexShrink:0 }}>{i}</span>
-        <span style={{ fontSize:13.5, fontWeight:900, color:"var(--text)", flex:1, minWidth:0 }}>{t}</span>
-        {aside}
-        {fold && <span style={{ fontSize:11, color:"var(--muted)", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>}
+        <span style={{ fontSize:13.5, fontWeight:900, color:"var(--text)", flex:"1 0 auto", whiteSpace:"nowrap" }}>{t}</span>
+        {(aside || fold) && <span style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", justifyContent:"flex-end", marginLeft:"auto", minWidth:0 }}>
+          {aside}
+          {fold && <span style={{ fontSize:11, color:"var(--muted)", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>}
+        </span>}
       </div>
       {shut ? summary : children}
     </div>);
