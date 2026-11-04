@@ -263,7 +263,9 @@ def tracking(text: str, links: list) -> tuple[str | None, str | None, str | None
 
 # « PLA Marble x 1 » (ou « × 1 ») puis « Granit rouge (13201) / Filament avec bobine / 1 kg » : le produit, la
 # quantite, le nom de couleur, le CODE COULEUR Bambu (celui du catalogue : plus rien a deviner), bobine ou recharge
-_BAMBU_RE = re.compile(r"(?P<title>[A-Za-z][A-Za-z0-9+\- ]{1,40}?)\s*[×x]\s*(?P<qty>\d{1,3})\s+(?P<color>[^/\n()]{1,60}?)\s*\((?P<code>\d{5})\)\s*/\s*(?P<pack>[^/\n]{1,40})(?:/\s*(?P<w>[\d.,]+\s*k?g))?", re.I)
+# le nom du produit peut porter une barre, des parentheses, un point (04/11/2026 : « Support for PLA (New Version) »
+# ne correspondait a rien et la ligne disparaissait ; « Support for PLA/PETG » n'etait lu qu'a partir de « PETG »)
+_BAMBU_RE = re.compile(r"(?P<title>[A-Za-z][A-Za-z0-9+\-/(). ]{1,60}?)\s*[×x]\s*(?P<qty>\d{1,3})\s+(?P<color>[^/\n()]{1,60}?)\s*\((?P<code>\d{5})\)\s*/\s*(?P<pack>[^/\n]{1,40})(?:/\s*(?P<w>[\d.,]+\s*k?g))?", re.I)
 
 
 # un montant : « €14.96 EUR », « 14,96 € », « -€20.00 EUR », « -6.07 » (points, sans devise, en fin de ligne)
@@ -342,14 +344,10 @@ def totals(text: str) -> dict:
     return t
 
 
-def extra_per_unit(tot: dict | None, items: list[dict]) -> float:
-    """Ce que chaque bobine payante prend de la fin de commande, a parts egales (28/10/2026) : les remises (abonnement,
-    points…) si « repartir les remises » (oui par defaut), les frais de port si « repartir les frais de port » (non par
-    defaut : ils vont souvent avec autre chose de la commande, une imprimante, un AMS). 0 quand on ne sait pas."""
+def _extra(tot: dict | None) -> float:
+    """Ce qui se repartit de la fin de commande : les remises (si « repartir les remises », oui par defaut), les frais de
+    port (si « repartir les frais de port », non par defaut)."""
     if not tot:
-        return 0.0
-    n = sum(int(i.get("qty") or 0) for i in items if i.get("kind", "filament") == "filament" and (i.get("price") or 0) > 0)
-    if n <= 0:
         return 0.0
     extra = 0.0
     try:
@@ -359,18 +357,37 @@ def extra_per_unit(tot: dict | None, items: list[dict]) -> float:
             extra += float(tot["shipping"])
     except (TypeError, ValueError):
         return 0.0
-    return extra / n
+    return extra
+
+
+def extra_per_unit(tot: dict | None, items: list[dict]) -> float:
+    """Ce que chaque bobine payante prend de la fin de commande, a parts egales (28/10/2026) : les remises (abonnement,
+    points…) si « repartir les remises » (oui par defaut), les frais de port si « repartir les frais de port » (non par
+    defaut : ils vont souvent avec autre chose de la commande, une imprimante, un AMS). 0 quand on ne sait pas."""
+    if not tot:
+        return 0.0
+    n = sum(int(i.get("qty") or 0) for i in items if i.get("kind", "filament") == "filament" and (i.get("price") or 0) > 0)
+    return _extra(tot) / n if n > 0 else 0.0
 
 
 def paid_unit(it: dict, tot: dict | None, items: list[dict] | None = None) -> float | None:
-    """Le prix paye d'une bobine de cette ligne : le prix remise de la ligne par unite, moins sa part (a parts
-    egales) de la remise de fin de commande. Un cadeau reste a 0."""
+    """Le prix paye d'une bobine de cette ligne : le prix remise de la ligne par unite, moins sa part de la remise de fin
+    de commande (repartie entre les bobines au prorata de leur prix). Un cadeau reste a 0."""
     if it.get("price") is None:
         return None
     q = max(1, int(it.get("qty") or 1))
     unit = float(it["price"]) / q
     if unit <= 0:
         return 0.0
+    # entre les bobines, au prorata de leur prix (04/11/2026, decide par l'utilisateur) : une bobine a 22 € en prend plus
+    # qu'une a 15 € ; a parts egales, chacune prenait autant, quel que soit son prix
+    fil = [i for i in (items if items is not None else [it]) if i.get("kind", "filament") == "filament" and (i.get("price") or 0) > 0]
+    try:
+        tot_fil = sum(float(i["price"]) for i in fil)
+    except (TypeError, ValueError):
+        tot_fil = 0.0
+    if tot_fil > 0:
+        return round(max(0.0, unit + _extra(tot) * unit / tot_fil), 2)
     return round(max(0.0, unit + extra_per_unit(tot, items if items is not None else [it])), 2)
 
 
