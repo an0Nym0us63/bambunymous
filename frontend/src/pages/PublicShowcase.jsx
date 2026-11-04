@@ -518,12 +518,14 @@ export default function PublicShowcase() {
           {d.sale.map((o, i) => <Reveal key={o.id} delay={(i % 5) * 80} style={shop ? { minWidth: 0 } : { flex: "0 0 clamp(220px, 26vw, 300px)", scrollSnapAlign: "start" }}>
             <div className="sc-cta" onClick={() => openIt(saleItems[i])} style={{ position: "relative", aspectRatio: "4 / 5", overflow: "hidden", borderRadius: 22, background: "#15151B",
               boxShadow: "0 24px 50px -30px rgba(0,0,0,.9)", cursor: "pointer" }}>
-              <Framed src={mid(o.img)} alt={o.title} style={{ position: "absolute", inset: 0 }}/>
-              <span style={{ position: "absolute", top: 12, left: 12, padding: "7px 13px", borderRadius: 30, fontSize: 14, fontWeight: 900, background: accent, color: "#0B0B0F",
-                boxShadow: `0 10px 30px -10px ${accent}` }}>{o.price != null ? `${o.from ? "dès " : ""}${price(o.price)}` : "Prix sur demande"}</span>
-              {o.qty > 1 && <span style={{ position: "absolute", top: 12, right: 12, ...glassTag, fontSize: 12, padding: "6px 11px" }}>{o.qty} disponibles</span>}
+              <img src={mid(o.img)} alt={o.title} loading="lazy" onError={e => { e.currentTarget.style.opacity = 0; }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}/>
+              <span style={{ position: "absolute", top: 10, left: 10, maxWidth: "calc(100% - 20px)", padding: "6px 12px", borderRadius: 30, fontSize: 13, fontWeight: 900,
+                background: accent, color: "#0B0B0F", boxShadow: `0 10px 30px -10px ${accent}`, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {o.price != null ? `${o.from ? "dès " : ""}${price(o.price)}` : "Prix sur demande"}</span>
             </div>
-            <div style={{ padding: "12px 4px 0", fontFamily: SERIF, fontSize: 18, color: "#F5F5F4" }}>{o.title}</div>
+            {/* le nombre sous le nom (04/11/2026) : sur la photo, il chevauchait le prix des petites cartes */}
+            <div style={{ padding: "10px 4px 0", fontFamily: SERIF, fontSize: shop ? 16 : 18, color: "#F5F5F4", lineHeight: 1.25 }}>{o.title}</div>
+            <div style={{ padding: "3px 4px 0", fontSize: 11.5, color: "rgba(255,255,255,.5)" }}>{o.qty > 1 ? `${o.qty} disponibles` : "Pièce unique"}</div>
           </Reveal>)}
         </div>
         {d.contact && <Reveal style={{ textAlign: "center", marginTop: 20, fontSize: 15.5, color: "rgba(255,255,255,.75)", padding: "0 20px" }}>
