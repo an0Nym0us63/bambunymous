@@ -778,7 +778,11 @@ function HubSwatch({ t, active, h, radius = 6, onPick = null, label = null }) {
   // une bobine posee pour le sechage (emplacement vide) : sa couleur, hachuree, comme dans le detail de l'AMS
   const posee = !c && t?.empty && t.drying_spool;
   const [pop] = useState(() => active && Date.now() - hubShownAt > 1500);
-  const tip = posee ? `posée pour le séchage : ${posee.translated_name || posee.name}` : t?.empty ? "vide" : [t?.filament_type, r != null ? `${Math.round(r * 100)} %` : null].filter(Boolean).join(" · ");
+  // l'emplacement qui imprime est vide (04/11/2026) : la bobine s'est videe dans l'AMS, le reste du filament s'imprime
+  // depuis le tube -- un encadre pointille orange, en attendant le relais
+  const dry = active && !c && !posee;
+  const tip = dry ? "vide dans l'AMS · le reste du filament s'imprime depuis le tube"
+    : posee ? `posée pour le séchage : ${posee.translated_name || posee.name}` : t?.empty ? "vide" : [t?.filament_type, r != null ? `${Math.round(r * 100)} %` : null].filter(Boolean).join(" · ");
   // toucher la pastille ouvre la fiche de la bobine (28/10/2026) : un bouton, nomme pour le lecteur d'ecran,
   // qui ne declenche pas le clic de l'unite derriere
   const pick = onPick ? e => { e.stopPropagation(); onPick(t); } : undefined;
@@ -791,8 +795,9 @@ function HubSwatch({ t, active, h, radius = 6, onPick = null, label = null }) {
           : posee ? { ...bgWithTop(colorBg(parseColorsList(posee.color, posee.colors_array), posee.multicolor_type, finishOf(posee), { size: h }),
               "repeating-linear-gradient(-45deg, rgba(255,255,255,0.45) 0 2px, transparent 2px 6px)"), opacity: 0.8 }
           : { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0 2px, transparent 2px 6px)" }),
-        border: c ? "1px solid rgba(0,0,0,0.18)" : "1px dashed rgba(148,163,184,0.6)",
-        outline: active ? "2px solid #3b82f6" : "none", outlineOffset: 1.5,
+        border: c ? "1px solid rgba(0,0,0,0.18)" : dry ? "2px dashed #f59e0b" : "1px dashed rgba(148,163,184,0.6)",
+        outline: dry ? "2px dashed #f59e0b" : active ? "2px solid #3b82f6" : "none", outlineOffset: 1.5,
+        ...(dry ? { background: "repeating-linear-gradient(-45deg, rgba(245,158,11,0.28) 0 2px, transparent 2px 6px)" } : null),
         animation: active ? (pop ? "bn-swap .55s ease-out, bn-ring 2s ease-out .55s infinite" : "bn-ring 2s ease-out infinite") : "none" }}/>
   );
 }

@@ -3997,6 +3997,17 @@ function Spool({ status, o, sz }) {
       <Empty>{live ? "Bobine inconnue" : "Pas d'impression en cours"}</Empty>
     </Tile>
   );
+  // la bobine s'est videe dans l'AMS (04/11/2026) : l'emplacement est vide, mais le reste du filament, dans le tube,
+  // s'imprime encore -- un encadre pointille, en attendant le relais de l'AMS (ou une nouvelle bobine)
+  if (live && t.empty) return (
+    <Tile icon={<Disc3 size={15}/>} color="#F59E0B" label="Filament en cours">
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 14,
+        border: "2px dashed #f59e0b", background: "repeating-linear-gradient(-45deg, rgba(245,158,11,0.10) 0 3px, transparent 3px 9px)" }}>
+        <span style={{ fontSize: 15, fontWeight: 900, color: "var(--text)" }}>{slotOf(t)} · vide dans l'AMS</span>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", lineHeight: 1.35 }}>Le reste du filament, dans le tube, s'imprime encore. L'AMS prendra le relais avec une bobine identique s'il en a une.</span>
+      </div>
+    </Tile>
+  );
   const si = t.spool_info || {};
   const color = hexCss(si.color || t.color);
   // les couleurs du dessin gardent leur transparence (01/11/2026 : coupees a 6 caracteres, un translucide perdait son damier)

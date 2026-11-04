@@ -654,7 +654,19 @@ class MQTTManager:
             tray_now = int(tray_now_raw) if tray_now_raw is not None else -1
             state.active_tray_local = tray_now
 
-            if new_ams is None and 0 <= tray_now <= 15:
+            if new_ams is None and extruder_infos:
+                # Deux buses, et la buse active ne dit aucun emplacement (04/11/2026 : bobine videe dans l'AMS, le reste
+                # du filament s'imprime depuis le tube) : tray_now n'est ici qu'un index LOCAL, il designait A1 a tort.
+                # On garde le dernier emplacement connu ; sans lui (appli redemarree), celui de la tache s'il est unique.
+                if state.active_ams_id in (None, -1) and state.ams_mapping:
+                    try:
+                        real = [int(v) for v in state.ams_mapping if int(v) != 65535]
+                    except (TypeError, ValueError):
+                        real = []
+                    if len(real) == 1:
+                        new_ams, new_tray = (real[0] >> 8) & 0xFF, real[0] & 0xFF
+                        source = "mapping_unique"
+            elif new_ams is None and 0 <= tray_now <= 15:
                 # Repli legacy : suppose un index global (vrai sur mono-buse/AMS unique)
                 new_ams, new_tray = tray_now // 4, tray_now % 4
                 source = "tray_now_fallback"
