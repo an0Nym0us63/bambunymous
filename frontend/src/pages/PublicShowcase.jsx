@@ -127,27 +127,35 @@ function Deck({ items, accent, onOpen }) {
   </div>;
 }
 
-// une carte de la collection, legere : la photo sans voile, le nom et la date dessous ; au survol, elle se souleve un
-// peu et montre sa deuxieme photo
-function Card({ it, accent, onOpen, i }) {
+// une carte de la collection : une case de la grille, la piece entiere sur un fond flou d'elle-meme (une photo produit,
+// jamais rognee) ; une grande case (2 x 2) de temps en temps donne le rythme. Le nom et la date dessous ; au survol, la
+// photo grossit un peu, la deuxieme apparait, le nom prend la couleur de la vitrine.
+function Card({ it, accent, onOpen, i, big }) {
   const [hov, setHov] = useState(false);
-  return <Reveal delay={(i % 6) * 60} style={{ breakInside: "avoid", marginBottom: "var(--sc-gap)" }}>
+  return <Reveal delay={(i % 4) * 80} style={{ display: "flex", minWidth: 0, ...(big ? { gridColumn: "span 2", gridRow: "span 2" } : null) }}>
     <button type="button" onClick={() => onOpen(it)} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ display: "block", width: "100%", padding: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", color: "inherit" }}>
-      <div style={{ position: "relative", borderRadius: 14, overflow: "hidden", background: "#121217", transform: hov ? "translateY(-3px)" : "none",
-        boxShadow: hov ? `0 22px 40px -24px rgba(0,0,0,.9), 0 0 0 1px color-mix(in srgb, ${accent} 35%, transparent)` : "0 0 0 1px rgba(255,255,255,.05)",
-        transition: "transform .5s cubic-bezier(.2,.8,.2,1), box-shadow .5s" }}>
-        <img src={mid(it.photos[0])} alt={it.title} loading="lazy" style={{ display: "block", width: "100%", height: "auto", maxHeight: 520, minHeight: 110, objectFit: "cover",
-          transform: hov ? "scale(1.03)" : "none", transition: "transform 1s cubic-bezier(.2,.8,.2,1)" }}/>
+      style={{ display: "flex", flexDirection: "column", width: "100%", padding: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", color: "inherit" }}>
+      <div style={{ position: "relative", flex: 1, minHeight: 0, aspectRatio: big ? "auto" : "4 / 5", borderRadius: big ? 22 : 16, overflow: "hidden",
+        boxShadow: hov ? `0 26px 50px -28px rgba(0,0,0,.95), 0 0 0 1px color-mix(in srgb, ${accent} 40%, transparent)` : "0 0 0 1px rgba(255,255,255,.06)",
+        transition: "box-shadow .5s" }}>
+        <Framed src={mid(it.photos[0])} alt={it.title} style={{ position: "absolute", inset: 0 }}
+          imgStyle={{ padding: big ? "4%" : "6%", boxSizing: "border-box", transform: hov ? "scale(1.05)" : "none", transition: "transform 1s cubic-bezier(.2,.8,.2,1)",
+            filter: "drop-shadow(0 18px 24px rgba(0,0,0,.45))" }}/>
         {it.photos[1] && <img src={mid(it.photos[1])} alt="" loading="lazy" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
-          opacity: hov ? 1 : 0, transition: "opacity .6s" }}/>}
-        {it.has3d && <span style={{ position: "absolute", top: 8, left: 8, ...glassTag, fontSize: 10, padding: "3px 8px" }}>3D</span>}
+          opacity: hov ? 1 : 0, transition: "opacity .7s" }}/>}
+        {it.has3d && <span style={{ position: "absolute", top: 10, left: 10, ...glassTag, fontSize: 10, padding: "3px 8px" }}>3D</span>}
+        {big && <span style={{ position: "absolute", left: 18, right: 18, bottom: 16, display: "flex", alignItems: "flex-end", gap: 10, pointerEvents: "none" }}>
+          <span style={{ flex: 1, minWidth: 0, fontFamily: SERIF, fontSize: "clamp(20px, 2.4vw, 30px)", color: "#fff", lineHeight: 1.1, textShadow: "0 4px 24px rgba(0,0,0,.7)" }}>{it.title}</span>
+        </span>}
       </div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "10px 2px 0" }}>
-        <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: hov ? "#fff" : "rgba(255,255,255,.88)", lineHeight: 1.3, transition: "color .3s" }}>{it.title}</span>
+        {!big && <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: hov ? accent : "rgba(255,255,255,.88)", lineHeight: 1.3, transition: "color .3s",
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title}</span>}
+        {big && <span style={{ flex: 1, minWidth: 0, fontSize: 12, letterSpacing: ".18em", textTransform: "uppercase", color: accent }}>
+          {[it.categories?.[0], monthFr(it.date)].filter(Boolean).join(" · ") || "Pièce phare"}</span>}
         <Dots colors={it.colors} size={8} max={4}/>
       </div>
-      {(it.categories?.[0] || it.date) && <div style={{ padding: "3px 2px 0", fontSize: 11.5, color: hov ? accent : "rgba(255,255,255,.42)", transition: "color .3s" }}>
+      {!big && (it.categories?.[0] || it.date) && <div style={{ padding: "3px 2px 0", fontSize: 11.5, color: "rgba(255,255,255,.42)" }}>
         {[it.categories?.[0], monthFr(it.date)].filter(Boolean).join(" · ")}</div>}
     </button>
   </Reveal>;
@@ -364,6 +372,19 @@ export default function PublicShowcase() {
   }, [items]);
   const openIt = useCallback(it => { setOpen(it); try { window.history.replaceState(null, "", `#${it.key}`); } catch { /* rien */ } }, []);
   const close = useCallback(() => { setOpen(null); try { window.history.replaceState(null, "", window.location.pathname); } catch { /* rien */ } }, []);
+  // les grandes cases de la grille : des pieces phares (★), sinon une toutes les neuf ; quatre au plus, rien sous 6 pieces
+  const bigs = useMemo(() => {
+    const out = new Set();
+    if (shown.length < 6) return out;
+    // espacees : au plus une grande case toutes les huit pieces (sinon elles s'empilent et ecrasent la grille)
+    const fav = shown.some(it => it.featured && !it.cover);
+    let last = -99;
+    shown.forEach((it, i) => {
+      if (it.cover || i - last < 8 || out.size >= 4) return;
+      if (fav ? it.featured : i % 9 === 0) { out.add(it.key); last = i; }
+    });
+    return out;
+  }, [shown]);
   const list = shown.length ? shown : items;
   const goTo = useCallback(dd => setOpen(o => { if (!o) return o; const i = list.findIndex(x => x.key === o.key); const nx = list[(i + dd + list.length) % list.length];
     try { window.history.replaceState(null, "", `#${nx.key}`); } catch { /* rien */ } return nx; }), [list]);
@@ -379,9 +400,9 @@ export default function PublicShowcase() {
       .sc-hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: clamp(30px, 5vw, 80px); align-items: center; }
       .sc-deck { width: min(440px, 100%); aspect-ratio: 4 / 5; margin: 0 auto 60px; }
       @media (max-width: 900px) { .sc-hero { grid-template-columns: 1fr; } .sc-deck { width: min(340px, 82vw); } }
-      .sc-masonry { --sc-gap: clamp(18px, 2.4vw, 32px); columns: 4; column-gap: var(--sc-gap); }
-      @media (max-width: 1200px) { .sc-masonry { columns: 3; } }
-      @media (max-width: 760px) { .sc-masonry { columns: 2; --sc-gap: 14px; } }
+      .sc-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-flow: dense; gap: clamp(26px, 3vw, 40px) clamp(16px, 2vw, 26px); }
+      @media (max-width: 1100px) { .sc-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+      @media (max-width: 760px) { .sc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 12px; } }
       .sc-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent); }
       .sc-chips::-webkit-scrollbar { display: none; }
       .sc-shine { background: linear-gradient(100deg, #fff 20%, ${accent} 40%, #fff 60%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text;
@@ -468,8 +489,8 @@ export default function PublicShowcase() {
               style={{ ...seg, flexShrink: 0, border: "1px solid rgba(255,255,255,.1)", ...(cat === c ? segOn(accent) : null) }}>{c || "Tout"}</button>)}
           </div>}
         </div>
-        {shown.length ? <div className="sc-masonry" key={`${cat}|${only3d}|${sort}`}>
-          {shown.map((it, i) => <Card key={it.key} it={it} i={i} accent={accent} onOpen={openIt}/>)}
+        {shown.length ? <div className="sc-grid" key={`${cat}|${only3d}|${sort}`}>
+          {shown.map((it, i) => <Card key={it.key} it={it} i={i} accent={accent} onOpen={openIt} big={bigs.has(it.key)}/>)}
         </div> : <div style={{ textAlign: "center", padding: "70px 20px", color: "rgba(255,255,255,.6)" }}>
           <div style={{ fontFamily: SERIF, fontSize: 28, color: "#fff" }}>Rien de ce côté-là</div>
           <div style={{ marginTop: 8 }}>Aucune pièce ne répond à « {q} ».</div>
