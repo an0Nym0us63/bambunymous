@@ -23,7 +23,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 25                          # 25 : un modele a un seul plateau a aussi sa vue assemblee, pour l'editer (31/10) ; 24 : une piece a l'echelle de son plateau dans la vue assemblee (30/10) ; 23 : une piece redimensionnee volontairement n est plus prise pour une place abimee (30/10) ; 22 : place d'assemblage abimee d'une piece en miroir reprise (30/10) ; 21 : triangles d'une piece en miroir remis dans le bon sens (30/10) ; 20 : pieces en miroir gardees en miroir dans la vue assemblee (30/10) ; 19 : couches en marches d'un lithophane lissees (30/10) ; 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 26                          # 26 : QR et textes graves par un modificateur a son filament, montres (04/11) ; 25 : un modele a un seul plateau a aussi sa vue assemblee, pour l'editer (31/10) ; 24 : une piece a l'echelle de son plateau dans la vue assemblee (30/10) ; 23 : une piece redimensionnee volontairement n est plus prise pour une place abimee (30/10) ; 22 : place d'assemblage abimee d'une piece en miroir reprise (30/10) ; 21 : triangles d'une piece en miroir remis dans le bon sens (30/10) ; 20 : pieces en miroir gardees en miroir dans la vue assemblee (30/10) ; 19 : couches en marches d'un lithophane lissees (30/10) ; 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan|hue ?forge", re.I)       # HueForge : une image en couches, a voir par derriere aussi (30/10)
 MAX_TRIANGLES = 1_500_000              # au-dela, le plateau est simplifie (29/10/2026 ; avant : pas converti du tout) :
                                        # un telephone l'affiche vite, et le fichier reste de quelques Mo
@@ -71,6 +71,24 @@ def _mul(a: list, b: list) -> list:
 
 
 _CHUNK = 8 << 20                       # lu par morceaux de 8 Mo (31/10/2026)
+
+
+def _proud(m):
+    """Une forme gravee (QR, texte) un peu plus epaisse (0,05 mm de chaque cote, le long de son axe le plus mince) : sa
+    face affleure la surface de la piece, elle passait derriere ou clignotait avec elle (04/11/2026)."""
+    import numpy as np
+    v = np.asarray(m.v, dtype=np.float32)
+    if not len(v):
+        return m
+    lo, hi = v.min(axis=0), v.max(axis=0)
+    ax = int(np.argmin(hi - lo))
+    ext = float(hi[ax] - lo[ax])
+    if ext <= 0 or ext > 5:
+        return m
+    c = (lo[ax] + hi[ax]) / 2
+    w = v.copy()
+    w[:, ax] = c + (w[:, ax] - c) * ((ext + 0.1) / ext)
+    return _Mesh(w, m.t, m.paint, m.n)
 
 
 class _Mesh:
@@ -538,16 +556,19 @@ def _settings(z: zipfile.ZipFile) -> tuple:
         body = m.group(2)
         head = body.split("<part", 1)[0]
         ext = re.search(r'key="extruder" value="(\d+)"', head)
-        parts, pnames = {}, {}
+        parts, pnames, shapes = {}, {}, set()
         for p in re.finditer(r'<part id="(\d+)"([^>]*)>(.*?)</part>', body, re.S):
             e = re.search(r'key="extruder" value="(\d+)"', p.group(3))
             st = re.search(r'subtype="([^"]*)"', p.group(2))
             parts[p.group(1)] = (int(e.group(1)) if e else None, st.group(1) if st else "normal_part")
+            # une forme gravee (SVG, texte) de Bambu Studio : un QR code, une inscription
+            if "<BambuStudioShape" in p.group(3) or "<text_info" in p.group(3) or "<slic3rpe:text" in p.group(3):
+                shapes.add(p.group(1))
             pn = re.search(r'key="name" value="([^"]*)"', p.group(3))
             if pn:
                 pnames[p.group(1)] = _html.unescape(pn.group(1))
         nm = re.search(r'key="name" value="([^"]*)"', head)
-        objs[m.group(1)] = {"extruder": int(ext.group(1)) if ext else 1, "parts": parts, "pnames": pnames,
+        objs[m.group(1)] = {"extruder": int(ext.group(1)) if ext else 1, "parts": parts, "pnames": pnames, "shapes": shapes,
                             "name": _html.unescape(nm.group(1)) if nm else ""}
     plates = []
     # la vue d'assemblage (29/10/2026) : la place de chaque objet une fois assemble, que le createur peut poser dans
@@ -780,11 +801,16 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                         (0, st.get("name") or "")))
         for ci, c in enumerate(o.get("components") or []):
             pe, ptype = st["parts"].get(str(c["objectid"]), (None, "normal_part"))
-            if ptype in _NOT_SHOWN:
+            # un QR code ou un texte grave par un modificateur a son propre filament (04/11/2026, la boite du Casse-tete :
+            # le QR du couvercle n'existe qu'ainsi, le couvercle lui-meme est uni) : montre, a fleur de la surface
+            shape = ptype == "modifier_part" and pe and pe != st["extruder"] and str(c["objectid"]) in (st.get("shapes") or ())
+            if ptype in _NOT_SHOWN and not shape:
                 continue
             sub = objs_in(c["path"]).get(str(c["objectid"])) or {}
             if "mesh" not in sub:
                 continue
+            if shape:
+                sub = {**sub, "mesh": _proud(sub["mesh"])}
             # la piece (son rang dans l'objet et son nom) : l'edition de la vue assemblee la deplace seule
             out.append((pe or st["extruder"], groups.get(sub.get("pid") or "", None), _mul(vols.get(ci, c["transform"]), mt), sub["mesh"],
                         (ci, (st.get("pnames") or {}).get(str(c["objectid"])) or st.get("name") or "")))
