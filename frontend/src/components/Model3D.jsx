@@ -1468,7 +1468,7 @@ function GroupPlates({ gid, sources, onClose, onSaved }) {
                   style={{ ...chip(x.on.has(p.n)), ...(p.thumb ? { display: "inline-flex", alignItems: "center", gap: 7, padding: "4px 12px 4px 4px" } : {}) }}
                   data-tip={(s.printed || []).includes(p.n) ? "Imprimé dans ce groupe" : "Pas d'impression de ce plateau dans le groupe"}>
                   {/* la vignette du plateau (04/11/2026) : on le reconnait a l'oeil plutot qu'a son nom */}
-                  {p.thumb && <img src={`/api/v1${p.thumb}?_t=${encodeURIComponent(tok)}`} alt="" loading="lazy"
+                  {p.thumb && <img src={`/api/v1${p.thumb}?_t=${encodeURIComponent(tok)}`} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = "none"; }}
                     style={{ width: 38, height: 38, flex: "none", objectFit: "contain", borderRadius: 10, background: "var(--surface)",
                       opacity: x.on.has(p.n) ? 1 : 0.75 }}/>}
                   <span>{x.on.has(p.n) ? "✓ " : ""}{p.n}{p.name ? ` · ${p.name}` : ""} <span style={{ opacity: 0.7 }}>({p.pieces} pièce{p.pieces > 1 ? "s" : ""}){(s.printed || []).includes(p.n) ? " 🖨" : ""}</span></span></button>)}
