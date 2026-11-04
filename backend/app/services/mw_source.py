@@ -308,17 +308,52 @@ async def attribute_plate(pid: int, iid: str) -> None:
         logger.exception("[MW-3MF] plateau aux objets")
 
 
-def _profile(prof, manual) -> str:
-    """Le profil d'une impression : celui de l'imprimante, sinon celui des plateaux choisis a la main."""
-    p = str(prof or "").strip()
-    if p and p != "0":
-        return p
+def _profile(prof, manual, did=None, task=None) -> str:
+    """Le profil d'une impression : celui des plateaux choisis a la main, sinon celui de l'imprimante.
+
+    04/11/2026 (Casse-tete, 2630110) : un createur qui met a jour ses profils en change les identifiants ; l'imprimante
+    donnait alors un profil disparu, qui passait avant le choix fait a la main, et la fiche montrait le 3MF d'un autre
+    profil. Le choix a la main passe donc d'abord ; et, avec le modele (did) et le nom de la tache (task), un profil
+    que la fiche MakerWorld gardee ne connait plus devient celui dont le titre est ce nom de tache."""
     try:
         m = json.loads(manual) if manual else None
         q = str((m or {}).get("profile") or "").strip() if isinstance(m, dict) else ""
-        return q if q and q != "0" else ""
     except (ValueError, TypeError):
+        q = ""
+    if q and q != "0":
+        return q
+    p = str(prof or "").strip()
+    if not p or p == "0":
         return ""
+    return _current_profile(did, p, task) if did else p
+
+
+def _disk_profiles(did) -> list:
+    """Les profils de la fiche MakerWorld gardee sur disque (rien a demander a MakerWorld) ; [] sans elle."""
+    try:
+        from .makerworld import _disk_path
+        f = _disk_path(str(did))
+        if not f.is_file():
+            return []
+        profs = (json.loads(f.read_text(encoding="utf-8")).get("base") or {}).get("profiles") or []
+        return [x for x in profs if isinstance(x, dict)]
+    except (OSError, ValueError, TypeError):
+        return []
+
+
+def _current_profile(did, p: str, task=None) -> str:
+    """p s'il est un profil (ou une instance) du modele ; sinon celui dont le titre (d'origine ou traduit) est le nom
+    de la tache ; sinon p tel quel."""
+    profs = _disk_profiles(did)
+    if not profs or any(p in (str(x.get("profile_id") or ""), str(x.get("instance_id") or "")) for x in profs):
+        return p
+    t = " ".join(str(task or "").split()).casefold()
+    if t:
+        hit = [x for x in profs if t in (" ".join(str(x.get("title_original") or "").split()).casefold(),
+                                         " ".join(str(x.get("title") or "").split()).casefold())]
+        if len(hit) == 1 and hit[0].get("profile_id"):
+            return str(hit[0]["profile_id"])
+    return p
 
 
 _BY_DID = {"mt": None, "n": -1, "v": {}}

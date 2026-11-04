@@ -877,7 +877,7 @@ async def _group_view(gid: int) -> dict:
     async with AsyncSessionLocal() as db:
         g = await db.get(Group, gid)
         rows = (await db.execute(select(Print.id, Print.design_id, Print.mw_profile_id, Print.mw_plates, Print.plate_id,
-                                        Print.translated_name, Print.file_name, Print.model_3mf)
+                                        Print.translated_name, Print.file_name, Print.model_3mf, Print.task_name)
                                  .where(Print.group_id == gid).order_by(Print.print_date, Print.id))).all()
     if not g or not rows:
         raise HTTPException(404, "Groupe inconnu")
@@ -886,7 +886,7 @@ async def _group_view(gid: int) -> dict:
     # plateau), comme la ligne « Plateaux » de sa carte
     from ....services import mw_plate_guess as _G
     from ....services.mw_source import known, resolve, fetch, path_of
-    profs = {r[0]: _profile(r[2], r[3]) or "" for r in rows}
+    profs = {r[0]: _profile(r[2], r[3], str(r[1] or "").strip() or None, r[8]) or "" for r in rows}
     plate_of = {r[0]: int(r[4]) if str(r[4] or "").isdigit() else None for r in rows}
     for did_ in {str(r[1]).strip() for r in rows if str(r[1] or "").strip().isdigit()}:
         try:
@@ -899,7 +899,7 @@ async def _group_view(gid: int) -> dict:
             logger.exception("[3D] groupe : profil de chaque impression")
     logger.info(f"[3D] assemblage du groupe {gid} : profils {profs}")
     srcs: dict = {}
-    for pid, did_, prof, plates, plate_id, tname, fname, _m3 in rows:
+    for pid, did_, prof, plates, plate_id, tname, fname, _m3, _tk in rows:
         f = None
         d0, pr0 = str(did_ or "").strip(), profs.get(pid) or ""
         if d0.isdigit() and pr0:
@@ -1685,9 +1685,9 @@ async def _prof_of(did: str, profile: str, print_id: int, how: list | None = Non
         from ....db.session import AsyncSessionLocal
         from ....models.print_history import Print
         async with AsyncSessionLocal() as db:
-            r = (await db.execute(select(Print.mw_profile_id, Print.mw_plates).where(Print.id == print_id))).first()
+            r = (await db.execute(select(Print.mw_profile_id, Print.mw_plates, Print.task_name).where(Print.id == print_id))).first()
         if r:
-            prof = _profile(r[0], r[1]) or prof
+            prof = _profile(r[0], r[1], did, r[2]) or prof
     if not prof:
         try:
             from ....services.mw_plate_guess import printed_profile

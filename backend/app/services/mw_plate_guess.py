@@ -346,6 +346,10 @@ async def profile_per_print(design_id: str, print_ids: list) -> dict:
         m = _manual(r.mw_plates) or {}
         pp = str(m.get("profile") or r.mw_profile_id or from_files.get(r.id) or "")
         pp = by_inst.get(pp, pp)
+        # un profil que le modele n'a plus (04/11/2026 : identifiants changes par une mise a jour du createur) se
+        # deduit comme une impression sans profil -- le nom de la tache le cite le plus souvent
+        if pp and profs and pp not in by_inst.values() and not m.get("profile"):
+            pp = ""
         if pp and pp != "0":
             out[r.id] = {"profile": pp, "plate": int(r.plate_id) if str(r.plate_id or "").isdigit() else None}
         else:
