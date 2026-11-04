@@ -408,6 +408,21 @@ class MQTTManager:
         _task = p.get("subtask_name", "")
         _url  = p.get("url", "")
 
+        # Le message de lancement tel que recu (04/11/2026) : c'est lui qui decide cloud ou FTP pour le 3MF (une URL
+        # http -> cloud d'abord ; pas de message ou une autre URL -> FTP). On le garde au journal pour pouvoir le dire
+        # apres coup ; l'URL perd sa requete (la signature pre-signee), le reste est tel quel.
+        if p.get("command") == "project_file":
+            try:
+                _keep = {k: v for k, v in p.items() if k not in ("url", "sequence_id")}
+                logger.info(f"[PRINT] ▶ lancement reçu (project_file) job={_jid or '?'} url={str(_url).split('?', 1)[0]!r} "
+                            f"{json.dumps(_keep, ensure_ascii=False, default=str)[:1500]}")
+            except Exception:
+                pass
+        elif (_gst == "RUNNING" and p.get("print_type") == "local" and p.get("gcode_file") and _jid
+              and state.status in ("PREPARE", "IDLE", "")):
+            logger.info(f"[PRINT] ▶ lancement local vu sans project_file : job={_jid} "
+                        f"gcode_file={p.get('gcode_file')!r} subtask={_task!r} → 3MF par FTP")
+
         # Cloud: command=project_file + url
         if p.get("command") == "project_file" and _url and _jid:
             _am0 = p.get("ams_mapping2") or p.get("ams_mapping") or []
