@@ -45,6 +45,14 @@ export default function PrintCalendar() {
   const nav = useNavigate();
   const width = useWidth(), wide = width >= 760, side = width >= 1180;   // side : le detail du jour a cote de la grille
   const detailRef = useRef(null);
+  // la largeur reelle de la grille : l'etagere d'une case n'affiche que ce qui y tient (04/11/2026 : elle debordait)
+  const calRef = useRef(null);
+  const [calW, setCalW] = useState(0);
+  useEffect(() => {
+    const el = calRef.current; if (!el) return undefined;
+    const ro = new ResizeObserver(() => setCalW(el.clientWidth)); ro.observe(el); setCalW(el.clientWidth);
+    return () => ro.disconnect();
+  }, [side]);
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [days, setDays] = useState(null);       // {date: {count, duration, items}}
   const [queue, setQueue] = useState(null);
@@ -94,7 +102,8 @@ export default function PrintCalendar() {
   // le detail du jour : a cote de la grille sur grand ecran ; dessous ailleurs, et la page y descend au toucher
   const pickDay = k => { setPick(k); if (!side) setTimeout(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); };
   const grid7 = `repeat(7, minmax(0, 1fr))${wide ? " 64px" : ""}`;
-  const calendar = <div style={{ borderRadius: 18, border: "1px solid var(--border)", background: "var(--surface)", padding: wide ? 8 : 5, overflow: "hidden", minWidth: 0 }}>
+  const gap = wide ? 5 : 3, cellW = calW ? (calW - 2 * (wide ? 8 : 5) - (wide ? 64 + gap : 0) - 6 * gap) / 7 : 60;
+  const calendar = <div ref={calRef} style={{ borderRadius: 18, border: "1px solid var(--border)", background: "var(--surface)", padding: wide ? 8 : 5, overflow: "hidden", minWidth: 0 }}>
     <div style={{ display: "grid", gridTemplateColumns: grid7, gap: wide ? 5 : 3, marginBottom: 4 }}>
       {DAYS.map(d => <div key={d} style={{ textAlign: "center", fontSize: 10.5, fontWeight: 900, color: "var(--muted)", letterSpacing: ".04em" }}>{wide ? d : d[0]}</div>)}
       {wide && <div style={{ textAlign: "center", fontSize: 10.5, fontWeight: 900, color: "var(--muted)" }}>Semaine</div>}
@@ -107,33 +116,36 @@ export default function PrintCalendar() {
           const pfill = Math.min(1 - fill, p.reduce((a, y) => a + y.seconds, 0) / 86400);
           // l'etagere : une vignette par impression du jour (une impression sur deux jours n'y est qu'une fois par jour)
           const shelf = [...new Map((x?.items || []).map(i => [i.id, i])).values()];
-          // au telephone, les vignettes se chevauchent comme des livres sur une etagere (une case fait ~44 px)
-          const room = wide ? 5 : 3, th = wide ? 22 : 17;
+          // ce qui tient dans la case : cote a cote, sinon chevauchees comme des livres (jusqu'a la moitie), puis « +N »
+          const th = wide ? 22 : 15, avail = cellW - 2 * (wide ? 5 : 3) - 4, more = wide ? 16 : 13;
+          const fitAll = shelf.length * th + (shelf.length - 1) * 2 <= avail;
+          const room = fitAll ? shelf.length : Math.max(1, 1 + Math.floor((avail - more - th) / (th * 0.45)));
+          const shown = Math.min(shelf.length, room);
+          const step = shown > 1 ? Math.min(th + 2, (avail - (shelf.length > shown ? more : 0) - th) / (shown - 1)) : th;
           const on = k === pick, isToday = k === today;
           return <button key={k} type="button" onClick={() => pickDay(k)} aria-label={`${d.getDate()} ${MONTHS[d.getMonth()]}`}
-            style={{ position: "relative", height: wide ? 66 : 54, minWidth: 0, borderRadius: wide ? 11 : 8, cursor: "pointer", overflow: "hidden", padding: 0,
+            style={{ position: "relative", height: wide ? 70 : 56, minWidth: 0, borderRadius: wide ? 11 : 8, cursor: "pointer", overflow: "hidden", padding: 0,
               border: on ? "2px solid #6366F1" : isToday ? "2px solid color-mix(in srgb, #6366F1 55%, transparent)" : "1px solid var(--border)",
               background: on ? "color-mix(in srgb, #6366F1 8%, var(--surface2))" : "var(--surface2)", opacity: inMonth(d) ? 1 : 0.38, textAlign: "left" }}>
+            {/* les heures du jour, en remplissage depuis le bas ; la file prevue au-dessus, en hachures */}
+            <span aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: `${fill * 100}%`,
+              background: "linear-gradient(0deg, color-mix(in srgb, #8B5CF6 45%, transparent), color-mix(in srgb, #EC4899 18%, transparent))" }}/>
+            {pfill > 0 && <span aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: `${fill * 100}%`, height: `${pfill * 100}%`,
+              background: "repeating-linear-gradient(135deg, color-mix(in srgb, #22C55E 30%, transparent) 0 5px, transparent 5px 10px)" }}/>}
             <span style={{ position: "absolute", top: wide ? 4 : 3, left: wide ? 6 : 4, fontSize: wide ? 12 : 10.5, fontWeight: 900,
               color: isToday ? "#6366F1" : "var(--text)" }}>{d.getDate()}</span>
-            {wide && x?.duration > 0 && <span style={{ position: "absolute", top: 5, right: 6, fontSize: 9.5, fontWeight: 800, color: "var(--muted)" }}>{hm(x.duration)}</span>}
-            {/* l'etagere des vignettes, posee sur la barre des heures */}
-            <span style={{ position: "absolute", left: wide ? 5 : 3, right: wide ? 5 : 3, bottom: wide ? 7 : 6, display: "flex", alignItems: "flex-end", gap: wide ? 2 : 0 }}>
-              {shelf.slice(0, room).map((it, j) => { const c = (ST[it.status] || ST.SUCCESS)[0];
+            {wide && x?.duration > 0 && cellW >= 74 && <span style={{ position: "absolute", top: 5, right: 6, fontSize: 9.5, fontWeight: 800, color: "var(--text2)" }}>{hm(x.duration)}</span>}
+            {/* l'etagere des vignettes */}
+            <span style={{ position: "absolute", left: wide ? 5 : 3, right: wide ? 5 : 3, bottom: wide ? 6 : 5, display: "flex", alignItems: "flex-end", overflow: "hidden" }}>
+              {shelf.slice(0, shown).map((it, j) => { const c = (ST[it.status] || ST.SUCCESS)[0];
                 return <img key={it.id} src={apiThumb(apiUrl(`/prints/${it.id}/image`), 64)} alt="" loading="lazy"
                   onError={e => { e.currentTarget.style.visibility = "hidden"; }}
                   style={{ width: th, height: th, borderRadius: wide ? 6 : 4, objectFit: "cover", flexShrink: 0, background: "var(--surface)",
-                    marginLeft: !wide && j ? -7 : 0, position: "relative", zIndex: room - j,
+                    marginLeft: j ? step - th : 0, position: "relative", zIndex: shown - j,
                     boxShadow: `0 2px 0 0 ${c}, 0 0 0 1px color-mix(in srgb, ${c} 40%, transparent)` }}/>; })}
-              {shelf.length > room && <span style={{ fontSize: wide ? 10 : 8.5, fontWeight: 900, color: "var(--text2)", lineHeight: `${th}px`, marginLeft: wide ? 0 : 2 }}>+{shelf.length - room}</span>}
+              {shelf.length > shown && <span style={{ fontSize: wide ? 10 : 8.5, fontWeight: 900, color: "var(--text)", lineHeight: `${th}px`, marginLeft: 3, flexShrink: 0 }}>+{shelf.length - shown}</span>}
               {!shelf.length && p.length > 0 && <span style={{ width: th, height: th, borderRadius: wide ? 6 : 4, border: "1.5px dashed #22C55E",
                 display: "flex", alignItems: "center", justifyContent: "center", fontSize: wide ? 11 : 8 }}>✅</span>}
-            </span>
-            {/* les heures machine du jour, et la file prevue a la suite (hachuree) */}
-            <span aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: wide ? 4 : 3, background: "color-mix(in srgb, var(--border) 60%, transparent)" }}>
-              <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${fill * 100}%`, background: "linear-gradient(90deg, #8B5CF6, #EC4899)" }}/>
-              {pfill > 0 && <span style={{ position: "absolute", left: `${fill * 100}%`, top: 0, bottom: 0, width: `${pfill * 100}%`,
-                background: "repeating-linear-gradient(90deg, #22C55E 0 3px, transparent 3px 5px)" }}/>}
             </span>
           </button>;
         })}
@@ -148,8 +160,8 @@ export default function PrintCalendar() {
     <div style={{ display: "flex", flexWrap: "wrap", gap: 10, padding: "4px 4px 2px", fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>
       {["SUCCESS", "FAILED", "CANCELLED", "IN_PROGRESS"].map(s => <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
         <span style={{ width: 9, height: 3, borderRadius: 2, background: ST[s][0] }}/>{ST[s][1]}</span>)}
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 12, height: 3, background: "repeating-linear-gradient(90deg, #22C55E 0 3px, transparent 3px 5px)" }}/>prévu</span>
-      <span>· la barre : les heures machine du jour</span>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 12, height: 8, borderRadius: 2, background: "repeating-linear-gradient(135deg, color-mix(in srgb, #22C55E 55%, transparent) 0 3px, transparent 3px 6px)" }}/>prévu</span>
+      <span>· le remplissage : les heures machine du jour</span>
     </div>
   </div>;
   const detail = <div ref={detailRef} style={{ borderRadius: 18, border: "1px solid var(--border)", background: "var(--surface)", padding: 12, display: "flex", flexDirection: "column", gap: 8,
