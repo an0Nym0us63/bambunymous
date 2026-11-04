@@ -23,7 +23,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 26                          # 26 : QR et textes graves par un modificateur a son filament, montres (04/11) ; 25 : un modele a un seul plateau a aussi sa vue assemblee, pour l'editer (31/10) ; 24 : une piece a l'echelle de son plateau dans la vue assemblee (30/10) ; 23 : une piece redimensionnee volontairement n est plus prise pour une place abimee (30/10) ; 22 : place d'assemblage abimee d'une piece en miroir reprise (30/10) ; 21 : triangles d'une piece en miroir remis dans le bon sens (30/10) ; 20 : pieces en miroir gardees en miroir dans la vue assemblee (30/10) ; 19 : couches en marches d'un lithophane lissees (30/10) ; 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 27                          # 27 : volumes negatifs retires, modificateurs de couleur appliques (04/11) ; 26 : QR et textes graves par un modificateur a son filament, montres (04/11) ; 25 : un modele a un seul plateau a aussi sa vue assemblee, pour l'editer (31/10) ; 24 : une piece a l'echelle de son plateau dans la vue assemblee (30/10) ; 23 : une piece redimensionnee volontairement n est plus prise pour une place abimee (30/10) ; 22 : place d'assemblage abimee d'une piece en miroir reprise (30/10) ; 21 : triangles d'une piece en miroir remis dans le bon sens (30/10) ; 20 : pieces en miroir gardees en miroir dans la vue assemblee (30/10) ; 19 : couches en marches d'un lithophane lissees (30/10) ; 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan|hue ?forge", re.I)       # HueForge : une image en couches, a voir par derriere aussi (30/10)
 MAX_TRIANGLES = 1_500_000              # au-dela, le plateau est simplifie (29/10/2026 ; avant : pas converti du tout) :
                                        # un telephone l'affiche vite, et le fichier reste de quelques Mo
@@ -73,6 +73,97 @@ def _mul(a: list, b: list) -> list:
 _CHUNK = 8 << 20                       # lu par morceaux de 8 Mo (31/10/2026)
 
 
+def _booleans(parts: list, obj_ext: int) -> dict | None:
+    """Les volumes negatifs et les modificateurs de couleur d'un objet, appliques a ses pieces (04/11/2026) : chaque
+    volume negatif est retire de chaque piece (un trou, un texte en creux), puis chaque piece est recoupee le long de
+    chaque modificateur a son propre filament (la partie dedans en prend la couleur, un QR grave aussi).
+
+    parts : [(rang, type, extrudeur, maillage, transformation dans l'objet)]. Rend {rang : _Mesh recoupe, dans le
+    repere de la piece, avec l'extrudeur de chaque triangle} pour les pieces changees ; None si rien ne s'applique ou
+    si la bibliotheque manque. Une piece peinte au pinceau, ou dont le maillage n'est pas ferme, reste telle quelle."""
+    import numpy as np
+    negs = [p for p in parts if p[1] == "negative_part"]
+    mods = [p for p in parts if p[1] == "modifier_part" and p[2]]
+    if not negs and not mods:
+        return None
+    try:
+        import manifold3d as M3
+    except ImportError:
+        return None
+
+    def solid(m, tr):
+        rot = np.array(tr[:9], dtype=np.float64).reshape(3, 3)
+        v = np.asarray(m.v, dtype=np.float64) @ rot + np.array(tr[9:], dtype=np.float64)
+        t = np.array(m.t, dtype=np.uint32)              # une copie modifiable (la bibliotheque refuse la lecture seule)
+        if np.linalg.det(rot) < 0:                     # en miroir : les triangles tournent dans l'autre sens
+            t = t[:, [0, 2, 1]]
+        mesh = M3.Mesh(vert_properties=np.ascontiguousarray(v, dtype=np.float32), tri_verts=np.ascontiguousarray(t))
+        mesh.merge()
+        sol = M3.Manifold(mesh)
+        return sol if sol.status() == M3.Error.NoError and not sol.is_empty() else None
+    try:
+        cut = None
+        for p in negs:
+            n_ = solid(p[3], p[4])
+            if n_ is not None:
+                cut = n_ if cut is None else cut + n_
+        mod_sol = [(solid(p[3], p[4]), p[2]) for p in mods]
+        mod_sol = [(m_, e) for m_, e in mod_sol if m_ is not None]
+    except Exception as e:
+        logger.info(f"[3D] volumes negatifs / modificateurs illisibles : {e}")
+        return None
+    if cut is None and not mod_sol:
+        return None
+    out = {}
+    for ci, ptype, pe, m, tr in parts:
+        if ptype != "normal_part" or m.paint:
+            continue
+        ext = pe or obj_ext
+        if cut is None and all(me == ext for _, me in mod_sol):
+            continue                                    # rien a retirer ni a recolorer : la piece reste telle quelle
+        try:
+            whole = solid(m, tr)
+            if whole is None:
+                continue
+            if cut is not None:
+                whole = whole - cut
+            bits = [(whole, ext)]
+            for ms, me in mod_sol:
+                if me == ext and all(e == ext for _, e in bits):
+                    continue
+                nxt = []
+                for b, e in bits:
+                    inside, outside = b ^ ms, b - ms
+                    if not inside.is_empty():
+                        nxt.append((inside, me))
+                    if not outside.is_empty():
+                        nxt.append((outside, e))
+                bits = nxt
+            if not bits:
+                continue
+            vs, ts, es, n0 = [], [], [], 0
+            for b, e in bits:
+                mm = b.to_mesh()
+                vv = np.asarray(mm.vert_properties, dtype=np.float64)[:, :3]
+                tt = np.asarray(mm.tri_verts, dtype=np.int64)
+                vs.append(vv)
+                ts.append(tt + n0)
+                es.append(np.full(len(tt), 0 if e == ext else e, dtype=np.int64))
+                n0 += len(vv)
+            v = np.concatenate(vs)
+            t = np.concatenate(ts)
+            # retour dans le repere de la piece (la vue assemblee la place ensuite a sa facon)
+            rot = np.array(tr[:9], dtype=np.float64).reshape(3, 3)
+            v = (v - np.array(tr[9:], dtype=np.float64)) @ np.linalg.inv(rot)
+            if np.linalg.det(rot) < 0:
+                t = t[:, [0, 2, 1]]
+            ee = np.concatenate(es)
+            out[ci] = _Mesh(v.astype(np.float32), t.astype(np.int32), None, m.n, ee if ee.any() else None)
+        except Exception as e:
+            logger.info(f"[3D] piece {ci} : volumes negatifs / modificateurs non appliques ({e})")
+    return out or None
+
+
 def _proud(m):
     """Une forme gravee (QR, texte) un peu plus epaisse (0,05 mm de chaque cote, le long de son axe le plus mince) : sa
     face affleure la surface de la piece, elle passait derriere ou clignotait avec elle (04/11/2026)."""
@@ -97,11 +188,13 @@ class _Mesh:
     triangles peints, leurs codes)), et n, la taille de son XML (la part de la piece dans l'avancement). Avant, le XML
     de tous les objets restait en memoire pendant toute la conversion, et chaque maillage etait decoupe en millions
     de petits objets Python : un 3MF de 28 Mo demandait 620 Mo, un de 150 Mo plus de 3 Go."""
-    __slots__ = ("v", "t", "paint", "n")
+    __slots__ = ("v", "t", "paint", "n", "ext")
 
-    def __init__(self, v, t, paint, n):
+    def __init__(self, v, t, paint, n, ext=None):
         v.flags.writeable = t.flags.writeable = False    # partage entre les plateaux et la vue assemblee
-        self.v, self.t, self.paint, self.n = v, t, paint, n
+        # ext : l'extrudeur de chaque triangle (04/11/2026), quand des modificateurs de couleur ont recoupe la piece ;
+        # 0 : celui de la piece
+        self.v, self.t, self.paint, self.n, self.ext = v, t, paint, n, ext
 
     def __len__(self):
         return self.n
@@ -789,6 +882,8 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     if not plates:                                      # pas de plateaux decrits : tout sur un seul
         plates = [(1, "", [(oid, i) for oid, lst in items_by_obj.items() for i in range(len(lst))])]
 
+    recut: dict = {}                                    # objet -> {rang : piece recoupee}
+
     def parts_of(oid, mt, vols=None):
         """(extrudeur, couleur de secours, transformation, maillage) de chaque piece visible d'un objet place.
         vols : {rang de la piece : sa place dans l'objet}, celle de la vue assemblee (au lieu de celle du plateau)."""
@@ -799,11 +894,22 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
         if "mesh" in o:
             out.append((st["extruder"], groups.get(o.get("pid") or "", None), _mul(vols[0], mt) if 0 in vols else mt, o["mesh"],
                         (0, st.get("name") or "")))
+        # les volumes negatifs et les modificateurs de couleur de l'objet, appliques une fois a ses pieces (04/11/2026)
+        if oid not in recut:
+            comps = []
+            for ci, c in enumerate(o.get("components") or []):
+                pe, ptype = st["parts"].get(str(c["objectid"]), (None, "normal_part"))
+                sub = objs_in(c["path"]).get(str(c["objectid"])) or {}
+                if "mesh" in sub and ptype in ("normal_part", "negative_part", "modifier_part"):
+                    comps.append((ci, ptype, pe if ptype != "normal_part" else (pe or st["extruder"]), sub["mesh"], c["transform"]))
+            recut[oid] = _booleans(comps, st["extruder"]) or {}
+        done = recut[oid]
         for ci, c in enumerate(o.get("components") or []):
             pe, ptype = st["parts"].get(str(c["objectid"]), (None, "normal_part"))
             # un QR code ou un texte grave par un modificateur a son propre filament (04/11/2026, la boite du Casse-tete :
-            # le QR du couvercle n'existe qu'ainsi, le couvercle lui-meme est uni) : montre, a fleur de la surface
-            shape = ptype == "modifier_part" and pe and pe != st["extruder"] and str(c["objectid"]) in (st.get("shapes") or ())
+            # le QR du couvercle n'existe qu'ainsi, le couvercle lui-meme est uni) : quand les pieces n'ont pas pu etre
+            # recoupees, montre a part, a fleur de la surface
+            shape = ptype == "modifier_part" and pe and pe != st["extruder"] and str(c["objectid"]) in (st.get("shapes") or ()) and not done
             if ptype in _NOT_SHOWN and not shape:
                 continue
             sub = objs_in(c["path"]).get(str(c["objectid"])) or {}
@@ -811,6 +917,8 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                 continue
             if shape:
                 sub = {**sub, "mesh": _proud(sub["mesh"])}
+            elif ci in done:
+                sub = {**sub, "mesh": done[ci]}
             # la piece (son rang dans l'objet et son nom) : l'edition de la vue assemblee la deplace seule
             out.append((pe or st["extruder"], groups.get(sub.get("pid") or "", None), _mul(vols.get(ci, c["transform"]), mt), sub["mesh"],
                         (ci, (st.get("pnames") or {}).get(str(c["objectid"])) or st.get("name") or "")))
@@ -916,7 +1024,11 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
                 v, t, paint = _mesh(body)
                 if paint:
                     say(a0 + (a1 - a0) * 0.55, "Couleurs peintes")
-                v, by_ext = _painted(v, t, paint, ext) if paint else (v, {ext: t})
+                te = getattr(body, "ext", None)
+                if te is not None:                      # recoupee par des modificateurs de couleur (04/11/2026)
+                    by_ext = {(int(e) or ext): t[te == e] for e in np.unique(te)}
+                else:
+                    v, by_ext = _painted(v, t, paint, ext) if paint else (v, {ext: t})
                 say(a0 + (a1 - a0) * 0.85, "Mise en place")
                 total += sum(len(x) for x in by_ext.values())
                 if total > READ_TRIANGLES:
