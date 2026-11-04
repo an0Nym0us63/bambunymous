@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import HiddenMark from "../components/HiddenMark";
 import Cachettes, { Hide } from "../components/Cachettes";
 import { useUrlTab } from "../utils/useUrlTab";
@@ -1807,12 +1808,14 @@ export default function Objects() {
   const [selected, setSelected] = useState(null);
   const [selectedAcc, setSelectedAcc] = useState(null);   // fiche accessoire
   // ?id=… (depuis l'accueil) : la fiche de cet objet s'ouvre directement
+  // (relu a chaque changement d'adresse, 04/11/2026 : la recherche globale ouvre un objet depuis la page Objets meme)
+  const loc = useLocation();
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("id");
     if (!id) return;
     client.get(`/objects/objects/${id}`).then(r => setSelected(r.data)).catch(() => {});
     window.history.replaceState(null, "", window.location.pathname);
-  }, []);
+  }, [loc.search]);
   const [creatingAcc, setCreatingAcc] = useState(false);  // creation accessoire
   // Plus de filtre par etat : les sections repliables le font, et mieux --
   // elles montrent les cinq etats a la fois avec leurs comptes, la ou une

@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useLocation } from "react-router-dom";
 import { BookOpen, ChevronRight, List, Search, X } from "lucide-react";
 import client from "../api/client";
 import { egg } from "../eggs";
@@ -169,14 +170,17 @@ export default function Guide() {
       h1.prepend(ic);
     });
   }, [html]);
+  // l'ancre de l'adresse : a l'ouverture, puis a chaque changement (04/11/2026 : la recherche globale y mene aussi
+  // depuis la page Guide)
+  const hash = useLocation().hash;
   useEffect(() => {
     if (!tree.length) return;
-    const h = decodeURIComponent(window.location.hash.slice(1));
+    const h = decodeURIComponent(hash.slice(1));
     if (!h) return undefined;
     openTo(h);
     goTo(h);
     return undefined;
-  }, [tree]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tree, hash]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // la partie en cours, suivie au defilement
   useEffect(() => {

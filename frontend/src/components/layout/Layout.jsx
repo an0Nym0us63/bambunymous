@@ -13,6 +13,7 @@ const Spool = ({ size = 24, ...p }) => (
 );
 import UserMenu from "../UserMenu";
 import NotifBell from "../NotifBell";
+import GlobalSearch from "../GlobalSearch";
 import ShareProgress from "../ShareProgress";
 import RfidScanBridge from "../RfidScanBridge";
 import PushBridge from "../PushBridge";
@@ -233,6 +234,8 @@ export default function Layout() {
           : <div style={{ padding:"0 12px 8px" }}><FriendChip block/></div>)}
         {/* Suivi d'un partage Telegram en arriere-plan (ShareProgress, par portail). */}
         <div id="sidebar-status" style={{ display:"flex", flexDirection:"column", gap:6, padding: mini ? "0 6px" : "0 12px", overflow:"hidden" }}/>
+        {/* la recherche globale (04/11/2026) */}
+        <div style={{ padding: mini ? "0 0 6px" : "0 12px 6px", display:"flex", justifyContent:"center" }}><GlobalSearch wide mini={mini}/></div>
         <nav style={S.nav}>
           {nav.map(n => <NavItem key={n.to} {...n} mini={mini} upd={n.to === "/settings" && upd.any ? updatesTip(upd) : null}/>)}
         </nav>
@@ -284,6 +287,7 @@ export default function Layout() {
           <div id="header-status" style={{ display:"flex", alignItems:"center", flexShrink:0 }}/>
           {/* Profil sur toutes les pages, toujours le plus a droite (apres le
               point d'injection des actions de la page). */}
+          <GlobalSearch/>
           {!friend && <NotifBell/>}
           <UserMenu placement="bottom"/>
         </header>
