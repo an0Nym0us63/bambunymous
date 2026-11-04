@@ -25,6 +25,7 @@ import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { useMine, MineBadge, FriendsPrints, useHasFriends, useShared, sharedCount, relayed } from "../components/Friends";
 import MwQueue from "../components/MwQueue";
+import PrintCalendar from "../components/PrintCalendar";
 import { mwImg } from "../components/MwImg";
 import { toast } from "../store/toast";
 import ShareSheet from "../components/ShareSheet";
@@ -3544,12 +3545,15 @@ export default function Prints() {
   const setSortF = v => patchUrl({ sort: v });
   // « Tout effacer » : plus aucun parametre de filtre dans l'adresse (recherche comprise)
   const clearFilters = () => { patchUrl(Object.fromEntries(FILTER_KEYS.map(k => [k, ""]))); setFilSearch(""); };
-  const [viewMode, setViewMode] = useUrlTab("tab", "list", ["list", "gallery", "makerworld", "queue"]);
+  const [viewMode, setViewMode] = useUrlTab("tab", "list", ["list", "gallery", "makerworld", "queue", "calendar"]);
+  // cinq onglets (04/11/2026) : sur un ecran etroit, seul l'onglet ouvert garde son nom, les autres leur icone
+  const [tabsNarrow, setTabsNarrow] = useState(() => window.innerWidth < 520);
+  useEffect(() => { const f = () => setTabsNarrow(window.innerWidth < 520); window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, []);
   // la liste en grille de cartes, ou en rangees compactes (choix retenu sur l'appareil)
   const [rows, setRows0] = useState(() => { try { return localStorage.getItem("bn-prints-rows") === "1"; } catch { return false; } });
   const [kindSlot, setKindSlot] = useState(null);       // la place du choix Photos / Vues 3D de la galerie
   const setRows = v => { setRows0(v); try { localStorage.setItem("bn-prints-rows", v ? "1" : "0"); } catch { /* indisponible */ } };
-  useTrackDetail(`Historique · ${ {list:"Liste", gallery:"Galerie", makerworld:"MakerWorld", queue:"À faire"}[viewMode] || viewMode }`);
+  useTrackDetail(`Historique · ${ {list:"Liste", gallery:"Galerie", makerworld:"MakerWorld", queue:"À faire", calendar:"Calendrier"}[viewMode] || viewMode }`);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   // Groupes selectionnes (appui long sur une tuile de groupe), dans l'ordre de
@@ -3875,16 +3879,16 @@ export default function Prints() {
 
       {/* Tabs Liste / Galerie / MakerWorld */}
       <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:16, padding:4, border:"1px solid var(--border)" }}>
-        {[["list","Liste","☰","#3B82F6"],["gallery","Galerie","🖼️","#EC4899"],["makerworld","MakerWorld","🌐","#06B6D4"],["queue","À faire","✅","#22C55E"]].map(([id,label,ic,c])=>(
+        {[["list","Liste","☰","#3B82F6"],["gallery","Galerie","🖼️","#EC4899"],["makerworld","MakerWorld","🌐","#06B6D4"],["queue","À faire","✅","#22C55E"],["calendar","Calendrier","📅","#8B5CF6"]].map(([id,label,ic,c])=>(
           // comme les Stats : largeur selon le texte, qui retrecit avec l'ecran
-          <button key={id} onClick={()=>setViewMode(id)} style={{
-            flex:"1 1 auto", minWidth:0, padding:"8px 4px", borderRadius:12, fontWeight:800, cursor:"pointer",
+          <button key={id} onClick={()=>setViewMode(id)} aria-label={label} data-tip={tabsNarrow && viewMode!==id ? label : undefined} style={{
+            flex: tabsNarrow && viewMode!==id ? "0 0 auto" : "1 1 auto", minWidth: tabsNarrow && viewMode!==id ? 40 : 0, padding:"8px 4px", borderRadius:12, fontWeight:800, cursor:"pointer",
             fontSize:"clamp(10.5px, 3.1vw, 12.5px)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
             display:"flex", alignItems:"center", justifyContent:"center", gap:5,
             background: viewMode===id ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` : "transparent",
             color: viewMode===id ? "white" : "var(--muted)", boxShadow: viewMode===id ? `0 6px 16px -6px ${c}` : "none",
             border:"none", transition:"all 0.15s",
-          }}><span style={{ fontSize:"clamp(11px, 3.2vw, 13px)", filter: viewMode===id ? "none" : "grayscale(.5)" }}>{ic}</span>{label}</button>
+          }}><span style={{ fontSize:"clamp(11px, 3.2vw, 13px)", filter: viewMode===id ? "none" : "grayscale(.5)" }}>{ic}</span>{tabsNarrow && viewMode!==id ? null : label}</button>
         ))}
       </div>
 
@@ -3892,6 +3896,8 @@ export default function Prints() {
           sur « imprime N fois » revient a la liste, recherche posee. */}
       {/* File : modeles des collections « a imprimer », besoins en filament, pret / stock / manque. */}
       {viewMode==="queue" && <MwQueue/>}
+      {/* le calendrier : les jours, leurs heures machine, et la file a venir (04/11/2026) */}
+      {viewMode==="calendar" && <PrintCalendar/>}
       {viewMode==="makerworld" && (
         <MakerWorldView onSearch={x => { setSearch(x.title || ""); setViewMode("list"); }}/>
       )}
@@ -3918,7 +3924,7 @@ export default function Prints() {
       )}
 
       {/* Recherche + Filtres + .3mf */}
-      {viewMode!=="makerworld" && viewMode!=="queue" && (() => {
+      {viewMode!=="makerworld" && viewMode!=="queue" && viewMode!=="calendar" && (() => {
         // les filtres actifs : une etiquette chacun, ✕ pour l'enlever
         const fil = (Array.isArray(allFilaments) ? allFilaments : []).find(f => String(f.id) === filamentIdF);
         const bucket = (Array.isArray(colorBuckets) ? colorBuckets : []).find(b => b.slug === colorF);
