@@ -55,6 +55,17 @@ def _light(rows, off) -> dict:
             "distinct_models": len({str(r.design_id or "").strip() or (r.translated_name or r.file_name or "") for r in rows})}
 
 
+@router.get("/years")
+async def wrapped_years(_: str = Depends(get_current_user)):
+    """Les annees qui ont des impressions, la plus recente d'abord, avec leur nombre : le choix des retrospectives."""
+    from ....models.print_history import Print
+    y = extract("year", Print.print_date)
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(y, func.count()).where(func.coalesce(Print.stats_excluded, 0) == 0, Print.print_date.isnot(None))
+                                 .group_by(y))).all()
+    return {"years": sorted(({"year": int(a), "count": int(n)} for a, n in rows if a), key=lambda r: -r["year"])}
+
+
 @router.get("")
 async def wrapped(year: int = Query(0), tz: int = 0, _: str = Depends(get_current_user), scope: str = Query("year")):
     from ....models.print_history import FilamentUsage, MakerWorldDesign as MW, Print

@@ -62,7 +62,8 @@ function Pie({ parts, size = 170, hole = 0.58 }) {
   </svg>;
 }
 
-// des bobines qui tombent du haut et rebondissent (les couleurs de l'annee)
+// des bobines qui tombent du haut et rebondissent (les couleurs de l'annee), une seule fois a l'arrivee sur la
+// diapo : en boucle, elles restaient en travers du camembert des matieres pendant la lecture.
 function Rain({ colors }) {
   const drops = useMemo(() => Array.from({ length: 22 }, (_, i) => ({ hex: colors[i % colors.length], left: 4 + (i * 37) % 92, size: 16 + (i * 7) % 18,
     delay: (i * 173) % 1800, dur: 1600 + (i * 97) % 900, spin: (i % 2 ? 1 : -1) * (180 + (i * 53) % 360) })), [colors]);
@@ -499,7 +500,7 @@ export default function YearWrapped({ year: year0 = 0, onClose, data = null, pub
       @keyframes ywPie { from { opacity: 0; transform: scale(.7) rotate(-40deg); } to { opacity: 1; transform: none; } }
       .yw-pie { transform-box: fill-box; transform-origin: center; animation: ywPie .7s cubic-bezier(.2,.8,.2,1) both; }
       @keyframes ywDrop { 0% { top: -8%; transform: rotate(0); } 78% { top: 90%; } 86% { top: 84%; } 100% { top: 112%; transform: rotate(var(--yw-spin)); } }
-      .yw-drop { animation-name: ywDrop; animation-timing-function: cubic-bezier(.45,.05,.55,.95); animation-iteration-count: infinite; animation-fill-mode: both; }
+      .yw-drop { animation-name: ywDrop; animation-timing-function: cubic-bezier(.45,.05,.55,.95); animation-iteration-count: 1; animation-fill-mode: both; }
       @keyframes ywTower { from { transform: scaleY(0); } to { transform: scaleY(1); } }
       .yw-tower { transform-origin: bottom; animation: ywTower .9s cubic-bezier(.2,.9,.25,1.15) both; }
       @keyframes ywFlip { from { opacity: 0; transform: rotateY(85deg) translateZ(-40px); } to { opacity: 1; transform: none; } }
@@ -562,34 +563,40 @@ const roundBtn = { width: 34, height: 34, borderRadius: "50%", border: "none", b
 const navArrow = { position: "absolute", top: "50%", transform: "translateY(-50%)", zIndex: 3, width: 38, height: 38, borderRadius: "50%", border: "none",
   background: "rgba(255,255,255,.14)", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
 
-// la banniere qui l'ouvre (en tete des statistiques)
+// l'entree des retrospectives (en tete des statistiques) : un bouton discret ; au clic, on choisit laquelle voir --
+// « Depuis le debut » ou une annee qui a des impressions (avec leur nombre).
 export function WrappedBanner() {
-  const [open, setOpen] = useState(null);             // 0 : l'annee en cours ; "all" : depuis le debut
-  const y = new Date().getFullYear();
+  const [open, setOpen] = useState(null);             // une annee, ou "all" : depuis le debut
+  const [menu, setMenu] = useState(false);
+  const [years, setYears] = useState(null);
+  const box = useRef(null);
+  useEffect(() => {
+    if (!menu) return;
+    if (years === null) client.get("/wrapped/years").then(r => setYears(r.data?.years || [])).catch(() => setYears([]));
+    const out = e => { if (box.current && !box.current.contains(e.target)) setMenu(false); };
+    document.addEventListener("pointerdown", out);
+    return () => document.removeEventListener("pointerdown", out);
+  }, [menu]);
+  const pick = v => { setMenu(false); setOpen(v); };
+  const row = { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 12px", border: "none", borderRadius: 12, cursor: "pointer",
+    background: "transparent", color: "var(--text)", fontSize: 13.5, fontWeight: 800, textAlign: "left" };
   return <>
-    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-    <button type="button" onClick={() => setOpen(0)} style={{ flex: "3 1 280px", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", gap: 14,
-      padding: "14px 16px", borderRadius: 20, border: "none", cursor: "pointer", textAlign: "left", color: "#fff",
-      background: "linear-gradient(120deg, #4F46E5, #9333EA 45%, #EC4899)", boxShadow: "0 12px 30px -14px #9333EA" }}>
-      <span aria-hidden="true" style={{ position: "absolute", right: -30, top: -40, width: 160, height: 160, borderRadius: "50%", background: "rgba(255,255,255,.15)", filter: "blur(20px)" }}/>
-      <span style={{ fontSize: 30 }}>🎁</span>
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: "block", fontSize: 16, fontWeight: 900 }}>Ton année {y} en impressions</span>
-        <span style={{ fontSize: 12.5, fontWeight: 700, opacity: .9 }}>Tes chiffres, tes couleurs, tes modèles et tes records, en diapositives</span>
-      </span>
-      <span style={{ fontSize: 13, fontWeight: 900, padding: "7px 14px", borderRadius: 20, background: "rgba(255,255,255,.22)", whiteSpace: "nowrap" }}>Voir ›</span>
-    </button>
-    {/* toute la vie de l'imprimante */}
-    <button type="button" onClick={() => setOpen("all")} style={{ flex: "1 1 180px", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", gap: 12,
-      padding: "14px 16px", borderRadius: 20, border: "none", cursor: "pointer", textAlign: "left", color: "#fff",
-      background: "linear-gradient(120deg, #0F172A, #312E81 55%, #7C3AED)", boxShadow: "0 12px 30px -14px #312E81" }}>
-      <span style={{ fontSize: 28 }}>🏛️</span>
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: "block", fontSize: 15, fontWeight: 900 }}>Depuis le début</span>
-        <span style={{ fontSize: 12, fontWeight: 700, opacity: .85 }}>Toute la vie de ton imprimante</span>
-      </span>
-      <span style={{ fontSize: 16, fontWeight: 900 }}>›</span>
-    </button>
+    <div ref={box} style={{ position: "relative", display: "flex", justifyContent: "flex-end" }}>
+      <button type="button" onClick={() => setMenu(m => !m)} data-tip="Tes rétrospectives en diapositives : une année, ou depuis le début"
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 16, cursor: "pointer", fontSize: 12.5, fontWeight: 800,
+          border: "1px solid color-mix(in srgb, #9333EA 30%, var(--border))", color: "var(--text2)",
+          background: "linear-gradient(120deg, color-mix(in srgb, #9333EA 12%, transparent), color-mix(in srgb, #EC4899 10%, transparent)), var(--surface)" }}>
+        🎁 Rétrospectives <span style={{ fontSize: 10, opacity: .7 }}>{menu ? "▲" : "▼"}</span>
+      </button>
+      {menu && <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 50, width: 250, maxWidth: "calc(100vw - 32px)", padding: 6, borderRadius: 16,
+        background: "linear-gradient(var(--surface), var(--surface)), var(--bg)", border: "1px solid var(--border)", boxShadow: "0 16px 40px -12px rgba(0,0,0,.35)" }}>
+        <button type="button" onClick={() => pick("all")} style={row} className="yw-pick">🏛️ <span style={{ flex: 1 }}>Depuis le début</span></button>
+        {years === null ? <div style={{ padding: "8px 12px", fontSize: 12.5, color: "var(--muted)" }}>Chargement…</div>
+          : years.map(y => <button key={y.year} type="button" onClick={() => pick(y.year)} style={row} className="yw-pick">
+            🎁 <span style={{ flex: 1, whiteSpace: "nowrap" }}>{y.year === new Date().getFullYear() ? `Mon année ${y.year}` : `Année ${y.year}`}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>{y.count} impr.</span></button>)}
+        <style>{`.yw-pick:hover { background: var(--surface2) !important; }`}</style>
+      </div>}
     </div>
     {open !== null && <YearWrapped year={open} onClose={() => setOpen(null)}/>}
   </>;
