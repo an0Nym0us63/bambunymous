@@ -403,6 +403,16 @@ async def mw_plate_guess(design_id: str, ids: str = "", _: str = Depends(get_cur
     return await _call(mw_plate_guess.guess(design_id, ids.split(",")))
 
 
+@router.get("/model/{design_id}/print-profiles")
+async def mw_print_profiles(design_id: str, ids: str = "", _: str = Depends(get_current_user)):
+    """{profiles: {print_id: profil}} : le profil retenu pour chaque impression du modele (04/11/2026), le meme que
+    l'assemblage du groupe -- choisi a la main, donne par l'imprimante s'il existe encore, sinon deduit (nom de la
+    tache, apercu, plateau). La fiche d'un groupe en fait une carte par profil."""
+    from ....services import mw_plate_guess as _G
+    got = await _G.profile_per_print(design_id, [x for x in ids.split(",") if x.strip().isdigit()][:60])
+    return {"profiles": {str(k): v.get("profile") for k, v in got.items() if v.get("profile")}}
+
+
 @router.get("/rate-templates")
 async def mw_rate_templates(_: str = Depends(get_current_user)):
     """Familles de messages d'evaluation tout faits."""

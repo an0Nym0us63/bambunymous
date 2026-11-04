@@ -630,7 +630,7 @@ const colorScope = prints => prints.length === 1 ? `print:${prints[0].id}` : pri
 
 // others : les autres impressions du groupe, pas (encore) liees a ce modele ; onLinked : l'une d'elles vient de l'etre
 // group : la carte d'un groupe -- sa vue 3D prend le profil de l'assemblage le plus recent du modele
-function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false, others = [], onLinked = null, group = false }) {
+function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false, others = [], onLinked = null, group = false, profile = null }) {
   const [open, setOpen] = useState(false);       // replie a chaque ouverture : le resume suffit
   const mineOf = useMine([designId]);            // chez un copain : l'ai-je deja ?
   const visiting = useFriend((s) => s.friend);
@@ -774,7 +774,7 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false, ot
         </div>
       )}
       {!toRate.has(String(designId)) && <RateStatusLine designId={designId}/>}
-      <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShown}
+      <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShown} profile={profile}
         modelTitle={mw.title} modelTitleFr={mw.title_fr} others={others} onLinked={onLinked}/>
       <AdminOnly home mw>
         <button onClick={() => setPick(true)} style={{ display:"block", width:"100%", padding:"7px", border:"none",
@@ -794,7 +794,7 @@ function MakerWorldCard({ designId, note, prints = [], rateElsewhere = false, ot
       {/* carte repliee : les plateaux deduisent quand meme le profil, sans s'afficher (le resume le montre, la vue
           3D l'attend) ; la vue 3D, au profil montre par les plateaux (sinon celui de l'impression) */}
       {!open && <div style={{ display:"none" }}>
-        <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShown}
+        <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints} onProfile={setShown} profile={profile}
         modelTitle={mw.title} modelTitleFr={mw.title_fr}/></div>}
       {/* le profil de l'assemblage le plus recent, seulement quand celui de la carte n'est que deduit : un profil choisi ou
           confirme (« C'est celui-la ») l'emporte toujours (30/10/2026 : le groupe restait sur l'ancienne vue) */}
@@ -958,7 +958,7 @@ function guessProfile(profiles, prints, imgGuess, modelTitle, modelTitleFr) {
   return { avec, sure, guess, profOf };
 }
 
-function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, modelTitle, modelTitleFr, others = [], onLinked = null }) {
+function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, modelTitle, modelTitleFr, others = [], onLinked = null, profile = null }) {
   const [over, setOver] = useState(() => ({ ...PLATES_OVER }));          // corrections faites ici, avant relecture
   const [imgGuess, setImgGuess] = useState({});        // plateau probable par print (silhouette de son apercu)
   const guessIds = printsIn.filter(pr => !manualPlates(pr.mw_plates) && pr.status !== "FAILED" && pr.status !== "CANCELLED")
@@ -976,7 +976,8 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
   const visiting = useFriend((s) => s.friend);
   const prints = printsIn.map(pr => pr.id in over ? { ...pr, mw_plates: over[pr.id] } : pr);
   const { avec, sure, guess, profOf } = guessProfile(profiles, prints, imgGuess, modelTitle, modelTitleFr);
-  const [pid, setPid] = useState(null);
+  // la carte d'un profil, dans un groupe qui en melange plusieurs (04/11/2026) : elle s'ouvre sur le sien
+  const [pid, setPid] = useState(profile || null);
   // le profil montre ici, pour la vue 3D de la carte
   const shownP = prints.length ? avec.find(x => x.profile_id === pid) || guess || null : null;
   const shownId = shownP?.profile_id ?? null;
@@ -2000,6 +2001,26 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   const [lDay, lHour] = whenFr(latest);
   const designs = (() => { const cpt = {}; prints.forEach(x => { const d = String(x.design_id || "").trim(); if (d && d !== "0") cpt[d] = (cpt[d] || 0) + 1; });
     return Object.keys(cpt).sort((a, b) => cpt[b] - cpt[a]).map(d => [d, cpt[d]]); })();
+  // le profil de chaque impression, comme l'assemblage du groupe (04/11/2026 : deux profils d'un meme modele ne
+  // faisaient qu'une carte, au profil le plus imprime) ; une carte par modele et par profil
+  const [profOfPrint, setProfOfPrint] = useState({});
+  const profKey = designs.map(([d]) => `${d}:${prints.filter(x => String(x.design_id || "").trim() === d).map(x => x.id).join(",")}`).join("|");
+  useEffect(() => {
+    let alive = true;
+    Promise.all(designs.map(([d]) => client.get(`/makerworld/model/${encodeURIComponent(d)}/print-profiles`,
+      { params: { ids: prints.filter(x => String(x.design_id || "").trim() === d).map(x => x.id).join(",") } })
+      .then(r => r.data?.profiles || {}).catch(() => ({}))))
+      .then(all => alive && setProfOfPrint(Object.assign({}, ...all)));
+    return () => { alive = false; };
+  }, [profKey]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const cards = designs.flatMap(([d]) => {
+    const mine = prints.filter(x => String(x.design_id || "").trim() === d);
+    const by = new Map();
+    mine.forEach(x => { const k = profOfPrint[String(x.id)] || ""; by.set(k, [...(by.get(k) || []), x]); });
+    // une impression sans profil connu rejoint la carte du modele s'il n'y en a qu'une autre
+    if (by.has("") && by.size === 2) { const [k] = [...by.keys()].filter(x => x); by.set(k, [...by.get(k), ...by.get("")]); by.delete(""); }
+    return [...by.entries()].sort((a, b) => b[1].length - a[1].length).map(([prof, list]) => ({ d, prof: prof || null, list }));
+  });
   const saveNb = async () => {
     const n = parseInt(nbVal);
     if (!isNaN(n) && n >= 1) { try { await client.patch(`/prints/groups/${groupId}`, { number_of_items: n }); setNbItems(n); onUpdated?.(); } catch { /* garde l'ancien */ } }
@@ -2253,9 +2274,10 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       <GroupPhotosV2 groupId={groupId} onUpdated={onUpdated} prints={prints}/>
       {printsBlock}
       {filaments.length > 0 && <FilamentsV2 filaments={filaments} onSpoolClick={setSelSpool} onUnmap={setUnmapping}/>}
-      {designs.map(([d, n]) => <MakerWorldCard key={d} designId={d} rateElsewhere group prints={prints.filter(x => String(x.design_id || "").trim() === d)}
-        others={prints.filter(x => String(x.design_id || "").trim() !== d)} onLinked={loadPrints}
-        note={designs.length > 1 || n < prints.length ? `${n} print${n > 1 ? "s" : ""} sur ${prints.length} de ce modèle` : null}/>)}
+      {cards.map(({ d, prof, list }) => <MakerWorldCard key={`${d}:${prof || ""}`} designId={d} profile={prof} rateElsewhere group prints={list}
+        others={prints.filter(x => !list.includes(x))} onLinked={loadPrints}
+        note={cards.length > 1 || list.length < prints.length
+          ? `${list.length} print${list.length > 1 ? "s" : ""} sur ${prints.length} de ce ${cards.filter(c => c.d === d).length > 1 ? "profil" : "modèle"}` : null}/>)}
       {/* ses impressions sans modele MakerWorld, avec un 3MF d'origine importe (31/10/2026) */}
       {(own => own.length > 0 && <OwnSourceCard designId={`p${own[0].id}`} group prints={own}/>)(prints.filter(x => !String(x.design_id || "").trim() && x.source_3mf))}
     </div>);
