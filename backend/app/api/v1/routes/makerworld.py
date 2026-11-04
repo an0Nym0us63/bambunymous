@@ -1,6 +1,7 @@
 """MakerWorld : etat du cache des modeles, compte (connexion, j'aime,
 favoris) et diagnostic. Lecture seule cote MakerWorld."""
 import asyncio
+import zipfile
 import logging
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile
@@ -961,8 +962,18 @@ async def _group_view(gid: int) -> dict:
             if n is not None:
                 count[n] = count.get(n, 0) + 1
         kept = sorted({n for i, n in enumerate(plate_of) if n is not None and (keep is None or i in keep)})
+        # la vignette de chaque plateau, quand le 3MF en a une (04/11/2026 : reconnaitre un plateau a son nom seul)
+        try:
+            def _pngs(f=e["path"]):
+                with zipfile.ZipFile(f) as z:
+                    return {x for x in z.namelist() if x.startswith("Metadata/plate_")}
+            pngs = await asyncio.to_thread(_pngs)
+        except (zipfile.BadZipFile, OSError):
+            pngs = set()
         sources.append({"iid": iid, "name": e["name"], "manual": isinstance(mine, list), "printed": printed, "kept": kept,
-                        "plates": [{"n": n, "name": names.get(n, ""), "pieces": count[n]} for n in sorted(count)]})
+                        "plates": [{"n": n, "name": names.get(n, ""), "pieces": count[n],
+                                    **({"thumb": f"/makerworld/3d/group/{int(gid)}/thumb/{iid}/{n}"} if f"Metadata/plate_{n}.png" in pngs else {})}
+                                   for n in sorted(count)]})
         # les couleurs : celles de chaque plateau (ses impressions), a defaut celles de toutes
         pchoices = await _print_choices(e["ids"])
         detail: list = []
@@ -1982,6 +1993,29 @@ async def mw_3d_group_plates(gid: int, body: dict = Body({}), _: str = Depends(r
             cur[str(iid)] = sorted({int(n) for n in lst if isinstance(n, int) and 0 <= n < 1000})
     T.group_sel_save(gkey, {**sel, "plates": cur})
     return {"plates": cur}
+
+
+@router.get("/3d/group/{gid}/thumb/{iid}/{n}")
+async def mw_3d_group_thumb(gid: int, iid: str, n: int, _=Depends(_img_user)):
+    """La vignette d'un plateau d'un 3MF du groupe (04/11/2026), pour le choix des plateaux : par une balise image,
+    d'ou le jeton en `_t`."""
+    from fastapi import Response
+    from ....services import mw_3d as T
+    from ....services.mw_source import path_of
+    if not T._safe_name(iid):
+        raise HTTPException(404)
+    f = path_of(iid)
+    if not f.is_file():
+        raise HTTPException(404)
+
+    def read():
+        with zipfile.ZipFile(f) as z:
+            return z.read(f"Metadata/plate_{int(n)}.png")
+    try:
+        data = await asyncio.to_thread(read)
+    except (KeyError, zipfile.BadZipFile, OSError):
+        raise HTTPException(404)
+    return Response(data, media_type="image/png", headers={"Cache-Control": "private, max-age=86400"})
 
 
 @router.post("/3d/group/{gid}/seed")

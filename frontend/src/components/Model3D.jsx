@@ -1421,6 +1421,7 @@ function Swatches({ list, value, onPick, free = true }) {
 // d'office ceux des impressions (devines, parfois mal : des pieces manquaient), ou choisis ici. L'assemblage commence
 // garde ses places (les pieces cachees les retrouvent une fois remontrees).
 function GroupPlates({ gid, sources, onClose, onSaved }) {
+  const tok = (() => { try { return localStorage.getItem("token") || ""; } catch { return ""; } })();
   const init = () => Object.fromEntries((sources || []).filter(s => !s.no_view).map(s => [s.iid, { auto: !s.manual, on: new Set(s.kept || []) }]));
   const [sel, setSel] = useState(init);
   const [busy, setBusy] = useState(false);
@@ -1463,9 +1464,14 @@ function GroupPlates({ gid, sources, onClose, onSaved }) {
             </div>
             {s.no_view ? <div style={{ fontSize: 12, fontWeight: 700, color: "#d97706" }}>⚠ Pas de vue assemblée dans ce 3MF : ses pièces ne peuvent pas entrer dans l'assemblage</div> : <>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {s.plates.map(p => <button key={p.n} type="button" onClick={() => toggle(s.iid, p.n)} style={chip(x.on.has(p.n))}
+                {s.plates.map(p => <button key={p.n} type="button" onClick={() => toggle(s.iid, p.n)}
+                  style={{ ...chip(x.on.has(p.n)), ...(p.thumb ? { display: "inline-flex", alignItems: "center", gap: 7, padding: "4px 12px 4px 4px" } : {}) }}
                   data-tip={(s.printed || []).includes(p.n) ? "Imprimé dans ce groupe" : "Pas d'impression de ce plateau dans le groupe"}>
-                  {x.on.has(p.n) ? "✓ " : ""}{p.n}{p.name ? ` · ${p.name}` : ""} <span style={{ opacity: 0.7 }}>({p.pieces} pièce{p.pieces > 1 ? "s" : ""}){(s.printed || []).includes(p.n) ? " 🖨" : ""}</span></button>)}
+                  {/* la vignette du plateau (04/11/2026) : on le reconnait a l'oeil plutot qu'a son nom */}
+                  {p.thumb && <img src={`/api/v1${p.thumb}?_t=${encodeURIComponent(tok)}`} alt="" loading="lazy"
+                    style={{ width: 38, height: 38, flex: "none", objectFit: "contain", borderRadius: 10, background: "var(--surface)",
+                      opacity: x.on.has(p.n) ? 1 : 0.75 }}/>}
+                  <span>{x.on.has(p.n) ? "✓ " : ""}{p.n}{p.name ? ` · ${p.name}` : ""} <span style={{ opacity: 0.7 }}>({p.pieces} pièce{p.pieces > 1 ? "s" : ""}){(s.printed || []).includes(p.n) ? " 🖨" : ""}</span></span></button>)}
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 <button type="button" onClick={() => all(s.iid, s)} style={{ ...chip(false), fontSize: 11.5 }}>Tous</button>
