@@ -184,17 +184,6 @@ export default function ShowcaseManager({ sid, onClose, onChanged }) {
             style={{ ...input, fontSize: 18, fontWeight: 900, border: "1px dashed var(--border)", background: "transparent", padding: "4px 8px" }}/>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", marginTop: 4 }}>Un portfolio public, à envoyer par un lien : un grand carrousel, la collection, et ta boutique. Jamais un coût.</div>
         </div>
-        <FCard t="Le genre" i="🏷️" c="#3B82F6">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 8 }}>
-            {MODES.map(([v, ic, l, sub]) => { const on = mode === v;
-              return <button key={v} type="button" onClick={() => set({ mode: v })} aria-pressed={on}
-                style={{ display: "flex", flexDirection: "column", gap: 2, padding: "10px 12px", borderRadius: 14, cursor: "pointer", textAlign: "left",
-                  border: `1.5px solid ${on ? "#C9A96E" : "var(--border)"}`, background: on ? "color-mix(in srgb, #C9A96E 14%, var(--surface))" : "var(--surface)",
-                  boxShadow: on ? "0 8px 20px -14px #C9A96E" : "none", transition: "all .2s" }}>
-                <span style={{ fontSize: 13.5, fontWeight: 900, color: on ? GOLD : "var(--text)" }}>{ic} {l}</span>
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{sub}</span></button>; })}
-          </div>
-        </FCard>
         <FCard t="Le lien" i="🔗" c={GOLD}>
           {link ? <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", wordBreak: "break-all" }}>{link}</div>
@@ -213,6 +202,17 @@ export default function ShowcaseManager({ sid, onClose, onChanged }) {
               opacity: busy || (!res.length && !shop) ? .55 : 1 }}>Créer et copier le lien</button>
             {!res.length && !shop && <div style={{ fontSize: 12, color: "var(--muted)" }}>Ajoute d'abord une pièce ou une règle.</div>}
           </div>}
+        </FCard>
+        <FCard t="Le genre" i="🏷️" c="#3B82F6">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 8 }}>
+            {MODES.map(([v, ic, l, sub]) => { const on = mode === v;
+              return <button key={v} type="button" onClick={() => set({ mode: v })} aria-pressed={on}
+                style={{ display: "flex", flexDirection: "column", gap: 2, padding: "10px 12px", borderRadius: 14, cursor: "pointer", textAlign: "left",
+                  border: `1.5px solid ${on ? "#C9A96E" : "var(--border)"}`, background: on ? "color-mix(in srgb, #C9A96E 14%, var(--surface))" : "var(--surface)",
+                  boxShadow: on ? "0 8px 20px -14px #C9A96E" : "none", transition: "all .2s" }}>
+                <span style={{ fontSize: 13.5, fontWeight: 900, color: on ? GOLD : "var(--text)" }}>{ic} {l}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{sub}</span></button>; })}
+          </div>
         </FCard>
         <FCard t="L'allure" i="🎨" c="#8B5CF6">
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
