@@ -1,7 +1,7 @@
 """Partage Telegram : connexion du compte, destinations, apercu et envoi."""
 import logging
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
 
 from .auth import require_admin
 from ....services import telegram_share as tg
@@ -63,6 +63,24 @@ def _kind(kind: str) -> str:
     if kind not in ("print", "group", "design", "creator"):
         raise HTTPException(404)
     return kind
+
+
+@router.post("/image")
+async def share_image(file: UploadFile = File(...), text: str = Form(""), destination_ids: str = Form(""),
+                      _: str = Depends(require_admin)):
+    """Une image faite dans l'appli (le resume de « Ton annee en impressions », 04/11/2026), envoyee par Telegram avec
+    son texte. destination_ids : separes par des virgules. PNG ou JPEG, 10 Mo au plus."""
+    import tempfile
+    from pathlib import Path
+    data = await file.read(10 * 1024 * 1024 + 1)
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(413, "Image trop lourde (10 Mo au plus)")
+    if not (data[:8] == b"\x89PNG\r\n\x1a\n" or data[:3] == b"\xff\xd8\xff"):
+        raise HTTPException(400, "Image PNG ou JPEG attendue")
+    with tempfile.TemporaryDirectory() as tmp:
+        f = Path(tmp) / ("resume.png" if data[:4] == b"\x89PNG" else "resume.jpg")
+        f.write_bytes(data)
+        return await _call(tg.send_image(f, text, [x for x in destination_ids.split(",") if x.strip()]))
 
 
 @router.get("/{kind}/{obj_id}/preview")

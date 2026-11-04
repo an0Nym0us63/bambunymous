@@ -6,6 +6,7 @@ import MwImg from "./MwImg";
 import { egg } from "../eggs";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 import { toast } from "../store/toast";
+import { useIsAdmin } from "../store/auth";
 
 // « Ton annee en impressions » (04/11/2026) : l'annee racontee en diapositives plein ecran, comme une story -- un
 // toucher a droite avance, a gauche recule, l'appui long met en pause ; chaque diapositive avance seule au bout de 7 s.
@@ -143,22 +144,97 @@ function slidesOf(d) {
   return S;
 }
 
-function Summary({ d, onShare }) {
+// le resume : une carte a son propre degrade, photographiee telle qu'a l'ecran pour le partage (04/11/2026 : une image
+// redessinee a part ne lui aurait jamais ressemble) ; le bouton Partager n'entre pas dans la photo
+function Summary({ d, onShare, cardRef }) {
   const tiles = [["🖨️", nf(d.count), "impressions"], ["⏱️", `${nf(hrs(d.seconds))} h`, "de machine"], ["✅", `${d.count ? Math.round(d.success / d.count * 100) : 0} %`, "de réussite"],
     ["🧵", kg(d.weight_g), "de filament"], ["🎨", nf(d.distinct_colors), "couleurs"], ["📆", `${d.streak} j`, "de série"]];
   return <div style={{ width: "min(440px, 100%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
-    <Kicker>BambuNymous · {d.year}</Kicker>
-    <div style={{ fontSize: "clamp(26px, 7vw, 36px)", fontWeight: 900, lineHeight: 1.1 }}>Ton année en impressions</div>
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, width: "100%" }}>
-      {tiles.map(([ic, v, l], i) => <div key={l} className="yw-in" style={{ animationDelay: `${i * 90}ms`, padding: "12px 6px", borderRadius: 16, background: "rgba(255,255,255,.12)" }}>
-        <div style={{ fontSize: 20 }}>{ic}</div><div style={{ fontSize: 19, fontWeight: 900 }}>{v}</div><div style={{ fontSize: 11, fontWeight: 700, opacity: .8 }}>{l}</div></div>)}
+    <div ref={cardRef} style={{ width: "100%", boxSizing: "border-box", padding: "22px 16px 20px", borderRadius: 28, display: "flex", flexDirection: "column", alignItems: "center",
+      gap: 14, background: "linear-gradient(160deg, #1E1B4B, #4F46E5 55%, #9333EA)", boxShadow: "0 20px 50px -20px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.12)", color: "#fff" }}>
+      <Kicker>BambuNymous · {d.year}</Kicker>
+      <div style={{ fontSize: "clamp(26px, 7vw, 34px)", fontWeight: 900, lineHeight: 1.1 }}>Ton année en impressions</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, width: "100%" }}>
+        {tiles.map(([ic, v, l]) => <div key={l} style={{ padding: "12px 6px", borderRadius: 16, background: "rgba(255,255,255,.12)" }}>
+          <div style={{ fontSize: 20 }}>{ic}</div><div style={{ fontSize: 19, fontWeight: 900 }}>{v}</div><div style={{ fontSize: 11, fontWeight: 700, opacity: .8 }}>{l}</div></div>)}
+      </div>
+      {d.models?.[0] && <div style={{ fontSize: 14, fontWeight: 700, opacity: .95 }}>
+        Modèle préféré : <b>{d.models[0].title}</b>{d.creators?.[0] ? <> · créateur : <b>{d.creators[0].name}</b></> : null}</div>}
+      {d.colors?.length > 0 && <div style={{ display: "flex", gap: 6 }}>{d.colors.slice(0, 6).map(c => <Spool key={c.hex} hex={c.hex} size={26}/>)}</div>}
     </div>
-    {d.models?.[0] && <div className="yw-in" style={{ animationDelay: "500ms", fontSize: 14, fontWeight: 700, opacity: .95 }}>
-      Modèle préféré : <b>{d.models[0].title}</b>{d.creators?.[0] ? <> · créateur : <b>{d.creators[0].name}</b></> : null}</div>}
-    {d.colors?.length > 0 && <div style={{ display: "flex", gap: 6 }}>{d.colors.slice(0, 6).map(c => <Spool key={c.hex} hex={c.hex} size={26}/>)}</div>}
-    <button type="button" onClick={e => { e.stopPropagation(); onShare(); }} style={{ marginTop: 6, display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 22px",
+    <button type="button" onClick={e => { e.stopPropagation(); onShare(); }} style={{ marginTop: 2, display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 22px",
       borderRadius: 30, border: "none", background: "#fff", color: "#111827", fontSize: 15, fontWeight: 900, cursor: "pointer", boxShadow: "0 10px 30px -8px rgba(0,0,0,.5)" }}>
       <Share2 size={17}/>Partager</button>
+  </div>;
+}
+
+// ou partager l'image du resume : Telegram (le compte relie dans l'appli, ses destinations), une autre appli (le menu de
+// partage du systeme), ou l'enregistrer
+function SharePanel({ d, text, shot, onClose }) {
+  const isAdmin = useIsAdmin();
+  const [tg, setTg] = useState(null);                 // l'etat du compte Telegram relie
+  const [busy, setBusy] = useState(null);
+  useEffect(() => {
+    if (!isAdmin) { setTg({}); return undefined; }
+    let alive = true;
+    client.get("/share/telegram").then(r => alive && setTg(r.data || {})).catch(() => alive && setTg({}));
+    return () => { alive = false; };
+  }, [isAdmin]);
+  const sendTg = async dest => {
+    setBusy(dest.id);
+    try {
+      const blob = await shot();
+      const fd = new FormData();
+      fd.append("file", blob, `annee-${d.year}.png`); fd.append("text", text); fd.append("destination_ids", dest.id);
+      const r = await client.post("/share/image", fd, { timeout: 120000 });
+      toast(`Envoyé sur Telegram : ${r.data?.destination || dest.label}`);
+      egg("annee_partagee");
+      onClose();
+    } catch (e) { toast(e?.response?.data?.detail || "L'envoi n'a pas abouti", "error"); }
+    setBusy(null);
+  };
+  const other = async () => {
+    setBusy("other");
+    try {
+      const blob = await shot();
+      const file = new File([blob], `annee-${d.year}.png`, { type: "image/png" });
+      if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], text, title: `Mon année ${d.year} en impressions` });
+      else if (navigator.share) await navigator.share({ text, title: `Mon année ${d.year} en impressions` });
+      else { await navigator.clipboard.writeText(text); toast("Texte copié : colle-le où tu veux"); }
+      egg("annee_partagee");
+    } catch { /* partage annule */ }
+    setBusy(null);
+  };
+  const save = async () => {
+    setBusy("save");
+    try {
+      const blob = await shot();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = `bambunymous-annee-${d.year}.png`;
+      document.body.appendChild(a); a.dispatchEvent(new MouseEvent("click")); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    } catch { toast("L'image n'a pas pu être préparée", "error"); }
+    setBusy(null);
+  };
+  const dests = tg?.connected ? (tg.destinations || []) : [];
+  const row = (key, ic, label, sub, onClick) => <button key={key} type="button" disabled={!!busy} onClick={onClick}
+    style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "11px 12px", borderRadius: 14, border: "none", cursor: busy ? "default" : "pointer",
+      background: "rgba(255,255,255,.1)", color: "#fff", textAlign: "left", opacity: busy && busy !== key ? .5 : 1 }}>
+    <span style={{ fontSize: 22, width: 28, textAlign: "center" }}>{busy === key ? "⏳" : ic}</span>
+    <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: 14.5, fontWeight: 900 }}>{label}</span>
+      {sub && <span style={{ fontSize: 12, fontWeight: 700, opacity: .75 }}>{sub}</span>}</span></button>;
+  return <div onClick={e => { e.stopPropagation(); if (!busy) onClose(); }} style={{ position: "absolute", inset: 0, zIndex: 5, background: "rgba(0,0,0,.5)",
+    display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "100%", padding: "16px 14px max(18px, env(safe-area-inset-bottom))", borderRadius: "24px 24px 0 0",
+      background: "linear-gradient(180deg, #1F2937, #111827)", display: "flex", flexDirection: "column", gap: 8, animation: "ywIn .3s cubic-bezier(.2,.8,.2,1) both" }}>
+      <div style={{ fontSize: 15, fontWeight: 900, textAlign: "center", marginBottom: 4 }}>Partager l'image de ton année</div>
+      {tg === null ? <div style={{ fontSize: 12.5, opacity: .7, textAlign: "center" }}>…</div>
+        : dests.length ? dests.map(x => row(x.id, "✈️", `Telegram · ${x.label}`, "avec ton compte relié dans BambuNymous", () => sendTg(x)))
+        : isAdmin && <div style={{ fontSize: 12, fontWeight: 700, opacity: .7, textAlign: "center", padding: "0 8px" }}>
+          Telegram : relie ton compte et choisis tes destinations dans Paramètres › Partage.</div>}
+      {row("other", "📤", "Une autre appli…", "le menu de partage de ton appareil", other)}
+      {row("save", "⬇️", "Enregistrer l'image", `bambunymous-annee-${d.year}.png`, save)}
+    </div>
   </div>;
 }
 
@@ -192,13 +268,17 @@ export default function YearWrapped({ year: year0 = 0, onClose }) {
     return () => window.removeEventListener("keydown", k);
   });
   const go = n => { setT(0); setI(x => Math.max(0, Math.min(last, x + n))); };
-  const share = async () => {
-    const txt = `Mon année ${d.year} en impressions 3D : ${nf(d.count)} impressions, ${nf(hrs(d.seconds))} h de machine, ${kg(d.weight_g)} de filament, `
-      + `${d.count ? Math.round(d.success / d.count * 100) : 0} % de réussite${d.models?.[0] ? `, modèle préféré : ${d.models[0].title}` : ""}. #BambuNymous`;
-    try {
-      if (navigator.share) await navigator.share({ title: `Mon année ${d.year} en impressions`, text: txt });
-      else { await navigator.clipboard.writeText(txt); toast("Résumé copié : colle-le où tu veux"); }
-    } catch { /* partage annule */ }
+  // le texte qui accompagne l'image, et la photo du resume (au double de sa taille, nette sur un telephone)
+  const shareText = d && d.count ? `Mon année ${d.year} en impressions 3D : ${nf(d.count)} impressions, ${nf(hrs(d.seconds))} h de machine, ${kg(d.weight_g)} de filament, `
+    + `${Math.round(d.success / d.count * 100)} % de réussite${d.models?.[0] ? `, modèle préféré : ${d.models[0].title}` : ""}. #BambuNymous` : "";
+  const cardRef = useRef(null);
+  const [sharing, setSharing] = useState(false);
+  const shot = async () => {
+    const { toBlob } = await import("html-to-image");
+    const el = cardRef.current;
+    const b = await toBlob(el, { pixelRatio: 2.5, cacheBust: true, style: { margin: "0", transform: "none" } });
+    if (!b) throw new Error("image vide");
+    return b;
   };
   const s = slides[i];
   const tap = e => {
@@ -246,9 +326,10 @@ export default function YearWrapped({ year: year0 = 0, onClose }) {
         {d?.error && <div style={{ fontSize: 16, fontWeight: 800 }}>Le récapitulatif n'a pas pu être préparé.</div>}
         {d && !d.error && !d.count && <div style={{ fontSize: 17, fontWeight: 800, maxWidth: 340 }}>Pas encore d'impression en {d.year} : reviens après tes premières !</div>}
         {s && <div key={`${d.year}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, width: "100%" }}>
-          {s.summary ? <Summary d={d} onShare={share}/> : s.body}
+          {s.summary ? <Summary d={d} cardRef={cardRef} onShare={() => { setPaused(true); setSharing(true); }}/> : s.body}
         </div>}
       </div>
+      {sharing && d && <SharePanel d={d} text={shareText} shot={shot} onClose={() => setSharing(false)}/>}
       {slides.length > 0 && <>
         {i > 0 && <button type="button" onClick={e => { e.stopPropagation(); go(-1); }} aria-label="Précédente" style={{ ...navArrow, left: 8 }}><ChevronLeft size={22}/></button>}
         {i < last && <button type="button" onClick={e => { e.stopPropagation(); go(1); }} aria-label="Suivante" style={{ ...navArrow, right: 8 }}><ChevronRight size={22}/></button>}

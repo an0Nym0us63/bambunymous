@@ -1019,6 +1019,30 @@ def bundle_file(token: str, name: str) -> Optional[Path]:
     return f if f.is_file() else None
 
 
+async def send_image(path: Path, text: str, destination_ids) -> dict:
+    """Une image faite dans l'appli (le resume de « Ton annee en impressions », 04/11/2026) et son texte, envoyes a une
+    ou plusieurs destinations ; un refus n'arrete pas les autres."""
+    if isinstance(destination_ids, str):
+        destination_ids = [destination_ids]
+    known = {d["id"]: d for d in await destinations()}
+    dests = [known[i] for i in dict.fromkeys(destination_ids or []) if i in known]
+    if not dests:
+        raise ShareError("Destination inconnue")
+    caption = html.escape(text or "")[:1000]
+    results = []
+    async with _lock:
+        c = await _connected_client()
+        for dest in dests:
+            try:
+                await _send_one(c, dest, [(path, False)], caption)
+                results.append({"id": dest["id"], "label": dest["label"], "ok": True})
+            except ShareError as e:
+                results.append({"id": dest["id"], "label": dest["label"], "ok": False, "error": str(e)})
+    if not any(r["ok"] for r in results):
+        raise ShareError("\n".join(r["error"] for r in results))
+    return {"ok": all(r["ok"] for r in results), "results": results, "destination": ", ".join(r["label"] for r in results if r["ok"])}
+
+
 async def send(kind: str, obj_id: int, destination_ids, message: str = "",
                tz_offset_min: Optional[int] = None, chosen=None) -> dict:
     """
