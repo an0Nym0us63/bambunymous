@@ -240,8 +240,14 @@
 
   <section id="filaments-archiver">
     <h3>Archiver une bobine</h3>
-    <p><span class="admin">admin</span> Quand une bobine est finie (ou donnée, ou jetée), archive-la plutôt que de la supprimer : <span class="ui">📦 Archiver…</span> dans le menu <span class="ui">⋯</span> de sa fiche ou dans le menu rapide. Une confirmation rappelle qu'elle « passera en Archives avec une quantité remise à 0 et sortira du stock ».</p>
+    <p><span class="admin">admin</span> Quand une bobine est finie (ou donnée, ou jetée), archive-la plutôt que de la supprimer : <span class="ui">📦 Archiver…</span> dans le menu <span class="ui">⋯</span> de sa fiche ou dans le menu rapide. La boîte rappelle qu'elle « passera en Archives avec une quantité remise à 0 et sortira du stock » et demande pourquoi : <span class="ui">🏁 Elle est finie</span>, <span class="ui">🗑 Jetée, abîmée</span> ou <span class="ui">📦 Autre raison</span> (donnée, prêtée…). Seule « finie » mesure la précision du suivi : ce qui lui restait chez nous est son écart (voir ci-dessous).</p>
     <p>La bobine passe à 0 g, à l'emplacement « Archives », dans l'onglet <span class="ui">Archivées</span>. Son historique reste intact. Une bobine archivée n'est plus jamais reconnue dans l'AMS et ne compte plus dans les séchages.</p>
+  </section>
+
+  <section id="filaments-derive">
+    <h3>L'écart du suivi d'une bobine</h3>
+    <p>À la fin de chaque bobine, l'appli note l'écart entre son poids chez nous et le vrai (0) : quand l'AMS prend le relais en pleine impression, quand tu choisis la suite (<span class="ui">🔁 Bobine finie ? Choisir la suite</span>), ou quand tu l'archives en disant qu'elle est finie. <b>Positif</b> (« +12 g ») : on lui croyait encore du filament. <b>Négatif</b> (« −8 g ») : elle a imprimé au-delà de notre zéro (ce qu'elle imprime une fois à 0 chez nous est cumulé jusqu'à sa fin). Une seule mesure par bobine, avec le suivi couche par couche.</p>
+    <p>Sa fiche le montre dans <b>Son histoire</b> (<span class="ui">Écart du suivi</span>, et d'où il vient). <span class="admin">admin</span> <span class="ui">Écarter</span> le retire des statistiques de précision en disant pourquoi (jetée en partie, prêtée à un copain, poids de départ faux, autre cause) ; <span class="ui">Remettre</span> l'y replace. Les mesures sont dans <a href="#stats-filaments">Statistiques › Filaments</a>, où l'écart se corrige aussi à la main.</p>
   </section>
 
   <section id="filaments-supprimer-bobine">

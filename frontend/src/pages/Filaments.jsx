@@ -15,7 +15,8 @@ import client, { apiUrl, apiThumb } from "../api/client";
 import StoreLink from "../components/StoreLink";
 import { egg } from "../eggs";
 import { useFriend } from "../store/friend";
-import { showAlert, showConfirm } from "../utils/dialog";
+import { showAlert, showConfirm, showChoice } from "../utils/dialog";
+import { archiveSpool, DRIFT_OFF, DRIFT_KIND, driftTxt } from "../utils/spoolArchive";
 import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import IncomingOrders, { OrderSheet } from "../components/IncomingOrders";
@@ -874,6 +875,41 @@ function FHero({ colors, type, finish = null, color, chips, name, sub, children,
 }
 
 // onChanged (facultatif) : previent le parent qu'une bobine a change, pour qu'il recharge sa liste SANS fermer la fiche.
+// La derive du suivi mesuree a la fin de la bobine (05/11/2026) : son ecart, d'ou il vient ; l'admin l'ecarte des stats
+// (avec sa raison) ou l'y remet
+function DriftRow({ spool, onUpdated }) {
+  const isAdmin = useIsAdmin();
+  const off = spool.drift_off;
+  const toggle = async () => {
+    let v = "";
+    if (!off) {
+      v = await showChoice("Écarter cette bobine des stats de précision du suivi ? Pourquoi son écart ne compte pas :", DRIFT_OFF,
+        { title: "Écarter la mesure" });
+      if (!v) return;
+    }
+    try {
+      await client.patch(`/filaments/spools/${spool.id}/drift`, { off: v });
+      if (v) egg("derive_ecartee");
+      onUpdated?.();
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
+  const g = spool.drift_g;
+  return (
+    <div style={FROW}>
+      <span style={FLAB} data-tip="À sa fin : notre poids moins le vrai (0). Positif, on lui croyait encore du filament ; négatif, elle a imprimé au-delà de notre zéro">Écart du suivi</span>
+      <span style={{ textAlign:"right" }}>
+        <span style={{ ...FVAL, color: off ? "var(--muted)" : Math.abs(g) < 15 ? "#16a34a" : "#F59E0B",
+          textDecoration: off ? "line-through" : "none" }}>{driftTxt(g)}</span>
+        <span style={{ display:"block", fontSize:11, fontWeight:600, color:"var(--muted)" }}>
+          {off ? `écartée : ${off}` : DRIFT_KIND[spool.drift_kind] || ""}
+          {isAdmin && <button onClick={toggle} style={{ marginLeft:6, padding:"1px 8px", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer",
+            border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text2)" }}>{off ? "Remettre" : "Écarter"}</button>}
+        </span>
+      </span>
+    </div>
+  );
+}
+
 export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelete, onChanged }) {
   // La bobine affichee (28/10/2026) : chaque modification (poids, prix, tag, sechage) la recharge par sa route
   // et la fiche reste ouverte ; avant, onUpdated fermait la fiche. Seuls archiver et supprimer ferment.
@@ -958,11 +994,8 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
     finally { setDeleting(false); }
   };
   const archive = async () => {
-    if (!(await showConfirm(
-      `Archiver la bobine #${spool.id} ? Elle passera en Archives avec une quantité remise à 0 et sortira du stock.`,
-      { confirmLabel: "Archiver" }
-    ))) return;
-    await onArchive(spool.id); onClose();
+    if (!(await archiveSpool(spool))) return;
+    await onArchive?.(spool.id); onClose();
   };
   const openDetail = id => client.get(`/prints/${id}`).then(r => setDetail(r.data))
     .catch(e => showAlert(e.response?.data?.detail || "Impression introuvable"));
@@ -1118,6 +1151,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
             <FRow l="Déjà consommé" v={consumed != null ? `${Math.round(consumed)} g` : "poids inconnu"} d={consumedPct != null ? `${consumedPct} % de ${Math.round(total)} g` : null}/>
             <FRow l="Rythme" v={rythme ? rythme.v : (spool.first_used_at ? null : "pas encore utilisée")} d={rythme?.d}/>
             <DryEditRow spoolId={spool.id} spoolName={name} current={spool.last_dried_at} aSecher={aSecher} onUpdated={refresh}/>
+            {spool.drift_g != null && <DriftRow spool={spool} onUpdated={refresh}/>}
             <div style={FROW}>
               <span style={FLAB}>Utilisation</span>
               <button onClick={loadUsage} disabled={loadingUsage} style={{ padding:"4px 11px", borderRadius:9, fontSize:12, fontWeight:800, cursor:"pointer",
@@ -1974,10 +2008,7 @@ function SpoolsView({ filaments, showArchived }) {
         isAdmin && fil && { icon: "＋", label: "Ajouter une bobine de ce filament", tone: "#22C55E", onClick: () => setShowAdd(fil.id) },
         isAdmin && !s.archived && "-",
         isAdmin && !s.archived && { icon: "📦", label: "Archiver…", hint: "Quantité remise à 0, sort du stock", tone: "#64748B", onClick: async () => {
-          if (!(await showConfirm(`Archiver la bobine #${s.id} ? Elle passera en Archives avec une quantité remise à 0 et sortira du stock.`,
-            { confirmLabel: "Archiver" }))) return;
-          try { await client.delete(`/filaments/spools/${s.id}`); load(); }
-          catch (e) { showAlert(e.response?.data?.detail || e.message); }
+          if (await archiveSpool(s)) load();
         } },
         isAdmin && { icon: "🗑", label: "Supprimer définitivement…", danger: true, onClick: async () => {
           if (!(await showConfirm(`Supprimer définitivement la bobine #${s.id} ?`, { danger: true, confirmLabel: "Supprimer" }))) return;
@@ -2150,7 +2181,7 @@ function SpoolsView({ filaments, showArchived }) {
         <SpoolBottomSheet
           spool={selected}
           onClose={()=>setSelected(null)}
-          onArchive={async(id)=>{ await client.delete(`/filaments/spools/${id}`); load(); }}
+          onArchive={load}
           onDelete={load}
           onChanged={load}
         />

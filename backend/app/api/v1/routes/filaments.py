@@ -185,6 +185,10 @@ class SpoolOut(BaseModel):
     needs_drying: bool = False
     dry_days: Optional[int] = None
     created_at: datetime
+    drift_g: Optional[float] = None
+    drift_kind: Optional[str] = None
+    drift_off: Optional[str] = None
+    end_reason: Optional[str] = None
 
 class SpoolCreate(BaseModel):
     filament_id: int
@@ -1366,14 +1370,22 @@ async def update_spool(
 @router.delete("/spools/{sid}", status_code=204)
 async def archive_spool(
     sid: int,
+    reason: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     _: str = Depends(get_current_user),
 ):
+    """reason (05/11/2026) : finie, jetee ou autre. Finie, ce qui lui restait chez nous est sa derive (positive : on lui
+    croyait encore du filament ; negative si elle avait deja imprime sous notre zero)."""
     s = await db.get(Spool, sid)
     if not s:
         raise HTTPException(404, "Bobine introuvable")
     before = s.remaining_weight_g
     s.archived = True
+    if reason in ("finie", "jetee", "autre"):
+        s.end_reason = reason
+    if reason == "finie":
+        from ....services import drift
+        drift.record(s, float(before or 0), "archive")
     # Une bobine archivee sort du stock : on remet sa quantite a 0 et on la
     # replace en "Archives". Le worker spool_location ne touche plus aux
     # archivees (exclues du matching AMS), sa location resterait sinon figee
@@ -1383,6 +1395,66 @@ async def archive_spool(
     _log_weight(db, s, before, "Bobine archivée")
     await db.commit()
     _clear_match_cache()
+
+
+class DriftEdit(BaseModel):
+    drift_g: Optional[float] = None       # l'ecart corrige a la main
+    off: Optional[str] = None             # ecartee des stats : la raison ; "" la remet
+    clear: bool = False                   # oublie la mesure
+
+
+@router.patch("/spools/{sid}/drift", response_model=SpoolOut)
+async def edit_spool_drift(sid: int, body: DriftEdit, db: AsyncSession = Depends(get_db),
+                           _: str = Depends(require_admin)):
+    """La derive d'une bobine (05/11/2026) : corrigee, ecartee des stats avec sa raison (jetee en partie, pretee, mal
+    initialisee...), remise, ou oubliee."""
+    s = await db.get(Spool, sid)
+    if not s:
+        raise HTTPException(404, "Bobine introuvable")
+    if body.clear:
+        s.drift_g = s.drift_kind = s.drift_at = s.drift_off = None
+    else:
+        if body.drift_g is not None:
+            s.drift_g = round(float(body.drift_g), 1)
+            s.drift_kind = s.drift_kind or "main"
+            s.drift_at = s.drift_at or datetime.utcnow()
+        if body.off is not None:
+            s.drift_off = body.off.strip()[:120] or None
+    await db.commit()
+    return _spool_out(await _load_spool(db, sid))
+
+
+@router.get("/drift")
+async def drift_stats(db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
+    """La precision du suivi (05/11/2026) : chaque bobine mesuree a sa fin, et ce qu'on en tire (hors bobines ecartees)."""
+    rows = (await db.execute(select(Spool, Filament).outerjoin(Filament, Filament.id == Spool.filament_id)
+                             .where(Spool.drift_g.is_not(None)).order_by(Spool.drift_at.desc()))).all()
+    items, kept = [], []
+    for s, f in rows:
+        full = float(f.filament_weight_g) if f and f.filament_weight_g else 1000.0
+        items.append({"id": s.id, "filament_id": s.filament_id, "drift_g": s.drift_g, "kind": s.drift_kind,
+                      "at": s.drift_at.isoformat() if s.drift_at else None, "off": s.drift_off, "full_g": full,
+                      "archived": bool(s.archived), "end_reason": s.end_reason,
+                      "name": (getattr(f, "translated_name", None) or f.name) if f else f"Bobine #{s.id}",
+                      "brand": f.manufacturer if f else None, "material": (f.fila_type or f.material) if f else None,
+                      "color": f.color if f else None, "colors": f.colors_array if f else None,
+                      "multicolor": f.multicolor_type if f else None})
+        if not s.drift_off:
+            kept.append((float(s.drift_g), full))
+    n = len(kept)
+    summary = {"n": n, "excluded": len(items) - n}
+    if n:
+        absd = sorted(abs(d) for d, _f in kept)
+        summary.update({
+            "mean_g": round(sum(d for d, _f in kept) / n, 1),
+            "mean_abs_g": round(sum(absd) / n, 1),
+            "median_abs_g": round(absd[n // 2] if n % 2 else (absd[n // 2 - 1] + absd[n // 2]) / 2, 1),
+            "max_abs_g": round(absd[-1], 1),
+            # la precision : 100 % moins l'ecart moyen rapporte au poids d'une bobine pleine
+            "accuracy_pct": round(max(0.0, 100 - 100 * sum(abs(d) / f for d, f in kept) / n), 1),
+            "over": sum(1 for d, _f in kept if d > 0.5), "under": sum(1 for d, _f in kept if d < -0.5),
+        })
+    return {"summary": summary, "items": items}
 
 
 def _log_weight(db, s, before, why: str) -> None:
@@ -1565,6 +1637,10 @@ def _spool_out(s: Spool, sib: tuple | None = None) -> SpoolOut:
         first_used_at=s.first_used_at,
         last_used_at=s.last_used_at,
         last_dried_at=s.last_dried_at,
+        drift_g=getattr(s, "drift_g", None),
+        drift_kind=getattr(s, "drift_kind", None),
+        drift_off=getattr(s, "drift_off", None),
+        end_reason=getattr(s, "end_reason", None),
         created_at=s.created_at,
     )
 

@@ -17,6 +17,9 @@ import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 // Stats embarquait Impressions, Objets, Filaments et Succes entieres avant son premier affichage)
 import { PrintDetail, GroupBottomSheet, ObjectSheet, AccessorySheet, FilamentSheetFromSpool } from "../components/LazySheets";
 import { importRetry } from "../utils/importRetry";
+import { useIsAdmin } from "../store/auth";
+import { showChoice, showAlert } from "../utils/dialog";
+import { DRIFT_OFF, DRIFT_KIND, driftTxt } from "../utils/spoolArchive";
 const Achievements = React.lazy(() => importRetry(() => import("./Achievements")));
 const MachineStats = React.lazy(() => importRetry(() => import("../components/MachineStats")));
 import { FSheet, fBtn, fGrad } from "../components/FicheKit";
@@ -311,6 +314,101 @@ return (
     </div>
   </div>
 );
+}
+
+// La precision du suivi des bobines (05/11/2026) : a la fin de chaque bobine, l'ecart entre notre poids et le vrai
+// (relais de l'AMS, suite choisie a la main, archivee « finie ») ; l'admin ecarte une mesure faussee (jetee en partie,
+// pretee, mal initialisee) ou en corrige l'ecart
+function DriftStats() {
+  const isAdmin = useIsAdmin();
+  const [d, setD] = useState(null);
+  const [open, setOpen] = useState(null);
+  const [edit, setEdit] = useState(null);       // { id, v }
+  const load = () => client.get("/filaments/drift").then(r => setD(r.data)).catch(() => setD({ error: true }));
+  useEffect(() => { load(); }, []);
+  if (!d || d.error) return null;
+  const k = d.summary, items = d.items || [];
+  const patch = async (id, body, gesture) => {
+    try { await client.patch(`/filaments/spools/${id}/drift`, body); if (gesture) egg("derive_ecartee"); load(); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
+  const toggle = async it => {
+    if (it.off) return patch(it.id, { off: "" });
+    const v = await showChoice(`Écarter la bobine #${it.id} des stats de précision ? Pourquoi son écart ne compte pas :`, DRIFT_OFF,
+      { title: "Écarter la mesure" });
+    if (v) patch(it.id, { off: v }, true);
+  };
+  const saveEdit = () => {
+    const v = parseFloat(String(edit.v).replace(",", ".").replace("−", "-"));
+    if (Number.isFinite(v)) patch(edit.id, { drift_g: v }, true);
+    setEdit(null);
+  };
+  const max = Math.max(20, ...items.map(it => Math.abs(it.drift_g)));
+  const trend = !k.n ? null : Math.abs(k.mean_g) < 5 ? "sans biais" : k.mean_g > 0 ? "on surestime" : "on sous-estime";
+  return (
+    <Section title="Précision du suivi" icon="🎯" isGlobal>
+      {!items.length ? (
+        <div style={{ ...statCard("#14B8A6"), padding: "14px 14px", fontSize: 13, fontWeight: 600, color: "var(--text2)", lineHeight: 1.5 }}>
+          Pas encore de mesure. À la fin de chaque bobine, l'écart entre notre poids et le vrai est noté : quand l'AMS prend le relais,
+          quand tu choisis la suite, ou quand tu l'archives en disant qu'elle est finie.
+        </div>
+      ) : (<>
+        {k.n > 0 && <div className="kpi-grid st-kpis" style={{ "--kpi-min": "150px", marginBottom: 12 }}>
+          <KpiCard icon={Target} label="Précision" value={`${String(k.accuracy_pct).replace(".", ",")} %`} color="#14B8A6"
+            sub="écart rapporté à une bobine pleine"/>
+          <KpiCard icon={Gauge} label="Écart typique" value={`± ${Math.round(k.mean_abs_g)} g`} color="#3B82F6"
+            sub={`médiane ${Math.round(k.median_abs_g)} g · max ${Math.round(k.max_abs_g)} g`}/>
+          <KpiCard icon={Activity} label="Tendance" value={driftTxt(k.mean_g)} color={Math.abs(k.mean_g) < 5 ? "#22C55E" : "#F59E0B"}
+            sub={trend}/>
+          <KpiCard icon={Package} label="Bobines mesurées" value={k.n} color="#8B5CF6"
+            sub={`${k.over} au-dessus · ${k.under} en dessous${k.excluded ? ` · ${k.excluded} écartée${k.excluded > 1 ? "s" : ""}` : ""}`}/>
+        </div>}
+        <div style={{ ...statCard("#14B8A6"), padding: "8px 12px", maxHeight: 360, overflowY: "auto" }}>
+          {items.map(it => {
+            const w = Math.max(2, Math.abs(it.drift_g) / max * 50);
+            const col = it.off ? "var(--muted)" : Math.abs(it.drift_g) < 15 ? "#22C55E" : it.drift_g > 0 ? "#F59E0B" : "#EF4444";
+            return (
+              <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0", borderBottom: "1px dashed var(--border)",
+                opacity: it.off ? 0.6 : 1 }}>
+                <span onClick={() => setOpen(it)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: "1 1 40%" }}>
+                  <Dot hex={it.color} colors={it.colors} multicolor={it.multicolor} size={12}/>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {it.name} <span style={{ color: "var(--muted)", fontWeight: 700 }}>#{it.id}</span></span>
+                    <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {it.off ? `écartée : ${it.off}` : DRIFT_KIND[it.kind] || ""}{it.at ? ` · ${new Date(it.at + "Z").toLocaleDateString("fr-FR")}` : ""}</span>
+                  </span>
+                </span>
+                {/* l'ecart, de part et d'autre du zero */}
+                <span style={{ position: "relative", flex: "1 1 30%", height: 8, borderRadius: 5, background: "color-mix(in srgb, var(--border) 70%, transparent)" }}>
+                  <span style={{ position: "absolute", left: "50%", top: -3, bottom: -3, width: 1.5, background: "var(--muted)" }}/>
+                  <span style={{ position: "absolute", top: 0, bottom: 0, borderRadius: 5, background: col, width: `${w}%`,
+                    left: it.drift_g >= 0 ? "50%" : `${50 - w}%` }}/>
+                </span>
+                {edit?.id === it.id ? (
+                  <input autoFocus value={edit.v} onChange={e => setEdit({ ...edit, v: e.target.value })} onBlur={saveEdit}
+                    onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEdit(null); }}
+                    inputMode="decimal" style={{ width: 62, padding: "3px 6px", borderRadius: 8, border: "1px solid var(--border)",
+                      background: "var(--surface)", color: "var(--text)", fontSize: 13, fontWeight: 800, textAlign: "right" }}/>
+                ) : (
+                  <span onClick={() => isAdmin && setEdit({ id: it.id, v: String(it.drift_g) })} data-tip={isAdmin ? "Corriger l'écart" : undefined}
+                    style={{ width: 62, textAlign: "right", fontSize: 13, fontWeight: 900, color: col, cursor: isAdmin ? "pointer" : "default",
+                      textDecoration: it.off ? "line-through" : "none", flexShrink: 0 }}>{driftTxt(it.drift_g)}</span>
+                )}
+                {isAdmin && <button onClick={() => toggle(it)} data-tip={it.off ? "La remettre dans les stats" : "L'écarter des stats (jetée en partie, prêtée…)"}
+                  style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 9, border: "1px solid var(--border)", background: "var(--surface2)",
+                    cursor: "pointer", fontSize: 13 }}>{it.off ? "↩" : "🚫"}</button>}
+              </div>
+            );
+          })}
+        </div>
+        <p style={{ fontSize: 10.5, color: "var(--muted)", margin: "8px 0 0" }}>
+          Au-dessus de zéro : on lui croyait encore du filament à sa fin. En dessous : elle a imprimé au-delà de notre zéro.
+        </p>
+      </>)}
+      {open && <FilamentSheetFromSpool filamentId={open.filament_id} spoolId={open.id} onClose={() => { setOpen(null); load(); }}/>}
+    </Section>
+  );
 }
 
 function DryingStats() {
@@ -1354,6 +1452,7 @@ export default function Stats() {
         </Section>
       )}
 
+      <DriftStats/>
       </>)}
 
       {tab === "drying" && <DryingStats/>}

@@ -447,6 +447,13 @@ async def switch(pid: int, slot: int, spool_id: int, auto: bool = False) -> dict
             old = await db.get(Spool, last.spool_id)
             if old and not old.archived:
                 left_old = round(float(old.remaining_weight_g or 0), 1)
+                # la derive du suivi (05/11/2026) : elle est vraiment finie a « part » ; on lui croyait bef - part
+                if pid in _PROG:
+                    from . import drift
+                    bef = getattr(last, "spool_before_g", None)
+                    est = (float(bef) if bef is not None else left_old + float(last.grams_used or 0)) - part
+                    if drift.record(old, est, "relais" if auto else "suite"):
+                        logger.info(f"[DERIVE] bobine #{old.id} finie a {part:.1f} g : derive {old.drift_g:+.1f} g")
                 old.remaining_weight_g = 0.0                  # finie : ce qui restait a ete imprime
                 if left_old > 0:
                     # tracee dans son historique (02/11/2026), et annulable comme un rendu
@@ -536,6 +543,8 @@ async def settle(pid: int, nothing: bool = False) -> list:
             logger.warning(f"[LIVE] report sur les objets de l'impression #{pid} : {e}")
         await db.commit()
     await _state_put(pid, {"settled": True, "back": [[s, g] for s, g in back]})
+    if pid in _PROG or nothing:
+        await _overrun(pid)
     logger.info(f"[LIVE] impression #{pid} ratee : {', '.join(f'{g:g} g a la bobine #{s}' for s, g in back) or 'rien a rendre'}"
                 f" (couche {(_PROG.get(pid) or {}).get('layer', '?')}{', rien imprime' if nothing else ''})")
     if back:
@@ -548,6 +557,30 @@ async def settle(pid: int, nothing: bool = False) -> list:
     return back
 
 
+async def _overrun(pid: int) -> None:
+    """Fin d'impression (05/11/2026) : ce que chaque bobine a imprime sous notre zero (le decompte s'arrete a 0) est
+    cumule sur elle, pour sa derive a sa fin. Une fois par impression ; la bobine relayee en cours de route a deja sa
+    mesure (seule la derniere de chaque filament compte)."""
+    from ..models.filament import Spool
+    from . import drift
+    st = (await _state()).get(str(pid)) or {}
+    if st.get("overrun"):
+        return
+    async with AsyncSessionLocal() as db:
+        for rs in (await _rows(db, pid)).values():
+            r = rs[-1]
+            bef = getattr(r, "spool_before_g", None)
+            if not r.spool_id or bef is None:
+                continue
+            over = float(r.grams_used or 0) - max(0.0, float(bef))
+            sp = await db.get(Spool, r.spool_id)
+            if sp and over >= 0.5:
+                drift.add_overrun(sp, over)
+                logger.info(f"[DERIVE] bobine #{sp.id} : {over:.1f} g imprimes sous notre zero (impression #{pid})")
+        await db.commit()
+    await _state_put(pid, {"overrun": True})
+
+
 def forget(pid: int) -> None:
     with _LOCK:
         _PROG.pop(pid, None)
@@ -558,6 +591,7 @@ def forget(pid: int) -> None:
 
 async def finished(pid: int) -> None:
     """Impression finie (reussie) : son etat est clos ; plus rien a rattraper."""
+    await _overrun(pid)
     await _state_put(pid, {"settled": True})
     forget(pid)
 

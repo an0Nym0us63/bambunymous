@@ -15,8 +15,8 @@ export default function DialogHost() {
   useEffect(() => {
     if (!dlg) return;
     const onKey = (e) => {
-      if (e.key === "Escape") close(dlg.type === "confirm" ? false : undefined);
-      if (e.key === "Enter") close(dlg.type === "confirm" ? true : undefined);
+      if (e.key === "Escape") close(dlg.type === "confirm" ? false : dlg.type === "choice" ? null : undefined);
+      if (e.key === "Enter" && dlg.type !== "choice") close(dlg.type === "confirm" ? true : undefined);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -24,7 +24,8 @@ export default function DialogHost() {
 
   // les infobulles maison vivent ici (monte une fois, sur toutes les pages)
   if (!dlg) return <TipHost/>;
-  const isConfirm = dlg.type === "confirm";
+  const isChoice = dlg.type === "choice";
+  const isConfirm = dlg.type === "confirm" || isChoice;
   // la couleur de la boite : rouge pour une action qui detruit, bleu sinon (un simple message : neutre)
   const c = dlg.danger ? "#EF4444" : isConfirm ? "#3B82F6" : "#6366F1";
   const c2 = dlg.danger ? "#F97316" : isConfirm ? "#6366F1" : "#8B5CF6";
@@ -32,7 +33,7 @@ export default function DialogHost() {
 
   return (<>
     <TipHost/>
-    <div onClick={() => close(isConfirm ? false : undefined)}
+    <div onClick={() => close(isChoice ? null : isConfirm ? false : undefined)}
       style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(0,0,0,0.6)",
         display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
         animation: "dlgFade 0.12s ease" }}>
@@ -46,19 +47,32 @@ export default function DialogHost() {
           <p style={{ fontSize: 14.5, fontWeight: 600, color: "var(--text)", lineHeight: 1.5, margin: 0,
             whiteSpace: "pre-wrap" }}>{dlg.message}</p>
         </div>
+        {isChoice && <div style={{ display: "flex", flexDirection: "column", gap: 7, padding: "12px 16px 0" }}>
+          {(dlg.choices || []).map(ch => (
+            <button key={ch.value} onClick={() => close(ch.value)}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, cursor: "pointer", textAlign: "left",
+                border: `1px solid color-mix(in srgb, ${ch.tone || c} 35%, var(--border))`,
+                background: `color-mix(in srgb, ${ch.tone || c} 9%, var(--surface2))`, color: "var(--text)" }}>
+              {ch.icon && <span style={{ fontSize: 18, lineHeight: 1 }}>{ch.icon}</span>}
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 13.5, fontWeight: 800 }}>{ch.label}</span>
+                {ch.hint && <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>{ch.hint}</span>}
+              </span>
+            </button>))}
+        </div>}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", padding: "12px 16px 14px", borderTop: "1px solid var(--border)" }}>
           {isConfirm && (
-            <button onClick={() => close(false)}
+            <button onClick={() => close(isChoice ? null : false)}
               style={{ padding: "10px 16px", borderRadius: 12, border: "1px solid var(--border)",
                 background: "var(--surface2)", color: "var(--text)", fontSize: 13.5, fontWeight: 800,
                 cursor: "pointer" }}>{dlg.cancelLabel || "Annuler"}</button>
           )}
-          <button onClick={() => close(isConfirm ? true : undefined)} autoFocus
+          {!isChoice && <button onClick={() => close(isConfirm ? true : undefined)} autoFocus
             style={{ padding: "10px 18px", borderRadius: 12, border: "none",
               background: `linear-gradient(135deg, ${c}, ${c2})`, boxShadow: `0 8px 18px -10px ${c}`, color: "white", fontSize: 13.5,
               fontWeight: 800, cursor: "pointer" }}>
             {dlg.confirmLabel || (isConfirm ? "Confirmer" : "OK")}
-          </button>
+          </button>}
         </div>
       </div>
     </div>

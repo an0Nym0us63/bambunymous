@@ -8,6 +8,11 @@ export function showAlert(message, opts = {}) {
   if (!_handler) { window.alert(message); return Promise.resolve(); }
   return _handler({ type: "alert", message, ...opts });
 }
+// un choix parmi plusieurs (05/11/2026) : choices = [{ value, label, icon, hint, tone }] ; rend la valeur, null si annule
+export function showChoice(message, choices, opts = {}) {
+  if (!_handler) return Promise.resolve(window.confirm(message) ? choices[0]?.value ?? null : null);
+  return _handler({ type: "choice", message, choices, ...opts });
+}
 export function showConfirm(message, opts = {}) {
   if (!_handler) return Promise.resolve(window.confirm(message));
   return _handler({ type: "confirm", message, ...opts });

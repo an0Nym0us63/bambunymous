@@ -95,6 +95,16 @@ class Spool(Base):
     first_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_dried_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # dernier sechage AMS
+    # la derive du suivi (05/11/2026) : a la fin de vie de la bobine, notre poids moins le vrai (0) ; positive, on lui
+    # croyait encore du filament ; negative, elle a imprime au-dela de notre zero. overrun_g cumule ce qu'elle a imprime
+    # sous notre zero (le decompte s'arrete a 0) ; drift_kind : relais (l'AMS), suite (a la main), archive (finie).
+    overrun_g: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    drift_g: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    drift_kind: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    drift_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    end_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)   # a l'archivage : finie, jetee, autre
+    # ecartee des stats de precision, et pourquoi (jetee en partie, pretee, mal initialisee...) ; drift_g reste lisible
+    drift_off: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     filament: Mapped["Filament"] = relationship("Filament", back_populates="spools")
