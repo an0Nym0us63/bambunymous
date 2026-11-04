@@ -669,9 +669,6 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
     import re as _re
     if _re.fullmatch(r"g\d{1,9}", did):
         return await _group_view(int(did[1:]))
-    # « s12 » : l'impression 12 telle qu'imprimee, d'apres son 3MF tranche (04/11/2026)
-    if _re.fullmatch(r"s\d{1,9}", did):
-        return await _sliced_view(int(did[1:]), bool(peek) or str(token or "").startswith("fk_"))
     # « p12 » : le 3MF importe a la main pour l'impression 12, sans modele MakerWorld (31/10/2026)
     mine = bool(_re.fullmatch(r"p\d+", did))
     if not did.isdigit() and not mine:
@@ -782,14 +779,14 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             pass
     # le groupe de l'impression (31/10/2026) : la vue propose « 🧩 Tout le groupe » ou qu'elle soit ouverte (fiche de
     # l'impression, galerie des vues 3D), pas seulement depuis la carte du groupe
-    grp_id, grp_n, has_sliced = None, 0, None
+    grp_id, grp_n = None, 0
     if print_id:
         try:
             from sqlalchemy import select as _sel, func as _fn
             from ....models.print_history import Print as _P
             from ....db.session import AsyncSessionLocal as _SL
             async with _SL() as db:
-                grp_id, has_sliced = (await db.execute(_sel(_P.group_id, _P.model_3mf).where(_P.id == print_id))).first() or (None, None)
+                grp_id = (await db.execute(_sel(_P.group_id).where(_P.id == print_id))).scalar()
                 if grp_id:
                     grp_n = (await db.execute(_sel(_fn.count(_P.id)).where(_P.group_id == grp_id))).scalar() or 0
         except Exception:
@@ -875,70 +872,8 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             "edit_key": ekey if key and source != "makerworld" else None, "own_edit": bool(key and ekey != key),
             "can_own": bool(key and source != "makerworld" and own_who), "own_who": own_who,
             "group_id": grp_id if grp_n > 1 else None,
-            # l'impression a son 3MF tranche, avec ses objets : la vue propose « telle qu'imprimee » (04/11/2026)
-            "sliced": bool(has_sliced) and await asyncio.to_thread(_sliced_has_mesh, has_sliced),
             # des plateaux encore en preparation (« pending » sur eux) : la vue redemande jusqu'a la fin
             "pending": bool((meta or {}).get("pending"))}
-
-
-_SLICED_MESH: dict = {}
-
-
-def _sliced_has_mesh(rel: str) -> bool:
-    """Le 3MF tranche garde-t-il ses objets ? (04/11/2026) Celui qu'envoie Bambu Studio a l'imprimante n'a que le G-code
-    du plateau : rien a montrer en 3D. Retenu par fichier."""
-    if rel in _SLICED_MESH:
-        return _SLICED_MESH[rel]
-    from ....services.archive import local_or_archive
-    ok = False
-    try:
-        f = local_or_archive(rel)
-        if f is not None and f.is_file():
-            with zipfile.ZipFile(f) as z:
-                names = z.namelist()
-                ok = any(n.startswith("3D/Objects/") for n in names) or b"<object" in z.read("3D/3dmodel.model")
-    except (OSError, KeyError, zipfile.BadZipFile):
-        ok = False
-    _SLICED_MESH[rel] = ok
-    return ok
-
-
-async def _sliced_view(pid: int, readonly: bool) -> dict:
-    """L'impression telle qu'imprimee (04/11/2026) : son plateau lu dans son 3MF tranche, avec ce qui a ete change dans
-    Bambu Studio avant de l'imprimer (un texte ajoute, des couleurs, des objets retires) et que le 3MF d'origine n'a
-    pas. Aux couleurs du tranchage, celles de l'impression ; ni vue assemblee ni edition."""
-    from sqlalchemy import select
-    from ....db.session import AsyncSessionLocal
-    from ....models.print_history import Print
-    from ....services import mw_3d as T
-    from ....services.archive import local_or_archive
-    async with AsyncSessionLocal() as db:
-        rel = (await db.execute(select(Print.model_3mf).where(Print.id == pid))).scalar()
-    src = local_or_archive(rel) if rel else None
-    if src is None or not src.is_file():
-        raise HTTPException(404, "Pas de 3MF tranché gardé pour cette impression")
-    key = f"s{pid}"
-    if readonly:
-        # un copain ou un coup d'oeil : seulement une vue deja calculee
-        ok = T.ready(src, key)
-        if not ok:
-            raise HTTPException(409, "Vue 3D pas encore calculée chez lui : il doit l'ouvrir une fois de son côté")
-        meta = T._read_side(key, "plates.json")
-    else:
-        meta = await T.from_3mf_early(src, key)
-    shown, skipped = T.plates_out(meta, key) if meta else ([], [])
-    shown = [p for p in shown if not p.get("assembled")]      # la copie du plateau pour l'editer : pas ici
-    if not shown:
-        raise HTTPException(404, "Ce 3MF tranché n'a que le G-code du plateau, sans ses objets : rien à montrer en 3D")
-    try:
-        bed = mw.bed_of(await mw.my_printer())
-    except Exception:
-        bed = [256, 256]
-    return {"source": "sliced", "profile": None, "ms": 0, "bed": bed, "key": key, "plates": shown, "skipped": skipped,
-            "finishes": T.origin_finishes(src), "used_palette": None, "used_detail": None, "used_options": [], "chosen": {},
-            "used_plates": {}, "used_details_plates": {}, "used_multi_plates": {}, "used_multi": {}, "used_finishes_plates": {},
-            "used_finishes": {}, "glows": {}, "piece_plates": {}, "assembly_edit": None, "edit_key": None, "own_edit": False,
-            "can_own": False, "sliced": True, "pending": bool((meta or {}).get("pending"))}
 
 
 async def _group_view(gid: int) -> dict:

@@ -1902,10 +1902,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const fromView = useRef(null);                        // la vue du modele seul quittee pour le groupe : son assemblage se reprend
   // le choix des plateaux du groupe : ouvert des que la vue du groupe est la (pickGrp : a ouvrir)
   const [pickGrp, setPickGrp] = useState(false);
-  // « telle qu'imprimee » (04/11/2026) : l'impression d'apres son 3MF tranche, avec ce qui a ete change dans Bambu
-  // Studio avant de l'imprimer (un texte ajoute, des couleurs) ; en option, a cote du 3MF d'origine
-  const [asPrinted, setAsPrinted] = useState(false);
-  const did = asPrinted && printId ? `s${printId}` : grpAll && gid ? `g${gid}` : designId;
+  const did = grpAll && gid ? `g${gid}` : designId;
   const base = `/makerworld/3d/${encodeURIComponent(did)}`;
   useEffect(() => { if (meta?.group_id) setGrpSeen(String(meta.group_id)); }, [meta?.group_id]);
   useEffect(() => {
@@ -2266,15 +2263,11 @@ export default function Model3D({ designId = null, profileId = null, printId = n
               color: "#d97706", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>⚠ {meta.missing.length} modèle{meta.missing.length > 1 ? "s" : ""} sans vue assemblée : {meta.missing.join(", ")}</div>}
           </div>
         </div>
-        {(meta?.plates?.length > 1 || (gid && !fr) || (printId && (meta?.sliced || asPrinted))) && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {(meta?.plates?.length > 1 || (gid && !fr)) && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {meta?.plates?.length > 0 && (meta.plates.length > 1 || grpAll) && meta.plates.map((x, i) => <button key={x.n} type="button" onClick={() => setPlate(i)} style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer",
             fontSize: 12.5, fontWeight: 800, border: i === plate ? "none" : "1px solid var(--border)", color: i === plate ? "#fff" : "var(--text2)",
             background: i === plate ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "var(--surface2)" }}>{x.pending ? "⏳ " : ""}{x.assembled ? (grpAll ? "🧩 Tout le groupe" : "🧩 Assemblé") : x.name ? `${x.n} · ${x.name}` : `Plateau ${x.n}`}</button>)}
-          {printId && !grpAll && (meta?.sliced || asPrinted) && <button type="button" onClick={() => { setPlate(0); setAsPrinted(v => !v); if (!asPrinted) egg("vue_imprimee"); }}
-            data-tip={asPrinted ? "Revenir au 3MF d'origine du modèle" : "L'impression telle qu'imprimée, d'après son 3MF tranché : avec ce que tu as changé dans Bambu Studio avant de l'imprimer (texte ajouté, couleurs…)"}
-            style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer", fontSize: 12, fontWeight: 800, border: "1px dashed #F59E0B",
-              color: "#D97706", background: "color-mix(in srgb, #F59E0B 8%, transparent)" }}>{asPrinted ? "↩ 3MF d'origine" : "🖨 Telle qu'imprimée"}</button>}
-          {gid && !fr && !asPrinted && <button type="button" onClick={() => { if (!grpAll && meta?.key) fromView.current = { view: meta.key, edit: meta.edit_key || meta.key, data: edit?.pieces ? edit : null }; setPlate(0); setGrpAll(v => !v); if (!grpAll) egg("assemblage_groupe"); }}
+          {gid && !fr && <button type="button" onClick={() => { if (!grpAll && meta?.key) fromView.current = { view: meta.key, edit: meta.edit_key || meta.key, data: edit?.pieces ? edit : null }; setPlate(0); setGrpAll(v => !v); if (!grpAll) egg("assemblage_groupe"); }}
             data-tip={grpAll ? "Revenir à ce modèle seul" : "L'assemblage du groupe : choisis les plateaux de chacun de ses modèles et profils, puis tout est réuni dans une seule vue à éditer"}
             style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 800, border: "1px dashed color-mix(in srgb, #6366F1 55%, var(--border))",
               color: "#6366F1", background: "color-mix(in srgb, #6366F1 8%, transparent)" }}>{grpAll ? "↩ Ce modèle seul" : "🧩 Plateaux du groupe"}</button>}
@@ -2417,8 +2410,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
         {meta && <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
           <span>{meta.source === "3mf" && shown ? `3MF d'origine, aux couleurs des filaments ${altLabel.toLowerCase()}`
             : meta.source === "3mf" ? "3MF d'origine, aux couleurs de ses filaments"
-            : meta.source === "3mf_other" ? "3MF d'origine d'un autre profil du modèle"
-            : meta.source === "sliced" ? "Telle qu'imprimée : le 3MF tranché, aux couleurs du tranchage" : "Aperçu MakerWorld (sans couleurs)"}</span>
+            : meta.source === "3mf_other" ? "3MF d'origine d'un autre profil du modèle" : "Aperçu MakerWorld (sans couleurs)"}</span>
           {meta.source === "makerworld" && !want3mf && <button type="button" onClick={() => setWant3mf(true)}
             data-tip="Compte comme un téléchargement MakerWorld (une fois pour ce profil)"
             style={{ padding: "3px 10px", borderRadius: 14, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800, color: "#fff",
