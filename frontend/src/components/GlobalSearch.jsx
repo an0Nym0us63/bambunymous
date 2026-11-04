@@ -112,9 +112,6 @@ export function SearchSheet({ onClose }) {
           {q && <button type="button" onClick={() => { setQ(""); inp.current?.focus(); }} aria-label="Effacer" data-tip="Effacer"
             style={{ width: 30, height: 30, borderRadius: "50%", border: "none", background: "var(--surface2)", color: "var(--muted)", cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><X size={15}/></button>}
-          <button type="button" onClick={onClose} aria-label="Fermer" data-tip="Fermer (Échap)"
-            style={{ border: "1px solid var(--border)", background: "var(--surface)", color: "var(--muted)", borderRadius: 9, padding: "4px 8px",
-              fontSize: 11, fontWeight: 800, cursor: "pointer", flexShrink: 0 }}>Échap</button>
         </div>
         <div ref={listRef} style={{ overflowY: "auto", padding: "8px 10px 14px", overscrollBehavior: "contain" }}>
           {/* avant de taper : les dernieres recherches */}
