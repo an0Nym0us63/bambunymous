@@ -875,10 +875,32 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             "edit_key": ekey if key and source != "makerworld" else None, "own_edit": bool(key and ekey != key),
             "can_own": bool(key and source != "makerworld" and own_who), "own_who": own_who,
             "group_id": grp_id if grp_n > 1 else None,
-            # l'impression a son 3MF tranche : la vue propose « telle qu'imprimee » (04/11/2026)
-            "sliced": bool(has_sliced),
+            # l'impression a son 3MF tranche, avec ses objets : la vue propose « telle qu'imprimee » (04/11/2026)
+            "sliced": bool(has_sliced) and await asyncio.to_thread(_sliced_has_mesh, has_sliced),
             # des plateaux encore en preparation (« pending » sur eux) : la vue redemande jusqu'a la fin
             "pending": bool((meta or {}).get("pending"))}
+
+
+_SLICED_MESH: dict = {}
+
+
+def _sliced_has_mesh(rel: str) -> bool:
+    """Le 3MF tranche garde-t-il ses objets ? (04/11/2026) Celui qu'envoie Bambu Studio a l'imprimante n'a que le G-code
+    du plateau : rien a montrer en 3D. Retenu par fichier."""
+    if rel in _SLICED_MESH:
+        return _SLICED_MESH[rel]
+    from ....services.archive import local_or_archive
+    ok = False
+    try:
+        f = local_or_archive(rel)
+        if f is not None and f.is_file():
+            with zipfile.ZipFile(f) as z:
+                names = z.namelist()
+                ok = any(n.startswith("3D/Objects/") for n in names) or b"<object" in z.read("3D/3dmodel.model")
+    except (OSError, KeyError, zipfile.BadZipFile):
+        ok = False
+    _SLICED_MESH[rel] = ok
+    return ok
 
 
 async def _sliced_view(pid: int, readonly: bool) -> dict:
@@ -907,7 +929,7 @@ async def _sliced_view(pid: int, readonly: bool) -> dict:
     shown, skipped = T.plates_out(meta, key) if meta else ([], [])
     shown = [p for p in shown if not p.get("assembled")]      # la copie du plateau pour l'editer : pas ici
     if not shown:
-        raise HTTPException(404, "Rien à montrer dans le 3MF tranché de cette impression")
+        raise HTTPException(404, "Ce 3MF tranché n'a que le G-code du plateau, sans ses objets : rien à montrer en 3D")
     try:
         bed = mw.bed_of(await mw.my_printer())
     except Exception:
