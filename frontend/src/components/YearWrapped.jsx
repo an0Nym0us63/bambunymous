@@ -62,7 +62,7 @@ function slidesOf(d) {
       <svg viewBox="0 0 100 100" style={{ width: "100%", height: "100%", transform: "rotate(-90deg)" }}>
         <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,.2)" strokeWidth="10"/>
         <circle className="yw-ring" cx="50" cy="50" r="42" fill="none" stroke="#fff" strokeWidth="10" strokeLinecap="round"
-          strokeDasharray={`${2 * Math.PI * 42}`} style={{ "--yw-off": `${2 * Math.PI * 42 * (1 - pct / 100)}` }}/>
+          strokeDasharray={`${2 * Math.PI * 42}`} style={{ "--yw-off": `${2 * Math.PI * 42 * (1 - pct / 100)}`, strokeDashoffset: `${2 * Math.PI * 42 * (1 - pct / 100)}` }}/>
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Big size={52}><Count to={pct}/> %</Big></div>
     </div>
@@ -207,15 +207,27 @@ function SharePanel({ d, text: text0, shot, onClose }) {
     if (!tok) return;
     try { await client.delete(`/wrapped/share/${tok}`); setLink(null); toast("Lien retiré : il ne s'ouvre plus"); } catch { toast("Le lien n'a pas pu être retiré", "error"); }
   };
-  const sendTg = async dest => {
-    setBusy(dest.id);
+  // les destinations Telegram cochees : d'office celles du dernier partage (le meme choix que le partage d'une impression)
+  const [sel, setSel] = useState(null);
+  const [note, setNote] = useState("");
+  useEffect(() => {
+    if (!tg?.destinations?.length || sel) return;
+    const ids = tg.destinations.map(x => x.id);
+    let last = []; try { last = JSON.parse(localStorage.getItem("bn-share-dests") || "[]"); } catch { /* stockage indisponible */ }
+    const keep = (Array.isArray(last) ? last : []).filter(x => ids.includes(x));
+    setSel(keep.length ? keep : ids.slice(0, 1));
+  }, [tg]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sendTg = async () => {
+    if (!sel?.length) return;
+    setBusy("tg");
     try {
-      const blob = await shot();
-      const text = textWith(await withLink());
+      const m = { blob: await shot(), ext: "png", type: "image/png" };
+      const text = [note.trim(), textWith(await withLink())].filter(Boolean).join("\n\n");
       const fd = new FormData();
-      fd.append("file", blob, `annee-${d.year}.png`); fd.append("text", text); fd.append("destination_ids", dest.id);
+      fd.append("file", m.blob, `annee-${d.year}.${m.ext}`); fd.append("text", text); fd.append("destination_ids", sel.join(","));
       const r = await client.post("/share/image", fd, { timeout: 120000 });
-      toast(`Envoyé sur Telegram : ${r.data?.destination || dest.label}`);
+      try { localStorage.setItem("bn-share-dests", JSON.stringify(sel)); } catch { /* stockage indisponible */ }
+      toast(`Envoyé sur Telegram : ${r.data?.destination || ""}`);
       egg("annee_partagee");
       onClose();
     } catch (e) { toast(e?.response?.data?.detail || "L'envoi n'a pas abouti", "error"); }
@@ -224,9 +236,9 @@ function SharePanel({ d, text: text0, shot, onClose }) {
   const other = async () => {
     setBusy("other");
     try {
-      const blob = await shot();
+      const m = { blob: await shot(), ext: "png", type: "image/png" };
       const text = textWith(await withLink());
-      const file = new File([blob], `annee-${d.year}.png`, { type: "image/png" });
+      const file = new File([m.blob], `annee-${d.year}.${m.ext}`, { type: m.type });
       if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], text, title: `Mon année ${d.year} en impressions` });
       else if (navigator.share) await navigator.share({ text, title: `Mon année ${d.year} en impressions` });
       else { await navigator.clipboard.writeText(text); toast("Texte copié : colle-le où tu veux"); }
@@ -237,9 +249,9 @@ function SharePanel({ d, text: text0, shot, onClose }) {
   const save = async () => {
     setBusy("save");
     try {
-      const blob = await shot();
+      const m = { blob: await shot(), ext: "png", type: "image/png" };
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob); a.download = `bambunymous-annee-${d.year}.png`;
+      a.href = URL.createObjectURL(m.blob); a.download = `bambunymous-annee-${d.year}.${m.ext}`;
       document.body.appendChild(a); a.dispatchEvent(new MouseEvent("click")); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     } catch { toast("L'image n'a pas pu être préparée", "error"); }
@@ -263,7 +275,21 @@ function SharePanel({ d, text: text0, shot, onClose }) {
         <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{link}</span>
         <button type="button" onClick={unshare} style={{ border: "none", background: "none", color: "#FCA5A5", fontSize: 11.5, fontWeight: 900, cursor: "pointer" }}>Retirer le lien</button></div>}
       {tg === null ? <div style={{ fontSize: 12.5, opacity: .7, textAlign: "center" }}>…</div>
-        : dests.length ? dests.map(x => row(x.id, "✈️", `Telegram · ${x.label}`, "l'image et le lien de l'animation, par ton compte relié", () => sendTg(x)))
+        : dests.length ? <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 10, borderRadius: 16, background: "rgba(255,255,255,.06)" }}>
+          <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", opacity: .8 }}>✈️ Telegram · l'image et le lien</div>
+          {dests.map(x => { const on = !!sel?.includes(x.id);
+            return <label key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 12, cursor: "pointer",
+              background: on ? "rgba(96,165,250,.18)" : "rgba(255,255,255,.05)", border: `1px solid ${on ? "rgba(96,165,250,.6)" : "transparent"}` }}>
+              <input type="checkbox" checked={on} disabled={!!busy} style={{ accentColor: "#60A5FA", width: 18, height: 18 }}
+                onChange={() => setSel(s => on ? (s || []).filter(y => y !== x.id) : [...(s || []), x.id])}/>
+              <span style={{ fontSize: 14, fontWeight: on ? 900 : 700 }}>{x.label}</span></label>; })}
+          <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Un mot pour accompagner (facultatif)…" disabled={!!busy}
+            style={{ width: "100%", boxSizing: "border-box", marginTop: 2, padding: "8px 10px", borderRadius: 12, border: "1px solid rgba(255,255,255,.15)",
+              background: "rgba(0,0,0,.25)", color: "#fff", fontSize: 13.5, fontFamily: "inherit", resize: "vertical" }}/>
+          <button type="button" disabled={!!busy || !sel?.length} onClick={sendTg} style={{ padding: "11px 14px", borderRadius: 14, border: "none", cursor: "pointer",
+            background: "linear-gradient(135deg, #229ED9, #60A5FA)", color: "#fff", fontSize: 14.5, fontWeight: 900, opacity: busy || !sel?.length ? .55 : 1 }}>
+            {busy === "tg" ? "Envoi…" : `Envoyer sur Telegram${sel?.length ? ` (${sel.length})` : ""}`}</button>
+        </div>
         : isAdmin && <div style={{ fontSize: 12, fontWeight: 700, opacity: .7, textAlign: "center", padding: "0 8px" }}>
           Telegram : relie ton compte et choisis tes destinations dans Paramètres › Partage.</div>}
       {row("other", "📤", "Une autre appli…", "le menu de partage de ton appareil", other)}
