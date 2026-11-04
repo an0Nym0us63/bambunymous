@@ -1438,10 +1438,23 @@ async def drift_stats(db: AsyncSession = Depends(get_db), _: str = Depends(get_c
                       "archived": bool(s.archived), "end_reason": s.end_reason,
                       "name": (getattr(f, "translated_name", None) or f.name) if f else f"Bobine #{s.id}",
                       "brand": f.manufacturer if f else None, "material": (f.fila_type or f.material) if f else None,
+                      "family": family_of(f.fila_type or f.material, f.material) if f else None,
                       "color": f.color if f else None, "colors": f.colors_array if f else None,
                       "multicolor": f.multicolor_type if f else None})
         if not s.drift_off:
             kept.append((float(s.drift_g), full))
+    # par marque, type, sous-type, couleur et facon de mesurer (05/11/2026) : l'ecart moyen avec son signe, sans son signe
+    groups = {}
+    for key, get in (("brand", lambda it: it["brand"]), ("family", lambda it: it["family"]),
+                     ("sub", lambda it: it["material"]), ("kind", lambda it: it["kind"])):
+        acc = {}
+        for it in items:
+            if not it["off"]:
+                acc.setdefault(get(it) or "?", []).append((float(it["drift_g"]), it["full_g"]))
+        groups[key] = sorted(({"name": k, "n": len(v), "mean_g": round(sum(d for d, _f in v) / len(v), 1),
+                               "mean_abs_g": round(sum(abs(d) for d, _f in v) / len(v), 1),
+                               "accuracy_pct": round(max(0.0, 100 - 100 * sum(abs(d) / f for d, f in v) / len(v)), 1)}
+                              for k, v in acc.items()), key=lambda g: (-g["n"], g["mean_abs_g"]))
     n = len(kept)
     summary = {"n": n, "excluded": len(items) - n}
     if n:
@@ -1455,7 +1468,7 @@ async def drift_stats(db: AsyncSession = Depends(get_db), _: str = Depends(get_c
             "accuracy_pct": round(max(0.0, 100 - 100 * sum(abs(d) / f for d, f in kept) / n), 1),
             "over": sum(1 for d, _f in kept if d > 0.5), "under": sum(1 for d, _f in kept if d < -0.5),
         })
-    return {"summary": summary, "items": items}
+    return {"summary": summary, "items": items, "groups": groups}
 
 
 def _log_weight(db, s, before, why: str) -> None:

@@ -324,6 +324,7 @@ function DriftStats() {
   const [d, setD] = useState(null);
   const [open, setOpen] = useState(null);
   const [edit, setEdit] = useState(null);       // { id, v }
+  const [by, setBy] = useState("brand");
   const load = () => client.get("/filaments/drift").then(r => setD(r.data)).catch(() => setD({ error: true }));
   useEffect(() => { load(); }, []);
   if (!d || d.error) return null;
@@ -363,6 +364,48 @@ function DriftStats() {
           <KpiCard icon={Package} label="Bobines mesurées" value={k.n} color="#8B5CF6"
             sub={`${k.over} au-dessus · ${k.under} en dessous${k.excluded ? ` · ${k.excluded} écartée${k.excluded > 1 ? "s" : ""}` : ""}`}/>
         </div>}
+        {k.n > 0 && (() => {
+          const gs = (d.groups || {})[by] || [];
+          const gmax = Math.max(10, ...gs.map(g => Math.abs(g.mean_g)), ...gs.map(g => g.mean_abs_g));
+          const TABS = [["brand", "Marque"], ["family", "Type"], ["sub", "Sous-type"], ["kind", "Mesure"]];
+          return (
+            <div style={{ ...statCard("#3B82F6"), padding: "12px 12px", marginBottom: 12 }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                {TABS.map(([v, l]) => <button key={v} onClick={() => setBy(v)} style={{ padding: "4px 11px", borderRadius: 20, fontSize: 12, fontWeight: 800,
+                  cursor: "pointer", border: `1px solid ${by === v ? "#3B82F6" : "var(--border)"}`,
+                  background: by === v ? "color-mix(in srgb, #3B82F6 14%, var(--surface2))" : "var(--surface2)",
+                  color: by === v ? "#3B82F6" : "var(--text2)" }}>{l}</button>)}
+              </div>
+              {gs.map(g => {
+                const w = Math.max(2, Math.abs(g.mean_g) / gmax * 50);
+                const col = Math.abs(g.mean_g) < 5 ? "#22C55E" : g.mean_g > 0 ? "#F59E0B" : "#EF4444";
+                return (
+                  <div key={g.name} style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 0" }}>
+                    <span style={{ flex: "1 1 35%", minWidth: 0 }}>
+                      <span style={{ display: "block", fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {by === "kind" ? (DRIFT_KIND[g.name] || g.name) : g.name}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)" }}>
+                        {g.n} bobine{g.n > 1 ? "s" : ""} · précision {String(g.accuracy_pct).replace(".", ",")} %</span>
+                    </span>
+                    {/* la tendance, de part et d'autre du zero ; l'ecart typique en trait pale */}
+                    <span data-tip={`Tendance ${driftTxt(g.mean_g)} · écart typique ± ${Math.round(g.mean_abs_g)} g`}
+                      style={{ position: "relative", flex: "1 1 35%", height: 8, borderRadius: 5, background: "color-mix(in srgb, var(--border) 70%, transparent)" }}>
+                      <span style={{ position: "absolute", top: 2, bottom: 2, borderRadius: 3, background: "color-mix(in srgb, #3B82F6 30%, transparent)",
+                        left: `${50 - g.mean_abs_g / gmax * 50}%`, width: `${g.mean_abs_g / gmax * 100}%` }}/>
+                      <span style={{ position: "absolute", left: "50%", top: -3, bottom: -3, width: 1.5, background: "var(--muted)" }}/>
+                      <span style={{ position: "absolute", top: 0, bottom: 0, borderRadius: 5, background: col, width: `${w}%`,
+                        left: g.mean_g >= 0 ? "50%" : `${50 - w}%` }}/>
+                    </span>
+                    <span style={{ width: 70, textAlign: "right", flexShrink: 0 }}>
+                      <span style={{ display: "block", fontSize: 13, fontWeight: 900, color: col }}>{driftTxt(g.mean_g)}</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>± {Math.round(g.mean_abs_g)} g</span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
         <div style={{ ...statCard("#14B8A6"), padding: "8px 12px", maxHeight: 360, overflowY: "auto" }}>
           {items.map(it => {
             const w = Math.max(2, Math.abs(it.drift_g) / max * 50);
