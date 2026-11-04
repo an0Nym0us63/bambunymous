@@ -456,6 +456,15 @@ def _catalog_index():
     return types, colors
 
 
+def _hex(c) -> str | None:
+    """La couleur d'une entree du catalogue, sans #, avec sa transparence quand elle en a une (04/11/2026 : « Nature »,
+    00000000 chez Bambu, tronque a 000000, sortait noir) ; opaque : 6 chiffres."""
+    h = str(c or "").lstrip("#")
+    if len(h) >= 8 and h[6:8].upper() != "FF":
+        return h[:8]
+    return h[:6] or None
+
+
 def match_catalog_code(code: str) -> dict | None:
     """L'entree du catalogue par son code couleur Bambu (« 13201 »), exact."""
     from .bambu_catalog import catalog_entries, fr_name
@@ -463,7 +472,7 @@ def match_catalog_code(code: str) -> dict | None:
     for e in data or []:
         if str(e.get("fila_color_code") or "") == str(code):
             names = e.get("fila_color_name") or {}
-            cols = [c.lstrip("#")[:6] for c in (e.get("fila_color") or []) if isinstance(c, str)]
+            cols = [_hex(c) for c in (e.get("fila_color") or []) if isinstance(c, str) and _hex(c)]
             ctype = {"单色": "monochrome", "渐变色": "gradient", "多拼色": "coaxial"}.get(e.get("fila_color_type") or "", "monochrome")
             return {"fila_id": e.get("fila_id"), "fila_color_code": e.get("fila_color_code"), "fila_type": e.get("fila_type"),
                     "name_fr": fr_name(names), "name_en": names.get("en"),
@@ -493,7 +502,7 @@ def match_catalog(title: str) -> dict | None:
             cols = e.get("fila_color") or []
             return {"fila_id": e.get("fila_id"), "fila_color_code": e.get("fila_color_code"), "fila_type": e.get("fila_type"),
                     "name_fr": fr_name(names), "name_en": names.get("en"),
-                    "color_hex": (cols[0].lstrip("#")[:6] if cols else None), "refill": "refill" in low or "recharge" in low}
+                    "color_hex": (_hex(cols[0]) if cols else None), "refill": "refill" in low or "recharge" in low}
         return {"fila_type": e_type_label(t, types, colors), "fila_id": None, "fila_color_code": None, "name_fr": None,
                 "name_en": None, "color_hex": None, "refill": "refill" in low or "recharge" in low}
     return None
@@ -513,9 +522,13 @@ async def _filament_for(db, cat: dict):
     if not cat:
         return None
     if cat.get("fila_color_code"):
-        f = (await db.execute(select(Filament).where(Filament.fila_color_code == str(cat["fila_color_code"])))).scalars().first()
-        if f:
-            return f
+        fs = (await db.execute(select(Filament).where(Filament.fila_color_code == str(cat["fila_color_code"])))).scalars().all()
+        if cat.get("variant"):
+            # une variante que le catalogue n'a pas (« Support for PLA (New Version) », meme code que l'ancien) : seulement
+            # une fiche de ce type-la, sinon une nouvelle
+            return next((f for f in fs if _fold(f.fila_type or "") == _fold(cat.get("fila_type") or "")), None)
+        if fs:
+            return fs[0]
     if cat.get("fila_id") and cat.get("color_hex"):
         rows = (await db.execute(select(Filament).where(Filament.profile_id == cat["fila_id"]))).scalars().all()
         for f in rows:
@@ -531,6 +544,12 @@ async def enrich_items(items: list[dict]) -> list[dict]:
             cat = match_catalog_code(it["fila_color_code"]) if it.get("fila_color_code") else None
             if cat:
                 cat["refill"] = bool(it.get("refill"))
+                # le produit du mail precise une variante que le catalogue n'a pas, entre parentheses (04/11/2026 :
+                # « Support for PLA (New Version) », le catalogue n'a que « Support for PLA » sous le meme code) : la
+                # ligne garde le nom du mail, et ne se rattache qu'a une fiche de ce type
+                prod, ct = _fold(it.get("product") or ""), _fold(cat.get("fila_type") or "")
+                if ct and prod != ct and ct in prod and re.fullmatch(r"\(.+\)", prod.replace(ct, "", 1).strip()):
+                    cat["fila_type"], cat["variant"] = it["product"], True
             elif it.get("fila_color_code"):
                 # un code que le catalogue local ne connait pas encore : le produit et le nom de couleur du mail
                 cat = {"fila_id": None, "fila_color_code": it["fila_color_code"], "fila_type": it.get("product"),
@@ -541,6 +560,8 @@ async def enrich_items(items: list[dict]) -> list[dict]:
             it.setdefault("received", 0)
             if cat:
                 it.update({k: cat.get(k) for k in ("fila_id", "fila_color_code", "fila_type", "name_fr", "color_hex", "refill")})
+                if cat.get("variant"):
+                    it["variant"] = True
                 f = await _filament_for(db, cat)
                 it["filament_id"] = f.id if f else None
                 if f and not it.get("color_hex"):
@@ -1118,6 +1139,8 @@ async def _ensure_filament(db, it: dict):
         if f:
             return f, False
     cat = match_catalog_code(it["fila_color_code"]) if it.get("fila_color_code") else None
+    if cat and it.get("variant"):                      # « (New Version) » : son type a elle, pas celui du catalogue
+        cat.update(fila_type=it.get("fila_type") or cat.get("fila_type"), variant=True)
     f = await _filament_for(db, cat or {k: it.get(k) for k in ("fila_id", "fila_color_code", "color_hex")})
     if f:
         return f, False
