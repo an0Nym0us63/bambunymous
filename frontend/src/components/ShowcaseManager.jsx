@@ -13,6 +13,8 @@ import { egg } from "../eggs";
 // selectionner, filtre par createur). Le meme calcul que le serveur (routes/showcase.py, _resolve) donne l'apercu.
 const DUR = [[0, "sans fin"], [7, "7 jours"], [30, "30 jours"], [365, "1 an"]];
 const RULE_T = [["all", "Toutes mes pièces"], ["creator", "Un créateur"], ["model", "Un modèle"], ["category", "Une catégorie"], ["year", "Une année"], ["kind", "Un type"]];
+const SOURCES = [["photos", "📷", "Avec photos", "Seulement les vraies photos"], ["photos_3d", "🧊", "Photos ou vues 3D", "Une vue 3D faute de photo"],
+  ["all", "🗂️", "Toutes", "Toutes les impressions réussies ; sans photo, l'image du plateau"]];
 const RULE_ICON = { all: "🌐", creator: "👤", model: "🧩", category: "🏷️", year: "📆", kind: "🗂️" };
 const GOLD = "#A1803F";
 
@@ -57,9 +59,15 @@ export default function ShowcaseManager({ sid, onClose, onChanged }) {
   const [dirty, setDirty] = useState(false);
   useEffect(() => {
     client.get(`/showcase/${sid}`).then(r => setCfg(r.data)).catch(() => setCfg({ error: true }));
-    client.get("/showcase/candidates").then(r => setCd(r.data)).catch(() => setCd({ items: [], options: {} }));
     egg("vitrine");
   }, [sid]);
+  // les pieces possibles suivent la source choisie (photos ; photos ou vues 3D ; toutes)
+  const source = cfg?.source || "photos_3d";
+  useEffect(() => {
+    if (!cfg || cfg.error) return;
+    setCd(null);
+    client.get("/showcase/candidates", { params: { source } }).then(r => setCd(r.data)).catch(() => setCd({ items: [], options: {} }));
+  }, [source, !!cfg]); // eslint-disable-line react-hooks/exhaustive-deps
   const cands = cd?.items || [];
   const byK = useMemo(() => Object.fromEntries(cands.map(c => [c.k, c])), [cands]);
   const res = useMemo(() => cfg && !cfg.error ? resolve(cfg, cands, byK) : [], [cfg, cands, byK]);
@@ -77,7 +85,7 @@ export default function ShowcaseManager({ sid, onClose, onChanged }) {
     setBusy(true);
     try {
       const { title, tagline, accent, contact, show_sale, show_credit, rules, exclude } = cfg;
-      const r = await client.put(`/showcase/${sid}`, { title, tagline, accent, contact, show_sale, show_credit, items, rules, exclude });
+      const r = await client.put(`/showcase/${sid}`, { title, tagline, accent, contact, show_sale, show_credit, source, items, rules, exclude });
       setCfg(r.data); setDirty(false); toast("Vitrine enregistrée"); onChanged?.();
     } catch (e) { toast(e?.response?.data?.detail || "La vitrine n'a pas pu être enregistrée", "error"); }
     setBusy(false);
@@ -201,6 +209,18 @@ export default function ShowcaseManager({ sid, onClose, onChanged }) {
               <input type="checkbox" checked={!!cfg.show_sale} onChange={e => set({ show_sale: e.target.checked })} style={{ width: 18, height: 18 }}/>La boutique : mes objets disponibles avec un prix souhaité</label>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5, fontWeight: 700, color: "var(--text2)" }}>
               <input type="checkbox" checked={!!cfg.show_credit} onChange={e => set({ show_credit: e.target.checked })} style={{ width: 18, height: 18 }}/>Créditer le modèle MakerWorld et son créateur</label>
+          </div>
+        </FCard>
+        <FCard t="La source" i="📷" c="#EC4899">
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginTop: 4 }}>Ce que la vitrine peut montrer : les règles et l'ajout piochent là-dedans.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 8 }}>
+            {SOURCES.map(([v, ic, l, sub]) => { const on = source === v;
+              return <button key={v} type="button" onClick={() => set({ source: v })} aria-pressed={on}
+                style={{ display: "flex", flexDirection: "column", gap: 2, padding: "10px 12px", borderRadius: 14, cursor: "pointer", textAlign: "left",
+                  border: `1.5px solid ${on ? "#C9A96E" : "var(--border)"}`, background: on ? "color-mix(in srgb, #C9A96E 14%, var(--surface))" : "var(--surface)",
+                  boxShadow: on ? "0 8px 20px -14px #C9A96E" : "none", transition: "all .2s" }}>
+                <span style={{ fontSize: 13.5, fontWeight: 900, color: on ? GOLD : "var(--text)" }}>{ic} {l}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{sub}</span></button>; })}
           </div>
         </FCard>
         <FCard t="Les règles" i="✨" c="#F59E0B">

@@ -2453,3 +2453,6 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     </FSheet>,
     document.body);
 }
+
+// la vue 3D seule, sans la fiche ni l'edition : la vitrine publique s'en sert (04/11/2026)
+export { Viewer as Model3DViewer, isGlb };
