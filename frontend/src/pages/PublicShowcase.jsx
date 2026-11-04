@@ -32,8 +32,9 @@ function useReveal(margin = "0px 0px -6% 0px") {
 
 function Reveal({ children, delay = 0, style, as: Tag = "div" }) {
   const [ref, on] = useReveal();
-  return <Tag ref={ref} style={{ ...style, opacity: on ? 1 : 0, transform: on ? "none" : "translateY(28px) scale(.985)", filter: on ? "none" : "blur(6px)",
-    transition: `opacity .9s ${delay}ms, transform 1s cubic-bezier(.2,.8,.2,1) ${delay}ms, filter .9s ${delay}ms` }}>{children}</Tag>;
+  // une apparition discrete (04/11/2026) : un fondu et une petite montee, sans flou (trop appuye au defilement)
+  return <Tag ref={ref} style={{ ...style, opacity: on ? 1 : 0, transform: on ? "none" : "translateY(12px)",
+    transition: `opacity .6s ease ${delay}ms, transform .7s cubic-bezier(.2,.8,.2,1) ${delay}ms` }}>{children}</Tag>;
 }
 
 // un nombre qui monte quand il apparait
