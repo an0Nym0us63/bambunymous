@@ -103,6 +103,8 @@ export default function PrintCalendar() {
   const pickDay = k => { setPick(k); if (!side) setTimeout(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); };
   const grid7 = `repeat(7, minmax(0, 1fr))${wide ? " 64px" : ""}`;
   const gap = wide ? 5 : 3, cellW = calW ? (calW - 2 * (wide ? 8 : 5) - (wide ? 64 + gap : 0) - 6 * gap) / 7 : 60;
+  // sur ordinateur, la case suit sa largeur (04/11/2026 : a 70 px de haut, le mois paraissait tasse) ; au telephone, fixe
+  const cellH = wide ? Math.round(Math.min(112, Math.max(80, cellW * 0.82))) : 56;
   const calendar = <div ref={calRef} style={{ borderRadius: 18, border: "1px solid var(--border)", background: "var(--surface)", padding: wide ? 8 : 5, overflow: "hidden", minWidth: 0 }}>
     <div style={{ display: "grid", gridTemplateColumns: grid7, gap: wide ? 5 : 3, marginBottom: 4 }}>
       {DAYS.map(d => <div key={d} style={{ textAlign: "center", fontSize: 10.5, fontWeight: 900, color: "var(--muted)", letterSpacing: ".04em" }}>{wide ? d : d[0]}</div>)}
@@ -117,14 +119,14 @@ export default function PrintCalendar() {
           // l'etagere : une vignette par impression du jour (une impression sur deux jours n'y est qu'une fois par jour)
           const shelf = [...new Map((x?.items || []).map(i => [i.id, i])).values()];
           // ce qui tient dans la case : cote a cote, sinon chevauchees comme des livres (jusqu'a la moitie), puis « +N »
-          const th = wide ? 22 : 15, avail = cellW - 2 * (wide ? 5 : 3) - 4, more = wide ? 16 : 13;
+          const th = wide ? Math.round(Math.min(30, Math.max(22, cellW * 0.22))) : 15, avail = cellW - 2 * (wide ? 5 : 3) - 4, more = wide ? 16 : 13;
           const fitAll = shelf.length * th + (shelf.length - 1) * 2 <= avail;
           const room = fitAll ? shelf.length : Math.max(1, 1 + Math.floor((avail - more - th) / (th * 0.45)));
           const shown = Math.min(shelf.length, room);
           const step = shown > 1 ? Math.min(th + 2, (avail - (shelf.length > shown ? more : 0) - th) / (shown - 1)) : th;
           const on = k === pick, isToday = k === today;
           return <button key={k} type="button" onClick={() => pickDay(k)} aria-label={`${d.getDate()} ${MONTHS[d.getMonth()]}`}
-            style={{ position: "relative", height: wide ? 70 : 56, minWidth: 0, borderRadius: wide ? 11 : 8, cursor: "pointer", overflow: "hidden", padding: 0,
+            style={{ position: "relative", height: cellH, minWidth: 0, borderRadius: wide ? 11 : 8, cursor: "pointer", overflow: "hidden", padding: 0,
               border: on ? "2px solid #6366F1" : isToday ? "2px solid color-mix(in srgb, #6366F1 55%, transparent)" : "1px solid var(--border)",
               background: on ? "color-mix(in srgb, #6366F1 8%, var(--surface2))" : "var(--surface2)", opacity: inMonth(d) ? 1 : 0.38, textAlign: "left" }}>
             {/* les heures du jour, en remplissage depuis le bas ; la file prevue au-dessus, en hachures */}
