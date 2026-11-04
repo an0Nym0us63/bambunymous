@@ -43,21 +43,24 @@ async def live_layer(print_id: int | None = None, n: int | None = None, _: str =
         p = await db.get(Print, pid)
         if not p:
             raise HTTPException(404)
-        rows = (await db.execute(select(FilamentUsage.ams_slot, FilamentUsage.color_hex, Filament.color)
+        rows = (await db.execute(select(FilamentUsage.ams_slot, FilamentUsage.color_hex, Filament.color, Filament.name, FilamentUsage.filament_type)
                                  .outerjoin(Spool, Spool.id == FilamentUsage.spool_id)
                                  .outerjoin(Filament, Filament.id == Spool.filament_id)
                                  .where(FilamentUsage.print_id == pid).order_by(FilamentUsage.id))).all()
-    colors = {}
-    for slot, chex, fcol in rows:
+    # et leur nom (04/11/2026 : la legende disait « Filament 15 ») : celui de la bobine, sinon la matiere relevee
+    colors, names = {}, {}
+    for slot, chex, fcol, fname, ftype in rows:
         if slot and (slot - 1) not in colors:
             colors[slot - 1] = "#" + str(fcol or chex or "94a3b8").lstrip("#")[:6]
+            if fname or ftype:
+                names[slot - 1] = fname or ftype
     want = n if n is not None else (s.layer if live else None)
     try:
         out = await LV.layer(pid, p, want)
     except Exception as e:
         raise HTTPException(502, f"G-code illisible : {e}")
     return {**out, "print_id": pid, "live": live, "now": s.layer if live else None, "total": s.total_layers if live else None,
-            "colors": colors, "name": p.translated_name or p.file_name}
+            "colors": colors, "names": names, "name": p.translated_name or p.file_name}
 
 
 @router.get("/{print_id}")

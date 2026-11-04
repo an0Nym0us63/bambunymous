@@ -111,7 +111,7 @@ export function LayerExplorer({ status }) {
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 12, color: "var(--text2)" }}>
         {Object.entries(d.colors || {}).map(([t, c]) => <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <span style={{ width: 12, height: 12, borderRadius: "50%", background: c, border: "1px solid rgba(0,0,0,.2)" }}/>Filament {Number(t) + 1}</span>)}
+          <span style={{ width: 12, height: 12, borderRadius: "50%", background: c, border: "1px solid rgba(0,0,0,.2)" }}/>{d.names?.[t] || `Filament ${Number(t) + 1}`}</span>)}
         {ghost && <span style={{ color: "var(--muted)" }}>· en gris : la couche d'avant</span>}
       </div>
     </>}
