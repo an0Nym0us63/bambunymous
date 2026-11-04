@@ -231,7 +231,7 @@ export const HEAT_COLORS = { nozzle: "#F97316", nozzle2: "#FB923C", bed: "#EF444
 // comme les tuiles : AMS-A, AMS-B… et HT-A, HT-B… pour les AMS HT (numerotes a partir de 128)
 const amsLetter = n => String.fromCharCode(65 + (n >= 128 ? n - 128 : n));
 export const amsShort = id => { const n = Number(id); return n >= 128 ? `H${amsLetter(n)}` : amsLetter(n); };
-export const amsName = id => { const n = Number(id); return n >= 128 ? `HT-${amsLetter(n)}` : `AMS-${amsLetter(n)}`; };
+export const amsName = id => { const n = Number(id); return n >= 254 ? "Externe" : n >= 128 ? `HT-${amsLetter(n)}` : `AMS-${amsLetter(n)}`; };
 
 /** Les series d'humidite (ou de temperature, k = 1) de chaque AMS, dans l'ordre de leur numero. */
 export function amsLines(points, k = 0) {

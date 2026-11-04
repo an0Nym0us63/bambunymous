@@ -688,6 +688,23 @@ class MQTTManager:
                 logger.info(f"[ACTIVE] device.extruder.info brut: {extruder_infos}")
                 state._extruder_infos_logged = str(extruder_infos)
 
+            # Une bobine qui se vide en cours d'impression (04/11/2026) : le filament reste dans le tube et continue
+            # d'imprimer, mais l'imprimante annonce un instant le support externe ; la bobine active sautait sur
+            # « Externe » et y restait. Pendant une impression dont la correspondance n'utilise aucun support externe
+            # (ams_mapping : octet haut 254/255, 65535 = rien), l'externe annonce est ignore : on garde le vrai emplacement.
+            if new_ams == EXT_AMS_ID and state.ams_mapping and state.active_ams_id not in (None, -1, EXT_AMS_ID) \
+                    and str(p.get("gcode_state") or state.status or "").upper() in ("RUNNING", "PAUSE", "PREPARE"):
+                try:
+                    uses_ext = any(int(v) != 65535 and ((int(v) >> 8) & 0xFF) in (254, 255) for v in state.ams_mapping)
+                except (TypeError, ValueError):
+                    uses_ext = True
+                if not uses_ext:
+                    if getattr(state, "_ext_ignored", None) != (state.active_ams_id, state.active_tray_id):
+                        logger.info(f"[ACTIVE] externe annonce ignore ({source}) : la tache n'utilise pas l'externe "
+                                    f"(mapping={state.ams_mapping}) ; on reste sur ams={state.active_ams_id} tray={state.active_tray_id}")
+                        state._ext_ignored = (state.active_ams_id, state.active_tray_id)
+                    new_ams = new_tray = None
+
             if new_ams is not None and new_tray is not None:
                 if new_ams != state.active_ams_id or new_tray != state.active_tray_id:
                     logger.info(f"[ACTIVE] source={source} → ams_id={new_ams} tray={new_tray} (tray_now={tray_now}, nozzle={active_nozzle_idx}) — avant: ams={state.active_ams_id} tray={state.active_tray_id}")

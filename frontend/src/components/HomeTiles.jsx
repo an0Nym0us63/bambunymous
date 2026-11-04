@@ -1712,7 +1712,8 @@ const FanBadge = ({ a, size = 16 }) => (a.dry_fan1 || a.dry_fan2) ? <span title=
   style={{ position: "absolute", top: -3, right: -3, width: size, height: size, borderRadius: "50%", background: "var(--surface)", color: "#0ea5e9",
     display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 1.5px rgba(14,165,233,0.45)", zIndex: 1 }}>
   <Fan size={Math.round(size * 0.72)} style={{ animation: "spin 1.4s linear infinite" }}/></span> : null;
-const amsLab = a => a.id >= 128 ? `HT-${String.fromCharCode(65 + a.id - 128)}` : `AMS-${String.fromCharCode(65 + a.id)}`;
+// le support externe porte le numero 254/255 (04/11/2026 : compte comme un HT, il s'affichait « HT-À »)
+const amsLab = a => a.id >= 254 ? "Externe" : a.id >= 128 ? `HT-${String.fromCharCode(65 + a.id - 128)}` : `AMS-${String.fromCharCode(65 + a.id)}`;
 function Dry({ v, status, o, sz }) {
   const drying = (status?.ams_list || []).filter(a => a.is_drying && a.dry_time > 0);
   const k = v?.kpis;
@@ -1934,7 +1935,7 @@ function Humidity({ status, o, sz }) {
       <span data-pk="" style={{ fontSize: fs, fontWeight: 900, color: col(a.humidity), lineHeight: 1.1, whiteSpace: "nowrap" }}>{a.humidity}{cw >= 30 ? "%" : ""}</span>
       <span style={{ flex: 1, minHeight: 8, width: 12, borderRadius: 6, background: "var(--surface2)", position: "relative", overflow: "hidden" }}>
         <span data-pk="" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: `${Math.min(100, a.humidity)}%`, background: col(a.humidity) }}/></span>
-      <span style={{ fontSize: 10, fontWeight: 800, color: "var(--muted)", lineHeight: 1.1, whiteSpace: "nowrap" }}>{a.id >= 128 ? (cw >= 34 ? amsLab(a) : "HT") : amsLab(a).slice(4)}</span>
+      <span style={{ fontSize: 10, fontWeight: 800, color: "var(--muted)", lineHeight: 1.1, whiteSpace: "nowrap" }}>{a.id >= 254 ? "Ext" : a.id >= 128 ? (cw >= 34 ? amsLab(a) : "HT") : amsLab(a).slice(4)}</span>
     </div>)}</div>; };
   return (
     <Tile icon={<Droplets size={15}/>} color="#06B6D4" label="Humidité des AMS" to="/stats?tab=drying"
@@ -3980,7 +3981,7 @@ function LayerTile({ status, sz }) {
   );
 }
 // le filament en cours : la bobine qui imprime (sa couleur, sa matiere, ce qui reste)
-const slotOf = t => t.ams.id >= 128 ? amsLab(t.ams) : `${String.fromCharCode(65 + t.ams.id)}${t.id + 1}`;
+const slotOf = t => t.ams.id >= 254 ? `Externe ${t.id + 1}` : t.ams.id >= 128 ? amsLab(t.ams) : `${String.fromCharCode(65 + t.ams.id)}${t.id + 1}`;
 function activeTray(status) {
   const ams = (status?.ams_list || []).find(a => a.id === status?.active_ams_id);
   const tray = ams?.trays?.find(t => t.id === status?.active_tray_id);
