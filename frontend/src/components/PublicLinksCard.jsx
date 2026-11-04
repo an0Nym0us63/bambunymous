@@ -28,7 +28,7 @@ export default function PublicLinksCard({ card, cardTitle }) {
   return <div className="card" style={card}>
     <div style={cardTitle}>🔗 Liens publics</div>
     <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", marginBottom: 10 }}>
-      Ce qui s'ouvre sans compte : « Ton année » et « Depuis le début » (Statistiques), et ta vitrine (Impressions › Galerie). Un lien expiré ne s'ouvre plus.</div>
+      Ce qui s'ouvre sans compte : « Ton année » et « Depuis le début » (Statistiques), et tes vitrines (Impressions › Galerie). Un lien expiré ne s'ouvre plus.</div>
     {links === null ? <div style={{ color: "var(--muted)" }}>Chargement…</div>
       : !links.length ? <div style={{ fontSize: 13, color: "var(--muted)" }}>Aucun lien public pour l'instant.</div>
       : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

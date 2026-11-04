@@ -563,9 +563,10 @@ const roundBtn = { width: 34, height: 34, borderRadius: "50%", border: "none", b
 const navArrow = { position: "absolute", top: "50%", transform: "translateY(-50%)", zIndex: 3, width: 38, height: 38, borderRadius: "50%", border: "none",
   background: "rgba(255,255,255,.14)", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
 
-// l'entree des retrospectives (en tete des statistiques) : un bouton discret ; au clic, on choisit laquelle voir --
-// « Depuis le debut » ou une annee qui a des impressions (avec leur nombre).
-export function WrappedBanner() {
+// l'entree des retrospectives (dans la tuile « Impressions » des statistiques, inline : une pastille parmi ses
+// chiffres) : un bouton discret ; au clic, on choisit laquelle voir -- « Depuis le debut » ou une annee qui a des
+// impressions (avec leur nombre).
+export function WrappedBanner({ inline = false }) {
   const [open, setOpen] = useState(null);             // une annee, ou "all" : depuis le debut
   const [menu, setMenu] = useState(false);
   const [years, setYears] = useState(null);
@@ -581,14 +582,15 @@ export function WrappedBanner() {
   const row = { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 12px", border: "none", borderRadius: 12, cursor: "pointer",
     background: "transparent", color: "var(--text)", fontSize: 13.5, fontWeight: 800, textAlign: "left" };
   return <>
-    <div ref={box} style={{ position: "relative", display: "flex", justifyContent: "flex-end" }}>
+    <div ref={box} style={{ position: "relative", display: inline ? "inline-flex" : "flex", justifyContent: "flex-end" }}>
       <button type="button" onClick={() => setMenu(m => !m)} data-tip="Tes rétrospectives en diapositives : une année, ou depuis le début"
-        style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 16, cursor: "pointer", fontSize: 12.5, fontWeight: 800,
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: inline ? "3px 9px" : "6px 12px", borderRadius: 16, cursor: "pointer",
+          fontSize: inline ? 11.5 : 12.5, fontWeight: 800, whiteSpace: "nowrap",
           border: "1px solid color-mix(in srgb, #9333EA 30%, var(--border))", color: "var(--text2)",
           background: "linear-gradient(120deg, color-mix(in srgb, #9333EA 12%, transparent), color-mix(in srgb, #EC4899 10%, transparent)), var(--surface)" }}>
         🎁 Rétrospectives <span style={{ fontSize: 10, opacity: .7 }}>{menu ? "▲" : "▼"}</span>
       </button>
-      {menu && <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 50, width: 250, maxWidth: "calc(100vw - 32px)", padding: 6, borderRadius: 16,
+      {menu && <div style={{ position: "absolute", top: "calc(100% + 6px)", ...(inline ? { left: 0 } : { right: 0 }), zIndex: 50, width: 250, maxWidth: "calc(100vw - 32px)", padding: 6, borderRadius: 16,
         background: "linear-gradient(var(--surface), var(--surface)), var(--bg)", border: "1px solid var(--border)", boxShadow: "0 16px 40px -12px rgba(0,0,0,.35)" }}>
         <button type="button" onClick={() => pick("all")} style={row} className="yw-pick">🏛️ <span style={{ flex: 1 }}>Depuis le début</span></button>
         {years === null ? <div style={{ padding: "8px 12px", fontSize: 12.5, color: "var(--muted)" }}>Chargement…</div>

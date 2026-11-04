@@ -3960,6 +3960,8 @@ export default function Prints() {
                 fontWeight:900, color:"#fff", background:"#3b82f6", display:"flex", alignItems:"center", justifyContent:"center", border:"2px solid var(--bg)" }}>{chips.length}</span>}
             </button>
             {viewMode==="gallery" && <div ref={setKindSlot} style={{ display:"contents" }}/>}
+            {/* les vitrines (04/11/2026) : les portfolios publics, un bouton rond dans la rangee de la galerie */}
+            {viewMode==="gallery" && <AdminOnly><ShowcaseBanner round={round(false)}/></AdminOnly>}
             {viewMode==="list" && <button onClick={() => setRows(!rows)} aria-label={rows ? "Afficher en grille" : "Afficher en rangées"}
               data-tip={rows ? "En grille" : "En rangées"} style={round(false)}>{rows ? "▦" : "☰"}</button>}
             {viewMode==="list" && (
@@ -4181,8 +4183,6 @@ export default function Prints() {
         </p>
       )}
 
-      {/* la vitrine (04/11/2026) : le portfolio public, gere d'ici */}
-      {viewMode==="gallery" && <AdminOnly><ShowcaseBanner/></AdminOnly>}
       {viewMode==="gallery" && <PrintsGalleryView search={search} sortF={sortF} kindSlot={kindSlot}/>}
 
       {!loading && !error && prints.length > 0 && viewMode==="list" && (() => {

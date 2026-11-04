@@ -466,7 +466,7 @@ function KpiCard({ icon: Icon, label, value, sub, color = "#3b82f6", delta = nul
 }
 
 // L'en-tete d'un onglet : le chiffre qui compte en grand, un anneau (taux), et quelques pastilles
-function StatHero({ color, icon, value, label, ring = null, ringLabel = "", chips = [] }) {
+function StatHero({ color, icon, value, label, ring = null, ringLabel = "", chips = [], action = null }) {
   const R = 30, C = 2 * Math.PI * R;
   return (
     <div style={{ ...statCard(color), padding: "16px 16px", display: "flex", alignItems: "center", gap: 14,
@@ -474,9 +474,10 @@ function StatHero({ color, icon, value, label, ring = null, ringLabel = "", chip
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
         <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color }}>{icon} {label}</span>
         <span style={{ fontSize: "clamp(30px, 10vw, 40px)", fontWeight: 900, lineHeight: 1.1, ...fGrad(color, `color-mix(in srgb, ${color} 55%, #ffffff)`) }}>{value}</span>
-        {chips.filter(Boolean).length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 2 }}>
+        {(chips.filter(Boolean).length > 0 || action) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", marginTop: 2 }}>
           {chips.filter(Boolean).map((c, i) => <span key={i} style={{ fontSize: 11.5, fontWeight: 800, padding: "3px 9px", borderRadius: 20,
             color: "var(--text2)", background: "color-mix(in srgb, var(--surface) 70%, transparent)", border: "1px solid var(--border)", whiteSpace: "nowrap" }}>{c}</span>)}
+          {action}
         </div>}
       </div>
       {ring != null && <div style={{ position: "relative", width: 84, height: 84, flexShrink: 0 }}>
@@ -1109,8 +1110,6 @@ export default function Stats() {
         />
       )}
 
-      {/* « Ton annee en impressions » (04/11/2026) : le recapitulatif de l'annee, en diapositives */}
-      {tab === "prints" && <WrappedBanner/>}
       {tab === "prints" && (!data || !data.total_prints ? (
         <p style={{ textAlign:"center", color:"var(--muted)", padding:60 }}>
           Aucune impression terminée sur cette période.
@@ -1118,7 +1117,8 @@ export default function Stats() {
       ) : (<>
       <StatHero color="#3B82F6" icon="🖨️" label={`Impressions · ${period.label.toLowerCase()}`} value={data.total_prints}
         ring={data.success_rate} ringLabel="réussite"
-        chips={[`⏱ ${fmtH(data.total_hours * 3600)}`, `⚖ ${fmtKg(data.total_weight_g)}`, !isMoneyHidden() && `💶 ${fmtEur(data.total_cost)}`]}/>
+        chips={[`⏱ ${fmtH(data.total_hours * 3600)}`, `⚖ ${fmtKg(data.total_weight_g)}`, !isMoneyHidden() && `💶 ${fmtEur(data.total_cost)}`]}
+        action={<WrappedBanner inline/>}/>
       {/* Tendances (28/10/2026) : fleche par rapport a la periode precedente de meme longueur ; rien en mode « Tout » */}
       <Section title="Impressions">
         <div className="kpi-grid st-kpis">
