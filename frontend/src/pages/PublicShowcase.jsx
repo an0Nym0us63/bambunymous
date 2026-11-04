@@ -110,7 +110,7 @@ function Deck({ items, accent, onOpen }) {
             opacity: d === 0 ? 1 : 0, transform: d === 0 ? "none" : "translateY(10px)", transition: "all .7s .2s", textAlign: "left" }}>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: "block", fontFamily: SERIF, fontSize: 19, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title}</span>
-              <span style={{ fontSize: 11, letterSpacing: ".2em", textTransform: "uppercase", color: accent }}>{[it.categories?.[0], monthFr(it.date)].filter(Boolean).join(" · ") || "Pièce phare"}</span>
+              <span style={{ fontSize: 11, letterSpacing: ".2em", textTransform: "uppercase", color: accent }}>{it.sale ? `${it.sale.price != null ? `${it.sale.from ? "dès " : ""}${price(it.sale.price)}` : "Prix sur demande"}${it.sale.qty > 1 ? ` · ${it.sale.qty} disponibles` : ""}` : [it.categories?.[0], monthFr(it.date)].filter(Boolean).join(" · ") || "Pièce phare"}</span>
             </span>
             {it.has3d && <span style={chip3d}>3D</span>}
             <Dots colors={it.colors} size={11} max={4}/>
@@ -127,8 +127,8 @@ function Deck({ items, accent, onOpen }) {
   </div>;
 }
 
-// une carte de la collection : une case de la grille, la piece entiere sur un fond flou d'elle-meme (une photo produit,
-// jamais rognee) ; une grande case (2 x 2) de temps en temps donne le rythme. Le nom et la date dessous ; au survol, la
+// une carte de la collection : une case de la grille, la photo la remplit (format 4/5) ; une grande case (2 x 2) de
+// temps en temps donne le rythme. Le nom et la date dessous ; au survol, la
 // photo grossit un peu, la deuxieme apparait, le nom prend la couleur de la vitrine.
 function Card({ it, accent, onOpen, i, big }) {
   const [hov, setHov] = useState(false);
@@ -138,9 +138,8 @@ function Card({ it, accent, onOpen, i, big }) {
       <div style={{ position: "relative", flex: 1, minHeight: 0, aspectRatio: big ? "auto" : "4 / 5", borderRadius: big ? 22 : 16, overflow: "hidden",
         boxShadow: hov ? `0 26px 50px -28px rgba(0,0,0,.95), 0 0 0 1px color-mix(in srgb, ${accent} 40%, transparent)` : "0 0 0 1px rgba(255,255,255,.06)",
         transition: "box-shadow .5s" }}>
-        <Framed src={mid(it.photos[0])} alt={it.title} style={{ position: "absolute", inset: 0 }}
-          imgStyle={{ padding: big ? "4%" : "6%", boxSizing: "border-box", transform: hov ? "scale(1.05)" : "none", transition: "transform 1s cubic-bezier(.2,.8,.2,1)",
-            filter: "drop-shadow(0 18px 24px rgba(0,0,0,.45))" }}/>
+        <img src={mid(it.photos[0])} alt={it.title} loading="lazy" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
+          transform: hov ? "scale(1.05)" : "none", transition: "transform 1s cubic-bezier(.2,.8,.2,1)" }}/>
         {it.photos[1] && <img src={mid(it.photos[1])} alt="" loading="lazy" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
           opacity: hov ? 1 : 0, transition: "opacity .7s" }}/>}
         {it.has3d && <span style={{ position: "absolute", top: 10, left: 10, ...glassTag, fontSize: 10, padding: "3px 8px" }}>3D</span>}
@@ -271,6 +270,10 @@ function Viewer({ it, list, token, accent, onClose, onGo }) {
             {[it.kind === "group" && it.count > 1 ? `${it.count} pièces` : null, it.categories?.join(" · ")].filter(Boolean).join(" · ") || "Impression 3D"}</div>
           <h3 style={{ margin: "10px 0 6px", fontFamily: SERIF, fontWeight: 600, fontSize: "clamp(28px, 3.2vw, 44px)", lineHeight: 1.05, color: "#fff" }}>{it.title}</h3>
           {it.date && <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.55)" }}>Imprimé en {monthFr(it.date)}</div>}
+          {it.sale && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+            <span style={{ padding: "8px 14px", borderRadius: 30, fontSize: 16, fontWeight: 900, background: accent, color: "#0B0B0F" }}>
+              {it.sale.price != null ? `${it.sale.from ? "dès " : ""}${price(it.sale.price)}` : "Prix sur demande"}</span>
+            <span style={{ ...glassTag, fontSize: 12.5, padding: "8px 14px" }}>{it.sale.qty} disponible{it.sale.qty > 1 ? "s" : ""}</span></div>}
         </div>
         {it.note && <p style={{ fontSize: 15.5, lineHeight: 1.75, color: "rgba(255,255,255,.85)", margin: 0, paddingLeft: 14, borderLeft: `2px solid ${accent}` }}>{it.note}</p>}
         {it.colors?.length > 0 && <div>
@@ -352,6 +355,11 @@ export default function PublicShowcase() {
     items.forEach(it => (it.categories || []).forEach(x => { c[x] = (c[x] || 0) + 1; }));
     return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 12);
   }, [items]);
+  // la boutique seule (mode « shop ») : ni collection ni carrousel de pieces, les objets a vendre partout (en tete, en
+  // grille, dans la visionneuse avec leur prix)
+  const shop = d?.mode === "shop";
+  const saleItems = useMemo(() => (d?.sale || []).map(o => ({ key: `o${o.id}`, title: o.title, photos: [o.img], categories: [], colors: [], date: null,
+    featured: false, has3d: false, cover: false, kind: "object", count: o.qty, sale: o })), [d]);
   const n3d = items.filter(it => it.has3d).length;
   const nColors = useMemo(() => new Set(items.flatMap(it => it.colors || [])).size, [items]);
   const nModels = useMemo(() => new Set(items.map(it => it.model?.creator).filter(Boolean)).size, [items]);
@@ -365,11 +373,11 @@ export default function PublicShowcase() {
   }, [items, cat, only3d, q, sort]);
   // une piece ouverte se partage par son adresse (#p12) ; l'adresse qui en porte une l'ouvre
   useEffect(() => {
-    if (!items.length) return;
+    if (!items.length && !saleItems.length) return;
     const h = window.location.hash.slice(1);
-    const it = h && items.find(x => x.key === h);
+    const it = h && (items.find(x => x.key === h) || saleItems.find(x => x.key === h));
     if (it) setOpen(it);
-  }, [items]);
+  }, [items, saleItems]);
   const openIt = useCallback(it => { setOpen(it); try { window.history.replaceState(null, "", `#${it.key}`); } catch { /* rien */ } }, []);
   const close = useCallback(() => { setOpen(null); try { window.history.replaceState(null, "", window.location.pathname); } catch { /* rien */ } }, []);
   // les grandes cases de la grille : des pieces phares (★), sinon une toutes les neuf ; quatre au plus, rien sous 6 pieces
@@ -385,7 +393,7 @@ export default function PublicShowcase() {
     });
     return out;
   }, [shown]);
-  const list = shown.length ? shown : items;
+  const list = shop ? saleItems : shown.length ? shown : items;
   const goTo = useCallback(dd => setOpen(o => { if (!o) return o; const i = list.findIndex(x => x.key === o.key); const nx = list[(i + dd + list.length) % list.length];
     try { window.history.replaceState(null, "", `#${nx.key}`); } catch { /* rien */ } return nx; }), [list]);
   const accent = d?.accent || "#C9A96E";
@@ -400,9 +408,8 @@ export default function PublicShowcase() {
       .sc-hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: clamp(30px, 5vw, 80px); align-items: center; }
       .sc-deck { width: min(440px, 100%); aspect-ratio: 4 / 5; margin: 0 auto 60px; }
       @media (max-width: 900px) { .sc-hero { grid-template-columns: 1fr; } .sc-deck { width: min(340px, 82vw); } }
-      .sc-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-flow: dense; gap: clamp(26px, 3vw, 40px) clamp(16px, 2vw, 26px); }
-      @media (max-width: 1100px) { .sc-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-      @media (max-width: 760px) { .sc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 12px; } }
+      .sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); grid-auto-flow: dense; gap: 26px 16px; }
+      @media (max-width: 760px) { .sc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 10px; } }
       .sc-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent); }
       .sc-chips::-webkit-scrollbar { display: none; }
       .sc-shine { background: linear-gradient(100deg, #fff 20%, ${accent} 40%, #fff 60%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text;
@@ -441,22 +448,24 @@ export default function PublicShowcase() {
           <Reveal delay={120}><h1 className="sc-shine" style={{ margin: "22px 0 0", fontFamily: SERIF, fontWeight: 600, fontSize: "clamp(42px, 7vw, 96px)", lineHeight: .98, letterSpacing: "-.02em" }}>{d.title}</h1></Reveal>
           {d.tagline && <Reveal delay={240}><p style={{ margin: "22px 0 0", maxWidth: 520, fontSize: "clamp(15px, 1.5vw, 18px)", lineHeight: 1.7, color: "rgba(255,255,255,.66)" }}>{d.tagline}</p></Reveal>}
           <Reveal delay={360} style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 30 }}>
-            <button type="button" className="sc-cta" onClick={toCol} style={{ padding: "14px 28px", borderRadius: 40, cursor: "pointer", fontSize: 13, fontWeight: 800, letterSpacing: ".14em",
-              textTransform: "uppercase", color: "#0B0B0F", background: accent, border: "none", boxShadow: `0 18px 50px -14px ${accent}` }}>Explorer la collection ↓</button>
-            {d.sale?.length > 0 && <a href="#boutique" className="sc-cta" style={{ padding: "14px 24px", borderRadius: 40, fontSize: 13, fontWeight: 800, letterSpacing: ".14em",
+            <button type="button" className="sc-cta" onClick={shop ? () => document.getElementById("boutique")?.scrollIntoView({ behavior: calm() ? "auto" : "smooth" }) : toCol}
+              style={{ padding: "14px 28px", borderRadius: 40, cursor: "pointer", fontSize: 13, fontWeight: 800, letterSpacing: ".14em",
+              textTransform: "uppercase", color: "#0B0B0F", background: accent, border: "none", boxShadow: `0 18px 50px -14px ${accent}` }}>{shop ? "Voir la boutique ↓" : "Explorer la collection ↓"}</button>
+            {!shop && d.sale?.length > 0 && <a href="#boutique" className="sc-cta" style={{ padding: "14px 24px", borderRadius: 40, fontSize: 13, fontWeight: 800, letterSpacing: ".14em",
               textTransform: "uppercase", color: "#fff", textDecoration: "none", border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.04)" }}>La boutique</a>}
           </Reveal>
           <Reveal delay={480} style={{ display: "flex", gap: "clamp(18px, 3vw, 40px)", marginTop: 40, flexWrap: "wrap" }}>
-            {[[items.length, "pièces"], [nColors, "couleurs"], n3d ? [n3d, "en 3D"] : nModels ? [nModels, "créateurs"] : null].filter(Boolean).map(([v, l]) =>
+            {(shop ? [[saleItems.length, "modèles"], [saleItems.reduce((a, x) => a + (x.count || 1), 0), "pièces disponibles"]]
+              : [[items.length, "pièces"], [nColors, "couleurs"], n3d ? [n3d, "en 3D"] : nModels ? [nModels, "créateurs"] : null]).filter(Boolean).map(([v, l]) =>
               <div key={l}><div style={{ fontFamily: SERIF, fontSize: "clamp(28px, 3.4vw, 42px)", color: "#fff", lineHeight: 1 }}><Count to={v}/></div>
                 <div style={{ fontSize: 11, letterSpacing: ".24em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", marginTop: 6 }}>{l}</div></div>)}
           </Reveal>
         </div>
-        <Reveal delay={200}><Deck items={hero} accent={accent} onOpen={openIt}/></Reveal>
+        <Reveal delay={200}><Deck items={shop ? saleItems.slice(0, 8) : hero} accent={accent} onOpen={openIt}/></Reveal>
       </section>
 
       {/* la collection */}
-      <section ref={colRef} style={{ maxWidth: 1360, margin: "0 auto", padding: "clamp(30px, 6vw, 70px) clamp(16px, 4vw, 56px) clamp(60px, 9vw, 120px)", scrollMarginTop: 60 }}>
+      {!shop && <section ref={colRef} style={{ maxWidth: 1360, margin: "0 auto", padding: "clamp(30px, 6vw, 70px) clamp(16px, 4vw, 56px) clamp(60px, 9vw, 120px)", scrollMarginTop: 60 }}>
         <Reveal style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
           <h2 style={{ margin: 0, fontFamily: SERIF, fontWeight: 500, fontSize: "clamp(24px, 3vw, 34px)", color: "#fff", lineHeight: 1 }}>La collection</h2>
           <span style={{ fontSize: 12.5, color: "rgba(255,255,255,.45)" }}>
@@ -495,7 +504,7 @@ export default function PublicShowcase() {
           <div style={{ fontFamily: SERIF, fontSize: 28, color: "#fff" }}>Rien de ce côté-là</div>
           <div style={{ marginTop: 8 }}>Aucune pièce ne répond à « {q} ».</div>
           <button type="button" onClick={() => { setQ(""); setCat(""); setOnly3d(false); }} style={{ ...pillBtn, marginTop: 18 }}>Tout revoir</button></div>}
-      </section>
+      </section>}
 
       {/* la boutique, en carrousel */}
       {d.sale?.length > 0 && <section id="boutique" style={{ padding: "clamp(60px, 9vw, 110px) 0", background: "linear-gradient(180deg, transparent, rgba(255,255,255,.025) 30%, transparent)", scrollMarginTop: 60 }}>
@@ -503,9 +512,12 @@ export default function PublicShowcase() {
           <div style={{ fontSize: 11, letterSpacing: ".34em", textTransform: "uppercase", color: accent }}>Disponibles</div>
           <h2 style={{ margin: "10px 0 0", fontFamily: SERIF, fontWeight: 500, fontSize: "clamp(30px, 4vw, 52px)", color: "#fff" }}>La boutique</h2>
         </Reveal>
-        <div style={{ display: "flex", gap: 18, overflowX: "auto", scrollSnapType: "x mandatory", padding: "10px clamp(18px, 5vw, 64px) 26px", scrollbarWidth: "none" }}>
-          {d.sale.map((o, i) => <Reveal key={o.id} delay={(i % 5) * 80} style={{ flex: "0 0 clamp(220px, 26vw, 300px)", scrollSnapAlign: "start" }}>
-            <div className="sc-cta" style={{ position: "relative", aspectRatio: "4 / 5", overflow: "hidden", borderRadius: 22, background: "#15151B", boxShadow: "0 24px 50px -30px rgba(0,0,0,.9)" }}>
+        {/* en carrousel sous la collection ; seule (mode boutique), en grille */}
+        <div className={shop ? "sc-grid" : undefined} style={shop ? { maxWidth: 1360, margin: "0 auto", padding: "10px clamp(16px, 4vw, 56px) 26px" }
+          : { display: "flex", gap: 18, overflowX: "auto", scrollSnapType: "x mandatory", padding: "10px clamp(18px, 5vw, 64px) 26px", scrollbarWidth: "none" }}>
+          {d.sale.map((o, i) => <Reveal key={o.id} delay={(i % 5) * 80} style={shop ? { minWidth: 0 } : { flex: "0 0 clamp(220px, 26vw, 300px)", scrollSnapAlign: "start" }}>
+            <div className="sc-cta" onClick={() => openIt(saleItems[i])} style={{ position: "relative", aspectRatio: "4 / 5", overflow: "hidden", borderRadius: 22, background: "#15151B",
+              boxShadow: "0 24px 50px -30px rgba(0,0,0,.9)", cursor: "pointer" }}>
               <Framed src={mid(o.img)} alt={o.title} style={{ position: "absolute", inset: 0 }}/>
               <span style={{ position: "absolute", top: 12, left: 12, padding: "7px 13px", borderRadius: 30, fontSize: 14, fontWeight: 900, background: accent, color: "#0B0B0F",
                 boxShadow: `0 10px 30px -10px ${accent}` }}>{o.price != null ? `${o.from ? "dès " : ""}${price(o.price)}` : "Prix sur demande"}</span>

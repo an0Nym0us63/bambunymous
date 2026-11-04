@@ -33,6 +33,14 @@ ACCENTS = ("#C9A96E", "#E5E7EB", "#F472B6", "#60A5FA", "#34D399", "#F59E0B", "#A
 _ITEM = re.compile(r"^[pg]\d{1,9}$")
 RULES = ("all", "creator", "model", "category", "year", "kind")
 SOURCES = ("photos", "photos_3d", "all")
+# le genre de la vitrine (04/11/2026) : portfolio (les pieces), both (les pieces et la boutique), shop (la boutique seule :
+# les objets a vendre, sans la collection) ; l'ancien interrupteur show_sale se lit encore (vrai : both)
+MODES = ("portfolio", "both", "shop")
+
+
+def _mode(s: dict) -> str:
+    m = s.get("mode")
+    return m if m in MODES else ("both" if s.get("show_sale") else "portfolio")
 DEFAULT = {"title": "Ma vitrine", "tagline": "Des objets imprimés en 3D, pièce par pièce", "accent": ACCENTS[0],
            "contact": "", "show_sale": False, "show_credit": True, "source": "photos_3d", "items": [], "rules": [], "exclude": []}
 
@@ -94,6 +102,9 @@ def _clean(body: dict, cur: dict) -> dict:
             out[k] = bool(body[k])
     if body.get("source") in SOURCES:
         out["source"] = body["source"]
+    if body.get("mode") in MODES:
+        out["mode"] = body["mode"]
+        out["show_sale"] = body["mode"] != "portfolio"
     if isinstance(body.get("items"), list):
         seen, items = set(), []
         for it in body["items"][:400]:
@@ -259,7 +270,7 @@ def _resolve(s: dict, cands: dict) -> list:
 
 async def _out(s: dict) -> dict:
     t, v = await PL.find("showcase", s["id"])
-    return {**s, "token": t, "path": f"/vitrine/{t}" if t else None, "expires": (v or {}).get("expires"),
+    return {**s, "mode": _mode(s), "token": t, "path": f"/vitrine/{t}" if t else None, "expires": (v or {}).get("expires"),
             "expired": bool(v and PL.expired(v)), "views": (v or {}).get("views") or 0, "accents": ACCENTS}
 
 
@@ -269,8 +280,21 @@ async def showcase_list(_: str = Depends(get_current_user)):
     lst = await _load()
     allc = await _candidates() if lst else {}
     out = []
+    shop = None
     for s in lst:
         o = await _out(s)
+        if o["mode"] == "shop":
+            # une boutique seule : ses objets a vendre (un par nom), et la photo du plus recent
+            if shop is None:
+                from ....models.object_history import Object
+                async with AsyncSessionLocal() as db:
+                    rows = (await db.execute(select(Object.id, Object.name, Object.translated_name).where(Object.status == "available")
+                                             .order_by(Object.created_at.desc()))).all()
+                shop = (len({(r.translated_name or r.name or "").strip().lower() for r in rows}),
+                        f"/api/v1/objects/objects/{rows[0].id}/image" if rows else None)
+            o["count"], o["cover"] = shop
+            out.append(o)
+            continue
         cands = _pool(allc, s.get("source"))
         res = _resolve(s, cands)
         o["count"] = len(res)
@@ -382,8 +406,9 @@ async def showcase_public(token: str, request: Request):
     s = next((s for s in lst if s["id"] == (v.get("ref") or "1")), None)
     if not s:
         raise HTTPException(404, "Cette vitrine n'existe pas, a expiré ou a été retirée")
-    cands = _pool(await _candidates(), s.get("source"))
-    keys = _resolve(s, cands)
+    mode = _mode(s)
+    cands = _pool(await _candidates(), s.get("source")) if mode != "shop" else {}
+    keys = _resolve(s, cands) if mode != "shop" else []
     allp = sorted({p for it in keys for p in cands[it["k"]]["pids"]})
     async with AsyncSessionLocal() as db:
         cols: dict = {}
@@ -395,7 +420,7 @@ async def showcase_public(token: str, request: Request):
                     cols.setdefault(pid, {})
                     cols[pid][h] = cols[pid].get(h, 0) + float(g or 0)
         sale = []
-        if s.get("show_sale"):
+        if mode != "portfolio":
             # la boutique (04/11/2026) : les objets « à vendre » et eux seuls (statut available), avec ou sans prix ; les
             # exemplaires d'un meme objet (meme nom) n'en font qu'un, avec leur nombre et leur prix (le plus bas s'ils different)
             by: dict = {}
@@ -428,7 +453,7 @@ async def showcase_public(token: str, request: Request):
                       "model": ({"title": c["model"] or "", "creator": c["creator"], "url": f"https://makerworld.com/fr/models/{c['design']}"}
                                 if c["design"] and c["model"] is not None and s.get("show_credit") else None)})
     return {"title": s["title"], "tagline": s["tagline"], "accent": s["accent"], "contact": s["contact"], "items": items, "sale": sale,
-            "pending3d": bool(todo)}
+            "pending3d": bool(todo), "mode": mode}
 
 
 @router.get("/public/{token}/ready3d")

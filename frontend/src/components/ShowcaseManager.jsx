@@ -16,6 +16,8 @@ const DUR = [[0, "sans fin"], [7, "7 jours"], [30, "30 jours"], [365, "1 an"]];
 const RULE_T = [["all", "Toutes mes pièces"], ["creator", "Un créateur"], ["model", "Un modèle"], ["category", "Une catégorie"], ["year", "Une année"], ["kind", "Un type"]];
 const SOURCES = [["photos", "📷", "Avec photos", "Seulement les vraies photos"], ["photos_3d", "🧊", "Photos ou vues 3D", "Une vue 3D faute de photo"],
   ["all", "🗂️", "Toutes", "Toutes les impressions réussies ; sans photo, l'image du plateau"]];
+const MODES = [["portfolio", "🖼️", "Portfolio", "Tes plus belles pièces"], ["both", "🛍️", "Portfolio + boutique", "Tes pièces, puis tes objets à vendre"],
+  ["shop", "🏷️", "Boutique seule", "Seulement tes objets à vendre, sans la collection"]];
 const RULE_ICON = { all: "🌐", creator: "👤", model: "🧩", category: "🏷️", year: "📆", kind: "🗂️" };
 const GOLD = "#A1803F";
 
@@ -65,6 +67,8 @@ export default function ShowcaseManager({ sid, onClose, onChanged }) {
   }, [sid]);
   // les pieces possibles suivent la source choisie (photos ; photos ou vues 3D ; toutes)
   const source = cfg?.source || "photos_3d";
+  const mode = cfg?.mode || (cfg?.show_sale ? "both" : "portfolio");     // portfolio, both, shop (la boutique seule)
+  const shop = mode === "shop";
   useEffect(() => {
     if (!cfg || cfg.error) return;
     setCd(null);
@@ -86,8 +90,8 @@ export default function ShowcaseManager({ sid, onClose, onChanged }) {
   const save = async () => {
     setBusy(true);
     try {
-      const { title, tagline, accent, contact, show_sale, show_credit, rules, exclude } = cfg;
-      const r = await client.put(`/showcase/${sid}`, { title, tagline, accent, contact, show_sale, show_credit, source, items, rules, exclude });
+      const { title, tagline, accent, contact, show_credit, rules, exclude } = cfg;
+      const r = await client.put(`/showcase/${sid}`, { title, tagline, accent, contact, mode, show_credit, source, items, rules, exclude });
       setCfg(r.data); setDirty(false); toast("Vitrine enregistrée"); onChanged?.();
     } catch (e) { toast(e?.response?.data?.detail || "La vitrine n'a pas pu être enregistrée", "error"); }
     setBusy(false);
@@ -180,6 +184,17 @@ export default function ShowcaseManager({ sid, onClose, onChanged }) {
             style={{ ...input, fontSize: 18, fontWeight: 900, border: "1px dashed var(--border)", background: "transparent", padding: "4px 8px" }}/>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", marginTop: 4 }}>Un portfolio public, à envoyer par un lien : un grand carrousel, la collection, et ta boutique. Jamais un coût.</div>
         </div>
+        <FCard t="Le genre" i="🏷️" c="#3B82F6">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 8 }}>
+            {MODES.map(([v, ic, l, sub]) => { const on = mode === v;
+              return <button key={v} type="button" onClick={() => set({ mode: v })} aria-pressed={on}
+                style={{ display: "flex", flexDirection: "column", gap: 2, padding: "10px 12px", borderRadius: 14, cursor: "pointer", textAlign: "left",
+                  border: `1.5px solid ${on ? "#C9A96E" : "var(--border)"}`, background: on ? "color-mix(in srgb, #C9A96E 14%, var(--surface))" : "var(--surface)",
+                  boxShadow: on ? "0 8px 20px -14px #C9A96E" : "none", transition: "all .2s" }}>
+                <span style={{ fontSize: 13.5, fontWeight: 900, color: on ? GOLD : "var(--text)" }}>{ic} {l}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{sub}</span></button>; })}
+          </div>
+        </FCard>
         <FCard t="Le lien" i="🔗" c={GOLD}>
           {link ? <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", wordBreak: "break-all" }}>{link}</div>
@@ -194,9 +209,9 @@ export default function ShowcaseManager({ sid, onClose, onChanged }) {
           </div> : <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", fontSize: 12.5, fontWeight: 800, color: "var(--muted)" }}>Valable :
               {DUR.map(([n, l]) => <button key={n} type="button" onClick={() => setDays(n)} style={chip(days === n)}>{l}</button>)}</div>
-            <button type="button" disabled={busy || !res.length} onClick={makeLink} style={{ ...fBtn, color: "#fff", border: "none", background: `linear-gradient(135deg, #1F2937, ${GOLD})`,
-              opacity: busy || !res.length ? .55 : 1 }}>Créer et copier le lien</button>
-            {!res.length && <div style={{ fontSize: 12, color: "var(--muted)" }}>Ajoute d'abord une pièce ou une règle.</div>}
+            <button type="button" disabled={busy || (!res.length && !shop)} onClick={makeLink} style={{ ...fBtn, color: "#fff", border: "none", background: `linear-gradient(135deg, #1F2937, ${GOLD})`,
+              opacity: busy || (!res.length && !shop) ? .55 : 1 }}>Créer et copier le lien</button>
+            {!res.length && !shop && <div style={{ fontSize: 12, color: "var(--muted)" }}>Ajoute d'abord une pièce ou une règle.</div>}
           </div>}
         </FCard>
         <FCard t="L'allure" i="🎨" c="#8B5CF6">
@@ -209,11 +224,10 @@ export default function ShowcaseManager({ sid, onClose, onChanged }) {
             </div>
             <input value={cfg.contact || ""} onChange={e => set({ contact: e.target.value })} placeholder="Contact (Instagram, e-mail…), facultatif" maxLength={200} style={input}/>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5, fontWeight: 700, color: "var(--text2)" }}>
-              <input type="checkbox" checked={!!cfg.show_sale} onChange={e => set({ show_sale: e.target.checked })} style={{ width: 18, height: 18 }}/>La boutique : mes objets à vendre (les exemplaires d'un même objet regroupés)</label>
-            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5, fontWeight: 700, color: "var(--text2)" }}>
               <input type="checkbox" checked={!!cfg.show_credit} onChange={e => set({ show_credit: e.target.checked })} style={{ width: 18, height: 18 }}/>Créditer le modèle MakerWorld et son créateur</label>
           </div>
         </FCard>
+        {!shop && <>
         <FCard t="La source" i="📷" c="#EC4899">
           <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginTop: 4 }}>Ce que la vitrine peut montrer : les règles et l'ajout piochent là-dedans.</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 8 }}>
@@ -298,6 +312,9 @@ export default function ShowcaseManager({ sid, onClose, onChanged }) {
           {free.length > shown.length && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
             {free.length - shown.length} autres : affine la recherche, ou « Tout sélectionner » les prend toutes.</div>}
         </FCard>
+        </>}
+        {shop && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", padding: "4px 2px" }}>
+          La boutique montre tes objets « À vendre » (page Objets), les exemplaires d'un même objet réunis avec leur nombre et leur prix. Pour en ajouter ou en retirer, change leur statut dans Objets.</div>}
         <button type="button" onClick={remove} style={{ ...chip(false), alignSelf: "center", color: "#ef4444" }}>Supprimer cette vitrine</button>
       </>}
     </div>
@@ -348,7 +365,7 @@ export function ShowcaseBanner({ round = null }) {
               : <span style={{ width: 34, height: 34, borderRadius: 9, background: "var(--surface2)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>✨</span>}
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.title}</span>
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{s.count} pièce{s.count > 1 ? "s" : ""}{(s.rules || []).length ? " · règles" : ""}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{s.mode === "shop" ? `boutique · ${s.count} objet${s.count > 1 ? "s" : ""} à vendre` : `${s.count} pièce${s.count > 1 ? "s" : ""}${(s.rules || []).length ? " · règles" : ""}`}</span>
             </span>
             <span data-tip={s.path ? (s.expired ? "Lien expiré" : "Lien actif") : "Pas de lien"} style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
               background: s.path ? (s.expired ? "#ef4444" : "#16a34a") : "var(--border)" }}/>
