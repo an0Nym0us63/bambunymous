@@ -4,6 +4,7 @@ import { useAuth } from "./store/auth";
 import Layout from "./components/layout/Layout";
 import Login from "./pages/Login";
 const PublicYear = React.lazy(() => import("./pages/PublicYear"));
+const PublicShowcase = React.lazy(() => import("./pages/PublicShowcase"));
 import { importRetry } from "./utils/importRetry";
 // Les pages : chargees a la demande (le premier affichage n'attend plus toute l'appli),
 // puis prechargees en fond une fois l'appli au calme : changer de page reste instantane.
@@ -107,6 +108,8 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       {/* l'annee partagee par un lien (04/11/2026) : ouverte a tous, sans compte */}
       <Route path="/annee/:token" element={<React.Suspense fallback={null}><PublicYear /></React.Suspense>} />
+      {/* la vitrine, ouverte a tous par son lien (04/11/2026) */}
+      <Route path="/vitrine/:token" element={<React.Suspense fallback={null}><PublicShowcase /></React.Suspense>} />
       <Route path="/" element={
         <PrivateRoute>
           <Layout />

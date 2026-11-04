@@ -26,6 +26,7 @@ import AdminOnly from "../components/AdminOnly";
 import { useMine, MineBadge, FriendsPrints, useHasFriends, useShared, sharedCount, relayed } from "../components/Friends";
 import MwQueue from "../components/MwQueue";
 import PrintCalendar from "../components/PrintCalendar";
+import { ShowcaseBanner } from "../components/ShowcaseManager";
 import { mwImg } from "../components/MwImg";
 import { toast } from "../store/toast";
 import ShareSheet from "../components/ShareSheet";
@@ -4180,6 +4181,8 @@ export default function Prints() {
         </p>
       )}
 
+      {/* la vitrine (04/11/2026) : le portfolio public, gere d'ici */}
+      {viewMode==="gallery" && <AdminOnly><ShowcaseBanner/></AdminOnly>}
       {viewMode==="gallery" && <PrintsGalleryView search={search} sortF={sortF} kindSlot={kindSlot}/>}
 
       {!loading && !error && prints.length > 0 && viewMode==="list" && (() => {

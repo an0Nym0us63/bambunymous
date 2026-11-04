@@ -18,6 +18,7 @@ import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY,
          ROLE_OPTIONS, ROLE_LABEL, ROLE_BADGE } from "../store/auth";
 import AdminOnly from "../components/AdminOnly";
 import TelegramSettings from "../components/TelegramSettings";
+import PublicLinksCard from "../components/PublicLinksCard";
 import MailOrdersSettings from "../components/MailOrdersSettings";
 import SwitchCard, { phoneWidth } from "../components/SwitchCard";
 import DryRulesCard from "../components/DryRulesCard";
@@ -2318,6 +2319,8 @@ export default function Settings() {
       {tab === "share" && (
       <AdminOnly><div className="wide-flow">
         <TelegramSettings card={card} cardTitle={cardTitle}/>
+        {/* les liens publics (annees, vitrine), leurs durees et ouvertures (04/11/2026) */}
+        <PublicLinksCard card={card} cardTitle={cardTitle}/>
       </div></AdminOnly>
       )}
 
