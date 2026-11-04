@@ -106,7 +106,8 @@ async def open_(token: str, kinds: tuple, request=None) -> dict | None:
     v["last_view"] = datetime.utcnow().isoformat(timespec="seconds")
     await save(d)
     if request is not None:
-        await _log_add(token, request)
+        import asyncio
+        asyncio.create_task(_log_add(token, request))     # en fond : la page ne l'attend pas (04/11/2026)
     return v
 
 

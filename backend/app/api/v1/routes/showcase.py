@@ -14,6 +14,7 @@ Rangement : SHOWCASES = {"list": [vitrine…]} ; l'ancienne vitrine unique (SHOW
 et son lien (ref None dans le registre) la suit.
 """
 import html as _html
+import logging
 import json
 import re
 import secrets
@@ -27,6 +28,7 @@ from ....services import public_links as PL
 from .auth import get_current_user, require_admin
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 KEY = "SHOWCASES"
 OLD_KEY = "SHOWCASE"
 ACCENTS = ("#C9A96E", "#E5E7EB", "#F472B6", "#60A5FA", "#34D399", "#F59E0B", "#A78BFA", "#F87171")
@@ -138,12 +140,24 @@ READY_TTL = 20 * 60
 _CAND: dict = {"t": 0.0, "v": None}
 _READY: dict = {}                                     # (cle, modele) -> (horodatage, vue prete)
 _FILL: dict = {}                                      # vitrine -> la verification en cours
+PUB_TTL = 60
+_PUB: dict = {}                                       # vitrine -> (horodatage, ce que la page publique montre, refaite en cours)
 
 
 async def _candidates() -> dict:
+    """Les pieces possibles, gardees : une copie un peu vieille sert tout de suite (04/11/2026 : la reconstruction de la
+    galerie faisait attendre le visiteur), et se refait en fond ; seule la toute premiere fois attend."""
+    import asyncio
     import time
-    if _CAND["v"] is None or time.time() - _CAND["t"] > CAND_TTL:
+    if _CAND["v"] is None:
         _CAND["v"], _CAND["t"] = await _candidates_build(), time.time()
+    elif time.time() - _CAND["t"] > CAND_TTL and not (_CAND.get("task") and not _CAND["task"].done()):
+        async def again():
+            try:
+                _CAND["v"], _CAND["t"] = await _candidates_build(), time.time()
+            except Exception:
+                logger.exception("[VITRINE] pieces possibles non refaites")
+        _CAND["task"] = asyncio.create_task(again())
     return _CAND["v"]
 
 
@@ -355,7 +369,7 @@ async def showcase_put(sid: str, body: dict = Body({}), _: str = Depends(require
     n = _clean(body or {}, s)
     lst[lst.index(s)] = n
     await _save(lst)
-    _CAND["v"] = None                                 # la vitrine changee se voit tout de suite
+    _PUB.pop(sid, None)                               # la vitrine changee se voit tout de suite
     t, _v = await PL.find("showcase", sid)
     if t:                                             # le titre du lien suit celui de la vitrine
         await PL.put("showcase", sid, n["title"])
@@ -397,8 +411,8 @@ async def showcase_unlink(sid: str, _: str = Depends(require_admin)):
 async def showcase_public(token: str, request: Request):
     """La vitrine, sans compte (le lien est la cle) : seulement ses pieces, leurs photos, la date (mois), les couleurs
     de filament, le modele et son createur (si le credit est voulu), le mot ; jamais un cout."""
-    from ....models.print_history import FilamentUsage
-    from ....models.object_history import Object
+    import asyncio
+    import time
     v = await PL.open_(token, ("showcase",), request)
     if not v:
         raise HTTPException(404, "Cette vitrine n'existe pas, a expiré ou a été retirée")
@@ -406,6 +420,27 @@ async def showcase_public(token: str, request: Request):
     s = next((s for s in lst if s["id"] == (v.get("ref") or "1")), None)
     if not s:
         raise HTTPException(404, "Cette vitrine n'existe pas, a expiré ou a été retirée")
+    # la vitrine prete est gardee (04/11/2026) : un visiteur l'a tout de suite, meme un peu vieille, et elle se refait
+    # en fond ; enregistrer la vitrine l'efface (ses changements se voient aussitot)
+    hit = _PUB.get(s["id"])
+    if hit:
+        if time.time() - hit[0] > PUB_TTL and not (hit[2] and not hit[2].done()):
+            async def again(s=s):
+                try:
+                    _PUB[s["id"]] = (time.time(), await _public_build(s), None)
+                except Exception:
+                    logger.exception("[VITRINE] vitrine non refaite")
+            _PUB[s["id"]] = (hit[0], hit[1], asyncio.create_task(again()))
+        return hit[1]
+    out = await _public_build(s)
+    _PUB[s["id"]] = (time.time(), out, None)
+    return out
+
+
+async def _public_build(s: dict) -> dict:
+    """Ce que la page publique montre de la vitrine s (les pieces, leurs couleurs, la boutique, les vues 3D connues)."""
+    from ....models.print_history import FilamentUsage
+    from ....models.object_history import Object
     mode = _mode(s)
     cands = _pool(await _candidates(), s.get("source")) if mode != "shop" else {}
     keys = _resolve(s, cands) if mode != "shop" else []
@@ -549,3 +584,20 @@ async def showcase_public_3d(token: str, key: str):
     keep = ("plates", "used_palette", "used_plates", "used_multi", "used_multi_plates", "used_finishes", "used_finishes_plates",
             "finishes", "glows", "piece_plates", "assembly_edit", "bed")
     return {k: r.get(k) for k in keep}
+
+
+async def warm() -> None:
+    """Au demarrage (04/11/2026) : les pieces possibles et chaque vitrine qui a un lien, preparees d'avance -- le
+    premier visiteur apres une mise a jour ne les attend pas. Un peu apres le demarrage, pour ne pas le ralentir."""
+    import asyncio
+    import time
+    await asyncio.sleep(20)
+    try:
+        lst = await _load()
+        reg = await PL.load()
+        linked = {str(v.get("ref") or "1") for v in reg.values() if v.get("kind") == "showcase" and not PL.expired(v)}
+        for s in lst:
+            if s["id"] in linked:
+                _PUB[s["id"]] = (time.time(), await _public_build(s), None)
+    except Exception:
+        logger.exception("[VITRINE] prechauffe")

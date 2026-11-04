@@ -420,8 +420,9 @@ export default function PublicShowcase() {
   const goTo = useCallback(dd => setOpen(o => { if (!o) return o; const i = list.findIndex(x => x.key === o.key); const nx = list[(i + dd + list.length) % list.length];
     try { window.history.replaceState(null, "", `#${nx.key}`); } catch { /* rien */ } return nx; }), [list]);
   const accent = d?.accent || "#C9A96E";
-  if (!d || d.error) return <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#08080B", color: "#EDEDED",
-    fontFamily: SERIF, fontSize: 22, padding: 24, textAlign: "center" }}>{!d ? <span className="sc-spin" style={{ borderTopColor: "#C9A96E" }}/> : "Cette vitrine n'existe pas, a expiré ou a été retirée."}
+  if (!d) return <Skeleton/>;
+  if (d.error) return <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#08080B", color: "#EDEDED",
+    fontFamily: SERIF, fontSize: 22, padding: 24, textAlign: "center" }}>Cette vitrine n'existe pas, a expiré ou a été retirée.
     <style>{baseCss}</style></div>;
   const toCol = () => colRef.current?.scrollIntoView({ behavior: calm() ? "auto" : "smooth", block: "start" });
   return <div ref={rootRef} style={{ height: "100dvh", overflowY: "auto", overflowX: "hidden", background: "#08080B", color: "#EDEDED", position: "relative", "--sc-accent": accent }}>
@@ -597,3 +598,29 @@ const seg = { height: 34, padding: "0 14px", borderRadius: 24, border: "none", b
   fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, transition: "all .25s" };
 const segOn = a => ({ background: a, color: "#0B0B0F" });
 const label = { fontSize: 11, letterSpacing: ".24em", textTransform: "uppercase", color: "rgba(255,255,255,.5)" };
+
+// la page tout de suite (04/11/2026) : pendant que la vitrine arrive, sa mise en page en formes grises qui luisent
+// (l'en-tete, le titre, le jeu de cartes, la grille) plutot qu'un cercle seul sur fond noir
+function Skeleton() {
+  const bar = (w, h, extra) => <span className="sc-sk" style={{ display: "block", width: w, height: h, borderRadius: 10, ...extra }}/>;
+  return <div style={{ minHeight: "100dvh", background: "#08080B", overflow: "hidden" }}>
+    <style>{baseCss}{`
+      @keyframes scSk { from { background-position: 150% 0; } to { background-position: -150% 0; } }
+      .sc-sk { background: linear-gradient(100deg, rgba(255,255,255,.05) 30%, rgba(255,255,255,.11) 50%, rgba(255,255,255,.05) 70%); background-size: 250% 100%;
+        animation: scSk 1.6s ease-in-out infinite; }
+      .sc-skh { display: grid; grid-template-columns: 1.05fr 1fr; gap: 60px; align-items: center; }
+      @media (max-width: 900px) { .sc-skh { grid-template-columns: 1fr; gap: 30px; } }
+    `}</style>
+    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "20px clamp(16px, 5vw, 64px)" }}>{bar(150, 22)}<span style={{ flex: 1 }}/>{bar(110, 34, { borderRadius: 30 })}</div>
+    <div className="sc-skh" style={{ maxWidth: 1360, margin: "0 auto", padding: "clamp(40px, 8vh, 90px) clamp(18px, 5vw, 64px) 40px" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {bar(190, 28, { borderRadius: 30 })}{bar("80%", 64)}{bar("55%", 64)}{bar("70%", 16)}{bar("50%", 16)}
+        <div style={{ display: "flex", gap: 10, marginTop: 14 }}>{bar(210, 48, { borderRadius: 40 })}{bar(140, 48, { borderRadius: 40 })}</div>
+      </div>
+      {bar("min(400px, 80vw)", "auto", { aspectRatio: "4 / 5", borderRadius: 26, margin: "0 auto" })}
+    </div>
+    <div style={{ maxWidth: 1360, margin: "0 auto", padding: "20px clamp(16px, 4vw, 56px)", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: "26px 16px" }}>
+      {Array.from({ length: 8 }, (_, i) => <div key={i}>{bar("100%", "auto", { aspectRatio: "4 / 5", borderRadius: 16 })}<div style={{ height: 10 }}/>{bar("70%", 13)}</div>)}
+    </div>
+  </div>;
+}

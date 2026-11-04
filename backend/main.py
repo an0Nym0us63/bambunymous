@@ -180,6 +180,9 @@ async def lifespan(app: FastAPI):
         t.add_done_callback(_BG_TASKS.discard)
         return t
     _bg(_rate_resume())
+    # les vitrines prechauffees (04/11/2026) : le premier visiteur apres un redemarrage ne les attend pas
+    from app.api.v1.routes.showcase import warm as _showcase_warm
+    _bg(_showcase_warm())
     # la boucle surveillee : ce qui la fige est releve (Parametres > Vitesse du serveur)
     from app.core.perf import loop_watch as _loop_watch
     _tasks.track("loop_watch", _bg(_loop_watch()))
