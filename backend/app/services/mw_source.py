@@ -321,7 +321,8 @@ def _profile(prof, manual, did=None, task=None) -> str:
     except (ValueError, TypeError):
         q = ""
     if q and q != "0":
-        return q
+        # un choix pose avec un profil que le modele n'a plus (recopie de l'imprimante) se corrige comme lui
+        return _current_profile(did, q, task) if did else q
     p = str(prof or "").strip()
     if not p or p == "0":
         return ""

@@ -348,7 +348,9 @@ async def profile_per_print(design_id: str, print_ids: list) -> dict:
         pp = by_inst.get(pp, pp)
         # un profil que le modele n'a plus (04/11/2026 : identifiants changes par une mise a jour du createur) se
         # deduit comme une impression sans profil -- le nom de la tache le cite le plus souvent
-        if pp and profs and pp not in by_inst.values() and not m.get("profile"):
+        # (04/11/2026, Jailbreak) meme venu d'un choix de plateaux : celui-ci est souvent pose tout seul (« auto »), en
+        # recopiant le profil perime de l'imprimante -- deux impressions d'un meme profil faisaient deux cartes
+        if pp and profs and pp not in by_inst.values():
             pp = ""
         if pp and pp != "0":
             out[r.id] = {"profile": pp, "plate": int(r.plate_id) if str(r.plate_id or "").isdigit() else None}
