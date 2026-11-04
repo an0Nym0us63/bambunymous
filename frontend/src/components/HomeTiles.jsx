@@ -4594,13 +4594,19 @@ const lum = c => { const h = String(c || "").replace("#", ""); if (h.length < 6)
   return parseInt(h.slice(0, 2), 16) * 0.299 + parseInt(h.slice(2, 4), 16) * 0.587 + parseInt(h.slice(4, 6), 16) * 0.114; };
 // la case d'une bobine : sa couleur, assombrie au-dessus de ce qui reste, l'emplacement ecrit dedans quand ca tient
 function TraySwatch({ t, s, on, label = true }) {
-  const c = trayCol(t), left = trayLeft(t), ink = lum(c) > 160 ? "rgba(15,23,42,0.75)" : "rgba(255,255,255,0.92)";
+  const c = trayCol(t), left = trayLeft(t);
+  // une couleur surtout transparente (« Nature », « Transparent ») montre le damier clair : libelle sombre (04/11/2026 :
+  // il etait blanc, la couleur sous-jacente etant noire, et ne se lisait plus)
+  const raw = String((t && !t.empty && (t.spool_info?.color || t.spool_info?.filament_color || t.color)) || "").replace("#", "");
+  const a = /^[0-9a-f]{8}$/i.test(raw) ? parseInt(raw.slice(6), 16) : 255;
+  const dark = a < 128 || lum(c) > 160;
+  const ink = dark ? "rgba(15,23,42,0.8)" : "rgba(255,255,255,0.95)";
   return <span data-pk="" data-tip={trayTip(t)} style={{ position: "relative", width: s, height: s, flexShrink: 0, borderRadius: Math.round(s / 3.4), display: "block",
     ...trayBg(t, left != null && s >= 22 ? `linear-gradient(to bottom, rgba(0,0,0,0.16) ${(1 - left) * 100}%, transparent ${(1 - left) * 100}%)` : null, s),
     border: "1px solid rgba(0,0,0,0.15)", boxShadow: on ? "0 0 0 2.5px var(--surface), 0 0 0 4.5px #3b82f6, 0 4px 14px rgba(59,130,246,0.45)" : "0 2px 6px rgba(0,0,0,0.12)",
     animation: on ? "bn-ring 2s ease-out infinite" : "none" }}>
     {label && s >= 30 && <span style={{ position: "absolute", left: 0, right: 0, bottom: Math.max(2, s * 0.06), textAlign: "center", fontSize: Math.max(9, Math.min(12, s * 0.22)),
-      fontWeight: 900, color: ink, letterSpacing: ".02em" }}>{slotOf(t)}</span>}
+      fontWeight: 900, color: ink, letterSpacing: ".02em", textShadow: dark ? "0 0 3px rgba(255,255,255,.9)" : "0 1px 2px rgba(0,0,0,.55)" }}>{slotOf(t)}</span>}
   </span>;
 }
 function Colors({ status, o, sz }) {
