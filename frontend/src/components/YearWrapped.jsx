@@ -137,8 +137,8 @@ function slidesOf(d) {
   if (d.sold) S.push({ bg: ["#16A34A", "#065F46"], body: <>
     <Kicker>Tes ventes</Kicker>
     <Big size={96}><Count to={d.sold}/></Big>
-    <Line delay={300}>objet{d.sold > 1 ? "s" : ""} vendu{d.sold > 1 ? "s" : ""}, pour {money(d.revenue)}.</Line>
-    <Line delay={600}>Le filament de l'année t'a coûté {money(d.cost)}.</Line>
+    <Line delay={300}>objet{d.sold > 1 ? "s" : ""} vendu{d.sold > 1 ? "s" : ""}{d.revenue != null ? `, pour ${money(d.revenue)}` : ""}.</Line>
+    {d.cost != null && <Line delay={600}>Le filament de l'année t'a coûté {money(d.cost)}.</Line>}
   </> });
   S.push({ bg: ["#111827", "#4F46E5"], summary: true });
   return S;
@@ -146,7 +146,7 @@ function slidesOf(d) {
 
 // le resume : une carte a son propre degrade, photographiee telle qu'a l'ecran pour le partage (04/11/2026 : une image
 // redessinee a part ne lui aurait jamais ressemble) ; le bouton Partager n'entre pas dans la photo
-function Summary({ d, onShare, cardRef }) {
+function Summary({ d, onShare, cardRef, pub = false }) {
   const tiles = [["🖨️", nf(d.count), "impressions"], ["⏱️", `${nf(hrs(d.seconds))} h`, "de machine"], ["✅", `${d.count ? Math.round(d.success / d.count * 100) : 0} %`, "de réussite"],
     ["🧵", kg(d.weight_g), "de filament"], ["🎨", nf(d.distinct_colors), "couleurs"], ["📆", `${d.streak} j`, "de série"]];
   return <div style={{ width: "min(440px, 100%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
@@ -162,28 +162,56 @@ function Summary({ d, onShare, cardRef }) {
         Modèle préféré : <b>{d.models[0].title}</b>{d.creators?.[0] ? <> · créateur : <b>{d.creators[0].name}</b></> : null}</div>}
       {d.colors?.length > 0 && <div style={{ display: "flex", gap: 6 }}>{d.colors.slice(0, 6).map(c => <Spool key={c.hex} hex={c.hex} size={26}/>)}</div>}
     </div>
-    <button type="button" onClick={e => { e.stopPropagation(); onShare(); }} style={{ marginTop: 2, display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 22px",
+    {pub ? <div style={{ fontSize: 12.5, fontWeight: 800, opacity: .8 }}>Fait avec BambuNymous{d.shared_at ? ` · chiffres du ${new Date(`${d.shared_at}Z`).toLocaleDateString("fr-FR")}` : ""}</div>
+    : <button type="button" onClick={e => { e.stopPropagation(); onShare(); }} style={{ marginTop: 2, display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 22px",
       borderRadius: 30, border: "none", background: "#fff", color: "#111827", fontSize: 15, fontWeight: 900, cursor: "pointer", boxShadow: "0 10px 30px -8px rgba(0,0,0,.5)" }}>
-      <Share2 size={17}/>Partager</button>
+      <Share2 size={17}/>Partager</button>}
   </div>;
 }
 
 // ou partager l'image du resume : Telegram (le compte relie dans l'appli, ses destinations), une autre appli (le menu de
 // partage du systeme), ou l'enregistrer
-function SharePanel({ d, text, shot, onClose }) {
+function SharePanel({ d, text: text0, shot, onClose }) {
   const isAdmin = useIsAdmin();
   const [tg, setTg] = useState(null);                 // l'etat du compte Telegram relie
   const [busy, setBusy] = useState(null);
+  const [link, setLink] = useState(undefined);        // le lien public de l'animation (undefined : pas encore lu)
   useEffect(() => {
-    if (!isAdmin) { setTg({}); return undefined; }
+    if (!isAdmin) { setTg({}); setLink(null); return undefined; }
     let alive = true;
     client.get("/share/telegram").then(r => alive && setTg(r.data || {})).catch(() => alive && setTg({}));
+    client.get(`/wrapped/share/${d.year}`).then(r => alive && setLink(r.data?.path ? `${window.location.origin}${r.data.path}` : null)).catch(() => alive && setLink(null));
     return () => { alive = false; };
-  }, [isAdmin]);
+  }, [isAdmin, d.year]);
+  // le lien de l'animation entiere : cree (ou ses chiffres refaits) a chaque partage
+  const makeLink = async () => {
+    const r = await client.post("/wrapped/share", { year: d.year, tz: -new Date().getTimezoneOffset() });
+    const u = `${window.location.origin}${r.data.path}`;
+    setLink(u);
+    return u;
+  };
+  const withLink = async () => { try { return isAdmin ? await makeLink() : null; } catch { return null; } };
+  const textWith = u => u ? `${text0}\n▶ L'animation : ${u}` : text0;
+  const copyLink = async () => {
+    setBusy("link");
+    try {
+      const u = await makeLink();
+      await navigator.clipboard.writeText(u).catch(() => {});
+      toast("Lien de l'animation copié");
+      egg("annee_partagee");
+    } catch (e) { toast(e?.response?.data?.detail || "Le lien n'a pas pu être créé", "error"); }
+    setBusy(null);
+  };
+  const unshare = async () => {
+    const tok = (link || "").split("/annee/")[1];
+    if (!tok) return;
+    try { await client.delete(`/wrapped/share/${tok}`); setLink(null); toast("Lien retiré : il ne s'ouvre plus"); } catch { toast("Le lien n'a pas pu être retiré", "error"); }
+  };
   const sendTg = async dest => {
     setBusy(dest.id);
     try {
       const blob = await shot();
+      const text = textWith(await withLink());
       const fd = new FormData();
       fd.append("file", blob, `annee-${d.year}.png`); fd.append("text", text); fd.append("destination_ids", dest.id);
       const r = await client.post("/share/image", fd, { timeout: 120000 });
@@ -197,6 +225,7 @@ function SharePanel({ d, text, shot, onClose }) {
     setBusy("other");
     try {
       const blob = await shot();
+      const text = textWith(await withLink());
       const file = new File([blob], `annee-${d.year}.png`, { type: "image/png" });
       if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], text, title: `Mon année ${d.year} en impressions` });
       else if (navigator.share) await navigator.share({ text, title: `Mon année ${d.year} en impressions` });
@@ -227,9 +256,14 @@ function SharePanel({ d, text, shot, onClose }) {
     display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
     <div onClick={e => e.stopPropagation()} style={{ width: "100%", padding: "16px 14px max(18px, env(safe-area-inset-bottom))", borderRadius: "24px 24px 0 0",
       background: "linear-gradient(180deg, #1F2937, #111827)", display: "flex", flexDirection: "column", gap: 8, animation: "ywIn .3s cubic-bezier(.2,.8,.2,1) both" }}>
-      <div style={{ fontSize: 15, fontWeight: 900, textAlign: "center", marginBottom: 4 }}>Partager l'image de ton année</div>
+      <div style={{ fontSize: 15, fontWeight: 900, textAlign: "center", marginBottom: 4 }}>Partager ton année</div>
+      {isAdmin && row("link", "🔗", link ? "Copier le lien de l'animation" : "Créer le lien de l'animation",
+        "toute la story, à ouvrir sans compte · chiffres du jour, sans les montants", copyLink)}
+      {isAdmin && link && <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px", fontSize: 11.5, fontWeight: 700, opacity: .8 }}>
+        <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{link}</span>
+        <button type="button" onClick={unshare} style={{ border: "none", background: "none", color: "#FCA5A5", fontSize: 11.5, fontWeight: 900, cursor: "pointer" }}>Retirer le lien</button></div>}
       {tg === null ? <div style={{ fontSize: 12.5, opacity: .7, textAlign: "center" }}>…</div>
-        : dests.length ? dests.map(x => row(x.id, "✈️", `Telegram · ${x.label}`, "avec ton compte relié dans BambuNymous", () => sendTg(x)))
+        : dests.length ? dests.map(x => row(x.id, "✈️", `Telegram · ${x.label}`, "l'image et le lien de l'animation, par ton compte relié", () => sendTg(x)))
         : isAdmin && <div style={{ fontSize: 12, fontWeight: 700, opacity: .7, textAlign: "center", padding: "0 8px" }}>
           Telegram : relie ton compte et choisis tes destinations dans Paramètres › Partage.</div>}
       {row("other", "📤", "Une autre appli…", "le menu de partage de ton appareil", other)}
@@ -238,20 +272,23 @@ function SharePanel({ d, text, shot, onClose }) {
   </div>;
 }
 
-export default function YearWrapped({ year: year0 = 0, onClose }) {
+// pub : la page publique d'un lien partage (les chiffres figes, deja lus ; ni annee a choisir, ni succes, ni partage
+// par l'appli) -- le meme recit, a l'identique
+export default function YearWrapped({ year: year0 = 0, onClose, data = null, pub = false }) {
   const [year, setYear] = useState(year0);
-  const [d, setD] = useState(null);
+  const [d, setD] = useState(data);
   const [i, setI] = useState(0);
   const [paused, setPaused] = useState(false);
   const [t, setT] = useState(0);                     // l'avancement de la diapositive en cours (0..1)
   const hold = useRef(null);
   useEffect(() => {
+    if (pub) return undefined;
     let alive = true;
     setD(null); setI(0);
     client.get("/wrapped", { params: { year, tz: -new Date().getTimezoneOffset() } }).then(r => alive && setD(r.data)).catch(() => alive && setD({ error: true }));
     return () => { alive = false; };
-  }, [year]);
-  useEffect(() => { egg("annee_impressions"); }, []);
+  }, [year, pub]);
+  useEffect(() => { if (!pub) egg("annee_impressions"); }, [pub]);
   const slides = useMemo(() => d && d.count ? slidesOf(d) : [], [d]);
   const last = slides.length - 1;
   // l'avancement : 7 s par diapositive, sauf la derniere (le resume reste)
@@ -314,7 +351,7 @@ export default function YearWrapped({ year: year0 = 0, onClose }) {
           <span style={{ flex: 1 }}/>
           {slides.length > 0 && i < last && <button type="button" onClick={e => { e.stopPropagation(); setPaused(p => !p); }} aria-label={paused ? "Reprendre" : "Pause"} data-tip={paused ? "Reprendre" : "Pause"}
             style={roundBtn}>{paused ? <Play size={16}/> : <Pause size={16}/>}</button>}
-          <button type="button" onClick={e => { e.stopPropagation(); onClose(); }} aria-label="Fermer" data-tip="Fermer" style={roundBtn}><X size={18}/></button>
+          {!pub && <button type="button" onClick={e => { e.stopPropagation(); onClose(); }} aria-label="Fermer" data-tip="Fermer" style={roundBtn}><X size={18}/></button>}
         </div>
       </div>
       {/* la diapositive : toucher a gauche recule, ailleurs avance ; l'appui long met en pause */}
@@ -326,7 +363,7 @@ export default function YearWrapped({ year: year0 = 0, onClose }) {
         {d?.error && <div style={{ fontSize: 16, fontWeight: 800 }}>Le récapitulatif n'a pas pu être préparé.</div>}
         {d && !d.error && !d.count && <div style={{ fontSize: 17, fontWeight: 800, maxWidth: 340 }}>Pas encore d'impression en {d.year} : reviens après tes premières !</div>}
         {s && <div key={`${d.year}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, width: "100%" }}>
-          {s.summary ? <Summary d={d} cardRef={cardRef} onShare={() => { setPaused(true); setSharing(true); }}/> : s.body}
+          {s.summary ? <Summary d={d} cardRef={cardRef} pub={pub} onShare={() => { setPaused(true); setSharing(true); }}/> : s.body}
         </div>}
       </div>
       {sharing && d && <SharePanel d={d} text={shareText} shot={shot} onClose={() => setSharing(false)}/>}

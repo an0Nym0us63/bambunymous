@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./store/auth";
 import Layout from "./components/layout/Layout";
 import Login from "./pages/Login";
+const PublicYear = React.lazy(() => import("./pages/PublicYear"));
 import { importRetry } from "./utils/importRetry";
 // Les pages : chargees a la demande (le premier affichage n'attend plus toute l'appli),
 // puis prechargees en fond une fois l'appli au calme : changer de page reste instantane.
@@ -104,6 +105,8 @@ export default function App() {
     <>
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* l'annee partagee par un lien (04/11/2026) : ouverte a tous, sans compte */}
+      <Route path="/annee/:token" element={<React.Suspense fallback={null}><PublicYear /></React.Suspense>} />
       <Route path="/" element={
         <PrivateRoute>
           <Layout />

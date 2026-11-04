@@ -8,11 +8,11 @@ import html as _html
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import extract, func, select
 
 from ....db.session import AsyncSessionLocal
-from .auth import get_current_user
+from .auth import get_current_user, require_admin
 
 router = APIRouter()
 
@@ -137,3 +137,72 @@ async def wrapped(year: int = Query(0), tz: int = 0, _: str = Depends(get_curren
     out["distinct_colors"] = sum(1 for g in col.values() if g > 0)
     out["materials"] = [{"name": n, "grams": round(g)} for n, g in mat.most_common(5) if g > 0]
     return out
+
+
+# ── Le lien public (04/11/2026) : l'animation de l'annee, a envoyer a qui l'on veut ─────────────────────────────────
+# Les chiffres sont figes au moment du partage (pas de lecture en direct de la base) et gardes dans les reglages
+# (sauvegardes avec la base) : un lien par annee, refait a chaque partage, revocable. Sans les montants.
+SHARES_KEY = "WRAPPED_SHARES"
+_PRIVATE = ("cost", "revenue")
+
+
+async def _shares() -> dict:
+    import json
+    from ....services.settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, SHARES_KEY, "")
+    try:
+        d = json.loads(raw) if raw else {}
+    except ValueError:
+        d = {}
+    return d if isinstance(d, dict) else {}
+
+
+async def _shares_put(d: dict) -> None:
+    import json
+    from ....services.settings_service import set_setting
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, SHARES_KEY, json.dumps(d, ensure_ascii=False))
+        await db.commit()
+
+
+@router.post("/share")
+async def wrapped_share(body: dict = Body({}), user: str = Depends(require_admin)):
+    """Fige l'annee et rend son lien public : {token, path}. Le meme lien pour la meme annee, ses chiffres refaits."""
+    import secrets
+    year, tz = int(body.get("year") or 0), int(body.get("tz") or 0)
+    data = await wrapped(year, tz, user)
+    if not data.get("count"):
+        raise HTTPException(400, "Rien à partager pour cette année")
+    data = {k: v for k, v in data.items() if k not in _PRIVATE and k != "years"}
+    d = await _shares()
+    token = next((t for t, v in d.items() if v.get("year") == data["year"]), None) or secrets.token_urlsafe(12)
+    d[token] = {"year": data["year"], "at": datetime.utcnow().isoformat(timespec="seconds"), "data": data}
+    await _shares_put(d)
+    return {"token": token, "path": f"/annee/{token}", "year": data["year"]}
+
+
+@router.get("/share/{year}")
+async def wrapped_share_of(year: int, _: str = Depends(require_admin)):
+    """Le lien deja partage pour cette annee, s'il y en a un."""
+    d = await _shares()
+    t = next((t for t, v in d.items() if v.get("year") == year), None)
+    return {"token": t, "path": f"/annee/{t}" if t else None, "at": d[t]["at"] if t else None}
+
+
+@router.delete("/share/{token}")
+async def wrapped_unshare(token: str, _: str = Depends(require_admin)):
+    """Revoque un lien : il ne s'ouvre plus."""
+    d = await _shares()
+    d.pop(token, None)
+    await _shares_put(d)
+    return {"ok": True}
+
+
+@router.get("/public/{token}")
+async def wrapped_public(token: str):
+    """L'annee partagee, telle que figee : sans compte (le lien est la cle)."""
+    v = (await _shares()).get(token) if len(token) <= 40 else None
+    if not v:
+        raise HTTPException(404, "Ce lien n'existe pas ou a été retiré")
+    return {**v["data"], "shared_at": v.get("at")}
