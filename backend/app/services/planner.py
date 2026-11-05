@@ -156,6 +156,7 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
                                "colors_array": s.get("colors_array"), "multicolor_type": s.get("multicolor_type"),
                                "name": s.get("name") or f"{f.get('type') or ''} {f.get('color') or ''}".strip(), "g": f.get("g")})
                 out.append({"key": f"{did}:{idx}:{c}", "design_id": did, "title": title, "cover": m.get("cover_url"),
+                            "retained": bool(m.get("planned")),   # profil retenu dans « A faire » ; sinon celui par defaut
                             "plate": idx, "plate_name": pname, "plates_total": len(plates), "copy": c, "qty": qty,
                             "seconds": int(secs), "weight_g": wg, "fils": fl, "_obj": obj, "thumb": thumb})
     return out, changed
@@ -164,8 +165,9 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
 def _ordered(jobs: list, order: list) -> list:
     rank = {k: i for i, k in enumerate(order)}
     pos = {j["key"]: i for i, j in enumerate(jobs)}
-    # ceux de l'ordre voulu a leur place ; les nouveaux suivent, dans l'ordre de « A faire »
-    return sorted(jobs, key=lambda j: (0, rank[j["key"]]) if j["key"] in rank else (1, pos[j["key"]]))
+    # les modeles retenus d'abord, ceux qui ne le sont pas apres (05/11/2026 : planifies quand meme, en priorite basse) ;
+    # dans chacun, l'ordre voulu, puis les nouveaux dans l'ordre de « A faire »
+    return sorted(jobs, key=lambda j: (not j.get("retained", True),) + ((0, rank[j["key"]]) if j["key"] in rank else (1, pos[j["key"]])))
 
 
 # ── les heures ───────────────────────────────────────────────────────────────

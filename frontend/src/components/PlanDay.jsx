@@ -77,6 +77,9 @@ export function PlateThumb({ j, size = 52, onClick }) {
 }
 // le nom d'un plateau quand il dit autre chose que « Plateau 2 » (sinon « Plateau 2/4 · Plateau 2 »)
 const pname = j => j.plate_name && !/^(plateau|plate)\s*\d+$/i.test(j.plate_name.trim()) ? j.plate_name : "";
+// un modele pas retenu dans « A faire » (05/11/2026) : planifie quand meme, apres les retenus, en gris
+export const UNRET = "#94A3B8";
+export const unretained = j => j && j.retained === false;
 export const plateTxt = j => j.plates_total > 1 ? `Plateau ${j.plate}/${j.plates_total}${pname(j) ? ` · ${pname(j)}` : ""}`
   : pname(j) || "Plateau unique";
 export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, onUnpin, onOpen, onDue, onDone, dragging }) {
@@ -90,9 +93,10 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
     onDragLeave={() => setOver(false)}
     onDrop={e => { const k = e.dataTransfer.getData("text/bn-job"); setOver(false); if (k && k !== j.key) { e.preventDefault(); e.stopPropagation(); onDropBefore?.(k, j.key); } }}
     style={{ display: "flex", flexDirection: "column", gap: 6, padding: 8, borderRadius: 13, cursor: edit ? "grab" : "default", opacity: dragging === j.key ? 0.45 : 1,
-      border: `1.5px ${j.completes ? "solid" : "dashed"} ${j.too_long ? "#EF4444" : j.completes ? GOLD : "color-mix(in srgb, #22C55E 50%, var(--border))"}`,
+      border: `1.5px ${j.completes ? "solid" : "dashed"} ${j.too_long ? "#EF4444" : unretained(j) ? UNRET : j.completes ? GOLD : "color-mix(in srgb, #22C55E 50%, var(--border))"}`,
       boxShadow: over ? "0 -3px 0 0 #6366F1" : "none",
-      background: j.completes ? `linear-gradient(120deg, color-mix(in srgb, ${GOLD} 14%, transparent), transparent 60%), var(--surface2)` : "color-mix(in srgb, #22C55E 5%, var(--surface2))" }}>
+      background: j.completes ? `linear-gradient(120deg, color-mix(in srgb, ${GOLD} 14%, transparent), transparent 60%), var(--surface2)`
+        : unretained(j) ? "var(--surface2)" : "color-mix(in srgb, #22C55E 5%, var(--surface2))" }}>
     <div style={{ display: "flex", gap: 9, minWidth: 0 }}>
       <PlateThumb j={j} onClick={onOpen}/>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -113,7 +117,8 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
         </div>
       </div>
     </div>
-    {(j.completes || j.due || j.load?.length > 0) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+    {(j.completes || j.due || j.load?.length > 0 || unretained(j)) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+      {unretained(j) && tag("○ non retenu", "#64748B", "Profil par défaut, pas retenu dans « À faire » : planifié après les modèles retenus. Retiens-le depuis sa fiche (sa vignette) pour le planifier en priorité")}
       {j.completes && tag(doneTxt(j), "#A16207", "Avec ce plateau, tous ceux de l'objet sont faits")}
       {j.due && tag(`🎯 avant le ${dueTxt(j.due)}`, j.due_ok ? "#16A34A" : "#EF4444", j.due_ok ? "L'objet sera fini à temps" : "Le dernier plateau de l'objet finit après cette date")}
       {j.load?.length > 0 && tag(`🧵 À charger : ${j.load.join(", ")}`, "#EA580C", "Pas dans l'AMS à ce moment-là")}

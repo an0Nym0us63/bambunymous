@@ -8,7 +8,7 @@ import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 import MwImg from "./MwImg";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
-import { DayStrip, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, jobName, dueTxt, doneTxt, plateTxt } from "./PlanDay";
+import { DayStrip, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
 // chacune, liseree de son etat) posee sur la barre de ses heures machine (une impression qui
@@ -249,7 +249,7 @@ export default function PrintCalendar() {
             {mos && <span style={{ position: "absolute", left: wide ? 5 : 3, right: wide ? 5 : 3, top, bottom: wide ? 7 : 5, display: "flex", flexWrap: "wrap",
               alignContent: "flex-end", gap: 3, overflow: "hidden" }}>
               {[...shelf.map(it => ({ done: it })), ...p.map(j => ({ j }))].slice(0, mos.shown).map(({ done, j }, i) => {
-                const c = done ? (ST[done.status] || ST.SUCCESS)[0] : j.completes ? "#EAB308" : j.too_long ? "#EF4444" : "#22C55E";
+                const c = done ? (ST[done.status] || ST.SUCCESS)[0] : j.too_long ? "#EF4444" : unretained(j) ? UNRET : j.completes ? "#EAB308" : "#22C55E";
                 const img = done ? apiThumb(apiUrl(`/prints/${done.id}/image`), 96) : null;
                 return <span key={done ? `d${done.id}` : j.key} style={{ width: mos.size, height: mos.size, flexShrink: 0, borderRadius: wide ? 7 : 4, overflow: "hidden",
                   boxSizing: "border-box", background: "#fff", position: "relative",
@@ -348,18 +348,20 @@ export default function PrintCalendar() {
   // la file : chaque impression prevue, dans l'ordre, a glisser sur un jour du calendrier
   const pool = showPlan && pd?.jobs?.length ? <div style={{ borderRadius: 18, border: "1px solid var(--border)", background: "var(--surface)", padding: 10 }}>
     <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#22C55E", marginBottom: 7 }}>
-      La file · {pd.jobs.length} plateau{pd.jobs.length > 1 ? "x" : ""}{edit && wide ? " · glisse-les sur un jour" : ""}</div>
+      La file · {pd.jobs.length} plateau{pd.jobs.length > 1 ? "x" : ""}{edit && wide ? " · glisse-les sur un jour" : ""}
+      {pd.jobs.some(unretained) && <span style={{ display: "block", marginTop: 3, fontSize: 11, fontWeight: 700, letterSpacing: 0, textTransform: "none", color: "var(--muted)" }}>
+        ○ en gris : modèles pas retenus dans « À faire » (profil par défaut), planifiés après les retenus.</span>}</div>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
       {pd.jobs.slice(0, 60).map(j => <button key={j.key} type="button" draggable={edit}
         onDragStart={e => { e.dataTransfer.setData("text/bn-job", j.key); setDragging(j.key); }} onDragEnd={() => setDragging(null)}
         onClick={() => pickDay(j.day)} data-tip={`${jobName(j)} · ${hm(j.seconds)}`}
         style={{ display: "inline-flex", alignItems: "center", gap: 7, width: 240, maxWidth: "100%", padding: "4px 8px 4px 4px", borderRadius: 11, cursor: edit ? "grab" : "pointer",
-          border: `1.5px ${j.completes ? "solid" : "dashed"} ${j.too_long ? "#EF4444" : j.completes ? "#EAB308" : "color-mix(in srgb, #22C55E 45%, var(--border))"}`,
+          border: `1.5px ${j.completes ? "solid" : "dashed"} ${j.too_long ? "#EF4444" : unretained(j) ? UNRET : j.completes ? "#EAB308" : "color-mix(in srgb, #22C55E 45%, var(--border))"}`,
           background: "var(--surface2)", opacity: dragging === j.key ? 0.4 : 1 }}>
         <PlateThumb j={j} size={34}/>
         <span style={{ minWidth: 0, textAlign: "left" }}>
           <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {j.completes ? "🏁 " : ""}{j.title}</span>
+            {j.completes ? "🏁 " : ""}{unretained(j) ? "○ " : ""}{j.title}</span>
           <span style={{ display: "block", fontSize: 10.5, fontWeight: 800, color: "#6366F1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {plateTxt(j)}{j.qty > 1 ? ` · ${j.copy}/${j.qty}` : ""}</span>
           <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: j.load?.length ? "#F97316" : "var(--muted)" }}>
