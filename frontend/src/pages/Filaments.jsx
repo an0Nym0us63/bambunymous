@@ -1818,6 +1818,21 @@ const _dayFr = d => d.toLocaleDateString("fr-FR", { day: "numeric", month: "shor
 const _dur = days => days == null ? null : days < 14 ? `${Math.max(1, Math.round(days))} j` : days < 70 ? `${Math.round(days / 7)} sem.` : `${(days / 30.4).toFixed(days < 300 ? 1 : 0).replace(".", ",")} mois`;
 const ARCH_ORDERS = [["count", "🏆 Les plus vidées"], ["recent", "🕒 Récentes"], ["hue", "🎨 Teintes"], ["brand", "🏷️ Marques"]];
 
+// l'ecart du suivi d'une pile (05/11/2026) : la moyenne de ses bobines qui comptent ; sinon, en barre, celle des ecartees
+function _driftOf(list) {
+  const all = list.filter(x => x.drift_g != null);
+  if (!all.length) return null;
+  const on = all.filter(x => !x.drift_off), use = on.length ? on : all;
+  return { g: use.reduce((t, x) => t + x.drift_g, 0) / use.length, n: use.length, off: !on.length, total: all.length };
+}
+// en gris, discret, dans un coin
+function DriftMark({ d, style }) {
+  if (!d) return null;
+  return <span data-tip={`Écart du suivi${d.total > 1 ? ` : moyenne de ${d.n} bobine${d.n > 1 ? "s" : ""}` : ""}${d.off ? " (hors des stats)" : ""}`}
+    style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)", opacity: d.off ? 0.55 : 0.85, whiteSpace: "nowrap",
+      textDecoration: d.off ? "line-through" : "none", ...style }}>Δ {driftTxt(d.g)}{d.total > 1 ? ` · ${d.n}` : ""}</span>;
+}
+
 function archiveGroups(spools) {
   const by = new Map();
   for (const s of spools) {
@@ -1831,7 +1846,8 @@ function archiveGroups(spools) {
     const starts = list.map(x => _date(x.first_used_at) || _date(x.created_at)).filter(Boolean);
     const price = list.reduce((t, x) => t + (x.price_override ?? x.filament_price ?? 0), 0);
     return { ...g, list, n: list.length, s: list[0], last: _endOf(list[0]), first: starts.length ? new Date(Math.min(...starts)) : null,
-      kg: list.reduce((t, x) => t + (x.filament_weight_g || 1000), 0) / 1000, price, life: lives.length ? lives.reduce((a, b) => a + b, 0) / lives.length : null };
+      kg: list.reduce((t, x) => t + (x.filament_weight_g || 1000), 0) / 1000, price, life: lives.length ? lives.reduce((a, b) => a + b, 0) / lives.length : null,
+      drift: _driftOf(list) };
   });
 }
 
@@ -1931,7 +1947,7 @@ function ArchiveWall({ spools, onOpen, menu }) {
         const main = paleHex(g.s.filament_color) ? "#94a3b8" : (hexToCss(g.s.filament_color) || "#94a3b8");
         const span = g.first && g.last ? (_monthFr(g.first) === _monthFr(g.last) ? _monthFr(g.last) : `${_monthFr(g.first)} → ${_monthFr(g.last)}`) : null;
         return <Pressable key={g.key} onClick={() => { if (g.n === 1) onOpen(g.s); else { setOpen(g.key); egg("pile_ouverte"); } }} menu={() => menu(g.s)} className="card-sm"
-          style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 18, cursor: "pointer", minWidth: 0,
+          style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 18, cursor: "pointer", minWidth: 0,
             border: `1px solid color-mix(in srgb, ${main} 28%, var(--border))`,
             background: `radial-gradient(90% 120% at 0% 50%, ${main}26, transparent 65%), var(--surface)` }}>
           {/* largeur fixe : le texte des cartes reste aligne, quelle que soit la hauteur de la pile */}
@@ -1953,6 +1969,7 @@ function ArchiveWall({ spools, onOpen, menu }) {
               {g.n > 1 ? `📅 ${span}` : `🏁 finie ${_dayFr(g.last)}`}</span>}
           </div>
           {g.n > 1 && <span style={{ fontSize: 16, color: "var(--muted)", flexShrink: 0 }}>›</span>}
+          <DriftMark d={g.drift} style={{ position: "absolute", bottom: 7, right: 12 }}/>
         </Pressable>;
       })}
     </div>
@@ -2012,6 +2029,7 @@ function ArchiveWall({ spools, onOpen, menu }) {
                     <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
                       <span style={{ fontSize: 13.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{end ? `Finie ${_dayFr(end)}` : "Finie"}</span>
                       <span style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>#{x.id}</span>
+                      <DriftMark d={_driftOf([x])}/>
                       {pr ? <span style={{ marginLeft: "auto", padding: "1px 7px", borderRadius: 20, fontSize: 11, fontWeight: 900, color: "#16A34A", background: tint("#16A34A", 12), whiteSpace: "nowrap" }}>
                         {moneyVal(pr, 2).replace(".", ",")} €</span> : null}
                     </div>

@@ -1386,7 +1386,7 @@ async def archive_spool(
         s.end_reason = reason
     if reason == "finie":
         from ....services import drift
-        drift.record(s, float(before or 0), "archive")
+        drift.record(s, float(before or 0), "archive", await drift.full_of(db, s))
     # Une bobine archivee sort du stock : on remet sa quantite a 0 et on la
     # replace en "Archives". Le worker spool_location ne touche plus aux
     # archivees (exclues du matching AMS), sa location resterait sinon figee

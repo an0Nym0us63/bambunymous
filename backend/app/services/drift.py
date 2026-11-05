@@ -20,15 +20,31 @@ def add_overrun(sp, grams: float) -> None:
         sp.overrun_g = round(float(sp.overrun_g or 0) + grams, 1)
 
 
-def record(sp, left: float, kind: str) -> bool:
+# au-dela de AUTO_OFF_PCT % du poids d'une bobine pleine (100 g sur 1 kg), une mesure automatique sort d'elle-meme des
+# stats (05/11/2026) : le suivi ne se trompe pas d'autant, c'est une autre cause (jetee en partie, pretee, poids de
+# depart faux) ; elle reste lisible, et « Remettre » la fait compter
+AUTO_OFF_PCT = 10
+AUTO_OFF = f"Écart de plus de {AUTO_OFF_PCT} % (automatique)"
+
+
+def record(sp, left: float, kind: str, full: float | None = None) -> bool:
     """La bobine est vraiment finie, et on lui croyait encore « left » grammes (negatif : deja sous notre zero).
-    Une seule mesure par bobine."""
+    Une seule mesure par bobine. full : le poids d'une bobine pleine de son filament."""
     if sp is None or getattr(sp, "drift_g", None) is not None:
         return False
     sp.drift_g = round(float(left) - float(sp.overrun_g or 0), 1)
     sp.drift_kind = kind
     sp.drift_at = datetime.utcnow()
+    if abs(sp.drift_g) > (full or 1000.0) * AUTO_OFF_PCT / 100:
+        sp.drift_off = AUTO_OFF
     return True
+
+
+async def full_of(db, sp) -> float:
+    """Le poids d'une bobine pleine de son filament (1 kg sans le savoir)."""
+    from ..models.filament import Filament
+    f = await db.get(Filament, sp.filament_id) if sp is not None else None
+    return float(f.filament_weight_g) if f and f.filament_weight_g else 1000.0
 
 
 PAST_OFF = "Passé, déduit de l'historique"

@@ -452,7 +452,7 @@ async def switch(pid: int, slot: int, spool_id: int, auto: bool = False) -> dict
                     from . import drift
                     bef = getattr(last, "spool_before_g", None)
                     est = (float(bef) if bef is not None else left_old + float(last.grams_used or 0)) - part
-                    if drift.record(old, est, "relais" if auto else "suite"):
+                    if drift.record(old, est, "relais" if auto else "suite", await drift.full_of(db, old)):
                         logger.info(f"[DERIVE] bobine #{old.id} finie a {part:.1f} g : derive {old.drift_g:+.1f} g")
                 old.remaining_weight_g = 0.0                  # finie : ce qui restait a ete imprime
                 if left_old > 0:
