@@ -369,6 +369,44 @@ async def mw_queue_plan_delete(design_id: str, _: str = Depends(require_mw)):
     return {"ok": True}
 
 
+# ── le planning des impressions (05/11/2026) : « A faire » pose sur les jours, voir services/planner.py ──
+@router.get("/plan")
+async def mw_plan(tz: int | None = None, _: str = Depends(get_current_user)):
+    """Les travaux de « A faire » (plateau par plateau) poses sur les jours a venir, chaque decalage explique,
+    l'avance ou le retard, les conseils. tz : decalage du navigateur (minutes)."""
+    from ....services import planner as P
+    return await _call(P.plan(tz if tz is not None and -900 <= tz <= 900 else None))
+
+
+@router.put("/plan/settings")
+async def mw_plan_settings(body: dict = Body({}), _: str = Depends(require_mw)):
+    """Les consignes : pause entre deux impressions (gap, minutes), heures de fonctionnement (run) et de lancement
+    (launch), {"from": "08:00", "to": "22:00"} ou null."""
+    from ....services import planner as P
+    try:
+        await P.set_settings(body)
+    except P.PlanError as e:
+        raise HTTPException(400, str(e))
+    return await P.plan()
+
+
+@router.put("/plan/arrange")
+async def mw_plan_arrange(body: dict = Body({}), _: str = Depends(require_mw)):
+    """Ranger : {order: [cles], pins: {cle: "AAAA-MM-JJ" | null}}."""
+    from ....services import planner as P
+    try:
+        return await P.arrange(body)
+    except P.PlanError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/plan/optimize")
+async def mw_plan_optimize(body: dict = Body({}), _: str = Depends(require_mw)):
+    """Enchainer les memes couleurs : toute la file, ou un jour ({day})."""
+    from ....services import planner as P
+    return await P.optimize_plan(str(body.get("day") or "") or None)
+
+
 @router.get("/mine")
 async def mw_mine(ids: str = "", _: str = Depends(get_current_user)):
     """Ce que J'AI de ces modeles (imprimes, collections, j'aime) : pour les

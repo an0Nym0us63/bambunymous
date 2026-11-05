@@ -3,6 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
 import { egg } from "../eggs";
+import { showAlert } from "../utils/dialog";
+import { useCanMw } from "../store/auth";
+import MakerWorldModelSheet from "./MakerWorldModelSheet";
+import { DayStrip, JobCard, PlanSettings, PlanAdvice, jobName } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
 // chacune, liseree de son etat) posee sur la barre de ses heures machine (une impression qui
@@ -14,32 +18,22 @@ const ST = { SUCCESS: ["#22C55E", "réussie"], FAILED: ["#EF4444", "échouée"],
   IN_PROGRESS: ["#3B82F6", "en cours"] };
 const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const hm = s => { const m = Math.round((s || 0) / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${String(m % 60).padStart(2, "0")}` : ""}`; };
+// l'etat du planning : a lancer, en retard, en avance, dans les temps
+function PlanStatus({ st, live }) {
+  const c = { due: "#6366F1", late: "#F97316", ahead: "#22C55E", ontime: "#22C55E" }[st.state] || "#64748B";
+  const ic = { due: "⏰", late: "🐢", ahead: "🚀", ontime: "✅" }[st.state] || "📅";
+  return <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 12px", borderRadius: 14, border: `1px solid color-mix(in srgb, ${c} 40%, var(--border))`,
+    background: `color-mix(in srgb, ${c} 9%, var(--surface))` }}>
+    <span style={{ fontSize: 17 }}>{ic}</span>
+    <span style={{ flex: 1, fontSize: 13, fontWeight: 800, color: "var(--text2)" }}>{st.text}
+      {live && <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>En cours : {live.name} · encore {hm(live.remaining_min * 60)}</span>}</span>
+  </div>;
+}
 const useWidth = () => {
   const [w, setW] = useState(() => window.innerWidth);
   useEffect(() => { const f = () => setW(window.innerWidth); window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, []);
   return w;
 };
-
-// la file « A faire » posee sur les jours a venir : chaque modele a la suite, a partir de la fin de l'impression en cours
-function projectQueue(models) {
-  const out = {};
-  if (!Array.isArray(models)) return out;
-  let t = new Date();
-  const cur = models.find(m => m.printing && m.remaining_min);
-  if (cur) t = new Date(t.getTime() + cur.remaining_min * 60000);
-  models.filter(m => !m.printing && m.seconds > 0).slice(0, 40).forEach(m => {
-    let s = new Date(t), end = new Date(t.getTime() + m.seconds * 1000);
-    while (s < end) {
-      const mid = new Date(s); mid.setHours(24, 0, 0, 0);
-      const e = end < mid ? end : mid, k = iso(s);
-      (out[k] = out[k] || []).push({ design_id: m.design_id, title: m.title_fr || m.title || `Modèle ${m.design_id}`, cover: m.cover_url,
-        start: s.toTimeString().slice(0, 5), seconds: Math.round((e - s) / 1000), qty: m.qty });
-      s = e;
-    }
-    t = end;
-  });
-  return out;
-}
 
 export default function PrintCalendar() {
   const nav = useNavigate();
@@ -55,8 +49,14 @@ export default function PrintCalendar() {
   }, [side]);
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [days, setDays] = useState(null);       // {date: {count, duration, items}}
-  const [queue, setQueue] = useState(null);
+  // le planning (05/11/2026) : « A faire » plateau par plateau, pose par le serveur selon les consignes
+  const [pd, setPd] = useState(null);
   const [showPlan, setShowPlan] = useState(true);
+  const [setOpen, setSetOpen] = useState(false);
+  const [sheet, setSheet] = useState(null);           // la fiche d'un modele : profil, plateaux, filaments retenus
+  const [dragging, setDragging] = useState(null);
+  const [dropDay, setDropDay] = useState(null);
+  const edit = useCanMw();                            // ranger : droit MakerWorld, jamais chez un copain
   const [pick, setPick] = useState(() => iso(new Date()));
   useEffect(() => { egg("calendrier"); }, []);
   // les semaines affichees : du lundi qui precede le 1er au dimanche qui suit la fin du mois
@@ -78,10 +78,45 @@ export default function PrintCalendar() {
   }, [grid.from, grid.to]);
   useEffect(() => {
     let alive = true;
-    client.get("/makerworld/queue").then(r => alive && setQueue(r.data?.models || [])).catch(() => alive && setQueue([]));
-    return () => { alive = false; };
+    const load = () => client.get("/makerworld/plan", { params: { tz: -new Date().getTimezoneOffset() } })
+      .then(r => alive && setPd(r.data)).catch(() => alive && setPd(x => x || { jobs: [], days: {} }));
+    load();
+    // le planning suit l'impression en cours : relu chaque minute (avance, retard, ce qui est a lancer)
+    const t = setInterval(() => { if (!document.hidden) load(); }, 60000);
+    return () => { alive = false; clearInterval(t); };
   }, []);
-  const plan = useMemo(() => showPlan ? projectQueue(queue) : {}, [queue, showPlan]);
+  const plan = useMemo(() => {
+    const out = {};
+    if (showPlan) for (const j of pd?.jobs || []) (out[j.day] = out[j.day] || []).push(j);
+    return out;
+  }, [pd, showPlan]);
+  // ranger : l'ordre voulu et les jours poses partent au serveur, qui repose tout et rend le planning
+  const keys = (pd?.jobs || []).map(j => j.key);
+  const byKey = Object.fromEntries((pd?.jobs || []).map(j => [j.key, j]));
+  const send = async (url, body, method = "put") => {
+    try { const r = await client[method](url, body); setPd(r.data); return true; }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); return false; }
+  };
+  const arrange = (body, what = "planning_glisse") => send("/makerworld/plan/arrange", body).then(ok => { if (ok) egg(what); });
+  const without = k => keys.filter(x => x !== k);
+  const moveBefore = (k, ref) => {
+    const o = without(k); o.splice(Math.max(0, o.indexOf(ref)), 0, k);
+    const a = byKey[k], b = byKey[ref];
+    arrange({ order: o, ...(a && b && a.day !== b.day ? { pins: { [k]: b.day } } : {}) });
+  };
+  const moveAfter = (k, ref) => { const o = without(k); o.splice(o.indexOf(ref) + 1, 0, k); arrange({ order: o }); };
+  // poser sur un jour : le travail y va, apres ce qui y est deja
+  const moveDay = (k, day) => {
+    const o = without(k);
+    let at = 0;
+    o.forEach((x, i) => { if (byKey[x]?.day <= day) at = i + 1; });
+    o.splice(at, 0, k);
+    arrange({ order: o, pins: { [k]: day } });
+  };
+  const unpin = k => arrange({ pins: { [k]: null } });
+  const applyAdvice = a => a.kind === "after" ? moveAfter(a.key, a.ref) : moveBefore(a.key, a.ref);
+  const optimize = day => send("/makerworld/plan/optimize", day ? { day } : {}, "post").then(ok => { if (ok) egg("planning_optimise"); });
+  const saveSettings = async v => { if (await send("/makerworld/plan/settings", v)) { egg("planning_consignes"); setSetOpen(false); } };
   const today = iso(new Date());
   const inMonth = d => d.getMonth() === month.getMonth();
   const monthDays = grid.weeks.flat().filter(inMonth).map(iso);
@@ -115,7 +150,7 @@ export default function PrintCalendar() {
       return <div key={iso(w[0])} style={{ display: "grid", gridTemplateColumns: grid7, gap: wide ? 5 : 3, marginBottom: wide ? 5 : 3 }}>
         {w.map(d => {
           const k = iso(d), x = days?.[k], p = plan[k] || [], fill = Math.min(1, (x?.duration || 0) / 86400);
-          const pfill = Math.min(1 - fill, p.reduce((a, y) => a + y.seconds, 0) / 86400);
+          const pfill = showPlan ? Math.min(1 - fill, (pd?.days?.[k]?.seconds || 0) / 86400) : 0;
           // l'etagere : une vignette par impression du jour (une impression sur deux jours n'y est qu'une fois par jour)
           const shelf = [...new Map((x?.items || []).map(i => [i.id, i])).values()];
           // ce qui tient dans la case : cote a cote, sinon chevauchees comme des livres (jusqu'a la moitie), puis « +N »
@@ -125,9 +160,15 @@ export default function PrintCalendar() {
           const shown = Math.min(shelf.length, room);
           const step = shown > 1 ? Math.min(th + 2, (avail - (shelf.length > shown ? more : 0) - th) / (shown - 1)) : th;
           const on = k === pick, isToday = k === today;
-          return <button key={k} type="button" onClick={() => pickDay(k)} aria-label={`${d.getDate()} ${MONTHS[d.getMonth()]}`}
+          // un jour a venir : on y depose une impression de la file
+          const drop = edit && k >= today ? {
+            onDragOver: e => { if (e.dataTransfer.types.includes("text/bn-job")) { e.preventDefault(); setDropDay(k); } },
+            onDragLeave: () => setDropDay(x => x === k ? null : x),
+            onDrop: e => { const j = e.dataTransfer.getData("text/bn-job"); setDropDay(null); if (j) { e.preventDefault(); moveDay(j, k); pickDay(k); } } } : {};
+          const fits = Math.max(1, Math.floor((avail - more) / (th + 2)));
+          return <button key={k} type="button" onClick={() => pickDay(k)} aria-label={`${d.getDate()} ${MONTHS[d.getMonth()]}`} {...drop}
             style={{ position: "relative", height: cellH, minWidth: 0, borderRadius: wide ? 11 : 8, cursor: "pointer", overflow: "hidden", padding: 0,
-              border: on ? "2px solid #6366F1" : isToday ? "2px solid color-mix(in srgb, #6366F1 55%, transparent)" : "1px solid var(--border)",
+              border: dropDay === k ? "2px dashed #22C55E" : on ? "2px solid #6366F1" : isToday ? "2px solid color-mix(in srgb, #6366F1 55%, transparent)" : "1px solid var(--border)",
               background: on ? "color-mix(in srgb, #6366F1 8%, var(--surface2))" : "var(--surface2)", opacity: inMonth(d) ? 1 : 0.38, textAlign: "left" }}>
             {/* les heures du jour, en remplissage depuis le bas ; la file prevue au-dessus, en hachures */}
             <span aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: `${fill * 100}%`,
@@ -146,8 +187,13 @@ export default function PrintCalendar() {
                     marginLeft: j ? step - th : 0, position: "relative", zIndex: shown - j,
                     boxShadow: `0 2px 0 0 ${c}, 0 0 0 1px color-mix(in srgb, ${c} 40%, transparent)` }}/>; })}
               {shelf.length > shown && <span style={{ fontSize: wide ? 10 : 8.5, fontWeight: 900, color: "var(--text)", lineHeight: `${th}px`, marginLeft: 3, flexShrink: 0 }}>+{shelf.length - shown}</span>}
-              {!shelf.length && p.length > 0 && <span style={{ width: th, height: th, borderRadius: wide ? 6 : 4, border: "1.5px dashed #22C55E",
-                display: "flex", alignItems: "center", justifyContent: "center", fontSize: wide ? 11 : 8 }}>✅</span>}
+              {/* les jours a venir : la vignette de ce qui y est prevu, liseree en pointilles */}
+              {!shelf.length && p.slice(0, fits).map(j => <span key={j.key} style={{ width: th, height: th, flexShrink: 0, marginRight: 2,
+                borderRadius: wide ? 6 : 4, border: `1.5px dashed ${j.too_long ? "#EF4444" : "#22C55E"}`, overflow: "hidden", boxSizing: "border-box",
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: wide ? 11 : 8, background: "var(--surface)" }}>
+                {j.cover ? <img src={apiThumb(j.cover, 64)} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.85 }}/> : "✅"}</span>)}
+              {!shelf.length && p.length > fits &&
+                <span style={{ fontSize: wide ? 10 : 8.5, fontWeight: 900, color: "#16A34A", lineHeight: `${th}px` }}>+{p.length - fits}</span>}
             </span>
           </button>;
         })}
@@ -167,13 +213,13 @@ export default function PrintCalendar() {
     </div>
   </div>;
   const detail = <div ref={detailRef} style={{ borderRadius: 18, border: "1px solid var(--border)", background: "var(--surface)", padding: 12, display: "flex", flexDirection: "column", gap: 8,
-    scrollMarginTop: 70, minWidth: 0, ...(side ? { position: "sticky", top: 12, maxHeight: "calc(100dvh - 40px)", overflowY: "auto" } : {}) }}>
+    scrollMarginTop: 70, minWidth: 0 }}>
     <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
       <span style={{ fontSize: 15, fontWeight: 900, color: "var(--text)", textTransform: "capitalize" }}>
         {new Date(`${pick}T12:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</span>
       {sel?.duration > 0 && <span style={{ fontSize: 12, fontWeight: 800, color: "var(--muted)" }}>{hm(sel.duration)} de machine</span>}
     </div>
-    {!sel?.items?.length && !selPlan.length && <div style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)" }}>
+    {!sel?.items?.length && !selPlan.length && pick < today && <div style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)" }}>
       {days ? "Rien d'imprimé ce jour-là" : "Chargement…"}</div>}
     {(sel?.items || []).map((it, i) => { const [c, l] = ST[it.status] || ST.SUCCESS;
       return <button key={`${it.id}${i}`} type="button" onClick={() => nav(`/prints?id=${it.id}`)}
@@ -187,22 +233,43 @@ export default function PrintCalendar() {
         </span>
         <span style={{ fontSize: 11, fontWeight: 900, color: c, background: `color-mix(in srgb, ${c} 14%, transparent)`, borderRadius: 9, padding: "2px 8px" }}>{l}</span>
       </button>; })}
+    {pick >= today && <DayStrip day={pick} done={sel?.items || []} jobs={selPlan} settings={pd?.settings} now={pd?.now}/>}
     {selPlan.length > 0 && <>
-      <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#22C55E", marginTop: 4 }}>
-        Prévu si la file s'enchaîne</div>
-      {selPlan.map((it, i) => <button key={`${it.design_id}${i}`} type="button" onClick={() => nav(`/prints?tab=queue`)}
-        style={{ display: "flex", alignItems: "center", gap: 10, padding: 6, borderRadius: 12, border: "1.5px dashed color-mix(in srgb, #22C55E 50%, var(--border))",
-          background: "color-mix(in srgb, #22C55E 6%, var(--surface2))", cursor: "pointer", textAlign: "left" }}>
-        <span style={{ width: 42, height: 42, borderRadius: 10, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
-          background: "var(--surface)" }}>✅</span>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: "block", fontSize: 13.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {it.title}{it.qty > 1 ? ` ×${it.qty}` : ""}</span>
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>vers {it.start} · {hm(it.seconds)} ce jour-là</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+        <span style={{ flex: 1, fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#22C55E" }}>
+          Prévu · {hm(selPlan.reduce((a, j) => a + j.seconds, 0))}</span>
+        {edit && selPlan.length > 1 && <button type="button" onClick={() => optimize(pick)} data-tip="Enchaîner les mêmes couleurs, la plus longue en fin de journée"
+          style={{ ...pill, padding: "4px 10px", color: "#6366F1" }}>✨ Optimiser la journée</button>}
+      </div>
+      {selPlan.map((j, i) => <JobCard key={j.key} j={j} edit={edit} dragging={dragging} onDrag={setDragging}
+        onDropBefore={moveBefore} onUp={i ? () => moveBefore(j.key, selPlan[i - 1].key) : null}
+        onDown={i < selPlan.length - 1 ? () => moveAfter(j.key, selPlan[i + 1].key) : null}
+        onDay={day => moveDay(j.key, day)} onUnpin={() => unpin(j.key)} onOpen={() => setSheet(j.design_id)}/>)}
+    </>}
+    {pick >= today && !selPlan.length && pd && <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
+      {edit ? "Rien de prévu : glisse ici une impression de la file (sous le calendrier), ou pose-la avec son 📅." : "Rien de prévu ce jour-là."}</div>}
+  </div>;
+  const advice = showPlan ? <PlanAdvice items={pd?.advice} edit={edit} onApply={applyAdvice}/> : null;
+  // la file : chaque impression prevue, dans l'ordre, a glisser sur un jour du calendrier
+  const pool = showPlan && pd?.jobs?.length ? <div style={{ borderRadius: 18, border: "1px solid var(--border)", background: "var(--surface)", padding: 10 }}>
+    <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#22C55E", marginBottom: 7 }}>
+      La file · {pd.jobs.length} impression{pd.jobs.length > 1 ? "s" : ""}{edit && wide ? " · glisse-les sur un jour" : ""}</div>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+      {pd.jobs.slice(0, 60).map(j => <button key={j.key} type="button" draggable={edit}
+        onDragStart={e => { e.dataTransfer.setData("text/bn-job", j.key); setDragging(j.key); }} onDragEnd={() => setDragging(null)}
+        onClick={() => pickDay(j.day)} data-tip={`${jobName(j)} · ${hm(j.seconds)}`}
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, maxWidth: 230, padding: "3px 8px 3px 3px", borderRadius: 10, cursor: edit ? "grab" : "pointer",
+          border: `1.5px dashed ${j.too_long ? "#EF4444" : "color-mix(in srgb, #22C55E 45%, var(--border))"}`, background: "var(--surface2)", opacity: dragging === j.key ? 0.4 : 1 }}>
+        <span style={{ width: 26, height: 26, borderRadius: 7, overflow: "hidden", flexShrink: 0, background: "var(--surface)" }}>
+          {j.cover && <img src={apiThumb(j.cover, 64)} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}</span>
+        <span style={{ minWidth: 0, textAlign: "left" }}>
+          <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{jobName(j)}</span>
+          <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: j.load?.length ? "#F97316" : "var(--muted)" }}>
+            {new Date(`${j.day}T12:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })} {j.start.slice(11, 16)} · {hm(j.seconds)}{j.load?.length ? " · 🧵" : ""}</span>
         </span>
       </button>)}
-    </>}
-  </div>;
+    </div>
+  </div> : null;
   return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
     {/* le mois et ses chiffres */}
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -216,15 +283,27 @@ export default function PrintCalendar() {
         style={{ ...pill, color: "#6366F1", borderColor: "color-mix(in srgb, #6366F1 40%, var(--border))" }}>Aujourd'hui</button>
       <button type="button" onClick={() => setShowPlan(v => !v)} data-tip="La file « À faire », enchaînée sans pause après l'impression en cours"
         style={{ ...pill, ...(showPlan ? { color: "#22C55E", borderColor: "color-mix(in srgb, #22C55E 45%, var(--border))", background: "color-mix(in srgb, #22C55E 10%, var(--surface2))" } : {}) }}>
-        {showPlan ? "✓ " : ""}Prévisions de la file{showPlan && nPlanned ? ` (${nPlanned})` : ""}</button>
+        {showPlan ? "✓ " : ""}Planning{showPlan && nPlanned ? ` (${nPlanned})` : ""}</button>
+      <button type="button" onClick={() => setSetOpen(v => !v)} data-tip="Pause entre deux impressions, heures de fonctionnement et de lancement"
+        style={{ ...pill, ...(setOpen ? { color: "#6366F1" } : {}) }}>⚙ Consignes</button>
+      {edit && nPlanned > 1 && <button type="button" onClick={() => optimize(null)}
+        data-tip="Enchaîner les plateaux de mêmes couleurs dans toute la file (les impressions posées sur un jour ne bougent pas)"
+        style={{ ...pill, color: "#6366F1" }}>✨ Optimiser la file</button>}
     </div>
+    {pd?.status && showPlan && <PlanStatus st={pd.status} live={pd.live}/>}
+    {setOpen && <PlanSettings s={pd?.settings} onSave={saveSettings} onClose={() => setSetOpen(false)}/>}
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {chip("Impressions", days ? mCount : "…", "#3B82F6")}
       {chip("Heures machine", days ? hm(mTotal) : "…", "#8B5CF6")}
       {chip("Occupation", days ? `${Math.round(occ * 100)} %` : "…", "#EC4899")}
       {chip("Jours actifs", days ? `${mActive} / ${monthDays.length}` : "…", "#22C55E")}
     </div>
-    {side ? <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 340px", gap: 12, alignItems: "start" }}>{calendar}{detail}</div> : <>{calendar}{detail}</>}
+    {side ? <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 12, alignItems: "start" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>{calendar}{pool}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 12, maxHeight: "calc(100dvh - 40px)", overflowY: "auto" }}>{detail}{advice}</div>
+    </div> : <>{calendar}{advice}{detail}{pool}</>}
+    {sheet && <MakerWorldModelSheet designId={String(sheet)} onClose={() => { setSheet(null);
+      client.get("/makerworld/plan", { params: { tz: -new Date().getTimezoneOffset() } }).then(r => setPd(r.data)).catch(() => {}); }}/>}
   </div>;
 }
 

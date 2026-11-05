@@ -637,12 +637,18 @@ async def boost_tokens_tick(cfg) -> int:
     return sent
 
 
+async def plan_tick(cfg) -> int:
+    """Le planning (05/11/2026) : a l'heure prevue, l'imprimante libre, ce qu'il faut lancer."""
+    from . import planner
+    return await planner.tick(cfg)
+
+
 # ── Boucle commune ───────────────────────────────────────────────────────────
 # (types qui la reclament, verification) ; None : toujours (les succes se
 # tiennent a jour meme quand leur notification est coupee).
 _TICKS = [(("attention_new",), attention_tick), (("weekly_summary",), weekly_tick), (("printer_idle",), idle_tick),
           (None, achievements_tick), (("friend_achievement",), friend_achievements_tick),
-          (("mw_queue_ready",), queue_ready_tick),
+          (("mw_queue_ready",), queue_ready_tick), (("plan_due",), plan_tick),
           (("dry_needed_loaded",), dry_needed_tick), (("dry_forgotten",), dry_forgotten_tick),
           (("accessory_low", "accessory_out"), accessories_tick), (("objects_unsold",), unsold_tick),
           (("print_overdue",), overdue_tick), (("mw_auth_lost",), mw_auth_tick),

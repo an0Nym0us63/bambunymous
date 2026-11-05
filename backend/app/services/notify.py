@@ -501,6 +501,15 @@ EVENTS["mw_queue_ready"] = {
     "sample": {"title": "✅ Prêt à imprimer : Lampe lune", "priority": 2, "attach": _SAMPLE_COVER, "link": "/prints?tab=queue",
                "message": "🧵 Tout le filament est en stock (2 couleurs, 184 g).\n✨ Déjà dans l'AMS."},
 }
+EVENTS["plan_due"] = {
+    "section": "prints", "label": "Impression du planning à lancer",
+    "description": "À l'heure prévue par le planning (calendrier des impressions), l'imprimante libre : ce qu'il faut lancer, "
+                   "ce qu'il faut charger avant, et la suite. Un second rappel si elle n'est toujours pas lancée une demi-heure après "
+                   "(relevé toutes les 15 min).",
+    "options": [],
+    "sample": {"title": "⏰ À lancer : Lampe lune · plateau 2", "priority": 3, "attach": _SAMPLE_COVER, "link": "/prints?tab=calendar",
+               "message": "⏱ 3 h 20 · prévue à 14 h\n🧵 À charger : PLA Matte Turquoise\nEnsuite : Vase spirale"},
+}
 EVENTS["dry_needed_loaded"] = {
     "section": "dry", "label": "Bobine à sécher dans l'AMS",
     "description": "Une bobine chargée dans l'AMS n'a jamais été séchée, ou plus depuis son délai (une fois par bobine, jusqu'à son séchage).",
@@ -517,7 +526,7 @@ EVENTS["dry_forgotten"] = {
 }
 
 # Ordre d'affichage dans chaque section
-_ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_end", "print_overdue", "print_done", "print_failed",
+_ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_end", "print_overdue", "print_done", "print_failed", "plan_due",
           "print_paused", "print_resumed", "print_speed",
           "printer_hms", "printer_offline", "bed_cooled", "printer_firmware",
           "dry_started", "dry_done", "dry_needed_loaded", "dry_forgotten",

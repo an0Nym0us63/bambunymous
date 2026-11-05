@@ -570,7 +570,12 @@ async def _compute(fresh: bool = False) -> dict:
             row["plates"] = [{"index": pl.get("index"), "name": pl.get("name") or "",
                               "ready": pl.get("index") in ready, "printed": mine.get(pl.get("index"), 0),
                               "seconds": _num(pl.get("seconds")) or None,
-                              "weight_g": round(sum(_num(f.get("g")) for f in pl.get("filaments") or []), 1) or None}
+                              "weight_g": round(sum(_num(f.get("g")) for f in pl.get("filaments") or []), 1) or None,
+                              # ses filaments retenus (05/11/2026) : le planning y lit ce qu'il faut charger et enchaine
+                              # les plateaux de memes couleurs
+                              "fils": [{"filament_id": fid_at.get((pl.get("index") if per_plate else None, fkey(f.get("type"), f.get("color")))),
+                                        "type": f.get("type"), "color": f.get("color"), "g": round(_num(f.get("g")), 1)}
+                                       for f in pl.get("filaments") or [] if _num(f.get("g")) > 0]}
                              for pl in plates]
             # faisable tout de suite avec ce qui est charge : les plateaux prets (ceux pas encore
             # imprimes d'abord), leurs heures et leurs grammes -- pour trier « A faire » par ce qu'on peut lancer

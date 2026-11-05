@@ -9,7 +9,7 @@
     <dt><span class="ui">Galerie</span></dt><dd>Seulement les prints et groupes qui ont des photos, en grandes tuiles, avec un mode comparaison.</dd>
     <dt><span class="ui">MakerWorld</span></dt><dd>Tes collections, j'aime et découvertes MakerWorld (détaillé dans le chapitre <a href="#makerworld">MakerWorld</a>), avec en tête la tuile <a href="#impressions-a-evaluer">À évaluer</a>.</dd>
     <dt><span class="ui">À faire</span></dt><dd>Ta file d'attente : les modèles MakerWorld que tu veux imprimer, avec ce qui est faisable tout de suite avec ton stock. Voir <a href="#impressions-a-faire">À faire</a>.</dd>
-    <dt><span class="ui">Calendrier</span></dt><dd>Le mois jour par jour : chaque case range en étagère la vignette de chacune de ses impressions (liserée de la couleur de son état : réussie, échouée, annulée, en cours ; celles qui ne tiennent pas côte à côte se chevauchent, puis « +3 »), et se remplit depuis le bas de ses heures machine (une impression qui passe minuit compte sur les deux jours) ; en tête, les impressions, heures machine, l'occupation (les heures des jours écoulés sur leurs 24 h) et les jours actifs du mois ; sur ordinateur, une colonne donne les heures et la charge de chaque semaine. ‹ › changent de mois, <span class="ui">Aujourd'hui</span> y revient. Toucher un jour en montre les impressions — à côté de la grille sur un grand écran, dessous ailleurs (la page y descend) — (heure de lancement, durée ce jour-là, état), qui ouvrent leur fiche. <span class="ui">Prévisions de la file</span> pose sur les jours à venir, en hachures vertes, la file <a href="#impressions-a-faire">À faire</a> enchaînée sans pause après l'impression en cours (dans son ordre de priorité) : de quoi voir jusqu'où elle mène.</dd>
+    <dt><span class="ui">Calendrier</span></dt><dd>Le mois jour par jour : chaque case range en étagère la vignette de chacune de ses impressions (liserée de la couleur de son état : réussie, échouée, annulée, en cours ; celles qui ne tiennent pas côte à côte se chevauchent, puis « +3 »), et se remplit depuis le bas de ses heures machine (une impression qui passe minuit compte sur les deux jours) ; en tête, les impressions, heures machine, l'occupation (les heures des jours écoulés sur leurs 24 h) et les jours actifs du mois ; sur ordinateur, une colonne donne les heures et la charge de chaque semaine. ‹ › changent de mois, <span class="ui">Aujourd'hui</span> y revient. Toucher un jour en montre les impressions — à côté de la grille sur un grand écran, dessous ailleurs (la page y descend) — (heure de lancement, durée ce jour-là, état), qui ouvrent leur fiche. <span class="ui">Planning</span> pose sur les jours à venir, en hachures vertes avec leurs vignettes en pointillés, la file <a href="#impressions-a-faire">À faire</a> plateau par plateau, selon tes consignes : voir <a href="#impressions-planning">Le planning</a>.</dd>
   </dl>
   <div class="tip"><p>L'onglet choisi s'écrit dans l'adresse (<code>/prints?tab=gallery</code>, <code>?tab=makerworld</code>, <code>?tab=queue</code>, <code>?tab=calendar</code>) et il est gardé quand tu passes d'une page à l'autre. Une adresse <code>/prints?id=123</code> ouvre directement la fiche du print 123, <code>/prints?group=4</code> celle du groupe 4 : pratique pour partager un lien.</p></div>
   <figure class="phone"><img src="img/impressions-liste.webp" alt="Page Impressions sur téléphone, onglet Liste : compteurs, recherche et cartes de prints"><figcaption>L'onglet Liste sur téléphone : les compteurs, la barre de recherche et les cartes.</figcaption></figure>
@@ -465,6 +465,32 @@
       <li><span class="ui">📌 Oublier le plan retenu</span> : revient au profil et aux filaments par défaut.</li>
     </ul>
   </section>
+</section>
+
+<section id="impressions-planning">
+  <h2>Le planning</h2>
+  <p>Dans l'onglet <span class="ui">Calendrier</span>, le <b>planning</b> pose ta file <a href="#impressions-a-faire">À faire</a> sur les jours à venir, <b>plateau par plateau</b> et exemplaire par exemplaire (un modèle voulu en 4 exemplaires donne 4 impressions ; un plateau imprimé depuis son entrée dans le planning en sort). Il part de maintenant, ou de la fin de l'impression en cours, et suit tes consignes. Chaque impression décalée dit <b>pourquoi</b> (↪) : « Finirait à 23 h 15, après l'arrêt de 22 h : reportée au lendemain, demain à 8 h », « Pas de lancement entre 00:00 et 08:00 : lancée à 8 h »…</p>
+  <h3>Les consignes</h3>
+  <p><span class="ui">⚙ Consignes</span>, au-dessus du calendrier :</p>
+  <ul>
+    <li><b>Pause entre deux impressions</b> (en minutes) : le temps de retirer le plateau et de relancer. Avec une heure, quatre impressions de 6 h tiennent sur deux jours.</li>
+    <li><b>Heures de fonctionnement</b> : 24 h/24, ou une plage. Une impression doit <b>commencer et finir</b> dans la plage : avec 8 h – 22 h, une impression de 6 h ne part plus après 16 h. Une impression plus longue que la plage est signalée en rouge (elle ne peut pas la respecter).</li>
+    <li><b>Heures de lancement</b> : à toute heure, ou une plage (quand quelqu'un est là pour lancer). Une impression ne peut <b>commencer</b> que dedans, elle peut finir après : avec 8 h – minuit, une impression peut finir à 2 h du matin, mais la suivante attend 8 h.</li>
+  </ul>
+  <p>Une plage peut passer minuit (22:00 – 06:00).</p>
+  <h3>La journée</h3>
+  <p>Toucher un jour à venir montre sa <b>frise</b> de 0 h à 24 h : les heures de fonctionnement en vert pâle, les heures de lancement soulignées en violet, les impressions faites, les prévues hachurées de leur couleur, l'heure qu'il est en rouge. Dessous, chaque impression prévue : ses heures, sa durée, ses filaments (en orange <b>🧵 À charger</b> ce qui n'est pas dans l'AMS à ce moment-là), pourquoi elle est là, et son avance ou son retard. Sa vignette ouvre la fiche du modèle, pour changer le profil, les plateaux ou les filaments retenus.</p>
+  <p><b>Ranger</b> <span class="admin">admin</span> (ou un compte qui a le droit MakerWorld) :</p>
+  <ul>
+    <li>sur ordinateur, glisse une impression de <span class="ui">La file</span> (sous le calendrier) sur un jour, ou une carte de la journée sur une autre pour la placer avant ;</li>
+    <li>partout, ↑ ↓ la font passer plus tôt ou plus tard, 📅 la pose sur un autre jour ;</li>
+    <li>une impression posée sur un jour porte 📌 : elle y reste, à partir du début de journée (l'heure de lancement, sinon celle de fonctionnement, sinon 8 h), après ce qui y était ; si elle n'y tient plus, elle passe au lendemain et le dit. ✕ la rend à la file, qui la place où elle tient.</li>
+  </ul>
+  <h3>Optimiser et conseils</h3>
+  <p><span class="ui">✨ Optimiser la file</span> enchaîne les plateaux de <b>mêmes couleurs</b>, même s'ils viennent de modèles différents, pour charger moins de bobines ; la priorité de la file reste à peu près tenue (le choix se fait parmi les huit suivantes), et les impressions posées sur un jour ne bougent pas. <span class="ui">✨ Optimiser la journée</span> fait de même pour un jour, et met la plus longue (4 h et plus) en fin de journée, pour qu'elle imprime le soir ou la nuit.</p>
+  <p>Le cadre <span class="ui">💡 Conseils</span> propose : enchaîner deux plateaux qui ont les mêmes filaments, avancer une impression qui tient dans un creux de la journée, ce qu'il faut charger avant les prochaines, ce qui ne peut pas respecter les consignes. <span class="ui">Appliquer</span> range l'impression comme proposé.</p>
+  <h3>En temps réel</h3>
+  <p>Le planning se recalcule à chaque minute, depuis l'heure qu'il est et la fin estimée de l'impression en cours : si elle prend du retard, toute la suite est décalée d'autant, toujours dans les consignes. Un bandeau dit où tu en es : <b>⏰ À lancer maintenant</b> (l'imprimante est libre et l'heure est passée), <b>🐢 retard</b> ou <b>🚀 avance</b> sur le planning tel qu'il était à ton dernier rangement, ou <b>✅ dans les temps</b> ; chaque carte montre aussi son propre décalage (+45 min). Avec la notification <span class="ui">Impression du planning à lancer</span> (section Impressions), un rappel arrive à l'heure prévue quand l'imprimante est libre, avec ce qu'il faut charger et la suite, et un second une demi-heure plus tard si rien n'est lancé.</p>
 </section>
 
 <section id="impressions-a-evaluer">
