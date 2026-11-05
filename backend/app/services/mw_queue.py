@@ -296,13 +296,14 @@ async def _printed_plates(dids) -> dict:
 
 
 def plate_copies(manual) -> int | None:
-    """Les exemplaires de ses plateaux qu'un print a donnes, dits a la main (choix des plateaux sur sa fiche)."""
+    """Les exemplaires de ses plateaux qu'un print a donnes, dits a la main (choix des plateaux sur sa fiche) ; 0 : il
+    ne compte pas (relance, rate, en double)."""
     try:
         m = json.loads(manual) if manual else None
-        c = int(m.get("copies")) if isinstance(m, dict) and m.get("copies") else None
+        c = int(m["copies"]) if isinstance(m, dict) and m.get("copies") is not None else None
     except (ValueError, TypeError):
         return None
-    return c if c and 1 <= c <= 50 else None
+    return c if c is not None and 0 <= c <= 50 else None
 
 
 def plate_pieces(design_id, prof: dict | None) -> dict:
@@ -342,7 +343,7 @@ def copies_of(e: dict, plate_g: dict, pieces: dict) -> tuple:
         connait les pieces (12 elements d'un plateau de 6 porte-cles : 2 exemplaires ; 6 : un seul) ;
       - sinon au poids : le filament pris sur le poids des plateaux MakerWorld (un plateau duplique pese le double) ;
       - sinon un."""
-    if e.get("copies"):
+    if e.get("copies") is not None:
         return e["copies"], "main"
     ps = e["plates"]
     pc = sum(pieces.get(n) or 0 for n in ps)
@@ -395,7 +396,16 @@ async def print_copies(design_id: str) -> dict:
         plate_g = {pl.get("index"): _num(pl.get("weight_g")) or sum(_num(f.get("g")) for f in pl.get("filaments") or [])
                    for pl in (prof or {}).get("plates") or []}
         n, how = copies_of(e, plate_g, plate_pieces(design_id, prof))
-        out[str(e["id"])] = {"n": n, "how": how, "plates": e["plates"]}
+        out[str(e["id"])] = {"n": n, "how": how, "plates": e["plates"], "profile": e["prof"] or None}
+    # de quoi les nommer (le menu d'un plateau dans « A faire »)
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Print.id, Print.translated_name, Print.file_name, Print.print_date, Print.status)
+                                 .where(Print.id.in_([int(k) for k in out])))).all()
+    for pid, tn, fn, at, st in rows:
+        out[str(pid)].update(name=tn or fn, date=at.isoformat() if at else None, status=st)
     return out
 
 

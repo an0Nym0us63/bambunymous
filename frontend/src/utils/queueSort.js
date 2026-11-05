@@ -42,3 +42,10 @@ export function plateRound(counts) {
 }
 // un plateau compte comme fait dans la serie en cours
 export const plateDoneInRound = (n, r) => !!r && (r.complete ? n > 0 : (Number(n) || 0) > r.base);
+// combien d'exemplaires d'un plateau un print a donnes (05/11/2026) : le choix, dans la fiche du modele et dans
+// « A faire » ; 0 : il ne compte pas (relance, rate, en double)
+export const COPY_CHOICES = [
+  { value: "auto", icon: "⚖", label: "Automatique", hint: "Les éléments déclarés sur les pièces du plateau d'origine, sinon le poids : un plateau dupliqué pèse le double" },
+  { value: 0, icon: "🚫", label: "Ne compte pas", hint: "Relancé, raté ou en double : ce print ne fait pas un exemplaire de plus" },
+  ...[1, 2, 3, 4, 5, 6].map(n => ({ value: n, label: `×${n}` }))];
+export const copiesLabel = c => c.n === 0 ? "ne compte pas" : `×${c.n} (${{ main: "dit à la main", elements: "éléments déclarés", poids: "deviné au poids" }[c.how] || "par défaut"})`;

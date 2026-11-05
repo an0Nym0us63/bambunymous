@@ -2041,15 +2041,18 @@ async def set_mw_plates(print_id: int, body: dict, _: str = Depends(get_current_
         if not p:
             raise HTTPException(404)
         try:
-            copies = int(body.get("copies")) if body.get("copies") else None
+            copies = int(body["copies"]) if body.get("copies") is not None else None
         except (TypeError, ValueError):
             raise HTTPException(400, "Exemplaires : un nombre")
-        if copies is not None and not 1 <= copies <= 50:
-            raise HTTPException(400, "Exemplaires : de 1 à 50")
+        if copies is not None and not 0 <= copies <= 50:
+            raise HTTPException(400, "Exemplaires : de 0 (ne compte pas) à 50")
         p.mw_plates = None if body.get("reset") else _json.dumps({"profile": prof or None, "plates": plates,
-                                                                   **({"copies": copies} if copies else {})})
+                                                                   **({"copies": copies} if copies is not None else {})})
         await db.commit()
         out = {"id": print_id, "mw_plates": p.mw_plates}
+    # « A faire » et le planning comptent les plateaux faits : recalcules au prochain appel
+    from ....services import mw_queue as _Q
+    _Q._INVALID[0] = True
     # le 3MF d'origine de ce profil, recupere en fond s'il manque (28/10/2026) : la vue 3D, les couleurs et la
     # sauvegarde NAS suivent le profil choisi sans attendre un rattrapage
     if prof:

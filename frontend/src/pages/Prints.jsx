@@ -21,6 +21,7 @@ import { noPageGesture } from "../utils/pullRefreshGuard";
 import MwImg from "../components/MwImg";
 import client, { apiUrl, apiThumb } from "../api/client";
 import { showAlert, showConfirm, showChoice } from "../utils/dialog";
+import { COPY_CHOICES } from "../utils/queueSort";
 import { egg } from "../eggs";
 import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
@@ -900,7 +901,7 @@ const manualPlates = (raw) => { try { const m = JSON.parse(raw || "null"); retur
 // filament pris, sur le poids des plateaux MakerWorld : un plateau duplique pese le double) -- comme « A faire »
 const printCopies = (pr, plates, weightOf) => {
   const m = manualPlates(pr.mw_plates);
-  if (m?.copies) return { n: m.copies, hand: true };
+  if (m?.copies != null) return { n: m.copies, hand: true };
   const w = plates.reduce((a, i) => a + (weightOf(i) || 0), 0);
   if (!pr.total_weight_g || !w || plates.some(i => !weightOf(i))) return { n: 1, hand: false };
   return { n: Math.max(1, Math.min(50, Math.floor(pr.total_weight_g / w + 0.35))), hand: false };
@@ -1041,7 +1042,7 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
   const acceptAll = () => Object.entries(probable).forEach(([i, l]) => l.forEach(({ pr }) => save(pr, [Number(i)])));
   const save = async (pr, plates, reset = false, copies) => {
     // les exemplaires dits a la main restent, sauf quand on les change
-    const keep = copies === undefined ? manualPlates(pr.mw_plates)?.copies || null : copies;
+    const keep = copies === undefined ? manualPlates(pr.mw_plates)?.copies ?? null : copies;
     try {
       const { data } = await client.put(`/prints/${pr.id}/mw-plates`, { profile: prof.profile_id, plates, reset, copies: keep });
       PLATES_OVER[pr.id] = data.mw_plates;
@@ -1071,12 +1072,11 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
         // combien d'exemplaires ce print a donnes (plateau duplique sur le plateau d'impression)
         ...prints.filter(pr => (platesOf(pr) || []).includes(pl.index) && (pr.status === "SUCCESS" || pr.status === "PARTIAL")).map(pr => {
           const cur = platesOf(pr) || [], c = copiesOf(pr, cur);
-          return { icon: "🔢", label: `Exemplaires : ×${c.n} (${{ main: "dit à la main", elements: "éléments déclarés", poids: "deviné au poids" }[c.how || (c.hand ? "main" : "poids")] || "par défaut"})`,
+          return { icon: "🔢", label: c.n === 0 ? "Ne compte pas (relancé)" : `Exemplaires : ×${c.n} (${{ main: "dit à la main", elements: "éléments déclarés", poids: "deviné au poids" }[c.how || (c.hand ? "main" : "poids")] || "par défaut"})`,
             hint: `${pr.translated_name || pr.file_name} · touche pour corriger`,
             onClick: async () => {
               const v = await showChoice(`Combien d'exemplaires de ${cur.length > 1 ? "ces plateaux" : "ce plateau"} ce print a-t-il donnés ?`,
-                [{ value: "auto", icon: "⚖", label: "Automatique", hint: "Les éléments déclarés sur les pièces du plateau d'origine, sinon le poids : un plateau dupliqué pèse le double" },
-                  ...[1, 2, 3, 4, 5, 6].map(n => ({ value: n, label: `×${n}` }))]);
+                COPY_CHOICES);
               if (v == null) return;
               await save(pr, cur, false, v === "auto" ? null : v);
               loadCps();

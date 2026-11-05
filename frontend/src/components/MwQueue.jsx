@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import { plateRound, plateDoneInRound } from "../utils/queueSort";
+import { plateRound, plateDoneInRound, COPY_CHOICES, copiesLabel } from "../utils/queueSort";
+import { openMenu } from "./ContextMenu";
+import { showAlert, showChoice } from "../utils/dialog";
+import { egg } from "../eggs";
 import { QUEUE_SORTS, sortQueue } from "../utils/queueSort";
 import { useTrackDetail } from "../utils/track";
 import { useUrlTab } from "../utils/useUrlTab";
@@ -43,7 +46,32 @@ function statusText(r) {
 // Les plateaux d'un modele, un par pastille : vert = faisable tout de suite avec
 // l'AMS ; coche = deja imprime par moi ; gris = il manque un filament dans l'AMS ;
 // orange avec sablier = en cours d'impression.
-function PlateChips({ plates }) {
+function PlateChips({ plates, designId, edit, onChanged }) {
+  // un plateau deja fait : ses prints, et pour chacun ce qu'il compte (05/11/2026 : un plateau relance comptait pour
+  // une deuxieme serie) ; on dit « ne compte pas », ou combien d'exemplaires il a donnes
+  const pick = async (e, p) => {
+    e.stopPropagation();
+    if (!edit || !designId || !p.printed) return;
+    const at = e.currentTarget;
+    let cps = {};
+    try { cps = (await client.get(`/makerworld/model/${designId}/print-copies`)).data.copies || {}; } catch { /* rien */ }
+    const mine = Object.entries(cps).filter(([, c]) => (c.plates || []).includes(p.index))
+      .sort((a, b) => String(b[1].date || "").localeCompare(String(a[1].date || "")));
+    openMenu({ currentTarget: at, clientX: at.getBoundingClientRect().left, clientY: at.getBoundingClientRect().bottom, preventDefault() {}, stopPropagation() {} }, {
+      title: `Plateau ${p.index}${p.name ? ` · ${p.name}` : ""}`, subtitle: `Compté ${p.printed} fois : touche un print pour corriger`,
+      items: mine.length ? mine.map(([pid, c]) => ({ icon: c.n === 0 ? "🚫" : "🖨", label: c.name || `Print #${pid}`,
+        hint: [c.date ? new Date(c.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : null, copiesLabel(c)].filter(Boolean).join(" · "),
+        onClick: async () => {
+          const v = await showChoice(`« ${c.name || `Print #${pid}`} » : combien d'exemplaires de ${c.plates.length > 1 ? "ses plateaux" : "ce plateau"} compte-t-il ?`, COPY_CHOICES);
+          if (v == null) return;
+          try {
+            await client.put(`/prints/${pid}/mw-plates`, { profile: c.profile, plates: c.plates, copies: v === "auto" ? null : v });
+            egg("plateau_exemplaires");
+            onChanged?.();
+          } catch (err) { showAlert(err.response?.data?.detail || err.message); }
+        } })) : [{ icon: "ℹ", label: "Aucun print reconnu pour ce plateau", disabled: true }],
+    });
+  };
   // ou j'en suis, en series (un modele refait des mois plus tard repart d'une nouvelle serie)
   const round = plateRound(plates.map(p => p.printed));
   const todo = plates.filter(p => p.ready && !plateDoneInRound(p.printed, round) && !p.printing);   // faisables, ni faits (cette serie) ni en cours
@@ -59,7 +87,8 @@ function PlateChips({ plates }) {
           + (done ? ` · déjà imprimé${p.printed > 1 ? ` ${p.printed}×` : ""}` : " · pas encore imprimé")
           + (p.printing ? " · en cours d'impression" : "");
         return (
-          <span key={p.index} data-tip={tip} style={{ position:"relative", minWidth:20, height:20, padding:"0 5px", borderRadius:7,
+          <span key={p.index} data-tip={tip + (edit && p.printed ? " · touche pour corriger ce qui compte" : "")} onClick={e => pick(e, p)}
+            style={{ position:"relative", minWidth:20, height:20, padding:"0 5px", borderRadius:7, cursor: edit && p.printed ? "pointer" : "default",
             fontSize:10, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", gap:1,
             color: p.printing || p.ready ? "#fff" : "var(--muted)",
             background: p.printing ? "linear-gradient(135deg, #F59E0B, #FBBF24)" : p.ready ? (done ? "rgba(34,197,94,0.55)" : "linear-gradient(135deg, #22C55E, #4ADE80)") : "var(--surface)",
@@ -456,7 +485,7 @@ export default function MwQueue() {
                     <span style={grad("#F59E0B", "#FBBF24")}>⚖ {g(r.weight_g)}</span>
                     {r.cost != null && <span style={grad("#16A34A", "#4ADE80")}>💶 {moneyVal(r.cost, 2)} €</span>}
                   </span>
-                  {r.plates?.length > 1 && <PlateChips plates={r.plates}/>}
+                  {r.plates?.length > 1 && <PlateChips plates={r.plates} designId={r.design_id} edit={isAdmin} onChanged={refresh}/>}
                   {r.ready_now?.plates > 0 && (
                     <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:800, color:"#16a34a", marginTop:5, padding:"2px 8px",
                       borderRadius:20, background:"rgba(34,197,94,0.12)" }}>
