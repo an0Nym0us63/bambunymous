@@ -750,8 +750,10 @@ async def set_deadline(design_id: str, due) -> dict:
 
 
 async def color_day(day: str, fid: int) -> dict:
-    """La journee couleur : tous les plateaux de la file qui utilisent ce filament, de tous les objets, poses sur ce
-    jour a la suite (ce qui n'y tient pas passe au lendemain et le dit)."""
+    """La journee couleur (05/11/2026, revue) : remplir ce jour au maximum avec les plateaux qui n'utilisent QUE ce
+    filament, puis, s'il reste de la place, ceux qui ne demandent en plus que des filaments deja charges dans l'AMS.
+    Chacun n'est garde que s'il y tient (il commence et finit ce jour-la) ; ceux qui n'y tiennent pas restent ou ils
+    etaient, au lieu de passer au lendemain. Ce qui etait prevu ce jour-la se decale derriere."""
     try:
         datetime.strptime(day, "%Y-%m-%d")
     except ValueError:
@@ -761,19 +763,36 @@ async def color_day(day: str, fid: int) -> dict:
     r = place(jobs, d, now, busy, loaded, _slots())
     # un objet a finir avant ce jour (ou ce jour meme) n'y est pas emmene : il raterait sa date
     dl = d.get("deadlines") or {}
-    mine = [j["key"] for j in r["jobs"] if any(f.get("filament_id") == fid for f in j["fils"])
-            and not (dl.get(j["design_id"]) and dl[j["design_id"]] <= day)]
-    if not mine:
-        raise PlanError("Aucun plateau de la file n'utilise ce filament (ou ils ont une date limite avant ce jour)")
-    # un seul filament d'abord (ils s'enchainent sans rien charger), puis ceux qui en melangent d'autres
-    one = {j["key"] for j in r["jobs"] if _sig(j) == frozenset([fid])}
-    mine.sort(key=lambda k: k not in one)
-    rest = [j["key"] for j in r["jobs"] if j["key"] not in set(mine)]
-    # ils prennent la tete de la journee (05/11/2026 : poses apres ce qui y etait deja, la moitie passait au lendemain
-    # et la journee ne changeait pas de couleur) ; ce qui y etait se decale derriere eux
+    uses = [j for j in r["jobs"] if fid in _sig(j) and not (dl.get(j["design_id"]) and dl[j["design_id"]] <= day)]
+    ok_set = {fid} | set(loaded)
+    only = [j["key"] for j in uses if _sig(j) == frozenset([fid])]
+    with_loaded = [j["key"] for j in uses if _sig(j) != frozenset([fid]) and _sig(j) <= ok_set]
+    needs_load = [j["key"] for j in uses if not _sig(j) <= ok_set]
+    if not only and not with_loaded:
+        raise PlanError("Aucun plateau de la file n'utilise ce filament seul (ou avec des filaments déjà chargés)"
+                        if uses else "Aucun plateau de la file n'utilise ce filament (ou ils ont une date limite avant ce jour)")
     day_of = {j["key"]: j["day"] for j in r["jobs"]}
-    at = next((i for i, k in enumerate(rest) if day_of.get(k, "") >= day), len(rest))
-    return await arrange({"order": rest[:at] + mine + rest[at:], "pins": {k: day for k in mine}})
+    chosen, no_room = [], 0
+    for k in (only + with_loaded)[:60]:
+        trial = chosen + [k]
+        rest = [j["key"] for j in r["jobs"] if j["key"] not in set(trial)]
+        at = next((i for i, x in enumerate(rest) if day_of.get(x, "") >= day), len(rest))
+        order = rest[:at] + trial + rest[at:]
+        pins = {**d["pins"], **{x: day for x in trial}}
+        rr = place(_ordered(jobs, order, pins), {**d, "pins": pins}, now, busy, loaded, _slots())
+        placed = {j["key"]: j for j in rr["jobs"]}
+        if all(x in placed and placed[x]["day"] == day and placed[x]["end"][:10] == day for x in trial):
+            chosen = trial
+        else:
+            no_room += 1
+    if not chosen:
+        raise PlanError("Aucun de ces plateaux ne tient sur ce jour (la journée est trop courte pour eux)")
+    rest = [j["key"] for j in r["jobs"] if j["key"] not in set(chosen)]
+    at = next((i for i, x in enumerate(rest) if day_of.get(x, "") >= day), len(rest))
+    out = await arrange({"order": rest[:at] + chosen + rest[at:], "pins": {k: day for k in chosen}})
+    out["color_day"] = {"placed": len(chosen), "only": len([k for k in chosen if k in set(only)]), "no_room": no_room,
+                        "needs_load": len(needs_load)}
+    return out
 
 
 async def arrange(body: dict) -> dict:

@@ -160,10 +160,13 @@ export default function PrintCalendar() {
   const colorDay = (day, fid) => send("/makerworld/plan/color-day", { day, filament_id: fid }, "post").then(d => {
     if (!d) return;
     egg("planning_couleur");
-    const mine = (d.jobs || []).filter(j => j.fils?.some(f => f.filament_id === fid));
-    const on = mine.filter(j => j.day === day).length, off = mine.filter(j => j.pinned && j.day !== day).length;
+    const cd = d.color_day || {};
     const name = (d.colors || []).find(c => c.filament_id === fid)?.name || "ce filament";
-    toast(`🎨 ${on} plateau${on > 1 ? "x" : ""} en ${name} sur ce jour${off ? ` · ${off} n'y tien${off > 1 ? "nent" : "t"} plus, au lendemain` : ""}`, "success", 5000);
+    const bits = [];
+    if (cd.placed - cd.only > 0) bits.push(`${cd.placed - cd.only} avec un filament déjà chargé`);
+    if (cd.no_room) bits.push(`${cd.no_room} n'y tien${cd.no_room > 1 ? "nent" : "t"} pas (restent où ils étaient)`);
+    if (cd.needs_load) bits.push(`${cd.needs_load} écarté${cd.needs_load > 1 ? "s" : ""} : il${cd.needs_load > 1 ? "s" : ""} demande${cd.needs_load > 1 ? "nt" : ""} un autre filament à charger`);
+    toast(`🎨 ${cd.placed || 0} plateau${cd.placed > 1 ? "x" : ""} en ${name} sur ce jour${bits.length ? ` · ${bits.join(" · ")}` : ""}`, "success", 6000);
   });
   const optimize = day => send("/makerworld/plan/optimize", day ? { day } : {}, "post").then(ok => { if (ok) egg("planning_optimise"); });
   const jobAct = j => ({

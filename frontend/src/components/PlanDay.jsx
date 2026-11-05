@@ -229,7 +229,7 @@ export function ColorDay({ colors, onPick }) {
     {open && <div style={{ flex: "1 0 100%", display: "flex", flexDirection: "column", gap: 2, padding: 4, borderRadius: 12,
       border: "1px solid color-mix(in srgb, #EC4899 30%, var(--border))", background: "var(--surface)", maxHeight: 320, overflowY: "auto" }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", padding: "4px 6px" }}>
-        Tous les plateaux qui utilisent ce filament viennent sur ce jour, d'abord ceux qui n'ont que lui.</div>
+        Les plateaux qui n'utilisent que ce filament remplissent ce jour au maximum, puis ceux qui ne demandent en plus qu'un filament déjà chargé ; ceux qui n'y tiennent pas restent où ils étaient.</div>
       {colors.map(c => <button key={c.filament_id} type="button" onClick={() => { setOpen(false); onPick(c.filament_id); }}
         style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr)", columnGap: 8, rowGap: 1, alignItems: "center", width: "100%", padding: "6px 8px",
           borderRadius: 9, border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}>
