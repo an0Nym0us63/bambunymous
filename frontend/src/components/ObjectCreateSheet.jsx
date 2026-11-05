@@ -19,6 +19,10 @@ import { useKeyboardInset } from "../utils/keyboard";
  * degrade, grande icone, cases de chiffres.
  */
 const C = "#22C55E";
+// les etats qu'un objet peut avoir en naissant (05/11/2026), comme le selecteur de sa fiche ; « vendu » se pose avec
+// son prix, depuis la fiche
+const STATES = [["available", "🏷️", "À vendre", "#3b82f6"], ["personal", "🏠", "Perso", "#a855f7"],
+  ["gifted", "🎁", "Offert", "#f59e0b"], ["unavailable", "⛔", "Indisponible", "#94a3b8"]];
 
 export default function ObjectCreateSheet({ parentType, parentId, defaultName,
                                             costFabrication = 0, onDone, onClose }) {
@@ -26,6 +30,7 @@ export default function ObjectCreateSheet({ parentType, parentId, defaultName,
   const [quota, setQuota] = useState(null);
   const [qty, setQty] = useState(1);
   const [name, setName] = useState(defaultName || "");
+  const [status, setStatus] = useState("personal");
   // son groupe, des la creation (05/11/2026) : aucun, un existant ({id, name}) ou un nouveau ({fresh: nom})
   const [grp, setGrp] = useState(null);
   const [groups, setGroups] = useState([]);
@@ -52,6 +57,7 @@ export default function ObjectCreateSheet({ parentType, parentId, defaultName,
         name: (name || "Sans nom").trim(),
         qty,
         cost_fabrication: costFabrication,
+        status,
         group_id: grp?.id || null,
         group_new: !!grp?.fresh,
         group_name: grp?.fresh || null,
@@ -140,6 +146,20 @@ export default function ObjectCreateSheet({ parentType, parentId, defaultName,
                     style={{ padding:"0 14px", height:44, borderRadius:12, border:`1px solid ${C}55`, background:`${C}14`, color:"#16a34a",
                       fontSize:12.5, fontWeight:800, cursor:"pointer", whiteSpace:"nowrap" }}>Tout ({remaining})</button>
                 )}
+              </div>
+            </div>
+
+            <div>
+              <label style={lbl}>État</label>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                {STATES.map(([k, ic, l, c]) => {
+                  const on = status === k;
+                  return <button key={k} type="button" onClick={() => setStatus(k)}
+                    style={{ padding:"10px 8px", borderRadius:13, cursor:"pointer", font:"inherit", fontSize:13.5, fontWeight:800,
+                      border: on ? "none" : "1px solid var(--border)", color: on ? "#fff" : "var(--text)",
+                      background: on ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 65%, #fff))` : "var(--surface2)",
+                      boxShadow: on ? `0 8px 18px -10px ${c}` : "none" }}>{ic} {l}</button>;
+                })}
               </div>
             </div>
 

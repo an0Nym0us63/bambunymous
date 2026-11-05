@@ -730,6 +730,7 @@ class ObjectCreate(BaseModel):
     # l'appelant plutot que de choisir a sa place.
     group_new: bool = False           # regrouper les objets crees dans un nouveau groupe
     group_name: Optional[str] = None  # nom de ce groupe (defaut : nom de l'objet)
+    status: Optional[str] = None      # son etat des la creation (05/11/2026) ; sans : perso
 
 @router.post("/objects")
 async def create_objects(body: ObjectCreate, _: str = Depends(get_current_user)):
@@ -763,6 +764,9 @@ async def create_objects(body: ObjectCreate, _: str = Depends(get_current_user))
             raise HTTPException(409,
                 f"Il ne reste que {remaining} objet(s) a creer sur {nb_items}.")
         n = body.qty
+        st = body.status or "personal"
+        if st not in OBJECT_STATUSES or st == "sold":
+            raise HTTPException(400, "État invalide à la création (vendu se pose avec son prix, depuis la fiche)")
 
         # Regroupement demande : le groupe est cree AVANT les objets pour que
         # chacun naisse deja rattache, plutot qu'en deux temps.
@@ -792,6 +796,8 @@ async def create_objects(body: ObjectCreate, _: str = Depends(get_current_user))
                 group_id=target_group_id,
                 comment=body.comment,
             )
+            if st != "personal":
+                _apply_status(obj, st)
             db.add(obj)
             await db.flush()
             created_ids.append(obj.id)
