@@ -1260,7 +1260,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
               <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#8B5CF6" }}>📋 Historique · bobine #{spool.id}</div>
               <div style={{ fontSize:17, fontWeight:900, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
               <div style={{ fontSize:12, fontWeight:700, color:"var(--muted)" }}>
-                {(() => { const us = usageHistory.filter(u => (u.kind || "usage") === "usage"), back = usageHistory.filter(u => u.kind && u.kind !== "usage" && u.kind !== "fin" && u.kind !== "correction" && !u.reverted);
+                {(() => { const us = usageHistory.filter(u => (u.kind || "usage") === "usage"), back = usageHistory.filter(u => (u.kind === "rendu" || u.kind === "annule") && !u.reverted);
                   return <>{us.length} impression{us.length !== 1 ? "s" : ""}
                     {us.length > 0 && ` · ${Math.round(us.reduce((t, u) => t + (u.grams_used || 0), 0))} g consommés`}
                     {back.length > 0 && ` · ${Math.round(back.reduce((t, u) => t + (u.grams || 0), 0))} g rendus`}</>; })()}</div>
@@ -1288,6 +1288,23 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                       style={{ padding:"3px 9px", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer", border:"1px solid var(--border)",
                         background:"var(--surface)", color:"var(--text2)" }}>↶ Annuler</button>}
                   </div>
+                </div>;
+              }
+              // des lignes qui expliquent sans changer le poids (05/11/2026) : imprime sous notre zero, l'ecart du suivi
+              // mesure / corrige / ecarte, l'arrivee de la bobine
+              if (u.kind === "zero" || u.kind === "ecart" || u.kind === "ajout") {
+                const when = u.print_date ? new Date(u.print_date).toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" }) : null;
+                const [ic, t, c] = u.kind === "zero" ? ["⤵️", "Sous notre zéro", "#EF4444"] : u.kind === "ecart" ? ["🎯", "Écart du suivi", "#14B8A6"] : ["📦", null, "#3B82F6"];
+                return <div key={`i${u.kind}${u.id}`} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 10px", borderRadius:14, border:"1px dashed var(--border)",
+                  background:`linear-gradient(135deg, color-mix(in srgb, ${c} 9%, transparent), transparent 55%)` }}>
+                  <span style={{ width:46, height:34, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17,
+                    background:`color-mix(in srgb, ${c} 13%, transparent)` }}>{ic}</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12.5, fontWeight:800, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
+                      {t ? `${t}${u.file_name ? ` · ${u.file_name}` : ""}` : u.file_name}</div>
+                    <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginTop:1 }}>{when}{u.kind !== "ajout" ? " · n'a pas changé le poids" : ""}</div>
+                  </div>
+                  {u.grams != null && u.kind !== "ajout" && <div style={{ fontSize:13, fontWeight:900, color:c, flexShrink:0 }}>{u.kind === "zero" ? "−" : u.grams > 0 ? "+" : u.grams < 0 ? "−" : "±"}{Math.abs(u.grams).toFixed(1)} g</div>}
                 </div>;
               }
               // une correction de poids hors impression (a la main, au scan RFID, a l'archivage, 02/11/2026)
@@ -1346,7 +1363,13 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                     {u.status === "FAILED" && (u.returned > 0
                       ? <span data-tip="Rendu à la bobine après l'échec (ligne verte « Rendu à la bobine »)" style={{ color:"#16a34a" }}>↩ {u.returned.toFixed(1).replace(".", ",")} g rendus</span>
                       : <span data-tip="Rien n'est revenu à la bobine : ouvre l'impression, ⚖ Restituer dans ses filaments" style={{ color:"#d97706" }}>rien de rendu</span>)}
-                    {u.relay && <span data-tip="Elle a pris la suite d'une bobine finie en cours d'impression" style={{ color:"#8B5CF6" }}>🔁 a pris le relais</span>}</div>
+                    {u.relay && <span data-tip="Elle a pris la suite d'une bobine finie en cours d'impression" style={{ color:"#8B5CF6" }}>🔁 a pris le relais</span>}
+                    {/* reussie, avec quelque chose de rendu : une piece annulee en cours de route (05/11/2026) */}
+                    {u.status !== "FAILED" && u.returned > 0 && <span data-tip="Revenu à la bobine (ligne verte « Rendu à la bobine », avec sa cause)" style={{ color:"#16a34a" }}>↩ {u.returned.toFixed(1).replace(".", ",")} g rendus</span>}</div>
+                  {/* plus imprime que ce qu'elle avait chez nous au lancement : la suite est passee sous notre zero */}
+                  {u.before != null && (u.grams_used || 0) - u.before >= 0.5 && <div data-tip="Le décompte s'arrête à 0 g : ce qu'elle a imprimé au-delà est gardé à part (« Sous notre zéro ») pour l'écart du suivi à sa fin"
+                    style={{ fontSize:11, fontWeight:700, color:"#EF4444", marginTop:2 }}>
+                    elle avait {u.before.toFixed(1).replace(".", ",")} g chez nous : {((u.grams_used || 0) - u.before).toFixed(1).replace(".", ",")} g sous notre zéro</div>}
                 </div>
                 <div style={{ textAlign:"right", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
                   <div style={{ fontSize:14, fontWeight:900, ...fGrad("#ef4444", "#f97316") }}>−{u.grams_used?.toFixed(1)} g</div>

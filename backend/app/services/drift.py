@@ -53,6 +53,17 @@ def weighed(sp) -> None:
         sp.overrun_g = None
 
 
+# l'historique de la bobine dit tout, avec sa cause (05/11/2026) : ces lignes n'y changent pas le poids, elles
+# l'expliquent (« zero » : imprime sous notre zero ; « ecart » : l'ecart du suivi mesure, corrige ou ecarte)
+INFO_KINDS = ("zero", "ecart")
+
+
+def note(db, sp, kind: str, grams, label: str, print_id=None, usage_id=None) -> None:
+    from ..models.spool_move import SpoolMove
+    db.add(SpoolMove(spool_id=sp.id, grams=round(float(grams or 0), 1), kind=kind, print_id=print_id, usage_id=usage_id,
+                     label=(label or "")[:250] or None))
+
+
 def back_note(a: float) -> str:
     return f" · dont {a:g} g sous notre zéro".replace(".", ",") if a > 0 else ""
 

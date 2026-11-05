@@ -585,6 +585,9 @@ async def switch(pid: int, slot: int, spool_id: int, auto: bool = False) -> dict
                     est = (float(bef) if bef is not None else left_old + float(last.grams_used or 0)) - part
                     if drift.record(old, est, "relais" if auto else "suite", await drift.full_of(db, old)):
                         logger.info(f"[DERIVE] bobine #{old.id} finie a {part:.1f} g : derive {old.drift_g:+.1f} g")
+                        drift.note(db, old, "ecart", old.drift_g, f"{pname} — {'relais de l’AMS' if auto else 'suite choisie à la main'} : "
+                                   f"on lui croyait {est:.0f} g{' (hors des stats : ' + old.drift_off + ')' if old.drift_off else ''}",
+                                   print_id=pid, usage_id=last.id)
                 old.remaining_weight_g = 0.0                  # finie : ce qui restait a ete imprime
                 if left_old > 0:
                     # tracee dans son historique (02/11/2026), et annulable comme un rendu
@@ -698,7 +701,10 @@ async def overrun(pid: int) -> None:
     st = (await _state()).get(str(pid)) or {}
     if st.get("overrun"):
         return
+    from ..models.print_history import Print
     async with AsyncSessionLocal() as db:
+        p = await db.get(Print, pid)
+        pname = (p.translated_name or p.file_name) if p else f"Impression {pid}"
         for rs in (await _rows(db, pid)).values():
             r = rs[-1]
             bef = getattr(r, "spool_before_g", None)
@@ -708,6 +714,9 @@ async def overrun(pid: int) -> None:
             sp = await db.get(Spool, r.spool_id)
             if sp and over >= 0.5:
                 drift.add_overrun(sp, over)
+                # dans son historique (05/11/2026) : ce qu'elle a imprime au-dela de ce qu'on lui croyait
+                drift.note(db, sp, "zero", over, f"{pname} — {float(r.grams_used or 0):.1f} g imprimés, on lui croyait "
+                           f"{max(0.0, float(bef)):.1f} g", print_id=pid, usage_id=r.id)
                 logger.info(f"[DERIVE] bobine #{sp.id} : {over:.1f} g imprimes sous notre zero (impression #{pid})")
         await db.commit()
     await _state_put(pid, {"overrun": True})

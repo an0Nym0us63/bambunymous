@@ -1388,15 +1388,18 @@ async def archive_spool(
     if reason in ("finie", "jetee", "autre"):
         s.end_reason = reason
     if reason == "finie":
-        from ....services import drift
-        drift.record(s, float(before or 0), "archive", await drift.full_of(db, s))
+        if drift.record(s, float(before or 0), "archive", await drift.full_of(db, s)):
+            drift.note(db, s, "ecart", s.drift_g, f"Archivée finie : il lui restait {float(before or 0):.0f} g chez nous"
+                       + (f", {float(s.overrun_g):.0f} g déjà imprimés sous notre zéro" if s.overrun_g else "")
+                       + (f" (hors des stats : {s.drift_off})" if s.drift_off else ""))
     # Une bobine archivee sort du stock : on remet sa quantite a 0 et on la
     # replace en "Archives". Le worker spool_location ne touche plus aux
     # archivees (exclues du matching AMS), sa location resterait sinon figee
     # sur son dernier tray AMS et son poids continuerait a fausser les cumuls.
     s.remaining_weight_g = 0.0
     s.location = "Archives"
-    _log_weight(db, s, before, "Bobine archivée")
+    _log_weight(db, s, before, {"finie": "Bobine archivée : finie", "jetee": "Bobine archivée : jetée",
+                                "autre": "Bobine archivée : autre raison"}.get(reason or "", "Bobine archivée"))
     await db.commit()
     _clear_match_cache()
 
@@ -1417,13 +1420,17 @@ async def edit_spool_drift(sid: int, body: DriftEdit, db: AsyncSession = Depends
         raise HTTPException(404, "Bobine introuvable")
     if body.clear:
         s.drift_g = s.drift_kind = s.drift_at = s.drift_off = None
+        drift.note(db, s, "ecart", 0, "Écart du suivi oublié")
     else:
         if body.drift_g is not None:
+            old = s.drift_g
             s.drift_g = round(float(body.drift_g), 1)
             s.drift_kind = s.drift_kind or "main"
             s.drift_at = s.drift_at or datetime.utcnow()
+            drift.note(db, s, "ecart", s.drift_g, "Écart corrigé à la main" + (f" (avant : {old:+.0f} g)" if old is not None else ""))
         if body.off is not None:
             s.drift_off = body.off.strip()[:120] or None
+            drift.note(db, s, "ecart", s.drift_g, f"Écarté des stats : {s.drift_off}" if s.drift_off else "Remis dans les stats")
     await db.commit()
     return _spool_out(await _load_spool(db, sid))
 
@@ -1511,8 +1518,9 @@ async def adjust_spool_weight(
     cur = s.remaining_weight_g or 0.0
     if body.mode == "set":
         s.remaining_weight_g = max(0.0, body.value)
+        was = s.overrun_g if s.drift_g is None else None
         drift.weighed(s)                             # un poids pose est le vrai : le sous-zero d'avant ne compte plus
-        _log_weight(db, s, cur, "Poids corrigé")
+        _log_weight(db, s, cur, "Poids corrigé" + (f" · {was:g} g sous notre zéro effacés".replace(".", ",") if was else ""))
     elif body.mode == "add":
         # des grammes rendus remboursent d'abord le sous-zero (05/11/2026) : 100 g rendus a une bobine passee 73 g sous
         # notre zero ne lui en laissent que 27
@@ -2578,6 +2586,11 @@ async def delete_filament(fid: int, _: str = Depends(get_current_user)):
     return {"ok": True}
 
 
+async def _load_spool_plain(sid: int):
+    async with AsyncSessionLocal() as db:
+        return await db.get(Spool, sid)
+
+
 @router.get("/spools/{sid}/usage")
 async def spool_usage_history(sid: int, _: str = Depends(get_current_user)):
     """L'historique de la bobine : ses consommations (kind « usage », avec infos du print) et, depuis le 31/10/2026,
@@ -2588,7 +2601,7 @@ async def spool_usage_history(sid: int, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(
             _sel(
-                _FU.id, _FU.print_id, _FU.grams_used, _FU.cost, _FU.from_g,
+                _FU.id, _FU.print_id, _FU.grams_used, _FU.cost, _FU.from_g, _FU.spool_before_g,
                 _P.file_name, _P.translated_name, _P.print_date, _P.status
             )
             .join(_P, _FU.print_id == _P.id)
@@ -2596,6 +2609,7 @@ async def spool_usage_history(sid: int, _: str = Depends(get_current_user)):
             .order_by(_P.print_date.desc())
         )).all()
         moves = (await db.execute(_sel(SpoolMove).where(SpoolMove.spool_id == sid))).scalars().all()
+    sp = await _load_spool_plain(sid)
     # ce qui a ete rendu a chaque consommation (02/11/2026) : une impression echouee dit si sa part non imprimee est
     # revenue a la bobine, ou pas
     back = {}
@@ -2615,9 +2629,15 @@ async def spool_usage_history(sid: int, _: str = Depends(get_current_user)):
             # suivi couche par couche : cette bobine a pris le relais d'une autre en cours d'impression (02/11/2026)
             "relay":      r.from_g is not None,
             "returned":   back.get(r.id, 0),
+            # ce qu'elle avait chez nous au lancement (05/11/2026) : moins que l'impression, la suite est sous notre zero
+            "before":     round(float(r.spool_before_g), 1) if r.spool_before_g is not None else None,
         }
         for r in rows
     ]
+    # son arrivee (05/11/2026) : la premiere ligne de son histoire
+    if sp is not None and sp.created_at:
+        out.append({"kind": "ajout", "id": 0, "file_name": "Ajoutée au stock" + (" (tag RFID)" if sp.tag_number else ""), "grams": None,
+                    "print_date": sp.created_at.isoformat() + "Z", "reverted": False})
     out += [{"kind": m.kind, "id": m.id, "print_id": m.print_id, "file_name": m.label, "grams": m.grams,
              "print_date": m.at.isoformat() + "Z" if m.at else None, "reverted": m.reverted_at is not None,
              "reverted_at": m.reverted_at.isoformat() + "Z" if m.reverted_at else None} for m in moves]
@@ -2668,6 +2688,8 @@ async def spool_history_undo(sid: int, body: dict = Body({}), _: str = Depends(r
             m = await db.get(SpoolMove, oid)
             if not m or m.spool_id != sid or m.reverted_at is not None:
                 raise HTTPException(404, "Ligne introuvable ou déjà annulée")
+            if m.kind in drift.INFO_KINDS:
+                raise HTTPException(400, "Cette ligne explique, elle ne se défait pas")
             if m.kind == "correction":
                 # une correction de poids : la bobine revient au poids d'avant
                 s.remaining_weight_g = round(max(0.0, (s.remaining_weight_g or 0) - (m.grams or 0)), 1)
