@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { usePromotedTabs } from "../utils/navMenu";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import HiddenMark from "../components/HiddenMark";
 import Cachettes, { Hide } from "../components/Cachettes";
@@ -2479,10 +2480,12 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
           {/* les filaments de toutes ses impressions (une fois chaque couleur), sur la meme petite rangee que les tuiles d'impression */}
           {(() => { const seen = new Set(), fu = [];
             for (const x of prints) for (const f of x.filament_usage || []) { const k = String(f.color_hex || "").toLowerCase(); if (k && !seen.has(k)) { seen.add(k); fu.push(f); } }
-            return <div style={{ display:"flex", alignItems:"center", gap:3, height:10, marginBottom:3 }}>
-              {fu.slice(0, 8).map((f, i) => <ColorDot key={i} hex={f.color_hex} colors={f.filament_colors_array} multicolor={f.filament_multicolor_type} size={9} ring="none"
+            // les pastilles laissent la place aux etiquettes (05/11/2026 : 8 couleurs, « +82 » et « 📁 28 » debordaient)
+            const nd = Math.max(3, 8 - 3 * (1 + (number_of_items > 1) + (nToRate > 0)));
+            return <div style={{ display:"flex", alignItems:"center", gap:3, height:10, marginBottom:3, minWidth:0 }}>
+              {fu.slice(0, nd).map((f, i) => <ColorDot key={i} hex={f.color_hex} colors={f.filament_colors_array} multicolor={f.filament_multicolor_type} size={9} ring="none"
                 style={{ boxShadow:"0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent)" }}/>)}
-              {fu.length > 8 && <span style={{ fontSize:9, fontWeight:800, color:"var(--muted)" }}>+{fu.length - 8}</span>}
+              {fu.length > nd && <span style={{ fontSize:9, fontWeight:800, color:"var(--muted)", whiteSpace:"nowrap" }}>+{fu.length - nd}</span>}
               <span style={{ flex:1 }}/>
               <span data-tip={`${prints.length} impression${prints.length > 1 ? "s" : ""} dans ce groupe`} style={tagS("#7C3AED")}>📁 {prints.length}</span>
               {number_of_items > 1 && <span data-tip={`${number_of_items} pièces`} style={tagS("#2563EB")}>×{number_of_items}</span>}
@@ -2612,6 +2615,8 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
   const dots = p.filament_usage?.length > 0 && <span style={{ display:"flex", gap:3 }}>{p.filament_usage.slice(0, 6).map((f,i) => (
     <ColorDot key={i} hex={f.color_hex} colors={f.filament_colors_array} multicolor={f.filament_multicolor_type} size={row ? 11 : 12} ring="none"
       style={{ boxShadow:"0 0 0 1.5px rgba(255,255,255,0.85), 0 1px 3px rgba(0,0,0,0.3)" }}/>))}</span>;
+  // les pastilles de couleur laissent la place aux etiquettes de la vignette (05/11/2026 : debordement)
+  const ndots = Math.max(3, 8 - 3 * ((p.number_of_items > 1) + !!rateMe));
   const frame = { position:"relative", cursor:"pointer", userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none", touchAction:"manipulation",
     outline: selected ? "2px solid #3b82f6" : "none", outlineOffset: 2 };
   return (<>
@@ -2662,10 +2667,10 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
         {/* les filaments, sur leur propre petite rangee entre la vignette et le nom (30/10/2026 : ni sur l'image, ni sur la
             ligne de la date, qu'ils coupaient) ; hauteur gardee meme sans filament, pour que les tuiles s'alignent */}
         <div data-tip={p.filament_usage?.length ? p.filament_usage.map(f => f.filament_name || f.color_name || f.color_hex).filter(Boolean).join(", ") : undefined}
-          style={{ display:"flex", alignItems:"center", gap:3, height:10, marginBottom:3 }}>
-          {(p.filament_usage || []).slice(0, 8).map((f, i) => <ColorDot key={i} hex={f.color_hex} colors={f.filament_colors_array} multicolor={f.filament_multicolor_type} size={9} ring="none"
+          style={{ display:"flex", alignItems:"center", gap:3, height:10, marginBottom:3, minWidth:0 }}>
+          {(p.filament_usage || []).slice(0, ndots).map((f, i) => <ColorDot key={i} hex={f.color_hex} colors={f.filament_colors_array} multicolor={f.filament_multicolor_type} size={9} ring="none"
             style={{ boxShadow:"0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent)" }}/>)}
-          {(p.filament_usage?.length || 0) > 8 && <span style={{ fontSize:9, fontWeight:800, color:"var(--muted)" }}>+{p.filament_usage.length - 8}</span>}
+          {(p.filament_usage?.length || 0) > ndots && <span style={{ fontSize:9, fontWeight:800, color:"var(--muted)", whiteSpace:"nowrap" }}>+{p.filament_usage.length - ndots}</span>}
           <span style={{ flex:1 }}/>
           {p.number_of_items > 1 && <span data-tip={`${p.number_of_items} pièces`} style={tagS("#2563EB")}>×{p.number_of_items}</span>}
           {rateMe && <span data-tip="À évaluer sur MakerWorld" style={tagS("#F59E0B")}>★</span>}
@@ -3565,6 +3570,7 @@ export default function Prints() {
   // « Tout effacer » : plus aucun parametre de filtre dans l'adresse (recherche comprise)
   const clearFilters = () => { patchUrl(Object.fromEntries(FILTER_KEYS.map(k => [k, ""]))); setFilSearch(""); };
   const [viewMode, setViewMode] = useUrlTab("tab", "list", ["list", "gallery", "makerworld", "queue", "calendar"]);
+  const promoted = usePromotedTabs("/prints");       // les onglets sortis au menu (05/11/2026)
   // cinq onglets (04/11/2026) : sur un ecran etroit, seul l'onglet ouvert garde son nom, les autres leur icone
   const [tabsNarrow, setTabsNarrow] = useState(() => window.innerWidth < 520);
   useEffect(() => { const f = () => setTabsNarrow(window.innerWidth < 520); window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, []);
@@ -3898,7 +3904,7 @@ export default function Prints() {
 
       {/* Tabs Liste / Galerie / MakerWorld */}
       <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:16, padding:4, border:"1px solid var(--border)" }}>
-        {[["list","Liste","☰","#3B82F6"],["gallery","Galerie","🖼️","#EC4899"],["makerworld","MakerWorld","🌐","#06B6D4"],["queue","À faire","✅","#22C55E"],["calendar","Calendrier","📅","#8B5CF6"]].map(([id,label,ic,c])=>(
+        {[["list","Liste","☰","#3B82F6"],["gallery","Galerie","🖼️","#EC4899"],["makerworld","MakerWorld","🌐","#06B6D4"],["queue","À faire","✅","#22C55E"],["calendar","Calendrier","📅","#8B5CF6"]].filter(([id]) => !promoted.has(id)).map(([id,label,ic,c])=>(
           // comme les Stats : largeur selon le texte, qui retrecit avec l'ecran
           <button key={id} onClick={()=>setViewMode(id)} aria-label={label} data-tip={tabsNarrow && viewMode!==id ? label : undefined} style={{
             flex: tabsNarrow && viewMode!==id ? "0 0 auto" : "1 1 auto", minWidth: tabsNarrow && viewMode!==id ? 40 : 0, padding:"8px 4px", borderRadius:12, fontWeight:800, cursor:"pointer",

@@ -1,16 +1,11 @@
 import React, { useEffect } from "react";
 import { FriendChip } from "../Friends";
 import { useFriend } from "../../store/friend";
-import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
-import { Home, Settings, Printer, ShoppingBag, BarChart2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
+import { PanelLeftClose, PanelLeftOpen, MoreHorizontal } from "lucide-react";
+import { useNavMenu, isActiveItem, MOBILE_SLOTS } from "../../utils/navMenu";
 
-// Une bobine vue de face (flasque, noyau, brin qui part) dans le trait des autres icones : la bibliotheque n'en a
-// pas, et le colis qui la remplacait ne disait rien (28/10/2026)
-const Spool = ({ size = 24, ...p }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...p}>
-    <circle cx="11" cy="12" r="8"/><circle cx="11" cy="12" r="2.5"/><path d="M19 12c1.5 1.5 2 4.5 2.5 8"/>
-  </svg>
-);
 import UserMenu from "../UserMenu";
 import NotifBell from "../NotifBell";
 import GlobalSearch from "../GlobalSearch";
@@ -31,16 +26,7 @@ import { MwLinkHost } from "../MwCreatorPage";
 import { useIsAdmin } from "../../store/auth";
 import { useUpdates, updatesTip } from "../../utils/updates";
 
-// chaque page a sa couleur (celle de ses onglets) : la barre laterale la reprend
-const nav = [
-  { to: "/",          icon: Home,       label: "Accueil",     c: "#3B82F6" },
-  { to: "/prints",    icon: Printer,    label: "Impressions", c: "#06B6D4" },
-  { to: "/filaments", icon: Spool,      label: "Filaments",   c: "#F97316" },
-  { to: "/objects",   icon: ShoppingBag,label: "Objets",      c: "#8B5CF6" },
-  { to: "/stats",     icon: BarChart2,  label: "Stats",       c: "#22C55E" },
-  { to: "/settings",  icon: Settings,   label: "Paramètres",  c: "#64748B" },
-];
-
+// le menu : propre a chaque compte (05/11/2026, utils/navMenu.js) ; chaque page a sa couleur (celle de ses onglets)
 // Titre affiche dans le header mobile : evite de redonder le <h1> de chaque page.
 const TITLES = {
   "/":          null,            // l'accueil n'a pas de titre propre
@@ -97,24 +83,61 @@ const S = {
 // une mise a jour en attente : une petite pastille ambre au coin de l'icone de Parametres
 const UpdDot = ({ tip, size = 10, style }) => <span data-tip={tip} aria-label={tip} style={{ position:"absolute", top:-3, right:-3, width:size, height:size,
   borderRadius:"50%", background:"linear-gradient(135deg, #F59E0B, #F97316)", boxShadow:"0 0 0 2px var(--sidebar, var(--surface))", ...style }}/>;
-function NavItem({ to, icon: Icon, label, c, mini, upd }) {
+function NavItem({ to, icon: Icon, label, c, mini, upd, isActive }) {
   return (
-    <NavLink to={to} end={to === "/"} className="bn-nav" data-tip={mini ? (upd ? `${label} · ${upd}` : label) : (upd || undefined)} aria-label={label}
-      style={({ isActive }) => ({
+    <Link to={to} className="bn-nav" aria-current={isActive ? "page" : undefined} data-tip={mini ? (upd ? `${label} · ${upd}` : label) : (upd || undefined)} aria-label={label}
+      style={{
         "--c": c, display:"flex", alignItems:"center", gap:11, padding: mini ? "7px" : "7px 10px 7px 7px",
         justifyContent: mini ? "center" : "flex-start", borderRadius:14, fontSize:14, textDecoration:"none", transition:"background .15s, box-shadow .15s",
         background: isActive ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 65%, #ffffff))` : "transparent",
         boxShadow: isActive ? `0 8px 18px -10px ${c}` : "none",
         color: isActive ? "#fff" : "var(--text2)", fontWeight: isActive ? 800 : 600, whiteSpace:"nowrap",
-      })}>
-      {({ isActive }) => (<>
+      }}>
         <span style={{ width:32, height:32, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", position:"relative",
           background: isActive ? "rgba(255,255,255,0.22)" : `color-mix(in srgb, ${c} 16%, transparent)`, color: isActive ? "#fff" : c }}>
           <Icon size={17}/>{upd && <UpdDot/>}</span>
         {!mini && <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{label}</span>}
-      </>)}
-    </NavLink>
+    </Link>
   );
+}
+
+// un bouton de la barre du bas : l'icone dans une pastille de la couleur de la page ouverte, son nom dessous
+function BottomItem({ to, onClick, icon: Icon, label, c, isActive, dot }) {
+  const inner = <>
+    <span style={{ width:48, height:30, borderRadius:15, display:"flex", alignItems:"center", justifyContent:"center",
+      transition:"background .2s, box-shadow .2s",
+      background: isActive ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 65%, #ffffff))` : "transparent",
+      boxShadow: isActive ? `0 6px 14px -6px ${c}` : "none", color: isActive ? "#fff" : "inherit", position:"relative" }}>
+      <Icon size={19}/>{dot}</span>
+    <span style={{ maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{label}</span>
+  </>;
+  const st = { flex:1, minWidth:0, display:"flex", flexDirection:"column", alignItems:"center", padding:"8px 0 2px", gap:3, fontSize:10.5,
+    textDecoration:"none", fontWeight: isActive ? 800 : 600, color: isActive ? c : "var(--muted)", transition:"color 0.15s",
+    background:"none", border:"none", cursor:"pointer", fontFamily:"inherit" };
+  return to ? <Link to={to} aria-current={isActive ? "page" : undefined} style={st}>{inner}</Link>
+    : <button type="button" onClick={onClick} aria-label={label} style={st}>{inner}</button>;
+}
+
+// « Plus » (telephone) : les pages du menu qui ne tiennent pas dans la barre du bas, et celles rangees la
+function MoreSheet({ items, loc, visible, upd, onClose }) {
+  return createPortal(<>
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:2999, background:"rgba(0,0,0,0.35)" }}/>
+    <div role="dialog" aria-label="Plus de pages" style={{ position:"fixed", left:8, right:8, zIndex:3000,
+      bottom:"calc(70px + env(safe-area-inset-bottom, 0px))", borderRadius:20, padding:12, background:"var(--sheet-bg)",
+      border:"1px solid var(--border)", boxShadow:"0 14px 40px rgba(0,0,0,0.4)",
+      display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(96px, 1fr))", gap:8 }}>
+      {items.map(it => { const on = isActiveItem(it, loc, visible); const Icon = it.icon;
+        return <Link key={it.k} to={it.to} onClick={onClose} aria-current={on ? "page" : undefined}
+          style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, padding:"10px 4px", borderRadius:14, textDecoration:"none",
+            background: on ? `color-mix(in srgb, ${it.c} 14%, transparent)` : "var(--surface2)", border:"1px solid var(--border)",
+            color: on ? it.c : "var(--text2)", fontSize:12, fontWeight:800 }}>
+          <span style={{ width:38, height:38, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", position:"relative",
+            background:`color-mix(in srgb, ${it.c} 16%, transparent)`, color:it.c }}><Icon size={19}/>
+            {it.k === "settings" && upd.any && <UpdDot tip={updatesTip(upd)}/>}</span>
+          <span style={{ textAlign:"center", lineHeight:1.15 }}>{it.short || it.label}</span>
+        </Link>; })}
+    </div>
+  </>, document.body);
 }
 
 // La barre laterale repliee ou non (retenu sur ce navigateur) ; sur un ecran etroit, repliee par defaut.
@@ -129,13 +152,24 @@ function useSideMini() {
 
 export default function Layout() {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const loc = useLocation();
+  const { pathname } = loc;
+  const isAdmin = useIsAdmin();
+  const menu = useNavMenu(isAdmin);
+  const bar = menu.filter(i => i.place === "bar"), more = menu.filter(i => i.place === "more");
+  const visible = menu.filter(i => i.place !== "hidden");
+  // la barre du bas : 6 places ; s'il en faut plus (ou des pages rangees dans « Plus »), 5 et le bouton « Plus »
+  const needMore = more.length > 0 || bar.length > MOBILE_SLOTS;
+  const bottom = needMore ? bar.slice(0, MOBILE_SLOTS - 1) : bar;
+  const moreList = needMore ? [...bar.slice(MOBILE_SLOTS - 1), ...more] : [];
+  const [moreOpen, setMoreOpen] = React.useState(false);
+  React.useEffect(() => { setMoreOpen(false); }, [pathname, loc.search]);
   const title = TITLES[pathname] ?? null;
   const friend = useFriend((st) => st.friend);   // chez un copain
   const visitHome = useFriend((st) => st.visit);
   const [mini, flipMini] = useSideMini();
   // une mise a jour de BambuNymous (pour l'admin) ou de l'appli Android : une pastille sur Parametres
-  const upd = useUpdates(useIsAdmin());
+  const upd = useUpdates(isAdmin);
   const headerRef = React.useRef(null);
   // gestes caches (voir eggs.js) ; le logo, lui, a le tournis facile
   React.useEffect(() => { installEggs(); }, []);
@@ -237,7 +271,15 @@ export default function Layout() {
         {/* la recherche globale (04/11/2026) */}
         <div style={{ padding: mini ? "0 0 6px" : "0 12px 6px", display:"flex", justifyContent:"center" }}><GlobalSearch wide mini={mini}/></div>
         <nav style={S.nav}>
-          {nav.map(n => <NavItem key={n.to} {...n} mini={mini} upd={n.to === "/settings" && upd.any ? updatesTip(upd) : null}/>)}
+          {bar.map(n => <NavItem key={n.k} {...n} label={n.short || n.label} mini={mini} isActive={isActiveItem(n, loc, visible)}
+            upd={n.k === "settings" && upd.any ? updatesTip(upd) : null}/>)}
+          {/* les pages rangees dans « Plus » : sur ordinateur, a part sous le menu */}
+          {more.length > 0 && <>
+            {!mini && <div style={{ margin:"10px 8px 2px", fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"var(--muted)" }}>Plus</div>}
+            {mini && <div style={{ height:1, margin:"6px 10px", background:"var(--border)" }}/>}
+            {more.map(n => <NavItem key={n.k} {...n} label={n.short || n.label} mini={mini} isActive={isActiveItem(n, loc, visible)}
+              upd={n.k === "settings" && upd.any ? updatesTip(upd) : null}/>)}
+          </>}
         </nav>
         {/* Replier / deplier la barre */}
         <div style={{ padding:"0 10px 8px", display:"flex", justifyContent: mini ? "center" : "flex-end" }}>
@@ -311,23 +353,12 @@ export default function Layout() {
         {/* Bottom nav mobile */}
         <nav className="show-mobile" style={S.bottomNav}>
           {/* la page ouverte : son icone dans une pastille de sa couleur, son nom dans cette couleur */}
-          {nav.map(({ to, icon: Icon, label, c }) => (
-            <NavLink key={to} to={to} end={to === "/"} style={({ isActive }) => ({
-              flex:1, minWidth:0, display:"flex", flexDirection:"column", alignItems:"center",
-              padding:"8px 0 2px", gap:3, fontSize:10.5, textDecoration:"none", fontWeight: isActive ? 800 : 600,
-              color: isActive ? c : "var(--muted)", transition:"color 0.15s",
-            })}>
-              {({ isActive }) => (<>
-                <span style={{ width:48, height:30, borderRadius:15, display:"flex", alignItems:"center", justifyContent:"center",
-                  transition:"background .2s, box-shadow .2s",
-                  background: isActive ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 65%, #ffffff))` : "transparent",
-                  boxShadow: isActive ? `0 6px 14px -6px ${c}` : "none", color: isActive ? "#fff" : "inherit", position:"relative" }}>
-                  <Icon size={19}/>
-                  {to === "/settings" && upd.any && <UpdDot tip={updatesTip(upd)} style={{ top:1, right:9, boxShadow:"0 0 0 2px var(--surface)" }}/>}</span>
-                <span style={{ maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{label}</span>
-              </>)}
-            </NavLink>
-          ))}
+          {bottom.map(it => <BottomItem key={it.k} to={it.to} icon={it.icon} label={it.short || it.label} c={it.c} isActive={isActiveItem(it, loc, visible)}
+            dot={it.k === "settings" && upd.any ? <UpdDot tip={updatesTip(upd)} style={{ top:1, right:9, boxShadow:"0 0 0 2px var(--surface)" }}/> : null}/>)}
+          {needMore && <BottomItem onClick={() => setMoreOpen(o => !o)} icon={MoreHorizontal} label="Plus" c="#64748B"
+            isActive={moreOpen || moreList.some(it => isActiveItem(it, loc, visible))}
+            dot={moreList.some(it => it.k === "settings") && upd.any ? <UpdDot tip={updatesTip(upd)} style={{ top:1, right:9, boxShadow:"0 0 0 2px var(--surface)" }}/> : null}/>}
+          {moreOpen && <MoreSheet items={moreList} loc={loc} visible={visible} upd={upd} onClose={() => setMoreOpen(false)}/>}
           <span style={{ position:"absolute", top:1, left:"50%", transform:"translateX(-50%)" }}><Hide at="nav" size={9}/></span>
         </nav>
       </div>

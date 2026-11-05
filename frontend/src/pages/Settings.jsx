@@ -31,6 +31,7 @@ import MyAppNotifications from "../components/MyAppNotifications";
 import AndroidApp from "../components/AndroidApp";
 import PerfSheet, { perfLabel, perfMs, perfTone, perfSlow, perfBad, perfSort, perfVal } from "../components/PerfSheet";
 import StorageSheet from "../components/StorageSheet";
+import MenuSettings from "../components/MenuSettings";
 const MwRelinkSheet = React.lazy(() => import("../components/MwRelinkSheet"));
 import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
@@ -2197,6 +2198,7 @@ export default function Settings() {
         </div>
       </div>
       <HomeDisplayCard/>
+      <MenuSettings/>
       <AdminOnly>
         <AMSOrderSection/>
         <AttentionCard card={card} cardTitle={cardTitle}/>

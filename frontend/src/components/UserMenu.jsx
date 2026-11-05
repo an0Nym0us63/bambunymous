@@ -1,7 +1,9 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogOut, Trophy, BookOpen, Bell, LayoutGrid } from "lucide-react";
+import { LogOut, LayoutGrid, Bell } from "lucide-react";
+import { useNavMenu } from "../utils/navMenu";
+import { useUpdates, updatesTip } from "../utils/updates";
 import { useAuth, ROLE_LABEL, ROLE_ADMIN } from "../store/auth";
 import client from "../api/client";
 import { FriendPicker, useFriendsPrinting } from "./Friends";
@@ -35,6 +37,8 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
 
   const btnRef = React.useRef(null);
   const [rect, setRect] = React.useState(null);   // null = menu ferme
+  const profileItems = useNavMenu(role === ROLE_ADMIN).filter(i => i.place === "profile");
+  const upd = useUpdates(role === ROLE_ADMIN);
 
   // Repositionner sur scroll/resize serait du luxe : on ferme, c'est plus
   // previsible qu'un menu qui derive a cote de son ancre.
@@ -160,15 +164,19 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
               </p>
               <p style={{ margin:"2px 0 0", fontSize:11, color:"var(--muted)" }}>{roleLabel}</p>
             </div>
-            {/* les notifications, avec leur nombre (la cloche n'est pas toujours a cote) */}
-            {!visiting && <button onClick={() => { setRect(null); navigate("/notifications"); }}
-              style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
-                padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid var(--border)",
-                cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:600, textAlign:"left" }}>
-              <Bell size={16} color="#3B82F6"/> Notifications
-              {unseen > 0 && <span style={{ marginLeft:"auto", minWidth:18, height:18, padding:"0 6px", borderRadius:9, boxSizing:"border-box",
-                background:"#ef4444", color:"#fff", fontSize:10.5, fontWeight:800, lineHeight:"18px", textAlign:"center" }}>{unseen > 99 ? "99+" : unseen}</span>}
-            </button>}
+            {/* les pages rangees dans le profil (05/11/2026, reglees dans Parametres › Affichage › Menu) : par defaut
+                Notifications (avec leur nombre : la cloche n'est pas toujours a cote), Succes et le guide */}
+            {profileItems.filter(it => !(visiting && it.k === "notifications")).map(it => { const Icon = it.icon;
+              return <button key={it.k} onClick={() => { setRect(null); navigate(it.to); }}
+                style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
+                  padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid var(--border)",
+                  cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:600, textAlign:"left", position:"relative" }}>
+                <Icon size={16} color={it.c}/> {it.label}
+                {it.k === "notifications" && unseen > 0 && <span style={{ marginLeft:"auto", minWidth:18, height:18, padding:"0 6px", borderRadius:9, boxSizing:"border-box",
+                  background:"#ef4444", color:"#fff", fontSize:10.5, fontWeight:800, lineHeight:"18px", textAlign:"center" }}>{unseen > 99 ? "99+" : unseen}</span>}
+                {it.k === "settings" && upd.any && <span data-tip={updatesTip(upd)} style={{ marginLeft:"auto", width:9, height:9, borderRadius:"50%",
+                  background:"linear-gradient(135deg, #F59E0B, #F97316)" }}/>}
+              </button>; })}
             {onHome && <button onClick={() => { setRect(null); window.dispatchEvent(new Event("bn-home-edit")); }}
               style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
                 padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid var(--border)",
@@ -176,19 +184,6 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
               <LayoutGrid size={16} color="#8B5CF6"/> Personnaliser l'accueil
             </button>}
             <FriendPicker onDone={() => setRect(null)}/>
-            <button onClick={() => { setRect(null); navigate("/stats?tab=achievements"); }}
-              style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
-                padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid var(--border)",
-                cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:600, textAlign:"left" }}>
-              <Trophy size={16} color="#F59E0B"/> Succès
-            </button>
-            {/* le guide d'utilisation : une page de l'appli (reservee aux comptes de la maison) */}
-            <a href="/guide" onClick={e => { e.preventDefault(); setRect(null); navigate("/guide"); }}
-              style={{ width:"100%", display:"flex", alignItems:"center", gap:10, boxSizing:"border-box",
-                padding:"12px 14px", borderBottom:"1px solid var(--border)", textDecoration:"none",
-                color:"var(--text)", fontSize:13, fontWeight:600 }}>
-              <BookOpen size={16} color="#3B82F6"/> Guide d'utilisation
-            </a>
             {!opened ? null : door ? (
               <form onSubmit={go} style={{ display:"flex", alignItems:"center", gap:6, padding:"9px 10px 9px 14px",
                 borderBottom:"1px solid var(--border)" }}>

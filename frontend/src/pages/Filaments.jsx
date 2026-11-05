@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { usePromotedTabs } from "../utils/navMenu";
 import HiddenMark from "../components/HiddenMark";
 import Cachettes, { Hide } from "../components/Cachettes";
 import { createPortal } from "react-dom";
@@ -3520,6 +3521,7 @@ export default function Filaments() {
 
   const galActiveFilters = countFilters(galFilters);
 
+  const promoted = usePromotedTabs("/filaments");    // les onglets sortis au menu (05/11/2026)
   const tabs = [
     { id:"spools",   label:"Stock",     ic:"🧵", c:"#3B82F6" },
     { id:"archived", label:"Archivées", ic:"🗄", c:"#64748B" },
@@ -3579,7 +3581,7 @@ export default function Filaments() {
       </div>
 
       {/* Tabs */}
-      <PageTabs tabs={tabs} tab={tab} setTab={setTab}/>
+      <PageTabs tabs={tabs.filter(t => !promoted.has(t.id))} tab={tab} setTab={setTab}/>
 
       {tab==="catalog" && <FilamentsView/>}
       {tab==="gallery" && (
