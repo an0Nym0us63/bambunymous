@@ -839,6 +839,17 @@ async def plan(tz: int | None = None) -> dict:
     for k in [k for k in d["locked"] if k not in keys]:
         d["locked"].pop(k)
         dirty = True
+    # le plateau fige qu'on vient de lancer (06/11/2026) : une impression de ce modele a demarre et un de ses plateaux
+    # etait fige dans les 3 h -- c'est lui (lance un peu en avance ou en retard). Son figeage tombe : il restait fige,
+    # repousse apres l'impression en cours. Le compte des plateaux, lui, suit deja l'impression en cours
+    if live and live[2]:
+        for k, at in list(d["locked"].items()):
+            if k.split(":")[0].split("~")[0] == str(live[2]) and abs((datetime.fromisoformat(at) - now).total_seconds()) <= 3 * 3600:
+                d["locked"].pop(k, None)
+                d["pins"].pop(k, None)
+                dirty = True
+                logger.info(f"[PLAN] {k} : fige a {at}, l'impression en cours de ce modele l'a lance : defige")
+                break
     r = place(jobs, d, now, busy, loaded, _slots())
     mark_complete(r["jobs"])
     # avance ou retard : chaque debut, compare a celui du dernier rangement

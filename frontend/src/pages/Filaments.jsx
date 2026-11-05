@@ -1349,13 +1349,25 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                   <span style={{ width:46, height:46, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20,
                     background:"rgba(34,197,94,0.15)" }}>{u.kind === "annule" ? "↩️" : "⚖️"}</span>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:13, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
-                      textDecoration: u.reverted ? "line-through" : "none" }}>
-                      {u.kind === "annule" ? "Consommation annulée" : "Rendu à la bobine"}{u.file_name ? ` · ${frNum(u.file_name)}` : ""}</div>
+                    {/* une ligne par action (06/11/2026) : ce qui revient, de quelle impression, et pourquoi, en entier */}
+                    {(() => {
+                      const t = frNum(u.file_name || ""), name = t.split(" — ")[0], why = t.split(" — ").slice(1).join(" — ");
+                      const who = (why.split("pièce annulée : ")[1] || "").split(" ;")[0], cons = why.match(/consommation ([\d,]+) → ([\d,]+) g/);
+                      const reason = u.kind === "annule" ? "consommation annulée"
+                        : who ? `✂ pièce annulée : ${who}${cons ? ` · ${cons[1]} g prévus → ${cons[2]} g` : ""}`
+                        : /échec/.test(why) ? "échec : la part non imprimée revient"
+                        : /avant la première couche/.test(why) ? "annulée avant la première couche : tout revient"
+                        : u.gone && u.print_id ? `restitué à la main sur l'impression #${u.print_id}, retirée depuis`
+                        : "restitué à la main";
+                      return <>
+                        <div style={{ fontSize:13, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+                          textDecoration: u.reverted ? "line-through" : "none" }}>{u.kind === "annule" ? "Consommation annulée" : "Rendu à la bobine"}{name ? ` · ${name}` : ""}</div>
+                        <div style={{ fontSize:11.5, fontWeight:800, color: who ? "#F97316" : "#16a34a", marginTop:2, lineHeight:1.35 }}>{reason}</div>
+                      </>;
+                    })()}
                     <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>
                       {when}{u.reverted ? " · annulé" : ""}
-                      {/* rendu pour une impression qui n'est plus la (06/11/2026) : sinon on ne comprenait pas d'ou il venait */}
-                      {u.gone && u.print_id && <span data-tip="Restitué à la main sur cette impression, retirée ou remplacée depuis (un lancement relancé)"> · restitué sur l'impression #{u.print_id}, retirée depuis</span>}</div>
+</div>
                   </div>
                   <div style={{ textAlign:"right", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
                     <div style={{ fontSize:14, fontWeight:900, color:"#16a34a" }}>+{(u.grams || 0).toFixed(1)} g</div>
@@ -1385,7 +1397,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                   {/* une piece annulee : la consommation de cette ligne en tient deja compte (05/11/2026) */}
                   {(() => { const xs = usageHistory._onRow?.[u.usage_id] || [];
                     // une note « piece » dit deja tout (rendu ou non) ; sinon le rendu de la piece annulee
-                    return xs.some(x => x.kind === "piece") ? xs.filter(x => x.kind === "piece") : xs.filter(x => x.kind === "rendu"); })().map(x => {
+                    return xs.filter(x => x.kind === "piece"); })().map(x => {
                     const t = frNum(x.file_name || ""), who = (t.split("pièce annulée : ")[1] || "").split(" ;")[0], cons = (t.match(/consommation ([\d,]+) → ([\d,]+) g/) || []);
                     return <div key={`p${x.id}`} data-tip={t} style={{ fontSize:11, fontWeight:700, color:"#F97316", marginTop:2 }}>
                       ✂ pièce annulée{who ? ` : ${who}` : ""}{cons[1] ? ` · ${cons[1]} g prévus → ${cons[2]} g` : ` · ${(x.grams || 0).toFixed(1).replace(".", ",")} g de moins`}</div>; })}
@@ -1398,7 +1410,11 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                       ` (${u.zero_total.toFixed(1).replace(".", ",")} g en tout${u.status === "IN_PROGRESS" ? " à la fin" : ""})`}</div>}
                 </div>
                 <div style={{ textAlign:"right", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
-                  <div style={{ fontSize:14, fontWeight:900, ...fGrad("#ef4444", "#f97316") }}>−{u.grams_used?.toFixed(1)} g</div>
+                  {/* ce qui a ete preleve au lancement ; rendu ensuite (ses lignes vertes) : ce qu'il en reste */}
+                  <div style={{ fontSize:14, fontWeight:900, ...fGrad("#ef4444", "#f97316") }}
+                    data-tip={u.returned > 0 ? "Prélevé au lancement" : undefined}>−{((u.grams_used || 0) + (u.returned || 0)).toFixed(1)} g</div>
+                  {u.returned > 0 && <div data-tip="Ce que l'impression a pris au final, une fois le rendu revenu à la bobine"
+                    style={{ fontSize:11, fontWeight:800, color:"var(--muted)" }}>au final {(u.grams_used || 0).toFixed(1).replace(".", ",")} g</div>}
                   {u.cost > 0 && <div style={{ fontSize:11, fontWeight:700, color:"#16a34a" }}>{moneyVal(u.cost, 2)} €</div>}
                   {isAdmin && u.usage_id && <button onClick={e => { e.stopPropagation(); undoLine("usage", u.usage_id, u.grams_used, true); }}
                     data-tip="Rendre ces grammes à la bobine : l'impression ne compte plus sur elle"
