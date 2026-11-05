@@ -2228,9 +2228,12 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 800, color: "var(--text)", minWidth: 0 }}>
             <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.file_name || "Sans nom"}</span>
-            {coverPrintId === x.id && <span data-tip="Vignette du groupe" style={tagS("#F59E0B")}>★</span>}</span>
+            {coverPrintId === x.id && <span data-tip="Vignette du groupe" style={tagS("#F59E0B")}>★</span>}
+            {/* les memes marques que la liste (05/11/2026) : pieces, piece annulee */}
+            {x.number_of_items > 1 && <span data-tip={`${x.number_of_items} pièces`} style={tagS("#2563EB")}>×{x.number_of_items}</span>}</span>
           <span style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            <span style={{ color: c }}>{ic} {l}</span> · {dy} {hr.split(" · ")[0]}</span>
+            <span style={{ color: c }}>{ic} {l}</span>{x.skipped_objects?.objects?.length > 0 && <span data-tip={`${x.skipped_objects.objects.length > 1 ? `${x.skipped_objects.objects.length} pièces annulées` : "Une pièce annulée"} pendant l'impression`}
+              style={{ color: "#F97316" }}> · ✂</span>} · {dy} {hr.split(" · ")[0]}</span>
         </span>
         <span style={{ textAlign: "right", flexShrink: 0 }}>
           <span style={{ display: "block", fontSize: 12, fontWeight: 900, color: "var(--text)" }}>{(x.duration_seconds || x.estimated_seconds) ? durFr(x.duration_seconds || x.estimated_seconds) : "—"}</span>
@@ -2253,7 +2256,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
           <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, fontWeight: 800, color: "var(--text)", minWidth: 0 }}>
             <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.file_name || "Sans nom"}</span>
             {coverPrintId === x.id && <span data-tip="Vignette du groupe" style={tagS("#F59E0B")}>★</span>}</div>
-          <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{fmtDate(x.print_date)}</div>
+          <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{x.skipped_objects?.objects?.length > 0 && <span data-tip="Pièce annulée pendant l'impression" style={{ color: "#F97316", fontWeight: 900 }}>✂ </span>}{fmtDate(x.print_date)}</div>
         </div>
       </div>); };
   const printsBlock = (
