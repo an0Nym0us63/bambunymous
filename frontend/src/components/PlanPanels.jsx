@@ -113,12 +113,19 @@ export function JobSheet({ j, now, edit, onClose, act }) {
 
 // Un objet « d'une traite » (06/11/2026) : libre (d'autres objets peuvent s'intercaler), ses plateaux d'un exemplaire
 // a la suite, ou tout l'objet (tous ses exemplaires) a la suite
-export const CHAIN_TXT = { plates: "🔗 plateaux d'une traite", all: "🔗 tout d'une traite" };
+// 06/11/2026 : les mots disent l'objet, pas ses plateaux. Un seul exemplaire : libre ou d'une traite (les deux reglages
+// reviennent au meme). Plusieurs : chaque exemplaire d'une traite (entre deux, d'autres objets passent), ou tous les
+// exemplaires a la suite. Un modele d'un seul plateau : seul « tous les exemplaires » a un sens.
+const chainMode = j => !j.chain ? null : (j.qty || 1) > 1 ? (j.plates_total > 1 ? j.chain : "all") : "plates";
+export const chainTxt = j => ({ plates: (j.qty || 1) > 1 ? "🔗 chaque exemplaire d'une traite" : "🔗 d'une traite",
+  all: (j.qty || 1) > 1 ? "🔗 tous les exemplaires à la suite" : "🔗 d'une traite" })[chainMode(j)] || "";
 function ChainPick({ j, busy, run, act }) {
-  const opts = [[null, "Libre", "D'autres objets peuvent s'intercaler (l'optimiseur enchaîne les mêmes couleurs)"],
-    j.plates_total > 1 && ["plates", "Ses plateaux", "Les plateaux d'un même exemplaire se suivent : commencé, il se finit d'une traite"],
-    ["all", j.qty > 1 ? "Tous ses exemplaires" : "Tout l'objet", j.qty > 1 ? `Tous ses plateaux, des ${j.qty} exemplaires, à la suite` : "Tous ses plateaux à la suite"]].filter(Boolean);
-  const cur = j.chain || null;
+  const many = (j.qty || 1) > 1;
+  const opts = [[null, "Libre", "D'autres objets peuvent s'intercaler entre ses plateaux (l'optimiseur enchaîne les mêmes couleurs)"],
+    !many && ["plates", "D'une traite", "Ses plateaux se suivent : commencé, il se finit sans rien entre deux"],
+    many && j.plates_total > 1 && ["plates", "Chaque exemplaire", "Les plateaux d'un exemplaire se suivent ; entre deux exemplaires, d'autres objets peuvent passer"],
+    many && ["all", "Tous les exemplaires", `Les ${j.qty} exemplaires à la suite${j.plates_total > 1 ? ", chacun plateau après plateau" : ""}, sans rien entre deux`]].filter(Boolean);
+  const cur = chainMode(j);
   const tip = (opts.find(o => o[0] === cur) || opts[0])[2];
   return <div style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)" }}>
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 7 }}>
@@ -188,7 +195,7 @@ export function PoolSummary({ jobs, blocked = [], now, onOpenModel }) {
           {(x.nb || f.due || f.chain || x.locked || x.pinned || x.load || x.low || x.wait) ? <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
             {x.nb > 0 && <span style={chipS("#DC2626")}>⛔ {x.nb} non planifiable{x.nb > 1 ? "s" : ""}</span>}
             {f.due && <span style={chipS(f.due_ok ? "#16A34A" : "#EF4444")}>🎯 {dueTxt(f.due)}</span>}
-            {f.chain && <span style={chipS("#0EA5E9")}>{CHAIN_TXT[f.chain]}</span>}
+            {f.chain && <span style={chipS("#0EA5E9")}>{chainTxt(f)}</span>}
             {x.locked > 0 && <span style={chipS("#4F46E5")}>🔒 {x.locked}</span>}
             {x.pinned > 0 && <span style={chipS("#7C3AED")}>📌 {x.pinned}</span>}
             {x.load && <span style={chipS("#EA580C")}>🧵</span>}
@@ -221,7 +228,7 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act }) {
           {un && <span style={chipS("#64748B")}>○ non retenu</span>}
           {x.nb > 0 && <span style={chipS("#DC2626")}>⛔ {x.nb} non planifiable{x.nb > 1 ? "s" : ""}</span>}
           {f.due && <span style={chipS(f.due_ok ? "#16A34A" : "#EF4444")}>🎯 avant le {dueTxt(f.due)}</span>}
-          {f.chain && <span style={chipS("#0EA5E9")}>{CHAIN_TXT[f.chain]}</span>}
+          {f.chain && <span style={chipS("#0EA5E9")}>{chainTxt(f)}</span>}
         </span>
       </div>
     </div>
@@ -305,7 +312,7 @@ export function PoolGrouped({ jobs, blocked = [], now, edit, drag, onDrag, onOpe
               {okJobs[0]?.start && <> · dès <b style={{ color: "var(--text)" }}>{dayOf(okJobs[0].start, now)}</b> {hhmm(okJobs[0].start)}</>}
               {nb > 0 && <b style={{ color: "#DC2626" }}> · ⛔ {nb} non planifiable{nb > 1 ? "s" : ""}</b>}
               {f.due && <span style={{ color: f.due_ok ? "#16A34A" : "#EF4444", fontWeight: 900 }}> · 🎯 {dueTxt(f.due)}</span>}
-              {f.chain && <span style={{ color: "#0EA5E9", fontWeight: 900 }}> · {CHAIN_TXT[f.chain]}</span>}</span>
+              {f.chain && <span style={{ color: "#0EA5E9", fontWeight: 900 }}> · {chainTxt(f)}</span>}</span>
           </span>
         </button>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(172px, 1fr))", gap: 5, marginTop: 8 }}>
