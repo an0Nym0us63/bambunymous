@@ -14,6 +14,7 @@ import AdminOnly from "./AdminOnly";
 import { Pressable } from "./ContextMenu";
 import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
+import { useNavigate } from "react-router-dom";
 import Model3D from "./Model3D";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import { moneyVal } from "../utils/money";
@@ -192,6 +193,32 @@ export default function MwQueue() {
   }, [reload, until, chosen.join(",")]);
 
   const refresh = () => { fresh.current = true; setBusy(true); setReload(n => n + 1); };
+  // le planning de chaque modele (06/11/2026) : quand il commence et quand il finit, d'un coup d'oeil ; toucher la ligne
+  // ouvre le calendrier sur sa fiche
+  const navTo = useNavigate();
+  const [plan, setPlan] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    client.get("/makerworld/plan", { params: { tz: -new Date().getTimezoneOffset() } }).then(({ data }) => {
+      if (!alive) return;
+      const by = {};
+      for (const j of data.jobs || []) {
+        const x = by[j.design_id] = by[j.design_id] || { n: 0, first: j.start, last: j.end, blocked: 0 };
+        x.n += 1; if (j.start < x.first) x.first = j.start; if (j.end > x.last) x.last = j.end;
+      }
+      for (const b of data.blocked || []) (by[b.design_id] = by[b.design_id] || { n: 0, first: null, last: null, blocked: 0 }).blocked += 1;
+      setPlan({ by, now: data.now });
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [reload]);
+  const when = iso => {
+    if (!iso || !plan) return "";
+    const d = iso.slice(0, 10), t = (plan.now || "").slice(0, 10);
+    const tm = new Date(`${t}T12:00`); tm.setDate(tm.getDate() + 1);
+    const tom = `${tm.getFullYear()}-${String(tm.getMonth() + 1).padStart(2, "0")}-${String(tm.getDate()).padStart(2, "0")}`;
+    const h = `${+iso.slice(11, 13)} h${iso.slice(14, 16) !== "00" ? ` ${iso.slice(14, 16)}` : ""}`;
+    return `${d === t ? "aujourd'hui" : d === tom ? "demain" : new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} ${h}`;
+  };
   // Nombre d'exemplaires : affiche tout de suite, totaux recalcules par le serveur.
   const setQty = async (did, n) => {
     setQ(x => ({ ...x, models: x.models.map(r => r.design_id === did ? { ...r, qty: n } : r) }));
@@ -485,6 +512,14 @@ export default function MwQueue() {
                     <span style={grad("#F59E0B", "#FBBF24")}>⚖ {g(r.weight_g)}</span>
                     {r.cost != null && <span style={grad("#16A34A", "#4ADE80")}>💶 {moneyVal(r.cost, 2)} €</span>}
                   </span>
+                  {/* au planning : de quand a quand ; toucher ouvre le calendrier sur ce modele */}
+                  {plan?.by?.[r.design_id] && (() => { const x = plan.by[r.design_id];
+                    return <span role="button" tabIndex={0} onClick={e => { e.stopPropagation(); navTo(`/prints?tab=calendar&plan=${encodeURIComponent(r.design_id)}`); }}
+                      data-tip="Ouvrir le calendrier sur ce modèle"
+                      style={{ display:"inline-flex", alignItems:"center", gap:5, marginTop:5, padding:"2px 9px", borderRadius:20, cursor:"pointer", fontSize:11, fontWeight:800,
+                        color: x.n ? "#4F46E5" : "#DC2626", background: x.n ? "rgba(99,102,241,0.12)" : "rgba(220,38,38,0.1)", maxWidth:"100%" }}>
+                      📅 {x.n ? `Planning : ${x.n} plateau${x.n > 1 ? "x" : ""} · dès ${when(x.first)} · fini ${when(x.last)}` : "Planning : non planifiable"}
+                      {x.n > 0 && x.blocked > 0 && <span style={{ color:"#DC2626" }}> · ⛔ {x.blocked}</span>}</span>; })()}
                   {r.plates?.length > 1 && <PlateChips plates={r.plates} designId={r.mw_id || r.design_id} edit={isAdmin} onChanged={refresh}/>}
                   {r.ready_now?.plates > 0 && (
                     <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:800, color:"#16a34a", marginTop:5, padding:"2px 8px",

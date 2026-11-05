@@ -83,6 +83,14 @@ export default function PrintCalendar() {
   // le planning (05/11/2026) : « A faire » plateau par plateau, pose par le serveur selon les consignes
   const [pd, setPd] = useState(() => cacheOf().pd);
   useEffect(() => { if (pd && pd.jobs) cacheOf().pd = pd; }, [pd]);
+  // venu d'« À faire » (06/11/2026) : ?plan=… ouvre la fiche de ce modele du planning (?model= ouvre la fiche MakerWorld)
+  const modelParam = useRef(new URLSearchParams(window.location.search).get("plan"));
+  useEffect(() => {
+    if (!modelParam.current || !pd?.jobs) return;
+    const m = modelParam.current;
+    modelParam.current = null;
+    if ((pd.jobs || []).some(j => j.design_id === m) || (pd.blocked || []).some(j => j.design_id === m)) setModelSel(m);
+  }, [pd]);
   const [showPlan, setShowPlan] = useState(true);
   const [setOpen, setSetOpen] = useState(false);
   const [sheet, setSheet] = useState(null);           // la fiche d'un modele : profil, plateaux, filaments retenus
