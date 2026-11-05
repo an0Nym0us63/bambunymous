@@ -101,12 +101,18 @@ export function Layer3D({ s, d, now, w, h }) {
     }
     g.setLineDash([]); g.globalAlpha = 1;
   }, [s, d, now, w, h, az]);
-  const down = e => { drag.current = { x: e.clientX, az }; e.currentTarget.setPointerCapture?.(e.pointerId); };
-  const move = e => { if (drag.current) setAz(drag.current.az + (e.clientX - drag.current.x) / 120); };
+  // au doigt (05/11/2026) : tourner ne doit ni faire defiler, ni changer d'ecran de l'accueil (data-noswipe), ni ouvrir la
+  // vue en grand de la tuile au lacher (un simple toucher l'ouvre toujours)
+  const moved = useRef(false);
+  const down = e => { e.stopPropagation(); drag.current = { x: e.clientX, az }; moved.current = false; e.currentTarget.setPointerCapture?.(e.pointerId); };
+  const move = e => { if (!drag.current) return; e.stopPropagation(); const dx = e.clientX - drag.current.x;
+    if (Math.abs(dx) > 4) moved.current = true; setAz(drag.current.az + dx / 120); };
   const up = () => { drag.current = null; };
+  const click = e => { if (moved.current) { e.stopPropagation(); e.preventDefault(); moved.current = false; } };
   if (s && !s.ok) return <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Pas de vue 3D pour cette impression</span>;
   if (!s) return <div style={{ width: w, height: h, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, color: "var(--muted)" }}>Calcul de la vue 3D…</div>;
-  return <canvas ref={ref} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} data-tip="Glisse pour tourner autour"
+  return <canvas ref={ref} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onClickCapture={click}
+    onTouchStart={e => e.stopPropagation()} onTouchMove={e => e.stopPropagation()} data-noswipe="" data-tip="Glisse pour tourner autour"
     style={{ width: w, height: h, display: "block", touchAction: "none", cursor: "grab" }}/>;
 }
 
