@@ -136,7 +136,7 @@ client.interceptors.request.use(config => {
 export const PHOTOS_CHANGED = "bn-photos-changed";
 client.interceptors.response.use(r => {
   const m = (r.config?.method || "get").toLowerCase(), u = r.config?.url || "";
-  if (m !== "get" && /^\/?prints\/(groups\/)?\d+\/(photos?|upload)/.test(u.replace(/^\/api\/v1/, "")))
+  if (m !== "get" && /^\/?prints\/(groups\/)?\d+\/(photos?|upload)\b/.test(u.replace(/^\/api\/v1/, "")))
     window.dispatchEvent(new CustomEvent(PHOTOS_CHANGED));
   // une impression supprimee : l'accueil ne la montre plus (31/10/2026)
   if (m === "delete" && /^\/?prints\/\d+$/.test(u.replace(/^\/api\/v1/, "")))
