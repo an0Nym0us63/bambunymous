@@ -182,6 +182,7 @@ export default function PrintCalendar() {
     smart: () => send("/makerworld/plan/smart", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
     later: () => send("/makerworld/plan/later", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
     laterAll: () => send("/makerworld/plan/later", { key: j.key, whole: true }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
+    chain: mode => send("/makerworld/plan/chain", { design_id: j.design_id, mode }, "post").then(ok => { if (ok && mode) egg("planning_traite"); }),
     lock: () => send("/makerworld/plan/lock", { key: j.key, lock: true }, "post").then(ok => { if (ok) egg("planning_fige"); }),
     unlock: () => send("/makerworld/plan/lock", { key: j.key, lock: false }, "post"),
     day: v => moveDay(j.key, v),

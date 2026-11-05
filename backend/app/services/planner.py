@@ -18,7 +18,10 @@ Ce que l'on range (meme reglage) :
   plan0 : {cle: debut prevu} le planning tel qu'il etait au dernier rangement, pour dire l'avance ou le retard ;
   deadlines : {design: "AAAA-MM-JJ"} un objet a finir AVANT ce jour (« la fusee avant le 24 ») : son dernier plateau
           doit finir avant minuit la veille ; le planning previent quand il deborde, l'optimiseur ne le sacrifie pas ;
-  tz    : decalage horaire du navigateur (minutes), pour la boucle des rappels.
+  tz    : decalage horaire du navigateur (minutes), pour la boucle des rappels ;
+  chain : {ligne de « A faire »: "plates" | "all"} (06/11/2026) un objet « d'une traite » : "plates", les plateaux d'un
+          meme exemplaire se suivent (rien ne s'intercale) ; "all", tous ses plateaux de tous ses exemplaires se suivent.
+          Le groupe prend la place de son premier plateau dans la file, et le jour ou celui-ci est pose.
 
 Un travail : un plateau d'un modele (ou le modele entier quand ses plateaux ne disent pas leur duree), un
 exemplaire. Ce qui reste a faire d'un plateau : le nombre d'objets voulus, moins ce qu'il a deja donne (mes
@@ -55,7 +58,7 @@ async def _load() -> dict:
     d = d if isinstance(d, dict) else {}
     for k, v in DEFAULTS.items():
         d.setdefault(k, v)
-    for k in ("pins", "done", "plan0", "notified", "deadlines", "locked"):
+    for k in ("pins", "done", "plan0", "notified", "deadlines", "locked", "chain"):
         if not isinstance(d.get(k), dict):
             d[k] = {}
     if not isinstance(d.get("order"), list):
@@ -160,7 +163,8 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
                             "title": title, "cover": m.get("cover_url"),
                             "retained": bool(m.get("planned")),   # profil retenu dans « A faire » ; sinon celui par defaut
                             "plate": idx, "plate_name": pname, "plates_total": len(plates), "copy": c, "qty": qty,
-                            "seconds": int(secs), "weight_g": wg, "fils": fl, "_obj": obj, "thumb": thumb})
+                            "seconds": int(secs), "weight_g": wg, "fils": fl, "_obj": obj, "thumb": thumb,
+                            "chain": d.get("chain", {}).get(did)})
     return out, changed
 
 
@@ -169,10 +173,40 @@ def _ordered(jobs: list, order: list, pins: dict | None = None) -> list:
     pos = {j["key"]: i for i, j in enumerate(jobs)}
     # les modeles retenus d'abord, ceux qui ne le sont pas apres (05/11/2026 : planifies quand meme, en priorite basse) ;
     # dans chacun, l'ordre voulu, puis les nouveaux dans l'ordre de « A faire »
-    # un plateau pose a la main sur un jour garde sa place parmi les retenus, meme si son modele ne l'est pas
-    pins = pins or {}
-    return sorted(jobs, key=lambda j: (not (j.get("retained", True) or j["key"] in pins),)
-                  + ((0, rank[j["key"]]) if j["key"] in rank else (1, pos[j["key"]])))
+    # les retenus toujours devant (06/11/2026) : un non retenu pose sur un jour (la journee couleur les prenait aussi)
+    # ne passe plus devant eux ; son jour est ignore tant que son modele n'est pas retenu
+    return _chained(sorted(jobs, key=lambda j: (not j.get("retained", True),)
+                           + ((0, rank[j["key"]]) if j["key"] in rank else (1, pos[j["key"]]))))
+
+
+def _chained(seq: list) -> list:
+    """Les objets « d'une traite » (06/11/2026) : leurs plateaux regroupes a la place du premier d'entre eux.
+    "plates" : un groupe par exemplaire (le 1er reste a faire de chaque plateau, puis le 2e…), dans l'ordre des
+    plateaux ; "all" : un seul groupe, exemplaire par exemplaire. Chaque plateau groupe porte chain_g."""
+    rounds, groups = {}, {}
+    for j in seq:
+        m = j.get("chain")
+        if m not in ("plates", "all"):
+            j.pop("chain_g", None)
+            continue
+        did = str(j["design_id"])
+        n = rounds.setdefault((did, j.get("plate")), 0)
+        rounds[(did, j.get("plate"))] = n + 1
+        j["_round"] = n
+        g = did if m == "all" else f"{did}#{n}"
+        j["chain_g"] = g
+        groups.setdefault(g, []).append(j)
+    if not groups:
+        return seq
+    out, seen = [], set()
+    for j in seq:
+        g = j.get("chain_g")
+        if g is None:
+            out.append(j)
+        elif g not in seen:
+            seen.add(g)
+            out += sorted(groups[g], key=lambda x: (x["_round"], x.get("plate") or 0))
+    return out
 
 
 # ── les heures ───────────────────────────────────────────────────────────────
@@ -315,6 +349,21 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
     rules = Rules(d)
     today = now.date()
     pins = d["pins"]
+    # un non retenu n'est pose sur aucun jour : il passe apres les retenus (06/11/2026)
+    if any(j.get("retained") is False and j["key"] in pins for j in jobs):
+        pins = {k: v for k, v in pins.items() if not any(j["key"] == k and j.get("retained") is False for j in jobs)}
+    # un objet « d'une traite » : tous ses plateaux suivent le jour ou est pose le premier (ou aucun)
+    if any(j.get("chain_g") for j in jobs):
+        pins, first = dict(pins), {}
+        for j in jobs:
+            g = j.get("chain_g")
+            if not g:
+                continue
+            p0 = first.setdefault(g, pins.get(j["key"]))
+            if p0:
+                pins[j["key"]] = p0
+            else:
+                pins.pop(j["key"], None)
     cursor = max(now, busy_until + rules.gap) if busy_until else now
     by_day, pending = {}, []
     rank = {j["key"]: i for i, j in enumerate(jobs)}
@@ -706,6 +755,7 @@ async def plan(tz: int | None = None) -> dict:
     due_of = {x["design_id"]: x for x in dls}
     for j in r["jobs"]:
         j.pop("_obj", None)
+        j.pop("_round", None)
         x = due_of.get(j["design_id"])
         if x:
             j["due"], j["due_ok"] = x["due"], x["ok"]
@@ -796,7 +846,7 @@ async def color_day(day: str, fid: int) -> dict:
     # un objet a finir avant ce jour (ou ce jour meme) n'y est pas emmene : il raterait sa date
     dl = d.get("deadlines") or {}
     uses = [j for j in r["jobs"] if fid in _sig(j) and not (dl.get(j["design_id"]) and dl[j["design_id"]] <= day)
-            and j["key"] not in d["locked"]]
+            and j["key"] not in d["locked"] and j.get("retained", True)]      # les retenus seulement (06/11/2026)
     ok_set = {fid} | set(loaded)
     only = [j["key"] for j in uses if _sig(j) == frozenset([fid])]
     with_loaded = [j["key"] for j in uses if _sig(j) != frozenset([fid]) and _sig(j) <= ok_set]
@@ -970,6 +1020,26 @@ async def place_day(key: str, day: str) -> dict:
             best = (c, order)
     pick = best or fallback
     return await arrange({"order": pick[1], "pins": {key: day}})
+
+
+async def set_chain(rid: str, mode) -> dict:
+    """Un objet « d'une traite » (06/11/2026) : "plates" (les plateaux d'un exemplaire se suivent), "all" (tous ses
+    plateaux, de tous ses exemplaires), ou None (libre, des plateaux d'autres objets peuvent s'intercaler)."""
+    d = await _load()
+    rid = str(rid or "").strip()
+    a, _, b = rid.partition("~")
+    if not a.isdigit() or (b and not b.isdigit()):
+        raise PlanError("Objet inconnu")
+    if mode in ("plates", "all"):
+        d["chain"][rid] = mode
+    elif mode in (None, "", "free"):
+        d["chain"].pop(rid, None)
+    else:
+        raise PlanError("Choix inconnu")
+    d["plan0"] = {}
+    d["rev"] = int(d.get("rev") or 0) + 1
+    await _save(d)
+    return await plan()
 
 
 async def lock(key: str, on: bool = True) -> dict:

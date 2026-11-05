@@ -150,6 +150,7 @@ export function PlanZoom({ p: p0 }) {
     smart: () => send("/makerworld/plan/smart", { key: j.key }).then(d => d && egg("planning_glisse")),
     later: () => send("/makerworld/plan/later", { key: j.key }).then(d => d && egg("planning_glisse")),
     laterAll: () => send("/makerworld/plan/later", { key: j.key, whole: true }).then(d => d && egg("planning_glisse")),
+    chain: mode => send("/makerworld/plan/chain", { design_id: j.design_id, mode }).then(d => d && mode && egg("planning_traite")),
     dayBest: v => send("/makerworld/plan/place-day", { key: j.key, day: v }).then(d => d && egg("planning_glisse")),
     day: v => send("/makerworld/plan/place-day", { key: j.key, day: v }),
     unpin: () => send("/makerworld/plan/arrange", { pins: { [j.key]: null } }, "put"),

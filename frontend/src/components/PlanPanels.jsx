@@ -85,15 +85,47 @@ export function JobSheet({ j, now, edit, onClose, act }) {
       {edit && !j.why && !j.locked && row("smart", "✨", "Placer au mieux", "Là où il charge le moins de filaments, sans faire rater de date limite, le plus tôt possible", () => run("smart", act.smart))}
       {edit && !j.why && !j.locked && j.plates_total > 1 && act.laterAll && row("laterall", "⏬", "Tout l'objet plus tard", "Tous les plateaux de cet objet passent en fin de file, dans leur ordre (un objet retenu reste devant les non retenus) ; les figés restent", () => run("laterall", act.laterAll))}
       {edit && !j.why && !j.locked && row("later", "⏭", "Plus tard", "Il quitte sa place et son jour, et passe en fin de file", () => run("later", act.later))}
-      {edit && !j.why && !j.locked && dateRow("daybest", "📌", "Le placer sur un jour", "À la meilleure place de la journée (le moins de filaments à charger), du moment qu'il y finit ; le reste se décale", j.day, v => v && act.dayBest(v), new Date().toISOString().slice(0, 10))}
-      {edit && !j.why && !j.locked && dateRow("day", "📅", "Le poser sur un jour, après le reste", "Il y va après ce qui y est déjà", j.day, v => v && act.day(v), new Date().toISOString().slice(0, 10))}
+      {/* un non retenu passe apres les retenus, sans jour (06/11/2026) : le retenir d'abord */}
+      {edit && !j.why && unretained(j) && <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", borderRadius: 12,
+        border: "1px dashed color-mix(in srgb, #94A3B8 60%, var(--border))", background: "var(--surface2)" }}>
+        <span style={{ fontSize: 18, width: 24, textAlign: "center" }}>○</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", lineHeight: 1.4 }}>Pas retenu : il passe après tous les plateaux retenus, et ne se pose
+          sur aucun jour. Pour le placer, retiens son profil dans <b>Fiche du modèle</b>.</span></div>}
+      {edit && !j.why && !j.locked && !unretained(j) && dateRow("daybest", "📌", "Le placer sur un jour", "À la meilleure place de la journée (le moins de filaments à charger), du moment qu'il y finit ; le reste se décale", j.day, v => v && act.dayBest(v), new Date().toISOString().slice(0, 10))}
+      {edit && !j.why && !j.locked && !unretained(j) && dateRow("day", "📅", "Le poser sur un jour, après le reste", "Il y va après ce qui y est déjà", j.day, v => v && act.day(v), new Date().toISOString().slice(0, 10))}
       {edit && j.pinned && !j.locked && row("unpin", "📌", "Le rendre à la file", "Il n'est plus posé sur ce jour : il se place où il tient", () => run("unpin", act.unpin))}
+      {/* d'une traite (06/11/2026) : ses plateaux se suivent, rien d'un autre objet ne s'intercale */}
+      {edit && act.chain && (j.plates_total > 1 || j.qty > 1) && <ChainPick j={j} busy={busy} run={run} act={act}/>}
       {row("sheet", "🧾", "Fiche du modèle", "Retenir le profil, choisir les plateaux et les filaments de chaque couleur", () => { act.sheet(); onClose(); })}
       {j.day && row("dayview", "🗓", "Voir sa journée", null, () => { act.dayview(); onClose(); })}
       {edit && dateRow("due", "🎯", j.due ? "Changer la date limite" : "Une date limite pour l'objet", j.due ? `Fini avant le ${dueTxt(j.due)}` : "Le planning prévient s'il déborde", j.due, v => act.due(v))}
       {edit && row("done", "✓", "Marquer fait", "Imprimé hors de l'appli, ou pas reconnu : il compte comme fait", () => run("done", act.done))}
     </div>
   </PlanPopup>;
+}
+
+// Un objet « d'une traite » (06/11/2026) : libre (d'autres objets peuvent s'intercaler), ses plateaux d'un exemplaire
+// a la suite, ou tout l'objet (tous ses exemplaires) a la suite
+export const CHAIN_TXT = { plates: "🔗 plateaux d'une traite", all: "🔗 tout d'une traite" };
+function ChainPick({ j, busy, run, act }) {
+  const opts = [[null, "Libre", "D'autres objets peuvent s'intercaler (l'optimiseur enchaîne les mêmes couleurs)"],
+    j.plates_total > 1 && ["plates", "Ses plateaux", "Les plateaux d'un même exemplaire se suivent : commencé, il se finit d'une traite"],
+    ["all", j.qty > 1 ? "Tous ses exemplaires" : "Tout l'objet", j.qty > 1 ? `Tous ses plateaux, des ${j.qty} exemplaires, à la suite` : "Tous ses plateaux à la suite"]].filter(Boolean);
+  const cur = j.chain || null;
+  const tip = (opts.find(o => o[0] === cur) || opts[0])[2];
+  return <div style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 7 }}>
+      <span style={{ fontSize: 18, width: 24, textAlign: "center" }}>{busy === "chain" ? "…" : "🔗"}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 13.5, fontWeight: 900, color: "var(--text)" }}>D'une traite</span>
+        <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.35 }}>{tip}</span></span></div>
+    <div role="radiogroup" style={{ display: "flex", padding: 3, borderRadius: 11, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+      {opts.map(([k, l]) => <button key={l} type="button" role="radio" aria-checked={cur === k} disabled={!!busy}
+        onClick={() => cur !== k && run("chain", () => act.chain(k))}
+        style={{ flex: 1, padding: "6px 4px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 900, font: "inherit",
+          color: cur === k ? "#fff" : "var(--muted)", background: cur === k ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "transparent" }}>{l}</button>)}
+    </div>
+  </div>;
 }
 
 // la file, regroupee par objet : son en-tete (vignette, nom, combien de plateaux, combien d'heures, le prochain),
@@ -133,10 +165,11 @@ export function PoolGrouped({ jobs, blocked = [], now, edit, drag, onDrag, onOpe
               {okJobs.length} plateau{okJobs.length > 1 ? "x" : ""} · {hm(tot)}
               {okJobs[0]?.start && <> · dès <b style={{ color: "var(--text)" }}>{dayOf(okJobs[0].start, now)}</b> {hhmm(okJobs[0].start)}</>}
               {nb > 0 && <b style={{ color: "#DC2626" }}> · ⛔ {nb} non planifiable{nb > 1 ? "s" : ""}</b>}
-              {f.due && <span style={{ color: f.due_ok ? "#16A34A" : "#EF4444", fontWeight: 900 }}> · 🎯 {dueTxt(f.due)}</span>}</span>
+              {f.due && <span style={{ color: f.due_ok ? "#16A34A" : "#EF4444", fontWeight: 900 }}> · 🎯 {dueTxt(f.due)}</span>}
+              {f.chain && <span style={{ color: "#0EA5E9", fontWeight: 900 }}> · {CHAIN_TXT[f.chain]}</span>}</span>
           </span>
         </button>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(124px, 1fr))", gap: 5, marginTop: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(172px, 1fr))", gap: 5, marginTop: 8 }}>
           {g.jobs.map(j => {
             const bad = !!j.blockedWhy;
             const c = bad ? "#DC2626" : j.too_long ? "#EF4444" : j.locked ? "#4F46E5" : un ? UNRET : j.completes ? "#059669" : "color-mix(in srgb, #22C55E 50%, var(--border))";
@@ -152,7 +185,7 @@ export function PoolGrouped({ jobs, blocked = [], now, edit, drag, onDrag, onOpe
                 <span style={{ fontSize: 11, fontWeight: 900, color: bad ? "#DC2626" : "#6366F1", whiteSpace: "nowrap" }}>
                   {j.locked ? "🔒 " : ""}{j.completes ? "🏁 " : ""}{lbl || "Plateau"}{j.load?.length ? " 🧵" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}</span>
                 {bad ? <span style={{ fontSize: 11.5, fontWeight: 900, color: "#DC2626", whiteSpace: "nowrap" }}>⛔ non planifiable</span>
-                  : <span style={{ fontSize: 12, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{dayOf(j.start, now)}
+                  : <span style={{ fontSize: 12, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{dayOf(j.start, now)}
                     <span style={{ fontWeight: 700, color: "var(--muted)" }}> {hhmm(j.start)}</span></span>}
               </span>
             </button>;

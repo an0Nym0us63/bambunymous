@@ -462,6 +462,16 @@ async def mw_plan_lock(body: dict = Body({}), _: str = Depends(require_mw)):
         raise HTTPException(400, str(e))
 
 
+@router.post("/plan/chain")
+async def mw_plan_chain(body: dict = Body({}), _: str = Depends(require_mw)):
+    """Un objet d'une traite ({design_id, mode: "plates" | "all" | null})."""
+    from ....services import planner as P
+    try:
+        return await P.set_chain(str(body.get("design_id") or ""), body.get("mode"))
+    except P.PlanError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/plan/later")
 async def mw_plan_later(body: dict = Body({}), _: str = Depends(require_mw)):
     """« Plus tard » : le plateau ({key}) quitte sa place et passe en fin de file."""
