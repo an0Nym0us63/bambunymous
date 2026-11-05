@@ -1302,7 +1302,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                     background:`color-mix(in srgb, ${c} 13%, transparent)` }}>{ic}</span>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontSize:12.5, fontWeight:800, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
-                      {t ? `${t}${u.file_name ? ` · ${u.file_name}` : ""}` : u.file_name}</div>
+                      {t ? `${t}${u.file_name ? ` · ${frNum(u.file_name)}` : ""}` : u.file_name}</div>
                     <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginTop:1 }}>{when}{u.kind !== "ajout" ? " · n'a pas changé le poids" : ""}</div>
                   </div>
                   {u.grams != null && u.kind !== "ajout" && <div style={{ fontSize:13, fontWeight:900, color:c, flexShrink:0 }}>{u.kind === "zero" ? "−" : u.kind === "piece" ? "" : u.grams > 0 ? "+" : u.grams < 0 ? "−" : "±"}{Math.abs(u.grams).toFixed(1)} g{u.kind === "piece" ? " de moins" : ""}</div>}
@@ -1338,7 +1338,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontSize:13, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
                       textDecoration: u.reverted ? "line-through" : "none" }}>
-                      {u.kind === "annule" ? "Consommation annulée" : "Rendu à la bobine"}{u.file_name ? ` · ${u.file_name}` : ""}</div>
+                      {u.kind === "annule" ? "Consommation annulée" : "Rendu à la bobine"}{u.file_name ? ` · ${frNum(u.file_name)}` : ""}</div>
                     <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>
                       {when}{u.reverted ? " · annulé" : ""}</div>
                   </div>
@@ -2331,6 +2331,9 @@ function MeasuredCard({ f, onUpdated }) {
       {same ? "Notre couleur est déjà celle mesurée. " : ""}Échantillons imprimés et mesurés par la communauté FilamentColors.xyz.</div>
   </FCard>;
 }
+
+// les grammes des lignes d'historique a la francaise (05/11/2026 : « 23.6 g » ecrit par le serveur avant ce jour)
+const frNum = s => String(s || "").replace(/(\d)\.(\d)(?=\d* ?g|\d* →)/g, "$1,$2");
 
 export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
   useTrackDetail(f ? `Fiche filament · ${f.translated_name || f.name || "#" + f.id}` : null);

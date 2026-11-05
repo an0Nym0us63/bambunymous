@@ -715,8 +715,8 @@ async def overrun(pid: int) -> None:
             if sp and over >= 0.5:
                 drift.add_overrun(sp, over)
                 # dans son historique (05/11/2026) : ce qu'elle a imprime au-dela de ce qu'on lui croyait
-                drift.note(db, sp, "zero", over, f"{pname} — {float(r.grams_used or 0):.1f} g imprimés, on lui croyait "
-                           f"{max(0.0, float(bef)):.1f} g", print_id=pid, usage_id=r.id)
+                drift.note(db, sp, "zero", over, f"{pname} — {_fr(float(r.grams_used or 0))} g imprimés, on lui croyait "
+                           f"{_fr(max(0.0, float(bef)))} g", print_id=pid, usage_id=r.id)
                 logger.info(f"[DERIVE] bobine #{sp.id} : {over:.1f} g imprimes sous notre zero (impression #{pid})")
         await db.commit()
     await _state_put(pid, {"overrun": True})
@@ -769,14 +769,14 @@ async def skipped_back(pid: int) -> list:
                 if give >= 0.1 and sp and not sp.archived:
                     a = drift.give_back(sp, give)
                     db.add(SpoolMove(spool_id=r.spool_id, grams=give, kind="rendu", print_id=pid, usage_id=r.id,
-                                     label=(label + f" ; consommation {g:.1f} → {g - cut:.1f} g" + drift.back_note(a))[:250]))
+                                     label=(label + f" ; consommation {_fr(g)} → {_fr(g - cut)} g" + drift.back_note(a))[:250]))
                     back.append((r.spool_id, give))
                 # ce qui n'avait pas ete retire (le decompte s'arrete a 0) ne revient pas : la ligne le dit quand meme
                 # (05/11/2026 : 20 g de moins sur une bobine qui n'avait que 22 g, et rien dans son historique)
                 if sp and cut - give >= 0.1:
-                    drift.note(db, sp, "piece", cut - give, f"{label} ; consommation {g:.1f} → {g - cut:.1f} g ; "
-                               + (f"rien à rendre : elle n'avait que {float(bef):.1f} g chez nous" if give < 0.1
-                                  else f"{give:.1f} g rendus, le reste n'avait pas été retiré (elle n'avait que {float(bef):.1f} g)"),
+                    drift.note(db, sp, "piece", cut - give, f"{label} ; consommation {_fr(g)} → {_fr(g - cut)} g ; "
+                               + (f"rien à rendre : elle n'avait que {_fr(float(bef))} g chez nous" if give < 0.1
+                                  else f"{_fr(give)} g rendus, le reste n'avait pas été retiré (elle n'avait que {_fr(float(bef))} g)"),
                                print_id=pid, usage_id=r.id)
                 if rest < 0.05:
                     break
@@ -795,6 +795,11 @@ async def skipped_back(pid: int) -> list:
         logger.warning(f"[LIVE] pieces annulees de l'impression #{pid} : {e}")
     logger.info(f"[LIVE] impression #{pid} : {what} ; {', '.join(f'{g:g} g a la bobine #{s}' for s, g in back) or 'rien a rendre'}")
     return back
+
+
+def _fr(x) -> str:
+    """Un nombre de grammes a la francaise, pour les lignes de l'historique (« 23,6 », pas « 23.6 »)."""
+    return f"{float(x):.1f}".replace(".", ",")
 
 
 def forget(pid: int) -> None:
