@@ -8,7 +8,7 @@ import MwImg from "./MwImg";
 // Les travaux et leurs raisons viennent du serveur (services/planner.py) : la page ne fait que les montrer et ranger.
 
 export const hm = s => { const m = Math.round((s || 0) / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${String(m % 60).padStart(2, "0")}` : ""}`; };
-const hhmm = iso => iso ? iso.slice(11, 16).replace(":", " h ").replace(/ h 00$/, " h").replace(/^0(?=\d)/, "") : "";
+export const hhmm = iso => iso ? iso.slice(11, 16).replace(":", " h ").replace(/ h 00$/, " h").replace(/^0(?=\d)/, "") : "";
 export const jobName = j => `${j.title}${j.plates_total > 1 ? ` · plateau ${j.plate}` : ""}${j.qty > 1 ? ` · ${j.copy}/${j.qty}` : ""}`;
 // le plateau qui termine un objet : « 🏁 Objet terminé » (« 1 sur 2 » quand il en faut plusieurs)
 export const doneTxt = j => j.completes ? `🏁 Objet terminé${j.qty > 1 ? ` · ${j.completes} sur ${j.qty}` : ""}` : null;
@@ -16,7 +16,7 @@ const GOLD = "#EAB308";
 const toMin = v => { const m = /^(\d{1,2}):(\d{2})$/.exec(v || ""); return m ? +m[1] * 60 + +m[2] : null; };
 
 // une plage d'heures sur la frise : [debut, fin] en minutes du jour, coupee a minuit
-function spans(w) {
+export function spans(w) {
   if (!w) return null;
   const a = toMin(w.from), b0 = toMin(w.to);
   if (a == null || b0 == null) return null;

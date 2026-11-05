@@ -7,17 +7,18 @@ import { showAlert } from "../utils/dialog";
 import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 import MwImg from "./MwImg";
+import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
 import { DayStrip, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, jobName, dueTxt, doneTxt, plateTxt } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
 // chacune, liseree de son etat) posee sur la barre de ses heures machine (une impression qui
 // passe minuit compte sur les deux jours, comme les stats), ses impressions et leur etat ; la charge de chaque
 // semaine ; et, sur les jours a venir, la file « A faire » si elle s'enchainait sans pause, apres l'impression en cours.
-const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
-const MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
-const ST = { SUCCESS: ["#22C55E", "réussie"], FAILED: ["#EF4444", "échouée"], CANCELLED: ["#94A3B8", "annulée"], PARTIAL: ["#F59E0B", "partielle"],
+export const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+export const MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+export const ST = { SUCCESS: ["#22C55E", "réussie"], FAILED: ["#EF4444", "échouée"], CANCELLED: ["#94A3B8", "annulée"], PARTIAL: ["#F59E0B", "partielle"],
   IN_PROGRESS: ["#3B82F6", "en cours"] };
-const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+export const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 // les impressions d'un jour, une fois chacune (une impression sur deux jours n'y est qu'une fois par jour)
 const shelf0 = x => [...new Map((x?.items || []).map(i => [i.id, i])).values()];
 const hm = s => { const m = Math.round((s || 0) / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${String(m % 60).padStart(2, "0")}` : ""}`; };
@@ -80,6 +81,10 @@ export default function PrintCalendar() {
   const [dropDay, setDropDay] = useState(null);
   const edit = useCanMw();                            // ranger : droit MakerWorld, jamais chez un copain
   const [pick, setPick] = useState(() => iso(new Date()));
+  // la vue (05/11/2026) : le mois, la semaine (grille horaire ; un agenda au telephone) ou le jour
+  const [view, setViewS] = useState(() => { try { return localStorage.getItem("bn_cal_view") || (window.innerWidth >= 760 ? "month" : "day"); } catch { return "month"; } });
+  const setView = v => { setViewS(v); try { localStorage.setItem("bn_cal_view", v); } catch { /* rien */ } if (v !== "month") egg("calendrier_vues"); };
+  const week = useMemo(() => weekOf(pick), [pick]);
   useEffect(() => { egg("calendrier"); }, []);
   // les semaines affichees : du lundi qui precede le 1er au dimanche qui suit la fin du mois
   const grid = useMemo(() => {
@@ -91,13 +96,15 @@ export default function PrintCalendar() {
     for (let d = new Date(start); d <= end;) { const w = []; for (let i = 0; i < 7; i++) { w.push(new Date(d)); d.setDate(d.getDate() + 1); } weeks.push(w); }
     return { weeks, from: iso(start), to: iso(end) };
   }, [month]);
+  // ce qu'il faut lire : le mois affiche ; en semaine et en jour, la semaine du jour choisi
+  const rFrom = view === "month" ? grid.from : week[0], rTo = view === "month" ? grid.to : week[6];
   useEffect(() => {
     let alive = true;
     setDays(null);
-    client.get("/prints/kpis/daily", { params: { date_from: grid.from, date_to: grid.to, tz: -new Date().getTimezoneOffset(), detail: true } })
+    client.get("/prints/kpis/daily", { params: { date_from: rFrom, date_to: rTo, tz: -new Date().getTimezoneOffset(), detail: true } })
       .then(r => alive && setDays(Object.fromEntries((r.data || []).map(x => [x.date, x])))).catch(() => alive && setDays({}));
     return () => { alive = false; };
-  }, [grid.from, grid.to]);
+  }, [rFrom, rTo]);
   useEffect(() => {
     let alive = true;
     const load = () => client.get("/makerworld/plan", { params: { tz: -new Date().getTimezoneOffset() } })
@@ -156,7 +163,26 @@ export default function PrintCalendar() {
   const nPlanned = Object.values(plan).flat().length;
   const sel = days?.[pick];
   const selPlan = plan[pick] || [];
-  const go = n => setMonth(m => new Date(m.getFullYear(), m.getMonth() + n, 1));
+  const shift = (day, n) => { const d = new Date(`${day}T12:00`); d.setDate(d.getDate() + n); return iso(d); };
+  const go = n => {
+    if (view === "month") return setMonth(m => new Date(m.getFullYear(), m.getMonth() + n, 1));
+    const p = shift(pick, view === "week" ? 7 * n : n);
+    setPick(p);
+    const d = new Date(`${p}T12:00`);
+    setMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+  };
+  const fmtShort = d => new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  const title = view === "month" ? `${MONTHS[month.getMonth()]} ${month.getFullYear()}`
+    : view === "week" ? `${fmtShort(week[0])} – ${fmtShort(week[6])}`
+    : new Date(`${pick}T12:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  const unit = { month: "Mois", week: "Semaine", day: "Jour" }[view];
+  // au telephone, en semaine et en jour : glisser a gauche ou a droite change de periode
+  const swipe = useRef(null);
+  const swipeProps = view !== "month" ? {
+    onTouchStart: e => { const t = e.touches[0]; swipe.current = { x: t.clientX, y: t.clientY }; },
+    onTouchEnd: e => { const s0 = swipe.current; swipe.current = null; if (!s0) return; const t = e.changedTouches[0];
+      const dx = t.clientX - s0.x, dy = t.clientY - s0.y; if (Math.abs(dx) > 70 && Math.abs(dx) > 1.6 * Math.abs(dy)) go(dx < 0 ? 1 : -1); },
+  } : {};
   const chip = (label, value, color) => <div style={{ flex: "1 1 120px", minWidth: 0, padding: "10px 12px", borderRadius: 14, border: "1px solid var(--border)",
     background: `linear-gradient(150deg, color-mix(in srgb, ${color} 14%, transparent), transparent 70%), var(--surface2)` }}>
     <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color }}>{label}</div>
@@ -306,6 +332,15 @@ export default function PrintCalendar() {
         {edit ? "Rien de prévu : glisse ici un plateau de la file (sous le calendrier), pose-le avec son 📅, ou fais-en une journée couleur." : "Rien de prévu ce jour-là."}</span>
       {edit && <ColorDay colors={pd?.colors} onPick={fid => colorDay(pick, fid)}/>}</div>}
   </div>;
+  const openPrint = it => nav(`/prints?id=${it.id}`);
+  const openJob = j => pickDay(j.day);
+  const viewMain = view === "month" ? calendar
+    : view === "week" ? (wide ? <TimeGrid dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} hourPx={28}
+        pick={pick} onPick={pickDay} onOpenPrint={openPrint} onOpenJob={openJob} edit={edit} onDropDay={moveDay} height={600}/>
+      : <WeekAgenda dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} pick={pick}
+        onPick={k => { setPick(k); setView("day"); }} onOpenPrint={openPrint} onOpenJob={j => { setPick(j.day); setView("day"); }}/>)
+    : <TimeGrid dates={[pick]} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} hourPx={wide ? 46 : 40}
+        pick={pick} onPick={pickDay} onOpenPrint={openPrint} onOpenJob={openJob} edit={edit} onDropDay={moveDay} height={wide ? 640 : 460}/>;
   const advice = showPlan ? <>
     <PlanDeadlines items={pd?.deadlines} edit={edit} onDue={setDue}/>
     <PlanAdvice items={pd?.advice} edit={edit} onApply={applyAdvice}/>
@@ -337,13 +372,19 @@ export default function PrintCalendar() {
   return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
     {/* le mois et ses chiffres */}
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <button type="button" onClick={() => go(-1)} aria-label="Mois précédent" data-tip="Mois précédent" style={navBtn}><ChevronLeft size={18}/></button>
-      <div style={{ flex: 1, textAlign: "center", fontSize: 19, fontWeight: 900, color: "var(--text)", textTransform: "capitalize" }}>
-        {MONTHS[month.getMonth()]} {month.getFullYear()}</div>
-      <button type="button" onClick={() => go(1)} aria-label="Mois suivant" data-tip="Mois suivant" style={navBtn}><ChevronRight size={18}/></button>
+      <button type="button" onClick={() => go(-1)} aria-label={`${unit} précédent`} data-tip={`${unit} précédent`} style={navBtn}><ChevronLeft size={18}/></button>
+      <div style={{ flex: 1, minWidth: 0, textAlign: "center", fontSize: wide ? 19 : 16.5, fontWeight: 900, color: "var(--text)", textTransform: "capitalize",
+        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
+      <button type="button" onClick={() => go(1)} aria-label={`${unit} suivant`} data-tip={`${unit} suivant`} style={navBtn}><ChevronRight size={18}/></button>
+    </div>
+    <div role="tablist" style={{ display: "flex", padding: 3, borderRadius: 14, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+      {[["month", "Mois"], ["week", "Semaine"], ["day", "Jour"]].map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={view === k}
+        onClick={() => setView(k)} style={{ flex: 1, padding: "7px 6px", borderRadius: 11, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 900,
+          color: view === k ? "#fff" : "var(--muted)", background: view === k ? "linear-gradient(135deg, #6366F1, #8B5CF6)" : "transparent",
+          boxShadow: view === k ? "0 6px 14px -8px #6366F1" : "none" }}>{l}</button>)}
     </div>
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-      <button type="button" onClick={() => { const d = new Date(); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); pickDay(iso(d)); }}
+      <button type="button" onClick={() => { const d = new Date(); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setPick(iso(d)); }}
         style={{ ...pill, color: "#6366F1", borderColor: "color-mix(in srgb, #6366F1 40%, var(--border))" }}>Aujourd'hui</button>
       <button type="button" onClick={() => setShowPlan(v => !v)} data-tip="La file « À faire », enchaînée sans pause après l'impression en cours"
         style={{ ...pill, ...(showPlan ? { color: "#22C55E", borderColor: "color-mix(in srgb, #22C55E 45%, var(--border))", background: "color-mix(in srgb, #22C55E 10%, var(--surface2))" } : {}) }}>
@@ -358,16 +399,16 @@ export default function PrintCalendar() {
     {showPlan && (pd?.deadlines || []).filter(x => !x.ok).map(x => <PlanStatus key={x.design_id}
       st={{ state: "deadline", text: `${x.title} ne sera pas fini avant le ${dueTxt(x.due)} : voir les conseils` }}/>)}
     {setOpen && <PlanSettings s={pd?.settings} onSave={saveSettings} onClose={() => setSetOpen(false)}/>}
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    {view === "month" && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {chip("Impressions", days ? mCount : "…", "#3B82F6")}
       {chip("Heures machine", days ? hm(mTotal) : "…", "#8B5CF6")}
       {chip("Occupation", days ? `${Math.round(occ * 100)} %` : "…", "#EC4899")}
       {chip("Jours actifs", days ? `${mActive} / ${monthDays.length}` : "…", "#22C55E")}
-    </div>
+    </div>}
     {side ? <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 12, alignItems: "start" }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>{calendar}{pool}</div>
+      <div {...swipeProps} style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>{viewMain}{pool}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 12, maxHeight: "calc(100dvh - 40px)", overflowY: "auto" }}>{detail}{advice}</div>
-    </div> : <>{calendar}{advice}{detail}{pool}</>}
+    </div> : <><div {...swipeProps}>{viewMain}</div>{advice}{view === "week" ? null : detail}{pool}</>}
     {sheet && <MakerWorldModelSheet designId={String(sheet)} onClose={() => { setSheet(null);
       client.get("/makerworld/plan", { params: { tz: -new Date().getTimezoneOffset() } }).then(r => setPd(r.data)).catch(() => {}); }}/>}
   </div>;
