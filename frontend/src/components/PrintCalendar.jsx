@@ -8,6 +8,7 @@ import { toast } from "../store/toast";
 import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 import MwImg, { thumbSrc } from "./MwImg";
+import { currentFriend } from "../store/friend";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
 import { PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, poolGroups, BlockedList, LowStockBanner } from "./PlanPanels";
 import { OPT_MODES, DayStrip, onDay, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained } from "./PlanDay";
@@ -60,6 +61,11 @@ function mosaic(n, w, h, min, max = 64) {
   return { shown: 0, size: min };
 }
 
+// le dernier planning et les dernieres journees lus (06/11/2026) : en revenant sur la page, ils s'affichent tout de suite,
+// puis se relisent en fond (avant : un ecran vide le temps des deux lectures)
+const CACHES = {};
+const cacheOf = () => { const k = currentFriend()?.id || "me"; return (CACHES[k] = CACHES[k] || { pd: null, days: {} }); };
+
 export default function PrintCalendar() {
   const nav = useNavigate();
   const width = useWidth(), wide = width >= 760, side = width >= 1180;   // side : le detail du jour a cote de la grille
@@ -75,7 +81,8 @@ export default function PrintCalendar() {
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [days, setDays] = useState(null);       // {date: {count, duration, items}}
   // le planning (05/11/2026) : « A faire » plateau par plateau, pose par le serveur selon les consignes
-  const [pd, setPd] = useState(null);
+  const [pd, setPd] = useState(() => cacheOf().pd);
+  useEffect(() => { if (pd && pd.jobs) cacheOf().pd = pd; }, [pd]);
   const [showPlan, setShowPlan] = useState(true);
   const [setOpen, setSetOpen] = useState(false);
   const [sheet, setSheet] = useState(null);           // la fiche d'un modele : profil, plateaux, filaments retenus
@@ -106,9 +113,11 @@ export default function PrintCalendar() {
   const rFrom = view === "month" ? grid.from : week[0], rTo = view === "month" ? grid.to : week[6];
   useEffect(() => {
     let alive = true;
-    setDays(null);
+    const ck = `${rFrom}|${rTo}`;
+    setDays(cacheOf().days[ck] || null);
     client.get("/prints/kpis/daily", { params: { date_from: rFrom, date_to: rTo, tz: -new Date().getTimezoneOffset(), detail: true } })
-      .then(r => alive && setDays(Object.fromEntries((r.data || []).map(x => [x.date, x])))).catch(() => alive && setDays({}));
+      .then(r => { const v = Object.fromEntries((r.data || []).map(x => [x.date, x])); cacheOf().days[ck] = v; if (alive) setDays(v); })
+      .catch(() => alive && setDays(x => x || {}));
     return () => { alive = false; };
   }, [rFrom, rTo]);
   useEffect(() => {
