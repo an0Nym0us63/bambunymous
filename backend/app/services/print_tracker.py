@@ -618,6 +618,18 @@ def on_progress(job_id: str, pct: float, layer: int):
         live_usage.note(pid, pct, layer)
 
 
+def on_skipped(job_id: str, ids: list, pct: float, layer: int):
+    """Des pieces annulees pendant l'impression (« s_obj » de l'imprimante, 05/11/2026). Seulement une impression vue
+    a sa couche 0 ou 1 (ou reprise) : au lancement, l'etat porte encore celles de l'impression d'avant."""
+    if not job_id or not ids:
+        return
+    st = _job(job_id)
+    pid = st.get("print_id")
+    if pid and (st.get("low") or st.get("restored")):
+        from . import live_usage
+        live_usage.skip(pid, ids, pct, layer)
+
+
 async def _save_pause(pid: int, paused: float, since: Optional[float]):
     try:
         async with AsyncSessionLocal() as db:
@@ -834,6 +846,7 @@ async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float],
                 live_usage.forget(pid)
         elif status != "FAILED":
             try:
+                await live_usage.skipped_back(pid)     # les pieces annulees rendent ce qu'elles n'ont pas imprime
                 await live_usage.overrun(pid)          # le negatif d'une bobine a 0 g se garde aussi sans le suivi
             except Exception as e:
                 logger.error(f"[DERIVE] fin de l'impression #{pid} : {e}", exc_info=True)

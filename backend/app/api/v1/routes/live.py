@@ -63,8 +63,13 @@ async def live_layer(print_id: int | None = None, n: int | None = None, _: str =
         out = await LV.layer(pid, p, want)
     except Exception as e:
         raise HTTPException(502, f"G-code illisible : {e}")
+    # les pieces annulees (05/11/2026) : grisees et hachurees a partir de leur couche
+    try:
+        sk = await L.skipped(pid)
+    except Exception:
+        sk = {}
     return {**out, "print_id": pid, "live": live, "now": s.layer if live else None, "total": s.total_layers if live else None,
-            "colors": colors, "names": names, "name": p.translated_name or p.file_name}
+            "colors": colors, "names": names, "name": p.translated_name or p.file_name, "skipped": sk}
 
 
 @router.get("/{print_id}")

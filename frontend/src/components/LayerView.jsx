@@ -67,8 +67,32 @@ export function LayerCanvas({ d, ghost, w, h }) {
       g.lineWidth = lw + 1.4;
       stroke(pale, () => { g.strokeStyle = "#64748b"; g.globalAlpha = 0.55; });
     }
+    // une piece annulee (05/11/2026) : a partir de sa couche, grisee sous une zone hachuree
+    const sk = d.skipped || {};
+    const off = q => q.o != null && sk[q.o] && d.layer >= sk[q.o].layer;
+    const gone = d.paths.filter(off), kept = gone.length ? d.paths.filter(q => !off(q)) : d.paths;
     g.lineWidth = lw;
-    stroke(d.paths, q => { g.strokeStyle = col(q.t); g.globalAlpha = 1; });
+    stroke(kept, q => { g.strokeStyle = col(q.t); g.globalAlpha = 1; });
+    if (gone.length) {
+      const byObj = {};
+      for (const q of gone) (byObj[q.o] = byObj[q.o] || []).push(q);
+      for (const qs of Object.values(byObj)) {
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const q of qs) { const p = unpack(q.p); for (let i = 0; i < p.length; i += 2) {
+          const X = ox + p[i] * k, Y = oy - p[i + 1] * k; x0 = Math.min(x0, X); x1 = Math.max(x1, X); y0 = Math.min(y0, Y); y1 = Math.max(y1, Y); } }
+        x0 -= 3; y0 -= 3; x1 += 3; y1 += 3;
+        g.save();
+        g.beginPath(); g.rect(x0, y0, x1 - x0, y1 - y0); g.clip();
+        g.globalAlpha = 0.14; g.fillStyle = muted; g.fillRect(x0, y0, x1 - x0, y1 - y0);
+        g.globalAlpha = 0.45; g.strokeStyle = muted; g.lineWidth = 1;
+        g.beginPath();
+        for (let s = x0 - (y1 - y0); s < x1; s += 6) { g.moveTo(s, y1); g.lineTo(s + (y1 - y0), y0); }
+        g.stroke();
+        g.restore();
+        g.lineWidth = lw;
+        stroke(qs, () => { g.strokeStyle = muted; g.globalAlpha = 0.4; });
+      }
+    }
     g.globalAlpha = 1;
   }, [d, ghost, w, h]);
   return <canvas ref={ref} style={{ width: w, height: h, display: "block" }}/>;
@@ -113,6 +137,11 @@ export function LayerExplorer({ status }) {
         {Object.entries(d.colors || {}).map(([t, c]) => <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
           <span style={{ width: 12, height: 12, borderRadius: "50%", background: c, border: "1px solid rgba(0,0,0,.2)" }}/>{d.names?.[t] || `Filament ${Number(t) + 1}`}</span>)}
         {ghost && <span style={{ color: "var(--muted)" }}>· en gris : la couche d'avant</span>}
+        {Object.entries(d.skipped || {}).map(([o, x]) => <span key={o} data-tip="Annulée pendant l'impression : ce qu'elle n'a pas imprimé revient aux bobines à la fin"
+          style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--muted)" }}>
+          <span style={{ width: 12, height: 12, borderRadius: 3, border: "1px solid var(--muted)",
+            background: "repeating-linear-gradient(45deg, var(--muted) 0 1.5px, transparent 1.5px 5px)", opacity: 0.7 }}/>
+          {x.name || `Pièce ${o}`} : annulée à la couche {x.layer}</span>)}
       </div>
     </>}
   </div>;

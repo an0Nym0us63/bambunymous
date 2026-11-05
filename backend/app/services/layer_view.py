@@ -26,6 +26,7 @@ _LAYER = re.compile(rb"(?m)^M73 L(\d+)")
 _PCT = re.compile(rb"(?m)^M73 P(\d+)")
 _TOOL = re.compile(rb"(?m)^T(\d+)")
 _NUM = re.compile(rb"([XYZEIJ])(-?\d*\.?\d+)")
+_OBJ = re.compile(rb"(?m)^; (start|stop) printing object(?:, unique label id: (\d+))?")
 
 
 def _index(raw: bytes) -> dict:
@@ -45,7 +46,12 @@ def _index(raw: bytes) -> dict:
             tval.append(n)
     # l'avancement au debut de chaque couche (le dernier « M73 P » avant elle)
     P = [pval[i] if (i := bisect.bisect_right(ppos, o) - 1) >= 0 else 0 for o in O]
-    return {"raw": raw, "L": L, "O": O, "P": P, "Tpos": tpos, "Tval": tval}
+    # la piece qui s'imprime (05/11/2026) : pour griser une piece annulee
+    opos, oval = [], []
+    for m in _OBJ.finditer(raw):
+        opos.append(m.start())
+        oval.append(m.group(2).decode() if m.group(1) == b"start" and m.group(2) else None)
+    return {"raw": raw, "L": L, "O": O, "P": P, "Tpos": tpos, "Tval": tval, "Opos": opos, "Oval": oval}
 
 
 def _load(model_3mf: str, plate_id: str) -> Optional[dict]:
@@ -59,9 +65,9 @@ def _load(model_3mf: str, plate_id: str) -> Optional[dict]:
     return ix if ix["L"] else None
 
 
-def _paths(raw: bytes, a: int, b: int, tool: Optional[int]) -> tuple[list, float, list]:
-    """Les extrusions entre deux positions du fichier : ([{t, e0, p: [x, y, ...] en dixiemes de mm}], extrusion totale,
-    boite [xmin, ymin, xmax, ymax])."""
+def _paths(raw: bytes, a: int, b: int, tool: Optional[int], obj: Optional[str] = None) -> tuple[list, float, list]:
+    """Les extrusions entre deux positions du fichier : ([{t, e0, p: [x, y, ...] en dixiemes de mm, o: la piece}],
+    extrusion totale, boite [xmin, ymin, xmax, ymax])."""
     out, cur = [], None
     x = y = None
     absolute = True
@@ -80,6 +86,12 @@ def _paths(raw: bytes, a: int, b: int, tool: Optional[int]) -> tuple[list, float
         if not line:
             continue
         c = line[0]
+        if c == 59:                                   # ';' : le debut et la fin d'une piece
+            if line.startswith(b"; start printing object") or line.startswith(b"; stop printing object"):
+                m = _OBJ.match(line)
+                obj = m.group(2).decode() if m and m.group(1) == b"start" and m.group(2) else None
+                cur = None
+            continue
         if c == 84:                                   # 'T'
             m = _TOOL.match(line)
             if m and int(m.group(1)) < 255:
@@ -117,6 +129,8 @@ def _paths(raw: bytes, a: int, b: int, tool: Optional[int]) -> tuple[list, float
         if de > 0 and tool is not None and x is not None and nx is not None and (nx != x or ny != y):
             if cur is None or cur["t"] != tool or cur["p"][-2:] != [round(x * 10), round(y * 10)]:
                 cur = {"t": tool, "e0": round(e_tot, 2), "p": []}
+                if obj is not None:
+                    cur["o"] = obj
                 out.append(cur)
                 put(x, y)
             if g in (b"G2 ", b"G3 ") and (b"I" in vals or b"J" in vals):
@@ -200,6 +214,11 @@ def _tool_at(ix: dict, pos: int) -> Optional[int]:
     return ix["Tval"][i] if i >= 0 else None
 
 
+def _obj_at(ix: dict, pos: int) -> Optional[str]:
+    i = bisect.bisect_right(ix.get("Opos") or [], pos) - 1
+    return ix["Oval"][i] if i >= 0 else None
+
+
 async def layer(pid: int, p, n: Optional[int]) -> dict:
     """La couche n (sinon la premiere). Points : le premier en dixiemes de mm, puis les ecarts. La couche precedente
     (le fantome), la page l'a deja. Pas de « part deja imprimee » de la couche (02/11/2026) : l'ordre des traces est
@@ -215,11 +234,12 @@ async def layer(pid: int, p, n: Optional[int]) -> dict:
     def one(j):
         a = O[j]
         b = O[j + 1] if j + 1 < len(O) else len(raw)
-        return _paths(raw, a, b, _tool_at(ix, a))
+        return _paths(raw, a, b, _tool_at(ix, a), _obj_at(ix, a))
 
     def lean(j):
         ps, e, bx = one(j)
-        return [{"t": q["t"], "e0": q["e0"], "p": _deltas(_simplify(q["p"]))} for q in ps], e, bx
+        return [{"t": q["t"], "e0": q["e0"], "p": _deltas(_simplify(q["p"])), **({"o": q["o"]} if "o" in q else {})}
+                for q in ps], e, bx
 
     paths, e_tot, box = await asyncio.to_thread(lean, i)
     return {"ok": True, "layer": L[i], "first": L[0], "last": L[-1], "count": len(L), "e_total": e_tot,

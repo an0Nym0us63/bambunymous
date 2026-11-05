@@ -51,6 +51,7 @@ _PROG: dict = {}      # print_id -> {"layer", "pct", "t"} : la derniere progress
 _BEST: dict = {}      # print_id -> {slot: g} : le plus loin atteint (jamais deux fois la meme matiere)
 _TABLES: dict = {}    # print_id -> table du G-code, ou None (illisible : estimation)
 _REFILL: dict = {}    # print_id -> {"t": dernier regard, "seen": (slot, spool_id) en attente de confirmation}
+_SKIP: dict = {}      # print_id -> {objet: [couche, avancement]} : les pieces annulees, et quand (05/11/2026)
 
 
 def enabled() -> bool:
@@ -64,28 +65,40 @@ _M73L = re.compile(rb"M73 L(\d+)")
 _T = re.compile(rb"T(\d+)")
 
 
+_OBJ = b"; start printing object, unique label id:"
+_OBJ_END = b"; stop printing object"
+
+
 def parse_gcode(raw: bytes) -> dict:
     """{"L": [couches], "P": [avancement au debut de chaque couche], "C": {outil: [mm cumules au debut de chaque
-    couche]}, "T": {outil: mm au total}}. Outil n = filament n+1 du 3MF. Extrusions relatives (M83) ou absolues (M82,
-    G92) ; les rincages faits par l'imprimante sont notes en commentaire (« ;VG1 E… ») et comptent pour le filament
-    qui arrive."""
+    couche]}, "T": {outil: mm au total}, "O": {objet: {outil: [mm cumules au debut de chaque couche]}}, "OT": {objet:
+    {outil: mm au total}}}. Outil n = filament n+1 du 3MF. Extrusions relatives (M83) ou absolues (M82, G92) ; les
+    rincages faits par l'imprimante sont notes en commentaire (« ;VG1 E… ») et comptent pour le filament qui arrive.
+    Chaque piece est encadree par « ; start printing object, unique label id: N » et « ; stop printing object » (05/11/2026) :
+    ce qui s'extrude entre les deux est aussi compte pour elle, pour savoir ce qu'une piece annulee n'imprime pas."""
     tool = None
+    obj = None
     rel = True
     last_e = 0.0
     pct = 0
     cum: dict = {}
-    L, P, snaps = [], [], []
+    ocum: dict = {}
+    L, P, snaps, osnaps = [], [], [], []
     for line in raw.split(b"\n"):
         if not line:
             continue
         c = line[0]
-        if c == 59:                                  # ';' : commentaire, sauf les rincages virtuels
+        if c == 59:                                  # ';' : commentaire, sauf les rincages virtuels et les pieces
             if line.startswith(b";VG1") and tool is not None:
                 m = _E.search(line)
                 if m:
                     v = float(m.group(1))
                     if v > 0:
                         cum[tool] = cum.get(tool, 0.0) + v
+            elif line.startswith(_OBJ):
+                obj = line[len(_OBJ):].strip().decode("ascii", "replace") or None
+            elif line.startswith(_OBJ_END):
+                obj = None
             continue
         if c == 71:                                  # 'G'
             if line.startswith((b"G1", b"G0", b"G2", b"G3")):
@@ -96,10 +109,16 @@ def parse_gcode(raw: bytes) -> dict:
                     continue
                 v = float(m.group(1))
                 if rel:
-                    cum[tool] = cum.get(tool, 0.0) + v
+                    d = v
                 else:
-                    cum[tool] = cum.get(tool, 0.0) + (v - last_e)
+                    d = v - last_e
                     last_e = v
+                cum[tool] = cum.get(tool, 0.0) + d
+                if obj is not None:
+                    o = ocum.get(obj)
+                    if o is None:
+                        o = ocum[obj] = {}
+                    o[tool] = o.get(tool, 0.0) + d
             elif line.startswith(b"G92"):
                 m = _E.search(line.split(b";", 1)[0])
                 if m:
@@ -115,6 +134,7 @@ def parse_gcode(raw: bytes) -> dict:
                     L.append(int(m.group(1)))
                     P.append(pct)
                     snaps.append(dict(cum))
+                    osnaps.append({k: dict(v) for k, v in ocum.items()})
             elif line.startswith(b"M83"):
                 rel = True
             elif line.startswith(b"M82"):
@@ -127,7 +147,9 @@ def parse_gcode(raw: bytes) -> dict:
                 if n < 255:
                     tool = n
     tools = sorted(cum)
-    return {"L": L, "P": P, "C": {t: [s.get(t, 0.0) for s in snaps] for t in tools}, "T": {t: cum[t] for t in tools}}
+    O = {k: {t: [(sn.get(k) or {}).get(t, 0.0) for sn in osnaps] for t in v} for k, v in ocum.items()}
+    return {"L": L, "P": P, "C": {t: [s.get(t, 0.0) for s in snaps] for t in tools}, "T": {t: cum[t] for t in tools},
+            "O": O, "OT": ocum}
 
 
 def _read_table(model_3mf: str, plate_id: str) -> Optional[dict]:
@@ -139,6 +161,18 @@ def _read_table(model_3mf: str, plate_id: str) -> Optional[dict]:
         if not name:
             return None
         t = parse_gcode(z.read(name))
+        # le nom des pieces, pour l'historique d'une piece annulee
+        try:
+            import html as _html
+            info = z.read("Metadata/slice_info.config").decode("utf-8", "replace")
+            names = {}
+            for tag in re.findall(r"<object\s[^>]*>", info):
+                i, n = re.search(r'identify_id="([^"]*)"', tag), re.search(r'\sname="([^"]*)"', tag)
+                if i and n:
+                    names[i.group(1)] = _html.unescape(n.group(1))
+            t["N"] = names
+        except KeyError:
+            t["N"] = {}
     return t if t["L"] and t["T"] else None
 
 
@@ -167,12 +201,17 @@ def _mm_at(t: dict, tool: int, layer: int, pct: float) -> Optional[float]:
     cs = t["C"].get(tool)
     if cs is None:
         return None
+    return _at(t, cs, t["T"][tool], layer, pct)
+
+
+def _at(t: dict, cs: list, total: float, layer: int, pct: float) -> float:
+    """Des mm cumules couche par couche (cs, total a la fin) : leur valeur a la couche et a l'avancement annonces."""
     L, P = t["L"], t["P"]
     if layer < L[0]:
         return 0.0
     i = min(bisect.bisect_right(L, layer) - 1, len(L) - 1)
     a = cs[i]
-    b = cs[i + 1] if i + 1 < len(cs) else t["T"][tool]
+    b = cs[i + 1] if i + 1 < len(cs) else total
     p0 = P[i]
     p1 = P[i + 1] if i + 1 < len(P) else 100
     f = 0.0 if p1 <= p0 else max(0.0, min(1.0, (pct - p0) / (p1 - p0)))
@@ -195,6 +234,63 @@ def used_by_slot(t: Optional[dict], planned: dict, layer: int, pct: float) -> tu
             used[slot] = max(0.0, min(g, g * max(0.0, min(100.0, pct)) / 100))
             src[slot] = "estimate"
     return used, src
+
+
+def skipped_by_slot(t: Optional[dict], planned: dict, skips: dict, layer: Optional[int] = None,
+                    pct: float = 0.0) -> dict:
+    """{slot: grammes que les pieces annulees n'ont pas imprimes} jusqu'a (layer, pct), ou en tout (layer None).
+    Une piece annulee a (couche, avancement) : ce que le G-code lui faisait extruder ensuite, de chaque filament, rapporte
+    aux grammes prevus du filament comme le reste du suivi."""
+    out: dict = {}
+    if not t or not skips or not t.get("O"):
+        return out
+    for slot, g in planned.items():
+        tool = slot - 1
+        tot = (t["T"].get(tool) or 0)
+        if g <= 0 or tot <= 0:
+            continue
+        mm = 0.0
+        for obj, at in skips.items():
+            cs = (t["O"].get(obj) or {}).get(tool)
+            if cs is None:
+                continue
+            ot = t["OT"][obj][tool]
+            a = _at(t, cs, ot, int(at[0]), float(at[1]))
+            b = ot if layer is None else _at(t, cs, ot, layer, pct)
+            mm += max(0.0, b - a)
+        if mm > 0:
+            out[slot] = min(g, g * mm / tot)
+    return out
+
+
+def _skips(pid: int) -> dict:
+    with _LOCK:
+        return dict(_SKIP.get(pid) or {})
+
+
+def skip(pid: int, ids: list, pct: float, layer: int) -> None:
+    """Des pieces annulees pendant l'impression (« s_obj » de l'imprimante) : on garde la couche et l'avancement ou
+    chacune l'a ete, la premiere fois qu'on la voit."""
+    if not pid:
+        return
+    with _LOCK:
+        cur = _SKIP.setdefault(pid, {})
+        new = [str(i) for i in ids if str(i) not in cur]
+        for i in new:
+            cur[i] = [int(layer or 0), float(pct or 0)]
+        snap = dict(cur)
+    if new:
+        logger.info(f"[LIVE] impression #{pid} : piece(s) annulee(s) {', '.join(new)} a la couche {layer} ({pct:.0f} %)")
+        from .print_tracker import _bg
+        _bg(_state_put(pid, {"skip": snap}))
+
+
+async def skipped(pid: int) -> dict:
+    """{objet: {"layer", "name"}} : les pieces annulees de cette impression (pour la vue couche et le suivi)."""
+    st = (await _state()).get(str(pid)) or {}
+    sk = {**(st.get("skip") or {}), **_skips(pid)}
+    names = ((_TABLES.get(pid) or {}).get("N") or {})
+    return {o: {"layer": int(v[0]), "name": names.get(o)} for o, v in sk.items()}
 
 
 # ── Etat (en base : survit a un redemarrage) ────────────────────────────────────────────────────────────────────────
@@ -228,6 +324,8 @@ async def load() -> None:
                 _PROG[pid] = {"layer": int(e["layer"]), "pct": float(e.get("pct") or 0), "t": 0.0}
             if e.get("active"):
                 _REFILL[pid] = {"t": 0.0, "seen": None, "active": {int(x) for x in e["active"]}}
+            if e.get("skip"):
+                _SKIP[pid] = {str(o): list(v) for o, v in e["skip"].items()}
 
 
 # ── Lignes de consommation ───────────────────────────────────────────────────────────────────────────────────────────
@@ -259,6 +357,11 @@ async def _used(db, pid: int, p=None) -> tuple[dict, dict, dict]:
         return rows, {s: 0.0 for s in planned}, {}
     t = await _table(pid, p)
     used, src = used_by_slot(t, planned, prog["layer"], prog["pct"])
+    # une piece annulee n'imprime plus (05/11/2026) : ce que le G-code lui faisait extruder depuis ne compte pas
+    sk = _skips(pid)
+    if sk:
+        for s, g in skipped_by_slot(t, planned, sk, prog["layer"], prog["pct"]).items():
+            used[s] = max(0.0, used[s] - g)
     best = _BEST.setdefault(pid, {})
     for s, g in used.items():
         best[s] = used[s] = max(g, best.get(s, 0.0))       # jamais de recul : une reprise ne compte pas deux fois
@@ -582,8 +685,73 @@ async def overrun(pid: int) -> None:
     await _state_put(pid, {"overrun": True})
 
 
+async def skipped_back(pid: int) -> list:
+    """Impression finie avec des pieces annulees (05/11/2026) : ce qu'elles n'ont pas imprime revient aux bobines (le
+    sous-zero d'abord), trace dans leur historique (« pièce annulée : … »). Une fois ; avant overrun. Rend
+    [(spool_id, grammes)]."""
+    from ..models.print_history import Print
+    from ..models.filament import Spool
+    from ..models.spool_move import SpoolMove
+    from .print_tracker import _costs
+    from . import drift
+    st = (await _state()).get(str(pid)) or {}
+    if st.get("skip_back"):
+        return []
+    sk = {**(st.get("skip") or {}), **_skips(pid)}
+    if not sk:
+        return []
+    back = []
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, pid)
+        if not p:
+            return []
+        t = await _table(pid, p)
+        sk = {o: v for o, v in sk.items() if t and o in (t.get("O") or {})}
+        if not sk:
+            logger.info(f"[LIVE] impression #{pid} : pieces annulees inconnues du G-code, rien n'est rendu")
+            await _state_put(pid, {"skip_back": True})
+            return []
+        rows = await _rows(db, pid)
+        planned = {s: sum(float(r.grams_used or 0) for r in rs) for s, rs in rows.items()}
+        names = t.get("N") or {}
+        what = ", ".join(f"{names.get(o) or f'pièce {o}'} (couche {v[0]})" for o, v in sk.items())
+        label = f"{p.translated_name or p.file_name or f'Impression {pid}'} — pièce annulée : {what}"
+        for slot, less in skipped_by_slot(t, planned, sk).items():
+            rest = less
+            for r in reversed(rows.get(slot) or []):     # la derniere bobine d'abord : c'est elle qui finissait
+                g = float(r.grams_used or 0)
+                cut = min(rest, g)
+                if cut < 0.05:
+                    continue
+                rest -= cut
+                bef = getattr(r, "spool_before_g", None)
+                taken = min(g, max(0.0, float(bef))) if bef is not None else g
+                r.grams_used = round(g - cut, 2)
+                give = round(max(0.0, taken - (g - cut)), 1)
+                sp = await db.get(Spool, r.spool_id) if r.spool_id else None
+                if give >= 0.1 and sp and not sp.archived:
+                    a = drift.give_back(sp, give)
+                    db.add(SpoolMove(spool_id=r.spool_id, grams=give, kind="rendu", print_id=pid, usage_id=r.id,
+                                     label=(label + drift.back_note(a))[:250]))
+                    back.append((r.spool_id, give))
+                if rest < 0.05:
+                    break
+        await db.flush()
+        await _costs(db, p)
+        try:
+            from ..api.v1.routes.prints import _propagate_from_print
+            await _propagate_from_print(db, pid)
+        except Exception as e:
+            logger.warning(f"[LIVE] report sur les objets de l'impression #{pid} : {e}")
+        await db.commit()
+    await _state_put(pid, {"skip_back": True, "skip": sk})
+    logger.info(f"[LIVE] impression #{pid} : {what} ; {', '.join(f'{g:g} g a la bobine #{s}' for s, g in back) or 'rien a rendre'}")
+    return back
+
+
 def forget(pid: int) -> None:
     with _LOCK:
+        _SKIP.pop(pid, None)
         _PROG.pop(pid, None)
         _BEST.pop(pid, None)
         _TABLES.pop(pid, None)
@@ -592,6 +760,7 @@ def forget(pid: int) -> None:
 
 async def finished(pid: int) -> None:
     """Impression finie (reussie) : son etat est clos ; plus rien a rattraper."""
+    await skipped_back(pid)
     await overrun(pid)
     await _state_put(pid, {"settled": True})
     forget(pid)
@@ -651,7 +820,7 @@ async def live(pid: int) -> dict:
                 "fil_color": fil.color if fil else None,
             })
     return {"print_id": pid, "print_name": p.translated_name or p.file_name, "layer": prog.get("layer"), "pct": prog.get("pct"),
-            "items": items}
+            "items": items, "skipped": await skipped(pid)}
 
 
 async def current_print_id() -> Optional[int]:

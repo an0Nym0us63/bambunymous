@@ -466,6 +466,11 @@ class MQTTManager:
         # pct100 ne partait jamais.
         if _jid and _gst in ("RUNNING", "FINISH"):
             _op(_jid, _pct, _lay)
+        # des pieces annulees en cours de route (05/11/2026) : « s_obj », les identifiants des objets sautes
+        _so = p.get("s_obj")
+        if isinstance(_so, list) and _so and (_jid or state.job_id) and _gst in ("RUNNING", "PAUSE", "FINISH"):
+            from app.services.print_tracker import on_skipped as _osk
+            _osk(_jid or state.job_id, _so, _pct, _lay)
         # Pauses (retirees de la duree reelle)
         if _jid and _gst:
             _os(_jid, _gst)
