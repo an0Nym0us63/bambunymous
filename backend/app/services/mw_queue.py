@@ -338,20 +338,22 @@ _PIECES: dict = {}
 
 def copies_of(e: dict, plate_g: dict, pieces: dict) -> tuple:
     """Les exemplaires de ses plateaux qu'un print a donnes, et comment on le sait (05/11/2026) :
-      - dits a la main (choix des plateaux sur sa fiche) ;
-      - sinon ses elements declares sur les pieces de ses plateaux d'origine, quand il en declare plus d'un et qu'on
-        connait les pieces (12 elements d'un plateau de 6 porte-cles : 2 exemplaires ; 6 : un seul) ;
+      - dits a la main (choix des plateaux sur sa fiche, ou pastille d'un plateau dans « A faire ») ;
       - sinon au poids : le filament pris sur le poids des plateaux MakerWorld (un plateau duplique pese le double) ;
-      - sinon un."""
+      - sinon, sans poids, ses elements declares sur les pieces de ses plateaux d'origine (12 elements d'un plateau
+        de 6 porte-cles : 2 exemplaires) ;
+      - sinon un.
+    Le poids passe avant les elements (05/11/2026) : une piece du 3MF n'est pas un objet (une boite en deux parties
+    fait 2 pieces ; ses 2 elements declares comptaient pour un seul exemplaire alors qu'il y en avait deux)."""
     if e.get("copies") is not None:
         return e["copies"], "main"
     ps = e["plates"]
+    if all(plate_g.get(n) for n in ps) and e.get("g"):
+        return guess_copies(e.get("g"), ps, plate_g), "poids"
     pc = sum(pieces.get(n) or 0 for n in ps)
     if (e.get("items") or 1) > 1 and pc and all(pieces.get(n) for n in ps) and e["items"] >= pc:
         return max(1, min(50, round(e["items"] / pc))), "elements"
-    g = guess_copies(e.get("g"), ps, plate_g)
-    w = all(plate_g.get(n) for n in ps) and e.get("g")
-    return g, "poids" if w else "defaut"
+    return 1, "defaut"
 
 
 def guess_copies(g: float, plates: list, plate_g: dict) -> int:
