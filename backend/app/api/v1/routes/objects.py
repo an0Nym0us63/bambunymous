@@ -771,8 +771,7 @@ async def create_objects(body: ObjectCreate, _: str = Depends(get_current_user))
         # Regroupement demande : le groupe est cree AVANT les objets pour que
         # chacun naisse deja rattache, plutot qu'en deux temps.
         target_group_id = body.group_id
-        # un groupe neuf, meme pour un seul objet (05/11/2026 : le groupe se choisit des la creation)
-        if body.group_new:
+        if body.group_new and n > 1:
             grp = ObjectGroup(name=(body.group_name or body.name or "Lot").strip())
             db.add(grp)
             await db.flush()
