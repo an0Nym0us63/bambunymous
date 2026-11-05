@@ -113,7 +113,8 @@ async def set_settings(body: dict) -> dict:
                 if b - a < 30:
                     raise PlanError("Une plage d'au moins 30 minutes")
                 d[k] = {"from": w["from"], "to": w["to"]}
-    d["plan0"] = {}                                  # nouvelles consignes : le planning repart de la
+    d["plan0"] = {}
+    d["rev"] = int(d.get("rev") or 0) + 1         # rangement a la main : la tache de fond n'y voit pas un decalage                                  # nouvelles consignes : le planning repart de la
     await _save(d)
     return {k: d[k] for k in DEFAULTS}
 
@@ -584,7 +585,7 @@ async def plan(tz: int | None = None) -> dict:
             "busy_until": busy.isoformat(timespec="minutes") if busy else None,
             "live": {"name": live[1], "design_id": live[2], "remaining_min": live[0]} if live else None,
             "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix), "status": status,
-            "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded),
+            "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),
             "manual_done": [{"key": k, "title": v.get("title"), "plate": k.split(":")[-1], "n": v.get("n")}
                             for k, v in d["done"].items() if isinstance(v, dict) and v.get("n")]}
 
@@ -605,6 +606,7 @@ async def mark_done(key: str, undo: bool = False) -> dict:
         d["done"][bk] = cur
     else:
         d["done"].pop(bk, None)
+    d["rev"] = int(d.get("rev") or 0) + 1
     await _save(d)
     return await plan()
 
@@ -638,6 +640,7 @@ async def set_deadline(design_id: str, due) -> dict:
     else:
         d["deadlines"].pop(did, None)
     d["notified"].pop(f"due:{did}", None)
+    d["rev"] = int(d.get("rev") or 0) + 1
     await _save(d)
     return await plan()
 
@@ -686,6 +689,7 @@ async def arrange(body: dict) -> dict:
                 raise PlanError("Jour invalide")
             d["pins"][str(k)] = str(v)
     d["plan0"] = {}
+    d["rev"] = int(d.get("rev") or 0) + 1         # rangement a la main : la tache de fond n'y voit pas un decalage
     await _save(d)
     return await plan()
 
@@ -735,11 +739,11 @@ def _replace(order: list, old: list, new: list) -> list:
 
 
 # ── les rappels (boucle des notifications) ───────────────────────────────────
-async def tick(cfg) -> int:
+async def tick(cfg, r: dict | None = None) -> int:
     """Toutes les 15 min : a l'heure prevue, imprimante libre, « a lancer » ; une fois en retard d'une demi-heure,
     un second rappel. Un rappel par travail."""
     from . import notify as N
-    r = await plan()
+    r = r or await plan()
     sent = 0
     d = await _load()
     changed = False
@@ -782,3 +786,131 @@ async def tick(cfg) -> int:
     title = f"⏰ En retard de {_dur(st['late_min'] * 60)} : {name}" if step == 2 else f"⏰ À lancer : {name}"
     await N.notify("plan_due", title, "\n".join(lines), click=N.app_link(cfg, "/prints?tab=calendar"), priority=3)
     return sent + 1
+
+
+# ── la tache de fond (05/11/2026) ────────────────────────────────────────────
+# Toutes les 5 minutes, et des qu'une impression commence ou finit : le planning est refait (ce qui a pris du retard
+# decale la suite, dans les consignes), garde (PRINT_PLAN_SNAP : le dernier etat, ce qui a glisse et pourquoi, les
+# debordements), et les rappels partent. L'ordre et les jours poses restent ceux de l'utilisateur : seuls ses
+# rangements et « Optimiser » les changent ; un rangement a la main n'est pas compte comme un decalage.
+SNAP_KEY = "PRINT_PLAN_SNAP"
+PERIOD = 300
+_KICK = [None]
+
+
+def kick() -> None:
+    """Une impression commence ou finit : verifier tout de suite (sans attendre les 5 minutes)."""
+    ev = _KICK[0]
+    if ev is not None:
+        ev.set()
+
+
+async def _snap_load() -> dict:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, SNAP_KEY, "")
+    try:
+        d = json.loads(raw) if raw else {}
+    except ValueError:
+        d = {}
+    return d if isinstance(d, dict) else {}
+
+
+async def _snap_save(d: dict) -> None:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, SNAP_KEY, json.dumps(d, ensure_ascii=False))
+
+
+async def _check_view(jobs: list) -> dict | None:
+    """Pour la page : la derniere verification, et sur chaque plateau decale depuis moins de 24 h, d'ou il vient."""
+    snap = await _snap_load()
+    if not snap.get("at"):
+        return None
+    moved = {m["key"]: m for m in snap.get("moved") or []}
+    for j in jobs:
+        m = moved.get(j["key"])
+        if m:
+            j["moved"] = {"from": m["from"], "at": m["at"], "why": m.get("why")}
+    return {"at": snap["at"], "moved": len([m for m in moved.values() if any(j["key"] == m["key"] for j in jobs)]),
+            "overflow": snap.get("overflow") or []}
+
+
+async def check(cfg=None) -> dict:
+    """Une verification : refaire le planning, noter ce qui a change de jour (sauf rangement a la main), les
+    debordements, et envoyer les rappels (« a lancer », date limite, decalage)."""
+    from . import notify as N
+    if cfg is None:
+        cfg = await N._load()
+    d0 = await _load()
+    r = await plan()
+    now = r["now"]
+    snap = await _snap_load()
+    prev = snap.get("days") or {}
+    same_rev = snap.get("rev") == int(d0.get("rev") or 0)
+    today = datetime.fromisoformat(now).date()
+    moved = [m for m in snap.get("moved") or []
+             if (datetime.fromisoformat(now) - datetime.fromisoformat(m["at"])).total_seconds() < 86400]
+    fresh = []
+    if same_rev:
+        for j in r["jobs"]:
+            was = prev.get(j["key"])
+            if was and was != j["day"]:
+                # la cause d'abord, puis ce qui l'a poussee a ce jour-la (une plage d'heures, une date posee...)
+                cause = ("une impression a fini plus tôt" if was > j["day"] else "l'impression en cours a pris du retard" if r.get("live")
+                         else "rien n'a été lancé à l'heure prévue")
+                detail = next((x for x in j.get("reasons") or [] if not x.startswith("Posée")), None)
+                why = f"{cause} ; {detail[0].lower()}{detail[1:]}" if detail else cause
+                m = {"key": j["key"], "title": _title(j), "from": was, "to": j["day"], "at": now, "why": why}
+                moved = [x for x in moved if x["key"] != j["key"]] + [m]
+                fresh.append(m)
+    overflow = [{"kind": "deadline", "text": f"{x['title']} : fini après sa date (avant le {_due_txt(x['due'])})"}
+                for x in r.get("deadlines") or [] if not x["ok"]]
+    overflow += [{"kind": "long", "text": f"{_title(j)} : plus longue que la plage de fonctionnement"} for j in r["jobs"] if j.get("too_long")]
+    last = r["jobs"][-1]["end"] if r["jobs"] else None
+    await _snap_save({"at": now, "rev": int((await _load()).get("rev") or 0), "days": {j["key"]: j["day"] for j in r["jobs"]},
+                      "moved": moved[-60:], "overflow": overflow, "count": len(r["jobs"]), "last_end": last})
+    sent = 0
+    # les rappels : a lancer, date limite (la logique d'avant, tick)
+    if N.enabled_in(cfg, "plan_due") or N.enabled_in(cfg, "plan_deadline"):
+        sent += await tick(cfg, r)
+    # un decalage : un seul message par verification, qui dit combien et jusqu'ou
+    if fresh and N.enabled_in(cfg, "plan_shift"):
+        later = [m for m in fresh if m["to"] > m["from"]]
+        lines = [f"• {m['title']} : {_day_fr(datetime.fromisoformat(m['from'] + 'T12:00'), today)} → "
+                 f"{_day_fr(datetime.fromisoformat(m['to'] + 'T12:00'), today)} ({m['why']})" for m in fresh[:6]]
+        if len(fresh) > 6:
+            lines.append(f"… et {len(fresh) - 6} autre{'s' if len(fresh) > 7 else ''}")
+        await N.notify("plan_shift", f"🔄 Le planning a glissé : {len(fresh)} plateau{'x' if len(fresh) > 1 else ''} "
+                       f"{'repoussé' if later else 'avancé'}{'s' if len(fresh) > 1 else ''}", "\n".join(lines),
+                       click=N.app_link(cfg, "/prints?tab=calendar"), priority=2)
+        sent += 1
+    return {"jobs": len(r["jobs"]), "moved": len(fresh), "overflow": len(overflow), "sent": sent}
+
+
+async def loop(first_delay_s: int = 60):
+    """La tache « Planning des impressions » : une verification toutes les 5 minutes, ou des qu'une impression
+    commence ou finit (kick)."""
+    import asyncio
+    from ..core import tasks as _tasks
+    _KICK[0] = asyncio.Event()
+    await _tasks.sleep("planner", first_delay_s)
+    while True:
+        try:
+            r = await check()
+            if r["moved"]:
+                logger.info(f"[PLANNING] {r['moved']} plateau(x) decale(s), {r['overflow']} debordement(s)")
+        except Exception:
+            _tasks.error("planner")
+            logger.exception("[PLANNING] verification")
+        _tasks.waiting("planner", PERIOD)
+        _KICK[0].clear()
+        try:
+            await asyncio.wait_for(_KICK[0].wait(), PERIOD)
+            await asyncio.sleep(20)                      # une impression qui commence : son etat se pose d'abord
+        except asyncio.TimeoutError:
+            pass
+        _tasks.start("planner")
+

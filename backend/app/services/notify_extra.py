@@ -648,7 +648,7 @@ async def plan_tick(cfg) -> int:
 # tiennent a jour meme quand leur notification est coupee).
 _TICKS = [(("attention_new",), attention_tick), (("weekly_summary",), weekly_tick), (("printer_idle",), idle_tick),
           (None, achievements_tick), (("friend_achievement",), friend_achievements_tick),
-          (("mw_queue_ready",), queue_ready_tick), (("plan_due", "plan_deadline"), plan_tick),
+          (("mw_queue_ready",), queue_ready_tick),
           (("dry_needed_loaded",), dry_needed_tick), (("dry_forgotten",), dry_forgotten_tick),
           (("accessory_low", "accessory_out"), accessories_tick), (("objects_unsold",), unsold_tick),
           (("print_overdue",), overdue_tick), (("mw_auth_lost",), mw_auth_tick),

@@ -132,6 +132,11 @@ def touch() -> None:
     passe pour vieux, le prochain appel le rend tout de suite et le recalcule en fond."""
     if _CACHE[1] is not None:
         _CACHE[0] = 0.0
+    try:
+        from . import planner
+        planner.kick()                                   # le planning se verifie tout de suite
+    except Exception:
+        pass
 
 
 async def config() -> dict:

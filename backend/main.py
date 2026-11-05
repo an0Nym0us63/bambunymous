@@ -219,6 +219,8 @@ async def lifespan(app: FastAPI):
     from app.services import notify_extra as _nx
     _tasks.track("notify_extra", _bg(_nx.loop()))
     _tasks.track("update", _bg(_nx.update_loop()))
+    from app.services import planner as _planner
+    _tasks.track("planner", _bg(_planner.loop()))            # planning : decale, deborde, rappelle (5 min, et a chaque impression)
     from app.services import achievements as _ach
     _tasks.track("ach_warm", _bg(_ach.warm()))                 # succes : gros calcul prepare d'avance
     from app.services import ach_watch as _aw

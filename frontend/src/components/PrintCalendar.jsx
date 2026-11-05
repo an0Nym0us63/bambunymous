@@ -22,14 +22,19 @@ const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")
 const shelf0 = x => [...new Map((x?.items || []).map(i => [i.id, i])).values()];
 const hm = s => { const m = Math.round((s || 0) / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${String(m % 60).padStart(2, "0")}` : ""}`; };
 // l'etat du planning : a lancer, en retard, en avance, dans les temps
-function PlanStatus({ st, live }) {
+function PlanStatus({ st, live, check }) {
   const c = { due: "#6366F1", late: "#F97316", ahead: "#22C55E", ontime: "#22C55E", deadline: "#EF4444" }[st.state] || "#64748B";
   const ic = { due: "⏰", late: "🐢", ahead: "🚀", ontime: "✅", deadline: "🎯" }[st.state] || "📅";
   return <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 12px", borderRadius: 14, border: `1px solid color-mix(in srgb, ${c} 40%, var(--border))`,
     background: `color-mix(in srgb, ${c} 9%, var(--surface))` }}>
     <span style={{ fontSize: 17 }}>{ic}</span>
     <span style={{ flex: 1, fontSize: 13, fontWeight: 800, color: "var(--text2)" }}>{st.text}
-      {live && <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>En cours : {live.name} · encore {hm(live.remaining_min * 60)}</span>}</span>
+      {live && <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>En cours : {live.name} · encore {hm(live.remaining_min * 60)}</span>}
+      {/* la tache de fond « Planning des impressions » : sa derniere verification */}
+      {check && <span data-tip="La tâche « Planning des impressions » refait le planning toutes les 5 min et à chaque impression (Paramètres › Tâches)"
+        style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>
+        🔄 Vérifié à {check.at.slice(11, 16).replace(":", " h ")}{check.moved > 0 ? ` · ${check.moved} plateau${check.moved > 1 ? "x" : ""} décalé${check.moved > 1 ? "s" : ""} depuis 24 h` : ""}
+        {check.overflow?.length > 0 ? ` · ${check.overflow.length} débordement${check.overflow.length > 1 ? "s" : ""}` : ""}</span>}</span>
   </div>;
 }
 const useWidth = () => {
@@ -349,7 +354,7 @@ export default function PrintCalendar() {
         data-tip="Enchaîner les plateaux de mêmes couleurs dans toute la file (les impressions posées sur un jour ne bougent pas)"
         style={{ ...pill, color: "#6366F1" }}>✨ Optimiser la file</button>}
     </div>
-    {pd?.status && showPlan && <PlanStatus st={pd.status} live={pd.live}/>}
+    {pd?.status && showPlan && <PlanStatus st={pd.status} live={pd.live} check={pd.check}/>}
     {showPlan && (pd?.deadlines || []).filter(x => !x.ok).map(x => <PlanStatus key={x.design_id}
       st={{ state: "deadline", text: `${x.title} ne sera pas fini avant le ${dueTxt(x.due)} : voir les conseils` }}/>)}
     {setOpen && <PlanSettings s={pd?.settings} onSave={saveSettings} onClose={() => setSetOpen(false)}/>}

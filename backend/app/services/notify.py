@@ -505,7 +505,7 @@ EVENTS["plan_due"] = {
     "section": "prints", "label": "Impression du planning à lancer",
     "description": "À l'heure prévue par le planning (calendrier des impressions), l'imprimante libre : ce qu'il faut lancer, "
                    "ce qu'il faut charger avant, et la suite. Un second rappel si elle n'est toujours pas lancée une demi-heure après "
-                   "(relevé toutes les 15 min).",
+                   "(vérifié par la tâche « Planning des impressions », toutes les 5 min et à chaque impression).",
     "options": [],
     "sample": {"title": "⏰ À lancer : Lampe lune · plateau 2", "priority": 3, "attach": _SAMPLE_COVER, "link": "/prints?tab=calendar",
                "message": "⏱ 3 h 20 · prévue à 14 h\n🧵 À charger : PLA Matte Turquoise\nEnsuite : Vase spirale"},
@@ -514,11 +514,21 @@ EVENTS["plan_deadline"] = {
     "section": "prints", "label": "Date limite du planning dépassée",
     "description": "Un objet du planning à finir avant une date (« la fusée avant le 24 ») ne tient plus : son dernier plateau "
                    "finit trop tard, parce qu'une impression a pris du retard ou que d'autres ont été intercalées. Une fois, "
-                   "de nouveau s'il se rétablit puis déborde encore (relevé toutes les 15 min).",
+                   "de nouveau s'il se rétablit puis déborde encore (vérifié par la tâche « Planning des impressions », toutes les 5 min et à chaque impression).",
     "options": [],
     "sample": {"title": "🎯 Fusée lunaire ne sera pas finie avant le 24 décembre", "priority": 3, "attach": _SAMPLE_COVER,
                "link": "/prints?tab=calendar",
                "message": "Son dernier plateau finit mardi 24 à 3 h, 3 h trop tard.\nLe planning propose quoi faire."},
+}
+EVENTS["plan_shift"] = {
+    "section": "prints", "label": "Planning décalé",
+    "description": "Des plateaux du planning changent de jour sans que tu les aies rangés : une impression a pris du retard, "
+                   "rien n'a été lancé à l'heure prévue, ou une impression a fini plus tôt. Un message par vérification, avec "
+                   "chaque plateau, d'où il vient et pourquoi (tâche « Planning des impressions », toutes les 5 min).",
+    "options": [],
+    "sample": {"title": "🔄 Le planning a glissé : 2 plateaux repoussés", "priority": 2, "link": "/prints?tab=calendar",
+               "message": "• Lampe lune · plateau 2 : aujourd'hui → demain (Finirait à 23 h 40, après l'arrêt de 22 h)\n"
+                          "• Vase spirale : demain → samedi 8 (l'impression en cours a pris du retard)"},
 }
 EVENTS["dry_needed_loaded"] = {
     "section": "dry", "label": "Bobine à sécher dans l'AMS",
@@ -536,7 +546,7 @@ EVENTS["dry_forgotten"] = {
 }
 
 # Ordre d'affichage dans chaque section
-_ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_end", "print_overdue", "print_done", "print_failed", "plan_due", "plan_deadline",
+_ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_end", "print_overdue", "print_done", "print_failed", "plan_due", "plan_deadline", "plan_shift",
           "print_paused", "print_resumed", "print_speed",
           "printer_hms", "printer_offline", "bed_cooled", "printer_firmware",
           "dry_started", "dry_done", "dry_needed_loaded", "dry_forgotten",
