@@ -42,7 +42,10 @@ logger = logging.getLogger(__name__)
 KEY = "PRINT_PLAN"
 HORIZON_DAYS = 60
 SHIFT_MIN = 180          # un plateau « decale » : son depart a bouge d'au moins 3 h (06/11/2026)
-DEFAULTS = {"gap": 15, "run": None, "launch": None}
+DEFAULTS = {"gap": 15, "run": None, "launch": None, "opt_mode": "mix", "auto_new": "off"}
+# les modes d'optimisation (06/11/2026) : au mieux (couleurs et nuits, le meilleur des deux), le moins de changements de
+# filament, le plus d'impressions chaque jour (les courtes d'abord), remplir les temps morts (les nuits)
+MODES = ("mix", "couleurs", "debit", "nuits")
 
 
 class PlanError(Exception):
@@ -121,6 +124,11 @@ async def set_settings(body: dict) -> dict:
                 if b - a < 30:
                     raise PlanError("Une plage d'au moins 30 minutes")
                 d[k] = {"from": w["from"], "to": w["to"]}
+    if body.get("opt_mode") in MODES:
+        d["opt_mode"] = body["opt_mode"]
+    # les nouveaux plateaux (un modele retenu, un exemplaire de plus) : en fin de file, ou places selon un mode
+    if body.get("auto_new") in ("off",) + MODES:
+        d["auto_new"] = body["auto_new"]
     d["plan0"] = {}
     d["rev"] = int(d.get("rev") or 0) + 1         # rangement a la main : la tache de fond n'y voit pas un decalage                                  # nouvelles consignes : le planning repart de la
     await _save(d)
@@ -705,6 +713,47 @@ def _night_waits(r: dict, rules) -> list:
     return out
 
 
+def mode_score(r: dict, d: dict, now: datetime, mode: str) -> float:
+    """Ce que coute un planning selon le mode (plus petit = mieux) : une date limite ratee compte toujours enorme."""
+    rules = Rules(d)
+    late = 100000 * sum(1 for x in deadlines(r["jobs"], d, now) if not x["ok"])
+    loads = sum(len(j.get("load") or []) for j in r["jobs"])
+    idle = sum(w for _, w in _night_waits(r, rules)) / 60 if rules.launch else 0
+    # le plus d'impressions tot : la somme des heures de fin (les courtes d'abord la font baisser)
+    ends = sum((datetime.fromisoformat(j["end"]) - now).total_seconds() / 3600 for j in r["jobs"]) / max(1, len(r["jobs"]))
+    if mode == "couleurs":
+        return late + 60 * loads + 0.05 * idle + ends
+    if mode == "debit":
+        return late + 10 * ends + 2 * loads
+    if mode == "nuits":
+        return late + idle + 5 * loads
+    return late + idle + 30 * loads + ends
+
+
+def auto_insert(jobs: list, d: dict, now: datetime, busy, loaded: set, new: list, mode: str) -> list:
+    """Les nouveaux plateaux places selon le mode (06/11/2026), sans toucher a l'ordre des autres : chacun essaie une
+    vingtaine de places et garde la meilleure. Rend l'ordre."""
+    order = [j["key"] for j in _ordered(jobs, d["order"], d["pins"])]
+    for k in new:
+        if k not in order or k in d["locked"] or k in d["pins"]:
+            continue
+        rest = [x for x in order if x != k]
+        step = max(1, len(rest) // 20)
+        spots = sorted(set(list(range(0, len(rest) + 1, step)) + [len(rest)]))
+        best = None
+        for i in spots:
+            o = rest[:i] + [k] + rest[i:]
+            r = place(_ordered(jobs, o, d["pins"]), d, now, busy, loaded, _slots())
+            if not any(j["key"] == k for j in r["jobs"]):
+                continue
+            sc = mode_score(r, d, now, mode)
+            if best is None or sc < best[0]:
+                best = (sc, o)
+        if best:
+            order = best[1]
+    return order
+
+
 def night_fill(jobs: list, order: list, d: dict, now: datetime, busy, loaded: set, movable: set, rounds: int = 40,
                why: dict | None = None) -> list:
     """Remplir les nuits (06/11/2026). Avec des heures de lancement (on lance de 8 h a 00 h 30) et l'imprimante qui a le
@@ -850,6 +899,27 @@ async def plan(tz: int | None = None) -> dict:
                 dirty = True
                 logger.info(f"[PLAN] {k} : fige a {at}, l'impression en cours de ce modele l'a lance : defige")
                 break
+    # les nouveaux plateaux (06/11/2026) : places selon le mode choisi dans les consignes, sans toucher aux autres ;
+    # « known » garde ceux deja vus (la premiere fois, tous le sont : rien ne bouge)
+    known = d.get("known")
+    cur = [j["key"] for j in jobs]
+    if not isinstance(known, list):
+        d["known"] = cur
+        dirty = True
+    else:
+        ks = set(known)
+        new = [k for k in cur if k not in ks]
+        if new and d.get("auto_new") in MODES:
+            try:
+                d["order"] = auto_insert(jobs, d, now, busy, loaded, new, d["auto_new"])
+                d["rev"] = int(d.get("rev") or 0) + 1
+                jobs = _ordered(jobs, d["order"], d["pins"])
+                logger.info(f"[PLAN] {len(new)} nouveau(x) plateau(x) place(s) en mode {d['auto_new']}")
+            except Exception:
+                logger.exception("[PLAN] placement des nouveaux plateaux")
+        if new or len(ks) != len(cur):
+            d["known"] = cur
+            dirty = True
     r = place(jobs, d, now, busy, loaded, _slots())
     mark_complete(r["jobs"])
     # avance ou retard : chaque debut, compare a celui du dernier rangement
@@ -1047,7 +1117,7 @@ async def arrange(body: dict) -> dict:
     return await plan()
 
 
-async def optimize_plan(day: str | None = None, start: str | None = None) -> dict:
+async def optimize_plan(day: str | None = None, start: str | None = None, mode: str | None = None) -> dict:
     """« Optimiser » : toute la file, ou un seul jour (ses travaux remis dans un ordre qui enchaine les couleurs).
     start (06/11/2026) : « a partir de » ce jour ; ce qui est prevu avant reste a sa place, dans son ordre, et seule la
     suite est reordonnee (couleurs, nuits, dates limites)."""
@@ -1093,16 +1163,24 @@ async def optimize_plan(day: str | None = None, start: str | None = None) -> dic
     hs = set(head)
     base = head + [j["key"] for j in jobs if j["key"] not in hs]
     free = [j for j in jobs if j["key"] not in d["pins"] and j["key"] not in d["locked"] and j["key"] not in hs]
+    mode = mode if mode in MODES else (d.get("opt_mode") if d.get("opt_mode") in MODES else "mix")
     sw = {}
-    best = optimize(_soft_grouped(free), start_loaded, why=sw)
+    if mode == "debit":
+        # le plus d'impressions chaque jour : les plus courtes d'abord (dans l'ordre de priorite des retenus)
+        best = sorted(_soft_grouped(free), key=lambda j: (not j.get("retained", True), j["seconds"]))
+    elif mode == "nuits":
+        best = _soft_grouped(free)                    # l'ordre actuel ; les nuits se remplissent ensuite
+    else:
+        best = optimize(_soft_grouped(free), start_loaded, why=sw)
     order = _replace(base, [j["key"] for j in free], [j["key"] for j in best])
     # les nuits remplies (06/11/2026) : avant la coupure des lancements, le plateau qui finit au plus pres de la reprise ;
     # les plateaux au jour fige peuvent changer d'heure dans leur journee (leur jour, place() le garde)
     movable = {j["key"] for j in jobs if j["key"] not in d["locked"] and j["key"] not in hs}
-    order = night_fill(jobs, order, d, now, busy, loaded, movable, why=sw)
+    if mode != "couleurs":                            # le moins de changements : on ne remplit pas les nuits a leur prix
+        order = night_fill(jobs, order, d, now, busy, loaded, movable, why=sw)
     # enchainer les couleurs peut gacher les nuits plus que le remplissage ne rattrape : on compare avec l'ordre de
     # depart, nuits remplies aussi, au temps mort des nuits plus 30 min par filament a charger, et on garde le meilleur
-    if Rules(d).launch:
+    if Rules(d).launch and mode == "mix":
         def score(o):
             rr = place(_ordered(jobs, o, d["pins"]), d, now, busy, loaded, _slots())
             return sum(w for _, w in _night_waits(rr, Rules(d))) / 60 + 30 * sum(len(j.get("load") or []) for j in rr["jobs"])

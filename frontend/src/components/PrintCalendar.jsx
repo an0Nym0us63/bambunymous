@@ -10,7 +10,7 @@ import MakerWorldModelSheet from "./MakerWorldModelSheet";
 import MwImg from "./MwImg";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
 import { PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, poolGroups, BlockedList, LowStockBanner } from "./PlanPanels";
-import { DayStrip, onDay, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained } from "./PlanDay";
+import { OPT_MODES, DayStrip, onDay, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
 // chacune, liseree de son etat) posee sur la barre de ses heures machine (une impression qui
@@ -214,7 +214,8 @@ export default function PrintCalendar() {
   });
   const optimize = day => send("/makerworld/plan/optimize", day ? { day } : {}, "post").then(ok => { if (ok) egg("planning_optimise"); });
   // toute la file, a partir d'un jour (06/11/2026) : ce qui est prevu avant ne bouge pas
-  const optimizeFrom = from => send("/makerworld/plan/optimize", from ? { from } : {}, "post").then(ok => { if (ok) egg("planning_optimise"); });
+  const optimizeFrom = (from, mode) => send("/makerworld/plan/optimize", { ...(from ? { from } : {}), ...(mode ? { mode } : {}) }, "post")
+    .then(ok => { if (ok) egg("planning_optimise"); });
   const jobAct = j => ({
     smart: () => send("/makerworld/plan/smart", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
     later: () => send("/makerworld/plan/later", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
@@ -516,7 +517,8 @@ export default function PrintCalendar() {
     {modelSel && <ModelSheet g={poolGroups(pd?.jobs, pd?.blocked).find(g => g.id === modelSel)} now={pd?.now} edit={edit} jobs={pd?.jobs}
       onClose={() => setModelSel(null)} onPick={setJobSel} act={modelAct(modelSel)}/>}
     {jobSel && <JobSheet j={jobSel} now={pd?.now} edit={edit} onClose={() => setJobSel(null)} act={jobAct(jobSel)} jobs={pd?.jobs}/>}
-    {pop === "optimize" && <OptimizePick today={today} onPick={from => { setPop(null); optimizeFrom(from); }} onClose={() => setPop(null)}/>}
+    {pop === "optimize" && <OptimizePick today={today} mode0={pd?.settings?.opt_mode} onPick={(from, mode) => { setPop(null); optimizeFrom(from, mode); }}
+      onClose={() => setPop(null)}/>}
     {pop === "advice" && <PlanPopup title={`Conseils (${pd?.advice?.length || 0})`} icon="💡" color="#F59E0B" onClose={() => setPop(null)}>
       <PlanAdvice items={pd?.advice} edit={edit} onApply={a => { applyAdvice(a); setPop(null); }}/></PlanPopup>}
     {pop === "locked" && <PlanPopup title="Plateaux figés" icon="🔒" color="#4F46E5" onClose={() => setPop(null)}>
@@ -541,8 +543,11 @@ export default function PrintCalendar() {
 const navBtn = { width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)", cursor: "pointer",
   display: "flex", alignItems: "center", justifyContent: "center" };
 // « Optimiser la file » : a partir de quand (06/11/2026). Ce qui est prevu avant reste a sa place.
-function OptimizePick({ today, onPick, onClose }) {
+function OptimizePick({ today, mode0, onPick: pick, onClose }) {
   const [free, setFree] = useState("");
+  const [mode, setMode] = useState(mode0 || "mix");
+  const onPick = from => pick(from, mode);
+  const cur = OPT_MODES.find(m => m[0] === mode) || OPT_MODES[0];
   const plus = n => { const t = new Date(`${today}T12:00`); t.setDate(t.getDate() + n);
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; };
   const opt = (k, ic, label, hint, from) => <button key={k} type="button" onClick={() => onPick(from)}
@@ -555,8 +560,15 @@ function OptimizePick({ today, onPick, onClose }) {
   const fr = d => new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
   return <PlanPopup title="Optimiser la file" icon="✨" color="#6366F1" onClose={onClose}>
     <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45, marginBottom: 8 }}>
-      Enchaîner les mêmes couleurs, remplir les nuits, tenir les dates limites. Ce qui est prévu avant le jour choisi ne bouge pas,
-      les plateaux figés non plus.</div>
+      D'abord le mode, puis à partir de quand. Ce qui est prévu avant le jour choisi ne bouge pas, les plateaux figés non plus,
+      et aucune date limite n'est sacrifiée.</div>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
+      {OPT_MODES.map(([k, ic, l]) => <button key={k} type="button" onClick={() => setMode(k)}
+        style={{ padding: "8px 8px", borderRadius: 11, cursor: "pointer", font: "inherit", fontSize: 12.5, fontWeight: 900, textAlign: "left",
+          border: `1.5px solid ${mode === k ? "#6366F1" : "var(--border)"}`, color: mode === k ? "#fff" : "var(--text2)",
+          background: mode === k ? "linear-gradient(135deg, #6366F1, #8B5CF6)" : "var(--surface)" }}>{ic} {l}</button>)}
+    </div>
+    <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", lineHeight: 1.4, marginBottom: 10 }}>{cur[3]}</div>
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {opt("all", "✨", "Toute la file", "Dès maintenant", null)}
       {opt("tomorrow", "🌅", "Sans toucher à aujourd'hui", `À partir de demain, ${fr(plus(1))}`, plus(1))}

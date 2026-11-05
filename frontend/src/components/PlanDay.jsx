@@ -164,8 +164,15 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
 }
 
 // les consignes de la maison
+// les modes d'optimisation (06/11/2026)
+export const OPT_MODES = [["mix", "⚖️", "Au mieux", "Couleurs et nuits : le meilleur des deux, sans rater de date limite"],
+  ["couleurs", "🎨", "Le moins de filaments", "Enchaîner les mêmes couleurs : le moins de bobines à changer"],
+  ["debit", "⚡", "Le plus d'impressions", "Les plus courtes d'abord : le plus d'impressions finies chaque jour"],
+  ["nuits", "🌙", "Remplir les temps morts", "Le long du soir finit au plus près de la reprise : l'imprimante tourne la nuit"]];
 export function PlanSettings({ s, onSave, onClose }) {
   const [gap, setGap] = useState(String(s?.gap ?? 15));
+  const [optMode, setOptMode] = useState(s?.opt_mode || "mix");
+  const [autoNew, setAutoNew] = useState(s?.auto_new || "off");
   const [run, setRun] = useState(s?.run || null);
   const [launch, setLaunch] = useState(s?.launch || null);
   const [busy, setBusy] = useState(false);
@@ -178,7 +185,10 @@ export function PlanSettings({ s, onSave, onClose }) {
       de <input type="time" value={v.from} onChange={e => set({ ...v, from: e.target.value })} style={tin}/>
       à <input type="time" value={v.to} onChange={e => set({ ...v, to: e.target.value })} style={tin}/></div>}
   </div>;
-  const save = async () => { setBusy(true); try { await onSave({ gap: Math.max(0, parseInt(gap) || 0), run, launch }); } finally { setBusy(false); } };
+  const save = async () => { setBusy(true); try { await onSave({ gap: Math.max(0, parseInt(gap) || 0), run, launch, opt_mode: optMode, auto_new: autoNew }); } finally { setBusy(false); } };
+  const modes = (v, set, extra) => <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+    {[...(extra ? [extra] : []), ...OPT_MODES].map(([k, ic, l, tip]) => <button key={k} type="button" data-tip={tip} onClick={() => set(k)}
+      style={{ ...seg, ...(v === k ? segOn : {}) }}>{ic} {l}</button>)}</div>;
   return <div style={{ borderRadius: 16, border: "1px solid var(--border)", background: "var(--surface)", padding: 12, display: "flex", flexDirection: "column", gap: 12 }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <span style={{ fontSize: 14.5, fontWeight: 900, color: "var(--text)", flex: 1 }}>⚙ Les consignes du planning</span>
@@ -199,6 +209,17 @@ export function PlanSettings({ s, onSave, onClose }) {
       <div style={lab}>▶ Heures de lancement</div>
       {range(launch, setLaunch, { from: "08:00", to: "00:00" }, "À toute heure", "Une plage")}
       <div style={hint}>Quand quelqu'un est là pour lancer. Avec 8 h – minuit, une impression peut finir à 2 h du matin, mais la suivante attend 8 h.</div>
+    </div>
+    <div>
+      <div style={lab}>✨ Mode d'optimisation proposé</div>
+      {modes(optMode, setOptMode)}
+      <div style={hint}>Celui que « Optimiser la file » propose d'office ; tu peux en choisir un autre à chaque fois.</div>
+    </div>
+    <div>
+      <div style={lab}>➕ Nouveaux plateaux</div>
+      {modes(autoNew, setAutoNew, ["off", "⏬", "En fin de file", "Comme avant : après les autres retenus"])}
+      <div style={hint}>Un modèle que tu retiens, un exemplaire de plus : ses plateaux vont en fin de file, ou se placent tout seuls à la
+        meilleure place selon ce mode. Rien d'autre ne bouge : ce que tu as rangé ou optimisé reste tel quel.</div>
     </div>
     <button type="button" disabled={busy} onClick={save} style={{ alignSelf: "flex-end", padding: "8px 16px", borderRadius: 12, border: "none", cursor: "pointer",
       background: "linear-gradient(135deg, #6366F1, #8B5CF6)", color: "#fff", fontSize: 13, fontWeight: 900 }}>{busy ? "…" : "Enregistrer"}</button>
