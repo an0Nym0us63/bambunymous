@@ -266,15 +266,17 @@ async def _live_print(d: dict) -> dict:
         from ..db.session import AsyncSessionLocal
         from ..models.print_history import Print
         async with AsyncSessionLocal() as db:
-            p = (await db.execute(select(Print.id, Print.print_date, Print.translated_name, Print.file_name)
+            p = (await db.execute(select(Print.id, Print.print_date, Print.translated_name, Print.file_name, Print.estimated_seconds)
                                   .where(Print.status == "IN_PROGRESS").order_by(Print.id.desc()).limit(1))).first()
     except Exception:
         return {}
     if not p:
         return {}
     tzm = d.get("tz") if isinstance(d.get("tz"), int) else 60
-    start = (p[1] + timedelta(minutes=tzm)).isoformat(timespec="minutes") if p[1] else None
-    return {"print_id": p[0], "start": start, "title": p[2] or p[3]}
+    st = p[1] + timedelta(minutes=tzm) if p[1] else None
+    # la fin prevue au lancement (05/11/2026) : le debut plus la duree estimee par le fichier tranche
+    planned = (st + timedelta(seconds=int(p[4]))).isoformat(timespec="minutes") if st and p[4] else None
+    return {"print_id": p[0], "start": st.isoformat(timespec="minutes") if st else None, "title": p[2] or p[3], "planned_end": planned}
 
 
 def _title(j) -> str:

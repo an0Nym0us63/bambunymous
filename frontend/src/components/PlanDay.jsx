@@ -52,6 +52,8 @@ export function DayStrip({ day, done = [], jobs = [], settings, now, live = null
           left: pct(a), width: pct(Math.max(4, b - a)), borderRadius: 4, border: "1.5px dashed #3B82F6", boxSizing: "border-box",
           background: "repeating-linear-gradient(135deg, color-mix(in srgb, #3B82F6 35%, transparent) 0 4px, transparent 4px 8px)" }}/> : null;
       })()}
+      {live?.planned && live.planned.slice(0, 10) === day && <span data-tip={`Fin prévue au lancement : ${hhmm(live.planned)}`} style={{ position: "absolute", top: -2, bottom: -2,
+        left: pct(minOf(live.planned, day)), width: 0, borderLeft: "2px dashed #8B5CF6" }}/>}
       {nowM != null && <span style={{ position: "absolute", top: 0, bottom: 0, left: pct(nowM), width: 2, background: "#EF4444" }}/>}
     </div>
     {(launch || []).map(([a, b], i) => <span key={`l${i}`} data-tip="Heures de lancement" style={{ position: "absolute", top: 27, height: 3, borderRadius: 2,
@@ -240,6 +242,15 @@ export function ColorDay({ colors, onPick }) {
   </>;
 }
 
+// l'ecart entre la fin prevue au lancement et celle estimee maintenant (05/11/2026) : « +21 min » en orange (en retard),
+// « −8 min » en vert (en avance)
+export function endDrift(planned, end) {
+  if (!planned || !end) return null;
+  const m = Math.round((new Date(end) - new Date(planned)) / 60000);
+  if (Math.abs(m) < 2) return { m: 0, txt: "à l'heure", c: "#16A34A" };
+  const a = Math.abs(m), t = a < 60 ? `${a} min` : `${Math.floor(a / 60)} h${a % 60 ? ` ${String(a % 60).padStart(2, "0")}` : ""}`;
+  return { m, txt: m > 0 ? `+${t}` : `−${t}`, c: m > 0 ? "#EA580C" : "#16A34A" };
+}
 // les deux tuiles du haut du calendrier (05/11/2026) : l'impression en cours (debut, fin estimee, avancement) et les
 // prochains plateaux du planning (debut -> fin)
 const whenTxt = (isoStr, now) => {
@@ -274,6 +285,10 @@ export function NowNextTiles({ pd, onOpenPrint, onPickJob, wide }) {
           <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>
             {live.start ? `${whenTxt(live.start, now)} → ` : ""}<span style={{ color: "#2563EB" }}>fin vers {whenTxt(pd.busy_until, now)}</span>
             <span style={{ color: "var(--muted)", fontWeight: 700 }}> · encore {hm(live.remaining_min * 60)}</span></span>
+          {live.planned_end && (() => { const dr = endDrift(live.planned_end, pd.busy_until); return dr && <span style={{ display: "flex", alignItems: "center", gap: 6,
+            fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+            prévue au lancement : <b style={{ color: "var(--text2)" }}>{whenTxt(live.planned_end, now)}</b>
+            <span style={{ fontWeight: 900, color: dr.c, background: `color-mix(in srgb, ${dr.c} 14%, transparent)`, borderRadius: 7, padding: "0 6px" }}>{dr.txt}</span></span>; })()}
           {pct != null && <span style={{ height: 6, borderRadius: 4, background: "var(--surface2)", overflow: "hidden" }}>
             <span style={{ display: "block", height: "100%", width: `${pct * 100}%`, background: "linear-gradient(90deg, #3B82F6, #60A5FA)" }}/></span>}
         </span>

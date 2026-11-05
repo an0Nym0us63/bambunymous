@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { apiUrl, apiThumb } from "../api/client";
 import MwImg from "./MwImg";
-import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, UNRET, unretained } from "./PlanDay";
+import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, UNRET, unretained, endDrift } from "./PlanDay";
 import { ST, iso, DAYS } from "./PrintCalendar";
 
 // Les vues Semaine et Jour du calendrier (05/11/2026) : une grille horaire ou ce qui est imprime, ce qui imprime et
@@ -106,8 +106,19 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
               borderRadius: "0 0 8px 8px", border: "1.5px dashed #3B82F6", borderTop: "none", boxSizing: "border-box", overflow: "hidden",
               background: "repeating-linear-gradient(135deg, color-mix(in srgb, #3B82F6 22%, transparent) 0 5px, color-mix(in srgb, #3B82F6 8%, transparent) 5px 10px)",
               display: "flex", alignItems: "flex-end", justifyContent: "flex-end", padding: "0 6px 2px" }}>
-            {e.live.end.slice(0, 10) === d && <span style={{ fontSize: 10.5, fontWeight: 900, color: "#2563EB", whiteSpace: "nowrap" }}>⏳ fin vers {hhmm(e.live.end)}</span>}
+            {e.live.end.slice(0, 10) === d && (() => { const dr = endDrift(e.live.planned, e.live.end);
+              return <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, fontWeight: 900, color: "#2563EB", whiteSpace: "nowrap",
+                background: "color-mix(in srgb, var(--surface) 85%, transparent)", borderRadius: 7, padding: "1px 6px" }}>
+                ⏳ fin vers {hhmm(e.live.end)}
+                {dr && <span data-tip={`Prévue au lancement : ${hhmm(e.live.planned)}`} style={{ color: dr.c, background: `color-mix(in srgb, ${dr.c} 15%, transparent)`,
+                  borderRadius: 6, padding: "0 5px" }}>{dr.txt}</span>}</span>; })()}
           </span>)}
+          {/* la fin prevue au lancement : un trait pointille violet, son heure dans le coin */}
+          {live?.planned && live.planned.slice(0, 10) === d && (() => { const y = minOf(live.planned, d) / 60 * hourPx;
+            return <span data-tip={`Fin prévue au lancement : ${hhmm(live.planned)}`} style={{ position: "absolute", left: 0, right: 0, top: y, zIndex: 2,
+              borderTop: "2px dashed #8B5CF6", pointerEvents: "none" }}>
+              <span style={{ position: "absolute", left: 6, top: -9, fontSize: 9.5, fontWeight: 900, color: "#fff", background: "#8B5CF6", borderRadius: 6,
+                padding: "1px 6px", whiteSpace: "nowrap" }}>prévu {hhmm(live.planned)}</span></span>; })()}
           {evs[d].filter(e => e.kind !== "rest").map(e => {
             const top = e.a / 60 * hourPx, h = Math.max(16, (e.b - e.a) / 60 * hourPx - 2);
             const big = h >= 34, plan = e.kind === "plan";
