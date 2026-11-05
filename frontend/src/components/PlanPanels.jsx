@@ -113,26 +113,30 @@ export function PoolGrouped({ jobs, blocked = [], now, edit, drag, onDrag, onOpe
     if (!(j.design_id in at)) { at[j.design_id] = groups.length; groups.push({ id: j.design_id, jobs: [] }); }
     groups[at[j.design_id]].jobs.push(j);
   }
-  return <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+  // en cartes sur une grille (06/11/2026) : une seule colonne au telephone, autant qu'il en tient sur un grand ecran
+  // (avant : une rangee pleine largeur par objet, presque vide)
+  return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 330px), 1fr))", gap: 8, alignItems: "start" }}>
     {groups.map(g => {
       const okJobs = g.jobs.filter(j => !j.blockedWhy), nb = g.jobs.length - okJobs.length;
       const f = okJobs[0] || g.jobs[0], un = unretained(f), tot = okJobs.reduce((a, j) => a + j.seconds, 0);
       return <div key={g.id} style={{ borderRadius: 14, border: `1px solid ${nb ? "color-mix(in srgb, #DC2626 45%, var(--border))" : un ? "color-mix(in srgb, #94A3B8 50%, var(--border))" : "var(--border)"}`,
-        background: un ? "var(--surface2)" : "linear-gradient(135deg, color-mix(in srgb, #22C55E 6%, transparent), transparent 60%), var(--surface2)", padding: 8 }}>
-        <button type="button" onClick={() => onOpen(f)} style={{ display: "flex", gap: 9, alignItems: "center", width: "100%", border: "none", background: "none", padding: 0,
+        background: un ? "var(--surface2)" : "linear-gradient(135deg, color-mix(in srgb, #22C55E 6%, transparent), transparent 60%), var(--surface2)", padding: 9,
+        height: "100%", boxSizing: "border-box" }}>
+        <button type="button" onClick={() => onOpen(f)} style={{ display: "flex", gap: 11, alignItems: "center", width: "100%", border: "none", background: "none", padding: 0,
           cursor: "pointer", textAlign: "left", font: "inherit" }}>
-          <PlateThumb j={{ ...f, thumb: null, plates_total: 1 }} size={38}/>
+          <PlateThumb j={{ ...f, thumb: null, plates_total: 1 }} size={64}/>
           <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: "block", fontSize: 13, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <span style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontSize: 13.5, fontWeight: 900,
+              color: "var(--text)", lineHeight: 1.25 }} data-tip={f.title}>
               {un ? "○ " : ""}{f.title}</span>
-            <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+            <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "var(--muted)", marginTop: 2 }}>
               {okJobs.length} plateau{okJobs.length > 1 ? "x" : ""} · {hm(tot)}
               {okJobs[0]?.start && <> · dès <b style={{ color: "var(--text)" }}>{dayOf(okJobs[0].start, now)}</b> {hhmm(okJobs[0].start)}</>}
               {nb > 0 && <b style={{ color: "#DC2626" }}> · ⛔ {nb} non planifiable{nb > 1 ? "s" : ""}</b>}
               {f.due && <span style={{ color: f.due_ok ? "#16A34A" : "#EF4444", fontWeight: 900 }}> · 🎯 {dueTxt(f.due)}</span>}</span>
           </span>
         </button>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(124px, 1fr))", gap: 5, marginTop: 8 }}>
           {g.jobs.map(j => {
             const bad = !!j.blockedWhy;
             const c = bad ? "#DC2626" : j.too_long ? "#EF4444" : j.locked ? "#4F46E5" : un ? UNRET : j.completes ? "#059669" : "color-mix(in srgb, #22C55E 50%, var(--border))";
@@ -140,11 +144,11 @@ export function PoolGrouped({ jobs, blocked = [], now, edit, drag, onDrag, onOpe
             return <button key={j.key} type="button" draggable={edit && drag && !bad} onDragStart={e => { e.dataTransfer.setData("text/bn-job", j.key); onDrag?.(j.key); }}
               onDragEnd={() => onDrag?.(null)} onClick={() => onOpen(bad ? { ...j, why: j.blockedWhy } : j)}
               data-tip={bad ? `${jobName(j)} : non planifiable · ${(j.blockedWhy || []).join(" · ")}` : `${jobName(j)} · ${when(j.start, now)} → ${when(j.end, now)}`}
-              style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 9px 3px 3px", borderRadius: 10, cursor: edit && drag && !bad ? "grab" : "pointer", font: "inherit",
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 7px 3px 3px", borderRadius: 10, cursor: edit && drag && !bad ? "grab" : "pointer", font: "inherit", minWidth: 0,
                 border: `1.5px ${j.completes || bad || j.locked ? "solid" : "dashed"} ${c}`, textAlign: "left",
                 background: bad ? "color-mix(in srgb, #DC2626 9%, var(--surface))" : "var(--surface)" }}>
               <PlateThumb j={j} size={28}/>
-              <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.15, minWidth: 0 }}>
+              <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.15, minWidth: 0, overflow: "hidden" }}>
                 <span style={{ fontSize: 11, fontWeight: 900, color: bad ? "#DC2626" : "#6366F1", whiteSpace: "nowrap" }}>
                   {j.locked ? "🔒 " : ""}{j.completes ? "🏁 " : ""}{lbl || "Plateau"}{j.load?.length ? " 🧵" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}</span>
                 {bad ? <span style={{ fontSize: 11.5, fontWeight: 900, color: "#DC2626", whiteSpace: "nowrap" }}>⛔ non planifiable</span>
