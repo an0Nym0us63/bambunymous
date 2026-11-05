@@ -97,7 +97,7 @@ export default function MenuSettings() {
         client.get("/home/menu/accounts").then(r => setAccounts(r.data.accounts || [])).catch(() => {}); if (sent.includes(me)) loadNavMenu(true); }}/>}
     <p style={{ margin: "0 0 10px", fontSize: 12.5, color: "var(--muted)", lineHeight: 1.45 }}>
       {who ? `Le menu de ${who} : ses pages, leur ordre, et où les trouver.` : "Tes pages, leur ordre, et où les trouver."} Accueil reste toujours en tête du menu ;
-      Paramètres va dans le menu ou dans le profil. Une page masquée reste joignable par un lien ou la recherche.</p>
+      Paramètres va dans le menu, dans « Plus » ou dans le profil, jamais masqué. Une page masquée reste joignable par un lien ou la recherche.</p>
 
     {/* l'apercu : la barre du bas du telephone, « Plus » et le profil */}
     {saved !== undefined && <div style={{ marginBottom: 12, padding: 10, borderRadius: 14, background: "var(--surface2)", border: "1px solid var(--border)" }}>

@@ -10,7 +10,7 @@ import { useAuth, ROLE_ADMIN } from "../store/auth";
 //   more    : le panneau « Plus » (au telephone) ; sous le menu, a part, sur ordinateur
 //   profile : le menu du profil (la pastille du compte)
 //   hidden  : nulle part (la page reste joignable par un lien, la recherche, une fiche : ce n'est pas un droit)
-// Accueil reste toujours dans la barre ; Parametres ne se masque pas (barre ou profil).
+// Accueil reste toujours dans la barre ; Parametres ne se masque pas (barre, « Plus » ou profil : toujours joignable).
 
 // Une bobine vue de face (flasque, noyau, brin qui part) dans le trait des autres icones : la bibliotheque n'en a
 // pas, et le colis qui la remplacait ne disait rien (28/10/2026)
@@ -41,8 +41,8 @@ export const NAV_ITEMS = [
   { k: "logs",      to: "/logs",                    icon: ScrollText,   label: "Journal",     c: "#64748B", def: "hidden", admin: true },
 ];
 export const PLACES = [["bar", "Menu"], ["more", "Plus"], ["profile", "Profil"], ["hidden", "Masqué"]];
-// les places permises : Accueil, toujours au menu ; Parametres, au menu ou dans le profil
-export const placesOf = k => k === "home" ? ["bar"] : k === "settings" ? ["bar", "profile"] : PLACES.map(p => p[0]);
+// les places permises : Accueil, toujours au menu ; Parametres, au menu, dans « Plus » (06/11/2026) ou dans le profil
+export const placesOf = k => k === "home" ? ["bar"] : k === "settings" ? ["bar", "more", "profile"] : PLACES.map(p => p[0]);
 export const MOBILE_SLOTS = 6;           // la barre du bas : 6 places (comme avant) ; au-dela, 5 et « Plus »
 
 // la liste reglee, completee : les entrees inconnues partent, les nouvelles arrivent a leur place par defaut, a la fin
