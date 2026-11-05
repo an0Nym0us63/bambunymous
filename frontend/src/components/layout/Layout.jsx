@@ -75,7 +75,9 @@ const S = {
     WebkitBackdropFilter:"blur(12px) saturate(140%)",
     borderTop:"1px solid var(--border)",
     position:"fixed", left:0, right:0, bottom:0, zIndex:50,
-    paddingBottom:"calc(env(safe-area-inset-bottom, 0px) * 0.5)" },
+    paddingBottom:"calc(env(safe-area-inset-bottom, 0px) * 0.5)",
+    // les coins arrondis de l'ecran rognaient le premier et le dernier nom (05/11/2026 : le « d » de MakerWorld)
+    paddingLeft:"max(10px, env(safe-area-inset-left, 0px))", paddingRight:"max(10px, env(safe-area-inset-right, 0px))" },
 };
 
 // Une entree du menu : l'icone dans une pastille de la couleur de la page ; la page ouverte, en degrade.
