@@ -1370,7 +1370,10 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                   {/* plus imprime que ce qu'elle avait chez nous au lancement : la suite est passee sous notre zero */}
                   {u.before != null && (u.grams_used || 0) - u.before >= 0.5 && <div data-tip="Le décompte s'arrête à 0 g : ce qu'elle a imprimé au-delà est gardé à part (« Sous notre zéro ») pour l'écart du suivi à sa fin"
                     style={{ fontSize:11, fontWeight:700, color:"#EF4444", marginTop:2 }}>
-                    elle avait {u.before.toFixed(1).replace(".", ",")} g chez nous : {((u.grams_used || 0) - u.before).toFixed(1).replace(".", ",")} g sous notre zéro</div>}
+                    elle avait {u.before.toFixed(1).replace(".", ",")} g chez nous : {((u.grams_used || 0) - u.before).toFixed(1).replace(".", ",")} g sous notre zéro
+                    {/* le cumul : ce sous-zero s'ajoute a celui d'avant (05/11/2026) */}
+                    {u.zero_total != null && u.zero_total > (u.grams_used || 0) - u.before + 0.05 &&
+                      ` (${u.zero_total.toFixed(1).replace(".", ",")} g en tout${u.status === "IN_PROGRESS" ? " à la fin" : ""})`}</div>}
                 </div>
                 <div style={{ textAlign:"right", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
                   <div style={{ fontSize:14, fontWeight:900, ...fGrad("#ef4444", "#f97316") }}>−{u.grams_used?.toFixed(1)} g</div>

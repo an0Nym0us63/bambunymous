@@ -2642,6 +2642,32 @@ async def spool_usage_history(sid: int, _: str = Depends(get_current_user)):
              "print_date": m.at.isoformat() + "Z" if m.at else None, "reverted": m.reverted_at is not None,
              "reverted_at": m.reverted_at.isoformat() + "Z" if m.reverted_at else None} for m in moves]
     out.sort(key=lambda x: x.get("print_date") or "", reverse=True)
+    # le sous-zero cumule a chaque impression (05/11/2026 : « 47 g sous notre zero » sans dire qu'il s'ajoutait aux
+    # 4,8 g d'avant) : on part du cumul garde sur la bobine (le vrai) et on remonte le temps ; une impression en cours
+    # n'y est pas encore (comptee a sa fin) ; une pesee qui l'a efface arrete la remontee
+    import re as _re
+    cum = float(sp.overrun_g or 0) if sp is not None and sp.drift_g is None else None
+    if cum is not None:
+        for x in out:
+            if x.get("kind") == "usage" and x.get("before") is not None and x.get("status") == "IN_PROGRESS":
+                over = float(x.get("grams_used") or 0) - float(x["before"])
+                if over >= 0.5:
+                    x["zero_total"] = round(cum + over, 1)
+        for x in out:
+            if cum is None:
+                break
+            k = x.get("kind")
+            if k == "usage" and x.get("status") != "IN_PROGRESS" and x.get("before") is not None:
+                over = float(x.get("grams_used") or 0) - float(x["before"])
+                if over >= 0.5:
+                    x["zero_total"] = round(cum, 1)
+                    cum = max(0.0, cum - over)
+            elif k in ("rendu", "annule") and not x.get("reverted"):
+                m = _re.search(r"dont ([\d,]+) g sous notre zéro", x.get("file_name") or "")
+                if m:
+                    cum += float(m.group(1).replace(",", "."))
+            elif k == "correction" and "sous notre zéro effacés" in (x.get("file_name") or ""):
+                cum = None
     return out
 
 
