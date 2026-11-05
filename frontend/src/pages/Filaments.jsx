@@ -880,6 +880,21 @@ function FHero({ colors, type, finish = null, color, chips, name, sub, children,
 function DriftRow({ spool, onUpdated }) {
   const isAdmin = useIsAdmin();
   const off = spool.drift_off;
+  // l'ecart se corrige ici aussi (05/11/2026 : seulement depuis les stats, on ne le trouvait pas) ; une bobine archivee
+  // sans mesure peut en recevoir une
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState("");
+  const startEdit = () => { setVal(spool.drift_g != null ? String(spool.drift_g).replace(".", ",") : ""); setEditing(true); };
+  const save = async () => {
+    const v = parseFloat(val.replace(",", ".").replace("−", "-").replace(/\s|g/gi, ""));
+    if (!Number.isFinite(v)) { setEditing(false); return; }
+    try {
+      await client.patch(`/filaments/spools/${spool.id}/drift`, { drift_g: v });
+      egg("derive_ecartee");
+      setEditing(false);
+      onUpdated?.();
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
   const toggle = async () => {
     let v = "";
     if (!off) {
@@ -894,19 +909,40 @@ function DriftRow({ spool, onUpdated }) {
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
   const g = spool.drift_g;
+  if (g == null && !isAdmin) return null;
   return (
     <div style={FROW}>
       <span style={FLAB} data-tip="À sa fin : notre poids moins le vrai (0). Positif, on lui croyait encore du filament ; négatif, elle a imprimé au-delà de notre zéro">Écart du suivi</span>
+      {editing ? (
+        <span style={{ display:"flex", gap:6, alignItems:"center" }}>
+          <input value={val} autoFocus inputMode="decimal" placeholder="ex. −20 ou 15"
+            onChange={e => setVal(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
+            style={{ width:90, padding:"4px 8px", borderRadius:7, fontSize:13, fontWeight:800, background:"var(--surface2)",
+              border:"1px solid var(--border)", color:"var(--text)", outline:"none", textAlign:"right" }}/>
+          <span style={{ fontSize:12, color:"var(--muted)" }}>g</span>
+          <button onClick={save} style={{ padding:"4px 10px", borderRadius:7, fontSize:12, fontWeight:700, background:"#3b82f6", color:"white",
+            border:"none", cursor:"pointer" }}>OK</button>
+          <button onClick={() => setEditing(false)} style={{ padding:"4px 8px", borderRadius:7, fontSize:12, background:"var(--surface2)",
+            border:"1px solid var(--border)", color:"var(--muted)", cursor:"pointer" }}>✕</button>
+        </span>
+      ) : (
       <span style={{ textAlign:"right" }}>
-        <span style={{ ...FVAL, color: off ? "var(--muted)" : Math.abs(g) < 15 ? "#16a34a" : "#F59E0B",
-          textDecoration: off ? "line-through" : "none" }}>{driftTxt(g)}</span>
-        <span style={{ display:"block", fontSize:11, fontWeight:600, color:"var(--muted)" }}>
+        <span style={{ display:"inline-flex", alignItems:"center", gap:6 }}>
+          {g != null ? <span style={{ ...FVAL, color: off ? "var(--muted)" : Math.abs(g) < 15 ? "#16a34a" : "#F59E0B",
+            textDecoration: off ? "line-through" : "none" }}>{driftTxt(g)}</span>
+            : <span style={{ fontSize:12, color:"var(--muted)", fontStyle:"italic" }}>pas mesuré</span>}
+          {isAdmin && <button onClick={startEdit} data-tip={g != null ? "Corriger l'écart" : "Saisir l'écart (ce qu'elle avait chez nous à sa fin, moins le vrai)"}
+            style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2, display:"flex" }}>
+            <Pencil size={13}/></button>}
+        </span>
+        {g != null && <span style={{ display:"block", fontSize:11, fontWeight:600, color:"var(--muted)" }}>
           {off ? (isPast(spool) ? "du passé, hors des stats" : `écartée : ${off}`) : DRIFT_KIND[spool.drift_kind] || ""}
           {isAdmin && <button onClick={toggle} style={{ marginLeft:6, padding:"1px 8px", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer",
             border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text2)" }}>
             {off ? (isPast(spool) ? "Compter" : "Remettre") : "Écarter"}</button>}
-        </span>
-      </span>
+        </span>}
+      </span>)}
     </div>
   );
 }
@@ -1152,7 +1188,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
             <FRow l="Déjà consommé" v={consumed != null ? `${Math.round(consumed)} g` : "poids inconnu"} d={consumedPct != null ? `${consumedPct} % de ${Math.round(total)} g` : null}/>
             <FRow l="Rythme" v={rythme ? rythme.v : (spool.first_used_at ? null : "pas encore utilisée")} d={rythme?.d}/>
             <DryEditRow spoolId={spool.id} spoolName={name} current={spool.last_dried_at} aSecher={aSecher} onUpdated={refresh}/>
-            {spool.drift_g != null && <DriftRow spool={spool} onUpdated={refresh}/>}
+            {(spool.drift_g != null || spool.archived) && <DriftRow spool={spool} onUpdated={refresh}/>}
             {/* a 0 g chez nous mais elle imprime encore : ce qu'elle a deja imprime en dessous, garde pour sa fin */}
             {spool.drift_g == null && spool.overrun_g > 0 && <FRow l="Sous notre zéro" v={driftTxt(-spool.overrun_g)} vc="#EF4444"
               d="imprimé une fois à 0 g chez nous ; compté dans son écart à sa fin"/>}
