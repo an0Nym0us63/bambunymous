@@ -179,8 +179,7 @@ export default function GlobalSearch({ wide = false, mini = false }) {
     ? <button type="button" onClick={() => setOpen(true)} data-tip="Rechercher partout (Ctrl K)" aria-label="Rechercher partout"
         style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 10px", borderRadius: 12, border: "1px solid var(--border)",
           background: "var(--surface2)", color: "var(--muted)", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
-        <Search size={15}/><span style={{ flex: 1, textAlign: "left" }}>Rechercher…</span>
-        <span style={{ fontSize: 10.5, fontWeight: 800, border: "1px solid var(--border)", borderRadius: 6, padding: "1px 5px" }}>Ctrl K</span></button>
+        <Search size={15}/><span style={{ flex: 1, textAlign: "left" }}>Rechercher…</span></button>
     : <button type="button" onClick={() => setOpen(true)} data-tip="Rechercher partout" aria-label="Rechercher partout"
         style={{ width: wide ? 36 : 34, height: wide ? 36 : 34, borderRadius: wide ? 12 : "50%", flexShrink: 0, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
           border: wide ? "1px solid var(--border)" : "none", background: wide ? "var(--surface2)" : "rgba(99,102,241,0.12)", color: wide ? "var(--muted)" : "#6366F1" }}>
