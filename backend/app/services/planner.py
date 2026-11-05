@@ -731,26 +731,36 @@ def mode_score(r: dict, d: dict, now: datetime, mode: str) -> float:
 
 
 def auto_insert(jobs: list, d: dict, now: datetime, busy, loaded: set, new: list, mode: str) -> list:
-    """Les nouveaux plateaux places selon le mode (06/11/2026), sans toucher a l'ordre des autres : chacun essaie une
-    vingtaine de places et garde la meilleure. Rend l'ordre."""
+    """Les nouveaux plateaux places selon le mode (06/11/2026), sans toucher a l'ordre des autres. Chacun cherche en deux
+    temps : une place sur vingt dans toute la file, puis toutes les places autour de la meilleure (une quarantaine
+    d'essais : un modele de 13 plateaux ne fait pas attendre la page). Rend l'ordre."""
+    import time as _t
+    t_end = _t.monotonic() + 6
     order = [j["key"] for j in _ordered(jobs, d["order"], d["pins"])]
     for k in new:
         if k not in order or k in d["locked"] or k in d["pins"]:
             continue
         rest = [x for x in order if x != k]
-        step = max(1, len(rest) // 150)                 # toutes les places (06/11/2026 : une vingtaine en ratait)
-        spots = sorted(set(list(range(0, len(rest) + 1, step)) + [len(rest)]))
-        best = None
-        for i in spots:
+        tried = {}
+
+        def at(i):
+            if i in tried or i < 0 or i > len(rest):
+                return
             o = rest[:i] + [k] + rest[i:]
             r = place(_ordered(jobs, o, d["pins"]), d, now, busy, loaded, _slots())
-            if not any(j["key"] == k for j in r["jobs"]):
-                continue
-            sc = mode_score(r, d, now, mode)
-            if best is None or sc < best[0]:
-                best = (sc, o)
-        if best:
-            order = best[1]
+            tried[i] = mode_score(r, d, now, mode) if any(j["key"] == k for j in r["jobs"]) else None
+        step = max(1, len(rest) // 20)
+        for i in list(range(0, len(rest) + 1, step)) + [len(rest)]:
+            at(i)
+        ok = {i: v for i, v in tried.items() if v is not None}
+        if ok and _t.monotonic() < t_end:
+            b = min(ok, key=ok.get)
+            for i in range(b - step + 1, b + step):
+                at(i)
+        ok = {i: v for i, v in tried.items() if v is not None}
+        if ok:
+            b = min(ok, key=ok.get)
+            order = rest[:b] + [k] + rest[b:]
     return order
 
 
