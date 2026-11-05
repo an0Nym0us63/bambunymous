@@ -103,13 +103,33 @@ function NavItem({ to, icon: Icon, label, c, mini, upd, isActive }) {
 
 // un bouton de la barre du bas : l'icone dans une pastille de la couleur de la page ouverte, son nom dessous
 function BottomItem({ to, onClick, icon: Icon, label, c, isActive, dot }) {
+  // un nom qui ne tient pas (« MakerWorld ») retrecit un peu au lieu d'etre coupe (05/11/2026)
+  const txt = React.useRef(null);
+  const [fs, setFs] = React.useState(null);
+  React.useLayoutEffect(() => {
+    const el = txt.current;
+    if (!el) return undefined;
+    // la largeur exacte du nom a 10,5 px (au demi-pixel pres : arrondie, elle laissait « MakerWorld » coupe), comparee a la
+    // place de l'entree moins 2 px
+    const fit = () => {
+      const cs = getComputedStyle(el), ctx = (fit.c = fit.c || document.createElement("canvas").getContext("2d"));
+      ctx.font = `${cs.fontWeight} 10.5px ${cs.fontFamily}`;
+      const natural = ctx.measureText(label).width, avail = (el.parentElement?.getBoundingClientRect().width || 0) - 2;
+      setFs(avail > 0 && natural > avail ? Math.max(8, Math.floor((10.5 * avail / natural) * 10) / 10) : null);
+    };
+    fit();
+    document.fonts?.ready?.then(fit);              // la police chargee change la largeur
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(fit) : null;
+    ro?.observe(el.parentElement);
+    return () => ro?.disconnect();
+  }, [label, isActive]);                           // la page ouverte passe en gras : plus large
   const inner = <>
     <span style={{ width:48, height:30, borderRadius:15, display:"flex", alignItems:"center", justifyContent:"center",
       transition:"background .2s, box-shadow .2s",
       background: isActive ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 65%, #ffffff))` : "transparent",
       boxShadow: isActive ? `0 6px 14px -6px ${c}` : "none", color: isActive ? "#fff" : "inherit", position:"relative" }}>
       <Icon size={19}/>{dot}</span>
-    <span style={{ maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{label}</span>
+    <span ref={txt} style={{ maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", ...(fs ? { fontSize: fs } : {}) }}>{label}</span>
   </>;
   const st = { flex:1, minWidth:0, display:"flex", flexDirection:"column", alignItems:"center", padding:"8px 0 2px", gap:3, fontSize:10.5,
     textDecoration:"none", fontWeight: isActive ? 800 : 600, color: isActive ? c : "var(--muted)", transition:"color 0.15s",
