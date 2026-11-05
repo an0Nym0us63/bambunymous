@@ -703,7 +703,8 @@ export function useTilesData(status = null, want = null) {
       spools: () => put("spools", get("/filaments/spools", { archived: false })),
       dry: () => put("dry", get("/filaments/drying/overview")),
       // chez un copain : ni mes copains ni mon fil (les siens ne sont pas relayes), la tuile le dit
-      friends: () => { if (!currentFriend()) put("friends", get("/friends/shared/printing")); },
+      // (null, pas rien : sinon la tuile attendait sans fin, 05/11/2026)
+      friends: () => put("friends", currentFriend() ? Promise.resolve(null) : get("/friends/shared/printing")),
       ach: () => put("ach", get("/achievements")),
       month: () => {
         const now = new Date();
@@ -713,7 +714,7 @@ export function useTilesData(status = null, want = null) {
           .then(([cur, prev]) => ({ ...cur, prev })));
       },
       sales: () => put("sales", get("/objects/objects/stats")),
-      feed: () => { if (!currentFriend()) put("feed", get("/notify/me/history")); },
+      feed: () => put("feed", currentFriend() ? Promise.resolve(null) : get("/notify/me/history")),
       attention: () => put("attention", get("/attention")),
       orders: () => put("orders", get("/filaments/incoming").then(r => r.orders || [])),
       // a evaluer : relu avec le reste (une impression qui vient de finir y entre sans recharger la page)
@@ -3953,7 +3954,7 @@ function Countdown({ status, o, sz }) {
       <Stats items={[["Reste", left ? fmtDur(left * 60) : "—"], ["Fin", left ? finAt(left) : "—"],
         ["Couche", status.total_layers > 0 ? `${status.layer} / ${status.total_layers}` : "—"], ["Avancement", `${pct} %`, color], ...facts]}/>
       {/* le dessin de la couche en cours (02/11/2026), lu dans le G-code */}
-      {!currentFriend() && <LayerExplorer status={status}/>}</> : null}
+      <LayerExplorer status={status}/></> : null}
       mini={sz.h === 0.5} summary={live ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13.5 }}>
         <span style={{ color }}>{pct}%</span>{left > 0 && <>{fmtDur(left * 60)}<Muted>· {finAt(left)}</Muted></>}</span> : <Muted size={12.5}>rien en cours</Muted>}>
       {({ W }) => live ? <Stack min={W < 215 ? 150 : 76} head={hero} blocks={[name && { h: 18, node: name }, layers && { h: 30, node: layers },
@@ -3964,7 +3965,8 @@ function Countdown({ status, o, sz }) {
 // la couche en cours (02/11/2026) : son dessin, lu dans le G-code du 3MF tranche ; la part deja imprimee en plein, la
 // couche d'avant en fantome ; en grand, un curseur pour parcourir les couches
 function LayerTile({ status, sz }) {
-  const live = isLive(status) && !currentFriend();
+  // chez un copain aussi (05/11/2026) : /live/layer passe par le relais, comme sa camera
+  const live = isLive(status);
   const { d, ghost } = useLayer(live, null, status?.layer);
   const tot = status?.total_layers || d?.last;
   const [mode, setMode] = useLayerMode();            // 2D ou 3D : le meme choix que la vue en grand (05/11/2026)
