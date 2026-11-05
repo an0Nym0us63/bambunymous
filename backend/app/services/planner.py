@@ -254,6 +254,25 @@ def _reason(why, c: datetime, s: datetime, secs: float, rules: Rules, today) -> 
     return f"Imprimante à l'arrêt (fonctionne de {rt.get('from')} à {rt.get('to')}) : lancée {nxt}"
 
 
+async def _live_print(d: dict) -> dict:
+    """L'impression en cours dans l'historique (05/11/2026, pour la tuile « En cours ») : son numero, son nom traduit et
+    son debut, a l'heure du navigateur."""
+    try:
+        from sqlalchemy import select
+        from ..db.session import AsyncSessionLocal
+        from ..models.print_history import Print
+        async with AsyncSessionLocal() as db:
+            p = (await db.execute(select(Print.id, Print.print_date, Print.translated_name, Print.file_name)
+                                  .where(Print.status == "IN_PROGRESS").order_by(Print.id.desc()).limit(1))).first()
+    except Exception:
+        return {}
+    if not p:
+        return {}
+    tzm = d.get("tz") if isinstance(d.get("tz"), int) else 60
+    start = (p[1] + timedelta(minutes=tzm)).isoformat(timespec="minutes") if p[1] else None
+    return {"print_id": p[0], "start": start, "title": p[2] or p[3]}
+
+
 def _title(j) -> str:
     """Le nom d'un travail : le modele, et son plateau quand il en a plusieurs."""
     pl = f" · plateau {j['plate']}" if j.get("plates_total", 0) > 1 else ""
@@ -585,7 +604,7 @@ async def plan(tz: int | None = None) -> dict:
         return all(x["ok"] for x in deadlines(rr["jobs"], d, now) if x["keys"] and x["keys"][0] in set(ks))
     return {"settings": {k: d[k] for k in DEFAULTS}, "now": now.isoformat(timespec="minutes"),
             "busy_until": busy.isoformat(timespec="minutes") if busy else None,
-            "live": {"name": live[1], "design_id": live[2], "remaining_min": live[0]} if live else None,
+            "live": ({"name": live[1], "design_id": live[2], "remaining_min": live[0], **(await _live_print(d))} if live else None),
             "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix), "status": status,
             "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),
             "manual_done": [{"key": k, "title": v.get("title"), "plate": k.split(":")[-1], "n": v.get("n")}

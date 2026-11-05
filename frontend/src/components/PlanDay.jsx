@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { apiThumb } from "../api/client";
+import { apiThumb, apiUrl } from "../api/client";
 import { colorBg, parseColorsList } from "../utils/colors";
 import MwImg from "./MwImg";
 
@@ -235,6 +235,63 @@ export function ColorDay({ colors, onPick }) {
       </button>)}
     </div>}
   </>;
+}
+
+// les deux tuiles du haut du calendrier (05/11/2026) : l'impression en cours (debut, fin estimee, avancement) et les
+// prochains plateaux du planning (debut -> fin)
+const whenTxt = (isoStr, now) => {
+  if (!isoStr) return "";
+  const d = isoStr.slice(0, 10), t = hhmm(isoStr), today = (now || "").slice(0, 10);
+  if (d === today) return t;
+  const tm = new Date(`${today}T12:00`); tm.setDate(tm.getDate() + 1);
+  const tomorrow = `${tm.getFullYear()}-${String(tm.getMonth() + 1).padStart(2, "0")}-${String(tm.getDate()).padStart(2, "0")}`;
+  return d === tomorrow ? `demain ${t}` : `${new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })} ${t}`;
+};
+export function NowNextTiles({ pd, onOpenPrint, onPickJob, wide }) {
+  const live = pd?.live, now = pd?.now;
+  const next = (pd?.jobs || []).slice(0, wide ? 4 : 3);
+  const card = { flex: "1 1 280px", minWidth: 0, borderRadius: 16, border: "1px solid var(--border)", background: "var(--surface)", padding: 10,
+    display: "flex", flexDirection: "column", gap: 7 };
+  const head = (ic, t, c) => <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: c }}>{ic} {t}</div>;
+  let pct = null;
+  if (live?.start && pd?.busy_until) {
+    const a = new Date(live.start).getTime(), b = new Date(pd.busy_until).getTime(), n = new Date(now).getTime();
+    if (b > a) pct = Math.max(0, Math.min(1, (n - a) / (b - a)));
+  }
+  return <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+    <div style={{ ...card, borderColor: live ? "color-mix(in srgb, #3B82F6 40%, var(--border))" : "var(--border)" }}>
+      {head("⏳", "En cours", "#3B82F6")}
+      {live ? <button type="button" onClick={() => live.print_id && onOpenPrint({ id: live.print_id })}
+        style={{ display: "flex", gap: 10, alignItems: "center", border: "none", background: "none", padding: 0, cursor: live.print_id ? "pointer" : "default",
+          textAlign: "left", font: "inherit", minWidth: 0 }}>
+        {live.print_id && <img src={apiThumb(apiUrl(`/prints/${live.print_id}/image`), 96)} alt="" style={{ width: 48, height: 48, borderRadius: 10, objectFit: "cover",
+          flexShrink: 0, background: "var(--surface2)" }} onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>}
+        <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{live.title || live.name}</span>
+          <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>
+            {live.start ? `${whenTxt(live.start, now)} → ` : ""}<span style={{ color: "#2563EB" }}>fin vers {whenTxt(pd.busy_until, now)}</span>
+            <span style={{ color: "var(--muted)", fontWeight: 700 }}> · encore {hm(live.remaining_min * 60)}</span></span>
+          {pct != null && <span style={{ height: 6, borderRadius: 4, background: "var(--surface2)", overflow: "hidden" }}>
+            <span style={{ display: "block", height: "100%", width: `${pct * 100}%`, background: "linear-gradient(90deg, #3B82F6, #60A5FA)" }}/></span>}
+        </span>
+      </button> : <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>Rien n'imprime en ce moment.</span>}
+    </div>
+    <div style={card}>
+      {head("⏭", "Prochaines", "#16A34A")}
+      {!next.length && <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>Rien de prévu.</span>}
+      {next.map(j => <button key={j.key} type="button" onClick={() => onPickJob(j)}
+        style={{ display: "flex", gap: 8, alignItems: "center", border: "none", background: "none", padding: 0, cursor: "pointer", textAlign: "left", font: "inherit", minWidth: 0 }}>
+        <PlateThumb j={j} size={34}/>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {j.completes ? "🏁 " : ""}{unretained(j) ? "○ " : ""}{j.title}<span style={{ color: "#6366F1" }}>{j.plates_total > 1 ? ` · ${j.plate}/${j.plates_total}` : ""}</span></span>
+          <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <span style={{ color: "var(--text2)" }}>{whenTxt(j.start, now)} → {whenTxt(j.end, now)}</span> · {hm(j.seconds)}
+            {j.load?.length ? <span style={{ color: "#EA580C" }}> · 🧵 {j.load.join(", ")}</span> : ""}</span>
+        </span>
+      </button>)}
+    </div>
+  </div>;
 }
 
 // les plateaux marques faits a la main, a retirer si c'etait une erreur
