@@ -1072,7 +1072,7 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
         // combien d'exemplaires ce print a donnes (plateau duplique sur le plateau d'impression)
         ...prints.filter(pr => (platesOf(pr) || []).includes(pl.index) && (pr.status === "SUCCESS" || pr.status === "PARTIAL")).map(pr => {
           const cur = platesOf(pr) || [], c = copiesOf(pr, cur);
-          return { icon: "🔢", label: c.n === 0 ? "Ne compte pas (relancé)" : `Exemplaires : ×${c.n} (${{ main: "dit à la main", elements: "éléments déclarés", poids: "deviné au poids" }[c.how || (c.hand ? "main" : "poids")] || "par défaut"})`,
+          return { icon: "🔢", label: c.n === 0 ? "Ne compte pas (relancé)" : `Exemplaires : ×${c.n} (${{ main: "dit à la main", groupe: "d'après le groupe", elements: "éléments déclarés", poids: "deviné au poids" }[c.how || (c.hand ? "main" : "poids")] || "par défaut"})`,
             hint: `${pr.translated_name || pr.file_name} · touche pour corriger`,
             onClick: async () => {
               const v = await showChoice(`Combien d'exemplaires de ${cur.length > 1 ? "ces plateaux" : "ce plateau"} ce print a-t-il donnés ?`,

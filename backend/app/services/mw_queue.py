@@ -311,6 +311,36 @@ async def _ams_stock() -> dict:
     return out
 
 
+async def _group_copies(db, pids) -> dict:
+    """Les exemplaires dits par le groupe (06/11/2026) : un groupe d'impressions porte son nombre d'elements (« ces 2
+    impressions ont fait 3 boites ») ; il se repartit entre ses impressions du meme modele et du meme plateau, les plus
+    anciennes d'abord (3 pour 2 : 2 puis 1). Seulement quand il dit plus d'un element. Rend {print_id: exemplaires}."""
+    from sqlalchemy import select
+    from ..models.print_history import Print, Group
+    pids = [int(x) for x in pids if x]
+    if not pids:
+        return {}
+    gids = {g for (g,) in (await db.execute(select(Print.group_id).where(Print.id.in_(pids), Print.group_id.isnot(None)))).all()}
+    if not gids:
+        return {}
+    items = {gid: int(n) for gid, n in (await db.execute(select(Group.id, Group.number_of_items).where(Group.id.in_(gids)))).all()
+             if n and int(n) > 1}
+    if not items:
+        return {}
+    rows = (await db.execute(select(Print.id, Print.group_id, Print.design_id, Print.plate_id, Print.print_date).where(
+        Print.group_id.in_(list(items)), Print.status.in_(("SUCCESS", "PARTIAL", "IN_PROGRESS"))))).all()
+    by = {}
+    for pid, gid, did, plate, at in rows:
+        by.setdefault((gid, str(did), str(plate or "1")), []).append((at, pid))
+    out = {}
+    for (gid, _did, _pl), ps in by.items():
+        ps.sort(key=lambda x: (x[0] is None, x[0], x[1]))
+        base, rem = divmod(items[gid], len(ps))
+        for i, (_at, pid) in enumerate(ps):
+            out[pid] = base + (1 if i < rem else 0)
+    return out
+
+
 async def _printed_plates(dids) -> dict:
     """Mes impressions reussies de ces modeles, une entree par print : {design_id: [{"prof", "plates", "g", "copies"}]}
     (profil « » : pas connu ; plates : les plateaux qu'il couvre, un print qui en regroupe plusieurs comptant pour
@@ -326,6 +356,7 @@ async def _printed_plates(dids) -> dict:
         rows = (await db.execute(select(Print.design_id, Print.plate_id, Print.mw_profile_id, Print.mw_plates,
                                         Print.total_weight_g, Print.number_of_items, Print.id).where(
             Print.design_id.in_(dids), Print.status.in_(("SUCCESS", "PARTIAL"))))).all()
+        gcop = await _group_copies(db, [r[6] for r in rows])
     out = {}
     for did, plate, prof, manual, g, items, pid in rows:
         # les plateaux designes a la main (regroupes, renumerotes) passent avant le numero du fichier,
@@ -340,7 +371,7 @@ async def _printed_plates(dids) -> dict:
         copies = plate_copies(manual)
         for pr, ns in by.items():
             out.setdefault(str(did), []).append({"prof": pr, "plates": ns, "g": _num(g), "copies": copies,
-                                                 "items": int(items or 1), "id": pid})
+                                                 "gcopies": gcop.get(pid), "items": int(items or 1), "id": pid})
     return out
 
 
@@ -396,6 +427,8 @@ def copies_of(e: dict, plate_g: dict, pieces: dict) -> tuple:
     fait 2 pieces ; ses 2 elements declares comptaient pour un seul exemplaire alors qu'il y en avait deux)."""
     if e.get("copies") is not None:
         return e["copies"], "main"
+    if e.get("gcopies") is not None:                 # le nombre d'elements du groupe, reparti (06/11/2026)
+        return e["gcopies"], "groupe"
     ps = e["plates"]
     if all(plate_g.get(n) for n in ps) and e.get("g"):
         return guess_copies(e.get("g"), ps, plate_g), "poids"
@@ -478,6 +511,7 @@ async def _printing_plates() -> dict:
             rows = (await db.execute(select(Print.design_id, Print.plate_id, Print.mw_profile_id, Print.mw_plates,
                                             Print.total_weight_g, Print.number_of_items, Print.id).where(
                 Print.status == "IN_PROGRESS", Print.design_id.isnot(None)))).all()
+            gcop = await _group_copies(db, [r[6] for r in rows])
     except Exception:
         return {}
     out = {}
@@ -492,7 +526,7 @@ async def _printing_plates() -> dict:
             # son profil (06/11/2026) : avec plusieurs profils retenus, seule la ligne du sien est « en cours »
             pr = next((str(k).partition(":")[0].strip() for k in plate_keys(plate, prof, manual)), "")
             out.setdefault(str(did), []).append({"prof": pr, "plates": ns, "g": _num(g), "copies": plate_copies(manual),
-                                                 "items": int(items or 1), "id": pid})
+                                                 "gcopies": gcop.get(pid), "items": int(items or 1), "id": pid})
     return out
 
 
