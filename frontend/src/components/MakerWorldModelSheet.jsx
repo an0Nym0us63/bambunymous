@@ -515,6 +515,27 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                 <button onClick={unpinPlan} disabled={planBusy} title="Oublier ce choix"
                                   style={{ ...linkBtn, padding:"5px 9px", fontSize:11.5, cursor:"pointer", color:"var(--muted)" }}>✕</button>
                               )}
+                              {/* combien d'objets on en veut, comme sur la carte de « A faire » (05/11/2026) : les plateaux
+                                  deja faits comptent, « A faire » et le planning preparent le reste */}
+                              {plan?.instance_id === p.instance_id && (() => {
+                                const n = plan?.qty || 1;
+                                const setN = async v => {
+                                  const q = Math.max(1, Math.min(99, v));
+                                  setPlan(x => ({ ...x, qty: q }));
+                                  try { await client.put(`/makerworld/queue/qty/${id}`, { qty: q }); }
+                                  catch (e) { showAlert(e.response?.data?.detail || e.message); }
+                                };
+                                const b = { width:26, height:26, borderRadius:9, border:"none", background:"var(--surface)", color:"var(--text)", fontSize:14,
+                                  fontWeight:900, cursor:"pointer", lineHeight:1, padding:0 };
+                                return <span data-tip="Combien d'objets en tout : les plateaux déjà faits comptent, « À faire » et le planning préparent le reste"
+                                  style={{ display:"inline-flex", alignItems:"center", gap:3, padding:2, borderRadius:12, background:"var(--surface)",
+                                    border:"1px solid rgba(139,92,246,0.4)" }}>
+                                  <button onClick={() => n > 1 && setN(n - 1)} disabled={n <= 1} aria-label="Un objet de moins" style={{ ...b, opacity: n <= 1 ? 0.4 : 1 }}>‒</button>
+                                  <span style={{ minWidth:24, textAlign:"center", fontSize:12.5, fontWeight:900, color:"#8B5CF6" }}>×{n}</span>
+                                  <button onClick={() => setN(n + 1)} aria-label="Un objet de plus" style={b}>+</button>
+                                  <span style={{ fontSize:11, fontWeight:800, color:"var(--muted)", padding:"0 6px 0 2px" }}>objet{n > 1 ? "s" : ""} voulu{n > 1 ? "s" : ""}</span>
+                                </span>;
+                              })()}
                             </AdminOnly>
                           )}
                           {IS_MOBILE ? (
