@@ -769,8 +769,15 @@ async def skipped_back(pid: int) -> list:
                 if give >= 0.1 and sp and not sp.archived:
                     a = drift.give_back(sp, give)
                     db.add(SpoolMove(spool_id=r.spool_id, grams=give, kind="rendu", print_id=pid, usage_id=r.id,
-                                     label=(label + drift.back_note(a))[:250]))
+                                     label=(label + f" ; consommation {g:.1f} → {g - cut:.1f} g" + drift.back_note(a))[:250]))
                     back.append((r.spool_id, give))
+                # ce qui n'avait pas ete retire (le decompte s'arrete a 0) ne revient pas : la ligne le dit quand meme
+                # (05/11/2026 : 20 g de moins sur une bobine qui n'avait que 22 g, et rien dans son historique)
+                if sp and cut - give >= 0.1:
+                    drift.note(db, sp, "piece", cut - give, f"{label} ; consommation {g:.1f} → {g - cut:.1f} g ; "
+                               + (f"rien à rendre : elle n'avait que {float(bef):.1f} g chez nous" if give < 0.1
+                                  else f"{give:.1f} g rendus, le reste n'avait pas été retiré (elle n'avait que {float(bef):.1f} g)"),
+                               print_id=pid, usage_id=r.id)
                 if rest < 0.05:
                     break
         await db.flush()

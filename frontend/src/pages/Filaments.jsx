@@ -1292,9 +1292,10 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
               }
               // des lignes qui expliquent sans changer le poids (05/11/2026) : imprime sous notre zero, l'ecart du suivi
               // mesure / corrige / ecarte, l'arrivee de la bobine
-              if (u.kind === "zero" || u.kind === "ecart" || u.kind === "ajout") {
+              if (u.kind === "zero" || u.kind === "ecart" || u.kind === "ajout" || u.kind === "piece") {
                 const when = u.print_date ? new Date(u.print_date).toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" }) : null;
-                const [ic, t, c] = u.kind === "zero" ? ["⤵️", "Sous notre zéro", "#EF4444"] : u.kind === "ecart" ? ["🎯", "Écart du suivi", "#14B8A6"] : ["📦", null, "#3B82F6"];
+                const [ic, t, c] = u.kind === "zero" ? ["⤵️", "Sous notre zéro", "#EF4444"] : u.kind === "ecart" ? ["🎯", "Écart du suivi", "#14B8A6"]
+                  : u.kind === "piece" ? ["✂️", "Pièce annulée", "#F97316"] : ["📦", null, "#3B82F6"];
                 return <div key={`i${u.kind}${u.id}`} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 10px", borderRadius:14, border:"1px dashed var(--border)",
                   background:`linear-gradient(135deg, color-mix(in srgb, ${c} 9%, transparent), transparent 55%)` }}>
                   <span style={{ width:46, height:34, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17,
@@ -1304,7 +1305,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                       {t ? `${t}${u.file_name ? ` · ${u.file_name}` : ""}` : u.file_name}</div>
                     <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginTop:1 }}>{when}{u.kind !== "ajout" ? " · n'a pas changé le poids" : ""}</div>
                   </div>
-                  {u.grams != null && u.kind !== "ajout" && <div style={{ fontSize:13, fontWeight:900, color:c, flexShrink:0 }}>{u.kind === "zero" ? "−" : u.grams > 0 ? "+" : u.grams < 0 ? "−" : "±"}{Math.abs(u.grams).toFixed(1)} g</div>}
+                  {u.grams != null && u.kind !== "ajout" && <div style={{ fontSize:13, fontWeight:900, color:c, flexShrink:0 }}>{u.kind === "zero" ? "−" : u.kind === "piece" ? "" : u.grams > 0 ? "+" : u.grams < 0 ? "−" : "±"}{Math.abs(u.grams).toFixed(1)} g{u.kind === "piece" ? " de moins" : ""}</div>}
                 </div>;
               }
               // une correction de poids hors impression (a la main, au scan RFID, a l'archivage, 02/11/2026)

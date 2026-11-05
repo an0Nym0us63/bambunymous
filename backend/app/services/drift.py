@@ -55,7 +55,7 @@ def weighed(sp) -> None:
 
 # l'historique de la bobine dit tout, avec sa cause (05/11/2026) : ces lignes n'y changent pas le poids, elles
 # l'expliquent (« zero » : imprime sous notre zero ; « ecart » : l'ecart du suivi mesure, corrige ou ecarte)
-INFO_KINDS = ("zero", "ecart")
+INFO_KINDS = ("zero", "ecart", "piece")      # « piece » : une piece annulee qui n'avait rien a rendre
 
 
 def note(db, sp, kind: str, grams, label: str, print_id=None, usage_id=None) -> None:
