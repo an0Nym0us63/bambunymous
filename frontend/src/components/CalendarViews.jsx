@@ -34,7 +34,7 @@ export function dayEvents(day, days, jobs, live = null) {
     if (j.end.slice(0, 10) < day || j.start.slice(0, 10) > day) continue;
     const a = minOf(j.start, day), b = minOf(j.end, day);
     if (b <= a) continue;
-    out.push({ kind: "plan", key: j.key + day, a, b, j, color: j.too_long ? "#EF4444" : unretained(j) ? UNRET : j.completes ? "#059669" : "#22C55E" });
+    out.push({ kind: "plan", key: j.key + day, a, b, j, color: j.too_long ? "#EF4444" : j.locked ? "#4F46E5" : unretained(j) ? UNRET : j.completes ? "#059669" : "#22C55E" });
   }
   return out.sort((x, y) => x.a - y.a);
 }
@@ -75,10 +75,15 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
             background: d === pick ? "color-mix(in srgb, #6366F1 12%, transparent)" : "transparent" }}>
           <div style={{ fontSize: 11, fontWeight: 900, color: d === today ? "#6366F1" : "var(--text2)", textTransform: "capitalize" }}>{dayName(d)}</div>
           <div style={{ fontSize: 10, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {done ? hm(done) : ""}{done && planned ? " · " : ""}{planned ? <span style={{ color: "#16A34A" }}>{hm(planned)}</span> : ""}
-            {fin > 0 && <span style={{ marginLeft: 3, padding: "0 4px", borderRadius: 6, background: "#D1FAE5", color: "#065F46", fontWeight: 900 }}>🏁{fin > 1 ? fin : ""}</span>}
+            {done ? hm(done) : ""}{done && planned ? " · " : ""}{planned ? <span style={{ color: "#16A34A" }}>{hm(planned)}</span> : ""}</div>
+          {/* les pastilles du jour, sur leur ligne (05/11/2026 : a la suite des heures, elles etaient coupees) */}
+          <div style={{ display: "flex", justifyContent: "center", gap: 3, flexWrap: "wrap", marginTop: 2, minHeight: 15 }}>
+            {fin > 0 && <span data-tip={`${fin} objet${fin > 1 ? "s" : ""} terminé${fin > 1 ? "s" : ""} ce jour-là`} style={{ padding: "0 5px", borderRadius: 6, background: "#D1FAE5",
+              color: "#065F46", fontSize: 10, fontWeight: 900 }}>🏁{fin > 1 ? ` ${fin}` : ""}</span>}
             {evs[d].some(e => e.kind === "plan" && e.j.low_info?.length) && <span data-tip="Un filament passe sous le seuil ce jour-là"
-              style={{ marginLeft: 3, padding: "0 4px", borderRadius: 6, background: "#FEE2E2", color: "#B91C1C", fontWeight: 900 }}>📉</span>}</div>
+              style={{ padding: "0 5px", borderRadius: 6, background: "#FEE2E2", color: "#B91C1C", fontSize: 10, fontWeight: 900 }}>📉</span>}
+            {evs[d].some(e => e.kind === "plan" && e.j.locked) && <span data-tip="Un plateau figé ce jour-là"
+              style={{ padding: "0 5px", borderRadius: 6, background: "#E0E7FF", color: "#4F46E5", fontSize: 10, fontWeight: 900 }}>🔒</span>}</div>
         </button>;
       })}
     </div>}
@@ -129,21 +134,23 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
               data-tip={`${plan ? jobName(e.j) : title} · ${String(Math.floor(e.a / 60)).padStart(2, "0")}:${String(e.a % 60).padStart(2, "0")}`}
               style={{ position: "absolute", left: 4, right: 3, top, height: h, zIndex: 1, overflow: "hidden", cursor: "pointer", textAlign: "left", font: "inherit",
                 display: "flex", alignItems: big ? "flex-start" : "center", gap: 6, padding: big ? "4px 6px" : "0 6px", borderRadius: 8, boxSizing: "border-box",
-                border: plan ? `1.5px ${e.j.completes ? "solid" : "dashed"} ${e.color}` : "none",
+                border: plan ? `${e.j.locked ? 2 : 1.5}px ${e.j.completes || e.j.locked ? "solid" : "dashed"} ${e.color}` : "none",
                 background: plan ? `color-mix(in srgb, ${e.color} 14%, var(--surface))`
                   : `linear-gradient(135deg, color-mix(in srgb, ${e.color} 80%, #000 0%), color-mix(in srgb, ${e.color} 55%, transparent))`,
                 color: plan ? "var(--text)" : "#fff" }}>
               {big && <Thumb e={e} size={Math.min(one ? 44 : 28, h - 8)}/>}
               <span style={{ minWidth: 0, flex: 1 }}>
                 <span style={{ display: "block", fontSize: 11.5, fontWeight: 900, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis",
-                  whiteSpace: big && one ? "normal" : "nowrap" }}>{plan && e.j.completes ? "🏁 " : ""}{plan && unretained(e.j) ? "○ " : ""}{title}</span>
+                  whiteSpace: big && one ? "normal" : "nowrap" }}>{plan && e.j.locked ? "🔒 " : ""}{plan && e.j.completes ? "🏁 " : ""}{plan && unretained(e.j) ? "○ " : ""}{title}</span>
                 {big && <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, opacity: .85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {plan ? `${hhmm(e.j.start)} → ${hhmm(e.j.end)} · ${plateTxt(e.j)}` : `${e.it.start?.slice(11, 16)} · ${hm(e.it.seconds)}`}</span>}
                 {big && one && plan && e.j.load?.length > 0 && <span style={{ display: "block", fontSize: 10.5, fontWeight: 800, color: "#EA580C" }}>🧵 {e.j.load.join(", ")}</span>}
                 {big && one && plan && e.j.completes && <span style={{ display: "block", fontSize: 10.5, fontWeight: 900, color: "#047857" }}>{doneTxt(e.j)}</span>}
-                {big && plan && e.j.low_info?.length > 0 && <span style={{ display: "block", fontSize: 10.5, fontWeight: 900, color: "#DC2626", whiteSpace: "nowrap", overflow: "hidden",
-                  textOverflow: "ellipsis" }}>📉 {e.j.low_info.map(x => x.name).join(", ")}</span>}
+                {big && one && plan && e.j.low_info?.length > 0 && <span style={{ display: "block", fontSize: 10.5, fontWeight: 900, color: "#DC2626", whiteSpace: "nowrap", overflow: "hidden",
+                  textOverflow: "ellipsis" }}>📉 {e.j.low_info.map(x => x.name).join(", ")} sous le seuil</span>}
               </span>
+              {plan && e.j.low_info?.length > 0 && <span data-tip={`📉 ${e.j.low_info.map(x => `${x.name} sous le seuil (il en restera ${x.left} g)`).join(" · ")}`}
+                style={{ position: "absolute", top: 2, right: 2, padding: "0 4px", borderRadius: 6, background: "#FEE2E2", border: "1px solid #FCA5A5", fontSize: 10, lineHeight: "14px" }}>📉</span>}
             </button>;
           })}
           {d === today && nowM != null && <span style={{ position: "absolute", left: 0, right: 0, top: nowM / 60 * hourPx, height: 2, background: "#EF4444", zIndex: 2 }}>

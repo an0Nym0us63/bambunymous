@@ -67,6 +67,7 @@ export function JobSheet({ j, now, edit, onClose, act }) {
         <span style={{ fontSize: 13, fontWeight: 900, color: "#6366F1" }}>{plateTxt(j)}{j.qty > 1 ? ` · ${j.copy}e sur ${j.qty}` : ""}</span>
         {j.start && <span style={{ fontSize: 14, fontWeight: 900, color: "var(--text)" }}>{when(j.start, now)} → {when(j.end, now)} <span style={{ fontSize: 12, color: "var(--muted)" }}>{hm(j.seconds)}</span></span>}
         <span style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+          {j.locked && <span style={{ fontSize: 11, fontWeight: 900, color: "#4F46E5" }}>🔒 figé</span>}
           {unretained(j) && <span style={{ fontSize: 11, fontWeight: 900, color: "#64748B" }}>○ non retenu</span>}
           {j.completes && <span style={{ fontSize: 11, fontWeight: 900, color: "#047857" }}>{doneTxt(j)}</span>}
           {j.due && <span style={{ fontSize: 11, fontWeight: 900, color: j.due_ok ? "#16A34A" : "#EF4444" }}>🎯 avant le {dueTxt(j.due)}</span>}
@@ -78,11 +79,14 @@ export function JobSheet({ j, now, edit, onClose, act }) {
       </div>
     </div>
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      {edit && !j.why && row("smart", "✨", "Placer au mieux", "Là où il charge le moins de filaments, sans faire rater de date limite, le plus tôt possible", () => run("smart", act.smart))}
-      {edit && !j.why && row("later", "⏭", "Plus tard", "Il quitte sa place et son jour, et passe en fin de file", () => run("later", act.later))}
-      {edit && !j.why && dateRow("daybest", "📌", "Le placer sur un jour", "À la meilleure place de la journée (le moins de filaments à charger), du moment qu'il y finit ; le reste se décale", j.day, v => v && act.dayBest(v), new Date().toISOString().slice(0, 10))}
-      {edit && !j.why && dateRow("day", "📅", "Le poser sur un jour, après le reste", "Il y va après ce qui y est déjà", j.day, v => v && act.day(v), new Date().toISOString().slice(0, 10))}
-      {edit && j.pinned && row("unpin", "📌", "Le rendre à la file", "Il n'est plus posé sur ce jour : il se place où il tient", () => run("unpin", act.unpin))}
+      {edit && !j.why && j.start && (j.locked
+        ? row("unlock", "🔓", "Défiger", "Il redevient libre : le planning, les optimiseurs et la journée couleur peuvent le déplacer", () => run("unlock", act.unlock), "#4F46E5")
+        : row("lock", "🔒", `Figer ici (${when(j.start, now)})`, "Il garde ce jour et cette heure : rien ne le déplacera (optimiser, journée couleur, au mieux, plus tard), le reste s'organise autour", () => run("lock", act.lock), "#4F46E5"))}
+      {edit && !j.why && !j.locked && row("smart", "✨", "Placer au mieux", "Là où il charge le moins de filaments, sans faire rater de date limite, le plus tôt possible", () => run("smart", act.smart))}
+      {edit && !j.why && !j.locked && row("later", "⏭", "Plus tard", "Il quitte sa place et son jour, et passe en fin de file", () => run("later", act.later))}
+      {edit && !j.why && !j.locked && dateRow("daybest", "📌", "Le placer sur un jour", "À la meilleure place de la journée (le moins de filaments à charger), du moment qu'il y finit ; le reste se décale", j.day, v => v && act.dayBest(v), new Date().toISOString().slice(0, 10))}
+      {edit && !j.why && !j.locked && dateRow("day", "📅", "Le poser sur un jour, après le reste", "Il y va après ce qui y est déjà", j.day, v => v && act.day(v), new Date().toISOString().slice(0, 10))}
+      {edit && j.pinned && !j.locked && row("unpin", "📌", "Le rendre à la file", "Il n'est plus posé sur ce jour : il se place où il tient", () => run("unpin", act.unpin))}
       {row("sheet", "🧾", "Fiche du modèle", "Retenir le profil, choisir les plateaux et les filaments de chaque couleur", () => { act.sheet(); onClose(); })}
       {j.day && row("dayview", "🗓", "Voir sa journée", null, () => { act.dayview(); onClose(); })}
       {edit && dateRow("due", "🎯", j.due ? "Changer la date limite" : "Une date limite pour l'objet", j.due ? `Fini avant le ${dueTxt(j.due)}` : "Le planning prévient s'il déborde", j.due, v => act.due(v))}
@@ -130,18 +134,18 @@ export function PoolGrouped({ jobs, blocked = [], now, edit, drag, onDrag, onOpe
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
           {g.jobs.map(j => {
             const bad = !!j.blockedWhy;
-            const c = bad ? "#DC2626" : j.too_long ? "#EF4444" : un ? UNRET : j.completes ? "#059669" : "color-mix(in srgb, #22C55E 50%, var(--border))";
+            const c = bad ? "#DC2626" : j.too_long ? "#EF4444" : j.locked ? "#4F46E5" : un ? UNRET : j.completes ? "#059669" : "color-mix(in srgb, #22C55E 50%, var(--border))";
             const lbl = j.plates_total > 1 ? `P${j.plate}${j.qty > 1 ? `·${j.copy}` : ""}` : j.qty > 1 ? `${j.copy}/${j.qty}` : "";
             return <button key={j.key} type="button" draggable={edit && drag && !bad} onDragStart={e => { e.dataTransfer.setData("text/bn-job", j.key); onDrag?.(j.key); }}
               onDragEnd={() => onDrag?.(null)} onClick={() => onOpen(bad ? { ...j, why: j.blockedWhy } : j)}
               data-tip={bad ? `${jobName(j)} : non planifiable · ${(j.blockedWhy || []).join(" · ")}` : `${jobName(j)} · ${when(j.start, now)} → ${when(j.end, now)}`}
               style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 9px 3px 3px", borderRadius: 10, cursor: edit && drag && !bad ? "grab" : "pointer", font: "inherit",
-                border: `1.5px ${j.completes || bad ? "solid" : "dashed"} ${c}`, textAlign: "left",
+                border: `1.5px ${j.completes || bad || j.locked ? "solid" : "dashed"} ${c}`, textAlign: "left",
                 background: bad ? "color-mix(in srgb, #DC2626 9%, var(--surface))" : "var(--surface)" }}>
               <PlateThumb j={j} size={28}/>
               <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.15, minWidth: 0 }}>
                 <span style={{ fontSize: 11, fontWeight: 900, color: bad ? "#DC2626" : "#6366F1", whiteSpace: "nowrap" }}>
-                  {j.completes ? "🏁 " : ""}{lbl || "Plateau"}{j.load?.length ? " 🧵" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}</span>
+                  {j.locked ? "🔒 " : ""}{j.completes ? "🏁 " : ""}{lbl || "Plateau"}{j.load?.length ? " 🧵" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}</span>
                 {bad ? <span style={{ fontSize: 11.5, fontWeight: 900, color: "#DC2626", whiteSpace: "nowrap" }}>⛔ non planifiable</span>
                   : <span style={{ fontSize: 12, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{dayOf(j.start, now)}
                     <span style={{ fontWeight: 700, color: "var(--muted)" }}> {hhmm(j.start)}</span></span>}
@@ -155,8 +159,8 @@ export function PoolGrouped({ jobs, blocked = [], now, edit, drag, onDrag, onOpe
 }
 
 // l'alerte du seuil (05/11/2026) : quel filament passera sous un quart de bobine, quel jour, pendant quel plateau
-export function LowStockBanner({ jobs, now, onOpen }) {
-  const [all, setAll] = useState(false);
+export function LowStockBanner({ jobs, now, onOpen, inPopup = false }) {
+  const [all, setAll] = useState(inPopup);
   const alerts = (jobs || []).flatMap(j => (j.low_info || []).map(x => ({ ...x, j })));
   if (!alerts.length) return null;
   const shown = all ? alerts : alerts.slice(0, 3);

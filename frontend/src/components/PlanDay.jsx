@@ -104,7 +104,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
     onDrop={e => { const k = e.dataTransfer.getData("text/bn-job"); setOver(false); if (k && k !== j.key) { e.preventDefault(); e.stopPropagation(); onDropBefore?.(k, j.key); } }}
     onClick={compact ? onOpen : undefined}
     style={{ display: "flex", flexDirection: "column", gap: 6, padding: 8, borderRadius: 13, cursor: compact ? "pointer" : edit ? "grab" : "default", opacity: dragging === j.key ? 0.45 : 1,
-      border: `1.5px ${j.completes ? "solid" : "dashed"} ${j.too_long ? "#EF4444" : unretained(j) ? UNRET : j.completes ? GOLD : "color-mix(in srgb, #22C55E 50%, var(--border))"}`,
+      border: `${j.locked ? 2 : 1.5}px ${j.completes || j.locked ? "solid" : "dashed"} ${j.too_long ? "#EF4444" : j.locked ? "#4F46E5" : unretained(j) ? UNRET : j.completes ? GOLD : "color-mix(in srgb, #22C55E 50%, var(--border))"}`,
       boxShadow: over ? "0 -3px 0 0 #6366F1" : "none",
       background: j.completes ? `linear-gradient(120deg, color-mix(in srgb, ${GOLD} 14%, transparent), transparent 60%), var(--surface2)`
         : unretained(j) ? "var(--surface2)" : "color-mix(in srgb, #22C55E 5%, var(--surface2))" }}>
@@ -117,7 +117,8 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
             {hhmm(j.start)} → {j.end.slice(0, 10) !== j.start.slice(0, 10) ? "lendemain " : ""}{hhmm(j.end)}</span>
           <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>{hm(j.seconds)}</span>
           {Math.abs(drift) >= 10 && <span style={{ fontSize: 11.5, fontWeight: 900, color: drift > 0 ? "#F97316" : "#22C55E" }}>{drift > 0 ? `+${hm(drift * 60)}` : `−${hm(-drift * 60)}`}</span>}
-          {j.pinned && <span data-tip="Posé sur ce jour" style={{ fontSize: 11 }}>📌</span>}
+          {j.locked ? <span data-tip="Figé : rien ne le déplace (optimiser, journée couleur…)" style={{ fontSize: 11 }}>🔒</span>
+            : j.pinned && <span data-tip="Posé sur ce jour" style={{ fontSize: 11 }}>📌</span>}
         </div>
         <div style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text2)", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
           overflow: "hidden" }}>{j.title}</div>
@@ -128,9 +129,10 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
         </div>
       </div>
     </div>
-    {(j.completes || j.due || j.load?.length > 0 || unretained(j) || j.awaits_order?.length > 0 || j.low_after?.length > 0) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+    {(j.completes || j.due || j.load?.length > 0 || unretained(j) || j.locked || j.awaits_order?.length > 0 || j.low_after?.length > 0) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
       {j.awaits_order?.length > 0 && tag(`🚚 compte sur la commande : ${j.awaits_order.join(", ")}`, "#0EA5E9", "Le stock ne suffit pas : ce plateau prend sur une bobine commandée, pas encore reçue")}
       {j.low_after?.length > 0 && tag(`📉 sous le seuil : ${j.low_after.join(", ")}`, "#DC2626", "Après ce plateau, il restera moins d'un quart de bobine de ce filament")}
+      {j.locked && tag(`🔒 figé à ${hhmm(j.start)}`, "#4F46E5", "Figé à ce jour et cette heure : optimiser, journée couleur, au mieux ou plus tard ne le déplacent pas")}
       {unretained(j) && tag("○ non retenu", "#64748B", "Profil par défaut, pas retenu dans « À faire » : planifié après les modèles retenus. Retiens-le depuis sa fiche (sa vignette) pour le planifier en priorité")}
       {j.completes && tag(doneTxt(j), "#047857", "Avec ce plateau, tous ceux de l'objet sont faits")}
       {j.due && tag(`🎯 avant le ${dueTxt(j.due)}`, j.due_ok ? "#16A34A" : "#EF4444", j.due_ok ? "L'objet sera fini à temps" : "Le dernier plateau de l'objet finit après cette date")}

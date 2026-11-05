@@ -450,6 +450,16 @@ async def mw_plan_place_day(body: dict = Body({}), _: str = Depends(require_mw))
         raise HTTPException(400, str(e))
 
 
+@router.post("/plan/lock")
+async def mw_plan_lock(body: dict = Body({}), _: str = Depends(require_mw)):
+    """Figer ({key, lock: true}) ou defiger ({key, lock: false}) un plateau du planning."""
+    from ....services import planner as P
+    try:
+        return await P.lock(str(body.get("key") or ""), body.get("lock", True) is not False)
+    except P.PlanError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/plan/later")
 async def mw_plan_later(body: dict = Body({}), _: str = Depends(require_mw)):
     """« Plus tard » : le plateau ({key}) quitte sa place et passe en fin de file."""

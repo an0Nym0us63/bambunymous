@@ -172,6 +172,8 @@ export default function PrintCalendar() {
   const jobAct = j => ({
     smart: () => send("/makerworld/plan/smart", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
     later: () => send("/makerworld/plan/later", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
+    lock: () => send("/makerworld/plan/lock", { key: j.key, lock: true }, "post").then(ok => { if (ok) egg("planning_fige"); }),
+    unlock: () => send("/makerworld/plan/lock", { key: j.key, lock: false }, "post"),
     day: v => moveDay(j.key, v),
     dayBest: v => placeDay(j.key, v),
     unpin: () => unpin(j.key),
@@ -421,6 +423,15 @@ export default function PrintCalendar() {
       {showPlan && pd?.advice?.length > 0 && <button type="button" onClick={() => setPop("advice")} data-tip="Les conseils du planning"
         style={{ ...pill, color: "#D97706", borderColor: "color-mix(in srgb, #F59E0B 45%, var(--border))", background: "color-mix(in srgb, #F59E0B 10%, var(--surface2))" }}>
         💡 {pd.advice.length}</button>}
+      {/* les plateaux figes : combien, et leur liste */}
+      {showPlan && pd?.jobs?.some(j => j.locked) && <button type="button" onClick={() => setPop("locked")} data-tip="Plateaux figés : optimiser, journée couleur, au mieux ou plus tard ne les déplacent pas"
+        style={{ ...pill, color: "#4F46E5", borderColor: "color-mix(in srgb, #4F46E5 40%, var(--border))", background: "color-mix(in srgb, #4F46E5 8%, var(--surface2))" }}>
+        🔒 {pd.jobs.filter(j => j.locked).length} figé{pd.jobs.filter(j => j.locked).length > 1 ? "s" : ""}</button>}
+      {/* le seuil, comme les conseils (05/11/2026) : un bouton, la liste dans une fenetre */}
+      {showPlan && pd?.jobs?.some(j => j.low_info?.length) && <button type="button" onClick={() => setPop("low")}
+        data-tip="Des filaments passeront sous le seuil (un quart de bobine) pendant le planning"
+        style={{ ...pill, color: "#DC2626", borderColor: "color-mix(in srgb, #DC2626 40%, var(--border))", background: "color-mix(in srgb, #DC2626 7%, var(--surface2))" }}>
+        📉 {pd.jobs.reduce((a, j) => a + (j.low_info?.length || 0), 0)} sous le seuil</button>}
       {showPlan && pd?.blocked?.length > 0 && <button type="button" onClick={() => setPop("blocked")} data-tip="Plateaux que le stock et les commandes ne permettent pas de poser"
         style={{ ...pill, color: "#DC2626", borderColor: "color-mix(in srgb, #DC2626 45%, var(--border))", background: "color-mix(in srgb, #DC2626 9%, var(--surface2))" }}>
         ⛔ {pd.blocked.length} non planifiable{pd.blocked.length > 1 ? "s" : ""}</button>}
@@ -428,7 +439,6 @@ export default function PrintCalendar() {
         style={{ ...pill, color: "#16A34A", borderColor: "color-mix(in srgb, #22C55E 45%, var(--border))" }}>📋 La file ({pd.jobs.length})</button>}
     </div>
     {pd?.status && showPlan && <PlanStatus st={pd.status} live={null} check={pd.check}/>}
-    {pd && showPlan && <LowStockBanner jobs={pd.jobs} now={pd.now} onOpen={j => setJobSel(j)}/>}
     {pd && showPlan && <NowNextTiles pd={pd} wide={wide} onOpenPrint={it => nav(`/prints?id=${it.id}`)} onPickJob={j => setJobSel(j)}/>}
     {showPlan && (pd?.deadlines || []).filter(x => !x.ok).map(x => <PlanStatus key={x.design_id}
       st={{ state: "deadline", text: `${x.title} ne sera pas fini avant le ${dueTxt(x.due)} : voir les conseils` }}/>)}
@@ -442,6 +452,12 @@ export default function PrintCalendar() {
     {jobSel && <JobSheet j={jobSel} now={pd?.now} edit={edit} onClose={() => setJobSel(null)} act={jobAct(jobSel)}/>}
     {pop === "advice" && <PlanPopup title={`Conseils (${pd?.advice?.length || 0})`} icon="💡" color="#F59E0B" onClose={() => setPop(null)}>
       <PlanAdvice items={pd?.advice} edit={edit} onApply={a => { applyAdvice(a); setPop(null); }}/></PlanPopup>}
+    {pop === "locked" && <PlanPopup title="Plateaux figés" icon="🔒" color="#4F46E5" onClose={() => setPop(null)}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45, marginBottom: 8 }}>
+        Ils gardent leur jour et leur heure : le reste s'organise autour. Touche-en un pour le défiger.</div>
+      <PoolGrouped jobs={(pd?.jobs || []).filter(j => j.locked)} now={pd?.now} edit={edit} onOpen={j => setJobSel(j)}/></PlanPopup>}
+    {pop === "low" && <PlanPopup title="Sous le seuil" icon="📉" color="#DC2626" onClose={() => setPop(null)}>
+      <LowStockBanner jobs={pd?.jobs} now={pd?.now} inPopup onOpen={j => setJobSel(j)}/></PlanPopup>}
     {pop === "blocked" && <PlanPopup title="Non planifiables" icon="⛔" color="#DC2626" onClose={() => setPop(null)}>
       <BlockedList items={pd?.blocked || []} onOpen={b => setJobSel(b)}/></PlanPopup>}
     {pop === "pool" && <PlanPopup title={`La file · ${pd?.jobs?.length || 0} plateaux`} icon="📋" color="#22C55E" onClose={() => setPop(null)}>
