@@ -1022,7 +1022,7 @@ function NextSorted({ models, card }) {
       Trier
       <select value={by} onChange={e => setBy(e.target.value)} style={{ height: 30, borderRadius: 9, border: "1px solid var(--border)", maxWidth: "100%",
         background: "var(--surface2)", color: "var(--text)", fontWeight: 700, fontSize: 12.5, padding: "0 8px" }}>
-        {QUEUE_SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        {QUEUE_SORTS.filter(([v]) => v !== "plan").map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
     </label>
     {list.some(canGo) && <><H2>Imprimables maintenant</H2>{grid(list.filter(canGo))}</>}

@@ -7,6 +7,7 @@ export const QUEUE_SORTS = [
   ["nhours", "le plus d'heures faisables maintenant"],
   ["ngrams", "le plus de grammes faisables maintenant"],
   ["ready", "la plus grande part prête"],
+  ["plan", "selon le planning"],
 ];
 
 // « le plus pret » : pret AMS, puis en partie (la part des plateaux prets), puis stock OK, puis ce qui manque
@@ -20,8 +21,16 @@ const CMP = {
   ngrams: (a, b) => now(b, "weight_g") - now(a, "weight_g") || readiness(b) - readiness(a),
 };
 
-// la liste triee (une copie) ; « prio » ou un tri inconnu la rend telle quelle
-export const sortQueue = (rows, by) => (CMP[by] ? [...rows].sort(CMP[by]) : rows);
+// la liste triee (une copie) ; « prio » ou un tri inconnu la rend telle quelle. « plan » (06/11/2026) : dans l'ordre ou le
+// planning les imprimera (son premier plateau) ; plan : {design_id: {first}} ; sans planning, ceux qui n'y sont pas a la fin
+export const sortQueue = (rows, by, plan) => {
+  if (by === "plan") {
+    if (!plan) return rows;
+    const f = r => plan[r.design_id]?.first || "9999";
+    return [...rows].sort((a, b) => f(a).localeCompare(f(b)));
+  }
+  return CMP[by] ? [...rows].sort(CMP[by]) : rows;
+};
 
 // Ou j'en suis des plateaux retenus, en series : on peut refaire un modele des mois plus tard. La serie en
 // cours est celle d'apres le plateau le moins imprime ; un plateau est « fait » s'il l'a ete plus que lui.

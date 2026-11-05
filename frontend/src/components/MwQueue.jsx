@@ -278,7 +278,7 @@ export default function MwQueue() {
   if (!q) return <p style={msg}>Lecture de la liste… (la première fois, chaque fiche est lue sur MakerWorld)</p>;
   const t = q.totals;
   const filtered = q.models.filter(r => sorting || cutting || choosing || filter === "all" || r.status === filter);
-  const rows = sorting || cutting ? filtered : sortQueue(filtered, sortBy);
+  const rows = sorting || cutting ? filtered : sortQueue(filtered, sortBy, plan?.by);
   const cutAt = q.until ? q.models.findIndex(r => r.design_id === q.until.design_id) : -1;
   const picked = q.picked ? new Set(q.picked.ids) : null;
   const marks = choosing || picked;                // cases a cocher visibles
