@@ -3967,7 +3967,7 @@ function LayerTile({ status, sz }) {
   const live = isLive(status) && !currentFriend();
   const { d, ghost } = useLayer(live, null, status?.layer);
   const tot = status?.total_layers || d?.last;
-  const [mode] = useLayerMode();                     // 2D ou 3D : choisi dans la vue en grand (05/11/2026)
+  const [mode, setMode] = useLayerMode();            // 2D ou 3D : le meme choix que la vue en grand (05/11/2026)
   const s3 = useShell(live && mode === "3d" && d?.ok, d?.print_id);
   return (
     <Tile icon={<Layers size={15}/>} color="#8B5CF6" label="Couche en cours" zoom={live ? <LayerExplorer status={status}/> : null}
@@ -3976,7 +3976,13 @@ function LayerTile({ status, sz }) {
       {({ W, H }) => !live ? <Empty>Rien en cours d'impression</Empty>
         : !d ? <Empty>…</Empty>
         : !d.ok ? <Empty>Pas de G-code pour cette impression</Empty>
-        : <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 0 }}>
+        : <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 0, position: "relative" }}>
+          {/* la bascule 2D / 3D, discrete dans le coin (05/11/2026) ; le clic n'ouvre pas la vue en grand */}
+          <button type="button" onClick={e => { e.stopPropagation(); const v = mode === "3d" ? "2d" : "3d"; setMode(v); if (v === "3d") egg("couche_3d"); }}
+            data-tip={mode === "3d" ? "Revenir à la couche seule (2D)" : "Voir toute l'impression en 3D"} aria-label={mode === "3d" ? "Vue 2D" : "Vue 3D"}
+            style={{ position: "absolute", top: 0, right: 0, zIndex: 1, border: "1px solid var(--border)", borderRadius: 7, padding: "1px 6px",
+              fontSize: 10, fontWeight: 900, letterSpacing: ".02em", cursor: "pointer", opacity: 0.7,
+              background: "color-mix(in srgb, var(--surface) 80%, transparent)", color: "var(--muted)" }}>{mode === "3d" ? "2D" : "3D"}</button>
           {mode === "3d" ? <Layer3D s={s3} d={d} now={d.layer} w={Math.max(60, Math.floor(W))} h={Math.max(50, Math.floor(H) - 18)}/>
             : <LayerCanvas d={d} ghost={ghost} w={Math.max(60, Math.floor(W))} h={Math.max(50, Math.floor(H) - 18)}/>}
           <Muted size={11.5}>couche {d.layer} / {tot}{Object.keys(d.skipped || {}).length > 0 &&
