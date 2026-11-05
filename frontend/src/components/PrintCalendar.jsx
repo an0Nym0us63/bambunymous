@@ -9,7 +9,7 @@ import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 import MwImg from "./MwImg";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
-import { PlanPopup, JobSheet, PoolGrouped, BlockedList, LowStockBanner } from "./PlanPanels";
+import { PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, poolGroups, BlockedList, LowStockBanner } from "./PlanPanels";
 import { DayStrip, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
@@ -84,6 +84,7 @@ export default function PrintCalendar() {
   const edit = useCanMw();                            // ranger : droit MakerWorld, jamais chez un copain
   // les fenetres (05/11/2026) : un plateau et ses actions, les conseils, la file (telephone), les non planifiables
   const [jobSel, setJobSel] = useState(null);
+  const [modelSel, setModelSel] = useState(null);     // la fiche d'un modele de la file (06/11/2026)
   const [pop, setPop] = useState(null);               // "advice" | "pool" | "blocked"
   const [pick, setPick] = useState(() => iso(new Date()));
   // la vue (05/11/2026) : le mois, la semaine (grille horaire ; un agenda au telephone) ou le jour
@@ -153,6 +154,21 @@ export default function PrintCalendar() {
   const placeDay = (k, day) => send("/makerworld/plan/place-day", { key: k, day }, "post").then(ok => { if (ok) egg("planning_glisse"); });
   // un objet en tete de file (pour tenir sa date limite)
   const toFront = ks => arrange({ order: [...ks, ...keys.filter(k => !ks.includes(k))] });
+  // tout un modele (06/11/2026) : ses plateaux libres (pas figes), dans leur ordre
+  const modelKeys = did => (pd?.jobs || []).filter(j => j.design_id === did && !j.locked).map(j => j.key);
+  const modelAct = did => {
+    const ks = modelKeys(did), j0 = (pd?.jobs || []).find(j => j.design_id === did) || (pd?.blocked || []).find(j => j.design_id === did);
+    return {
+      // caler sur un jour : en tete de ce jour, a la suite ; ce qui n'y tient pas glisse au lendemain
+      dayAll: day => arrange({ order: [...ks, ...keys.filter(k => !ks.includes(k))], pins: Object.fromEntries(ks.map(k => [k, day])) }),
+      front: () => arrange({ order: [...ks, ...keys.filter(k => !ks.includes(k))], pins: Object.fromEntries(ks.map(k => [k, null])) }),
+      unpinAll: () => arrange({ pins: Object.fromEntries(ks.map(k => [k, null])) }),
+      laterAll: () => j0 && send("/makerworld/plan/later", { key: j0.key, whole: true }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
+      chain: mode => send("/makerworld/plan/chain", { design_id: did, mode }, "post").then(ok => { if (ok && mode) egg("planning_traite"); }),
+      due: v => setDue(did, v),
+      sheet: () => setSheet(j0?.mw_id || did),
+    };
+  };
   const applyAdvice = a => a.kind === "front" ? toFront(a.keys) : a.kind === "after" ? moveAfter(a.key, a.ref) : moveBefore(a.key, a.ref);
   // le champ date se trouvait cache sous la ligne : sur ordinateur, le clic ne l'ouvrait pas (05/11/2026, showPicker) ;
   // et un message dit ce qui a ete pose
@@ -400,11 +416,11 @@ export default function PrintCalendar() {
   // la file : chaque impression prevue, dans l'ordre, a glisser sur un jour du calendrier
   const pool = showPlan && pd?.jobs?.length ? <div style={{ borderRadius: 18, border: "1px solid var(--border)", background: "var(--surface)", padding: 10 }}>
     <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#22C55E", marginBottom: 7 }}>
-      La file · {pd.jobs.length} plateau{pd.jobs.length > 1 ? "x" : ""}{edit && wide ? " · glisse un plateau sur un jour, touche-le pour ses actions" : ""}
+      La file · {poolGroups(pd.jobs, pd.blocked).length} modèles · {pd.jobs.length} plateau{pd.jobs.length > 1 ? "x" : ""}{edit ? " · touche un modèle pour ses actions et celles de ses plateaux" : ""}
       {pd.jobs.some(unretained) && <span style={{ display: "block", marginTop: 3, fontSize: 11, fontWeight: 700, letterSpacing: 0, textTransform: "none", color: "var(--muted)" }}>
         ○ en gris : modèles pas retenus dans « À faire » (profil par défaut), planifiés après les retenus.</span>}</div>
     {/* regroupee par objet (05/11/2026) : son en-tete, puis ses plateaux */}
-    <PoolGrouped jobs={pd.jobs} blocked={pd.blocked} now={pd.now} edit={edit} drag={wide} onDrag={setDragging} onOpen={j => setJobSel(j)}/>
+    <PoolSummary jobs={pd.jobs} blocked={pd.blocked} now={pd.now} onOpenModel={setModelSel}/>
   </div> : null;
   return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
     {/* le mois et ses chiffres ; sur mobile, la date et ‹ › restent en haut sous l'en-tete (05/11/2026) */}
@@ -462,6 +478,8 @@ export default function PrintCalendar() {
       {chip("Occupation", days ? `${Math.round(occ * 100)} %` : "…", "#EC4899")}
       {chip("Jours actifs", days ? `${mActive} / ${monthDays.length}` : "…", "#22C55E")}
     </div>}
+    {modelSel && <ModelSheet g={poolGroups(pd?.jobs, pd?.blocked).find(g => g.id === modelSel)} now={pd?.now} edit={edit}
+      onClose={() => setModelSel(null)} onPick={setJobSel} act={modelAct(modelSel)}/>}
     {jobSel && <JobSheet j={jobSel} now={pd?.now} edit={edit} onClose={() => setJobSel(null)} act={jobAct(jobSel)}/>}
     {pop === "advice" && <PlanPopup title={`Conseils (${pd?.advice?.length || 0})`} icon="💡" color="#F59E0B" onClose={() => setPop(null)}>
       <PlanAdvice items={pd?.advice} edit={edit} onApply={a => { applyAdvice(a); setPop(null); }}/></PlanPopup>}
@@ -474,7 +492,7 @@ export default function PrintCalendar() {
     {pop === "blocked" && <PlanPopup title="Non planifiables" icon="⛔" color="#DC2626" onClose={() => setPop(null)}>
       <BlockedList items={pd?.blocked || []} onOpen={b => setJobSel(b)}/></PlanPopup>}
     {pop === "pool" && <PlanPopup title={`La file · ${pd?.jobs?.length || 0} plateaux`} icon="📋" color="#22C55E" onClose={() => setPop(null)}>
-      <PoolGrouped jobs={pd?.jobs || []} blocked={pd?.blocked || []} now={pd?.now} edit={edit} onOpen={j => setJobSel(j)}/></PlanPopup>}
+      <PoolSummary jobs={pd?.jobs || []} blocked={pd?.blocked || []} now={pd?.now} onOpenModel={setModelSel}/></PlanPopup>}
     {side ? <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 12, alignItems: "start" }}>
       <div {...swipeProps} style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>{viewMain}{pool}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 12, maxHeight: "calc(100dvh - 40px)", overflowY: "auto" }}>{detail}{advice}</div>

@@ -665,6 +665,56 @@ def optimize(jobs: list, loaded: set, keep: list | None = None) -> list:
     return out
 
 
+def night_fill(jobs: list, order: list, d: dict, now: datetime, busy, loaded: set, movable: set, rounds: int = 20) -> list:
+    """Remplir les nuits (06/11/2026). Avec des heures de lancement (on lance de 8 h a 00 h 30) et l'imprimante qui a le
+    droit de tourner apres, le dernier plateau lance avant la coupure doit finir au plus pres de la prochaine heure de
+    lancement, moins la pause : il imprime la nuit et le suivant part a 8 h pile. A chaque nuit perdue (une attente due
+    a l'heure de lancement), on cherche parmi les plateaux qui suivent (deplacables : ni figes ni poses sur un jour)
+    celui qui, lance a la place du dernier de la soiree, laisse le moins de temps mort ; il passe devant. Finir un peu
+    apres l'heure de lancement compte moitie moins qu'une attente (l'imprimante, elle, travaille)."""
+    rules = Rules(d)
+    if not rules.launch:
+        return order
+    order = list(order)
+    seen = set()
+    for _ in range(rounds):
+        r = place(_ordered(jobs, order, d["pins"]), d, now, busy, loaded, _slots())
+        pl = r["jobs"]
+        pos = {k: i for i, k in enumerate(order)}
+        moved = False
+        for i in range(len(pl) - 1):
+            a, b = pl[i], pl[i + 1]
+            a_s, a_e, b_s = (datetime.fromisoformat(a["start"]), datetime.fromisoformat(a["end"]),
+                             datetime.fromisoformat(b["start"]))
+            free = a_e + rules.gap
+            if b_s - free < timedelta(minutes=30) or a["key"] in seen:
+                continue
+            nxt, why, _tl = rules.earliest(free, b["seconds"])
+            if why != "launch":
+                continue                              # une attente qui ne vient pas de l'heure de lancement
+            target = nxt - rules.gap
+
+            def loss(secs):
+                e = a_s + timedelta(seconds=secs)
+                return (target - e).total_seconds() if e <= target else (e - target).total_seconds() * 0.5
+            # lance a l'heure de a : il faut que les regles l'acceptent (plage de fonctionnement)
+            cands = [x for x in pl[i + 1:i + 31] if x["key"] in movable and x["key"] in pos
+                     and rules.earliest(a_s, x["seconds"])[0] == a_s and not rules.earliest(a_s, x["seconds"])[2]]
+            seen.add(a["key"])
+            if not cands or a["key"] not in movable or a["key"] not in pos:
+                continue
+            best = min(cands, key=lambda x: loss(x["seconds"]))
+            if loss(best["seconds"]) + 20 * 60 < loss(a["seconds"]):
+                order.remove(best["key"])
+                order.insert(order.index(a["key"]), best["key"])
+                seen.add(best["key"])
+                moved = True
+                break
+        if not moved:
+            break
+    return order
+
+
 # ── ce que la page lit ───────────────────────────────────────────────────────
 async def _context(tz: int | None):
     from . import mw_queue as Q
@@ -918,17 +968,23 @@ async def optimize_plan(day: str | None = None) -> dict:
         for j in r["jobs"][:i0]:
             before |= _sig(j)
         best = optimize(on, before)
-        # le plus long en dernier : il imprime pendant la nuit ou la fin de journee
-        if len(best) > 2:
+        # sans heures de lancement : le plus long en dernier, il imprime pendant la nuit ou la fin de journee
+        if len(best) > 2 and not Rules(d).launch:
             long_i = max(range(len(best)), key=lambda i: best[i]["seconds"])
             if best[long_i]["seconds"] >= 4 * 3600:
                 best.append(best.pop(long_i))
         # le jour garde sa place dans l'ordre general : ses travaux reprennent leurs rangs, dans le nouvel ordre
-        return await arrange({"order": _replace([j["key"] for j in r["jobs"]], [j["key"] for j in on], [j["key"] for j in best]),
-                              "pins": {j["key"]: day for j in best}})
+        order = _replace([j["key"] for j in r["jobs"]], [j["key"] for j in on], [j["key"] for j in best])
+        # avec des heures de lancement : le dernier de la soiree finit au plus pres de l'heure ou l'on relance
+        if Rules(d).launch:
+            pins = {**d["pins"], **{j["key"]: day for j in best}}
+            order = night_fill(jobs, order, {**d, "pins": pins}, now, busy, loaded, {j["key"] for j in best})
+        return await arrange({"order": order, "pins": {j["key"]: day for j in best}})
     free = [j for j in jobs if j["key"] not in d["pins"] and j["key"] not in d["locked"]]
     best = optimize(free, loaded)
     order = _replace([j["key"] for j in jobs], [j["key"] for j in free], [j["key"] for j in best])
+    # les nuits remplies (06/11/2026) : avant la coupure des lancements, le plateau qui finit au plus pres de la reprise
+    order = night_fill(jobs, order, d, now, busy, loaded, {j["key"] for j in free})
     # enchainer les couleurs ne doit pas faire deborder une date limite : un objet qui ne tient pas passe en tete,
     # les dates les plus proches d'abord (s'il ne tient pas meme en tete, il y reste : c'est le plus urgent)
     for _ in range(3):

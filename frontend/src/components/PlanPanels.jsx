@@ -41,9 +41,11 @@ export function StockTags({ j }) {
 }
 
 // la fiche d'actions d'un plateau : le placer au mieux, plus tard, sur un jour ; la fiche du modele ; fait ; date limite
-export function JobSheet({ j, now, edit, onClose, act }) {
+// les lignes d'action d'une fiche : un bouton (icone, nom, explication) ou un choix de date ; close : la fiche se ferme
+// apres l'action (celle d'un plateau) ou reste ouverte pour voir le resultat (celle d'un modele)
+function useActRows(onDone) {
   const [busy, setBusy] = useState(null);
-  const run = async (k, fn) => { setBusy(k); try { await fn(); onClose(); } finally { setBusy(null); } };
+  const run = async (k, fn) => { setBusy(k); try { await fn(); onDone?.(); } finally { setBusy(null); } };
   const row = (k, ic, label, hint, onClick, tone = "var(--text)") => <button key={k} type="button" disabled={!!busy} onClick={onClick}
     style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer",
       background: "var(--surface)", textAlign: "left", font: "inherit", opacity: busy && busy !== k ? 0.5 : 1 }}>
@@ -60,6 +62,11 @@ export function JobSheet({ j, now, edit, onClose, act }) {
       <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>{hint}</span></span>
     <input type="date" onClick={e => { try { e.currentTarget.showPicker?.(); } catch { /* rien */ } }} value={value || ""} min={min} onChange={e => run(k, () => onPick(e.target.value || null))}
       style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%" }}/></label>;
+  return { busy, run, row, dateRow };
+}
+
+export function JobSheet({ j, now, edit, onClose, act }) {
+  const { busy, run, row, dateRow } = useActRows(onClose);
   return <PlanPopup title={j.title} icon="🧩" color={j.why ? "#DC2626" : unretained(j) ? UNRET : j.completes ? "#059669" : "#22C55E"} onClose={onClose} z={5300}>
     <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
       <PlateThumb j={j} size={64}/>
@@ -126,6 +133,129 @@ function ChainPick({ j, busy, run, act }) {
           color: cur === k ? "#fff" : "var(--muted)", background: cur === k ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "transparent" }}>{l}</button>)}
     </div>
   </div>;
+}
+
+// La file en resume (06/11/2026) : une carte par modele, sans ses plateaux (la page en devenait illisible). Sa
+// vignette, son nom, combien de plateaux et d'heures, de quand a quand, ce qui demande attention, et une frise d'un
+// trait par plateau (vert : prevu ; indigo : fige ; rouge : non planifiable). La toucher ouvre sa fiche (ModelSheet).
+export function poolGroups(jobs, blocked = []) {
+  const groups = [], at = {};
+  for (const j of [...(jobs || []), ...(blocked || []).map(b => ({ ...b, blockedWhy: b.why }))]) {
+    if (!(j.design_id in at)) { at[j.design_id] = groups.length; groups.push({ id: j.design_id, jobs: [] }); }
+    groups[at[j.design_id]].jobs.push(j);
+  }
+  return groups;
+}
+const gInfo = g => {
+  const ok = g.jobs.filter(j => !j.blockedWhy), f = ok[0] || g.jobs[0];
+  const starts = ok.map(j => j.start).filter(Boolean).sort(), ends = ok.map(j => j.end).filter(Boolean).sort();
+  return { ok, f, nb: g.jobs.length - ok.length, tot: ok.reduce((a, j) => a + j.seconds, 0), first: starts[0], last: ends[ends.length - 1],
+    locked: ok.filter(j => j.locked).length, pinned: ok.filter(j => j.pinned && !j.locked).length, load: ok.some(j => j.load?.length),
+    low: ok.some(j => j.low_after?.length), wait: ok.some(j => j.awaits_order?.length) };
+};
+const chipS = c => ({ fontSize: 10.5, fontWeight: 900, color: c, background: `color-mix(in srgb, ${c} 13%, transparent)`, borderRadius: 7,
+  padding: "1px 6px", whiteSpace: "nowrap" });
+export function PoolSummary({ jobs, blocked = [], now, onOpenModel }) {
+  const groups = poolGroups(jobs, blocked);
+  return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))", gap: 8 }}>
+    {groups.map(g => {
+      const x = gInfo(g), f = x.f, un = unretained(f);
+      const sameDay = x.first && x.last && x.first.slice(0, 10) === x.last.slice(0, 10);
+      return <button key={g.id} type="button" onClick={() => onOpenModel(g.id)}
+        style={{ display: "flex", gap: 11, alignItems: "center", padding: 9, borderRadius: 14, cursor: "pointer", textAlign: "left", font: "inherit", minWidth: 0,
+          border: `1px solid ${x.nb ? "color-mix(in srgb, #DC2626 45%, var(--border))" : un ? "color-mix(in srgb, #94A3B8 50%, var(--border))" : "var(--border)"}`,
+          background: un ? "var(--surface2)" : "linear-gradient(135deg, color-mix(in srgb, #22C55E 6%, transparent), transparent 60%), var(--surface2)" }}>
+        <PlateThumb j={{ ...f, thumb: null, plates_total: 1 }} size={60}/>
+        <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontSize: 13.5, fontWeight: 900,
+            color: "var(--text)", lineHeight: 1.25 }}>{un ? "○ " : ""}{f.title}</span>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+            {x.ok.length} plateau{x.ok.length > 1 ? "x" : ""} · {hm(x.tot)}
+            {x.first && <> · {sameDay ? <><b style={{ color: "var(--text)" }}>{dayOf(x.first, now)}</b> {hhmm(x.first)}–{hhmm(x.last)}</>
+              : <>du <b style={{ color: "var(--text)" }}>{dayOf(x.first, now)}</b> au <b style={{ color: "var(--text)" }}>{dayOf(x.last, now)}</b></>}</>}</span>
+          {/* une frise : un trait par plateau */}
+          <span style={{ display: "flex", gap: 2, height: 5 }}>
+            {g.jobs.map(j => <span key={j.key} style={{ flex: 1, borderRadius: 3, background: j.blockedWhy ? "#DC2626" : j.locked ? "#4F46E5"
+              : un ? UNRET : j.completes ? "#059669" : "color-mix(in srgb, #22C55E 55%, var(--border))" }}/>)}</span>
+          {(x.nb || f.due || f.chain || x.locked || x.pinned || x.load || x.low || x.wait) ? <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {x.nb > 0 && <span style={chipS("#DC2626")}>⛔ {x.nb} non planifiable{x.nb > 1 ? "s" : ""}</span>}
+            {f.due && <span style={chipS(f.due_ok ? "#16A34A" : "#EF4444")}>🎯 {dueTxt(f.due)}</span>}
+            {f.chain && <span style={chipS("#0EA5E9")}>{CHAIN_TXT[f.chain]}</span>}
+            {x.locked > 0 && <span style={chipS("#4F46E5")}>🔒 {x.locked}</span>}
+            {x.pinned > 0 && <span style={chipS("#7C3AED")}>📌 {x.pinned}</span>}
+            {x.load && <span style={chipS("#EA580C")}>🧵</span>}
+            {x.wait && <span style={chipS("#0EA5E9")}>🚚</span>}
+            {x.low && <span style={chipS("#DC2626")}>📉</span>}
+          </span> : null}
+        </span>
+      </button>;
+    })}
+  </div>;
+}
+
+// La fiche d'un modele du planning (06/11/2026) : en haut ce qui vaut pour tout le modele (caler tous ses plateaux
+// sur un jour, en tete, plus tard, d'une traite, date limite…), dessous chacun de ses plateaux, a toucher pour ses
+// actions a lui. Elle reste ouverte apres une action : on voit les plateaux bouger.
+export function ModelSheet({ g, now, edit, onClose, onPick, act }) {
+  const { busy, run, row, dateRow } = useActRows(null);
+  if (!g) return null;
+  const x = gInfo(g), f = x.f, un = unretained(f), free = x.ok.filter(j => !j.locked);
+  const today = new Date().toISOString().slice(0, 10);
+  const sec = t => <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#16A34A", margin: "6px 0 2px" }}>{t}</div>;
+  return <PlanPopup title={f.title} icon="🧩" color={un ? UNRET : "#22C55E"} onClose={onClose} z={5250}>
+    <div style={{ display: "flex", gap: 11, alignItems: "center", marginBottom: 10 }}>
+      <PlateThumb j={{ ...f, thumb: null, plates_total: 1 }} size={72}/>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3, fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>
+        <span><b style={{ color: "var(--text)" }}>{x.ok.length} plateau{x.ok.length > 1 ? "x" : ""}</b> à faire · {hm(x.tot)}{f.qty > 1 ? ` · ${f.qty} exemplaires voulus` : ""}</span>
+        {x.first && <span>du <b style={{ color: "var(--text)" }}>{when(x.first, now)}</b> au <b style={{ color: "var(--text)" }}>{when(x.last, now)}</b></span>}
+        <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {un && <span style={chipS("#64748B")}>○ non retenu</span>}
+          {x.nb > 0 && <span style={chipS("#DC2626")}>⛔ {x.nb} non planifiable{x.nb > 1 ? "s" : ""}</span>}
+          {f.due && <span style={chipS(f.due_ok ? "#16A34A" : "#EF4444")}>🎯 avant le {dueTxt(f.due)}</span>}
+          {f.chain && <span style={chipS("#0EA5E9")}>{CHAIN_TXT[f.chain]}</span>}
+        </span>
+      </div>
+    </div>
+    {edit && <>
+      {sec("Tout le modèle")}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {un ? <div style={{ padding: "10px 12px", borderRadius: 12, border: "1px dashed color-mix(in srgb, #94A3B8 60%, var(--border))", background: "var(--surface2)",
+            fontSize: 12, fontWeight: 700, color: "var(--text2)", lineHeight: 1.4 }}>○ Pas retenu : ses plateaux passent après tous les plateaux retenus, sans jour.
+            Pour les placer, retiens son profil dans <b>Fiche du modèle</b>.</div>
+          : free.length > 0 && <>
+            {dateRow("dayall", "📌", `Caler ${free.length > 1 ? `les ${free.length} plateaux` : "le plateau"} sur un jour`,
+              "Ils prennent la tête de ce jour, à la suite ; ce qui n'y tient pas passe au lendemain, puis au jour d'après", f.day, v => v && act.dayAll(v), today)}
+            {row("front", "⏫", "Tout en tête de file", "Ses plateaux passent avant tous les autres (ceux posés sur un jour y retournent à la file)", () => run("front", act.front))}
+            {row("later", "⏬", "Tout plus tard", "Ses plateaux passent en fin de file, dans leur ordre (un modèle retenu reste devant les non retenus)", () => run("later", act.laterAll))}
+            {x.pinned > 0 && row("unpin", "↩", "Les rendre à la file", `${x.pinned} plateau${x.pinned > 1 ? "x sont posés" : " est posé"} sur un jour : ils se replacent où ils tiennent`, () => run("unpin", act.unpinAll))}
+          </>}
+        {act.chain && (f.plates_total > 1 || f.qty > 1) && <ChainPick j={f} busy={busy} run={run} act={act}/>}
+        {dateRow("due", "🎯", f.due ? "Changer la date limite" : "Une date limite", f.due ? `Fini avant le ${dueTxt(f.due)} (son dernier plateau)` : "Son dernier plateau fini avant ce jour ; le planning prévient s'il déborde", f.due, v => act.due(v))}
+        {row("sheet", "🧾", "Fiche du modèle", "Retenir le profil, choisir les plateaux, les filaments et le nombre d'exemplaires", () => { act.sheet(); onClose(); })}
+      </div>
+    </>}
+    {sec(`Plateau par plateau (${g.jobs.length})`)}
+    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+      {g.jobs.map(j => {
+        const bad = !!j.blockedWhy;
+        const c = bad ? "#DC2626" : j.locked ? "#4F46E5" : un ? UNRET : j.completes ? "#059669" : "color-mix(in srgb, #22C55E 50%, var(--border))";
+        return <button key={j.key} type="button" onClick={() => onPick(bad ? { ...j, why: j.blockedWhy } : j)}
+          style={{ display: "flex", alignItems: "center", gap: 9, padding: "5px 10px 5px 5px", borderRadius: 12, cursor: "pointer", font: "inherit", textAlign: "left",
+            border: `1.5px ${j.completes || bad || j.locked ? "solid" : "dashed"} ${c}`, background: bad ? "color-mix(in srgb, #DC2626 8%, var(--surface))" : "var(--surface)" }}>
+          <PlateThumb j={j} size={38}/>
+          <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
+            <span style={{ fontSize: 12, fontWeight: 900, color: bad ? "#DC2626" : "#6366F1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {j.locked ? "🔒 " : ""}{j.pinned && !j.locked ? "📌 " : ""}{j.completes ? "🏁 " : ""}{plateTxt(j)}{j.qty > 1 ? ` · ${j.copy}e/${j.qty}` : ""}
+              {j.load?.length ? " 🧵" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}</span>
+            {bad ? <span style={{ fontSize: 11.5, fontWeight: 800, color: "#DC2626" }}>⛔ non planifiable · {(j.blockedWhy || []).join(" · ")}</span>
+              : <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text)" }}>{dayOf(j.start, now)} <span style={{ fontWeight: 700, color: "var(--muted)" }}>
+                {hhmm(j.start)} → {hhmm(j.end)} · {hm(j.seconds)}</span></span>}
+          </span>
+          <span style={{ color: "var(--muted)", fontSize: 13 }}>›</span>
+        </button>;
+      })}
+    </div>
+  </PlanPopup>;
 }
 
 // la file, regroupee par objet : son en-tete (vignette, nom, combien de plateaux, combien d'heures, le prochain),
