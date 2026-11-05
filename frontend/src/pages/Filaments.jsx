@@ -2363,6 +2363,17 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
     swatch:           f.swatch || false,
     label_printed:    f.label_printed || false,
     to_order:         f.to_order || false,
+    // la fiche technique (05/11/2026) : posee par la synchro, ou a la main quand aucun catalogue ne la donne
+    density: f.density != null ? String(f.density) : "",
+    nozzle_min: f.nozzle_min != null ? String(f.nozzle_min) : "",
+    nozzle_max: f.nozzle_max != null ? String(f.nozzle_max) : "",
+    bed_min: f.bed_min != null ? String(f.bed_min) : "",
+    bed_max: f.bed_max != null ? String(f.bed_max) : "",
+    dry_temp: f.dry_temp != null ? String(f.dry_temp) : "",
+    dry_hours: f.dry_hours != null ? String(f.dry_hours) : "",
+    td: f.td != null ? String(f.td) : "",
+    gtin: f.gtin != null ? String(f.gtin) : "",
+    buy_url: f.buy_url != null ? String(f.buy_url) : "",
   });
 
   const color = hexDisplay(f.color);
@@ -2417,6 +2428,17 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
         swatch:            form.swatch,
         label_printed:     form.label_printed,
         to_order:          form.to_order,
+        // vide : efface (null) ; un nombre a virgule accepte
+        density: form.density === "" ? null : Number(String(form.density).replace(",", ".")) || null,
+        nozzle_min: form.nozzle_min === "" ? null : Number(String(form.nozzle_min).replace(",", ".")) || null,
+        nozzle_max: form.nozzle_max === "" ? null : Number(String(form.nozzle_max).replace(",", ".")) || null,
+        bed_min: form.bed_min === "" ? null : Number(String(form.bed_min).replace(",", ".")) || null,
+        bed_max: form.bed_max === "" ? null : Number(String(form.bed_max).replace(",", ".")) || null,
+        dry_temp: form.dry_temp === "" ? null : Number(String(form.dry_temp).replace(",", ".")) || null,
+        dry_hours: form.dry_hours === "" ? null : Number(String(form.dry_hours).replace(",", ".")) || null,
+        td: form.td === "" ? null : Number(String(form.td).replace(",", ".")) || null,
+        gtin: form.gtin.trim() || null,
+        buy_url: form.buy_url.trim() || null,
       });
       setEditing(false);
       onUpdated?.(r.data);
@@ -2516,6 +2538,18 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               {F("Nom traduit (français)","translated_name")}
               {F("Marque","manufacturer")}
               {F("Sous-type (ex: PLA Basic)","fila_type")}
+              {/* la fiche technique (05/11/2026) */}
+              <details style={{ marginBottom:10 }}>
+                <summary style={{ cursor:"pointer", fontSize:12.5, fontWeight:800, color:"var(--text2)", marginBottom:8 }}>🧪 Impression (buse, plateau, densité, séchage, TD…)</summary>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))", gap:"0 10px" }}>
+                  {F("Buse min (°C)","nozzle_min")}{F("Buse max (°C)","nozzle_max")}
+                  {F("Plateau min (°C)","bed_min")}{F("Plateau max (°C)","bed_max")}
+                  {F("Densité (g/cm³)","density")}{F("Transparence (TD)","td")}
+                  {F("Séchage (°C)","dry_temp")}{F("Durée de séchage (h)","dry_hours")}
+                </div>
+                {F("Code-barres","gtin")}
+                {F("Lien d'achat","buy_url")}
+              </details>
               <div style={{ marginBottom:10 }}>
                 <label style={lStyle}>Couleur(s) — hex séparées par virgule si multi</label>
                 <input style={iStyle} value={form.colors_input}

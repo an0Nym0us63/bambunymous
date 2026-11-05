@@ -37,8 +37,10 @@ const isBambu = b => normB(b).startsWith("bambu");
 
 // brand0 : la marque du filament ; une autre que Bambu Lab ouvre le catalogue des autres marques sur elle (02/11/2026)
 // withMeasured : l'onglet « Mesurées » (toute la bibliotheque FilamentColors, Bambu compris) : le navigateur des catalogues
-export default function CatalogPicker({ onPick, field, family0 = "", type0 = "", near = null, brand0 = "", withMeasured = false }) {
-  const [src, setSrc] = useState(brand0 && !isBambu(brand0) ? "ofd" : "bambu");
+// only (05/11/2026, le navigateur par source) : un seul catalogue, sans onglets : « bambu », « own », « ofd » ou « fc »
+export default function CatalogPicker({ onPick, field, family0 = "", type0 = "", near = null, brand0 = "", withMeasured = false, only = "" }) {
+  const [src, setSrc] = useState(only ? (only === "bambu" ? "bambu" : only === "fc" ? "fc" : "ofd") : brand0 && !isBambu(brand0) ? "ofd" : "bambu");
+  const onlyQ = only === "own" || only === "ofd" ? { only } : {};
   const [families, setFamilies] = useState([]);
   const [typesByFamily, setTypesByFamily] = useState({});
   const [brands, setBrands] = useState(null);              // catalogue des autres marques : [{name, count, families}]
@@ -67,7 +69,7 @@ export default function CatalogPicker({ onPick, field, family0 = "", type0 = "",
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!ofd || brands) return;
-    client.get(fcs ? "/filaments/catalog/fc/brands" : "/filaments/catalog/ofd/brands").then(({ data }) => {
+    client.get(fcs ? "/filaments/catalog/fc/brands" : "/filaments/catalog/ofd/brands", { params: onlyQ }).then(({ data }) => {
       const list = data.brands || [];
       setBrands(list);
       const hit = list.find(x => normB(x.name) === normB(brand0));
@@ -80,7 +82,7 @@ export default function CatalogPicker({ onPick, field, family0 = "", type0 = "",
   useEffect(() => {
     if (ofd && !brand) { setEntries([]); setTotal(0); setLoading(brands == null); return; }
     setLoading(true);
-    const params = ofd ? { brand } : { lang: "fr" };
+    const params = ofd ? { brand, ...onlyQ } : { lang: "fr" };
     if (family) params.family = family;
     if (type && !ofd) params.fila_type = type;
     if (dq.trim()) params.q = dq.trim();
@@ -108,8 +110,8 @@ export default function CatalogPicker({ onPick, field, family0 = "", type0 = "",
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ display: "flex", gap: 6 }}>{tab("bambu", "Bambu Lab")}{tab("ofd", "🌍 Autres marques")}
-        {withMeasured && tab("fc", "🔬 Mesurées")}</div>
+      {!only && <div style={{ display: "flex", gap: 6 }}>{tab("bambu", "Bambu Lab")}{tab("ofd", "🌍 Autres marques")}
+        {withMeasured && tab("fc", "🔬 Mesurées")}</div>}
       {ofd && <Select searchable value={brand} onChange={e => { setBrand(e.target.value); setFamily(""); setType(""); }} style={field}
         options={[{ value: "", label: brands == null ? "Chargement des marques…" : "Choisis une marque" },
                   ...(brands || []).map(b => ({ value: b.name, label: `${b.name} · ${b.count}` }))]}/>}
@@ -257,14 +259,72 @@ export function CatalogLinkSheet({ f, onClose, onDone, z = 1600 }) {
 // une entree s'ouvre sur sa fiche des catalogues (temperatures, sechage, densite, code-barres, liens d'achat...)
 export function CatalogBrowser({ onClose, z = 1500 }) {
   const [pick, setPick] = useState(null);
+  const [mode, setMode] = useState("all");          // all : la vue regroupee ; src : un catalogue a la fois (05/11/2026)
+  const [srcs, setSrcs] = useState(null);
+  const [one, setOne] = useState(null);             // le catalogue parcouru seul
+  useEffect(() => { if (mode === "src" && !srcs) client.get("/filaments/catalog/sources").then(r => setSrcs(r.data.sources || [])).catch(() => setSrcs([])); }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
   const field = { width: "100%", padding: "9px 12px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13 };
+  const picked = e => { setPick(e); egg("catalogues_parcourus"); };
+  const modeBtn = (id, label) => <button type="button" onClick={() => { setMode(id); setOne(null); setPick(null); }} aria-pressed={mode === id}
+    style={{ border: "none", borderRadius: 9, padding: "5px 12px", fontSize: 12, fontWeight: 900, cursor: "pointer",
+      background: mode === id ? "#14B8A6" : "transparent", color: mode === id ? "#fff" : "var(--text2)" }}>{label}</button>;
+  const cur = (srcs || []).find(s => s.id === one);
   return createPortal(<FSheet onClose={onClose} z={z}>
     <div style={{ padding: "40px 16px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#14B8A6" }}>📚 Les catalogues</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, fontSize: 10.5, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#14B8A6" }}>📚 Les catalogues</div>
+        <span style={{ display: "inline-flex", padding: 2, gap: 2, borderRadius: 11, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+          {modeBtn("all", "Regroupés")}{modeBtn("src", "Par source")}</span>
+      </div>
       {pick ? <EntryFacts e={pick} onBack={() => setPick(null)}/>
-        : <CatalogPicker onPick={e => { setPick(e); egg("catalogues_parcourus"); }} field={field} withMeasured/>}
+        : mode === "all" ? <CatalogPicker onPick={picked} field={field} withMeasured/>
+        : !one ? <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {!srcs && <div style={{ fontSize: 12.5, color: "var(--muted)" }}>…</div>}
+            {(srcs || []).map(s => <button key={s.id} type="button" onClick={() => setOne(s.id)} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%",
+              textAlign: "left", padding: "10px 12px", borderRadius: 14, cursor: "pointer", border: `1px solid ${s.c}44`,
+              background: `linear-gradient(135deg, ${s.c}18, transparent 70%), var(--surface)` }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 14, fontWeight: 900, color: "var(--text)" }}>{s.name}</span>
+                <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>{s.sub}</span></span>
+              <span style={{ fontSize: 12.5, fontWeight: 900, color: s.c }}>{s.count.toLocaleString("fr-FR")}</span>
+              <span style={{ fontSize: 16, color: "var(--muted)" }}>›</span></button>)}
+          </div>
+        : <>
+            <button type="button" onClick={() => setOne(null)} style={{ alignSelf: "flex-start", border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)",
+              borderRadius: 10, padding: "5px 11px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>‹ Les sources</button>
+            <div style={{ fontSize: 15, fontWeight: 900, color: cur?.c || "var(--text)" }}>{cur?.name}</div>
+            {one === "profiles" ? <ProfilesList/> : <CatalogPicker key={one} only={one} onPick={picked} field={field}/>}
+          </>}
     </div>
   </FSheet>, document.body);
+}
+
+// les profils Bambu Studio : un par filament Bambu, sa fiche depliable
+function ProfilesList() {
+  const [q, setQ] = useState("");
+  const [d, setD] = useState(null);
+  const [open, setOpen] = useState(null);
+  useEffect(() => { const t = setTimeout(() => client.get("/filaments/catalog/profiles", { params: { q } }).then(r => setD(r.data)).catch(() => setD({ entries: [] })), 200);
+    return () => clearTimeout(t); }, [q]);
+  return <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    <div style={{ position: "relative" }}>
+      <Search size={15} style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--muted)", pointerEvents: "none" }}/>
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher un filament (PLA Matte, GFA01…)"
+        style={{ width: "100%", height: 40, borderRadius: 20, padding: "0 14px 0 38px", fontWeight: 600, fontSize: 13, border: "1px solid var(--border)",
+          background: "var(--surface)", color: "var(--text)", boxSizing: "border-box" }}/>
+    </div>
+    {!d ? <div style={{ fontSize: 12.5, color: "var(--muted)" }}>…</div> : !d.entries.length
+      ? <div style={{ fontSize: 12.5, color: "var(--muted)" }}>{q ? "Aucun résultat" : "Profils pas encore téléchargés (avec le nuancier, au démarrage)"}</div>
+      : d.entries.map(p => <div key={p.id} style={{ borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface2)", overflow: "hidden" }}>
+        <button type="button" onClick={() => setOpen(open === p.id ? null : p.id)} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+          padding: "9px 12px", border: "none", background: "none", cursor: "pointer" }}>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>{p.name}</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", fontFamily: "monospace" }}>{p.id}{p.type ? ` · ${p.type}` : ""}</span></span>
+          <span style={{ fontSize: 14, color: "var(--muted)", transform: open === p.id ? "rotate(90deg)" : "none" }}>›</span></button>
+        {open === p.id && <div style={{ padding: "0 12px 10px" }}><FactsList facts={p.facts}/></div>}
+      </div>)}
+  </div>;
 }
 
 function EntryFacts({ e, onBack }) {

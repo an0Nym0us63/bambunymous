@@ -71,6 +71,9 @@ def from_store(code: str) -> list:
     from . import bambu_store
     e = (bambu_store.load().get("codes") or {}).get(str(code).strip()) or {}
     out = []
+    # une couleur vendue d'une seule facon : son lien est range sous « any » (05/11/2026 : il manquait sur la fiche)
+    if e.get("any") and not e.get("spool") and not e.get("refill"):
+        out.append({"k": "buy_any", "label": "Racheter", "value": "boutique Bambu", "url": e["any"], "src": "boutique"})
     if e.get("spool"):
         out.append({"k": "buy_spool", "label": "Racheter (bobine 1 kg)", "value": "boutique Bambu", "url": e["spool"], "src": "boutique"})
     if e.get("refill"):
@@ -185,10 +188,8 @@ def fields(profile: dict | None, view: dict | None, fc: dict | None, store_code:
             put("bed_max", max(beds), "bambu")
         put("dry_temp", _i(p.get("filament_dev_ams_drying_temperature")), "bambu")
         put("dry_hours", _num(p.get("filament_dev_ams_drying_time")), "bambu")
-    if store_code:
-        from . import bambu_store
-        e = (bambu_store.load().get("codes") or {}).get(str(store_code).strip()) or {}
-        put("buy_url", e.get("spool") or e.get("refill"), "boutique")
+    # pas de lien d'achat pour un Bambu (05/11/2026) : le lien direct de la boutique (bonne fiche, bonne couleur) est
+    # deja calcule a chaque fois depuis son code couleur ; le recopier ferait doublon
     # 3. Open Filament Database
     if vsrc == "ofd":
         put("density", _num(t.get("density")), "ofd")

@@ -835,6 +835,35 @@ async def catalog_facts(source: str = "", ref: str = "", fila_id: str = "", code
     return await _aio.to_thread(_facts_for, source, ref, fila_id, code, brand, (name,) if name else (), fila_type, family, hex)
 
 
+@router.get("/catalog/sources")
+async def catalog_sources(_: str = Depends(get_current_user)):
+    """Chaque catalogue et ce qu'il contient (05/11/2026), pour le navigateur par source."""
+    from ....services import ofd_catalog, own_catalog, fc_catalog, bambu_profiles
+    from ....services.bambu_catalog import catalog_entries
+    raw, _n = catalog_entries()
+    oi = ofd_catalog.index() or {}
+    return {"sources": [
+        {"id": "bambu", "name": "Nuancier Bambu", "sub": "Bambu Studio : codes couleur, noms, couleurs", "count": len(raw or []), "c": "#0EA5E9"},
+        {"id": "profiles", "name": "Profils Bambu Studio", "sub": "Températures, densité, séchage de chaque filament Bambu", "count": len(bambu_profiles.profiles()), "c": "#0284C7"},
+        {"id": "own", "name": "Notre catalogue", "sub": "Les couleurs qu'aucun autre n'a", "count": len(own_catalog.items()), "c": "#F59E0B"},
+        {"id": "ofd", "name": "Open Filament Database", "sub": "Les autres marques : couleurs, tailles, liens d'achat", "count": len(oi.get("entries") or []), "c": "#8B5CF6"},
+        {"id": "fc", "name": "FilamentColors", "sub": "Échantillons imprimés et mesurés : couleur, TD", "count": fc_catalog.status()["count"], "c": "#14B8A6"},
+    ]}
+
+
+@router.get("/catalog/profiles")
+async def catalog_profiles(q: str = "", _: str = Depends(get_current_user)):
+    """Les profils Bambu Studio des filaments Bambu (05/11/2026) : un par filament, avec sa fiche."""
+    from ....services import bambu_profiles, catalog_facts as CF
+    ql = (q or "").strip().casefold()
+    out = []
+    for pid, p in sorted(bambu_profiles.profiles().items(), key=lambda kv: kv[1].get("name", "")):
+        if ql and ql not in f"{pid} {p.get('name')} {p.get('filament_type')}".casefold():
+            continue
+        out.append({"id": pid, "name": p.get("name"), "type": p.get("filament_type"), "facts": CF.from_profile(p)})
+    return {"available": bool(out) or not ql, "entries": out}
+
+
 @router.get("/catalog/fc/brands")
 async def fc_brands(_: str = Depends(get_current_user)):
     from ....services import fc_catalog
@@ -1074,6 +1103,10 @@ async def update_filament(
     raw = body.model_dump(exclude_unset=True)
     if "price" in raw and raw["price"] is None:
         payload["price"] = None
+    # la fiche technique (05/11/2026) : un champ vide a l'ecran s'efface
+    for k in ("density", "nozzle_min", "nozzle_max", "bed_min", "bed_max", "dry_temp", "dry_hours", "td", "gtin", "buy_url",):
+        if k in raw and raw[k] is None:
+            payload[k] = None
     # Idem pour colors_array : repasser en monochrome doit EFFACER le colors_array,
     # sinon un ancien residu masque la nouvelle couleur (parseColorsList le prefere).
     if "colors_array" in raw and raw["colors_array"] is None:
@@ -1901,9 +1934,16 @@ async def _apply_ofd(db, f, e: dict, link: bool = False, skip=None) -> list:
 
 
 @router.get("/catalog/ofd/brands")
-async def ofd_brands(_: str = Depends(get_current_user)):
-    """Les marques du catalogue des autres marques (02/11/2026) : nom, nombre de couleurs, familles."""
+async def ofd_brands(only: str = "", _: str = Depends(get_current_user)):
+    """Les marques du catalogue des autres marques (02/11/2026) : nom, nombre de couleurs, familles. only (05/11/2026,
+    le navigateur par source) : « ofd » l'Open Filament Database seule, « own » notre catalogue seul."""
     from ....services import ofd_catalog, own_catalog
+    if only == "own":
+        own = own_catalog.brands()
+        out = sorted(({"name": nm, "count": n, "families": sorted(x for x in fams if x)} for nm, n, fams in own.values()), key=lambda b: b["name"].casefold())
+        return {"available": bool(out), "brands": out}
+    if only == "ofd":
+        return ofd_catalog.brands()
     r = ofd_catalog.brands()
     own = own_catalog.brands()
     out = []
@@ -1983,11 +2023,16 @@ async def family_map_put(body: dict = Body({}), _: str = Depends(require_admin))
 
 
 @router.get("/catalog/ofd/search")
-async def ofd_search(brand: str = "", family: str = "", q: str = "", _: str = Depends(get_current_user)):
+async def ofd_search(brand: str = "", family: str = "", q: str = "", only: str = "", _: str = Depends(get_current_user)):
     """Les couleurs d'une marque, a la forme de /catalog/search (plus la marque et le poids du support) : celles de notre
     catalogue d'abord, puis l'Open Filament Database."""
     from ....services import ofd_catalog, own_catalog
     from ....services import fc_catalog
+    if only == "own":
+        mine = own_catalog.search(brand, family, q)
+        return {"available": True, "total": len(mine), "entries": mine}
+    if only == "ofd":
+        return ofd_catalog.search(brand, family, q)
     mine = own_catalog.search(brand, family, q)
     r = ofd_catalog.search(brand, family, q)
     fc = fc_catalog.search(brand, family, q)[:400]     # puis les couleurs mesurees que les autres n'ont pas (05/11/2026)

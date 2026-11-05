@@ -213,21 +213,25 @@ def matches(brand: str, names: list, fila_type: str = "", material: str = "", he
         ts = _type_score(e["type"], fila_type, material)
         if ts >= 3:                                     # une autre matiere (un PETG pour un PLA) : jamais
             continue
+        # un support (« Support for PLA ») n'est pas un PLA, et l'inverse (05/11/2026)
+        if ("support" in str(fila_type or "").lower()) != ("support" in f"{e['type']} {e['name']}".lower()):
+            continue
         # le nom porte notre sous-type (« Meta Black » pour un PLA Meta noir) : il passe devant
         tw = set(re.findall(r"[a-z]+", f"{fila_type or ''}".lower())) - {"pla", "petg", "abs", "asa", "tpu", "pa", "pc"}
         bonus = -0.5 if tw & set(re.findall(r"[a-z]+", e["name"].lower())) else 0
         # une finition dans leur nom qui n'est pas la notre (« Marble Red » pour un PLA Basic rouge) : derriere
         ours = set(re.findall(r"[a-z]+", f"{fila_type or ''} {' '.join(n or '' for n in names)}".lower()))
-        if (set(re.findall(r"[a-z]+", e["name"].lower())) & _FINISH) - ours:
-            bonus += 1.5
+        # une finition dans leur nom qui n'est pas la notre (« Marble White » pour un blanc uni) : pas le meme filament,
+        # au mieux une teinte proche (05/11/2026 : retenu pour un support blanc)
+        odd = bool((set(re.findall(r"[a-z]+", e["name"].lower())) & _FINISH) - ours)
         if norm(e["name"]) in raw:                     # le nom tel quel avant un nom qui ne colle qu'une fois nettoye
             bonus -= 0.3
         if en and en in want:
-            out.append((0 + ts + bonus, e, "nom"))
+            out.append((0 + ts + bonus + (6 if odd else 0), e, "teinte" if odd else "nom"))
         # un nom contenu dans l'autre, seulement s'il en couvre l'essentiel (« White » ne suffit pas pour « Jade White »)
         elif en and any(w and (w in en or en in w) and min(len(w), len(en)) >= 6
                         and min(len(w), len(en)) / max(len(w), len(en)) >= 0.7 for w in want):
-            out.append((4 + ts, e, "nom"))
+            out.append((4 + ts + (6 if odd else 0), e, "teinte" if odd else "nom"))
     if not out and hex_:
         for e in pool:
             ts = _type_score(e["type"], fila_type, material)
