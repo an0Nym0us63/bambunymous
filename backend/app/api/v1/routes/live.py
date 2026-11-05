@@ -72,6 +72,26 @@ async def live_layer(print_id: int | None = None, n: int | None = None, _: str =
             "colors": colors, "names": names, "name": p.translated_name or p.file_name, "skipped": sk}
 
 
+@router.get("/shell")
+async def live_shell(print_id: int | None = None, _: str = Depends(get_current_user)):
+    """La vue 3D de l'impression (05/11/2026) : le contour de chaque couche, a sa hauteur. Une fois par impression ;
+    la page la colore jusqu'a la couche en cours (les couleurs et les pieces annulees viennent de /layer)."""
+    from ....db.session import AsyncSessionLocal
+    from ....models.print_history import Print
+    from ....services import layer_view as LV
+    pid = print_id or await L.current_print_id()
+    if not pid:
+        return {"ok": False, "why": "none"}
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, pid)
+        if not p:
+            raise HTTPException(404)
+    try:
+        return {**(await LV.shell(pid, p)), "print_id": pid}
+    except Exception as e:
+        raise HTTPException(502, f"G-code illisible : {e}")
+
+
 @router.get("/{print_id}")
 async def live_print(print_id: int, _: str = Depends(get_current_user)):
     if not L.enabled():

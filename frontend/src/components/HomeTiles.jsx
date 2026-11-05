@@ -9,7 +9,7 @@ import { SensorSpark, SensorChart, SensorLegend, amsLines, heatLines, fanLines }
 import { liveOfSpool, LiveHatch, LiveTo, LiveSwitchButton, LiveBar } from "./LiveUsage";
 import { egg } from "../eggs";
 import { useLiveSpool, useLiveCurrent } from "../store/liveUsage";
-import { useLayer, LayerCanvas, LayerExplorer } from "./LayerView";
+import { useLayer, LayerCanvas, LayerExplorer, Layer3D, useShell, useLayerMode } from "./LayerView";
 import { useIsAdmin } from "../store/auth";
 import { showAlert } from "../utils/dialog";
 import { relayed } from "./Friends";
@@ -3967,6 +3967,8 @@ function LayerTile({ status, sz }) {
   const live = isLive(status) && !currentFriend();
   const { d, ghost } = useLayer(live, null, status?.layer);
   const tot = status?.total_layers || d?.last;
+  const [mode] = useLayerMode();                     // 2D ou 3D : choisi dans la vue en grand (05/11/2026)
+  const s3 = useShell(live && mode === "3d" && d?.ok, d?.print_id);
   return (
     <Tile icon={<Layers size={15}/>} color="#8B5CF6" label="Couche en cours" zoom={live ? <LayerExplorer status={status}/> : null}
       mini={sz.h === 0.5} summary={live && d?.ok ? <span style={{ fontSize: 13.5 }}>couche {d.layer}<Muted> / {tot}</Muted></span>
@@ -3975,7 +3977,8 @@ function LayerTile({ status, sz }) {
         : !d ? <Empty>…</Empty>
         : !d.ok ? <Empty>Pas de G-code pour cette impression</Empty>
         : <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 0 }}>
-          <LayerCanvas d={d} ghost={ghost} w={Math.max(60, Math.floor(W))} h={Math.max(50, Math.floor(H) - 18)}/>
+          {mode === "3d" ? <Layer3D s={s3} d={d} now={d.layer} w={Math.max(60, Math.floor(W))} h={Math.max(50, Math.floor(H) - 18)}/>
+            : <LayerCanvas d={d} ghost={ghost} w={Math.max(60, Math.floor(W))} h={Math.max(50, Math.floor(H) - 18)}/>}
           <Muted size={11.5}>couche {d.layer} / {tot}{Object.keys(d.skipped || {}).length > 0 &&
             <span style={{ color: "#F97316", fontWeight: 800 }}> · ✂ {Object.keys(d.skipped).length} annulée{Object.keys(d.skipped).length > 1 ? "s" : ""}</span>}</Muted></div>}
     </Tile>

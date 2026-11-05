@@ -27,6 +27,9 @@ _PCT = re.compile(rb"(?m)^M73 P(\d+)")
 _TOOL = re.compile(rb"(?m)^T(\d+)")
 _NUM = re.compile(rb"([XYZEIJ])(-?\d*\.?\d+)")
 _OBJ = re.compile(rb"(?m)^; (start|stop) printing object(?:, unique label id: (\d+))?")
+_ZH = re.compile(rb"(?m)^; Z_HEIGHT: (-?\d*\.?\d+)")
+# la vue 3D (05/11/2026) ne garde que le contour exterieur de chaque couche
+_SHELL = (b"; FEATURE: Outer wall", b"; FEATURE: Overhang wall")
 
 
 def _index(raw: bytes) -> dict:
@@ -51,7 +54,13 @@ def _index(raw: bytes) -> dict:
     for m in _OBJ.finditer(raw):
         opos.append(m.start())
         oval.append(m.group(2).decode() if m.group(1) == b"start" and m.group(2) else None)
-    return {"raw": raw, "L": L, "O": O, "P": P, "Tpos": tpos, "Tval": tval, "Opos": opos, "Oval": oval}
+    # la hauteur de chaque couche (le dernier « ; Z_HEIGHT » avant elle), pour la vue 3D
+    zpos, zval = [], []
+    for m in _ZH.finditer(raw):
+        zpos.append(m.start())
+        zval.append(float(m.group(1)))
+    Z = [zval[i] if (i := bisect.bisect_right(zpos, o) - 1) >= 0 else None for o in O]
+    return {"raw": raw, "L": L, "O": O, "P": P, "Tpos": tpos, "Tval": tval, "Opos": opos, "Oval": oval, "Z": Z}
 
 
 def _load(model_3mf: str, plate_id: str) -> Optional[dict]:
@@ -65,7 +74,8 @@ def _load(model_3mf: str, plate_id: str) -> Optional[dict]:
     return ix if ix["L"] else None
 
 
-def _paths(raw: bytes, a: int, b: int, tool: Optional[int], obj: Optional[str] = None) -> tuple[list, float, list]:
+def _paths(raw: bytes, a: int, b: int, tool: Optional[int], obj: Optional[str] = None,
+           shell: bool = False) -> tuple[list, float, list]:
     """Les extrusions entre deux positions du fichier : ([{t, e0, p: [x, y, ...] en dixiemes de mm, o: la piece}],
     extrusion totale, boite [xmin, ymin, xmax, ymax])."""
     out, cur = [], None
@@ -75,6 +85,7 @@ def _paths(raw: bytes, a: int, b: int, tool: Optional[int], obj: Optional[str] =
     last_e = 0.0
     e_tot = 0.0
     box = [math.inf, math.inf, -math.inf, -math.inf]
+    keep = not shell                                  # shell : seulement les parois exterieures (vue 3D)
 
     def put(px, py):
         q = (round(px * 10), round(py * 10))
@@ -87,7 +98,10 @@ def _paths(raw: bytes, a: int, b: int, tool: Optional[int], obj: Optional[str] =
             continue
         c = line[0]
         if c == 59:                                   # ';' : le debut et la fin d'une piece
-            if line.startswith(b"; start printing object") or line.startswith(b"; stop printing object"):
+            if shell and line.startswith(b"; FEATURE:"):
+                keep = line.startswith(_SHELL)
+                cur = None
+            elif line.startswith(b"; start printing object") or line.startswith(b"; stop printing object"):
                 m = _OBJ.match(line)
                 obj = m.group(2).decode() if m and m.group(1) == b"start" and m.group(2) else None
                 cur = None
@@ -126,7 +140,7 @@ def _paths(raw: bytes, a: int, b: int, tool: Optional[int], obj: Optional[str] =
         if e is not None:
             de = e if rel_e else e - last_e
             if not rel_e: last_e = e
-        if de > 0 and tool is not None and x is not None and nx is not None and (nx != x or ny != y):
+        if de > 0 and keep and tool is not None and x is not None and nx is not None and (nx != x or ny != y):
             if cur is None or cur["t"] != tool or cur["p"][-2:] != [round(x * 10), round(y * 10)]:
                 cur = {"t": tool, "e0": round(e_tot, 2), "p": []}
                 if obj is not None:
@@ -156,7 +170,7 @@ def _paths(raw: bytes, a: int, b: int, tool: Optional[int], obj: Optional[str] =
 TOL = 1.5          # simplification des polylignes, en dixiemes de mm (le trait affiche en fait plusieurs)
 
 
-def _simplify(pts: list) -> list:
+def _simplify(pts: list, tol: float = TOL) -> list:
     """Douglas-Peucker sur [x, y, x, y, ...] (dixiemes de mm) : les points qui ne changent pas le dessin partent."""
     n = len(pts) // 2
     if n <= 2:
@@ -179,7 +193,7 @@ def _simplify(pts: list) -> list:
                 dist = px * px + py * py
             if dist > far:
                 far, at = dist, k
-        if at >= 0 and far > TOL * TOL:
+        if at >= 0 and far > tol * tol:
             keep[at] = True
             stack += [(a, at), (at, b)]
     out = []
@@ -244,6 +258,56 @@ async def layer(pid: int, p, n: Optional[int]) -> dict:
     paths, e_tot, box = await asyncio.to_thread(lean, i)
     return {"ok": True, "layer": L[i], "first": L[0], "last": L[-1], "count": len(L), "e_total": e_tot,
             "box": [round(v, 1) for v in box] if math.isfinite(box[0]) else None, "paths": paths}
+
+
+SHELL_LAYERS = 240     # au-dela, une couche sur deux (trois...) : la forme reste, le poids non
+SHELL_POINTS = 40000   # points envoyes au plus (quelques centaines de Ko)
+
+
+async def shell(pid: int, p) -> dict:
+    """La vue 3D (05/11/2026) : le contour exterieur de chaque couche, a sa hauteur, lu dans le G-code (le 3MF envoye a
+    l'imprimante n'a pas le maillage des pieces). Calcule une fois par impression. Points en dixiemes de mm, z en mm."""
+    ix = await _get(pid, p)
+    if not ix:
+        return {"ok": False}
+    if ix.get("shell"):
+        return ix["shell"]
+    L, O, Z, raw = ix["L"], ix["O"], ix["Z"], ix["raw"]
+
+    def build():
+        n = len(L)
+        step = max(1, math.ceil(n / SHELL_LAYERS))
+        got, box, zt = [], [math.inf, math.inf, -math.inf, -math.inf], 0.0
+        for j in range(0, n, step):
+            a = O[j]
+            b = O[j + 1] if j + 1 < n else len(raw)
+            ps, _e, bx = _paths(raw, a, b, _tool_at(ix, a), _obj_at(ix, a), shell=True)
+            z = Z[j] if Z[j] is not None else (j + 1) * 0.2
+            zt = max(zt, z)
+            if math.isfinite(bx[0]):
+                box = [min(box[0], bx[0]), min(box[1], bx[1]), max(box[2], bx[2]), max(box[3], bx[3])]
+            got.append((L[j], z, ps))
+        # un plafond de points (une piece tres detaillee pesait 1 Mo) : la simplification grossit jusqu'a y tenir
+        for tol in (4.0, 8.0, 16.0, 32.0, 64.0):
+            out, pts_n = [], 0
+            for nl, z, ps in got:
+                lay = []
+                for q in ps:
+                    pts = _simplify(q["p"], tol)
+                    # au-dela du premier essai, les bribes (plus courtes que 3 fois la tolerance) partent : une paroi
+                    # decoupee en milliers de segments de deux points ne dessine rien de plus
+                    if len(pts) >= 4 and (tol == 4.0 or len(pts) > 4 or abs(pts[2] - pts[0]) + abs(pts[3] - pts[1]) >= 3 * tol):
+                        pts_n += len(pts) // 2
+                        lay.append({"t": q["t"], "p": _deltas(pts), **({"o": q["o"]} if "o" in q else {})})
+                out.append({"n": nl, "z": round(z, 2), "paths": lay})
+            if pts_n <= SHELL_POINTS:
+                break
+        return {"ok": True, "layers": out, "first": L[0], "last": L[-1], "step": step, "ztop": round(zt, 2),
+                "box": [round(v, 1) for v in box] if math.isfinite(box[0]) else None}
+
+    res = await asyncio.to_thread(build)
+    ix["shell"] = res
+    return res
 
 
 def forget(pid: Optional[int] = None) -> None:
