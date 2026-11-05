@@ -680,7 +680,7 @@ async def _compute(fresh: bool = False) -> dict:
                                {str(x.get(i) or "") for x in profiles for i in ("instance_id", "profile_id")} - {""},
                                {pl.get("index"): _num(pl.get("weight_g")) or sum(_num(f.get("g")) for f in pl.get("filaments") or [])
                                 for pl in prof.get("plates") or []}, plate_pieces(did, prof))
-            row["plates"] = [{"index": pl.get("index"), "name": pl.get("name") or "",
+            row["plates"] = [{"index": pl.get("index"), "name": pl.get("name") or "", "thumb": pl.get("thumb"),
                               "ready": pl.get("index") in ready, "printed": mine.get(pl.get("index"), 0),
                               "seconds": _num(pl.get("seconds")) or None,
                               "weight_g": round(sum(_num(f.get("g")) for f in pl.get("filaments") or []), 1) or None,

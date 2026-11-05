@@ -134,14 +134,14 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
         if plates:
             for p in plates:
                 units.append((p.get("index"), p.get("name") or "", p.get("seconds"), p.get("fils") or [],
-                              p.get("printed") or 0, bool(p.get("printing")), p.get("weight_g")))
+                              p.get("printed") or 0, bool(p.get("printing")), p.get("weight_g"), p.get("thumb")))
         elif m.get("seconds"):
             fils = [{"filament_id": (f.get("chosen") or {}).get("filament_id"), "type": f.get("type"), "color": f.get("color"),
                      "g": round((f.get("g") or 0) / qty, 1)} for f in m.get("filaments") or []]
-            units.append((0, "", m["seconds"] / qty, fils, 0, bool(m.get("printing")), round((m.get("weight_g") or 0) / qty, 1)))
+            units.append((0, "", m["seconds"] / qty, fils, 0, bool(m.get("printing")), round((m.get("weight_g") or 0) / qty, 1), None))
         # l'objet : combien chaque plateau en a deja donne, pour savoir quel plateau en termine un
         obj = {"qty": qty, "plates": {}}
-        for idx, pname, secs, fils, printed, printing, wg in units:
+        for idx, pname, secs, fils, printed, printing, wg, thumb in units:
             bk = f"{did}:{idx}"
             mk = manual.get(bk)
             done = printed + (int(mk.get("n") or 0) if isinstance(mk, dict) else 0) + (1 if printing else 0)
@@ -156,7 +156,7 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
                                "name": s.get("name") or f"{f.get('type') or ''} {f.get('color') or ''}".strip(), "g": f.get("g")})
                 out.append({"key": f"{did}:{idx}:{c}", "design_id": did, "title": title, "cover": m.get("cover_url"),
                             "plate": idx, "plate_name": pname, "plates_total": len(plates), "copy": c, "qty": qty,
-                            "seconds": int(secs), "weight_g": wg, "fils": fl, "_obj": obj})
+                            "seconds": int(secs), "weight_g": wg, "fils": fl, "_obj": obj, "thumb": thumb})
     return out, changed
 
 
