@@ -108,14 +108,26 @@ export function Layer3D({ s, d, now, w, h }) {
       const Ls = s.layers, j = Ls.findIndex(L => L.n >= cur);
       const a = Ls[Math.max(0, (j < 0 ? Ls.length : j) - 1)], b = Ls[j < 0 ? Ls.length - 1 : j];
       const z = b.n === a.n ? b.z : a.z + (b.z - a.z) * (cur - a.n) / (b.n - a.n);
-      g.lineWidth = Math.max(0.7, Math.min(2.4, 4.2 * k));
-      for (const q of d.paths) {
+      // pleine (06/11/2026) : chaque trace a la largeur d'extrusion (0,42 mm), sans plafond ; plafonne a 2,4 px, on voyait
+      // des hachures sur la vue en grand. Un liseré clair d'abord, pour la detacher de ce qui est imprime dessous
+      const lw = Math.max(0.9, 4.4 * k);
+      const trace = q => {
         const p = unpack(q.p);
-        if (p.length < 4) continue;
-        const gone = q.o != null && sk[q.o] && cur >= sk[q.o].layer;
+        if (p.length < 4) return false;
         g.beginPath();
         let [X, Y] = proj(p[0], p[1], z); g.moveTo(ox + X * k, oy + Y * k);
         for (let i = 2; i < p.length; i += 2) { [X, Y] = proj(p[i], p[i + 1], z); g.lineTo(ox + X * k, oy + Y * k); }
+        return true;
+      };
+      g.setLineDash([]); g.strokeStyle = "rgba(255,255,255,0.85)"; g.globalAlpha = 0.9; g.lineWidth = lw + 2.2;
+      for (const q of d.paths) {
+        const gone = q.o != null && sk[q.o] && cur >= sk[q.o].layer;
+        if (!gone && trace(q)) g.stroke();
+      }
+      g.lineWidth = lw;
+      for (const q of d.paths) {
+        const gone = q.o != null && sk[q.o] && cur >= sk[q.o].layer;
+        if (!trace(q)) continue;
         if (gone) { g.setLineDash([3, 3]); g.strokeStyle = muted; g.globalAlpha = 0.35; }
         else { g.setLineDash([]); g.strokeStyle = col(q.t); g.globalAlpha = 1; }
         g.stroke();
