@@ -464,7 +464,10 @@ async def mw_plan_lock(body: dict = Body({}), _: str = Depends(require_mw)):
 async def mw_plan_later(body: dict = Body({}), _: str = Depends(require_mw)):
     """« Plus tard » : le plateau ({key}) quitte sa place et passe en fin de file."""
     from ....services import planner as P
-    return await P.later(str(body.get("key") or ""))
+    try:
+        return await P.later(str(body.get("key") or ""), bool(body.get("whole")))
+    except P.PlanError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.post("/plan/optimize")

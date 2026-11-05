@@ -154,7 +154,16 @@ export default function PrintCalendar() {
   // un objet en tete de file (pour tenir sa date limite)
   const toFront = ks => arrange({ order: [...ks, ...keys.filter(k => !ks.includes(k))] });
   const applyAdvice = a => a.kind === "front" ? toFront(a.keys) : a.kind === "after" ? moveAfter(a.key, a.ref) : moveBefore(a.key, a.ref);
-  const setDue = (did, due) => send(`/makerworld/plan/deadline/${did}`, { due }).then(ok => { if (ok && due) egg("planning_echeance"); });
+  // le champ date se trouvait cache sous la ligne : sur ordinateur, le clic ne l'ouvrait pas (05/11/2026, showPicker) ;
+  // et un message dit ce qui a ete pose
+  const setDue = (did, due) => send(`/makerworld/plan/deadline/${did}`, { due }).then(d => {
+    if (!d) return;
+    if (!due) { toast("🎯 Date limite retirée", "info", 3500); return; }
+    egg("planning_echeance");
+    const x = (d.deadlines || []).find(y => String(y.design_id) === String(did));
+    const day = new Date(`${due}T12:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+    toast(x ? (x.ok ? `🎯 Fini avant le ${day} : ça tient` : `🎯 Avant le ${day} : ça déborde, voir les conseils`) : `🎯 Date limite : avant le ${day}`, x && !x.ok ? "error" : "ok", 5000);
+  });
   const markDone = (key, undo = false) => send("/makerworld/plan/done", { key, undo }, "post");
   // la journee couleur : ce qui a ete pose ce jour-la, et ce qui n'y tient pas (05/11/2026 : on ne voyait rien se passer)
   const colorDay = (day, fid) => send("/makerworld/plan/color-day", { day, filament_id: fid }, "post").then(d => {
@@ -166,12 +175,13 @@ export default function PrintCalendar() {
     if (cd.placed - cd.only > 0) bits.push(`${cd.placed - cd.only} avec un filament déjà chargé`);
     if (cd.no_room) bits.push(`${cd.no_room} n'y tien${cd.no_room > 1 ? "nent" : "t"} pas (restent où ils étaient)`);
     if (cd.needs_load) bits.push(`${cd.needs_load} écarté${cd.needs_load > 1 ? "s" : ""} : il${cd.needs_load > 1 ? "s" : ""} demande${cd.needs_load > 1 ? "nt" : ""} un autre filament à charger`);
-    toast(`🎨 ${cd.placed || 0} plateau${cd.placed > 1 ? "x" : ""} en ${name} sur ce jour${bits.length ? ` · ${bits.join(" · ")}` : ""}`, "success", 6000);
+    toast(`🎨 ${cd.placed || 0} plateau${cd.placed > 1 ? "x" : ""} en ${name} sur ce jour${bits.length ? ` · ${bits.join(" · ")}` : ""}`, "ok", 6000);
   });
   const optimize = day => send("/makerworld/plan/optimize", day ? { day } : {}, "post").then(ok => { if (ok) egg("planning_optimise"); });
   const jobAct = j => ({
     smart: () => send("/makerworld/plan/smart", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
     later: () => send("/makerworld/plan/later", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
+    laterAll: () => send("/makerworld/plan/later", { key: j.key, whole: true }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
     lock: () => send("/makerworld/plan/lock", { key: j.key, lock: true }, "post").then(ok => { if (ok) egg("planning_fige"); }),
     unlock: () => send("/makerworld/plan/lock", { key: j.key, lock: false }, "post"),
     day: v => moveDay(j.key, v),
@@ -396,8 +406,10 @@ export default function PrintCalendar() {
     <PoolGrouped jobs={pd.jobs} blocked={pd.blocked} now={pd.now} edit={edit} drag={wide} onDrag={setDragging} onOpen={j => setJobSel(j)}/>
   </div> : null;
   return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-    {/* le mois et ses chiffres */}
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    {/* le mois et ses chiffres ; sur mobile, la date et ‹ › restent en haut sous l'en-tete (05/11/2026) */}
+    <div style={{ display: "flex", alignItems: "center", gap: 8, ...(wide ? {} : { position: "sticky", top: 0, zIndex: 20,
+      margin: "-6px -16px 0", padding: "6px 16px", background: "color-mix(in srgb, var(--bg) 88%, transparent)",
+      backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", borderBottom: "1px solid var(--border)" }) }}>
       <button type="button" onClick={() => go(-1)} aria-label={`${unit} précédent`} data-tip={`${unit} précédent`} style={navBtn}><ChevronLeft size={18}/></button>
       <div style={{ flex: 1, minWidth: 0, textAlign: "center", fontSize: wide ? 19 : 16.5, fontWeight: 900, color: "var(--text)", textTransform: "capitalize",
         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>

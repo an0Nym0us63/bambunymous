@@ -58,7 +58,7 @@ export function JobSheet({ j, now, edit, onClose, act }) {
     <span style={{ flex: 1, minWidth: 0 }}>
       <span style={{ display: "block", fontSize: 13.5, fontWeight: 900, color: "var(--text)" }}>{label}</span>
       <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>{hint}</span></span>
-    <input type="date" value={value || ""} min={min} onChange={e => run(k, () => onPick(e.target.value || null))}
+    <input type="date" onClick={e => { try { e.currentTarget.showPicker?.(); } catch { /* rien */ } }} value={value || ""} min={min} onChange={e => run(k, () => onPick(e.target.value || null))}
       style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%" }}/></label>;
   return <PlanPopup title={j.title} icon="🧩" color={j.why ? "#DC2626" : unretained(j) ? UNRET : j.completes ? "#059669" : "#22C55E"} onClose={onClose} z={5300}>
     <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
@@ -83,6 +83,7 @@ export function JobSheet({ j, now, edit, onClose, act }) {
         ? row("unlock", "🔓", "Défiger", "Il redevient libre : le planning, les optimiseurs et la journée couleur peuvent le déplacer", () => run("unlock", act.unlock), "#4F46E5")
         : row("lock", "🔒", `Figer ici (${when(j.start, now)})`, "Il garde ce jour et cette heure : rien ne le déplacera (optimiser, journée couleur, au mieux, plus tard), le reste s'organise autour", () => run("lock", act.lock), "#4F46E5"))}
       {edit && !j.why && !j.locked && row("smart", "✨", "Placer au mieux", "Là où il charge le moins de filaments, sans faire rater de date limite, le plus tôt possible", () => run("smart", act.smart))}
+      {edit && !j.why && !j.locked && j.plates_total > 1 && act.laterAll && row("laterall", "⏬", "Tout l'objet plus tard", "Tous les plateaux de cet objet passent en fin de file, dans leur ordre (un objet retenu reste devant les non retenus) ; les figés restent", () => run("laterall", act.laterAll))}
       {edit && !j.why && !j.locked && row("later", "⏭", "Plus tard", "Il quitte sa place et son jour, et passe en fin de file", () => run("later", act.later))}
       {edit && !j.why && !j.locked && dateRow("daybest", "📌", "Le placer sur un jour", "À la meilleure place de la journée (le moins de filaments à charger), du moment qu'il y finit ; le reste se décale", j.day, v => v && act.dayBest(v), new Date().toISOString().slice(0, 10))}
       {edit && !j.why && !j.locked && dateRow("day", "📅", "Le poser sur un jour, après le reste", "Il y va après ce qui y est déjà", j.day, v => v && act.day(v), new Date().toISOString().slice(0, 10))}

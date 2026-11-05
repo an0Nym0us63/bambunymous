@@ -990,16 +990,20 @@ async def lock(key: str, on: bool = True) -> dict:
     return await plan()
 
 
-async def later(key: str) -> dict:
-    """« Plus tard » : le plateau quitte sa place et son jour, et passe en fin de file."""
+async def later(key: str, whole: bool = False) -> dict:
+    """« Plus tard » : le plateau quitte sa place et son jour, et passe en fin de file (un modele retenu reste devant
+    les non retenus). whole (05/11/2026) : tous les plateaux de son objet a la fois, dans leur ordre ; les figes restent."""
     d = await _load()
     if key in d["locked"]:
         raise PlanError("Ce plateau est figé : défige-le d'abord pour le déplacer")
-    d["pins"].pop(key, None)
-    d["order"] = [k for k in d["order"] if k != key]
     d0, now, jobs, _, loaded, live, busy = await _context(None)
-    keys = [j["key"] for j in _ordered(jobs, d["order"], d["pins"]) if j["key"] != key]
-    return await arrange({"order": keys + [key], "pins": {key: None}})
+    order = [j["key"] for j in _ordered(jobs, d["order"], d["pins"])]
+    did = key.split(":")[0]
+    move = [k for k in order if (k.split(":")[0] == did if whole else k == key) and k not in d["locked"]]
+    if not move:
+        raise PlanError("Plateau inconnu du planning")
+    keep = [k for k in order if k not in set(move)]
+    return await arrange({"order": keep + move, "pins": {k: None for k in move}})
 
 
 def _replace(order: list, old: list, new: list) -> list:

@@ -147,10 +147,10 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
       <button type="button" onClick={onUp} disabled={!onUp} aria-label="Plus tôt" data-tip="Plus tôt" style={act}>↑</button>
       <button type="button" onClick={onDown} disabled={!onDown} aria-label="Plus tard" data-tip="Plus tard" style={act}>↓</button>
       <label data-tip="Le poser sur un autre jour" style={{ ...act, position: "relative" }}>📅 Jour
-        <input type="date" value={j.day} min={new Date().toISOString().slice(0, 10)} onChange={e => e.target.value && onDay(e.target.value)}
+        <input type="date" onClick={e => { try { e.currentTarget.showPicker?.(); } catch { /* rien */ } }} value={j.day} min={new Date().toISOString().slice(0, 10)} onChange={e => e.target.value && onDay(e.target.value)}
           style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%" }}/></label>
       <label data-tip={j.due ? "Changer la date limite de l'objet" : "Une date limite pour l'objet : fini avant ce jour"} style={{ ...act, position: "relative" }}>🎯 Date
-        <input type="date" value={j.due || ""} onChange={e => onDue(e.target.value || null)}
+        <input type="date" onClick={e => { try { e.currentTarget.showPicker?.(); } catch { /* rien */ } }} value={j.due || ""} onChange={e => onDue(e.target.value || null)}
           style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%" }}/></label>
       <button type="button" onClick={onDone} data-tip="Imprimé hors de l'appli, ou pas reconnu : le compter comme fait" style={act}>✓ Fait</button>
       {j.pinned && <button type="button" onClick={onUnpin} data-tip="Le rendre à la file : il se place où il tient" style={act}>✕</button>}
