@@ -67,7 +67,8 @@ async def _save(d: dict) -> None:
     from ..db.session import AsyncSessionLocal
     from .settings_service import set_setting
     async with AsyncSessionLocal() as db:
-        await set_setting(db, KEY, json.dumps(d, ensure_ascii=False))
+        # les cles « _… » ne servent qu'au calcul (le stock du moment) : jamais enregistrees
+        await set_setting(db, KEY, json.dumps({k: v for k, v in d.items() if not k.startswith("_")}, ensure_ascii=False))
 
 
 def _hm(v) -> int | None:
@@ -319,6 +320,26 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
             pending.append(j)
     placed = []
     carry = []
+    blocked = []
+    # le stock (05/11/2026) : ce que chaque filament a en bobines, et en commande pas encore recue ; chaque plateau pose
+    # le consomme. Un plateau que ni le stock ni les commandes ne couvrent n'est pas pose (« non planifiable ») ; un
+    # plateau qui compte sur une commande le dit ; un filament qui passe sous le seuil (un quart de bobine) aussi.
+    stock = {fid: dict(v) for fid, v in (d.get("_stock") or {}).items()}
+
+    def short(j):
+        """Ce qui manque a ce plateau, meme avec les commandes ; et les filaments qu'il prendrait a une commande."""
+        miss, await_ = [], []
+        for f in j["fils"]:
+            st = stock.get(f.get("filament_id"))
+            g = f.get("g") or 0
+            if not st or not g:
+                continue
+            if g > st["g"] + st["ordered"] + 0.5:
+                miss.append(f"{f['name']} : il faut {round(g)} g, il en reste {max(0, round(st['g']))} g"
+                            + (f" (+ {round(st['ordered'])} g commandés)" if st["ordered"] > 0 else ""))
+            elif g > st["g"] + 0.5:
+                await_.append(f["name"])
+        return miss, await_
     # ce qui est charge, le plus recemment servi en dernier : un AMS n'a que `slots` places, charger un filament
     # sort celui qui a servi il y a le plus longtemps
     have = list(loaded)
@@ -340,7 +361,20 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
                     have.remove(fid)
                 have.append(fid)
         del have[:max(0, len(have) - slots)]
-        placed.append({**j, "start": s.isoformat(timespec="minutes"), "end": e.isoformat(timespec="minutes"),
+        _, awaits = short(j)
+        low = []
+        for f in j["fils"]:
+            st = stock.get(f.get("filament_id"))
+            g = f.get("g") or 0
+            if not st or not g:
+                continue
+            before = st["g"] + st["ordered"]
+            take = min(max(st["g"], 0), g)
+            st["g"] -= take
+            st["ordered"] -= g - take
+            if before >= st["low"] > st["g"] + st["ordered"]:
+                low.append(f"{f['name']} (il en restera {max(0, round(st['g'] + st['ordered']))} g)")
+        placed.append({**j, "awaits_order": awaits, "low_after": low, "start": s.isoformat(timespec="minutes"), "end": e.isoformat(timespec="minutes"),
                        "day": s.date().isoformat(), "pinned": j["key"] in pins, "reasons": rs, "too_long": too_long,
                        "load": [f["name"] for f in need], "wait_s": int((s - c).total_seconds()) if s > c else 0})
         cursor = e + rules.gap
@@ -363,6 +397,11 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
         while todo or (pending and not full):
             if todo and (full or not pending or rank[todo[0][0]["key"]] < rank[pending[0]["key"]]):
                 j, extra = todo.pop(0)
+                miss, _ = short(j)
+                if miss:
+                    blocked.append({**j, "why": miss})
+                    left -= 1
+                    continue
                 c = max(cursor, d0 + timedelta(minutes=h0))
                 if extra is None and c > cursor + timedelta(minutes=1) and c.date() != cursor.date():
                     extra = f"Posée {_day_fr(c, today)} (glissée sur le calendrier)"
@@ -374,6 +413,12 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
                 left -= 1
                 continue
             j = pending[0]
+            miss, _ = short(j)
+            if miss:
+                pending.pop(0)
+                blocked.append({**j, "why": miss})
+                left -= 1
+                continue
             c = cursor
             s, why, too_long = rules.earliest(c, j["seconds"])
             if s.date() > day and i < HORIZON_DAYS:
@@ -395,7 +440,7 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
             s = mid
         x["count"] += 1
         x["keys"].append(p["key"])
-    return {"jobs": placed, "days": days}
+    return {"jobs": placed, "days": days, "blocked": blocked}
 
 
 def deadlines(placed: list, d: dict, now: datetime) -> list:
@@ -525,7 +570,9 @@ def optimize(jobs: list, loaded: set, keep: list | None = None) -> list:
     have = set(loaded)
     out = []
     while rest:
-        win = rest[:8]
+        # parmi les 24 suivants (05/11/2026 : 8 avant) : un objet peut rester en suspens, le temps d'enchainer les
+        # plateaux d'autres objets de memes couleurs ; les dates limites sont gardees ensuite (optimize_plan)
+        win = rest[:24]
         best = min(range(len(win)), key=lambda i: (len(_sig(win[i]) - have), i))
         j = rest.pop(best)
         have |= _sig(j)
@@ -546,9 +593,36 @@ async def _context(tz: int | None):
     stock_of = {int(k): v for k, v in stock_of.items() if str(k).isdigit()}
     loaded = set((await Q._ams_stock()).keys())
     jobs, changed = _jobs(q.get("models") or [], d, stock_of)
+    d["_stock"] = await _stock_ledger(stock_of)
     live = _live()
     busy = now + timedelta(minutes=live[0]) if live else None
     return d, now, jobs, changed or tz is not None, loaded, live, busy
+
+
+async def _stock_ledger(stock_of: dict) -> dict:
+    """{filament: {g: en bobines, ordered: en commande pas recue, low: le seuil}} pour les filaments de la file. Le seuil :
+    un quart d'une bobine (comme « Filaments en fin de stock »)."""
+    if not stock_of:
+        return {}
+    try:
+        from sqlalchemy import select, func
+        from ..db.session import AsyncSessionLocal
+        from ..models.filament import Spool, Filament
+        ids = [int(k) for k in stock_of]
+        async with AsyncSessionLocal() as db:
+            nom = dict((await db.execute(select(Filament.id, Filament.filament_weight_g).where(Filament.id.in_(ids)))).all())
+            ordered = dict((await db.execute(select(Spool.filament_id, func.count(Spool.id))
+                                             .where(Spool.filament_id.in_(ids), Spool.ordered.is_(True), Spool.archived.is_(False))
+                                             .group_by(Spool.filament_id))).all())
+    except Exception:
+        logger.exception("[PLANNING] stock")
+        return {}
+    out = {}
+    for fid, v in stock_of.items():
+        fid = int(fid)
+        n = float(nom.get(fid) or 1000)
+        out[fid] = {"g": float(v.get("stock_g") or 0), "ordered": float(ordered.get(fid, 0)) * n, "low": n * 0.25}
+    return out
 
 
 async def plan(tz: int | None = None) -> dict:
@@ -607,6 +681,8 @@ async def plan(tz: int | None = None) -> dict:
             "live": ({"name": live[1], "design_id": live[2], "remaining_min": live[0], **(await _live_print(d))} if live else None),
             "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix), "status": status,
             "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),
+            "blocked": [{k: b.get(k) for k in ("key", "design_id", "title", "cover", "thumb", "plate", "plate_name", "plates_total", "copy", "qty",
+                                                "seconds", "retained", "why", "fils")} for b in r.get("blocked") or []],
             "manual_done": [{"key": k, "title": v.get("title"), "plate": k.split(":")[-1], "n": v.get("n")}
                             for k, v in d["done"].items() if isinstance(v, dict) and v.get("n")]}
 
@@ -751,6 +827,52 @@ async def optimize_plan(day: str | None = None) -> dict:
         front = [k for x in broke for k in x["keys"]]
         order = front + [k for k in order if k not in set(front)]
     return await arrange({"order": order})
+
+
+def _cost(r: dict, d: dict, now: datetime, key: str) -> float:
+    """Ce que coute un planning, pour choisir ou poser un plateau : une date limite ratee (enorme), un plateau non
+    planifiable, chaque filament a charger, et le plateau lui-meme tard (un peu)."""
+    c = 0.0
+    c += 10000 * sum(1 for x in deadlines(r["jobs"], d, now) if not x["ok"])
+    c += 500 * len(r.get("blocked") or [])
+    c += 20 * sum(len(j.get("load") or []) for j in r["jobs"])
+    me = next((j for j in r["jobs"] if j["key"] == key), None)
+    if me:
+        c += (datetime.fromisoformat(me["start"]) - now).total_seconds() / 3600 * 0.5
+    end = max((j["end"] for j in r["jobs"]), default=None)
+    if end:
+        c += (datetime.fromisoformat(end) - now).total_seconds() / 3600 * 0.05
+    return c
+
+
+async def smart_place(key: str) -> dict:
+    """« Placer au mieux » : essaie ce plateau a chaque place des 40 premieres de la file et garde celle qui charge le
+    moins de filaments, ne rate aucune date limite, laisse le moins de plateaux non planifiables, et le passe tot."""
+    d, now, jobs, _, loaded, live, busy = await _context(None)
+    jobs = _ordered(jobs, d["order"])
+    keys = [j["key"] for j in jobs]
+    if key not in keys:
+        raise PlanError("Plateau inconnu du planning")
+    d["pins"].pop(key, None)
+    rest = [k for k in keys if k != key]
+    best = None
+    for i in range(0, min(len(rest), 40) + 1):
+        order = rest[:i] + [key] + rest[i:]
+        r = place(_ordered(jobs, order), d, now, busy, loaded, _slots())
+        c = _cost(r, d, now, key)
+        if best is None or c < best[0]:
+            best = (c, order)
+    return await arrange({"order": best[1], "pins": {key: None}})
+
+
+async def later(key: str) -> dict:
+    """« Plus tard » : le plateau quitte sa place et son jour, et passe en fin de file."""
+    d = await _load()
+    d["pins"].pop(key, None)
+    d["order"] = [k for k in d["order"] if k != key]
+    d0, now, jobs, _, loaded, live, busy = await _context(None)
+    keys = [j["key"] for j in _ordered(jobs, d["order"]) if j["key"] != key]
+    return await arrange({"order": keys + [key], "pins": {key: None}})
 
 
 def _replace(order: list, old: list, new: list) -> list:
