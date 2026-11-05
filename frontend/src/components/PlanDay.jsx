@@ -167,7 +167,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
 
 // les consignes de la maison
 // les modes d'optimisation (06/11/2026)
-export const OPT_MODES = [["mix", "⚖️", "Au mieux", "Couleurs et nuits : le meilleur des deux, sans rater de date limite"],
+export const OPT_MODES = [["mix", "🧠", "Intelligent", "Essaie plusieurs plannings et garde le meilleur sur l'ensemble : aucune date limite ratée, les nuits remplies, le moins de bobines à changer, le travail fini tôt"],
   ["couleurs", "🎨", "Le moins de filaments", "Enchaîner les mêmes couleurs : le moins de bobines à changer"],
   ["debit", "⚡", "Le plus d'impressions", "Les plus courtes d'abord : le plus d'impressions finies chaque jour"],
   ["nuits", "🌙", "Remplir les temps morts", "Le long du soir finit au plus près de la reprise : l'imprimante tourne la nuit"]];

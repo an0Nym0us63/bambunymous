@@ -738,7 +738,7 @@ def auto_insert(jobs: list, d: dict, now: datetime, busy, loaded: set, new: list
         if k not in order or k in d["locked"] or k in d["pins"]:
             continue
         rest = [x for x in order if x != k]
-        step = max(1, len(rest) // 20)
+        step = max(1, len(rest) // 150)                 # toutes les places (06/11/2026 : une vingtaine en ratait)
         spots = sorted(set(list(range(0, len(rest) + 1, step)) + [len(rest)]))
         best = None
         for i in spots:
@@ -755,7 +755,7 @@ def auto_insert(jobs: list, d: dict, now: datetime, busy, loaded: set, new: list
 
 
 def night_fill(jobs: list, order: list, d: dict, now: datetime, busy, loaded: set, movable: set, rounds: int = 40,
-               why: dict | None = None) -> list:
+               why: dict | None = None, budget: float | None = None) -> list:
     """Remplir les nuits (06/11/2026). Avec des heures de lancement (on lance de 8 h a 00 h 30) et l'imprimante qui a le
     droit de tourner apres, le dernier plateau lance avant la coupure doit finir au plus pres de la prochaine heure de
     lancement, moins la pause : il imprime la nuit et le suivant part a 8 h pile.
@@ -778,7 +778,11 @@ def night_fill(jobs: list, order: list, d: dict, now: datetime, busy, loaded: se
     r = sim(order)
     cur = total(r)
     seen = set()
+    import time as _t
+    t_end = _t.monotonic() + budget if budget else None
     for _ in range(rounds):
+        if t_end and _t.monotonic() > t_end:
+            break                                     # le temps imparti (le mode intelligent en fait plusieurs)
         pl = r["jobs"]
         pos = set(order)
         night = next(((i, w) for i, w in _night_waits(r, rules) if pl[i]["day"] not in seen), None)
@@ -1176,18 +1180,52 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
     # les nuits remplies (06/11/2026) : avant la coupure des lancements, le plateau qui finit au plus pres de la reprise ;
     # les plateaux au jour fige peuvent changer d'heure dans leur journee (leur jour, place() le garde)
     movable = {j["key"] for j in jobs if j["key"] not in d["locked"] and j["key"] not in hs}
-    if mode != "couleurs":                            # le moins de changements : on ne remplit pas les nuits a leur prix
-        order = night_fill(jobs, order, d, now, busy, loaded, movable, why=sw)
+    if mode not in ("couleurs", "mix"):               # le moins de changements : on ne remplit pas les nuits a leur prix ;
+        order = night_fill(jobs, order, d, now, busy, loaded, movable, why=sw, budget=3)   # l'intelligent le fait plus bas
     # enchainer les couleurs peut gacher les nuits plus que le remplissage ne rattrape : on compare avec l'ordre de
     # depart, nuits remplies aussi, au temps mort des nuits plus 30 min par filament a charger, et on garde le meilleur
-    if Rules(d).launch and mode == "mix":
-        def score(o):
-            rr = place(_ordered(jobs, o, d["pins"]), d, now, busy, loaded, _slots())
-            return sum(w for _, w in _night_waits(rr, Rules(d))) / 60 + 30 * sum(len(j.get("load") or []) for j in rr["jobs"])
-        sw0 = {}
-        order0 = night_fill(jobs, head + [j["key"] for j in _soft_grouped(jobs) if j["key"] not in hs], d, now, busy, loaded, movable, why=sw0)
-        if score(order0) < score(order):
-            order, sw = order0, sw0
+    # chaque mode est juge sur son critere ; l'intelligent sur l'ensemble (aucune date limite ratee, le moins de temps
+    # mort, le moins de bobines a changer, le travail fini tot)
+    import time as _t
+    t0 = _t.monotonic()
+
+    def score(o):
+        return mode_score(place(_ordered(jobs, o, d["pins"]), d, now, busy, loaded, _slots()), d, now, mode)
+    cur = score(order)
+    if mode == "mix":
+        # le mode intelligent (06/11/2026) : plusieurs departs (les couleurs enchainees, l'ordre actuel, les plus courtes
+        # d'abord) ; les departs bruts se comparent vite, le remplissage des nuits (le plus long) se fait sur le meilleur
+        o0 = head + [j["key"] for j in _soft_grouped(jobs) if j["key"] not in hs]
+        spt = sorted(_soft_grouped(free), key=lambda j: (not j.get("retained", True), j["seconds"]))
+        o1 = _replace(base, [j["key"] for j in free], [j["key"] for j in spt])
+        cands = [(cur, order)] + [(score(o), o) for o in (o0, o1)]
+        cur, order = min(cands, key=lambda c: c[0])
+        if Rules(d).launch:
+            nf = night_fill(jobs, order, d, now, busy, loaded, movable, why=sw, budget=4)
+            sc = score(nf)
+            if sc < cur:
+                cur, order = sc, nf
+    # les retouches, tous modes (06/11/2026) : chaque plateau deplacable essaie 1 a 3 places plus tot ou plus tard, ce
+    # qui fait gagner reste ; dans un temps borne (le bouton attend)
+    mv = [k for k in order if k in movable and k not in d["pins"]]
+    for _pass in range(2):
+        better = False
+        for k in mv:
+            if _t.monotonic() - t0 > (7 if mode == "mix" else 4):
+                break
+            i = order.index(k)
+            for dlt in (-3, -2, -1, 1, 2, 3):
+                jx = i + dlt
+                if jx < len(head) or jx >= len(order):
+                    continue
+                o = order[:i] + order[i + 1:]
+                o.insert(jx, k)
+                sc = score(o)
+                if sc + 1 < cur:
+                    cur, order, better = sc, o, True
+                    break
+        if not better:
+            break
     # enchainer les couleurs ne doit pas faire deborder une date limite : un objet qui ne tient pas passe en tete,
     # les dates les plus proches d'abord (s'il ne tient pas meme en tete, il y reste : c'est le plus urgent)
     for _ in range(3):

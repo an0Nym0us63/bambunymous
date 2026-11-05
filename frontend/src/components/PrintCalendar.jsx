@@ -223,8 +223,12 @@ export default function PrintCalendar() {
   });
   const optimize = day => send("/makerworld/plan/optimize", day ? { day } : {}, "post").then(ok => { if (ok) egg("planning_optimise"); });
   // toute la file, a partir d'un jour (06/11/2026) : ce qui est prevu avant ne bouge pas
-  const optimizeFrom = (from, mode) => send("/makerworld/plan/optimize", { ...(from ? { from } : {}), ...(mode ? { mode } : {}) }, "post")
-    .then(ok => { if (ok) egg("planning_optimise"); });
+  // quelques secondes de calcul (06/11/2026) : on le dit, puis ce qui a ete fait
+  const optimizeFrom = (from, mode) => {
+    toast("✨ Optimisation en cours… quelques secondes", "info", 8000);
+    return send("/makerworld/plan/optimize", { ...(from ? { from } : {}), ...(mode ? { mode } : {}) }, "post")
+      .then(ok => { if (ok) { egg("planning_optimise"); toast("✨ Planning optimisé", "ok", 3000); } });
+  };
   const jobAct = j => ({
     smart: () => send("/makerworld/plan/smart", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
     later: () => send("/makerworld/plan/later", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
