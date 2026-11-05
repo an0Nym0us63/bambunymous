@@ -14,7 +14,9 @@ export function useLayer(enabled, n = null, nowLayer = null) {
   useEffect(() => {
     if (!enabled) { setD(null); return; }
     let on = true;
-    client.get("/live/layer", { params: n != null ? { n } : {} }).then(r => {
+    // une couche choisie : lue un instant apres (le curseur et les - / + gardes appuyes passent vite : seule celle ou
+    // l'on s'arrete est demandee)
+    const go = () => client.get("/live/layer", { params: n != null ? { n } : {} }).then(r => {
       if (!on) return;
       const x = r.data;
       // la couche d'avant devient le fantome (gardee ici : le serveur ne la renvoie pas)
@@ -23,7 +25,8 @@ export function useLayer(enabled, n = null, nowLayer = null) {
       if (x?.ok && (!prev || prev.layer !== x.layer)) last.current = x;
       setD(x);
     }).catch(() => { if (on) setD({ ok: false }); });
-    return () => { on = false; };
+    const t = n != null ? setTimeout(go, 120) : (go(), null);
+    return () => { on = false; clearTimeout(t); };
     // la couche en cours : relue a chaque nouvelle couche
   }, [enabled, n, nowLayer]); // eslint-disable-line react-hooks/exhaustive-deps
   return { d, ghost };
@@ -236,6 +239,8 @@ export function LayerExplorer({ status }) {
         : <LayerCanvas d={d} ghost={ghost} w={wide - 12} h={size - 12}/>) : <div style={{ height: size - 12 }}/>}
     </div>
     {d?.ok && <>
+      {/* 06/11/2026 : sur deux lignes (au telephone, tout sur une seule debordait), et - / + pour aller couche par couche,
+          le doigt etant trop gros pour le curseur ; garde appuye, ca defile */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 800, color: "var(--text)" }}>
         <span role="group" aria-label="Vue" style={{ display: "inline-flex", padding: 2, gap: 2, borderRadius: 10, background: "var(--surface2)", border: "1px solid var(--border)" }}>
           {[["2d", "2D", "La couche seule, vue de dessus"], ["3d", "3D", "Toute l'impression de trois quarts : imprimé en couleur, le reste en fantôme"]].map(([v, l, tip]) =>
@@ -243,11 +248,18 @@ export function LayerExplorer({ status }) {
               style={{ border: "none", borderRadius: 8, padding: "3px 9px", fontSize: 12, fontWeight: 900, cursor: "pointer",
                 background: mode === v ? "#8B5CF6" : "transparent", color: mode === v ? "#fff" : "var(--text2)" }}>{l}</button>)}
         </span>
-        <span style={{ whiteSpace: "nowrap" }}>Couche {d.layer} / {d.last}</span>
+        <span style={{ whiteSpace: "nowrap", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>Couche {pick ?? d.layer} / {d.last}</span>
+        {/* sa place est gardee : il apparait sans faire descendre le curseur (le doigt rate le + sinon) */}
+        <button type="button" onClick={() => setPick(null)} tabIndex={pick != null ? 0 : -1} aria-hidden={pick == null}
+          style={{ border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)", visibility: pick != null ? "visible" : "hidden",
+          borderRadius: 10, padding: "4px 10px", fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}
+          data-tip="Revenir à la couche qui imprime">● En cours{now ? ` · ${now}` : ""}</button>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <StepBtn dir={-1} label="Couche précédente" disabled={(pick ?? d.layer) <= d.first} onStep={() => setPick(p => Math.max(d.first, (p ?? d.layer) - 1))}/>
         <input type="range" min={d.first} max={d.last} value={pick ?? d.layer} onChange={e => setPick(Number(e.target.value))}
-          aria-label="Choisir la couche" style={{ flex: 1, accentColor: "#8B5CF6" }}/>
-        {pick != null && <button type="button" onClick={() => setPick(null)} style={{ border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)",
-          borderRadius: 10, padding: "4px 10px", fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>● En cours</button>}
+          aria-label="Choisir la couche" style={{ flex: 1, minWidth: 0, accentColor: "#8B5CF6" }}/>
+        <StepBtn dir={1} label="Couche suivante" disabled={(pick ?? d.layer) >= d.last} onStep={() => setPick(p => Math.min(d.last, (p ?? d.layer) + 1))}/>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 12, color: "var(--text2)" }}>
         {Object.entries(d.colors || {}).map(([t, c]) => <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
@@ -262,4 +274,25 @@ export function LayerExplorer({ status }) {
       </div>
     </>}
   </div>;
+}
+
+// − / + : une couche a chaque appui ; garde appuye, ca defile (de plus en plus vite)
+function StepBtn({ dir, label, disabled, onStep }) {
+  const t = React.useRef(null);
+  const stop = () => { clearTimeout(t.current); t.current = null; };
+  React.useEffect(() => stop, []);
+  const start = e => {
+    if (disabled) return;
+    e.preventDefault();
+    onStep();
+    let wait = 380;
+    const again = () => { onStep(); wait = Math.max(45, wait * 0.8); t.current = setTimeout(again, wait); };
+    t.current = setTimeout(again, wait);
+  };
+  return <button type="button" aria-label={label} data-tip={label} disabled={disabled}
+    onPointerDown={start} onPointerUp={stop} onPointerLeave={stop} onPointerCancel={stop} onContextMenu={e => e.preventDefault()}
+    onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onStep(); } }}
+    style={{ width: 40, height: 40, flexShrink: 0, borderRadius: 12, border: "1px solid color-mix(in srgb, #8B5CF6 40%, var(--border))",
+      background: "color-mix(in srgb, #8B5CF6 10%, var(--surface))", color: "#7C3AED", fontSize: 20, fontWeight: 900, lineHeight: 1,
+      cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.35 : 1, touchAction: "manipulation", userSelect: "none" }}>{dir < 0 ? "−" : "+"}</button>;
 }
