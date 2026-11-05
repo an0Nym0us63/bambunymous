@@ -337,7 +337,7 @@ async def mw_queue_plan(design_id: str, body: dict = Body({}), _: str = Depends(
     """Profil, plateaux et filaments retenus pour ce modele (depuis sa fiche)."""
     from ....services import mw_queue as Q
     try:
-        return await Q.set_plan(design_id, body)
+        return await Q.set_plan(design_id, body, add=bool(body.get("add")))
     except Q.QueueError as e:
         raise HTTPException(400, str(e))
 
@@ -360,13 +360,15 @@ async def mw_queue_qty(design_id: str, body: dict = Body({}), _: str = Depends(r
 
 
 @router.delete("/queue/plan/{design_id}")
-async def mw_queue_plan_delete(design_id: str, _: str = Depends(require_mw)):
+async def mw_queue_plan_delete(design_id: str, instance_id: str | None = None, _: str = Depends(require_mw)):
+    """Oublier un profil retenu (instance_id), sinon le premier ; « 123~456 » vise le profil 456 du modele 123."""
     from ....services import mw_queue as Q
+    did, _sep, iid = str(design_id).partition("~")
     try:
-        await Q.set_plan(design_id, None)
+        out = await Q.set_plan(did, None, which=instance_id or iid or None)
     except Q.QueueError as e:
         raise HTTPException(400, str(e))
-    return {"ok": True}
+    return {"ok": True, **out}
 
 
 # ── le planning des impressions (05/11/2026) : « A faire » pose sur les jours, voir services/planner.py ──

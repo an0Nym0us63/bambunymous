@@ -187,7 +187,7 @@ export default function PrintCalendar() {
     day: v => moveDay(j.key, v),
     dayBest: v => placeDay(j.key, v),
     unpin: () => unpin(j.key),
-    sheet: () => setSheet(j.design_id),
+    sheet: () => setSheet(j.mw_id || j.design_id),
     dayview: () => { setPick(j.day); setView("day"); },
     due: v => setDue(j.design_id, v),
     done: () => markDone(j.key),

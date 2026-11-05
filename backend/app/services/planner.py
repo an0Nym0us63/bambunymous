@@ -156,7 +156,8 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
                     fl.append({"filament_id": fid, "type": f.get("type"), "color": s.get("color") or f.get("color"),
                                "colors_array": s.get("colors_array"), "multicolor_type": s.get("multicolor_type"),
                                "name": s.get("name") or f"{f.get('type') or ''} {f.get('color') or ''}".strip(), "g": f.get("g")})
-                out.append({"key": f"{did}:{idx}:{c}", "design_id": did, "title": title, "cover": m.get("cover_url"),
+                out.append({"key": f"{did}:{idx}:{c}", "design_id": did, "mw_id": m.get("mw_id") or did.split("~")[0],
+                            "title": title, "cover": m.get("cover_url"),
                             "retained": bool(m.get("planned")),   # profil retenu dans « A faire » ; sinon celui par defaut
                             "plate": idx, "plate_name": pname, "plates_total": len(plates), "copy": c, "qty": qty,
                             "seconds": int(secs), "weight_g": wg, "fils": fl, "_obj": obj, "thumb": thumb})

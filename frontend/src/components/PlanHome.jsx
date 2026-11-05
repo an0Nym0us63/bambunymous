@@ -153,7 +153,7 @@ export function PlanZoom({ p: p0 }) {
     dayBest: v => send("/makerworld/plan/place-day", { key: j.key, day: v }).then(d => d && egg("planning_glisse")),
     day: v => send("/makerworld/plan/place-day", { key: j.key, day: v }),
     unpin: () => send("/makerworld/plan/arrange", { pins: { [j.key]: null } }, "put"),
-    sheet: () => setSheet(j.design_id),
+    sheet: () => setSheet(j.mw_id || j.design_id),
     dayview: () => nav("/prints?tab=calendar"),
     due: v => send(`/makerworld/plan/deadline/${j.design_id}`, { due: v }, "put").then(d => { if (d && v) { egg("planning_echeance"); toast("🎯 Date limite posée", "ok", 3000); } }),
     done: () => send("/makerworld/plan/done", { key: j.key }),

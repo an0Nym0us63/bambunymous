@@ -1163,7 +1163,7 @@ function Next({ q, o, sz }) {
   const stock = t.stock ?? all.filter(m => m.status === "stock").length;
   const short = t.short ?? all.filter(m => m.status === "short").length;
   const busy = all.filter(m => m.printing).length;
-  const open = m => setSheet({ design_id: m.design_id, title: m.title, title_fr: m.title_fr, cover_url: m.cover_url });
+  const open = m => setSheet({ design_id: m.mw_id || m.design_id, title: m.title, title_fr: m.title_fr, cover_url: m.cover_url });
   // en tete : ce qui tourne, sinon le premier imprimable, sinon le premier
   const hero = models.find(m => m.printing) || models.find(canGo) || models[0];
   const rest = models.filter(m => m !== hero);

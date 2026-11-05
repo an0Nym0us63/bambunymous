@@ -220,13 +220,13 @@ export default function MwQueue() {
     const i = q.models.findIndex(x => x.design_id === r.design_id);
     const last = q.models.length - 1;
     const isCut = q.until?.design_id === r.design_id;
-    const open = () => setModel({ design_id: r.design_id, title: r.title, title_fr: r.title_fr, cover_url: r.cover_url });
+    const open = () => setModel({ design_id: r.mw_id || r.design_id, title: r.title, title_fr: r.title_fr, cover_url: r.cover_url });
     return {
       title: r.title_fr || r.title || `Modèle ${r.design_id}`,
       subtitle: statusText(r), color: (STATUS[r.status] || STATUS.unknown)[1].startsWith("var") ? "#94A3B8" : (STATUS[r.status] || STATUS.unknown)[1],
       items: [
         { icon: "📄", label: "Ouvrir la fiche", tone: "#3B82F6", onClick: open },
-        { icon: "🌐", label: "Voir sur MakerWorld", tone: "#06B6D4", onClick: () => window.open(`https://makerworld.com/fr/models/${r.design_id}`, "_blank", "noopener") },
+        { icon: "🌐", label: "Voir sur MakerWorld", tone: "#06B6D4", onClick: () => window.open(`https://makerworld.com/fr/models/${r.mw_id || r.design_id}`, "_blank", "noopener") },
         r.profile && { icon: "🧊", label: "Vue 3D", hint: r.planned ? `profil retenu : ${r.profile.title || ""}` : "profil par défaut du modèle",
           tone: "#0EA5E9", onClick: () => setView3d(r) },
         "-",
@@ -436,8 +436,8 @@ export default function MwQueue() {
               <React.Fragment key={r.design_id}>
               <Pressable role="button" tabIndex={0} menu={sorting || cutting || choosing ? null : () => rowMenu(r)}
                 onClick={() => choosing ? toggleChosen(r.design_id) : cutting ? (setChosen([]), setUntil(r.design_id), setCutting(false))
-                  : setModel({ design_id: r.design_id, title: r.title, title_fr: r.title_fr, cover_url: r.cover_url })}
-                onPointerDown={() => prefetchModel(r.design_id)}
+                  : setModel({ design_id: r.mw_id || r.design_id, title: r.title, title_fr: r.title_fr, cover_url: r.cover_url })}
+                onPointerDown={() => prefetchModel(r.mw_id || r.design_id)}
                 style={{ position:"relative", display:"flex", alignItems:"flex-start", gap:10, padding:"10px 10px 10px 14px", borderRadius:18, cursor:"pointer",
                   textAlign:"left", height:"100%", boxSizing:"border-box", overflow:"hidden", color:"var(--text)", opacity: out ? 0.45 : 1,
                   background:`linear-gradient(135deg, ${sc}17, transparent 50%), var(--surface2)`,
@@ -485,7 +485,7 @@ export default function MwQueue() {
                     <span style={grad("#F59E0B", "#FBBF24")}>⚖ {g(r.weight_g)}</span>
                     {r.cost != null && <span style={grad("#16A34A", "#4ADE80")}>💶 {moneyVal(r.cost, 2)} €</span>}
                   </span>
-                  {r.plates?.length > 1 && <PlateChips plates={r.plates} designId={r.design_id} edit={isAdmin} onChanged={refresh}/>}
+                  {r.plates?.length > 1 && <PlateChips plates={r.plates} designId={r.mw_id || r.design_id} edit={isAdmin} onChanged={refresh}/>}
                   {r.ready_now?.plates > 0 && (
                     <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:800, color:"#16a34a", marginTop:5, padding:"2px 8px",
                       borderRadius:20, background:"rgba(34,197,94,0.12)" }}>
@@ -566,7 +566,7 @@ export default function MwQueue() {
       )}
       {pick && <CollectionsPicker chosen={q.collections.map(c => c.id)} onClose={() => setPick(false)}
         onSaved={() => { setPick(false); refresh(); }}/>}
-      {view3d && <Model3D designId={view3d.design_id} profileId={view3d.planned ? view3d.profile?.instance_id : view3d.default_instance || view3d.profile?.instance_id}
+      {view3d && <Model3D designId={view3d.mw_id || view3d.design_id} profileId={view3d.planned ? view3d.profile?.instance_id : view3d.default_instance || view3d.profile?.instance_id}
         fetchSource={view3d.planned}
         title={view3d.title_fr || view3d.title} palette={view3d.planned ? paletteOf(view3d) : null}
         paletteFinishes={view3d.planned ? finishesOf(view3d) : null} onClose={() => setView3d(null)}/>}

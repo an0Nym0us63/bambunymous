@@ -8,6 +8,9 @@ Reglage MW_QUEUE (JSON) :
    "plans": {"<design_id>": {"instance_id": "1452154", "plates": [1, 3] | null,
                              "picks": {"PLA|#646941": 12, ...}, "qty": 2}}}
 qty : nombre d'exemplaires voulus (temps, filament, cout et stock multiplies).
+Plusieurs profils retenus (06/11/2026, un modele qui regroupe des objets differents : pêche, banane…) : le premier
+reste sous "<design_id>", les suivants sous "<design_id>~<instance_id>". Chacun fait sa ligne dans « A faire » (son
+design_id est cette cle, mw_id le modele) et ses plateaux dans le planning.
 Un plan est retenu depuis la fiche du modele (profil, plateaux, filaments
 choisis). Sans plan : le profil retenu par l'appli, tous les plateaux, et le
 filament le plus proche du stock pour chaque couleur.
@@ -102,6 +105,26 @@ class QueueError(Exception):
     pass
 
 
+def mw_of(rid) -> str:
+    """Le modele MakerWorld d'une ligne de « A faire » (« 123~456 » : le profil 456 du modele 123)."""
+    return str(rid or "").split("~")[0]
+
+
+def _rid_ok(rid: str) -> bool:
+    a, _, b = str(rid or "").partition("~")
+    return a.isdigit() and (not b or b.isdigit())
+
+
+def _plans_of(d: dict, did: str) -> list:
+    """Les profils retenus d'un modele, le premier d'abord : [{key, instance_id, plates, picks, plate_picks, qty}]."""
+    out = []
+    p0 = d["plans"].get(did)
+    if p0 and p0.get("instance_id"):
+        out.append({"key": did, **p0})
+    out += [{"key": k, **v} for k, v in d["plans"].items() if k.startswith(did + "~") and (v or {}).get("instance_id")]
+    return out
+
+
 async def _load() -> dict:
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting
@@ -151,18 +174,33 @@ async def set_collections(ids: list) -> dict:
     return await config()
 
 
-async def set_plan(design_id: str, plan) -> dict:
+async def set_plan(design_id: str, plan, add: bool = False, which: str | None = None) -> dict:
+    """Retenir un profil (plan : profil, plateaux, filaments) ou l'oublier (plan None ; which : son instance, sinon le
+    premier). Un profil deja retenu est mis a jour ; add (06/11/2026) en retient un de plus au lieu de remplacer le
+    premier. Rend tous les profils retenus du modele."""
     did = str(design_id or "").strip()
     if not did.isdigit():
         raise QueueError("Modèle inconnu")
     d = await _load()
+    mine = _plans_of(d, did)
     if plan is None:
-        # oublier le plan, mais garder la quantite si elle a ete reglee
-        q = _qty((d["plans"].get(did) or {}).get("qty", 1))
-        if q > 1:
-            d["plans"][did] = {"instance_id": None, "plates": None, "picks": {}, "plate_picks": {}, "qty": q}
+        gone = next((x for x in mine if which and str(x.get("instance_id")) == str(which)), None) or (mine[0] if mine else None)
+        if gone and gone["key"] != did:
+            d["plans"].pop(gone["key"], None)
         else:
-            d["plans"].pop(did, None)
+            rest = [x for x in mine if x["key"] != did]
+            if rest:
+                # le suivant devient le premier
+                nxt = rest[0]
+                d["plans"].pop(nxt["key"], None)
+                d["plans"][did] = {k: v for k, v in nxt.items() if k != "key"}
+            else:
+                # oublier le plan, mais garder la quantite si elle a ete reglee
+                q = _qty((d["plans"].get(did) or {}).get("qty", 1))
+                if q > 1:
+                    d["plans"][did] = {"instance_id": None, "plates": None, "picks": {}, "plate_picks": {}, "qty": q}
+                else:
+                    d["plans"].pop(did, None)
     else:
         iid = str((plan or {}).get("instance_id") or "")
         if not iid.isdigit():
@@ -177,10 +215,14 @@ async def set_plan(design_id: str, plan) -> dict:
                 one = {str(k)[:40]: int(v) for k, v in pk.items() if str(v).isdigit()}
                 if one:
                     plate_picks[str(int(pn))] = one
-        qty = _qty(plan.get("qty", (d["plans"].get(did) or {}).get("qty", 1)))
-        d["plans"][did] = {"instance_id": iid, "plates": plates, "picks": picks, "plate_picks": plate_picks, "qty": qty}
+        same = next((x for x in mine if str(x.get("instance_id")) == iid), None)
+        key = same["key"] if same else f"{did}~{iid}" if add and mine else did
+        if len(mine) >= 30 and not same and key != did:
+            raise QueueError("Trente profils retenus au plus")
+        qty = _qty(plan.get("qty", (d["plans"].get(key) or {}).get("qty", 1)))
+        d["plans"][key] = {"instance_id": iid, "plates": plates, "picks": picks, "plate_picks": plate_picks, "qty": qty}
     await _save(d)
-    return d["plans"].get(did) or {}
+    return {"plans": _plans_of(d, did)}
 
 
 def _qty(v) -> int:
@@ -196,7 +238,7 @@ async def set_order(ids: list) -> list:
     seen, order = set(), []
     for i in ids or []:
         i = str(i)
-        if i.isdigit() and i not in seen:
+        if _rid_ok(i) and i not in seen:
             seen.add(i); order.append(i)
     d["order"] = order[:2000]
     await _save(d)
@@ -204,11 +246,13 @@ async def set_order(ids: list) -> list:
 
 
 async def set_qty(design_id: str, qty) -> dict:
-    """Nombre d'exemplaires d'un modele (sans toucher au reste du plan)."""
+    """Nombre d'exemplaires d'un modele, ou d'un de ses profils retenus (« 123~456 »), sans toucher au reste du plan."""
     did = str(design_id or "").strip()
-    if not did.isdigit():
+    if not _rid_ok(did):
         raise QueueError("Modèle inconnu")
     d = await _load()
+    if "~" in did and did not in d["plans"]:
+        raise QueueError("Profil qui n'est plus retenu")
     pl = d["plans"].setdefault(did, {"instance_id": None, "plates": None, "picks": {}})
     pl["qty"] = _qty(qty)
     await _save(d)
@@ -371,12 +415,17 @@ def guess_copies(g: float, plates: list, plate_g: dict) -> int:
     return max(1, min(50, int(g / w + 0.35)))         # a partir de 1,65x : 2 (un print partiel ou une pesee juste reste a 1)
 
 
-def _printed_of(entries: list, prof: dict | None, all_ids: set, plate_g: dict | None = None, pieces: dict | None = None) -> dict:
+def _printed_of(entries: list, prof: dict | None, all_ids: set, plate_g: dict | None = None, pieces: dict | None = None,
+                strict: bool = False) -> dict:
     """Les plateaux imprimes du profil retenu (05/11/2026 : le plateau 2 d'un autre profil n'est pas le meme) :
     ceux de ce profil (son numero d'instance ou de profil) et ceux dont le profil n'est pas connu. Si aucun print
     du modele ne porte un profil qu'on connait (numerotation inconnue), tous comptent, comme avant. Chaque print
-    compte ses exemplaires : dits a la main, sinon devines au poids (plate_g : le poids de chaque plateau)."""
+    compte ses exemplaires : dits a la main, sinon devines au poids (plate_g : le poids de chaque plateau).
+    strict (06/11/2026, plusieurs profils retenus) : un print sans profil connu ne compte pour aucun (il compterait
+    pour chacun)."""
     mine = {str((prof or {}).get("instance_id") or ""), str((prof or {}).get("profile_id") or ""), ""} - {"None"}
+    if strict:
+        mine.discard("")
     known = any(e["prof"] in all_ids for e in entries if e["prof"])
     out = {}
     for e in entries:
@@ -440,7 +489,9 @@ async def _printing_plates() -> dict:
             except ValueError:
                 continue
         if ns:
-            out.setdefault(str(did), []).append({"prof": "", "plates": ns, "g": _num(g), "copies": plate_copies(manual),
+            # son profil (06/11/2026) : avec plusieurs profils retenus, seule la ligne du sien est « en cours »
+            pr = next((str(k).partition(":")[0].strip() for k in plate_keys(plate, prof, manual)), "")
+            out.setdefault(str(did), []).append({"prof": pr, "plates": ns, "g": _num(g), "copies": plate_copies(manual),
                                                  "items": int(items or 1), "id": pid})
     return out
 
@@ -481,11 +532,17 @@ async def queue(fresh: bool = False, until: str | None = None, pick: list | None
     on_plates = await _printing_plates()
     models = []
     for r in raw["models"]:
-        on = live if live and live["design_id"] == r["design_id"] else None
+        mw = mw_of(r["design_id"])
+        on = live if live and live["design_id"] == mw else None
         # « en cours » se lit a chaque appel (etat en direct, impression ouverte dans l'historique),
         # jamais dans le calcul en cache : une impression finie depuis restait « en cours »
-        printing = bool(on or str(r["design_id"]) in on_plates)
-        ents = on_plates.get(str(r["design_id"])) if printing else None
+        printing = bool(on or mw in on_plates)
+        ents = on_plates.get(mw) if printing else None
+        if r.get("multi") and mw in on_plates:
+            # plusieurs profils retenus : seule la ligne du profil qui imprime (06/11/2026)
+            ids = {str((r.get("profile") or {}).get(k) or "") for k in ("instance_id", "profile_id")} - {""}
+            ents = [e for e in on_plates[mw] if e["prof"] in ids]
+            printing = bool(ents)
         if ents and r.get("plates"):
             # combien d'exemplaires chaque plateau en cours va donner (dits a la main, elements, poids)
             pg = {p.get("index"): p.get("weight_g") for p in r["plates"]}
@@ -586,16 +643,25 @@ async def _compute(fresh: bool = False) -> dict:
 
     models, stock_of = [], {}
     stock_all = None                                  # tout le stock, lu seulement si un choix sort des propositions
-    for did, base in designs.items():
+    lines = []
+    for did in designs:
+        lines.append((did, did, cfg["plans"].get(did)))
+        lines += [(x["key"], did, {k: v for k, v in x.items() if k != "key"}) for x in _plans_of(cfg, did)[1:]] \
+            if (cfg["plans"].get(did) or {}).get("instance_id") else []
+    nlines = {}
+    for _, did, _ in lines:
+        nlines[did] = nlines.get(did, 0) + 1
+    for rid, did, plan in lines:
+        base = designs[did]
         m = details.get(did) or {}
-        plan = cfg["plans"].get(did)
+        multi = nlines[did] > 1
         qty = _qty((plan or {}).get("qty", 1))
         # un plan qui ne porte qu'une quantite ne compte pas comme « retenu »
         chosen_plan = bool(plan and plan.get("instance_id"))
         profiles = m.get("profiles") or []
         prof = next((p for p in profiles if plan and p.get("instance_id") == plan.get("instance_id")), None) \
             or next((p for p in profiles if p.get("main")), None) or (profiles[0] if profiles else None)
-        row = {"design_id": did, "title": base.get("title"), "title_fr": base.get("title_fr") or m.get("title_fr"),
+        row = {"design_id": rid, "mw_id": did, "multi": multi, "title": base.get("title"), "title_fr": base.get("title_fr") or m.get("title_fr"),
                "cover_url": base.get("cover_url") or m.get("cover_url"), "collections": where.get(did, []),
                "printed": m.get("printed") or 0, "planned": chosen_plan, "qty": qty, "error": m.get("error"),
                "plates_ready": [], "plates_count": 0, "_need": {}, "_miss": {}, "_inprog": m.get("in_progress") or 0,
@@ -606,7 +672,8 @@ async def _compute(fresh: bool = False) -> dict:
             plates = [pl for pl in prof.get("plates") or [] if sel is None or pl.get("index") in sel]
             items = (m.get("stock") or {}).get(prof.get("instance_id")) or []
             picks = (plan or {}).get("picks") or {}
-            row["profile"] = {"instance_id": prof.get("instance_id"), "title": prof.get("title"),
+            row["profile"] = {"instance_id": prof.get("instance_id"), "profile_id": prof.get("profile_id"), "title": prof.get("title"),
+                              "cover": prof.get("cover"),
                               "printer": prof.get("printer"), "plates": len(plates), "plates_total": len(prof.get("plates") or [])}
             one = sum(_num(pl.get("seconds")) for pl in plates) if sel is not None else _num(prof.get("seconds"))
             row["seconds"] = one * qty if one else None
@@ -705,7 +772,7 @@ async def _compute(fresh: bool = False) -> dict:
             mine = _printed_of(done_plates.get(str(did), []), prof,
                                {str(x.get(i) or "") for x in profiles for i in ("instance_id", "profile_id")} - {""},
                                {pl.get("index"): _num(pl.get("weight_g")) or sum(_num(f.get("g")) for f in pl.get("filaments") or [])
-                                for pl in prof.get("plates") or []}, plate_pieces(did, prof))
+                                for pl in prof.get("plates") or []}, plate_pieces(did, prof), strict=multi)
             row["plates"] = [{"index": pl.get("index"), "name": pl.get("name") or "", "thumb": pl.get("thumb"),
                               "ready": pl.get("index") in ready, "printed": mine.get(pl.get("index"), 0),
                               "seconds": _num(pl.get("seconds")) or None,
@@ -728,10 +795,18 @@ async def _compute(fresh: bool = False) -> dict:
             row["status"] = ("ams" if ok_ams and items else "partial" if ready else
                              "stock" if ok_stock and items else "short" if items else "unknown")
         row["weight_g"] = round(row["weight_g"], 1)
+        if multi and prof:
+            # plusieurs profils retenus : chaque ligne dit le sien, avec son image (06/11/2026)
+            row["variant"] = prof.get("title") or None
+            if row["variant"]:
+                row["title"] = f"{row['title'] or ''} · {row['variant']}"
+                row["title_fr"] = f"{row['title_fr']} · {row['variant']}" if row.get("title_fr") else None
+            row["cover_url"] = prof.get("cover") or row["cover_url"]
         models.append(row)
 
     rank = {did: i for i, did in enumerate(cfg.get("order") or [])}
-    models.sort(key=lambda r: (r["design_id"] in rank, rank.get(r["design_id"], 0)))
+    # les retenus toujours devant les autres (06/11/2026), puis l'ordre choisi (les nouveaux en tete de leur groupe)
+    models.sort(key=lambda r: (not r["planned"], r["design_id"] in rank, rank.get(r["design_id"], 0)))
     for r in models:
         r["new"] = r["design_id"] not in rank
     prices = await _prices(stock_of.keys())

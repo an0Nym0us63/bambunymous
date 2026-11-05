@@ -1746,6 +1746,9 @@ EGGS = {
     "planning_fige": ('🔒', 'Rendez-vous ferme', "Figer un plateau du planning à son jour et son heure",
                       "Celui-là, on n'y touche plus.",
                       "Les optimiseurs passent, lui reste."),
+    "plusieurs_profils": ('🍓', 'Corbeille de fruits', "Retenir plusieurs profils d'un même modèle pour « À faire »",
+                          "Pêche, banane, orange : chacun sa ligne.",
+                          "Un modèle, plusieurs objets, tous au planning."),
     "planning_echeance": ('🎯', 'Pour Noël', "Donner une date limite à un objet du planning",
                           "Promis, ce sera prêt pour le jour J.",
                           "Le planning veille : s'il déborde, tu le sauras."),
@@ -4652,6 +4655,7 @@ def _batch22(push, d, now) -> None:
         picks = {int(k): v for k, v in ((plan or {}).get("plate_picks") or {}).items() if str(k).isdigit() and v}
         if not picks:
             continue
+        did = str(did).split("~")[0]                  # un profil retenu en plus (« 123~456 ») : le modele
         for pn in picks:
             sur += ok.get((str(did), pn), [])
         # Cameleon : chaque plateau choisi imprime, chaque filament d'une autre couleur que celle prevue

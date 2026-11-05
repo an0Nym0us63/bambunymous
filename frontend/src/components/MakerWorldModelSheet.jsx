@@ -14,6 +14,7 @@ import { mwLiked } from "../utils/mwSync";
 import { useMwAssign } from "../store/mwAssign";
 import { useFriend } from "../store/friend";
 import MwImg from "./MwImg";
+import { egg } from "../eggs";
 import MwRich, { richImages } from "./MwRich";
 import MwStockMatch, { profileMulti, stockSummary, setPicksFromPlan, picksOf, platePicksOf, plateInAms, clearPicks, plateColorMap, usePicksVersion, profilePalette, profileFinishes,
   PlateColors } from "./MwStockMatch";
@@ -50,6 +51,36 @@ const fmtDur = s => { if (!s) return null; const h = Math.floor(s / 3600), m = M
   return h ? `${h} h${m ? ` ${String(m).padStart(2, "0")}` : ""}` : `${m} min`; };
 const fmtDate = iso => { try { return new Date(iso).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" }); } catch { return ""; } };
 
+// Les profils retenus pour « A faire » (06/11/2026) : chacun sa vignette, son nom et sa quantite ; un mot pour dire qu'on
+// peut en retenir plusieurs quand le modele regroupe des objets differents.
+function PlansStrip({ plans, profiles, onOpen }) {
+  const byId = Object.fromEntries((profiles || []).map(p => [p.instance_id, p]));
+  const box = { borderRadius:14, padding:"8px 10px", marginBottom:8, border:"1px solid rgba(34,197,94,0.35)",
+    background:"linear-gradient(135deg, rgba(34,197,94,0.10), rgba(34,197,94,0.03))" };
+  if (!plans.length) return <div style={{ ...box, borderStyle:"dashed", fontSize:11.5, color:"var(--text2)", lineHeight:1.45 }}>
+    📌 Déplie un profil et <b>retiens-le</b> pour « À faire ». Ce modèle regroupe plusieurs objets différents ? Tu peux en retenir <b>plusieurs</b> :
+    chacun aura sa ligne et ses plateaux au planning.</div>;
+  return <div style={box}>
+    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:6, fontSize:11, fontWeight:900, letterSpacing:".05em", textTransform:"uppercase", color:"#16A34A" }}>
+      📌 Pour « À faire » · {plans.length} profil{plans.length > 1 ? "s" : ""}</div>
+    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+      {plans.map(pl => {
+        const p = byId[pl.instance_id] || {};
+        return <button key={pl.instance_id} type="button" onClick={() => onOpen(pl.instance_id)} data-tip="Le déplier"
+          style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"3px 9px 3px 3px", borderRadius:12, cursor:"pointer",
+            border:"1px solid rgba(34,197,94,0.45)", background:"var(--surface)", color:"var(--text)", fontSize:12, fontWeight:800, maxWidth:"100%" }}>
+          {p.cover ? <MwImg src={p.cover} w={60} style={{ width:24, height:24, borderRadius:8, objectFit:"cover", flexShrink:0 }}/>
+            : <span style={{ width:24, height:24, borderRadius:8, background:"var(--surface2)", flexShrink:0 }}/>}
+          <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.title || "Profil"}</span>
+          {(pl.qty || 1) > 1 && <span style={{ color:"#8B5CF6", fontWeight:900 }}>×{pl.qty}</span>}
+        </button>;
+      })}
+    </div>
+    {plans.length === 1 && <div style={{ marginTop:6, fontSize:11, color:"var(--muted)", lineHeight:1.4 }}>
+      Les autres profils sont des objets différents ? Déplie-en un et touche <b>＋ Retenir aussi</b>.</div>}
+  </div>;
+}
+
 export default function MakerWorldModelSheet({ designId, preview, onClose, onSearch, z = 4200 }) {
   const [id, setId] = useState(designId);          // permet d'ouvrir un similaire sans empiler
   const [m, setM] = useState(null);
@@ -78,7 +109,11 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [sim, setSim] = useState(null);
   const [zoom, setZoom] = useState(null);          // galerie plein ecran { images, index }
   const [exactBusy, setExactBusy] = useState(null);
-  const [plan, setPlan] = useState(null);            // plan retenu pour la file (profil, plateaux, filaments)
+  // les profils retenus pour la file (profil, plateaux, filaments, quantite), le premier d'abord ; plusieurs quand le
+  // modele regroupe des objets differents (06/11/2026 : peche, banane, orange…)
+  const [plans, setPlans] = useState([]);
+  const plan = plans[0] || null;
+  const planOf = iid => plans.find(x => x.instance_id === iid) || null;
   const [planBusy, setPlanBusy] = useState(false);
   const [studioBusy, setStudioBusy] = useState(false);
   useTrackDetail(`Fiche MakerWorld · ${m?.title || "#" + id}`);
@@ -175,34 +210,33 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setExactBusy(null);
   };
-  const [planDone, setPlanDone] = useState(null);   // « Retenu » / « Mis à jour », un instant
+  const [planDone, setPlanDone] = useState(null);   // { iid, txt } : « Retenu » / « Ajouté » / « Mis à jour », un instant
   const planDoneT = useRef(null);
-  const pinPlan = async (p) => {
-    setPlanBusy(true);
+  // add : un profil de plus (les autres restent retenus) ; sinon il prend la place du premier
+  const pinPlan = async (p, add = false) => {
+    setPlanBusy(p.instance_id);
     try {
-      const body = { instance_id: p.instance_id, plates: plateSel[p.instance_id] || null,
+      const body = { instance_id: p.instance_id, plates: plateSel[p.instance_id] || null, add,
         picks: picksOf(`${id}|${p.instance_id}`, m.stock?.[p.instance_id]),
         plate_picks: platePicksOf(`${id}|${p.instance_id}`, m.stock?.[p.instance_id]) };
+      const updating = !!planOf(p.instance_id);
       const { data } = await client.put(`/makerworld/queue/plan/${id}`, body);
-      // Retour visible : le bouton passe a « ✓ Enregistre » un instant
-      const updating = plan?.instance_id === p.instance_id;
-      setPlan(data);
-      setPlanDone(updating ? "Mis à jour" : "Retenu");
+      setPlans(data.plans || []);
+      // Retour visible : le bouton passe a « ✓ Retenu » un instant
+      setPlanDone({ iid: p.instance_id, txt: updating ? "Mis à jour" : add ? "Ajouté à « À faire »" : "Retenu" });
       clearTimeout(planDoneT.current);
       planDoneT.current = setTimeout(() => setPlanDone(null), 1800);
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setPlanBusy(false);
   };
-  const unpinPlan = async () => {
-    setPlanBusy(true);
+  const unpinPlan = async (p) => {
+    setPlanBusy(p.instance_id);
     try {
-      await client.delete(`/makerworld/queue/plan/${id}`);
+      const { data } = await client.delete(`/makerworld/queue/plan/${id}`, { params: { instance_id: p.instance_id } });
       // le plan oublie : filaments et plateaux reviennent aux choix par defaut, sans recharger
-      if (plan?.instance_id) {
-        clearPicks(`${id}|${plan.instance_id}`);
-        setPlateSel(s => { const n = { ...s }; delete n[plan.instance_id]; return n; });
-      }
-      setPlan(null);
+      clearPicks(`${id}|${p.instance_id}`);
+      setPlateSel(s => { const n = { ...s }; delete n[p.instance_id]; return n; });
+      setPlans(data?.plans || plans.filter(x => x.instance_id !== p.instance_id));
       setM(x => x && { ...x });
     }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
@@ -221,20 +255,25 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
 
   useEffect(() => {
     let alive = true;
-    setM(null); setCom(null); setSim(null); setMore(false); setAllProfs(false); setShowCom(false);
+    setM(null); setPlans([]); setCom(null); setSim(null); setMore(false); setAllProfs(false); setShowCom(false);
     getModel(id).then(data => {
       if (!alive) return;
       setM(data);
       setOpen(null);          // profils replies a l'ouverture : on deplie celui qu'on veut voir
-      // Plan deja retenu pour la file : on le remet (profil deplie, plateaux, filaments).
+      // Plans deja retenus pour la file : on les remet (plateaux, filaments), le premier deplie.
       client.get("/makerworld/queue/config").then(({ data: c }) => {
-        const pl = c.plans?.[String(id)];
-        if (!alive || !pl) { if (alive) setPlan(null); return; }
-        setPlan(pl);
-        setPicksFromPlan(`${id}|${pl.instance_id}`, data.stock?.[pl.instance_id], pl.picks, pl.plate_picks)
-          .then(() => alive && setM(x => x && { ...x }));     // choix trouves par recherche : relus, on redessine
-        if (pl.plates) setPlateSel(s => ({ ...s, [pl.instance_id]: pl.plates }));
-        setOpen(pl.instance_id);
+        const all = c.plans || {}, k0 = String(id);
+        const pls = [all[k0], ...Object.keys(all).filter(k => k.startsWith(`${k0}~`)).map(k => all[k])]
+          .filter(pl => pl?.instance_id);
+        if (!alive) return;
+        setPlans(all[k0]?.instance_id ? pls : []);
+        if (!all[k0]?.instance_id) return;
+        for (const pl of pls) {
+          setPicksFromPlan(`${id}|${pl.instance_id}`, data.stock?.[pl.instance_id], pl.picks, pl.plate_picks)
+            .then(() => alive && setM(x => x && { ...x }));     // choix trouves par recherche : relus, on redessine
+          if (pl.plates) setPlateSel(s => ({ ...s, [pl.instance_id]: pl.plates }));
+        }
+        setOpen(pls[0].instance_id);
       }).catch(() => {});
     }).catch(e => alive && setM({ error: e.response?.data?.detail || e.message }));
     client.get(`/makerworld/similar/${id}`).then(({ data }) => alive && setSim(data.items || [])).catch(() => {});
@@ -430,20 +469,25 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
               <Section title={`Profils (${m.profiles.length})`} icon="🧩" c="#06B6D4" bare>
                 {/* Tous les profils listes, chacun replie : on voit d'un coup combien il y en a. */}
                 {(() => {
-                  // Le profil retenu pour « A faire » d'abord, toujours ; puis l'ordre de l'appli.
-                  const ps = [...m.profiles].sort((a, b) => (b.instance_id === plan?.instance_id) - (a.instance_id === plan?.instance_id));
+                  // Les profils retenus pour « A faire » d'abord, dans leur ordre ; puis l'ordre de l'appli.
+                  const rk = p => { const i = plans.findIndex(x => x.instance_id === p.instance_id); return i < 0 ? 999 : i; };
+                  const ps = [...m.profiles].sort((a, b) => rk(a) - rk(b));
                   const LIMIT = 4;
                   // Un profil deplie reste visible meme au-dela des premiers.
                   const shown = allProfs || ps.length <= LIMIT + 1 ? ps
                     : ps.filter((p, i) => i < LIMIT || p.instance_id === open);
                   return (<>
+                {/* les profils retenus pour « A faire », d'un coup d'oeil (06/11/2026) ; toucher l'un le deplie */}
+                {!friend && canPlan && ps.length > 1 && <PlansStrip plans={plans} profiles={m.profiles}
+                  onOpen={iid => { setOpen(iid); setAllProfs(true); }}/>}
                 {shown.map(p => {
                   const isOpen = open === p.instance_id;
                   const nDone = p.plates.filter(pl => plateDone(p, pl.index)).length;
+                  const mine = planOf(p.instance_id);
                   return (
                     <div key={p.instance_id} style={{ borderRadius:16, marginBottom:8, overflow:"hidden",
-                      border: plan?.instance_id === p.instance_id ? "1.5px solid rgba(34,197,94,0.55)" : isOpen ? "1px solid rgba(6,182,212,0.45)" : "1px solid var(--border)",
-                      background: plan?.instance_id === p.instance_id ? "linear-gradient(160deg, rgba(34,197,94,0.12), transparent 45%), var(--surface2)"
+                      border: mine ? "1.5px solid rgba(34,197,94,0.55)" : isOpen ? "1px solid rgba(6,182,212,0.45)" : "1px solid var(--border)",
+                      background: mine ? "linear-gradient(160deg, rgba(34,197,94,0.12), transparent 45%), var(--surface2)"
                         : isOpen ? "linear-gradient(160deg, rgba(6,182,212,0.10), transparent 45%), var(--surface2)" : "var(--surface2)" }}>
                       <button onClick={() => setOpen(isOpen ? null : p.instance_id)}
                         style={{ width:"100%", textAlign:"left", padding:"11px 12px", background:"none", border:"none",
@@ -476,8 +520,13 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                             <span data-tip={m.printed_profile_sure ? "Le profil de tes impressions" : "Déduit de tes impressions (nom de la tâche, image, poids)"}
                               style={{ ...pBadge, background:"linear-gradient(135deg, #22C55E, #16A34A)", border:"none", color:"white" }}>
                               🖨 Imprimé{m.printed_profile_sure ? "" : " (déduit)"}</span>}
-                          {p.main && <span data-tip="Le meilleur pour ton imprimante, proposé pour « À faire »"
-                            style={{ ...pBadge, background:"linear-gradient(135deg, #3B82F6, #6366F1)", border:"none", color:"white" }}>Retenu</span>}
+                          {/* ton choix : vert ; le choix automatique de l'appli (quand tu n'en as retenu aucun) : « Proposé »
+                              (06/11/2026 : il s'appelait « Retenu », et passait pour le profil qu'on venait de retenir) */}
+                          {mine ? <span data-tip={plans.length > 1 ? `Retenu pour « À faire », avec ${plans.length - 1} autre${plans.length > 2 ? "s" : ""} profil${plans.length > 2 ? "s" : ""} de ce modèle` : "Retenu pour « À faire »"}
+                              style={{ ...pBadge, background:"linear-gradient(135deg, #22C55E, #16A34A)", border:"none", color:"white" }}>
+                              📌 Retenu{(mine.qty || 1) > 1 ? ` ×${mine.qty}` : ""}</span>
+                            : p.main && !plans.length && <span data-tip="Le meilleur pour ton imprimante : « À faire » le prend tant que tu n'en retiens aucun"
+                              style={{ ...pBadge, color:"#6366F1", borderColor:"rgba(99,102,241,0.45)" }}>✨ Proposé</span>}
                           {p.fit === 2 ? <span style={{ ...pBadge, color:"#22c55e" }}>🖨️ pour ta {m.printer}</span>
                             : p.fit === 1 ? <span style={{ ...pBadge, color:"#84cc16" }}>🖨️ compatible {m.printer}</span>
                             : m.printer ? <span style={{ ...pBadge, color:"#f59e0b" }}>pas pour ta {m.printer}</span> : null}
@@ -500,29 +549,36 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                         <div style={{ display:"flex", gap:6, padding:"0 10px 8px", flexWrap:"wrap" }}>
                           {!friend && (
                             <AdminOnly mw>
-                              <button onClick={() => pinPlan(p)} disabled={planBusy}
-                                data-tip="La file d'attente utilisera ce profil, ces plateaux et ces filaments"
-                                style={{ ...linkBtn, padding:"6px 11px", fontSize:12, cursor:"pointer", color:"#16a34a", background:"rgba(34,197,94,0.12)", borderColor:"rgba(34,197,94,0.4)",
-                                  transition:"background .25s, color .25s, transform .15s",
-                                  ...(plan?.instance_id === p.instance_id ? { color:"#22c55e", borderColor:"rgba(34,197,94,0.4)" } : null),
-                                  ...(planDone && plan?.instance_id === p.instance_id
-                                    ? { background:"#22c55e", color:"white", borderColor:"#22c55e", transform:"scale(1.04)" } : null),
-                                  ...(planBusy ? { opacity:0.6 } : null) }}>
-                                {planBusy ? "📌 Enregistrement…"
-                                  : planDone && plan?.instance_id === p.instance_id ? `✓ ${planDone}`
-                                  : plan?.instance_id === p.instance_id ? "📌 Retenu pour « À faire » · mettre à jour" : "📌 Retenir pour « À faire »"}</button>
-                              {plan?.instance_id === p.instance_id && (
-                                <button onClick={unpinPlan} disabled={planBusy} title="Oublier ce choix"
-                                  style={{ ...linkBtn, padding:"5px 9px", fontSize:11.5, cursor:"pointer", color:"var(--muted)" }}>✕</button>
-                              )}
+                              {(() => {
+                                const busy = planBusy === p.instance_id, done = planDone?.iid === p.instance_id ? planDone.txt : null;
+                                const btn = (label, tip, on, tone = "#16a34a", strong = false) => <button onClick={on} disabled={!!planBusy} data-tip={tip}
+                                  style={{ ...linkBtn, padding:"6px 11px", fontSize:12, cursor:"pointer", color: strong ? "white" : tone,
+                                    background: strong ? `linear-gradient(135deg, ${tone}, #16A34A)` : "rgba(34,197,94,0.12)", borderColor: strong ? "transparent" : "rgba(34,197,94,0.4)",
+                                    transition:"background .25s, color .25s, transform .15s", ...(planBusy ? { opacity:0.6 } : null) }}>{label}</button>;
+                                if (done) return <span style={{ ...linkBtn, padding:"6px 11px", fontSize:12, background:"#22c55e", color:"white", borderColor:"#22c55e",
+                                  transform:"scale(1.04)" }}>✓ {done}</span>;
+                                if (busy) return <span style={{ ...linkBtn, padding:"6px 11px", fontSize:12, color:"#16a34a" }}>📌 Enregistrement…</span>;
+                                if (mine) return <>
+                                  {btn("📌 Mettre à jour", "Enregistrer les plateaux et filaments choisis ci-dessous pour ce profil", () => pinPlan(p))}
+                                  <button onClick={() => unpinPlan(p)} disabled={!!planBusy} data-tip={plans.length > 1 ? "Ne plus retenir ce profil (les autres restent)" : "Oublier ce choix"}
+                                    style={{ ...linkBtn, padding:"5px 9px", fontSize:11.5, cursor:"pointer", color:"var(--muted)" }}>✕ Ne plus retenir</button>
+                                </>;
+                                // aucun retenu : un seul bouton ; deja d'autres : « en plus » (objets differents) ou « a la place »
+                                if (!plans.length) return btn("📌 Retenir pour « À faire »", "La file d'attente utilisera ce profil, ces plateaux et ces filaments", () => pinPlan(p), "#22C55E", true);
+                                return <>
+                                  {btn("＋ Retenir aussi", "Un objet différent du même modèle : il a sa propre ligne dans « À faire » et ses plateaux au planning, les autres profils retenus restent",
+                                    () => { pinPlan(p, true); egg("plusieurs_profils"); }, "#22C55E", true)}
+                                  {btn(plans.length > 1 ? "⇄ À la place du premier" : "⇄ À la place", `Remplace « ${(m.profiles.find(x => x.instance_id === plan.instance_id) || {}).title || "le profil retenu"} »`, () => pinPlan(p))}
+                                </>;
+                              })()}
                               {/* combien d'objets on en veut, comme sur la carte de « A faire » (05/11/2026) : les plateaux
                                   deja faits comptent, « A faire » et le planning preparent le reste */}
-                              {plan?.instance_id === p.instance_id && (() => {
-                                const n = plan?.qty || 1;
+                              {mine && (() => {
+                                const n = mine.qty || 1;
                                 const setN = async v => {
                                   const q = Math.max(1, Math.min(99, v));
-                                  setPlan(x => ({ ...x, qty: q }));
-                                  try { await client.put(`/makerworld/queue/qty/${id}`, { qty: q }); }
+                                  setPlans(xs => xs.map(x => x.instance_id === p.instance_id ? { ...x, qty: q } : x));
+                                  try { await client.put(`/makerworld/queue/qty/${mine.key || id}`, { qty: q }); }
                                   catch (e) { showAlert(e.response?.data?.detail || e.message); }
                                 };
                                 const b = { width:26, height:26, borderRadius:9, border:"none", background:"var(--surface)", color:"var(--text)", fontSize:14,
@@ -818,7 +874,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
           paletteMulti={profileMulti(m.stock?.[view3d.instance_id], `${id}|${view3d.instance_id}`)}
           platePalettes={Object.fromEntries((view3d.plates || []).map(pl => [pl.index,
             profilePalette(m.stock?.[view3d.instance_id], `${id}|${view3d.instance_id}`, pl.index)]))}
-          fetchSource={!!view3d.instance_id && (view3d.instance_id === plan?.instance_id || String(view3d.profile_id) === String(m.printed_profile))}
+          fetchSource={!!view3d.instance_id && (!!planOf(view3d.instance_id) || String(view3d.profile_id) === String(m.printed_profile))}
           title={m.title_fr || m.title} onClose={() => setView3d(null)}/>}
       </div>
     </div>,
