@@ -411,24 +411,30 @@ async def print_copies(design_id: str) -> dict:
 
 async def _printing_plates() -> dict:
     """Plateaux en cours d'impression (impression ouverte dans l'historique) :
-    {design_id: {numeros de plateau}}. Lu a chaque appel : ca bouge vite."""
+    {design_id: [{"prof", "plates", "g", "copies", "items"}]}, comme _printed_plates : l'impression en cours compte
+    ses exemplaires (05/11/2026 : un plateau duplique en cours ne comptait que pour un). Lu a chaque appel."""
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print
     from .makerworld import plate_keys
     try:
         async with AsyncSessionLocal() as db:
-            rows = (await db.execute(select(Print.design_id, Print.plate_id, Print.mw_profile_id, Print.mw_plates).where(
+            rows = (await db.execute(select(Print.design_id, Print.plate_id, Print.mw_profile_id, Print.mw_plates,
+                                            Print.total_weight_g, Print.number_of_items, Print.id).where(
                 Print.status == "IN_PROGRESS", Print.design_id.isnot(None)))).all()
     except Exception:
         return {}
     out = {}
-    for did, plate, prof, manual in rows:
+    for did, plate, prof, manual, g, items, pid in rows:
+        ns = []
         for k in plate_keys(plate, prof, manual):
             try:
-                out.setdefault(str(did), set()).add(int(str(k.split(":", 1)[1] or "1").strip() or 1))
+                ns.append(int(str(k.split(":", 1)[1] or "1").strip() or 1))
             except ValueError:
                 continue
+        if ns:
+            out.setdefault(str(did), []).append({"prof": "", "plates": ns, "g": _num(g), "copies": plate_copies(manual),
+                                                 "items": int(items or 1), "id": pid})
     return out
 
 
@@ -472,9 +478,12 @@ async def queue(fresh: bool = False, until: str | None = None, pick: list | None
         # « en cours » se lit a chaque appel (etat en direct, impression ouverte dans l'historique),
         # jamais dans le calcul en cache : une impression finie depuis restait « en cours »
         printing = bool(on or str(r["design_id"]) in on_plates)
-        pp = on_plates.get(str(r["design_id"])) if printing else None
-        if pp and r.get("plates"):
-            r = {**r, "plates": [{**p, "printing": p.get("index") in pp} for p in r["plates"]]}
+        ents = on_plates.get(str(r["design_id"])) if printing else None
+        if ents and r.get("plates"):
+            # combien d'exemplaires chaque plateau en cours va donner (dits a la main, elements, poids)
+            pg = {p.get("index"): p.get("weight_g") for p in r["plates"]}
+            pp = _printed_of(ents, None, set(), pg, plate_pieces(r["design_id"], r.get("profile")))
+            r = {**r, "plates": [{**p, "printing": p.get("index") in pp, "printing_n": pp.get(p.get("index"), 0)} for p in r["plates"]]}
         models.append({**r, "printing": printing,
                        "progress": on["progress"] if on else None, "remaining_min": on["remaining_min"] if on else None})
     models.sort(key=lambda r: not r["printing"])

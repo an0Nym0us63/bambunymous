@@ -134,17 +134,17 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
         if plates:
             for p in plates:
                 units.append((p.get("index"), p.get("name") or "", p.get("seconds"), p.get("fils") or [],
-                              p.get("printed") or 0, bool(p.get("printing")), p.get("weight_g"), p.get("thumb")))
+                              p.get("printed") or 0, (p.get("printing_n") or 1) if p.get("printing") else 0, p.get("weight_g"), p.get("thumb")))
         elif m.get("seconds"):
             fils = [{"filament_id": (f.get("chosen") or {}).get("filament_id"), "type": f.get("type"), "color": f.get("color"),
                      "g": round((f.get("g") or 0) / qty, 1)} for f in m.get("filaments") or []]
-            units.append((0, "", m["seconds"] / qty, fils, 0, bool(m.get("printing")), round((m.get("weight_g") or 0) / qty, 1), None))
+            units.append((0, "", m["seconds"] / qty, fils, 0, 1 if m.get("printing") else 0, round((m.get("weight_g") or 0) / qty, 1), None))
         # l'objet : combien chaque plateau en a deja donne, pour savoir quel plateau en termine un
         obj = {"qty": qty, "plates": {}}
         for idx, pname, secs, fils, printed, printing, wg, thumb in units:
             bk = f"{did}:{idx}"
             mk = manual.get(bk)
-            done = printed + (int(mk.get("n") or 0) if isinstance(mk, dict) else 0) + (1 if printing else 0)
+            done = printed + (int(mk.get("n") or 0) if isinstance(mk, dict) else 0) + printing   # en cours : ses exemplaires
             obj["plates"][idx] = done
             for c in range(done + 1, qty + 1):
                 fl = []

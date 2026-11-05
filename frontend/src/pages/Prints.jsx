@@ -1620,6 +1620,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 900,
             color: "#fff", background: `linear-gradient(135deg, ${stC}, color-mix(in srgb, ${stC} 70%, #ffffff))`, boxShadow: `0 4px 14px ${stC}55` }}>{stI} {stL}</span>
+          {/* les pieces de ce print, comme sur sa carte de la liste (05/11/2026) */}
+          {localNb > 1 && <span data-tip={`${localNb} pièces (éléments déclarés)`} style={{ display: "inline-flex", alignItems: "center", padding: "3px 10px", borderRadius: 20,
+            fontSize: 11.5, fontWeight: 900, color: "#2563EB", background: "color-mix(in srgb, #2563EB 14%, transparent)" }}>×{localNb}</span>}
           {!visiting && <NasChip count={p.nas_only} url={`/prints/${p.id}/nas`}/>}
           {groupe && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 6px 2px 9px", borderRadius: 20, fontSize: 11.5, fontWeight: 800,
             color: "#a78bfa", background: "rgba(167,139,250,0.16)" }}>📁 {groupe}
