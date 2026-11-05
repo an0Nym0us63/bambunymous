@@ -26,9 +26,20 @@ export const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
 const shelf0 = x => [...new Map((x?.items || []).map(i => [i.id, i])).values()];
 const hm = s => { const m = Math.round((s || 0) / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${String(m % 60).padStart(2, "0")}` : ""}`; };
 // l'etat du planning : a lancer, en retard, en avance, dans les temps
-function PlanStatus({ st, live, check }) {
+function PlanStatus({ st, live, check, compact }) {
   const c = { due: "#6366F1", late: "#F97316", ahead: "#22C55E", ontime: "#22C55E", deadline: "#EF4444" }[st.state] || "#64748B";
   const ic = { due: "⏰", late: "🐢", ahead: "🚀", ontime: "✅", deadline: "🎯" }[st.state] || "📅";
+  // au telephone (06/11/2026) : une ligne ; la verification en infobulle (la carte « En cours » dit deja l'impression)
+  if (compact) {
+    const tip = check ? `Vérifié à ${check.at.slice(11, 16).replace(":", " h ")}${check.moved > 0 ? ` · ${check.moved} plateau${check.moved > 1 ? "x" : ""} décalé${check.moved > 1 ? "s" : ""} depuis 24 h` : ""}${check.overflow?.length ? ` · ${check.overflow.length} débordement${check.overflow.length > 1 ? "s" : ""}` : ""}` : undefined;
+    return <div data-tip={tip} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 12,
+      border: `1px solid color-mix(in srgb, ${c} 40%, var(--border))`, background: `color-mix(in srgb, ${c} 9%, var(--surface))` }}>
+      <span style={{ fontSize: 15 }}>{ic}</span>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{st.text}</span>
+      {check && <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>🔄 {check.at.slice(11, 16).replace(":", " h ")}
+        {check.overflow?.length ? <span style={{ color: "#EF4444" }}> · ⚠ {check.overflow.length}</span> : null}</span>}
+    </div>;
+  }
   return <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 12px", borderRadius: 14, border: `1px solid color-mix(in srgb, ${c} 40%, var(--border))`,
     background: `color-mix(in srgb, ${c} 9%, var(--surface))` }}>
     <span style={{ fontSize: 17 }}>{ic}</span>
@@ -295,10 +306,12 @@ export default function PrintCalendar() {
     onTouchEnd: e => { const s0 = swipe.current; swipe.current = null; if (!s0) return; const t = e.changedTouches[0];
       const dx = t.clientX - s0.x, dy = t.clientY - s0.y; if (Math.abs(dx) > 70 && Math.abs(dx) > 1.6 * Math.abs(dy)) go(dx < 0 ? 1 : -1); },
   } : {};
-  const chip = (label, value, color) => <div style={{ flex: "1 1 120px", minWidth: 0, padding: "10px 12px", borderRadius: 14, border: "1px solid var(--border)",
-    background: `linear-gradient(150deg, color-mix(in srgb, ${color} 14%, transparent), transparent 70%), var(--surface2)` }}>
-    <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color }}>{label}</div>
-    <div style={{ fontSize: 20, fontWeight: 900, color: "var(--text)" }}>{value}</div></div>;
+  // au telephone (06/11/2026) : les quatre sur une ligne, en petit (deux grandes lignes avant)
+  const chip = (label, value, color) => <div style={{ flex: wide ? "1 1 120px" : "1 1 0", minWidth: 0, padding: wide ? "10px 12px" : "6px 7px", borderRadius: wide ? 14 : 11,
+    border: "1px solid var(--border)", background: `linear-gradient(150deg, color-mix(in srgb, ${color} 14%, transparent), transparent 70%), var(--surface2)` }}>
+    <div style={{ fontSize: wide ? 10.5 : 8.5, fontWeight: 900, letterSpacing: wide ? ".06em" : ".02em", textTransform: "uppercase", color,
+      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
+    <div style={{ fontSize: wide ? 20 : 14.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{value}</div></div>;
   // le detail du jour : a cote de la grille sur grand ecran ; dessous ailleurs, et la page y descend au toucher
   const pickDay = k => { setPick(k); if (!side) setTimeout(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); };
   const grid7 = `repeat(7, minmax(0, 1fr))${wide ? " 64px" : ""}`;
@@ -532,12 +545,12 @@ export default function PrintCalendar() {
       {showPlan && !side && pd?.jobs?.length > 0 && <button type="button" onClick={() => setPop("pool")} data-tip="La file : chaque plateau prévu, par objet"
         style={{ ...pill, color: "#16A34A", borderColor: "color-mix(in srgb, #22C55E 45%, var(--border))" }}>📋 {wide ? `La file (${pd.jobs.length})` : `File ${pd.jobs.length}`}</button>}
     </div>
-    {pd?.status && showPlan && <PlanStatus st={pd.status} live={null} check={pd.check}/>}
+    {pd?.status && showPlan && <PlanStatus st={pd.status} live={null} check={pd.check} compact={!wide}/>}
     {pd && showPlan && <NowNextTiles pd={pd} wide={wide} onOpenPrint={it => nav(`/prints?id=${it.id}`)} onPickJob={j => setJobSel(j)}/>}
     {showPlan && (pd?.deadlines || []).filter(x => !x.ok).map(x => <PlanStatus key={x.design_id}
       st={{ state: "deadline", text: `${x.title} ne sera pas fini avant le ${dueTxt(x.due)} : voir les conseils` }}/>)}
     {setOpen && <PlanSettings s={pd?.settings} onSave={saveSettings} onClose={() => setSetOpen(false)}/>}
-    {view === "month" && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    {view === "month" && <div style={{ display: "flex", gap: wide ? 8 : 5, flexWrap: wide ? "wrap" : "nowrap" }}>
       {chip("Impressions", days ? mCount : "…", "#3B82F6")}
       {chip("Heures machine", days ? hm(mTotal) : "…", "#8B5CF6")}
       {chip("Occupation", days ? `${Math.round(occ * 100)} %` : "…", "#EC4899")}
