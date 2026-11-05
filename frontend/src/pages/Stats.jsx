@@ -325,14 +325,14 @@ function DriftStats() {
   const [open, setOpen] = useState(null);
   const [edit, setEdit] = useState(null);       // { id, v }
   const [by, setBy] = useState("brand");
-  const [past, setPast] = useState(false);       // les bobines du passe hors des stats, montrees a la demande
+  const [unfold, setUnfold] = useState(null);     // le filament deplie
   const load = () => client.get("/filaments/drift").then(r => setD(r.data)).catch(() => setD({ error: true }));
   useEffect(() => { load(); }, []);
   if (!d || d.error) return null;
   const k = d.summary, all = d.items || [];
-  // le passe (ecart deduit de l'historique) reste hors des stats et cache, sauf les bobines qu'on y a fait entrer
-  const pastOut = all.filter(it => isPast(it) && it.off);
-  const items = past ? all : all.filter(it => !(isPast(it) && it.off));
+  // une bobine ecartee n'apparait pas ici du tout (05/11/2026) : elle se voit sur sa fiche et sur le mur des
+  // archivees, d'ou on la fait compter
+  const items = all.filter(it => !it.off);
   const patch = async (id, body, gesture) => {
     try { await client.patch(`/filaments/spools/${id}/drift`, body); if (gesture) egg("derive_ecartee"); load(); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
@@ -349,10 +349,60 @@ function DriftStats() {
     setEdit(null);
   };
   const max = Math.max(20, ...items.map(it => Math.abs(it.drift_g)));
+  const spoolRow = (it, inner = false) => {
+            const w = Math.max(2, Math.abs(it.drift_g) / max * 50);
+            const col = it.off ? "var(--muted)" : Math.abs(it.drift_g) < 15 ? "#22C55E" : it.drift_g > 0 ? "#F59E0B" : "#EF4444";
+            return (
+              <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0", borderBottom: inner ? "none" : "1px dashed var(--border)",
+                opacity: it.off ? 0.6 : 1 }}>
+                <span onClick={() => setOpen(it)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: "1 1 40%" }}>
+                  <Dot hex={it.color} colors={it.colors} multicolor={it.multicolor} size={12}/>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {inner ? "" : it.name} <span style={{ color: "var(--muted)", fontWeight: 700 }}>#{it.id}</span></span>
+                    <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {it.off ? (isPast(it) ? "du passé, hors des stats" : `écartée : ${it.off}`) : DRIFT_KIND[it.kind] || ""}{it.at ? ` · ${new Date(it.at + "Z").toLocaleDateString("fr-FR")}` : ""}</span>
+                  </span>
+                </span>
+                {/* l'ecart, de part et d'autre du zero */}
+                <span style={{ position: "relative", flex: "1 1 30%", height: 8, borderRadius: 5, background: "color-mix(in srgb, var(--border) 70%, transparent)" }}>
+                  <span style={{ position: "absolute", left: "50%", top: -3, bottom: -3, width: 1.5, background: "var(--muted)" }}/>
+                  <span style={{ position: "absolute", top: 0, bottom: 0, borderRadius: 5, background: col, width: `${w}%`,
+                    left: it.drift_g >= 0 ? "50%" : `${50 - w}%` }}/>
+                </span>
+                {edit?.id === it.id ? (
+                  <input autoFocus value={edit.v} onChange={e => setEdit({ ...edit, v: e.target.value })} onBlur={saveEdit}
+                    onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEdit(null); }}
+                    inputMode="decimal" style={{ width: 62, padding: "3px 6px", borderRadius: 8, border: "1px solid var(--border)",
+                      background: "var(--surface)", color: "var(--text)", fontSize: 13, fontWeight: 800, textAlign: "right" }}/>
+                ) : (
+                  <span onClick={() => isAdmin && setEdit({ id: it.id, v: String(it.drift_g) })} data-tip={isAdmin ? "Corriger l'écart" : undefined}
+                    style={{ width: 62, textAlign: "right", fontSize: 13, fontWeight: 900, color: col, cursor: isAdmin ? "pointer" : "default",
+                      textDecoration: it.off ? "line-through" : "none", flexShrink: 0 }}>{driftTxt(it.drift_g)}</span>
+                )}
+                {isAdmin && <button onClick={() => toggle(it)} data-tip={it.off ? (isPast(it) ? "La compter dans les stats" : "La remettre dans les stats") : "L'écarter des stats (jetée en partie, prêtée…)"}
+                  style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 9, border: "1px solid var(--border)", background: "var(--surface2)",
+                    cursor: "pointer", fontSize: 13 }}>{it.off ? "↩" : "🚫"}</button>}
+              </div>
+            );
+            };
+  // une ligne par filament : la plus recente mesure d'abord
+  const fils = [];
+  for (const it of items) {
+    let f = fils.find(x => x.key === it.filament_id);
+    if (!f) fils.push(f = { key: it.filament_id, s: it, list: [] });
+    f.list.push(it);
+  }
+  for (const f of fils) {
+    f.on = f.list.filter(x => !x.off);
+    f.mean = f.on.length ? f.on.reduce((t, x) => t + x.drift_g, 0) / f.on.length : null;
+    const v = (f.on.length ? f.on : f.list).map(x => x.drift_g);
+    f.lo = Math.min(...v); f.hi = Math.max(...v);
+  }
   const trend = !k.n ? null : Math.abs(k.mean_g) < 5 ? "sans biais" : k.mean_g > 0 ? "on surestime" : "on sous-estime";
   return (
     <Section title="Précision du suivi" icon="🎯" isGlobal>
-      {!all.length ? (
+      {!items.length ? (
         <div style={{ ...statCard("#14B8A6"), padding: "14px 14px", fontSize: 13, fontWeight: 600, color: "var(--text2)", lineHeight: 1.5 }}>
           Pas encore de mesure. À la fin de chaque bobine, l'écart entre notre poids et le vrai est noté : quand l'AMS prend le relais,
           quand tu choisis la suite, ou quand tu l'archives en disant qu'elle est finie.
@@ -410,48 +460,48 @@ function DriftStats() {
             </div>
           );
         })()}
-        {pastOut.length > 0 && <button onClick={() => setPast(p => !p)} style={{ marginBottom: 8, padding: "5px 12px", borderRadius: 20, fontSize: 12,
-          fontWeight: 800, cursor: "pointer", border: "1px solid var(--border)", background: past ? "color-mix(in srgb, #14B8A6 14%, var(--surface2))" : "var(--surface2)",
-          color: past ? "#0D9488" : "var(--text2)" }}
-          data-tip="Les bobines archivées avant le suivi : leur écart est déduit de leur historique, hors des stats tant que tu ne les y fais pas entrer">
-          🕰 {past ? "Cacher" : "Montrer"} le passé ({pastOut.length} hors des stats)</button>}
-        <div style={{ ...statCard("#14B8A6"), padding: "8px 12px", maxHeight: 360, overflowY: "auto" }}>
-          {items.map(it => {
-            const w = Math.max(2, Math.abs(it.drift_g) / max * 50);
-            const col = it.off ? "var(--muted)" : Math.abs(it.drift_g) < 15 ? "#22C55E" : it.drift_g > 0 ? "#F59E0B" : "#EF4444";
-            return (
-              <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0", borderBottom: "1px dashed var(--border)",
-                opacity: it.off ? 0.6 : 1 }}>
-                <span onClick={() => setOpen(it)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: "1 1 40%" }}>
-                  <Dot hex={it.color} colors={it.colors} multicolor={it.multicolor} size={12}/>
+        {/* par filament (05/11/2026 : une ligne par bobine devenait illisible) : la moyenne de celles qui comptent, chaque
+            bobine en point sur l'axe ; toucher le filament deplie ses bobines */}
+        <div style={{ ...statCard("#14B8A6"), padding: "8px 12px", maxHeight: 460, overflowY: "auto" }}>
+          {fils.map(f => {
+            if (f.list.length === 1) return spoolRow(f.list[0]);
+            const col = f.mean == null ? "var(--muted)" : Math.abs(f.mean) < 15 ? "#22C55E" : f.mean > 0 ? "#F59E0B" : "#EF4444";
+            const pos = g => `${50 + Math.max(-1, Math.min(1, g / max)) * 50}%`;
+            const isOpen = unfold === f.key;
+            return <div key={f.key} style={{ borderBottom: "1px dashed var(--border)" }}>
+              <div onClick={() => setUnfold(isOpen ? null : f.key)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 0", cursor: "pointer",
+                opacity: f.mean == null ? 0.6 : 1 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: "1 1 40%" }}>
+                  <Dot hex={f.s.color} colors={f.s.colors} multicolor={f.s.multicolor} size={12}/>
                   <span style={{ minWidth: 0 }}>
                     <span style={{ display: "block", fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {it.name} <span style={{ color: "var(--muted)", fontWeight: 700 }}>#{it.id}</span></span>
+                      {f.s.name}</span>
                     <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {it.off ? (isPast(it) ? "du passé, hors des stats" : `écartée : ${it.off}`) : DRIFT_KIND[it.kind] || ""}{it.at ? ` · ${new Date(it.at + "Z").toLocaleDateString("fr-FR")}` : ""}</span>
+                      {f.list.length} bobines{f.on.length < f.list.length ? ` · ${f.on.length} comptée${f.on.length > 1 ? "s" : ""}` : ""}
+                      {f.lo != null && f.on.length > 1 ? ` · de ${driftTxt(f.lo)} à ${driftTxt(f.hi)}` : ""}</span>
                   </span>
                 </span>
-                {/* l'ecart, de part et d'autre du zero */}
-                <span style={{ position: "relative", flex: "1 1 30%", height: 8, borderRadius: 5, background: "color-mix(in srgb, var(--border) 70%, transparent)" }}>
-                  <span style={{ position: "absolute", left: "50%", top: -3, bottom: -3, width: 1.5, background: "var(--muted)" }}/>
-                  <span style={{ position: "absolute", top: 0, bottom: 0, borderRadius: 5, background: col, width: `${w}%`,
-                    left: it.drift_g >= 0 ? "50%" : `${50 - w}%` }}/>
+                {/* la repartition : chaque bobine en point (pleine si elle compte), la moyenne en trait */}
+                <span data-tip={f.list.map(x => `#${x.id} ${driftTxt(x.drift_g)}${x.off ? " (hors stats)" : ""}`).join(" · ")}
+                  style={{ position: "relative", flex: "1 1 30%", height: 14 }}>
+                  <span style={{ position: "absolute", left: 0, right: 0, top: 5, height: 4, borderRadius: 3, background: "color-mix(in srgb, var(--border) 70%, transparent)" }}/>
+                  {f.lo != null && <span style={{ position: "absolute", top: 5, height: 4, borderRadius: 3, background: "color-mix(in srgb, #3B82F6 30%, transparent)",
+                    left: pos(f.lo), width: `calc(${pos(f.hi)} - ${pos(f.lo)})` }}/>}
+                  <span style={{ position: "absolute", left: "50%", top: 1, bottom: 1, width: 1.5, background: "var(--muted)" }}/>
+                  {f.list.map(x => <span key={x.id} style={{ position: "absolute", top: 3, width: 8, height: 8, marginLeft: -4, borderRadius: "50%", left: pos(x.drift_g),
+                    background: x.off ? "transparent" : "#64748B", border: `1.5px solid ${x.off ? "var(--muted)" : "#64748B"}`, opacity: x.off ? 0.6 : 0.75 }}/>)}
+                  {f.mean != null && <span style={{ position: "absolute", top: 0, bottom: 0, width: 3, marginLeft: -1.5, borderRadius: 2, left: pos(f.mean), background: col }}/>}
                 </span>
-                {edit?.id === it.id ? (
-                  <input autoFocus value={edit.v} onChange={e => setEdit({ ...edit, v: e.target.value })} onBlur={saveEdit}
-                    onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEdit(null); }}
-                    inputMode="decimal" style={{ width: 62, padding: "3px 6px", borderRadius: 8, border: "1px solid var(--border)",
-                      background: "var(--surface)", color: "var(--text)", fontSize: 13, fontWeight: 800, textAlign: "right" }}/>
-                ) : (
-                  <span onClick={() => isAdmin && setEdit({ id: it.id, v: String(it.drift_g) })} data-tip={isAdmin ? "Corriger l'écart" : undefined}
-                    style={{ width: 62, textAlign: "right", fontSize: 13, fontWeight: 900, color: col, cursor: isAdmin ? "pointer" : "default",
-                      textDecoration: it.off ? "line-through" : "none", flexShrink: 0 }}>{driftTxt(it.drift_g)}</span>
-                )}
-                {isAdmin && <button onClick={() => toggle(it)} data-tip={it.off ? (isPast(it) ? "La compter dans les stats" : "La remettre dans les stats") : "L'écarter des stats (jetée en partie, prêtée…)"}
-                  style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 9, border: "1px solid var(--border)", background: "var(--surface2)",
-                    cursor: "pointer", fontSize: 13 }}>{it.off ? "↩" : "🚫"}</button>}
+                <span style={{ width: 62, textAlign: "right", flexShrink: 0 }}>
+                  <span style={{ display: "block", fontSize: 13, fontWeight: 900, color: col }}>{f.mean != null ? driftTxt(f.mean) : "—"}</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>moyenne</span>
+                </span>
+                <span style={{ width: 28, flexShrink: 0, textAlign: "center", fontSize: 14, color: "var(--muted)", transform: isOpen ? "rotate(90deg)" : "none",
+                  transition: "transform .15s" }}>›</span>
               </div>
-            );
+              {isOpen && <div style={{ paddingLeft: 14, borderLeft: "2px solid color-mix(in srgb, #14B8A6 30%, transparent)", marginBottom: 8 }}>
+                {f.list.map(x => spoolRow(x, true))}</div>}
+            </div>;
           })}
         </div>
         <p style={{ fontSize: 10.5, color: "var(--muted)", margin: "8px 0 0" }}>
