@@ -153,6 +153,14 @@ const gInfo = g => {
     locked: ok.filter(j => j.locked).length, pinned: ok.filter(j => j.pinned && !j.locked).length, load: ok.some(j => j.load?.length),
     low: ok.some(j => j.low_after?.length), wait: ok.some(j => j.awaits_order?.length) };
 };
+// « du … au … » en bon francais (06/11/2026 : « du Aujourd'hui au Demain ») : d'aujourd'hui, de demain, du sam. 7 nov. ;
+// a aujourd'hui, a demain, au sam. 7 nov. ; time : l'heure en plus
+const B = ({ children }) => <b style={{ color: "var(--text)" }}>{children}</b>;
+function fromTo(a, b, now, time = false) {
+  const word = iso => { const t = dayOf(iso, now); return t === "Aujourd'hui" ? ["d'", "à ", "aujourd'hui"] : t === "Demain" ? ["de ", "à ", "demain"] : ["du ", "au ", t]; };
+  const [de, , la] = word(a), [, au, lb] = word(b);
+  return <>{de}<B>{la}{time ? ` ${hhmm(a)}` : ""}</B> {au}<B>{lb}{time ? ` ${hhmm(b)}` : ""}</B></>;
+}
 const chipS = c => ({ fontSize: 10.5, fontWeight: 900, color: c, background: `color-mix(in srgb, ${c} 13%, transparent)`, borderRadius: 7,
   padding: "1px 6px", whiteSpace: "nowrap" });
 export function PoolSummary({ jobs, blocked = [], now, onOpenModel }) {
@@ -172,7 +180,7 @@ export function PoolSummary({ jobs, blocked = [], now, onOpenModel }) {
           <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
             {x.ok.length} plateau{x.ok.length > 1 ? "x" : ""} · {hm(x.tot)}
             {x.first && <> · {sameDay ? <><b style={{ color: "var(--text)" }}>{dayOf(x.first, now)}</b> {hhmm(x.first)}–{hhmm(x.last)}</>
-              : <>du <b style={{ color: "var(--text)" }}>{dayOf(x.first, now)}</b> au <b style={{ color: "var(--text)" }}>{dayOf(x.last, now)}</b></>}</>}</span>
+              : fromTo(x.first, x.last, now)}</>}</span>
           {/* une frise : un trait par plateau */}
           <span style={{ display: "flex", gap: 2, height: 5 }}>
             {g.jobs.map(j => <span key={j.key} style={{ flex: 1, borderRadius: 3, background: j.blockedWhy ? "#DC2626" : j.locked ? "#4F46E5"
@@ -207,7 +215,8 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act }) {
       <PlateThumb j={{ ...f, thumb: null, plates_total: 1 }} size={72}/>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3, fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>
         <span><b style={{ color: "var(--text)" }}>{x.ok.length} plateau{x.ok.length > 1 ? "x" : ""}</b> à faire · {hm(x.tot)}{f.qty > 1 ? ` · ${f.qty} exemplaires voulus` : ""}</span>
-        {x.first && <span>du <b style={{ color: "var(--text)" }}>{when(x.first, now)}</b> au <b style={{ color: "var(--text)" }}>{when(x.last, now)}</b></span>}
+        {x.first && <span>{x.first.slice(0, 10) === x.last.slice(0, 10)
+          ? <><B>{dayOf(x.first, now)}</B> de {hhmm(x.first)} à {hhmm(x.last)}</> : fromTo(x.first, x.last, now, true)}</span>}
         <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
           {un && <span style={chipS("#64748B")}>○ non retenu</span>}
           {x.nb > 0 && <span style={chipS("#DC2626")}>⛔ {x.nb} non planifiable{x.nb > 1 ? "s" : ""}</span>}
