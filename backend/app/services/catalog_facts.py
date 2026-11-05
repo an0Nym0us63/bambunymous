@@ -150,3 +150,61 @@ def merge(*lists) -> list:
             seen.add(k)
             out.append(f)
     return out
+
+
+
+# ── Les champs du filament (05/11/2026) : ce que la synchro peut poser, une source par champ ──
+# priorite : notre catalogue, puis Bambu (profil Bambu Studio, boutique), puis l'Open Filament Database, puis
+# FilamentColors (ses temperatures sont celles du type : en dernier) ; la transparence (TD) ne vient que de lui
+def _i(v):
+    n = _num(v)
+    return int(round(n)) if n else None
+
+
+def fields(profile: dict | None, view: dict | None, fc: dict | None, store_code: str | None) -> dict:
+    cand: dict = {}
+
+    def put(k, v, src):
+        if v not in (None, "", 0) and k not in cand:
+            cand[k] = (v, src)
+
+    t = (view or {}).get("tech") or {}
+    vsrc = (view or {}).get("source")
+    # 1. notre catalogue
+    if vsrc == "own":
+        put("gtin", t.get("gtin"), "own")
+    # 2. Bambu
+    if profile:
+        p = profile
+        put("density", _num(p.get("filament_density")), "bambu")
+        put("nozzle_min", _i(p.get("nozzle_temperature_range_low")), "bambu")
+        put("nozzle_max", _i(p.get("nozzle_temperature_range_high")), "bambu")
+        beds = [x for x in (_i(p.get("textured_plate_temp")), _i(p.get("hot_plate_temp"))) if x]
+        if beds:
+            put("bed_min", min(beds), "bambu")
+            put("bed_max", max(beds), "bambu")
+        put("dry_temp", _i(p.get("filament_dev_ams_drying_temperature")), "bambu")
+        put("dry_hours", _num(p.get("filament_dev_ams_drying_time")), "bambu")
+    if store_code:
+        from . import bambu_store
+        e = (bambu_store.load().get("codes") or {}).get(str(store_code).strip()) or {}
+        put("buy_url", e.get("spool") or e.get("refill"), "boutique")
+    # 3. Open Filament Database
+    if vsrc == "ofd":
+        put("density", _num(t.get("density")), "ofd")
+        put("nozzle_min", _i(t.get("nozzle_min")), "ofd")
+        put("nozzle_max", _i(t.get("nozzle_max")), "ofd")
+        put("bed_min", _i(t.get("bed_min")), "ofd")
+        put("bed_max", _i(t.get("bed_max")), "ofd")
+        put("gtin", t.get("gtin"), "ofd")
+        link = next((l.get("url") for l in t.get("links") or [] if l.get("url") and "amzn." not in l["url"] and "amazon." not in l["url"]), None)
+        put("buy_url", link, "ofd")
+    # 4. FilamentColors
+    if fc:
+        put("td", _num(fc.get("td")), "fc")
+        put("nozzle_min", _i(fc.get("hot")), "fc")
+        put("bed_min", _i(fc.get("bed")), "fc")
+        link = fc.get("link")
+        if link and "amzn." not in link and "amazon." not in link and not profile:
+            put("buy_url", link, "fc")
+    return cand

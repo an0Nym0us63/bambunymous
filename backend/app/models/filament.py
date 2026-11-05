@@ -43,6 +43,18 @@ class Filament(Base):
     catalog_ref: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     # ce qu'on garde a nous au lieu du catalogue (03/11/2026), CSV : name, color, family, type, brand, spool
     catalog_skip: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # ce que les catalogues en disent (05/11/2026), pose a la synchro champ par champ (coche par l'administrateur) :
+    # densite, temperatures de buse et de plateau, sechage conseille, transparence (TD), code-barres, lien d'achat
+    density: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    nozzle_min: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    nozzle_max: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    bed_min: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    bed_max: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    dry_temp: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    dry_hours: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    td: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    gtin: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    buy_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     external_filament_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     translated_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # nom localisé
     reference_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)

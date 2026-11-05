@@ -2594,6 +2594,17 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               <FRow l="Multicolor" v={f.multicolor_type && f.multicolor_type !== "monochrome" ? f.multicolor_type : null}/>
               <FRow l="Finition" v={FINISHES.find(([k]) => k === finishOf(f))?.[1] || null}/>
             </FCard>
+            {/* la fiche technique posee a la synchro (05/11/2026) */}
+            {[f.density, f.nozzle_min, f.nozzle_max, f.bed_min, f.bed_max, f.dry_temp, f.td, f.gtin, f.buy_url].some(v => v != null && v !== "") &&
+              <FCard t="Impression" i="🧪" c="#F97316">
+                <FRow l="Buse" v={f.nozzle_min || f.nozzle_max ? [f.nozzle_min, f.nozzle_max].filter(Boolean).join("–") + " °C" : null}/>
+                <FRow l="Plateau" v={f.bed_min || f.bed_max ? [...new Set([f.bed_min, f.bed_max].filter(Boolean))].join("–") + " °C" : null}/>
+                <FRow l="Densité" v={f.density ? `${String(f.density).replace(".", ",")} g/cm³` : null}/>
+                <FRow l="Séchage" v={f.dry_temp ? `${f.dry_temp} °C${f.dry_hours ? ` pendant ${String(f.dry_hours).replace(".", ",")} h` : ""}` : null}/>
+                <FRow l="Transparence (TD)" v={f.td != null ? String(f.td).replace(".", ",") : null}/>
+                <FRow l="Code-barres" v={f.gtin} mono/>
+                {f.buy_url && <FRow l="Acheter" v={<a href={f.buy_url} target="_blank" rel="noreferrer" style={{ color: "#3B82F6" }}>{f.buy_url.split("//").pop().split("/")[0]} ›</a>}/>}
+              </FCard>}
             <FCard t="Côté Bambu" i="🏷️" c="#0EA5E9">
               <FRow l="Profile ID" v={f.profile_id} mono/>
               <FRow l="Code couleur Bambu" v={f.fila_color_code} mono/>

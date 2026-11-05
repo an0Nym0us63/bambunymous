@@ -11,8 +11,14 @@ import { egg } from "../eggs";
 // parmi les propositions ou en cherchant soi-meme), sans correspondance (a chercher), deja a jour. « Appliquer » n'envoie
 // que ce qui est coche ou valide.
 const LABEL = { translated_name: "Nom", name: "Nom anglais", fila_type: "Type", material: "Famille", color: "Couleur", colors_array: "Couleurs",
-  multicolor_type: "Multicolore", fila_color_code: "Code couleur", profile_id: "Profil", manufacturer: "Marque", spool_weight_g: "Support vide" };
-const val = (k, v) => v == null || v === "" ? "—" : k === "color" ? `#${String(v).replace(/^#/, "").slice(0, 6)}` : k === "spool_weight_g" ? `${Math.round(v)} g` : String(v);
+  multicolor_type: "Multicolore", fila_color_code: "Code couleur", profile_id: "Profil", manufacturer: "Marque", spool_weight_g: "Support vide",
+  // la fiche technique (05/11/2026)
+  density: "Densité", nozzle_min: "Buse min", nozzle_max: "Buse max", bed_min: "Plateau min", bed_max: "Plateau max",
+  dry_temp: "Séchage", dry_hours: "Durée de séchage", td: "Transparence (TD)", gtin: "Code-barres", buy_url: "Lien d'achat" };
+const UNIT = { density: " g/cm³", nozzle_min: " °C", nozzle_max: " °C", bed_min: " °C", bed_max: " °C", dry_temp: " °C", dry_hours: " h" };
+const SRC = { bambu: ["Bambu", "#0EA5E9"], boutique: ["Boutique", "#22C55E"], ofd: ["OFD", "#8B5CF6"], own: ["Nous", "#F59E0B"], fc: ["FilamentColors", "#14B8A6"] };
+const val = (k, v) => v == null || v === "" ? "—" : k === "color" ? `#${String(v).replace(/^#/, "").slice(0, 6)}` : k === "spool_weight_g" ? `${Math.round(v)} g`
+  : k === "buy_url" ? String(v).split("//").pop().split("/")[0] : `${String(v).replace(".", ",")}${UNIT[k] || ""}`;
 const sw = (hex, size = 26) => <span style={{ width: size, height: size, borderRadius: Math.round(size * 0.28), flexShrink: 0,
   background: hex ? `#${String(hex).replace(/^#/, "").slice(0, 6)}` : "repeating-linear-gradient(135deg, var(--border) 0 3px, transparent 3px 6px)",
   boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.22)" }}/>;
@@ -23,6 +29,7 @@ const bodyOf = p => other(p) ? { source: p.source, ref: p.ref } : { fila_id: p.f
 export default function CatalogSyncSheet({ onClose, onDone, z = 1500 }) {
   const [d, setD] = useState(null);
   const [on, setOn] = useState({});             // id -> true : mise a jour sure cochee
+  const [off, setOff] = useState({});           // id -> {champ: true} : les champs decoches (05/11/2026)
   const [pick, setPick] = useState({});         // id -> proposition choisie (cle) ; validee si dans ok
   const [ok, setOk] = useState({});             // id -> true : correspondance devinee validee
   const [linked, setLinked] = useState({});     // id -> nom : rattache a la main depuis cette fenetre
@@ -39,11 +46,13 @@ export default function CatalogSyncSheet({ onClose, onDone, z = 1500 }) {
     const by = s => (d?.items || []).filter(x => x.status === s && !linked[x.id]);
     return { sure: by("sure"), guess: by("guess"), none: by("none"), ok: by("ok") };
   }, [d, linked]);
-  const n = g.sure.filter(x => on[x.id]).length + g.guess.filter(x => ok[x.id]).length;
+  const kept = x => x.changes.filter(c => !off[x.id]?.[c.f]);
+  const n = g.sure.filter(x => on[x.id] && kept(x).length).length + g.guess.filter(x => ok[x.id]).length;
   const strong = g.guess.filter(x => x.strong);
   const apply = async () => {
     const items = [
-      ...g.sure.filter(x => on[x.id]).map(x => ({ id: x.id, ...bodyOf(x.proposals[0]), link: false })),
+      ...g.sure.filter(x => on[x.id] && kept(x).length).map(x => ({ id: x.id, ...(x.tech_only ? { tech_only: true } : bodyOf(x.proposals[0])), link: false,
+        fields: kept(x).map(c => c.f) })),
       ...g.guess.filter(x => ok[x.id]).map(x => ({ id: x.id, ...bodyOf(x.proposals.find(p => keyOf(p) === pick[x.id]) || x.proposals[0]), link: true })),
     ];
     setBusy(true);
@@ -96,10 +105,16 @@ export default function CatalogSyncSheet({ onClose, onDone, z = 1500 }) {
             {g.sure.map(x => <React.Fragment key={x.id}>{card("#16a34a", <>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>{who(x)}
                 {toggle(!!on[x.id], on[x.id] ? "✓ Oui" : "Non", () => setOn(m => ({ ...m, [x.id]: !m[x.id] })), "#16a34a")}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingLeft: 35 }}>
-                {x.changes.map(c => <div key={c.f} style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text2)", display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <span style={{ color: "var(--muted)", minWidth: 86 }}>{LABEL[c.f] || c.f}</span>
-                  <span style={{ color: "var(--muted)", textDecoration: "line-through" }}>{val(c.f, c.a)}</span><span>→ {val(c.f, c.b)}</span></div>)}</div>
+              {/* chaque champ se coche ou non (05/11/2026) : decoche, il garde sa valeur */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 3, paddingLeft: 35, opacity: on[x.id] ? 1 : 0.5 }}>
+                {x.changes.map(c => { const sel = !off[x.id]?.[c.f];
+                  return <label key={c.f} style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text2)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", cursor: "pointer" }}>
+                    <input type="checkbox" checked={sel && !!on[x.id]} disabled={!on[x.id]} style={{ accentColor: "#16a34a", margin: 0 }}
+                      onChange={() => setOff(m => ({ ...m, [x.id]: { ...(m[x.id] || {}), [c.f]: sel } }))}/>
+                    <span style={{ color: "var(--muted)", minWidth: 96 }}>{LABEL[c.f] || c.f}</span>
+                    <span style={{ color: "var(--muted)", textDecoration: "line-through" }}>{val(c.f, c.a)}</span><span>→ {val(c.f, c.b)}</span>
+                    {c.src && SRC[c.src] && <span style={{ fontSize: 9.5, fontWeight: 900, padding: "0 6px", borderRadius: 20, color: SRC[c.src][1],
+                      background: `color-mix(in srgb, ${SRC[c.src][1]} 14%, transparent)` }}>{SRC[c.src][0]}</span>}</label>; })}</div>
             </>)}</React.Fragment>)}</>}
 
           {g.guess.length > 0 && <>{head("À confirmer", "#F59E0B", g.guess.length,

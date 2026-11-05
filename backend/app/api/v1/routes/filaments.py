@@ -96,6 +96,17 @@ class FilamentOut(BaseModel):
     fila_color_code: Optional[str] = None
     catalog_ref: Optional[str] = None     # catalogue des autres marques (« ofd:… »)
     catalog_skip: Optional[str] = None    # ce qu'on garde a nous au lieu du catalogue
+    # la fiche technique posee a la synchro (05/11/2026)
+    density: Optional[float] = None
+    nozzle_min: Optional[int] = None
+    nozzle_max: Optional[int] = None
+    bed_min: Optional[int] = None
+    bed_max: Optional[int] = None
+    dry_temp: Optional[int] = None
+    dry_hours: Optional[float] = None
+    td: Optional[float] = None
+    gtin: Optional[str] = None
+    buy_url: Optional[str] = None
     swatch: bool
     label_printed: bool = False
     label_printed_at: Optional[datetime] = None
@@ -110,6 +121,16 @@ class FilamentOut(BaseModel):
     updated_at: Optional[datetime] = None
 
 class FilamentCreate(BaseModel):
+    density: Optional[float] = None
+    nozzle_min: Optional[int] = None
+    nozzle_max: Optional[int] = None
+    bed_min: Optional[int] = None
+    bed_max: Optional[int] = None
+    dry_temp: Optional[int] = None
+    dry_hours: Optional[float] = None
+    td: Optional[float] = None
+    gtin: Optional[str] = None
+    buy_url: Optional[str] = None
     name: str
     name_en: Optional[str] = None
     translated_name: Optional[str] = None
@@ -1689,6 +1710,17 @@ def _fil_out(f: Filament, agg: tuple | None = None) -> FilamentOut:
         price=f.price, filament_weight_g=f.filament_weight_g, spool_weight_g=f.spool_weight_g,
         spool_tare_name=getattr(f, "spool_tare_name", None),
         profile_id=f.profile_id, fila_color_code=getattr(f, "fila_color_code", None),
+        catalog_ref=getattr(f, "catalog_ref", None),
+        density=getattr(f, "density", None),
+        nozzle_min=getattr(f, "nozzle_min", None),
+        nozzle_max=getattr(f, "nozzle_max", None),
+        bed_min=getattr(f, "bed_min", None),
+        bed_max=getattr(f, "bed_max", None),
+        dry_temp=getattr(f, "dry_temp", None),
+        dry_hours=getattr(f, "dry_hours", None),
+        td=getattr(f, "td", None),
+        gtin=getattr(f, "gtin", None),
+        buy_url=getattr(f, "buy_url", None),
         swatch=f.swatch, to_order=f.to_order,
         label_printed=bool(getattr(f, "label_printed", False)),
         label_printed_at=getattr(f, "label_printed_at", None),
@@ -2131,6 +2163,36 @@ async def _link_one(db, f, body: dict, link: bool = True) -> list:
     return changed
 
 
+TECH_FIELDS = ("density", "nozzle_min", "nozzle_max", "bed_min", "bed_max", "dry_temp", "dry_hours", "td", "gtin", "buy_url")
+
+
+def _tech_for(f, view: dict | None = None) -> dict:
+    """La fiche technique que les catalogues donnent a ce filament (05/11/2026) : {champ: (valeur, source)}, notre
+    catalogue et Bambu d'abord (voir catalog_facts.fields)."""
+    from ....services import catalog_facts as CF, fc_catalog, bambu_profiles
+    if view is None and f.catalog_ref:
+        view = _other_entry(f.catalog_ref)
+    bambu = "bambu" in (f.manufacturer or "").lower() or (bool(f.profile_id) and not f.catalog_ref)
+    if view and view.get("source") == "fc" and view.get("fc"):
+        fc = view["fc"]
+    else:
+        m = fc_catalog.matches(f.manufacturer or ("Bambu Lab" if bambu else ""), [f.name_en, f.name, f.translated_name],
+                               f.fila_type or "", f.material or "", f.color or "", limit=1)
+        fc = m[0] if m and m[0].get("how") == "nom" else None
+    return CF.fields(bambu_profiles.of(f.profile_id) if bambu else None, view, fc, f.fila_color_code if bambu else None)
+
+
+def _tech_changes(f, view: dict | None = None) -> list:
+    """Les champs techniques qui changeraient : [{f, a, b, src}] (une valeur egale, a l'arrondi pres, ne compte pas)."""
+    out = []
+    for k, (v, src) in _tech_for(f, view).items():
+        cur = getattr(f, k, None)
+        same = cur == v or (isinstance(cur, (int, float)) and isinstance(v, (int, float)) and abs(cur - v) < 0.005)
+        if not same:
+            out.append({"f": k, "a": cur, "b": v, "src": src})
+    return out
+
+
 @router.get("/filaments/enrich/preview")
 async def enrich_preview(db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
     """L'apercu de la synchro : rien n'est enregistre. items : {id, nom, marque, couleur…, status, changes, proposals,
@@ -2185,9 +2247,14 @@ async def enrich_preview(db: AsyncSession = Depends(get_db), _: str = Depends(re
                 ch = _apply_catalog(after, e, en_to_fr)
                 sure = (v, _diff(f, after, ch))
         if sure:
-            it.update(status="sure" if sure[1] else "ok", changes=sure[1], proposals=[sure[0]])
+            # et la fiche technique (05/11/2026) : densite, temperatures, sechage, TD, code-barres, lien d'achat
+            tech = _tech_changes(f, sure[0] if sure[0].get("source") in ("ofd", "own", "fc") else None)
+            ch = sure[1] + tech
+            it.update(status="sure" if ch else "ok", changes=ch, proposals=[sure[0]])
             items.append(it)
             continue
+        # pas de catalogue sur : la fiche technique se complete quand meme (profil Bambu, echantillon a son nom)
+        it["tech"] = _tech_changes(f)
         # a deviner : les plus ressemblantes du bon catalogue
         if bambu:
             pool = [v for e, v in bviews if f.profile_id and e.get("fila_id", "").upper() == f.profile_id.upper()] \
@@ -2209,6 +2276,11 @@ async def enrich_preview(db: AsyncSession = Depends(get_db), _: str = Depends(re
             named = str(best.get("name") or "").lower() in {str(x or "").lower() for x in (f.name, f.name_en, f.translated_name)}                 or str(best.get("name_fr") or "").lower() in {str(x or "").lower() for x in (f.name, f.name_en, f.translated_name)}
             it.update(status="guess", proposals=ranked, strong=_score(f, best) < 30 and (close or named))
         items.append(it)
+    # sans correspondance mais avec une fiche technique a completer (profil Bambu, echantillon a son nom) : une mise a
+    # jour de ces seuls champs (05/11/2026)
+    for it in items:
+        if it["status"] == "none" and it.get("tech"):
+            it.update(status="sure", changes=it.pop("tech"), tech_only=True)
     counts = {k: sum(1 for x in items if x["status"] == k) for k in ("sure", "ok", "guess", "none")}
     return {"items": items, "counts": counts, "bambu_ready": bool(raw), "others_ready": bool(ofd_brands)}
 
@@ -2223,7 +2295,27 @@ async def enrich_apply(body: dict = Body({}), db: AsyncSession = Depends(get_db)
         if f is None:
             continue
         try:
-            await _link_one(db, f, x, link=bool(x.get("link")))
+            # fields (05/11/2026) : les champs coches ; un champ decoche garde sa valeur (rien de retenu pour la suite)
+            fields = set(x.get("fields") or []) if "fields" in x else None
+            before = {a: getattr(f, a, None) for a in (*_SNAP, *TECH_FIELDS)}
+            if not x.get("tech_only"):
+                await _link_one(db, f, x, link=bool(x.get("link")))
+            if fields is not None:
+                for a in _SHOW:
+                    if a not in fields and getattr(f, a, None) != before.get(a):
+                        setattr(f, a, before[a])
+                if "colors_array" not in fields and "color" not in fields:
+                    f.colors_array, f.multicolor_type = before["colors_array"], before["multicolor_type"]
+                # les champs qui vont ensemble : le nom anglais avec le nom, le nom du support avec son poids
+                if "name" not in fields:
+                    f.name_en = before["name_en"]
+                if "spool_weight_g" not in fields:
+                    f.spool_tare_name = before["spool_tare_name"]
+                tech = _tech_for(f)
+                for k in TECH_FIELDS:
+                    if k in fields and k in tech:
+                        setattr(f, k, tech[k][0])
+                f.color_bucket = buckets_for(f.color, f.colors_array)
             done += 1
         except ValueError as e:
             errors.append({"id": f.id, "name": f.translated_name or f.name, "error": str(e)})
