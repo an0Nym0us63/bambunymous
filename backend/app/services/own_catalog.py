@@ -58,7 +58,8 @@ def view(x: dict) -> dict:
             "name": x["name"], "name_fr": x.get("name_fr") or fr_name({"en": x["name"]}), "color_hex": cols[0] if cols else "",
             "colors": cols, "color_type": ctype, "color_type_fr": ctype, "filament_weight_g": fw,
             "spool_weight_g": sw, "spool_src": src, "hex_approx": bool(x.get("hex_approx")), "gtin": x.get("gtin"),
-            "discontinued": bool(x.get("discontinued"))}
+            "discontinued": bool(x.get("discontinued")),
+            "tech": {k: v for k, v in {"gtin": x.get("gtin"), "print_temp": x.get("print_temp")}.items() if v}}
 
 
 def entry(ref: str) -> dict | None:

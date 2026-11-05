@@ -783,6 +783,64 @@ async def filament_print_counts(
     return {str(fid): n for fid, n in rows if fid is not None}
 
 
+def _facts_for(source: str = "", ref: str = "", fila_id: str = "", code: str = "", brand: str = "", names=(),
+               fila_type: str = "", family: str = "", hex_: str = "") -> dict:
+    """Les faits des catalogues pour une entree (ou un filament) : profil Bambu Studio, boutique, entree « autres
+    marques », echantillon FilamentColors ; et les echantillons trouves."""
+    from ....services import catalog_facts as CF, fc_catalog, bambu_profiles
+    view = _other_entry(ref, source) if source in ("ofd", "own", "fc") and ref else None
+    bambu = bool(fila_id) or "bambu" in (brand or "").lower()
+    if view and not names:
+        names = (view.get("name"),)
+    measured = []
+    if view and view.get("source") == "fc" and view.get("fc"):
+        measured = [{**view["fc"], "how": "nom", "score": 0, "url": view.get("url")}]
+    else:
+        measured = fc_catalog.matches(brand or ("Bambu Lab" if bambu else ""), list(names), fila_type, family, hex_)
+    # le profil Bambu et l'entree du catalogue passent avant l'echantillon (ses temperatures sont celles du type)
+    facts = CF.merge(CF.from_profile(bambu_profiles.of(fila_id)) if bambu else [], CF.from_view(view),
+                     CF.from_fc(measured[0] if measured and measured[0].get("how") == "nom" else None),
+                     CF.from_store(code) if bambu else [])
+    if bambu:                                   # un Bambu se rachete a la boutique Bambu d'ici, pas a celle de l'echantillon
+        facts = [x for x in facts if x["k"] != "buy_fc"]
+    return {"facts": facts, "measured": measured, "sources": CF.SRC}
+
+
+@router.get("/catalog/facts")
+async def catalog_facts(source: str = "", ref: str = "", fila_id: str = "", code: str = "", brand: str = "", name: str = "",
+                        fila_type: str = "", family: str = "", hex: str = "", _: str = Depends(get_current_user)):
+    """Les faits d'une entree des catalogues (05/11/2026), pour le navigateur des catalogues."""
+    import asyncio as _aio
+    return await _aio.to_thread(_facts_for, source, ref, fila_id, code, brand, (name,) if name else (), fila_type, family, hex)
+
+
+@router.get("/catalog/fc/brands")
+async def fc_brands(_: str = Depends(get_current_user)):
+    from ....services import fc_catalog
+    st = fc_catalog.status()
+    return {"available": st["available"], "count": st["count"], "brands": fc_catalog.all_brands()}
+
+
+@router.get("/catalog/fc/search")
+async def fc_search(brand: str = "", q: str = "", _: str = Depends(get_current_user)):
+    from ....services import fc_catalog
+    return fc_catalog.browse(brand, q)
+
+
+@router.get("/filaments/{fid}/sources")
+async def filament_sources(fid: int, db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
+    """Ce que les catalogues savent de ce filament (05/11/2026) : sa fiche des catalogues, chaque fait avec sa source."""
+    import asyncio as _aio
+    f = await db.get(Filament, fid)
+    if not f:
+        raise HTTPException(404, "Filament introuvable")
+    src, _s, ref = str(f.catalog_ref or "").partition(":")
+    bambu = "bambu" in (f.manufacturer or "").lower() or (bool(f.profile_id) and not f.catalog_ref)
+    return await _aio.to_thread(_facts_for, src if ref else "", ref, f.profile_id if bambu else "", f.fila_color_code or "",
+                                f.manufacturer or ("Bambu Lab" if bambu else ""), (f.name_en, f.name, f.translated_name),
+                                f.fila_type or "", f.material or "", f.color or "")
+
+
 @router.get("/filaments/{fid}/measured")
 async def filament_measured(fid: int, db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
     """Sa couleur mesuree (05/11/2026, FilamentColors.xyz) : les echantillons de ce filament (meme marque, meme nom de

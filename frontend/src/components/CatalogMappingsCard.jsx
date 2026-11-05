@@ -5,11 +5,14 @@ import { FSheet, fBtn } from "./FicheKit";
 import CatalogNamesCard from "./CatalogNamesCard";
 import TypeTranscoCard from "./TypeTranscoCard";
 import FamilyMapCard from "./FamilyMapCard";
+import { CatalogBrowser } from "./CatalogPicker";
 
 // Les correspondances des catalogues (03/11/2026), chacune dans sa fenetre (la page des Parametres restait sinon
 // interminable) : les noms (traductions), les sous-types (gamme d'un catalogue -> notre sous-type), les familles
 // (sous-type -> famille). Chaque fenetre : chercher, ajouter, modifier, supprimer.
 const KINDS = [
+  // parcourir les catalogues (05/11/2026) : Bambu Lab, autres marques, couleurs mesurees, et la fiche de chaque entree
+  { id: "browse", icon: "📚", c: "#14B8A6", title: "Parcourir les catalogues", sub: "Bambu Lab, autres marques, couleurs mesurées" },
   { id: "names", icon: "🔤", c: "#8B5CF6", title: "Noms des couleurs", sub: "Nom anglais du catalogue → notre nom français",
     help: "Le catalogue Bambu n'a pas traduit toutes ses couleurs, et certaines traductions ne collent pas à la boutique. Nos noms passent avant le catalogue (scan RFID, AMS, commandes, fiches filament) ; en enregistrant, les fiches qui portaient l'ancien nom sont renommées, un nom tapé à la main n'est jamais touché." },
   { id: "types", icon: "🔀", c: "#0EA5E9", title: "Sous-types des catalogues", sub: "Gamme d'une autre marque → notre sous-type",
@@ -27,7 +30,7 @@ export default function CatalogMappingsCard({ card, cardTitle }) {
     client.get("/filaments/catalog/family-map").then(r => (r.data.items || []).length).catch(() => null),
   ]).then(([names, types, families]) => setN({ names, types, families }));
   useEffect(() => { counts(); }, []);
-  const k = KINDS.find(x => x.id === open);
+  const k = open === "browse" ? null : KINDS.find(x => x.id === open);
   return <div className="card" style={card}>
     <div style={{ ...cardTitle, display: "flex", alignItems: "center", gap: 6 }}>🗂️ Correspondances des catalogues</div>
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -43,6 +46,7 @@ export default function CatalogMappingsCard({ card, cardTitle }) {
         <span style={{ fontSize: 16, color: "var(--muted)", flexShrink: 0 }}>›</span>
       </button>)}
     </div>
+    {open === "browse" && <CatalogBrowser onClose={() => setOpen(null)}/>}
     {k && createPortal(<FSheet onClose={() => { setOpen(null); counts(); }} z={1500}
       bottom={<button onClick={() => { setOpen(null); counts(); }} style={{ ...fBtn, flex: 1 }}>Fermer</button>}>
       <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 10 }}>

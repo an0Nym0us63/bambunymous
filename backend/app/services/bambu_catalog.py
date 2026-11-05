@@ -119,6 +119,12 @@ class BambuCatalogSync:
         if st_fil not in (200, 304):
             log.warning(f"[CATALOG] nuancier Bambu Studio en échec ({st_fil}) : la copie locale reste")
         w_typ, st_typ = False, None
+        # les profils Bambu Studio (densite, temperatures, sechage) : relus avec le nuancier (05/11/2026)
+        try:
+            from . import bambu_profiles
+            bambu_profiles.sync_once()
+        except Exception as e:
+            log.warning(f"[CATALOG] profils Bambu Studio : {e}")
         log.info(f"[CATALOG] Sync terminée en {time.time()-t0:.1f}s "
                  f"(filaments={'maj' if w_fil else 'ok'}, types={'maj' if w_typ else 'ok'})")
         return {"filaments": w_fil, "types": w_typ, "status": {"filaments": st_fil, "types": st_typ}}

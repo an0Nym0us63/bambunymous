@@ -6,6 +6,7 @@ import Select from "./Select";
 import { FSheet, fBtn } from "./FicheKit";
 import { egg } from "../eggs";
 import { showAlert } from "../utils/dialog";
+import { useCatalogFacts, FactsList, MeasuredHead } from "./CatalogFacts";
 
 // Le catalogue Bambu : famille, type, recherche (nom francais, anglais, code couleur), et la liste des entrees.
 // Sorti de la creation d'un filament (02/11/2026) pour servir aussi au rattachement d'un filament existant.
@@ -35,7 +36,8 @@ const normB = s => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const isBambu = b => normB(b).startsWith("bambu");
 
 // brand0 : la marque du filament ; une autre que Bambu Lab ouvre le catalogue des autres marques sur elle (02/11/2026)
-export default function CatalogPicker({ onPick, field, family0 = "", type0 = "", near = null, brand0 = "" }) {
+// withMeasured : l'onglet « Mesurées » (toute la bibliotheque FilamentColors, Bambu compris) : le navigateur des catalogues
+export default function CatalogPicker({ onPick, field, family0 = "", type0 = "", near = null, brand0 = "", withMeasured = false }) {
   const [src, setSrc] = useState(brand0 && !isBambu(brand0) ? "ofd" : "bambu");
   const [families, setFamilies] = useState([]);
   const [typesByFamily, setTypesByFamily] = useState({});
@@ -48,7 +50,8 @@ export default function CatalogPicker({ onPick, field, family0 = "", type0 = "",
   const [entries, setEntries] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);            // pas de « non disponible » avant la premiere reponse
-  const ofd = src === "ofd";
+  const fcs = src === "fc";                                // FilamentColors (05/11/2026) : toute sa bibliotheque
+  const ofd = src === "ofd" || fcs;                         // le meme choix de marque
 
   useEffect(() => {
     client.get("/filaments/catalog/types").then(({ data }) => {
@@ -64,13 +67,13 @@ export default function CatalogPicker({ onPick, field, family0 = "", type0 = "",
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!ofd || brands) return;
-    client.get("/filaments/catalog/ofd/brands").then(({ data }) => {
+    client.get(fcs ? "/filaments/catalog/fc/brands" : "/filaments/catalog/ofd/brands").then(({ data }) => {
       const list = data.brands || [];
       setBrands(list);
       const hit = list.find(x => normB(x.name) === normB(brand0));
-      if (hit) { setBrand(hit.name); setFamily(f => hit.families.includes(f) ? f : ""); setType(""); }
+      if (hit) { setBrand(hit.name); setFamily(f => (hit.families || []).includes(f) ? f : ""); setType(""); }
     }).catch(() => setBrands([]));
-  }, [ofd]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ofd, fcs, brands == null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // un quart de seconde apres la derniere frappe (28/10/2026 : un appel par frappe)
   useEffect(() => { const t = setTimeout(() => setDq(q), 250); return () => clearTimeout(t); }, [q]);
@@ -81,7 +84,7 @@ export default function CatalogPicker({ onPick, field, family0 = "", type0 = "",
     if (family) params.family = family;
     if (type && !ofd) params.fila_type = type;
     if (dq.trim()) params.q = dq.trim();
-    client.get(ofd ? "/filaments/catalog/ofd/search" : "/filaments/catalog/search", { params })
+    client.get(fcs ? "/filaments/catalog/fc/search" : ofd ? "/filaments/catalog/ofd/search" : "/filaments/catalog/search", { params })
       .then(({ data }) => { setEntries(data.available ? data.entries || [] : []); setTotal(data.total ?? (data.entries || []).length); })
       .catch(() => { setEntries([]); setTotal(0); })
       .finally(() => setLoading(false));
@@ -97,7 +100,7 @@ export default function CatalogPicker({ onPick, field, family0 = "", type0 = "",
   const famList = ofd ? (cur?.families || []) : families;
   const types = ofd ? [...new Set(entries.map(e => e.fila_type).filter(Boolean))].sort()
     : family ? (typesByFamily[family] || []) : Object.values(typesByFamily).flat();
-  const tab = (id, label) => <button type="button" onClick={() => { if (src !== id) { setSrc(id); setFamily(""); setType(""); setEntries([]); } }}
+  const tab = (id, label) => <button type="button" onClick={() => { if (src !== id) { setSrc(id); setFamily(""); setType(""); setEntries([]); setBrand(""); setBrands(null); } }}
     style={{ flex: 1, padding: "8px 10px", borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: "pointer",
       border: `1px solid ${src === id ? "#6366F1" : "var(--border)"}`, color: src === id ? "#fff" : "var(--text2)",
       background: src === id ? "linear-gradient(135deg, #3B82F6, #6366F1)" : "var(--surface)" }}>{label}</button>;
@@ -105,18 +108,19 @@ export default function CatalogPicker({ onPick, field, family0 = "", type0 = "",
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ display: "flex", gap: 6 }}>{tab("bambu", "Bambu Lab")}{tab("ofd", "🌍 Autres marques")}</div>
+      <div style={{ display: "flex", gap: 6 }}>{tab("bambu", "Bambu Lab")}{tab("ofd", "🌍 Autres marques")}
+        {withMeasured && tab("fc", "🔬 Mesurées")}</div>
       {ofd && <Select searchable value={brand} onChange={e => { setBrand(e.target.value); setFamily(""); setType(""); }} style={field}
         options={[{ value: "", label: brands == null ? "Chargement des marques…" : "Choisis une marque" },
                   ...(brands || []).map(b => ({ value: b.name, label: `${b.name} · ${b.count}` }))]}/>}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {!fcs && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         <Select searchable value={family} onChange={e => { setFamily(e.target.value); setType(""); }}
           style={{ ...field, flex: 1, minWidth: 120 }}
           options={[{ value: "", label: "Toutes familles" }, ...famList.map(f => ({ value: f, label: f }))]}/>
         <Select searchable value={type} onChange={e => setType(e.target.value)}
           style={{ ...field, flex: 1, minWidth: 140 }}
           options={[{ value: "", label: ofd ? "Toutes gammes" : "Tous types" }, ...types.map(t => ({ value: t, label: t }))]}/>
-      </div>
+      </div>}
       <div style={{ position: "relative" }}>
         <Search size={15} style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--muted)", pointerEvents: "none" }}/>
         <input value={q} onChange={e => setQ(e.target.value)}
@@ -157,7 +161,8 @@ export default function CatalogPicker({ onPick, field, family0 = "", type0 = "",
                 {e.source && e.source !== "bambu"
                   ? <span data-tip={e.spool_src === "catalogue" ? "Poids du support vide donné par le catalogue" : e.spool_src ? "Poids du support vide estimé (SpoolmanDB : même marque, même matière)" : undefined}>
                       {e.source === "own" && <span style={{ color: "#8B5CF6", fontWeight: 800 }}>★ notre catalogue · </span>}
-                      {e.fila_type}{spoolTxt(e)}{e.hex_approx ? " · teinte approchée" : ""}{e.discontinued ? " · plus fabriqué" : ""}</span>
+                      {e.source === "fc" && <span style={{ color: "#14B8A6", fontWeight: 800 }}>🔬 mesurée{e.td != null ? ` · TD ${String(e.td).replace(".", ",")}` : ""} · </span>}
+                      {e.fila_type}{fcs ? ` · ${e.brand}` : spoolTxt(e)}{e.hex_approx ? " · teinte approchée" : ""}{e.discontinued ? " · plus fabriqué" : ""}</span>
                   : <>{e.fila_type} · <span style={{ fontFamily: "monospace" }}>{e.fila_color_code}</span></>}
               </p>
             </div>
@@ -245,4 +250,43 @@ export function CatalogLinkSheet({ f, onClose, onDone, z = 1600 }) {
         : <CatalogPicker onPick={setPick} field={field} family0={f.material || ""} type0={f.fila_type || ""} near={hex || null} brand0={f.manufacturer || ""}/>}
       </div>
     </FSheet>, document.body);
+}
+
+
+// Parcourir les catalogues (05/11/2026, Parametres › Filaments) : Bambu Lab, les autres marques, les couleurs mesurees ;
+// une entree s'ouvre sur sa fiche des catalogues (temperatures, sechage, densite, code-barres, liens d'achat...)
+export function CatalogBrowser({ onClose, z = 1500 }) {
+  const [pick, setPick] = useState(null);
+  const field = { width: "100%", padding: "9px 12px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13 };
+  return createPortal(<FSheet onClose={onClose} z={z}>
+    <div style={{ padding: "40px 16px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#14B8A6" }}>📚 Les catalogues</div>
+      {pick ? <EntryFacts e={pick} onBack={() => setPick(null)}/>
+        : <CatalogPicker onPick={e => { setPick(e); egg("catalogues_parcourus"); }} field={field} withMeasured/>}
+    </div>
+  </FSheet>, document.body);
+}
+
+function EntryFacts({ e, onBack }) {
+  const bambu = !e.source || e.source === "bambu";
+  const params = bambu ? { fila_id: e.fila_id, code: e.fila_color_code, brand: "Bambu Lab", name: e.name, fila_type: e.fila_type, family: e.family, hex: e.color_hex }
+    : { source: e.source, ref: e.ref, brand: e.brand, name: e.name, fila_type: e.fila_type, family: e.family, hex: e.color_hex };
+  const d = useCatalogFacts("/filaments/catalog/facts", params, [e.source, e.ref, e.fila_id, e.fila_color_code]);
+  const m = d?.measured?.[0];
+  return <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <button type="button" onClick={onBack} style={{ alignSelf: "flex-start", border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)",
+      borderRadius: 10, padding: "5px 11px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>‹ Retour à la liste</button>
+    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <span style={{ borderRadius: 12, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.25)", display: "inline-flex" }}><CatalogSwatch e={e} size={52}/></span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 17, fontWeight: 900, color: "var(--text)" }}>{e.name_fr && e.name_fr !== e.name ? `${e.name_fr} · ${e.name}` : e.name}</div>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>{[e.brand || "Bambu Lab", e.fila_type, e.fila_color_code].filter(Boolean).join(" · ")}</div>
+      </div>
+    </div>
+    <div style={{ padding: 12, borderRadius: 16, border: "1px solid var(--border)", background: "var(--surface2)" }}>
+      {!d ? <div style={{ fontSize: 12.5, color: "var(--muted)" }}>…</div> : <>
+        {m && <MeasuredHead m={m}/>}
+        <FactsList facts={d.facts} ours={e.source === "fc" ? null : e.color_hex}/></>}
+    </div>
+  </div>;
 }

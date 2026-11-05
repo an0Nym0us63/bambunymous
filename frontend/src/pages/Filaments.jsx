@@ -24,6 +24,7 @@ import IncomingOrders, { OrderSheet } from "../components/IncomingOrders";
 import { useTrackDetail } from "../utils/track";
 import Select from "../components/Select";
 import CatalogPicker, { CatalogLinkSheet } from "../components/CatalogPicker";
+import { useCatalogFacts, FactsList, MeasuredHead } from "../components/CatalogFacts";
 import { useIsAdmin } from "../store/auth";
 import { Pressable, openMenu } from "../components/ContextMenu";
 import { colorBg, parseColorsList, finishOf, isDark, autoFinishOf, FINISHES, COLOR_BUCKETS, BUCKET_FR, BUCKET_HEX, bucketsOf } from "../utils/colors";
@@ -2301,48 +2302,28 @@ function SpoolsView({ filaments, showArchived }) {
 
 // ── Vue Catalogue ──────────────────────────────────────────────────────────
 // ── Fiche filament catalogue ────────────────────────────────────────────────
-// sa couleur mesuree (05/11/2026, FilamentColors.xyz) : a cote de la notre, avec la transparence (TD) et la photo de
-// l'echantillon ; l'administrateur peut la reprendre. Rien n'est pose d'office
-function MeasuredCard({ f, onUpdated }) {
+// ce que les catalogues savent de ce filament (05/11/2026) : sa couleur mesuree (FilamentColors, avec la photo de
+// l'echantillon et sa transparence), le profil Bambu Studio, l'entree de son catalogue, les liens d'achat ; chaque fait
+// avec sa source. L'administrateur peut reprendre la couleur mesuree ; rien n'est pose d'office
+function CatalogFactsCard({ f, onUpdated }) {
   const isAdmin = useIsAdmin();
-  const [d, setD] = useState(null);
+  const d = useCatalogFacts(`/filaments/filaments/${f.id}/sources`, {}, [f.id, f.color, f.catalog_ref]);
   const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    let on = true;
-    client.get(`/filaments/filaments/${f.id}/measured`).then(r => { if (on) setD(r.data); }).catch(() => { if (on) setD(null); });
-    return () => { on = false; };
-  }, [f.id, f.color]);
-  if (!d?.available || !d.matches?.length) return null;
-  const best = d.matches[0], same = (f.color || "").replace(/^#/, "").slice(0, 6).toUpperCase() === best.hex;
-  const use = async m => {
+  if (!d || (!d.facts?.length && !d.measured?.length)) return null;
+  const m = d.measured?.[0];
+  const ours = (f.color || "").replace(/^#/, "").slice(0, 6).toUpperCase();
+  const use = async () => {
     setBusy(true);
     try { const r = await client.patch(`/filaments/filaments/${f.id}`, { color: m.hex }); egg("couleur_mesuree"); onUpdated?.(r.data); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setBusy(false);
   };
-  return <FCard t="Couleur mesurée" i="🔬" c="#14B8A6">
-    {d.matches.map((m, i) => <div key={m.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 0", borderTop: i ? "1px dashed var(--border)" : "none" }}>
-      {m.img ? <img src={m.img} alt="" loading="lazy" style={{ width:44, height:44, borderRadius:10, objectFit:"cover", flexShrink:0, background:"var(--surface2)" }}/>
-        : <span style={{ width:44, height:44, borderRadius:10, flexShrink:0, background:`#${m.hex}` }}/>}
-      <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:13, fontWeight:800, color:"var(--text)" }}>{m.name} <span style={{ color:"var(--muted)", fontWeight:600 }}>· {m.type}</span></div>
-        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>
-          <span style={{ display:"inline-flex", alignItems:"center", gap:4 }}>
-            <span data-tip="La nôtre" style={{ width:12, height:12, borderRadius:3, background:`#${(f.color || "888888").replace(/^#/, "").slice(0, 6)}`, border:"1px solid var(--border)" }}/>→
-            <span data-tip="Mesurée" style={{ width:12, height:12, borderRadius:3, background:`#${m.hex}`, border:"1px solid var(--border)" }}/>
-            <span style={{ fontFamily:"monospace" }}>#{m.hex}</span></span>
-          {m.td != null && <span data-tip="Transparence mesurée (TD) : l'épaisseur en mm sous laquelle la lumière passe, celle des HueForge">TD {String(m.td).replace(".", ",")}</span>}
-          {m.how === "teinte" && <span data-tip="Aucun échantillon à ce nom : la teinte la plus proche de la marque, pour info" style={{ color:"#d97706" }}>teinte proche</span>}
-          {m.url && <a href={m.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color:"#14B8A6" }}>voir ›</a>}
-        </div>
-      </div>
-      {isAdmin && i === 0 && m.how === "nom" && (f.color || "").replace(/^#/, "").slice(0, 6).toUpperCase() !== m.hex &&
-        <button type="button" disabled={busy} onClick={() => use(m)} data-tip="Remplacer notre couleur par celle mesurée"
-          style={{ flexShrink:0, padding:"5px 10px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface)", color:"var(--text2)",
-            fontSize:11.5, fontWeight:800, cursor:"pointer" }}>Utiliser</button>}
-    </div>)}
-    <div style={{ fontSize:10.5, color:"var(--muted)", marginTop:4 }}>
-      {same ? "Notre couleur est déjà celle mesurée. " : ""}Échantillons imprimés et mesurés par la communauté FilamentColors.xyz.</div>
+  return <FCard t="Fiche des catalogues" i="📚" c="#14B8A6">
+    {m && <MeasuredHead m={m}/>}
+    <FactsList facts={d.facts} ours={ours}/>
+    {isAdmin && m?.how === "nom" && ours !== m.hex && <button type="button" disabled={busy} onClick={use} data-tip="Remplacer notre couleur par celle mesurée"
+      style={{ marginTop: 8, padding: "6px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)",
+        fontSize: 12, fontWeight: 800, cursor: "pointer" }}>🔬 Utiliser la couleur mesurée</button>}
   </FCard>;
 }
 
@@ -2621,7 +2602,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               <FRow l="À commander" v={f.to_order ? "oui" : null} vc="#f97316"/>
             </FCard>
           </div>
-          <MeasuredCard f={f} onUpdated={onUpdated}/>
+          <CatalogFactsCard f={f} onUpdated={onUpdated}/>
           {f.comment && <div style={{ position:"relative", padding:"12px 14px 12px 18px", borderRadius:16, overflow:"hidden",
             background:"linear-gradient(135deg, color-mix(in srgb, #A855F7 12%, transparent), transparent 70%), var(--surface2)", border:"1px solid var(--border)" }}>
             <span aria-hidden="true" style={{ position:"absolute", left:0, top:10, bottom:10, width:4, borderRadius:4, background:"linear-gradient(#A855F7, #EC4899)" }}/>

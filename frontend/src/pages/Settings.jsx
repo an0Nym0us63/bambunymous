@@ -268,6 +268,7 @@ function EnrichFromCatalogSection() {
       <button onClick={() => setOpen(true)}
         style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 16px", background:"#3b82f6", border:"none", borderRadius:10,
           color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>🔍 Comparer aux catalogues</button>
+
       {last && <p style={{ fontSize:12, fontWeight:700, color:"#16a34a", margin:"10px 0 0" }}>
         ✓ {last.updated} filament{last.updated > 1 ? "s" : ""} mis à jour{last.errors ? ` · ${last.errors} en échec` : ""}</p>}
       {open && <CatalogSyncSheet onClose={() => setOpen(false)} onDone={setLast}/>}

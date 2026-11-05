@@ -102,6 +102,12 @@ def build_index() -> dict:
     for s in raw.get("sizes") or []:
         if isinstance(s, dict) and s.get("variant_id"):
             sizes[s["variant_id"]].append(s)
+    # la fiche technique (05/11/2026) : liens d'achat par taille, nom des boutiques
+    stores = {x["id"]: x.get("name") for x in raw.get("stores") or [] if isinstance(x, dict) and x.get("id")}
+    links = collections.defaultdict(list)
+    for x in raw.get("purchase_links") or []:
+        if isinstance(x, dict) and x.get("size_id") and x.get("url"):
+            links[x["size_id"]].append({"store": stores.get(x.get("store_id")) or "", "url": x["url"]})
     # SpoolmanDB : le support le plus frequent par (marque, matiere, poids net), puis (marque, poids net)
     sm = collections.defaultdict(collections.Counter)
     try:
@@ -130,10 +136,20 @@ def build_index() -> dict:
             fw, ew = s.get("filament_weight"), s.get("empty_spool_weight")
             if isinstance(fw, (int, float)) and fw > 0 and (s.get("diameter") in (None, 1.75)):
                 ws.append([int(fw), float(ew) if isinstance(ew, (int, float)) and 0 < ew <= 1000 else None])
+        # la taille de 1 kg (ou la premiere en 1,75) : son code-barres, sa reference, son mandrin, ses liens d'achat
+        sz = next((s for s in sizes.get(v["id"], []) if s.get("filament_weight") == 1000 and s.get("diameter") in (None, 1.75)),
+                  next((s for s in sizes.get(v["id"], []) if s.get("diameter") in (None, 1.75)), {}))
+        tech = {k: val for k, val in {
+            "density": f.get("density"), "dtol": f.get("diameter_tolerance"),
+            "nozzle_min": f.get("min_print_temperature"), "nozzle_max": f.get("max_print_temperature"),
+            "bed_min": f.get("min_bed_temperature"), "bed_max": f.get("max_bed_temperature"),
+            "gtin": sz.get("gtin") or sz.get("ean"), "article": sz.get("article_number"), "core": sz.get("spool_core_diameter"),
+            "refill": bool(sz.get("spool_refill")) or None, "links": links.get(sz.get("id"))[:4] if links.get(sz.get("id")) else None,
+            "brand_site": b.get("website"), "origin": b.get("origin")}.items() if val not in (None, "", [])}
         out.append({"ref": v["id"], "brand": bname, "gamme": _gamme(f.get("name"), bname), "material": str(f.get("material") or ""),
                     "name": str(v.get("name") or "").strip(), "hex": str(v.get("color_hex") or ""), "hexes": hexes,
                     "traits": sorted(k for k, on in (v.get("traits") or {}).items() if on), "weights": ws,
-                    "disc": bool(v.get("discontinued") or f.get("discontinued"))})
+                    "disc": bool(v.get("discontinued") or f.get("discontinued")), "tech": tech})
         counts[bname] += 1
     idx = {"version": raw.get("version"), "generated_at": raw.get("generated_at"), "built": time.time(),
            "brands": sorted(counts.items(), key=lambda x: x[0].casefold()), "entries": out, "spool_db": spool_db}
@@ -147,7 +163,10 @@ def build_index() -> dict:
 def sync_once() -> bool:
     a = _fetch(OFD_URL, OFD_FILE)
     b = _fetch(SPOOLMAN_URL, SPOOLMAN_FILE)
-    if (a or b or not (_dir() / INDEX_FILE).is_file()) and (_dir() / OFD_FILE).is_file():
+    # un index d'avant la fiche technique (05/11/2026) se refait
+    old = (index() or {}) if (_dir() / INDEX_FILE).is_file() else {}
+    stale = bool(old) and not any("tech" in e for e in (old.get("entries") or [])[:50])
+    if (a or b or stale or not (_dir() / INDEX_FILE).is_file()) and (_dir() / OFD_FILE).is_file():
         build_index()
         return True
     return False
@@ -213,7 +232,7 @@ def view(e: dict) -> dict:
             "brand": e.get("brand"), "fila_type": ft, "gamme": e.get("gamme"), "family": family_of(ft, e.get("material")) or e.get("material"),
             "name": e.get("name"), "name_fr": fr_name({"en": e.get("name")}), "color_hex": hexes[0], "colors": hexes,
             "color_type": ctype, "color_type_fr": ctype, "filament_weight_g": fw, "spool_weight_g": sw, "spool_src": src,
-            "discontinued": e.get("disc", False)}
+            "discontinued": e.get("disc", False), "tech": e.get("tech") or {}}
 
 
 def gammes() -> list:

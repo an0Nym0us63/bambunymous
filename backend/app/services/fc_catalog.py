@@ -25,6 +25,7 @@ API = "https://filamentcolors.xyz/api"
 SITE = "https://filamentcolors.xyz"
 INDEX_FILE, VERSION_FILE = "index.json", "version.json"
 INTERVAL_S = 7 * 86400
+FORMAT = 2                                      # la forme de l'index (2 : temperatures, RAL, Pantone) ; autre : relu
 TIMEOUT_S = 60
 PAUSE_S = 1.0                                   # entre deux pages : on ne martele pas leur serveur
 UA = "BambuNymous-CatalogSync/1.0 (cache hebdomadaire)"
@@ -60,7 +61,11 @@ def _entry(x: dict) -> dict | None:
             "name": str(x.get("color_name") or "").strip(), "hex": hx,
             "td": float(td) if isinstance(td, (int, float)) and td > 0 else None,
             "img": x.get("card_img") or x.get("image_front"), "link": x.get("mfr_purchase_link") or x.get("amazon_purchase_link"),
-            "avail": bool(x.get("is_available", True))}
+            "avail": bool(x.get("is_available", True)),
+            # (05/11/2026) les temperatures de son type, et les teintes de reference les plus proches
+            "hot": ft.get("hot_end_temp") or None, "bed": ft.get("bed_temp") or None,
+            "ral": " ".join(str(v) for v in ((x.get("closest_ral_1") or {}).get("code"), (x.get("closest_ral_1") or {}).get("name")) if v) or None,
+            "pantone": (x.get("closest_pantone_1") or {}).get("code") or None}
 
 
 def sync_once(force: bool = False) -> bool:
@@ -76,7 +81,8 @@ def sync_once(force: bool = False) -> bool:
         old = json.loads((d / VERSION_FILE).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         pass
-    if not force and (d / INDEX_FILE).is_file() and old.get("db_last_modified") == ver.get("db_last_modified"):
+    fresh = (d / INDEX_FILE).is_file() and old.get("db_last_modified") == ver.get("db_last_modified") and old.get("v") == FORMAT
+    if not force and fresh:
         return False
     out, url, pages = [], f"{API}/swatch/?format=json&page_size=100", 0
     while url and pages < 200:
@@ -95,7 +101,7 @@ def sync_once(force: bool = False) -> bool:
     tmp = d / f"{INDEX_FILE}.part"
     tmp.write_text(json.dumps(idx, ensure_ascii=False), encoding="utf-8")
     tmp.replace(d / INDEX_FILE)
-    (d / VERSION_FILE).write_text(json.dumps(ver), encoding="utf-8")
+    (d / VERSION_FILE).write_text(json.dumps({**ver, "v": FORMAT}), encoding="utf-8")
     logger.info(f"[FC] {len(out)} couleurs mesurées, {len(idx['brands'])} marques ({pages} pages)")
     return True
 
@@ -266,7 +272,10 @@ def view(e: dict) -> dict:
             "name_fr": fr_name({"en": e["name"]}), "color_hex": e["hex"], "colors": [e["hex"]], "color_type": "monochrome",
             "color_type_fr": "monochrome", "filament_weight_g": 1000, "spool_weight_g": sw, "spool_src": src,
             "measured": True, "td": e.get("td"), "img": e.get("img"), "url": f"{SITE}/swatch/{e['id']}/",
-            "discontinued": not e.get("avail", True)}
+            "discontinued": not e.get("avail", True),
+            "tech": {k: v for k, v in {"nozzle_min": e.get("hot"), "bed_min": e.get("bed"),
+                                       "links": [{"store": (e.get("link") or "").split("//")[-1].split("/")[0], "url": e["link"]}] if e.get("link") else None}.items() if v},
+            "fc": e}
 
 
 def _taken() -> set:
@@ -331,6 +340,26 @@ def search(brand: str = "", family: str = "", q: str = "") -> list:
         out.append(e)
     out.sort(key=lambda e: (not e.get("avail", True), str(e.get("type") or "").casefold(), e["name"].casefold()))
     return [view(e) for e in out]
+
+
+def all_brands() -> list:
+    """Toutes les marques de la bibliotheque, Bambu Lab compris (le navigateur des catalogues) : [{name, count}]."""
+    idx = index()
+    if not idx:
+        return []
+    return sorted(({"name": v[0]["brand"], "count": len(v)} for v in idx["by_brand"].values()), key=lambda b: b["name"].casefold())
+
+
+def browse(brand: str = "", q: str = "", limit: int = 600) -> dict:
+    """Toute la bibliotheque (pas seulement les references en plus), pour la parcourir."""
+    idx = index()
+    if not idx:
+        return {"available": False, "entries": []}
+    b, ql = _brand_key(brand) if brand else "", (q or "").strip().casefold()
+    pool = idx["by_brand"].get(b, []) if b else idx.get("entries") or []
+    out = [e for e in pool if not ql or ql in f"{e['name']} {e.get('type')} {e['brand']}".casefold()]
+    out.sort(key=lambda e: (str(e.get("type") or "").casefold(), e["name"].casefold()))
+    return {"available": True, "total": len(out), "entries": [view(e) for e in out[:limit]]}
 
 
 def entry(ref: str) -> dict | None:
