@@ -522,13 +522,14 @@ EVENTS["plan_deadline"] = {
 }
 EVENTS["plan_shift"] = {
     "section": "prints", "label": "Planning décalé",
-    "description": "Des plateaux du planning changent de jour sans que tu les aies rangés : une impression a pris du retard, "
-                   "rien n'a été lancé à l'heure prévue, ou une impression a fini plus tôt. Un message par vérification, avec "
-                   "chaque plateau, d'où il vient et pourquoi (tâche « Planning des impressions », toutes les 5 min).",
+    "description": "Le planning recule ou avance d'au moins 3 heures sans que tu l'aies rangé : une impression a pris "
+                   "beaucoup de retard, ou a fini bien plus tôt. Quelques minutes de retard ne préviennent pas, même si un "
+                   "plateau passe la coupure du soir et part le lendemain. Le message dit le premier plateau décalé, de quand "
+                   "à quand et pourquoi (tâche « Planning des impressions », toutes les 5 min).",
     "options": [],
-    "sample": {"title": "🔄 Le planning a glissé : 2 plateaux repoussés", "priority": 2, "link": "/prints?tab=calendar",
-               "message": "• Lampe lune · plateau 2 : aujourd'hui → demain (Finirait à 23 h 40, après l'arrêt de 22 h)\n"
-                          "• Vase spirale : demain → samedi 8 (l'impression en cours a pris du retard)"},
+    "sample": {"title": "🔄 Le planning a reculé de 4 h", "priority": 2, "link": "/prints?tab=calendar",
+               "message": "Lampe lune · plateau 2 : demain à 8 h → demain à 12 h (l'impression en cours a pris du retard)\n"
+                          "La suite suit."},
 }
 EVENTS["dry_needed_loaded"] = {
     "section": "dry", "label": "Bobine à sécher dans l'AMS",

@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 KEY = "PRINT_PLAN"
 HORIZON_DAYS = 60
+SHIFT_MIN = 180          # un plateau « decale » : son depart a bouge d'au moins 3 h (06/11/2026)
 DEFAULTS = {"gap": 15, "run": None, "launch": None}
 
 
@@ -1355,6 +1356,7 @@ async def check(cfg=None) -> dict:
     now = r["now"]
     snap = await _snap_load()
     prev = snap.get("days") or {}
+    prev_s = snap.get("starts") or {}
     same_rev = snap.get("rev") == int(d0.get("rev") or 0)
     today = datetime.fromisoformat(now).date()
     moved = [m for m in snap.get("moved") or []
@@ -1363,34 +1365,56 @@ async def check(cfg=None) -> dict:
     if same_rev:
         for j in r["jobs"]:
             was = prev.get(j["key"])
-            if was and was != j["day"]:
+            # decale : son heure de depart a bouge d'au moins SHIFT_MIN (06/11/2026). Changer de jour ne suffit plus :
+            # 5 minutes de retard faisaient passer le dernier plateau de chaque soiree au lendemain matin, et la moitie
+            # du planning « glissait »
+            s0 = prev_s.get(j["key"])
+            big = s0 and abs((datetime.fromisoformat(j["start"]) - datetime.fromisoformat(s0)).total_seconds()) >= SHIFT_MIN * 60
+            if big:
+                was = was or s0[:10]
                 # la cause d'abord, puis ce qui l'a poussee a ce jour-la (une plage d'heures, une date posee...)
-                cause = ("une impression a fini plus tôt" if was > j["day"] else "l'impression en cours a pris du retard" if r.get("live")
+                cause = ("une impression a fini plus tôt" if s0 > j["start"] else "l'impression en cours a pris du retard" if r.get("live")
                          else "rien n'a été lancé à l'heure prévue")
                 detail = next((x for x in j.get("reasons") or [] if not x.startswith("Posée")), None)
                 why = f"{cause} ; {detail[0].lower()}{detail[1:]}" if detail else cause
-                m = {"key": j["key"], "title": _title(j), "from": was, "to": j["day"], "at": now, "why": why}
+                m = {"key": j["key"], "title": _title(j), "from": was, "to": j["day"], "at": now, "why": why,
+                     "from_s": s0, "to_s": j["start"]}
                 moved = [x for x in moved if x["key"] != j["key"]] + [m]
                 fresh.append(m)
+    # la cause : de combien l'imprimante se libere plus tard (la fin de l'impression en cours), sinon de combien le
+    # premier plateau part plus tard. Quelques minutes, ce n'est qu'un glissement, meme si un plateau passe la coupure du
+    # soir et part le lendemain matin (8 h plus tard) : ni message ni « decale »
+    if fresh:
+        bu, bu0 = r.get("busy_until"), snap.get("busy")
+        if bu and bu0:
+            root = abs((datetime.fromisoformat(bu) - datetime.fromisoformat(bu0)).total_seconds())
+        else:
+            first = min(r["jobs"], key=lambda x: x["start"])
+            root = abs((datetime.fromisoformat(first["start"]) - datetime.fromisoformat(prev_s.get(first["key"], first["start"]))).total_seconds())
+        if root < SHIFT_MIN * 60:
+            keys = {m["key"] for m in fresh}
+            moved = [x for x in moved if x["key"] not in keys or x["at"] != now]
+            fresh = []
     overflow = [{"kind": "deadline", "text": f"{x['title']} : fini après sa date (avant le {_due_txt(x['due'])})"}
                 for x in r.get("deadlines") or [] if not x["ok"]]
     overflow += [{"kind": "long", "text": f"{_title(j)} : plus longue que la plage de fonctionnement"} for j in r["jobs"] if j.get("too_long")]
     last = r["jobs"][-1]["end"] if r["jobs"] else None
     await _snap_save({"at": now, "rev": int((await _load()).get("rev") or 0), "days": {j["key"]: j["day"] for j in r["jobs"]},
+                      "starts": {j["key"]: j["start"] for j in r["jobs"]}, "busy": r.get("busy_until"),
                       "moved": moved[-60:], "overflow": overflow, "count": len(r["jobs"]), "last_end": last})
     sent = 0
     # les rappels : a lancer, date limite (la logique d'avant, tick)
     if N.enabled_in(cfg, "plan_due") or N.enabled_in(cfg, "plan_deadline"):
         sent += await tick(cfg, r)
-    # un decalage : un seul message par verification, qui dit combien et jusqu'ou
+    # un decalage de plusieurs heures : un seul message, qui dit le premier plateau decale, de quand a quand, et
+    # pourquoi ; la suite le suit (le nombre de plateaux ne disait rien)
     if fresh and N.enabled_in(cfg, "plan_shift"):
-        later = [m for m in fresh if m["to"] > m["from"]]
-        lines = [f"• {m['title']} : {_day_fr(datetime.fromisoformat(m['from'] + 'T12:00'), today)} → "
-                 f"{_day_fr(datetime.fromisoformat(m['to'] + 'T12:00'), today)} ({m['why']})" for m in fresh[:6]]
-        if len(fresh) > 6:
-            lines.append(f"… et {len(fresh) - 6} autre{'s' if len(fresh) > 7 else ''}")
-        await N.notify("plan_shift", f"🔄 Le planning a glissé : {len(fresh)} plateau{'x' if len(fresh) > 1 else ''} "
-                       f"{'repoussé' if later else 'avancé'}{'s' if len(fresh) > 1 else ''}", "\n".join(lines),
+        m = min(fresh, key=lambda x: x["to_s"])
+        a, b = datetime.fromisoformat(m["from_s"]), datetime.fromisoformat(m["to_s"])
+        body = f"{m['title']} : {_day_fr(a, today)} à {_fmt(a)} → {_day_fr(b, today)} à {_fmt(b)} ({m['why']})"
+        if len(fresh) > 1:
+            body += "\nLa suite suit."
+        await N.notify("plan_shift", f"🔄 Le planning a {'reculé' if b > a else 'avancé'} de {_dur(abs((b - a).total_seconds()))}", body,
                        click=N.app_link(cfg, "/prints?tab=calendar"), priority=2)
         sent += 1
     return {"jobs": len(r["jobs"]), "moved": len(fresh), "overflow": len(overflow), "sent": sent}
