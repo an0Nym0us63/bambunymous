@@ -20,7 +20,7 @@ import { useFriend, currentFriend } from "../store/friend";
 import { noPageGesture } from "../utils/pullRefreshGuard";
 import MwImg from "../components/MwImg";
 import client, { apiUrl, apiThumb } from "../api/client";
-import { showAlert, showConfirm } from "../utils/dialog";
+import { showAlert, showConfirm, showChoice } from "../utils/dialog";
 import { egg } from "../eggs";
 import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
@@ -896,6 +896,15 @@ function OwnSourceCard({ designId, prints = [], group = false, url = null }) {
 // le numero de plateau lu dans le fichier (renumerote dans mon projet, ou
 // plusieurs plateaux MakerWorld regroupes sur un seul).
 const manualPlates = (raw) => { try { const m = JSON.parse(raw || "null"); return m && Array.isArray(m.plates) ? m : null; } catch { return null; } };
+// les exemplaires de ses plateaux qu'un print a donnes (05/11/2026) : dits a la main, sinon devines au poids (le
+// filament pris, sur le poids des plateaux MakerWorld : un plateau duplique pese le double) -- comme « A faire »
+const printCopies = (pr, plates, weightOf) => {
+  const m = manualPlates(pr.mw_plates);
+  if (m?.copies) return { n: m.copies, hand: true };
+  const w = plates.reduce((a, i) => a + (weightOf(i) || 0), 0);
+  if (!pr.total_weight_g || !w || plates.some(i => !weightOf(i))) return { n: 1, hand: false };
+  return { n: Math.max(1, Math.min(50, Math.floor(pr.total_weight_g / w + 0.35))), hand: false };
+};
 
 // les corrections faites sur la page, avant relecture des prints : partagees par la carte depliee et son double
 // cache (carte repliee), sinon replier la carte oubliait le profil qu'on venait de retenir
@@ -977,6 +986,11 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
   }, [designId, guessIds]);
   const isAdmin = useIsAdmin();
   const visiting = useFriend((s) => s.friend);
+  // les exemplaires de chaque print (05/11/2026), comptes par le serveur comme « A faire » : dits a la main, sinon
+  // elements declares sur pieces du plateau d'origine, sinon au poids
+  const [cps, setCps] = useState({});
+  const loadCps = () => designId && client.get(`/makerworld/model/${designId}/print-copies`).then(({ data }) => setCps(data.copies || {})).catch(() => {});
+  useEffect(() => { loadCps(); }, [designId]);   // eslint-disable-line react-hooks/exhaustive-deps
   const prints = printsIn.map(pr => pr.id in over ? { ...pr, mw_plates: over[pr.id] } : pr);
   const { avec, sure, guess, profOf } = guessProfile(profiles, prints, imgGuess, modelTitle, modelTitleFr);
   // la carte d'un profil, dans un groupe qui en melange plusieurs (04/11/2026) : elle s'ouvre sur le sien
@@ -1005,9 +1019,13 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
     const i = parseInt(pr.plate_id, 10);
     return i ? [i] : null;
   };
+  const weightOf = i => { const pl = prof.plates.find(q => q.index === i); return pl?.weight_g || null; };
+  const copiesOf = (pr, ps) => cps[pr.id] ? { n: cps[pr.id].n, hand: cps[pr.id].how === "main", how: cps[pr.id].how } : printCopies(pr, ps, weightOf);
   prints.forEach(pr => {
-    (platesOf(pr) || []).forEach(i => {
-      if (pr.status === "SUCCESS" || pr.status === "PARTIAL") done[i] = (done[i] || 0) + 1;
+    const ps = platesOf(pr) || [];
+    const c = copiesOf(pr, ps).n;
+    ps.forEach(i => {
+      if (pr.status === "SUCCESS" || pr.status === "PARTIAL") done[i] = (done[i] || 0) + c;
       else if (pr.status === "IN_PROGRESS") running[i] = true;
     });
   });
@@ -1021,9 +1039,11 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
   });
   const nProbable = Object.keys(probable).length;
   const acceptAll = () => Object.entries(probable).forEach(([i, l]) => l.forEach(({ pr }) => save(pr, [Number(i)])));
-  const save = async (pr, plates, reset = false) => {
+  const save = async (pr, plates, reset = false, copies) => {
+    // les exemplaires dits a la main restent, sauf quand on les change
+    const keep = copies === undefined ? manualPlates(pr.mw_plates)?.copies || null : copies;
     try {
-      const { data } = await client.put(`/prints/${pr.id}/mw-plates`, { profile: prof.profile_id, plates, reset });
+      const { data } = await client.put(`/prints/${pr.id}/mw-plates`, { profile: prof.profile_id, plates, reset, copies: keep });
       PLATES_OVER[pr.id] = data.mw_plates;
       setOver(o => ({ ...o, [pr.id]: data.mw_plates }));
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
@@ -1047,6 +1067,21 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
           return { icon: on ? "✅" : "⬜", img: apiThumb(apiUrl(`/prints/${pr.id}/image`), 128), label: pr.translated_name || pr.file_name,
             hint: [fmtDate(pr.print_date), STATUS_CFG[pr.status]?.label].filter(Boolean).join(" · "),
             onClick: () => save(pr, on ? cur.filter(i => i !== pl.index) : [...cur, pl.index]) };
+        }),
+        // combien d'exemplaires ce print a donnes (plateau duplique sur le plateau d'impression)
+        ...prints.filter(pr => (platesOf(pr) || []).includes(pl.index) && (pr.status === "SUCCESS" || pr.status === "PARTIAL")).map(pr => {
+          const cur = platesOf(pr) || [], c = copiesOf(pr, cur);
+          return { icon: "🔢", label: `Exemplaires : ×${c.n} (${{ main: "dit à la main", elements: "éléments déclarés", poids: "deviné au poids" }[c.how || (c.hand ? "main" : "poids")] || "par défaut"})`,
+            hint: `${pr.translated_name || pr.file_name} · touche pour corriger`,
+            onClick: async () => {
+              const v = await showChoice(`Combien d'exemplaires de ${cur.length > 1 ? "ces plateaux" : "ce plateau"} ce print a-t-il donnés ?`,
+                [{ value: "auto", icon: "⚖", label: "Automatique", hint: "Les éléments déclarés sur les pièces du plateau d'origine, sinon le poids : un plateau dupliqué pèse le double" },
+                  ...[1, 2, 3, 4, 5, 6].map(n => ({ value: n, label: `×${n}` }))]);
+              if (v == null) return;
+              await save(pr, cur, false, v === "auto" ? null : v);
+              loadCps();
+              egg("plateau_exemplaires");
+            } };
         }),
         // les impressions du groupe pas encore liees a ce modele (28/10/2026 : elles manquaient a la liste) : les choisir
         // les lie au modele et marque le plateau

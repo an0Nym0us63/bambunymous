@@ -2029,7 +2029,8 @@ async def get_print(print_id: int, _: str = Depends(get_current_user)):
 @router.put("/{print_id}/mw-plates")
 async def set_mw_plates(print_id: int, body: dict, _: str = Depends(get_current_user)):
     """Plateaux MakerWorld imprimes par ce print (choisis a la main). Une liste
-    vide dit « aucun plateau de ce profil » ; reset revient a la detection."""
+    vide dit « aucun plateau de ce profil » ; reset revient a la detection. copies (05/11/2026) : les exemplaires
+    de ces plateaux qu'il a donnes (plateau duplique sur le plateau d'impression), sinon devines au poids."""
     import json as _json
     plates = sorted({int(x) for x in (body.get("plates") or []) if str(x).isdigit() and 0 < int(x) < 1000})
     prof = str(body.get("profile") or "").strip()
@@ -2039,7 +2040,14 @@ async def set_mw_plates(print_id: int, body: dict, _: str = Depends(get_current_
         p = await db.get(Print, print_id)
         if not p:
             raise HTTPException(404)
-        p.mw_plates = None if body.get("reset") else _json.dumps({"profile": prof or None, "plates": plates})
+        try:
+            copies = int(body.get("copies")) if body.get("copies") else None
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Exemplaires : un nombre")
+        if copies is not None and not 1 <= copies <= 50:
+            raise HTTPException(400, "Exemplaires : de 1 à 50")
+        p.mw_plates = None if body.get("reset") else _json.dumps({"profile": prof or None, "plates": plates,
+                                                                   **({"copies": copies} if copies else {})})
         await db.commit()
         out = {"id": print_id, "mw_plates": p.mw_plates}
     # le 3MF d'origine de ce profil, recupere en fond s'il manque (28/10/2026) : la vue 3D, les couleurs et la

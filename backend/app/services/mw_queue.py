@@ -263,9 +263,9 @@ async def _ams_stock() -> dict:
 
 
 async def _printed_plates(dids) -> dict:
-    """Mes impressions reussies de ces modeles, plateau par plateau et profil par profil :
-    {design_id: {profil: {numero de plateau: nombre}}} (profil « » : pas connu). Un print qui regroupe plusieurs
-    plateaux (designes a la main) compte pour chacun."""
+    """Mes impressions reussies de ces modeles, une entree par print : {design_id: [{"prof", "plates", "g", "copies"}]}
+    (profil « » : pas connu ; plates : les plateaux qu'il couvre, un print qui en regroupe plusieurs comptant pour
+    chacun ; g : le filament qu'il a pris ; copies : les exemplaires de ses plateaux dits a la main, sinon None)."""
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print
@@ -274,35 +274,128 @@ async def _printed_plates(dids) -> dict:
         return {}
     from .makerworld import plate_keys
     async with AsyncSessionLocal() as db:
-        rows = (await db.execute(select(Print.design_id, Print.plate_id, Print.mw_profile_id, Print.mw_plates).where(
+        rows = (await db.execute(select(Print.design_id, Print.plate_id, Print.mw_profile_id, Print.mw_plates,
+                                        Print.total_weight_g, Print.number_of_items, Print.id).where(
             Print.design_id.in_(dids), Print.status.in_(("SUCCESS", "PARTIAL"))))).all()
     out = {}
-    for did, plate, prof, manual in rows:
+    for did, plate, prof, manual, g, items, pid in rows:
         # les plateaux designes a la main (regroupes, renumerotes) passent avant le numero du fichier,
         # comme sur la fiche (avant le 24/10/2026, « A faire » ne lisait que le numero)
+        by = {}
         for k in plate_keys(plate, prof, manual):
             pr, _, num = k.partition(":")
             try:
-                n = int(str(num or "1").strip() or 1)
+                by.setdefault(str(pr or "").strip(), []).append(int(str(num or "1").strip() or 1))
             except ValueError:
                 continue
-            per = out.setdefault(str(did), {}).setdefault(str(pr or "").strip(), {})
-            per[n] = per.get(n, 0) + 1
+        copies = plate_copies(manual)
+        for pr, ns in by.items():
+            out.setdefault(str(did), []).append({"prof": pr, "plates": ns, "g": _num(g), "copies": copies,
+                                                 "items": int(items or 1), "id": pid})
     return out
 
 
-def _printed_of(by_prof: dict, prof: dict | None, all_ids: set) -> dict:
+def plate_copies(manual) -> int | None:
+    """Les exemplaires de ses plateaux qu'un print a donnes, dits a la main (choix des plateaux sur sa fiche)."""
+    try:
+        m = json.loads(manual) if manual else None
+        c = int(m.get("copies")) if isinstance(m, dict) and m.get("copies") else None
+    except (ValueError, TypeError):
+        return None
+    return c if c and 1 <= c <= 50 else None
+
+
+def plate_pieces(design_id, prof: dict | None) -> dict:
+    """Les pieces de chaque plateau du 3MF d'origine de ce profil, quand on l'a : {plateau: nombre d'objets poses}."""
+    from . import mw_source
+    from .mw_3d import _settings
+    import zipfile
+    iid = None
+    for k in ((prof or {}).get("profile_id"), (prof or {}).get("instance_id")):
+        iid = iid or (mw_source.known(design_id, str(k)) if k else None)
+    if not iid:
+        return {}
+    path = mw_source.path_of(iid)
+    try:
+        key = (str(path), path.stat().st_mtime)
+    except OSError:
+        return {}
+    if key not in _PIECES:
+        try:
+            with zipfile.ZipFile(path) as z:
+                plates, _ = _settings(z)
+            _PIECES[key] = {n: len(inst) for n, _name, inst in plates if inst}
+        except Exception:
+            _PIECES[key] = {}
+        if len(_PIECES) > 500:
+            _PIECES.pop(next(iter(_PIECES)))
+    return _PIECES[key]
+
+
+_PIECES: dict = {}
+
+
+def copies_of(e: dict, plate_g: dict, pieces: dict) -> tuple:
+    """Les exemplaires de ses plateaux qu'un print a donnes, et comment on le sait (05/11/2026) :
+      - dits a la main (choix des plateaux sur sa fiche) ;
+      - sinon ses elements declares sur les pieces de ses plateaux d'origine, quand il en declare plus d'un et qu'on
+        connait les pieces (12 elements d'un plateau de 6 porte-cles : 2 exemplaires ; 6 : un seul) ;
+      - sinon au poids : le filament pris sur le poids des plateaux MakerWorld (un plateau duplique pese le double) ;
+      - sinon un."""
+    if e.get("copies"):
+        return e["copies"], "main"
+    ps = e["plates"]
+    pc = sum(pieces.get(n) or 0 for n in ps)
+    if (e.get("items") or 1) > 1 and pc and all(pieces.get(n) for n in ps) and e["items"] >= pc:
+        return max(1, min(50, round(e["items"] / pc))), "elements"
+    g = guess_copies(e.get("g"), ps, plate_g)
+    w = all(plate_g.get(n) for n in ps) and e.get("g")
+    return g, "poids" if w else "defaut"
+
+
+def guess_copies(g: float, plates: list, plate_g: dict) -> int:
+    """Les exemplaires devines au poids (05/11/2026) : le filament pris par le print, sur le poids de ses plateaux
+    MakerWorld. Un plateau duplique deux fois sur le plateau d'impression pese le double ; un plateau de 6 porte-cles
+    d'origine pese ce qu'il pese. Au moins un, et un seul quand le poids manque."""
+    w = sum(plate_g.get(n) or 0 for n in plates)
+    if not g or not w or any(not plate_g.get(n) for n in plates):
+        return 1
+    return max(1, min(50, int(g / w + 0.35)))         # a partir de 1,65x : 2 (un print partiel ou une pesee juste reste a 1)
+
+
+def _printed_of(entries: list, prof: dict | None, all_ids: set, plate_g: dict | None = None, pieces: dict | None = None) -> dict:
     """Les plateaux imprimes du profil retenu (05/11/2026 : le plateau 2 d'un autre profil n'est pas le meme) :
     ceux de ce profil (son numero d'instance ou de profil) et ceux dont le profil n'est pas connu. Si aucun print
-    du modele ne porte un profil qu'on connait (numerotation inconnue), tous comptent, comme avant."""
+    du modele ne porte un profil qu'on connait (numerotation inconnue), tous comptent, comme avant. Chaque print
+    compte ses exemplaires : dits a la main, sinon devines au poids (plate_g : le poids de chaque plateau)."""
     mine = {str((prof or {}).get("instance_id") or ""), str((prof or {}).get("profile_id") or ""), ""} - {"None"}
-    known = any(k in all_ids for k in by_prof if k)
+    known = any(e["prof"] in all_ids for e in entries if e["prof"])
     out = {}
-    for k, per in by_prof.items():
-        if known and k not in mine:
+    for e in entries:
+        if known and e["prof"] not in mine:
             continue
-        for n, c in per.items():
+        c = copies_of(e, plate_g or {}, pieces or {})[0]
+        for n in e["plates"]:
             out[n] = out.get(n, 0) + c
+    return out
+
+
+async def print_copies(design_id: str) -> dict:
+    """{print_id: {n, how, plates}} pour les prints reussis de ce modele : ce que la fiche montre et corrige."""
+    from .makerworld import model_detail
+    entries = (await _printed_plates([design_id])).get(str(design_id), [])
+    if not entries:
+        return {}
+    m = await model_detail(str(design_id), stale_ok=True)
+    profs = m.get("profiles") or []
+    out = {}
+    for e in entries:
+        prof = next((p for p in profs if e["prof"] and e["prof"] in (str(p.get("instance_id")), str(p.get("profile_id")))), None) \
+            or next((p for p in profs if p.get("main")), None) or (profs[0] if profs else None)
+        plate_g = {pl.get("index"): _num(pl.get("weight_g")) or sum(_num(f.get("g")) for f in pl.get("filaments") or [])
+                   for pl in (prof or {}).get("plates") or []}
+        n, how = copies_of(e, plate_g, plate_pieces(design_id, prof))
+        out[str(e["id"])] = {"n": n, "how": how, "plates": e["plates"]}
     return out
 
 
@@ -583,8 +676,10 @@ async def _compute(fresh: bool = False) -> dict:
             row["plates_ready"] = ready
             row["plates_count"] = len(plates)
             # chaque plateau : faisable tout de suite avec l'AMS ? deja imprime (par moi) ?
-            mine = _printed_of(done_plates.get(str(did), {}), prof,
-                               {str(x.get(i) or "") for x in profiles for i in ("instance_id", "profile_id")} - {""})
+            mine = _printed_of(done_plates.get(str(did), []), prof,
+                               {str(x.get(i) or "") for x in profiles for i in ("instance_id", "profile_id")} - {""},
+                               {pl.get("index"): _num(pl.get("weight_g")) or sum(_num(f.get("g")) for f in pl.get("filaments") or [])
+                                for pl in prof.get("plates") or []}, plate_pieces(did, prof))
             row["plates"] = [{"index": pl.get("index"), "name": pl.get("name") or "",
                               "ready": pl.get("index") in ready, "printed": mine.get(pl.get("index"), 0),
                               "seconds": _num(pl.get("seconds")) or None,

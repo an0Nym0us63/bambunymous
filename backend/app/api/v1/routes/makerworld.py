@@ -471,6 +471,14 @@ async def mw_plate_guess(design_id: str, ids: str = "", _: str = Depends(get_cur
     return await _call(mw_plate_guess.guess(design_id, ids.split(",")))
 
 
+@router.get("/model/{design_id}/print-copies")
+async def mw_print_copies(design_id: str, _: str = Depends(get_current_user)):
+    """{copies: {print_id: {n, how}}} : les exemplaires de ses plateaux que chaque print reussi a donnes (dits a la
+    main, sinon elements declares sur pieces du plateau d'origine, sinon au poids), comme « A faire » les compte."""
+    from ....services import mw_queue as Q
+    return {"copies": await _call(Q.print_copies(design_id))}
+
+
 @router.get("/model/{design_id}/print-profiles")
 async def mw_print_profiles(design_id: str, ids: str = "", _: str = Depends(get_current_user)):
     """{profiles: {print_id: profil}} : le profil retenu pour chaque impression du modele (04/11/2026), le meme que
