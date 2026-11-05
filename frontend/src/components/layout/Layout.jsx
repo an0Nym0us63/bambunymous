@@ -113,7 +113,10 @@ function BottomItem({ to, onClick, icon: Icon, label, c, isActive, dot }) {
   </>;
   const st = { flex:1, minWidth:0, display:"flex", flexDirection:"column", alignItems:"center", padding:"8px 0 2px", gap:3, fontSize:10.5,
     textDecoration:"none", fontWeight: isActive ? 800 : 600, color: isActive ? c : "var(--muted)", transition:"color 0.15s",
-    background:"none", border:"none", cursor:"pointer", fontFamily:"inherit" };
+    background:"none", border:"none", cursor:"pointer", fontFamily:"inherit",
+    // un bouton (« Plus ») centre son contenu en hauteur et garde sa propre hauteur de ligne : calé comme les liens
+    // (05/11/2026 : il était un peu plus haut que les autres)
+    justifyContent:"flex-start", alignSelf:"stretch", lineHeight:"inherit", margin:0, boxSizing:"border-box" };
   return to ? <Link to={to} aria-current={isActive ? "page" : undefined} style={st}>{inner}</Link>
     : <button type="button" onClick={onClick} aria-label={label} style={st}>{inner}</button>;
 }
