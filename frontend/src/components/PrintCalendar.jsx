@@ -313,7 +313,11 @@ export default function PrintCalendar() {
         </span>
         <span style={{ fontSize: 11, fontWeight: 900, color: c, background: `color-mix(in srgb, ${c} 14%, transparent)`, borderRadius: 9, padding: "2px 8px" }}>{l}</span>
       </button>; })}
-    {pick >= today && <DayStrip day={pick} done={sel?.items || []} jobs={selPlan} settings={pd?.settings} now={pd?.now}/>}
+    {pick >= today && <DayStrip day={pick} done={sel?.items || []} jobs={selPlan} settings={pd?.settings} now={pd?.now}
+      live={pd?.live && pd?.busy_until ? { now: pd.now, end: pd.busy_until, name: pd.live.name } : null}/>}
+    {pick >= today && pd?.live && pd?.busy_until && pd.busy_until.slice(0, 10) >= pick && pd.now.slice(0, 10) <= pick &&
+      <div style={{ fontSize: 11.5, fontWeight: 800, color: "#2563EB" }}>⏳ En cours : {pd.live.name} · fin vers {pd.busy_until.slice(11, 16).replace(":", " h ")}
+        {pd.busy_until.slice(0, 10) !== pd.now.slice(0, 10) ? " (le lendemain)" : ""}</div>}
     {selPlan.length > 0 && <>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
         <span style={{ flex: "1 0 100%", fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#22C55E" }}>
@@ -333,13 +337,15 @@ export default function PrintCalendar() {
       {edit && <ColorDay colors={pd?.colors} onPick={fid => colorDay(pick, fid)}/>}</div>}
   </div>;
   const openPrint = it => nav(`/prints?id=${it.id}`);
+  // l'impression en cours et sa fin estimee : la grille prolonge son bloc jusque-la
+  const live = pd?.live && pd?.busy_until ? { now: pd.now, end: pd.busy_until, name: pd.live.name } : null;
   const openJob = j => pickDay(j.day);
   const viewMain = view === "month" ? calendar
-    : view === "week" ? (wide ? <TimeGrid dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} hourPx={28}
+    : view === "week" ? (wide ? <TimeGrid dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} hourPx={28}
         pick={pick} onPick={pickDay} onOpenPrint={openPrint} onOpenJob={openJob} edit={edit} onDropDay={moveDay} height={600}/>
-      : <WeekAgenda dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} pick={pick}
+      : <WeekAgenda dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} pick={pick}
         onPick={k => { setPick(k); setView("day"); }} onOpenPrint={openPrint} onOpenJob={j => { setPick(j.day); setView("day"); }}/>)
-    : <TimeGrid dates={[pick]} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} hourPx={wide ? 46 : 40}
+    : <TimeGrid dates={[pick]} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} hourPx={wide ? 46 : 40}
         pick={pick} onPick={pickDay} onOpenPrint={openPrint} onOpenJob={openJob} edit={edit} onDropDay={moveDay} height={wide ? 640 : 460}/>;
   const advice = showPlan ? <>
     <PlanDeadlines items={pd?.deadlines} edit={edit} onDue={setDue}/>

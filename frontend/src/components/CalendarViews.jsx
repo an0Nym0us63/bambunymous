@@ -18,8 +18,14 @@ const minOf = (isoStr, day) => {
 const dayName = (d, long = false) => new Date(`${d}T12:00`).toLocaleDateString("fr-FR", long ? { weekday: "long", day: "numeric", month: "long" } : { weekday: "short", day: "numeric" });
 
 // ce qui occupe un jour : les impressions faites (et celle en cours), puis les plateaux prevus, coupes a minuit
-export function dayEvents(day, days, jobs) {
+export function dayEvents(day, days, jobs, live = null) {
   const out = [];
+  // l'impression en cours : ce qu'il lui reste, de maintenant a sa fin estimee (05/11/2026 : le bloc s'arretait a
+  // l'heure qu'il est), sur ce jour et le suivant si elle passe minuit
+  if (live?.end && live.now && live.now.slice(0, 10) <= day && live.end.slice(0, 10) >= day) {
+    const a = minOf(live.now, day), b = minOf(live.end, day);
+    if (b > a) out.push({ kind: "rest", key: `rest${day}`, a, b, live, color: "#3B82F6" });
+  }
   for (const it of [...new Map((days?.[day]?.items || []).map(i => [i.id, i])).values()]) {
     const a = minOf(it.start, day), b = Math.min(1440, a + Math.max(1, (it.seconds || 0) / 60));
     out.push({ kind: "done", key: `d${it.id}`, a, b, it, color: it.status === "IN_PROGRESS" ? "#3B82F6" : (ST[it.status] || ST.SUCCESS)[0] });
@@ -43,11 +49,11 @@ function Thumb({ e, size }) {
 }
 
 // la grille horaire d'un ou plusieurs jours
-export function TimeGrid({ dates, days, jobs, settings, now, hourPx = 30, pick, onPick, onOpenPrint, onOpenJob, edit, onDropDay, height }) {
+export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, pick, onPick, onOpenPrint, onOpenJob, edit, onDropDay, height }) {
   const scroller = useRef(null);
   const run = spans(settings?.run), launch = spans(settings?.launch);
   const today = now?.slice(0, 10), nowM = now ? minOf(now, today) : null;
-  const evs = Object.fromEntries(dates.map(d => [d, dayEvents(d, days, (jobs || []).filter(j => j.start.slice(0, 10) <= d && j.end.slice(0, 10) >= d))]));
+  const evs = Object.fromEntries(dates.map(d => [d, dayEvents(d, days, (jobs || []).filter(j => j.start.slice(0, 10) <= d && j.end.slice(0, 10) >= d), live)]));
   // a l'ouverture : la grille descend vers ce qui compte (l'heure qu'il est, ou le premier evenement, moins une heure)
   useEffect(() => {
     const el = scroller.current; if (!el) return;
@@ -93,7 +99,14 @@ export function TimeGrid({ dates, days, jobs, settings, now, hourPx = 30, pick, 
           {launch && launch.map(([a, b], i) => <span key={`l${i}`} data-tip="Heures de lancement" style={{ position: "absolute", left: 0, width: 3,
             top: a / 60 * hourPx, height: (b - a) / 60 * hourPx, background: "color-mix(in srgb, #6366F1 45%, transparent)" }}/>)}
           {Array.from({ length: 24 }, (_, h) => <span key={h} style={{ position: "absolute", left: 0, right: 0, top: h * hourPx, borderTop: "1px solid color-mix(in srgb, var(--border) 60%, transparent)" }}/>)}
-          {evs[d].map(e => {
+          {evs[d].filter(e => e.kind === "rest").map(e => <span key={e.key} data-tip={`${e.live.name || "Impression en cours"} : fin estimée vers ${hhmm(e.live.end)}`}
+            style={{ position: "absolute", left: 4, right: 3, top: e.a / 60 * hourPx, height: Math.max(14, (e.b - e.a) / 60 * hourPx - 2), zIndex: 1,
+              borderRadius: "0 0 8px 8px", border: "1.5px dashed #3B82F6", borderTop: "none", boxSizing: "border-box", overflow: "hidden",
+              background: "repeating-linear-gradient(135deg, color-mix(in srgb, #3B82F6 22%, transparent) 0 5px, color-mix(in srgb, #3B82F6 8%, transparent) 5px 10px)",
+              display: "flex", alignItems: "flex-end", justifyContent: "flex-end", padding: "0 6px 2px" }}>
+            {e.live.end.slice(0, 10) === d && <span style={{ fontSize: 10.5, fontWeight: 900, color: "#2563EB", whiteSpace: "nowrap" }}>⏳ fin vers {hhmm(e.live.end)}</span>}
+          </span>)}
+          {evs[d].filter(e => e.kind !== "rest").map(e => {
             const top = e.a / 60 * hourPx, h = Math.max(16, (e.b - e.a) / 60 * hourPx - 2);
             const big = h >= 34, plan = e.kind === "plan";
             const title = plan ? e.j.title : (e.it.title || e.it.name);
@@ -125,11 +138,11 @@ export function TimeGrid({ dates, days, jobs, settings, now, hourPx = 30, pick, 
 }
 
 // la semaine au telephone : un jour sous l'autre, sa frise, puis ce qui s'y passe dans l'ordre
-export function WeekAgenda({ dates, days, jobs, settings, now, pick, onPick, onOpenPrint, onOpenJob }) {
+export function WeekAgenda({ dates, days, jobs, settings, now, live, pick, onPick, onOpenPrint, onOpenJob }) {
   const today = now?.slice(0, 10);
   return <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
     {dates.map(d => {
-      const ev = dayEvents(d, days, (jobs || []).filter(j => j.day === d));
+      const ev = dayEvents(d, days, (jobs || []).filter(j => j.day === d)).filter(e => e.kind !== "rest");
       const done = days?.[d]?.duration || 0, planned = ev.filter(e => e.kind === "plan").reduce((a, e) => a + e.j.seconds, 0);
       return <div key={d} style={{ borderRadius: 16, border: `1px solid ${d === pick ? "color-mix(in srgb, #6366F1 50%, var(--border))" : "var(--border)"}`,
         background: "var(--surface)", padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
@@ -140,7 +153,7 @@ export function WeekAgenda({ dates, days, jobs, settings, now, pick, onPick, onO
             {planned ? <span style={{ color: "#16A34A" }}>{hm(planned)} prévues</span> : ""}</span>
           <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--muted)" }}>›</span>
         </button>
-        {(ev.length > 0 || d >= today) && <DayStrip day={d} done={days?.[d]?.items || []} jobs={(jobs || []).filter(j => j.day === d)} settings={settings} now={now}/>}
+        {(ev.length > 0 || d >= today) && <DayStrip day={d} done={days?.[d]?.items || []} jobs={(jobs || []).filter(j => j.day === d)} settings={settings} now={now} live={live}/>}
         {!ev.length && <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>{d < today ? "Rien d'imprimé" : "Rien de prévu"}</span>}
         {ev.map(e => {
           const plan = e.kind === "plan";
@@ -155,7 +168,8 @@ export function WeekAgenda({ dates, days, jobs, settings, now, pick, onPick, onO
               <span style={{ display: "block", fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {plan && e.j.completes ? "🏁 " : ""}{plan && unretained(e.j) ? "○ " : ""}{plan ? e.j.title : (e.it.title || e.it.name)}</span>
               <span style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {plan ? `${plateTxt(e.j)} · ${hm(e.j.seconds)}${e.j.load?.length ? " · 🧵" : ""}` : `${hm(e.it.seconds)} · ${(ST[e.it.status] || ST.SUCCESS)[1]}`}</span>
+                {plan ? `${plateTxt(e.j)} · ${hm(e.j.seconds)}${e.j.load?.length ? " · 🧵" : ""}`
+                  : e.it.status === "IN_PROGRESS" && live?.end ? `en cours · fin vers ${hhmm(live.end)}` : `${hm(e.it.seconds)} · ${(ST[e.it.status] || ST.SUCCESS)[1]}`}</span>
             </span>
           </button>;
         })}

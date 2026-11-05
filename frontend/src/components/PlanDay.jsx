@@ -26,7 +26,7 @@ export function spans(w) {
 
 // la journee en frise : 0 h a 24 h, la plage de fonctionnement en vert pale, celle de lancement soulignee, les
 // impressions faites en violet, les prevues hachurees de leur couleur
-export function DayStrip({ day, done = [], jobs = [], settings, now }) {
+export function DayStrip({ day, done = [], jobs = [], settings, now, live = null }) {
   const pct = m => `${(m / 1440) * 100}%`;
   const minOf = (iso, d) => { if (!iso) return 0; if (iso.slice(0, 10) < d) return 0; if (iso.slice(0, 10) > d) return 1440;
     return +iso.slice(11, 13) * 60 + +iso.slice(14, 16); };
@@ -45,6 +45,13 @@ export function DayStrip({ day, done = [], jobs = [], settings, now }) {
         return <span key={j.key} data-tip={`${jobName(j)} · ${hhmm(j.start)} → ${hhmm(j.end)}`} style={{ position: "absolute", top: 2, bottom: 2, left: pct(a), width: pct(Math.max(4, b - a)),
           borderRadius: 4, border: `1.5px dashed ${j.too_long ? "#EF4444" : "#22C55E"}`, boxSizing: "border-box",
           background: `repeating-linear-gradient(135deg, color-mix(in srgb, ${c} 55%, transparent) 0 4px, transparent 4px 8px)` }}/>; })}
+      {/* l'impression en cours : ce qu'il lui reste, jusqu'a sa fin estimee (05/11/2026) */}
+      {live?.end && live.now && live.now.slice(0, 10) <= day && live.end.slice(0, 10) >= day && (() => {
+        const a = live.now.slice(0, 10) < day ? 0 : minOf(live.now, day), b = live.end.slice(0, 10) > day ? 1440 : minOf(live.end, day);
+        return b > a ? <span data-tip={`${live.name || "Impression en cours"} : fin estimée vers ${hhmm(live.end)}`} style={{ position: "absolute", top: 2, bottom: 2,
+          left: pct(a), width: pct(Math.max(4, b - a)), borderRadius: 4, border: "1.5px dashed #3B82F6", boxSizing: "border-box",
+          background: "repeating-linear-gradient(135deg, color-mix(in srgb, #3B82F6 35%, transparent) 0 4px, transparent 4px 8px)" }}/> : null;
+      })()}
       {nowM != null && <span style={{ position: "absolute", top: 0, bottom: 0, left: pct(nowM), width: 2, background: "#EF4444" }}/>}
     </div>
     {(launch || []).map(([a, b], i) => <span key={`l${i}`} data-tip="Heures de lancement" style={{ position: "absolute", top: 27, height: 3, borderRadius: 2,
