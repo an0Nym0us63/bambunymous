@@ -27,6 +27,9 @@ export function spans(w) {
 
 // la journee en frise : 0 h a 24 h, la plage de fonctionnement en vert pale, celle de lancement soulignee, les
 // impressions faites en violet, les prevues hachurees de leur couleur
+// un plateau sur ce jour : commence ce jour-la, ou commence avant et deborde dessus (06/11/2026 : lance a 22 h 54 et fini
+// a 2 h, il ne se voyait pas au debut du lendemain)
+export const onDay = (j, d) => j.day === d || (!!j.start && !!j.end && j.start.slice(0, 10) < d && j.end > `${d}T00:00`);
 export function DayStrip({ day, done = [], jobs = [], settings, now, live = null }) {
   const pct = m => `${(m / 1440) * 100}%`;
   const minOf = (iso, d) => { if (!iso) return 0; if (iso.slice(0, 10) < d) return 0; if (iso.slice(0, 10) > d) return 1440;

@@ -5,7 +5,7 @@ import { egg } from "../eggs";
 import { showAlert } from "../utils/dialog";
 import { toast } from "../store/toast";
 import { useCanMw } from "../store/auth";
-import { DayStrip, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt } from "./PlanDay";
+import { DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt } from "./PlanDay";
 import { JobSheet, LowStockBanner, BlockedList } from "./PlanPanels";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 
@@ -125,7 +125,7 @@ export function planTileBody(p, { W, H }) {
   const max = Math.max(1, Math.floor((H - used) / 36));
   return <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 6, overflow: "hidden" }}>
     <StateHead p={p}/>
-    {showStrip && <DayStrip day={today} done={p.today_items || []} jobs={(p.jobs || []).filter(j => j.day === today)} settings={p.settings} now={p.now} live={live}/>}
+    {showStrip && <DayStrip day={today} done={p.today_items || []} jobs={(p.jobs || []).filter(j => onDay(j, today))} settings={p.settings} now={p.now} live={live}/>}
     {showLive && <LiveCard p={p} compact={W < 260}/>}
     <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
       {(p.jobs || []).length ? <Agenda jobs={p.jobs} now={p.now} max={max}/> : <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>Rien de prévu</span>}
@@ -168,7 +168,7 @@ export function PlanZoom({ p: p0 }) {
   return <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
     <StateHead p={p}/>
     {p.status?.text && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", marginTop: -4 }}>{p.status.text}</div>}
-    <DayStrip day={(p.now || "").slice(0, 10)} done={p.today_items || []} jobs={(p.jobs || []).filter(j => j.day === (p.now || "").slice(0, 10))} settings={p.settings} now={p.now} live={live}/>
+    <DayStrip day={(p.now || "").slice(0, 10)} done={p.today_items || []} jobs={(p.jobs || []).filter(j => onDay(j, (p.now || "").slice(0, 10)))} settings={p.settings} now={p.now} live={live}/>
     <NowNextTiles pd={p} wide onOpenPrint={it => nav(`/prints?id=${it.id}`)} onPickJob={setSel}/>
     <AlertChips p={p} big/>
     {sec("Les prochains jours")}
@@ -177,7 +177,7 @@ export function PlanZoom({ p: p0 }) {
         <span style={{ fontSize: 13.5, fontWeight: 900, color: "var(--text)", textTransform: "capitalize" }}>{dayLabel(d, p.now)}</span>
         <span style={{ fontSize: 11.5, fontWeight: 800, color: "#16A34A" }}>{dur((p.jobs || []).filter(j => j.day === d).reduce((a, j) => a + j.seconds, 0) / 60)} prévues</span>
       </div>
-      <DayStrip day={d} done={d === (p.now || "").slice(0, 10) ? p.today_items || [] : []} jobs={(p.jobs || []).filter(j => j.day === d)} settings={p.settings} now={p.now} live={live}/>
+      <DayStrip day={d} done={d === (p.now || "").slice(0, 10) ? p.today_items || [] : []} jobs={(p.jobs || []).filter(j => onDay(j, d))} settings={p.settings} now={p.now} live={live}/>
       <Agenda jobs={(p.jobs || []).filter(j => j.day === d)} now={p.now} max={40} onOpen={setSel}/>
     </div>)}
     {(p.jobs || []).some(j => j.low_info?.length) && <>{sec("Sous le seuil")}<LowStockBanner jobs={p.jobs} now={p.now} inPopup onOpen={setSel}/></>}
