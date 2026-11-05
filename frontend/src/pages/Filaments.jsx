@@ -1968,14 +1968,17 @@ function ArchiveWall({ spools, onOpen, menu }) {
               {g.life != null && <span data-tip="Durée moyenne d'une bobine, de sa première à sa dernière impression" style={{ color: "#8B5CF6" }}>⏱ {_dur(g.life)}</span>}
               {g.price > 0 && <span style={{ color: "#16A34A" }}>{moneyVal(g.price, 0)} €</span>}
             </div>
-            {span && <span style={{ alignSelf: "flex-start", maxWidth: "100%", marginTop: 3, padding: "1px 8px", borderRadius: 20, fontSize: 10.5, fontWeight: 800,
+            {/* la periode et l'ecart sur une meme ligne (05/11/2026 : l'ecart, pose en absolu dans le coin, chevauchait la periode) */}
+            {(span || g.drift) && <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", columnGap: 8, rowGap: 2, marginTop: 3, minWidth: 0 }}>
+            {span && <span style={{ maxWidth: "100%", padding: "1px 8px", borderRadius: 20, fontSize: 10.5, fontWeight: 800,
               whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
               color: `color-mix(in srgb, ${isDark(g.s.filament_color) ? "#94a3b8" : main} 62%, var(--text2))`,
               background: `color-mix(in srgb, ${isDark(g.s.filament_color) ? "#94a3b8" : main} 16%, transparent)` }}>
               {g.n > 1 ? `📅 ${span}` : `🏁 finie ${_dayFr(g.last)}`}</span>}
+            <DriftMark d={g.drift} style={{ marginLeft: "auto", flexShrink: 0 }}/>
+            </div>}
           </div>
           {g.n > 1 && <span style={{ fontSize: 16, color: "var(--muted)", flexShrink: 0 }}>›</span>}
-          <DriftMark d={g.drift} style={{ position: "absolute", bottom: 7, right: 12 }}/>
         </Pressable>;
       })}
     </div>
