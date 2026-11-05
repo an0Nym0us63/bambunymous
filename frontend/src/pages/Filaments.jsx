@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { usePromotedTabs } from "../utils/navMenu";
+import { usePromotedTabs, tabLabel } from "../utils/navMenu";
 import HiddenMark from "../components/HiddenMark";
 import Cachettes, { Hide } from "../components/Cachettes";
 import { createPortal } from "react-dom";
@@ -3581,7 +3581,7 @@ export default function Filaments() {
       <div className="hidden-mobile" style={{ display:"none", alignItems:"center",
         justifyContent:"flex-end", gap:10 }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)",
-          margin:0, marginRight:"auto" }}>Filaments</h1>
+          margin:0, marginRight:"auto" }}>{promoted.has(tab) ? tabLabel("/filaments", tab) : "Filaments"}</h1>
         {!friend && rfidScan.available && (
           <button onClick={rfidScan.toggle}
             aria-label="Scan RFID en continu" title={rfidScan.listening ? "Scan RFID actif" : "Scan RFID"}
@@ -3604,7 +3604,7 @@ export default function Filaments() {
       </div>
 
       {/* Tabs */}
-      <PageTabs tabs={tabs.filter(t => !promoted.has(t.id))} tab={tab} setTab={setTab}/>
+      {!promoted.has(tab) && <PageTabs tabs={tabs.filter(t => !promoted.has(t.id))} tab={tab} setTab={setTab}/>}
 
       {tab==="catalog" && <FilamentsView/>}
       {tab==="gallery" && (

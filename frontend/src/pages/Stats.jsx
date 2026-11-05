@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { usePromotedTabs } from "../utils/navMenu";
+import { usePromotedTabs, tabLabel } from "../utils/navMenu";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import HiddenMark from "../components/HiddenMark";
 import Cachettes from "../components/Cachettes";
@@ -1217,6 +1217,7 @@ export default function Stats() {
     </button>
   );
 
+  const promoted = usePromotedTabs("/stats");        // les onglets sortis au menu (05/11/2026)
   // Mobile : le bouton part dans le header fixe (via HeaderAction), il affiche la
   // plage courante. Desktop : le header mobile n'existe pas, titre + bouton dans le flux.
   const header = (
@@ -1225,7 +1226,7 @@ export default function Stats() {
       <div className="hidden-mobile" style={{ display: "none", alignItems: "center",
         justifyContent: "flex-end", gap: 10 }}>
         <h1 className="page-title" style={{ fontSize: 18, fontWeight: 700, color: "var(--text)",
-          margin: 0, marginRight: "auto" }}>Statistiques</h1>
+          margin: 0, marginRight: "auto" }}>{promoted.has(tab) ? tabLabel("/stats", tab) : "Statistiques"}</h1>
         {filterBtn()}
       </div>
       {filterOpen && (
@@ -1255,7 +1256,6 @@ export default function Stats() {
     </div>
   );
 
-  const promoted = usePromotedTabs("/stats");        // les onglets sortis au menu (05/11/2026)
   const tabs = [{ id:"prints", label:"Impressions", ic:"🖨️", c:"#3B82F6" }, { id:"filaments", label:"Filaments", ic:"🧵", c:"#F97316" },
     { id:"drying", label:"Séchage", ic:"💧", c:"#06B6D4" }, { id:"machine", label:"Machine", ic:"📈", c:"#0EA5E9" }, { id:"objects", label:"Objets", ic:"🎁", c:"#8B5CF6" },
     { id:"achievements", label:"Succès", ic:"🏆", c:"#F59E0B" }];
@@ -1265,7 +1265,7 @@ export default function Stats() {
       {header}
 
       {/* Onglets : chacun sa couleur ; l'icone seule sur les inactifs quand la place manque */}
-      <StatTabs tabs={tabs.filter(t => !promoted.has(t.id))} tab={tab} setTab={setTab}/>
+      {!promoted.has(tab) && <StatTabs tabs={tabs.filter(t => !promoted.has(t.id))} tab={tab} setTab={setTab}/>}
       <style>{`@media (max-width: 600px) { .st-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
         .st-kpis > :last-child:nth-child(odd) { grid-column: 1 / -1; } }`}</style>
 

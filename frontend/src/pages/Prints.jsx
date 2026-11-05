@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { usePromotedTabs } from "../utils/navMenu";
+import { usePromotedTabs, tabLabel } from "../utils/navMenu";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import HiddenMark from "../components/HiddenMark";
 import Cachettes, { Hide } from "../components/Cachettes";
@@ -3900,10 +3900,11 @@ export default function Prints() {
     <div className="page-wide">
 
       {/* Titre */}
-      <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Impressions</h1>
+      <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>{promoted.has(viewMode) ? tabLabel("/prints", viewMode) : "Impressions"}</h1>
 
-      {/* Tabs Liste / Galerie / MakerWorld */}
-      <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:16, padding:4, border:"1px solid var(--border)" }}>
+      {/* Tabs Liste / Galerie / MakerWorld ; un onglet sorti au menu et ouvert de la : une page a lui, sans les onglets
+          d'Impressions (05/11/2026 : on arrivait sur la barre d'onglets sans aucun choisi) */}
+      {!promoted.has(viewMode) && <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:16, padding:4, border:"1px solid var(--border)" }}>
         {[["list","Liste","☰","#3B82F6"],["gallery","Galerie","🖼️","#EC4899"],["makerworld","MakerWorld","🌐","#06B6D4"],["queue","À faire","✅","#22C55E"],["calendar","Calendrier","📅","#8B5CF6"]].filter(([id]) => !promoted.has(id)).map(([id,label,ic,c])=>(
           // comme les Stats : largeur selon le texte, qui retrecit avec l'ecran
           <button key={id} onClick={()=>setViewMode(id)} aria-label={label} data-tip={tabsNarrow && viewMode!==id ? label : undefined} style={{
@@ -3915,7 +3916,7 @@ export default function Prints() {
             border:"none", transition:"all 0.15s",
           }}><span style={{ fontSize:"clamp(11px, 3.2vw, 13px)", filter: viewMode===id ? "none" : "grayscale(.5)" }}>{ic}</span>{tabsNarrow && viewMode!==id ? null : label}</button>
         ))}
-      </div>
+      </div>}
 
       {/* Onglet MakerWorld : collections, j'aime, « deja imprime ». Un clic
           sur « imprime N fois » revient a la liste, recherche posee. */}

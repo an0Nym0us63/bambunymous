@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronUp, ChevronDown, MoreHorizontal, Lock } from "lucide-react";
 import client from "../api/client";
 import { useAuth, ROLE_ADMIN } from "../store/auth";
 import { egg } from "../eggs";
 import { showConfirm } from "../utils/dialog";
-import Select from "./Select";
 import { normalize, pack, placesOf, PLACES, MOBILE_SLOTS, useNavStore, loadNavMenu } from "../utils/navMenu";
 
 // Parametres › Affichage › Menu (05/11/2026) : quelles pages, dans quel ordre, et ou (menu, « Plus », profil, masquee).
@@ -24,6 +24,7 @@ export default function MenuSettings() {
   const [accounts, setAccounts] = useState([]);
   const [saved, setSaved] = useState(undefined);      // le reglage lu (null : le menu par defaut)
   const [state, setState] = useState("");
+  const [copyOpen, setCopyOpen] = useState(false);
   const timer = useRef(null);
   const mine = useNavStore(s => s.saved), mineLoaded = useNavStore(s => s.loaded);
 
@@ -74,11 +75,26 @@ export default function MenuSettings() {
   return <div className="card" style={{ padding: 16 }}>
     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
       <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", flex: 1, minWidth: 120 }}>Menu</div>
-      {isAdmin && accounts.length > 0 && <div style={{ minWidth: 170 }}>
-        <Select value={who} onChange={setWho} options={[{ value: "", label: `Mon menu (${me})` },
-          ...accounts.map(a => ({ value: a.username, label: `${a.username}${a.own ? "" : " · par défaut"}` }))]}/></div>}
       {state && <span style={{ fontSize: 11.5, fontWeight: 700, color: state.startsWith("Erreur") ? "#EF4444" : "var(--muted)" }}>{state}</span>}
+      {isAdmin && accounts.length > 0 && <button type="button" onClick={() => setCopyOpen(true)} data-tip="Copier ce menu sur d'autres comptes"
+        style={{ border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)", borderRadius: 10, padding: "6px 11px",
+          fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>⧉ Copier vers…</button>}
     </div>
+    {/* l'administrateur : le compte dont il regle le menu, en pastilles */}
+    {isAdmin && accounts.length > 0 && <div role="radiogroup" aria-label="Compte" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+      {[{ username: "", label: `Moi · ${me}` }, ...accounts.map(a => ({ ...a, label: a.username }))].map(a => { const on = who === a.username;
+        return <button key={a.username || "_me"} type="button" role="radio" aria-checked={on} onClick={() => setWho(a.username)}
+          data-tip={a.username && !a.own ? "Pas encore réglé : le menu par défaut" : undefined}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 11px", borderRadius: 20, fontSize: 12.5, fontWeight: 800, cursor: "pointer",
+            border: on ? "none" : "1px solid var(--border)", color: on ? "#fff" : "var(--text2)",
+            background: on ? "linear-gradient(135deg, #8B5CF6, #6366F1)" : "var(--surface)" }}>
+          <span style={{ width: 18, height: 18, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 900,
+            background: on ? "rgba(255,255,255,.25)" : "#4f46e5", color: "#fff" }}>{(a.username || me || "?").charAt(0).toUpperCase()}</span>
+          {a.label}{a.username && !a.own && <span style={{ opacity: 0.6, fontWeight: 600 }}>· défaut</span>}</button>; })}
+    </div>}
+    {copyOpen && <CopyMenu from={who || me} fromLabel={who || "ton menu"} accounts={[{ username: me, role: ROLE_ADMIN }, ...accounts].filter(a => a.username !== (who || me))}
+      onClose={() => setCopyOpen(false)} onDone={sent => { setCopyOpen(false); setState(`Copié vers ${sent.join(", ")}`);
+        client.get("/home/menu/accounts").then(r => setAccounts(r.data.accounts || [])).catch(() => {}); if (sent.includes(me)) loadNavMenu(true); }}/>}
     <p style={{ margin: "0 0 10px", fontSize: 12.5, color: "var(--muted)", lineHeight: 1.45 }}>
       {who ? `Le menu de ${who} : ses pages, leur ordre, et où les trouver.` : "Tes pages, leur ordre, et où les trouver."} Accueil reste toujours en tête du menu ;
       Paramètres va dans le menu ou dans le profil. Une page masquée reste joignable par un lien ou la recherche.</p>
@@ -123,4 +139,41 @@ export default function MenuSettings() {
     {saved && <button type="button" onClick={reset} style={{ marginTop: 10, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)",
       borderRadius: 10, padding: "7px 12px", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>↺ Menu par défaut</button>}
   </div>;
+}
+
+// copier un menu sur d'autres comptes : on coche, on enregistre (05/11/2026)
+function CopyMenu({ from, fromLabel, accounts, onClose, onDone }) {
+  const [pick, setPick] = useState(() => new Set());
+  const [busy, setBusy] = useState(false);
+  const flip = u => setPick(p => { const n = new Set(p); n.has(u) ? n.delete(u) : n.add(u); return n; });
+  const save = async () => {
+    setBusy(true);
+    try { const r = await client.post("/home/menu/send", { from, to: [...pick] }); onDone(r.data.sent || []); }
+    catch (e) { setBusy(false); alert(e.response?.data?.detail || e.message); }
+  };
+  return createPortal(<>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 3999, background: "rgba(0,0,0,.45)" }}/>
+    <div role="dialog" aria-label="Copier le menu" style={{ position: "fixed", zIndex: 4000, left: "50%", top: "50%", transform: "translate(-50%, -50%)",
+      width: "min(92vw, 360px)", maxHeight: "80vh", overflow: "auto", borderRadius: 20, padding: 16, background: "var(--sheet-bg)", border: "1px solid var(--border)",
+      boxShadow: "0 20px 50px rgba(0,0,0,.45)" }}>
+      <div style={{ fontSize: 15, fontWeight: 900, color: "var(--text)" }}>⧉ Copier le menu</div>
+      <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 12px" }}>Le menu de <b>{fromLabel}</b> remplace celui des comptes cochés.</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {accounts.map(a => { const on = pick.has(a.username);
+          return <label key={a.username} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 12, cursor: "pointer",
+            border: `1px solid ${on ? "#8B5CF6" : "var(--border)"}`, background: on ? "color-mix(in srgb, #8B5CF6 12%, var(--surface))" : "var(--surface)" }}>
+            <input type="checkbox" checked={on} onChange={() => flip(a.username)} style={{ width: 17, height: 17, accentColor: "#8B5CF6" }}/>
+            <span style={{ flex: 1, fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>{a.username}</span>
+            {a.own === false && <span style={{ fontSize: 11, color: "var(--muted)" }}>menu par défaut</span>}
+          </label>; })}
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+        <button type="button" onClick={onClose} style={{ flex: 1, padding: 10, borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface2)",
+          color: "var(--text2)", fontWeight: 800, cursor: "pointer" }}>Annuler</button>
+        <button type="button" disabled={!pick.size || busy} onClick={save} style={{ flex: 2, padding: 10, borderRadius: 12, border: "none", fontWeight: 900,
+          cursor: pick.size ? "pointer" : "default", color: "#fff", opacity: pick.size ? 1 : 0.5,
+          background: "linear-gradient(135deg, #8B5CF6, #6366F1)" }}>{busy ? "…" : `Enregistrer${pick.size ? ` (${pick.size})` : ""}`}</button>
+      </div>
+    </div>
+  </>, document.body);
 }

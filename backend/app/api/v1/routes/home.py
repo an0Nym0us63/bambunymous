@@ -165,18 +165,17 @@ async def nav_menu_send(body: dict = Body(...), acc=Depends(require_own_account)
         raise HTTPException(403, "Réservé aux administrateurs")
     to = [str(x) for x in ((body or {}).get("to") or []) if isinstance(x, str)][:50]
     reset = bool((body or {}).get("reset"))
+    src = str((body or {}).get("from") or acc[0])          # le menu d'un compte vers d'autres (05/11/2026)
     from sqlalchemy import select
     from ....models.user import User
     async with AsyncSessionLocal() as db:
         d = await _menus(db)
-        mine = d.get(acc[0])
-        if not mine and not reset:
-            raise HTTPException(400, "Enregistre d'abord ton menu")
+        mine = d.get(src)
         known = set((await db.execute(select(User.username).where(User.active.is_(True)))).scalars().all())
-        sent = [u for u in dict.fromkeys(to) if u in known and u != acc[0]]
+        sent = [u for u in dict.fromkeys(to) if u in known and u != src]
         for u in sent:
-            if reset:
-                d.pop(u, None)
+            if reset or not mine:
+                d.pop(u, None)                  # le menu par defaut se copie aussi : rien de regle
             else:
                 d[u] = json.loads(json.dumps(mine))
         await set_setting(db, KEY_MENU, json.dumps(d))

@@ -92,6 +92,8 @@ export function isActiveItem(it, loc, visible) {
 // les onglets sortis de leur page (05/11/2026) : une entree deplacee au menu, dans « Plus » ou le profil (ailleurs que
 // sa place par defaut) n'est plus un onglet de sa page -- MakerWorld au menu n'est plus un onglet d'Impressions. A sa
 // place par defaut, ou masquee, l'onglet reste (Succes, dans le profil par defaut, reste un onglet de Stats)
+// le nom de l'onglet sorti, pour le titre de la page (« MakerWorld » plutot qu'« Impressions »)
+export const tabLabel = (path, tab) => NAV_ITEMS.find(i => i.to === `${path}?tab=${tab}`)?.label;
 export function usePromotedTabs(path) {
   const isAdmin = useAuth(s => s.role) === ROLE_ADMIN;
   const menu = useNavMenu(isAdmin);

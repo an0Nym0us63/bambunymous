@@ -163,8 +163,11 @@ export default function Layout() {
   const bottom = needMore ? bar.slice(0, MOBILE_SLOTS - 1) : bar;
   const moreList = needMore ? [...bar.slice(MOBILE_SLOTS - 1), ...more] : [];
   const [moreOpen, setMoreOpen] = React.useState(false);
+  // un onglet sorti au menu, ouvert : son nom en titre (« MakerWorld » plutot qu'« Impressions »)
+  const openTab = visible.find(i => i.to.includes("?tab=") && isActiveItem(i, loc, visible));
   React.useEffect(() => { setMoreOpen(false); }, [pathname, loc.search]);
-  const title = TITLES[pathname] ?? null;
+  const title0 = TITLES[pathname] ?? null;
+  const title = openTab && openTab.place !== openTab.def ? openTab.label : title0;
   const friend = useFriend((st) => st.friend);   // chez un copain
   const visitHome = useFriend((st) => st.visit);
   const [mini, flipMini] = useSideMini();
