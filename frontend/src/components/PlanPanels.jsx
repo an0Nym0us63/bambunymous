@@ -69,7 +69,7 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
   const { busy, run, row, dateRow } = useActRows(onClose);
   const [slot, setSlot] = useState(false);            // choisir sa place dans une journee (06/11/2026)
   if (slot) return <SlotPicker j={j} jobs={jobs || []} now={now} onClose={() => setSlot(false)}
-    onPick={(day, after) => run("slot", () => act.slot(day, after))}/>;
+    onPick={(day, after) => run("slot", () => act.slot(day, after))} onAuto={day => run("slot", () => act.dayBest(day))}/>;
   return <PlanPopup title={j.title} icon="🧩" color={j.why ? "#DC2626" : unretained(j) ? UNRET : j.completes ? "#059669" : "#22C55E"} onClose={onClose} z={5300}>
     <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
       <PlateThumb j={j} size={64}/>
@@ -102,10 +102,10 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
         <span style={{ fontSize: 18, width: 24, textAlign: "center" }}>○</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", lineHeight: 1.4 }}>Pas retenu : il passe après tous les plateaux retenus, et ne se pose
           sur aucun jour. Pour le placer, retiens son profil dans <b>Fiche du modèle</b>.</span></div>}
-      {edit && !j.why && !j.locked && !unretained(j) && dateRow("daybest", "📌", "Le placer sur un jour", "À la meilleure place de la journée (le moins de filaments à charger), du moment qu'il y finit ; le reste se décale", j.day, v => v && act.dayBest(v), new Date().toISOString().slice(0, 10))}
-      {edit && !j.why && !j.locked && !unretained(j) && act.slot && jobs && row("slot", "📍", "Choisir sa place dans une journée",
-        "Tu vois les plateaux du jour (figés, enchaînés…) et tu touches l'endroit où le glisser", () => setSlot(true))}
-      {edit && !j.why && !j.locked && !unretained(j) && dateRow("day", "📅", "Le poser sur un jour, après le reste", "Il y va après ce qui y est déjà", j.day, v => v && act.day(v), new Date().toISOString().slice(0, 10))}
+      {edit && !j.why && !j.locked && !unretained(j) && !(act.slot && jobs) && dateRow("daybest", "📌", "Le placer sur un jour", "À la meilleure place de la journée (le moins de filaments à charger), du moment qu'il y finit ; le reste se décale", j.day, v => v && act.dayBest(v), new Date().toISOString().slice(0, 10))}
+      {edit && !j.why && !j.locked && !unretained(j) && act.slot && jobs && row("slot", "📍", "Le placer sur un jour",
+        "Le jour, puis sa place : automatique (la meilleure de la journée) ou celle que tu touches entre les plateaux du jour", () => setSlot(true))}
+      {edit && !j.why && !j.locked && !unretained(j) && !(act.slot && jobs) && dateRow("day", "📅", "Le poser sur un jour, après le reste", "Il y va après ce qui y est déjà", j.day, v => v && act.day(v), new Date().toISOString().slice(0, 10))}
       {/* d'une traite (06/11/2026) : ses plateaux se suivent, rien d'un autre objet ne s'intercale */}
       {edit && act.chain && (j.plates_total > 1 || j.qty > 1) && <ChainPick j={j} busy={busy} run={run} act={act}/>}
       {row("sheet", "🧾", "Fiche du modèle", "Retenir le profil, choisir les plateaux et les filaments de chaque couleur", () => { act.sheet(); onClose(); })}
@@ -319,7 +319,7 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act }) {
 // Choisir la place d'un plateau dans une journee (06/11/2026) : le jour, ses plateaux dans l'ordre (figes, enchaines,
 // poses), et entre eux des « ici » : en premier, apres tel plateau, en dernier. Pas au milieu d'un objet « d'une traite »
 // strict (il resterait groupe) ; apres un fige, il part des que le fige est fini.
-function SlotPicker({ j, jobs, now, onClose, onPick }) {
+function SlotPicker({ j, jobs, now, onClose, onPick, onAuto }) {
   const [day, setDay] = useState(j.day || (now || "").slice(0, 10));
   const list = jobs.filter(x => x.key !== j.key && x.day === day && !unretained(x)).sort((a, b) => a.start.localeCompare(b.start));
   const strict = (a, b) => a && b && a.chain_g && a.chain_g === b.chain_g && a.chain !== "soft";
@@ -334,6 +334,16 @@ function SlotPicker({ j, jobs, now, onClose, onPick }) {
         onClick={e => { try { e.currentTarget.showPicker?.(); } catch { /* rien */ } }}
         style={{ flex: 1, padding: "6px 8px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", font: "inherit" }}/>
     </label>
+    {/* automatique : le systeme choisit (le moins de filaments a charger, aucune date limite ratee, il y finit) */}
+    <button type="button" onClick={() => onAuto(day)} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 12px",
+      marginBottom: 10, borderRadius: 12, border: "none", cursor: "pointer", font: "inherit", textAlign: "left", color: "#fff",
+      background: "linear-gradient(135deg, #6366F1, #8B5CF6)", boxShadow: "0 8px 18px -10px #6366F1" }}>
+      <span style={{ fontSize: 18 }}>✨</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 13.5, fontWeight: 900 }}>Automatique</span>
+        <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, opacity: 0.9, lineHeight: 1.35 }}>La meilleure place de la journée : le moins de filaments
+          à charger, aucune date limite ratée, du moment qu'il y finit</span></span></button>
+    <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#6366F1", margin: "0 0 5px" }}>Ou à la main</div>
     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
       {here(null, list.length ? "En premier" : "Ce jour-là")}
       {list.map((x, i) => <React.Fragment key={x.key}>
