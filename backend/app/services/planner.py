@@ -163,12 +163,15 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
     return out, changed
 
 
-def _ordered(jobs: list, order: list) -> list:
+def _ordered(jobs: list, order: list, pins: dict | None = None) -> list:
     rank = {k: i for i, k in enumerate(order)}
     pos = {j["key"]: i for i, j in enumerate(jobs)}
     # les modeles retenus d'abord, ceux qui ne le sont pas apres (05/11/2026 : planifies quand meme, en priorite basse) ;
     # dans chacun, l'ordre voulu, puis les nouveaux dans l'ordre de « A faire »
-    return sorted(jobs, key=lambda j: (not j.get("retained", True),) + ((0, rank[j["key"]]) if j["key"] in rank else (1, pos[j["key"]])))
+    # un plateau pose a la main sur un jour garde sa place parmi les retenus, meme si son modele ne l'est pas
+    pins = pins or {}
+    return sorted(jobs, key=lambda j: (not (j.get("retained", True) or j["key"] in pins),)
+                  + ((0, rank[j["key"]]) if j["key"] in rank else (1, pos[j["key"]])))
 
 
 # ── les heures ───────────────────────────────────────────────────────────────
@@ -362,7 +365,7 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
                 have.append(fid)
         del have[:max(0, len(have) - slots)]
         _, awaits = short(j)
-        low = []
+        low, low_info = [], []
         for f in j["fils"]:
             st = stock.get(f.get("filament_id"))
             g = f.get("g") or 0
@@ -374,7 +377,9 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
             st["ordered"] -= g - take
             if before >= st["low"] > st["g"] + st["ordered"]:
                 low.append(f"{f['name']} (il en restera {max(0, round(st['g'] + st['ordered']))} g)")
-        placed.append({**j, "awaits_order": awaits, "low_after": low, "start": s.isoformat(timespec="minutes"), "end": e.isoformat(timespec="minutes"),
+                low_info.append({"name": f["name"], "color": f.get("color"), "colors_array": f.get("colors_array"),
+                                 "multicolor_type": f.get("multicolor_type"), "left": max(0, round(st["g"] + st["ordered"])), "low": round(st["low"])})
+        placed.append({**j, "awaits_order": awaits, "low_after": low, "low_info": low_info, "start": s.isoformat(timespec="minutes"), "end": e.isoformat(timespec="minutes"),
                        "day": s.date().isoformat(), "pinned": j["key"] in pins, "reasons": rs, "too_long": too_long,
                        "load": [f["name"] for f in need], "wait_s": int((s - c).total_seconds()) if s > c else 0})
         cursor = e + rules.gap
@@ -627,7 +632,7 @@ async def _stock_ledger(stock_of: dict) -> dict:
 
 async def plan(tz: int | None = None) -> dict:
     d, now, jobs, dirty, loaded, live, busy = await _context(tz)
-    jobs = _ordered(jobs, d["order"])
+    jobs = _ordered(jobs, d["order"], d["pins"])
     keys = {j["key"] for j in jobs}
     # les poses de travaux sortis du planning (imprimes, retires de « A faire ») s'en vont
     for k in [k for k in d["pins"] if k not in keys]:
@@ -674,7 +679,7 @@ async def plan(tz: int | None = None) -> dict:
     def fix(ks):
         # en tete de file, cet objet tiendrait-il sa date ?
         o = ks + [j["key"] for j in jobs if j["key"] not in set(ks)]
-        rr = place(_ordered(jobs, o), d, now, busy, loaded, _slots())
+        rr = place(_ordered(jobs, o, d["pins"]), d, now, busy, loaded, _slots())
         return all(x["ok"] for x in deadlines(rr["jobs"], d, now) if x["keys"] and x["keys"][0] in set(ks))
     return {"settings": {k: d[k] for k in DEFAULTS}, "now": now.isoformat(timespec="minutes"),
             "busy_until": busy.isoformat(timespec="minutes") if busy else None,
@@ -750,7 +755,7 @@ async def color_day(day: str, fid: int) -> dict:
     except ValueError:
         raise PlanError("Jour invalide")
     d, now, jobs, _, loaded, live, busy = await _context(None)
-    jobs = _ordered(jobs, d["order"])
+    jobs = _ordered(jobs, d["order"], d["pins"])
     r = place(jobs, d, now, busy, loaded, _slots())
     # un objet a finir avant ce jour (ou ce jour meme) n'y est pas emmene : il raterait sa date
     dl = d.get("deadlines") or {}
@@ -794,7 +799,7 @@ async def arrange(body: dict) -> dict:
 async def optimize_plan(day: str | None = None) -> dict:
     """« Optimiser » : toute la file, ou un seul jour (ses travaux remis dans un ordre qui enchaine les couleurs)."""
     d, now, jobs, _, loaded, live, busy = await _context(None)
-    jobs = _ordered(jobs, d["order"])
+    jobs = _ordered(jobs, d["order"], d["pins"])
     if day:
         r = place(jobs, d, now, busy, loaded, _slots())
         on = [j for j in r["jobs"] if j["day"] == day]
@@ -820,7 +825,7 @@ async def optimize_plan(day: str | None = None) -> dict:
     # enchainer les couleurs ne doit pas faire deborder une date limite : un objet qui ne tient pas passe en tete,
     # les dates les plus proches d'abord (s'il ne tient pas meme en tete, il y reste : c'est le plus urgent)
     for _ in range(3):
-        r = place(_ordered(jobs, order), d, now, busy, loaded, _slots())
+        r = place(_ordered(jobs, order, d["pins"]), d, now, busy, loaded, _slots())
         broke = [x for x in deadlines(r["jobs"], d, now) if not x["ok"] and order[:len(x["keys"])] != x["keys"]]
         if not broke:
             break
@@ -849,7 +854,7 @@ async def smart_place(key: str) -> dict:
     """« Placer au mieux » : essaie ce plateau a chaque place des 40 premieres de la file et garde celle qui charge le
     moins de filaments, ne rate aucune date limite, laisse le moins de plateaux non planifiables, et le passe tot."""
     d, now, jobs, _, loaded, live, busy = await _context(None)
-    jobs = _ordered(jobs, d["order"])
+    jobs = _ordered(jobs, d["order"], d["pins"])
     keys = [j["key"] for j in jobs]
     if key not in keys:
         raise PlanError("Plateau inconnu du planning")
@@ -858,11 +863,52 @@ async def smart_place(key: str) -> dict:
     best = None
     for i in range(0, min(len(rest), 40) + 1):
         order = rest[:i] + [key] + rest[i:]
-        r = place(_ordered(jobs, order), d, now, busy, loaded, _slots())
+        r = place(_ordered(jobs, order, d["pins"]), d, now, busy, loaded, _slots())
         c = _cost(r, d, now, key)
         if best is None or c < best[0]:
             best = (c, order)
     return await arrange({"order": best[1], "pins": {key: None}})
+
+
+async def place_day(key: str, day: str) -> dict:
+    """« Le placer sur ce jour » (05/11/2026) : le plateau est pose sur ce jour, a la meilleure place de la journee
+    (le moins de filaments a charger, aucune date limite ratee), du moment qu'il y finit ; le reste se decale. Sans
+    place ou il finit le jour meme (plus long que la journee), il prend la premiere."""
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except ValueError:
+        raise PlanError("Jour invalide")
+    d, now, jobs, _, loaded, live, busy = await _context(None)
+    jobs = _ordered(jobs, d["order"], d["pins"])
+    keys = [j["key"] for j in jobs]
+    if key not in keys:
+        raise PlanError("Plateau inconnu du planning")
+    d["pins"][key] = day
+    rest = [k for k in keys if k != key]
+    base = place(_ordered(jobs, rest + [key], d["pins"]), d, now, busy, loaded, _slots())
+    on = [j["key"] for j in base["jobs"] if j["day"] == day and j["key"] != key]
+    # les places : avant chacun des plateaux de ce jour, et apres le dernier
+    first = min((rest.index(k) for k in on), default=None)
+    last = max((rest.index(k) for k in on), default=None)
+    if first is None:
+        at = next((i for i, k in enumerate(rest) if (next((j for j in base["jobs"] if j["key"] == k), {}).get("day") or "") > day), len(rest))
+        spots = [at]
+    else:
+        spots = list(range(first, last + 2))
+    best, fallback = None, None
+    for i in spots:
+        order = rest[:i] + [key] + rest[i:]
+        r = place(_ordered(jobs, order, d["pins"]), d, now, busy, loaded, _slots())
+        me = next((j for j in r["jobs"] if j["key"] == key), None)
+        c = _cost(r, d, now, key)
+        if fallback is None:
+            fallback = (c, order)
+        if not me or me["day"] != day or me["end"][:10] != day:
+            continue                                       # il doit commencer ET finir ce jour-la
+        if best is None or c < best[0]:
+            best = (c, order)
+    pick = best or fallback
+    return await arrange({"order": pick[1], "pins": {key: day}})
 
 
 async def later(key: str) -> dict:
@@ -871,7 +917,7 @@ async def later(key: str) -> dict:
     d["pins"].pop(key, None)
     d["order"] = [k for k in d["order"] if k != key]
     d0, now, jobs, _, loaded, live, busy = await _context(None)
-    keys = [j["key"] for j in _ordered(jobs, d["order"]) if j["key"] != key]
+    keys = [j["key"] for j in _ordered(jobs, d["order"], d["pins"]) if j["key"] != key]
     return await arrange({"order": keys + [key], "pins": {key: None}})
 
 

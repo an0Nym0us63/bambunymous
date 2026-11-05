@@ -76,7 +76,9 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
           <div style={{ fontSize: 11, fontWeight: 900, color: d === today ? "#6366F1" : "var(--text2)", textTransform: "capitalize" }}>{dayName(d)}</div>
           <div style={{ fontSize: 10, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {done ? hm(done) : ""}{done && planned ? " · " : ""}{planned ? <span style={{ color: "#16A34A" }}>{hm(planned)}</span> : ""}
-            {fin > 0 && <span style={{ marginLeft: 3, padding: "0 4px", borderRadius: 6, background: "#FACC15", color: "#713F12", fontWeight: 900 }}>🏁{fin > 1 ? fin : ""}</span>}</div>
+            {fin > 0 && <span style={{ marginLeft: 3, padding: "0 4px", borderRadius: 6, background: "#FACC15", color: "#713F12", fontWeight: 900 }}>🏁{fin > 1 ? fin : ""}</span>}
+            {evs[d].some(e => e.kind === "plan" && e.j.low_info?.length) && <span data-tip="Un filament passe sous le seuil ce jour-là"
+              style={{ marginLeft: 3, padding: "0 4px", borderRadius: 6, background: "#FEE2E2", color: "#B91C1C", fontWeight: 900 }}>📉</span>}</div>
         </button>;
       })}
     </div>}
@@ -126,6 +128,8 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
                   {plan ? `${hhmm(e.j.start)} → ${hhmm(e.j.end)} · ${plateTxt(e.j)}` : `${e.it.start?.slice(11, 16)} · ${hm(e.it.seconds)}`}</span>}
                 {big && one && plan && e.j.load?.length > 0 && <span style={{ display: "block", fontSize: 10.5, fontWeight: 800, color: "#EA580C" }}>🧵 {e.j.load.join(", ")}</span>}
                 {big && one && plan && e.j.completes && <span style={{ display: "block", fontSize: 10.5, fontWeight: 900, color: "#A16207" }}>{doneTxt(e.j)}</span>}
+                {big && plan && e.j.low_info?.length > 0 && <span style={{ display: "block", fontSize: 10.5, fontWeight: 900, color: "#DC2626", whiteSpace: "nowrap", overflow: "hidden",
+                  textOverflow: "ellipsis" }}>📉 {e.j.low_info.map(x => x.name).join(", ")}</span>}
               </span>
             </button>;
           })}

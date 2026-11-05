@@ -80,7 +80,8 @@ export function JobSheet({ j, now, edit, onClose, act }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {edit && !j.why && row("smart", "✨", "Placer au mieux", "Là où il charge le moins de filaments, sans faire rater de date limite, le plus tôt possible", () => run("smart", act.smart))}
       {edit && !j.why && row("later", "⏭", "Plus tard", "Il quitte sa place et son jour, et passe en fin de file", () => run("later", act.later))}
-      {edit && !j.why && dateRow("day", "📅", "Le poser sur un jour", "Il y va après ce qui y est déjà", j.day, v => v && act.day(v), new Date().toISOString().slice(0, 10))}
+      {edit && !j.why && dateRow("daybest", "📌", "Le placer sur un jour", "À la meilleure place de la journée (le moins de filaments à charger), du moment qu'il y finit ; le reste se décale", j.day, v => v && act.dayBest(v), new Date().toISOString().slice(0, 10))}
+      {edit && !j.why && dateRow("day", "📅", "Le poser sur un jour, après le reste", "Il y va après ce qui y est déjà", j.day, v => v && act.day(v), new Date().toISOString().slice(0, 10))}
       {edit && j.pinned && row("unpin", "📌", "Le rendre à la file", "Il n'est plus posé sur ce jour : il se place où il tient", () => run("unpin", act.unpin))}
       {row("sheet", "🧾", "Fiche du modèle", "Retenir le profil, choisir les plateaux et les filaments de chaque couleur", () => { act.sheet(); onClose(); })}
       {j.day && row("dayview", "🗓", "Voir sa journée", null, () => { act.dayview(); onClose(); })}
@@ -129,6 +130,34 @@ export function PoolGrouped({ jobs, now, edit, drag, onDrag, onOpen }) {
         </div>
       </div>;
     })}
+  </div>;
+}
+
+// l'alerte du seuil (05/11/2026) : quel filament passera sous un quart de bobine, quel jour, pendant quel plateau
+export function LowStockBanner({ jobs, now, onOpen }) {
+  const [all, setAll] = useState(false);
+  const alerts = (jobs || []).flatMap(j => (j.low_info || []).map(x => ({ ...x, j })));
+  if (!alerts.length) return null;
+  const shown = all ? alerts : alerts.slice(0, 3);
+  const dayTxt = iso => {
+    const d = iso.slice(0, 10), today = (now || "").slice(0, 10);
+    const t = new Date(`${today}T12:00`); t.setDate(t.getDate() + 1);
+    const tomorrow = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+    return d === today ? "aujourd'hui" : d === tomorrow ? "demain" : new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" });
+  };
+  return <div style={{ borderRadius: 14, border: "1px solid color-mix(in srgb, #DC2626 40%, var(--border))", padding: "9px 12px", display: "flex", flexDirection: "column", gap: 5,
+    background: "linear-gradient(135deg, color-mix(in srgb, #DC2626 10%, transparent), transparent 70%), var(--surface)" }}>
+    <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#DC2626" }}>
+      📉 Sous le seuil · {alerts.length} filament{alerts.length > 1 ? "s" : ""}</div>
+    {shown.map((a, i) => <button key={i} type="button" onClick={() => onOpen(a.j)} style={{ display: "flex", alignItems: "center", gap: 8, border: "none", background: "none",
+      padding: 0, cursor: "pointer", textAlign: "left", font: "inherit" }}>
+      <span style={{ width: 12, height: 12, borderRadius: "50%", flexShrink: 0, background: a.color || "#94A3B8", border: "1px solid rgba(0,0,0,.2)" }}/>
+      <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", lineHeight: 1.35 }}>
+        <b>{a.name}</b> passera sous le seuil <b>{dayTxt(a.j.start)}</b> vers {hhmm(a.j.end)}, pendant <b>{a.j.title}</b>
+        {a.j.plates_total > 1 ? ` · plateau ${a.j.plate}` : ""} <span style={{ color: "var(--muted)" }}>(il en restera {a.left} g, seuil {a.low} g)</span></span>
+    </button>)}
+    {alerts.length > 3 && <button type="button" onClick={() => setAll(v => !v)} style={{ alignSelf: "flex-start", border: "none", background: "none", padding: 0, cursor: "pointer",
+      fontSize: 12, fontWeight: 800, color: "#DC2626" }}>{all ? "Moins" : `+ ${alerts.length - 3} autre${alerts.length > 4 ? "s" : ""}`}</button>}
   </div>;
 }
 

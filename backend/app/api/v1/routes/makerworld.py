@@ -440,6 +440,16 @@ async def mw_plan_smart(body: dict = Body({}), _: str = Depends(require_mw)):
         raise HTTPException(400, str(e))
 
 
+@router.post("/plan/place-day")
+async def mw_plan_place_day(body: dict = Body({}), _: str = Depends(require_mw)):
+    """Le placer sur un jour ({key, day}) : a la meilleure place de la journee, du moment qu'il y finit."""
+    from ....services import planner as P
+    try:
+        return await P.place_day(str(body.get("key") or ""), str(body.get("day") or ""))
+    except P.PlanError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/plan/later")
 async def mw_plan_later(body: dict = Body({}), _: str = Depends(require_mw)):
     """« Plus tard » : le plateau ({key}) quitte sa place et passe en fin de file."""

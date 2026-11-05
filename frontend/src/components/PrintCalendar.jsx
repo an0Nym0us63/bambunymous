@@ -8,7 +8,7 @@ import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 import MwImg from "./MwImg";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
-import { PlanPopup, JobSheet, PoolGrouped, BlockedList } from "./PlanPanels";
+import { PlanPopup, JobSheet, PoolGrouped, BlockedList, LowStockBanner } from "./PlanPanels";
 import { DayStrip, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
@@ -147,6 +147,9 @@ export default function PrintCalendar() {
     arrange({ order: o, pins: { [k]: day } });
   };
   const unpin = k => arrange({ pins: { [k]: null } });
+  // le placer sur un jour (05/11/2026) : le serveur lui cherche la meilleure place de la journee, ou il finit le jour
+  // meme ; le reste se decale
+  const placeDay = (k, day) => send("/makerworld/plan/place-day", { key: k, day }, "post").then(ok => { if (ok) egg("planning_glisse"); });
   // un objet en tete de file (pour tenir sa date limite)
   const toFront = ks => arrange({ order: [...ks, ...keys.filter(k => !ks.includes(k))] });
   const applyAdvice = a => a.kind === "front" ? toFront(a.keys) : a.kind === "after" ? moveAfter(a.key, a.ref) : moveBefore(a.key, a.ref);
@@ -158,6 +161,7 @@ export default function PrintCalendar() {
     smart: () => send("/makerworld/plan/smart", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
     later: () => send("/makerworld/plan/later", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
     day: v => moveDay(j.key, v),
+    dayBest: v => placeDay(j.key, v),
     unpin: () => unpin(j.key),
     sheet: () => setSheet(j.design_id),
     dayview: () => { setPick(j.day); setView("day"); },
@@ -250,6 +254,9 @@ export default function PrintCalendar() {
             </>}
             <span style={{ position: "absolute", top: wide ? 4 : 3, left: wide ? 6 : 4, fontSize: wide ? 12 : 10.5, fontWeight: 900,
               color: isToday ? "#6366F1" : "var(--text)" }}>{d.getDate()}</span>
+            {p.some(j => j.low_info?.length) && <span data-tip={p.flatMap(j => (j.low_info || []).map(x => `📉 ${x.name} sous le seuil (${j.title})`)).join(" · ")}
+              style={{ position: "absolute", top: wide ? 4 : 2, left: wide ? 24 : 17, zIndex: 2, fontSize: wide ? 11 : 9, lineHeight: 1, padding: "1px 3px", borderRadius: 6,
+                background: "#FEE2E2", border: "1px solid #FCA5A5" }}>📉</span>}
             {/* un objet s'y termine : une pastille doree, lisible */}
             {finished.length > 0 && <span data-tip={finished.map(j => `${doneTxt(j)} : ${j.title}`).join(" · ")}
               style={{ position: "absolute", top: wide ? 3 : 2, right: wide ? 4 : 2, zIndex: 2, display: "inline-flex", alignItems: "center", gap: 2,
@@ -409,6 +416,7 @@ export default function PrintCalendar() {
         style={{ ...pill, color: "#16A34A", borderColor: "color-mix(in srgb, #22C55E 45%, var(--border))" }}>📋 La file ({pd.jobs.length})</button>}
     </div>
     {pd?.status && showPlan && <PlanStatus st={pd.status} live={null} check={pd.check}/>}
+    {pd && showPlan && <LowStockBanner jobs={pd.jobs} now={pd.now} onOpen={j => setJobSel(j)}/>}
     {pd && showPlan && <NowNextTiles pd={pd} wide={wide} onOpenPrint={it => nav(`/prints?id=${it.id}`)} onPickJob={j => setJobSel(j)}/>}
     {showPlan && (pd?.deadlines || []).filter(x => !x.ok).map(x => <PlanStatus key={x.design_id}
       st={{ state: "deadline", text: `${x.title} ne sera pas fini avant le ${dueTxt(x.due)} : voir les conseils` }}/>)}
