@@ -12,7 +12,8 @@ export const hhmm = iso => iso ? iso.slice(11, 16).replace(":", " h ").replace(/
 export const jobName = j => `${j.title}${j.plates_total > 1 ? ` · plateau ${j.plate}` : ""}${j.qty > 1 ? ` · ${j.copy}/${j.qty}` : ""}`;
 // le plateau qui termine un objet : « 🏁 Objet terminé » (« 1 sur 2 » quand il en faut plusieurs)
 export const doneTxt = j => j.completes ? `🏁 Objet terminé${j.qty > 1 ? ` · ${j.completes} sur ${j.qty}` : ""}` : null;
-const GOLD = "#EAB308";
+// le plateau qui termine un objet : vert profond, plein (05/11/2026 : en dore, il faisait penser a un avertissement)
+const GOLD = "#059669";
 const toMin = v => { const m = /^(\d{1,2}):(\d{2})$/.exec(v || ""); return m ? +m[1] * 60 + +m[2] : null; };
 
 // une plage d'heures sur la frise : [debut, fin] en minutes du jour, coupee a minuit
@@ -131,7 +132,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
       {j.awaits_order?.length > 0 && tag(`🚚 compte sur la commande : ${j.awaits_order.join(", ")}`, "#0EA5E9", "Le stock ne suffit pas : ce plateau prend sur une bobine commandée, pas encore reçue")}
       {j.low_after?.length > 0 && tag(`📉 sous le seuil : ${j.low_after.join(", ")}`, "#DC2626", "Après ce plateau, il restera moins d'un quart de bobine de ce filament")}
       {unretained(j) && tag("○ non retenu", "#64748B", "Profil par défaut, pas retenu dans « À faire » : planifié après les modèles retenus. Retiens-le depuis sa fiche (sa vignette) pour le planifier en priorité")}
-      {j.completes && tag(doneTxt(j), "#A16207", "Avec ce plateau, tous ceux de l'objet sont faits")}
+      {j.completes && tag(doneTxt(j), "#047857", "Avec ce plateau, tous ceux de l'objet sont faits")}
       {j.due && tag(`🎯 avant le ${dueTxt(j.due)}`, j.due_ok ? "#16A34A" : "#EF4444", j.due_ok ? "L'objet sera fini à temps" : "Le dernier plateau de l'objet finit après cette date")}
       {j.load?.length > 0 && tag(`🧵 À charger : ${j.load.join(", ")}`, "#EA580C", "Pas dans l'AMS à ce moment-là")}
     </div>}

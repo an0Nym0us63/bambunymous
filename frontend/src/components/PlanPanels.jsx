@@ -60,7 +60,7 @@ export function JobSheet({ j, now, edit, onClose, act }) {
       <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>{hint}</span></span>
     <input type="date" value={value || ""} min={min} onChange={e => run(k, () => onPick(e.target.value || null))}
       style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%" }}/></label>;
-  return <PlanPopup title={j.title} icon="🧩" color={j.why ? "#DC2626" : unretained(j) ? UNRET : j.completes ? "#EAB308" : "#22C55E"} onClose={onClose} z={5300}>
+  return <PlanPopup title={j.title} icon="🧩" color={j.why ? "#DC2626" : unretained(j) ? UNRET : j.completes ? "#059669" : "#22C55E"} onClose={onClose} z={5300}>
     <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
       <PlateThumb j={j} size={64}/>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
@@ -68,7 +68,7 @@ export function JobSheet({ j, now, edit, onClose, act }) {
         {j.start && <span style={{ fontSize: 14, fontWeight: 900, color: "var(--text)" }}>{when(j.start, now)} → {when(j.end, now)} <span style={{ fontSize: 12, color: "var(--muted)" }}>{hm(j.seconds)}</span></span>}
         <span style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
           {unretained(j) && <span style={{ fontSize: 11, fontWeight: 900, color: "#64748B" }}>○ non retenu</span>}
-          {j.completes && <span style={{ fontSize: 11, fontWeight: 900, color: "#A16207" }}>{doneTxt(j)}</span>}
+          {j.completes && <span style={{ fontSize: 11, fontWeight: 900, color: "#047857" }}>{doneTxt(j)}</span>}
           {j.due && <span style={{ fontSize: 11, fontWeight: 900, color: j.due_ok ? "#16A34A" : "#EF4444" }}>🎯 avant le {dueTxt(j.due)}</span>}
           {j.load?.length > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "#EA580C" }}>🧵 à charger : {j.load.join(", ")}</span>}
           <StockTags j={j}/>
@@ -130,7 +130,7 @@ export function PoolGrouped({ jobs, blocked = [], now, edit, drag, onDrag, onOpe
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
           {g.jobs.map(j => {
             const bad = !!j.blockedWhy;
-            const c = bad ? "#DC2626" : j.too_long ? "#EF4444" : un ? UNRET : j.completes ? "#EAB308" : "color-mix(in srgb, #22C55E 50%, var(--border))";
+            const c = bad ? "#DC2626" : j.too_long ? "#EF4444" : un ? UNRET : j.completes ? "#059669" : "color-mix(in srgb, #22C55E 50%, var(--border))";
             const lbl = j.plates_total > 1 ? `P${j.plate}${j.qty > 1 ? `·${j.copy}` : ""}` : j.qty > 1 ? `${j.copy}/${j.qty}` : "";
             return <button key={j.key} type="button" draggable={edit && drag && !bad} onDragStart={e => { e.dataTransfer.setData("text/bn-job", j.key); onDrag?.(j.key); }}
               onDragEnd={() => onDrag?.(null)} onClick={() => onOpen(bad ? { ...j, why: j.blockedWhy } : j)}

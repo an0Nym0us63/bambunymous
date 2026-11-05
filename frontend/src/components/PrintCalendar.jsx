@@ -272,7 +272,7 @@ export default function PrintCalendar() {
             {/* un objet s'y termine : une pastille doree, lisible */}
             {finished.length > 0 && <span data-tip={finished.map(j => `${doneTxt(j)} : ${j.title}`).join(" · ")}
               style={{ position: "absolute", top: wide ? 3 : 2, right: wide ? 4 : 2, zIndex: 2, display: "inline-flex", alignItems: "center", gap: 2,
-                padding: wide ? "1px 6px" : "0 4px", borderRadius: 9, background: "#FACC15", color: "#713F12", fontSize: wide ? 10.5 : 9, fontWeight: 900,
+                padding: wide ? "1px 6px" : "0 4px", borderRadius: 9, background: "#D1FAE5", color: "#065F46", fontSize: wide ? 10.5 : 9, fontWeight: 900,
                 boxShadow: "0 1px 3px rgba(0,0,0,.25)" }}>🏁{finished.length > 1 || wide ? ` ${finished.length}` : ""}</span>}
             {wide && p.length > 0 && !finished.length && cellW >= 74 && <span style={{ position: "absolute", top: 5, right: 6, fontSize: 9.5, fontWeight: 900,
               color: "#16A34A" }}>{hm((pd?.days?.[k]?.seconds) || 0)}</span>}
@@ -282,7 +282,7 @@ export default function PrintCalendar() {
             {mos && <span style={{ position: "absolute", left: wide ? 5 : 3, right: wide ? 5 : 3, top, bottom: wide ? 7 : 5, display: "flex", flexWrap: "wrap",
               alignContent: "flex-end", gap: 3, overflow: "hidden" }}>
               {[...shelf.map(it => ({ done: it })), ...p.map(j => ({ j }))].slice(0, mos.shown).map(({ done, j }, i) => {
-                const c = done ? (ST[done.status] || ST.SUCCESS)[0] : j.too_long ? "#EF4444" : unretained(j) ? UNRET : j.completes ? "#EAB308" : "#22C55E";
+                const c = done ? (ST[done.status] || ST.SUCCESS)[0] : j.too_long ? "#EF4444" : unretained(j) ? UNRET : j.completes ? "#059669" : "#22C55E";
                 const img = done ? apiThumb(apiUrl(`/prints/${done.id}/image`), 96) : null;
                 return <span key={done ? `d${done.id}` : j.key} style={{ width: mos.size, height: mos.size, flexShrink: 0, borderRadius: wide ? 7 : 4, overflow: "hidden",
                   boxSizing: "border-box", background: "#fff", position: "relative",
@@ -321,7 +321,7 @@ export default function PrintCalendar() {
       {["SUCCESS", "FAILED", "CANCELLED", "IN_PROGRESS"].map(s => <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
         <span style={{ width: 9, height: 3, borderRadius: 2, background: ST[s][0] }}/>{ST[s][1]}</span>)}
       <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 12, height: 10, borderRadius: 3, border: "1.5px dashed #22C55E" }}/>plateau prévu</span>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ padding: "0 5px", borderRadius: 8, background: "#FACC15", color: "#713F12", fontWeight: 900 }}>🏁</span>objet terminé</span>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ padding: "0 5px", borderRadius: 8, background: "#D1FAE5", color: "#065F46", fontWeight: 900 }}>🏁</span>objet terminé</span>
       <span>· le remplissage : les heures machine du jour</span>
     </div>
   </div>;
