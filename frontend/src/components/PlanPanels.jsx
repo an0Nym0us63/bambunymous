@@ -74,7 +74,8 @@ export function JobSheet({ j, now, edit, onClose, act }) {
         <span style={{ fontSize: 13, fontWeight: 900, color: "#6366F1" }}>{plateTxt(j)}{j.qty > 1 ? ` · ${j.copy}e sur ${j.qty}` : ""}</span>
         {j.start && <span style={{ fontSize: 14, fontWeight: 900, color: "var(--text)" }}>{when(j.start, now)} → {when(j.end, now)} <span style={{ fontSize: 12, color: "var(--muted)" }}>{hm(j.seconds)}</span></span>}
         <span style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-          {j.locked && <span style={{ fontSize: 11, fontWeight: 900, color: "#4F46E5" }}>🔒 figé</span>}
+          {j.locked ? <span style={{ fontSize: 11, fontWeight: 900, color: "#4F46E5" }}>🔒 jour et heure figés</span>
+            : j.pinned && <span style={{ fontSize: 11, fontWeight: 900, color: "#7C3AED" }}>📌 jour figé</span>}
           {unretained(j) && <span style={{ fontSize: 11, fontWeight: 900, color: "#64748B" }}>○ non retenu</span>}
           {j.completes && <span style={{ fontSize: 11, fontWeight: 900, color: "#047857" }}>{doneTxt(j)}</span>}
           {j.due && <span style={{ fontSize: 11, fontWeight: 900, color: j.due_ok ? "#16A34A" : "#EF4444" }}>🎯 avant le {dueTxt(j.due)}</span>}
@@ -86,9 +87,8 @@ export function JobSheet({ j, now, edit, onClose, act }) {
       </div>
     </div>
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      {edit && !j.why && j.start && (j.locked
-        ? row("unlock", "🔓", "Défiger", "Il redevient libre : le planning, les optimiseurs et la journée couleur peuvent le déplacer", () => run("unlock", act.unlock), "#4F46E5")
-        : row("lock", "🔒", `Figer ici (${when(j.start, now)})`, "Il garde ce jour et cette heure : rien ne le déplacera (optimiser, journée couleur, au mieux, plus tard), le reste s'organise autour", () => run("lock", act.lock), "#4F46E5"))}
+      {/* figer (06/11/2026) : libre, le jour seulement, ou le jour et l'heure */}
+      {edit && !j.why && j.start && !unretained(j) && <FreezePick j={j} now={now} busy={busy} run={run} act={act}/>}
       {edit && !j.why && !j.locked && row("smart", "✨", "Placer au mieux", "Là où il charge le moins de filaments, sans faire rater de date limite, le plus tôt possible", () => run("smart", act.smart))}
       {edit && !j.why && !j.locked && j.plates_total > 1 && act.laterAll && row("laterall", "⏬", "Tout l'objet plus tard", "Tous les plateaux de cet objet passent en fin de file, dans leur ordre (un objet retenu reste devant les non retenus) ; les figés restent", () => run("laterall", act.laterAll))}
       {edit && !j.why && !j.locked && row("later", "⏭", "Plus tard", "Il quitte sa place et son jour, et passe en fin de file", () => run("later", act.later))}
@@ -100,7 +100,6 @@ export function JobSheet({ j, now, edit, onClose, act }) {
           sur aucun jour. Pour le placer, retiens son profil dans <b>Fiche du modèle</b>.</span></div>}
       {edit && !j.why && !j.locked && !unretained(j) && dateRow("daybest", "📌", "Le placer sur un jour", "À la meilleure place de la journée (le moins de filaments à charger), du moment qu'il y finit ; le reste se décale", j.day, v => v && act.dayBest(v), new Date().toISOString().slice(0, 10))}
       {edit && !j.why && !j.locked && !unretained(j) && dateRow("day", "📅", "Le poser sur un jour, après le reste", "Il y va après ce qui y est déjà", j.day, v => v && act.day(v), new Date().toISOString().slice(0, 10))}
-      {edit && j.pinned && !j.locked && row("unpin", "📌", "Le rendre à la file", "Il n'est plus posé sur ce jour : il se place où il tient", () => run("unpin", act.unpin))}
       {/* d'une traite (06/11/2026) : ses plateaux se suivent, rien d'un autre objet ne s'intercale */}
       {edit && act.chain && (j.plates_total > 1 || j.qty > 1) && <ChainPick j={j} busy={busy} run={run} act={act}/>}
       {row("sheet", "🧾", "Fiche du modèle", "Retenir le profil, choisir les plateaux et les filaments de chaque couleur", () => { act.sheet(); onClose(); })}
@@ -113,6 +112,38 @@ export function JobSheet({ j, now, edit, onClose, act }) {
 
 // Un objet « d'une traite » (06/11/2026) : libre (d'autres objets peuvent s'intercaler), ses plateaux d'un exemplaire
 // a la suite, ou tout l'objet (tous ses exemplaires) a la suite
+// Figer un plateau (06/11/2026), en trois crans : libre (le planning le place ou il tient) ; le jour (il reste ce jour-la,
+// l'ordre de la journee peut changer ; c'est aussi ce que fait le poser sur un jour) ; le jour et l'heure (rien ne le
+// deplace plus, le reste s'organise autour)
+function FreezePick({ j, now, busy, run, act }) {
+  const cur = j.locked ? "time" : j.pinned ? "day" : null;
+  const day = j.day ? new Date(`${j.day}T12:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }) : "";
+  const opts = [[null, "Libre", "Le planning le place où il tient, et les optimiseurs peuvent le déplacer"],
+    ["day", "Le jour", `Il reste le ${day} ; l'heure peut bouger (l'ordre de la journée, l'optimiseur de la journée)`],
+    ["time", "Jour et heure", `Il part le ${day} à ${hhmm(j.start)} : rien ne le déplace, le reste s'organise autour`]];
+  const go = async k => {
+    if (k === "time") return act.lock();
+    if (cur === "time") await act.unlock();        // defiger l'heure garde le jour
+    if (k === "day" && cur !== "day" && cur !== "time") await act.pinDay();
+    if (k === null && (cur === "day" || cur === "time")) await act.unpin();
+  };
+  const tone = cur === "time" ? "#4F46E5" : cur === "day" ? "#7C3AED" : "var(--text)";
+  return <div style={{ padding: "10px 12px", borderRadius: 12, border: `1px solid ${cur ? "color-mix(in srgb, #6366F1 40%, var(--border))" : "var(--border)"}`, background: "var(--surface)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 7 }}>
+      <span style={{ fontSize: 18, width: 24, textAlign: "center" }}>{busy === "freeze" ? "…" : cur === "time" ? "🔒" : cur === "day" ? "📌" : "🔓"}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 13.5, fontWeight: 900, color: tone }}>Figer</span>
+        <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.35 }}>{(opts.find(o => o[0] === cur) || opts[0])[2]}</span></span></div>
+    <div role="radiogroup" style={{ display: "flex", padding: 3, borderRadius: 11, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+      {opts.map(([k, l]) => <button key={l} type="button" role="radio" aria-checked={cur === k} disabled={!!busy}
+        onClick={() => cur !== k && run("freeze", () => go(k))}
+        style={{ flex: 1, padding: "6px 4px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 900, font: "inherit",
+          color: cur === k ? "#fff" : "var(--muted)", background: cur === k ? (k === "time" ? "linear-gradient(135deg, #4F46E5, #6366F1)"
+            : k === "day" ? "linear-gradient(135deg, #7C3AED, #A855F7)" : "linear-gradient(135deg, #64748B, #94A3B8)") : "transparent" }}>{l}</button>)}
+    </div>
+  </div>;
+}
+
 // 06/11/2026 : les mots disent l'objet, pas ses plateaux. Un seul exemplaire : libre ou d'une traite (les deux reglages
 // reviennent au meme). Plusieurs : chaque exemplaire d'une traite (entre deux, d'autres objets passent), ou tous les
 // exemplaires a la suite. Un modele d'un seul plateau : seul « tous les exemplaires » a un sens.
@@ -197,7 +228,7 @@ export function PoolSummary({ jobs, blocked = [], now, onOpenModel }) {
             {f.due && <span style={chipS(f.due_ok ? "#16A34A" : "#EF4444")}>🎯 {dueTxt(f.due)}</span>}
             {f.chain && <span style={chipS("#0EA5E9")}>{chainTxt(f)}</span>}
             {x.locked > 0 && <span style={chipS("#4F46E5")}>🔒 {x.locked}</span>}
-            {x.pinned > 0 && <span style={chipS("#7C3AED")}>📌 {x.pinned}</span>}
+            {x.pinned > 0 && <span style={chipS("#7C3AED")} data-tip="Plateaux au jour figé">📌 {x.pinned}</span>}
             {x.load && <span style={chipS("#EA580C")}>🧵</span>}
             {x.wait && <span style={chipS("#0EA5E9")}>🚚</span>}
             {x.low && <span style={chipS("#DC2626")}>📉</span>}
@@ -243,7 +274,8 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act }) {
               "Ils prennent la tête de ce jour, à la suite ; ce qui n'y tient pas passe au lendemain, puis au jour d'après", f.day, v => v && act.dayAll(v), today)}
             {row("front", "⏫", "Tout en tête de file", "Ses plateaux passent avant tous les autres (ceux posés sur un jour y retournent à la file)", () => run("front", act.front))}
             {row("later", "⏬", "Tout plus tard", "Ses plateaux passent en fin de file, dans leur ordre (un modèle retenu reste devant les non retenus)", () => run("later", act.laterAll))}
-            {x.pinned > 0 && row("unpin", "↩", "Les rendre à la file", `${x.pinned} plateau${x.pinned > 1 ? "x sont posés" : " est posé"} sur un jour : ils se replacent où ils tiennent`, () => run("unpin", act.unpinAll))}
+            {free.some(j => !j.pinned) && row("pinall", "📌", "Figer leurs jours", "Chaque plateau garde le jour où il est prévu ; l'heure peut encore bouger", () => run("pinall", act.pinAll))}
+            {x.pinned > 0 && row("unpin", "🔓", "Défiger leurs jours", `${x.pinned} plateau${x.pinned > 1 ? "x ont leur" : " a son"} jour figé : ils se replacent où ils tiennent (les jours et heures figés restent)`, () => run("unpin", act.unpinAll))}
           </>}
         {act.chain && (f.plates_total > 1 || f.qty > 1) && <ChainPick j={f} busy={busy} run={run} act={act}/>}
         {dateRow("due", "🎯", f.due ? "Changer la date limite" : "Une date limite", f.due ? `Fini avant le ${dueTxt(f.due)} (son dernier plateau)` : "Son dernier plateau fini avant ce jour ; le planning prévient s'il déborde", f.due, v => act.due(v))}

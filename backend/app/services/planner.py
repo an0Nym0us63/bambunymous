@@ -181,8 +181,9 @@ def _ordered(jobs: list, order: list, pins: dict | None = None) -> list:
 
 def _chained(seq: list) -> list:
     """Les objets « d'une traite » (06/11/2026) : leurs plateaux regroupes a la place du premier d'entre eux.
-    "plates" : un groupe par exemplaire (le 1er reste a faire de chaque plateau, puis le 2e…), dans l'ordre des
-    plateaux ; "all" : un seul groupe, exemplaire par exemplaire. Chaque plateau groupe porte chain_g."""
+    "plates" : un groupe par exemplaire (le 1er reste a faire de chaque plateau, puis le 2e…) ; "all" : un seul groupe,
+    exemplaire par exemplaire. Dans un groupe, l'ordre de la file (pas celui des numeros) : l'optimiseur peut ainsi
+    lancer le plus long en fin de soiree. Chaque plateau groupe porte chain_g."""
     rounds, groups = {}, {}
     for j in seq:
         m = j.get("chain")
@@ -205,7 +206,7 @@ def _chained(seq: list) -> list:
             out.append(j)
         elif g not in seen:
             seen.add(g)
-            out += sorted(groups[g], key=lambda x: (x["_round"], x.get("plate") or 0))
+            out += sorted(groups[g], key=lambda x: x["_round"])          # stable : l'ordre de la file dans un exemplaire
     return out
 
 
@@ -697,8 +698,10 @@ def night_fill(jobs: list, order: list, d: dict, now: datetime, busy, loaded: se
             def loss(secs):
                 e = a_s + timedelta(seconds=secs)
                 return (target - e).total_seconds() if e <= target else (e - target).total_seconds() * 0.5
-            # lance a l'heure de a : il faut que les regles l'acceptent (plage de fonctionnement)
-            cands = [x for x in pl[i + 1:i + 31] if x["key"] in movable and x["key"] in pos
+            # lance a l'heure de a : il faut que les regles l'acceptent (plage de fonctionnement) ; un objet « d'une
+            # traite » reste groupe : dans son groupe, on choisit parmi ses plateaux ; hors groupe, parmi les libres
+            ga = a.get("chain_g")
+            cands = [x for x in pl[i + 1:i + 31] if x["key"] in movable and x["key"] in pos and x.get("chain_g") == ga
                      and rules.earliest(a_s, x["seconds"])[0] == a_s and not rules.earliest(a_s, x["seconds"])[2]]
             seen.add(a["key"])
             if not cands or a["key"] not in movable or a["key"] not in pos:
@@ -896,7 +899,8 @@ async def color_day(day: str, fid: int) -> dict:
     # un objet a finir avant ce jour (ou ce jour meme) n'y est pas emmene : il raterait sa date
     dl = d.get("deadlines") or {}
     uses = [j for j in r["jobs"] if fid in _sig(j) and not (dl.get(j["design_id"]) and dl[j["design_id"]] <= day)
-            and j["key"] not in d["locked"] and j.get("retained", True)]      # les retenus seulement (06/11/2026)
+            and j["key"] not in d["locked"] and j.get("retained", True)                 # les retenus seulement (06/11/2026)
+            and d["pins"].get(j["key"], day) == day]                                   # ni un jour fige ailleurs
     ok_set = {fid} | set(loaded)
     only = [j["key"] for j in uses if _sig(j) == frozenset([fid])]
     with_loaded = [j["key"] for j in uses if _sig(j) != frozenset([fid]) and _sig(j) <= ok_set]
@@ -1126,7 +1130,8 @@ async def later(key: str, whole: bool = False) -> dict:
     d0, now, jobs, _, loaded, live, busy = await _context(None)
     order = [j["key"] for j in _ordered(jobs, d["order"], d["pins"])]
     did = key.split(":")[0]
-    move = [k for k in order if (k.split(":")[0] == did if whole else k == key) and k not in d["locked"]]
+    move = [k for k in order if (k.split(":")[0] == did if whole else k == key) and k not in d["locked"]
+            and (not whole or k not in d["pins"] or k == key)]       # tout l'objet : les jours figes restent
     if not move:
         raise PlanError("Plateau inconnu du planning")
     keep = [k for k in order if k not in set(move)]

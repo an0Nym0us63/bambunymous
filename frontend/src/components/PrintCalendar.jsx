@@ -161,8 +161,10 @@ export default function PrintCalendar() {
     return {
       // caler sur un jour : en tete de ce jour, a la suite ; ce qui n'y tient pas glisse au lendemain
       dayAll: day => arrange({ order: [...ks, ...keys.filter(k => !ks.includes(k))], pins: Object.fromEntries(ks.map(k => [k, day])) }),
-      front: () => arrange({ order: [...ks, ...keys.filter(k => !ks.includes(k))], pins: Object.fromEntries(ks.map(k => [k, null])) }),
+      // en tete : les plateaux au jour fige y restent
+      front: () => { const fr = ks.filter(k => !byKey[k]?.pinned); return arrange({ order: [...fr, ...keys.filter(k => !fr.includes(k))] }); },
       unpinAll: () => arrange({ pins: Object.fromEntries(ks.map(k => [k, null])) }),
+      pinAll: () => arrange({ pins: Object.fromEntries((pd?.jobs || []).filter(j => ks.includes(j.key) && !j.pinned && j.day).map(j => [j.key, j.day])) }),
       laterAll: () => j0 && send("/makerworld/plan/later", { key: j0.key, whole: true }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
       chain: mode => send("/makerworld/plan/chain", { design_id: did, mode }, "post").then(ok => { if (ok && mode) egg("planning_traite"); }),
       due: v => setDue(did, v),
@@ -204,6 +206,7 @@ export default function PrintCalendar() {
     day: v => moveDay(j.key, v),
     dayBest: v => placeDay(j.key, v),
     unpin: () => unpin(j.key),
+    pinDay: () => arrange({ pins: { [j.key]: j.day } }),
     sheet: () => setSheet(j.mw_id || j.design_id),
     dayview: () => { setPick(j.day); setView("day"); },
     due: v => setDue(j.design_id, v),

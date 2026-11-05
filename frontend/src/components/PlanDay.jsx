@@ -118,7 +118,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
           <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>{hm(j.seconds)}</span>
           {Math.abs(drift) >= 10 && <span style={{ fontSize: 11.5, fontWeight: 900, color: drift > 0 ? "#F97316" : "#22C55E" }}>{drift > 0 ? `+${hm(drift * 60)}` : `−${hm(-drift * 60)}`}</span>}
           {j.locked ? <span data-tip="Figé : rien ne le déplace (optimiser, journée couleur…)" style={{ fontSize: 11 }}>🔒</span>
-            : j.pinned && <span data-tip="Posé sur ce jour" style={{ fontSize: 11 }}>📌</span>}
+            : j.pinned && <span data-tip="Jour figé : il reste ce jour-là" style={{ fontSize: 11 }}>📌</span>}
         </div>
         <div style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text2)", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
           overflow: "hidden" }}>{j.title}</div>
@@ -153,7 +153,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
         <input type="date" onClick={e => { try { e.currentTarget.showPicker?.(); } catch { /* rien */ } }} value={j.due || ""} onChange={e => onDue(e.target.value || null)}
           style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%" }}/></label>
       <button type="button" onClick={onDone} data-tip="Imprimé hors de l'appli, ou pas reconnu : le compter comme fait" style={act}>✓ Fait</button>
-      {j.pinned && <button type="button" onClick={onUnpin} data-tip="Le rendre à la file : il se place où il tient" style={act}>✕</button>}
+      {j.pinned && <button type="button" onClick={onUnpin} data-tip="Défiger le jour : il se place où il tient" style={act}>✕</button>}
     </div>}
   </div>;
 }
