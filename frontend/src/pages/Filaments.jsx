@@ -16,7 +16,7 @@ import StoreLink from "../components/StoreLink";
 import { egg } from "../eggs";
 import { useFriend } from "../store/friend";
 import { showAlert, showConfirm, showChoice } from "../utils/dialog";
-import { archiveSpool, DRIFT_OFF, DRIFT_KIND, driftTxt } from "../utils/spoolArchive";
+import { archiveSpool, DRIFT_OFF, DRIFT_KIND, driftTxt, isPast } from "../utils/spoolArchive";
 import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import IncomingOrders, { OrderSheet } from "../components/IncomingOrders";
@@ -901,9 +901,10 @@ function DriftRow({ spool, onUpdated }) {
         <span style={{ ...FVAL, color: off ? "var(--muted)" : Math.abs(g) < 15 ? "#16a34a" : "#F59E0B",
           textDecoration: off ? "line-through" : "none" }}>{driftTxt(g)}</span>
         <span style={{ display:"block", fontSize:11, fontWeight:600, color:"var(--muted)" }}>
-          {off ? `écartée : ${off}` : DRIFT_KIND[spool.drift_kind] || ""}
+          {off ? (isPast(spool) ? "du passé, hors des stats" : `écartée : ${off}`) : DRIFT_KIND[spool.drift_kind] || ""}
           {isAdmin && <button onClick={toggle} style={{ marginLeft:6, padding:"1px 8px", borderRadius:8, fontSize:11, fontWeight:800, cursor:"pointer",
-            border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text2)" }}>{off ? "Remettre" : "Écarter"}</button>}
+            border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text2)" }}>
+            {off ? (isPast(spool) ? "Compter" : "Remettre") : "Écarter"}</button>}
         </span>
       </span>
     </div>

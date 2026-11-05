@@ -183,6 +183,9 @@ async def lifespan(app: FastAPI):
     # les vitrines prechauffees (04/11/2026) : le premier visiteur apres un redemarrage ne les attend pas
     from app.api.v1.routes.showcase import warm as _showcase_warm
     _bg(_showcase_warm())
+    # l'ecart du suivi des bobines archivees du passe, deduit de leur historique (une fois, 05/11/2026)
+    from app.services.drift import backfill_past as _drift_past
+    _bg(_drift_past())
     # la boucle surveillee : ce qui la fige est releve (Parametres > Vitesse du serveur)
     from app.core.perf import loop_watch as _loop_watch
     _tasks.track("loop_watch", _bg(_loop_watch()))

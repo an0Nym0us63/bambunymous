@@ -31,7 +31,10 @@ export const DRIFT_OFF = [
   { value: "Autre cause", icon: "❔", label: "Autre cause", tone: "#64748B" },
 ];
 
-export const DRIFT_KIND = { relais: "relais de l'AMS", suite: "suite choisie à la main", archive: "archivée finie", main: "corrigée à la main" };
+export const DRIFT_KIND = { relais: "relais de l'AMS", suite: "suite choisie à la main", archive: "archivée finie", main: "corrigée à la main",
+  historique: "déduit de l'historique" };
+// les bobines archivees avant le suivi : ecart deduit, ecarte des stats tant qu'on ne l'y fait pas entrer
+export const isPast = it => it.kind === "historique" || it.drift_kind === "historique";
 
 // « +12 g » / « −8 g »
 export const driftTxt = g => `${g > 0 ? "+" : g < 0 ? "−" : "±"}${Math.abs(Math.round(g))} g`;

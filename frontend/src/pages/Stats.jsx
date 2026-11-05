@@ -19,7 +19,7 @@ import { PrintDetail, GroupBottomSheet, ObjectSheet, AccessorySheet, FilamentShe
 import { importRetry } from "../utils/importRetry";
 import { useIsAdmin } from "../store/auth";
 import { showChoice, showAlert } from "../utils/dialog";
-import { DRIFT_OFF, DRIFT_KIND, driftTxt } from "../utils/spoolArchive";
+import { DRIFT_OFF, DRIFT_KIND, driftTxt, isPast } from "../utils/spoolArchive";
 const Achievements = React.lazy(() => importRetry(() => import("./Achievements")));
 const MachineStats = React.lazy(() => importRetry(() => import("../components/MachineStats")));
 import { FSheet, fBtn, fGrad } from "../components/FicheKit";
@@ -325,10 +325,14 @@ function DriftStats() {
   const [open, setOpen] = useState(null);
   const [edit, setEdit] = useState(null);       // { id, v }
   const [by, setBy] = useState("brand");
+  const [past, setPast] = useState(false);       // les bobines du passe hors des stats, montrees a la demande
   const load = () => client.get("/filaments/drift").then(r => setD(r.data)).catch(() => setD({ error: true }));
   useEffect(() => { load(); }, []);
   if (!d || d.error) return null;
-  const k = d.summary, items = d.items || [];
+  const k = d.summary, all = d.items || [];
+  // le passe (ecart deduit de l'historique) reste hors des stats et cache, sauf les bobines qu'on y a fait entrer
+  const pastOut = all.filter(it => isPast(it) && it.off);
+  const items = past ? all : all.filter(it => !(isPast(it) && it.off));
   const patch = async (id, body, gesture) => {
     try { await client.patch(`/filaments/spools/${id}/drift`, body); if (gesture) egg("derive_ecartee"); load(); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
@@ -348,7 +352,7 @@ function DriftStats() {
   const trend = !k.n ? null : Math.abs(k.mean_g) < 5 ? "sans biais" : k.mean_g > 0 ? "on surestime" : "on sous-estime";
   return (
     <Section title="Précision du suivi" icon="🎯" isGlobal>
-      {!items.length ? (
+      {!all.length ? (
         <div style={{ ...statCard("#14B8A6"), padding: "14px 14px", fontSize: 13, fontWeight: 600, color: "var(--text2)", lineHeight: 1.5 }}>
           Pas encore de mesure. À la fin de chaque bobine, l'écart entre notre poids et le vrai est noté : quand l'AMS prend le relais,
           quand tu choisis la suite, ou quand tu l'archives en disant qu'elle est finie.
@@ -406,6 +410,11 @@ function DriftStats() {
             </div>
           );
         })()}
+        {pastOut.length > 0 && <button onClick={() => setPast(p => !p)} style={{ marginBottom: 8, padding: "5px 12px", borderRadius: 20, fontSize: 12,
+          fontWeight: 800, cursor: "pointer", border: "1px solid var(--border)", background: past ? "color-mix(in srgb, #14B8A6 14%, var(--surface2))" : "var(--surface2)",
+          color: past ? "#0D9488" : "var(--text2)" }}
+          data-tip="Les bobines archivées avant le suivi : leur écart est déduit de leur historique, hors des stats tant que tu ne les y fais pas entrer">
+          🕰 {past ? "Cacher" : "Montrer"} le passé ({pastOut.length} hors des stats)</button>}
         <div style={{ ...statCard("#14B8A6"), padding: "8px 12px", maxHeight: 360, overflowY: "auto" }}>
           {items.map(it => {
             const w = Math.max(2, Math.abs(it.drift_g) / max * 50);
@@ -419,7 +428,7 @@ function DriftStats() {
                     <span style={{ display: "block", fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {it.name} <span style={{ color: "var(--muted)", fontWeight: 700 }}>#{it.id}</span></span>
                     <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {it.off ? `écartée : ${it.off}` : DRIFT_KIND[it.kind] || ""}{it.at ? ` · ${new Date(it.at + "Z").toLocaleDateString("fr-FR")}` : ""}</span>
+                      {it.off ? (isPast(it) ? "du passé, hors des stats" : `écartée : ${it.off}`) : DRIFT_KIND[it.kind] || ""}{it.at ? ` · ${new Date(it.at + "Z").toLocaleDateString("fr-FR")}` : ""}</span>
                   </span>
                 </span>
                 {/* l'ecart, de part et d'autre du zero */}
@@ -438,7 +447,7 @@ function DriftStats() {
                     style={{ width: 62, textAlign: "right", fontSize: 13, fontWeight: 900, color: col, cursor: isAdmin ? "pointer" : "default",
                       textDecoration: it.off ? "line-through" : "none", flexShrink: 0 }}>{driftTxt(it.drift_g)}</span>
                 )}
-                {isAdmin && <button onClick={() => toggle(it)} data-tip={it.off ? "La remettre dans les stats" : "L'écarter des stats (jetée en partie, prêtée…)"}
+                {isAdmin && <button onClick={() => toggle(it)} data-tip={it.off ? (isPast(it) ? "La compter dans les stats" : "La remettre dans les stats") : "L'écarter des stats (jetée en partie, prêtée…)"}
                   style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 9, border: "1px solid var(--border)", background: "var(--surface2)",
                     cursor: "pointer", fontSize: 13 }}>{it.off ? "↩" : "🚫"}</button>}
               </div>
