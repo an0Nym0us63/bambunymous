@@ -99,6 +99,25 @@ export function Layer3D({ s, d, now, w, h }) {
         g.stroke();
       }
     }
+    // la couche en cours remplie (05/11/2026) : tous ses traces, ceux de la vue 2D deja lus, poses a sa hauteur ;
+    // la hauteur, entre les deux couches du contour qui l'encadrent
+    if (d?.ok && d.paths?.length && d.layer === cur && s.layers.length) {
+      const Ls = s.layers, j = Ls.findIndex(L => L.n >= cur);
+      const a = Ls[Math.max(0, (j < 0 ? Ls.length : j) - 1)], b = Ls[j < 0 ? Ls.length - 1 : j];
+      const z = b.n === a.n ? b.z : a.z + (b.z - a.z) * (cur - a.n) / (b.n - a.n);
+      g.lineWidth = Math.max(0.7, Math.min(2.4, 4.2 * k));
+      for (const q of d.paths) {
+        const p = unpack(q.p);
+        if (p.length < 4) continue;
+        const gone = q.o != null && sk[q.o] && cur >= sk[q.o].layer;
+        g.beginPath();
+        let [X, Y] = proj(p[0], p[1], z); g.moveTo(ox + X * k, oy + Y * k);
+        for (let i = 2; i < p.length; i += 2) { [X, Y] = proj(p[i], p[i + 1], z); g.lineTo(ox + X * k, oy + Y * k); }
+        if (gone) { g.setLineDash([3, 3]); g.strokeStyle = muted; g.globalAlpha = 0.35; }
+        else { g.setLineDash([]); g.strokeStyle = col(q.t); g.globalAlpha = 1; }
+        g.stroke();
+      }
+    }
     g.setLineDash([]); g.globalAlpha = 1;
   }, [s, d, now, w, h, az]);
   // au doigt (05/11/2026) : tourner ne doit ni faire defiler, ni changer d'ecran de l'accueil (data-noswipe), ni ouvrir la
