@@ -19,7 +19,7 @@ import { PrintDetail, GroupBottomSheet, ObjectSheet, AccessorySheet, FilamentShe
 import { importRetry } from "../utils/importRetry";
 import { useIsAdmin } from "../store/auth";
 import { showChoice, showAlert } from "../utils/dialog";
-import { DRIFT_OFF, DRIFT_KIND, driftTxt, isPast } from "../utils/spoolArchive";
+import { DRIFT_OFF, DRIFT_KIND, driftTxt } from "../utils/spoolArchive";
 const Achievements = React.lazy(() => importRetry(() => import("./Achievements")));
 const MachineStats = React.lazy(() => importRetry(() => import("../components/MachineStats")));
 import { FSheet, fBtn, fGrad } from "../components/FicheKit";
@@ -338,7 +338,6 @@ function DriftStats() {
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
   const toggle = async it => {
-    if (it.off) return patch(it.id, { off: "" });
     const v = await showChoice(`Écarter la bobine #${it.id} des stats de précision ? Pourquoi son écart ne compte pas :`, DRIFT_OFF,
       { title: "Écarter la mesure" });
     if (v) patch(it.id, { off: v }, true);
@@ -349,43 +348,34 @@ function DriftStats() {
     setEdit(null);
   };
   const max = Math.max(20, ...items.map(it => Math.abs(it.drift_g)));
-  const spoolRow = (it, inner = false) => {
-            const w = Math.max(2, Math.abs(it.drift_g) / max * 50);
-            const col = it.off ? "var(--muted)" : Math.abs(it.drift_g) < 15 ? "#22C55E" : it.drift_g > 0 ? "#F59E0B" : "#EF4444";
-            return (
-              <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0", borderBottom: inner ? "none" : "1px dashed var(--border)",
-                opacity: it.off ? 0.6 : 1 }}>
-                <span onClick={() => setOpen(it)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: "1 1 40%" }}>
-                  <Dot hex={it.color} colors={it.colors} multicolor={it.multicolor} size={12}/>
-                  <span style={{ minWidth: 0 }}>
-                    <span style={{ display: "block", fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {inner ? "" : it.name} <span style={{ color: "var(--muted)", fontWeight: 700 }}>#{it.id}</span></span>
-                    <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {it.off ? (isPast(it) ? "du passé, hors des stats" : `écartée : ${it.off}`) : DRIFT_KIND[it.kind] || ""}{it.at ? ` · ${new Date(it.at + "Z").toLocaleDateString("fr-FR")}` : ""}</span>
-                  </span>
-                </span>
-                {/* l'ecart, de part et d'autre du zero */}
-                <span style={{ position: "relative", flex: "0 1 72px", height: 8, borderRadius: 5, background: "color-mix(in srgb, var(--border) 70%, transparent)" }}>
-                  <span style={{ position: "absolute", left: "50%", top: -3, bottom: -3, width: 1.5, background: "var(--muted)" }}/>
-                  <span style={{ position: "absolute", top: 0, bottom: 0, borderRadius: 5, background: col, width: `${w}%`,
-                    left: it.drift_g >= 0 ? "50%" : `${50 - w}%` }}/>
-                </span>
-                {edit?.id === it.id ? (
-                  <input autoFocus value={edit.v} onChange={e => setEdit({ ...edit, v: e.target.value })} onBlur={saveEdit}
-                    onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEdit(null); }}
-                    inputMode="decimal" style={{ width: 62, padding: "3px 6px", borderRadius: 8, border: "1px solid var(--border)",
-                      background: "var(--surface)", color: "var(--text)", fontSize: 13, fontWeight: 800, textAlign: "right" }}/>
-                ) : (
-                  <span onClick={() => isAdmin && setEdit({ id: it.id, v: String(it.drift_g) })} data-tip={isAdmin ? "Corriger l'écart" : undefined}
-                    style={{ width: 52, textAlign: "right", fontSize: 13, fontWeight: 900, color: col, cursor: isAdmin ? "pointer" : "default",
-                      textDecoration: it.off ? "line-through" : "none", flexShrink: 0 }}>{driftTxt(it.drift_g)}</span>
-                )}
-                {isAdmin && <button onClick={() => toggle(it)} data-tip={it.off ? (isPast(it) ? "La compter dans les stats" : "La remettre dans les stats") : "L'écarter des stats (jetée en partie, prêtée…)"}
-                  style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 9, border: "1px solid var(--border)", background: "var(--surface2)",
-                    cursor: "pointer", fontSize: 13 }}>{it.off ? "↩" : "🚫"}</button>}
-              </div>
-            );
-            };
+  const colOf = g => g == null ? "var(--muted)" : Math.abs(g) < 15 ? "#22C55E" : g > 0 ? "#F59E0B" : "#EF4444";
+  // l'ecart d'une bobine : touche, il se corrige (admin)
+  const driftVal = it => edit?.id === it.id ? (
+    <input autoFocus value={edit.v} onChange={e => setEdit({ ...edit, v: e.target.value })} onBlur={saveEdit}
+      onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEdit(null); }}
+      inputMode="decimal" style={{ width: 62, padding: "3px 6px", borderRadius: 8, border: "1px solid var(--border)",
+        background: "var(--surface)", color: "var(--text)", fontSize: 13, fontWeight: 800, textAlign: "right" }}/>
+  ) : (
+    <span onClick={e => { e.stopPropagation(); if (isAdmin) setEdit({ id: it.id, v: String(it.drift_g) }); }} data-tip={isAdmin ? "Corriger l'écart" : undefined}
+      style={{ fontSize: 14, fontWeight: 900, color: colOf(it.drift_g), cursor: isAdmin ? "pointer" : "default", whiteSpace: "nowrap" }}>{driftTxt(it.drift_g)}</span>
+  );
+  const offBtn = it => isAdmin && <button onClick={e => { e.stopPropagation(); toggle(it); }} data-tip="L'écarter des stats (jetée en partie, prêtée…)"
+    style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 9, border: "1px solid var(--border)", background: "var(--surface2)", cursor: "pointer", fontSize: 13 }}>🚫</button>;
+  const kindOf = it => [DRIFT_KIND[it.kind], it.at ? new Date(it.at + "Z").toLocaleDateString("fr-FR") : null].filter(Boolean).join(" · ");
+  // l'axe autour de zero, sur toute la largeur : un point par bobine, la moyenne en trait, l'etendue en pale
+  const pos = g => `${50 + Math.max(-1, Math.min(1, g / max)) * 50}%`;
+  const Axis = ({ list, mean }) => {
+    const lo = Math.min(...list.map(x => x.drift_g)), hi = Math.max(...list.map(x => x.drift_g));
+    return <div style={{ position: "relative", height: 14, margin: "6px 0 2px" }}>
+      <span style={{ position: "absolute", left: 0, right: 0, top: 5, height: 4, borderRadius: 3, background: "color-mix(in srgb, var(--border) 70%, transparent)" }}/>
+      {list.length > 1 && <span style={{ position: "absolute", top: 5, height: 4, borderRadius: 3, background: "color-mix(in srgb, #3B82F6 30%, transparent)",
+        left: pos(lo), width: `calc(${pos(hi)} - ${pos(lo)})` }}/>}
+      <span style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1.5, background: "var(--muted)" }}/>
+      {list.length > 1 && list.map(x => <span key={x.id} data-tip={`#${x.id} ${driftTxt(x.drift_g)}`} style={{ position: "absolute", top: 3, width: 8, height: 8,
+        marginLeft: -4, borderRadius: "50%", left: pos(x.drift_g), background: "#64748B", opacity: 0.7 }}/>)}
+      <span style={{ position: "absolute", top: 0, bottom: 0, width: 4, marginLeft: -2, borderRadius: 2, left: pos(mean), background: colOf(mean) }}/>
+    </div>;
+  };
   // une ligne par filament : la plus recente mesure d'abord
   const fils = [];
   for (const it of items) {
@@ -394,10 +384,8 @@ function DriftStats() {
     f.list.push(it);
   }
   for (const f of fils) {
-    f.on = f.list.filter(x => !x.off);
-    f.mean = f.on.length ? f.on.reduce((t, x) => t + x.drift_g, 0) / f.on.length : null;
-    const v = (f.on.length ? f.on : f.list).map(x => x.drift_g);
-    f.lo = Math.min(...v); f.hi = Math.max(...v);
+    f.mean = f.list.reduce((t, x) => t + x.drift_g, 0) / f.list.length;
+    f.lo = Math.min(...f.list.map(x => x.drift_g)); f.hi = Math.max(...f.list.map(x => x.drift_g));
   }
   const trend = !k.n ? null : Math.abs(k.mean_g) < 5 ? "sans biais" : k.mean_g > 0 ? "on surestime" : "on sous-estime";
   return (
@@ -434,26 +422,28 @@ function DriftStats() {
                 const w = Math.max(2, Math.abs(g.mean_g) / gmax * 50);
                 const col = Math.abs(g.mean_g) < 5 ? "#22C55E" : g.mean_g > 0 ? "#F59E0B" : "#EF4444";
                 return (
-                  <div key={g.name} style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 0" }}>
-                    <span style={{ flex: "1 1 35%", minWidth: 0 }}>
-                      <span style={{ display: "block", fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <div key={g.name} style={{ padding: "7px 0" }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: "block", fontSize: 13.5, fontWeight: 800, color: "var(--text)", lineHeight: 1.25 }}>
                         {by === "kind" ? (DRIFT_KIND[g.name] || g.name) : g.name}</span>
                       <span style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)" }}>
                         {g.n} bobine{g.n > 1 ? "s" : ""} · précision {String(g.accuracy_pct).replace(".", ",")} %</span>
                     </span>
-                    {/* la tendance, de part et d'autre du zero ; l'ecart typique en trait pale */}
-                    <span data-tip={`Tendance ${driftTxt(g.mean_g)} · écart typique ± ${Math.round(g.mean_abs_g)} g`}
-                      style={{ position: "relative", flex: "1 1 35%", height: 8, borderRadius: 5, background: "color-mix(in srgb, var(--border) 70%, transparent)" }}>
+                    <span style={{ textAlign: "right", flexShrink: 0 }}>
+                      <span style={{ display: "block", fontSize: 14, fontWeight: 900, color: col }}>{driftTxt(g.mean_g)}</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>± {Math.round(g.mean_abs_g)} g</span>
+                    </span>
+                    </div>
+                    {/* la tendance, de part et d'autre du zero, sur toute la largeur ; l'ecart typique en trait pale */}
+                    <div data-tip={`Tendance ${driftTxt(g.mean_g)} · écart typique ± ${Math.round(g.mean_abs_g)} g`}
+                      style={{ position: "relative", height: 8, margin: "6px 0 2px", borderRadius: 5, background: "color-mix(in srgb, var(--border) 70%, transparent)" }}>
                       <span style={{ position: "absolute", top: 2, bottom: 2, borderRadius: 3, background: "color-mix(in srgb, #3B82F6 30%, transparent)",
                         left: `${50 - g.mean_abs_g / gmax * 50}%`, width: `${g.mean_abs_g / gmax * 100}%` }}/>
                       <span style={{ position: "absolute", left: "50%", top: -3, bottom: -3, width: 1.5, background: "var(--muted)" }}/>
                       <span style={{ position: "absolute", top: 0, bottom: 0, borderRadius: 5, background: col, width: `${w}%`,
                         left: g.mean_g >= 0 ? "50%" : `${50 - w}%` }}/>
-                    </span>
-                    <span style={{ width: 70, textAlign: "right", flexShrink: 0 }}>
-                      <span style={{ display: "block", fontSize: 13, fontWeight: 900, color: col }}>{driftTxt(g.mean_g)}</span>
-                      <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>± {Math.round(g.mean_abs_g)} g</span>
-                    </span>
+                    </div>
                   </div>
                 );
               })}
@@ -464,43 +454,35 @@ function DriftStats() {
             bobine en point sur l'axe ; toucher le filament deplie ses bobines */}
         <div style={{ ...statCard("#14B8A6"), padding: "8px 12px", maxHeight: 460, overflowY: "auto" }}>
           {fils.map(f => {
-            if (f.list.length === 1) return spoolRow(f.list[0]);
-            const col = f.mean == null ? "var(--muted)" : Math.abs(f.mean) < 15 ? "#22C55E" : f.mean > 0 ? "#F59E0B" : "#EF4444";
-            const pos = g => `${50 + Math.max(-1, Math.min(1, g / max)) * 50}%`;
+            // en haut le nom entier, la marque et le sous-type ; dessous l'axe sur toute la largeur (05/11/2026 : tronques)
+            const one = f.list.length === 1 ? f.list[0] : null;
             const isOpen = unfold === f.key;
-            return <div key={f.key} style={{ borderBottom: "1px dashed var(--border)" }}>
-              <div onClick={() => setUnfold(isOpen ? null : f.key)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 0", cursor: "pointer",
-                opacity: f.mean == null ? 0.6 : 1 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: "1 1 40%" }}>
-                  <Dot hex={f.s.color} colors={f.s.colors} multicolor={f.s.multicolor} size={12}/>
-                  <span style={{ minWidth: 0 }}>
-                    <span style={{ display: "block", fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {f.s.name}</span>
-                    <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {f.list.length} bobines{f.on.length < f.list.length ? ` · ${f.on.length} comptée${f.on.length > 1 ? "s" : ""}` : ""}
-                      {f.lo != null && f.on.length > 1 ? ` · ${driftTxt(f.lo).replace(" g", "")} à ${driftTxt(f.hi)}` : ""}</span>
-                  </span>
+            const sub = [f.s.brand, f.s.material].filter(Boolean).join(" · ");
+            return <div key={f.key} style={{ padding: "10px 0", borderBottom: "1px dashed var(--border)" }}>
+              <div onClick={() => one ? setOpen(one) : setUnfold(isOpen ? null : f.key)} style={{ display: "flex", alignItems: "flex-start", gap: 9, cursor: "pointer" }}>
+                <span style={{ marginTop: 3 }}><Dot hex={f.s.color} colors={f.s.colors} multicolor={f.s.multicolor} size={12}/></span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: 13.5, fontWeight: 800, color: "var(--text)", lineHeight: 1.25 }}>
+                    {f.s.name}{one && <span style={{ color: "var(--muted)", fontWeight: 700 }}> #{one.id}</span>}</span>
+                  {sub && <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "var(--text2)" }}>{sub}</span>}
+                  <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--muted)" }}>
+                    {one ? kindOf(one) : `${f.list.length} bobines · de ${driftTxt(f.lo)} à ${driftTxt(f.hi)}`}</span>
                 </span>
-                {/* la repartition : chaque bobine en point (pleine si elle compte), la moyenne en trait */}
-                <span data-tip={f.list.map(x => `#${x.id} ${driftTxt(x.drift_g)}${x.off ? " (hors stats)" : ""}`).join(" · ")}
-                  style={{ position: "relative", flex: "0 1 72px", height: 14 }}>
-                  <span style={{ position: "absolute", left: 0, right: 0, top: 5, height: 4, borderRadius: 3, background: "color-mix(in srgb, var(--border) 70%, transparent)" }}/>
-                  {f.lo != null && <span style={{ position: "absolute", top: 5, height: 4, borderRadius: 3, background: "color-mix(in srgb, #3B82F6 30%, transparent)",
-                    left: pos(f.lo), width: `calc(${pos(f.hi)} - ${pos(f.lo)})` }}/>}
-                  <span style={{ position: "absolute", left: "50%", top: 1, bottom: 1, width: 1.5, background: "var(--muted)" }}/>
-                  {f.list.map(x => <span key={x.id} style={{ position: "absolute", top: 3, width: 8, height: 8, marginLeft: -4, borderRadius: "50%", left: pos(x.drift_g),
-                    background: x.off ? "transparent" : "#64748B", border: `1.5px solid ${x.off ? "var(--muted)" : "#64748B"}`, opacity: x.off ? 0.6 : 0.75 }}/>)}
-                  {f.mean != null && <span style={{ position: "absolute", top: 0, bottom: 0, width: 3, marginLeft: -1.5, borderRadius: 2, left: pos(f.mean), background: col }}/>}
+                <span style={{ textAlign: "right", flexShrink: 0 }}>
+                  {one ? driftVal(one) : <span style={{ fontSize: 14, fontWeight: 900, color: colOf(f.mean) }}>{driftTxt(f.mean)}</span>}
+                  {!one && <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>moyenne</span>}
                 </span>
-                <span style={{ width: 52, textAlign: "right", flexShrink: 0 }}>
-                  <span style={{ display: "block", fontSize: 13, fontWeight: 900, color: col }}>{f.mean != null ? driftTxt(f.mean) : "—"}</span>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>moyenne</span>
-                </span>
-                <span style={{ width: 28, flexShrink: 0, textAlign: "center", fontSize: 14, color: "var(--muted)", transform: isOpen ? "rotate(90deg)" : "none",
-                  transition: "transform .15s" }}>›</span>
+                {one ? offBtn(one) : <span style={{ width: 28, flexShrink: 0, textAlign: "center", fontSize: 15, color: "var(--muted)",
+                  transform: isOpen ? "rotate(90deg)" : "none", transition: "transform .15s" }}>›</span>}
               </div>
-              {isOpen && <div style={{ paddingLeft: 14, borderLeft: "2px solid color-mix(in srgb, #14B8A6 30%, transparent)", marginBottom: 8 }}>
-                {f.list.map(x => spoolRow(x, true))}</div>}
+              <div style={{ paddingLeft: 21 }}><Axis list={f.list} mean={one ? one.drift_g : f.mean}/></div>
+              {isOpen && <div style={{ margin: "6px 0 0 21px", paddingLeft: 10, borderLeft: "2px solid color-mix(in srgb, #14B8A6 30%, transparent)" }}>
+                {f.list.map(x => <div key={x.id} onClick={() => setOpen(x)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 0", cursor: "pointer" }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>
+                    #{x.id} <span style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)" }}>{kindOf(x)}</span></span>
+                  {driftVal(x)}{offBtn(x)}
+                </div>)}
+              </div>}
             </div>;
           })}
         </div>
