@@ -1065,8 +1065,20 @@ async def optimize_plan(day: str | None = None) -> dict:
     sw = {}
     best = optimize(_soft_grouped(free), loaded, why=sw)
     order = _replace([j["key"] for j in jobs], [j["key"] for j in free], [j["key"] for j in best])
-    # les nuits remplies (06/11/2026) : avant la coupure des lancements, le plateau qui finit au plus pres de la reprise
-    order = night_fill(jobs, order, d, now, busy, loaded, {j["key"] for j in free}, why=sw)
+    # les nuits remplies (06/11/2026) : avant la coupure des lancements, le plateau qui finit au plus pres de la reprise ;
+    # les plateaux au jour fige peuvent changer d'heure dans leur journee (leur jour, place() le garde)
+    movable = {j["key"] for j in jobs if j["key"] not in d["locked"]}
+    order = night_fill(jobs, order, d, now, busy, loaded, movable, why=sw)
+    # enchainer les couleurs peut gacher les nuits plus que le remplissage ne rattrape : on compare avec l'ordre de
+    # depart, nuits remplies aussi, au temps mort des nuits plus 30 min par filament a charger, et on garde le meilleur
+    if Rules(d).launch:
+        def score(o):
+            rr = place(_ordered(jobs, o, d["pins"]), d, now, busy, loaded, _slots())
+            return sum(w for _, w in _night_waits(rr, Rules(d))) / 60 + 30 * sum(len(j.get("load") or []) for j in rr["jobs"])
+        sw0 = {}
+        order0 = night_fill(jobs, [j["key"] for j in _soft_grouped(jobs)], d, now, busy, loaded, movable, why=sw0)
+        if score(order0) < score(order):
+            order, sw = order0, sw0
     # enchainer les couleurs ne doit pas faire deborder une date limite : un objet qui ne tient pas passe en tete,
     # les dates les plus proches d'abord (s'il ne tient pas meme en tete, il y reste : c'est le plus urgent)
     for _ in range(3):
