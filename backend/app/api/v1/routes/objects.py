@@ -767,7 +767,8 @@ async def create_objects(body: ObjectCreate, _: str = Depends(get_current_user))
         # Regroupement demande : le groupe est cree AVANT les objets pour que
         # chacun naisse deja rattache, plutot qu'en deux temps.
         target_group_id = body.group_id
-        if body.group_new and n > 1:
+        # un groupe neuf, meme pour un seul objet (05/11/2026 : le groupe se choisit des la creation)
+        if body.group_new:
             grp = ObjectGroup(name=(body.group_name or body.name or "Lot").strip())
             db.add(grp)
             await db.flush()
@@ -971,7 +972,9 @@ async def accessory_categories(_: str = Depends(get_current_user)):
 @router.post("/accessories")
 async def create_accessory(body: AccessoryCreate, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
-        acc = Accessory(name=body.name, quantity=body.quantity, unit_price=body.unit_price)
+        # sa categorie des la creation (05/11/2026), choisie parmi les existantes ou creee
+        acc = Accessory(name=body.name, quantity=body.quantity, unit_price=body.unit_price,
+                        category=(body.category or "").strip()[:64] or None)
         db.add(acc); await db.flush(); await db.commit()
         return {"id": acc.id, "name": acc.name}
 

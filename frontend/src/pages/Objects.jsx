@@ -351,6 +351,7 @@ function AccessoryCreateSheet({ onClose, onCreated }) {
   useTrackDetail("Objets · Nouvel accessoire");
   const [form, setForm] = React.useState({ name:"", quantity:"0", unit_price:"0", total_price:"" });
   const [priceMode, setPriceMode] = React.useState("unit");  // unit | total
+  const [cat, setCat] = React.useState(null);               // sa categorie, des la creation (05/11/2026)
   const [busy, setBusy] = React.useState(false);
   const inp = fInp;
 
@@ -372,6 +373,7 @@ function AccessoryCreateSheet({ onClose, onCreated }) {
         // Le serveur stocke un prix unitaire : on lui envoie l'unitaire
         // effectif, que l'utilisateur ait saisi l'un ou l'autre.
         unit_price: effUnit,
+        category: cat || null,
       });
       onCreated?.(r.data?.id);
     } catch(e) {
@@ -398,6 +400,9 @@ function AccessoryCreateSheet({ onClose, onCreated }) {
           <div><label style={lbl}>Nom</label>
             <input style={inp} autoFocus value={form.name} placeholder="Ex : Aimant 10×3"
               onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
+          <div><label style={lbl}>Catégorie</label>
+            <CategoryPicker value={cat} onChange={setCat}/>
+            <p style={{ ...fNote, marginTop:4 }}>Choisis-en une, ou tape un nom nouveau pour la créer. Elle range l'accessoire dans sa section de la liste.</p></div>
           <div><label style={lbl}>Stock initial</label>
             <input style={inp} type="number" value={form.quantity}
               onChange={e=>setForm(f=>({...f,quantity:e.target.value}))}/></div>

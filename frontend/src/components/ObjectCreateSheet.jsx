@@ -25,9 +25,12 @@ export default function ObjectCreateSheet({ parentType, parentId, defaultName,
   useTrackDetail("Objets · Nouvel objet");
   const [quota, setQuota] = useState(null);
   const [qty, setQty] = useState(1);
-  const [mode, setMode] = useState("single");   // single | grouped
   const [name, setName] = useState(defaultName || "");
-  const [groupName, setGroupName] = useState(defaultName || "");
+  // son groupe, des la creation (05/11/2026) : aucun, un existant ({id, name}) ou un nouveau ({fresh: nom})
+  const [grp, setGrp] = useState(null);
+  const [groups, setGroups] = useState([]);
+  const [gq, setGq] = useState("");
+  useEffect(() => { client.get("/objects/object-groups").then(r => setGroups(r.data || [])).catch(() => {}); }, []);
   const [busy, setBusy] = useState(false);
   const kb = useKeyboardInset();
   const [err, setErr] = useState(null);
@@ -49,8 +52,9 @@ export default function ObjectCreateSheet({ parentType, parentId, defaultName,
         name: (name || "Sans nom").trim(),
         qty,
         cost_fabrication: costFabrication,
-        group_new: qty > 1 && mode === "grouped",
-        group_name: groupName.trim() || null,
+        group_id: grp?.id || null,
+        group_new: !!grp?.fresh,
+        group_name: grp?.fresh || null,
       });
       onDone?.(r.data);
       onClose();
@@ -139,29 +143,35 @@ export default function ObjectCreateSheet({ parentType, parentId, defaultName,
               </div>
             </div>
 
-            {qty > 1 && (
-              <div>
-                <label style={lbl}>Comment les enregistrer</label>
-                <div style={{ display:"flex", gap:8 }}>
-                  {[["single","🧩","Objets individuels","Chacun se vend et se suit à part"],
-                    ["grouped","🗃️","Regroupés","Un lot, suivi comme un ensemble"]].map(([m,ic,l,d]) => (
-                    <button key={m} onClick={() => setMode(m)}
-                      style={{ flex:1, minWidth:0, textAlign:"left", padding:"11px 12px", borderRadius:14, cursor:"pointer", font:"inherit",
-                        border:"1px solid " + (mode===m ? "#3b82f6" : "var(--border)"),
-                        background: mode===m ? "linear-gradient(135deg, rgba(59,130,246,0.18), transparent 70%), var(--surface2)" : "var(--surface2)" }}>
-                      <span style={{ display:"block", fontSize:18 }}>{ic}</span>
-                      <span style={{ display:"block", fontSize:13, fontWeight:800, color: mode===m ? "#60a5fa" : "var(--text)", marginTop:2 }}>{l}</span>
-                      <span style={{ display:"block", fontSize:11, color:"var(--muted)", marginTop:2, lineHeight:1.3 }}>{d}</span>
-                    </button>
-                  ))}
-                </div>
-                {mode === "grouped" && (
-                  <input style={{ ...inp, marginTop:8 }} value={groupName}
-                    placeholder="Nom du groupe d'objets"
-                    onChange={e => setGroupName(e.target.value)}/>
-                )}
-              </div>
-            )}
+            <div>
+              <label style={lbl}>Groupe</label>
+              {(() => {
+                const needle = gq.trim().toLowerCase();
+                const shown = (needle ? groups.filter(g => (g.name || "").toLowerCase().includes(needle)) : groups).slice(0, 14);
+                const exact = needle && groups.some(g => (g.name || "").trim().toLowerCase() === needle);
+                const chip = (key, label, on, onClick, tone = "#8B5CF6") => (
+                  <button key={key} type="button" onClick={onClick}
+                    style={{ padding:"7px 12px", borderRadius:20, cursor:"pointer", font:"inherit", fontSize:12.5, fontWeight:800, maxWidth:"100%",
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                      border:`1px solid ${on ? tone : "var(--border)"}`, color: on ? tone : "var(--text2)",
+                      background: on ? `color-mix(in srgb, ${tone} 14%, var(--surface2))` : "var(--surface2)" }}>{label}</button>);
+                return <>
+                  <input style={inp} value={gq} placeholder="Chercher un groupe, ou taper un nom pour en créer un"
+                    onChange={e => setGq(e.target.value)}/>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8 }}>
+                    {chip("none", "Aucun groupe", !grp, () => setGrp(null), "#64748B")}
+                    {shown.map(g => chip(g.id, `📁 ${g.name}`, grp?.id === g.id, () => setGrp({ id: g.id, name: g.name })))}
+                    {needle && !exact && chip("new", `＋ Créer « ${gq.trim()} »`, grp?.fresh === gq.trim(), () => setGrp({ fresh: gq.trim() }), "#16A34A")}
+                    {!needle && defaultName && !groups.some(g => (g.name || "").trim().toLowerCase() === defaultName.trim().toLowerCase()) &&
+                      chip("newd", `＋ Créer « ${defaultName} »`, grp?.fresh === defaultName, () => setGrp({ fresh: defaultName }), "#16A34A")}
+                  </div>
+                  <p style={{ margin:"6px 0 0", fontSize:11.5, fontWeight:600, color:"var(--muted)" }}>
+                    {grp?.fresh ? `Un nouveau groupe « ${grp.fresh} » sera créé, ${qty > 1 ? `avec les ${qty} objets` : "avec cet objet"}.`
+                      : grp ? `${qty > 1 ? `Les ${qty} objets iront` : "L'objet ira"} dans « ${grp.name} ».`
+                      : "Le groupe range l'objet (une collection, un client, un lot…) ; il se change ensuite depuis sa fiche."}</p>
+                </>;
+              })()}
+            </div>
           </>}
         </div>
 
