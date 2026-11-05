@@ -420,6 +420,16 @@ async def mw_plan_color_day(body: dict = Body({}), _: str = Depends(require_mw))
         raise HTTPException(400, str(e))
 
 
+@router.post("/plan/done")
+async def mw_plan_done(body: dict = Body({}), _: str = Depends(require_mw)):
+    """« Fait » : {key} un plateau imprime hors de l'appli compte comme fait ; {key, undo: true} le retire."""
+    from ....services import planner as P
+    try:
+        return await P.mark_done(str(body.get("key") or ""), bool(body.get("undo")))
+    except P.PlanError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/plan/optimize")
 async def mw_plan_optimize(body: dict = Body({}), _: str = Depends(require_mw)):
     """Enchainer les memes couleurs : toute la file, ou un jour ({day})."""

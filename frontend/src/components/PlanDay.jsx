@@ -9,6 +9,9 @@ import { colorBg, parseColorsList } from "../utils/colors";
 export const hm = s => { const m = Math.round((s || 0) / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${String(m % 60).padStart(2, "0")}` : ""}`; };
 const hhmm = iso => iso ? iso.slice(11, 16).replace(":", " h ").replace(/ h 00$/, " h").replace(/^0(?=\d)/, "") : "";
 export const jobName = j => `${j.title}${j.plates_total > 1 ? ` · plateau ${j.plate}` : ""}${j.qty > 1 ? ` · ${j.copy}/${j.qty}` : ""}`;
+// le plateau qui termine un objet : « 🏁 Objet terminé » (« 1 sur 2 » quand il en faut plusieurs)
+export const doneTxt = j => j.completes ? `🏁 Objet terminé${j.qty > 1 ? ` · ${j.completes} sur ${j.qty}` : ""}` : null;
+const GOLD = "#EAB308";
 const toMin = v => { const m = /^(\d{1,2}):(\d{2})$/.exec(v || ""); return m ? +m[1] * 60 + +m[2] : null; };
 
 // une plage d'heures sur la frise : [debut, fin] en minutes du jour, coupee a minuit
@@ -57,7 +60,7 @@ const Dot = ({ f }) => <span data-tip={f.name} style={{ width: 11, height: 11, b
 // un travail prevu : vignette, nom, heures, filaments (ceux a charger en orange), pourquoi il est la ; on le range
 // en le glissant (ordinateur) ou avec ses boutons (telephone)
 export const dueTxt = d => new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, onUnpin, onOpen, onDue, dragging }) {
+export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, onUnpin, onOpen, onDue, onDone, dragging }) {
   const [over, setOver] = useState(false);
   const drift = j.drift_min;
   return <div draggable={edit} onDragStart={e => { e.dataTransfer.setData("text/bn-job", j.key); e.dataTransfer.effectAllowed = "move"; onDrag?.(j.key); }}
@@ -66,8 +69,9 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
     onDragLeave={() => setOver(false)}
     onDrop={e => { const k = e.dataTransfer.getData("text/bn-job"); setOver(false); if (k && k !== j.key) { e.preventDefault(); e.stopPropagation(); onDropBefore?.(k, j.key); } }}
     style={{ display: "flex", gap: 9, padding: 7, borderRadius: 12, cursor: edit ? "grab" : "default", opacity: dragging === j.key ? 0.45 : 1,
-      border: `1.5px dashed ${j.too_long ? "#EF4444" : "color-mix(in srgb, #22C55E 50%, var(--border))"}`,
-      boxShadow: over ? "0 -3px 0 0 #6366F1" : "none", background: "color-mix(in srgb, #22C55E 5%, var(--surface2))" }}>
+      border: `1.5px ${j.completes ? "solid" : "dashed"} ${j.too_long ? "#EF4444" : j.completes ? GOLD : "color-mix(in srgb, #22C55E 50%, var(--border))"}`,
+      boxShadow: over ? "0 -3px 0 0 #6366F1" : "none",
+      background: j.completes ? `linear-gradient(120deg, color-mix(in srgb, ${GOLD} 14%, transparent), transparent 60%), var(--surface2)` : "color-mix(in srgb, #22C55E 5%, var(--surface2))" }}>
     <span onClick={onOpen} data-tip="Profil, plateaux et filaments retenus" style={{ width: 46, height: 46, borderRadius: 10, flexShrink: 0, overflow: "hidden", cursor: "pointer",
       background: "var(--surface)", display: "flex", alignItems: "center", justifyContent: "center" }}>
       {j.cover ? <img src={apiThumb(j.cover, 96)} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }}
@@ -82,6 +86,8 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
         {j.due && <span data-tip={j.due_ok ? "L'objet sera fini à temps" : "Le dernier plateau de l'objet finit après cette date"}
           style={{ fontWeight: 900, whiteSpace: "nowrap", color: j.due_ok ? "#16A34A" : "#EF4444" }}>🎯 avant le {dueTxt(j.due)}</span>}
       </span>
+      {j.completes && <span data-tip="Avec ce plateau, tous ceux de l'objet sont faits" style={{ alignSelf: "flex-start", fontSize: 11.5, fontWeight: 900, color: "#A16207",
+        background: `color-mix(in srgb, ${GOLD} 22%, transparent)`, borderRadius: 8, padding: "1px 8px" }}>{doneTxt(j)}</span>}
       {j.load?.length > 0 && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#F97316" }}>🧵 À charger : {j.load.join(", ")}</span>}
       {(j.reasons || []).map((r, i) => <span key={i} style={{ fontSize: 11.5, fontWeight: 600, color: j.too_long && i === j.reasons.length - 1 ? "#EF4444" : "var(--text2)",
         lineHeight: 1.35 }}>↪ {r}</span>)}
@@ -97,7 +103,8 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
       <label data-tip={j.due ? "Changer la date limite de l'objet" : "Une date limite pour l'objet : fini avant ce jour"} style={{ ...mini, position: "relative", width: "auto" }}>🎯
         <input type="date" value={j.due || ""} onChange={e => onDue(e.target.value || null)}
           style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%" }}/></label>
-      {j.pinned && <button type="button" onClick={onUnpin} data-tip="La rendre à la file : elle se place où elle tient" style={mini}>✕</button>}
+      <button type="button" onClick={onDone} data-tip="Imprimé hors de l'appli, ou pas reconnu : le compter comme fait" aria-label="Fait" style={mini}>✓</button>
+      {j.pinned && <button type="button" onClick={onUnpin} data-tip="Le rendre à la file : il se place où il tient" style={mini}>✕</button>}
     </span>}
   </div>;
 }
@@ -181,6 +188,18 @@ export function ColorDay({ colors, onPick }) {
         <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>{c.count} plateau{c.count > 1 ? "x" : ""} · {hm(c.seconds)}</span>
       </button>)}
     </div>}
+  </div>;
+}
+
+// les plateaux marques faits a la main, a retirer si c'etait une erreur
+export function ManualDone({ items, edit, onUndo }) {
+  if (!items?.length) return null;
+  return <div style={{ borderRadius: 16, border: "1px solid var(--border)", background: "var(--surface)", padding: 10, display: "flex", flexDirection: "column", gap: 5 }}>
+    <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)" }}>✓ Marqués faits à la main</div>
+    {items.map(x => <div key={x.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>
+      <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.title || `Plateau ${x.plate}`}{x.n > 1 ? ` ×${x.n}` : ""}</span>
+      {edit && <button type="button" onClick={() => onUndo(x.key)} data-tip="Retirer une fois : il redevient à faire" style={mini}>−</button>}
+    </div>)}
   </div>;
 }
 

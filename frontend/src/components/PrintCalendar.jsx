@@ -6,7 +6,7 @@ import { egg } from "../eggs";
 import { showAlert } from "../utils/dialog";
 import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
-import { DayStrip, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, jobName, dueTxt } from "./PlanDay";
+import { DayStrip, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, jobName, dueTxt, doneTxt } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
 // chacune, liseree de son etat) posee sur la barre de ses heures machine (une impression qui
@@ -118,6 +118,7 @@ export default function PrintCalendar() {
   const toFront = ks => arrange({ order: [...ks, ...keys.filter(k => !ks.includes(k))] });
   const applyAdvice = a => a.kind === "front" ? toFront(a.keys) : a.kind === "after" ? moveAfter(a.key, a.ref) : moveBefore(a.key, a.ref);
   const setDue = (did, due) => send(`/makerworld/plan/deadline/${did}`, { due }).then(ok => { if (ok && due) egg("planning_echeance"); });
+  const markDone = (key, undo = false) => send("/makerworld/plan/done", { key, undo }, "post");
   const colorDay = (day, fid) => send("/makerworld/plan/color-day", { day, filament_id: fid }, "post").then(ok => { if (ok) egg("planning_couleur"); });
   const optimize = day => send("/makerworld/plan/optimize", day ? { day } : {}, "post").then(ok => { if (ok) egg("planning_optimise"); });
   const saveSettings = async v => { if (await send("/makerworld/plan/settings", v)) { egg("planning_consignes"); setSetOpen(false); } };
@@ -181,6 +182,8 @@ export default function PrintCalendar() {
               background: "repeating-linear-gradient(135deg, color-mix(in srgb, #22C55E 30%, transparent) 0 5px, transparent 5px 10px)" }}/>}
             <span style={{ position: "absolute", top: wide ? 4 : 3, left: wide ? 6 : 4, fontSize: wide ? 12 : 10.5, fontWeight: 900,
               color: isToday ? "#6366F1" : "var(--text)" }}>{d.getDate()}</span>
+            {p.some(j => j.completes) && <span data-tip={p.filter(j => j.completes).map(j => `${doneTxt(j)} : ${j.title}`).join(" · ")}
+              style={{ position: "absolute", top: wide ? 3 : 2, left: wide ? 22 : 16, fontSize: wide ? 11 : 9 }}>🏁</span>}
             {wide && x?.duration > 0 && cellW >= 74 && <span style={{ position: "absolute", top: 5, right: 6, fontSize: 9.5, fontWeight: 800, color: "var(--text2)" }}>{hm(x.duration)}</span>}
             {/* l'etagere des vignettes */}
             <span style={{ position: "absolute", left: wide ? 5 : 3, right: wide ? 5 : 3, bottom: wide ? 6 : 5, display: "flex", alignItems: "flex-end", overflow: "hidden" }}>
@@ -249,30 +252,33 @@ export default function PrintCalendar() {
       {selPlan.map((j, i) => <JobCard key={j.key} j={j} edit={edit} dragging={dragging} onDrag={setDragging}
         onDropBefore={moveBefore} onUp={i ? () => moveBefore(j.key, selPlan[i - 1].key) : null}
         onDown={i < selPlan.length - 1 ? () => moveAfter(j.key, selPlan[i + 1].key) : null}
-        onDay={day => moveDay(j.key, day)} onUnpin={() => unpin(j.key)} onOpen={() => setSheet(j.design_id)} onDue={due => setDue(j.design_id, due)}/>)}
+        onDay={day => moveDay(j.key, day)} onUnpin={() => unpin(j.key)} onOpen={() => setSheet(j.design_id)} onDue={due => setDue(j.design_id, due)} onDone={() => markDone(j.key)}/>)}
     </>}
     {pick >= today && !selPlan.length && pd && <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
       <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
-        {edit ? "Rien de prévu : glisse ici une impression de la file (sous le calendrier), pose-la avec son 📅, ou fais-en une journée couleur." : "Rien de prévu ce jour-là."}</span>
+        {edit ? "Rien de prévu : glisse ici un plateau de la file (sous le calendrier), pose-le avec son 📅, ou fais-en une journée couleur." : "Rien de prévu ce jour-là."}</span>
       {edit && <ColorDay colors={pd?.colors} onPick={fid => colorDay(pick, fid)}/>}</div>}
   </div>;
   const advice = showPlan ? <>
     <PlanDeadlines items={pd?.deadlines} edit={edit} onDue={setDue}/>
-    <PlanAdvice items={pd?.advice} edit={edit} onApply={applyAdvice}/></> : null;
+    <PlanAdvice items={pd?.advice} edit={edit} onApply={applyAdvice}/>
+    <ManualDone items={pd?.manual_done} edit={edit} onUndo={k => markDone(`${k}:0`, true)}/></> : null;
   // la file : chaque impression prevue, dans l'ordre, a glisser sur un jour du calendrier
   const pool = showPlan && pd?.jobs?.length ? <div style={{ borderRadius: 18, border: "1px solid var(--border)", background: "var(--surface)", padding: 10 }}>
     <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#22C55E", marginBottom: 7 }}>
-      La file · {pd.jobs.length} impression{pd.jobs.length > 1 ? "s" : ""}{edit && wide ? " · glisse-les sur un jour" : ""}</div>
+      La file · {pd.jobs.length} plateau{pd.jobs.length > 1 ? "x" : ""}{edit && wide ? " · glisse-les sur un jour" : ""}</div>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
       {pd.jobs.slice(0, 60).map(j => <button key={j.key} type="button" draggable={edit}
         onDragStart={e => { e.dataTransfer.setData("text/bn-job", j.key); setDragging(j.key); }} onDragEnd={() => setDragging(null)}
         onClick={() => pickDay(j.day)} data-tip={`${jobName(j)} · ${hm(j.seconds)}`}
         style={{ display: "inline-flex", alignItems: "center", gap: 6, maxWidth: 230, padding: "3px 8px 3px 3px", borderRadius: 10, cursor: edit ? "grab" : "pointer",
-          border: `1.5px dashed ${j.too_long ? "#EF4444" : "color-mix(in srgb, #22C55E 45%, var(--border))"}`, background: "var(--surface2)", opacity: dragging === j.key ? 0.4 : 1 }}>
+          border: `1.5px ${j.completes ? "solid" : "dashed"} ${j.too_long ? "#EF4444" : j.completes ? "#EAB308" : "color-mix(in srgb, #22C55E 45%, var(--border))"}`,
+          background: "var(--surface2)", opacity: dragging === j.key ? 0.4 : 1 }}>
         <span style={{ width: 26, height: 26, borderRadius: 7, overflow: "hidden", flexShrink: 0, background: "var(--surface)" }}>
           {j.cover && <img src={apiThumb(j.cover, 64)} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}</span>
         <span style={{ minWidth: 0, textAlign: "left" }}>
-          <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{jobName(j)}</span>
+          <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {j.completes ? "🏁 " : ""}{jobName(j)}</span>
           <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: j.load?.length ? "#F97316" : "var(--muted)" }}>
             {new Date(`${j.day}T12:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })} {j.start.slice(11, 16)} · {hm(j.seconds)}{j.load?.length ? " · 🧵" : ""}
             {j.due && <span style={{ color: j.due_ok ? "#16A34A" : "#EF4444", fontWeight: 900 }}> · 🎯 {dueTxt(j.due)}</span>}</span>

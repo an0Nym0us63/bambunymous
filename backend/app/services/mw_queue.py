@@ -263,8 +263,9 @@ async def _ams_stock() -> dict:
 
 
 async def _printed_plates(dids) -> dict:
-    """Mes impressions reussies de ces modeles, plateau par plateau :
-    {design_id: {numero de plateau: nombre}}."""
+    """Mes impressions reussies de ces modeles, plateau par plateau et profil par profil :
+    {design_id: {profil: {numero de plateau: nombre}}} (profil « » : pas connu). Un print qui regroupe plusieurs
+    plateaux (designes a la main) compte pour chacun."""
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print
@@ -280,12 +281,28 @@ async def _printed_plates(dids) -> dict:
         # les plateaux designes a la main (regroupes, renumerotes) passent avant le numero du fichier,
         # comme sur la fiche (avant le 24/10/2026, « A faire » ne lisait que le numero)
         for k in plate_keys(plate, prof, manual):
+            pr, _, num = k.partition(":")
             try:
-                n = int(str(k.split(":", 1)[1] or "1").strip() or 1)
+                n = int(str(num or "1").strip() or 1)
             except ValueError:
                 continue
-            per = out.setdefault(str(did), {})
+            per = out.setdefault(str(did), {}).setdefault(str(pr or "").strip(), {})
             per[n] = per.get(n, 0) + 1
+    return out
+
+
+def _printed_of(by_prof: dict, prof: dict | None, all_ids: set) -> dict:
+    """Les plateaux imprimes du profil retenu (05/11/2026 : le plateau 2 d'un autre profil n'est pas le meme) :
+    ceux de ce profil (son numero d'instance ou de profil) et ceux dont le profil n'est pas connu. Si aucun print
+    du modele ne porte un profil qu'on connait (numerotation inconnue), tous comptent, comme avant."""
+    mine = {str((prof or {}).get("instance_id") or ""), str((prof or {}).get("profile_id") or ""), ""} - {"None"}
+    known = any(k in all_ids for k in by_prof if k)
+    out = {}
+    for k, per in by_prof.items():
+        if known and k not in mine:
+            continue
+        for n, c in per.items():
+            out[n] = out.get(n, 0) + c
     return out
 
 
@@ -566,7 +583,8 @@ async def _compute(fresh: bool = False) -> dict:
             row["plates_ready"] = ready
             row["plates_count"] = len(plates)
             # chaque plateau : faisable tout de suite avec l'AMS ? deja imprime (par moi) ?
-            mine = done_plates.get(str(did), {})
+            mine = _printed_of(done_plates.get(str(did), {}), prof,
+                               {str(x.get(i) or "") for x in profiles for i in ("instance_id", "profile_id")} - {""})
             row["plates"] = [{"index": pl.get("index"), "name": pl.get("name") or "",
                               "ready": pl.get("index") in ready, "printed": mine.get(pl.get("index"), 0),
                               "seconds": _num(pl.get("seconds")) or None,

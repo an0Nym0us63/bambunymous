@@ -14,15 +14,18 @@ Ce que l'on range (meme reglage) :
   order : l'ordre voulu des travaux (cles « design:plateau:exemplaire ») ; ceux qui n'y sont pas suivent, dans
           l'ordre de « A faire » ;
   pins  : {cle: "AAAA-MM-JJ"} le jour ou un travail a ete pose (glisse sur le calendrier) ;
-  base  : {"design:plateau": n} les impressions reussies deja comptees quand le plateau est entre dans le planning :
-          un exemplaire imprime depuis sort du planning ;
+  done  : {"design:plateau": {"n", "title"}} les plateaux marques faits a la main (imprimes hors de l'appli) ;
   plan0 : {cle: debut prevu} le planning tel qu'il etait au dernier rangement, pour dire l'avance ou le retard ;
   deadlines : {design: "AAAA-MM-JJ"} un objet a finir AVANT ce jour (« la fusee avant le 24 ») : son dernier plateau
           doit finir avant minuit la veille ; le planning previent quand il deborde, l'optimiseur ne le sacrifie pas ;
   tz    : decalage horaire du navigateur (minutes), pour la boucle des rappels.
 
 Un travail : un plateau d'un modele (ou le modele entier quand ses plateaux ne disent pas leur duree), un
-exemplaire. Les plateaux de modeles differents peuvent s'intercaler (l'optimiseur enchaine ceux de memes couleurs).
+exemplaire. Ce qui reste a faire d'un plateau : le nombre d'objets voulus, moins ce qu'il a deja donne (mes
+impressions reussies du profil retenu, un print qui regroupe deux plateaux comptant pour les deux, plus ceux marques
+faits a la main, plus celui qui imprime). Deux objets de 7 plateaux, un plateau imprime une fois, un jamais, les autres
+deux fois : il reste un plateau a faire une fois et un autre deux fois. Les plateaux de modeles differents peuvent
+s'intercaler (l'optimiseur enchaine ceux de memes couleurs) ; le plateau qui termine un objet le dit.
 """
 import json
 import logging
@@ -52,7 +55,7 @@ async def _load() -> dict:
     d = d if isinstance(d, dict) else {}
     for k, v in DEFAULTS.items():
         d.setdefault(k, v)
-    for k in ("pins", "base", "plan0", "notified", "deadlines"):
+    for k in ("pins", "done", "plan0", "notified", "deadlines"):
         if not isinstance(d.get(k), dict):
             d[k] = {}
     if not isinstance(d.get("order"), list):
@@ -119,7 +122,7 @@ async def set_settings(body: dict) -> dict:
 def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
     """Les travaux a planifier, dans l'ordre de « A faire » ; rend aussi si base a change (a garder)."""
     out, changed = [], False
-    base = d["base"]
+    manual = d["done"]
     for m in models:
         did = str(m.get("design_id"))
         if m.get("error") or not m.get("profile"):
@@ -136,12 +139,13 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
             fils = [{"filament_id": (f.get("chosen") or {}).get("filament_id"), "type": f.get("type"), "color": f.get("color"),
                      "g": round((f.get("g") or 0) / qty, 1)} for f in m.get("filaments") or []]
             units.append((0, "", m["seconds"] / qty, fils, 0, bool(m.get("printing")), round((m.get("weight_g") or 0) / qty, 1)))
+        # l'objet : combien chaque plateau en a deja donne, pour savoir quel plateau en termine un
+        obj = {"qty": qty, "plates": {}}
         for idx, pname, secs, fils, printed, printing, wg in units:
             bk = f"{did}:{idx}"
-            if bk not in base:
-                base[bk] = printed
-                changed = True
-            done = max(0, printed - base[bk]) + (1 if printing else 0)   # celui qui imprime n'est plus a planifier
+            mk = manual.get(bk)
+            done = printed + (int(mk.get("n") or 0) if isinstance(mk, dict) else 0) + (1 if printing else 0)
+            obj["plates"][idx] = done
             for c in range(done + 1, qty + 1):
                 fl = []
                 for f in fils:
@@ -152,7 +156,7 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
                                "name": s.get("name") or f"{f.get('type') or ''} {f.get('color') or ''}".strip(), "g": f.get("g")})
                 out.append({"key": f"{did}:{idx}:{c}", "design_id": did, "title": title, "cover": m.get("cover_url"),
                             "plate": idx, "plate_name": pname, "plates_total": len(plates), "copy": c, "qty": qty,
-                            "seconds": int(secs), "weight_g": wg, "fils": fl})
+                            "seconds": int(secs), "weight_g": wg, "fils": fl, "_obj": obj})
     return out, changed
 
 
@@ -401,6 +405,22 @@ def _due_txt(due: str) -> str:
     return f"{t.day} {['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'][t.month - 1]}"
 
 
+def mark_complete(placed: list) -> None:
+    """Dans l'ordre du planning, le plateau qui termine un objet : chaque plateau de l'objet a alors ete fait une fois
+    de plus que le nombre d'objets deja finis. j["completes"] = le numero de l'objet termine (1 sur 2…)."""
+    seen = {}
+    for j in placed:
+        o = j.pop("_obj", None)
+        if not o:
+            continue
+        st = seen.setdefault(id(o), {"n": dict(o["plates"]), "qty": o["qty"]})
+        before = min(st["n"].values()) if st["n"] else 0
+        st["n"][j["plate"]] = st["n"].get(j["plate"], 0) + 1
+        after = min(st["n"].values())
+        if after > before:
+            j["completes"] = after
+
+
 def _sig(j) -> frozenset:
     return frozenset(f["filament_id"] for f in j["fils"] if f.get("filament_id"))
 
@@ -518,6 +538,7 @@ async def plan(tz: int | None = None) -> dict:
         d["pins"].pop(k)
         dirty = True
     r = place(jobs, d, now, busy, loaded, _slots())
+    mark_complete(r["jobs"])
     # avance ou retard : chaque debut, compare a celui du dernier rangement
     p0 = d["plan0"]
     for j in r["jobs"]:
@@ -537,7 +558,7 @@ async def plan(tz: int | None = None) -> dict:
         if not live and s <= now:
             late = int((now - datetime.fromisoformat(p0.get(first["key"], first["start"]))).total_seconds() // 60)
             status = {"state": "due", "late_min": max(0, late),
-                      "text": f"À lancer maintenant : {first['title']}" + (f" (prévue il y a {_dur(late * 60)})" if late >= 10 else "")}
+                      "text": f"À lancer maintenant : {_title(first)}" + (f" (prévu il y a {_dur(late * 60)})" if late >= 10 else "")}
         elif first["drift_min"] >= 10:
             status = {"state": "late", "late_min": first["drift_min"],
                       "text": f"{_dur(first['drift_min'] * 60)} de retard sur le planning : la suite est décalée d'autant, dans les consignes"}
@@ -549,6 +570,7 @@ async def plan(tz: int | None = None) -> dict:
     dls = deadlines(r["jobs"], d, now)
     due_of = {x["design_id"]: x for x in dls}
     for j in r["jobs"]:
+        j.pop("_obj", None)
         x = due_of.get(j["design_id"])
         if x:
             j["due"], j["due_ok"] = x["due"], x["ok"]
@@ -562,7 +584,29 @@ async def plan(tz: int | None = None) -> dict:
             "busy_until": busy.isoformat(timespec="minutes") if busy else None,
             "live": {"name": live[1], "design_id": live[2], "remaining_min": live[0]} if live else None,
             "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix), "status": status,
-            "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded)}
+            "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded),
+            "manual_done": [{"key": k, "title": v.get("title"), "plate": k.split(":")[-1], "n": v.get("n")}
+                            for k, v in d["done"].items() if isinstance(v, dict) and v.get("n")]}
+
+
+async def mark_done(key: str, undo: bool = False) -> dict:
+    """« ✓ Fait » : un plateau imprime hors de l'appli (ou pas reconnu) compte comme fait ; undo le retire."""
+    parts = str(key).split(":")
+    if len(parts) < 2:
+        raise PlanError("Plateau inconnu")
+    bk = f"{parts[0]}:{parts[1]}"
+    d, now, jobs, _, loaded, live, busy = await _context(None)
+    j = next((x for x in jobs if x["key"] == key), None)
+    cur = d["done"].get(bk) if isinstance(d["done"].get(bk), dict) else {"n": 0, "title": None}
+    cur["n"] = max(0, int(cur.get("n") or 0) + (-1 if undo else 1))
+    if j:
+        cur["title"] = _title(j)
+    if cur["n"]:
+        d["done"][bk] = cur
+    else:
+        d["done"].pop(bk, None)
+    await _save(d)
+    return await plan()
 
 
 def colors(placed: list) -> list:
