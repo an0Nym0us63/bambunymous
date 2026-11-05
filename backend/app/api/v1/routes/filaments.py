@@ -2673,7 +2673,7 @@ async def spool_usage_history(sid: int, _: str = Depends(get_current_user)):
     if sp is not None and sp.created_at:
         out.append({"kind": "ajout", "id": 0, "file_name": "Ajoutée au stock" + (" (tag RFID)" if sp.tag_number else ""), "grams": None,
                     "print_date": sp.created_at.isoformat() + "Z", "reverted": False})
-    out += [{"kind": m.kind, "id": m.id, "print_id": m.print_id, "file_name": m.label, "grams": m.grams,
+    out += [{"kind": m.kind, "id": m.id, "print_id": m.print_id, "usage_id": m.usage_id, "file_name": m.label, "grams": m.grams,
              "print_date": m.at.isoformat() + "Z" if m.at else None, "reverted": m.reverted_at is not None,
              "reverted_at": m.reverted_at.isoformat() + "Z" if m.reverted_at else None} for m in moves]
     out.sort(key=lambda x: x.get("print_date") or "", reverse=True)

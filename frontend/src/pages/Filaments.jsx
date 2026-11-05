@@ -1268,7 +1268,16 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
           </div>
           <div style={{ padding:"12px 14px 18px", display:"flex", flexDirection:"column", gap:6 }}>
             {usageHistory.length === 0 && <p style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:"24px 0" }}>Aucune utilisation enregistrée</p>}
-            {usageHistory.map((u, i) => {
+            {(() => {
+              // les explications d'une impression (05/11/2026) : la piece annulee et le sous-zero se lisent SUR sa ligne
+              // (elle montre deja la consommation ramenee) ; a part, elles faisaient croire a une deuxieme deduction
+              const rows = new Set(usageHistory.filter(x => (x.kind || "usage") === "usage" && x.usage_id).map(x => x.usage_id));
+              const onRow = {};
+              for (const x of usageHistory) if ((x.kind === "piece" || x.kind === "zero") && x.usage_id && rows.has(x.usage_id))
+                (onRow[x.usage_id] = onRow[x.usage_id] || []).push(x);
+              usageHistory._onRow = onRow;
+              return null; })()}
+            {usageHistory.filter(u => !((u.kind === "piece" || u.kind === "zero") && u.usage_id && usageHistory._onRow?.[u.usage_id])).map((u, i) => {
               // un rendu (ou une consommation annulee) : vert, « + », et annulable s'il ne l'est pas deja (31/10/2026)
               // une bobine finie en cours d'impression (suivi couche par couche, 02/11/2026) : mise a 0, annulable
               if (u.kind === "fin") {
@@ -1367,6 +1376,11 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                     {u.relay && <span data-tip="Elle a pris la suite d'une bobine finie en cours d'impression" style={{ color:"#8B5CF6" }}>🔁 a pris le relais</span>}
                     {/* reussie, avec quelque chose de rendu : une piece annulee en cours de route (05/11/2026) */}
                     {u.status !== "FAILED" && u.returned > 0 && <span data-tip="Revenu à la bobine (ligne verte « Rendu à la bobine », avec sa cause)" style={{ color:"#16a34a" }}>↩ {u.returned.toFixed(1).replace(".", ",")} g rendus</span>}</div>
+                  {/* une piece annulee : la consommation de cette ligne en tient deja compte (05/11/2026) */}
+                  {(usageHistory._onRow?.[u.usage_id] || []).filter(x => x.kind === "piece").map(x => {
+                    const t = frNum(x.file_name || ""), who = (t.split("pièce annulée : ")[1] || "").split(" ;")[0], cons = (t.match(/consommation ([\d,]+) → ([\d,]+) g/) || []);
+                    return <div key={`p${x.id}`} data-tip={t} style={{ fontSize:11, fontWeight:700, color:"#F97316", marginTop:2 }}>
+                      ✂ pièce annulée{who ? ` : ${who}` : ""}{cons[1] ? ` · ${cons[1]} g prévus → ${cons[2]} g` : ` · ${(x.grams || 0).toFixed(1).replace(".", ",")} g de moins`}</div>; })}
                   {/* plus imprime que ce qu'elle avait chez nous au lancement : la suite est passee sous notre zero */}
                   {u.before != null && (u.grams_used || 0) - u.before >= 0.5 && <div data-tip="Le décompte s'arrête à 0 g : ce qu'elle a imprimé au-delà est gardé à part (« Sous notre zéro ») pour l'écart du suivi à sa fin"
                     style={{ fontSize:11, fontWeight:700, color:"#EF4444", marginTop:2 }}>
@@ -2333,7 +2347,7 @@ function MeasuredCard({ f, onUpdated }) {
 }
 
 // les grammes des lignes d'historique a la francaise (05/11/2026 : « 23.6 g » ecrit par le serveur avant ce jour)
-const frNum = s => String(s || "").replace(/(\d)\.(\d)(?=\d* ?g|\d* →)/g, "$1,$2");
+const frNum = s => String(s || "").replace(/(\d)\.(\d)(?=\d* ?g\b|\d* →)/g, "$1,$2");
 
 export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
   useTrackDetail(f ? `Fiche filament · ${f.translated_name || f.name || "#" + f.id}` : null);
