@@ -1744,7 +1744,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
               </div>}
               <div style={{ position: "absolute", top: 10, right: 12, display: "flex", gap: 8 }}>
                 {canRate && <RateStar designs={[p.design_id]} name={p.file_name} enabled={!visiting}/>}
-                {isAdmin && <button onClick={more} aria-label="Plus d'actions" style={v2Round}>⋯</button>}
+                {/* le ⋯ est dans la barre du bas, toujours visible (05/11/2026 : en haut aussi, il faisait doublon) */}
                 <button onClick={onClose} aria-label="Fermer" style={v2Round}>✕</button>
               </div>
             </div>
@@ -2356,7 +2356,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
                 {prints.some(x => (x.status === "SUCCESS" || x.status === "PARTIAL") && x.design_id && groupToRate.has(String(x.design_id)))
                   && <RateStar name={title} enabled={!groupVisiting}
                     designs={prints.filter(x => x.status === "SUCCESS" || x.status === "PARTIAL").map(x => String(x.design_id || "").trim()).filter(Boolean)}/>}
-                {isAdmin && <button onClick={more} aria-label="Plus d'actions" style={v2Round}>⋯</button>}
+                {/* le ⋯ est dans la barre du bas, toujours visible (05/11/2026 : en haut aussi, il faisait doublon) */}
                 <button onClick={onClose} aria-label="Fermer" style={v2Round}>✕</button>
               </div>
             </div>

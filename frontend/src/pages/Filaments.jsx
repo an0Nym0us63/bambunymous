@@ -30,7 +30,7 @@ import { Pressable, openMenu } from "../components/ContextMenu";
 import { colorBg, parseColorsList, finishOf, isDark, autoFinishOf, FINISHES, COLOR_BUCKETS, BUCKET_FR, BUCKET_HEX, bucketsOf } from "../utils/colors";
 import SpoolSVG from "../components/SpoolSVG";
 import { Ghost, GhostBadge, HeroSpool, ORD_C, ORD_BG, tipStock, tipOrdered } from "../components/SpoolGhost";
-import { EmptyCard, FCard, FLAB, FROW, FRow, FSheet, FTile, FVAL, PageTabs, SearchRow, agoFr, dayFr, fBtn, fChip, fGrad, fRound, isLight, lighten, fOutline } from "../components/FicheKit";
+import { EmptyCard, FCard, FLAB, FROW, FRow, FSheet, FTile, FVAL, PageTabs, SearchRow, agoFr, dayFr, fBtn, fChip, fGrad, isLight, lighten, fOutline } from "../components/FicheKit";
 import GalleryCompare from "../components/GalleryCompare";
 import { useLiveCurrent, useLiveSpool } from "../store/liveUsage";
 import { LiveHatch, LiveTo } from "../components/LiveUsage";
@@ -1115,7 +1115,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
   });
 
   return (
-    <FSheet onClose={onClose} top={<button onClick={menu} aria-label="Plus d'actions" style={fRound}>⋯</button>}
+    <FSheet onClose={onClose} /* le menu ⋯ est dans la barre du bas, toujours visible (05/11/2026 : en haut aussi, il faisait doublon) */
       bottom={<>
         {isAdmin && <button onClick={weigh} style={{ ...fBtn, flex:1, color:"#d97706", borderColor:"rgba(245,158,11,0.4)", background:"rgba(245,158,11,0.1)" }}>⚖ Ajuster le poids</button>}
         <button onClick={loadUsage} disabled={loadingUsage} style={{ ...fBtn, flex:1 }}>📋 {loadingUsage ? "…" : "Historique"}</button>
@@ -2540,7 +2540,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
   });
 
   return (
-    <FSheet onClose={onClose} top={isAdmin && !editing && <button onClick={menu} aria-label="Plus d'actions" style={fRound}>⋯</button>}
+    <FSheet onClose={onClose} /* le menu ⋯ est dans la barre du bas, toujours visible (05/11/2026 : en haut aussi, il faisait doublon) */
       bottom={isAdmin && (editing ? <>
         <button onClick={() => setEditing(false)} style={{ ...fBtn, flex:1, color:"var(--muted)" }}>Annuler</button>
         <button onClick={handleSave} disabled={saving} style={{ ...fBtn, flex:2, border:"none", color:"#fff",

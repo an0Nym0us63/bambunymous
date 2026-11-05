@@ -309,11 +309,12 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
             {!WIDE && <div style={{ position:"absolute", top:8, left:"50%", transform:"translateX(-50%)", width:38, height:4, borderRadius:2, background:"rgba(148,163,184,.6)" }}/>}
             <div style={{ position:"absolute", top:10, right:12, display:"flex", gap:8 }}>
               {/* a evaluer : le signal, qui ouvre l'evaluation (comme l'etoile de la barre du bas) */}
-              {rateHere && !friend && <span data-tip="À évaluer sur MakerWorld" style={{ display:"flex" }}>
+              {rateHere && !friend && !ok && <span data-tip="À évaluer sur MakerWorld" style={{ display:"flex" }}>
                 <RateButton did={id} label="⭐" ext="" doneLabel="✓" style={{ ...roundTop, display:"flex", alignItems:"center", justifyContent:"center",
                   textDecoration:"none", border:"none", background:"linear-gradient(135deg, #F59E0B, #FBBF24)", color:"#fff",
                   boxShadow:"0 6px 16px rgba(245,158,11,.45)" }}/></span>}
-              <button onClick={menu} aria-label="Plus d'actions" style={roundTop}>⋯</button>
+              {/* le ⋯ et l'etoile sont dans la barre du bas des qu'elle est la (05/11/2026 : en double, c'etait trop) */}
+              {!ok && <button onClick={menu} aria-label="Plus d'actions" style={roundTop}>⋯</button>}
               <button onClick={onClose} aria-label="Fermer" style={roundTop}>✕</button>
             </div>
           </div>
