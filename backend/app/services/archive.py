@@ -54,7 +54,7 @@ PH = "Photos du groupe"
 STATUS = {"SUCCESS": "réussie", "FAILED": "échouée", "PARTIAL": "partielle", "TO_REDO": "à refaire"}
 # le reste des donnees, recopie tel quel dans « Système »
 # les assemblages edites de la vue 3D et leurs versions (30/10/2026) : faits a la main, a garder
-SYSTEM_DIRS = [("bambu_catalog", "Catalogue Bambu"), ("ofd_catalog", "Catalogue des autres marques"), ("mw_3d_edits", "Assemblages 3D")]
+SYSTEM_DIRS = [("bambu_catalog", "Catalogue Bambu"), ("ofd_catalog", "Catalogue des autres marques"), ("fc_catalog", "Couleurs mesurées (FilamentColors)"), ("mw_3d_edits", "Assemblages 3D")]
 # les photos des filaments, objets et accessoires : un dossier par element, a son nom (voir _named_sync)
 SYS_NAMED = [("filaments", "Photos des filaments"), ("objects", "Objets"), ("accessories", "Accessoires")]
 SYS_DEL = f"{SYS}/_Supprimés"

@@ -235,7 +235,7 @@ async def lifespan(app: FastAPI):
     from app.services import mail_orders as _mail
     _tasks.track("mail", _bg(_mail.loop()))               # commandes Bambu Lab lues dans les mails, si active
     await mqtt_manager.start()
-    # Catalogue filaments Bambu (m0h31h31/3DPrint-Filament-RFID-Tool) :
+    # Catalogue filaments Bambu (nuancier de Bambu Studio) :
     # téléchargé au démarrage depuis GitHub, re-vérifié toutes les 24h via ETag.
     from app.services.bambu_catalog import BambuCatalogSync
     catalog_sync = BambuCatalogSync(data_dir=settings.DATA_DIR)
@@ -243,6 +243,9 @@ async def lifespan(app: FastAPI):
     # le catalogue des autres marques (Open Filament Database, poids des supports de SpoolmanDB) : chaque semaine
     from app.services import ofd_catalog as _ofd
     _tasks.track("catalog_ofd", _aio.create_task(_ofd.loop()))
+    # les couleurs mesurees (FilamentColors.xyz, 05/11/2026) : relues quand leur bibliotheque change, chaque semaine au plus
+    from app.services import fc_catalog as _fc
+    _tasks.track("catalog_fc", _aio.create_task(_fc.loop()))
     # les fiches restees au nom anglais (commandes lues dans les mails) : leur nom francais, une fois au demarrage
     # nos correspondances de noms (Parametres › Filaments), puis ces noms francais sur les fiches
     from app.services.bambu_catalog import retranslate_filaments as _retranslate, load_names as _load_names

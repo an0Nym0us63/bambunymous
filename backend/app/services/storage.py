@@ -73,7 +73,7 @@ def _cat(parts: tuple, name: str) -> str:
     if ext == ".3mf":
         return "tmf"
     return {"groups": "groups", "objects": "objects", "accessories": "accessories", "filaments": "filaments",
-            "bambu_catalog": "catalog", "ofd_catalog": "catalog", "tmp": "tmp", "uploads": "tmp"}.get(top, "other")
+            "bambu_catalog": "catalog", "ofd_catalog": "catalog", "fc_catalog": "catalog", "tmp": "tmp", "uploads": "tmp"}.get(top, "other")
 
 
 def _scan(root: Path) -> dict:

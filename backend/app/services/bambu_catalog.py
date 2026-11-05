@@ -1,12 +1,10 @@
 """
 Synchronisation du catalogue filaments Bambu Lab.
 - filaments_color_codes.json  : fila_id + color_code → nom couleur, hex, type.
-  Source officielle : le nuancier de Bambu Studio (depot bambulab/BambuStudio,
-  tenu par Bambu Lab). A defaut, la copie du depot communautaire
-  m0h31h31/3DPrint-Filament-RFID-Tool (meme format, en retard sur l'officiel).
-- filaments_type_mapping.json : type détaillé → famille (PLA/PETG/ABS...), du
-  depot communautaire. Bambu Studio n'en publie pas : la famille se DEDUIT du
-  type (« PLA Basic » → PLA) et ce fichier ne sert qu'en secours.
+  Source : le nuancier de Bambu Studio (depot bambulab/BambuStudio, tenu par Bambu Lab).
+- la famille (PLA/PETG/ABS...) se DEDUIT du type (« PLA Basic » → PLA). Le depot communautaire
+  m0h31h31/3DPrint-Filament-RFID-Tool (copie du nuancier et table des familles) n'est plus lu (05/11/2026) : il ne
+  fait que recopier Bambu Studio, en retard ; une table deja telechargee sert encore de secours.
 Téléchargés au démarrage, re-vérifiés toutes les 24h via ETag.
 Stockés dans DATA_DIR/bambu_catalog/.
 """
@@ -18,11 +16,8 @@ import urllib.error
 
 log = logging.getLogger(__name__)
 
-BASE_RAW = "https://raw.githubusercontent.com/m0h31h31/3DPrint-Filament-RFID-Tool/master/app/src/main/assets"
 OFFICIAL_RAW = "https://raw.githubusercontent.com/bambulab/BambuStudio/master/resources/profiles/BBL/filament"
 FILAMENTS_URL   = f"{OFFICIAL_RAW}/filaments_color_codes.json"
-FILAMENTS_FALLBACK_URL = f"{BASE_RAW}/filaments_color_codes.json"
-TYPE_MAP_URL    = f"{BASE_RAW}/filaments_type_mapping.json"
 FILAMENTS_FILE  = "filaments_color_codes.json"
 TYPE_MAP_FILE   = "filaments_type_mapping.json"
 INTERVAL_SEC    = 86400  # 24h
@@ -121,12 +116,9 @@ class BambuCatalogSync:
     def sync_once(self) -> dict:
         t0 = time.time()
         w_fil, st_fil = self._fetch(FILAMENTS_URL, FILAMENTS_FILE)
-        if st_fil not in (200, 304) and not os.path.exists(os.path.join(self.catalog_dir, FILAMENTS_FILE)):
-            # source officielle injoignable ou deplacee, et rien en local : la
-            # copie communautaire (une copie officielle deja la est gardee)
-            log.warning(f"[CATALOG] source officielle en échec ({st_fil}), copie communautaire")
-            w_fil, st_fil = self._fetch(FILAMENTS_FALLBACK_URL, FILAMENTS_FILE)
-        w_typ, st_typ = self._fetch(TYPE_MAP_URL,  TYPE_MAP_FILE)
+        if st_fil not in (200, 304):
+            log.warning(f"[CATALOG] nuancier Bambu Studio en échec ({st_fil}) : la copie locale reste")
+        w_typ, st_typ = False, None
         log.info(f"[CATALOG] Sync terminée en {time.time()-t0:.1f}s "
                  f"(filaments={'maj' if w_fil else 'ok'}, types={'maj' if w_typ else 'ok'})")
         return {"filaments": w_fil, "types": w_typ, "status": {"filaments": st_fil, "types": st_typ}}

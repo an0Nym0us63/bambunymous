@@ -783,6 +783,23 @@ async def filament_print_counts(
     return {str(fid): n for fid, n in rows if fid is not None}
 
 
+@router.get("/filaments/{fid}/measured")
+async def filament_measured(fid: int, db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
+    """Sa couleur mesuree (05/11/2026, FilamentColors.xyz) : les echantillons de ce filament (meme marque, meme nom de
+    couleur, le type departage ; a defaut une teinte tres proche, pour info), avec hex mesure, transparence (TD), photo."""
+    from ....services import fc_catalog
+    f = await db.get(Filament, fid)
+    if not f:
+        raise HTTPException(404, "Filament introuvable")
+    st = fc_catalog.status()
+    if not st["available"]:
+        return {"available": False, "matches": []}
+    names = [f.name_en, f.name, f.translated_name]
+    return {"available": True, "count": st["count"], "current": f.color,
+            "matches": fc_catalog.matches(f.manufacturer or ("Bambu Lab" if f.profile_id else ""), names, f.fila_type or "",
+                                          f.material or "", f.color or "")}
+
+
 @router.get("/filaments/{fid}/prints")
 async def filament_prints(
     fid: int,
@@ -1807,6 +1824,15 @@ async def ofd_brands(_: str = Depends(get_current_user)):
             b = {**b, "count": b["count"] + n, "families": sorted({*b["families"], *(x for x in fams if x)}), "own": n}
         out.append(b)
     out += [{"name": nm, "count": n, "families": sorted(x for x in fams if x), "own": n} for nm, n, fams in own.values()]
+    # les references en plus de FilamentColors (05/11/2026) : des couleurs, et des marques, que les autres n'ont pas
+    from ....services import fc_catalog
+    fcb = fc_catalog.brands()
+    for i, b in enumerate(out):
+        k = fc_catalog._brand_key(b["name"])
+        if k in fcb:
+            _n, n, fams = fcb.pop(k)
+            out[i] = {**b, "count": b["count"] + n, "families": sorted({*b["families"], *(x for x in fams if x)}), "fc": n}
+    out += [{"name": nm, "count": n, "families": sorted(x for x in fams if x), "fc": n} for nm, n, fams in fcb.values()]
     out.sort(key=lambda b: b["name"].casefold())
     return {**r, "available": bool(out), "brands": out}
 
@@ -1871,10 +1897,12 @@ async def ofd_search(brand: str = "", family: str = "", q: str = "", _: str = De
     """Les couleurs d'une marque, a la forme de /catalog/search (plus la marque et le poids du support) : celles de notre
     catalogue d'abord, puis l'Open Filament Database."""
     from ....services import ofd_catalog, own_catalog
+    from ....services import fc_catalog
     mine = own_catalog.search(brand, family, q)
     r = ofd_catalog.search(brand, family, q)
-    return {"available": bool(mine) or r.get("available", False), "total": len(mine) + (r.get("total") or 0),
-            "entries": mine + (r.get("entries") or [])}
+    fc = fc_catalog.search(brand, family, q)[:400]     # puis les couleurs mesurees que les autres n'ont pas (05/11/2026)
+    return {"available": bool(mine) or bool(fc) or r.get("available", False), "total": len(mine) + (r.get("total") or 0) + len(fc),
+            "entries": mine + (r.get("entries") or []) + fc}
 
 
 @router.post("/filaments/{fid}/link-catalog")
@@ -1997,10 +2025,11 @@ def _bambu_view(e: dict, t2f: dict, en_to_fr: dict) -> dict:
 
 def _other_entry(ref_or_catalog_ref: str, source: str = None):
     """L'entree « autres marques » : (source, ref) ou un catalog_ref « ofd:… » / « own:… »."""
-    from ....services import ofd_catalog, own_catalog
+    from ....services import ofd_catalog, own_catalog, fc_catalog
     if source is None:
         source, _, ref_or_catalog_ref = str(ref_or_catalog_ref or "").partition(":")
-    return own_catalog.entry(ref_or_catalog_ref) if source == "own" else ofd_catalog.entry(ref_or_catalog_ref) if source == "ofd" else None
+    return own_catalog.entry(ref_or_catalog_ref) if source == "own" else ofd_catalog.entry(ref_or_catalog_ref) if source == "ofd" \
+        else fc_catalog.entry(ref_or_catalog_ref) if source == "fc" else None
 
 
 async def _link_one(db, f, body: dict, link: bool = True) -> list:
@@ -2014,9 +2043,11 @@ async def _link_one(db, f, body: dict, link: bool = True) -> list:
         fid_ = str(body.get("fila_id") or "")
         if fid_.startswith("own-"):
             body = {**body, "source": "own", "ref": fid_[4:]}
+        elif fid_.startswith("fc-"):
+            body = {**body, "source": "fc", "ref": fid_[3:]}
         elif _other_entry(fid_, "ofd"):
             body = {**body, "source": "ofd", "ref": fid_}
-    if body.get("source") in ("ofd", "own"):
+    if body.get("source") in ("ofd", "own", "fc"):
         e = _other_entry(body.get("ref"), body["source"])
         if e is None:
             raise ValueError("Entrée introuvable dans le catalogue des autres marques")
@@ -2056,13 +2087,17 @@ async def enrich_preview(db: AsyncSession = Depends(get_db), _: str = Depends(re
     from ....services import own_catalog
     ofd_brands = {ofd_catalog.norm(b["name"]): b["name"] for b in (ofd_catalog.brands().get("brands") or [])}
     ofd_brands.update({k: v[0] for k, v in own_catalog.brands().items() if k not in ofd_brands})
+    from ....services import fc_catalog
+    ofd_brands.update({k: v[0] for k, v in fc_catalog.brands().items() if k not in ofd_brands})
     pools: dict = {}
 
     def ofd_pool(brand, fam):
         k = (brand, fam)
         if k not in pools:
             def both(fm):
-                return own_catalog.search(brand, fm, "") + (ofd_catalog.search(brand, fm, "", limit=100000).get("entries") or [])
+                from ....services import fc_catalog
+                return own_catalog.search(brand, fm, "") + (ofd_catalog.search(brand, fm, "", limit=100000).get("entries") or []) \
+                    + fc_catalog.search(brand, fm, "")
             v = both(fam or "")
             pools[k] = v or (both("") if fam else [])
         return pools[k]
@@ -2076,7 +2111,7 @@ async def enrich_preview(db: AsyncSession = Depends(get_db), _: str = Depends(re
         bambu = "bambu" in (f.manufacturer or "").lower() or (bool(f.profile_id) and not f.catalog_ref and not (f.manufacturer or "").strip())
         fam = family_of(f.fila_type, f.material) or f.material
         sure = None
-        if f.catalog_ref and f.catalog_ref.split(":", 1)[0] in ("ofd", "own"):
+        if f.catalog_ref and f.catalog_ref.split(":", 1)[0] in ("ofd", "own", "fc"):
             e = _other_entry(f.catalog_ref)
             if e:
                 after = _snap(f)
