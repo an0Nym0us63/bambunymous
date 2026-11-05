@@ -795,7 +795,8 @@ function HubSwatch({ t, active, h, radius = 6, onPick = null, label = null }) {
           : posee ? { ...bgWithTop(colorBg(parseColorsList(posee.color, posee.colors_array), posee.multicolor_type, finishOf(posee), { size: h }),
               "repeating-linear-gradient(-45deg, rgba(255,255,255,0.45) 0 2px, transparent 2px 6px)"), opacity: 0.8 }
           : { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0 2px, transparent 2px 6px)" }),
-        border: c ? "1px solid rgba(0,0,0,0.18)" : dry ? "2px dashed #f59e0b" : "1px dashed rgba(148,163,184,0.6)",
+        // vide qui imprime : le seul contour, celui de dehors (05/11/2026 : bord et contour pointilles se doublaient)
+        border: c ? "1px solid rgba(0,0,0,0.18)" : dry ? "none" : "1px dashed rgba(148,163,184,0.6)",
         outline: dry ? "2px dashed #f59e0b" : active ? "2px solid #3b82f6" : "none", outlineOffset: 1.5,
         ...(dry ? { background: "repeating-linear-gradient(-45deg, rgba(245,158,11,0.28) 0 2px, transparent 2px 6px)" } : null),
         animation: active ? (pop ? "bn-swap .55s ease-out, bn-ring 2s ease-out .55s infinite" : "bn-ring 2s ease-out infinite") : "none" }}/>
