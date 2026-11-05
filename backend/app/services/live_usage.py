@@ -816,13 +816,29 @@ async def live(pid: int) -> dict:
                                              .where(Spool.id.in_(ids)))).all():
                 spools[sp.id] = (sp, fil)
     prog = _PROG.get(pid) or {}
+    # une piece annulee n'imprimera plus le reste (05/11/2026) : le prevu, et le poids de la bobine a la fin, le
+    # retirent deja (la derniere bobine de chaque filament d'abord, comme skipped_back) ; une fois rendu a la fin, les
+    # lignes de consommation le portent elles-memes
+    adj: dict = {}
+    st = (await _state()).get(str(pid)) or {}
+    sk = {**(st.get("skip") or {}), **_skips(pid)}
+    if sk and not st.get("skip_back"):
+        t = await _table(pid, p)
+        for slot, less in skipped_by_slot(t, {s: sum(float(r.grams_used or 0) for r in rs) for s, rs in rows.items()}, sk).items():
+            for r in reversed(rows.get(slot) or []):
+                cut = min(less, float(r.grams_used or 0))
+                adj[r.id] = float(r.grams_used or 0) - cut
+                less -= cut
+                if less < 0.05:
+                    break
+    g_of = lambda r: adj.get(r.id, float(r.grams_used or 0))
     items = []
     for slot in sorted(rows):
         rs = rows[slot]
-        planned = sum(float(r.grams_used or 0) for r in rs)
+        planned = sum(g_of(r) for r in rs)
         u = used.get(slot, 0.0)
         for k, r in enumerate(rs):
-            ru = _row_used(r, u)
+            ru = min(_row_used(r, u), g_of(r))
             sp, fil = spools.get(r.spool_id, (None, None))
             rem = float(sp.remaining_weight_g) if sp and sp.remaining_weight_g is not None else None
             # le poids de la bobine juste avant le decompte du lancement (04/11/2026) : le decompte s'arrete a 0, et
@@ -830,15 +846,15 @@ async def live(pid: int) -> dict:
             # 175 g « maintenant ») ; on part donc de lui, et ce qui manquera se dit a part (short)
             bef = getattr(r, "spool_before_g", None)
             if bef is not None:
-                now_g, tgt_g = float(bef) - ru, float(bef) - float(r.grams_used or 0)
+                now_g, tgt_g = float(bef) - ru, float(bef) - g_of(r)
             elif rem is not None:
-                now_g, tgt_g = rem + float(r.grams_used or 0) - ru, rem
+                now_g, tgt_g = rem + float(r.grams_used or 0) - ru, rem + float(r.grams_used or 0) - g_of(r)
             else:
                 now_g = tgt_g = None
             items.append({
                 "slot": slot, "row": r.id, "spool_id": r.spool_id, "current": k == len(rs) - 1,
                 "planned": round(planned, 1), "used": round(u, 1),
-                "row_planned": round(float(r.grams_used or 0), 1), "row_used": round(ru, 1),
+                "row_planned": round(g_of(r), 1), "row_used": round(ru, 1),
                 "now": round(max(0.0, now_g), 1) if now_g is not None else None,
                 "target": round(max(0.0, tgt_g), 1) if tgt_g is not None else None,
                 "short": round(-tgt_g, 1) if tgt_g is not None and tgt_g < -0.5 else None,
