@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import client from "../api/client";
+import { egg } from "../eggs";
 
 // Le dessin d'une couche (02/11/2026) : les traces de chaque filament, lus dans le G-code du 3MF tranche, et la couche
 // d'avant en fantome. Affichage seulement. Pas de « deja imprime » dans la couche : on sait l'ordre des traces, pas le
@@ -213,7 +214,7 @@ export function LayerExplorer({ status }) {
       <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 800, color: "var(--text)" }}>
         <span role="group" aria-label="Vue" style={{ display: "inline-flex", padding: 2, gap: 2, borderRadius: 10, background: "var(--surface2)", border: "1px solid var(--border)" }}>
           {[["2d", "2D", "La couche seule, vue de dessus"], ["3d", "3D", "Toute l'impression de trois quarts : imprimé en couleur, le reste en fantôme"]].map(([v, l, tip]) =>
-            <button key={v} type="button" onClick={() => setMode(v)} data-tip={tip} aria-pressed={mode === v}
+            <button key={v} type="button" onClick={() => { setMode(v); if (v === "3d") egg("couche_3d"); }} data-tip={tip} aria-pressed={mode === v}
               style={{ border: "none", borderRadius: 8, padding: "3px 9px", fontSize: 12, fontWeight: 900, cursor: "pointer",
                 background: mode === v ? "#8B5CF6" : "transparent", color: mode === v ? "#fff" : "var(--text2)" }}>{l}</button>)}
         </span>
