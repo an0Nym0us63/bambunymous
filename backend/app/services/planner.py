@@ -42,7 +42,11 @@ logger = logging.getLogger(__name__)
 KEY = "PRINT_PLAN"
 HORIZON_DAYS = 60
 SHIFT_MIN = 180          # un plateau « decale » : son depart a bouge d'au moins 3 h (06/11/2026)
-DEFAULTS = {"gap": 15, "run": None, "launch": None, "opt_mode": "mix", "auto_new": "off"}
+DEFAULTS = {"gap": 15, "run": None, "launch": None, "opt_mode": "mix", "auto_new": "off", "days_off": []}
+# les jours particuliers (06/11/2026) : [{from, to, kind}] ; "absent" : aucun lancement ces jours-la (une impression
+# lancee avant finit quand meme) ; "light" (peu dispo) : une seule heure de lancement, la premiere de la plage habituelle
+# (on y lance un long qui couvre la journee ; la veille au soir, un long qui y mene)
+DAY_KINDS = ("absent", "light")
 # les modes d'optimisation (06/11/2026) : au mieux (couleurs et nuits, le meilleur des deux), le moins de changements de
 # filament, le plus d'impressions chaque jour (les courtes d'abord), remplir les temps morts (les nuits)
 MODES = ("mix", "couleurs", "debit", "nuits")
@@ -124,6 +128,18 @@ async def set_settings(body: dict) -> dict:
                 if b - a < 30:
                     raise PlanError("Une plage d'au moins 30 minutes")
                 d[k] = {"from": w["from"], "to": w["to"]}
+    if isinstance(body.get("days_off"), list):
+        out = []
+        for x in body["days_off"][:60]:
+            try:
+                a, b = str(x.get("from")), str(x.get("to") or x.get("from"))
+                datetime.strptime(a, "%Y-%m-%d"); datetime.strptime(b, "%Y-%m-%d")
+            except (ValueError, AttributeError, TypeError):
+                raise PlanError("Jour particulier : une date invalide")
+            if x.get("kind") not in DAY_KINDS:
+                raise PlanError("Jour particulier : absent ou peu dispo")
+            out.append({"from": min(a, b), "to": max(a, b), "kind": x["kind"], "note": str(x.get("note") or "")[:60]})
+        d["days_off"] = sorted(out, key=lambda x: x["from"])
     if body.get("opt_mode") in MODES:
         d["opt_mode"] = body["opt_mode"]
     # les nouveaux plateaux (un modele retenu, un exemplaire de plus) : en fin de file, ou places selon un mode
@@ -249,6 +265,32 @@ class Rules:
         self.launch = _window(d.get("launch"))
         self.run_txt = d.get("run")
         self.launch_txt = d.get("launch")
+        # les jours particuliers : {"AAAA-MM-JJ": "absent" | "light"}
+        self.off = {}
+        for x in d.get("days_off") or []:
+            try:
+                a, b = datetime.strptime(x["from"], "%Y-%m-%d"), datetime.strptime(x["to"], "%Y-%m-%d")
+            except (ValueError, KeyError, TypeError):
+                continue
+            while a <= b:
+                self.off[a.date().isoformat()] = x.get("kind")
+                a += timedelta(days=1)
+        # des moments sans lancement (une plage, ou des jours particuliers) : les nuits et les trous se remplissent
+        self.limits = bool(self.launch or self.off)
+
+    def _launch_iv(self, c: datetime, horizon: int):
+        """Les plages de lancement autour de c, jours particuliers compris : un jour absent n'en a pas, un jour peu dispo
+        n'en garde que la premiere heure. Sans plage reglee et sans jour particulier : None (a toute heure)."""
+        if not self.launch and not self.off:
+            return None
+        iv = self._iv(self.launch or (0, 1440), c, horizon)
+        out = []
+        for a, b in iv:
+            k = self.off.get(a.date().isoformat())
+            if k == "absent":
+                continue
+            out.append((a, min(b, a + timedelta(hours=1))) if k == "light" else (a, b))
+        return out
 
     @staticmethod
     def _iv(w, t0: datetime, days: int):
@@ -260,7 +302,7 @@ class Rules:
         """Le premier debut possible a partir de c : (debut, pourquoi pas c, trop long)."""
         dur = timedelta(seconds=secs)
         runs = self._iv(self.run, c, horizon) if self.run else None
-        lnch = self._iv(self.launch, c, horizon) if self.launch else None
+        lnch = self._launch_iv(c, horizon)
 
         def ok_launch(s):
             return lnch is None or any(a <= s <= b for a, b in lnch)
@@ -296,6 +338,13 @@ def _reason(why, c: datetime, s: datetime, secs: float, rules: Rules, today) -> 
         return None
     nxt = f"{_day_fr(s, today)} à {_fmt(s)}" if s.date() != c.date() else f"à {_fmt(s)}"
     if why == "launch":
+        # un jour particulier entre les deux : il le dit
+        k = next((rules.off.get((c + timedelta(days=i)).date().isoformat()) for i in range((s.date() - c.date()).days + 1)
+                  if rules.off.get((c + timedelta(days=i)).date().isoformat())), None)
+        if k == "absent":
+            return f"Absent ce jour-là (jour particulier) : lancée {nxt}"
+        if k == "light":
+            return f"Jour peu dispo (une seule heure de lancement) : lancée {nxt}"
         lt = rules.launch_txt or {}
         return f"Pas de lancement entre {lt.get('to')} et {lt.get('from')} : lancée {nxt}"
     kind, end = why
@@ -718,7 +767,7 @@ def mode_score(r: dict, d: dict, now: datetime, mode: str) -> float:
     rules = Rules(d)
     late = 100000 * sum(1 for x in deadlines(r["jobs"], d, now) if not x["ok"])
     loads = sum(len(j.get("load") or []) for j in r["jobs"])
-    idle = sum(w for _, w in _night_waits(r, rules)) / 60 if rules.launch else 0
+    idle = sum(w for _, w in _night_waits(r, rules)) / 60 if rules.limits else 0
     # le plus d'impressions tot : la somme des heures de fin (les courtes d'abord la font baisser)
     ends = sum((datetime.fromisoformat(j["end"]) - now).total_seconds() / 3600 for j in r["jobs"]) / max(1, len(r["jobs"]))
     if mode == "couleurs":
@@ -775,7 +824,7 @@ def night_fill(jobs: list, order: list, d: dict, now: datetime, busy, loaded: se
     chaque essai est simule sur tout le planning ; on garde celui qui reduit le plus le temps mort de toutes les nuits
     (au moins 20 min). Les dates limites sont rattrapees ensuite (optimize_plan)."""
     rules = Rules(d)
-    if not rules.launch:
+    if not rules.limits:
         return order
     order = list(order)
     def sim(o):
@@ -1150,14 +1199,14 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
         sw = {}
         best = optimize(_soft_grouped(on), before, why=sw)
         # sans heures de lancement : le plus long en dernier, il imprime pendant la nuit ou la fin de journee
-        if len(best) > 2 and not Rules(d).launch:
+        if len(best) > 2 and not Rules(d).limits:
             long_i = max(range(len(best)), key=lambda i: best[i]["seconds"])
             if best[long_i]["seconds"] >= 4 * 3600:
                 best.append(best.pop(long_i))
         # le jour garde sa place dans l'ordre general : ses travaux reprennent leurs rangs, dans le nouvel ordre
         order = _replace([j["key"] for j in r["jobs"]], [j["key"] for j in on], [j["key"] for j in best])
         # avec des heures de lancement : le dernier de la soiree finit au plus pres de l'heure ou l'on relance
-        if Rules(d).launch:
+        if Rules(d).limits:
             pins = {**d["pins"], **{j["key"]: day for j in best}}
             order = night_fill(jobs, order, {**d, "pins": pins}, now, busy, loaded, {j["key"] for j in best}, why=sw)
         keep = {k: v for k, v in d["soft_why"].items() if k not in {j["key"] for j in on}}
@@ -1210,7 +1259,7 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
         o1 = _replace(base, [j["key"] for j in free], [j["key"] for j in spt])
         cands = [(cur, order)] + [(score(o), o) for o in (o0, o1)]
         cur, order = min(cands, key=lambda c: c[0])
-        if Rules(d).launch:
+        if Rules(d).limits:
             nf = night_fill(jobs, order, d, now, busy, loaded, movable, why=sw, budget=4)
             sc = score(nf)
             if sc < cur:

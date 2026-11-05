@@ -171,10 +171,40 @@ export const OPT_MODES = [["mix", "🧠", "Intelligent", "Essaie plusieurs plann
   ["couleurs", "🎨", "Le moins de filaments", "Enchaîner les mêmes couleurs : le moins de bobines à changer"],
   ["debit", "⚡", "Le plus d'impressions", "Les plus courtes d'abord : le plus d'impressions finies chaque jour"],
   ["nuits", "🌙", "Remplir les temps morts", "Le long du soir finit au plus près de la reprise : l'imprimante tourne la nuit"]];
+// un jour particulier (06/11/2026) : absent (rien ne se lance), peu dispo (une seule heure de lancement)
+export const DAY_KIND = { absent: ["🏖", "Absent", "#0EA5E9", "Rien ne se lance ; une impression lancée avant finit quand même"],
+  light: ["⏳", "Peu dispo", "#F59E0B", "Une seule heure de lancement, la première de ta plage : un long y part, un autre la veille au soir"] };
+export const dayKindOf = (settings, day) => (settings?.days_off || []).find(x => x.from <= day && day <= x.to)?.kind || null;
+function DaysOff({ list, set }) {
+  const [kind, setKind] = useState("absent");
+  const [a, setA] = useState(""), [b, setB] = useState("");
+  const fr = d => new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+  const today = new Date().toISOString().slice(0, 10);
+  return <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    {list.map((x, i) => { const [ic, l, c] = DAY_KIND[x.kind] || DAY_KIND.absent;
+      return <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 10,
+        border: `1px solid color-mix(in srgb, ${c} 40%, var(--border))`, background: `color-mix(in srgb, ${c} 8%, var(--surface2))` }}>
+        <span style={{ fontSize: 15 }}>{ic}</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 800, color: "var(--text)" }}>{l} · {x.from === x.to ? fr(x.from) : `du ${fr(x.from)} au ${fr(x.to)}`}</span>
+        <button type="button" onClick={() => set(list.filter((_, k) => k !== i))} aria-label="Retirer" style={mini}>✕</button>
+      </div>; })}
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+      {Object.entries(DAY_KIND).map(([k, [ic, l, , tip]]) => <button key={k} type="button" data-tip={tip} onClick={() => setKind(k)}
+        style={{ ...seg, ...(kind === k ? segOn : {}) }}>{ic} {l}</button>)}
+      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>du</span>
+      <input type="date" value={a} min={today} onChange={e => { setA(e.target.value); if (!b || b < e.target.value) setB(e.target.value); }} style={tin}/>
+      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>au</span>
+      <input type="date" value={b} min={a || today} onChange={e => setB(e.target.value)} style={tin}/>
+      <button type="button" disabled={!a} onClick={() => { set([...list, { from: a, to: b || a, kind }].sort((x, y) => x.from.localeCompare(y.from))); setA(""); setB(""); }}
+        style={{ ...seg, ...(a ? segOn : { opacity: 0.5 }) }}>＋ Ajouter</button>
+    </div>
+  </div>;
+}
 export function PlanSettings({ s, onSave, onClose }) {
   const [gap, setGap] = useState(String(s?.gap ?? 15));
   const [optMode, setOptMode] = useState(s?.opt_mode || "mix");
   const [autoNew, setAutoNew] = useState(s?.auto_new || "off");
+  const [daysOff, setDaysOff] = useState(s?.days_off || []);
   const [run, setRun] = useState(s?.run || null);
   const [launch, setLaunch] = useState(s?.launch || null);
   const [busy, setBusy] = useState(false);
@@ -187,7 +217,7 @@ export function PlanSettings({ s, onSave, onClose }) {
       de <input type="time" value={v.from} onChange={e => set({ ...v, from: e.target.value })} style={tin}/>
       à <input type="time" value={v.to} onChange={e => set({ ...v, to: e.target.value })} style={tin}/></div>}
   </div>;
-  const save = async () => { setBusy(true); try { await onSave({ gap: Math.max(0, parseInt(gap) || 0), run, launch, opt_mode: optMode, auto_new: autoNew }); } finally { setBusy(false); } };
+  const save = async () => { setBusy(true); try { await onSave({ gap: Math.max(0, parseInt(gap) || 0), run, launch, opt_mode: optMode, auto_new: autoNew, days_off: daysOff }); } finally { setBusy(false); } };
   const modes = (v, set, extra) => <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
     {[...(extra ? [extra] : []), ...OPT_MODES].map(([k, ic, l, tip]) => <button key={k} type="button" data-tip={tip} onClick={() => set(k)}
       style={{ ...seg, ...(v === k ? segOn : {}) }}>{ic} {l}</button>)}</div>;
@@ -211,6 +241,12 @@ export function PlanSettings({ s, onSave, onClose }) {
       <div style={lab}>▶ Heures de lancement</div>
       {range(launch, setLaunch, { from: "08:00", to: "00:00" }, "À toute heure", "Une plage")}
       <div style={hint}>Quand quelqu'un est là pour lancer. Avec 8 h – minuit, une impression peut finir à 2 h du matin, mais la suivante attend 8 h.</div>
+    </div>
+    <div>
+      <div style={lab}>📅 Jours particuliers</div>
+      <DaysOff list={daysOff} set={setDaysOff}/>
+      <div style={hint}><b>Absent</b> : rien ne se lance (une impression lancée avant finit quand même). <b>Peu dispo</b> : une seule heure de
+        lancement, la première de ta plage ; le planning y lance un long qui couvre la journée, et un long la veille au soir.</div>
     </div>
     <div>
       <div style={lab}>✨ Mode d'optimisation proposé</div>

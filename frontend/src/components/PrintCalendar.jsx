@@ -11,7 +11,7 @@ import MwImg, { thumbSrc } from "./MwImg";
 import { currentFriend } from "../store/friend";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
 import { PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, poolGroups, BlockedList, LowStockBanner } from "./PlanPanels";
-import { OPT_MODES, DayStrip, onDay, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained } from "./PlanDay";
+import { OPT_MODES, DAY_KIND, dayKindOf, DayStrip, onDay, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
 // chacune, liseree de son etat) posee sur la barre de ses heures machine (une impression qui
@@ -339,6 +339,10 @@ export default function PrintCalendar() {
             </>}
             <span style={{ position: "absolute", top: wide ? 4 : 3, left: wide ? 6 : 4, fontSize: wide ? 12 : 10.5, fontWeight: 900,
               color: isToday ? "#6366F1" : "var(--text)" }}>{d.getDate()}</span>
+            {/* un jour particulier : absent, peu dispo (06/11/2026) */}
+            {dayKindOf(pd?.settings, k) && (() => { const [ic, l, c] = DAY_KIND[dayKindOf(pd?.settings, k)];
+              return <span data-tip={l} style={{ position: "absolute", top: wide ? 3 : 2, left: wide ? 22 : 16, fontSize: wide ? 11 : 9,
+                padding: "0 3px", borderRadius: 5, background: `color-mix(in srgb, ${c} 18%, transparent)` }}>{ic}</span>; })()}
             {p.some(j => j.low_info?.length) && <span data-tip={p.flatMap(j => (j.low_info || []).map(x => `📉 ${x.name} sous le seuil (${j.title})`)).join(" · ")}
               style={{ position: "absolute", top: wide ? 4 : 2, left: wide ? 24 : 17, zIndex: 2, fontSize: wide ? 11 : 9, lineHeight: 1, padding: "1px 3px", borderRadius: 6,
                 background: "#FEE2E2", border: "1px solid #FCA5A5" }}>📉</span>}
@@ -404,6 +408,9 @@ export default function PrintCalendar() {
       <span style={{ fontSize: 15, fontWeight: 900, color: "var(--text)", textTransform: "capitalize" }}>
         {new Date(`${pick}T12:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</span>
       {sel?.duration > 0 && <span style={{ fontSize: 12, fontWeight: 800, color: "var(--muted)" }}>{hm(sel.duration)} de machine</span>}
+      {dayKindOf(pd?.settings, pick) && (() => { const [ic, l, c, tip] = DAY_KIND[dayKindOf(pd?.settings, pick)];
+        return <span data-tip={tip} style={{ fontSize: 11.5, fontWeight: 900, color: c, background: `color-mix(in srgb, ${c} 13%, transparent)`,
+          borderRadius: 8, padding: "1px 8px" }}>{ic} {l}</span>; })()}
     </div>
     {/* la frise du jour en haut de la carte, sous son titre (06/11/2026 : en dessous de la liste, il fallait descendre) */}
     {pick >= today && <DayStrip day={pick} done={sel?.items || []} jobs={(pd?.jobs || []).filter(j => onDay(j, pick))} settings={pd?.settings} now={pd?.now}
