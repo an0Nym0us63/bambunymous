@@ -1353,7 +1353,9 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                       textDecoration: u.reverted ? "line-through" : "none" }}>
                       {u.kind === "annule" ? "Consommation annulée" : "Rendu à la bobine"}{u.file_name ? ` · ${frNum(u.file_name)}` : ""}</div>
                     <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>
-                      {when}{u.reverted ? " · annulé" : ""}</div>
+                      {when}{u.reverted ? " · annulé" : ""}
+                      {/* rendu pour une impression qui n'est plus la (06/11/2026) : sinon on ne comprenait pas d'ou il venait */}
+                      {u.gone && u.print_id && <span data-tip="Restitué à la main sur cette impression, retirée ou remplacée depuis (un lancement relancé)"> · restitué sur l'impression #{u.print_id}, retirée depuis</span>}</div>
                   </div>
                   <div style={{ textAlign:"right", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
                     <div style={{ fontSize:14, fontWeight:900, color:"#16a34a" }}>+{(u.grams || 0).toFixed(1)} g</div>
