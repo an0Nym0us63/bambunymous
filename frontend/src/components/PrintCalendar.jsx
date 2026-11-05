@@ -207,6 +207,14 @@ export default function PrintCalendar() {
     dayBest: v => placeDay(j.key, v),
     unpin: () => unpin(j.key),
     pinDay: () => arrange({ pins: { [j.key]: j.day } }),
+    // a sa place dans une journee : juste apres tel plateau (ou avant le premier du jour), son jour fige
+    slot: (day, after) => {
+      const o = keys.filter(x => x !== j.key);
+      const firstOfDay = (pd?.jobs || []).filter(x => x.day === day && x.key !== j.key).sort((a, b) => a.start.localeCompare(b.start))[0];
+      const at = after ? o.indexOf(after) + 1 : firstOfDay ? o.indexOf(firstOfDay.key) : o.length;
+      o.splice(Math.max(0, at), 0, j.key);
+      return arrange({ order: o, pins: { [j.key]: day } });
+    },
     sheet: () => setSheet(j.mw_id || j.design_id),
     dayview: () => { setPick(j.day); setView("day"); },
     due: v => setDue(j.design_id, v),
@@ -487,7 +495,7 @@ export default function PrintCalendar() {
     </div>}
     {modelSel && <ModelSheet g={poolGroups(pd?.jobs, pd?.blocked).find(g => g.id === modelSel)} now={pd?.now} edit={edit}
       onClose={() => setModelSel(null)} onPick={setJobSel} act={modelAct(modelSel)}/>}
-    {jobSel && <JobSheet j={jobSel} now={pd?.now} edit={edit} onClose={() => setJobSel(null)} act={jobAct(jobSel)}/>}
+    {jobSel && <JobSheet j={jobSel} now={pd?.now} edit={edit} onClose={() => setJobSel(null)} act={jobAct(jobSel)} jobs={pd?.jobs}/>}
     {pop === "advice" && <PlanPopup title={`Conseils (${pd?.advice?.length || 0})`} icon="💡" color="#F59E0B" onClose={() => setPop(null)}>
       <PlanAdvice items={pd?.advice} edit={edit} onApply={a => { applyAdvice(a); setPop(null); }}/></PlanPopup>}
     {pop === "locked" && <PlanPopup title="Plateaux figés" icon="🔒" color="#4F46E5" onClose={() => setPop(null)}>

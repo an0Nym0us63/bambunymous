@@ -155,6 +155,13 @@ export function PlanZoom({ p: p0 }) {
     day: v => send("/makerworld/plan/place-day", { key: j.key, day: v }),
     unpin: () => send("/makerworld/plan/arrange", { pins: { [j.key]: null } }, "put"),
     pinDay: () => send("/makerworld/plan/arrange", { pins: { [j.key]: j.day } }, "put"),
+    slot: (day, after) => {
+      const ks = (p.jobs || []).map(x => x.key).filter(x => x !== j.key);
+      const firstOfDay = (p.jobs || []).filter(x => x.day === day && x.key !== j.key).sort((a, b) => a.start.localeCompare(b.start))[0];
+      const at = after ? ks.indexOf(after) + 1 : firstOfDay ? ks.indexOf(firstOfDay.key) : ks.length;
+      ks.splice(Math.max(0, at), 0, j.key);
+      return send("/makerworld/plan/arrange", { order: ks, pins: { [j.key]: day } }, "put");
+    },
     sheet: () => setSheet(j.mw_id || j.design_id),
     dayview: () => nav("/prints?tab=calendar"),
     due: v => send(`/makerworld/plan/deadline/${j.design_id}`, { due: v }, "put").then(d => { if (d && v) { egg("planning_echeance"); toast("🎯 Date limite posée", "ok", 3000); } }),
@@ -184,7 +191,7 @@ export function PlanZoom({ p: p0 }) {
     {(p.blocked || []).length > 0 && <>{sec("Non planifiables")}<BlockedList items={p.blocked} onOpen={setSel}/></>}
     <button type="button" onClick={() => nav("/prints?tab=calendar")} style={{ alignSelf: "flex-start", padding: "9px 16px", borderRadius: 12, border: "none", cursor: "pointer",
       background: `linear-gradient(135deg, ${C}, #8B5CF6)`, color: "#fff", fontSize: 13, fontWeight: 900, boxShadow: `0 8px 18px -10px ${C}` }}>📅 Ouvrir le calendrier</button>
-    {sel && <JobSheet j={sel} now={p.now} edit={edit} onClose={() => setSel(null)} act={act(sel)}/>}
+    {sel && <JobSheet j={sel} now={p.now} edit={edit} onClose={() => setSel(null)} act={act(sel)} jobs={p.jobs}/>}
     {sheet && <MakerWorldModelSheet designId={String(sheet)} onClose={() => setSheet(null)}/>}
   </div>;
 }

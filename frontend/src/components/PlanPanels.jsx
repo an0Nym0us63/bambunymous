@@ -65,8 +65,11 @@ function useActRows(onDone) {
   return { busy, run, row, dateRow };
 }
 
-export function JobSheet({ j, now, edit, onClose, act }) {
+export function JobSheet({ j, now, edit, onClose, act, jobs }) {
   const { busy, run, row, dateRow } = useActRows(onClose);
+  const [slot, setSlot] = useState(false);            // choisir sa place dans une journee (06/11/2026)
+  if (slot) return <SlotPicker j={j} jobs={jobs || []} now={now} onClose={() => setSlot(false)}
+    onPick={(day, after) => run("slot", () => act.slot(day, after))}/>;
   return <PlanPopup title={j.title} icon="🧩" color={j.why ? "#DC2626" : unretained(j) ? UNRET : j.completes ? "#059669" : "#22C55E"} onClose={onClose} z={5300}>
     <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
       <PlateThumb j={j} size={64}/>
@@ -100,6 +103,8 @@ export function JobSheet({ j, now, edit, onClose, act }) {
         <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", lineHeight: 1.4 }}>Pas retenu : il passe après tous les plateaux retenus, et ne se pose
           sur aucun jour. Pour le placer, retiens son profil dans <b>Fiche du modèle</b>.</span></div>}
       {edit && !j.why && !j.locked && !unretained(j) && dateRow("daybest", "📌", "Le placer sur un jour", "À la meilleure place de la journée (le moins de filaments à charger), du moment qu'il y finit ; le reste se décale", j.day, v => v && act.dayBest(v), new Date().toISOString().slice(0, 10))}
+      {edit && !j.why && !j.locked && !unretained(j) && act.slot && jobs && row("slot", "📍", "Choisir sa place dans une journée",
+        "Tu vois les plateaux du jour (figés, enchaînés…) et tu touches l'endroit où le glisser", () => setSlot(true))}
       {edit && !j.why && !j.locked && !unretained(j) && dateRow("day", "📅", "Le poser sur un jour, après le reste", "Il y va après ce qui y est déjà", j.day, v => v && act.day(v), new Date().toISOString().slice(0, 10))}
       {/* d'une traite (06/11/2026) : ses plateaux se suivent, rien d'un autre objet ne s'intercale */}
       {edit && act.chain && (j.plates_total > 1 || j.qty > 1) && <ChainPick j={j} busy={busy} run={run} act={act}/>}
@@ -308,6 +313,44 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act }) {
         </button>;
       })}
     </div>
+  </PlanPopup>;
+}
+
+// Choisir la place d'un plateau dans une journee (06/11/2026) : le jour, ses plateaux dans l'ordre (figes, enchaines,
+// poses), et entre eux des « ici » : en premier, apres tel plateau, en dernier. Pas au milieu d'un objet « d'une traite »
+// strict (il resterait groupe) ; apres un fige, il part des que le fige est fini.
+function SlotPicker({ j, jobs, now, onClose, onPick }) {
+  const [day, setDay] = useState(j.day || (now || "").slice(0, 10));
+  const list = jobs.filter(x => x.key !== j.key && x.day === day && !unretained(x)).sort((a, b) => a.start.localeCompare(b.start));
+  const strict = (a, b) => a && b && a.chain_g && a.chain_g === b.chain_g && a.chain !== "soft";
+  const here = (after, label) => <button key={`h${after || "0"}`} type="button" onClick={() => onPick(day, after)}
+    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "6px 10px", borderRadius: 10, cursor: "pointer", font: "inherit",
+      border: "1.5px dashed color-mix(in srgb, #6366F1 55%, var(--border))", background: "color-mix(in srgb, #6366F1 7%, transparent)",
+      color: "#6366F1", fontSize: 12.5, fontWeight: 900 }}>📍 {label}</button>;
+  return <PlanPopup title={`Placer ${plateTxt(j)}`} icon="📍" color="#6366F1" onClose={onClose} z={5320}>
+    <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: 13, fontWeight: 800, color: "var(--text2)" }}>
+      Jour
+      <input type="date" value={day} min={(now || "").slice(0, 10)} onChange={e => e.target.value && setDay(e.target.value)}
+        onClick={e => { try { e.currentTarget.showPicker?.(); } catch { /* rien */ } }}
+        style={{ flex: 1, padding: "6px 8px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", font: "inherit" }}/>
+    </label>
+    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+      {here(null, list.length ? "En premier" : "Ce jour-là")}
+      {list.map((x, i) => <React.Fragment key={x.key}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 8px 4px 4px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)" }}>
+          <PlateThumb j={x} size={30}/>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", fontSize: 12, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {x.locked ? "🔒 " : x.pinned ? "📌 " : ""}{x.chain_g ? "🔗 " : ""}{x.title}</span>
+            <span style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>{hhmm(x.start)} → {hhmm(x.end)} · {plateTxt(x)}</span>
+          </span>
+        </div>
+        {!strict(x, list[i + 1]) && here(x.key, i === list.length - 1 ? `En dernier, après celui de ${hhmm(x.start)} (fini à ${hhmm(x.end)})`
+          : `Après celui de ${hhmm(x.start)} (fini à ${hhmm(x.end)})`)}
+      </React.Fragment>)}
+    </div>
+    <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.4 }}>
+      Son jour est figé ; ce qui suit se décale. Après un plateau figé 🔒, il part dès qu'il est fini.</div>
   </PlanPopup>;
 }
 
