@@ -22,6 +22,9 @@ Ce que l'on range (meme reglage) :
   chain : {ligne de « A faire »: "plates" | "all"} (06/11/2026) un objet « d'une traite » : "plates", les plateaux d'un
           meme exemplaire se suivent (rien ne s'intercale) ; "all", tous ses plateaux de tous ses exemplaires se suivent.
           Le groupe prend la place de son premier plateau dans la file, et le jour ou celui-ci est pose.
+          "soft" (« au mieux ») : regroupes autant que possible, mais les optimiseurs peuvent y intercaler un plateau
+          d'un autre objet pour remplir une nuit ou charger moins de filaments ; soft_why {cle: "nuit"|"filaments"}
+          dit pourquoi un plateau a ete intercale (le plateau intercale le dit sur sa carte).
 
 Un travail : un plateau d'un modele (ou le modele entier quand ses plateaux ne disent pas leur duree), un
 exemplaire. Ce qui reste a faire d'un plateau : le nombre d'objets voulus, moins ce qu'il a deja donne (mes
@@ -58,7 +61,7 @@ async def _load() -> dict:
     d = d if isinstance(d, dict) else {}
     for k, v in DEFAULTS.items():
         d.setdefault(k, v)
-    for k in ("pins", "done", "plan0", "notified", "deadlines", "locked", "chain"):
+    for k in ("pins", "done", "plan0", "notified", "deadlines", "locked", "chain", "soft_why"):
         if not isinstance(d.get(k), dict):
             d[k] = {}
     if not isinstance(d.get("order"), list):
@@ -649,7 +652,25 @@ def advice(placed: list, d: dict, now: datetime, dls: list | None = None, fix=No
     return out
 
 
-def optimize(jobs: list, loaded: set, keep: list | None = None) -> list:
+def _soft_grouped(seq: list) -> list:
+    """Les objets « au mieux » regroupes a la place de leur premier plateau (le point de depart des optimiseurs)."""
+    groups = {}
+    for j in seq:
+        if j.get("chain") == "soft":
+            groups.setdefault(j["design_id"], []).append(j)
+    if not groups:
+        return seq
+    out, seen = [], set()
+    for j in seq:
+        if j.get("chain") != "soft":
+            out.append(j)
+        elif j["design_id"] not in seen:
+            seen.add(j["design_id"])
+            out += groups[j["design_id"]]
+    return out
+
+
+def optimize(jobs: list, loaded: set, keep: list | None = None, why: dict | None = None) -> list:
     """Un ordre qui enchaine les memes couleurs : a chaque pas, parmi les 8 suivants de la file, celui qui demande le
     moins de filaments a charger (a egalite, le premier de la file). La priorite de la file reste a peu pres tenue."""
     rest = list(jobs)
@@ -659,8 +680,12 @@ def optimize(jobs: list, loaded: set, keep: list | None = None) -> list:
         # parmi les 24 suivants (05/11/2026 : 8 avant) : un objet peut rester en suspens, le temps d'enchainer les
         # plateaux d'autres objets de memes couleurs ; les dates limites sont gardees ensuite (optimize_plan)
         win = rest[:24]
-        best = min(range(len(win)), key=lambda i: (len(_sig(win[i]) - have), i))
+        cur = out[-1]["design_id"] if out and out[-1].get("chain") == "soft" else None
+        # un objet « au mieux » en cours : son plateau suivant passe devant, sauf si un autre charge moins de filaments
+        best = min(range(len(win)), key=lambda i: (len(_sig(win[i]) - have), 0 if cur and win[i]["design_id"] == cur else 1, i))
         j = rest.pop(best)
+        if why is not None and cur and j["design_id"] != cur and any(x["design_id"] == cur for x in rest):
+            why[j["key"]] = "filaments"
         have |= _sig(j)
         out.append(j)
     return out
@@ -679,7 +704,8 @@ def _night_waits(r: dict, rules) -> list:
     return out
 
 
-def night_fill(jobs: list, order: list, d: dict, now: datetime, busy, loaded: set, movable: set, rounds: int = 40) -> list:
+def night_fill(jobs: list, order: list, d: dict, now: datetime, busy, loaded: set, movable: set, rounds: int = 40,
+               why: dict | None = None) -> list:
     """Remplir les nuits (06/11/2026). Avec des heures de lancement (on lance de 8 h a 00 h 30) et l'imprimante qui a le
     droit de tourner apres, le dernier plateau lance avant la coupure doit finir au plus pres de la prochaine heure de
     lancement, moins la pause : il imprime la nuit et le suivant part a 8 h pile.
@@ -743,9 +769,11 @@ def night_fill(jobs: list, order: list, d: dict, now: datetime, busy, loaded: se
             rr = sim(o)
             t = total(rr)
             if t + 1200 < cur and (best is None or t < best[0]):
-                best = (t, o, rr)
+                best = (t, o, rr, k)
         if best:
             cur, order, r = best[0], best[1], best[2]       # cette nuit peut encore s'ameliorer : on y revient
+            if why is not None:
+                why[best[3]] = "nuit"
         else:
             seen.add(a["day"])
     return order
@@ -837,6 +865,18 @@ async def plan(tz: int | None = None) -> dict:
                       "text": f"{_dur(-first['drift_min'] * 60)} d'avance : la suite est avancée d'autant"}
         else:
             status = {"state": "ontime", "late_min": 0, "text": "Dans les temps"}
+    # un objet « au mieux » coupe : les plateaux places entre deux de ses morceaux disent qu'ils y sont intercales
+    soft = {}
+    seq = sorted(r["jobs"], key=lambda x: x["start"])
+    for i, j in enumerate(seq):
+        if j.get("chain") == "soft":
+            soft.setdefault(j["design_id"], []).append(i)
+    for did, ix in soft.items():
+        for x in seq[ix[0]:ix[-1] + 1]:
+            # un plateau d'un autre objet « au mieux » qui ne fait que continuer le sien ne s'annonce pas
+            why = d["soft_why"].get(x["key"]) or (None if x.get("chain") == "soft" else "optimiser")
+            if x["design_id"] != did and why and not x.get("intercalated"):
+                x["intercalated"] = {"in": seq[ix[0]]["title"], "why": why}
     dls = deadlines(r["jobs"], d, now)
     due_of = {x["design_id"]: x for x in dls}
     for j in r["jobs"]:
@@ -972,6 +1012,8 @@ async def arrange(body: dict) -> dict:
     for k, v in (body.get("pins") or {}).items():
         if str(k) in d["locked"] and v != d["pins"].get(str(k)):
             raise PlanError("Ce plateau est figé : défige-le d'abord pour le déplacer")
+    if isinstance(body.get("soft_why"), dict):
+        d["soft_why"] = {str(k): str(v)[:20] for k, v in body["soft_why"].items()}
     if isinstance(body.get("order"), list):
         new = [str(k) for k in body["order"]][:2000]
         d["order"] = new + [k for k in d["order"] if k not in set(new)]
@@ -1004,7 +1046,8 @@ async def optimize_plan(day: str | None = None) -> dict:
         before = set(loaded)
         for j in r["jobs"][:i0]:
             before |= _sig(j)
-        best = optimize(on, before)
+        sw = {}
+        best = optimize(_soft_grouped(on), before, why=sw)
         # sans heures de lancement : le plus long en dernier, il imprime pendant la nuit ou la fin de journee
         if len(best) > 2 and not Rules(d).launch:
             long_i = max(range(len(best)), key=lambda i: best[i]["seconds"])
@@ -1015,13 +1058,15 @@ async def optimize_plan(day: str | None = None) -> dict:
         # avec des heures de lancement : le dernier de la soiree finit au plus pres de l'heure ou l'on relance
         if Rules(d).launch:
             pins = {**d["pins"], **{j["key"]: day for j in best}}
-            order = night_fill(jobs, order, {**d, "pins": pins}, now, busy, loaded, {j["key"] for j in best})
-        return await arrange({"order": order, "pins": {j["key"]: day for j in best}})
+            order = night_fill(jobs, order, {**d, "pins": pins}, now, busy, loaded, {j["key"] for j in best}, why=sw)
+        keep = {k: v for k, v in d["soft_why"].items() if k not in {j["key"] for j in on}}
+        return await arrange({"order": order, "pins": {j["key"]: day for j in best}, "soft_why": {**keep, **sw}})
     free = [j for j in jobs if j["key"] not in d["pins"] and j["key"] not in d["locked"]]
-    best = optimize(free, loaded)
+    sw = {}
+    best = optimize(_soft_grouped(free), loaded, why=sw)
     order = _replace([j["key"] for j in jobs], [j["key"] for j in free], [j["key"] for j in best])
     # les nuits remplies (06/11/2026) : avant la coupure des lancements, le plateau qui finit au plus pres de la reprise
-    order = night_fill(jobs, order, d, now, busy, loaded, {j["key"] for j in free})
+    order = night_fill(jobs, order, d, now, busy, loaded, {j["key"] for j in free}, why=sw)
     # enchainer les couleurs ne doit pas faire deborder une date limite : un objet qui ne tient pas passe en tete,
     # les dates les plus proches d'abord (s'il ne tient pas meme en tete, il y reste : c'est le plus urgent)
     for _ in range(3):
@@ -1031,7 +1076,7 @@ async def optimize_plan(day: str | None = None) -> dict:
             break
         front = [k for x in broke for k in x["keys"]]
         order = front + [k for k in order if k not in set(front)]
-    return await arrange({"order": order})
+    return await arrange({"order": order, "soft_why": sw})
 
 
 def _cost(r: dict, d: dict, now: datetime, key: str) -> float:
@@ -1123,7 +1168,7 @@ async def set_chain(rid: str, mode) -> dict:
     a, _, b = rid.partition("~")
     if not a.isdigit() or (b and not b.isdigit()):
         raise PlanError("Objet inconnu")
-    if mode in ("plates", "all"):
+    if mode in ("plates", "all", "soft"):
         d["chain"][rid] = mode
     elif mode in (None, "", "free"):
         d["chain"].pop(rid, None)
@@ -1132,7 +1177,14 @@ async def set_chain(rid: str, mode) -> dict:
     d["plan0"] = {}
     d["rev"] = int(d.get("rev") or 0) + 1
     await _save(d)
-    return await plan()
+    r = await plan()
+    if mode == "soft":
+        # au mieux : ses plateaux regroupes tout de suite, a la place du premier ; les optimiseurs feront le reste
+        seq = sorted(r["jobs"], key=lambda x: x["start"])
+        keys = [j["key"] for j in _soft_grouped(seq)]
+        if keys != [j["key"] for j in seq]:
+            return await arrange({"order": keys})
+    return r
 
 
 async def lock(key: str, on: bool = True) -> dict:

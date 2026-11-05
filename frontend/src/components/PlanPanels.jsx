@@ -78,6 +78,7 @@ export function JobSheet({ j, now, edit, onClose, act }) {
             : j.pinned && <span style={{ fontSize: 11, fontWeight: 900, color: "#7C3AED" }}>📌 jour figé</span>}
           {unretained(j) && <span style={{ fontSize: 11, fontWeight: 900, color: "#64748B" }}>○ non retenu</span>}
           {j.completes && <span style={{ fontSize: 11, fontWeight: 900, color: "#047857" }}>{doneTxt(j)}</span>}
+          {j.intercalated && <span style={{ fontSize: 11, fontWeight: 900, color: "#0EA5E9" }}>{interTxt(j)}</span>}
           {j.due && <span style={{ fontSize: 11, fontWeight: 900, color: j.due_ok ? "#16A34A" : "#EF4444" }}>🎯 avant le {dueTxt(j.due)}</span>}
           {j.load?.length > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "#EA580C" }}>🧵 à charger : {j.load.join(", ")}</span>}
           <StockTags j={j}/>
@@ -147,12 +148,16 @@ function FreezePick({ j, now, busy, run, act }) {
 // 06/11/2026 : les mots disent l'objet, pas ses plateaux. Un seul exemplaire : libre ou d'une traite (les deux reglages
 // reviennent au meme). Plusieurs : chaque exemplaire d'une traite (entre deux, d'autres objets passent), ou tous les
 // exemplaires a la suite. Un modele d'un seul plateau : seul « tous les exemplaires » a un sens.
-const chainMode = j => !j.chain ? null : (j.qty || 1) > 1 ? (j.plates_total > 1 ? j.chain : "all") : "plates";
-export const chainTxt = j => ({ plates: (j.qty || 1) > 1 ? "🔗 chaque exemplaire d'une traite" : "🔗 d'une traite",
+const chainMode = j => !j.chain ? null : j.chain === "soft" ? "soft" : (j.qty || 1) > 1 ? (j.plates_total > 1 ? j.chain : "all") : "plates";
+// un plateau intercale dans un objet « au mieux » (06/11/2026) : dans lequel, et pourquoi
+const WHY_TXT = { nuit: "pour remplir la nuit", filaments: "pour charger moins de filaments", optimiser: "pour optimiser" };
+export const interTxt = j => j.intercalated ? `↔ intercalé dans ${j.intercalated.in} : ${WHY_TXT[j.intercalated.why] || WHY_TXT.optimiser}` : "";
+export const chainTxt = j => ({ soft: "🔗 enchaîné au mieux", plates: (j.qty || 1) > 1 ? "🔗 chaque exemplaire d'une traite" : "🔗 d'une traite",
   all: (j.qty || 1) > 1 ? "🔗 tous les exemplaires à la suite" : "🔗 d'une traite" })[chainMode(j)] || "";
 function ChainPick({ j, busy, run, act }) {
   const many = (j.qty || 1) > 1;
   const opts = [[null, "Libre", "D'autres objets peuvent s'intercaler entre ses plateaux (l'optimiseur enchaîne les mêmes couleurs)"],
+    ["soft", "Au mieux", "Ses plateaux se suivent autant que possible ; l'optimiseur peut en intercaler un d'un autre objet pour remplir une nuit ou charger moins de filaments (le plateau intercalé le dit)"],
     !many && ["plates", "D'une traite", "Ses plateaux se suivent : commencé, il se finit sans rien entre deux"],
     many && j.plates_total > 1 && ["plates", "Chaque exemplaire", "Les plateaux d'un exemplaire se suivent ; entre deux exemplaires, d'autres objets peuvent passer"],
     many && ["all", "Tous les exemplaires", `Les ${j.qty} exemplaires à la suite${j.plates_total > 1 ? ", chacun plateau après plateau" : ""}, sans rien entre deux`]].filter(Boolean);
@@ -167,7 +172,7 @@ function ChainPick({ j, busy, run, act }) {
     <div role="radiogroup" style={{ display: "flex", padding: 3, borderRadius: 11, background: "var(--surface2)", border: "1px solid var(--border)" }}>
       {opts.map(([k, l]) => <button key={l} type="button" role="radio" aria-checked={cur === k} disabled={!!busy}
         onClick={() => cur !== k && run("chain", () => act.chain(k))}
-        style={{ flex: 1, padding: "6px 4px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 900, font: "inherit",
+        style={{ flex: 1, padding: "6px 4px", borderRadius: 9, lineHeight: 1.15, minWidth: 0, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 900, font: "inherit",
           color: cur === k ? "#fff" : "var(--muted)", background: cur === k ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "transparent" }}>{l}</button>)}
     </div>
   </div>;
@@ -294,7 +299,7 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act }) {
           <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
             <span style={{ fontSize: 12, fontWeight: 900, color: bad ? "#DC2626" : "#6366F1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {j.locked ? "🔒 " : ""}{j.pinned && !j.locked ? "📌 " : ""}{j.completes ? "🏁 " : ""}{plateTxt(j)}{j.qty > 1 ? ` · ${j.copy}e/${j.qty}` : ""}
-              {j.load?.length ? " 🧵" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}</span>
+              {j.load?.length ? " 🧵" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}{j.intercalated ? " ↔" : ""}</span>
             {bad ? <span style={{ fontSize: 11.5, fontWeight: 800, color: "#DC2626" }}>⛔ non planifiable · {(j.blockedWhy || []).join(" · ")}</span>
               : <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text)" }}>{dayOf(j.start, now)} <span style={{ fontWeight: 700, color: "var(--muted)" }}>
                 {hhmm(j.start)} → {hhmm(j.end)} · {hm(j.seconds)}</span></span>}
