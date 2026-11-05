@@ -721,7 +721,10 @@ def night_fill(jobs: list, order: list, d: dict, now: datetime, busy, loaded: se
     def sim(o):
         return place(_ordered(jobs, o, d["pins"]), d, now, busy, loaded, _slots())
     def total(r):
-        return sum(w for _, w in _night_waits(r, rules))
+        # d'abord le temps mort de toutes les nuits (le travail fini au plus tot) ; a egalite, les nuits proches
+        # comptent plus : remplir mieux une nuit decale la suite et le temps gagne reapparait souvent la nuit d'apres
+        ws = [w for _, w in _night_waits(r, rules)]
+        return (sum(ws), sum(w * 0.85 ** k for k, w in enumerate(ws)))
     r = sim(order)
     cur = total(r)
     seen = set()
@@ -768,7 +771,7 @@ def night_fill(jobs: list, order: list, d: dict, now: datetime, busy, loaded: se
                 o.insert(o.index(ref) + (1 if how == "after" else 0), k)
             rr = sim(o)
             t = total(rr)
-            if t + 1200 < cur and (best is None or t < best[0]):
+            if (t[0] + 1200 < cur[0] or (t[0] <= cur[0] and t[1] + 1200 < cur[1])) and (best is None or t < best[0]):
                 best = (t, o, rr, k)
         if best:
             cur, order, r = best[0], best[1], best[2]       # cette nuit peut encore s'ameliorer : on y revient
