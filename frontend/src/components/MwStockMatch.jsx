@@ -466,7 +466,7 @@ export function FilamentPicker({ x, g, chosen, title, onPick, onReset, resetLabe
             ))}
           </div>
         </div>
-        <div style={{ flex:1, minHeight:0, overflowY:"auto" }}>
+        <div style={{ flex:1, minHeight:0, overflowY: tab === "search" ? "hidden" : "auto" }}>
           {tab === "search" ? <StockSearch x={x} g={g} chosen={chosen} onPick={onPick} onGo={onGo} open/>
             : list === null ? <div style={{ padding:16, fontSize:12, color:"var(--muted)" }}>…</div>
             : !list.length ? <div style={{ padding:16, fontSize:12, color:"var(--muted)" }}>{empty}</div>
@@ -497,9 +497,11 @@ function StockSearch({ x, g, chosen, onPick, onGo, open }) {
       border:"none", borderTop:"1px solid var(--border)", color:"#3b82f6", fontSize:11.5, fontWeight:700, cursor:"pointer" }}>
       🔍 Chercher dans tout mon stock</button>
   );
+  // dans la boite (open) : la liste prend toute la hauteur, la recherche reste en haut (05/11/2026 : bornee a 300 px,
+  // elle laissait une zone blanche dessous)
   return (
-    <div style={{ borderTop:"1px solid var(--border)" }}>
-      <div style={{ padding:"7px 10px 5px" }}>
+    <div style={{ borderTop:"1px solid var(--border)", ...(open ? { height:"100%", display:"flex", flexDirection:"column" } : {}) }}>
+      <div style={{ padding:"7px 10px 5px", flexShrink:0 }}>
         <input value={q} onChange={e => setQ(e.target.value)} autoFocus autoComplete="off" spellCheck={false}
           placeholder="Nom, marque, matière, couleur…"
           style={{ width:"100%", boxSizing:"border-box", height:38, padding:"0 14px", borderRadius:20, fontSize:13.5,
@@ -507,7 +509,7 @@ function StockSearch({ x, g, chosen, onPick, onGo, open }) {
       </div>
       {res === null ? <div style={{ padding:"4px 12px 8px", fontSize:11, color:"var(--muted)" }}>…</div>
         : !res.length ? <div style={{ padding:"4px 12px 8px", fontSize:11, color:"var(--muted)" }}>Rien dans le stock.</div>
-        : (<div style={{ maxHeight:300, overflowY:"auto" }}>
+        : (<div style={open ? { flex:1, minHeight:0, overflowY:"auto" } : { maxHeight:300, overflowY:"auto" }}>
           {res.map(mt => (
             <MatchRow key={"s" + mt.filament_id} mt={mt} g={g} on={mt.filament_id === chosen?.filament_id}
               onPick={() => onPick(mt)} onGo={onGo}/>

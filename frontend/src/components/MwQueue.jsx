@@ -58,7 +58,7 @@ function PlateChips({ plates, designId, edit, onChanged }) {
     const mine = Object.entries(cps).filter(([, c]) => (c.plates || []).includes(p.index))
       .sort((a, b) => String(b[1].date || "").localeCompare(String(a[1].date || "")));
     openMenu({ currentTarget: at, clientX: at.getBoundingClientRect().left, clientY: at.getBoundingClientRect().bottom, preventDefault() {}, stopPropagation() {} }, {
-      title: `Plateau ${p.index}${p.name ? ` · ${p.name}` : ""}`, subtitle: `Compté ${p.printed} fois : touche un print pour corriger`,
+      title: `Plateau ${p.index}${p.name && !/^(plateau|plate)\s*\d+$/i.test(p.name.trim()) ? ` · ${p.name}` : ""}`, subtitle: `Compté ${p.printed} fois : touche un print pour corriger`,
       items: mine.length ? mine.map(([pid, c]) => ({ icon: c.n === 0 ? "🚫" : "🖨", label: c.name || `Print #${pid}`,
         hint: [c.date ? new Date(c.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : null, copiesLabel(c)].filter(Boolean).join(" · "),
         onClick: async () => {
