@@ -213,6 +213,8 @@ export default function PrintCalendar() {
     toast(`🎨 ${cd.placed || 0} plateau${cd.placed > 1 ? "x" : ""} en ${name} sur ce jour${bits.length ? ` · ${bits.join(" · ")}` : ""}`, "ok", 6000);
   });
   const optimize = day => send("/makerworld/plan/optimize", day ? { day } : {}, "post").then(ok => { if (ok) egg("planning_optimise"); });
+  // toute la file, a partir d'un jour (06/11/2026) : ce qui est prevu avant ne bouge pas
+  const optimizeFrom = from => send("/makerworld/plan/optimize", from ? { from } : {}, "post").then(ok => { if (ok) egg("planning_optimise"); });
   const jobAct = j => ({
     smart: () => send("/makerworld/plan/smart", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
     later: () => send("/makerworld/plan/later", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
@@ -479,7 +481,7 @@ export default function PrintCalendar() {
         {showPlan ? "✓ " : ""}Planning{showPlan && nPlanned ? (wide ? ` (${nPlanned})` : ` ${nPlanned}`) : ""}</button>
       <button type="button" onClick={() => setSetOpen(v => !v)} data-tip="Pause entre deux impressions, heures de fonctionnement et de lancement"
         style={{ ...pill, ...(setOpen ? { color: "#6366F1" } : {}) }} aria-label="Consignes">{wide ? "⚙ Consignes" : "⚙"}</button>
-      {edit && nPlanned > 1 && <button type="button" onClick={() => optimize(null)}
+      {edit && nPlanned > 1 && <button type="button" onClick={() => setPop("optimize")}
         data-tip="Enchaîner les plateaux de mêmes couleurs dans toute la file (les impressions posées sur un jour ne bougent pas)"
         style={{ ...pill, color: "#6366F1" }}>{wide ? "✨ Optimiser la file" : "✨ Optimiser"}</button>}
       {showPlan && pd?.advice?.length > 0 && <button type="button" onClick={() => setPop("advice")} data-tip="Les conseils du planning"
@@ -514,6 +516,7 @@ export default function PrintCalendar() {
     {modelSel && <ModelSheet g={poolGroups(pd?.jobs, pd?.blocked).find(g => g.id === modelSel)} now={pd?.now} edit={edit} jobs={pd?.jobs}
       onClose={() => setModelSel(null)} onPick={setJobSel} act={modelAct(modelSel)}/>}
     {jobSel && <JobSheet j={jobSel} now={pd?.now} edit={edit} onClose={() => setJobSel(null)} act={jobAct(jobSel)} jobs={pd?.jobs}/>}
+    {pop === "optimize" && <OptimizePick today={today} onPick={from => { setPop(null); optimizeFrom(from); }} onClose={() => setPop(null)}/>}
     {pop === "advice" && <PlanPopup title={`Conseils (${pd?.advice?.length || 0})`} icon="💡" color="#F59E0B" onClose={() => setPop(null)}>
       <PlanAdvice items={pd?.advice} edit={edit} onApply={a => { applyAdvice(a); setPop(null); }}/></PlanPopup>}
     {pop === "locked" && <PlanPopup title="Plateaux figés" icon="🔒" color="#4F46E5" onClose={() => setPop(null)}>
@@ -537,5 +540,39 @@ export default function PrintCalendar() {
 
 const navBtn = { width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)", cursor: "pointer",
   display: "flex", alignItems: "center", justifyContent: "center" };
+// « Optimiser la file » : a partir de quand (06/11/2026). Ce qui est prevu avant reste a sa place.
+function OptimizePick({ today, onPick, onClose }) {
+  const [free, setFree] = useState("");
+  const plus = n => { const t = new Date(`${today}T12:00`); t.setDate(t.getDate() + n);
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; };
+  const opt = (k, ic, label, hint, from) => <button key={k} type="button" onClick={() => onPick(from)}
+    style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 12px", borderRadius: 12, border: "1px solid var(--border)",
+      background: "var(--surface)", cursor: "pointer", textAlign: "left", font: "inherit" }}>
+    <span style={{ fontSize: 18, width: 24, textAlign: "center" }}>{ic}</span>
+    <span style={{ flex: 1, minWidth: 0 }}>
+      <span style={{ display: "block", fontSize: 13.5, fontWeight: 900, color: "var(--text)" }}>{label}</span>
+      <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.35 }}>{hint}</span></span></button>;
+  const fr = d => new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  return <PlanPopup title="Optimiser la file" icon="✨" color="#6366F1" onClose={onClose}>
+    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45, marginBottom: 8 }}>
+      Enchaîner les mêmes couleurs, remplir les nuits, tenir les dates limites. Ce qui est prévu avant le jour choisi ne bouge pas,
+      les plateaux figés non plus.</div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {opt("all", "✨", "Toute la file", "Dès maintenant", null)}
+      {opt("tomorrow", "🌅", "Sans toucher à aujourd'hui", `À partir de demain, ${fr(plus(1))}`, plus(1))}
+      {opt("after", "📆", "Sans toucher à aujourd'hui ni demain", `À partir de ${fr(plus(2))}`, plus(2))}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)" }}>
+        <span style={{ fontSize: 18, width: 24, textAlign: "center" }}>🗓</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 900, color: "var(--text)" }}>À partir du…</span>
+        <input type="date" value={free} min={today} onChange={e => setFree(e.target.value)}
+          onClick={e => { try { e.currentTarget.showPicker?.(); } catch { /* rien */ } }}
+          style={{ padding: "6px 8px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", font: "inherit" }}/>
+        <button type="button" disabled={!free} onClick={() => onPick(free)} style={{ padding: "6px 12px", borderRadius: 10, border: "none", cursor: free ? "pointer" : "default",
+          font: "inherit", background: free ? "linear-gradient(135deg, #6366F1, #8B5CF6)" : "var(--surface2)", color: free ? "#fff" : "var(--muted)", fontWeight: 900 }}>OK</button>
+      </div>
+    </div>
+  </PlanPopup>;
+}
+
 const pill = { padding: "6px 12px", borderRadius: 20, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--muted)", fontSize: 12,
   fontWeight: 800, cursor: "pointer" };

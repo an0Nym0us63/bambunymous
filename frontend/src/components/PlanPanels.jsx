@@ -143,7 +143,7 @@ function FreezePick({ j, now, busy, run, act }) {
     <div role="radiogroup" style={{ display: "flex", padding: 3, borderRadius: 11, background: "var(--surface2)", border: "1px solid var(--border)" }}>
       {opts.map(([k, l]) => <button key={l} type="button" role="radio" aria-checked={cur === k} disabled={!!busy}
         onClick={() => cur !== k && run("freeze", () => go(k))}
-        style={{ flex: 1, padding: "6px 4px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 900, font: "inherit",
+        style={{ flex: 1, padding: "6px 4px", borderRadius: 9, border: "none", cursor: "pointer", font: "inherit", fontSize: 12, fontWeight: 900,
           color: cur === k ? "#fff" : "var(--muted)", background: cur === k ? (k === "time" ? "linear-gradient(135deg, #4F46E5, #6366F1)"
             : k === "day" ? "linear-gradient(135deg, #7C3AED, #A855F7)" : "linear-gradient(135deg, #64748B, #94A3B8)") : "transparent" }}>{l}</button>)}
     </div>
@@ -177,7 +177,7 @@ function ChainPick({ j, busy, run, act }) {
     <div role="radiogroup" style={{ display: "flex", padding: 3, borderRadius: 11, background: "var(--surface2)", border: "1px solid var(--border)" }}>
       {opts.map(([k, l]) => <button key={l} type="button" role="radio" aria-checked={cur === k} disabled={!!busy}
         onClick={() => cur !== k && run("chain", () => act.chain(k))}
-        style={{ flex: 1, padding: "6px 4px", borderRadius: 9, lineHeight: 1.15, minWidth: 0, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 900, font: "inherit",
+        style={{ flex: 1, padding: "6px 4px", borderRadius: 9, lineHeight: 1.15, minWidth: 0, border: "none", cursor: "pointer", font: "inherit", fontSize: 12, fontWeight: 900,
           color: cur === k ? "#fff" : "var(--muted)", background: cur === k ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "transparent" }}>{l}</button>)}
     </div>
   </div>;

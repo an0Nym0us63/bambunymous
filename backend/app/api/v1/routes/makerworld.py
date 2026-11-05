@@ -484,9 +484,12 @@ async def mw_plan_later(body: dict = Body({}), _: str = Depends(require_mw)):
 
 @router.post("/plan/optimize")
 async def mw_plan_optimize(body: dict = Body({}), _: str = Depends(require_mw)):
-    """Enchainer les memes couleurs : toute la file, ou un jour ({day})."""
+    """Enchainer les memes couleurs : toute la file, ou un jour ({day}), ou a partir d'un jour ({from})."""
     from ....services import planner as P
-    return await P.optimize_plan(str(body.get("day") or "") or None)
+    try:
+        return await P.optimize_plan(str(body.get("day") or "") or None, str(body.get("from") or "") or None)
+    except P.PlanError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.get("/mine")
