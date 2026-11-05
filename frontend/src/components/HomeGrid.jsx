@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Check, GripVertical, Columns, Monitor, Smartphone, Settings2, X, Palette, Copy, Heading, Trash2, Pencil, Send } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Check, GripVertical, Columns, Monitor, Smartphone, Settings2, X, Palette, Copy, Heading, Trash2, Pencil, Send, ChevronLeft, ChevronRight } from "lucide-react";
 import client from "../api/client";
 import { currentFriend, useFriend } from "../store/friend";
 import { toast } from "../store/toast";
@@ -486,14 +486,14 @@ function PageDots({ names, cur, onGo, flash }) {
   </>, document.body);
 }
 // En reglage : des onglets nommes, et de quoi renommer, ajouter (quatre au plus) ou supprimer l'ecran courant.
-function PageBar({ names, cur, onGo, renaming, setRenaming, onRename, onAdd, onDel, bannerAll, setBannerAll, hasBanner }) {
+function PageBar({ names, cur, onGo, renaming, setRenaming, onRename, onAdd, onDel, onMove, bannerAll, setBannerAll, hasBanner }) {
   const tab = on => ({ height: 32, padding: "0 10px", borderRadius: 10, cursor: "pointer", fontWeight: 800, fontSize: 12.5, whiteSpace: "nowrap",
     display: "inline-flex", alignItems: "center", gap: 6, border: `1px solid ${on ? "#3b82f6" : "var(--border)"}`,
     background: on ? "rgba(59,130,246,0.12)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--text2)" });
   return <div className="card" style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, border: "1px dashed rgba(59,130,246,0.5)" }}>
     <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4 }}>
-      Les écrans du téléphone se font glisser au doigt (après le dernier revient le premier). Touche l'écran courant pour le renommer ;
-      le bouton « Écran » d'une tuile l'envoie sur l'écran de ton choix.</div>
+      Les écrans du téléphone se font glisser au doigt (après le dernier revient le premier). Touche l'écran courant pour le renommer,
+      ‹ › pour le déplacer ; le bouton « Écran » d'une tuile l'envoie sur l'écran de ton choix.</div>
     <div data-noswipe="" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
       {names.map((nm, i) => i === cur && renaming
         ? <input key={i} autoFocus defaultValue={nm.startsWith("Écran ") ? "" : nm} placeholder={nm} maxLength={PAGE_NAME_MAX}
@@ -504,7 +504,14 @@ function PageBar({ names, cur, onGo, renaming, setRenaming, onRename, onAdd, onD
           title={i === cur ? "Renommer cet écran" : `Aller sur « ${nm} »`}>{nm}{i === cur && <Pencil size={12}/>}</button>)}
       {onAdd && <button type="button" onClick={onAdd} style={{ ...tab(false), borderStyle: "dashed", color: "#3b82f6" }} title="Ajouter un écran (quatre au plus)">
         <Plus size={14}/>Écran</button>}
-      {onDel && <button type="button" onClick={onDel} style={{ ...tab(false), marginLeft: "auto", color: "#ef4444" }} title="Supprimer cet écran">
+      {/* deplacer l'ecran courant d'un cran (06/11/2026) : il echange sa place, ses tuiles et son nom avec son voisin */}
+      {onMove && names.length > 1 && <span style={{ display: "inline-flex", gap: 4, marginLeft: "auto" }}>
+        <button type="button" onClick={() => onMove(-1)} disabled={cur === 0} aria-label="Déplacer cet écran vers la gauche"
+          data-tip="Déplacer cet écran d'un cran vers la gauche" style={{ ...tab(false), opacity: cur === 0 ? 0.35 : 1 }}><ChevronLeft size={15}/></button>
+        <button type="button" onClick={() => onMove(1)} disabled={cur === names.length - 1} aria-label="Déplacer cet écran vers la droite"
+          data-tip="Déplacer cet écran d'un cran vers la droite" style={{ ...tab(false), opacity: cur === names.length - 1 ? 0.35 : 1 }}><ChevronRight size={15}/></button>
+      </span>}
+      {onDel && <button type="button" onClick={onDel} style={{ ...tab(false), marginLeft: onMove && names.length > 1 ? 0 : "auto", color: "#ef4444" }} title="Supprimer cet écran">
         <Trash2 size={14}/></button>}
     </div>
     {hasBanner && names.length > 1 && <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -749,6 +756,16 @@ export default function HomeGrid({ status, blocks, top = null }) {
     setCols(next);
     setNames(x => x.filter((_v, i) => i !== cur));
     goPage(Math.max(0, cur - 1), true);
+  };
+  // echanger l'ecran courant avec son voisin (06/11/2026) : ses tuiles et son nom le suivent
+  const movePage = dir => {
+    const to = cur + dir;
+    if (to < 0 || to >= nPages) return;
+    const next = cols.map(c => [...c]);
+    [next[cur], next[to]] = [next[to], next[cur]];
+    setCols(next);
+    setNames(x => { const y = [...x]; [y[cur], y[to]] = [y[to], y[cur]]; return y; });
+    goPage(to, true);
   };
   const setCols = next => setLay(l => ({ ...l, layouts: { ...l.layouts, [n]: next } }));
   const toAuto = () => setLay(l => {
@@ -1157,7 +1174,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
           ...(edit && wide ? { width: "100%", maxWidth: 420, margin: "0 auto" } : {}) }}>
           {edit && <PageBar names={[...Array(nPages).keys()].map(i => pageName(lay, i))} cur={cur} onGo={i => goPage(i, true)}
             renaming={renaming} setRenaming={setRenaming} onRename={v => setNames(x => x.map((y, i) => i === cur ? v : y))}
-            onAdd={nPages < MAX_PAGES ? addPage : null} onDel={nPages > 1 ? delPage : null} hasBanner={!!top}
+            onAdd={nPages < MAX_PAGES ? addPage : null} onDel={nPages > 1 ? delPage : null} onMove={movePage} hasBanner={!!top}
             bannerAll={!lay.bannerFirst} setBannerAll={v => setLay(l => { const y = { ...l }; if (v) delete y.bannerFirst; else y.bannerFirst = true; return y; })}/>}
           {!edit && nPages > 1 && <PageDots names={[...Array(nPages).keys()].map(i => pageName(lay, i))} cur={cur} onGo={i => goPage(i)} flash={flash}/>}
           <div style={{ position: "relative" }}>
