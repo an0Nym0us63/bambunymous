@@ -389,6 +389,12 @@ export default function PrintCalendar() {
         {new Date(`${pick}T12:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</span>
       {sel?.duration > 0 && <span style={{ fontSize: 12, fontWeight: 800, color: "var(--muted)" }}>{hm(sel.duration)} de machine</span>}
     </div>
+    {/* la frise du jour en haut de la carte, sous son titre (06/11/2026 : en dessous de la liste, il fallait descendre) */}
+    {pick >= today && <DayStrip day={pick} done={sel?.items || []} jobs={(pd?.jobs || []).filter(j => onDay(j, pick))} settings={pd?.settings} now={pd?.now}
+      live={pd?.live && pd?.busy_until ? { now: pd.now, end: pd.busy_until, name: pd.live.name, planned: pd.live.planned_end } : null}/>}
+    {pick >= today && pd?.live && pd?.busy_until && pd.busy_until.slice(0, 10) >= pick && pd.now.slice(0, 10) <= pick &&
+      <div style={{ fontSize: 11.5, fontWeight: 800, color: "#2563EB" }}>⏳ En cours : {pd.live.name} · fin vers {pd.busy_until.slice(11, 16).replace(":", " h ")}
+        {pd.busy_until.slice(0, 10) !== pd.now.slice(0, 10) ? " (le lendemain)" : ""}</div>}
     {!sel?.items?.length && !selPlan.length && pick < today && <div style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)" }}>
       {days ? "Rien d'imprimé ce jour-là" : "Chargement…"}</div>}
     {(sel?.items || []).map((it, i) => { const [c, l] = ST[it.status] || ST.SUCCESS;
@@ -403,11 +409,6 @@ export default function PrintCalendar() {
         </span>
         <span style={{ fontSize: 11, fontWeight: 900, color: c, background: `color-mix(in srgb, ${c} 14%, transparent)`, borderRadius: 9, padding: "2px 8px" }}>{l}</span>
       </button>; })}
-    {pick >= today && <DayStrip day={pick} done={sel?.items || []} jobs={(pd?.jobs || []).filter(j => onDay(j, pick))} settings={pd?.settings} now={pd?.now}
-      live={pd?.live && pd?.busy_until ? { now: pd.now, end: pd.busy_until, name: pd.live.name, planned: pd.live.planned_end } : null}/>}
-    {pick >= today && pd?.live && pd?.busy_until && pd.busy_until.slice(0, 10) >= pick && pd.now.slice(0, 10) <= pick &&
-      <div style={{ fontSize: 11.5, fontWeight: 800, color: "#2563EB" }}>⏳ En cours : {pd.live.name} · fin vers {pd.busy_until.slice(11, 16).replace(":", " h ")}
-        {pd.busy_until.slice(0, 10) !== pd.now.slice(0, 10) ? " (le lendemain)" : ""}</div>}
     {selPlan.length > 0 && <>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
         <span style={{ flex: "1 0 100%", fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#22C55E" }}>
