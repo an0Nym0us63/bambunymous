@@ -666,55 +666,88 @@ def optimize(jobs: list, loaded: set, keep: list | None = None) -> list:
     return out
 
 
-def night_fill(jobs: list, order: list, d: dict, now: datetime, busy, loaded: set, movable: set, rounds: int = 20) -> list:
+def _night_waits(r: dict, rules) -> list:
+    """Les nuits perdues d'un planning : [(i, attente en secondes)] pour chaque plateau i apres lequel la file attend
+    l'heure de lancement (au moins 30 min)."""
+    pl, out = r["jobs"], []
+    for i in range(len(pl) - 1):
+        a, b = pl[i], pl[i + 1]
+        free = datetime.fromisoformat(a["end"]) + rules.gap
+        wait = (datetime.fromisoformat(b["start"]) - free).total_seconds()
+        if wait >= 1800 and rules.earliest(free, b["seconds"])[1] == "launch":
+            out.append((i, wait))
+    return out
+
+
+def night_fill(jobs: list, order: list, d: dict, now: datetime, busy, loaded: set, movable: set, rounds: int = 40) -> list:
     """Remplir les nuits (06/11/2026). Avec des heures de lancement (on lance de 8 h a 00 h 30) et l'imprimante qui a le
     droit de tourner apres, le dernier plateau lance avant la coupure doit finir au plus pres de la prochaine heure de
-    lancement, moins la pause : il imprime la nuit et le suivant part a 8 h pile. A chaque nuit perdue (une attente due
-    a l'heure de lancement), on cherche parmi les plateaux qui suivent (deplacables : ni figes ni poses sur un jour)
-    celui qui, lance a la place du dernier de la soiree, laisse le moins de temps mort ; il passe devant. Finir un peu
-    apres l'heure de lancement compte moitie moins qu'une attente (l'imprimante, elle, travaille)."""
+    lancement, moins la pause : il imprime la nuit et le suivant part a 8 h pile.
+    Pour chaque nuit perdue, dans l'ordre, on essaie (deplacables seulement : ni figes ni au jour fige) :
+      - dans l'objet du dernier lance (« d'une traite » : il reste groupe), un autre de ses plateaux a sa place ;
+      - un long plateau d'un autre objet (libre), avance juste avant l'objet du dernier lance (ou avant lui) ;
+    chaque essai est simule sur tout le planning ; on garde celui qui reduit le plus le temps mort de toutes les nuits
+    (au moins 20 min). Les dates limites sont rattrapees ensuite (optimize_plan)."""
     rules = Rules(d)
     if not rules.launch:
         return order
     order = list(order)
+    def sim(o):
+        return place(_ordered(jobs, o, d["pins"]), d, now, busy, loaded, _slots())
+    def total(r):
+        return sum(w for _, w in _night_waits(r, rules))
+    r = sim(order)
+    cur = total(r)
     seen = set()
     for _ in range(rounds):
-        r = place(_ordered(jobs, order, d["pins"]), d, now, busy, loaded, _slots())
         pl = r["jobs"]
-        pos = {k: i for i, k in enumerate(order)}
-        moved = False
-        for i in range(len(pl) - 1):
-            a, b = pl[i], pl[i + 1]
-            a_s, a_e, b_s = (datetime.fromisoformat(a["start"]), datetime.fromisoformat(a["end"]),
-                             datetime.fromisoformat(b["start"]))
-            free = a_e + rules.gap
-            if b_s - free < timedelta(minutes=30) or a["key"] in seen:
-                continue
-            nxt, why, _tl = rules.earliest(free, b["seconds"])
-            if why != "launch":
-                continue                              # une attente qui ne vient pas de l'heure de lancement
-            target = nxt - rules.gap
-
-            def loss(secs):
-                e = a_s + timedelta(seconds=secs)
-                return (target - e).total_seconds() if e <= target else (e - target).total_seconds() * 0.5
-            # lance a l'heure de a : il faut que les regles l'acceptent (plage de fonctionnement) ; un objet « d'une
-            # traite » reste groupe : dans son groupe, on choisit parmi ses plateaux ; hors groupe, parmi les libres
-            ga = a.get("chain_g")
-            cands = [x for x in pl[i + 1:i + 31] if x["key"] in movable and x["key"] in pos and x.get("chain_g") == ga
-                     and rules.earliest(a_s, x["seconds"])[0] == a_s and not rules.earliest(a_s, x["seconds"])[2]]
-            seen.add(a["key"])
-            if not cands or a["key"] not in movable or a["key"] not in pos:
-                continue
-            best = min(cands, key=lambda x: loss(x["seconds"]))
-            if loss(best["seconds"]) + 20 * 60 < loss(a["seconds"]):
-                order.remove(best["key"])
-                order.insert(order.index(a["key"]), best["key"])
-                seen.add(best["key"])
-                moved = True
-                break
-        if not moved:
+        pos = set(order)
+        night = next(((i, w) for i, w in _night_waits(r, rules) if pl[i]["day"] not in seen), None)
+        if not night:
             break
+        i, _w = night
+        a = pl[i]
+        a_s = datetime.fromisoformat(a["start"])
+        target = rules.earliest(datetime.fromisoformat(a["end"]) + rules.gap, 60)[0] - rules.gap
+        want = (target - a_s).total_seconds()             # la duree ideale du dernier lancement
+        ga = a.get("chain_g")
+        # ou inserer un plateau d'un autre objet : avant le debut de l'objet du dernier lance, sinon avant lui
+        head = next((x["key"] for x in pl if ga and x.get("chain_g") == ga), a["key"])
+        tries = []
+        # un long plateau de l'objet en cours (ou libre, si le dernier lance l'est), pose apres le dernier lance puis
+        # apres 1, 2… des suivants : les petits passent devant dans la soiree et le long part au plus tard, juste avant
+        # la coupure (echanger deux plateaux ne changeait rien : la soiree finissait a la meme heure)
+        if a["key"] in movable and a["key"] in pos:
+            same = [x for x in pl if x["key"] != a["key"] and x["key"] in movable and x["key"] in pos
+                    and x.get("chain_g") == ga and x["seconds"] > a["seconds"] + 1800
+                    and (x.get("retained", True) or not a.get("retained", True))]
+            same.sort(key=lambda x: abs(x["seconds"] - want))
+            follow = [y["key"] for y in pl[i:i + 8] if y.get("chain_g") == ga and y["key"] in pos]
+            for x in same[:5]:
+                tries += [("after", x["key"], f) for f in follow if f != x["key"]]
+                tries.append(("swap", x["key"], a["key"]))
+        others = [x for x in pl[i + 1:] if not x.get("chain_g") and x["key"] in movable and x["key"] in pos
+                  and x["seconds"] > a["seconds"] + 1800 and (x.get("retained", True) or not a.get("retained", True))]
+        others.sort(key=lambda x: abs(x["seconds"] - want))
+        if ga and head in pos:
+            tries += [("before", x["key"], head) for x in others[:6]]
+        best = None
+        for how, k, ref in tries:
+            if how == "swap":
+                o = list(order)
+                ia, ib = o.index(k), o.index(ref)
+                o[ia], o[ib] = o[ib], o[ia]
+            else:
+                o = [x for x in order if x != k]
+                o.insert(o.index(ref) + (1 if how == "after" else 0), k)
+            rr = sim(o)
+            t = total(rr)
+            if t + 1200 < cur and (best is None or t < best[0]):
+                best = (t, o, rr)
+        if best:
+            cur, order, r = best[0], best[1], best[2]       # cette nuit peut encore s'ameliorer : on y revient
+        else:
+            seen.add(a["day"])
     return order
 
 
