@@ -2327,6 +2327,45 @@ function CatalogFactsCard({ f, onUpdated }) {
   </FCard>;
 }
 
+// la fiche technique du filament (05/11/2026), a part : buse, plateau, sechage, densite, transparence en tuiles, puis le
+// code-barres et le lien d'achat ; vide, elle dit comment la remplir
+const frN = v => String(v).replace(".", ",");
+function TechSection({ f, isAdmin, onEdit, onUpdated }) {
+  const [busy, setBusy] = useState(false);
+  const take = async () => {
+    setBusy(true);
+    try { const r = await client.post(`/filaments/filaments/${f.id}/tech-from-catalogs`, {}); onUpdated?.(r.data); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    setBusy(false);
+  };
+  const takeBtn = isAdmin && <button type="button" disabled={busy} onClick={take} data-tip="Remplir les champs vides avec ce que donnent les catalogues (notre catalogue et Bambu d'abord)"
+    style={{ marginTop:8, padding:"6px 12px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface)", color:"var(--text2)",
+      fontSize:12, fontWeight:800, cursor:"pointer" }}>{busy ? "…" : "⬇ Reprendre des catalogues"}</button>;
+  const range = (a, b) => a || b ? `${[...new Set([a, b].filter(Boolean))].join("–")} °C` : "—";
+  const has = [f.density, f.nozzle_min, f.nozzle_max, f.bed_min, f.bed_max, f.dry_temp, f.td, f.gtin, f.buy_url].some(v => v != null && v !== "");
+  // la transparence : 0 opaque ; au-dela de 10 mm, presque clair (l'echelle des HueForge)
+  const tdTxt = f.td == null ? null : f.td < 1 ? "opaque" : f.td < 4 ? "couvrant" : f.td < 10 ? "translucide" : "très clair";
+  return <FCard t="Impression" i="🧪" c="#F97316" aside={isAdmin ? <button type="button" onClick={onEdit} data-tip="Saisir ce qu'aucun catalogue ne donne"
+    style={{ border:"1px solid var(--border)", background:"var(--surface)", color:"var(--text2)", borderRadius:9, padding:"3px 9px", fontSize:11.5, fontWeight:800, cursor:"pointer" }}>✏️</button> : null}>
+    {!has ? <div style={{ fontSize:12.5, color:"var(--muted)", lineHeight:1.5, padding:"4px 0" }}>
+        Rien encore. La <b>synchro des catalogues</b> (Paramètres › Outils) la remplit : buse, plateau, séchage, densité, transparence ;
+        {isAdmin ? " ou ✏️ pour la saisir." : ""}<div>{takeBtn}</div></div>
+      : <>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(118px, 1fr))", gap:6, marginBottom:8 }}>
+          <FTile label="🔥 Buse" value={range(f.nozzle_min, f.nozzle_max)} sub="température" c1="#EF4444" c2="#F97316"/>
+          <FTile label="🛏 Plateau" value={range(f.bed_min, f.bed_max)} sub="température" c1="#F97316" c2="#FBBF24"/>
+          <FTile label="💧 Séchage" value={f.dry_temp ? `${f.dry_temp} °C` : "—"} sub={f.dry_hours ? `pendant ${frN(f.dry_hours)} h` : "conseillé"} c1="#0EA5E9" c2="#38BDF8"/>
+          <FTile label="⚖ Densité" value={f.density ? frN(f.density) : "—"} sub="g/cm³" c1="#8B5CF6" c2="#C084FC"/>
+          <FTile label="🔆 Transparence" value={f.td != null ? `TD ${frN(f.td)}` : "—"} sub={tdTxt || "non mesurée"} c1="#14B8A6" c2="#5EEAD4"
+            tip="TD : l'épaisseur (mm) sous laquelle la lumière passe, celle des HueForge"/>
+        </div>
+        <FRow l="Code-barres" v={f.gtin} mono/>
+        {f.buy_url && <FRow l="Acheter" v={<a href={f.buy_url} target="_blank" rel="noreferrer" style={{ color:"#3B82F6" }}>{f.buy_url.split("//").pop().split("/")[0]} ›</a>}/>}
+        {[f.density, f.nozzle_min, f.bed_min, f.dry_temp].some(v => v == null) && takeBtn}
+      </>}
+  </FCard>;
+}
+
 // les grammes des lignes d'historique a la francaise (05/11/2026 : « 23.6 g » ecrit par le serveur avant ce jour)
 const frNum = s => String(s || "").replace(/(\d)\.(\d)(?=\d* ?g\b|\d* →)/g, "$1,$2");
 
@@ -2531,25 +2570,13 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
       </FHero>
 
       <div style={{ padding:"12px 14px 18px", display:"flex", flexDirection:"column", gap:12 }}>
-        {editing ? (
+        {editing ? (<>
           <FCard t="Modifier le filament" i="✏️" c="#3B82F6">
             <div style={{ paddingTop:6 }}>
               {F("Nom (anglais / officiel) *","name")}
               {F("Nom traduit (français)","translated_name")}
               {F("Marque","manufacturer")}
               {F("Sous-type (ex: PLA Basic)","fila_type")}
-              {/* la fiche technique (05/11/2026) */}
-              <details style={{ marginBottom:10 }}>
-                <summary style={{ cursor:"pointer", fontSize:12.5, fontWeight:800, color:"var(--text2)", marginBottom:8 }}>🧪 Impression (buse, plateau, densité, séchage, TD…)</summary>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))", gap:"0 10px" }}>
-                  {F("Buse min (°C)","nozzle_min")}{F("Buse max (°C)","nozzle_max")}
-                  {F("Plateau min (°C)","bed_min")}{F("Plateau max (°C)","bed_max")}
-                  {F("Densité (g/cm³)","density")}{F("Transparence (TD)","td")}
-                  {F("Séchage (°C)","dry_temp")}{F("Durée de séchage (h)","dry_hours")}
-                </div>
-                {F("Code-barres","gtin")}
-                {F("Lien d'achat","buy_url")}
-              </details>
               <div style={{ marginBottom:10 }}>
                 <label style={lStyle}>Couleur(s) — hex séparées par virgule si multi</label>
                 <input style={iStyle} value={form.colors_input}
@@ -2609,7 +2636,28 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               </div>
             </div>
           </FCard>
-        ) : <>
+          {/* la fiche technique, a part (05/11/2026) : posee par la synchro des catalogues, ou ici quand aucun ne la donne */}
+          <FCard t="Impression" i="🧪" c="#F97316">
+            <div style={{ fontSize:11.5, fontWeight:600, color:"var(--muted)", margin:"2px 0 10px", lineHeight:1.45 }}>
+              La synchro des catalogues la remplit (profil Bambu Studio, Open Filament Database, FilamentColors) ; ici, ce qu'aucun ne donne. Un champ vidé s'efface.</div>
+            {[["🌡️ Températures", [["Buse min", "nozzle_min", "°C"], ["Buse max", "nozzle_max", "°C"], ["Plateau min", "bed_min", "°C"], ["Plateau max", "bed_max", "°C"]]],
+              ["💧 Séchage conseillé", [["Température", "dry_temp", "°C"], ["Durée", "dry_hours", "h"]]],
+              ["🧪 Matière", [["Densité", "density", "g/cm³"], ["Transparence (TD)", "td", "mm"]]]].map(([t, fs]) =>
+              <div key={t} style={{ marginBottom:8 }}>
+                <div style={{ fontSize:11, fontWeight:900, letterSpacing:".04em", textTransform:"uppercase", color:"#F97316", marginBottom:6 }}>{t}</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))", gap:"0 10px" }}>
+                  {fs.map(([l, k, u]) => <div key={k} style={{ marginBottom:10 }}>
+                    <label style={lStyle}>{l}</label>
+                    <div style={{ position:"relative" }}>
+                      <input style={{ ...iStyle, paddingRight:46 }} inputMode="decimal" value={form[k]} onChange={e => setForm(x => ({ ...x, [k]: e.target.value }))}/>
+                      <span style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", fontSize:11.5, fontWeight:700, color:"var(--muted)", pointerEvents:"none" }}>{u}</span>
+                    </div></div>)}
+                </div></div>)}
+            <div style={{ fontSize:11, fontWeight:900, letterSpacing:".04em", textTransform:"uppercase", color:"#F97316", marginBottom:6 }}>🛒 Achat</div>
+            {F("Code-barres (EAN)","gtin")}
+            {F("Lien d'achat","buy_url")}
+          </FCard>
+        </>) : <>
           {/* les chiffres du filament */}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4, minmax(0, 1fr))", gap:6 }}>
             <FTile label="🧵 Stock" value={nAct ? fmtStock(stock) : "—"} sub={`${nAct} active${nAct !== 1 ? "s" : ""}${f.ordered_spool_count > 0 ? ` · ${f.ordered_spool_count} en commande` : ""}`} c1="#16A34A" c2="#4ADE80"
@@ -2628,17 +2676,6 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               <FRow l="Multicolor" v={f.multicolor_type && f.multicolor_type !== "monochrome" ? f.multicolor_type : null}/>
               <FRow l="Finition" v={FINISHES.find(([k]) => k === finishOf(f))?.[1] || null}/>
             </FCard>
-            {/* la fiche technique posee a la synchro (05/11/2026) */}
-            {[f.density, f.nozzle_min, f.nozzle_max, f.bed_min, f.bed_max, f.dry_temp, f.td, f.gtin, f.buy_url].some(v => v != null && v !== "") &&
-              <FCard t="Impression" i="🧪" c="#F97316">
-                <FRow l="Buse" v={f.nozzle_min || f.nozzle_max ? [f.nozzle_min, f.nozzle_max].filter(Boolean).join("–") + " °C" : null}/>
-                <FRow l="Plateau" v={f.bed_min || f.bed_max ? [...new Set([f.bed_min, f.bed_max].filter(Boolean))].join("–") + " °C" : null}/>
-                <FRow l="Densité" v={f.density ? `${String(f.density).replace(".", ",")} g/cm³` : null}/>
-                <FRow l="Séchage" v={f.dry_temp ? `${f.dry_temp} °C${f.dry_hours ? ` pendant ${String(f.dry_hours).replace(".", ",")} h` : ""}` : null}/>
-                <FRow l="Transparence (TD)" v={f.td != null ? String(f.td).replace(".", ",") : null}/>
-                <FRow l="Code-barres" v={f.gtin} mono/>
-                {f.buy_url && <FRow l="Acheter" v={<a href={f.buy_url} target="_blank" rel="noreferrer" style={{ color: "#3B82F6" }}>{f.buy_url.split("//").pop().split("/")[0]} ›</a>}/>}
-              </FCard>}
             <FCard t="Côté Bambu" i="🏷️" c="#0EA5E9">
               <FRow l="Profile ID" v={f.profile_id} mono/>
               <FRow l="Code couleur Bambu" v={f.fila_color_code} mono/>
@@ -2647,6 +2684,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               <FRow l="À commander" v={f.to_order ? "oui" : null} vc="#f97316"/>
             </FCard>
           </div>
+          <TechSection f={f} isAdmin={isAdmin} onEdit={() => setEditing(true)} onUpdated={onUpdated}/>
           <CatalogFactsCard f={f} onUpdated={onUpdated}/>
           {f.comment && <div style={{ position:"relative", padding:"12px 14px 12px 18px", borderRadius:16, overflow:"hidden",
             background:"linear-gradient(135deg, color-mix(in srgb, #A855F7 12%, transparent), transparent 70%), var(--surface2)", border:"1px solid var(--border)" }}>

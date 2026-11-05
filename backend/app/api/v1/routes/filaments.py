@@ -891,6 +891,23 @@ async def filament_sources(fid: int, db: AsyncSession = Depends(get_db), _: str 
                                 f.fila_type or "", f.material or "", f.color or "")
 
 
+@router.post("/filaments/{fid}/tech-from-catalogs", response_model=FilamentOut)
+async def tech_from_catalogs(fid: int, body: dict = Body({}), db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    """Reprendre la fiche technique des catalogues pour ce filament (05/11/2026), comme la synchro : notre catalogue et
+    Bambu d'abord. only_empty (par defaut) : seulement les champs vides, une valeur saisie a la main reste."""
+    import asyncio as _aio
+    f = (await db.execute(select(Filament).options(selectinload(Filament.spools)).where(Filament.id == fid))).scalar_one_or_none()
+    if not f:
+        raise HTTPException(404, "Filament introuvable")
+    tech = await _aio.to_thread(_tech_for, f)
+    only_empty = body.get("only_empty", True)
+    for k, (v, _src) in tech.items():
+        if k in TECH_FIELDS and (not only_empty or getattr(f, k, None) in (None, "")):
+            setattr(f, k, v)
+    await db.commit()
+    return _fil_out(f)
+
+
 @router.get("/filaments/{fid}/measured")
 async def filament_measured(fid: int, db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
     """Sa couleur mesuree (05/11/2026, FilamentColors.xyz) : les echantillons de ce filament (meme marque, meme nom de
