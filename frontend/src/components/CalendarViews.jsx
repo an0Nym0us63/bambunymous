@@ -107,8 +107,9 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
             top: a / 60 * hourPx, height: (b - a) / 60 * hourPx, background: "color-mix(in srgb, #6366F1 45%, transparent)" }}/>)}
           {Array.from({ length: 24 }, (_, h) => <span key={h} style={{ position: "absolute", left: 0, right: 0, top: h * hourPx, borderTop: "1px solid color-mix(in srgb, var(--border) 60%, transparent)" }}/>)}
           {evs[d].filter(e => e.kind === "rest").map(e => <span key={e.key} data-tip={`${e.live.name || "Impression en cours"} : fin estimée vers ${hhmm(e.live.end)}`}
-            style={{ position: "absolute", left: 4, right: 3, top: e.a / 60 * hourPx, height: Math.max(14, (e.b - e.a) / 60 * hourPx - 2), zIndex: 3,
-              borderRadius: "0 0 8px 8px", border: "1.5px dashed #3B82F6", borderTop: "none", boxSizing: "border-box", overflow: "hidden",
+            // assez haut pour son etiquette, qui peut deborder (06/11/2026 : un quart d'heure restant la coupait)
+            style={{ position: "absolute", left: 4, right: 3, top: e.a / 60 * hourPx, height: Math.max(24, (e.b - e.a) / 60 * hourPx - 2), zIndex: 3,
+              borderRadius: "0 0 8px 8px", border: "1.5px dashed #3B82F6", borderTop: "none", boxSizing: "border-box", overflow: "visible",
               background: "repeating-linear-gradient(135deg, color-mix(in srgb, #3B82F6 22%, transparent) 0 5px, color-mix(in srgb, #3B82F6 8%, transparent) 5px 10px)",
               display: "flex", alignItems: "flex-end", justifyContent: "flex-end", padding: "0 6px 2px" }}>
             {e.live.end.slice(0, 10) === d && (() => { const dr = endDrift(e.live.planned, e.live.end);
