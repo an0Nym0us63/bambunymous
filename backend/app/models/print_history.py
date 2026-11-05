@@ -69,6 +69,9 @@ class Print(Base):
     # du temps ecoule pour la duree reelle. paused_since (UTC) = pause en cours.
     paused_seconds      = Column(Float, nullable=True)
     paused_since        = Column(DateTime, nullable=True)
+    # les pieces annulees en cours de route (05/11/2026), JSON {"objects": [{id, name, layer}], "back": [[bobine, g]]} :
+    # la fiche et la liste les signalent ; « back », ce qui est revenu aux bobines a la fin
+    skipped_objects     = Column(Text, nullable=True)
 
     group_id            = Column(Integer, ForeignKey("groups.id", ondelete="SET NULL"), nullable=True)
     # hors des classements de la page Stats (echantillons, supports de bobine…), compte dans les totaux

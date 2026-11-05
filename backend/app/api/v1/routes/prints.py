@@ -116,6 +116,12 @@ def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict]
         for s in (p.snapshots or [])
     ]
     d["tags"] = [t.tag for t in (p.tags or [])]
+    # les pieces annulees en cours de route (05/11/2026)
+    try:
+        import json as _json
+        d["skipped_objects"] = _json.loads(p.skipped_objects) if getattr(p, "skipped_objects", None) else None
+    except ValueError:
+        d["skipped_objects"] = None
     # ce qui n'est plus que sur le NAS (vide du local par une purge) : la fiche le signale
     d["nas_only"] = _purged_count(f"prints/{p.id}") + _purged_count_model(p.design_id)
     d["group_name"] = p.group.name if p.group else None

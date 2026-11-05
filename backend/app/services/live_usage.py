@@ -282,7 +282,35 @@ def skip(pid: int, ids: list, pct: float, layer: int) -> None:
     if new:
         logger.info(f"[LIVE] impression #{pid} : piece(s) annulee(s) {', '.join(new)} a la couche {layer} ({pct:.0f} %)")
         from .print_tracker import _bg
-        _bg(_state_put(pid, {"skip": snap}))
+
+        async def _keep():
+            await _state_put(pid, {"skip": snap})
+            await _mark(pid)
+        _bg(_keep())
+
+
+async def _mark(pid: int, back: Optional[list] = None) -> None:
+    """Les pieces annulees, gardees sur l'impression (05/11/2026) : la fiche et la liste les signalent."""
+    from ..models.print_history import Print
+    sk = await skipped(pid)
+    if not sk:
+        return
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, pid)
+        if not p:
+            return
+        try:
+            old = json.loads(p.skipped_objects) if p.skipped_objects else {}
+        except ValueError:
+            old = {}
+        names = {o.get("id"): o.get("name") for o in old.get("objects") or [] if isinstance(o, dict)}
+        out = {"objects": [{"id": o, "name": v["name"] or names.get(o), "layer": v["layer"]} for o, v in sk.items()]}
+        if back is not None:
+            out["back"] = [[s, g] for s, g in back]
+        elif old.get("back"):
+            out["back"] = old["back"]
+        p.skipped_objects = json.dumps(out, ensure_ascii=False)
+        await db.commit()
 
 
 async def skipped(pid: int) -> dict:
@@ -745,6 +773,10 @@ async def skipped_back(pid: int) -> list:
             logger.warning(f"[LIVE] report sur les objets de l'impression #{pid} : {e}")
         await db.commit()
     await _state_put(pid, {"skip_back": True, "skip": sk})
+    try:
+        await _mark(pid, back)
+    except Exception as e:
+        logger.warning(f"[LIVE] pieces annulees de l'impression #{pid} : {e}")
     logger.info(f"[LIVE] impression #{pid} : {what} ; {', '.join(f'{g:g} g a la bobine #{s}' for s, g in back) or 'rien a rendre'}")
     return back
 

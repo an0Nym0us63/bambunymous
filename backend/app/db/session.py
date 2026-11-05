@@ -213,6 +213,7 @@ async def _migrate():
         ("prints",    "thumb_3d",             "INTEGER DEFAULT 0"),
         ("prints",    "stats_excluded",       "INTEGER DEFAULT 0"),
         ("prints",    "translated_name",      "TEXT"),
+        ("prints",    "skipped_objects",      "TEXT"),
         ("prints",    "translated_by",        "TEXT"),
         ("filaments", "translated_name",      "TEXT"),
         ("filaments", "external_filament_id", "TEXT"),

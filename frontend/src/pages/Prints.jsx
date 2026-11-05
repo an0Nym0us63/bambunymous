@@ -1665,6 +1665,19 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         onCoverChange={name => { setP(prev => ({ ...prev, cover_photo: name })); onChanged?.(); }}/>
       {/* en cours, suivi couche par couche (alpha) : ce que chaque filament a vraiment consomme ; rien sur « Actuel » */}
       {p.status === "IN_PROGRESS" && !currentFriend() && <LiveUsageCard printId={p.id}/>}
+      {/* les pieces annulees en cours de route (05/11/2026), et ce qui est revenu aux bobines */}
+      {p.skipped_objects?.objects?.length > 0 && <div style={{ padding: "10px 14px", borderRadius: 16, border: "1px solid var(--border)",
+        background: "linear-gradient(135deg, color-mix(in srgb, #F97316 12%, transparent), transparent 70%), var(--surface2)" }}>
+        <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#F97316", marginBottom: 4 }}>
+          ✂ {p.skipped_objects.objects.length > 1 ? `${p.skipped_objects.objects.length} pièces annulées` : "Pièce annulée"} pendant l'impression</div>
+        {p.skipped_objects.objects.map(o => <div key={o.id} style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
+          {o.name || `Pièce ${o.id}`} <span style={{ color: "var(--muted)", fontWeight: 600 }}>· à la couche {o.layer}</span></div>)}
+        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+          {p.skipped_objects.back ? (p.skipped_objects.back.length
+            ? p.skipped_objects.back.map(([s, g]) => `${String(g).replace(".", ",")} g rendus à la bobine #${s}`).join(" · ")
+            : "Rien à rendre aux bobines")
+            : "Ce qu'elle n'imprime pas reviendra aux bobines à la fin"}</div>
+      </div>}
       {/* les filaments ont deja leur titre repliable (et « Restituer ») */}
       {fils.length > 0 && <FilamentsV2 filaments={fils} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker}
         onRestore={() => setShowDeleteConfirm("restore")} onUnmap={setUnmapping}/>}
@@ -2613,7 +2626,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
         <span style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
           <span style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.file_name || "Sans nom"}</span>
           <span style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-            <span style={{ color:stC }}>{stI} {stL}</span> · {day} {hour}</span>
+            <span style={{ color:stC }}>{stI} {stL}</span>{p.skipped_objects?.objects?.length > 0 && <span style={{ color: "#F97316" }}> · ✂</span>} · {day} {hour}</span>
           <span style={{ display:"flex", alignItems:"center", gap:6 }}>{dots}
             {p.number_of_items > 1 && <span data-tip={`${p.number_of_items} pièces`} style={tagS("#2563EB")}>×{p.number_of_items}</span>}
             {rateMe && <span data-tip="À évaluer sur MakerWorld" style={tagS("#F59E0B")}>★ à évaluer</span>}</span>
@@ -2660,7 +2673,9 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }}>
           {/* le statut en pastille seule, son nom au survol (03/11/2026 : « En cours · » mangeait l'heure sur une carte etroite) */}
           <span data-tip={`${p.status !== "SUCCESS" ? `${stL} · ` : ""}${fmtDate(p.print_date)}`} style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-            {p.status !== "SUCCESS" && <span style={{ color:stC, fontWeight:900 }}>{stI} </span>}{day} {hour.split(" · ")[0]}</span>
+            {p.status !== "SUCCESS" && <span style={{ color:stC, fontWeight:900 }}>{stI} </span>}
+            {p.skipped_objects?.objects?.length > 0 && <span data-tip={`${p.skipped_objects.objects.length > 1 ? `${p.skipped_objects.objects.length} pièces annulées` : "Une pièce annulée"} pendant l'impression`}
+              style={{ color: "#F97316", fontWeight: 900 }}>✂ </span>}{day} {hour.split(" · ")[0]}</span>
           {/* Repli sur estimated_seconds, comme la fiche */}
           {dur > 0 && <span style={{ fontSize:10.5, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap", flexShrink:0 }}>{durFr(dur)}</span>}
         </div>

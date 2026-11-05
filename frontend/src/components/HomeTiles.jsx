@@ -3976,7 +3976,8 @@ function LayerTile({ status, sz }) {
         : !d.ok ? <Empty>Pas de G-code pour cette impression</Empty>
         : <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 0 }}>
           <LayerCanvas d={d} ghost={ghost} w={Math.max(60, Math.floor(W))} h={Math.max(50, Math.floor(H) - 18)}/>
-          <Muted size={11.5}>couche {d.layer} / {tot}</Muted></div>}
+          <Muted size={11.5}>couche {d.layer} / {tot}{Object.keys(d.skipped || {}).length > 0 &&
+            <span style={{ color: "#F97316", fontWeight: 800 }}> · ✂ {Object.keys(d.skipped).length} annulée{Object.keys(d.skipped).length > 1 ? "s" : ""}</span>}</Muted></div>}
     </Tile>
   );
 }

@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
 import { LayerExplorer } from "../components/LayerView";
 import { currentFriend } from "../store/friend";
-import { useLiveSpool } from "../store/liveUsage";
+import { useLiveSpool, useLiveCurrent } from "../store/liveUsage";
 import { trayBg, parseColorsList, finishOf, colorBg, bgWithTop, isDark } from "../utils/colors";
 import { stageLabel, stageIsPause } from "../utils/printStage";
 import { createPortal } from "react-dom";
@@ -1579,6 +1579,8 @@ function PrinterPopup({ status, img, name, onClose }) {
   const hms = status?.hms_decoded || [];
   const worst = HMS_SEV[hms[0]?.severity] || HMS_SEV.info;
   const [hmsOpen, setHmsOpen] = useState(false);
+  const liveCur = useLiveCurrent();                // les pieces annulees de l'impression en cours (05/11/2026)
+  const skN = Object.keys(liveCur?.skipped || {}).length;
   const [moreOpen, setMoreOpen] = useState(false);
   // une pastille d'etat de l'en-tete : teintee quand elle signale quelque chose, grise sinon
   const chipSt = (c, on) => ({ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap",
@@ -1626,6 +1628,8 @@ function PrinterPopup({ status, img, name, onClose }) {
             <>{status.door_open ? <DoorOpen size={12}/> : <DoorClosed size={12}/>}{status.door_open ? "Porte ouverte" : ""}</>,
             status.door_open ? null : "Porte fermée")}
           {status?.connected && status.top_open === true && chip("#d97706", true, <><DoorOpen size={12}/>Capot ouvert</>)}
+          {skN > 0 && chip("#F97316", true, <>✂ {skN > 1 ? `${skN} pièces annulées` : "1 pièce annulée"}</>,
+            Object.values(liveCur.skipped).map(x => `${x.name || "Pièce"} (couche ${x.layer})`).join(" · "))}
           {status?.connected && status.light_on != null && chip(status.light_on ? "#ca8a04" : null, status.light_on,
             <>{status.light_on ? <Lightbulb size={12}/> : <LightbulbOff size={12}/>}</>,
             status.light_on ? "Lumière allumée" : "Lumière éteinte")}
