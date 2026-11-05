@@ -8,6 +8,7 @@ import { installIosPullRefresh } from "./utils/iosPullRefresh";
 import { installDesktopHScroll } from "./utils/desktopHScroll";
 import { installChunkReload } from "./utils/importRetry";
 import { installDragClickGuard } from "./utils/dragClickGuard";
+import { installEscClose } from "./utils/escClose";
 
 // Coquille Android : les rangees horizontales n'arment plus le tirer-pour-rafraichir.
 installPullRefreshGuard();
@@ -24,6 +25,8 @@ installDesktopHScroll();
 
 // Selectionner un champ en glissant hors d'une fenetre ne la ferme plus.
 installDragClickGuard();
+// Échap ferme la fenêtre du dessus, partout (06/11/2026)
+installEscClose();
 
 // Init thème avant premier render (évite le flash)
 const savedTheme = localStorage.getItem("bambu-theme") || "dark";
