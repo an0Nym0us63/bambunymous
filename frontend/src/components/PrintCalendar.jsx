@@ -240,6 +240,7 @@ export default function PrintCalendar() {
     dayBest: v => placeDay(j.key, v),
     unpin: () => unpin(j.key),
     pinDay: () => arrange({ pins: { [j.key]: j.day } }),
+    model: () => setModelSel(j.design_id),
     // a sa place dans une journee : juste apres tel plateau (ou avant le premier du jour), son jour fige
     slot: (day, after) => {
       const o = keys.filter(x => x !== j.key);

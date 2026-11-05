@@ -67,6 +67,14 @@ function useActRows(onDone) {
 
 export function JobSheet({ j, now, edit, onClose, act, jobs }) {
   const { busy, run, row, dateRow } = useActRows(onClose);
+  const big = (k, ic, label, tip, onClick) => <button key={k} type="button" disabled={!!busy} onClick={onClick} data-tip={tip}
+    style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "10px 6px", borderRadius: 12, cursor: "pointer", font: "inherit",
+      border: "1px solid var(--border)", background: "var(--surface)", opacity: busy && busy !== k ? 0.5 : 1 }}>
+    <span style={{ fontSize: 20 }}>{busy === k ? "…" : ic}</span>
+    <span style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text)" }}>{label}</span></button>;
+  const chipBtn = (label, tip, onClick) => <button key={label} type="button" disabled={!!busy} onClick={onClick} data-tip={tip}
+    style={{ padding: "6px 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", cursor: "pointer", font: "inherit",
+      fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>{label}</button>;
   const [slot, setSlot] = useState(false);            // choisir sa place dans une journee (06/11/2026)
   if (slot) return <SlotPicker j={j} jobs={jobs || []} now={now} onClose={() => setSlot(false)}
     onPick={(day, after) => run("slot", () => act.slot(day, after))} onAuto={day => run("slot", () => act.dayBest(day))}/>;
@@ -91,27 +99,35 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
       </div>
     </div>
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      {/* figer (06/11/2026) : libre, le jour seulement, ou le jour et l'heure */}
+      {/* la fiche simplifiee (06/11/2026) : figer ; trois actions cote a cote ; l'objet entier dans sa propre fiche ; le reste
+          en petits boutons. Toutes les fonctions d'avant y sont. */}
       {edit && !j.why && j.start && !unretained(j) && <FreezePick j={j} now={now} busy={busy} run={run} act={act}/>}
-      {edit && !j.why && !j.locked && row("smart", "✨", "Placer au mieux", "Là où il charge le moins de filaments, sans faire rater de date limite, le plus tôt possible", () => run("smart", act.smart))}
-      {edit && !j.why && !j.locked && j.plates_total > 1 && act.laterAll && row("laterall", "⏬", "Tout l'objet plus tard", "Tous les plateaux de cet objet passent en fin de file, dans leur ordre (un objet retenu reste devant les non retenus) ; les figés restent", () => run("laterall", act.laterAll))}
-      {edit && !j.why && !j.locked && row("later", "⏭", "Plus tard", "Il quitte sa place et son jour, et passe en fin de file", () => run("later", act.later))}
-      {/* un non retenu passe apres les retenus, sans jour (06/11/2026) : le retenir d'abord */}
       {edit && !j.why && unretained(j) && <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", borderRadius: 12,
         border: "1px dashed color-mix(in srgb, #94A3B8 60%, var(--border))", background: "var(--surface2)" }}>
         <span style={{ fontSize: 18, width: 24, textAlign: "center" }}>○</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", lineHeight: 1.4 }}>Pas retenu : il passe après tous les plateaux retenus, et ne se pose
-          sur aucun jour. Pour le placer, retiens son profil dans <b>Fiche du modèle</b>.</span></div>}
-      {edit && !j.why && !j.locked && !unretained(j) && !(act.slot && jobs) && dateRow("daybest", "📌", "Le placer sur un jour", "À la meilleure place de la journée (le moins de filaments à charger), du moment qu'il y finit ; le reste se décale", j.day, v => v && act.dayBest(v), new Date().toISOString().slice(0, 10))}
-      {edit && !j.why && !j.locked && !unretained(j) && act.slot && jobs && row("slot", "📍", "Le placer sur un jour",
-        "Le jour, puis sa place : automatique (la meilleure de la journée) ou celle que tu touches entre les plateaux du jour", () => setSlot(true))}
-      {edit && !j.why && !j.locked && !unretained(j) && !(act.slot && jobs) && dateRow("day", "📅", "Le poser sur un jour, après le reste", "Il y va après ce qui y est déjà", j.day, v => v && act.day(v), new Date().toISOString().slice(0, 10))}
-      {/* d'une traite (06/11/2026) : ses plateaux se suivent, rien d'un autre objet ne s'intercale */}
-      {edit && act.chain && (j.plates_total > 1 || j.qty > 1) && <ChainPick j={j} busy={busy} run={run} act={act}/>}
-      {row("sheet", "🧾", "Fiche du modèle", "Retenir le profil, choisir les plateaux et les filaments de chaque couleur", () => { act.sheet(); onClose(); })}
-      {j.day && row("dayview", "🗓", "Voir sa journée", null, () => { act.dayview(); onClose(); })}
-      {edit && dateRow("due", "🎯", j.due ? "Changer la date limite" : "Une date limite pour l'objet", j.due ? `Fini avant le ${dueTxt(j.due)}` : "Le planning prévient s'il déborde", j.due, v => act.due(v))}
-      {edit && row("done", "✓", "Marquer fait", "Imprimé hors de l'appli, ou pas reconnu : il compte comme fait", () => run("done", act.done))}
+          sur aucun jour. Pour le placer, retiens son profil dans <b>Fiche MakerWorld</b>.</span></div>}
+      {edit && !j.why && !j.locked && <div style={{ display: "grid", gridTemplateColumns: unretained(j) ? "1fr 1fr" : "1fr 1fr 1fr", gap: 6 }}>
+        {big("smart", "✨", "Au mieux", "Là où il charge le moins de filaments, sans faire rater de date limite, le plus tôt possible", () => run("smart", act.smart))}
+        {!unretained(j) && (act.slot && jobs
+          ? big("slot", "📍", "Sur un jour…", "Le jour, puis sa place : automatique ou celle que tu touches entre les plateaux du jour", () => setSlot(true))
+          : big("slot", "📍", "Sur un jour…", "À la meilleure place de la journée choisie", () => setSlot(true)))}
+        {big("later", "⏭", "Plus tard", "Il quitte sa place et son jour, et passe en fin de file", () => run("later", act.later))}
+      </div>}
+      {/* l'objet entier : sa fiche (tout plus tard, d'une traite, date limite, tous ses plateaux sur un jour) */}
+      {act.model ? row("model", "🧩", "Tout l'objet", [j.plates_total > 1 ? `${j.plates_total} plateaux` : null, j.chain ? "d'une traite" : null,
+          j.due ? `avant le ${dueTxt(j.due)}` : null].filter(Boolean).join(" · ") || "Tous ses plateaux sur un jour, plus tard, d'une traite, une date limite",
+          () => { act.model(); onClose(); })
+        : <>
+          {edit && !j.why && !j.locked && j.plates_total > 1 && act.laterAll && row("laterall", "⏬", "Tout l'objet plus tard", "Tous les plateaux de cet objet passent en fin de file, dans leur ordre ; les figés restent", () => run("laterall", act.laterAll))}
+          {edit && act.chain && (j.plates_total > 1 || j.qty > 1) && <ChainPick j={j} busy={busy} run={run} act={act}/>}
+          {edit && dateRow("due", "🎯", j.due ? "Changer la date limite" : "Une date limite pour l'objet", j.due ? `Fini avant le ${dueTxt(j.due)}` : "Le planning prévient s'il déborde", j.due, v => act.due(v))}
+        </>}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {j.day && chipBtn("🗓 Sa journée", "Voir sa journée dans le calendrier", () => { act.dayview(); onClose(); })}
+        {chipBtn("🧾 Fiche MakerWorld", "Retenir le profil, choisir les plateaux, les filaments et le nombre d'exemplaires", () => { act.sheet(); onClose(); })}
+        {edit && chipBtn(busy === "done" ? "…" : "✓ Fait", "Imprimé hors de l'appli, ou pas reconnu : il compte comme fait", () => run("done", act.done))}
+      </div>
     </div>
   </PlanPopup>;
 }
