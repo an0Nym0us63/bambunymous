@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
 import { egg } from "../eggs";
 import { showAlert } from "../utils/dialog";
+import { toast } from "../store/toast";
 import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 import MwImg from "./MwImg";
@@ -127,7 +128,7 @@ export default function PrintCalendar() {
   const keys = (pd?.jobs || []).map(j => j.key);
   const byKey = Object.fromEntries((pd?.jobs || []).map(j => [j.key, j]));
   const send = async (url, body, method = "put") => {
-    try { const r = await client[method](url, body); setPd(r.data); return true; }
+    try { const r = await client[method](url, body); setPd(r.data); return r.data || true; }
     catch (e) { showAlert(e.response?.data?.detail || e.message); return false; }
   };
   const arrange = (body, what = "planning_glisse") => send("/makerworld/plan/arrange", body).then(ok => { if (ok) egg(what); });
@@ -155,7 +156,15 @@ export default function PrintCalendar() {
   const applyAdvice = a => a.kind === "front" ? toFront(a.keys) : a.kind === "after" ? moveAfter(a.key, a.ref) : moveBefore(a.key, a.ref);
   const setDue = (did, due) => send(`/makerworld/plan/deadline/${did}`, { due }).then(ok => { if (ok && due) egg("planning_echeance"); });
   const markDone = (key, undo = false) => send("/makerworld/plan/done", { key, undo }, "post");
-  const colorDay = (day, fid) => send("/makerworld/plan/color-day", { day, filament_id: fid }, "post").then(ok => { if (ok) egg("planning_couleur"); });
+  // la journee couleur : ce qui a ete pose ce jour-la, et ce qui n'y tient pas (05/11/2026 : on ne voyait rien se passer)
+  const colorDay = (day, fid) => send("/makerworld/plan/color-day", { day, filament_id: fid }, "post").then(d => {
+    if (!d) return;
+    egg("planning_couleur");
+    const mine = (d.jobs || []).filter(j => j.fils?.some(f => f.filament_id === fid));
+    const on = mine.filter(j => j.day === day).length, off = mine.filter(j => j.pinned && j.day !== day).length;
+    const name = (d.colors || []).find(c => c.filament_id === fid)?.name || "ce filament";
+    toast(`🎨 ${on} plateau${on > 1 ? "x" : ""} en ${name} sur ce jour${off ? ` · ${off} n'y tien${off > 1 ? "nent" : "t"} plus, au lendemain` : ""}`, "success", 5000);
+  });
   const optimize = day => send("/makerworld/plan/optimize", day ? { day } : {}, "post").then(ok => { if (ok) egg("planning_optimise"); });
   const jobAct = j => ({
     smart: () => send("/makerworld/plan/smart", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),

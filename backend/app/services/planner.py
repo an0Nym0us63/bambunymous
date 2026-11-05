@@ -767,10 +767,10 @@ async def color_day(day: str, fid: int) -> dict:
     one = {j["key"] for j in r["jobs"] if _sig(j) == frozenset([fid])}
     mine.sort(key=lambda k: k not in one)
     rest = [j["key"] for j in r["jobs"] if j["key"] not in set(mine)]
-    at = 0
-    for i, k in enumerate(rest):
-        if next(j for j in r["jobs"] if j["key"] == k)["day"] <= day:
-            at = i + 1
+    # ils prennent la tete de la journee (05/11/2026 : poses apres ce qui y etait deja, la moitie passait au lendemain
+    # et la journee ne changeait pas de couleur) ; ce qui y etait se decale derriere eux
+    day_of = {j["key"]: j["day"] for j in r["jobs"]}
+    at = next((i for i, k in enumerate(rest) if day_of.get(k, "") >= day), len(rest))
     return await arrange({"order": rest[:at] + mine + rest[at:], "pins": {k: day for k in mine}})
 
 
