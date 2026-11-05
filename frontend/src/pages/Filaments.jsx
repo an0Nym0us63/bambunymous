@@ -1274,7 +1274,10 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
               // (elle montre deja la consommation ramenee) ; a part, elles faisaient croire a une deuxieme deduction
               const rows = new Set(usageHistory.filter(x => (x.kind || "usage") === "usage" && x.usage_id).map(x => x.usage_id));
               const onRow = {};
-              for (const x of usageHistory) if ((x.kind === "piece" || x.kind === "zero") && x.usage_id && rows.has(x.usage_id))
+              // un rendu pour piece annulee (06/11/2026) : sa ligne verte reste (on peut l'annuler), et l'impression dit aussi
+              // pourquoi, comme quand rien n'etait a rendre
+              const cutRendu = x => x.kind === "rendu" && /pièce annulée/.test(x.file_name || "");
+              for (const x of usageHistory) if ((x.kind === "piece" || x.kind === "zero" || cutRendu(x)) && x.usage_id && rows.has(x.usage_id))
                 (onRow[x.usage_id] = onRow[x.usage_id] || []).push(x);
               usageHistory._onRow = onRow;
               return null; })()}
@@ -1378,7 +1381,9 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                     {/* reussie, avec quelque chose de rendu : une piece annulee en cours de route (05/11/2026) */}
                     {u.status !== "FAILED" && u.returned > 0 && <span data-tip="Revenu à la bobine (ligne verte « Rendu à la bobine », avec sa cause)" style={{ color:"#16a34a" }}>↩ {u.returned.toFixed(1).replace(".", ",")} g rendus</span>}</div>
                   {/* une piece annulee : la consommation de cette ligne en tient deja compte (05/11/2026) */}
-                  {(usageHistory._onRow?.[u.usage_id] || []).filter(x => x.kind === "piece").map(x => {
+                  {(() => { const xs = usageHistory._onRow?.[u.usage_id] || [];
+                    // une note « piece » dit deja tout (rendu ou non) ; sinon le rendu de la piece annulee
+                    return xs.some(x => x.kind === "piece") ? xs.filter(x => x.kind === "piece") : xs.filter(x => x.kind === "rendu"); })().map(x => {
                     const t = frNum(x.file_name || ""), who = (t.split("pièce annulée : ")[1] || "").split(" ;")[0], cons = (t.match(/consommation ([\d,]+) → ([\d,]+) g/) || []);
                     return <div key={`p${x.id}`} data-tip={t} style={{ fontSize:11, fontWeight:700, color:"#F97316", marginTop:2 }}>
                       ✂ pièce annulée{who ? ` : ${who}` : ""}{cons[1] ? ` · ${cons[1]} g prévus → ${cons[2]} g` : ` · ${(x.grams || 0).toFixed(1).replace(".", ",")} g de moins`}</div>; })}
