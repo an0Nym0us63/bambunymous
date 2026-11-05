@@ -104,8 +104,9 @@ function NavItem({ to, icon: Icon, label, c, mini, upd, isActive }) {
 }
 
 // un bouton de la barre du bas : l'icone dans une pastille de la couleur de la page ouverte, son nom dessous
-function BottomItem({ to, onClick, icon: Icon, label, c, isActive, dot }) {
-  // un nom qui ne tient pas (« MakerWorld ») retrecit un peu au lieu d'etre coupe (05/11/2026)
+function BottomItem({ to, onClick, icon: Icon, label, c, isActive, dot, fitTo }) {
+  // un nom qui ne tient pas (« MakerWorld ») retrecit un peu au lieu d'etre coupe (05/11/2026) ; tous a la meme taille,
+  // celle du plus long (fitTo) : des noms de tailles differentes donnaient une barre qui semblait de travers (06/11/2026)
   const txt = React.useRef(null);
   const [fs, setFs] = React.useState(null);
   React.useLayoutEffect(() => {
@@ -115,8 +116,8 @@ function BottomItem({ to, onClick, icon: Icon, label, c, isActive, dot }) {
     // place de l'entree moins 2 px
     const fit = () => {
       const cs = getComputedStyle(el), ctx = (fit.c = fit.c || document.createElement("canvas").getContext("2d"));
-      ctx.font = `${cs.fontWeight} 10.5px ${cs.fontFamily}`;
-      const natural = ctx.measureText(label).width, avail = (el.parentElement?.getBoundingClientRect().width || 0) - 2;
+      ctx.font = `800 10.5px ${cs.fontFamily}`;              // en gras : la page ouverte l'est
+      const natural = Math.max(...(fitTo || [label]).map(x => ctx.measureText(x).width)), avail = (el.parentElement?.getBoundingClientRect().width || 0) - 2;
       setFs(avail > 0 && natural > avail ? Math.max(8, Math.floor((10.5 * avail / natural) * 10) / 10) : null);
     };
     fit();
@@ -124,7 +125,7 @@ function BottomItem({ to, onClick, icon: Icon, label, c, isActive, dot }) {
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(fit) : null;
     ro?.observe(el.parentElement);
     return () => ro?.disconnect();
-  }, [label, isActive]);                           // la page ouverte passe en gras : plus large
+  }, [label, fitTo?.join("|")]);
   const inner = <>
     <span style={{ width:48, height:30, borderRadius:15, display:"flex", alignItems:"center", justifyContent:"center",
       transition:"background .2s, box-shadow .2s",
@@ -187,6 +188,8 @@ export default function Layout() {
   const needMore = more.length > 0 || bar.length > MOBILE_SLOTS;
   const bottom = needMore ? bar.slice(0, MOBILE_SLOTS - 1) : bar;
   const moreList = needMore ? [...bar.slice(MOBILE_SLOTS - 1), ...more] : [];
+  // les noms de la barre du bas : tous prennent la taille qui fait tenir le plus large
+  const longest = [...bottom.map(it => it.short || it.label), ...(needMore ? ["Plus"] : [])];
   const [moreOpen, setMoreOpen] = React.useState(false);
   // un onglet sorti au menu, ouvert : son nom en titre (« MakerWorld » plutot qu'« Impressions »)
   const openTab = visible.find(i => i.to.includes("?tab=") && isActiveItem(i, loc, visible));
@@ -381,9 +384,9 @@ export default function Layout() {
         {/* Bottom nav mobile */}
         <nav className="show-mobile" style={S.bottomNav}>
           {/* la page ouverte : son icone dans une pastille de sa couleur, son nom dans cette couleur */}
-          {bottom.map(it => <BottomItem key={it.k} to={it.to} icon={it.icon} label={it.short || it.label} c={it.c} isActive={isActiveItem(it, loc, visible)}
+          {bottom.map(it => <BottomItem key={it.k} to={it.to} icon={it.icon} label={it.short || it.label} c={it.c} isActive={isActiveItem(it, loc, visible)} fitTo={longest}
             dot={it.k === "settings" && upd.any ? <UpdDot tip={updatesTip(upd)} style={{ top:1, right:9, boxShadow:"0 0 0 2px var(--surface)" }}/> : null}/>)}
-          {needMore && <BottomItem onClick={() => setMoreOpen(o => !o)} icon={MoreHorizontal} label="Plus" c="#64748B"
+          {needMore && <BottomItem onClick={() => setMoreOpen(o => !o)} icon={MoreHorizontal} label="Plus" c="#64748B" fitTo={longest}
             isActive={moreOpen || moreList.some(it => isActiveItem(it, loc, visible))}
             dot={moreList.some(it => it.k === "settings") && upd.any ? <UpdDot tip={updatesTip(upd)} style={{ top:1, right:9, boxShadow:"0 0 0 2px var(--surface)" }}/> : null}/>}
           {moreOpen && <MoreSheet items={moreList} loc={loc} visible={visible} upd={upd} onClose={() => setMoreOpen(false)}/>}
