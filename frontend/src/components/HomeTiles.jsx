@@ -30,6 +30,8 @@ import { DryCard } from "./AMSSection";
 import SpoolSVG, { FinishDefs } from "./SpoolSVG";
 import { switchRoutes, slotLabel, grilleAccueil, lireDisposition, trayPct } from "../utils/ams";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
+import { PlateThumb, NowNextTiles, unretained, hhmm as planHm } from "./PlanDay";
+import { LowStockBanner, BlockedList } from "./PlanPanels";
 import { FitBox } from "./FitThumb";
 
 // Les tuiles de l'accueil (22/10/2026, refaites le meme jour). Chaque tuile :
@@ -656,6 +658,79 @@ const IcoBed = ({ s = 12 }) => <svg width={s} height={s} viewBox="0 0 24 24" fil
 const IcoChamber = ({ s = 12 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
   strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 3v18M12 8h5M12 12h5"/></svg>;
 
+// ── Planning (05/11/2026) ────────────────────────────────────────────────────
+// La tuile du planning : ou il en est (dans les temps, a lancer, retard), ce qui imprime et quand ca finit, les prochains
+// plateaux avec leur debut et leur fin, et ce qui demande attention (conseils, sous le seuil, non planifiables, figes,
+// dates limites). En grand : les tuiles du calendrier, les alertes, puis la page.
+const PLAN_C = "#6366F1";
+const planWhen = (iso, now) => {
+  if (!iso) return "";
+  const d = iso.slice(0, 10), today = (now || "").slice(0, 10);
+  const t = new Date(`${today}T12:00`); t.setDate(t.getDate() + 1);
+  const tomorrow = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+  return `${d === today ? "" : d === tomorrow ? "demain " : new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" }) + " "}${planHm(iso)}`;
+};
+function PlanTile({ p, sz }) {
+  const nav = useNavigate();
+  const go = () => nav("/prints?tab=calendar");
+  const st = p?.status, jobs = p?.jobs || [];
+  const stC = { due: "#6366F1", late: "#F97316", ahead: "#22C55E", ontime: "#22C55E" }[st?.state] || "#64748B";
+  const stI = { due: "⏰", late: "🐢", ahead: "🚀", ontime: "✅" }[st?.state] || "📅";
+  const low = jobs.reduce((a, j) => a + (j.low_info?.length || 0), 0), locked = jobs.filter(j => j.locked).length;
+  const lateDl = (p?.deadlines || []).filter(x => !x.ok).length, blocked = (p?.blocked || []).length, adv = (p?.advice || []).length;
+  const chip = (txt, c, tip) => <span data-tip={tip} style={{ fontSize: 10.5, fontWeight: 900, color: c, background: `color-mix(in srgb, ${c} 13%, transparent)`,
+    borderRadius: 7, padding: "1px 6px", whiteSpace: "nowrap" }}>{txt}</span>;
+  const chips = <>
+    {lateDl > 0 && chip(`🎯 ${lateDl}`, "#EF4444", "Dates limites qui débordent")}
+    {blocked > 0 && chip(`⛔ ${blocked}`, "#DC2626", "Plateaux non planifiables (stock)")}
+    {low > 0 && chip(`📉 ${low}`, "#DC2626", "Filaments qui passeront sous le seuil")}
+    {adv > 0 && chip(`💡 ${adv}`, "#D97706", "Conseils")}
+    {locked > 0 && chip(`🔒 ${locked}`, "#4F46E5", "Plateaux figés")}
+  </>;
+  const next = jobs[0];
+  return <Tile icon={<CalendarClock size={15}/>} color={PLAN_C} label="Planning" to="/prints?tab=calendar" mini={sz.h === 0.5}
+    summary={p ? (next ? <span style={{ fontSize: 13 }}>{stI} <Muted size={12}>prochain</Muted> {planWhen(next.start, p.now)}</span> : <Muted size={12.5}>rien de prévu</Muted>) : "…"}
+    badge={st ? <span data-tip={st.text} style={{ fontSize: 13 }}>{stI}</span> : null}
+    zoom={p ? <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {st && <div style={{ padding: "8px 12px", borderRadius: 12, fontSize: 13, fontWeight: 800, color: "var(--text2)",
+        border: `1px solid color-mix(in srgb, ${stC} 40%, var(--border))`, background: `color-mix(in srgb, ${stC} 9%, var(--surface))` }}>{stI} {st.text}</div>}
+      <NowNextTiles pd={p} wide onOpenPrint={it => nav(`/prints?id=${it.id}`)} onPickJob={go}/>
+      <LowStockBanner jobs={jobs} now={p.now} onOpen={go}/>
+      {blocked > 0 && <BlockedList items={p.blocked} onOpen={go}/>}
+      <button type="button" onClick={go} style={{ alignSelf: "flex-start", padding: "8px 14px", borderRadius: 12, border: "none", cursor: "pointer",
+        background: `linear-gradient(135deg, ${PLAN_C}, #8B5CF6)`, color: "#fff", fontSize: 13, fontWeight: 900 }}>📅 Ouvrir le calendrier</button>
+    </div> : null}>
+    {({ W, H }) => {
+      if (!p) return <Empty>…</Empty>;
+      const live = p.live;
+      const rowH = 36, head = 22 + (live ? 34 : 0) + 22;
+      const n = Math.max(1, Math.floor((H - head) / rowH));
+      return <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 5, overflow: "hidden" }}>
+        {st && <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: stC, minWidth: 0 }}>
+          <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{stI} {st.state === "ontime" ? "Dans les temps" : st.text}</span></div>}
+        {live && <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "4px 7px", borderRadius: 10, minWidth: 0,
+          background: "color-mix(in srgb, #3B82F6 10%, var(--surface2))", border: "1px solid color-mix(in srgb, #3B82F6 30%, var(--border))" }}>
+          <span style={{ fontSize: 13 }}>⏳</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {live.title || live.name}</span>
+          <span style={{ fontSize: 11.5, fontWeight: 900, color: "#2563EB", whiteSpace: "nowrap" }}>fin {planWhen(p.busy_until, p.now)}</span></div>}
+        {jobs.slice(0, n).map(j => <div key={j.key} onClick={e => { e.stopPropagation(); go(); }} style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, cursor: "pointer",
+          opacity: unretained(j) ? 0.75 : 1 }}>
+          <PlateThumb j={j} size={28}/>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {j.locked ? "🔒 " : ""}{j.completes ? "🏁 " : ""}{j.title}{j.plates_total > 1 ? ` · ${j.plate}/${j.plates_total}` : ""}</span>
+            <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <b style={{ color: "var(--text)" }}>{planWhen(j.start, p.now)}</b> → {planHm(j.end)}{j.load?.length ? <span style={{ color: "#EA580C" }}> · 🧵</span> : ""}</span>
+          </span>
+        </div>)}
+        {!jobs.length && <Empty>Rien de prévu</Empty>}
+        <div style={{ marginTop: "auto", display: "flex", gap: 4, flexWrap: "wrap" }}>{chips}</div>
+      </div>;
+    }}
+  </Tile>;
+}
+
 // ── Donnees ──────────────────────────────────────────────────────────────────
 // Les donnees dont chaque tuile se sert (27/10/2026) : l'accueil ne demande plus que celles des tuiles posees ET
 // proches de l'ecran (avant : toutes, pour toutes les tuiles possibles, d'un coup, meme absentes de l'accueil).
@@ -663,6 +738,7 @@ export const TILE_NEEDS = {
   today: ["today", "prints", "live"], next: ["queue"], last: ["prints", "live"], stock: ["spools"], dry: ["dry"],
   friends: ["friends"], mw: ["mw"], rate: ["rate"], wheel: ["ach"], ach: ["ach"], month: ["month"], sales: ["sales"],
   feed: ["feed"], gallery: ["prints"], family: ["family"], podium: ["podium", "ach"], alerts: ["attention"], orders: ["orders"],
+  planning: ["plan"],
 };
 // lues une fois (pas relues toutes les 2 min avec le reste)
 const ONCE = new Set(["mw", "podium", "family"]);
@@ -717,6 +793,8 @@ export function useTilesData(status = null, want = null) {
       feed: () => put("feed", currentFriend() ? Promise.resolve(null) : get("/notify/me/history")),
       attention: () => put("attention", get("/attention")),
       orders: () => put("orders", get("/filaments/incoming").then(r => r.orders || [])),
+      // le planning (05/11/2026)
+      plan: () => put("plan", get("/makerworld/plan", { tz: -new Date().getTimezoneOffset() })),
       // a evaluer : relu avec le reste (une impression qui vient de finir y entre sans recharger la page)
       rate: () => put("rate", get("/makerworld/to-rate")),
       // « À faire » aussi : ce qui imprime, ce qui vient de finir, ce qui devient faisable bougent sans cesse
@@ -4979,6 +5057,7 @@ export const TILES = {
   week: { label: "Derniers jours", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Week o={o} sz={sz(it)}/>,
     options: [C("range", "Période", 7, [[7, "7 jours"], [14, "14 jours"], [30, "30 jours"]]),
       C("metric", "Compter", "h", [["h", "les heures"], ["n", "les impressions"], ["g", "les grammes"]]), B("avg", "Moyenne par jour", true)] },
+  planning: { label: "Planning", w: [1, 2], h: [2, 1, 3, 0.5], render: (d, st, o, it) => <PlanTile p={d.plan} sz={sz(it)}/> },
   next: { label: "À faire", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Next q={d.queue} o={o} sz={sz(it)}/>,
     options: [B("thumbs", "Vignettes", true), B("ready", "Seulement ce qui est prêt", false, { hint: "Les modèles imprimables tout de suite avec l'AMS (en tout ou en partie)." }),
       B("weight", "Poids", true), SCROLL(false)] },
@@ -5065,6 +5144,7 @@ export const TILES = {
 const WAIT = {
   today: ["today", "Les impressions du jour, leur réussite et l'écart avec hier."],
   next: ["queue", "Ce qui attend d'être imprimé, et ce qui est prêt tout de suite."],
+  planning: ["plan", "Ce qui imprime, les prochains plateaux et ce qui demande attention."],
   last: ["prints", "Tes dernières impressions, réussies ou non."],
   stock: ["spools", "Ce qui reste en bobines, et les plus basses."],
   dry: ["dry", "Les bobines au sec et celles à sécher."],
