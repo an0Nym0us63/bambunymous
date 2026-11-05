@@ -164,6 +164,23 @@ export default function PrintCalendar() {
       // en tete : les plateaux au jour fige y restent
       front: () => { const fr = ks.filter(k => !byKey[k]?.pinned); return arrange({ order: [...fr, ...keys.filter(k => !fr.includes(k))] }); },
       unpinAll: () => arrange({ pins: Object.fromEntries(ks.map(k => [k, null])) }),
+      // a une place choisie : ses plateaux a la suite, juste apres tel plateau (ou avant le premier du jour), leur jour fige
+      slotAll: (day, after) => {
+        const o = keys.filter(k => !ks.includes(k));
+        const firstOfDay = (pd?.jobs || []).filter(x => x.day === day && !ks.includes(x.key)).sort((a, b) => a.start.localeCompare(b.start))[0];
+        const at = after ? o.indexOf(after) + 1 : firstOfDay ? o.indexOf(firstOfDay.key) : o.length;
+        o.splice(Math.max(0, at), 0, ...ks);
+        return arrange({ order: o, pins: Object.fromEntries(ks.map(k => [k, day])) });
+      },
+      // automatique : le premier a la meilleure place de la journee, les autres juste apres lui
+      autoAll: async day => {
+        if (!ks.length) return;
+        const r = await send("/makerworld/plan/place-day", { key: ks[0], day }, "post");
+        if (!r || ks.length < 2) return;
+        const o = (r.jobs || []).map(x => x.key).filter(k => !ks.slice(1).includes(k));
+        o.splice(o.indexOf(ks[0]) + 1, 0, ...ks.slice(1));
+        return arrange({ order: o, pins: Object.fromEntries(ks.map(k => [k, day])) });
+      },
       pinAll: () => arrange({ pins: Object.fromEntries((pd?.jobs || []).filter(j => ks.includes(j.key) && !j.pinned && j.day).map(j => [j.key, j.day])) }),
       laterAll: () => j0 && send("/makerworld/plan/later", { key: j0.key, whole: true }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
       chain: mode => send("/makerworld/plan/chain", { design_id: did, mode }, "post").then(ok => { if (ok && mode) egg("planning_traite"); }),
@@ -493,7 +510,7 @@ export default function PrintCalendar() {
       {chip("Occupation", days ? `${Math.round(occ * 100)} %` : "…", "#EC4899")}
       {chip("Jours actifs", days ? `${mActive} / ${monthDays.length}` : "…", "#22C55E")}
     </div>}
-    {modelSel && <ModelSheet g={poolGroups(pd?.jobs, pd?.blocked).find(g => g.id === modelSel)} now={pd?.now} edit={edit}
+    {modelSel && <ModelSheet g={poolGroups(pd?.jobs, pd?.blocked).find(g => g.id === modelSel)} now={pd?.now} edit={edit} jobs={pd?.jobs}
       onClose={() => setModelSel(null)} onPick={setJobSel} act={modelAct(modelSel)}/>}
     {jobSel && <JobSheet j={jobSel} now={pd?.now} edit={edit} onClose={() => setJobSel(null)} act={jobAct(jobSel)} jobs={pd?.jobs}/>}
     {pop === "advice" && <PlanPopup title={`Conseils (${pd?.advice?.length || 0})`} icon="💡" color="#F59E0B" onClose={() => setPop(null)}>

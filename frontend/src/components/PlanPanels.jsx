@@ -252,10 +252,15 @@ export function PoolSummary({ jobs, blocked = [], now, onOpenModel }) {
 // La fiche d'un modele du planning (06/11/2026) : en haut ce qui vaut pour tout le modele (caler tous ses plateaux
 // sur un jour, en tete, plus tard, d'une traite, date limite…), dessous chacun de ses plateaux, a toucher pour ses
 // actions a lui. Elle reste ouverte apres une action : on voit les plateaux bouger.
-export function ModelSheet({ g, now, edit, onClose, onPick, act }) {
+export function ModelSheet({ g, now, edit, onClose, onPick, act, jobs }) {
   const { busy, run, row, dateRow } = useActRows(null);
+  const [slot, setSlot] = useState(false);            // caler tout le modele dans une journee (06/11/2026)
   if (!g) return null;
   const x = gInfo(g), f = x.f, un = unretained(f), free = x.ok.filter(j => !j.locked);
+  if (slot && jobs) return <SlotPicker j={f} jobs={jobs} now={now} own={g.jobs.map(j => j.key)} onClose={() => setSlot(false)}
+    title={`Placer ${free.length > 1 ? `ses ${free.length} plateaux` : "le plateau"}`}
+    onPick={(day, after) => run("dayall", async () => { await act.slotAll(day, after); setSlot(false); })}
+    onAuto={day => run("dayall", async () => { await act.autoAll(day); setSlot(false); })}/>;
   const today = new Date().toISOString().slice(0, 10);
   const sec = t => <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#16A34A", margin: "6px 0 2px" }}>{t}</div>;
   return <PlanPopup title={f.title} icon="🧩" color={un ? UNRET : "#22C55E"} onClose={onClose} z={5250}>
@@ -280,7 +285,10 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act }) {
             fontSize: 12, fontWeight: 700, color: "var(--text2)", lineHeight: 1.4 }}>○ Pas retenu : ses plateaux passent après tous les plateaux retenus, sans jour.
             Pour les placer, retiens son profil dans <b>Fiche du modèle</b>.</div>
           : free.length > 0 && <>
-            {dateRow("dayall", "📌", `Caler ${free.length > 1 ? `les ${free.length} plateaux` : "le plateau"} sur un jour`,
+            {jobs && act.slotAll ? row("dayall", "📍", `Placer ${free.length > 1 ? `les ${free.length} plateaux` : "le plateau"} sur un jour`,
+              `Le jour, puis leur place : automatique (la meilleure de la journée${free.length > 1 ? ", les autres à la suite" : ""}) ou celle que tu touches ; ce qui n'y tient pas passe au lendemain`,
+              () => setSlot(true))
+              : dateRow("dayall", "📌", `Caler ${free.length > 1 ? `les ${free.length} plateaux` : "le plateau"} sur un jour`,
               "Ils prennent la tête de ce jour, à la suite ; ce qui n'y tient pas passe au lendemain, puis au jour d'après", f.day, v => v && act.dayAll(v), today)}
             {row("front", "⏫", "Tout en tête de file", "Ses plateaux passent avant tous les autres (ceux posés sur un jour y retournent à la file)", () => run("front", act.front))}
             {row("later", "⏬", "Tout plus tard", "Ses plateaux passent en fin de file, dans leur ordre (un modèle retenu reste devant les non retenus)", () => run("later", act.laterAll))}
@@ -319,15 +327,16 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act }) {
 // Choisir la place d'un plateau dans une journee (06/11/2026) : le jour, ses plateaux dans l'ordre (figes, enchaines,
 // poses), et entre eux des « ici » : en premier, apres tel plateau, en dernier. Pas au milieu d'un objet « d'une traite »
 // strict (il resterait groupe) ; apres un fige, il part des que le fige est fini.
-function SlotPicker({ j, jobs, now, onClose, onPick, onAuto }) {
+function SlotPicker({ j, jobs, now, onClose, onPick, onAuto, own, title }) {
   const [day, setDay] = useState(j.day || (now || "").slice(0, 10));
-  const list = jobs.filter(x => x.key !== j.key && x.day === day && !unretained(x)).sort((a, b) => a.start.localeCompare(b.start));
+  const mine = new Set(own || [j.key]);
+  const list = jobs.filter(x => !mine.has(x.key) && x.day === day && !unretained(x)).sort((a, b) => a.start.localeCompare(b.start));
   const strict = (a, b) => a && b && a.chain_g && a.chain_g === b.chain_g && a.chain !== "soft";
   const here = (after, label) => <button key={`h${after || "0"}`} type="button" onClick={() => onPick(day, after)}
     style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "6px 10px", borderRadius: 10, cursor: "pointer", font: "inherit",
       border: "1.5px dashed color-mix(in srgb, #6366F1 55%, var(--border))", background: "color-mix(in srgb, #6366F1 7%, transparent)",
       color: "#6366F1", fontSize: 12.5, fontWeight: 900 }}>📍 {label}</button>;
-  return <PlanPopup title={`Placer ${plateTxt(j)}`} icon="📍" color="#6366F1" onClose={onClose} z={5320}>
+  return <PlanPopup title={title || `Placer ${plateTxt(j)}`} icon="📍" color="#6366F1" onClose={onClose} z={5320}>
     <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: 13, fontWeight: 800, color: "var(--text2)" }}>
       Jour
       <input type="date" value={day} min={(now || "").slice(0, 10)} onChange={e => e.target.value && setDay(e.target.value)}
