@@ -8,6 +8,7 @@ import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 import MwImg from "./MwImg";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
+import { PlanPopup, JobSheet, PoolGrouped, BlockedList } from "./PlanPanels";
 import { DayStrip, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
@@ -80,6 +81,9 @@ export default function PrintCalendar() {
   const [dragging, setDragging] = useState(null);
   const [dropDay, setDropDay] = useState(null);
   const edit = useCanMw();                            // ranger : droit MakerWorld, jamais chez un copain
+  // les fenetres (05/11/2026) : un plateau et ses actions, les conseils, la file (telephone), les non planifiables
+  const [jobSel, setJobSel] = useState(null);
+  const [pop, setPop] = useState(null);               // "advice" | "pool" | "blocked"
   const [pick, setPick] = useState(() => iso(new Date()));
   // la vue (05/11/2026) : le mois, la semaine (grille horaire ; un agenda au telephone) ou le jour
   const [view, setViewS] = useState(() => { try { return localStorage.getItem("bn_cal_view") || (window.innerWidth >= 760 ? "month" : "day"); } catch { return "month"; } });
@@ -150,6 +154,16 @@ export default function PrintCalendar() {
   const markDone = (key, undo = false) => send("/makerworld/plan/done", { key, undo }, "post");
   const colorDay = (day, fid) => send("/makerworld/plan/color-day", { day, filament_id: fid }, "post").then(ok => { if (ok) egg("planning_couleur"); });
   const optimize = day => send("/makerworld/plan/optimize", day ? { day } : {}, "post").then(ok => { if (ok) egg("planning_optimise"); });
+  const jobAct = j => ({
+    smart: () => send("/makerworld/plan/smart", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
+    later: () => send("/makerworld/plan/later", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
+    day: v => moveDay(j.key, v),
+    unpin: () => unpin(j.key),
+    sheet: () => setSheet(j.design_id),
+    dayview: () => { setPick(j.day); setView("day"); },
+    due: v => setDue(j.design_id, v),
+    done: () => markDone(j.key),
+  });
   const saveSettings = async v => { if (await send("/makerworld/plan/settings", v)) { egg("planning_consignes"); setSetOpen(false); } };
   const today = iso(new Date());
   const inMonth = d => d.getMonth() === month.getMonth();
@@ -329,7 +343,8 @@ export default function PrintCalendar() {
       {selPlan.map((j, i) => <JobCard key={j.key} j={j} edit={edit} dragging={dragging} onDrag={setDragging}
         onDropBefore={moveBefore} onUp={i ? () => moveBefore(j.key, selPlan[i - 1].key) : null}
         onDown={i < selPlan.length - 1 ? () => moveAfter(j.key, selPlan[i + 1].key) : null}
-        onDay={day => moveDay(j.key, day)} onUnpin={() => unpin(j.key)} onOpen={() => setSheet(j.design_id)} onDue={due => setDue(j.design_id, due)} onDone={() => markDone(j.key)}/>)}
+        onDay={day => moveDay(j.key, day)} onUnpin={() => unpin(j.key)} onOpen={() => setJobSel(j)} onDue={due => setDue(j.design_id, due)} onDone={() => markDone(j.key)}
+        compact={!wide}/>)}
     </>}
     {pick >= today && !selPlan.length && pd && <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
       <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
@@ -339,43 +354,25 @@ export default function PrintCalendar() {
   const openPrint = it => nav(`/prints?id=${it.id}`);
   // l'impression en cours et sa fin estimee : la grille prolonge son bloc jusque-la
   const live = pd?.live && pd?.busy_until ? { now: pd.now, end: pd.busy_until, name: pd.live.name } : null;
-  const openJob = j => pickDay(j.day);
+  const openJob = j => setJobSel(j);
   const viewMain = view === "month" ? calendar
     : view === "week" ? (wide ? <TimeGrid dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} hourPx={28}
         pick={pick} onPick={pickDay} onOpenPrint={openPrint} onOpenJob={openJob} edit={edit} onDropDay={moveDay} height={600}/>
       : <WeekAgenda dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} pick={pick}
-        onPick={k => { setPick(k); setView("day"); }} onOpenPrint={openPrint} onOpenJob={j => { setPick(j.day); setView("day"); }}/>)
+        onPick={k => { setPick(k); setView("day"); }} onOpenPrint={openPrint} onOpenJob={openJob}/>)
     : <TimeGrid dates={[pick]} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} hourPx={wide ? 46 : 40}
         pick={pick} onPick={pickDay} onOpenPrint={openPrint} onOpenJob={openJob} edit={edit} onDropDay={moveDay} height={wide ? 640 : 460}/>;
   const advice = showPlan ? <>
     <PlanDeadlines items={pd?.deadlines} edit={edit} onDue={setDue}/>
-    <PlanAdvice items={pd?.advice} edit={edit} onApply={applyAdvice}/>
     <ManualDone items={pd?.manual_done} edit={edit} onUndo={k => markDone(`${k}:0`, true)}/></> : null;
   // la file : chaque impression prevue, dans l'ordre, a glisser sur un jour du calendrier
   const pool = showPlan && pd?.jobs?.length ? <div style={{ borderRadius: 18, border: "1px solid var(--border)", background: "var(--surface)", padding: 10 }}>
     <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#22C55E", marginBottom: 7 }}>
-      La file · {pd.jobs.length} plateau{pd.jobs.length > 1 ? "x" : ""}{edit && wide ? " · glisse-les sur un jour" : ""}
+      La file · {pd.jobs.length} plateau{pd.jobs.length > 1 ? "x" : ""}{edit && wide ? " · glisse un plateau sur un jour, touche-le pour ses actions" : ""}
       {pd.jobs.some(unretained) && <span style={{ display: "block", marginTop: 3, fontSize: 11, fontWeight: 700, letterSpacing: 0, textTransform: "none", color: "var(--muted)" }}>
         ○ en gris : modèles pas retenus dans « À faire » (profil par défaut), planifiés après les retenus.</span>}</div>
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-      {pd.jobs.slice(0, 60).map(j => <button key={j.key} type="button" draggable={edit}
-        onDragStart={e => { e.dataTransfer.setData("text/bn-job", j.key); setDragging(j.key); }} onDragEnd={() => setDragging(null)}
-        onClick={() => pickDay(j.day)} data-tip={`${jobName(j)} · ${hm(j.seconds)}`}
-        style={{ display: "inline-flex", alignItems: "center", gap: 7, width: 240, maxWidth: "100%", padding: "4px 8px 4px 4px", borderRadius: 11, cursor: edit ? "grab" : "pointer",
-          border: `1.5px ${j.completes ? "solid" : "dashed"} ${j.too_long ? "#EF4444" : unretained(j) ? UNRET : j.completes ? "#EAB308" : "color-mix(in srgb, #22C55E 45%, var(--border))"}`,
-          background: "var(--surface2)", opacity: dragging === j.key ? 0.4 : 1 }}>
-        <PlateThumb j={j} size={34}/>
-        <span style={{ minWidth: 0, textAlign: "left" }}>
-          <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {j.completes ? "🏁 " : ""}{unretained(j) ? "○ " : ""}{j.title}</span>
-          <span style={{ display: "block", fontSize: 10.5, fontWeight: 800, color: "#6366F1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {plateTxt(j)}{j.qty > 1 ? ` · ${j.copy}/${j.qty}` : ""}</span>
-          <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: j.load?.length ? "#F97316" : "var(--muted)" }}>
-            {new Date(`${j.day}T12:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })} {j.start.slice(11, 16)} · {hm(j.seconds)}{j.load?.length ? " · 🧵" : ""}
-            {j.due && <span style={{ color: j.due_ok ? "#16A34A" : "#EF4444", fontWeight: 900 }}> · 🎯 {dueTxt(j.due)}</span>}</span>
-        </span>
-      </button>)}
-    </div>
+    {/* regroupee par objet (05/11/2026) : son en-tete, puis ses plateaux */}
+    <PoolGrouped jobs={pd.jobs} now={pd.now} edit={edit} drag={wide} onDrag={setDragging} onOpen={j => setJobSel(j)}/>
   </div> : null;
   return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
     {/* le mois et ses chiffres */}
@@ -402,9 +399,17 @@ export default function PrintCalendar() {
       {edit && nPlanned > 1 && <button type="button" onClick={() => optimize(null)}
         data-tip="Enchaîner les plateaux de mêmes couleurs dans toute la file (les impressions posées sur un jour ne bougent pas)"
         style={{ ...pill, color: "#6366F1" }}>✨ Optimiser la file</button>}
+      {showPlan && pd?.advice?.length > 0 && <button type="button" onClick={() => setPop("advice")} data-tip="Les conseils du planning"
+        style={{ ...pill, color: "#D97706", borderColor: "color-mix(in srgb, #F59E0B 45%, var(--border))", background: "color-mix(in srgb, #F59E0B 10%, var(--surface2))" }}>
+        💡 {pd.advice.length}</button>}
+      {showPlan && pd?.blocked?.length > 0 && <button type="button" onClick={() => setPop("blocked")} data-tip="Plateaux que le stock et les commandes ne permettent pas de poser"
+        style={{ ...pill, color: "#DC2626", borderColor: "color-mix(in srgb, #DC2626 45%, var(--border))", background: "color-mix(in srgb, #DC2626 9%, var(--surface2))" }}>
+        ⛔ {pd.blocked.length} non planifiable{pd.blocked.length > 1 ? "s" : ""}</button>}
+      {showPlan && !side && pd?.jobs?.length > 0 && <button type="button" onClick={() => setPop("pool")} data-tip="La file : chaque plateau prévu, par objet"
+        style={{ ...pill, color: "#16A34A", borderColor: "color-mix(in srgb, #22C55E 45%, var(--border))" }}>📋 La file ({pd.jobs.length})</button>}
     </div>
     {pd?.status && showPlan && <PlanStatus st={pd.status} live={null} check={pd.check}/>}
-    {pd && showPlan && <NowNextTiles pd={pd} wide={wide} onOpenPrint={it => nav(`/prints?id=${it.id}`)} onPickJob={j => pickDay(j.day)}/>}
+    {pd && showPlan && <NowNextTiles pd={pd} wide={wide} onOpenPrint={it => nav(`/prints?id=${it.id}`)} onPickJob={j => setJobSel(j)}/>}
     {showPlan && (pd?.deadlines || []).filter(x => !x.ok).map(x => <PlanStatus key={x.design_id}
       st={{ state: "deadline", text: `${x.title} ne sera pas fini avant le ${dueTxt(x.due)} : voir les conseils` }}/>)}
     {setOpen && <PlanSettings s={pd?.settings} onSave={saveSettings} onClose={() => setSetOpen(false)}/>}
@@ -414,10 +419,17 @@ export default function PrintCalendar() {
       {chip("Occupation", days ? `${Math.round(occ * 100)} %` : "…", "#EC4899")}
       {chip("Jours actifs", days ? `${mActive} / ${monthDays.length}` : "…", "#22C55E")}
     </div>}
+    {jobSel && <JobSheet j={jobSel} now={pd?.now} edit={edit} onClose={() => setJobSel(null)} act={jobAct(jobSel)}/>}
+    {pop === "advice" && <PlanPopup title={`Conseils (${pd?.advice?.length || 0})`} icon="💡" color="#F59E0B" onClose={() => setPop(null)}>
+      <PlanAdvice items={pd?.advice} edit={edit} onApply={a => { applyAdvice(a); setPop(null); }}/></PlanPopup>}
+    {pop === "blocked" && <PlanPopup title="Non planifiables" icon="⛔" color="#DC2626" onClose={() => setPop(null)}>
+      <BlockedList items={pd?.blocked || []} onOpen={b => { setPop(null); setJobSel(b); }}/></PlanPopup>}
+    {pop === "pool" && <PlanPopup title={`La file · ${pd?.jobs?.length || 0} plateaux`} icon="📋" color="#22C55E" onClose={() => setPop(null)}>
+      <PoolGrouped jobs={pd?.jobs || []} now={pd?.now} edit={edit} onOpen={j => { setPop(null); setJobSel(j); }}/></PlanPopup>}
     {side ? <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 12, alignItems: "start" }}>
       <div {...swipeProps} style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>{viewMain}{pool}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 12, maxHeight: "calc(100dvh - 40px)", overflowY: "auto" }}>{detail}{advice}</div>
-    </div> : <><div {...swipeProps}>{viewMain}</div>{advice}{view === "week" ? null : detail}{pool}</>}
+    </div> : <><div {...swipeProps}>{viewMain}</div>{advice}{view === "week" ? null : detail}</>}
     {sheet && <MakerWorldModelSheet designId={String(sheet)} onClose={() => { setSheet(null);
       client.get("/makerworld/plan", { params: { tz: -new Date().getTimezoneOffset() } }).then(r => setPd(r.data)).catch(() => {}); }}/>}
   </div>;

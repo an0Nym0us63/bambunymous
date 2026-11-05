@@ -89,7 +89,7 @@ export const UNRET = "#94A3B8";
 export const unretained = j => j && j.retained === false;
 export const plateTxt = j => j.plates_total > 1 ? `Plateau ${j.plate}/${j.plates_total}${pname(j) ? ` · ${pname(j)}` : ""}`
   : pname(j) || "Plateau unique";
-export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, onUnpin, onOpen, onDue, onDone, dragging }) {
+export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, onUnpin, onOpen, onDue, onDone, dragging, compact = false }) {
   const [over, setOver] = useState(false);
   const drift = j.drift_min;
   const tag = (txt, c, tip) => <span data-tip={tip} style={{ fontSize: 11, fontWeight: 900, whiteSpace: "nowrap", color: c, borderRadius: 7, padding: "1px 7px",
@@ -99,7 +99,8 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
     onDragOver={e => { if (edit && e.dataTransfer.types.includes("text/bn-job")) { e.preventDefault(); e.stopPropagation(); setOver(true); } }}
     onDragLeave={() => setOver(false)}
     onDrop={e => { const k = e.dataTransfer.getData("text/bn-job"); setOver(false); if (k && k !== j.key) { e.preventDefault(); e.stopPropagation(); onDropBefore?.(k, j.key); } }}
-    style={{ display: "flex", flexDirection: "column", gap: 6, padding: 8, borderRadius: 13, cursor: edit ? "grab" : "default", opacity: dragging === j.key ? 0.45 : 1,
+    onClick={compact ? onOpen : undefined}
+    style={{ display: "flex", flexDirection: "column", gap: 6, padding: 8, borderRadius: 13, cursor: compact ? "pointer" : edit ? "grab" : "default", opacity: dragging === j.key ? 0.45 : 1,
       border: `1.5px ${j.completes ? "solid" : "dashed"} ${j.too_long ? "#EF4444" : unretained(j) ? UNRET : j.completes ? GOLD : "color-mix(in srgb, #22C55E 50%, var(--border))"}`,
       boxShadow: over ? "0 -3px 0 0 #6366F1" : "none",
       background: j.completes ? `linear-gradient(120deg, color-mix(in srgb, ${GOLD} 14%, transparent), transparent 60%), var(--surface2)`
@@ -124,7 +125,9 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
         </div>
       </div>
     </div>
-    {(j.completes || j.due || j.load?.length > 0 || unretained(j)) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+    {(j.completes || j.due || j.load?.length > 0 || unretained(j) || j.awaits_order?.length > 0 || j.low_after?.length > 0) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+      {j.awaits_order?.length > 0 && tag(`🚚 compte sur la commande : ${j.awaits_order.join(", ")}`, "#0EA5E9", "Le stock ne suffit pas : ce plateau prend sur une bobine commandée, pas encore reçue")}
+      {j.low_after?.length > 0 && tag(`📉 sous le seuil : ${j.low_after.join(", ")}`, "#DC2626", "Après ce plateau, il restera moins d'un quart de bobine de ce filament")}
       {unretained(j) && tag("○ non retenu", "#64748B", "Profil par défaut, pas retenu dans « À faire » : planifié après les modèles retenus. Retiens-le depuis sa fiche (sa vignette) pour le planifier en priorité")}
       {j.completes && tag(doneTxt(j), "#A16207", "Avec ce plateau, tous ceux de l'objet sont faits")}
       {j.due && tag(`🎯 avant le ${dueTxt(j.due)}`, j.due_ok ? "#16A34A" : "#EF4444", j.due_ok ? "L'objet sera fini à temps" : "Le dernier plateau de l'objet finit après cette date")}
@@ -135,7 +138,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
       🔄 Décalé {j.moved.from < j.day ? "depuis" : "avancé du"} {dueTxt(j.moved.from)} à {hhmm(j.moved.at)} : {j.moved.why}</div>}
     {(j.reasons || []).map((r, i) => <div key={i} style={{ fontSize: 11.5, fontWeight: 600, lineHeight: 1.35,
       color: j.too_long && i === j.reasons.length - 1 ? "#EF4444" : "var(--muted)" }}>↪ {r}</div>)}
-    {edit && <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", flexWrap: "wrap", borderTop: "1px dashed var(--border)", paddingTop: 6 }}>
+    {edit && !compact && <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", flexWrap: "wrap", borderTop: "1px dashed var(--border)", paddingTop: 6 }}>
       <button type="button" onClick={onUp} disabled={!onUp} aria-label="Plus tôt" data-tip="Plus tôt" style={act}>↑</button>
       <button type="button" onClick={onDown} disabled={!onDown} aria-label="Plus tard" data-tip="Plus tard" style={act}>↓</button>
       <label data-tip="Le poser sur un autre jour" style={{ ...act, position: "relative" }}>📅 Jour
