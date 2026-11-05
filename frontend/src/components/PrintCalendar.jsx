@@ -7,7 +7,7 @@ import { showAlert } from "../utils/dialog";
 import { toast } from "../store/toast";
 import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
-import MwImg from "./MwImg";
+import MwImg, { thumbSrc } from "./MwImg";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
 import { PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, poolGroups, BlockedList, LowStockBanner } from "./PlanPanels";
 import { OPT_MODES, DayStrip, onDay, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained } from "./PlanDay";
@@ -349,7 +349,7 @@ export default function PrintCalendar() {
                   border: done ? `2px solid ${c}` : `${j.completes ? 2 : 1.5}px ${j.completes ? "solid" : "dashed"} ${c}` }}>
                   {done ? <img src={img} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
                     : j.thumb ? <MwImg src={j.thumb} w={Math.max(64, mos.size * 2)} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
-                    : j.cover ? <img src={apiThumb(j.cover, 96)} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }}/> : null}
+                    : j.cover ? <img src={thumbSrc(j.cover, 96)} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }}/> : null}
                   {!done && j.plates_total > 1 && mos.size >= 26 && <span style={{ position: "absolute", left: 1, bottom: 1, padding: "0 3px", borderRadius: 5,
                     background: "rgba(15,23,42,.75)", color: "#fff", fontSize: 8.5, fontWeight: 900, lineHeight: "12px" }}>{j.plate}</span>}
                 </span>;

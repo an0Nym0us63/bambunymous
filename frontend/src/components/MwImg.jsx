@@ -23,6 +23,14 @@ export function mwImg(url, w, animate = false) {
   } catch { return url; }
 }
 
+// Une vignette, d'ou qu'elle vienne (06/11/2026) : une image de l'API est reduite par le serveur, une image MakerWorld par
+// son CDN (sinon elle arrivait en pleine taille, plusieurs Mo pour une vignette)
+export function thumbSrc(url, w) {
+  if (!url || typeof url !== "string") return url;
+  if (url.startsWith("/api/")) return `${url}${url.includes("?") ? "&" : "?"}w=${w}`;
+  return mwImg(url, w / Math.min(2, (typeof window !== "undefined" && window.devicePixelRatio) || 1));
+}
+
 // <img> qui apparait en fondu une fois chargee (pas de saut ni de flash).
 export default function MwImg({ src, w = 300, style, eager = false, animate = false, ...rest }) {
   const [ok, setOk] = useState(false);

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { apiUrl, apiThumb } from "../api/client";
-import MwImg from "./MwImg";
+import MwImg, { thumbSrc } from "./MwImg";
 import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift } from "./PlanDay";
 import { ST, iso, DAYS } from "./PrintCalendar";
 
@@ -45,7 +45,7 @@ function Thumb({ e, size }) {
   if (e.kind === "done") return <img src={apiThumb(apiUrl(`/prints/${e.it.id}/image`), 96)} alt="" loading="lazy" style={st}
     onError={x => { x.currentTarget.style.visibility = "hidden"; }}/>;
   return e.j.thumb ? <MwImg src={e.j.thumb} w={96} style={{ ...st, objectFit: "contain" }}/>
-    : e.j.cover ? <img src={apiThumb(e.j.cover, 96)} alt="" loading="lazy" style={st}/> : <span style={{ ...st, display: "inline-block" }}/>;
+    : e.j.cover ? <img src={thumbSrc(e.j.cover, 96)} alt="" loading="lazy" style={st}/> : <span style={{ ...st, display: "inline-block" }}/>;
 }
 
 // la grille horaire d'un ou plusieurs jours

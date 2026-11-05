@@ -81,7 +81,9 @@ export function PlateThumb({ j, size = 52, onClick }) {
   return <span onClick={onClick} data-tip={onClick ? "Profil, plateaux et filaments retenus" : undefined}
     style={{ position: "relative", width: size, height: size, borderRadius: 10, flexShrink: 0, overflow: "hidden", cursor: onClick ? "pointer" : "default",
       background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-    {src ? (j.thumb ? <MwImg src={src} w={size * 2} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
+    {/* une image MakerWorld (couverture du modele ou du profil) passe par la reduction de son CDN (06/11/2026 : apiThumb ne
+        reduit que les images de l'API ; la file chargeait des couvertures de plusieurs Mo pour des vignettes de 60 px) */}
+    {src ? (j.thumb || !String(src).startsWith("/api/") ? <MwImg src={src} w={size * 2} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
       : <img src={apiThumb(src, size * 2)} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }}
         onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>) : <span style={{ fontSize: size / 3 }}>🧩</span>}
     {j.plates_total > 1 && <span style={{ position: "absolute", left: 2, bottom: 2, minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8,
