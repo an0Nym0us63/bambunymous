@@ -17,6 +17,8 @@ Ce que l'on range (meme reglage) :
   base  : {"design:plateau": n} les impressions reussies deja comptees quand le plateau est entre dans le planning :
           un exemplaire imprime depuis sort du planning ;
   plan0 : {cle: debut prevu} le planning tel qu'il etait au dernier rangement, pour dire l'avance ou le retard ;
+  deadlines : {design: "AAAA-MM-JJ"} un objet a finir AVANT ce jour (« la fusee avant le 24 ») : son dernier plateau
+          doit finir avant minuit la veille ; le planning previent quand il deborde, l'optimiseur ne le sacrifie pas ;
   tz    : decalage horaire du navigateur (minutes), pour la boucle des rappels.
 
 Un travail : un plateau d'un modele (ou le modele entier quand ses plateaux ne disent pas leur duree), un
@@ -50,7 +52,7 @@ async def _load() -> dict:
     d = d if isinstance(d, dict) else {}
     for k, v in DEFAULTS.items():
         d.setdefault(k, v)
-    for k in ("pins", "base", "plan0", "notified"):
+    for k in ("pins", "base", "plan0", "notified", "deadlines"):
         if not isinstance(d.get(k), dict):
             d[k] = {}
     if not isinstance(d.get("order"), list):
@@ -370,11 +372,40 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
     return {"jobs": placed, "days": days}
 
 
+def deadlines(placed: list, d: dict, now: datetime) -> list:
+    """Chaque objet a date limite : son dernier plateau, la date, tient-il ? (marge ou retard, en minutes)."""
+    out = []
+    for did, due in (d.get("deadlines") or {}).items():
+        mine = [j for j in placed if j["design_id"] == did]
+        if not mine:
+            continue
+        try:
+            limit = datetime.strptime(due, "%Y-%m-%d")
+        except ValueError:
+            continue
+        last = max(mine, key=lambda j: j["end"])
+        end = datetime.fromisoformat(last["end"])
+        out.append({"design_id": did, "title": mine[0]["title"], "cover": mine[0]["cover"], "due": due,
+                    "end": last["end"], "last_key": last["key"], "count": len(mine), "ok": end <= limit,
+                    "margin_min": int((limit - end).total_seconds() // 60), "keys": [j["key"] for j in mine]})
+    return sorted(out, key=lambda x: x["due"])
+
+
+def _late(m: int) -> str:
+    """Un retard en minutes, en jours au-dela de 24 h (« 1 j 11 h »)."""
+    return _dur(m * 60) if m < 1440 else f"{m // 1440} j{f' {m % 1440 // 60} h' if m % 1440 >= 60 else ''}"
+
+
+def _due_txt(due: str) -> str:
+    t = datetime.strptime(due, "%Y-%m-%d")
+    return f"{t.day} {['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'][t.month - 1]}"
+
+
 def _sig(j) -> frozenset:
     return frozenset(f["filament_id"] for f in j["fils"] if f.get("filament_id"))
 
 
-def advice(placed: list, d: dict, now: datetime) -> list:
+def advice(placed: list, d: dict, now: datetime, dls: list | None = None, fix=None) -> list:
     """Les petits conseils : enchainer les memes couleurs, remplir un creux, ce qu'il faut charger, ce qui ne
     peut pas respecter les consignes. Chacun peut porter une action (deplacer un travail)."""
     out = []
@@ -417,6 +448,19 @@ def advice(placed: list, d: dict, now: datetime) -> list:
                         "action": {"kind": "before", "key": b["key"], "ref": a["key"], "day": s.date().isoformat()}})
             n += 1
             break
+    # 0. une date limite depassee : en tete de liste
+    for x in dls or []:
+        if x["ok"]:
+            continue
+        end = datetime.fromisoformat(x["end"])
+        late = _late(-x["margin_min"])
+        ok_front = fix(x["keys"]) if fix else None
+        txt = (f"{x['title']} : son dernier plateau finit {_day_fr(end, today)} à {_fmt(end)}, {late} après ta date "
+               f"(fini avant le {_due_txt(x['due'])}). ")
+        txt += ("Passe ses plateaux en tête de file : il tient." if ok_front else
+                "Même en tête de file il ne tiendrait pas : élargis les heures, ou recule la date.")
+        out.insert(0, {"kind": "deadline", "icon": "🎯", "text": txt,
+                       **({"action": {"kind": "front", "keys": x["keys"]}} if ok_front else {})})
     # 3. ce qu'il faut charger pour les prochaines
     for j in placed[:4]:
         if j["load"]:
@@ -502,11 +546,83 @@ async def plan(tz: int | None = None) -> dict:
                       "text": f"{_dur(-first['drift_min'] * 60)} d'avance : la suite est avancée d'autant"}
         else:
             status = {"state": "ontime", "late_min": 0, "text": "Dans les temps"}
+    dls = deadlines(r["jobs"], d, now)
+    due_of = {x["design_id"]: x for x in dls}
+    for j in r["jobs"]:
+        x = due_of.get(j["design_id"])
+        if x:
+            j["due"], j["due_ok"] = x["due"], x["ok"]
+
+    def fix(ks):
+        # en tete de file, cet objet tiendrait-il sa date ?
+        o = ks + [j["key"] for j in jobs if j["key"] not in set(ks)]
+        rr = place(_ordered(jobs, o), d, now, busy, loaded, _slots())
+        return all(x["ok"] for x in deadlines(rr["jobs"], d, now) if x["keys"] and x["keys"][0] in set(ks))
     return {"settings": {k: d[k] for k in DEFAULTS}, "now": now.isoformat(timespec="minutes"),
             "busy_until": busy.isoformat(timespec="minutes") if busy else None,
             "live": {"name": live[1], "design_id": live[2], "remaining_min": live[0]} if live else None,
-            "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now), "status": status,
-            "loaded": sorted(loaded)}
+            "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix), "status": status,
+            "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded)}
+
+
+def colors(placed: list) -> list:
+    """Les filaments de la file, pour la journee couleur : combien de plateaux et d'heures chacun."""
+    out = {}
+    for j in placed:
+        for f in j["fils"]:
+            fid = f.get("filament_id")
+            if not fid:
+                continue
+            x = out.setdefault(fid, {"filament_id": fid, "name": f.get("name"), "color": f.get("color"),
+                                     "colors_array": f.get("colors_array"), "multicolor_type": f.get("multicolor_type"),
+                                     "count": 0, "seconds": 0})
+            x["count"] += 1
+            x["seconds"] += j["seconds"]
+    return sorted(out.values(), key=lambda x: -x["count"])
+
+
+async def set_deadline(design_id: str, due) -> dict:
+    """La date limite d'un objet (« fini avant le »), ou None pour la retirer."""
+    d = await _load()
+    did = str(design_id)
+    if due:
+        try:
+            datetime.strptime(str(due), "%Y-%m-%d")
+        except ValueError:
+            raise PlanError("Date invalide")
+        d["deadlines"][did] = str(due)
+    else:
+        d["deadlines"].pop(did, None)
+    d["notified"].pop(f"due:{did}", None)
+    await _save(d)
+    return await plan()
+
+
+async def color_day(day: str, fid: int) -> dict:
+    """La journee couleur : tous les plateaux de la file qui utilisent ce filament, de tous les objets, poses sur ce
+    jour a la suite (ce qui n'y tient pas passe au lendemain et le dit)."""
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except ValueError:
+        raise PlanError("Jour invalide")
+    d, now, jobs, _, loaded, live, busy = await _context(None)
+    jobs = _ordered(jobs, d["order"])
+    r = place(jobs, d, now, busy, loaded, _slots())
+    # un objet a finir avant ce jour (ou ce jour meme) n'y est pas emmene : il raterait sa date
+    dl = d.get("deadlines") or {}
+    mine = [j["key"] for j in r["jobs"] if any(f.get("filament_id") == fid for f in j["fils"])
+            and not (dl.get(j["design_id"]) and dl[j["design_id"]] <= day)]
+    if not mine:
+        raise PlanError("Aucun plateau de la file n'utilise ce filament (ou ils ont une date limite avant ce jour)")
+    # un seul filament d'abord (ils s'enchainent sans rien charger), puis ceux qui en melangent d'autres
+    one = {j["key"] for j in r["jobs"] if _sig(j) == frozenset([fid])}
+    mine.sort(key=lambda k: k not in one)
+    rest = [j["key"] for j in r["jobs"] if j["key"] not in set(mine)]
+    at = 0
+    for i, k in enumerate(rest):
+        if next(j for j in r["jobs"] if j["key"] == k)["day"] <= day:
+            at = i + 1
+    return await arrange({"order": rest[:at] + mine + rest[at:], "pins": {k: day for k in mine}})
 
 
 async def arrange(body: dict) -> dict:
@@ -555,7 +671,17 @@ async def optimize_plan(day: str | None = None) -> dict:
                               "pins": {j["key"]: day for j in best}})
     free = [j for j in jobs if j["key"] not in d["pins"]]
     best = optimize(free, loaded)
-    return await arrange({"order": _replace([j["key"] for j in jobs], [j["key"] for j in free], [j["key"] for j in best])})
+    order = _replace([j["key"] for j in jobs], [j["key"] for j in free], [j["key"] for j in best])
+    # enchainer les couleurs ne doit pas faire deborder une date limite : un objet qui ne tient pas passe en tete,
+    # les dates les plus proches d'abord (s'il ne tient pas meme en tete, il y reste : c'est le plus urgent)
+    for _ in range(3):
+        r = place(_ordered(jobs, order), d, now, busy, loaded, _slots())
+        broke = [x for x in deadlines(r["jobs"], d, now) if not x["ok"] and order[:len(x["keys"])] != x["keys"]]
+        if not broke:
+            break
+        front = [k for x in broke for k in x["keys"]]
+        order = front + [k for k in order if k not in set(front)]
+    return await arrange({"order": order})
 
 
 def _replace(order: list, old: list, new: list) -> list:
@@ -570,15 +696,36 @@ async def tick(cfg) -> int:
     un second rappel. Un rappel par travail."""
     from . import notify as N
     r = await plan()
+    sent = 0
+    d = await _load()
+    changed = False
+    for x in r.get("deadlines") or []:
+        k = f"due:{x['design_id']}"
+        if x["ok"]:
+            if d["notified"].pop(k, None):
+                changed = True
+            continue
+        if d["notified"].get(k):
+            continue
+        d["notified"][k] = 1
+        changed = True
+        end = datetime.fromisoformat(x["end"])
+        today = datetime.fromisoformat(r["now"]).date()
+        await N.notify("plan_deadline", f"🎯 {x['title']} ne sera pas fini avant le {_due_txt(x['due'])}",
+                       f"Son dernier plateau finit {_day_fr(end, today)} à {_fmt(end)}, {_late(-x['margin_min'])} trop tard.\n"
+                       f"Le planning propose quoi faire.", click=N.app_link(cfg, "/prints?tab=calendar"), priority=3)
+        sent += 1
+    if changed:
+        await _save(d)
     st, j = r.get("status"), (r.get("jobs") or [None])[0]
     if not st or not j or st["state"] != "due":
-        return 0
+        return sent
     d = await _load()
     seen = d["notified"].get(j["key"]) or 0
     step = 2 if st["late_min"] >= 30 else 1
     if seen >= step:
         return 0
-    d["notified"] = {k: v for k, v in d["notified"].items() if k in {x["key"] for x in r["jobs"]}}
+    d["notified"] = {k: v for k, v in d["notified"].items() if k in {x["key"] for x in r["jobs"]} or k.startswith("due:")}
     d["notified"][j["key"]] = step
     await _save(d)
     name = _title(j)
@@ -590,4 +737,4 @@ async def tick(cfg) -> int:
         lines.append(f"Ensuite : {nx['title']}")
     title = f"⏰ En retard de {_dur(st['late_min'] * 60)} : {name}" if step == 2 else f"⏰ À lancer : {name}"
     await N.notify("plan_due", title, "\n".join(lines), click=N.app_link(cfg, "/prints?tab=calendar"), priority=3)
-    return 1
+    return sent + 1

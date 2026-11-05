@@ -400,6 +400,26 @@ async def mw_plan_arrange(body: dict = Body({}), _: str = Depends(require_mw)):
         raise HTTPException(400, str(e))
 
 
+@router.put("/plan/deadline/{design_id}")
+async def mw_plan_deadline(design_id: str, body: dict = Body({}), _: str = Depends(require_mw)):
+    """La date limite d'un objet : {due: "AAAA-MM-JJ"} (fini AVANT ce jour) ou {due: null}."""
+    from ....services import planner as P
+    try:
+        return await P.set_deadline(design_id, body.get("due"))
+    except P.PlanError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/plan/color-day")
+async def mw_plan_color_day(body: dict = Body({}), _: str = Depends(require_mw)):
+    """La journee couleur : {day, filament_id} -> tous les plateaux de la file qui l'utilisent, poses sur ce jour."""
+    from ....services import planner as P
+    try:
+        return await P.color_day(str(body.get("day") or ""), int(body.get("filament_id") or 0))
+    except (P.PlanError, ValueError) as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/plan/optimize")
 async def mw_plan_optimize(body: dict = Body({}), _: str = Depends(require_mw)):
     """Enchainer les memes couleurs : toute la file, ou un jour ({day})."""

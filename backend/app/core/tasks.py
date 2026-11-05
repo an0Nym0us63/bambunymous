@@ -24,7 +24,7 @@ CATALOG = {
     "mw_3d":        ("Vues 3D", "Prépare les vues 3D des 3MF d'origine pas encore converties : 90 s après le démarrage, puis toutes les 12 h.", "MakerWorld"),
     "friends":      ("Copains", "Débuts et fins d'impression des copains, pour les notifications : toutes les 5 min.", "Notifications"),
     "mw_rate":      ("Impressions à évaluer", "Rappelle les modèles MakerWorld à évaluer : toutes les 6 h.", "Notifications"),
-    "notify_extra": ("Points d'attention", "Alertes, résumé de la semaine, imprimante au repos, impression du planning à lancer : toutes les 15 min.", "Notifications"),
+    "notify_extra": ("Points d'attention", "Alertes, résumé de la semaine, imprimante au repos, impression du planning à lancer, date limite du planning dépassée : toutes les 15 min.", "Notifications"),
     "update":       ("Nouvelle version", "Regarde si une nouvelle version de l'appli est publiée : toutes les 6 h.", "Notifications"),
     "ach_watch":    ("Relevés des succès", "Relève l'imprimante et les copains pour les succès.", "Succès"),
     "sensors":      ("Relevés des capteurs", "Humidité et température des AMS, buses, plateau, chambre : toutes les 5 min (chaque minute en impression), et les événements de la machine ; gardés 7 jours.", "Impressions"),

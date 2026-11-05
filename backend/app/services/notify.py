@@ -510,6 +510,16 @@ EVENTS["plan_due"] = {
     "sample": {"title": "⏰ À lancer : Lampe lune · plateau 2", "priority": 3, "attach": _SAMPLE_COVER, "link": "/prints?tab=calendar",
                "message": "⏱ 3 h 20 · prévue à 14 h\n🧵 À charger : PLA Matte Turquoise\nEnsuite : Vase spirale"},
 }
+EVENTS["plan_deadline"] = {
+    "section": "prints", "label": "Date limite du planning dépassée",
+    "description": "Un objet du planning à finir avant une date (« la fusée avant le 24 ») ne tient plus : son dernier plateau "
+                   "finit trop tard, parce qu'une impression a pris du retard ou que d'autres ont été intercalées. Une fois, "
+                   "de nouveau s'il se rétablit puis déborde encore (relevé toutes les 15 min).",
+    "options": [],
+    "sample": {"title": "🎯 Fusée lunaire ne sera pas finie avant le 24 décembre", "priority": 3, "attach": _SAMPLE_COVER,
+               "link": "/prints?tab=calendar",
+               "message": "Son dernier plateau finit mardi 24 à 3 h, 3 h trop tard.\nLe planning propose quoi faire."},
+}
 EVENTS["dry_needed_loaded"] = {
     "section": "dry", "label": "Bobine à sécher dans l'AMS",
     "description": "Une bobine chargée dans l'AMS n'a jamais été séchée, ou plus depuis son délai (une fois par bobine, jusqu'à son séchage).",
@@ -526,7 +536,7 @@ EVENTS["dry_forgotten"] = {
 }
 
 # Ordre d'affichage dans chaque section
-_ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_end", "print_overdue", "print_done", "print_failed", "plan_due",
+_ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_end", "print_overdue", "print_done", "print_failed", "plan_due", "plan_deadline",
           "print_paused", "print_resumed", "print_speed",
           "printer_hms", "printer_offline", "bed_cooled", "printer_firmware",
           "dry_started", "dry_done", "dry_needed_loaded", "dry_forgotten",

@@ -56,7 +56,8 @@ const Dot = ({ f }) => <span data-tip={f.name} style={{ width: 11, height: 11, b
 
 // un travail prevu : vignette, nom, heures, filaments (ceux a charger en orange), pourquoi il est la ; on le range
 // en le glissant (ordinateur) ou avec ses boutons (telephone)
-export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, onUnpin, onOpen, dragging }) {
+export const dueTxt = d => new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, onUnpin, onOpen, onDue, dragging }) {
   const [over, setOver] = useState(false);
   const drift = j.drift_min;
   return <div draggable={edit} onDragStart={e => { e.dataTransfer.setData("text/bn-job", j.key); e.dataTransfer.effectAllowed = "move"; onDrag?.(j.key); }}
@@ -78,6 +79,8 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
         <span style={{ whiteSpace: "nowrap" }}>{hhmm(j.start)} → {j.end.slice(0, 10) !== j.start.slice(0, 10) ? "lendemain " : ""}{hhmm(j.end)} · {hm(j.seconds)}</span>
         {Math.abs(drift) >= 10 && <span style={{ fontWeight: 900, color: drift > 0 ? "#F97316" : "#22C55E" }}>{drift > 0 ? `+${hm(drift * 60)}` : `−${hm(-drift * 60)}`}</span>}
         <span style={{ display: "inline-flex", gap: 3 }}>{(j.fils || []).slice(0, 8).map((f, i) => <Dot key={i} f={f}/>)}</span>
+        {j.due && <span data-tip={j.due_ok ? "L'objet sera fini à temps" : "Le dernier plateau de l'objet finit après cette date"}
+          style={{ fontWeight: 900, whiteSpace: "nowrap", color: j.due_ok ? "#16A34A" : "#EF4444" }}>🎯 avant le {dueTxt(j.due)}</span>}
       </span>
       {j.load?.length > 0 && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#F97316" }}>🧵 À charger : {j.load.join(", ")}</span>}
       {(j.reasons || []).map((r, i) => <span key={i} style={{ fontSize: 11.5, fontWeight: 600, color: j.too_long && i === j.reasons.length - 1 ? "#EF4444" : "var(--text2)",
@@ -90,6 +93,9 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
       </span>
       <label data-tip="La poser sur un autre jour" style={{ ...mini, position: "relative", width: "auto" }}>📅
         <input type="date" value={j.day} min={new Date().toISOString().slice(0, 10)} onChange={e => e.target.value && onDay(e.target.value)}
+          style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%" }}/></label>
+      <label data-tip={j.due ? "Changer la date limite de l'objet" : "Une date limite pour l'objet : fini avant ce jour"} style={{ ...mini, position: "relative", width: "auto" }}>🎯
+        <input type="date" value={j.due || ""} onChange={e => onDue(e.target.value || null)}
           style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%" }}/></label>
       {j.pinned && <button type="button" onClick={onUnpin} data-tip="La rendre à la file : elle se place où elle tient" style={mini}>✕</button>}
     </span>}
@@ -135,6 +141,46 @@ export function PlanSettings({ s, onSave, onClose }) {
     </div>
     <button type="button" disabled={busy} onClick={save} style={{ alignSelf: "flex-end", padding: "8px 16px", borderRadius: 12, border: "none", cursor: "pointer",
       background: "linear-gradient(135deg, #6366F1, #8B5CF6)", color: "#fff", fontSize: 13, fontWeight: 900 }}>{busy ? "…" : "Enregistrer"}</button>
+  </div>;
+}
+
+// les objets a finir avant une date : tiennent-ils ? (« la fusee avant le 24 »)
+export function PlanDeadlines({ items, edit, onDue }) {
+  if (!items?.length) return null;
+  const late = m => { m = Math.abs(m); return m < 1440 ? hm(m * 60) : `${Math.floor(m / 1440)} j${m % 1440 >= 60 ? ` ${Math.floor(m % 1440 / 60)} h` : ""}`; };
+  return <div style={{ borderRadius: 16, border: "1px solid var(--border)", background: "var(--surface)", padding: 10, display: "flex", flexDirection: "column", gap: 7 }}>
+    <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#EF4444" }}>🎯 Dates limites</div>
+    {items.map(x => <div key={x.design_id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <span style={{ fontSize: 15 }}>{x.ok ? "✅" : "⚠️"}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {x.title} · avant le {dueTxt(x.due)}</span>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: x.ok ? "#16A34A" : "#EF4444" }}>
+          {x.count} plateau{x.count > 1 ? "x" : ""} · fini le {dueTxt(x.end.slice(0, 10))} à {x.end.slice(11, 16).replace(":", " h ")}
+          {x.ok ? ` · ${late(x.margin_min)} de marge` : ` · ${late(x.margin_min)} trop tard`}</span>
+      </span>
+      {edit && <button type="button" onClick={() => onDue(x.design_id, null)} data-tip="Retirer la date limite" style={mini}>✕</button>}
+    </div>)}
+  </div>;
+}
+
+// la journee couleur : tous les plateaux d'un filament, de tous les objets, sur ce jour
+export function ColorDay({ colors, onPick }) {
+  const [open, setOpen] = useState(false);
+  if (!colors?.length) return null;
+  return <div style={{ position: "relative" }}>
+    <button type="button" onClick={() => setOpen(v => !v)} data-tip="Poser sur ce jour tous les plateaux d'un même filament, de tous les objets"
+      style={{ ...seg, padding: "4px 10px", color: "#EC4899" }}>🎨 Journée couleur</button>
+    {open && <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 20, width: 250, maxHeight: 300, overflowY: "auto", padding: 6,
+      borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 10px 30px rgba(0,0,0,.25)" }}>
+      {colors.map(c => <button key={c.filament_id} type="button" onClick={() => { setOpen(false); onPick(c.filament_id); }}
+        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "6px 8px", borderRadius: 9, border: "none", background: "transparent",
+          cursor: "pointer", textAlign: "left" }}>
+        <Dot f={c}/>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>{c.count} plateau{c.count > 1 ? "x" : ""} · {hm(c.seconds)}</span>
+      </button>)}
+    </div>}
   </div>;
 }
 
