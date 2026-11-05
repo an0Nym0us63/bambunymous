@@ -441,34 +441,38 @@ export default function PrintCalendar() {
           color: view === k ? "#fff" : "var(--muted)", background: view === k ? "linear-gradient(135deg, #6366F1, #8B5CF6)" : "transparent",
           boxShadow: view === k ? "0 6px 14px -8px #6366F1" : "none" }}>{l}</button>)}
     </div>
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+    {/* au telephone (06/11/2026) : une seule ligne qui defile au doigt, libelles courts (sur quatre lignes, elles
+        prenaient presque tout l'ecran) */}
+    <div data-noswipe="" className={wide ? undefined : "bn-pills"} style={wide ? { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }
+      : { display: "flex", gap: 6, alignItems: "center", overflowX: "auto", margin: "0 -16px", padding: "1px 16px", scrollbarWidth: "none" }}>
+      {!wide && <style>{".bn-pills::-webkit-scrollbar{display:none}.bn-pills>button{flex-shrink:0;white-space:nowrap;padding:5px 10px !important}"}</style>}
       <button type="button" onClick={() => { const d = new Date(); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setPick(iso(d)); }}
         style={{ ...pill, color: "#6366F1", borderColor: "color-mix(in srgb, #6366F1 40%, var(--border))" }}>Aujourd'hui</button>
       <button type="button" onClick={() => setShowPlan(v => !v)} data-tip="La file « À faire », enchaînée sans pause après l'impression en cours"
         style={{ ...pill, ...(showPlan ? { color: "#22C55E", borderColor: "color-mix(in srgb, #22C55E 45%, var(--border))", background: "color-mix(in srgb, #22C55E 10%, var(--surface2))" } : {}) }}>
-        {showPlan ? "✓ " : ""}Planning{showPlan && nPlanned ? ` (${nPlanned})` : ""}</button>
+        {showPlan ? "✓ " : ""}Planning{showPlan && nPlanned ? (wide ? ` (${nPlanned})` : ` ${nPlanned}`) : ""}</button>
       <button type="button" onClick={() => setSetOpen(v => !v)} data-tip="Pause entre deux impressions, heures de fonctionnement et de lancement"
-        style={{ ...pill, ...(setOpen ? { color: "#6366F1" } : {}) }}>⚙ Consignes</button>
+        style={{ ...pill, ...(setOpen ? { color: "#6366F1" } : {}) }} aria-label="Consignes">{wide ? "⚙ Consignes" : "⚙"}</button>
       {edit && nPlanned > 1 && <button type="button" onClick={() => optimize(null)}
         data-tip="Enchaîner les plateaux de mêmes couleurs dans toute la file (les impressions posées sur un jour ne bougent pas)"
-        style={{ ...pill, color: "#6366F1" }}>✨ Optimiser la file</button>}
+        style={{ ...pill, color: "#6366F1" }}>{wide ? "✨ Optimiser la file" : "✨ Optimiser"}</button>}
       {showPlan && pd?.advice?.length > 0 && <button type="button" onClick={() => setPop("advice")} data-tip="Les conseils du planning"
         style={{ ...pill, color: "#D97706", borderColor: "color-mix(in srgb, #F59E0B 45%, var(--border))", background: "color-mix(in srgb, #F59E0B 10%, var(--surface2))" }}>
         💡 {pd.advice.length}</button>}
       {/* les plateaux figes : combien, et leur liste */}
       {showPlan && pd?.jobs?.some(j => j.locked) && <button type="button" onClick={() => setPop("locked")} data-tip="Plateaux figés : optimiser, journée couleur, au mieux ou plus tard ne les déplacent pas"
         style={{ ...pill, color: "#4F46E5", borderColor: "color-mix(in srgb, #4F46E5 40%, var(--border))", background: "color-mix(in srgb, #4F46E5 8%, var(--surface2))" }}>
-        🔒 {pd.jobs.filter(j => j.locked).length} figé{pd.jobs.filter(j => j.locked).length > 1 ? "s" : ""}</button>}
+        🔒 {pd.jobs.filter(j => j.locked).length}{wide ? ` figé${pd.jobs.filter(j => j.locked).length > 1 ? "s" : ""}` : ""}</button>}
       {/* le seuil, comme les conseils (05/11/2026) : un bouton, la liste dans une fenetre */}
       {showPlan && pd?.jobs?.some(j => j.low_info?.length) && <button type="button" onClick={() => setPop("low")}
         data-tip="Des filaments passeront sous le seuil (un quart de bobine) pendant le planning"
         style={{ ...pill, color: "#DC2626", borderColor: "color-mix(in srgb, #DC2626 40%, var(--border))", background: "color-mix(in srgb, #DC2626 7%, var(--surface2))" }}>
-        📉 {pd.jobs.reduce((a, j) => a + (j.low_info?.length || 0), 0)} sous le seuil</button>}
+        📉 {pd.jobs.reduce((a, j) => a + (j.low_info?.length || 0), 0)}{wide ? " sous le seuil" : ""}</button>}
       {showPlan && pd?.blocked?.length > 0 && <button type="button" onClick={() => setPop("blocked")} data-tip="Plateaux que le stock et les commandes ne permettent pas de poser"
         style={{ ...pill, color: "#DC2626", borderColor: "color-mix(in srgb, #DC2626 45%, var(--border))", background: "color-mix(in srgb, #DC2626 9%, var(--surface2))" }}>
-        ⛔ {pd.blocked.length} non planifiable{pd.blocked.length > 1 ? "s" : ""}</button>}
+        ⛔ {pd.blocked.length}{wide ? ` non planifiable${pd.blocked.length > 1 ? "s" : ""}` : ""}</button>}
       {showPlan && !side && pd?.jobs?.length > 0 && <button type="button" onClick={() => setPop("pool")} data-tip="La file : chaque plateau prévu, par objet"
-        style={{ ...pill, color: "#16A34A", borderColor: "color-mix(in srgb, #22C55E 45%, var(--border))" }}>📋 La file ({pd.jobs.length})</button>}
+        style={{ ...pill, color: "#16A34A", borderColor: "color-mix(in srgb, #22C55E 45%, var(--border))" }}>📋 {wide ? `La file (${pd.jobs.length})` : `File ${pd.jobs.length}`}</button>}
     </div>
     {pd?.status && showPlan && <PlanStatus st={pd.status} live={null} check={pd.check}/>}
     {pd && showPlan && <NowNextTiles pd={pd} wide={wide} onOpenPrint={it => nav(`/prints?id=${it.id}`)} onPickJob={j => setJobSel(j)}/>}
