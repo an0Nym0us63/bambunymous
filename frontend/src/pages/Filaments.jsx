@@ -1057,7 +1057,9 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
   const ageSechage = spool.last_dried_at
     ? Math.floor((Date.now() - new Date(spool.last_dried_at).getTime()) / 86400000) : null;
   const resteSechage = ageSechage == null ? null : (spool.dry_days || 180) - ageSechage;
-  const secherBientot = !aSecher && resteSechage != null && resteSechage <= 30;
+  // une bobine archivee ne se seche plus (05/11/2026 : sa fiche annoncait encore le prochain sechage)
+  const arch = !!spool.archived;
+  const secherBientot = !arch && !aSecher && resteSechage != null && resteSechage <= 30;
   // Le prix reel de la bobine (le sien, sinon celui du filament) et ce qu'il en reste.
   const price = spool.price_override ?? spool.filament_price;
   const worth = price != null && total ? price * remaining / total : null;
@@ -1099,7 +1101,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
     title: name, subtitle: `Bobine #${spool.id} · ${Math.round(remaining)} g`, color: main,
     items: [
       isAdmin && { icon: "⚖", label: "Ajuster le poids", hint: "Restant, retirer, ajouter, pesée", tone: "#F59E0B", onClick: weigh },
-      isAdmin && { icon: "☀", label: "Je viens de la sécher", hint: spool.last_dried_at ? `Dernier séchage ${agoFr(spool.last_dried_at)}` : "Jamais séchée", tone: "#0EA5E9",
+      isAdmin && !arch && { icon: "☀", label: "Je viens de la sécher", hint: spool.last_dried_at ? `Dernier séchage ${agoFr(spool.last_dried_at)}` : "Jamais séchée", tone: "#0EA5E9",
         onClick: () => setDryOpen(true) },
       { icon: "📋", label: "Historique d'utilisation", hint: "Les impressions qui l'ont consommée", tone: "#8B5CF6", onClick: loadUsage },
       spool.filament_id && { icon: "🧵", label: "Voir le filament", hint: `Filament #${spool.filament_id}`, tone: "#EC4899", onClick: openFilament },
@@ -1161,10 +1163,13 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
             onClick={isAdmin ? weigh : undefined} tip={isAdmin ? "Ajuster le poids" : undefined}/>
           <FTile label="💶 Valeur" value={worth != null ? eur(worth) : "—"} sub={price != null ? `sur ${eur(price)}` : "prix non défini"} c1="#16A34A" c2="#4ADE80"
             tip="Ce qu'il reste de la bobine, à son prix"/>
-          <FTile label="💧 Séchage" value={ageSechage == null ? "jamais" : ageSechage <= 0 ? "auj." : `${ageSechage} j`}
+          {arch ? <FTile label="🎯 Écart" value={spool.drift_g != null ? driftTxt(spool.drift_g) : "—"}
+            sub={spool.drift_g == null ? "pas mesuré" : spool.drift_off ? "hors des stats" : "du suivi"} c1="#14B8A6" c2="#5EEAD4"
+            tip="L'écart du suivi à sa fin : notre poids moins le vrai"/>
+          : <FTile label="💧 Séchage" value={ageSechage == null ? "jamais" : ageSechage <= 0 ? "auj." : `${ageSechage} j`}
             sub={aSecher ? "à sécher" : secherBientot ? `dans ${Math.max(0, resteSechage)} j` : "à jour"}
             c1={aSecher ? "#0EA5E9" : "#06B6D4"} c2={aSecher ? "#38BDF8" : "#67E8F9"}
-            onClick={isAdmin ? () => setDryOpen(true) : undefined} tip={isAdmin ? "Je viens de la sécher" : undefined}/>
+            onClick={isAdmin ? () => setDryOpen(true) : undefined} tip={isAdmin ? "Je viens de la sécher" : undefined}/>}
           <FTile label="🧵 Stock" value={stockFil != null ? fmtStock(stockFil) : "—"}
             sub={spool.sibling_count == null ? "du filament" : spool.sibling_count > 0 ? `+${spool.sibling_count} bobine${spool.sibling_count > 1 ? "s" : ""}` : "seule bobine"}
             c1="#EC4899" c2="#F472B6" onClick={spool.filament_id ? openFilament : undefined} tip={spool.filament_id ? "Ouvrir la fiche du filament" : undefined}/>
@@ -1187,7 +1192,8 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
             <FRow l="Dernière utilisation" v={dayFr(spool.last_used_at) || "jamais"} d={agoFr(spool.last_used_at)}/>
             <FRow l="Déjà consommé" v={consumed != null ? `${Math.round(consumed)} g` : "poids inconnu"} d={consumedPct != null ? `${consumedPct} % de ${Math.round(total)} g` : null}/>
             <FRow l="Rythme" v={rythme ? rythme.v : (spool.first_used_at ? null : "pas encore utilisée")} d={rythme?.d}/>
-            <DryEditRow spoolId={spool.id} spoolName={name} current={spool.last_dried_at} aSecher={aSecher} onUpdated={refresh}/>
+            {arch ? <FRow l="Dernier séchage" v={spool.last_dried_at ? dayFr(spool.last_dried_at) : null}/>
+              : <DryEditRow spoolId={spool.id} spoolName={name} current={spool.last_dried_at} aSecher={aSecher} onUpdated={refresh}/>}
             {(spool.drift_g != null || spool.archived) && <DriftRow spool={spool} onUpdated={refresh}/>}
             {/* a 0 g chez nous mais elle imprime encore : ce qu'elle a deja imprime en dessous, garde pour sa fin */}
             {spool.drift_g == null && spool.overrun_g > 0 && <FRow l="Sous notre zéro" v={driftTxt(-spool.overrun_g)} vc="#EF4444"

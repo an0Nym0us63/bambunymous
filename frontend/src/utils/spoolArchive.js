@@ -37,4 +37,4 @@ export const DRIFT_KIND = { relais: "relais de l'AMS", suite: "suite choisie à 
 export const isPast = it => it.kind === "historique" || it.drift_kind === "historique";
 
 // « +12 g » / « −8 g »
-export const driftTxt = g => `${g > 0 ? "+" : g < 0 ? "−" : "±"}${Math.abs(Math.round(g))} g`;
+export const driftTxt = g => { const r = Math.round(g); return `${r > 0 ? "+" : r < 0 ? "−" : "±"}${Math.abs(r)} g`; };

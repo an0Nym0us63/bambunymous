@@ -365,7 +365,7 @@ function DriftStats() {
                   </span>
                 </span>
                 {/* l'ecart, de part et d'autre du zero */}
-                <span style={{ position: "relative", flex: "1 1 30%", height: 8, borderRadius: 5, background: "color-mix(in srgb, var(--border) 70%, transparent)" }}>
+                <span style={{ position: "relative", flex: "0 1 72px", height: 8, borderRadius: 5, background: "color-mix(in srgb, var(--border) 70%, transparent)" }}>
                   <span style={{ position: "absolute", left: "50%", top: -3, bottom: -3, width: 1.5, background: "var(--muted)" }}/>
                   <span style={{ position: "absolute", top: 0, bottom: 0, borderRadius: 5, background: col, width: `${w}%`,
                     left: it.drift_g >= 0 ? "50%" : `${50 - w}%` }}/>
@@ -377,7 +377,7 @@ function DriftStats() {
                       background: "var(--surface)", color: "var(--text)", fontSize: 13, fontWeight: 800, textAlign: "right" }}/>
                 ) : (
                   <span onClick={() => isAdmin && setEdit({ id: it.id, v: String(it.drift_g) })} data-tip={isAdmin ? "Corriger l'écart" : undefined}
-                    style={{ width: 62, textAlign: "right", fontSize: 13, fontWeight: 900, color: col, cursor: isAdmin ? "pointer" : "default",
+                    style={{ width: 52, textAlign: "right", fontSize: 13, fontWeight: 900, color: col, cursor: isAdmin ? "pointer" : "default",
                       textDecoration: it.off ? "line-through" : "none", flexShrink: 0 }}>{driftTxt(it.drift_g)}</span>
                 )}
                 {isAdmin && <button onClick={() => toggle(it)} data-tip={it.off ? (isPast(it) ? "La compter dans les stats" : "La remettre dans les stats") : "L'écarter des stats (jetée en partie, prêtée…)"}
@@ -478,12 +478,12 @@ function DriftStats() {
                       {f.s.name}</span>
                     <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {f.list.length} bobines{f.on.length < f.list.length ? ` · ${f.on.length} comptée${f.on.length > 1 ? "s" : ""}` : ""}
-                      {f.lo != null && f.on.length > 1 ? ` · de ${driftTxt(f.lo)} à ${driftTxt(f.hi)}` : ""}</span>
+                      {f.lo != null && f.on.length > 1 ? ` · ${driftTxt(f.lo).replace(" g", "")} à ${driftTxt(f.hi)}` : ""}</span>
                   </span>
                 </span>
                 {/* la repartition : chaque bobine en point (pleine si elle compte), la moyenne en trait */}
                 <span data-tip={f.list.map(x => `#${x.id} ${driftTxt(x.drift_g)}${x.off ? " (hors stats)" : ""}`).join(" · ")}
-                  style={{ position: "relative", flex: "1 1 30%", height: 14 }}>
+                  style={{ position: "relative", flex: "0 1 72px", height: 14 }}>
                   <span style={{ position: "absolute", left: 0, right: 0, top: 5, height: 4, borderRadius: 3, background: "color-mix(in srgb, var(--border) 70%, transparent)" }}/>
                   {f.lo != null && <span style={{ position: "absolute", top: 5, height: 4, borderRadius: 3, background: "color-mix(in srgb, #3B82F6 30%, transparent)",
                     left: pos(f.lo), width: `calc(${pos(f.hi)} - ${pos(f.lo)})` }}/>}
@@ -492,7 +492,7 @@ function DriftStats() {
                     background: x.off ? "transparent" : "#64748B", border: `1.5px solid ${x.off ? "var(--muted)" : "#64748B"}`, opacity: x.off ? 0.6 : 0.75 }}/>)}
                   {f.mean != null && <span style={{ position: "absolute", top: 0, bottom: 0, width: 3, marginLeft: -1.5, borderRadius: 2, left: pos(f.mean), background: col }}/>}
                 </span>
-                <span style={{ width: 62, textAlign: "right", flexShrink: 0 }}>
+                <span style={{ width: 52, textAlign: "right", flexShrink: 0 }}>
                   <span style={{ display: "block", fontSize: 13, fontWeight: 900, color: col }}>{f.mean != null ? driftTxt(f.mean) : "—"}</span>
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>moyenne</span>
                 </span>
