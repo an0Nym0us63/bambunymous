@@ -429,7 +429,7 @@ def _printed_of(entries: list, prof: dict | None, all_ids: set, plate_g: dict | 
     known = any(e["prof"] in all_ids for e in entries if e["prof"])
     out = {}
     for e in entries:
-        if known and e["prof"] not in mine:
+        if (known or strict) and e["prof"] not in mine:
             continue
         c = copies_of(e, plate_g or {}, pieces or {})[0]
         for n in e["plates"]:
