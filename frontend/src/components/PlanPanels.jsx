@@ -12,9 +12,9 @@ const when = (iso, now) => {
   return d === today ? hhmm(iso) : `${new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })} ${hhmm(iso)}`;
 };
 
-export function PlanPopup({ title, icon, color = "#6366F1", onClose, children, wide }) {
+export function PlanPopup({ title, icon, color = "#6366F1", onClose, children, wide, z = 5200 }) {
   const phone = typeof window !== "undefined" && window.innerWidth < 640;
-  return createPortal(<div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 5200, background: "rgba(2,6,23,0.55)", backdropFilter: "blur(5px)",
+  return createPortal(<div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: z, background: "rgba(2,6,23,0.55)", backdropFilter: "blur(5px)",
     display: "flex", alignItems: phone ? "flex-end" : "center", justifyContent: "center", padding: phone ? 0 : 16 }}>
     <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: wide ? 760 : 520, maxHeight: phone ? "88dvh" : "84dvh", display: "flex", flexDirection: "column",
       background: "var(--sheet-bg)", border: "1px solid var(--border)", borderRadius: phone ? "22px 22px 0 0" : 20, overflow: "hidden", boxShadow: "0 30px 80px rgba(0,0,0,.45)" }}>
@@ -60,7 +60,7 @@ export function JobSheet({ j, now, edit, onClose, act }) {
       <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>{hint}</span></span>
     <input type="date" value={value || ""} min={min} onChange={e => run(k, () => onPick(e.target.value || null))}
       style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%" }}/></label>;
-  return <PlanPopup title={j.title} icon="🧩" color={unretained(j) ? UNRET : j.completes ? "#EAB308" : "#22C55E"} onClose={onClose}>
+  return <PlanPopup title={j.title} icon="🧩" color={j.why ? "#DC2626" : unretained(j) ? UNRET : j.completes ? "#EAB308" : "#22C55E"} onClose={onClose} z={5300}>
     <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
       <PlateThumb j={j} size={64}/>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
@@ -92,18 +92,27 @@ export function JobSheet({ j, now, edit, onClose, act }) {
 }
 
 // la file, regroupee par objet : son en-tete (vignette, nom, combien de plateaux, combien d'heures, le prochain),
-// puis ses plateaux (a glisser sur un jour sur ordinateur, a toucher partout)
-export function PoolGrouped({ jobs, now, edit, drag, onDrag, onOpen }) {
+// puis ses plateaux (a glisser sur un jour sur ordinateur, a toucher partout). Chaque pastille dit son jour en clair
+// (gras) et son heure ; les plateaux non planifiables (stock) y sont aussi, en rouge, a leur place dans leur objet.
+const dayOf = (iso, now) => {
+  if (!iso) return "";
+  const d = iso.slice(0, 10), today = (now || "").slice(0, 10);
+  const t = new Date(`${today}T12:00`); t.setDate(t.getDate() + 1);
+  const tomorrow = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+  return d === today ? "Aujourd'hui" : d === tomorrow ? "Demain" : new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+};
+export function PoolGrouped({ jobs, blocked = [], now, edit, drag, onDrag, onOpen }) {
   const groups = [];
   const at = {};
-  for (const j of jobs) {
+  for (const j of [...jobs, ...blocked.map(b => ({ ...b, blockedWhy: b.why }))]) {
     if (!(j.design_id in at)) { at[j.design_id] = groups.length; groups.push({ id: j.design_id, jobs: [] }); }
     groups[at[j.design_id]].jobs.push(j);
   }
   return <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
     {groups.map(g => {
-      const f = g.jobs[0], un = unretained(f), tot = g.jobs.reduce((a, j) => a + j.seconds, 0);
-      return <div key={g.id} style={{ borderRadius: 14, border: `1px solid ${un ? "color-mix(in srgb, #94A3B8 50%, var(--border))" : "var(--border)"}`,
+      const okJobs = g.jobs.filter(j => !j.blockedWhy), nb = g.jobs.length - okJobs.length;
+      const f = okJobs[0] || g.jobs[0], un = unretained(f), tot = okJobs.reduce((a, j) => a + j.seconds, 0);
+      return <div key={g.id} style={{ borderRadius: 14, border: `1px solid ${nb ? "color-mix(in srgb, #DC2626 45%, var(--border))" : un ? "color-mix(in srgb, #94A3B8 50%, var(--border))" : "var(--border)"}`,
         background: un ? "var(--surface2)" : "linear-gradient(135deg, color-mix(in srgb, #22C55E 6%, transparent), transparent 60%), var(--surface2)", padding: 8 }}>
         <button type="button" onClick={() => onOpen(f)} style={{ display: "flex", gap: 9, alignItems: "center", width: "100%", border: "none", background: "none", padding: 0,
           cursor: "pointer", textAlign: "left", font: "inherit" }}>
@@ -112,21 +121,33 @@ export function PoolGrouped({ jobs, now, edit, drag, onDrag, onOpen }) {
             <span style={{ display: "block", fontSize: 13, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {un ? "○ " : ""}{f.title}</span>
             <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
-              {g.jobs.length} plateau{g.jobs.length > 1 ? "x" : ""} · {hm(tot)} · dès {when(f.start, now)}
+              {okJobs.length} plateau{okJobs.length > 1 ? "x" : ""} · {hm(tot)}
+              {okJobs[0]?.start && <> · dès <b style={{ color: "var(--text)" }}>{dayOf(okJobs[0].start, now)}</b> {hhmm(okJobs[0].start)}</>}
+              {nb > 0 && <b style={{ color: "#DC2626" }}> · ⛔ {nb} non planifiable{nb > 1 ? "s" : ""}</b>}
               {f.due && <span style={{ color: f.due_ok ? "#16A34A" : "#EF4444", fontWeight: 900 }}> · 🎯 {dueTxt(f.due)}</span>}</span>
           </span>
         </button>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
-          {g.jobs.map(j => <button key={j.key} type="button" draggable={edit && drag} onDragStart={e => { e.dataTransfer.setData("text/bn-job", j.key); onDrag?.(j.key); }}
-            onDragEnd={() => onDrag?.(null)} onClick={() => onOpen(j)} data-tip={`${jobName(j)} · ${when(j.start, now)} → ${when(j.end, now)}`}
-            style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px 3px 3px", borderRadius: 9, cursor: edit && drag ? "grab" : "pointer", font: "inherit",
-              border: `1.5px ${j.completes ? "solid" : "dashed"} ${j.too_long ? "#EF4444" : un ? UNRET : j.completes ? "#EAB308" : "color-mix(in srgb, #22C55E 50%, var(--border))"}`,
-              background: "var(--surface)" }}>
-            <PlateThumb j={j} size={24}/>
-            <span style={{ fontSize: 11, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap" }}>
-              {j.completes ? "🏁 " : ""}{j.plates_total > 1 ? `P${j.plate}${j.qty > 1 ? `·${j.copy}` : ""}` : j.qty > 1 ? `${j.copy}/${j.qty}` : ""} <span style={{ color: "var(--muted)" }}>{when(j.start, now)}</span>
-              {j.load?.length ? " 🧵" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}</span>
-          </button>)}
+          {g.jobs.map(j => {
+            const bad = !!j.blockedWhy;
+            const c = bad ? "#DC2626" : j.too_long ? "#EF4444" : un ? UNRET : j.completes ? "#EAB308" : "color-mix(in srgb, #22C55E 50%, var(--border))";
+            const lbl = j.plates_total > 1 ? `P${j.plate}${j.qty > 1 ? `·${j.copy}` : ""}` : j.qty > 1 ? `${j.copy}/${j.qty}` : "";
+            return <button key={j.key} type="button" draggable={edit && drag && !bad} onDragStart={e => { e.dataTransfer.setData("text/bn-job", j.key); onDrag?.(j.key); }}
+              onDragEnd={() => onDrag?.(null)} onClick={() => onOpen(bad ? { ...j, why: j.blockedWhy } : j)}
+              data-tip={bad ? `${jobName(j)} : non planifiable · ${(j.blockedWhy || []).join(" · ")}` : `${jobName(j)} · ${when(j.start, now)} → ${when(j.end, now)}`}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 9px 3px 3px", borderRadius: 10, cursor: edit && drag && !bad ? "grab" : "pointer", font: "inherit",
+                border: `1.5px ${j.completes || bad ? "solid" : "dashed"} ${c}`, textAlign: "left",
+                background: bad ? "color-mix(in srgb, #DC2626 9%, var(--surface))" : "var(--surface)" }}>
+              <PlateThumb j={j} size={28}/>
+              <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.15, minWidth: 0 }}>
+                <span style={{ fontSize: 11, fontWeight: 900, color: bad ? "#DC2626" : "#6366F1", whiteSpace: "nowrap" }}>
+                  {j.completes ? "🏁 " : ""}{lbl || "Plateau"}{j.load?.length ? " 🧵" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}</span>
+                {bad ? <span style={{ fontSize: 11.5, fontWeight: 900, color: "#DC2626", whiteSpace: "nowrap" }}>⛔ non planifiable</span>
+                  : <span style={{ fontSize: 12, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{dayOf(j.start, now)}
+                    <span style={{ fontWeight: 700, color: "var(--muted)" }}> {hhmm(j.start)}</span></span>}
+              </span>
+            </button>;
+          })}
         </div>
       </div>;
     })}

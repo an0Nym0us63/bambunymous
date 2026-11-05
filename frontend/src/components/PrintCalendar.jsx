@@ -379,7 +379,7 @@ export default function PrintCalendar() {
       {pd.jobs.some(unretained) && <span style={{ display: "block", marginTop: 3, fontSize: 11, fontWeight: 700, letterSpacing: 0, textTransform: "none", color: "var(--muted)" }}>
         ○ en gris : modèles pas retenus dans « À faire » (profil par défaut), planifiés après les retenus.</span>}</div>
     {/* regroupee par objet (05/11/2026) : son en-tete, puis ses plateaux */}
-    <PoolGrouped jobs={pd.jobs} now={pd.now} edit={edit} drag={wide} onDrag={setDragging} onOpen={j => setJobSel(j)}/>
+    <PoolGrouped jobs={pd.jobs} blocked={pd.blocked} now={pd.now} edit={edit} drag={wide} onDrag={setDragging} onOpen={j => setJobSel(j)}/>
   </div> : null;
   return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
     {/* le mois et ses chiffres */}
@@ -431,9 +431,9 @@ export default function PrintCalendar() {
     {pop === "advice" && <PlanPopup title={`Conseils (${pd?.advice?.length || 0})`} icon="💡" color="#F59E0B" onClose={() => setPop(null)}>
       <PlanAdvice items={pd?.advice} edit={edit} onApply={a => { applyAdvice(a); setPop(null); }}/></PlanPopup>}
     {pop === "blocked" && <PlanPopup title="Non planifiables" icon="⛔" color="#DC2626" onClose={() => setPop(null)}>
-      <BlockedList items={pd?.blocked || []} onOpen={b => { setPop(null); setJobSel(b); }}/></PlanPopup>}
+      <BlockedList items={pd?.blocked || []} onOpen={b => setJobSel(b)}/></PlanPopup>}
     {pop === "pool" && <PlanPopup title={`La file · ${pd?.jobs?.length || 0} plateaux`} icon="📋" color="#22C55E" onClose={() => setPop(null)}>
-      <PoolGrouped jobs={pd?.jobs || []} now={pd?.now} edit={edit} onOpen={j => { setPop(null); setJobSel(j); }}/></PlanPopup>}
+      <PoolGrouped jobs={pd?.jobs || []} blocked={pd?.blocked || []} now={pd?.now} edit={edit} onOpen={j => setJobSel(j)}/></PlanPopup>}
     {side ? <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 12, alignItems: "start" }}>
       <div {...swipeProps} style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>{viewMain}{pool}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 12, maxHeight: "calc(100dvh - 40px)", overflowY: "auto" }}>{detail}{advice}</div>
