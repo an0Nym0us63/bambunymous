@@ -378,6 +378,8 @@ async def rfid_create(
             spool.price_override = body.spool_price
         if body.remaining_weight_g is not None:
             spool.remaining_weight_g = body.remaining_weight_g
+            from ....services import drift as _drift
+            _drift.weighed(spool)                         # un poids pose : le sous-zero d'avant ne compte plus
         elif spool.remaining_weight_g is None:
             spool.remaining_weight_g = scan["spool_weight_g"]
         # location est gere automatiquement (Tiroir / AMS xxx) par le worker

@@ -64,6 +64,7 @@ from ....db.session import get_db, AsyncSessionLocal
 from ....models.filament import Filament, Spool
 from ....models.print_history import FilamentUsage
 from .auth import get_current_user, require_admin
+from ....services import drift
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
 
@@ -1360,6 +1361,8 @@ async def update_spool(
     for k, v in data.items():
         setattr(s, k, v)
     if "remaining_weight_g" in data:
+        if abs(float(s.remaining_weight_g or 0) - float(before or 0)) >= 0.1:
+            drift.weighed(s)
         _log_weight(db, s, before, "Poids corrigé")
     await db.commit()
     _clear_match_cache()
@@ -1508,15 +1511,21 @@ async def adjust_spool_weight(
     cur = s.remaining_weight_g or 0.0
     if body.mode == "set":
         s.remaining_weight_g = max(0.0, body.value)
+        drift.weighed(s)                             # un poids pose est le vrai : le sous-zero d'avant ne compte plus
         _log_weight(db, s, cur, "Poids corrigé")
     elif body.mode == "add":
-        s.remaining_weight_g = max(0.0, cur + body.value)
+        # des grammes rendus remboursent d'abord le sous-zero (05/11/2026) : 100 g rendus a une bobine passee 73 g sous
+        # notre zero ne lui en laissent que 27
+        a = drift.give_back(s, body.value) if body.value > 0 else 0.0
+        if body.value <= 0:
+            s.remaining_weight_g = max(0.0, cur + body.value)
         if not (body.print_id and body.value > 0):
-            _log_weight(db, s, cur, "Poids corrigé")
+            _log_weight(db, s, cur, "Poids corrigé" + drift.back_note(a))
         if body.print_id and body.value > 0:
             from ....models.spool_move import SpoolMove
             db.add(SpoolMove(spool_id=sid, grams=round(body.value, 1), kind="rendu", print_id=body.print_id,
-                             usage_id=body.usage_id, unlinked=bool(body.unlink), label=(body.label or "")[:250] or None))
+                             usage_id=body.usage_id, unlinked=bool(body.unlink),
+                             label=((body.label or "") + drift.back_note(a)).lstrip(" ·")[:250] or None))
     elif body.mode == "sub":
         s.remaining_weight_g = max(0.0, cur - body.value)
         _log_weight(db, s, cur, "Poids corrigé")
@@ -2641,18 +2650,20 @@ async def spool_history_undo(sid: int, body: dict = Body({}), _: str = Depends(r
             fu = await db.get(_FU, oid)
             if not fu or fu.spool_id != sid:
                 raise HTTPException(404, "Consommation introuvable")
-            g = round(fu.grams_used or 0, 1)
+            full_g = g = round(fu.grams_used or 0, 1)
             # seulement ce qui avait vraiment ete retire (04/11/2026) : le decompte du lancement s'arrete a 0
             if fu.spool_before_g is not None:
                 g = round(min(g, max(0.0, fu.spool_before_g)), 1)
             s.remaining_weight_g = round((s.remaining_weight_g or 0) + g, 1)
+            # ce qu'elle avait imprime sous notre zero pour elle n'a plus lieu d'etre (05/11/2026)
+            a = drift.take_overrun(s, full_g - g)
             fu.spool_id = None
             fu.spool_before_g = None
             pid = fu.print_id
             p = await db.get(_P, pid)
             db.add(SpoolMove(spool_id=sid, grams=g, kind="annule", print_id=pid, usage_id=fu.id, unlinked=True,
-                             label=(p.translated_name or p.file_name) if p else None))
-            msg = f"{g:g} g rendus à la bobine".replace(".", ",")
+                             label=(((p.translated_name or p.file_name) if p else "") + drift.back_note(a)).lstrip(" ·")[:250] or None))
+            msg = f"{g:g} g rendus à la bobine".replace(".", ",") + drift.back_note(a)
         elif kind == "move":
             m = await db.get(SpoolMove, oid)
             if not m or m.spool_id != sid or m.reverted_at is not None:
@@ -2671,7 +2682,7 @@ async def spool_history_undo(sid: int, body: dict = Body({}), _: str = Depends(r
                 await db.commit()
                 _clear_match_cache()
                 return {"ok": True, "message": f"{(m.grams or 0):g} g remis à la bobine".replace(".", ",")}
-            s.remaining_weight_g = round(max(0.0, (s.remaining_weight_g or 0) - (m.grams or 0)), 1)
+            drift.take_back(s, m.grams or 0)           # ce que le poids ne couvre pas repasse sous notre zero
             fu = await db.get(_FU, m.usage_id) if m.usage_id else None
             if fu is not None:
                 if m.unlinked:

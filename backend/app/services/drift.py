@@ -20,6 +20,43 @@ def add_overrun(sp, grams: float) -> None:
         sp.overrun_g = round(float(sp.overrun_g or 0) + grams, 1)
 
 
+def take_overrun(sp, grams: float) -> float:
+    """Des grammes rendus a une bobine passee sous notre zero (05/11/2026) : ils remboursent d'abord ce qu'elle a imprime
+    en dessous (ce filament existait, on l'avait oublie : une piece annulee jamais rendue) ; renvoie la part absorbee."""
+    if grams <= 0 or getattr(sp, "drift_g", None) is not None:
+        return 0.0
+    a = round(min(float(sp.overrun_g or 0), float(grams)), 1)
+    if a > 0:
+        sp.overrun_g = round(float(sp.overrun_g) - a, 1) or None
+    return a
+
+
+def give_back(sp, grams: float) -> float:
+    """Rend des grammes a une bobine : le sous-zero d'abord, le reste a son poids. Renvoie la part absorbee."""
+    a = take_overrun(sp, grams)
+    sp.remaining_weight_g = round(float(sp.remaining_weight_g or 0) + float(grams) - a, 1)
+    return a
+
+
+def take_back(sp, grams: float) -> None:
+    """L'inverse (un rendu annule) : ce que le poids ne couvre pas repasse sous notre zero."""
+    cur = float(sp.remaining_weight_g or 0)
+    sp.remaining_weight_g = round(max(0.0, cur - float(grams)), 1)
+    deficit = float(grams) - cur
+    if deficit >= 0.5 and getattr(sp, "drift_g", None) is None:
+        sp.overrun_g = round(float(sp.overrun_g or 0) + deficit, 1)
+
+
+def weighed(sp) -> None:
+    """Un poids mesure (pesee, poids pose a la main ou au scan) : c'est le vrai, le sous-zero d'avant ne compte plus."""
+    if getattr(sp, "drift_g", None) is None:
+        sp.overrun_g = None
+
+
+def back_note(a: float) -> str:
+    return f" · dont {a:g} g sous notre zéro".replace(".", ",") if a > 0 else ""
+
+
 # au-dela de AUTO_OFF_PCT % du poids d'une bobine pleine (100 g sur 1 kg), une mesure automatique sort d'elle-meme des
 # stats (05/11/2026) : le suivi ne se trompe pas d'autant, c'est une autre cause (jetee en partie, pretee, poids de
 # depart faux) ; elle reste lisible, et « Remettre » la fait compter

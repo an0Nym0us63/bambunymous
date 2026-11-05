@@ -2659,12 +2659,14 @@ async def restore_spool_weights(
             spool = await db.get(Spool, fu.spool_id)
             if not spool or spool.archived: continue
             add_g = round((fu.grams_used or 0) * fraction, 1)
-            spool.remaining_weight_g = round((spool.remaining_weight_g or 0) + add_g, 1)
+            from ....services import drift as _drift
+            absorbed = _drift.give_back(spool, add_g)      # le sous-zero d'abord (05/11/2026)
             fu.grams_used = round(max(0, (fu.grams_used or 0) - add_g), 1)
             restored.append({"spool_id": fu.spool_id, "added_g": add_g, "usage_id": fu.id})
             # garde dans l'historique de la bobine (31/10/2026), meme si l'impression est supprimee ensuite
             if add_g > 0:
-                db.add(SpoolMove(spool_id=fu.spool_id, grams=add_g, kind="rendu", print_id=print_id, usage_id=fu.id, label=label))
+                db.add(SpoolMove(spool_id=fu.spool_id, grams=add_g, kind="rendu", print_id=print_id, usage_id=fu.id,
+                                 label=(label + _drift.back_note(absorbed))[:250]))
         if restored:
             # Les grammes consommes ont baisse : le poids et le cout du print (et des
             # objets qui en derivent) suivent, sinon l'en-tete gardait l'ancien total.
