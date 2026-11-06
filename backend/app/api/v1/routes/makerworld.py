@@ -519,7 +519,8 @@ async def mw_plan_prio(body: dict = Body({}), _: str = Depends(require_mw)):
     """La priorite d'un modele ({target: ligne, level: -2..2}) ou d'un plateau ({target: "ligne:plateau", level})."""
     from ....services import planner as P
     try:
-        return await P.set_prio(str(body.get("target") or ""), body.get("level"))
+        tg = body.get("targets") if isinstance(body.get("targets"), list) else None
+        return await P.set_prio(str(body.get("target") or ""), body.get("level"), tg)
     except P.PlanError as e:
         raise HTTPException(400, str(e))
 

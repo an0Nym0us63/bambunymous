@@ -1831,31 +1831,35 @@ async def set_chain(rid: str, mode) -> dict:
     return r
 
 
-async def set_prio(target: str, level) -> dict:
+async def set_prio(target: str, level, targets: list | None = None) -> dict:
     """La priorite (06/11/2026) d'un modele ("ligne") ou d'un plateau ("ligne:plateau") : -2 a 2, 0 la retire. Un modele
     haut, bas ou tres bas : ses plateaux sont aussitot replaces selon le mode d'optimisation des consignes, un par un, sans
     toucher a l'ordre des autres. Urgent, ou un plateau dans son modele : la regle de l'ordre s'en charge. Les figes et ceux
-    au jour fige restent ou ils sont."""
+    au jour fige restent ou ils sont. targets (06/11/2026, actions de masse) : plusieurs modeles a la fois, un seul
+    replacement."""
     d = await _load()
-    t = str(target or "").strip()
-    rid, _, plate = t.partition(":")
-    if not _rid_ok(rid) or (plate and not plate.lstrip("-").isdigit()):
-        raise PlanError("Objet inconnu")
+    ts = [str(x).strip() for x in (targets or [target])][:200]
+    for t in ts:
+        rid, _, plate = t.partition(":")
+        if not _rid_ok(rid) or (plate and not plate.lstrip("-").isdigit()):
+            raise PlanError("Objet inconnu")
     try:
         lv = int(level or 0)
     except (TypeError, ValueError):
         raise PlanError("Priorité inconnue")
     if lv not in PRIOS:
         raise PlanError("Priorité inconnue")
-    if lv:
-        d["prio"][t] = lv
-    else:
-        d["prio"].pop(t, None)
+    for t in ts:
+        if lv:
+            d["prio"][t] = lv
+        else:
+            d["prio"].pop(t, None)
     await _save(d, "Priorité")
     d, now, jobs, _, loaded, live, busy = await _context(None)
-    if plate or lv == 2:
+    if any(":" in t for t in ts) or lv == 2:
         return await arrange({}, merge=True)        # l'ordre des plateaux du modele, ou urgent : _ordered s'en charge
-    mine = [j["key"] for j in _ordered(jobs, d["order"], d["pins"]) if j["design_id"] == rid]
+    rids = {t for t in ts}
+    mine = [j["key"] for j in _ordered(jobs, d["order"], d["pins"]) if j["design_id"] in rids]
     mode = d.get("opt_mode") if d.get("opt_mode") in MODES else "mix"
     try:
         order = auto_insert(jobs, d, now, busy, loaded, mine, mode)

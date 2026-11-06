@@ -306,16 +306,48 @@ const smallBtn = { padding: "5px 10px", borderRadius: 10, border: "1px solid var
   fontSize: 12, fontWeight: 800, color: "var(--text2)" };
 const chipS = c => ({ fontSize: 10.5, fontWeight: 900, color: c, background: `color-mix(in srgb, ${c} 13%, transparent)`, borderRadius: 7,
   padding: "1px 6px", whiteSpace: "nowrap" });
-export function PoolSummary({ jobs, blocked = [], now, onOpenModel }) {
+export function PoolSummary({ jobs, blocked = [], now, onOpenModel, bulk }) {
   const groups = poolGroups(jobs, blocked);
-  return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))", gap: 8 }}>
+  // les actions de masse (06/11/2026) : « Sélectionner », des cases sur les cartes, une barre d'actions
+  const [picking, setPicking] = useState(false);
+  const [sel, setSel] = useState([]);
+  const [busyB, setBusyB] = useState(null);
+  const toggle = id => setSel(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+  const go = async (k, fn) => { setBusyB(k); try { await fn(sel); } finally { setBusyB(null); } };
+  const bb = (k, label, tip, fn, c = "#6366F1") => <button key={k} type="button" disabled={!sel.length || !!busyB} onClick={() => go(k, fn)} data-tip={tip}
+    style={{ padding: "5px 10px", borderRadius: 10, border: `1px solid color-mix(in srgb, ${c} 40%, var(--border))`, background: `color-mix(in srgb, ${c} 10%, var(--surface))`,
+      color: c, cursor: sel.length ? "pointer" : "default", font: "inherit", fontSize: 12, fontWeight: 900, opacity: sel.length ? 1 : 0.5, whiteSpace: "nowrap" }}>{busyB === k ? "…" : label}</button>;
+  return <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    {bulk && <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+      <button type="button" onClick={() => { setPicking(v => !v); setSel([]); }} style={{ padding: "5px 11px", borderRadius: 10, cursor: "pointer", font: "inherit",
+        fontSize: 12, fontWeight: 900, border: "1px solid var(--border)", background: picking ? "linear-gradient(135deg, #6366F1, #8B5CF6)" : "var(--surface2)",
+        color: picking ? "#fff" : "var(--text2)" }}>{picking ? "✕ Fini" : "☑ Sélectionner"}</button>
+      {picking && <>
+        <button type="button" onClick={() => setSel(sel.length === groups.length ? [] : groups.map(g => g.id))}
+          style={{ padding: "5px 10px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer", font: "inherit", fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>
+          {sel.length === groups.length ? "Aucun" : "Tous"}</button>
+        <span style={{ fontSize: 12, fontWeight: 800, color: "var(--muted)" }}>{sel.length} modèle{sel.length > 1 ? "s" : ""}</span>
+        <span style={{ width: 4 }}/>
+        {PRIOS.map(([k, ic, l, c]) => bb(`p${k}`, `${ic} ${l}`, `Priorité ${l.toLowerCase()} pour les modèles choisis`, ids => bulk.prio(ids, k), c))}
+        <span style={{ width: 4 }}/>
+        {bb("fl", "🔓 Libres", "Leurs plateaux redeviennent libres", ids => bulk.freeze(ids, null), "#64748B")}
+        {bb("fd", "📌 Le jour", "Chaque plateau garde son jour", ids => bulk.freeze(ids, "day"), "#7C3AED")}
+        {bb("ft", "🔒 Jour et heure", "Chaque plateau garde son jour et son heure", ids => bulk.freeze(ids, "time"), "#4F46E5")}
+        <span style={{ width: 4 }}/>
+        {bb("front", "⏫ En tête", "Leurs plateaux passent avant les autres (les jours figés restent)", ids => bulk.front(ids), "#16A34A")}
+        {bb("later", "⏬ Plus tard", "Leurs plateaux passent en fin de file (les figés restent)", ids => bulk.later(ids), "#EA580C")}
+      </>}
+    </div>}
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))", gap: 8 }}>
     {groups.map(g => {
-      const x = gInfo(g), f = x.f, un = unretained(f);
+      const x = gInfo(g), f = x.f, un = unretained(f), on = sel.includes(g.id);
       const sameDay = x.first && x.last && x.first.slice(0, 10) === x.last.slice(0, 10);
-      return <button key={g.id} type="button" onClick={() => onOpenModel(g.id)}
+      return <button key={g.id} type="button" onClick={() => picking ? toggle(g.id) : onOpenModel(g.id)}
         style={{ display: "flex", gap: 11, alignItems: "center", padding: 9, borderRadius: 14, cursor: "pointer", textAlign: "left", font: "inherit", minWidth: 0,
-          border: `1px solid ${x.nb ? "color-mix(in srgb, #DC2626 45%, var(--border))" : un ? "color-mix(in srgb, #94A3B8 50%, var(--border))" : "var(--border)"}`,
+          border: on ? "2px solid #6366F1" : `1px solid ${x.nb ? "color-mix(in srgb, #DC2626 45%, var(--border))" : un ? "color-mix(in srgb, #94A3B8 50%, var(--border))" : "var(--border)"}`,
           background: un ? "var(--surface2)" : "linear-gradient(135deg, color-mix(in srgb, #22C55E 6%, transparent), transparent 60%), var(--surface2)" }}>
+        {picking && <span aria-hidden="true" style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+          border: `2px solid ${on ? "#6366F1" : "var(--border)"}`, background: on ? "#6366F1" : "var(--surface)", color: "#fff", fontSize: 13, fontWeight: 900 }}>{on ? "✓" : ""}</span>}
         <PlateThumb j={{ ...f, thumb: null, plates_total: 1 }} size={60}/>
         <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
           <span style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontSize: 13.5, fontWeight: 900,
@@ -342,6 +374,7 @@ export function PoolSummary({ jobs, blocked = [], now, onOpenModel }) {
         </span>
       </button>;
     })}
+  </div>
   </div>;
 }
 

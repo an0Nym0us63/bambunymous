@@ -163,7 +163,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
     return out;
   }, [pd, showPlan]);
   // les gestes du planning, partages avec « A faire » (06/11/2026)
-  const { undo, keys, byKey, send, arrange, moveBefore, moveAfter, moveDay, unpin, placeDay, toFront, modelAct, applyAdvice, setDue, markDone, colorDay, optimize, optimizeFrom, applyOptimized, jobAct } = usePlanActs({ pd, setPd, setSheet, setModelSel,
+  const { bulk, undo, keys, byKey, send, arrange, moveBefore, moveAfter, moveDay, unpin, placeDay, toFront, modelAct, applyAdvice, setDue, markDone, colorDay, optimize, optimizeFrom, applyOptimized, jobAct } = usePlanActs({ pd, setPd, setSheet, setModelSel,
     onDayView: day => { setPick(day); setView("day"); } });
   const saveSettings = async v => { if (await send("/makerworld/plan/settings", v)) { egg("planning_consignes"); setSetOpen(false); } };
   const today = iso(new Date());
@@ -398,7 +398,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
       {pd.jobs.some(unretained) && <span style={{ display: "block", marginTop: 3, fontSize: 11, fontWeight: 700, letterSpacing: 0, textTransform: "none", color: "var(--muted)" }}>
         ○ en gris : modèles pas retenus dans « À faire » (profil par défaut), planifiés après les retenus.</span>}</div>
     {/* regroupee par objet (05/11/2026) : son en-tete, puis ses plateaux */}
-    <PoolSummary jobs={pd.jobs} blocked={pd.blocked} now={pd.now} onOpenModel={setModelSel}/>
+    <PoolSummary jobs={pd.jobs} blocked={pd.blocked} now={pd.now} onOpenModel={setModelSel} bulk={edit ? bulk : null}/>
   </div> : null;
   return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
     {/* le mois et ses chiffres ; la date et ‹ › restent en haut au defilement (05/11/2026 au telephone, 06/11/2026 partout) */}
@@ -480,7 +480,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
     {pop === "blocked" && <PlanPopup title="Non planifiables" icon="⛔" color="#DC2626" onClose={() => setPop(null)}>
       <BlockedList items={pd?.blocked || []} onOpen={b => setJobSel(b)}/></PlanPopup>}
     {pop === "pool" && <PlanPopup title={`La file · ${pd?.jobs?.length || 0} plateaux`} icon="📋" color="#22C55E" onClose={() => setPop(null)}>
-      <PoolSummary jobs={pd?.jobs || []} blocked={pd?.blocked || []} now={pd?.now} onOpenModel={setModelSel}/></PlanPopup>}
+      <PoolSummary jobs={pd?.jobs || []} blocked={pd?.blocked || []} now={pd?.now} onOpenModel={setModelSel} bulk={edit ? bulk : null}/></PlanPopup>}
     {side ? <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 12, alignItems: "start" }}>
       <div {...swipeProps} style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>{viewMain}{pool}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 12, maxHeight: "calc(100dvh - 40px)", overflowY: "auto" }}>{detail}{advice}</div>

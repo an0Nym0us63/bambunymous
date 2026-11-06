@@ -148,5 +148,19 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
   });
   // « Annuler » (06/11/2026) : le dernier geste defait
   const undo = () => send("/makerworld/plan/undo", {}, "post").then(d => { if (d?.undone) toast(`↶ Annulé : ${d.undone}`, "ok", 3500); });
-  return { undo, keys, byKey, send, arrange, moveBefore, moveAfter, moveDay, unpin, placeDay, toFront, modelAct, applyAdvice, setDue, markDone, colorDay, optimize, optimizeFrom, applyOptimized, jobAct };
+  // les actions de masse (06/11/2026) : sur plusieurs modeles de la file a la fois, un seul « Annuler »
+  const bulk = {
+    prio: (dids, lv) => send("/makerworld/plan/prio", { targets: dids, level: lv }, "post").then(ok => { if (ok) egg("planning_priorite"); }),
+    freeze: async (dids, mode) => {
+      const all = (pd?.jobs || []).filter(j => dids.includes(j.design_id)), locked = all.filter(j => j.locked).map(j => j.key);
+      if (mode === "time") return send("/makerworld/plan/lock", { keys: all.map(j => j.key), lock: true }, "post").then(ok => { if (ok) egg("planning_fige"); });
+      if (locked.length && !(await send("/makerworld/plan/lock", { keys: locked, lock: false }, "post"))) return;
+      return arrange({ pins: Object.fromEntries(all.map(j => [j.key, mode === "day" ? j.day : null])), why: "Figer" });
+    },
+    front: dids => { const ks = keys.filter(k => dids.includes(byKey[k]?.design_id) && !byKey[k]?.pinned);
+      return arrange({ order: [...ks, ...keys.filter(k => !ks.includes(k))], why: "En tête" }); },
+    later: dids => { const ks = keys.filter(k => dids.includes(byKey[k]?.design_id) && !byKey[k]?.locked);
+      return arrange({ order: [...keys.filter(k => !ks.includes(k)), ...ks], pins: Object.fromEntries(ks.map(k => [k, null])), why: "Plus tard" }); },
+  };
+  return { bulk, undo, keys, byKey, send, arrange, moveBefore, moveAfter, moveDay, unpin, placeDay, toFront, modelAct, applyAdvice, setDue, markDone, colorDay, optimize, optimizeFrom, applyOptimized, jobAct };
 }
