@@ -117,6 +117,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   const [jobSel, setJobSel] = useState(null);
   const [modelSel, setModelSel] = useState(null);     // la fiche d'un modele de la file (06/11/2026)
   const [pop, setPop] = useState(null);
+  const [dayMode, setDayModeS] = useState(() => { try { return localStorage.getItem("bn_cal_daymode") || "list"; } catch { return "list"; } });
+  const setDayMode = v => { setDayModeS(v); try { localStorage.setItem("bn_cal_daymode", v); } catch { /* rien */ } };
   const [optPrev, setOptPrev] = useState(null);       // l'apercu d'une optimisation (06/11/2026)               // "advice" | "pool" | "blocked"
   const [pick, setPick] = useState(() => dayParam.current || iso(new Date()));
   // la vue (05/11/2026) : le mois, la semaine (grille horaire ; un agenda au telephone) ou le jour
@@ -370,6 +372,13 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   // l'impression en cours et sa fin estimee : la grille prolonge son bloc jusque-la
   const live = pd?.live && pd?.busy_until ? { now: pd.now, end: pd.busy_until, name: pd.live.name, planned: pd.live.planned_end } : null;
   const openJob = j => setJobSel(j);
+  // le jour au telephone (06/11/2026) : la grille horaire ou la liste (les courts y sont lisibles) ; garde dans ce navigateur
+  const dayList = !wide && view === "day" && dayMode === "list";
+  const dayToggle = !wide && view === "day" ? <div role="tablist" style={{ display: "flex", padding: 3, borderRadius: 12, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+    {[["list", "☰ Liste"], ["grid", "🕒 Horaire"]].map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={dayMode === k} onClick={() => setDayMode(k)}
+      style={{ flex: 1, padding: "6px 4px", borderRadius: 9, border: "none", cursor: "pointer", font: "inherit", fontSize: 12.5, fontWeight: 900,
+        color: dayMode === k ? "#fff" : "var(--muted)", background: dayMode === k ? "linear-gradient(135deg, #6366F1, #8B5CF6)" : "transparent" }}>{l}</button>)}
+  </div> : null;
   const viewMain = view === "month" ? calendar
     // la semaine sur ordinateur : les 24 h en entier, sans defilement interne (06/11/2026)
     : view === "week" ? (wide ? <TimeGrid dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} hourPx={28}
@@ -474,7 +483,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
     {side ? <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 12, alignItems: "start" }}>
       <div {...swipeProps} style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>{viewMain}{pool}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 12, maxHeight: "calc(100dvh - 40px)", overflowY: "auto" }}>{detail}{advice}</div>
-    </div> : <><div {...swipeProps}>{viewMain}</div>{advice}{view === "week" ? null : detail}</>}
+    </div> : dayList ? <>{dayToggle}<div {...swipeProps}>{detail}</div>{advice}</>
+      : <>{dayToggle}<div {...swipeProps}>{viewMain}</div>{advice}{view === "week" ? null : detail}</>}
     {sheet && <MakerWorldModelSheet designId={String(sheet)} onClose={() => { setSheet(null);
       client.get("/makerworld/plan", { params: { tz: -new Date().getTimezoneOffset() } }).then(r => setPd(r.data)).catch(() => {}); }}/>}
   </div>;
