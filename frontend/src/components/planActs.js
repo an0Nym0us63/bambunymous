@@ -69,7 +69,7 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
         const all = (pd?.jobs || []).filter(j => j.design_id === did), locked = all.filter(j => j.locked).map(j => j.key);
         if (mode === "time") return send("/makerworld/plan/lock", { keys: all.map(j => j.key), lock: true }, "post").then(ok => { if (ok) egg("planning_fige"); });
         if (locked.length && !(await send("/makerworld/plan/lock", { keys: locked, lock: false }, "post"))) return;
-        return arrange({ pins: Object.fromEntries(all.map(j => [j.key, mode === "day" ? j.day : null])) });
+        return arrange({ pins: Object.fromEntries(all.map(j => [j.key, mode === "day" ? j.day : null])), why: "Figer" });
       },
       pinAll: () => arrange({ pins: Object.fromEntries((pd?.jobs || []).filter(j => ks.includes(j.key) && !j.pinned && j.day).map(j => [j.key, j.day])) }),
       laterAll: () => j0 && send("/makerworld/plan/later", { key: j0.key, whole: true }, "post").then(ok => { if (ok) egg("planning_glisse"); }),

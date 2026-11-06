@@ -16,7 +16,7 @@ import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
 import { useNavigate } from "react-router-dom";
 import { usePlanActs } from "./planActs";
-import { JobSheet, ModelSheet, poolGroups, prioOf, UndoPill } from "./PlanPanels";
+import { JobSheet, ModelSheet, poolGroups, prioOf, UndoPill, PRIOS } from "./PlanPanels";
 import Model3D from "./Model3D";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import { moneyVal } from "../utils/money";
@@ -524,12 +524,25 @@ export default function MwQueue() {
                   </span>
                   {/* au planning : de quand a quand, sa priorite ; toucher ouvre sa fiche du planning */}
                   {plan?.by?.[r.design_id] && (() => { const x = plan.by[r.design_id], pr = pd?.prio?.[r.design_id];
-                    return <span role="button" tabIndex={0} onClick={e => { e.stopPropagation(); setPlanSel(r.design_id); }}
+                    // les gestes rapides (06/11/2026) : la priorite et figer, sans ouvrir la fiche
+                    const mine = (pd?.jobs || []).filter(j => j.design_id === r.design_id), n = mine.length;
+                    const fz = !n ? null : mine.every(j => j.locked) ? "time" : mine.every(j => j.pinned && !j.locked) ? "day" : mine.some(j => j.locked || j.pinned) ? "mix" : null;
+                    const at = e => { const b = e.currentTarget.getBoundingClientRect(); return { currentTarget: e.currentTarget, clientX: b.left, clientY: b.bottom, preventDefault() {}, stopPropagation() {} }; };
+                    const quick = (ic, tip, onClick) => <button type="button" data-tip={tip} aria-label={tip} onClick={e => { e.stopPropagation(); onClick(e); }}
+                      style={{ width:26, height:22, marginTop:5, borderRadius:20, border:"1px solid var(--border)", background:"var(--surface2)", cursor:"pointer", fontSize:12, lineHeight:1, padding:0 }}>{ic}</button>;
+                    const acts = isAdmin && n > 0 && <>
+                      {quick(pr ? prioOf(pr)[1] : "⚖", `Priorité : ${prioOf(pr)[2].toLowerCase()}`, e => openMenu(at(e), { title: "Priorité", subtitle: r.title_fr || r.title,
+                        items: PRIOS.map(([k, ic, l]) => ({ icon: ic, label: l, hint: (pr || 0) === k ? "actuelle" : undefined, onClick: () => modelAct(r.design_id).prio(k) })) }))}
+                      {quick(fz === "time" ? "🔒" : fz === "day" ? "📌" : fz === "mix" ? "◐" : "🔓", "Figer ses plateaux", e => openMenu(at(e), { title: `Figer ${n > 1 ? `ses ${n} plateaux` : "le plateau"}`, subtitle: r.title_fr || r.title,
+                        items: [[null, "🔓", "Libre"], ["day", "📌", "Le jour"], ["time", "🔒", "Jour et heure"]].map(([k, ic, l]) => ({ icon: ic, label: l, hint: fz === k ? "actuel" : undefined,
+                          onClick: () => modelAct(r.design_id).freeze(k) })) }))}
+                    </>;
+                    return <span style={{ display:"inline-flex", alignItems:"center", gap:4, maxWidth:"100%", flexWrap:"wrap" }}><span role="button" tabIndex={0} onClick={e => { e.stopPropagation(); setPlanSel(r.design_id); }}
                       data-tip="Sa fiche du planning : figer, sur un jour, d'une traite, date limite, priorité"
                       style={{ display:"inline-flex", alignItems:"center", gap:5, marginTop:5, padding:"2px 9px", borderRadius:20, cursor:"pointer", fontSize:11, fontWeight:800,
                         color: x.n ? "#4F46E5" : "#DC2626", background: x.n ? "rgba(99,102,241,0.12)" : "rgba(220,38,38,0.1)", maxWidth:"100%" }}>
                       📅 {pr ? `${prioOf(pr)[1]} ` : ""}{x.n ? `Planning : ${x.n} plateau${x.n > 1 ? "x" : ""} · dès ${when(x.first)} · fini ${when(x.last)}` : "Planning : non planifiable"}
-                      {x.n > 0 && x.blocked > 0 && <span style={{ color:"#DC2626" }}> · ⛔ {x.blocked}</span>}</span>; })()}
+                      {x.n > 0 && x.blocked > 0 && <span style={{ color:"#DC2626", whiteSpace:"nowrap" }}> · ⛔ {x.blocked}</span>}</span>{acts}</span>; })()}
                   {r.plates?.length > 1 && <PlateChips plates={r.plates} designId={r.mw_id || r.design_id} edit={isAdmin} onChanged={refresh}/>}
                   {r.ready_now?.plates > 0 && (
                     <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:800, color:"#16a34a", marginTop:5, padding:"2px 8px",
