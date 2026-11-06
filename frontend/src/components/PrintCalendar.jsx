@@ -10,6 +10,7 @@ import { currentFriend } from "../store/friend";
 import { usePlanActs } from "./planActs";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
 import { UndoPill, PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, poolGroups, BlockedList, LowStockBanner } from "./PlanPanels";
+import { PlanDashboard, Legend } from "./PlanDay";
 import { OPT_MODES, DAY_KIND, dayKindOf, DayStrip, onDay, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
@@ -435,6 +436,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
         style={{ ...pill, color: "#16A34A", borderColor: "color-mix(in srgb, #22C55E 45%, var(--border))" }}>📋 {wide ? `La file (${pd.jobs.length})` : `File ${pd.jobs.length}`}</button>}
     </div>
     {pd?.status && showPlan && <PlanStatus st={pd.status} live={null} check={pd.check} compact={!wide}/>}
+    {pd && showPlan && <PlanDashboard s={pd.summary} dur={pd.dur} now={pd.now} onLegend={() => setPop("legend")}/>}
     {pd && showPlan && <NowNextTiles pd={pd} wide={wide} onOpenPrint={openPrint} onPickJob={j => setJobSel(j)}/>}
     {showPlan && (pd?.deadlines || []).filter(x => !x.ok).map(x => <PlanStatus key={x.design_id}
       st={{ state: "deadline", text: `${x.title} ne sera pas fini avant le ${dueTxt(x.due)} : voir les conseils` }}/>)}
@@ -452,6 +454,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
     {optPrev && <OptimizePreview p={optPrev} onClose={() => setOptPrev(null)} onApply={() => { const p = optPrev; setOptPrev(null); applyOptimized(p); }}/>}
     {pop === "optimize" && <OptimizePick today={today} mode0={pd?.settings?.opt_mode} onPick={(from, mode, keep) => { setPop(null); optimizeFrom(from, mode, keep).then(r => r && setOptPrev(r)); }}
       onClose={() => setPop(null)}/>}
+    {pop === "legend" && <PlanPopup title="Ce que disent les signes" icon="?" color="#6366F1" onClose={() => setPop(null)}><Legend/></PlanPopup>}
     {pop === "advice" && <PlanPopup title={`Conseils (${pd?.advice?.length || 0})`} icon="💡" color="#F59E0B" onClose={() => setPop(null)}>
       <PlanAdvice items={pd?.advice} edit={edit} onApply={a => { applyAdvice(a); setPop(null); }}/></PlanPopup>}
     {pop === "locked" && <PlanPopup title="Plateaux figés" icon="🔒" color="#4F46E5" onClose={() => setPop(null)}>

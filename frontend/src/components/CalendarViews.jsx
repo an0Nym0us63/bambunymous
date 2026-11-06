@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { apiUrl, apiThumb } from "../api/client";
 import MwImg, { thumbSrc } from "./MwImg";
-import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift } from "./PlanDay";
+import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift, planIcons } from "./PlanDay";
 import { ST, iso, DAYS } from "./PrintCalendar";
 
 // Les vues Semaine et Jour du calendrier (05/11/2026) : une grille horaire ou ce qui est imprime, ce qui imprime et
@@ -145,7 +145,7 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
               {big && <Thumb e={e} size={Math.min(one ? 44 : 28, h - 8)}/>}
               <span style={{ minWidth: 0, flex: 1 }}>
                 <span style={{ display: "block", fontSize: 11.5, fontWeight: 900, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis",
-                  whiteSpace: big && one ? "normal" : "nowrap" }}>{plan && e.j.locked ? "🔒 " : ""}{plan && e.j.completes ? "🏁 " : ""}{plan && unretained(e.j) ? "○ " : ""}{title}</span>
+                  whiteSpace: big && one ? "normal" : "nowrap" }}>{plan && planIcons(e.j) ? `${planIcons(e.j)} ` : ""}{title}</span>
                 {big && <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, opacity: .85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {plan ? `${hhmm(e.j.start)} → ${hhmm(e.j.end)} · ${plateTxt(e.j)}` : `${e.it.start?.slice(11, 16)} · ${hm(e.it.seconds)}`}</span>}
                 {big && one && plan && e.j.load?.length > 0 && <span style={{ display: "block", fontSize: 10.5, fontWeight: 800, color: "#EA580C" }}>🧵 {e.j.load.join(", ")}</span>}
@@ -194,9 +194,9 @@ export function WeekAgenda({ dates, days, jobs, settings, now, live, pick, onPic
             <Thumb e={e} size={34}/>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: "block", fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {plan && e.j.completes ? "🏁 " : ""}{plan && unretained(e.j) ? "○ " : ""}{plan ? e.j.title : (e.it.title || e.it.name)}</span>
+                {plan && planIcons(e.j) ? `${planIcons(e.j)} ` : ""}{plan ? e.j.title : (e.it.title || e.it.name)}</span>
               <span style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {plan ? `${plateTxt(e.j)} · ${hm(e.j.seconds)}${e.j.load?.length ? " · 🧵" : ""}`
+                {plan ? `${plateTxt(e.j)} · ${hm(e.j.seconds)}`
                   : e.it.status === "IN_PROGRESS" && live?.end ? `en cours · fin vers ${hhmm(live.end)}` : `${hm(e.it.seconds)} · ${(ST[e.it.status] || ST.SUCCESS)[1]}`}</span>
             </span>
           </button>;

@@ -179,6 +179,55 @@ export const OPT_MODES = [["mix", "🧠", "Intelligent", "Essaie plusieurs plann
 export const DAY_KIND = { absent: ["🏖", "Absent", "#0EA5E9", "Rien ne se lance ; une impression lancée avant finit quand même"],
   light: ["⏳", "Peu dispo", "#F59E0B", "Une seule heure de lancement, la première de ta plage : un long y part, un autre la veille au soir"] };
 export const dayKindOf = (settings, day) => (settings?.days_off || []).find(x => x.from <= day && day <= x.to)?.kind || null;
+// les signes d'un plateau prevu (06/11/2026), les memes partout dans le calendrier ; LEGEND les explique
+export const PRIO_IC = { 2: "🔥", 1: "⬆", "-1": "⬇", "-2": "⏬" };
+export const planIcons = j => [j.locked ? "🔒" : j.pinned ? "📌" : "", PRIO_IC[j.prio_m] || "", j.completes ? "🏁" : "", unretained(j) ? "○" : "",
+  j.due && !j.due_ok ? "🎯" : "", j.intercalated ? "↔" : "", j.load?.length ? "🧵" : "", j.runout?.length ? "🔄" : ""].filter(Boolean).join("");
+export const LEGEND = [
+  ["Les impressions", [["▮", "Bloc plein, de la couleur de son état : une impression faite (réussie, échouée, annulée) ou en cours"],
+    ["┆", "Bloc hachuré, bord en pointillés : un plateau prévu par le planning, libre"],
+    ["▯", "Bord plein : un plateau prévu figé (jour et heure), ou qui termine un objet"],
+    ["○", "Gris : un modèle pas retenu dans « À faire » (profil par défaut), prévu après les retenus"]]],
+  ["Figer", [["📌", "Jour figé : il reste ce jour-là, l'heure peut bouger"], ["🔒", "Jour et heure figés : rien ne le déplace"]]],
+  ["Priorité", [["🔥", "Urgent : devant tous les autres retenus"], ["⬆", "Haute"], ["⬇", "Basse"], ["⏬", "Très basse"]]],
+  ["Filaments", [["🧵", "Une bobine à charger avant de le lancer"], ["↩", "La bobine à retirer pour faire la place"],
+    ["🔄", "La bobine chargée se videra pendant l'impression : en préparer une autre"], ["🚚", "Compte sur une commande pas encore reçue"],
+    ["📉", "Un filament passera sous le seuil (un quart de bobine)"]]],
+  ["Le reste", [["🏁", "Avec ce plateau, l'objet est fini"], ["🎯", "Date limite (rouge : il finira après)"],
+    ["↔", "Intercalé dans un objet « au mieux » (pour remplir une nuit, ou charger moins)"], ["⛔", "Non planifiable : le stock et les commandes ne suffisent pas"],
+    ["🏖", "Jour où tu es absent"], ["⏳", "Jour peu dispo"], ["↶", "Annuler le dernier geste"]]],
+];
+export function Legend() {
+  return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    {LEGEND.map(([t, rows]) => <div key={t}>
+      <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#6366F1", marginBottom: 5 }}>{t}</div>
+      {rows.map(([ic, txt]) => <div key={ic + txt} style={{ display: "flex", gap: 9, alignItems: "baseline", padding: "3px 0" }}>
+        <span style={{ width: 22, textAlign: "center", flexShrink: 0, fontSize: 14 }}>{ic}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text2)", lineHeight: 1.4 }}>{txt}</span></div>)}
+    </div>)}
+  </div>;
+}
+// le tableau de bord du planning (06/11/2026) : une ligne, l'essentiel ; tout fini quand, les bobines a charger, les
+// nuits perdues, les dates limites, les durees corrigees
+export function PlanDashboard({ s, dur, now, onLegend }) {
+  if (!s || !s.plates) return null;
+  const when = iso => { const d = new Date(iso), t = new Date(`${(now || "").slice(0, 10)}T12:00`), days = Math.round((new Date(`${iso.slice(0, 10)}T12:00`) - t) / 864e5);
+    return `${days === 0 ? "aujourd'hui" : days === 1 ? "demain" : d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} ${hhmm(iso)}`; };
+  const chip = (k, txt, tip, c = "var(--text2)") => <span key={k} data-tip={tip} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4,
+    padding: "4px 10px", borderRadius: 20, border: "1px solid var(--border)", background: "var(--surface)", fontSize: 12, fontWeight: 800, color: c, whiteSpace: "nowrap" }}>{txt}</span>;
+  return <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", alignItems: "center" }}>
+    {chip("p", `📋 ${s.plates} plateau${s.plates > 1 ? "x" : ""}`, "Les plateaux prévus")}
+    {s.end && chip("e", `🏁 tout fini ${when(s.end)}`, "Quand le dernier plateau de la file finira", "var(--text)")}
+    {chip("l", `🧵 ${s.loads} bobine${s.loads > 1 ? "s" : ""} à charger`, "Les chargements de bobine que demande toute la file", s.loads ? "#EA580C" : "var(--text2)")}
+    {s.nights > 0 && chip("n", `🌙 ${s.nights} nuit${s.nights > 1 ? "s" : ""} perdue${s.nights > 1 ? "s" : ""} · ${hm(s.idle_min * 60)}`, "Les nuits où l'imprimante attend l'heure de lancement : « Optimiser » peut les remplir", "#6366F1")}
+    {s.late > 0 && chip("d", `🎯 ${s.late} date${s.late > 1 ? "s" : ""} limite${s.late > 1 ? "s" : ""} ratée${s.late > 1 ? "s" : ""}`, "Voir les conseils", "#DC2626")}
+    {dur && Math.abs((dur.factor || 1) - 1) > 0.005 && chip("u", `⏱ durées ${dur.factor > 1 ? "+" : ""}${Math.round((dur.factor - 1) * 100)} %`, "Durées corrigées (Consignes › Durées)")}
+    {onLegend && <button type="button" onClick={onLegend} aria-label="Ce que disent les signes" data-tip="Ce que disent les signes et les couleurs"
+      style={{ flexShrink: 0, width: 28, height: 28, borderRadius: "50%", border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--muted)",
+        fontSize: 13, fontWeight: 900, cursor: "pointer" }}>?</button>}
+  </div>;
+}
+
 // une bobine qui se videra en pleine impression (06/11/2026) : vers quelle heure
 export const runoutTxt = r => `🔄 ${r.name} se vide vers ${+r.at.slice(11, 13)} h${r.at.slice(14, 16) !== "00" ? ` ${r.at.slice(14, 16)}` : ""} (reste ${r.left} g, il en faut ${r.need})`;
 // les creneaux de chargement (06/11/2026) : jusqu'a quatre plages

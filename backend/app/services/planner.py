@@ -1320,7 +1320,7 @@ async def plan(tz: int | None = None) -> dict:
     return {"settings": {k: d[k] for k in DEFAULTS}, "now": now.isoformat(timespec="minutes"),
             "busy_until": busy.isoformat(timespec="minutes") if busy else None,
             "live": ({"name": live[1], "design_id": live[2], "remaining_min": live[0], **(await _live_print(d))} if live else None),
-            "dur": d.get("_dur"),
+            "dur": d.get("_dur"), "summary": plan_metrics(r, d, now),
             "undo": ({"why": d["undo"][-1].get("why"), "at": d["undo"][-1].get("at")} if d["undo"] else None),
             "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix, gain), "status": status,
             "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),
