@@ -444,6 +444,9 @@ export function ModelSheet({ g: g0, now, edit, onClose, onPick, act: act0, jobs 
               "Ils prennent la tête de ce jour, à la suite ; ce qui n'y tient pas passe au lendemain, puis au jour d'après", f.day, v => v && act.dayAll(v), today)}
             {row("front", "⏫", "Tout en tête de file", "Ses plateaux passent avant tous les autres (ceux posés sur un jour y retournent à la file)", () => run("front", act.front))}
             {row("later", "⏬", "Tout plus tard", "Ses plateaux passent en fin de file, dans leur ordre (un modèle retenu reste devant les non retenus)", () => run("later", act.laterAll))}
+            {/* ses regroupements (06/11/2026 : « Dégrouper » n'etait que dans la fiche du plateau regroupe) */}
+            {act.unmerge && x.ok.filter(j => j.merged && j.merge_id).map(j => row(`unm${j.merge_id}`, "🧩", `Dégrouper : ${j.plate_name || "plateaux regroupés"}`,
+              "Ses plateaux redeviennent des impressions séparées", () => run(`unm${j.merge_id}`, () => act.unmerge(j.merge_id)), "#6366F1"))}
           </>}
         {!un && x.ok.length > 0 && act.freeze && <ModelFreezePick ok={x.ok} busy={busy} run={run} act={act}/>}
         {act.prio && <PrioPick value={f.prio_m} busy={busy} run={run} onPick={act.prio}/>}

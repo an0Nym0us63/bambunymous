@@ -88,6 +88,7 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
       chain: mode => send("/makerworld/plan/chain", { design_id: did, mode }, "post").then(ok => { if (ok && mode) egg("planning_traite"); }),
       due: v => setDue(did, v),
       sheet: () => setSheet(sheetRef(j0, did)),
+      unmerge: gid => unmerge(gid),           // un regroupement de ses plateaux, defait depuis la fiche du modele (06/11/2026)
       // sa priorite parmi les modeles (06/11/2026) : ses plateaux se replacent aussitot
       prio: lv => send("/makerworld/plan/prio", { target: did, level: lv }, "post").then(ok => { if (ok) egg("planning_priorite"); }),
     };
