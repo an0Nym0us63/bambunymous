@@ -507,7 +507,7 @@ def _slots() -> int:
         return _SLOTS["n"]
     try:
         from ..core.mqtt import get_state
-        return max(1, sum(len(a.trays or []) for a in get_state().ams_list or []))
+        return max(1, sum(len(a.trays or []) for a in get_state().ams_list or [] if a.id < 254))
     except Exception:
         return 4
 
@@ -515,7 +515,9 @@ def _slots() -> int:
 def _count_slots(ams: dict) -> int | None:
     try:
         from ..core.mqtt import get_state
-        trays = [t for a in get_state().ams_list or [] for t in a.trays or []]
+        # les AMS (et AMS HT) de la config ; 254/255, les bobines externes, n'en sont pas (deux emplacements vides
+        # comptaient : 20 places pour 17 sur une H2C a quatre AMS et un AMS HT)
+        trays = [t for a in get_state().ams_list or [] if a.id < 254 for t in a.trays or []]
     except Exception:
         return None
     if not trays:
