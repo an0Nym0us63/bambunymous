@@ -102,7 +102,8 @@ export default function PrintCalendar() {
     modelParam.current = null;
     if ((pd.jobs || []).some(j => j.design_id === m) || (pd.blocked || []).some(j => j.design_id === m)) setModelSel(m);
   }, [pd]);
-  const [showPlan, setShowPlan] = useState(true);
+  // le planning est toujours montre (06/11/2026) : le bouton pour le masquer ne servait a rien
+  const showPlan = true;
   const [setOpen, setSetOpen] = useState(false);
   const [sheet, setSheet] = useState(null);           // la fiche d'un modele : profil, plateaux, filaments retenus
   const [dragging, setDragging] = useState(null);
@@ -519,14 +520,11 @@ export default function PrintCalendar() {
       {!wide && <style>{".bn-pills::-webkit-scrollbar{display:none}.bn-pills>button{flex-shrink:0;white-space:nowrap;padding:5px 10px !important}"}</style>}
       <button type="button" onClick={() => { const d = new Date(); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setPick(iso(d)); }}
         style={{ ...pill, color: "#6366F1", borderColor: "color-mix(in srgb, #6366F1 40%, var(--border))" }}>Aujourd'hui</button>
-      <button type="button" onClick={() => setShowPlan(v => !v)} data-tip="La file « À faire », enchaînée sans pause après l'impression en cours"
-        style={{ ...pill, ...(showPlan ? { color: "#22C55E", borderColor: "color-mix(in srgb, #22C55E 45%, var(--border))", background: "color-mix(in srgb, #22C55E 10%, var(--surface2))" } : {}) }}>
-        {showPlan ? "✓ " : ""}Planning{showPlan && nPlanned ? (wide ? ` (${nPlanned})` : ` ${nPlanned}`) : ""}</button>
       <button type="button" onClick={() => setSetOpen(v => !v)} data-tip="Pause entre deux impressions, heures de fonctionnement et de lancement"
         style={{ ...pill, ...(setOpen ? { color: "#6366F1" } : {}) }} aria-label="Consignes">{wide ? "⚙ Consignes" : "⚙"}</button>
       {edit && nPlanned > 1 && <button type="button" onClick={() => setPop("optimize")}
         data-tip="Enchaîner les plateaux de mêmes couleurs dans toute la file (les impressions posées sur un jour ne bougent pas)"
-        style={{ ...pill, color: "#6366F1" }}>{wide ? "✨ Optimiser la file" : "✨ Optimiser"}</button>}
+        aria-label="Optimiser la file" style={{ ...pill, color: "#6366F1" }}>{wide ? "✨ Optimiser la file" : "✨"}</button>}
       {showPlan && pd?.advice?.length > 0 && <button type="button" onClick={() => setPop("advice")} data-tip="Les conseils du planning"
         style={{ ...pill, color: "#D97706", borderColor: "color-mix(in srgb, #F59E0B 45%, var(--border))", background: "color-mix(in srgb, #F59E0B 10%, var(--surface2))" }}>
         💡 {pd.advice.length}</button>}
