@@ -1036,7 +1036,7 @@ def _merge_advice(placed: list) -> list:
     try:
         from .plate_merge import proposals
         out = []
-        for p in proposals(placed, _slots())[:5]:
+        for p in [x for x in proposals(placed, _slots()) if x["saved_s"] >= 480][:10]:     # ceux qui font gagner 8 min ou plus
             out.append({"kind": "merge", "icon": "🧩", "conf": p["conf"],
                         "text": f"{p['title']} : "
                                 + (f"{len(p['plates'])} exemplaires du plateau {p['plates'][0]}" if len(set(p['plates'])) == 1
