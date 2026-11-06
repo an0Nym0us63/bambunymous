@@ -136,7 +136,8 @@ function Card({ it, accent, onOpen, i, big }) {
   return <Reveal delay={(i % 4) * 80} style={{ display: "flex", minWidth: 0, ...(big ? { gridColumn: "span 2", gridRow: "span 2" } : null) }}>
     <button type="button" onClick={() => onOpen(it)} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{ display: "flex", flexDirection: "column", width: "100%", padding: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", color: "inherit" }}>
-      <div style={{ position: "relative", flex: 1, minHeight: 0, aspectRatio: big ? "auto" : "4 / 5", borderRadius: big ? 22 : 16, overflow: "hidden",
+      {/* la piece phare tire sa hauteur de ses voisines ; seule sur sa rangee (telephone), elle garde la sienne (06/11/2026) */}
+      <div className={big ? "sc-big" : undefined} style={{ position: "relative", flex: 1, minHeight: big ? 260 : 0, aspectRatio: big ? "auto" : "4 / 5", borderRadius: big ? 22 : 16, overflow: "hidden",
         boxShadow: hov ? `0 26px 50px -28px rgba(0,0,0,.95), 0 0 0 1px color-mix(in srgb, ${accent} 40%, transparent)` : "0 0 0 1px rgba(255,255,255,.06)",
         transition: "box-shadow .5s" }}>
         <img src={mid(it.photos[0])} alt={it.title} loading="lazy" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
@@ -433,7 +434,7 @@ export default function PublicShowcase() {
       .sc-deck { width: min(440px, 100%); aspect-ratio: 4 / 5; margin: 0 auto 60px; }
       @media (max-width: 900px) { .sc-hero { grid-template-columns: 1fr; } .sc-deck { width: min(340px, 82vw); } }
       .sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); grid-auto-flow: dense; gap: 26px 16px; }
-      @media (max-width: 760px) { .sc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 10px; } }
+      @media (max-width: 760px) { .sc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 10px; } .sc-big { aspect-ratio: 1 / 1 !important; } }
       .sc-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent); }
       .sc-chips::-webkit-scrollbar { display: none; }
       .sc-shine { background: linear-gradient(100deg, #fff 20%, ${accent} 40%, #fff 60%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text;
