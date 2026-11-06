@@ -33,7 +33,7 @@ import MakerWorldModelSheet from "./MakerWorldModelSheet";
 import { hhmm as planHm } from "./PlanDay";
 import { PlanZoom, planTileBody } from "./PlanHome";
 import { FitBox } from "./FitThumb";
-import { ACH_PARAMS, achExpand } from "../utils/achSlim";
+import { ACH_HOME, achExpand } from "../utils/achSlim";
 
 // Les tuiles de l'accueil (22/10/2026, refaites le meme jour). Chaque tuile :
 //  - connait sa place reelle (largeur et hauteur en pixels, mesurees) et s'agence
@@ -760,7 +760,7 @@ export function useTilesData(status = null, want = null) {
       // chez un copain : ni mes copains ni mon fil (les siens ne sont pas relayes), la tuile le dit
       // (null, pas rien : sinon la tuile attendait sans fin, 05/11/2026)
       friends: () => put("friends", get("/friends/shared/printing")),
-      ach: () => put("ach", get("/achievements", ACH_PARAMS).then(achExpand)),
+      ach: () => put("ach", get("/achievements", ACH_HOME).then(achExpand)),
       month: () => {
         const now = new Date();
         const m0 = new Date(now.getFullYear(), now.getMonth(), 1), p0 = new Date(now.getFullYear(), now.getMonth() - 1, 1);

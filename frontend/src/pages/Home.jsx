@@ -23,7 +23,7 @@ import { AMSBox, AMSDetail, TrayBottomSheet, DryCard, amsRoute } from "../compon
 import { Zoom, TempStrip, SwitchArt, switchModel, FanStrip } from "../components/HomeTiles";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel, amsName, switchRoutes, trayPct } from "../utils/ams";
 import { FitBox } from "../components/FitThumb";
-import { ACH_PARAMS, achExpand } from "../utils/achSlim";
+import { ACH_HOME, achExpand } from "../utils/achSlim";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function hexCss(hex) {
@@ -2166,7 +2166,7 @@ function Greeting({ status, o = {} }) {
     if (opt("pNext", false)) put("queue", client.get("/makerworld/queue"));
     // chez un copain : pas mes copains (les siens ne sont pas relayes)
     if (opt("pFriends", false) && !currentFriend()) put("friends", client.get("/friends/shared/printing"));
-    if (opt("pGrade", false) || opt("pWheel", false)) put("ach", client.get("/achievements", { params: ACH_PARAMS }).then(r => ({ ...r, data: achExpand(r.data) })));
+    if (opt("pGrade", false) || opt("pWheel", false)) put("ach", client.get("/achievements", { params: ACH_HOME }).then(r => ({ ...r, data: achExpand(r.data) })));
   }, [st, !!o.pToday, !!o.pNext, !!o.pFriends, !!o.pGrade, !!o.pWheel]); // eslint-disable-line react-hooks/exhaustive-deps
   const h = new Date().getHours();
   const mood = opt("mood", "time");

@@ -3,6 +3,9 @@
 // Ici, a la lecture, tout est remis : le reste de l'appli voit la vue complete, comme avant. Une vue complete (un
 // serveur d'avant, chez un copain) passe telle quelle.
 export const ACH_PARAMS = { slim: 1 };
+// l'accueil (07/11/2026) : la vue reduite a ce que ses pastilles et tuiles affichent (~26 Ko au lieu de ~750) ; un
+// serveur d'avant l'ignore et renvoie la complete, qui se lit pareil
+export const ACH_HOME = { slim: 1, view: "home" };
 
 export function achExpand(data) {
   if (!data || !data.slim || !Array.isArray(data.items)) return data;
