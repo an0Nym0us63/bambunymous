@@ -569,6 +569,11 @@ async def set_design_collections(design_id: str, ids: list) -> dict:
     from .mw_watch import own
     for i in ids:
         own("add", i, did)
+    try:
+        from .mw_queue import collections_changed
+        collections_changed()                    # « A faire » le voit tout de suite (06/11/2026)
+    except Exception:
+        logger.exception("[MW] A faire apres un rangement")
     logger.info(f"[MW] modele {did} range dans {len(ids)} collection(s)")
     return {"ok": True, "in": ids}
 

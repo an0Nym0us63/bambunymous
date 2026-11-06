@@ -150,6 +150,19 @@ async def _save(d: dict) -> None:
     _INVALID[0] = True
 
 
+def collections_changed() -> None:
+    """Un modele range dans (ou sorti d') une collection depuis l'appli (06/11/2026) : « A faire » se recalcule avant de
+    repondre (les collections viennent d'etre relues), et le planning se verifie aussitot."""
+    _INVALID[0] = True
+    if _CACHE[1] is not None:
+        _CACHE[0] = 0.0
+    try:
+        from . import planner
+        planner.kick()
+    except Exception:
+        pass
+
+
 def touch() -> None:
     """Une impression commence ou finit : ce qui est fait et faisable change. Le resultat en cache
     passe pour vieux, le prochain appel le rend tout de suite et le recalcule en fond."""
