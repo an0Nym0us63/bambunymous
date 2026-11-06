@@ -218,6 +218,21 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     setExactBusy(null);
   };
   const [planDone, setPlanDone] = useState(null);   // { iid, txt } : « Retenu » / « Ajouté » / « Mis à jour », un instant
+  // ce qui est enregistre pour chaque profil retenu (06/11/2026) : plateaux et filaments, tels que lus ou enregistres ;
+  // l'ecran qui s'en ecarte le dit (toucher un plateau, changer un filament ne s'enregistrait qu'avec « Mettre a jour »)
+  const saved = useRef({});
+  const [, bumpSaved] = useState(0);
+  const platesSig = v => (Array.isArray(v) ? [...v].sort((a, b) => a - b) : null);   // l'ordre des touches ne compte pas
+  const sigOf = (iid, vk, stock) => { const sc = scopeOf(iid, vk), pk = vk ? `${iid}|${vk}` : iid;
+    return JSON.stringify([platesSig(plateSel[pk]), picksOf(sc, stock), platePicksOf(sc, stock)]); };
+  const dirtyOf = (iid, vk) => { const pk = vk ? `${iid}|${vk}` : iid;
+    return saved.current[pk] != null && sigOf(iid, vk, m?.stock?.[iid]) !== saved.current[pk]; };
+  // fermer avec des changements non enregistres : on demande
+  const closeSafe = async () => {
+    const dirty = (plans || []).some(pl => dirtyOf(pl.instance_id, pl.key && String(pl.key).split("~").length === 3 ? pl.key : null));
+    if (dirty && !(await showConfirm("Des plateaux ou des filaments choisis ne sont pas enregistrés (📌 Enregistrer les changements). Fermer quand même ?"))) return;
+    onClose();
+  };
   const planDoneT = useRef(null);
   // add : un profil de plus (les autres restent retenus) ; sinon il prend la place du premier
   const pinPlan = async (p, add = false) => {
@@ -230,6 +245,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
       const updating = !!planOf(p.instance_id);
       const { data } = await client.put(`/makerworld/queue/plan/${id}`, body);
       setPlans(data.plans || []);
+      saved.current[pk] = JSON.stringify([platesSig(body.plates), body.picks, body.plate_picks]); bumpSaved(x => x + 1);
       // Retour visible : le bouton passe a « ✓ Retenu » un instant
       setPlanDone({ iid: p.instance_id, txt: updating ? "Mis à jour" : add ? "Ajouté à « À faire »" : "Retenu" });
       clearTimeout(planDoneT.current);
@@ -310,7 +326,13 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
         for (const pl of pls) {
           const vk = pl.key.split("~").length === 3 ? pl.key : null;     // une variante de couleur : ses propres choix
           setPicksFromPlan(scopeOf(pl.instance_id, vk), data.stock?.[pl.instance_id], pl.picks, pl.plate_picks)
-            .then(() => alive && setM(x => x && { ...x }));     // choix trouves par recherche : relus, on redessine
+            .then(() => {
+              if (!alive) return;
+              // l'etat enregistre de ce profil, pour dire quand l'ecran s'en ecarte
+              const sc = scopeOf(pl.instance_id, vk), st = data.stock?.[pl.instance_id];
+              saved.current[vk ? `${pl.instance_id}|${vk}` : pl.instance_id] = JSON.stringify([platesSig(pl.plates), picksOf(sc, st), platePicksOf(sc, st)]);
+              setM(x => x && { ...x });                        // choix trouves par recherche : relus, on redessine
+            });
           if (pl.plates) setPlateSel(s => ({ ...s, [vk ? `${pl.instance_id}|${vk}` : pl.instance_id]: pl.plates }));
         }
         const w = String(id) === did0 ? want.current : {};
@@ -380,7 +402,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     ["💬", m.comment_count, "Avis", "#06B6D4", "#67E8F9"]].filter(([, n]) => n != null) : [];
 
   return createPortal(
-    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:z, background:"rgba(0,0,0,0.7)",
+    <div data-no-pull="" onClick={closeSafe} style={{ position:"fixed", inset:0, zIndex:z, background:"rgba(0,0,0,0.7)",
       display:"flex", alignItems: WIDE ? "center" : "flex-end", justifyContent:"center", padding: WIDE ? 20 : 0 }}>
       <div onClick={e => e.stopPropagation()} className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius: WIDE ? 24 : "22px 22px 0 0",
         width:"100%", maxWidth: WIDE ? 760 : 640, height: WIDE ? "90dvh" : "94dvh", display:"flex", flexDirection:"column", overflow:"hidden" }}>
@@ -396,7 +418,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                   boxShadow:"0 6px 16px rgba(245,158,11,.45)" }}/></span>}
               {/* le ⋯ et l'etoile sont dans la barre du bas des qu'elle est la (05/11/2026 : en double, c'etait trop) */}
               {!ok && <button onClick={menu} aria-label="Plus d'actions" style={roundTop}>⋯</button>}
-              <button onClick={onClose} aria-label="Fermer" style={roundTop}>✕</button>
+              <button onClick={closeSafe} aria-label="Fermer" style={roundTop}>✕</button>
             </div>
           </div>
           <div style={{ padding:"0 16px 20px" }}>
@@ -619,7 +641,10 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                   transform:"scale(1.04)" }}>✓ {done}</span>;
                                 if (busy) return <span style={{ ...linkBtn, padding:"6px 11px", fontSize:12, color:"#16a34a" }}>📌 Enregistrement…</span>;
                                 if (mine) return <>
-                                  {btn("📌 Mettre à jour", "Enregistrer les plateaux et filaments choisis ci-dessous pour ce profil", () => pinPlan(p))}
+                                  {dirtyOf(p.instance_id, vkey)
+                                    ? <>{btn("📌 Enregistrer les changements", "Les plateaux ou filaments choisis ci-dessous ne sont pas encore enregistrés pour ce profil", () => pinPlan(p), "#16A34A", true)}
+                                      <span style={{ alignSelf:"center", fontSize:11.5, fontWeight:800, color:"#D97706" }}>● modifié, pas encore enregistré</span></>
+                                    : btn("📌 Mettre à jour", "Enregistrer les plateaux et filaments choisis ci-dessous pour ce profil", () => pinPlan(p))}
                                   <button onClick={() => unpinPlan(p)} disabled={!!planBusy} data-tip={plans.length > 1 ? "Ne plus retenir ce profil (les autres restent)" : "Oublier ce choix"}
                                     style={{ ...linkBtn, padding:"5px 9px", fontSize:11.5, cursor:"pointer", color:"var(--muted)" }}>✕ Ne plus retenir</button>
                                 </>;
