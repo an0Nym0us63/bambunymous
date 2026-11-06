@@ -159,16 +159,20 @@ export function SensorChart({ lines, points, hours = 24, height = 180, unit = ""
   // le trace se fait sur des moyennes par tranche (~240 sur la largeur, 03/11/2026) : un ventilateur ou une buse qui
   // oscille a chaque releve faisait un pave plein ; la bulle, elle, lit toujours les vrais points
   const slot = (to - from) / 240;
+  // les moyennes gardent les vrais trous que le serveur a marques (06/11/2026 : perdus ici, la regle d'ecart reprenait la
+  // main et coupait les releves espaces du repos, 10 a 35 min, qui ne sont pas des trous)
   const inWin = l => {
     const out = [];
-    let k = null, s = 0, ts = 0, n = 0;
+    let k = null, s = 0, ts = 0, n = 0, g;
+    const push = () => out.push({ t: ts / n, v: s / n, ...(g !== undefined ? { gap: g } : {}) });
     for (const p of l.pts) {
       if (p.t < from || p.t > to) continue;
       const kk = Math.floor((p.t - from) / slot);
-      if (kk !== k) { if (n) out.push({ t: ts / n, v: s / n }); k = kk; s = ts = n = 0; }
+      if (kk !== k) { if (n) push(); k = kk; s = ts = n = 0; g = p.gap === undefined ? undefined : false; }
+      if (p.gap) g = true;
       s += p.v; ts += p.t; n++;
     }
-    if (n) out.push({ t: ts / n, v: s / n });
+    if (n) push();
     return out;
   };
   return <div ref={ref} onMouseMove={move} onMouseLeave={() => setAt(null)} onTouchStart={move} onTouchMove={move} onTouchEnd={() => setAt(null)}
