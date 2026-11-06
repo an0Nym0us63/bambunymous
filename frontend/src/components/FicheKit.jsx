@@ -3,6 +3,7 @@ import { Search, SlidersHorizontal, Plus } from "lucide-react";
 import AdminOnly from "./AdminOnly";
 import { useKeyboardInset } from "../utils/keyboard";
 import { useStackZ } from "../utils/zstack";
+import { useSwipeClose } from "../utils/swipeClose";
 
 // Le langage des fiches et des pages de liste (25/10/2026) : sorti de la page Filaments pour etre partage
 // (Objets et accessoires le reprennent). La coque d'une fiche, ses tuiles de chiffres, ses cartes de faits,
@@ -32,6 +33,7 @@ export const agoFr = iso => { if (!iso) return null; const d = Math.floor((Date.
 // et le champ qui prend le focus est recentre dans la zone qui defile une fois le clavier sorti.
 export function FSheet({ onClose, top = null, bottom = null, children, z: z0 = 1000 }) {
   const z = useStackZ(z0);              // au-dessus de toute fenetre deja ouverte (06/11/2026)
+  const { sheet, handle } = useSwipeClose(onClose);    // glisser la poignee vers le bas ferme (telephone)
   const wide = typeof window !== "undefined" && window.innerWidth >= 900;
   const kb = useKeyboardInset();
   const maxH = wide ? "90dvh" : "94dvh";
@@ -44,12 +46,14 @@ export function FSheet({ onClose, top = null, bottom = null, children, z: z0 = 1
   return (
     <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:z, display:"flex",
       alignItems: wide ? "center" : "flex-end", justifyContent:"center", padding: wide ? 20 : 0 }}>
-      <div onClick={e => e.stopPropagation()} className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius: wide ? 24 : "22px 22px 0 0",
+      <div ref={sheet} onClick={e => e.stopPropagation()} className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius: wide ? 24 : "22px 22px 0 0",
         width:"100%", maxWidth: wide ? 760 : 600, maxHeight: kb > 0 ? `calc(${maxH} - ${kb}px)` : maxH, display:"flex", flexDirection:"column", overflow:"hidden",
         marginBottom: kb, transition:"margin-bottom .15s ease, max-height .15s ease" }}>
         <div onFocus={onFocus} style={{ flex:1, minHeight:0, overflowY:"auto", position:"relative" }}>
           <div style={{ position:"sticky", top:0, zIndex:10, height:0 }}>
             {!wide && <div style={{ position:"absolute", top:8, left:"50%", transform:"translateX(-50%)", width:38, height:4, borderRadius:2, background:"rgba(148,163,184,.6)" }}/>}
+            {/* la zone de la poignee, seule a se glisser (06/11/2026) : etroite, rien du contenu n'y est */}
+            {!wide && <div {...handle} aria-hidden="true" style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:120, height:26, touchAction:"none" }}/>}
             <div style={{ position:"absolute", top:10, right:12, display:"flex", gap:8 }}>
               {top}
               <button onClick={onClose} aria-label="Fermer" className="hit" style={fRound}>✕</button>

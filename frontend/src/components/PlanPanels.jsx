@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc } from "./PlanDay";
 import { useStackZ } from "../utils/zstack";
+import { useSwipeClose } from "../utils/swipeClose";
 
 // Les fenetres du planning (05/11/2026) : une fenetre (en bas au telephone, au centre sur ordinateur), la fiche
 // d'actions d'un plateau, la file regroupee par objet, les plateaux non planifiables.
@@ -27,11 +28,12 @@ export function UndoPill({ info, onUndo, compact, style }) {
 export function PlanPopup({ title, icon, color = "#6366F1", onClose, children, wide, z: z0 = 5200 }) {
   const z = useStackZ(z0);              // au-dessus de toute fenetre deja ouverte (06/11/2026)
   const phone = typeof window !== "undefined" && window.innerWidth < 640;
+  const { sheet, handle } = useSwipeClose(onClose);    // au telephone, la barre de titre glissee vers le bas ferme
   return createPortal(<div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: z, background: "rgba(2,6,23,0.55)", backdropFilter: "blur(5px)",
     display: "flex", alignItems: phone ? "flex-end" : "center", justifyContent: "center", padding: phone ? 0 : 16 }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: wide ? 760 : 520, maxHeight: phone ? "88dvh" : "84dvh", display: "flex", flexDirection: "column",
+    <div ref={sheet} onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: wide ? 760 : 520, maxHeight: phone ? "88dvh" : "84dvh", display: "flex", flexDirection: "column",
       background: "var(--sheet-bg)", border: "1px solid var(--border)", borderRadius: phone ? "22px 22px 0 0" : 20, overflow: "hidden", boxShadow: "0 30px 80px rgba(0,0,0,.45)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", flexShrink: 0,
+      <div {...(phone ? handle : {})} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", flexShrink: 0, ...(phone ? { touchAction: "none" } : {}),
         background: `linear-gradient(135deg, color-mix(in srgb, ${color} 18%, transparent), transparent 70%)`, borderBottom: "1px solid var(--border)" }}>
         <span style={{ fontSize: 20 }}>{icon}</span>
         <span style={{ flex: 1, minWidth: 0, fontSize: 15.5, fontWeight: 900, color: "var(--text)" }}>{title}</span>
