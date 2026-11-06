@@ -204,6 +204,13 @@ export default function Layout() {
   const headerRef = React.useRef(null);
   // gestes caches (voir eggs.js) ; le logo, lui, a le tournis facile
   React.useEffect(() => { installEggs(); }, []);
+  // three.js (la vue 3D d'un modele) n'est plus charge avec l'appli (06/11/2026) : il se telecharge en fond, quelques
+  // secondes apres l'ouverture, quand le navigateur n'a rien d'autre a faire ; la premiere vue 3D n'a pas a l'attendre
+  React.useEffect(() => {
+    const go = () => { import("three").catch(() => {}); };
+    const t = setTimeout(() => (window.requestIdleCallback ? window.requestIdleCallback(go, { timeout: 8000 }) : go()), 4000);
+    return () => clearTimeout(t);
+  }, []);
   React.useEffect(() => { pageChanged(); }, [pathname]);
   const [spin, setSpin] = React.useState(false);
   const logoTap = React.useMemo(() => tapper(7, 3000, () => {
