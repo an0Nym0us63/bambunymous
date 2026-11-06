@@ -193,7 +193,9 @@ async def set_settings(body: dict) -> dict:
                 n = max(0, min(9, int(x.get("n") or 0)))
             except (TypeError, ValueError):
                 raise PlanError("Plateau : un nombre")
-            out.append({"kind": x["kind"], "n": n, "name": str(x.get("name") or "")[:40],
+            units = [{"name": str((u or {}).get("name") or "")[:30], "code": str((u or {}).get("code") or "")[:20] or None}
+                     for u in (x.get("units") or [])[:n] if isinstance(u, dict)]
+            out.append({"kind": x["kind"], "n": n, "name": str(x.get("name") or "")[:40], "units": units,
                         "avoid": [str(a).strip()[:30] for a in (x.get("avoid") or []) if str(a).strip()][:20]})
         d["plates"] = out
     if body.get("dur_mode") in ("off", "auto", "manual"):
@@ -681,7 +683,7 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
                 continue
             if g > ams_g[fid] + 0.5:
                 left = max(0.0, ams_g[fid])
-                runout.append({"name": f.get("name"), "left": round(left), "need": round(g),
+                runout.append({"name": names.get(fid) or f.get("name"), "id": fid, "left": round(left), "need": round(g),
                                "at": (s + timedelta(seconds=j["seconds"] * left / g)).isoformat(timespec="minutes")})
                 ams_g[fid] = None
             else:
@@ -694,7 +696,7 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
                 if fid in have:
                     have.remove(fid)
                 have.append(fid)
-        unload = []
+        unload, unload_ids = [], []
         here = rank.get(j["key"], 0)
         while len(have) > slots:
             out = [x for x in have if x not in mine]
@@ -704,6 +706,7 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
             have.remove(v)
             ams_g.pop(v, None)
             unload.append(names.get(v) or f"filament {v}")
+            unload_ids.append(v)
         _, awaits = short(j)
         low, low_info = [], []
         for f in j["fils"]:
@@ -721,7 +724,8 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
                                  "multicolor_type": f.get("multicolor_type"), "left": max(0, round(st["g"] + st["ordered"])), "low": round(st["low"])})
         placed.append({**j, "awaits_order": awaits, "low_after": low, "low_info": low_info, "start": s.isoformat(timespec="minutes"), "end": e.isoformat(timespec="minutes"),
                        "day": s.date().isoformat(), "pinned": j["key"] in pins, "locked": j["key"] in locked, "reasons": rs, "too_long": too_long,
-                       "load": [f["name"] for f in need], "unload": unload, "runout": runout,
+                       "load": [names.get(f["filament_id"]) or f["name"] for f in need], "load_ids": [f["filament_id"] for f in need],
+                       "unload": unload, "unload_ids": unload_ids, "runout": runout,
                        "free_slot": bool(need) and len(unload) < len(need),
                        "bed": b_need, "bed_change": b_change, "bed_warn": b_warn,
                        "wait_s": int((s - c).total_seconds()) if s > c else 0})
@@ -1188,18 +1192,23 @@ async def _context(tz: int | None):
     loaded = set(ams.keys())
     d["_ams"] = ams
     _SLOTS["n"] = _count_slots(ams)
+    # les filaments de la file et ceux charges (06/11/2026) : leur nom complet (« TPU 95A Bambu · Noir », pour les cartes et
+    # les notifications) et leur sous-type (les plateaux d'impression)
     d["_names"] = {int(k): v.get("name") for k, v in stock_of.items() if v.get("name")}
-    miss = [f for f in loaded if f not in d["_names"]]
-    if miss:
-        try:
-            from sqlalchemy import select
-            from ..db.session import AsyncSessionLocal
-            from ..models.filament import Filament
+    d["_ftype"] = {}
+    try:
+        from sqlalchemy import select
+        from ..db.session import AsyncSessionLocal
+        from ..models.filament import Filament
+        ids = list({int(k) for k in stock_of} | {int(f) for f in loaded})
+        if ids:
             async with AsyncSessionLocal() as db:
-                for fid, nm in (await db.execute(select(Filament.id, Filament.name).where(Filament.id.in_(miss)))).all():
-                    d["_names"][int(fid)] = nm
-        except Exception:
-            logger.exception("[PLANNING] noms des filaments charges")
+                for fid, nm, mt, ft, br in (await db.execute(select(Filament.id, Filament.name, Filament.material, Filament.fila_type,
+                                                                    Filament.manufacturer).where(Filament.id.in_(ids)))).all():
+                    d["_names"][int(fid)] = fil_label(nm, mt, ft, br)
+                    d["_ftype"][int(fid)] = (mt, ft)
+    except Exception:
+        logger.exception("[PLANNING] noms des filaments")
     jobs, changed = _jobs(q.get("models") or [], d, stock_of)
     # les durees corrigees (06/11/2026) : en proportion de la duree de chaque plateau
     st = await duration_stats()
@@ -1211,18 +1220,7 @@ async def _context(tz: int | None):
             j["seconds"] = int(j["seconds"] * f)
     if d.get("plates"):
         from . import plates as PL
-        d["_bed_now"] = await PL.mounted()
-        try:
-            from sqlalchemy import select
-            from ..db.session import AsyncSessionLocal
-            from ..models.filament import Filament
-            fids = {f.get("filament_id") for j in jobs for f in j["fils"] if f.get("filament_id")}
-            if fids:
-                async with AsyncSessionLocal() as db:
-                    d["_ftype"] = {int(i): (m, t) for i, m, t in (await db.execute(
-                        select(Filament.id, Filament.material, Filament.fila_type).where(Filament.id.in_(fids)))).all()}
-        except Exception:
-            logger.exception("[PLANNING] sous-types des filaments")
+        d["_bed_now"] = await PL.mounted(d.get("plates"))
     d["_stock"] = await _stock_ledger(stock_of)
     live = _live()
     busy = now + timedelta(minutes=live[0]) if live else None
@@ -1263,6 +1261,17 @@ def dur_factor(d: dict, st: dict) -> float:
     if d.get("dur_mode") == "manual":
         return 1 + int(d.get("dur_pct") or 0) / 100
     return 1.0
+
+
+def fil_label(name, material=None, fila_type=None, brand=None) -> str:
+    """Le nom complet d'un filament (06/11/2026) : « TPU 95A Bambu · Noir », « PLA Matte Sunlu · Blanc »."""
+    n = str(name or "").strip()
+    t = str(fila_type or material or "").strip()
+    b = str(brand or "").strip().replace("Bambu Lab", "Bambu")
+    if t and n.lower().startswith(t.lower()):
+        t = ""
+    head = " ".join(x for x in (t, b) if x)
+    return f"{head} · {n}" if head and n else head or n or "?"
 
 
 async def _stock_ledger(stock_of: dict) -> dict:
@@ -1967,8 +1976,9 @@ async def tick(cfg, r: dict | None = None) -> int:
                 body += "\n" + _bed_txt(j["bed_change"])
             head = f"🧵 À charger pour {_fmt(s)} : {', '.join(j['load'])}" if j.get("load") else \
                 f"🔲 Plateau à changer pour {_fmt(s)} : {_bed_name(j['bed_change']['to'])}"
+            # la toucher ouvre la fiche du filament a charger (06/11/2026), sinon le calendrier
             await N.notify("plan_load", head, body,
-                           click=N.app_link(cfg, "/prints?tab=calendar"), priority=3)
+                           click=N.app_link(cfg, f"/filaments?id={j['load_ids'][0]}" if j.get("load_ids") else "/prints?tab=calendar"), priority=3)
             sent += 1
         # une bobine qui se videra en pleine impression (06/11/2026) : un peu avant, laquelle et vers quelle heure
         for j in (r.get("jobs") or [])[:12]:
@@ -1982,7 +1992,7 @@ async def tick(cfg, r: dict | None = None) -> int:
                 await N.notify("plan_load", f"🔄 Bobine bientôt vide : {ro['name']} vers {_fmt(at)}",
                                f"Pendant {_title(j)} : il reste {ro['left']} g, il en faut {ro['need']} g.\n"
                                f"Prépare une autre bobine de {ro['name']} pour {_day_fr(at, today)} à {_fmt(at)}.",
-                               click=N.app_link(cfg, "/prints?tab=calendar"), priority=3)
+                               click=N.app_link(cfg, f"/filaments?id={ro['id']}" if ro.get("id") else "/prints?tab=calendar"), priority=3)
                 sent += 1
     if changed:
         await _save(d)

@@ -127,8 +127,33 @@ def profile_bed(design_id, profile_id, plate=None) -> str | None:
     return bed_of_3mf(f, plate) if f else None
 
 
-async def mounted() -> dict | None:
-    """Le plateau en place : celui de l'impression en cours, sinon de la derniere (son 3MF tranche). {kind, print_id}."""
+def printer_code() -> str | None:
+    """Le code du plateau que l'imprimante voit en place (device.plate.cur_id, lu grace au repere du plateau)."""
+    try:
+        from ..core.mqtt import get_state
+        raw = getattr(get_state(), "raw", None) or {}
+        return str(((raw.get("device") or {}).get("plate") or {}).get("cur_id") or "") or None
+    except Exception:
+        return None
+
+
+async def mounted(plates: list | None = None) -> dict | None:
+    """Le plateau en place (06/11/2026) : celui dont l'imprimante voit le code, s'il a ete reconnu (« C'est celui en
+    place ») ; sinon celui de l'impression en cours ou de la derniere (son 3MF tranche). {kind, name, code, how}."""
+    code = printer_code()
+    if code:
+        hits = [(p["kind"], (u.get("name") or f"{KINDS[p['kind']]} {i + 1}")) for p in plates or [] if p.get("kind") in KINDS
+                for i, u in enumerate(p.get("units") or []) if u.get("code") == code]
+        if hits:
+            return {"kind": hits[0][0], "name": " ou ".join(h[1] for h in hits), "code": code, "how": "printer"}
+    out = await _mounted_3mf()
+    if out:
+        out["code"] = code
+    return out or ({"kind": None, "code": code, "how": None} if code else None)
+
+
+async def _mounted_3mf() -> dict | None:
+    """Le plateau de l'impression en cours, sinon de la derniere (son 3MF tranche). {kind, print_id, how}."""
     try:
         from sqlalchemy import select
         from ..db.session import AsyncSessionLocal
@@ -142,7 +167,7 @@ async def mounted() -> dict | None:
     for pid, f, pl in rows:
         k = bed_of_3mf(DATA_DIR / f, pl)
         if k:
-            return {"kind": k, "print_id": pid}
+            return {"kind": k, "print_id": pid, "how": "3mf"}
     return None
 
 

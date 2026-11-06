@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { apiThumb, apiUrl } from "../api/client";
 import { colorBg, parseColorsList } from "../utils/colors";
 import MwImg from "./MwImg";
@@ -146,12 +147,12 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
       {j.intercalated && tag(`↔ intercalé dans ${j.intercalated.in}`, "#0EA5E9", { nuit: "Pour remplir la nuit", filaments: "Pour charger moins de filaments" }[j.intercalated.why]
         || "Pour optimiser le planning")}
       {j.due && tag(`🎯 avant le ${dueTxt(j.due)}`, j.due_ok ? "#16A34A" : "#EF4444", j.due_ok ? "L'objet sera fini à temps" : "Le dernier plateau de l'objet finit après cette date")}
-      {j.load?.length > 0 && tag(`🧵 À charger : ${j.load.join(", ")}${j.free_slot && !j.unload?.length ? " (emplacement libre)" : ""}`, "#EA580C",
+      {j.load?.length > 0 && tag(<>🧵 À charger : <FilLinks labels={j.load} ids={j.load_ids}/>{j.free_slot && !j.unload?.length ? " (emplacement libre)" : ""}</>, "#EA580C",
         j.free_slot && !j.unload?.length ? "Pas dans l'AMS à ce moment-là ; un emplacement est libre, rien à retirer" : "Pas dans l'AMS à ce moment-là")}
       {j.bed_change && tag(bedTxt(j.bed_change), "#0369A1", j.bed_warn || "Le plateau que demande ce profil, ou un des tiens qui va à ce filament")}
       {!j.bed_change && j.bed_warn && tag(`🔲 ${j.bed_warn}`, "#B45309", "Paramètres › Imprimante › Plateaux d'impression")}
-      {j.unload?.length > 0 && tag(`↩ À retirer : ${j.unload.join(", ")}`, "#64748B", "Celle qui resservira le plus tard (ou plus du tout) : on la sort pour faire la place")}
-      {(j.runout || []).map(r => <React.Fragment key={r.name}>{tag(runoutTxt(r), "#B45309", "La bobine chargée ne suffit pas : prépare-en une autre de ce filament pour cette heure-là")}</React.Fragment>)}
+      {j.unload?.length > 0 && tag(<>↩ À retirer : <FilLinks labels={j.unload} ids={j.unload_ids}/></>, "#64748B", "Celle qui resservira le plus tard (ou plus du tout) : on la sort pour faire la place")}
+      {(j.runout || []).map(r => <React.Fragment key={r.name}>{tag(<>🔄 <FilLink id={r.id} label={r.name}/>{runoutTxt(r).slice(3 + r.name.length)}</>, "#B45309", "La bobine chargée ne suffit pas : prépare-en une autre de ce filament pour cette heure-là")}</React.Fragment>)}
     </div>}
     {/* decale par la tache de fond (pas par un rangement) : d'ou il vient, quand, pourquoi */}
     {j.moved && <div style={{ fontSize: 11.5, fontWeight: 700, lineHeight: 1.35, color: "#0EA5E9" }}>
@@ -242,6 +243,17 @@ export const swapLong = j => !j.load?.length ? "" : j.load.map((x, i) => j.unloa
 // le plateau d'impression (06/11/2026) : son nom, et le changement a faire avant un plateau du planning
 export const BED_NAMES = { textured: "PEI texturé", supertack: "SuperTack", cool: "Cool Plate", hot: "PEI lisse", eng: "Engineering" };
 export const bedTxt = ch => ch ? `🔲 Mets le ${BED_NAMES[ch.to] || ch.to}${ch.from ? ` (à la place du ${BED_NAMES[ch.from] || ch.from})` : ""}` : "";
+// un filament nomme en entier (« TPU 95A Bambu · Noir »), qui ouvre sa fiche (06/11/2026)
+export function FilLink({ id, label }) {
+  const nav = useNavigate();
+  if (!id) return <>{label}</>;
+  return <span role="link" tabIndex={0} data-tip="Ouvrir la fiche du filament" onClick={e => { e.stopPropagation(); nav(`/filaments?id=${id}`); }}
+    style={{ cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>{label}</span>;
+}
+export const FilLinks = ({ labels, ids }) => <>{(labels || []).map((l, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={ids?.[i]} label={l}/></React.Fragment>)}</>;
+// le changement de bobine en phrase, ses filaments cliquables : « charger X a la place de Y »
+export const SwapLinks = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}charger <FilLink id={j.load_ids?.[i]} label={x}/>
+  {j.unload?.[i] ? <> à la place de <FilLink id={j.unload_ids?.[i]} label={j.unload[i]}/></> : j.free_slot ? " dans l'emplacement libre" : ""}</React.Fragment>)}</>;
 // une bobine qui se videra en pleine impression (06/11/2026) : vers quelle heure
 export const runoutTxt = r => `🔄 ${r.name} se vide vers ${+r.at.slice(11, 13)} h${r.at.slice(14, 16) !== "00" ? ` ${r.at.slice(14, 16)}` : ""} (reste ${r.left} g, il en faut ${r.need})`;
 // les creneaux de chargement (06/11/2026) : jusqu'a quatre plages

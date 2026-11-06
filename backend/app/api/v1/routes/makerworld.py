@@ -470,7 +470,34 @@ async def mw_plan_plates(_: str = Depends(require_mw)):
     from ....services import planner as P, plates as PL
     d = await P._load()
     return {"plates": d.get("plates") or [], "kinds": [{"kind": k, "label": PL.KINDS[k], "bambu_no": PL.bambu_no(k)} for k in PL.ORDER],
-            "mounted": await PL.mounted()}
+            "mounted": await PL.mounted(d.get("plates"))}
+
+
+@router.post("/plan/plates/bind")
+async def mw_plan_plates_bind(body: dict = Body({}), _: str = Depends(require_mw)):
+    """« C'est celui en place » : le code que l'imprimante voit est associe a ce plateau ({kind, unit : son rang})."""
+    from ....services import planner as P, plates as PL
+    code = PL.printer_code()
+    if not code:
+        raise HTTPException(400, "L'imprimante ne dit pas quel plateau est en place (détection du repère du plateau désactivée ?)")
+    d = await P._load()
+    p = next((x for x in d.get("plates") or [] if x.get("kind") == body.get("kind")), None)
+    try:
+        i = int(body.get("unit"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Plateau inconnu")
+    if not p or not 0 <= i < int(p.get("n") or 0):
+        raise HTTPException(400, "Plateau inconnu")
+    units = list(p.get("units") or [])
+    while len(units) <= i:
+        units.append({"name": "", "code": None})
+    units[i] = {**units[i], "code": code}
+    p["units"] = units
+    try:
+        await P.set_settings({"plates": d["plates"]})
+    except P.PlanError as e:
+        raise HTTPException(400, str(e))
+    return await mw_plan_plates()
 
 
 @router.post("/plan/undo")

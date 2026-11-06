@@ -5,7 +5,7 @@ import { egg } from "../eggs";
 import { showAlert } from "../utils/dialog";
 import { toast } from "../store/toast";
 import { useCanMw } from "../store/auth";
-import { DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt, bedTxt, BED_NAMES } from "./PlanDay";
+import { DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt, bedTxt, BED_NAMES, SwapLinks, FilLink } from "./PlanDay";
 import { JobSheet, LowStockBanner, BlockedList } from "./PlanPanels";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 
@@ -188,9 +188,9 @@ export function PlanZoom({ p: p0 }) {
         <span style={{ minWidth: 0 }}><span style={{ display: "block", fontSize: 12.5, fontWeight: 900, color: c }}>{head}</span>
           <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "var(--text2)", lineHeight: 1.4 }}>{txt}</span></span></div>;
       return <>{sec(bj && !j ? "Prochain changement de plateau" : "Prochain changement")}
-        {bj && line("🔲", "#0369A1", `${dayLabel(bj.day, p.now)} à ${hhmm(bj.start)}`, <>Pour {bj.title}{bj.plates_total > 1 ? ` · ${plateTxt(bj)}` : ""} : {bedTxt(bj.bed_change).replace(/^🔲 /, "").toLowerCase()}.</>, bj)}
-        {j && line("🧵", "#EA580C", `${dayLabel(j.day, p.now)} à ${hhmm(j.start)}`, <>Pour {j.title}{j.plates_total > 1 ? ` · ${plateTxt(j)}` : ""} : {swapLong(j)}.</>, j)}
-        {ro && line("🔄", "#B45309", `${dayLabel(ro.runout[0].at.slice(0, 10), p.now)} vers ${hhmm(ro.runout[0].at)}`, <>Pendant {ro.title} : {runoutTxt(ro.runout[0]).replace(/^🔄 /, "")}. Prépare une autre bobine.</>, ro)}
+        {bj && line("🔲", "#0369A1", `${dayLabel(bj.day, p.now)} à ${hhmm(bj.start)}`, <>Pour {bj.title}{bj.plates_total > 1 ? ` · ${plateTxt(bj)}` : ""} : {bedTxt(bj.bed_change).replace(/^🔲 Mets/, "mets")}.</>, bj)}
+        {j && line("🧵", "#EA580C", `${dayLabel(j.day, p.now)} à ${hhmm(j.start)}`, <>Pour {j.title}{j.plates_total > 1 ? ` · ${plateTxt(j)}` : ""} : <SwapLinks j={j}/>.</>, j)}
+        {ro && line("🔄", "#B45309", `${dayLabel(ro.runout[0].at.slice(0, 10), p.now)} vers ${hhmm(ro.runout[0].at)}`, <>Pendant {ro.title} : <FilLink id={ro.runout[0].id} label={ro.runout[0].name}/>{runoutTxt(ro.runout[0]).slice(3 + ro.runout[0].name.length)}. Prépare une autre bobine.</>, ro)}
       </>; })()}
     {sec("Les prochains jours")}
     {days.map(d => <div key={d} style={{ borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface2)", padding: 9, display: "flex", flexDirection: "column", gap: 6 }}>
