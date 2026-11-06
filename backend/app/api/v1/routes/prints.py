@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, UploadFile, File, Form, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import select, desc, func, or_, and_, update
@@ -420,6 +420,7 @@ async def list_prints(
     sort:     str = "recent",
     limit:    int = Query(40, le=200),
     offset:   int = 0,
+    request:  Request = None,
     _: str = Depends(get_current_user),
 ):
     """
@@ -446,15 +447,20 @@ async def list_prints(
     key = (status, search, group_id, tag, material, fila_type, filament_id, color, date_from, date_to, vue3d, sort, limit, offset,
            data_version("prints", "filament_usage", "print_tags", "groups", "print_snapshots", "bobines", "filaments"),
            _GALLERY["disk"], src_v)
+    gz_ok = request is not None and "gzip" in (request.headers.get("accept-encoding") or "")
     memo = _LIST_MEMO.get(key)
     if memo and _t.monotonic() - memo[0] < 30:
+        # deja compressee une fois (700 Ko : ~10 ms de compression, pendant lesquels le reste attendait)
+        if gz_ok:
+            return Response(memo[2], media_type="application/json", headers={"Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
         return Response(memo[1], media_type="application/json")
     out = await _list_prints(status, search, group_id, tag, material, fila_type, filament_id, color, date_from, date_to,
                              vue3d, sort, limit, offset)
     if len(_LIST_MEMO) > 30:
         _LIST_MEMO.clear()
     r = json_response(out)                     # gardee encodee : rien a refaire au prochain appel
-    _LIST_MEMO[key] = (_t.monotonic(), r.body)
+    import gzip as _gz
+    _LIST_MEMO[key] = (_t.monotonic(), r.body, _gz.compress(r.body, 5))
     return r
 
 
