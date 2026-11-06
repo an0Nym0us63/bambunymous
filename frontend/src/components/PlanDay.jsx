@@ -230,6 +230,11 @@ export function PlanDashboard({ s, dur, now, onLegend }) {
   </div>;
 }
 
+// le changement de bobine d'un plateau (06/11/2026), en court : « Bleu ciel ⇄ Silver » (charger l'un a la place de
+// l'autre), « Bleu ciel (place libre) » ; swapLong le dit en phrase
+export const swapTxt = j => !j.load?.length ? "" : j.load.map((x, i) => j.unload?.[i] ? `${x} ⇄ ${j.unload[i]}` : `${x}${j.free_slot ? " (place libre)" : ""}`).join(", ");
+export const swapLong = j => !j.load?.length ? "" : j.load.map((x, i) => j.unload?.[i] ? `charger ${x} à la place de ${j.unload[i]}`
+  : `charger ${x}${j.free_slot ? " dans l'emplacement libre" : ""}`).join(", ");
 // une bobine qui se videra en pleine impression (06/11/2026) : vers quelle heure
 export const runoutTxt = r => `🔄 ${r.name} se vide vers ${+r.at.slice(11, 13)} h${r.at.slice(14, 16) !== "00" ? ` ${r.at.slice(14, 16)}` : ""} (reste ${r.left} g, il en faut ${r.need})`;
 // les creneaux de chargement (06/11/2026) : jusqu'a quatre plages
@@ -470,7 +475,7 @@ export function NowNextTiles({ pd, onOpenPrint, onPickJob, wide }) {
             {j.completes ? "🏁 " : ""}{unretained(j) ? "○ " : ""}{j.title}<span style={{ color: "#6366F1" }}>{j.plates_total > 1 ? ` · ${j.plate}/${j.plates_total}` : ""}</span></span>
           <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             <span style={{ color: "var(--text2)" }}>{whenTxt(j.start, now)} → {whenTxt(j.end, now)}</span> · {hm(j.seconds)}
-            {j.load?.length ? <span style={{ color: "#EA580C" }}> · 🧵 {j.load.join(", ")}</span> : ""}
+            {j.load?.length ? <span style={{ color: "#EA580C" }}> · 🧵 {swapTxt(j)}</span> : ""}
             {j.runout?.length ? <span style={{ color: "#B45309" }}> · 🔄 {j.runout.map(r => r.name).join(", ")}</span> : ""}</span>
         </span>
       </button>)}

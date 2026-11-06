@@ -1925,6 +1925,12 @@ async def tick(cfg, r: dict | None = None) -> int:
     lines = [f"⏱ {_dur(j['seconds'])} · prévue à {_fmt(datetime.fromisoformat(r['now']) - timedelta(minutes=st['late_min']))}"]
     if j["load"]:
         lines.append(f"🧵 À charger : {', '.join(j['load'])}")
+        if j.get("unload"):
+            lines.append(f"↩ À retirer : {', '.join(j['unload'])}")
+        elif j.get("free_slot"):
+            lines.append("Un emplacement est libre : rien à retirer")
+    for ro in j.get("runout") or []:
+        lines.append(f"🔄 {ro['name']} se videra vers {_fmt(datetime.fromisoformat(ro['at']))} (reste {ro['left']} g, il en faut {ro['need']}) : prépare une autre bobine")
     nx = r["jobs"][1] if len(r["jobs"]) > 1 else None
     if nx:
         lines.append(f"Ensuite : {nx['title']}")
