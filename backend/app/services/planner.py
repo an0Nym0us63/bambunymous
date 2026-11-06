@@ -1549,13 +1549,24 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
     tm["context"] = round((time.perf_counter() - t0) * 1000)
     jobs = _ordered(jobs, d["order"], d["pins"])
     keys = {j["key"] for j in jobs}
-    # les poses de travaux sortis du planning (imprimes, retires de « A faire ») s'en vont
-    for k in [k for k in d["pins"] if k not in keys]:
-        d["pins"].pop(k)
-        dirty = True
-    for k in [k for k in d["locked"] if k not in keys]:
-        d["locked"].pop(k)
-        dirty = True
+    # les poses et les figeages de travaux sortis du planning (imprimes, retires de « A faire ») s'en vont, mais 12 h
+    # apres leur disparition seulement (06/11/2026 : une liste un instant incomplete -- le serveur qui redemarre,
+    # « A faire » relu pendant une optimisation -- effacait pour de bon les echantillons figes de Guillaume, replaces
+    # ensuite librement). Revenu entre-temps, il retrouve sa place et son heure
+    miss = d.setdefault("missing", {})
+    for k in list(miss):
+        if k in keys or (k not in d["pins"] and k not in d["locked"]):
+            miss.pop(k)
+            dirty = True
+    for k in {k for k in list(d["pins"]) + list(d["locked"]) if k not in keys}:
+        if k not in miss:
+            miss[k] = now.isoformat(timespec="minutes")
+            dirty = True
+        elif now - datetime.fromisoformat(miss[k]) > timedelta(hours=12):
+            d["pins"].pop(k, None)
+            d["locked"].pop(k, None)
+            miss.pop(k)
+            dirty = True
     # le plateau fige qu'on vient de lancer (06/11/2026) : une impression de ce modele a demarre et un de ses plateaux
     # etait fige dans les 3 h -- c'est lui (lance un peu en avance ou en retard). Son figeage tombe : il restait fige,
     # repousse apres l'impression en cours. Le compte des plateaux, lui, suit deja l'impression en cours
