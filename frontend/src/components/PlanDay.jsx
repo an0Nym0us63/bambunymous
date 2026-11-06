@@ -236,6 +236,7 @@ export function PlanDashboard({ s, dur, now, onLegend, cells = false, compact = 
       ["🧵", `${s.loads}`, `bobine${s.loads > 1 ? "s" : ""} à charger`, s.loads ? "#EA580C" : null, "Les chargements de bobine que demande toute la file"],
       s.beds > 0 && ["🔲", `${s.beds}`, `changement${s.beds > 1 ? "s" : ""} de plateau`, "#0369A1", "Les changements de plateau d'impression que demande toute la file"],
       s.nights > 0 && ["🌙", `${s.nights}`, `nuit${s.nights > 1 ? "s" : ""} perdue${s.nights > 1 ? "s" : ""} · ${hm(s.idle_min * 60)}`, "#6366F1", "Les nuits où l'imprimante attend l'heure de lancement : « Optimiser » peut les remplir"],
+      s.away_min > 0 && ["🚶", hm(s.away_min * 60), `temps mort en absence`, "#B45309", "L'imprimante à l'arrêt pendant tes absences : « Optimiser » y fait passer une impression lancée juste avant"],
       s.late > 0 && ["🎯", `${s.late}`, `date${s.late > 1 ? "s" : ""} limite${s.late > 1 ? "s" : ""} ratée${s.late > 1 ? "s" : ""}`, "#DC2626", "Voir les conseils"],
       dur && Math.abs((dur.factor || 1) - 1) > 0.005 && ["⏱", `${dur.factor > 1 ? "+" : ""}${Math.round((dur.factor - 1) * 100)} %`, "sur les durées", null, "Durées corrigées (Consignes › Durées)"],
     ].filter(Boolean);

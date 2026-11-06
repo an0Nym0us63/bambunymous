@@ -1993,7 +1993,15 @@ def plan_metrics(r: dict, d: dict, now: datetime) -> dict:
     rules = Rules(d)
     w = _night_waits(r, rules) if rules.limits else []
     js = r["jobs"]
+    # le temps mort pendant une absence (06/11/2026) compte a part de celui de la nuit
+    def in_away(i):
+        a0 = datetime.fromisoformat(js[i]["end"])
+        b0 = datetime.fromisoformat(js[i + 1]["start"])
+        return any(x < b0 and y > a0 for x, y in rules.away)
+    aw = [x for i, x in w if in_away(i)]
+    w = [(i, x) for i, x in w if not in_away(i)]
     return {"loads": sum(len(j.get("load") or []) for j in js), "beds": sum(1 for j in js if j.get("bed_change")), "nights": len(w), "idle_min": int(sum(x for _, x in w) // 60),
+            "away_n": len(aw), "away_min": int(sum(aw) // 60),
             "late": sum(1 for x in deadlines(js, d, now) if not x["ok"]), "end": max((j["end"] for j in js), default=None),
             "avg_h": round(sum((datetime.fromisoformat(j["end"]) - now).total_seconds() / 3600 for j in js) / max(1, len(js)), 1),
             "plates": len(js)}

@@ -541,7 +541,10 @@ function OptimizePreview({ p, onApply, onClose }) {
   const a = p.preview.before, b = p.preview.after;
   const day = iso => iso ? new Date(iso).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }) + ` ${+iso.slice(11, 13)} h${iso.slice(14, 16) !== "00" ? ` ${iso.slice(14, 16)}` : ""}` : "—";
   const rows = [["🧵", "Bobines à charger", a.loads, b.loads, x => x], ["🌙", "Nuits perdues", a.nights, b.nights, x => x],
-    ["⏸", "Temps mort la nuit", a.idle_min, b.idle_min, x => hm(x * 60)], ["⏱", "Fin moyenne d'un plateau", a.avg_h, b.avg_h, x => `${x} h`],
+    ["⏸", "Temps mort la nuit", a.idle_min, b.idle_min, x => hm(x * 60)],
+    // pendant les absences (06/11/2026), a part
+    ...((a.away_min || b.away_min) ? [["🚶", "Temps mort en absence", a.away_min || 0, b.away_min || 0, x => hm(x * 60)]] : []),
+    ["⏱", "Fin moyenne d'un plateau", a.avg_h, b.avg_h, x => `${x} h`],
     ["🏁", "Tout fini", a.end, b.end, day], ["🎯", "Dates limites ratées", a.late, b.late, x => x]];
   const better = (x, y, i) => i === 4 ? (y < x ? 1 : y > x ? -1 : 0) : (y < x ? 1 : y > x ? -1 : 0);
   const mode = OPT_MODES.find(m => m[0] === p.preview.mode);
