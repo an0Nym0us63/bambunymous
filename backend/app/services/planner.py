@@ -537,6 +537,28 @@ def _slots() -> int:
         return 4
 
 
+def _ht_state(ams: dict) -> dict:
+    """L'AMS HT (06/11/2026) : la ou un TPU se charge, en derivation (sinon, en bobine externe). {present, fid : le
+    filament de sa bobine}."""
+    try:
+        from ..core.mqtt import get_state, is_ht
+        hts = [a for a in get_state().ams_list or [] if is_ht(a.id)]
+    except Exception:
+        return {"present": False, "fid": None}
+    if not hts:
+        return {"present": False, "fid": None}
+    sids = {int(t.spool_id) for a in hts for t in a.trays or [] if getattr(t, "spool_id", None)}
+    fid = next((f for f, v in ams.items() if sids & set(v.get("spools") or [])), None)
+    return {"present": True, "fid": fid}
+
+
+def is_tpu(material, fila_type) -> bool:
+    """Un TPU qui ne passe pas par l'AMS (06/11/2026) : en bobine externe, ou dans l'AMS HT en derivation. Le « TPU for
+    AMS » passe par l'AMS comme les autres."""
+    m, t = str(material or "").upper(), str(fila_type or "").upper()
+    return m.startswith("TPU") and "AMS" not in m and "AMS" not in t
+
+
 def _count_slots(ams: dict) -> int | None:
     try:
         from ..core.mqtt import get_state
@@ -615,6 +637,18 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
     # sort celui qui a servi il y a le plus longtemps
     have = list(loaded)
     slots = max(slots, len(have), 1)
+    # le TPU (06/11/2026) : jamais dans un emplacement de l'AMS ; en bobine externe, ou dans l'AMS HT en derivation (la
+    # bobine du HT en sort alors, et le HT ne compte plus comme une place tant qu'il porte du TPU)
+    ftype_all = d.get("_ftype") or {}
+    ht = d.get("_ht") or {}
+    tpu_of = lambda fid, f=None: is_tpu(*(ftype_all.get(fid) or ((f or {}).get("type"), None)))
+    ext = {"cur": next((x for x in have if tpu_of(x)), None), "ht_taken": False}
+    if ext["cur"] is not None:
+        have.remove(ext["cur"])
+        if ht.get("present") and ht.get("fid") == ext["cur"]:
+            ext["ht_taken"] = True
+            slots = max(1, slots - 1)
+    where_ext = "dans l'AMS HT (dérivation)" if ht.get("present") else "en bobine externe"
     # quelle bobine sortir (06/11/2026) : celle dont on se servira le plus tard (ou plus du tout), pas la plus ancienne ;
     # sortir une bobine qui resservira l'apres-midi serait bete
     import bisect
@@ -673,8 +707,24 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
             rt = rules.run_txt or {}
             rs.append(f"Plus longue ({_dur(j['seconds'])}) que la plage de fonctionnement ({rt.get('from')}–{rt.get('to')}) : "
                       f"elle ne peut pas finir avant l'arrêt")
-        need = [f for f in j["fils"] if f.get("filament_id") and f["filament_id"] not in have]
+        nonlocal slots
+        need = [f for f in j["fils"] if f.get("filament_id") and f["filament_id"] not in have and not tpu_of(f["filament_id"], f)]
         mine = {f.get("filament_id") for f in j["fils"] if f.get("filament_id")}
+        # le TPU : la bobine externe (ou l'AMS HT en derivation) change de mains
+        ext_load, ext_out = None, None
+        for f in j["fils"]:
+            fid = f.get("filament_id")
+            if fid and tpu_of(fid, f) and fid != ext["cur"]:
+                ext_load, ext_out = f, ext["cur"]
+                ext["cur"] = fid
+                if ht.get("present") and not ext["ht_taken"]:
+                    ext["ht_taken"] = True
+                    hf = ht.get("fid")
+                    if hf in have and hf not in mine:
+                        have.remove(hf)
+                        ext_out = ext_out or hf
+                    slots = max(1, slots - 1)
+                break
         b_need, b_change, b_warn = bed_for(j)
         runout = []
         for f in j["fils"]:
@@ -692,7 +742,7 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
             ams_g[f["filament_id"]] = None
         for f in j["fils"]:
             fid = f.get("filament_id")
-            if fid:
+            if fid and not tpu_of(fid, f):
                 if fid in have:
                     have.remove(fid)
                 have.append(fid)
@@ -707,6 +757,10 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
             ams_g.pop(v, None)
             unload.append(names.get(v) or f"filament {v}")
             unload_ids.append(v)
+        # le TPU en dernier (comme dans la liste a charger) : ce qu'il remplace dehors ou dans l'AMS HT
+        if ext_load is not None and ext_out is not None:
+            unload.append(names.get(ext_out) or f"filament {ext_out}")
+            unload_ids.append(ext_out)
         _, awaits = short(j)
         low, low_info = [], []
         for f in j["fils"]:
@@ -724,7 +778,9 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
                                  "multicolor_type": f.get("multicolor_type"), "left": max(0, round(st["g"] + st["ordered"])), "low": round(st["low"])})
         placed.append({**j, "awaits_order": awaits, "low_after": low, "low_info": low_info, "start": s.isoformat(timespec="minutes"), "end": e.isoformat(timespec="minutes"),
                        "day": s.date().isoformat(), "pinned": j["key"] in pins, "locked": j["key"] in locked, "reasons": rs, "too_long": too_long,
-                       "load": [names.get(f["filament_id"]) or f["name"] for f in need], "load_ids": [f["filament_id"] for f in need],
+                       "load": [names.get(f["filament_id"]) or f["name"] for f in need] + ([f'{names.get(ext_load["filament_id"]) or ext_load["name"]} ({where_ext})'] if ext_load else []),
+                       "load_ids": [f["filament_id"] for f in need] + ([ext_load["filament_id"]] if ext_load else []),
+                       "load_where": {str(ext_load["filament_id"]): where_ext} if ext_load else {},
                        "unload": unload, "unload_ids": unload_ids, "runout": runout,
                        "free_slot": bool(need) and len(unload) < len(need),
                        "bed": b_need, "bed_change": b_change, "bed_warn": b_warn,
@@ -1212,6 +1268,7 @@ async def _context(tz: int | None):
     loaded = set(ams.keys())
     d["_ams"] = ams
     _SLOTS["n"] = _count_slots(ams)
+    d["_ht"] = _ht_state(ams)
     # les filaments de la file et ceux charges (06/11/2026) : leur nom complet (« TPU 95A Bambu · Noir », pour les cartes et
     # les notifications) et leur sous-type (les plateaux d'impression)
     d["_names"] = {int(k): v.get("name") for k, v in stock_of.items() if v.get("name")}
