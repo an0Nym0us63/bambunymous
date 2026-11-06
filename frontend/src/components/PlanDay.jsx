@@ -697,12 +697,13 @@ const AdvText = ({ t }) => { const i = String(t || "").indexOf(" : ");
   return i > 0 && i < 90 ? <><b style={{ color: "var(--text)", fontWeight: 800 }}>{t.slice(0, i)}</b><span style={{ color: "var(--muted)" }}> · {t.slice(i + 3)}</span></> : t; };
 // un regroupement en carte (06/11/2026 : la phrase entiere etait indigeste) : la vignette, le modele, quels plateaux,
 // et en pastilles ce qu'on y gagne, comment, et l'objet a imprimer en dernier
-function MergeCard({ a, edit, onApply }) {
+function MergeCard({ a, edit, onApply, c: cc = "#6366F1" }) {
   const m = a.m, dur = s => { const n = Math.round(s / 60); return n < 60 ? `${n} min` : `${Math.floor(n / 60)} h${n % 60 ? ` ${String(n % 60).padStart(2, "0")}` : ""}`; };
   const pill = (t, c, tip) => <span data-tip={tip} style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 800,
     whiteSpace: "nowrap", color: c, background: `color-mix(in srgb, ${c} 12%, transparent)` }}>{t}</span>;
-  return <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: 8, borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)" }}>
-    <PlateThumb j={{ thumb: m.thumb }} size={42}/>
+  return <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: 10, borderRadius: 14,
+    border: `1px solid color-mix(in srgb, ${cc} 18%, var(--border))`, background: `linear-gradient(135deg, color-mix(in srgb, ${cc} 7%, var(--surface)), var(--surface) 80%)` }}>
+    <PlateThumb j={{ thumb: m.thumb }} size={46}/>
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
       <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text)", lineHeight: 1.25, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{m.title}</div>
       <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>
@@ -720,8 +721,10 @@ function MergeCard({ a, edit, onApply }) {
       style={{ ...seg, ...segOn, padding: "3px 9px", flexShrink: 0 }}>Appliquer</button>}
   </div>;
 }
-const ADV_KINDS = [["deadline", "🎯", "Dates limites"], ["merge", "🧩", "Regrouper des plateaux"], ["colors", "🎨", "Enchaîner les mêmes couleurs"],
-  ["gap", "⏱", "Remplir un creux"], ["load", "🧵", "Bobines à charger"], ["long", "⚠️", "Trop longs pour les horaires"]];
+// chaque sorte, sa couleur (06/11/2026 : des accordeons gris et des cartes blanches)
+const ADV_KINDS = [["deadline", "🎯", "Dates limites", "#EF4444"], ["merge", "🧩", "Regrouper des plateaux", "#6366F1"],
+  ["colors", "🎨", "Enchaîner les mêmes couleurs", "#EC4899"], ["gap", "⏱", "Remplir un creux", "#0EA5E9"],
+  ["load", "🧵", "Bobines à charger", "#0891B2"], ["long", "⚠️", "Trop longs pour les horaires", "#F59E0B"]];
 export function PlanAdvice({ items, edit, onApply, at = null }) {
   // fermees a l'ouverture (06/11/2026) : toutes les sortes se voient d'un coup d'oeil, on deplie celle qui interesse
   const [open, setOpen] = useState({});
@@ -729,29 +732,31 @@ export function PlanAdvice({ items, edit, onApply, at = null }) {
   const flip = k => setOpen(s => ({ ...s, [k]: !s[k] }));
   const shut = Object.fromEntries(ADV_KINDS.concat([["other"]]).map(([k]) => [k, !open[k]]));
   const known = new Set(ADV_KINDS.map(k => k[0]));
-  const groups = [...ADV_KINDS, ["other", "💡", "Autres"]].map(([k, ic, l]) => [k, ic, l, items.filter(a => k === "other" ? !known.has(a.kind) : a.kind === k)])
-    .filter(g => g[3].length);
-  return <div style={{ borderRadius: 16, border: "1px solid color-mix(in srgb, #F59E0B 35%, var(--border))", padding: 10, display: "flex", flexDirection: "column", gap: 8,
-    background: "linear-gradient(150deg, color-mix(in srgb, #F59E0B 9%, transparent), transparent 70%), var(--surface)" }}>
-    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-      <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#D97706" }}>💡 Conseils</span>
-      {/* calcules en fond (06/11/2026) : les derniers, et quand */}
-      {at && <span data-tip="Calculés en fond par la tâche du planning, et quelques secondes après chaque changement" style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>
-        calculés à {at.slice(11, 16).replace(":", " h ")}</span>}
-    </div>
-    {groups.map(([k, ic, l, list]) => <div key={k} style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+  const groups = [...ADV_KINDS, ["other", "💡", "Autres", "#64748B"]].map(([k, ic, l, c]) => [k, ic, l, c, items.filter(a => k === "other" ? !known.has(a.kind) : a.kind === k)])
+    .filter(g => g[4].length);
+  return <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    {/* calcules en fond (06/11/2026) : les derniers, et quand */}
+    {at && <span data-tip="Calculés en fond par la tâche du planning, et quelques secondes après chaque changement"
+      style={{ alignSelf: "flex-end", fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>calculés à {at.slice(11, 16).replace(":", " h ")}</span>}
+    {groups.map(([k, ic, l, c, list]) => <div key={k} style={{ borderRadius: 16, overflow: "hidden", border: `1px solid color-mix(in srgb, ${c} 28%, var(--border))`,
+      background: `color-mix(in srgb, ${c} 4%, var(--surface))` }}>
       <button type="button" onClick={() => flip(k)} aria-expanded={!shut[k]}
-        style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 8px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)",
-          color: "var(--text)", cursor: "pointer", fontSize: 12.5, fontWeight: 900, textAlign: "left" }}>
-        <span>{ic}</span><span style={{ flex: 1 }}>{l}</span>
-        <span style={{ fontSize: 11, fontWeight: 900, color: "#D97706", background: "color-mix(in srgb, #F59E0B 14%, transparent)", borderRadius: 20, padding: "1px 7px" }}>{list.length}</span>
-        <span style={{ color: "var(--muted)", transform: shut[k] ? "rotate(-90deg)" : "none", transition: "transform .15s" }}>▾</span></button>
-      {!shut[k] && list.map((a, i) => a.m ? <MergeCard key={i} a={a} edit={edit} onApply={onApply}/>
-        : <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", paddingLeft: 4 }}>
-        <span style={{ fontSize: 14 }}>{a.icon}</span>
-        <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: "var(--text2)", lineHeight: 1.4 }}><AdvText t={a.text}/></span>
-        {edit && a.action && <button type="button" onClick={() => onApply(a.action)} style={{ ...seg, ...segOn, padding: "3px 9px", flexShrink: 0 }}>Appliquer</button>}
-      </div>)}
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: "none", cursor: "pointer", textAlign: "left", fontFamily: "inherit",
+          background: `linear-gradient(100deg, color-mix(in srgb, ${c} 16%, var(--surface)), color-mix(in srgb, ${c} 4%, var(--surface)) 70%)` }}>
+        <span style={{ width: 30, height: 30, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0,
+          background: `color-mix(in srgb, ${c} 20%, var(--surface))`, boxShadow: `0 4px 10px -6px ${c}` }}>{ic}</span>
+        <span style={{ flex: 1, fontSize: 13.5, fontWeight: 900, color: "var(--text)" }}>{l}</span>
+        <span style={{ minWidth: 22, height: 22, padding: "0 7px", borderRadius: 11, display: "inline-flex", alignItems: "center", justifyContent: "center",
+          fontSize: 11.5, fontWeight: 900, color: "#fff", background: c }}>{list.length}</span>
+        <span style={{ color: c, fontSize: 12, transform: shut[k] ? "rotate(-90deg)" : "none", transition: "transform .15s" }}>▾</span></button>
+      {!shut[k] && <div style={{ display: "flex", flexDirection: "column", gap: 7, padding: "4px 10px 10px" }}>
+        {list.map((a, i) => a.m ? <MergeCard key={i} a={a} c={c} edit={edit} onApply={onApply}/>
+          : <div key={i} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "9px 10px", borderRadius: 12,
+            border: `1px solid color-mix(in srgb, ${c} 18%, var(--border))`, background: `color-mix(in srgb, ${c} 6%, var(--surface))` }}>
+          <span style={{ fontSize: 15 }}>{a.icon}</span>
+          <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: "var(--text2)", lineHeight: 1.45 }}><AdvText t={a.text}/></span>
+          {edit && a.action && <button type="button" onClick={() => onApply(a.action)} style={{ ...seg, ...segOn, padding: "3px 9px", flexShrink: 0 }}>Appliquer</button>}
+        </div>)}</div>}
     </div>)}
   </div>;
 }
