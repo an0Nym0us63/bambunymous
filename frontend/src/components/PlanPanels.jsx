@@ -300,6 +300,8 @@ function fromTo(a, b, now, time = false) {
   const [de, , la] = word(a), [, au, lb] = word(b);
   return <>{de}<B>{la}{time ? ` ${hhmm(a)}` : ""}</B> {au}<B>{lb}{time ? ` ${hhmm(b)}` : ""}</B></>;
 }
+const smallBtn = { padding: "5px 10px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", cursor: "pointer", font: "inherit",
+  fontSize: 12, fontWeight: 800, color: "var(--text2)" };
 const chipS = c => ({ fontSize: 10.5, fontWeight: 900, color: c, background: `color-mix(in srgb, ${c} 13%, transparent)`, borderRadius: 7,
   padding: "1px 6px", whiteSpace: "nowrap" });
 export function PoolSummary({ jobs, blocked = [], now, onOpenModel }) {
@@ -369,6 +371,11 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act, jobs }) {
           {f.chain && <span style={chipS("#0EA5E9")}>{chainTxt(f)}</span>}
           {prioChip(f.prio_m)}
         </span>
+        {/* sous le modele (06/11/2026), en petits boutons comme dans la fiche d'un plateau : sa fiche MakerWorld, le calendrier */}
+        <span style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }}>
+          <button type="button" onClick={() => { act.sheet(); onClose(); }} data-tip="Retenir le profil, choisir les plateaux, les filaments et le nombre d'exemplaires" style={smallBtn}>🧾 Fiche MakerWorld</button>
+          {act.calendar && <button type="button" onClick={() => { act.calendar(); onClose(); }} data-tip="Le calendrier, sur ce modèle" style={smallBtn}>🗓 Voir au calendrier</button>}
+        </span>
       </div>
     </div>
     {edit && <>
@@ -376,7 +383,7 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act, jobs }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {un ? <div style={{ padding: "10px 12px", borderRadius: 12, border: "1px dashed color-mix(in srgb, #94A3B8 60%, var(--border))", background: "var(--surface2)",
             fontSize: 12, fontWeight: 700, color: "var(--text2)", lineHeight: 1.4 }}>○ Pas retenu : ses plateaux passent après tous les plateaux retenus, sans jour.
-            Pour les placer, retiens son profil dans <b>Fiche du modèle</b>.</div>
+            Pour les placer, retiens son profil dans <b>Fiche MakerWorld</b>.</div>
           : free.length > 0 && <>
             {jobs && act.slotAll ? row("dayall", "📍", `Placer ${free.length > 1 ? `les ${free.length} plateaux` : "le plateau"} sur un jour`,
               `Le jour, puis leur place : automatique (la meilleure de la journée${free.length > 1 ? ", les autres à la suite" : ""}) ou celle que tu touches ; ce qui n'y tient pas passe au lendemain`,
@@ -390,12 +397,8 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act, jobs }) {
         {act.prio && <PrioPick value={f.prio_m} busy={busy} run={run} onPick={act.prio}/>}
         {act.chain && (f.plates_total > 1 || f.qty > 1) && <ChainPick j={f} busy={busy} run={run} act={act}/>}
         {dateRow("due", "🎯", f.due ? "Changer la date limite" : "Une date limite", f.due ? `Fini avant le ${dueTxt(f.due)} (son dernier plateau)` : "Son dernier plateau fini avant ce jour ; le planning prévient s'il déborde", f.due, v => act.due(v))}
-        {row("sheet", "🧾", "Fiche du modèle", "Retenir le profil, choisir les plateaux, les filaments et le nombre d'exemplaires", () => { act.sheet(); onClose(); })}
       </div>
     </>}
-    {act.calendar && <button type="button" onClick={() => { act.calendar(); onClose(); }} style={{ marginTop: 8, padding: "6px 11px", borderRadius: 10,
-      border: "1px solid var(--border)", background: "var(--surface2)", cursor: "pointer", font: "inherit", fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>
-      🗓 Voir au calendrier</button>}
     {sec(`Plateau par plateau (${g.jobs.length})`)}
     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
       {g.jobs.map(j => {
