@@ -327,7 +327,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
     </div>
     {/* la frise du jour en haut de la carte, sous son titre (06/11/2026 : en dessous de la liste, il fallait descendre) */}
     {pick >= today && <DayStrip day={pick} done={sel?.items || []} jobs={(pd?.jobs || []).filter(j => onDay(j, pick))} settings={pd?.settings} now={pd?.now}
-      live={pd?.live && pd?.busy_until ? { now: pd.now, end: pd.busy_until, name: pd.live.name, planned: pd.live.planned_end } : null}/>}
+      live={pd?.live && pd?.busy_until ? { now: pd.now, end: pd.busy_until, name: pd.live.name, planned: pd.live.planned_end, id: pd.live.print_id } : null}/>}
     {pick >= today && pd?.live && pd?.busy_until && pd.busy_until.slice(0, 10) >= pick && pd.now.slice(0, 10) <= pick &&
       <div style={{ fontSize: 11.5, fontWeight: 800, color: "#2563EB" }}>⏳ En cours : {pd.live.name} · fin vers {pd.busy_until.slice(11, 16).replace(":", " h ")}
         {pd.busy_until.slice(0, 10) !== pd.now.slice(0, 10) ? " (le lendemain)" : ""}</div>}
@@ -370,7 +370,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
     at: `${day}T${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}` }, "post").then(ok => { if (ok) egg("planning_fige"); });
   const openPrint = it => onOpenPrint ? onOpenPrint(it) : nav(`/prints?id=${it.id}`);
   // l'impression en cours et sa fin estimee : la grille prolonge son bloc jusque-la
-  const live = pd?.live && pd?.busy_until ? { now: pd.now, end: pd.busy_until, name: pd.live.name, planned: pd.live.planned_end } : null;
+  const live = pd?.live && pd?.busy_until ? { now: pd.now, end: pd.busy_until, name: pd.live.name, planned: pd.live.planned_end, id: pd.live.print_id } : null;
   const openJob = j => setJobSel(j);
   // le jour au telephone (06/11/2026) : la grille horaire ou la liste (les courts y sont lisibles) ; garde dans ce navigateur
   const dayList = !wide && view === "day" && dayMode === "list";

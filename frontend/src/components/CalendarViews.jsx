@@ -113,13 +113,15 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
           {launch && launch.map(([a, b], i) => <span key={`l${i}`} data-tip="Heures de lancement" style={{ position: "absolute", left: 0, width: 3,
             top: a / 60 * hourPx, height: (b - a) / 60 * hourPx, background: "color-mix(in srgb, #6366F1 45%, transparent)" }}/>)}
           {Array.from({ length: 24 }, (_, h) => <span key={h} style={{ position: "absolute", left: 0, right: 0, top: h * hourPx, borderTop: "1px solid color-mix(in srgb, var(--border) 60%, transparent)" }}/>)}
+          {/* la partie hachuree (06/11/2026) : comme le debut de l'impression, elle ouvre sa fiche */}
           {evs[d].filter(e => e.kind === "rest").map(e => <span key={e.key} data-tip={`${e.live.name || "Impression en cours"} : fin estimée vers ${hhmm(e.live.end)}`}
+            role={e.live.id ? "button" : undefined} onClick={e.live.id ? ev => { ev.stopPropagation(); onOpenPrint({ id: e.live.id }); } : undefined}
             // sa vraie hauteur ; l'etiquette est posee sur le trait de fin, par-dessus tout (06/11/2026 : un quart d'heure
             // restant la coupait ; agrandi, le bloc faisait croire a une demi-heure)
             style={{ position: "absolute", left: 4, right: 3, top: e.a / 60 * hourPx, height: Math.max(3, (e.b - e.a) / 60 * hourPx - 2), zIndex: 4,
               borderRadius: "0 0 8px 8px", border: "1.5px dashed #3B82F6", borderTop: "none", boxSizing: "border-box", overflow: "visible",
               background: "repeating-linear-gradient(135deg, color-mix(in srgb, #3B82F6 22%, transparent) 0 5px, color-mix(in srgb, #3B82F6 8%, transparent) 5px 10px)",
-              display: "flex", alignItems: "flex-end", justifyContent: "flex-end", padding: "0 6px 2px" }}>
+              display: "flex", alignItems: "flex-end", justifyContent: "flex-end", padding: "0 6px 2px", cursor: e.live.id ? "pointer" : "default" }}>
             {e.live.end.slice(0, 10) === d && (() => { const dr = endDrift(e.live.planned, e.live.end);
               return <span style={{ position: "absolute", right: 6, top: "100%", transform: "translateY(-50%)", zIndex: 6,
                 display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, fontWeight: 900, color: "#2563EB", whiteSpace: "nowrap",
