@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional, List
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import select, desc, func, or_, and_, update
 from sqlalchemy.orm import selectinload
@@ -432,6 +432,37 @@ async def list_prints(
     page entiere pour une seule carte -- l'appli enchainait les requetes pour
     remplir l'ecran -- et revenait en entier dans chaque page qui le touchait.
     """
+    # (06/11/2026) la meme page rendue telle quelle tant que rien n'a change : les tables qu'elle lit, les photos et vues
+    # 3D du disque (gallery_touched), les 3MF d'origine gardes ; 30 s au plus pour le reste (0,25 s et 700 Ko a chaque
+    # retour sur l'onglet, et pendant ce temps les autres requetes attendaient)
+    import time as _t
+    from ....db.session import data_version
+    from ....core.fastjson import json_response
+    try:
+        from ....services.mw_source import _IDX as _SIDX
+        src_v = (_SIDX.get("mt"), len(_SIDX.get("v") or {}))
+    except Exception:
+        src_v = None
+    key = (status, search, group_id, tag, material, fila_type, filament_id, color, date_from, date_to, vue3d, sort, limit, offset,
+           data_version("prints", "filament_usage", "print_tags", "groups", "print_snapshots", "bobines", "filaments"),
+           _GALLERY["disk"], src_v)
+    memo = _LIST_MEMO.get(key)
+    if memo and _t.monotonic() - memo[0] < 30:
+        return Response(memo[1], media_type="application/json")
+    out = await _list_prints(status, search, group_id, tag, material, fila_type, filament_id, color, date_from, date_to,
+                             vue3d, sort, limit, offset)
+    if len(_LIST_MEMO) > 30:
+        _LIST_MEMO.clear()
+    r = json_response(out)                     # gardee encodee : rien a refaire au prochain appel
+    _LIST_MEMO[key] = (_t.monotonic(), r.body)
+    return r
+
+
+_LIST_MEMO: dict = {}
+
+
+async def _list_prints(status, search, group_id, tag, material, fila_type, filament_id, color, date_from, date_to,
+                       vue3d, sort, limit, offset) -> dict:
     from sqlalchemy import exists
     from ....models.print_history import PrintTag as _PT
 
@@ -512,9 +543,8 @@ async def list_prints(
                                        .order_by(_Snap.print_id, _Snap.id))).all():
                 snaps.setdefault(r.print_id, []).append(dict(r._mapping))
 
-    from ....core.fastjson import json_response
-    return json_response({"total": total, "has_more": done, "next_offset": pos,
-                          "prints": [_print_to_out(p, gc, snaps) for gc in ({},) for p in rows]})
+    return {"total": total, "has_more": done, "next_offset": pos,
+            "prints": [_print_to_out(p, gc, snaps) for gc in ({},) for p in rows]}
 
 
 # La galerie est gardee en memoire (28/10/2026) : chaque ouverture de l'onglet la recalculait entierement.

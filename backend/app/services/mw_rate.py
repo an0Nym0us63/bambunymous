@@ -221,6 +221,29 @@ async def to_rate(fresh: bool = False) -> dict:
     pending = await pending_ratings()
     stats = {"rated": len(rated), "pending": len(pending)} if rated is not None else None
     my_uid, mine = await own_designs()
+    # (06/11/2026) rendu tel quel tant que rien n'a bouge : mes evaluations (lues ou corrigees ici), mes impressions,
+    # leurs photos (base et disque) et les fiches des modeles ; 0,4 a 0,6 s a chaque ouverture de l'accueil sinon
+    from ..db.session import data_version
+    from ..api.v1.routes.prints import _GALLERY
+    hit_r = _CACHE.get("ratings")
+    key = (id(hit_r), hit_r[0] if hit_r else None, len(rated or ()),
+           tuple(sorted((k, len(v)) for k, v in pending.items())), tuple(sorted(mine)) if mine else (), my_uid,
+           data_version("prints", "print_snapshots", "groups", "filament_usage", "makerworld_designs"), _GALLERY["disk"])
+    memo = _CACHE.get("to_rate")
+    if memo and memo[0] == key and time.time() - memo[1] < 600:
+        return memo[2]
+    out = await _to_rate(rated, pending, stats, my_uid, mine)
+    _CACHE["to_rate"] = (key, time.time(), out)
+    return out
+
+
+async def _to_rate(rated, pending, stats, my_uid, mine) -> dict:
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print, MakerWorldDesign as MW
+    from ..api.v1.routes.filaments import gallery_items
+    from .makerworld_account import DONE_STATUSES
     async with AsyncSessionLocal() as db:
         prints = (await db.execute(
             select(Print).options(selectinload(Print.snapshots), selectinload(Print.group), selectinload(Print.filament_usage))
