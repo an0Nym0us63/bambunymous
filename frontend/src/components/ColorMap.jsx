@@ -41,8 +41,9 @@ export function ColorPairs({ detail = [], options = [], chosen = {}, scope = nul
         onClick: () => onChoose(x.from, { fil: o.fil, color: o.color }) }));
     const head = t => ({ label: t, disabled: true });
     openMenu(e, { title: `Couleur n°${x.e} du créateur : quelle bobine la remplace ?`, items: [
-      ...(tItems.length ? [head("📋 Prévu dans « À faire »"), ...tItems, "-", head("🖨️ Déjà imprimé")] : []),
-      ...items, items.length ? "-" : null,
+      // d'abord ce qui est imprime ; puis ce qui est prevu (06/11/2026 : pour l'assemblage et sa vignette avant d'avoir tout imprime)
+      ...(tItems.length && items.length ? [head("🖨️ Déjà imprimé")] : []), ...items, items.length ? "-" : null,
+      ...(tItems.length ? [head("📋 Prévu dans « À faire »"), ...tItems, "-"] : []),
       { icon: "🚫", label: "Aucune", hint: "Cette couleur n'a pas été imprimée", onClick: () => onChoose(x.from, { none: true }) },
       chosen?.[ck(x.from)] && !chosen[ck(x.from)].group ? { icon: "✨", label: plate != null ? "Comme les autres plateaux" : "Automatique",
         hint: plate != null ? "Retirer le choix propre à ce plateau" : "Revenir à la déduction de l'appli", onClick: () => onChoose(x.from, { auto: true }) } : null,
