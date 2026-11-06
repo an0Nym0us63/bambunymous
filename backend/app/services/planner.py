@@ -663,10 +663,22 @@ def _sig(j) -> frozenset:
     return frozenset(f["filament_id"] for f in j["fils"] if f.get("filament_id"))
 
 
-def advice(placed: list, d: dict, now: datetime, dls: list | None = None, fix=None) -> list:
+def advice(placed: list, d: dict, now: datetime, dls: list | None = None, fix=None, gain=None) -> list:
     """Les petits conseils : enchainer les memes couleurs, remplir un creux, ce qu'il faut charger, ce qui ne
-    peut pas respecter les consignes. Chacun peut porter une action (deplacer un travail)."""
+    peut pas respecter les consignes. Chacun peut porter une action (deplacer un travail).
+    gain(action) (06/11/2026) : ce que le planning entier y gagne, selon le mode des consignes. Un deplacement n'est
+    conseille que s'il gagne vraiment : sinon il defait ailleurs ce qu'il fait ici (la chaise musicale : enchainer B
+    apres A laissait un trou la ou etait B, et le conseil suivant le remettait)."""
     out = []
+    tries = [0]
+
+    def good(action):
+        if gain is None:
+            return True
+        if tries[0] >= 14:                            # le temps de la page : au-dela, on ne conseille plus
+            return False
+        tries[0] += 1
+        return gain(action) >= 20
     today = now.date()
     rules = Rules(d)
     pinned = d["pins"]
@@ -678,7 +690,8 @@ def advice(placed: list, d: dict, now: datetime, dls: list | None = None, fix=No
         sa, nxt = _sig(a), placed[i + 1]
         if not sa or _sig(nxt) == sa or not nxt["load"]:
             continue
-        b = next((x for x in placed[i + 2:] if _sig(x) == sa and x["load"] and x["key"] not in pinned), None)
+        b = next((x for x in placed[i + 2:] if _sig(x) == sa and x["load"] and x["key"] not in pinned
+                  and good({"kind": "after", "key": x["key"], "ref": a["key"]})), None)
         if b and b["key"] not in seen:
             seen.add(b["key"])
             out.append({"kind": "colors", "icon": "🎨",
@@ -699,6 +712,8 @@ def advice(placed: list, d: dict, now: datetime, dls: list | None = None, fix=No
                 continue
             s, _, too_long = rules.earliest(prev_end, b["seconds"], horizon=2)
             if too_long or s + timedelta(seconds=b["seconds"]) > datetime.fromisoformat(a["start"]) - rules.gap:
+                continue
+            if not good({"kind": "before", "key": b["key"], "ref": a["key"], "day": s.date().isoformat()}):
                 continue
             out.append({"kind": "gap", "icon": "⏱",
                         "text": f"{title(b)} ({_dur(b['seconds'])}) tient {_day_fr(s, today)} à {_fmt(s)}, dans le creux "
@@ -1083,6 +1098,26 @@ async def plan(tz: int | None = None) -> dict:
         if x:
             j["due"], j["due_ok"] = x["due"], x["ok"]
 
+    # ce qu'un conseil fait gagner au planning entier (06/11/2026), selon le mode des consignes : le deplacement simule
+    mode = d.get("opt_mode") if d.get("opt_mode") in MODES else "mix"
+    cur_keys = [j["key"] for j in sorted(r["jobs"], key=lambda x: x["start"])]
+    base_score = [None]
+
+    def gain(a):
+        k, ref = a["key"], a["ref"]
+        if k not in cur_keys or ref not in cur_keys:
+            return 0
+        o = [x for x in cur_keys if x != k]
+        o.insert(o.index(ref) + (1 if a["kind"] == "after" else 0), k)
+        pins = dict(d["pins"])
+        rj = next((x for x in r["jobs"] if x["key"] == ref), None)
+        if a["kind"] == "before" and rj and a.get("day") and a["day"] != next((x["day"] for x in r["jobs"] if x["key"] == k), None):
+            pins[k] = rj["day"]
+        dd = {**d, "pins": pins}
+        if base_score[0] is None:
+            base_score[0] = mode_score(place(_ordered(jobs, cur_keys, d["pins"]), d, now, busy, loaded, _slots()), d, now, mode)
+        return base_score[0] - mode_score(place(_ordered(jobs, o, pins), dd, now, busy, loaded, _slots()), dd, now, mode)
+
     def fix(ks):
         # en tete de file, cet objet tiendrait-il sa date ?
         o = ks + [j["key"] for j in jobs if j["key"] not in set(ks)]
@@ -1091,7 +1126,7 @@ async def plan(tz: int | None = None) -> dict:
     return {"settings": {k: d[k] for k in DEFAULTS}, "now": now.isoformat(timespec="minutes"),
             "busy_until": busy.isoformat(timespec="minutes") if busy else None,
             "live": ({"name": live[1], "design_id": live[2], "remaining_min": live[0], **(await _live_print(d))} if live else None),
-            "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix), "status": status,
+            "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix, gain), "status": status,
             "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),
             "blocked": [{k: b.get(k) for k in ("key", "design_id", "title", "cover", "thumb", "plate", "plate_name", "plates_total", "copy", "qty",
                                                 "seconds", "retained", "why", "fils")} for b in r.get("blocked") or []],
