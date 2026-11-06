@@ -385,19 +385,22 @@ async def _printed_plates(dids) -> dict:
     from .makerworld import plate_keys
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(Print.design_id, Print.plate_id, Print.mw_profile_id, Print.mw_plates,
-                                        Print.total_weight_g, Print.number_of_items, Print.id).where(
+                                        Print.total_weight_g, Print.number_of_items, Print.id, Print.model_3mf).where(
             Print.design_id.in_(dids), Print.status.in_(("SUCCESS", "PARTIAL"))))).all()
         gcop = await _group_copies(db, [r[6] for r in rows])
         # les filaments de chaque impression (06/11/2026, variantes de couleur) : ceux de ses bobines
         from ..models.print_history import FilamentUsage
         from ..models.filament import Spool
-        used = {}
+        used, colors = {}, {}
         if rows:
-            for pid_, fid_ in (await db.execute(select(FilamentUsage.print_id, Spool.filament_id).join(Spool, Spool.id == FilamentUsage.spool_id)
-                                                .where(FilamentUsage.print_id.in_([r[6] for r in rows])))).all():
+            for pid_, fid_, col_ in (await db.execute(select(FilamentUsage.print_id, Spool.filament_id, FilamentUsage.color_hex)
+                                                      .join(Spool, Spool.id == FilamentUsage.spool_id)
+                                                      .where(FilamentUsage.print_id.in_([r[6] for r in rows])))).all():
                 used.setdefault(pid_, set()).add(int(fid_))
+                if col_:
+                    colors.setdefault(pid_, {})[_hex6(col_)] = int(fid_)    # la couleur du 3MF -> le filament de la bobine
     out = {}
-    for did, plate, prof, manual, g, items, pid in rows:
+    for did, plate, prof, manual, g, items, pid, tmf in rows:
         # les plateaux designes a la main (regroupes, renumerotes) passent avant le numero du fichier,
         # comme sur la fiche (avant le 24/10/2026, « A faire » ne lisait que le numero)
         by = {}
@@ -411,7 +414,57 @@ async def _printed_plates(dids) -> dict:
         for pr, ns in by.items():
             out.setdefault(str(did), []).append({"prof": pr, "plates": ns, "g": _num(g), "copies": copies,
                                                  "gcopies": gcop.get(pid), "items": int(items or 1), "id": pid,
-                                                 "fids": used.get(pid, set()), "variant": plate_variant(manual)})
+                                                 "fids": used.get(pid, set()), "variant": plate_variant(manual),
+                                                 "tmf": tmf, "plate_id": plate, "fcol": colors.get(pid, {})})
+    return out
+
+
+def _hex6(c) -> str:
+    """« #FF0000FF », « ff0000 » -> « FF0000 »."""
+    return str(c or "").strip().lstrip("#").upper()[:6]
+
+
+_OBJ_CACHE: dict = {}
+
+
+def print_objects(tmf, plate) -> list:
+    """Les objets poses sur le plateau imprime (06/11/2026), d'apres le 3MF tranche du print : pour chacun, les couleurs
+    de ses filaments (celui de l'objet et ceux de ses parties). [] si le fichier manque ou ne se lit pas."""
+    import re
+    import zipfile
+    from pathlib import Path
+    import os
+    if not tmf:
+        return []
+    p = Path(os.getenv("DATA_DIR", "/data")) / tmf
+    try:
+        key = (str(p), p.stat().st_mtime, str(plate or 1))
+    except OSError:
+        return []
+    if key in _OBJ_CACHE:
+        return _OBJ_CACHE[key]
+    out = []
+    try:
+        with zipfile.ZipFile(p) as z:
+            xml = z.read("Metadata/model_settings.config").decode("utf-8", "ignore")
+            cols = json.loads(z.read("Metadata/project_settings.config")).get("filament_colour") or []
+        exts = {}
+        for oid, body in re.findall(r'<object id="(\d+)">(.*?)</object>', xml, re.S):
+            exts[oid] = {int(x) for x in re.findall(r'key="extruder" value="(\d+)"', body) if int(x) > 0} or {1}
+        n = str(plate or 1)
+        for blk in re.findall(r"<plate>(.*?)</plate>", xml, re.S):
+            if not re.search(rf'key="plater_id" value="{re.escape(n)}"', blk):
+                continue
+            for inst in re.findall(r"<model_instance>(.*?)</model_instance>", blk, re.S):
+                m = re.search(r'key="object_id" value="(\d+)"', inst)
+                if m:
+                    out.append({_hex6(cols[e - 1]) for e in exts.get(m.group(1), {1}) if 0 < e <= len(cols)})
+            break
+    except (KeyError, ValueError, OSError, zipfile.BadZipFile):
+        out = []
+    if len(_OBJ_CACHE) > 1000:
+        _OBJ_CACHE.clear()
+    _OBJ_CACHE[key] = out
     return out
 
 
@@ -721,6 +774,26 @@ def _split_variants(models: list, done_plates: dict, details: dict) -> None:
             to = next((r for r in rows if e.get("variant") == r["design_id"]), None)
             c = copies_of(e, plate_g, pieces)[0]
             fids = e.get("fids") or set()
+            # objet par objet (06/11/2026) : le 3MF tranche dit les objets poses et leur filament ; chacun va a la variante
+            # qui a ses couleurs. Le nombre d'objets d'une variante, sur les pieces d'un exemplaire, fait ses exemplaires
+            if to is None and len(rows) > 1:
+                objs = print_objects(e.get("tmf"), e.get("plate_id"))
+                per = max(1, sum(pieces.get(n) or 0 for n in e["plates"]) or 1)
+                got = {}
+                for cols in objs:
+                    of = {(e.get("fcol") or {}).get(x) for x in cols} - {None}
+                    if not of:
+                        continue
+                    cand = [r for r in rows if r["_fids"] and of <= r["_fids"]]
+                    if cand:
+                        r = min(cand, key=lambda r: (len(r["_fids"]), rows.index(r)))
+                        got[r["design_id"]] = got.get(r["design_id"], 0) + 1
+                if len(got) >= 2 or (got and sum(got.values()) >= per * 2):
+                    for rid, nobj in got.items():
+                        k = max(1, round(nobj / per))
+                        for n in e["plates"]:
+                            counts[rid][n] = counts[rid].get(n, 0) + k
+                    continue
             # plusieurs variantes sur un meme plateau (06/11/2026 : 4 echantillons de 4 couleurs, en un seul print de x4) :
             # chaque variante dont il a tous les filaments en prend sa part, a parts egales (le reste aux premieres)
             full = [r for r in rows if r["_fids"] and r["_fids"] <= fids] if to is None and c > 1 else []
