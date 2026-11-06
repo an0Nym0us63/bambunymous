@@ -15,15 +15,27 @@ function gapOf(pts) {
 
 /** [{t (ms), v}] d'une serie : pick(point) donne la valeur (null : rien ce coup-ci). */
 export function seriesOf(points, pick) {
-  return (points || []).map(p => ({ t: Date.parse(p.t), v: pick(p) })).filter(x => x.v != null && !Number.isNaN(x.t));
+  // gap (06/11/2026) : le serveur marque les vrais trous ; un point sans valeur le transmet au suivant
+  const out = [];
+  let hole = false;
+  for (const p of points || []) {
+    const t = Date.parse(p.t), v = pick(p);
+    if (p.gap) hole = true;
+    if (v == null || Number.isNaN(t)) continue;
+    out.push({ t, v, gap: p.gap === undefined ? undefined : hole });
+    hole = false;
+  }
+  return out;
 }
+// un trou entre deux points : celui marque par le serveur s'il le dit, sinon un ecart trop grand
+const cut = (pts, i, gap) => pts[i].gap !== undefined ? !!pts[i].gap : pts[i].t - pts[i - 1].t > gap;
 
 // les morceaux d'une serie (coupee aux trous), en coordonnees 0..100 x 0..h
 function segs(pts, x, y) {
   const out = [], gap = gapOf(pts);
   let cur = [];
   pts.forEach((p, i) => {
-    if (i && p.t - pts[i - 1].t > gap) { if (cur.length) out.push(cur); cur = []; }
+    if (i && cut(pts, i, gap)) { if (cur.length) out.push(cur); cur = []; }
     cur.push([x(p.t), y(p.v)]);
   });
   if (cur.length) out.push(cur);
@@ -135,7 +147,7 @@ export function SensorChart({ lines, points, hours = 24, height = 180, unit = ""
   const near = at == null ? null : lines.map(l => {
     let best = null;
     for (const p of l.pts) if (p.t >= from && p.t <= to && (!best || Math.abs(p.t - at) < Math.abs(best.t - at))) best = p;
-    return best && Math.abs(best.t - at) <= gapOf(l.pts) ? { l, p: best } : null;
+    return best && (best.gap !== undefined || Math.abs(best.t - at) <= gapOf(l.pts)) ? { l, p: best } : null;
   }).filter(Boolean);
   const move = e => {
     const r = ref.current?.getBoundingClientRect();

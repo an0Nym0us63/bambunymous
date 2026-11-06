@@ -196,6 +196,13 @@ async def history(hours: float = 24, end: datetime | None = None) -> dict:
     pts = [{"t": r.ts.isoformat() + "Z", "printing": bool(r.printing), "nozzle": r.nozzle, "nozzle2": r.nozzle2,
             "bed": r.bed, "chamber": r.chamber, **{k: getattr(r, k) for k in EXTRA},
             "ams": json.loads(r.ams) if r.ams else {}} for r in rows]
+    # les vrais trous (06/11/2026) : un point qui suit plus de 15 minutes sans releve (imprimante injoignable) porte
+    # gap ; la courbe ne coupe que la. Elle coupait aussi la ou les moyennes espacaient les points au repos (la nuit,
+    # entre deux impressions), et la ligne disparaissait alors que les valeurs etaient la
+    for i in range(1, len(pts)):
+        pts[i]["gap"] = _gap(pts[i - 1]["t"], pts[i]["t"]) > 900
+    if pts:
+        pts[0]["gap"] = False
     if len(pts) <= MAX_POINTS:
         return {"points": pts, "events": events, "hours": hours, "end": end.isoformat() + "Z"}
     step = -(-len(pts) // MAX_POINTS)
@@ -206,7 +213,9 @@ async def history(hours: float = 24, end: datetime | None = None) -> dict:
         while j < len(pts) and len(chunk) < step and _gap(pts[j - 1]["t"], pts[j]["t"]) <= 900:
             chunk.append(pts[j])
             j += 1
-        out.append(_mean(chunk))
+        m = _mean(chunk)
+        m["gap"] = bool(chunk[0].get("gap"))
+        out.append(m)
         i = j
     return {"points": out, "events": events, "hours": hours, "end": end.isoformat() + "Z"}
 
