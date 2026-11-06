@@ -155,7 +155,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
       {j.intercalated && tag(`↔ intercalé dans ${j.intercalated.in}`, "#0EA5E9", { nuit: "Pour remplir la nuit", filaments: "Pour charger moins de filaments" }[j.intercalated.why]
         || "Pour optimiser le planning")}
       {j.due && tag(`🎯 avant le ${dueTxt(j.due)}`, j.due_ok ? "#16A34A" : "#EF4444", j.due_ok ? "L'objet sera fini à temps" : "Le dernier plateau de l'objet finit après cette date")}
-      {j.load?.length > 0 && tag(<>🧵 À charger : <FilLinks labels={j.load} ids={j.load_ids}/>{j.free_slot && !j.unload?.length ? " (emplacement libre)" : ""}</>, "#EA580C",
+      {j.load?.length > 0 && tag(<>🧵 À charger : <FilLinks labels={j.load} ids={j.load_ids}/>{j.free_slot && !j.unload?.length ? " (emplacement libre)" : ""}</>, "#6366F1",
         j.free_slot && !j.unload?.length ? "Pas dans l'AMS à ce moment-là ; un emplacement est libre, rien à retirer" : "Pas dans l'AMS à ce moment-là")}
       {j.merged && tag(`🧩 ${j.plate_name || "Regroupés"}`, "#6366F1", "Imprimés ensemble sur un seul plateau : regroupe-les dans Bambu Studio avant de lancer")}
       {j.bed_change && tag(bedTxt(j.bed_change), "#0369A1", j.bed_warn || "Le plateau que demande ce profil, ou un des tiens qui va à ce filament")}
@@ -300,11 +300,12 @@ export function FilLink({ id, label }) {
 }
 // le changement de bobine, en court et en pastilles : « ● X à la place de ● Y » (celle qui sort, plus pale), « ● X (place libre) »
 export const SwapShort = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={j.load_ids?.[i]} label={x}/>
-  {outOf(j, i)[0] ? <><span style={{ fontWeight: 600, opacity: 0.75 }}> à la place de </span><span style={{ opacity: 0.7 }}><FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]}/></span></> : freeOf(j, i) ? " (place libre)" : ""}</React.Fragment>)}</>;
+  {outOf(j, i)[0] ? <><span style={{ fontWeight: 600, opacity: 0.75 }}> à la place de </span><span style={{ opacity: 0.6 }}><FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]}/></span></> : freeOf(j, i) ? " (place libre)" : ""}</React.Fragment>)}</>;
 export const FilLinks = ({ labels, ids }) => <>{(labels || []).map((l, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={ids?.[i]} label={l}/></React.Fragment>)}</>;
 // le changement de bobine en phrase, ses filaments cliquables : « charger X a la place de Y »
 export const SwapLinks = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}charger <FilLink id={j.load_ids?.[i]} label={x}/>
-  {outOf(j, i)[0] ? <> à la place de <FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]}/></> : freeOf(j, i) ? " dans l'emplacement libre" : ""}</React.Fragment>)}</>;
+  {outOf(j, i)[0] ? <><span style={{ fontWeight: 600, opacity: 0.75 }}> à la place de </span><span style={{ opacity: 0.6 }}><FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]}/></span></>
+    : freeOf(j, i) ? <span style={{ fontWeight: 600, opacity: 0.75 }}> dans l'emplacement libre</span> : ""}</React.Fragment>)}</>;
 // la fin de la journee (06/11/2026) : le dernier plateau prevu aujourd'hui finit vers telle heure ; combien encore
 export const dayEnd = p => {
   const today = (p?.now || "").slice(0, 10), js = (p?.jobs || []).filter(j => j.day === today);
@@ -553,7 +554,7 @@ export function NowNextTiles({ pd, onOpenPrint, onPickJob, wide }) {
           <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             <span style={{ color: "var(--text2)" }}>{whenTxt(j.start, now)} → {whenTxt(j.end, now)}</span> · {hm(j.seconds)}
             {j.bed_change ? <span style={{ color: "#0369A1" }}> · 🔲 {BED_NAMES[j.bed_change.to] || j.bed_change.to}</span> : ""}
-            {j.load?.length ? <span style={{ color: "#EA580C" }}> · 🧵 <SwapShort j={j}/></span> : ""}
+            {j.load?.length ? <span style={{ color: "var(--text2)" }}> · 🧵 <SwapShort j={j}/></span> : ""}
             {j.runout?.length ? <span style={{ color: "#B45309" }}> · 🔄 {j.runout.map(r => r.name).join(", ")}</span> : ""}</span>
         </span>
       </button>)}
