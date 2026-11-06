@@ -10,7 +10,7 @@ import { currentFriend } from "../store/friend";
 import { usePlanActs } from "./planActs";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
 import { UndoPill, PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, poolGroups, BlockedList, LowStockBanner } from "./PlanPanels";
-import { PlanDashboard, Legend, dayEnd, hhmm } from "./PlanDay";
+import { PlanDashboard, Legend, dayEnd, hhmm, dayInfo } from "./PlanDay";
 import { OPT_MODES, DAY_KIND, dayKindOf, DayStrip, onDay, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained, isFinal, setFilColors } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
@@ -299,6 +299,10 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
             {dayKindOf(pd?.settings, k) && (() => { const [ic, l, c] = DAY_KIND[dayKindOf(pd?.settings, k)];
               return <span data-tip={l} style={{ position: "absolute", top: wide ? 3 : 2, left: wide ? 22 : 16, fontSize: wide ? 11 : 9,
                 padding: "0 3px", borderRadius: 5, background: `color-mix(in srgb, ${c} 18%, transparent)` }}>{ic}</span>; })()}
+            {/* ferie, horaires du week-end, absence de quelques heures (06/11/2026) : un signe en haut a droite */}
+            {(() => { const x = dayInfo(pd?.settings, k); const ic = x.holiday ? "🎉" : x.away.length ? "🚶" : x.special ? "🏖" : null;
+              return ic && <span data-tip={[x.holiday && `Férié : ${x.holiday}`, x.special && "Horaires du week-end", x.away.length && `Absent ${x.away.map(([a, b]) => `${Math.floor(a / 60)} h – ${Math.floor(b / 60)} h`).join(", ")}`].filter(Boolean).join(" · ")}
+                style={{ position: "absolute", top: wide ? 3 : 2, right: wide ? 5 : 3, fontSize: wide ? 11 : 9, lineHeight: 1, zIndex: 2, opacity: 0.9 }}>{ic}</span>; })()}
             {p.some(j => j.low_info?.length) && <span data-tip={p.flatMap(j => (j.low_info || []).map(x => `📉 ${x.name} sous le seuil (${j.title})`)).join(" · ")}
               style={{ position: "absolute", top: wide ? 4 : 2, left: wide ? 24 : 17, zIndex: 2, fontSize: wide ? 11 : 9, lineHeight: 1, padding: "1px 3px", borderRadius: 6,
                 background: "#FEE2E2", border: "1px solid #FCA5A5" }}>📉</span>}

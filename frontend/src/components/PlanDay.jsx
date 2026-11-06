@@ -59,6 +59,23 @@ export function dayInfo(st, d) {
   const away = (st.away || []).filter(x => x.date === d).map(x => [toMin(x.from), toMin(x.to)]).filter(x => x[0] != null && x[1] != null);
   return { special, holiday, off, away, run: special ? st.we.run : st.run, launch: special ? st.we.launch : st.launch };
 }
+const hhm0 = m => `${Math.floor(m / 60) % 24} h${m % 60 ? ` ${String(m % 60).padStart(2, "0")}` : ""}`;
+export function DayMarks({ settings, day, full = true }) {
+  const x = dayInfo(settings, day);
+  const pill = (t, c, bg, tip) => <span data-tip={tip} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 20,
+    fontSize: 11, fontWeight: 800, color: c, background: bg, whiteSpace: "nowrap" }}>{t}</span>;
+  const w = x.launch, hh = t => t === "00:00" ? "minuit" : t.replace(/^0(?=\d)/, "").replace(":", " h ").replace(/ h 00$/, " h");
+  const items = [
+    x.holiday && pill(`🎉 ${full ? x.holiday : "férié"}`, "#BE185D", "#FCE7F3", `Férié : ${x.holiday}`),
+    x.special && pill(full ? `🏖 Horaires du week-end${w ? ` · lancement ${hh(w.from)} – ${hh(w.to)}` : ""}` : "🏖",
+      "#0E7490", "#CFFAFE", "Les horaires du week-end s'appliquent ce jour-là"),
+    x.off && pill(x.off === "absent" ? "🚶 Absent toute la journée" : "⏳ Peu dispo", "#B45309", "#FEF3C7",
+      x.off === "absent" ? "Rien ne se lance ce jour-là" : "Une seule heure de lancement"),
+    ...x.away.map(([a, b], i) => <React.Fragment key={i}>{pill(`🚶 Absent ${hhm0(a)} – ${hhm0(b)}`, "#B45309", "#FEF3C7", "Rien ne se lance pendant")}</React.Fragment>),
+  ].filter(Boolean);
+  if (!items.length) return null;
+  return <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{items}</div>;
+}
 // la journee en frise : 0 h a 24 h, la plage de fonctionnement en vert pale, celle de lancement soulignee, les
 // impressions faites en violet, les prevues hachurees de leur couleur
 // un plateau sur ce jour : commence ce jour-la, ou commence avant et deborde dessus (06/11/2026 : lance a 22 h 54 et fini
@@ -68,13 +85,18 @@ export function DayStrip({ day, done = [], jobs = [], settings, now, live = null
   const pct = m => `${(m / 1440) * 100}%`;
   const minOf = (iso, d) => { if (!iso) return 0; if (iso.slice(0, 10) < d) return 0; if (iso.slice(0, 10) > d) return 1440;
     return +iso.slice(11, 13) * 60 + +iso.slice(14, 16); };
-  const run = spans(settings?.run), launch = spans(settings?.launch);
+  // les horaires de ce jour (06/11/2026 : ceux du week-end ces jours-la) et ses absences
+  const di = dayInfo(settings, day);
+  const run = spans(di.run), launch = spans(di.launch);
+  const awayIv = di.off === "absent" ? [[0, 1440]] : di.away;
   const nowM = now && now.slice(0, 10) === day ? minOf(now, day) : null;
   return <div style={{ position: "relative", height: 34, marginTop: 2 }}>
     <div style={{ position: "absolute", left: 0, right: 0, top: 6, height: 18, borderRadius: 7, background: run ? "color-mix(in srgb, #94A3B8 16%, var(--surface2))" : "var(--surface2)",
       border: "1px solid var(--border)", overflow: "hidden" }}>
       {(run || []).map(([a, b], i) => <span key={`r${i}`} style={{ position: "absolute", top: 0, bottom: 0, left: pct(a), width: pct(b - a),
         background: "color-mix(in srgb, #22C55E 10%, var(--surface2))" }}/>)}
+      {awayIv.map(([a, b], i) => <span key={`a${i}`} data-tip="Absent : rien ne se lance" style={{ position: "absolute", top: 0, bottom: 0, left: pct(a), width: pct(b - a),
+        background: "repeating-linear-gradient(-45deg, color-mix(in srgb, #F59E0B 30%, transparent) 0 3px, transparent 3px 7px)" }}/>)}
       {done.map((it, i) => { const a = minOf(it.start, day), b = Math.min(1440, a + (it.seconds || 0) / 60);
         return <span key={`d${i}`} data-tip={`${it.title || it.name} · ${hm(it.seconds)}`} style={{ position: "absolute", top: 2, bottom: 2, left: pct(a), width: pct(Math.max(4, b - a)),
           borderRadius: 4, background: "linear-gradient(90deg, #8B5CF6, #EC4899)" }}/>; })}

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { apiUrl, apiThumb } from "../api/client";
 import MwImg, { thumbSrc } from "./MwImg";
-import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift, planIcons, isFinal, finBorder, finBg, dayInfo } from "./PlanDay";
+import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift, planIcons, isFinal, finBorder, finBg, dayInfo, DayMarks } from "./PlanDay";
 import { ST, iso, DAYS } from "./PrintCalendar";
 
 // Les vues Semaine et Jour du calendrier (05/11/2026) : une grille horaire ou ce qui est imprime, ce qui imprime et
@@ -211,6 +211,8 @@ export function WeekAgenda({ dates, days, jobs, settings, now, live, pick, onPic
             {planned ? <span style={{ color: "#16A34A" }}>{hm(planned)} prévues</span> : ""}</span>
           <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--muted)" }}>›</span>
         </button>
+        {/* ses particularites (06/11/2026) : ferie, horaires du week-end, absences */}
+        <DayMarks settings={settings} day={d}/>
         {(ev.length > 0 || d >= today) && <DayStrip day={d} done={days?.[d]?.items || []} jobs={(jobs || []).filter(j => onDay(j, d))} settings={settings} now={now} live={live}/>}
         {!ev.length && <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>{d < today ? "Rien d'imprimé" : "Rien de prévu"}</span>}
         {ev.map(e => {
