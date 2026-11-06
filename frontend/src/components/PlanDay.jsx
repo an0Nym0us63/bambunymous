@@ -543,16 +543,32 @@ export function ManualDone({ items, edit, onUndo }) {
   </div>;
 }
 
-// les conseils, chacun avec son « Appliquer » quand il deplace un travail
+// les conseils, chacun avec son « Appliquer » quand il deplace un travail ; ranges par sorte (06/11/2026), chaque
+// section se replie (garde dans ce navigateur) ; tous, plus seulement les six premiers
+const ADV_KINDS = [["deadline", "🎯", "Dates limites"], ["merge", "🧩", "Regrouper des plateaux"], ["colors", "🎨", "Enchaîner les mêmes couleurs"],
+  ["gap", "⏱", "Remplir un creux"], ["load", "🧵", "Bobines à charger"], ["long", "⚠️", "Trop longs pour les horaires"]];
 export function PlanAdvice({ items, edit, onApply }) {
+  const [shut, setShut] = useState(() => { try { return JSON.parse(localStorage.getItem("bn_adv_shut") || "{}"); } catch { return {}; } });
   if (!items?.length) return null;
-  return <div style={{ borderRadius: 16, border: "1px solid color-mix(in srgb, #F59E0B 35%, var(--border))", padding: 10, display: "flex", flexDirection: "column", gap: 7,
+  const flip = k => setShut(s => { const n = { ...s, [k]: !s[k] }; try { localStorage.setItem("bn_adv_shut", JSON.stringify(n)); } catch { /* rien */ } return n; });
+  const known = new Set(ADV_KINDS.map(k => k[0]));
+  const groups = [...ADV_KINDS, ["other", "💡", "Autres"]].map(([k, ic, l]) => [k, ic, l, items.filter(a => k === "other" ? !known.has(a.kind) : a.kind === k)])
+    .filter(g => g[3].length);
+  return <div style={{ borderRadius: 16, border: "1px solid color-mix(in srgb, #F59E0B 35%, var(--border))", padding: 10, display: "flex", flexDirection: "column", gap: 8,
     background: "linear-gradient(150deg, color-mix(in srgb, #F59E0B 9%, transparent), transparent 70%), var(--surface)" }}>
     <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#D97706" }}>💡 Conseils</div>
-    {items.slice(0, 6).map((a, i) => <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-      <span style={{ fontSize: 14 }}>{a.icon}</span>
-      <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: "var(--text2)", lineHeight: 1.4 }}>{a.text}</span>
-      {edit && a.action && <button type="button" onClick={() => onApply(a.action)} style={{ ...seg, ...segOn, padding: "3px 9px", flexShrink: 0 }}>Appliquer</button>}
+    {groups.map(([k, ic, l, list]) => <div key={k} style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+      <button type="button" onClick={() => flip(k)} aria-expanded={!shut[k]}
+        style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 8px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)",
+          color: "var(--text)", cursor: "pointer", fontSize: 12.5, fontWeight: 900, textAlign: "left" }}>
+        <span>{ic}</span><span style={{ flex: 1 }}>{l}</span>
+        <span style={{ fontSize: 11, fontWeight: 900, color: "#D97706", background: "color-mix(in srgb, #F59E0B 14%, transparent)", borderRadius: 20, padding: "1px 7px" }}>{list.length}</span>
+        <span style={{ color: "var(--muted)", transform: shut[k] ? "rotate(-90deg)" : "none", transition: "transform .15s" }}>▾</span></button>
+      {!shut[k] && list.map((a, i) => <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", paddingLeft: 4 }}>
+        <span style={{ fontSize: 14 }}>{a.icon}</span>
+        <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: "var(--text2)", lineHeight: 1.4 }}>{a.text}</span>
+        {edit && a.action && <button type="button" onClick={() => onApply(a.action)} style={{ ...seg, ...segOn, padding: "3px 9px", flexShrink: 0 }}>Appliquer</button>}
+      </div>)}
     </div>)}
   </div>;
 }

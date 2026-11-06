@@ -956,7 +956,7 @@ def advice(placed: list, d: dict, now: datetime, dls: list | None = None, fix=No
     def good(action):
         if gain is None:
             return True
-        if tries[0] >= 14:                            # le temps de la page : au-dela, on ne conseille plus
+        if tries[0] >= 24:                            # le temps de la page : au-dela, on ne conseille plus
             return False
         tries[0] += 1
         return gain(action) >= 20
@@ -979,12 +979,12 @@ def advice(placed: list, d: dict, now: datetime, dls: list | None = None, fix=No
                         "text": f"Enchaîne {title(b)} juste après {title(a)} : mêmes filaments, rien à recharger "
                                 f"(au lieu de {', '.join(b['load'][:2])} à remettre le {datetime.fromisoformat(b['start']).day}).",
                         "action": {"kind": "after", "key": b["key"], "ref": a["key"]}})
-        if len(seen) >= 3:
+        if len(seen) >= 6:
             break
     # 2. un creux : une attente d'au moins une heure qu'un travail plus loin pourrait remplir
     n = 0
     for i, a in enumerate(placed):
-        if a["wait_s"] < 3600 or i == 0 or n >= 2:
+        if a["wait_s"] < 3600 or i == 0 or n >= 4:
             continue
         prev_end = datetime.fromisoformat(placed[i - 1]["end"]) + rules.gap
         room = (datetime.fromisoformat(a["start"]) - rules.gap - prev_end).total_seconds()
@@ -1016,7 +1016,7 @@ def advice(placed: list, d: dict, now: datetime, dls: list | None = None, fix=No
         out.insert(0, {"kind": "deadline", "icon": "🎯", "text": txt,
                        **({"action": {"kind": "front", "keys": x["keys"]}} if ok_front else {})})
     # 3. ce qu'il faut charger pour les prochaines
-    for j in placed[:4]:
+    for j in placed[:8]:
         if j["load"]:
             s = datetime.fromisoformat(j["start"])
             out.append({"kind": "load", "icon": "🧵",
@@ -1036,7 +1036,7 @@ def _merge_advice(placed: list) -> list:
     try:
         from .plate_merge import proposals
         out = []
-        for p in [x for x in proposals(placed, _slots()) if x["saved_s"] >= 480][:10]:     # ceux qui font gagner 8 min ou plus
+        for p in proposals(placed, _slots())[:15]:
             out.append({"kind": "merge", "icon": "🧩", "conf": p["conf"],
                         "text": f"{p['title']} : "
                                 + (f"{len(p['plates'])} exemplaires du plateau {p['plates'][0]}" if len(set(p['plates'])) == 1
