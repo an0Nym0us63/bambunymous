@@ -32,6 +32,9 @@ export function useLayer(enabled, n = null, nowLayer = null) {
   return { d, ghost };
 }
 
+// un filament clair (blanc, jade...) : sur le fond clair, il lui faut un contour gris
+const lightCol = c => { const m = /^#?([0-9a-f]{6})/i.exec(c || ""); if (!m) return false; const n = parseInt(m[1], 16);
+  return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.78; };
 // la vue 3D (05/11/2026) : le contour exterieur de chaque couche, lu une fois par impression ; colore jusqu'a la
 // couche en cours, le reste en fantome. Le 3MF envoye a l'imprimante n'a pas le maillage : tout vient du G-code
 const SHELLS = {};
@@ -98,6 +101,11 @@ export function Layer3D({ s, d, now, w, h }) {
         for (let i = 2; i < p.length; i += 2) { [X, Y] = proj(p[i], p[i + 1], L.z); g.lineTo(ox + X * k, oy + Y * k); }
         if (gone) { g.setLineDash([3, 3]); g.strokeStyle = muted; g.globalAlpha = 0.35; g.lineWidth = 1; }
         else if (!done) { g.setLineDash([]); g.strokeStyle = muted; g.globalAlpha = 0.1; g.lineWidth = 1; }
+        else if (lightCol(col(q.t))) {
+          // un filament clair (06/11/2026) : un contour gris dessous, sinon le blanc disparait sur le fond clair
+          g.setLineDash([]); g.strokeStyle = "#64748b"; g.globalAlpha = 0.6; g.lineWidth = (top ? 2.2 : 1.1) + 1.3; g.stroke();
+          g.strokeStyle = col(q.t); g.globalAlpha = 1; g.lineWidth = top ? 2.2 : 1.1;
+        }
         else { g.setLineDash([]); g.strokeStyle = col(q.t); g.globalAlpha = top ? 1 : 0.8; g.lineWidth = top ? 2.2 : 1.1; }
         g.stroke();
       }
@@ -119,9 +127,11 @@ export function Layer3D({ s, d, now, w, h }) {
         for (let i = 2; i < p.length; i += 2) { [X, Y] = proj(p[i], p[i + 1], z); g.lineTo(ox + X * k, oy + Y * k); }
         return true;
       };
-      g.setLineDash([]); g.strokeStyle = "rgba(255,255,255,0.85)"; g.globalAlpha = 0.9; g.lineWidth = lw + 2.2;
+      g.setLineDash([]); g.globalAlpha = 0.9; g.lineWidth = lw + 2.2;
       for (const q of d.paths) {
         const gone = q.o != null && sk[q.o] && cur >= sk[q.o].layer;
+        // le liseré : clair, sauf sous un filament clair (gris, sinon blanc sur blanc)
+        g.strokeStyle = lightCol(col(q.t)) ? "rgba(71,85,105,0.75)" : "rgba(255,255,255,0.85)";
         if (!gone && trace(q)) g.stroke();
       }
       g.lineWidth = lw;
@@ -181,8 +191,6 @@ export function LayerCanvas({ d, ghost, w, h }) {
     const muted = getComputedStyle(cv).getPropertyValue("--muted").trim() || "#94a3b8";
     if (ghost?.ok) { g.lineWidth = lw; g.globalAlpha = 0.18; stroke(ghost.paths, () => { g.strokeStyle = muted; }); }
     const col = t => d.colors?.[t] || "#94a3b8";
-    const lightCol = c => { const m = /^#?([0-9a-f]{6})/i.exec(c || ""); if (!m) return false; const n = parseInt(m[1], 16);
-      return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.78; };
     // un filament clair (blanc, jade...) : un fin contour gris dessous, sinon il disparait sur le fond clair
     const pale = d.paths.filter(q => lightCol(col(q.t)));
     if (pale.length) {
