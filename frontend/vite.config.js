@@ -17,7 +17,9 @@ export default defineConfig({
           if (/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler|@remix-run)[\\/]/.test(id)) return "vendor-react";
           if (id.includes("lucide-react")) return "vendor-icons";
           // three.js (la vue 3D) : charge seulement a l'ouverture de la vue, jamais avec le reste de l'appli
-          if (/[\\/]node_modules[\\/]three[\\/]/.test(id)) return undefined;
+          // (06/11/2026) three-mesh-bvh aussi : range dans « vendor », il y entrainait three.js entier (~600 Ko charges
+          // et analyses a chaque ouverture de l'appli, meme sans vue 3D)
+          if (/[\\/]node_modules[\\/](three|three-mesh-bvh)[\\/]/.test(id)) return undefined;
           // le decodeur QR : charge a l'ouverture du lecteur seulement
           if (/[\\/]node_modules[\\/]jsqr[\\/]/.test(id)) return undefined;
           return "vendor";
