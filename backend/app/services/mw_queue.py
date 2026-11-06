@@ -789,6 +789,23 @@ def _split_variants(models: list, done_plates: dict, details: dict) -> None:
                 pl["printed"] = counts[r["design_id"]].get(pl["index"], 0)
 
 
+def _profiles_fresh(models: list, done_plates: dict, details: dict) -> None:
+    """Les profils retenus a jour (06/11/2026) : une impression d'un modele retenu qui porte un numero de profil inconnu de
+    sa fiche (le createur a mis le profil a jour, ou un fichier retranche) fait relire la fiche chez MakerWorld, en fond ;
+    le calcul suivant connait alors la nouvelle version."""
+    from .makerworld import refresh_soon
+    seen = set()
+    for r in models:
+        mw = str(r.get("mw_id") or "")
+        if not r.get("planned") or not mw or mw in seen:
+            continue
+        seen.add(mw)
+        m = details.get(mw) or {}
+        known = {str(p.get(k) or "") for p in m.get("profiles") or [] for k in ("instance_id", "profile_id")} - {""}
+        if any(e.get("prof") and e["prof"] not in known for e in done_plates.get(mw, [])):
+            refresh_soon(mw)
+
+
 def _variant_groups(models: list) -> dict:
     groups = {}
     for r in models:
@@ -1055,6 +1072,7 @@ async def _compute(fresh: bool = False) -> dict:
         models.append(row)
 
     _split_variants(models, done_plates, details)
+    _profiles_fresh(models, done_plates, details)
     rank = {did: i for i, did in enumerate(cfg.get("order") or [])}
     # les retenus toujours devant les autres (06/11/2026), puis l'ordre choisi (les nouveaux en tete de leur groupe)
     models.sort(key=lambda r: (not r["planned"], r["design_id"] in rank, rank.get(r["design_id"], 0)))

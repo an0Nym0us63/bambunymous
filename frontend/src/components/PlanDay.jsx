@@ -554,8 +554,8 @@ export function NowNextTiles({ pd, onOpenPrint, onPickJob, wide }) {
           <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             <span style={{ color: "var(--text2)" }}>{whenTxt(j.start, now)} → {whenTxt(j.end, now)}</span> · {hm(j.seconds)}
             {j.bed_change ? <span style={{ color: "#0369A1" }}> · 🔲 {BED_NAMES[j.bed_change.to] || j.bed_change.to}</span> : ""}
-            {/* les echanges de bobines en violet doux (06/11/2026 : l'orange criait, le noir faisait bloc) */}
-            {j.load?.length ? <span style={{ color: "color-mix(in srgb, #8B5CF6 72%, var(--text2))" }}> · 🧵 <SwapShort j={j}/></span> : ""}
+            {/* les echanges de bobines en cyan doux (06/11/2026 : l'orange criait, le noir faisait bloc) */}
+            {j.load?.length ? <span style={{ color: "color-mix(in srgb, #0891B2 78%, var(--text2))" }}> · 🧵 <SwapShort j={j}/></span> : ""}
             {j.runout?.length ? <span style={{ color: "#B45309" }}> · 🔄 {j.runout.map(r => r.name).join(", ")}</span> : ""}</span>
         </span>
       </button>)}

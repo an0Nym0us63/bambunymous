@@ -890,6 +890,34 @@ async def _base(did: str, stale_ok: bool = False) -> dict:
     return base
 
 
+_ASKED: dict = {}
+
+
+def refresh_soon(did: str, every: int = 900) -> bool:
+    """Relire la fiche d'un modele chez MakerWorld, en fond (06/11/2026) : un profil mis a jour par son createur change
+    de numero ; une impression qui en porte un inconnu le fait relire (au plus une fois par quart d'heure)."""
+    import asyncio
+    did = str(did or "")
+    if not did.isdigit() or did in _REFRESHING or time.time() - _ASKED.get(did, 0) < every:
+        return False
+    try:
+        loop_ = asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    _ASKED[did] = time.time()
+    _REFRESHING.add(did)
+
+    async def run():
+        await _refresh(did)
+        try:                                     # « A faire » se recalcule avec la fiche relue
+            from .mw_queue import _INVALID
+            _INVALID[0] = True
+        except Exception:
+            pass
+    loop_.create_task(run())
+    return True
+
+
 async def _refresh(did: str):
     import asyncio
     try:
