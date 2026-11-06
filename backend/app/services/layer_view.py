@@ -264,9 +264,61 @@ SHELL_LAYERS = 240     # au-dela, une couche sur deux (trois...) : la forme rest
 SHELL_POINTS = 40000   # points envoyes au plus (quelques centaines de Ko)
 
 
+def _shell_file(pid: int) -> Path:
+    return DATA_DIR / "prints" / str(pid) / "layer_shell.json.gz"
+
+
+def _shell_disk(pid: int, p) -> Optional[dict]:
+    """La vue gardee sur disque, si elle est plus recente que le 3MF tranche (refait, il la perime)."""
+    import gzip
+    import json
+    f = _shell_file(pid)
+    try:
+        src = DATA_DIR / p.model_3mf if p is not None and p.model_3mf else None
+        if not f.is_file() or (src is not None and src.is_file() and src.stat().st_mtime > f.stat().st_mtime):
+            return None
+        return json.loads(gzip.decompress(f.read_bytes()))
+    except (OSError, ValueError):
+        return None
+
+
+def _shell_save(pid: int, res: dict) -> None:
+    import gzip
+    import json
+    f = _shell_file(pid)
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        tmp = f.with_suffix(".tmp")
+        tmp.write_bytes(gzip.compress(json.dumps(res, separators=(",", ":")).encode("utf-8"), 5))
+        tmp.replace(f)
+    except OSError:
+        pass
+
+
+async def prepare(pid: int) -> None:
+    """Au lancement d'une impression (06/11/2026) : sa vue 3D calculee d'avance, la tuile l'a des son ouverture."""
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    try:
+        async with AsyncSessionLocal() as db:
+            p = await db.get(Print, pid)
+        if p is not None:
+            await shell(pid, p)
+    except Exception:
+        pass
+
+
 async def shell(pid: int, p) -> dict:
     """La vue 3D (05/11/2026) : le contour exterieur de chaque couche, a sa hauteur, lu dans le G-code (le 3MF envoye a
-    l'imprimante n'a pas le maillage des pieces). Calcule une fois par impression. Points en dixiemes de mm, z en mm."""
+    l'imprimante n'a pas le maillage des pieces). Calcule une fois par impression. Points en dixiemes de mm, z en mm.
+    (06/11/2026) gardee sur disque a cote de l'impression : un redemarrage, ou un coup d'oeil a une autre impression,
+    obligeaient a relire tout le G-code (plusieurs secondes « Calcul de la vue 3D… »)."""
+    hit = _CACHE.get(pid)
+    if hit is not None and hit.get("shell"):
+        return hit["shell"]
+    disk = await asyncio.to_thread(_shell_disk, pid, p)
+    if disk is not None:
+        return disk
     ix = await _get(pid, p)
     if not ix:
         return {"ok": False}
@@ -307,6 +359,8 @@ async def shell(pid: int, p) -> dict:
 
     res = await asyncio.to_thread(build)
     ix["shell"] = res
+    if res.get("ok"):
+        await asyncio.to_thread(_shell_save, pid, res)
     return res
 
 

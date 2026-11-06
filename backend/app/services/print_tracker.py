@@ -483,6 +483,9 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
                     raise ValueError("extraction vide")
                 await _apply_meta(pid, meta, taskname, job_id=job_id)
                 logger.info(f"[3MF] ✅ print_id={pid} enrichi à la tentative {attempt} (via {src})")
+                # la vue 3D de la tuile, calculee d'avance (06/11/2026)
+                from .layer_view import prepare as _lv_prepare
+                _bg(_lv_prepare(pid))
                 return
             except Exception as e:
                 logger.error(f"[3MF] ❌ Tentative {attempt}/{MAX_ATTEMPTS} print_id={pid} ({src}) : "
