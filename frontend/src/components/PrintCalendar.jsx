@@ -363,8 +363,9 @@ export default function PrintCalendar() {
   const live = pd?.live && pd?.busy_until ? { now: pd.now, end: pd.busy_until, name: pd.live.name, planned: pd.live.planned_end } : null;
   const openJob = j => setJobSel(j);
   const viewMain = view === "month" ? calendar
+    // la semaine sur ordinateur : les 24 h en entier, sans defilement interne (06/11/2026)
     : view === "week" ? (wide ? <TimeGrid dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} hourPx={28}
-        pick={pick} onPick={pickDay} onOpenPrint={openPrint} onOpenJob={openJob} edit={edit} onDropDay={moveDay} height={600}/>
+        pick={pick} onPick={pickDay} onOpenPrint={openPrint} onOpenJob={openJob} edit={edit} onDropDay={moveDay} height="full"/>
       : <WeekAgenda dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} pick={pick}
         onPick={k => { setPick(k); setView("day"); }} onOpenPrint={openPrint} onOpenJob={openJob}/>)
     : <TimeGrid dates={[pick]} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} hourPx={wide ? 46 : 40}

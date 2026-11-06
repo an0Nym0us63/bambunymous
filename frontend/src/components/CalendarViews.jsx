@@ -87,7 +87,8 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
         </button>;
       })}
     </div>}
-    <div ref={scroller} style={{ position: "relative", overflowY: "auto", height: height || Math.min(H, 560) }}>
+    {/* height "full" (06/11/2026) : les 24 h en entier, sans defilement interne (un peu de marge pour ce qui deborde minuit) */}
+    <div ref={scroller} style={{ position: "relative", overflowY: height === "full" ? "hidden" : "auto", height: height === "full" ? H + 16 : height || Math.min(H, 560) }}>
       <div style={{ display: "grid", gridTemplateColumns: cols, height: H, position: "relative" }}>
         {/* les heures */}
         <div style={{ position: "relative" }}>
