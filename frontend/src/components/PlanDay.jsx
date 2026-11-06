@@ -762,7 +762,7 @@ const mini = { width: 26, height: 24, borderRadius: 7, border: "1px solid var(--
 const seg = { padding: "5px 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--muted)", fontSize: 12, fontWeight: 800, cursor: "pointer" };
 const segOn = { color: "#6366F1", borderColor: "color-mix(in srgb, #6366F1 45%, var(--border))", background: "color-mix(in srgb, #6366F1 10%, var(--surface2))" };
 const tin = { padding: "7px 10px", borderRadius: 11, border: "1px solid color-mix(in srgb, #6366F1 22%, var(--border))", background: "var(--surface)",
-  color: "var(--text)", fontSize: 13, fontWeight: 800, fontFamily: "inherit", colorScheme: "light dark", outline: "none",
+  color: "var(--text)", fontSize: 13, fontWeight: 800, fontFamily: "inherit", outline: "none",
   boxShadow: "0 1px 2px rgba(15,23,42,.06), inset 0 1px 0 rgba(255,255,255,.4)", minHeight: 36 };
 const lab = { fontSize: 12.5, fontWeight: 900, color: "var(--text2)", marginBottom: 6 };
 const hint = { fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45, marginTop: 5 };

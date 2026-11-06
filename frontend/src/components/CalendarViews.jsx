@@ -15,6 +15,16 @@ const minOf = (isoStr, day) => {
   if (isoStr.slice(0, 10) > day) return 1440;
   return Math.min(1440, +isoStr.slice(11, 13) * 60 + +isoStr.slice(14, 16));
 };
+// les trous d'une liste de plages sur la journee (0 a 1440 min) ; inside : seulement dans ces autres plages (06/11/2026)
+const gaps = (iv, inside = null) => {
+  if (!iv) return [];
+  const out = [];
+  let t = 0;
+  for (const [a, b] of [...iv].sort((x, y) => x[0] - y[0])) { if (a > t) out.push([t, a]); t = Math.max(t, b); }
+  if (t < 1440) out.push([t, 1440]);
+  if (!inside) return out;
+  return out.flatMap(([a, b]) => inside.map(([x, y]) => [Math.max(a, x), Math.min(b, y)]).filter(([x, y]) => y > x));
+};
 const dayName = (d, long = false) => new Date(`${d}T12:00`).toLocaleDateString("fr-FR", long ? { weekday: "long", day: "numeric", month: "long" } : { weekday: "short", day: "numeric" });
 
 // ce qui occupe un jour : les impressions faites (et celle en cours), puis les plateaux prevus, coupes a minuit
@@ -118,6 +128,14 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
           style={{ position: "relative", borderLeft: "1px solid var(--border)", cursor: one ? "default" : "pointer",
             background: d === pick && !one ? "color-mix(in srgb, #6366F1 4%, transparent)" : "transparent" }}>
           {/* les heures de fonctionnement en fond, celles de lancement en liseré a gauche */}
+          {/* hors des heures de fonctionnement : gris hachure ; hors des heures de lancement (l'imprimante tourne, mais rien ne
+              part) : violet pale hachure (06/11/2026) */}
+          {gaps(spans(info[d].run)).map(([a, b], i) => <span key={`o${i}`} data-tip={`Imprimante à l'arrêt de ${hhm(a)} à ${hhm(b)}`}
+            style={{ position: "absolute", left: 0, right: 0, top: a / 60 * hourPx, height: (b - a) / 60 * hourPx, zIndex: 0, pointerEvents: "none",
+              background: "repeating-linear-gradient(-45deg, color-mix(in srgb, #64748B 16%, transparent) 0 3px, transparent 3px 8px)" }}/>)}
+          {gaps(spans(info[d].launch), spans(info[d].run)).map(([a, b], i) => <span key={`n${i}`} data-tip={`Pas de lancement de ${hhm(a)} à ${hhm(b)}`}
+            style={{ position: "absolute", left: 0, right: 0, top: a / 60 * hourPx, height: (b - a) / 60 * hourPx, zIndex: 0, pointerEvents: "none",
+              background: "repeating-linear-gradient(45deg, color-mix(in srgb, #8B5CF6 11%, transparent) 0 2px, transparent 2px 9px)" }}/>)}
           {/* les absences (06/11/2026) : hachurees, rien ne se lance ; un jour absent l'est en entier */}
           {[...(info[d].offIv || []).filter(x => x[2] === "absent"), ...info[d].away].map(([a, b], i) => <span key={`a${i}`} data-tip={`Absent de ${hhm(a)} à ${hhm(b)} : rien ne se lance`}
             style={{ position: "absolute", left: 0, right: 0, top: a / 60 * hourPx, height: (b - a) / 60 * hourPx, zIndex: 1, pointerEvents: "none",
