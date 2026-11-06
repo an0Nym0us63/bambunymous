@@ -573,7 +573,7 @@ async def achievements_mine(acc=Depends(require_own_account)):
 
 
 @router.get("")
-async def achievements_view(request: Request, fresh: bool = False, token: str = Depends(oauth2_scheme),
+async def achievements_view(request: Request, fresh: bool = False, slim: int = 0, token: str = Depends(oauth2_scheme),
                             username: str = Depends(get_current_user), role: str = Depends(get_current_role),
                             db: AsyncSession = Depends(get_db)):
     from ....services import achievements as A
@@ -589,7 +589,7 @@ async def achievements_view(request: Request, fresh: bool = False, token: str = 
                 by = await A._eggs_by()
                 others = [x for x in fam["secrets"] if x != username]
                 v = A.family_roster(A.family_finds_view(v, by, others), by, others)
-            return _json({**v, "me": me})
+            return _json({**v, "me": me}, slim)
         u = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
         house_ids = {it["id"] for it in v["items"] if it["level"] >= 0 and it["id"] in A.FAMILY_IDS}
         if not (u is not None and u.secrets_visible):
@@ -604,19 +604,41 @@ async def achievements_view(request: Request, fresh: bool = False, token: str = 
             fam = await A.family()
             v = A.family_roster(v, await A._eggs_by(), [x for x in fam["secrets"] if x != username],
                                 house=me["house"] or "La maison", house_ids=house_ids)
-        return _json({**v, "me": me})
+        return _json({**v, "me": me}, slim)
     u = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
     if u is not None and u.secrets_visible:
-        return _json(v)                           # droit « voit mes succes secrets » : tout, revelations comprises
+        return _json(v, slim)                           # droit « voit mes succes secrets » : tout, revelations comprises
     # seul un acces par cle de copain (relaye par son serveur) dit ce qu'il a
     mine = set()
     if by_key:
         mine = {x.strip() for x in (request.headers.get(MINE_HEADER) or "").split(",") if x.strip()}
-    return _json(A.mask_secrets(v, mine))
+    return _json(A.mask_secrets(v, mine), slim)
 
 
-def _json(v):
+def _json(v, slim: int = 0):
     """La vue est deja faite de types simples : la serialiser directement evite
     l'encodeur generique de FastAPI (~10 fois plus lent sur ses ~370 Ko)."""
     from ....core.fastjson import json_response
-    return json_response(v)
+    return json_response(_slim(v) if slim else v)
+
+
+_SLIM_KEYS = ("label", "emoji", "color")
+
+
+def _slim(v):
+    """La vue allegee (06/11/2026), seulement pour une appli qui la demande (?slim=1 : une ancienne version, chez un
+    copain par le relais, recoit toujours la complete) : chaque palier perd le libelle, l'emoji et la couleur IDENTIQUES
+    a ceux de sa definition commune (v["tiers"]), et « ticket » quand il est faux ; l'appli les remet a la lecture.
+    Rien n'est retire qui differerait. ~18 % de la vue en moins."""
+    defs = {t.get("id"): t for t in v.get("tiers") or [] if isinstance(t, dict)}
+    if not defs or not isinstance(v.get("items"), list):
+        return v
+
+    def tier(t):
+        g = defs.get(t.get("id")) if isinstance(t, dict) else None
+        if g is None:
+            return t
+        return {k: x for k, x in t.items() if not ((k in _SLIM_KEYS and x == g.get(k)) or (k == "ticket" and x is False))}
+    items = [{**it, "tiers": [tier(t) for t in it["tiers"]]} if isinstance(it, dict) and isinstance(it.get("tiers"), list) else it
+             for it in v["items"]]
+    return {**v, "items": items, "slim": 1}

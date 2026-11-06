@@ -13,6 +13,7 @@ import SlotMachine from "../components/SlotMachine";
 import TicketCeremony from "../components/TicketCeremony";
 import { Zoom, FamilyBoardZoom } from "../components/HomeTiles";
 import { Medal, TicketStub, gradeOf, GradeEmblem, CARD_ORDER, GRADE_AT, GRADES, GRADE_METAL, ROMAN } from "../components/medals";
+import { ACH_PARAMS, achExpand } from "../utils/achSlim";
 export { Medal, TicketStub, gradeOf, GradeEmblem, CARD_ORDER };
 
 // Succes : medailles gagnees sur l'historique (impressions, filaments, objets,
@@ -111,7 +112,7 @@ export default function Achievements({ embedded = false }) {
   }, [!!data, data?.me?.main, !!data?.family]); // eslint-disable-line react-hooks/exhaustive-deps
   const load = () => {
     client.get("/achievements/surprise/odds").then(r => setOdds(r.data?.accounts?.length ? r.data : null)).catch(() => setOdds(null));
-    return client.get("/achievements").then(r => setData(r.data)).catch(e => setErr(e.response?.data?.detail || e.message));
+    return client.get("/achievements", { params: ACH_PARAMS }).then(r => setData(achExpand(r.data))).catch(e => setErr(e.response?.data?.detail || e.message));
   };
   // cles : reveler l'etape suivante d'un secret, puis relire la page
   const [keyErr, setKeyErr] = useState(null);
