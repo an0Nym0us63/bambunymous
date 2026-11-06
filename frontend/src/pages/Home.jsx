@@ -1545,6 +1545,7 @@ const fullMoon = (d = new Date()) => {
 };
 function PrinterPopup({ status, img, name, onClose }) {
   const [big, setBig] = useState(false);
+  const plate = useMountedPlate(name);                 // le plateau en place (06/11/2026), a cote du filament en cours
   // telephone : la vignette en grand en haut avec l'anneau a cote, le nom dessous sur toute la largeur
   const narrowPop = typeof window !== "undefined" && window.innerWidth < 520;
   useEffect(() => {
@@ -1726,7 +1727,7 @@ function PrinterPopup({ status, img, name, onClose }) {
             <span data-egg="c_frog" style={{ fontSize: 9, opacity: 0.2, cursor: "default", userSelect: "none" }}>🐸</span></div>}
         </>}
 
-        {tray && !tray.empty ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
+        {(tray && !tray.empty) || plate ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
           {tray && !tray.empty && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, background: "var(--surface2)" }}>
             <span style={{ flexShrink: 0, display: "inline-flex" }}><SpoolSVG colors={tray && !tray.empty ? parseColorsList(tray.spool_info?.color || tray.color, tray.spool_info?.colors_array) : ["#888888"]}
               finish={finishOf(tray?.spool_info, tray)} size={52} active={live}/></span>
@@ -1737,6 +1738,18 @@ function PrinterPopup({ status, img, name, onClose }) {
               <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 700 }}>
                 {[spool?.fila_type || tray.filament_type, lvSpool ? `≈ ${Math.round(lvSpool.now)} g → ${Math.round(lvSpool.target)} g à la fin`
                   : spool?.remaining_weight_g != null ? `${Math.round(spool.remaining_weight_g)} g` : tray.remain != null ? `${tray.remain} %` : null].filter(Boolean).join(" · ")}</div>
+            </div>
+          </div>}
+          {plate && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, background: "var(--surface2)" }}>
+            <span style={{ flexShrink: 0, width: 52, height: 52, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center",
+              background: "color-mix(in srgb, #0369A1 12%, var(--surface))", color: "#0369A1" }}>
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true">
+                <rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h.01M11 14h.01M15 14h.01"/></svg></span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>Plateau en place</div>
+              <div style={{ fontSize: 14.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {plate.label}{plate.name ? <span style={{ color: "var(--muted)", fontWeight: 800 }}> · {plate.name}</span> : null}</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 700 }}>{plate.how === "printer" ? "Reconnu par l'imprimante" : "Celui de la dernière impression"}</div>
             </div>
           </div>}
         </div> : null}
