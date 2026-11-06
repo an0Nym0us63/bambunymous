@@ -23,7 +23,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-FORMAT_V = 28                          # 28 : la boite et la hauteur de chaque objet de chaque plateau, pour regrouper des plateaux (06/11) ; 27 : volumes negatifs retires, modificateurs de couleur appliques (04/11) ; 26 : QR et textes graves par un modificateur a son filament, montres (04/11) ; 25 : un modele a un seul plateau a aussi sa vue assemblee, pour l'editer (31/10) ; 24 : une piece a l'echelle de son plateau dans la vue assemblee (30/10) ; 23 : une piece redimensionnee volontairement n est plus prise pour une place abimee (30/10) ; 22 : place d'assemblage abimee d'une piece en miroir reprise (30/10) ; 21 : triangles d'une piece en miroir remis dans le bon sens (30/10) ; 20 : pieces en miroir gardees en miroir dans la vue assemblee (30/10) ; 19 : couches en marches d'un lithophane lissees (30/10) ; 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
+FORMAT_V = 27                          # 27 : volumes negatifs retires, modificateurs de couleur appliques (04/11) ; 26 : QR et textes graves par un modificateur a son filament, montres (04/11) ; 25 : un modele a un seul plateau a aussi sa vue assemblee, pour l'editer (31/10) ; 24 : une piece a l'echelle de son plateau dans la vue assemblee (30/10) ; 23 : une piece redimensionnee volontairement n est plus prise pour une place abimee (30/10) ; 22 : place d'assemblage abimee d'une piece en miroir reprise (30/10) ; 21 : triangles d'une piece en miroir remis dans le bon sens (30/10) ; 20 : pieces en miroir gardees en miroir dans la vue assemblee (30/10) ; 19 : couches en marches d'un lithophane lissees (30/10) ; 18 : plus de decoupage automatique en morceaux (29/10) ; 17 : 17 : morceaux separes dans la vue assemblee (29/10) ; 16 : une piece par partie d'objet (29/10) ; 15 : vue assemblee par piece, pour l'editer (29/10) ; 14 : blocs ranges plus serres (29/10) ; 13 : place des pieces dans la vue assemblee (29/10) ; 12 : tas deposes a l'origine (29/10) ; 11 : binaire compact, plateaux alleges (29/10) ; 10 : plateaux trop lourds simplifies (29/10) ; 9 : tas de pieces ranges (29/10) ; 8 : vue assemblee eparpillee rangee (29/10) ; 6 : la vue assemblee (29/10), 7 : toujours montree ; 2 : les couleurs peintes au pinceau (27/10/2026) ; 3 : pieces des 3MF recents (28/10) ; 4 : changements de filament en hauteur (28/10) ; 5 : lithophanes reconnus (28/10)
 _LITHO = re.compile(r"litho|lithophan|hue ?forge", re.I)       # HueForge : une image en couches, a voir par derriere aussi (30/10)
 MAX_TRIANGLES = 1_500_000              # au-dela, le plateau est simplifie (29/10/2026 ; avant : pas converti du tout) :
                                        # un telephone l'affiche vite, et le fichier reste de quelques Mo
@@ -1150,22 +1150,10 @@ def convert(src: Path, out_dir: Path, key: str = None) -> dict:
     for i, (n, pname, lst) in enumerate(work):
         where["tag"] = f"Plateau {i + 1}/{len(work)}"
         zchg = zch.get(n)                               # les changements de filament en hauteur de ce plateau
-        # chaque objet du plateau (06/11/2026) : sa boite au sol et sa hauteur, pour regrouper des plateaux comme Bambu
-        # Studio (le degagement de la tete autour de chaque objet, pas autour du plateau entier) ; releve une fois ici
-        own_p: dict = {}
-        groups_out, total, pw = emit(lst, zchg=zchg, own=own_p)
-        boxes = []
-        for arrs in own_p.values():
-            arrs = [a for a in arrs if len(a)]
-            if arrs:
-                boxes.append((np.min([a.min(axis=0) for a in arrs], axis=0), np.max([a.max(axis=0) for a in arrs], axis=0)))
-        own_p.clear()
+        groups_out, total, pw = emit(lst, zchg=zchg)
         r = write(n, pname, groups_out, total, pw)
         if r:
-            rec, size, shift = r
-            if boxes and len(boxes) <= 200:
-                rec["objects"] = [[round(float(lo[0] - shift[0]), 1), round(float(lo[1] - shift[1]), 1), round(float(hi[0] - shift[0]), 1),
-                                   round(float(hi[1] - shift[1]), 1), round(float(hi[2] - shift[2]), 1)] for lo, hi in boxes]
+            rec, size, _ = r
             # un lithophane (28/10/2026) : dit par son nom (plateau, modele, pieces « litho… »), ou une plaque mince
             # (6 mm au plus) et large ; la vue propose alors la lumiere derriere
             if bool(_LITHO.search(f"{pname} {names_txt}")) or (size[2] <= 6 and min(size[0], size[1]) >= 40):

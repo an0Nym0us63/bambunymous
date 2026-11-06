@@ -51,17 +51,14 @@ def profile_info(did, iid) -> dict | None:
             W = max((a[0] for a in area), default=256.0) - min((a[0] for a in area), default=0.0)
             H = max((a[1] for a in area), default=256.0) - min((a[1] for a in area), default=0.0)
             num = lambda k, dflt: float((ps.get(k)[0] if isinstance(ps.get(k), list) else ps.get(k)) or dflt)
-            sizes, objs = {}, {}
+            sizes = {}
             from .mw_3d import _root
             mf = _root() / str(iid) / "plates.json"
             if mf.is_file():
                 for p in json.loads(mf.read_text(encoding="utf-8")).get("plates") or []:
                     if p.get("size_mm") and not p.get("assembled"):
                         sizes[int(p["n"])] = [float(x) for x in p["size_mm"]]
-                        # ses objets (06/11/2026, vues 3D refaites depuis) : [x0, y0, x1, y1, hauteur]
-                        if p.get("objects"):
-                            objs[int(p["n"])] = [[float(v) for v in o] for o in p["objects"]]
-            out = {"W": W, "H": H, "seq": str(ps.get("print_sequence") or "by layer"), "sizes": sizes, "objs": objs,
+            out = {"W": W, "H": H, "seq": str(ps.get("print_sequence") or "by layer"), "sizes": sizes,
                    "rod_h": num("extruder_clearance_height_to_rod", 40), "lid_h": num("extruder_clearance_height_to_lid", 200),
                    "max_h": num("printable_height", 0) or num("extruder_clearance_height_to_lid", 200),
                    "rod_d": num("extruder_clearance_dist_to_rod", 50),
@@ -102,50 +99,23 @@ def _mixed(fils: list) -> bool:
     return not (all(len(f) == 1 for f in fils) and len(set().union(*fils)) == 1)
 
 
-def _objects(info: dict, n: int) -> list:
-    """Les objets d'un plateau [(largeur, profondeur, hauteur)] : chacun, quand la vue 3D les a releves ; sinon le
-    plateau entier comme un seul objet (sa boite)."""
-    if info.get("objs", {}).get(n):
-        return [(o[2] - o[0], o[3] - o[1], o[4]) for o in info["objs"][n]]
-    s = info["sizes"].get(n)
-    return [tuple(s)] if s else []
-
-
-def _too_close(info: dict, n: int, gap: float) -> bool:
-    """Objet par objet, les objets d'un meme plateau doivent deja s'ecarter du degagement de la tete : un plateau aux
-    pieces serrees ne s'imprime pas objet par objet (Bambu Studio le refuse), il ne se regroupe donc pas ainsi."""
-    os_ = info.get("objs", {}).get(n) or []
-    for i in range(len(os_)):
-        for j in range(i + 1, len(os_)):
-            a, b = os_[i], os_[j]
-            dx = max(b[0] - a[2], a[0] - b[2], 0)
-            dy = max(b[1] - a[3], a[1] - b[3], 0)
-            if max(dx, dy) < gap:
-                return True
-    return False
-
-
 def fits(info: dict, plates: list, by_obj: bool = False):
     """Ces plateaux (leurs numeros) tiennent-ils ensemble ? (confiance « haute » | « moyenne », mode) ou (None, mode).
-    by_obj : objet par objet d'office (des couleurs differentes). Chaque plateau entier (06/11/2026 : jamais une partie
-    de ses objets, on ne saurait plus ce qui est fait), mais chacun de ses objets range a part, comme Bambu Studio."""
+    by_obj : objet par objet d'office (des couleurs differentes)."""
     sz = [info["sizes"].get(n) for n in plates]
     if not sz or any(s is None for s in sz):
         return None, None
     # objet par objet seulement pour des couleurs differentes (06/11/2026) : un seul et meme filament partout se regroupe
-    # couche par couche, meme si le profil d'origine etait objet par objet
-    obs = [o for n in plates for o in _objects(info, n)]
+    # couche par couche, meme si le profil d'origine etait objet par objet. La boite de chaque plateau entier, telle quelle
     if by_obj:
-        if any(_too_close(info, n, info.get("head_r") or info["rod_d"]) for n in set(plates)):
-            return None, "objet par objet"
-        hs = sorted(o[2] for o in obs)
+        hs = sorted(s[2] for s in sz)
         # le dernier imprime peut monter jusqu'a la hauteur d'impression de la machine (06/11/2026 : 325 mm sur une H2C)
         if hs[-1] > info.get("max_h", info["lid_h"]) or any(h > info["rod_h"] for h in hs[:-1]):
             return None, "objet par objet"
         gap = info.get("head_r") or info["rod_d"]
     else:
         gap = GAP_LAYER
-    used = pack([(o[0], o[1]) for o in obs], info["W"] - 10, info["H"] - 10, gap)   # 5 mm de bord
+    used = pack([(s[0], s[1]) for s in sz], info["W"] - 10, info["H"] - 10, gap)   # 5 mm de bord
     if used is None:
         return None, "objet par objet" if by_obj else "couche par couche"
     return ("haute" if used <= 0.6 else "moyenne"), ("objet par objet" if by_obj else "couche par couche")
@@ -198,9 +168,8 @@ def proposals(jobs: list, slots: int, cap: int = 12) -> list:
                 # redescendant sur les autres, la tete butterait sur la tige) ; le conseil le dit
                 last = None
                 if mode == "objet par objet":
-                    top = lambda x: max((o[2] for o in _objects(info, x["plate"])), default=0)
-                    hi = max(grp, key=top)
-                    h = top(hi)
+                    hi = max(grp, key=lambda x: (info["sizes"].get(x["plate"]) or [0, 0, 0])[2])
+                    h = (info["sizes"].get(hi["plate"]) or [0, 0, 0])[2]
                     if h > info["rod_h"]:
                         last = {"key": hi["key"], "plate": hi["plate"], "title": hi["title"], "h": round(h), "rod_h": round(info["rod_h"])}
                 out.append({"keys": [x["key"] for x in grp], "plates": [x["plate"] for x in grp], "design_id": grp[0]["design_id"],
