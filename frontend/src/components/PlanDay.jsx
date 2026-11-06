@@ -290,9 +290,10 @@ export function PlanDashboard({ s, dur, now, onLegend, cells = false, compact = 
       s.late > 0 && ["🎯", `${s.late}`, `date${s.late > 1 ? "s" : ""} limite${s.late > 1 ? "s" : ""} ratée${s.late > 1 ? "s" : ""}`, "#DC2626", "Voir les conseils"],
       dur && Math.abs((dur.factor || 1) - 1) > 0.005 && ["⏱", `${dur.factor > 1 ? "+" : ""}${Math.round((dur.factor - 1) * 100)} %`, "sur les durées", null, "Durées corrigées (Consignes › Durées)"],
     ].filter(Boolean);
-    return <div style={{ display: "flex", alignItems: "stretch", minWidth: 0 }}>
-      {cs.map(([ic, v, l, c, tip], i) => <div key={i} data-tip={tip} style={{ flex: compact ? "0 0 auto" : "1 1 0", minWidth: compact ? 92 : 0, padding: compact ? "1px 10px" : "2px 12px",
-        borderLeft: i ? "1px solid var(--border)" : "none" }}>
+    // au telephone (06/11/2026) : en grille de trois, sur plusieurs lignes, dans l'ecran (elles defilaient au-dela du bord)
+    return <div style={compact ? { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", rowGap: 8, minWidth: 0 } : { display: "flex", alignItems: "stretch", minWidth: 0 }}>
+      {cs.map(([ic, v, l, c, tip], i) => <div key={i} data-tip={tip} style={{ flex: compact ? undefined : "1 1 0", minWidth: 0, padding: compact ? "1px 8px" : "2px 12px",
+        borderLeft: (compact ? i % 3 : i) ? "1px solid var(--border)" : "none" }}>
         <div style={{ fontSize: compact ? 14.5 : 16, fontWeight: 900, color: c || "var(--text)", whiteSpace: "nowrap", lineHeight: 1.2 }}><span style={{ fontSize: compact ? 12 : 13, marginRight: 5 }}>{ic}</span>{v}</div>
         <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l}</div>
       </div>)}

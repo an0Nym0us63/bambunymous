@@ -81,7 +81,7 @@ function PlanHero({ st, check, end, children, compact }) {
       </div>}
     </div>
     {children && <div style={{ padding: compact ? "8px 2px" : "10px 6px", borderTop: "1px solid var(--border)", background: "color-mix(in srgb, var(--surface2) 55%, transparent)",
-      ...(compact ? { overflowX: "auto", scrollbarWidth: "none" } : {}) }} data-noswipe="">{children}</div>}
+      }} data-noswipe="">{children}</div>}
   </div>;
 }
 // un bouton de la barre du planning sur ordinateur (06/11/2026) : meme hauteur, meme forme ; un nombre en pastille
@@ -160,8 +160,9 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   const [jobSel, setJobSel] = useState(null);
   const [modelSel, setModelSel] = useState(null);     // la fiche d'un modele de la file (06/11/2026)
   const [pop, setPop] = useState(null);
-  const [dayMode, setDayModeS] = useState(() => { try { return localStorage.getItem("bn_cal_daymode") || "list"; } catch { return "list"; } });
-  const setDayMode = v => { setDayModeS(v); try { localStorage.setItem("bn_cal_daymode", v); } catch { /* rien */ } };
+  // au telephone, la grille horaire par defaut (06/11/2026 ; la liste reste au choix)
+  const [dayMode, setDayModeS] = useState(() => { try { return localStorage.getItem("bn_cal_mode") || "grid"; } catch { return "grid"; } });
+  const setDayMode = v => { setDayModeS(v); try { localStorage.setItem("bn_cal_mode", v); } catch { /* rien */ } };
   const [optPrev, setOptPrev] = useState(null);       // l'apercu d'une optimisation (06/11/2026)               // "advice" | "pool" | "blocked"
   const [pick, setPick] = useState(() => dayParam.current || iso(new Date()));
   // la vue (05/11/2026) : le mois, la semaine (grille horaire ; un agenda au telephone) ou le jour
@@ -421,14 +422,14 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   const openJob = j => setJobSel(j);
   // le jour au telephone (06/11/2026) : la grille horaire ou la liste (les courts y sont lisibles) ; garde dans ce navigateur
   const dayList = !wide && view === "day" && dayMode === "list";
-  const dayToggle = !wide && view === "day" ? <div role="tablist" style={{ display: "flex", padding: 3, borderRadius: 12, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+  const dayToggle = !wide && (view === "day" || view === "week") ? <div role="tablist" style={{ display: "flex", padding: 3, borderRadius: 12, background: "var(--surface2)", border: "1px solid var(--border)" }}>
     {[["list", "☰ Liste"], ["grid", "🕒 Horaire"]].map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={dayMode === k} onClick={() => setDayMode(k)}
       style={{ flex: 1, padding: "6px 4px", borderRadius: 9, border: "none", cursor: "pointer", font: "inherit", fontSize: 12.5, fontWeight: 900,
         color: dayMode === k ? "#fff" : "var(--muted)", background: dayMode === k ? "linear-gradient(135deg, #6366F1, #8B5CF6)" : "transparent" }}>{l}</button>)}
   </div> : null;
   const viewMain = view === "month" ? calendar
     // la semaine sur ordinateur : les 24 h en entier, sans defilement interne (06/11/2026)
-    : view === "week" ? (wide ? <TimeGrid dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} hourPx={28}
+    : view === "week" ? (wide || dayMode === "grid" ? <TimeGrid dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} hourPx={28}
         pick={pick} onPick={pickDay} onOpenPrint={openPrint} onOpenJob={openJob} edit={edit} onDropDay={moveDay} onDropAt={dropAt} height="full"/>
       : <WeekAgenda dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} pick={pick}
         onPick={k => { setPick(k); setView("day"); }} onOpenPrint={openPrint} onOpenJob={openJob}/>)
@@ -485,10 +486,11 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
         tip="Absences de quelques heures, jours et périodes où tu n'es pas là (vacances…)">🚶 Absences</BarBtn>
       <BarBtn c={setOpen ? "#6366F1" : "var(--text2)"} onClick={() => setSetOpen(v => !v)} tip="Pause entre deux impressions, heures de fonctionnement et de lancement">⚙ Consignes</BarBtn>
     </div>}
-    {!wide && <div data-noswipe="" className="bn-bar" style={{ display: "flex", gap: 6, alignItems: "center", overflowX: "auto", margin: "0 -16px", padding: "1px 16px", scrollbarWidth: "none" }}>
+    {/* au telephone (06/11/2026) : sur une ou deux lignes, dans l'ecran (elle defilait au-dela du bord) */}
+    {!wide && <div data-noswipe="" className="bn-bar" style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
       <style>{".bn-bar::-webkit-scrollbar{display:none}"}</style>
       <BarBtn c="#6366F1" strong onClick={() => { const d = new Date(); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setPick(iso(d)); }}>Aujourd'hui</BarBtn>
-      {edit && nPlanned > 1 && <BarBtn c="#6366F1" label="Optimiser la file" onClick={() => setPop("optimize")}>✨ Optimiser</BarBtn>}
+      {edit && nPlanned > 1 && <BarBtn c="#6366F1" label="Optimiser la file" onClick={() => setPop("optimize")}>✨</BarBtn>}
       {edit && <UndoPill info={pd?.undo} onUndo={undo} compact style={{ height: 34, borderRadius: 11, padding: "0 12px", flexShrink: 0 }}/>}
       {showPlan && pd?.advice?.length > 0 && <BarBtn c="#D97706" n={pd.advice.length} onClick={() => setPop("advice")} label="Conseils">💡</BarBtn>}
       {showPlan && pd?.jobs?.some(j => j.locked) && <BarBtn c="#4F46E5" n={pd.jobs.filter(j => j.locked).length} onClick={() => setPop("locked")} label="Plateaux figés">🔒</BarBtn>}
