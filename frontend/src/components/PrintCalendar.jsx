@@ -362,6 +362,10 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
         {edit ? "Rien de prévu : glisse ici un plateau de la file (sous le calendrier), pose-le avec son 📅, ou fais-en une journée couleur." : "Rien de prévu ce jour-là."}</span>
       {edit && <ColorDay colors={pd?.colors} onPick={fid => colorDay(pick, fid)}/>}</div>}
   </div>;
+  // glisse a une heure (06/11/2026) : fige a ce jour et cette heure-la (au quart d'heure) ; le reste s'organise autour.
+  // Sa fiche le rend libre d'un geste
+  const dropAt = (k, day, m) => send("/makerworld/plan/lock", { key: k, lock: true,
+    at: `${day}T${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}` }, "post").then(ok => { if (ok) egg("planning_fige"); });
   const openPrint = it => onOpenPrint ? onOpenPrint(it) : nav(`/prints?id=${it.id}`);
   // l'impression en cours et sa fin estimee : la grille prolonge son bloc jusque-la
   const live = pd?.live && pd?.busy_until ? { now: pd.now, end: pd.busy_until, name: pd.live.name, planned: pd.live.planned_end } : null;
@@ -369,11 +373,11 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   const viewMain = view === "month" ? calendar
     // la semaine sur ordinateur : les 24 h en entier, sans defilement interne (06/11/2026)
     : view === "week" ? (wide ? <TimeGrid dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} hourPx={28}
-        pick={pick} onPick={pickDay} onOpenPrint={openPrint} onOpenJob={openJob} edit={edit} onDropDay={moveDay} height="full"/>
+        pick={pick} onPick={pickDay} onOpenPrint={openPrint} onOpenJob={openJob} edit={edit} onDropDay={moveDay} onDropAt={dropAt} height="full"/>
       : <WeekAgenda dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} pick={pick}
         onPick={k => { setPick(k); setView("day"); }} onOpenPrint={openPrint} onOpenJob={openJob}/>)
     : <TimeGrid dates={[pick]} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} hourPx={wide ? 46 : 40}
-        pick={pick} onPick={pickDay} onOpenPrint={openPrint} onOpenJob={openJob} edit={edit} onDropDay={moveDay} height={wide ? 640 : 460}/>;
+        pick={pick} onPick={pickDay} onOpenPrint={openPrint} onOpenJob={openJob} edit={edit} onDropDay={moveDay} onDropAt={dropAt} height={wide ? 640 : 460}/>;
   const advice = showPlan ? <>
     <PlanDeadlines items={pd?.deadlines} edit={edit} onDue={setDue}/>
     <ManualDone items={pd?.manual_done} edit={edit} onUndo={k => markDone(`${k}:0`, true)}/></> : null;

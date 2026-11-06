@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { apiUrl, apiThumb } from "../api/client";
 import MwImg, { thumbSrc } from "./MwImg";
 import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift, planIcons } from "./PlanDay";
@@ -49,8 +49,11 @@ function Thumb({ e, size }) {
 }
 
 // la grille horaire d'un ou plusieurs jours
-export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, pick, onPick, onOpenPrint, onOpenJob, edit, onDropDay, height }) {
+export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, pick, onPick, onOpenPrint, onOpenJob, edit, onDropDay, onDropAt, height }) {
   const scroller = useRef(null);
+  // glisser un plateau a une heure (06/11/2026) : ou il tomberait, le temps du glisser
+  const [over, setOver] = useState(null);
+  const minAt = (e, el) => Math.max(0, Math.min(1439, Math.round(((e.clientY - el.getBoundingClientRect().top) / hourPx * 60) / 15) * 15));
   const run = spans(settings?.run), launch = spans(settings?.launch);
   const today = now?.slice(0, 10), nowM = now ? minOf(now, today) : null;
   const evs = Object.fromEntries(dates.map(d => [d, dayEvents(d, days, (jobs || []).filter(j => j.start.slice(0, 10) <= d && j.end.slice(0, 10) >= d), live)]));
@@ -96,8 +99,11 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
             color: "var(--muted)" }}>{h ? `${h} h` : ""}</span>)}
         </div>
         {dates.map(d => <div key={d}
-          onDragOver={edit && d >= today ? e => { if (e.dataTransfer.types.includes("text/bn-job")) e.preventDefault(); } : undefined}
-          onDrop={edit && d >= today ? e => { const k = e.dataTransfer.getData("text/bn-job"); if (k) { e.preventDefault(); onDropDay(k, d); } } : undefined}
+          onDragOver={edit && d >= today ? e => { if (e.dataTransfer.types.includes("text/bn-job")) { e.preventDefault(); if (onDropAt) { const m = minAt(e, e.currentTarget);
+            if (!over || over.d !== d || over.m !== m) setOver({ d, m }); } } } : undefined}
+          onDragLeave={onDropAt ? e => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(null); } : undefined}
+          onDrop={edit && d >= today ? e => { const k = e.dataTransfer.getData("text/bn-job"); setOver(null);
+            if (k) { e.preventDefault(); onDropAt ? onDropAt(k, d, minAt(e, e.currentTarget)) : onDropDay(k, d); } } : undefined}
           onClick={() => !one && onPick(d)}
           style={{ position: "relative", borderLeft: "1px solid var(--border)", cursor: one ? "default" : "pointer",
             background: d === pick && !one ? "color-mix(in srgb, #6366F1 4%, transparent)" : "transparent" }}>
@@ -135,6 +141,8 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
             const big = h >= 34, plan = e.kind === "plan";
             const title = plan ? e.j.title : (e.it.title || e.it.name);
             return <button key={e.key} type="button" onClick={ev => { ev.stopPropagation(); plan ? onOpenJob(e.j) : onOpenPrint(e.it); }}
+              draggable={!!(edit && onDropAt && plan && !e.j.locked && !unretained(e.j))}
+              onDragStart={plan ? ev => { ev.dataTransfer.setData("text/bn-job", e.j.key); ev.dataTransfer.effectAllowed = "move"; } : undefined}
               data-tip={`${plan ? jobName(e.j) : title} · ${String(Math.floor(e.a / 60)).padStart(2, "0")}:${String(e.a % 60).padStart(2, "0")}`}
               style={{ position: "absolute", left: 4, right: 3, top, height: h, zIndex: 1, overflow: "hidden", cursor: "pointer", textAlign: "left", font: "inherit",
                 display: "flex", alignItems: big ? "flex-start" : "center", gap: 6, padding: big ? "4px 6px" : "0 6px", borderRadius: 8, boxSizing: "border-box",
@@ -157,6 +165,9 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
                 style={{ position: "absolute", top: 2, right: 2, padding: "0 4px", borderRadius: 6, background: "#FEE2E2", border: "1px solid #FCA5A5", fontSize: 10, lineHeight: "14px" }}>📉</span>}
             </button>;
           })}
+          {over?.d === d && <span style={{ position: "absolute", left: 0, right: 0, top: over.m / 60 * hourPx, height: 0, borderTop: "2px dashed #6366F1", zIndex: 4, pointerEvents: "none" }}>
+            <span style={{ position: "absolute", left: 4, top: -10, padding: "1px 6px", borderRadius: 6, background: "#6366F1", color: "#fff", fontSize: 10.5, fontWeight: 900 }}>
+              {Math.floor(over.m / 60)} h{over.m % 60 ? ` ${String(over.m % 60).padStart(2, "0")}` : ""}</span></span>}
           {d === today && nowM != null && <span style={{ position: "absolute", left: 0, right: 0, top: nowM / 60 * hourPx, height: 2, background: "#EF4444", zIndex: 2 }}>
             <span style={{ position: "absolute", left: -4, top: -3, width: 8, height: 8, borderRadius: "50%", background: "#EF4444" }}/></span>}
         </div>)}

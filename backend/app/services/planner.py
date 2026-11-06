@@ -1753,10 +1753,23 @@ async def set_prio(target: str, level) -> dict:
     return await arrange({"order": order}, merge=True)
 
 
-async def lock(key: str, on: bool = True, keys: list | None = None) -> dict:
+async def lock(key: str, on: bool = True, keys: list | None = None, at: str | None = None) -> dict:
     """Figer un plateau (05/11/2026) : il garde son jour et son heure (ceux du planning a cet instant), pose sur ce
     jour ; rien ne le deplace plus. Defiger le rend au planning (il reste pose sur son jour). keys (06/11/2026) :
-    plusieurs a la fois (tout un modele) ; ceux absents du planning sont passes."""
+    plusieurs a la fois (tout un modele) ; ceux absents du planning sont passes. at (06/11/2026, glisse a une heure dans
+    la semaine) : fige a ce jour et cette heure-la plutot qu'a ceux du planning."""
+    if at:
+        try:
+            t = datetime.strptime(str(at)[:16], "%Y-%m-%dT%H:%M")
+        except ValueError:
+            raise PlanError("Heure invalide")
+        d = await _load()
+        d["locked"][key] = t.isoformat(timespec="minutes")
+        d["pins"][key] = t.date().isoformat()
+        d["plan0"] = {}
+        d["rev"] = int(d.get("rev") or 0) + 1
+        await _save(d, "Glissé à une heure")
+        return await plan()
     r = await plan()
     by = {x["key"]: x for x in r["jobs"]}
     d = await _load()
