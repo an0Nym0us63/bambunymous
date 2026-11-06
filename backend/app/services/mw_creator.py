@@ -121,6 +121,18 @@ def _bill_item(h: dict) -> dict:
 
 
 async def points(offset: int = 0, limit: int = 30) -> dict:
+    # (06/11/2026) une page gardee une minute : la tuile de l'accueil et la page createur la redemandaient a
+    # MakerWorld a chaque ouverture (0,2 s)
+    k = ("points", max(0, int(offset)), max(1, min(int(limit), 50)))
+    hit = _CACHE.get(k)
+    if hit and time.time() - hit[0] < 60:
+        return hit[1]
+    out = await _points(offset, limit)
+    _CACHE[k] = (time.time(), out)
+    return out
+
+
+async def _points(offset: int = 0, limit: int = 30) -> dict:
     d = await _get(BILL.format(offset=max(0, int(offset)), limit=max(1, min(int(limit), 50))))
     hits = [_bill_item(h) for h in (d.get("hits") or []) if isinstance(h, dict)]
     # Totaux depuis toujours (page Transactions du site) : revenus et depenses,
@@ -138,7 +150,7 @@ async def recent_points(days: int = 30, max_pages: int = 10, fresh: bool = False
     since = datetime.now(timezone.utc) - timedelta(days=days)
     out, off = [], 0
     for _ in range(max_pages):
-        p = await points(off, 50)
+        p = await (_points if fresh else points)(off, 50)     # « fresh » relit vraiment MakerWorld
         for x in p["items"]:
             try:
                 t = datetime.fromisoformat(str(x["time"]).replace("Z", "+00:00"))

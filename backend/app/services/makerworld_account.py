@@ -678,8 +678,22 @@ def _count(d):
     return None
 
 
-async def boosts() -> dict:
-    """Mes boosts disponibles."""
+_BOOSTS = {"at": 0.0, "v": None}
+
+
+async def boosts(fresh: bool = False) -> dict:
+    """Mes boosts disponibles. (06/11/2026) gardes une minute (la page createur et chaque fiche de modele les
+    redemandaient a MakerWorld) ; apres un boost, relus."""
+    import time as _t
+    if not fresh and _BOOSTS["v"] is not None and _t.monotonic() - _BOOSTS["at"] < 60:
+        return dict(_BOOSTS["v"])
+    out = await _boosts()
+    if out.get("available") is not None:
+        _BOOSTS["v"], _BOOSTS["at"] = dict(out), _t.monotonic()
+    return out
+
+
+async def _boosts() -> dict:
     import asyncio
     from .makerworld import _get_json
     tok = await _tok()
@@ -764,7 +778,7 @@ async def boost(design_id: str) -> dict:
                             {"designId": int(did), "boostingRightId": st["right_id"],
                              "random": str(int(time.time() * 1000))}, tok)
     logger.info(f"[MW] modele {did} booste")
-    after = await boosts()
+    after = await boosts(fresh=True)
     return {"ok": True, "available": after.get("available")}
 
 
@@ -870,20 +884,20 @@ async def _people(path: str, uid: str, tok: str, most: int, strict: bool = False
 
 async def account_details() -> dict:
     """Le detail du compte (26/10/2026) : mes boosts a donner avec leur expiration, mes abonnes et mes
-    abonnements. Chaque partie lue a part : une qui echoue ne cache pas les autres."""
+    abonnements. Chaque partie lue a part : une qui echoue ne cache pas les autres. (06/11/2026) les trois en meme
+    temps : l'une apres l'autre, 2,6 s d'attente."""
+    import asyncio
     out = {}
-    try:
-        out["boosts"] = await boost_rights()
-    except Exception as e:
-        out["boosts_error"] = str(e)
-    try:
-        out["follows"] = await following()
-    except Exception as e:
-        out["follows_error"] = str(e)
-    try:
-        out["fans"] = await _people(FANS, await _my_uid(), await token(), 300, strict=True)
-    except Exception as e:
-        out["fans_error"] = str(e)
+
+    async def part(key, coro_fn):
+        try:
+            out[key] = await coro_fn()
+        except Exception as e:
+            out[f"{key}_error"] = str(e)
+
+    async def fans():
+        return await _people(FANS, await _my_uid(), await token(), 300, strict=True)
+    await asyncio.gather(part("boosts", boost_rights), part("follows", following), part("fans", fans))
     return out
 
 

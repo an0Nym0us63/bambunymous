@@ -159,10 +159,28 @@ def my_state() -> dict:
     return {"state": printer_state(st), "progress": s.progress}
 
 
+_PRINTING = {"at": 0.0, "res": None, "task": None}
+
+
 async def printing() -> dict:
     """Les copains dont l'imprimante tourne en ce moment : etat, avancement, et
     l'impression en cours (nom, vignette par le relais). Les autres sont omis
-    de « printing » ; « states » donne le voyant de chacun, « me » le mien."""
+    de « printing » ; « states » donne le voyant de chacun, « me » le mien.
+    (06/11/2026) l'accueil, sa tuile et la page Copains le demandaient en meme temps, chacun interrogeant tous les
+    copains : un seul tour a la fois, partage, et garde 10 s ; mon voyant reste lu a chaque appel."""
+    import time as _t
+    if _PRINTING["res"] is not None and _t.monotonic() - _PRINTING["at"] < 10:
+        res = _PRINTING["res"]
+    else:
+        task = _PRINTING["task"]
+        if task is None or task.done():
+            task = _PRINTING["task"] = asyncio.ensure_future(_printing())
+        res = await asyncio.shield(task)
+        _PRINTING["res"], _PRINTING["at"] = res, _t.monotonic()
+    return {**res, "me": my_state()}
+
+
+async def _printing() -> dict:
     friends = await _load()
     states = {}
 
@@ -192,7 +210,7 @@ async def printing() -> dict:
         except Exception:
             return None
     res = await asyncio.gather(*(one(f) for f in friends))
-    return {"printing": [r for r in res if r], "states": {str(k): v for k, v in states.items()}, "me": my_state()}
+    return {"printing": [r for r in res if r], "states": {str(k): v for k, v in states.items()}}
 
 
 async def for_design(design_id: str) -> dict:
