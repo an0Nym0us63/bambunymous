@@ -77,7 +77,7 @@ function Agenda({ jobs, now, max, onOpen }) {
             <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {r.j.locked ? "🔒 " : ""}{finIc(r.j, " ")}{unretained(r.j) ? "○ " : ""}{r.j.title}</span>
             <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              → {hhmm(r.j.end)} · {plateTxt(r.j)}{r.j.bed_change ? <span style={{ color: "#0369A1" }}> · 🔲 {BED_NAMES[r.j.bed_change.to] || r.j.bed_change.to}</span> : ""}{r.j.load?.length ? <span style={{ color: "var(--text2)" }}> · 🧵 <SwapShort j={r.j}/></span> : ""}{r.j.runout?.length ? <span style={{ color: "#B45309" }}> · 🔄</span> : ""}
+              → {hhmm(r.j.end)} · {plateTxt(r.j)}{r.j.bed_change ? <span style={{ color: "#0369A1" }}> · 🔲 {BED_NAMES[r.j.bed_change.to] || r.j.bed_change.to}</span> : ""}{r.j.load?.length ? <span style={{ color: "color-mix(in srgb, #8B5CF6 72%, var(--text2))" }}> · 🧵 <SwapShort j={r.j}/></span> : ""}{r.j.runout?.length ? <span style={{ color: "#B45309" }}> · 🔄</span> : ""}
               {r.j.low_info?.length ? <span style={{ color: "#DC2626" }}> · 📉</span> : ""}</span>
           </span>
         </span>
@@ -108,7 +108,7 @@ function AlertChips({ p, big }) {
 function NextUp({ p, onSheet }) {
   const j = p.jobs[0], mins = (new Date(j.start) - new Date(p.now)) / 60000;
   const todo = [
-    j.load?.length > 0 && ["🧵", "var(--text2)", <SwapLinks j={j}/>],
+    j.load?.length > 0 && ["🧵", "color-mix(in srgb, #8B5CF6 72%, var(--text2))", <SwapLinks j={j}/>],
     j.bed_change && ["🔲", "#0369A1", bedTxt(j.bed_change).replace(/^🔲 /, "")],
     j.merged && ["🧩", "#6366F1", "Regrouper ses plateaux dans Bambu Studio avant de lancer"],
     ...(j.runout || []).map(r => ["🔄", "#B45309", runoutTxt(r).replace(/^🔄 /, "") + " : prépare une autre bobine"]),
