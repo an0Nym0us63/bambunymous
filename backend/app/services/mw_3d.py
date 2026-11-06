@@ -1995,7 +1995,8 @@ async def warm_loop(first_delay_s: int = 90, period_s: int = 12 * 3600) -> None:
     while True:
         try:
             files = await asyncio.to_thread(_all_sources)
-            todo = [(f, k) for f, k in files if not _view_ok(f, k) and not blocked(f, k)]
+            # verifie hors de la boucle (06/11/2026) : chaque vue lue sur le NAS la figeait (977 ms au demarrage)
+            todo = await asyncio.to_thread(lambda: [(f, k) for f, k in files if not _view_ok(f, k) and not blocked(f, k)])
             WARM.update(running=bool(todo), done=0, total=len(todo), all=len(files), started=time.time(), finished=None,
                         current=None, stopped=None)
             for f, k in todo:

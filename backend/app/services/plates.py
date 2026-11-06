@@ -73,20 +73,82 @@ def bad_kinds(material: str | None, fila_type: str | None, extra: dict | None = 
 
 
 _CACHE: dict = {}
+# (06/11/2026) gardes aussi sur disque : apres un redemarrage, le premier planning rouvrait le 3MF de chaque profil
+# (2 a 4 s de boucle figee). La cle porte la date du fichier : un 3MF change est relu.
+_DISK = {"v": None, "timer": None}
+
+
+def _disk_file() -> Path:
+    return DATA_DIR / "cache" / "plate_beds.json"
+
+
+def _disk() -> dict:
+    if _DISK["v"] is None:
+        try:
+            v = json.loads(_disk_file().read_text(encoding="utf-8"))
+            _DISK["v"] = v if isinstance(v, dict) else {}
+        except (OSError, ValueError):
+            _DISK["v"] = {}
+    return _DISK["v"]
+
+
+def _disk_flush() -> None:
+    _DISK["timer"] = None
+    try:
+        f = _disk_file()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        tmp = f.with_suffix(".tmp")
+        tmp.write_text(json.dumps(dict(_disk())), encoding="utf-8")
+        tmp.replace(f)
+    except (OSError, RuntimeError):
+        pass
+
+
+def _disk_put(k: str, v) -> None:
+    import threading
+    d = _disk()
+    if d.get(k, "∅") == v:
+        return
+    if len(d) > 4000:
+        d.clear()
+    d[k] = v
+    # ecrit 5 s apres la derniere nouveaute (une rafale au demarrage : une seule ecriture)
+    if _DISK.get("timer") is None:
+        t = threading.Timer(5.0, _disk_flush)
+        t.daemon = True
+        _DISK["timer"] = t
+        t.start()
 
 
 def bed_of_3mf(path, plate=None) -> str | None:
     """Le type de plateau d'un 3MF : celui du plateau `plate` (son reglage propre, ou celui du G-code tranche), sinon celui
     du projet. Garde en memoire selon la date du fichier."""
+    p = Path(path)
+    # une copie du NAS (hors du dossier de donnees) ne change plus une fois archivee : ni existence ni date a verifier
+    # (chaque acces au NAS passe par le reseau, 06/11/2026)
+    nas = not str(p).startswith(str(DATA_DIR))
+    if nas:
+        key = (str(p), "nas", str(plate or ""))
+        if key in _CACHE:
+            return _CACHE[key]
+        hit = _disk().get(f"{key[0]}|nas|{key[2]}", "∅")
+        if hit != "∅":
+            _CACHE[key] = hit
+            return hit
     try:
-        p = Path(path)
         if not p.is_file():
             return None
-        key = (str(p), p.stat().st_mtime, str(plate or ""))
+        if not nas:
+            key = (str(p), p.stat().st_mtime, str(plate or ""))
     except OSError:
         return None
     if key in _CACHE:
         return _CACHE[key]
+    dk = f"{key[0]}|{key[1]}|{key[2]}"
+    hit = _disk().get(dk, "∅")
+    if hit != "∅":
+        _CACHE[key] = hit
+        return hit
     out = None
     try:
         with zipfile.ZipFile(p) as z:
@@ -114,6 +176,7 @@ def bed_of_3mf(path, plate=None) -> str | None:
     if len(_CACHE) > 2000:
         _CACHE.clear()
     _CACHE[key] = out
+    _disk_put(dk, out)
     return out
 
 

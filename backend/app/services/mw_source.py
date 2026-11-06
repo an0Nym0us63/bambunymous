@@ -329,15 +329,29 @@ def _profile(prof, manual, did=None, task=None) -> str:
     return _current_profile(did, p, task) if did else p
 
 
+_DPROF: dict = {}
+
+
 def _disk_profiles(did) -> list:
-    """Les profils de la fiche MakerWorld gardee sur disque (rien a demander a MakerWorld) ; [] sans elle."""
+    """Les profils de la fiche MakerWorld gardee sur disque (rien a demander a MakerWorld) ; [] sans elle.
+    (06/11/2026) gardes en memoire tant que la fiche ne change pas : la liste des impressions la relisait et la
+    decodait en entier pour chaque impression (481 ms au demarrage)."""
     try:
         from .makerworld import _disk_path
         f = _disk_path(str(did))
-        if not f.is_file():
+        try:
+            mt = f.stat().st_mtime
+        except OSError:
             return []
+        hit = _DPROF.get(str(did))
+        if hit and hit[0] == mt:
+            return hit[1]
         profs = (json.loads(f.read_text(encoding="utf-8")).get("base") or {}).get("profiles") or []
-        return [x for x in profs if isinstance(x, dict)]
+        out = [x for x in profs if isinstance(x, dict)]
+        if len(_DPROF) > 3000:
+            _DPROF.clear()
+        _DPROF[str(did)] = (mt, out)
+        return out
     except (OSError, ValueError, TypeError):
         return []
 
