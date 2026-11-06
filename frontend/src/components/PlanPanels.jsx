@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
-import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET } from "./PlanDay";
+import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt } from "./PlanDay";
 
 // Les fenetres du planning (05/11/2026) : une fenetre (en bas au telephone, au centre sur ordinateur), la fiche
 // d'actions d'un plateau, la file regroupee par objet, les plateaux non planifiables.
@@ -104,6 +104,8 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
           {j.due && <span style={{ fontSize: 11, fontWeight: 900, color: j.due_ok ? "#16A34A" : "#EF4444" }}>🎯 avant le {dueTxt(j.due)}</span>}
           {prioChip(j.prio_m)}{j.prio_p ? prioChip(j.prio_p, { opacity: 0.85 }) : null}
           {j.load?.length > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "#EA580C" }}>🧵 à charger : {j.load.join(", ")}</span>}
+          {j.unload?.length > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "#64748B" }}>↩ à retirer : {j.unload.join(", ")}</span>}
+          {(j.runout || []).map(r => <span key={r.name} style={{ fontSize: 11, fontWeight: 900, color: "#B45309" }}>{runoutTxt(r)}</span>)}
           <StockTags j={j}/>
         </span>
         {(j.reasons || []).map((r, i) => <span key={i} style={{ fontSize: 11.5, color: "var(--muted)" }}>↪ {r}</span>)}
@@ -405,7 +407,7 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act, jobs }) {
           <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
             <span style={{ fontSize: 12, fontWeight: 900, color: bad ? "#DC2626" : "#6366F1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {j.locked ? "🔒 " : ""}{j.pinned && !j.locked ? "📌 " : ""}{j.completes ? "🏁 " : ""}{plateTxt(j)}{j.qty > 1 ? ` · ${j.copy}e/${j.qty}` : ""}
-              {j.load?.length ? " 🧵" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}{j.intercalated ? " ↔" : ""}
+              {j.load?.length ? " 🧵" : ""}{j.runout?.length ? " 🔄" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}{j.intercalated ? " ↔" : ""}
               {j.prio_p ? ` ${prioOf(j.prio_p)[1]}` : ""}</span>
             {bad ? <span style={{ fontSize: 11.5, fontWeight: 800, color: "#DC2626" }}>⛔ non planifiable · {(j.blockedWhy || []).join(" · ")}</span>
               : <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text)" }}>{dayOf(j.start, now)} <span style={{ fontWeight: 700, color: "var(--muted)" }}>

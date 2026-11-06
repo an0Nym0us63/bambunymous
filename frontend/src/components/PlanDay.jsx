@@ -136,7 +136,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
         </div>
       </div>
     </div>
-    {(j.completes || j.due || j.load?.length > 0 || unretained(j) || j.locked || j.awaits_order?.length > 0 || j.low_after?.length > 0) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+    {(j.completes || j.due || j.load?.length > 0 || j.runout?.length > 0 || unretained(j) || j.locked || j.awaits_order?.length > 0 || j.low_after?.length > 0) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
       {j.awaits_order?.length > 0 && tag(`🚚 compte sur la commande : ${j.awaits_order.join(", ")}`, "#0EA5E9", "Le stock ne suffit pas : ce plateau prend sur une bobine commandée, pas encore reçue")}
       {j.low_after?.length > 0 && tag(`📉 sous le seuil : ${j.low_after.join(", ")}`, "#DC2626", "Après ce plateau, il restera moins d'un quart de bobine de ce filament")}
       {j.locked && tag(`🔒 figé à ${hhmm(j.start)}`, "#4F46E5", "Figé à ce jour et cette heure : optimiser, journée couleur, au mieux ou plus tard ne le déplacent pas")}
@@ -146,6 +146,8 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
         || "Pour optimiser le planning")}
       {j.due && tag(`🎯 avant le ${dueTxt(j.due)}`, j.due_ok ? "#16A34A" : "#EF4444", j.due_ok ? "L'objet sera fini à temps" : "Le dernier plateau de l'objet finit après cette date")}
       {j.load?.length > 0 && tag(`🧵 À charger : ${j.load.join(", ")}`, "#EA580C", "Pas dans l'AMS à ce moment-là")}
+      {j.unload?.length > 0 && tag(`↩ À retirer : ${j.unload.join(", ")}`, "#64748B", "Celle qui resservira le plus tard (ou plus du tout) : on la sort pour faire la place")}
+      {(j.runout || []).map(r => <React.Fragment key={r.name}>{tag(runoutTxt(r), "#B45309", "La bobine chargée ne suffit pas : prépare-en une autre de ce filament pour cette heure-là")}</React.Fragment>)}
     </div>}
     {/* decale par la tache de fond (pas par un rangement) : d'ou il vient, quand, pourquoi */}
     {j.moved && <div style={{ fontSize: 11.5, fontWeight: 700, lineHeight: 1.35, color: "#0EA5E9" }}>
@@ -177,6 +179,22 @@ export const OPT_MODES = [["mix", "🧠", "Intelligent", "Essaie plusieurs plann
 export const DAY_KIND = { absent: ["🏖", "Absent", "#0EA5E9", "Rien ne se lance ; une impression lancée avant finit quand même"],
   light: ["⏳", "Peu dispo", "#F59E0B", "Une seule heure de lancement, la première de ta plage : un long y part, un autre la veille au soir"] };
 export const dayKindOf = (settings, day) => (settings?.days_off || []).find(x => x.from <= day && day <= x.to)?.kind || null;
+// une bobine qui se videra en pleine impression (06/11/2026) : vers quelle heure
+export const runoutTxt = r => `🔄 ${r.name} se vide vers ${+r.at.slice(11, 13)} h${r.at.slice(14, 16) !== "00" ? ` ${r.at.slice(14, 16)}` : ""} (reste ${r.left} g, il en faut ${r.need})`;
+// les creneaux de chargement (06/11/2026) : jusqu'a quatre plages
+function LoadWins({ list, set }) {
+  return <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    {list.map((w, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>de</span>
+      <input type="time" value={w.from} onChange={e => set(list.map((x, k) => k === i ? { ...x, from: e.target.value } : x))} style={tin}/>
+      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>à</span>
+      <input type="time" value={w.to} onChange={e => set(list.map((x, k) => k === i ? { ...x, to: e.target.value } : x))} style={tin}/>
+      <button type="button" onClick={() => set(list.filter((_, k) => k !== i))} aria-label="Retirer" style={mini}>✕</button>
+    </div>)}
+    {list.length < 4 && <button type="button" onClick={() => set([...list, list.length ? { from: "19:00", to: "23:00" } : { from: "08:00", to: "09:00" }])}
+      style={{ ...seg, alignSelf: "flex-start" }}>＋ {list.length ? "Un autre créneau" : "Un créneau"}</button>}
+  </div>;
+}
 function DaysOff({ list, set }) {
   const [kind, setKind] = useState("absent");
   const [a, setA] = useState(""), [b, setB] = useState("");
@@ -209,6 +227,7 @@ export function PlanSettings({ s, onSave, onClose }) {
   const [daysOff, setDaysOff] = useState(s?.days_off || []);
   const [run, setRun] = useState(s?.run || null);
   const [launch, setLaunch] = useState(s?.launch || null);
+  const [loadWin, setLoadWin] = useState(s?.load_win || []);
   const [busy, setBusy] = useState(false);
   const range = (v, set, def, offTxt, onTxt) => <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -219,7 +238,7 @@ export function PlanSettings({ s, onSave, onClose }) {
       de <input type="time" value={v.from} onChange={e => set({ ...v, from: e.target.value })} style={tin}/>
       à <input type="time" value={v.to} onChange={e => set({ ...v, to: e.target.value })} style={tin}/></div>}
   </div>;
-  const save = async () => { setBusy(true); try { await onSave({ gap: Math.max(0, parseInt(gap) || 0), run, launch, opt_mode: optMode, auto_new: autoNew, days_off: daysOff }); } finally { setBusy(false); } };
+  const save = async () => { setBusy(true); try { await onSave({ gap: Math.max(0, parseInt(gap) || 0), run, launch, opt_mode: optMode, auto_new: autoNew, days_off: daysOff, load_win: loadWin }); } finally { setBusy(false); } };
   const modes = (v, set, extra) => <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
     {[...(extra ? [extra] : []), ...OPT_MODES].map(([k, ic, l, tip]) => <button key={k} type="button" data-tip={tip} onClick={() => set(k)}
       style={{ ...seg, ...(v === k ? segOn : {}) }}>{ic} {l}</button>)}</div>;
@@ -241,6 +260,12 @@ export function PlanSettings({ s, onSave, onClose }) {
       <div style={lab}>▶ Heures de lancement</div>
       {range(launch, setLaunch, { from: "08:00", to: "00:00" }, "À toute heure", "Une plage")}
       <div style={hint}>Quand quelqu'un est là pour lancer. Avec 8 h – minuit, une impression peut finir à 2 h du matin, mais la suivante attend 8 h.</div>
+    </div>
+    <div>
+      <div style={lab}>🧵 Créneaux de chargement</div>
+      <LoadWins list={loadWin} set={setLoadWin}/>
+      <div style={hint}>Quand tu peux changer une bobine. Sans créneau : à toute heure de lancement. Avec « 8 h – 9 h » et « 19 h – 23 h », un plateau qui
+        demande une bobine à charger attend l'un d'eux ; les autres partent à toute heure. L'optimiseur en tient compte.</div>
     </div>
     <div>
       <div style={lab}>📅 Jours particuliers</div>
@@ -375,7 +400,8 @@ export function NowNextTiles({ pd, onOpenPrint, onPickJob, wide }) {
             {j.completes ? "🏁 " : ""}{unretained(j) ? "○ " : ""}{j.title}<span style={{ color: "#6366F1" }}>{j.plates_total > 1 ? ` · ${j.plate}/${j.plates_total}` : ""}</span></span>
           <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             <span style={{ color: "var(--text2)" }}>{whenTxt(j.start, now)} → {whenTxt(j.end, now)}</span> · {hm(j.seconds)}
-            {j.load?.length ? <span style={{ color: "#EA580C" }}> · 🧵 {j.load.join(", ")}</span> : ""}</span>
+            {j.load?.length ? <span style={{ color: "#EA580C" }}> · 🧵 {j.load.join(", ")}</span> : ""}
+            {j.runout?.length ? <span style={{ color: "#B45309" }}> · 🔄 {j.runout.map(r => r.name).join(", ")}</span> : ""}</span>
         </span>
       </button>)}
     </div>

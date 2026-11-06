@@ -46,7 +46,9 @@ logger = logging.getLogger(__name__)
 KEY = "PRINT_PLAN"
 HORIZON_DAYS = 60
 SHIFT_MIN = 180          # un plateau « decale » : son depart a bouge d'au moins 3 h (06/11/2026)
-DEFAULTS = {"gap": 15, "run": None, "launch": None, "opt_mode": "mix", "auto_new": "off", "days_off": []}
+DEFAULTS = {"gap": 15, "run": None, "launch": None, "opt_mode": "mix", "auto_new": "off", "days_off": [], "load_win": []}
+# les creneaux de chargement (06/11/2026) : [{from, to}] ; vide, on charge a toute heure (de lancement). Sinon un plateau
+# qui demande de charger une bobine ne part que dans l'un d'eux (« je ne change de bobine que le matin et le soir »)
 # les jours particuliers (06/11/2026) : [{from, to, kind}] ; "absent" : aucun lancement ces jours-la (une impression
 # lancee avant finit quand meme) ; "light" (peu dispo) : une seule heure de lancement, la premiere de la plage habituelle
 # (on y lance un long qui couvre la journee ; la veille au soir, un long qui y mene)
@@ -175,6 +177,16 @@ async def set_settings(body: dict) -> dict:
                 raise PlanError("Jour particulier : absent ou peu dispo")
             out.append({"from": min(a, b), "to": max(a, b), "kind": x["kind"], "note": str(x.get("note") or "")[:60]})
         d["days_off"] = sorted(out, key=lambda x: x["from"])
+    if isinstance(body.get("load_win"), list):
+        out = []
+        for w in body["load_win"][:4]:
+            if not isinstance(w, dict) or not _window(w):
+                raise PlanError("Un créneau de chargement : de 08:00 à 09:00")
+            a, b = _window(w)
+            if b - a < 15:
+                raise PlanError("Un créneau de chargement d'au moins 15 minutes")
+            out.append({"from": w["from"], "to": w["to"]})
+        d["load_win"] = out
     if body.get("opt_mode") in MODES:
         d["opt_mode"] = body["opt_mode"]
     # les nouveaux plateaux (un modele retenu, un exemplaire de plus) : en fin de file, ou places selon un mode
@@ -332,6 +344,25 @@ class Rules:
                 a += timedelta(days=1)
         # des moments sans lancement (une plage, ou des jours particuliers) : les nuits et les trous se remplissent
         self.limits = bool(self.launch or self.off)
+        # les creneaux de chargement
+        self.load = [w for w in (_window(x) for x in d.get("load_win") or []) if w]
+        self.load_txt = [f"{x.get('from')}–{x.get('to')}" for x in d.get("load_win") or []]
+
+    def load_at(self, c: datetime) -> datetime:
+        """Le premier moment, a partir de c, dans un creneau de chargement (c lui-meme s'il y est)."""
+        if not self.load:
+            return c
+        best = None
+        for w in self.load:
+            for a, b in self._iv(w, c, 3):
+                if b > c:
+                    t = max(a, c)
+                    best = t if best is None or t < best else best
+                    break
+        return best or c
+
+    def in_load(self, s: datetime) -> bool:
+        return not self.load or self.load_at(s) == s
 
     def _launch_iv(self, c: datetime, horizon: int):
         """Les plages de lancement autour de c, jours particuliers compris : un jour absent n'en a pas, un jour peu dispo
@@ -523,6 +554,28 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
     # sort celui qui a servi il y a le plus longtemps
     have = list(loaded)
     slots = max(slots, len(have), 1)
+    # quelle bobine sortir (06/11/2026) : celle dont on se servira le plus tard (ou plus du tout), pas la plus ancienne ;
+    # sortir une bobine qui resservira l'apres-midi serait bete
+    import bisect
+    uses = {}
+    for i, x in enumerate(jobs):
+        for f in x["fils"]:
+            if f.get("filament_id"):
+                uses.setdefault(f["filament_id"], []).append(i)
+    names = dict(d.get("_names") or {})
+    for x in jobs:
+        for f in x["fils"]:
+            if f.get("filament_id") and f.get("name"):
+                names.setdefault(f["filament_id"], f["name"])
+
+    def next_use(fid, after):
+        u = uses.get(fid) or []
+        i = bisect.bisect_right(u, after)
+        return u[i] if i < len(u) else 10 ** 9
+    # ce qui reste sur les bobines chargees (06/11/2026) : une impression qui en demande plus videra la bobine en cours
+    # de route ; on dit vers quelle heure (au prorata de la duree), pour preparer la suivante. Une bobine chargee
+    # ensuite : on ne sait pas laquelle, on la suppose assez pleine
+    ams_g = {fid: float(v.get("g") or 0) for fid, v in (d.get("_ams") or {}).items()}
 
     def put(j, s, why, c, too_long, extra=None):
         nonlocal cursor
@@ -533,13 +586,37 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
             rs.append(f"Plus longue ({_dur(j['seconds'])}) que la plage de fonctionnement ({rt.get('from')}–{rt.get('to')}) : "
                       f"elle ne peut pas finir avant l'arrêt")
         need = [f for f in j["fils"] if f.get("filament_id") and f["filament_id"] not in have]
+        mine = {f.get("filament_id") for f in j["fils"] if f.get("filament_id")}
+        runout = []
+        for f in j["fils"]:
+            fid, g = f.get("filament_id"), f.get("g") or 0
+            if not fid or fid not in ams_g or ams_g[fid] is None or fid in {x["filament_id"] for x in need} or not g:
+                continue
+            if g > ams_g[fid] + 0.5:
+                left = max(0.0, ams_g[fid])
+                runout.append({"name": f.get("name"), "left": round(left), "need": round(g),
+                               "at": (s + timedelta(seconds=j["seconds"] * left / g)).isoformat(timespec="minutes")})
+                ams_g[fid] = None
+            else:
+                ams_g[fid] -= g
+        for f in need:
+            ams_g[f["filament_id"]] = None
         for f in j["fils"]:
             fid = f.get("filament_id")
             if fid:
                 if fid in have:
                     have.remove(fid)
                 have.append(fid)
-        del have[:max(0, len(have) - slots)]
+        unload = []
+        here = rank.get(j["key"], 0)
+        while len(have) > slots:
+            out = [x for x in have if x not in mine]
+            if not out:
+                break
+            v = max(out, key=lambda x: (next_use(x, here), -have.index(x)))
+            have.remove(v)
+            ams_g.pop(v, None)
+            unload.append(names.get(v) or f"filament {v}")
         _, awaits = short(j)
         low, low_info = [], []
         for f in j["fils"]:
@@ -557,7 +634,8 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
                                  "multicolor_type": f.get("multicolor_type"), "left": max(0, round(st["g"] + st["ordered"])), "low": round(st["low"])})
         placed.append({**j, "awaits_order": awaits, "low_after": low, "low_info": low_info, "start": s.isoformat(timespec="minutes"), "end": e.isoformat(timespec="minutes"),
                        "day": s.date().isoformat(), "pinned": j["key"] in pins, "locked": j["key"] in locked, "reasons": rs, "too_long": too_long,
-                       "load": [f["name"] for f in need], "wait_s": int((s - c).total_seconds()) if s > c else 0})
+                       "load": [f["name"] for f in need], "unload": unload, "runout": runout,
+                       "wait_s": int((s - c).total_seconds()) if s > c else 0})
         cursor = e + rules.gap
 
     def place_fixed():
@@ -566,6 +644,22 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
         extra = None if s <= fs + timedelta(minutes=1) else \
             f"Figé à {_fmt(fs)}, parti à {_fmt(s)} : l'imprimante n'était pas libre avant"
         put(fj, s, None, s, False, extra)
+
+    def slot_for(j, c):
+        """slot(), et un plateau qui demande de charger une bobine attend un creneau de chargement (06/11/2026). Rend
+        (debut, pourquoi, trop long, ce qu'il en dit)."""
+        if not rules.load or all(f.get("filament_id") in have for f in j["fils"] if f.get("filament_id")):
+            return (*slot(c, j["seconds"]), None)
+        c0 = c
+        for _ in range(12):
+            s, why, tl = slot(rules.load_at(c), j["seconds"])
+            if rules.in_load(s) or tl:
+                break
+            c = s
+        txt = None
+        if s > c0 + timedelta(minutes=1) and not rules.in_load(c0):
+            txt = f"Une bobine à charger : attend le créneau de chargement ({', '.join(rules.load_txt)})"
+        return s, why, tl, txt
 
     def slot(c, secs):
         """Le premier debut possible a partir de c, autour des plateaux figes : un fige qui doit partir avant passe
@@ -604,11 +698,11 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
                 c = max(cursor, d0 + timedelta(minutes=h0))
                 if extra is None and c > cursor + timedelta(minutes=1) and c.date() != cursor.date():
                     extra = f"Posée {_day_fr(c, today)} (glissée sur le calendrier)"
-                s, why, too_long = slot(c, j["seconds"])
+                s, why, too_long, ltxt = slot_for(j, c)
                 if s.date() > day and not too_long and i < HORIZON_DAYS:
                     carry.append((j, f"Posée le {day.day}/{day.month:02d} mais n'y tient plus : reportée"))
                     continue
-                put(j, s, why, c, too_long, extra)
+                put(j, s, None if ltxt else why, c, too_long, extra or ltxt)
                 left -= 1
                 continue
             j = pending[0]
@@ -619,12 +713,12 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
                 left -= 1
                 continue
             c = cursor
-            s, why, too_long = slot(c, j["seconds"])
+            s, why, too_long, ltxt = slot_for(j, c)
             if s.date() > day and i < HORIZON_DAYS:
                 full = True
                 continue
             pending.pop(0)
-            put(j, s, why, c, too_long)
+            put(j, s, None if ltxt else why, c, too_long, ltxt)
             left -= 1
     while fixed:                                      # les figes au-dela de la file
         place_fixed()
@@ -1001,7 +1095,21 @@ async def _context(tz: int | None):
     q = await Q.queue()
     stock_of = ((Q._CACHE[1] or {}).get("stock_of")) or {}
     stock_of = {int(k): v for k, v in stock_of.items() if str(k).isdigit()}
-    loaded = set((await Q._ams_stock()).keys())
+    ams = await Q._ams_stock()
+    loaded = set(ams.keys())
+    d["_ams"] = ams
+    d["_names"] = {int(k): v.get("name") for k, v in stock_of.items() if v.get("name")}
+    miss = [f for f in loaded if f not in d["_names"]]
+    if miss:
+        try:
+            from sqlalchemy import select
+            from ..db.session import AsyncSessionLocal
+            from ..models.filament import Filament
+            async with AsyncSessionLocal() as db:
+                for fid, nm in (await db.execute(select(Filament.id, Filament.name).where(Filament.id.in_(miss)))).all():
+                    d["_names"][int(fid)] = nm
+        except Exception:
+            logger.exception("[PLANNING] noms des filaments charges")
     jobs, changed = _jobs(q.get("models") or [], d, stock_of)
     d["_stock"] = await _stock_ledger(stock_of)
     live = _live()
@@ -1679,11 +1787,27 @@ async def tick(cfg, r: dict | None = None) -> int:
             when = f"{_day_fr(s, today)} à {_fmt(s)}" + (f", dans {_dur(left * 60)}" if left > 0 else ", maintenant")
             kept = [f.get("name") for f in j.get("fils") or [] if f.get("name") and f.get("name") not in j["load"]]
             body = f"Pour {_title(j)} ({_dur(j['seconds'])}), prévue {when}."
+            if j.get("unload"):
+                body += f"\nÀ retirer : {', '.join(j['unload'])} (elle ne resservira pas de sitôt)"
             if kept:
                 body += f"\nDéjà dans l'AMS : {', '.join(dict.fromkeys(kept))}"
             await N.notify("plan_load", f"🧵 À charger pour {_fmt(s)} : {', '.join(j['load'])}", body,
                            click=N.app_link(cfg, "/prints?tab=calendar"), priority=3)
             sent += 1
+        # une bobine qui se videra en pleine impression (06/11/2026) : un peu avant, laquelle et vers quelle heure
+        for j in (r.get("jobs") or [])[:12]:
+            for ro in j.get("runout") or []:
+                at = datetime.fromisoformat(ro["at"])
+                k = f"runout|{j['key']}|{ro['name']}"
+                if at - nowt > timedelta(minutes=mins) or at < nowt - timedelta(minutes=10) or d["notified"].get(k):
+                    continue
+                d["notified"][k] = 1
+                changed = True
+                await N.notify("plan_load", f"🔄 Bobine bientôt vide : {ro['name']} vers {_fmt(at)}",
+                               f"Pendant {_title(j)} : il reste {ro['left']} g, il en faut {ro['need']} g.\n"
+                               f"Prépare une autre bobine de {ro['name']} pour {_day_fr(at, today)} à {_fmt(at)}.",
+                               click=N.app_link(cfg, "/prints?tab=calendar"), priority=3)
+                sent += 1
     if changed:
         await _save(d)
     st, j = r.get("status"), (r.get("jobs") or [None])[0]
@@ -1695,7 +1819,8 @@ async def tick(cfg, r: dict | None = None) -> int:
     if seen >= step:
         return 0
     ks = {x["key"] for x in r["jobs"]}
-    d["notified"] = {k: v for k, v in d["notified"].items() if k in ks or k.startswith("due:") or (k.startswith("load:") and k[5:] in ks)}
+    d["notified"] = {k: v for k, v in d["notified"].items() if k in ks or k.startswith("due:") or (k.startswith("load:") and k[5:] in ks)
+                   or (k.startswith("runout|") and k.split("|")[1] in ks)}
     d["notified"][j["key"]] = step
     await _save(d)
     name = _title(j)
