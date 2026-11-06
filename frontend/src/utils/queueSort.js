@@ -1,8 +1,8 @@
-// Les tris de « À faire » (page et tuile de l'accueil). Par defaut : l'ordre de priorite,
-// celui de la liste ; les autres disent ce qu'on peut lancer tout de suite avec les
+// Les tris de « À faire » (page et tuile de l'accueil). Par defaut : l'ordre du planning dans la page (06/11/2026),
+// celui de la liste dans la tuile ; les autres disent ce qu'on peut lancer tout de suite avec les
 // bobines chargees (plateaux prets, leurs heures, leurs grammes).
 export const QUEUE_SORTS = [
-  ["prio", "par priorité"],
+  ["prio", "dans ton ordre"],
   ["nplates", "le plus de plateaux faisables maintenant"],
   ["nhours", "le plus d'heures faisables maintenant"],
   ["ngrams", "le plus de grammes faisables maintenant"],

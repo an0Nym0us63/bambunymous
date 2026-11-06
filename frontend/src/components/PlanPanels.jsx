@@ -91,6 +91,7 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
           {j.completes && <span style={{ fontSize: 11, fontWeight: 900, color: "#047857" }}>{doneTxt(j)}</span>}
           {j.intercalated && <span style={{ fontSize: 11, fontWeight: 900, color: "#0EA5E9" }}>{interTxt(j)}</span>}
           {j.due && <span style={{ fontSize: 11, fontWeight: 900, color: j.due_ok ? "#16A34A" : "#EF4444" }}>🎯 avant le {dueTxt(j.due)}</span>}
+          {prioChip(j.prio_m)}{j.prio_p ? prioChip(j.prio_p, { opacity: 0.85 }) : null}
           {j.load?.length > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "#EA580C" }}>🧵 à charger : {j.load.join(", ")}</span>}
           <StockTags j={j}/>
         </span>
@@ -114,8 +115,9 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
           : big("slot", "📍", "Sur un jour…", "À la meilleure place de la journée choisie", () => setSlot(true)))}
         {big("later", "⏭", "Plus tard", "Il quitte sa place et son jour, et passe en fin de file", () => run("later", act.later))}
       </div>}
+      {edit && !j.why && j.plates_total > 1 && act.prioPlate && <PrioPick plate value={j.prio_p} busy={busy} run={run} onPick={act.prioPlate}/>}
       {/* l'objet entier : sa fiche (tout plus tard, d'une traite, date limite, tous ses plateaux sur un jour) */}
-      {act.model ? row("model", "🧩", "Tout l'objet", [j.plates_total > 1 ? `${j.plates_total} plateaux` : null, j.chain ? "d'une traite" : null,
+      {act.model ? row("model", "🧩", "Tout l'objet", [j.plates_total > 1 ? `${j.plates_total} plateaux` : null, j.prio_m ? `priorité ${prioOf(j.prio_m)[2].toLowerCase()}` : null, j.chain ? "d'une traite" : null,
           j.due ? `avant le ${dueTxt(j.due)}` : null].filter(Boolean).join(" · ") || "Tous ses plateaux sur un jour, plus tard, d'une traite, une date limite",
           () => { act.model(); onClose(); })
         : <>
@@ -165,6 +167,38 @@ function FreezePick({ j, now, busy, run, act }) {
     </div>
   </div>;
 }
+
+// La priorite (06/11/2026) : d'un modele par rapport aux autres modeles, d'un plateau par rapport aux autres plateaux de
+// son modele. Une date limite passe avant ; les figes et les jours figes ne bougent pas pour elle.
+export const PRIOS = [[2, "🔥", "Urgent", "#DC2626"], [1, "⬆", "Haute", "#EA580C"], [0, "•", "Normale", "#64748B"],
+  [-1, "⬇", "Basse", "#0EA5E9"], [-2, "⏬", "Très basse", "#6366F1"]];
+export const prioOf = v => PRIOS.find(p => p[0] === (v || 0)) || PRIOS[2];
+const PRIO_TIP = {
+  model: { 2: "Il passe devant tous les autres modèles retenus (les figés et les jours figés restent, une date limite reste tenue)",
+    1: "L'optimiseur l'avance nettement : il ne le retarde que pour un vrai gain (une nuit, des bobines)",
+    0: "Comme les autres", "-1": "L'optimiseur le laisse passer après les autres quand ça arrange",
+    "-2": "Il passe après les autres modèles, sauf s'il a une date limite à tenir" },
+  plate: { 2: "Le premier de ses plateaux à imprimer", 1: "Avant ses autres plateaux normaux", 0: "Dans l'ordre de la file",
+    "-1": "Après ses autres plateaux normaux", "-2": "Le dernier de ses plateaux" } };
+function PrioPick({ value, busy, run, onPick, plate }) {
+  const cur = value || 0, [, ic, l, c] = prioOf(cur);
+  return <div style={{ padding: "10px 12px", borderRadius: 12, border: `1px solid ${cur ? `color-mix(in srgb, ${c} 40%, var(--border))` : "var(--border)"}`, background: "var(--surface)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 7 }}>
+      <span style={{ fontSize: 18, width: 24, textAlign: "center" }}>{busy === "prio" ? "…" : cur ? ic : "⚖"}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 13.5, fontWeight: 900, color: cur ? c : "var(--text)" }}>{plate ? "Priorité dans le modèle" : "Priorité"}{cur ? ` : ${l}` : ""}</span>
+        <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.35 }}>{PRIO_TIP[plate ? "plate" : "model"][cur]}</span></span></div>
+    <div role="radiogroup" style={{ display: "flex", padding: 3, borderRadius: 11, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+      {PRIOS.map(([k, pic, pl, pc]) => <button key={k} type="button" role="radio" aria-checked={cur === k} disabled={!!busy} data-tip={pl}
+        onClick={() => cur !== k && run("prio", () => onPick(k))}
+        style={{ flex: 1, padding: "6px 2px", borderRadius: 9, lineHeight: 1.15, minWidth: 0, border: "none", cursor: "pointer", font: "inherit", fontSize: 11.5, fontWeight: 900,
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+          color: cur === k ? "#fff" : "var(--muted)", background: cur === k ? pc : "transparent" }}>
+        <span style={{ fontSize: 13 }}>{pic}</span><span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{pl}</span></button>)}
+    </div>
+  </div>;
+}
+export const prioChip = (v, style) => v ? <span data-tip={`Priorité ${prioOf(v)[2].toLowerCase()}`} style={{ ...chipS(prioOf(v)[3]), ...style }}>{prioOf(v)[1]} {prioOf(v)[2]}</span> : null;
 
 // 06/11/2026 : les mots disent l'objet, pas ses plateaux. Un seul exemplaire : libre ou d'une traite (les deux reglages
 // reviennent au meme). Plusieurs : chaque exemplaire d'une traite (entre deux, d'autres objets passent), ou tous les
@@ -249,7 +283,8 @@ export function PoolSummary({ jobs, blocked = [], now, onOpenModel }) {
           <span style={{ display: "flex", gap: 2, height: 5 }}>
             {g.jobs.map(j => <span key={j.key} style={{ flex: 1, borderRadius: 3, background: j.blockedWhy ? "#DC2626" : j.locked ? "#4F46E5"
               : un ? UNRET : j.completes ? "#059669" : "color-mix(in srgb, #22C55E 55%, var(--border))" }}/>)}</span>
-          {(x.nb || f.due || f.chain || x.locked || x.pinned || x.load || x.low || x.wait) ? <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {(x.nb || f.due || f.chain || f.prio_m || x.locked || x.pinned || x.load || x.low || x.wait) ? <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {prioChip(f.prio_m)}
             {x.nb > 0 && <span style={chipS("#DC2626")}>⛔ {x.nb} non planifiable{x.nb > 1 ? "s" : ""}</span>}
             {f.due && <span style={chipS(f.due_ok ? "#16A34A" : "#EF4444")}>🎯 {dueTxt(f.due)}</span>}
             {f.chain && <span style={chipS("#0EA5E9")}>{chainTxt(f)}</span>}
@@ -291,6 +326,7 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act, jobs }) {
           {x.nb > 0 && <span style={chipS("#DC2626")}>⛔ {x.nb} non planifiable{x.nb > 1 ? "s" : ""}</span>}
           {f.due && <span style={chipS(f.due_ok ? "#16A34A" : "#EF4444")}>🎯 avant le {dueTxt(f.due)}</span>}
           {f.chain && <span style={chipS("#0EA5E9")}>{chainTxt(f)}</span>}
+          {prioChip(f.prio_m)}
         </span>
       </div>
     </div>
@@ -311,11 +347,15 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act, jobs }) {
             {free.some(j => !j.pinned) && row("pinall", "📌", "Figer leurs jours", "Chaque plateau garde le jour où il est prévu ; l'heure peut encore bouger", () => run("pinall", act.pinAll))}
             {x.pinned > 0 && row("unpin", "🔓", "Défiger leurs jours", `${x.pinned} plateau${x.pinned > 1 ? "x ont leur" : " a son"} jour figé : ils se replacent où ils tiennent (les jours et heures figés restent)`, () => run("unpin", act.unpinAll))}
           </>}
+        {act.prio && <PrioPick value={f.prio_m} busy={busy} run={run} onPick={act.prio}/>}
         {act.chain && (f.plates_total > 1 || f.qty > 1) && <ChainPick j={f} busy={busy} run={run} act={act}/>}
         {dateRow("due", "🎯", f.due ? "Changer la date limite" : "Une date limite", f.due ? `Fini avant le ${dueTxt(f.due)} (son dernier plateau)` : "Son dernier plateau fini avant ce jour ; le planning prévient s'il déborde", f.due, v => act.due(v))}
         {row("sheet", "🧾", "Fiche du modèle", "Retenir le profil, choisir les plateaux, les filaments et le nombre d'exemplaires", () => { act.sheet(); onClose(); })}
       </div>
     </>}
+    {act.calendar && <button type="button" onClick={() => { act.calendar(); onClose(); }} style={{ marginTop: 8, padding: "6px 11px", borderRadius: 10,
+      border: "1px solid var(--border)", background: "var(--surface2)", cursor: "pointer", font: "inherit", fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>
+      🗓 Voir au calendrier</button>}
     {sec(`Plateau par plateau (${g.jobs.length})`)}
     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
       {g.jobs.map(j => {
@@ -328,7 +368,8 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act, jobs }) {
           <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
             <span style={{ fontSize: 12, fontWeight: 900, color: bad ? "#DC2626" : "#6366F1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {j.locked ? "🔒 " : ""}{j.pinned && !j.locked ? "📌 " : ""}{j.completes ? "🏁 " : ""}{plateTxt(j)}{j.qty > 1 ? ` · ${j.copy}e/${j.qty}` : ""}
-              {j.load?.length ? " 🧵" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}{j.intercalated ? " ↔" : ""}</span>
+              {j.load?.length ? " 🧵" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}{j.intercalated ? " ↔" : ""}
+              {j.prio_p ? ` ${prioOf(j.prio_p)[1]}` : ""}</span>
             {bad ? <span style={{ fontSize: 11.5, fontWeight: 800, color: "#DC2626" }}>⛔ non planifiable · {(j.blockedWhy || []).join(" · ")}</span>
               : <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text)" }}>{dayOf(j.start, now)} <span style={{ fontWeight: 700, color: "var(--muted)" }}>
                 {hhmm(j.start)} → {hhmm(j.end)} · {hm(j.seconds)}</span></span>}

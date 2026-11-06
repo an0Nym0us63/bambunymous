@@ -124,6 +124,8 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
           {Math.abs(drift) >= 10 && <span style={{ fontSize: 11.5, fontWeight: 900, color: drift > 0 ? "#F97316" : "#22C55E" }}>{drift > 0 ? `+${hm(drift * 60)}` : `−${hm(-drift * 60)}`}</span>}
           {j.locked ? <span data-tip="Figé : rien ne le déplace (optimiser, journée couleur…)" style={{ fontSize: 11 }}>🔒</span>
             : j.pinned && <span data-tip="Jour figé : il reste ce jour-là" style={{ fontSize: 11 }}>📌</span>}
+          {j.prio_m ? <span data-tip={`Priorité ${["très basse", "basse", "", "haute", "urgente"][j.prio_m + 2]}`} style={{ fontSize: 11 }}>
+            {["⏬", "⬇", "", "⬆", "🔥"][j.prio_m + 2]}</span> : null}
         </div>
         <div style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text2)", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
           overflow: "hidden" }}>{j.title}</div>

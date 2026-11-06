@@ -25,6 +25,10 @@ Ce que l'on range (meme reglage) :
           "soft" (« au mieux ») : regroupes autant que possible, mais les optimiseurs peuvent y intercaler un plateau
           d'un autre objet pour remplir une nuit ou charger moins de filaments ; soft_why {cle: "nuit"|"filaments"}
           dit pourquoi un plateau a ete intercale (le plateau intercale le dit sur sa carte).
+  prio  : {ligne de « A faire » | "ligne:plateau": -2..2} (06/11/2026) la priorite d'un modele par rapport aux autres
+          modeles, ou d'un plateau par rapport aux autres plateaux de son modele (2 urgent, 1 haute, 0 normale -- absente,
+          -1 basse, -2 tres basse). Les optimiseurs la comptent ; une date limite passe avant, les figes et les jours
+          figes ne bougent pas pour elle, et un modele retenu reste devant les non retenus.
 
 Un travail : un plateau d'un modele (ou le modele entier quand ses plateaux ne disent pas leur duree), un
 exemplaire. Ce qui reste a faire d'un plateau : le nombre d'objets voulus, moins ce qu'il a deja donne (mes
@@ -69,7 +73,7 @@ async def _load() -> dict:
     d = d if isinstance(d, dict) else {}
     for k, v in DEFAULTS.items():
         d.setdefault(k, v)
-    for k in ("pins", "done", "plan0", "notified", "deadlines", "locked", "chain", "soft_why"):
+    for k in ("pins", "done", "plan0", "notified", "deadlines", "locked", "chain", "soft_why", "prio"):
         if not isinstance(d.get(k), dict):
             d[k] = {}
     if not isinstance(d.get("order"), list):
@@ -192,7 +196,8 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
                             "retained": bool(m.get("planned")),   # profil retenu dans « A faire » ; sinon celui par defaut
                             "plate": idx, "plate_name": pname, "plates_total": len(plates), "copy": c, "qty": qty,
                             "seconds": int(secs), "weight_g": wg, "fils": fl, "_obj": obj, "thumb": thumb,
-                            "chain": d.get("chain", {}).get(did)})
+                            "chain": d.get("chain", {}).get(did),
+                            "prio_m": int(d.get("prio", {}).get(did) or 0), "prio_p": int(d.get("prio", {}).get(f"{did}:{idx}") or 0)})
     return out, changed
 
 
@@ -203,8 +208,27 @@ def _ordered(jobs: list, order: list, pins: dict | None = None) -> list:
     # dans chacun, l'ordre voulu, puis les nouveaux dans l'ordre de « A faire »
     # les retenus toujours devant (06/11/2026) : un non retenu pose sur un jour (la journee couleur les prenait aussi)
     # ne passe plus devant eux ; son jour est ignore tant que son modele n'est pas retenu
-    return _chained(sorted(jobs, key=lambda j: (not j.get("retained", True),)
-                           + ((0, rank[j["key"]]) if j["key"] in rank else (1, pos[j["key"]]))))
+    # un modele urgent (06/11/2026) passe devant les autres retenus, quoi qu'en dise l'optimiseur
+    seq = sorted(jobs, key=lambda j: (not j.get("retained", True), j.get("prio_m") != 2)
+                 + ((0, rank[j["key"]]) if j["key"] in rank else (1, pos[j["key"]])))
+    return _chained(_plate_prio(seq, pins or {}))
+
+
+def _plate_prio(seq: list, pins: dict) -> list:
+    """La priorite d'un plateau (06/11/2026) ne joue qu'entre les plateaux de son modele : les places qu'ils occupent dans
+    la file sont reprises dans l'ordre de leurs priorites (stable). Ceux poses sur un jour (et les figes) gardent la leur."""
+    by = {}
+    for i, j in enumerate(seq):
+        if j["key"] not in pins:
+            by.setdefault(j["design_id"], []).append(i)
+    out = list(seq)
+    for ix in by.values():
+        grp = [seq[i] for i in ix]
+        if len(grp) < 2 or not any(j.get("prio_p") for j in grp):
+            continue
+        for i, j in zip(ix, sorted(grp, key=lambda j: -(j.get("prio_p") or 0))):
+            out[i] = j
+    return out
 
 
 def _chained(seq: list) -> list:
@@ -762,6 +786,28 @@ def _night_waits(r: dict, rules) -> list:
     return out
 
 
+# la priorite d'un modele (06/11/2026) : ce que pese une heure d'attente de chacun de ses plateaux, une normale pesant 1.
+# Urgent est en plus une regle (_ordered : devant les autres retenus) ; celle d'un plateau ne joue que dans son modele
+PRIO_W = {2: 60.0, 1: 25.0, 0: 1.0, -1: 0.4, -2: 0.15}
+PRIOS = (-2, -1, 0, 1, 2)
+
+
+def _pw(j) -> float:
+    return PRIO_W.get(j.get("prio_m") or 0, 1.0)
+
+
+def prio_cost(r: dict, now: datetime) -> float:
+    """Le cout des priorites d'un planning : chaque heure ou un plateau prioritaire attend sa fin coute plus, ou moins pour
+    une priorite basse. Tout en normale : 0 (rien ne change pour qui ne s'en sert pas)."""
+    return sum((_pw(j) - 1) * (datetime.fromisoformat(j["end"]) - now).total_seconds() / 3600
+               for j in r["jobs"] if j.get("prio_m"))
+
+
+def _by_prio(seq: list) -> list:
+    """Le point de depart des optimiseurs : les retenus devant, puis par priorite (stable : l'ordre de la file sinon)."""
+    return sorted(seq, key=lambda j: (not j.get("retained", True), -(j.get("prio_m") or 0), -(j.get("prio_p") or 0)))
+
+
 def mode_score(r: dict, d: dict, now: datetime, mode: str) -> float:
     """Ce que coute un planning selon le mode (plus petit = mieux) : une date limite ratee compte toujours enorme."""
     rules = Rules(d)
@@ -770,6 +816,7 @@ def mode_score(r: dict, d: dict, now: datetime, mode: str) -> float:
     idle = sum(w for _, w in _night_waits(r, rules)) / 60 if rules.limits else 0
     # le plus d'impressions tot : la somme des heures de fin (les courtes d'abord la font baisser)
     ends = sum((datetime.fromisoformat(j["end"]) - now).total_seconds() / 3600 for j in r["jobs"]) / max(1, len(r["jobs"]))
+    late += prio_cost(r, now)                         # les priorites, dans tous les modes (sous les dates limites)
     if mode == "couleurs":
         return late + 60 * loads + 0.05 * idle + ends
     if mode == "debit":
@@ -832,8 +879,10 @@ def night_fill(jobs: list, order: list, d: dict, now: datetime, busy, loaded: se
     def total(r):
         # d'abord le temps mort de toutes les nuits (le travail fini au plus tot) ; a egalite, les nuits proches
         # comptent plus : remplir mieux une nuit decale la suite et le temps gagne reapparait souvent la nuit d'apres
+        # les priorites comptent avec (06/11/2026) : remplir une nuit ne fait pas reculer un urgent
         ws = [w for _, w in _night_waits(r, rules)]
-        return (sum(ws), sum(w * 0.85 ** k for k, w in enumerate(ws)))
+        pc = 60 * prio_cost(r, now)
+        return (sum(ws) + pc, sum(w * 0.85 ** k for k, w in enumerate(ws)) + pc)
     r = sim(order)
     cur = total(r)
     seen = set()
@@ -1042,7 +1091,7 @@ async def plan(tz: int | None = None) -> dict:
     return {"settings": {k: d[k] for k in DEFAULTS}, "now": now.isoformat(timespec="minutes"),
             "busy_until": busy.isoformat(timespec="minutes") if busy else None,
             "live": ({"name": live[1], "design_id": live[2], "remaining_min": live[0], **(await _live_print(d))} if live else None),
-            "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix), "status": status,
+            "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix), "status": status,
             "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),
             "blocked": [{k: b.get(k) for k in ("key", "design_id", "title", "cover", "thumb", "plate", "plate_name", "plates_total", "copy", "qty",
                                                 "seconds", "retained", "why", "fils")} for b in r.get("blocked") or []],
@@ -1230,11 +1279,11 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
     sw = {}
     if mode == "debit":
         # le plus d'impressions chaque jour : les plus courtes d'abord (dans l'ordre de priorite des retenus)
-        best = sorted(_soft_grouped(free), key=lambda j: (not j.get("retained", True), j["seconds"]))
+        best = sorted(_soft_grouped(free), key=lambda j: (not j.get("retained", True), -(j.get("prio_m") or 0), j["seconds"]))
     elif mode == "nuits":
-        best = _soft_grouped(free)                    # l'ordre actuel ; les nuits se remplissent ensuite
+        best = _soft_grouped(_by_prio(free))          # l'ordre actuel ; les nuits se remplissent ensuite
     else:
-        best = optimize(_soft_grouped(free), start_loaded, why=sw)
+        best = optimize(_soft_grouped(_by_prio(free)), start_loaded, why=sw)
     order = _replace(base, [j["key"] for j in free], [j["key"] for j in best])
     # les nuits remplies (06/11/2026) : avant la coupure des lancements, le plateau qui finit au plus pres de la reprise ;
     # les plateaux au jour fige peuvent changer d'heure dans leur journee (leur jour, place() le garde)
@@ -1255,9 +1304,11 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
         # le mode intelligent (06/11/2026) : plusieurs departs (les couleurs enchainees, l'ordre actuel, les plus courtes
         # d'abord) ; les departs bruts se comparent vite, le remplissage des nuits (le plus long) se fait sur le meilleur
         o0 = head + [j["key"] for j in _soft_grouped(jobs) if j["key"] not in hs]
-        spt = sorted(_soft_grouped(free), key=lambda j: (not j.get("retained", True), j["seconds"]))
+        spt = sorted(_soft_grouped(free), key=lambda j: (not j.get("retained", True), -(j.get("prio_m") or 0), j["seconds"]))
         o1 = _replace(base, [j["key"] for j in free], [j["key"] for j in spt])
-        cands = [(cur, order)] + [(score(o), o) for o in (o0, o1)]
+        # avec des priorites : aussi l'ordre de la file trie par priorite
+        o2 = _replace(base, [j["key"] for j in free], [j["key"] for j in _soft_grouped(_by_prio(free))])
+        cands = [(cur, order)] + [(score(o), o) for o in (o0, o1) + ((o2,) if any(j.get("prio_m") or j.get("prio_p") for j in free) else ())]
         cur, order = min(cands, key=lambda c: c[0])
         if Rules(d).limits:
             nf = night_fill(jobs, order, d, now, busy, loaded, movable, why=sw, budget=4)
@@ -1305,6 +1356,7 @@ def _cost(r: dict, d: dict, now: datetime, key: str) -> float:
     c += 10000 * sum(1 for x in deadlines(r["jobs"], d, now) if not x["ok"])
     c += 500 * len(r.get("blocked") or [])
     c += 20 * sum(len(j.get("load") or []) for j in r["jobs"])
+    c += 0.3 * prio_cost(r, now)
     me = next((j for j in r["jobs"] if j["key"] == key), None)
     if me:
         c += (datetime.fromisoformat(me["start"]) - now).total_seconds() / 3600 * 0.5
@@ -1404,6 +1456,41 @@ async def set_chain(rid: str, mode) -> dict:
         if keys != [j["key"] for j in seq]:
             return await arrange({"order": keys})
     return r
+
+
+async def set_prio(target: str, level) -> dict:
+    """La priorite (06/11/2026) d'un modele ("ligne") ou d'un plateau ("ligne:plateau") : -2 a 2, 0 la retire. Un modele
+    haut, bas ou tres bas : ses plateaux sont aussitot replaces selon le mode d'optimisation des consignes, un par un, sans
+    toucher a l'ordre des autres. Urgent, ou un plateau dans son modele : la regle de l'ordre s'en charge. Les figes et ceux
+    au jour fige restent ou ils sont."""
+    d = await _load()
+    t = str(target or "").strip()
+    rid, _, plate = t.partition(":")
+    a, _, b = rid.partition("~")
+    if not a.isdigit() or (b and not b.isdigit()) or (plate and not plate.lstrip("-").isdigit()):
+        raise PlanError("Objet inconnu")
+    try:
+        lv = int(level or 0)
+    except (TypeError, ValueError):
+        raise PlanError("Priorité inconnue")
+    if lv not in PRIOS:
+        raise PlanError("Priorité inconnue")
+    if lv:
+        d["prio"][t] = lv
+    else:
+        d["prio"].pop(t, None)
+    await _save(d)
+    d, now, jobs, _, loaded, live, busy = await _context(None)
+    if plate or lv == 2:
+        return await arrange({})                    # l'ordre des plateaux du modele, ou urgent : _ordered s'en charge
+    mine = [j["key"] for j in _ordered(jobs, d["order"], d["pins"]) if j["design_id"] == rid]
+    mode = d.get("opt_mode") if d.get("opt_mode") in MODES else "mix"
+    try:
+        order = auto_insert(jobs, d, now, busy, loaded, mine, mode)
+    except Exception:
+        logger.exception("[PLAN] priorite : replacement")
+        return await plan()
+    return await arrange({"order": order})
 
 
 async def lock(key: str, on: bool = True) -> dict:

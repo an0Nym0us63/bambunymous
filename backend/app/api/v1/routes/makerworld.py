@@ -462,6 +462,16 @@ async def mw_plan_lock(body: dict = Body({}), _: str = Depends(require_mw)):
         raise HTTPException(400, str(e))
 
 
+@router.post("/plan/prio")
+async def mw_plan_prio(body: dict = Body({}), _: str = Depends(require_mw)):
+    """La priorite d'un modele ({target: ligne, level: -2..2}) ou d'un plateau ({target: "ligne:plateau", level})."""
+    from ....services import planner as P
+    try:
+        return await P.set_prio(str(body.get("target") or ""), body.get("level"))
+    except P.PlanError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/plan/chain")
 async def mw_plan_chain(body: dict = Body({}), _: str = Depends(require_mw)):
     """Un objet d'une traite ({design_id, mode: "plates" | "all" | null})."""
