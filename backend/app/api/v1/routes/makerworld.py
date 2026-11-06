@@ -463,6 +463,16 @@ async def mw_plan_lock(body: dict = Body({}), _: str = Depends(require_mw)):
         raise HTTPException(400, str(e))
 
 
+@router.post("/plan/undo")
+async def mw_plan_undo(_: str = Depends(require_mw)):
+    """« Annuler » le dernier geste du planning."""
+    from ....services import planner as P
+    try:
+        return await P.undo()
+    except P.PlanError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/plan/prio")
 async def mw_plan_prio(body: dict = Body({}), _: str = Depends(require_mw)):
     """La priorite d'un modele ({target: ligne, level: -2..2}) ou d'un plateau ({target: "ligne:plateau", level})."""

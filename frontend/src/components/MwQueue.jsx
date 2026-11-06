@@ -16,7 +16,7 @@ import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
 import { useNavigate } from "react-router-dom";
 import { usePlanActs } from "./planActs";
-import { JobSheet, ModelSheet, poolGroups, prioOf } from "./PlanPanels";
+import { JobSheet, ModelSheet, poolGroups, prioOf, UndoPill } from "./PlanPanels";
 import Model3D from "./Model3D";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import { moneyVal } from "../utils/money";
@@ -216,7 +216,7 @@ export default function MwQueue() {
     for (const b of pd.blocked || []) (by[b.design_id] = by[b.design_id] || { n: 0, first: null, last: null, blocked: 0 }).blocked += 1;
     return { by, now: pd.now };
   }, [pd]);
-  const { modelAct, jobAct } = usePlanActs({ pd, setPd,
+  const { modelAct, jobAct, undo: undoPlan } = usePlanActs({ pd, setPd,
     setSheet: id => setModel({ design_id: id }), setModelSel: setPlanSel,
     onDayView: day => navTo(`/prints?tab=calendar&day=${day}`) });
   const when = iso => {
@@ -441,6 +441,8 @@ export default function MwQueue() {
         {tab === "models" && (<>
         {/* tri et modes : compter jusqu'ici, choisir, reorganiser (sur grand ecran, sur une ligne) */}
         <div className="queue-tools" style={{ display:"flex", flexDirection:"column", gap:6 }}>
+          {/* annuler le dernier geste du planning fait ici (06/11/2026) : seulement dans le quart d'heure */}
+          {isAdmin && pd?.undo && Date.now() - Date.parse(`${pd.undo.at}Z`) < 15 * 60000 && <UndoPill info={pd.undo} onUndo={undoPlan} style={{ alignSelf:"flex-start" }}/>}
           {sorting && <span style={{ fontSize:12, fontWeight:700, color:"var(--muted)" }}>Ordre de priorité : ⤒ en haut, ↑ ↓, ⤓ en bas.</span>}
           {!sorting && !cutting && (
             <label style={{ position:"relative", display:"flex", alignItems:"center", minWidth:0 }}>

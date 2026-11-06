@@ -78,12 +78,43 @@ async def _load() -> dict:
             d[k] = {}
     if not isinstance(d.get("order"), list):
         d["order"] = []
+    if not isinstance(d.get("undo"), list):
+        d["undo"] = []
     return d
 
 
-async def _save(d: dict) -> None:
+async def undo() -> dict:
+    """« Annuler » : le dernier geste defait (l'ordre, les jours et heures figes, les priorites… d'avant)."""
+    d = await _load()
+    if not d["undo"]:
+        raise PlanError("Rien à annuler")
+    last = d["undo"].pop()
+    for k, v in (last.get("state") or {}).items():
+        if k in UNDO_KEYS:
+            d[k] = v if v is not None else ([] if k == "order" else {})
+    d["plan0"] = {}
+    d["rev"] = int(d.get("rev") or 0) + 1
+    await _save(d)
+    r = await plan()
+    r["undone"] = last.get("why")
+    return r
+
+
+# « Annuler » (06/11/2026) : ce qu'un geste change, et qu'on peut remettre comme avant
+UNDO_KEYS = ("order", "pins", "locked", "chain", "prio", "done", "deadlines", "soft_why")
+
+
+async def _save(d: dict, undo: str | None = None, merge: bool = False) -> None:
+    """undo : le nom du geste ; l'etat d'avant (celui enregistre) est garde pour « Annuler » (les 10 derniers).
+    merge : le geste continue le precedent (une priorite puis le replacement de ses plateaux) : un seul « Annuler »."""
     from ..db.session import AsyncSessionLocal
     from .settings_service import set_setting
+    if undo and not merge:
+        prev = await _load()
+        state = {k: prev.get(k) for k in UNDO_KEYS}
+        if any(state[k] != d.get(k) for k in UNDO_KEYS):
+            d["undo"] = ([x for x in d.get("undo") or [] if isinstance(x, dict)] + [
+                {"at": datetime.utcnow().isoformat(timespec="seconds"), "why": undo, "state": state}])[-10:]
     async with AsyncSessionLocal() as db:
         # les cles « _… » ne servent qu'au calcul (le stock du moment) : jamais enregistrees
         await set_setting(db, KEY, json.dumps({k: v for k, v in d.items() if not k.startswith("_")}, ensure_ascii=False))
@@ -1126,6 +1157,7 @@ async def plan(tz: int | None = None) -> dict:
     return {"settings": {k: d[k] for k in DEFAULTS}, "now": now.isoformat(timespec="minutes"),
             "busy_until": busy.isoformat(timespec="minutes") if busy else None,
             "live": ({"name": live[1], "design_id": live[2], "remaining_min": live[0], **(await _live_print(d))} if live else None),
+            "undo": ({"why": d["undo"][-1].get("why"), "at": d["undo"][-1].get("at")} if d["undo"] else None),
             "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix, gain), "status": status,
             "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),
             "blocked": [{k: b.get(k) for k in ("key", "design_id", "title", "cover", "thumb", "plate", "plate_name", "plates_total", "copy", "qty",
@@ -1151,7 +1183,7 @@ async def mark_done(key: str, undo: bool = False) -> dict:
     else:
         d["done"].pop(bk, None)
     d["rev"] = int(d.get("rev") or 0) + 1
-    await _save(d)
+    await _save(d, "Fait" if not undo else "Retiré des faits")
     return await plan()
 
 
@@ -1185,7 +1217,7 @@ async def set_deadline(design_id: str, due) -> dict:
         d["deadlines"].pop(did, None)
     d["notified"].pop(f"due:{did}", None)
     d["rev"] = int(d.get("rev") or 0) + 1
-    await _save(d)
+    await _save(d, "Date limite")
     return await plan()
 
 
@@ -1231,13 +1263,13 @@ async def color_day(day: str, fid: int) -> dict:
         raise PlanError("Aucun de ces plateaux ne tient sur ce jour (la journée est trop courte pour eux)")
     rest = [j["key"] for j in r["jobs"] if j["key"] not in set(chosen)]
     at = next((i for i, x in enumerate(rest) if day_of.get(x, "") >= day), len(rest))
-    out = await arrange({"order": rest[:at] + chosen + rest[at:], "pins": {k: day for k in chosen}})
+    out = await arrange({"order": rest[:at] + chosen + rest[at:], "pins": {k: day for k in chosen}}, "Journée couleur")
     out["color_day"] = {"placed": len(chosen), "only": len([k for k in chosen if k in set(only)]), "no_room": no_room,
                         "needs_load": len(needs_load)}
     return out
 
 
-async def arrange(body: dict) -> dict:
+async def arrange(body: dict, why: str = "Rangement", merge: bool = False) -> dict:
     """Ranger : {order: [cles] (l'ordre voulu, en entier ou le debut), pins: {cle: jour|null}}. Le planning
     repart de la (avance et retard se comptent depuis ce rangement). Un plateau fige ne se pose pas ailleurs."""
     d = await _load()
@@ -1260,7 +1292,7 @@ async def arrange(body: dict) -> dict:
             d["pins"][str(k)] = str(v)
     d["plan0"] = {}
     d["rev"] = int(d.get("rev") or 0) + 1         # rangement a la main : la tache de fond n'y voit pas un decalage
-    await _save(d)
+    await _save(d, why, merge)
     return await plan()
 
 
@@ -1294,7 +1326,7 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
             pins = {**d["pins"], **{j["key"]: day for j in best}}
             order = night_fill(jobs, order, {**d, "pins": pins}, now, busy, loaded, {j["key"] for j in best}, why=sw)
         keep = {k: v for k, v in d["soft_why"].items() if k not in {j["key"] for j in on}}
-        return await arrange({"order": order, "pins": {j["key"]: day for j in best}, "soft_why": {**keep, **sw}})
+        return await arrange({"order": order, "pins": {j["key"]: day for j in best}, "soft_why": {**keep, **sw}}, "Optimiser la journée")
     # a partir d'un jour : les plateaux prevus avant, dans leur ordre, en tete, et intouchables
     head, start_loaded = [], set(loaded)
     if start:
@@ -1381,7 +1413,7 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
             break
         front = [k for x in broke for k in x["keys"] if k not in hs]
         order = head + front + [k for k in order if k not in set(front) and k not in hs]
-    return await arrange({"order": order, "soft_why": sw})
+    return await arrange({"order": order, "soft_why": sw}, "Optimiser la file")
 
 
 def _cost(r: dict, d: dict, now: datetime, key: str) -> float:
@@ -1420,7 +1452,7 @@ async def smart_place(key: str) -> dict:
         c = _cost(r, d, now, key)
         if best is None or c < best[0]:
             best = (c, order)
-    return await arrange({"order": best[1], "pins": {key: None}})
+    return await arrange({"order": best[1], "pins": {key: None}}, "Au mieux")
 
 
 async def place_day(key: str, day: str) -> dict:
@@ -1463,7 +1495,7 @@ async def place_day(key: str, day: str) -> dict:
         if best is None or c < best[0]:
             best = (c, order)
     pick = best or fallback
-    return await arrange({"order": pick[1], "pins": {key: day}})
+    return await arrange({"order": pick[1], "pins": {key: day}}, "Sur un jour")
 
 
 async def set_chain(rid: str, mode) -> dict:
@@ -1482,14 +1514,14 @@ async def set_chain(rid: str, mode) -> dict:
         raise PlanError("Choix inconnu")
     d["plan0"] = {}
     d["rev"] = int(d.get("rev") or 0) + 1
-    await _save(d)
+    await _save(d, "D'une traite")
     r = await plan()
     if mode == "soft":
         # au mieux : ses plateaux regroupes tout de suite, a la place du premier ; les optimiseurs feront le reste
         seq = sorted(r["jobs"], key=lambda x: x["start"])
         keys = [j["key"] for j in _soft_grouped(seq)]
         if keys != [j["key"] for j in seq]:
-            return await arrange({"order": keys})
+            return await arrange({"order": keys}, merge=True)
     return r
 
 
@@ -1514,10 +1546,10 @@ async def set_prio(target: str, level) -> dict:
         d["prio"][t] = lv
     else:
         d["prio"].pop(t, None)
-    await _save(d)
+    await _save(d, "Priorité")
     d, now, jobs, _, loaded, live, busy = await _context(None)
     if plate or lv == 2:
-        return await arrange({})                    # l'ordre des plateaux du modele, ou urgent : _ordered s'en charge
+        return await arrange({}, merge=True)        # l'ordre des plateaux du modele, ou urgent : _ordered s'en charge
     mine = [j["key"] for j in _ordered(jobs, d["order"], d["pins"]) if j["design_id"] == rid]
     mode = d.get("opt_mode") if d.get("opt_mode") in MODES else "mix"
     try:
@@ -1525,7 +1557,7 @@ async def set_prio(target: str, level) -> dict:
     except Exception:
         logger.exception("[PLAN] priorite : replacement")
         return await plan()
-    return await arrange({"order": order})
+    return await arrange({"order": order}, merge=True)
 
 
 async def lock(key: str, on: bool = True, keys: list | None = None) -> dict:
@@ -1548,7 +1580,7 @@ async def lock(key: str, on: bool = True, keys: list | None = None) -> dict:
             d["locked"].pop(k, None)
     d["plan0"] = {}
     d["rev"] = int(d.get("rev") or 0) + 1
-    await _save(d)
+    await _save(d, "Figer")
     return await plan()
 
 
@@ -1566,7 +1598,7 @@ async def later(key: str, whole: bool = False) -> dict:
     if not move:
         raise PlanError("Plateau inconnu du planning")
     keep = [k for k in order if k not in set(move)]
-    return await arrange({"order": keep + move, "pins": {k: None for k in move}})
+    return await arrange({"order": keep + move, "pins": {k: None for k in move}}, "Plus tard")
 
 
 def _replace(order: list, old: list, new: list) -> list:

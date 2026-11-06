@@ -139,5 +139,7 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
     due: v => setDue(j.design_id, v),
     done: () => markDone(j.key),
   });
-  return { keys, byKey, send, arrange, moveBefore, moveAfter, moveDay, unpin, placeDay, toFront, modelAct, applyAdvice, setDue, markDone, colorDay, optimize, optimizeFrom, jobAct };
+  // « Annuler » (06/11/2026) : le dernier geste defait
+  const undo = () => send("/makerworld/plan/undo", {}, "post").then(d => { if (d?.undone) toast(`↶ Annulé : ${d.undone}`, "ok", 3500); });
+  return { undo, keys, byKey, send, arrange, moveBefore, moveAfter, moveDay, unpin, placeDay, toFront, modelAct, applyAdvice, setDue, markDone, colorDay, optimize, optimizeFrom, jobAct };
 }

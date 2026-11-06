@@ -12,6 +12,17 @@ const when = (iso, now) => {
   return d === today ? hhmm(iso) : `${new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })} ${hhmm(iso)}`;
 };
 
+// le bouton « Annuler » (06/11/2026) : le dernier geste du planning, et il y a combien de temps
+export function UndoPill({ info, onUndo, compact, style }) {
+  if (!info) return null;
+  const min = Math.max(0, Math.round((Date.now() - Date.parse(`${info.at}Z`)) / 60000));
+  const ago = min < 1 ? "à l'instant" : min < 60 ? `il y a ${min} min` : min < 1440 ? `il y a ${Math.round(min / 60)} h` : `il y a ${Math.round(min / 1440)} j`;
+  return <button type="button" onClick={onUndo} data-tip={`Annuler : ${info.why} (${ago}) ; l'ordre, les jours figés, les priorités… redeviennent comme avant`}
+    aria-label={`Annuler : ${info.why}`} style={{ padding: "6px 12px", borderRadius: 20, border: "1px solid color-mix(in srgb, #F59E0B 45%, var(--border))",
+      background: "color-mix(in srgb, #F59E0B 10%, var(--surface2))", color: "#B45309", fontSize: 12, fontWeight: 800, cursor: "pointer", font: "inherit",
+      whiteSpace: "nowrap", ...style }}>↶{compact ? "" : ` Annuler : ${info.why}`}</button>;
+}
+
 export function PlanPopup({ title, icon, color = "#6366F1", onClose, children, wide, z = 5200 }) {
   const phone = typeof window !== "undefined" && window.innerWidth < 640;
   return createPortal(<div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: z, background: "rgba(2,6,23,0.55)", backdropFilter: "blur(5px)",

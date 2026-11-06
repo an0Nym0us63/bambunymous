@@ -9,7 +9,7 @@ import MwImg, { thumbSrc } from "./MwImg";
 import { currentFriend } from "../store/friend";
 import { usePlanActs } from "./planActs";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
-import { PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, poolGroups, BlockedList, LowStockBanner } from "./PlanPanels";
+import { UndoPill, PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, poolGroups, BlockedList, LowStockBanner } from "./PlanPanels";
 import { OPT_MODES, DAY_KIND, dayKindOf, DayStrip, onDay, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
@@ -158,7 +158,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
     return out;
   }, [pd, showPlan]);
   // les gestes du planning, partages avec « A faire » (06/11/2026)
-  const { keys, byKey, send, arrange, moveBefore, moveAfter, moveDay, unpin, placeDay, toFront, modelAct, applyAdvice, setDue, markDone, colorDay, optimize, optimizeFrom, jobAct } = usePlanActs({ pd, setPd, setSheet, setModelSel,
+  const { undo, keys, byKey, send, arrange, moveBefore, moveAfter, moveDay, unpin, placeDay, toFront, modelAct, applyAdvice, setDue, markDone, colorDay, optimize, optimizeFrom, jobAct } = usePlanActs({ pd, setPd, setSheet, setModelSel,
     onDayView: day => { setPick(day); setView("day"); } });
   const saveSettings = async v => { if (await send("/makerworld/plan/settings", v)) { egg("planning_consignes"); setSetOpen(false); } };
   const today = iso(new Date());
@@ -414,6 +414,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
       {edit && nPlanned > 1 && <button type="button" onClick={() => setPop("optimize")}
         data-tip="Enchaîner les plateaux de mêmes couleurs dans toute la file (les impressions posées sur un jour ne bougent pas)"
         aria-label="Optimiser la file" style={{ ...pill, color: "#6366F1" }}>{wide ? "✨ Optimiser la file" : "✨"}</button>}
+      {edit && <UndoPill info={pd?.undo} onUndo={undo} compact={!wide}/>}
       {showPlan && pd?.advice?.length > 0 && <button type="button" onClick={() => setPop("advice")} data-tip="Les conseils du planning"
         style={{ ...pill, color: "#D97706", borderColor: "color-mix(in srgb, #F59E0B 45%, var(--border))", background: "color-mix(in srgb, #F59E0B 10%, var(--surface2))" }}>
         💡 {pd.advice.length}</button>}
