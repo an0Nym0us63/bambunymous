@@ -161,12 +161,13 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   const [modelSel, setModelSel] = useState(null);     // la fiche d'un modele de la file (06/11/2026)
   const [pop, setPop] = useState(null);
   // au telephone (06/11/2026) : le jour en grille horaire par defaut, la semaine en liste ; chacun garde son choix
-  const [dayModeD, setDayModeD] = useState(() => { try { return localStorage.getItem("bn_cal_mode") || "grid"; } catch { return "grid"; } });
+  const [dayModeD, setDayModeD] = useState("grid");
   const [dayModeW, setDayModeW] = useState(() => { try { return localStorage.getItem("bn_cal_wmode") || "list"; } catch { return "list"; } });
   const [optPrev, setOptPrev] = useState(null);       // l'apercu d'une optimisation (06/11/2026)               // "advice" | "pool" | "blocked"
   const [pick, setPick] = useState(() => dayParam.current || iso(new Date()));
   // la vue (05/11/2026) : le mois, la semaine (grille horaire ; un agenda au telephone) ou le jour
-  const [view, setViewS] = useState(() => { if (dayParam.current) return "day"; try { return localStorage.getItem("bn_cal_view") || (window.innerWidth >= 760 ? "month" : "day"); } catch { return "month"; } });
+  // au telephone, on arrive toujours sur le jour (06/11/2026), en grille horaire ; sur ordinateur, la derniere vue
+  const [view, setViewS] = useState(() => { if (dayParam.current || window.innerWidth < 760) return "day"; try { return localStorage.getItem("bn_cal_view") || "month"; } catch { return "month"; } });
   const setView = v => { setViewS(v); try { localStorage.setItem("bn_cal_view", v); } catch { /* rien */ } if (v !== "month") egg("calendrier_vues"); };
   const week = useMemo(() => weekOf(pick), [pick]);
   useEffect(() => { egg("calendrier"); }, []);
