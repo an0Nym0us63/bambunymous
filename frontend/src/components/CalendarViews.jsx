@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { apiUrl, apiThumb } from "../api/client";
 import MwImg, { thumbSrc } from "./MwImg";
-import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift, planIcons } from "./PlanDay";
+import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift, planIcons, isFinal, finBorder, finBg } from "./PlanDay";
 import { ST, iso, DAYS } from "./PrintCalendar";
 
 // Les vues Semaine et Jour du calendrier (05/11/2026) : une grille horaire ou ce qui est imprime, ce qui imprime et
@@ -72,7 +72,7 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
       <span/>
       {dates.map(d => {
         const done = (days?.[d]?.duration || 0), planned = evs[d].filter(e => e.kind === "plan").reduce((a, e) => a + (e.b - e.a) * 60, 0);
-        const fin = evs[d].filter(e => e.kind === "plan" && e.j.completes).length;
+        const fin = evs[d].filter(e => e.kind === "plan" && e.j.completes).length, finals = evs[d].some(e => e.kind === "plan" && isFinal(e.j));
         return <button key={d} type="button" onClick={() => onPick(d)}
           style={{ padding: "6px 4px", border: "none", borderLeft: "1px solid var(--border)", cursor: "pointer", textAlign: "center", minWidth: 0,
             background: d === pick ? "color-mix(in srgb, #6366F1 12%, transparent)" : "transparent" }}>
@@ -82,7 +82,7 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
           {/* les pastilles du jour, sur leur ligne (05/11/2026 : a la suite des heures, elles etaient coupees) */}
           <div style={{ display: "flex", justifyContent: "center", gap: 3, flexWrap: "wrap", marginTop: 2, minHeight: 15 }}>
             {fin > 0 && <span data-tip={`${fin} objet${fin > 1 ? "s" : ""} terminé${fin > 1 ? "s" : ""} ce jour-là`} style={{ padding: "0 5px", borderRadius: 6, background: "#D1FAE5",
-              color: "#065F46", fontSize: 10, fontWeight: 900 }}>🏁{fin > 1 ? ` ${fin}` : ""}</span>}
+              color: "#065F46", fontSize: 10, fontWeight: 900 }}>{finals ? "🏆" : "🏁"}{fin > 1 ? ` ${fin}` : ""}</span>}
             {evs[d].some(e => e.kind === "plan" && e.j.low_info?.length) && <span data-tip="Un filament passe sous le seuil ce jour-là"
               style={{ padding: "0 5px", borderRadius: 6, background: "#FEE2E2", color: "#B91C1C", fontSize: 10, fontWeight: 900 }}>📉</span>}
             {evs[d].some(e => e.kind === "plan" && e.j.locked) && <span data-tip="Un plateau figé ce jour-là"
@@ -149,9 +149,9 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
               style={{ position: "absolute", left: 4, right: 3, top, height: h, zIndex: 1, overflow: "hidden", cursor: "pointer", textAlign: "left", font: "inherit",
                 display: "flex", alignItems: big ? "flex-start" : "center", gap: 6, padding: big ? "4px 6px" : "0 6px", borderRadius: 8, boxSizing: "border-box",
                 // la fin d'un objet (06/11/2026 : trop discrete) : bord vert franc et fond plus vert ; le 🏁 du titre suffit
-                border: plan ? (e.j.completes ? "2.5px solid #059669" : `${e.j.locked ? 2 : 1.5}px ${e.j.locked ? "solid" : "dashed"} ${e.color}`) : "none",
-                boxShadow: plan && e.j.completes ? "0 0 0 2px color-mix(in srgb, #10B981 25%, transparent)" : "none",
-                background: plan ? (e.j.completes ? "linear-gradient(135deg, color-mix(in srgb, #10B981 30%, var(--surface)), color-mix(in srgb, #10B981 12%, var(--surface)))"
+                border: plan ? (e.j.completes ? finBorder(e.j) : `${e.j.locked ? 2 : 1.5}px ${e.j.locked ? "solid" : "dashed"} ${e.color}`) : "none",
+                boxShadow: plan && isFinal(e.j) ? "0 0 0 2px color-mix(in srgb, #10B981 25%, transparent)" : "none",
+                background: plan ? (e.j.completes ? finBg(e.j)
                   : `color-mix(in srgb, ${e.color} 14%, var(--surface))`)
                   : `linear-gradient(135deg, color-mix(in srgb, ${e.color} 80%, #000 0%), color-mix(in srgb, ${e.color} 55%, transparent))`,
                 color: plan ? "var(--text)" : "#fff" }}>
@@ -203,8 +203,8 @@ export function WeekAgenda({ dates, days, jobs, settings, now, live, pick, onPic
           const plan = e.kind === "plan";
           return <button key={e.key} type="button" onClick={() => plan ? onOpenJob(e.j) : onOpenPrint(e.it)}
             style={{ display: "flex", alignItems: "center", gap: 8, padding: 5, borderRadius: 11, cursor: "pointer", textAlign: "left", font: "inherit",
-              border: plan ? (e.j.completes ? "2px solid #059669" : `1.5px dashed ${e.color}`) : "1px solid var(--border)",
-              background: plan ? (e.j.completes ? "color-mix(in srgb, #10B981 18%, var(--surface2))" : `color-mix(in srgb, ${e.color} 7%, var(--surface2))`) : "var(--surface2)" }}>
+              border: plan ? (e.j.completes ? finBorder(e.j) : `1.5px dashed ${e.color}`) : "1px solid var(--border)",
+              background: plan ? (e.j.completes ? finBg(e.j, "var(--surface2)") : `color-mix(in srgb, ${e.color} 7%, var(--surface2))`) : "var(--surface2)" }}>
             <span style={{ width: 44, flexShrink: 0, fontSize: 12, fontWeight: 900, color: plan ? "#16A34A" : e.color, textAlign: "center" }}>
               {String(Math.floor(e.a / 60)).padStart(2, "0")}:{String(e.a % 60).padStart(2, "0")}</span>
             <Thumb e={e} size={34}/>

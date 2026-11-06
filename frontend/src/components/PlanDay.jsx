@@ -12,7 +12,15 @@ export const hm = s => { const m = Math.round((s || 0) / 60); return m < 60 ? `$
 export const hhmm = iso => iso ? iso.slice(11, 16).replace(":", " h ").replace(/ h 00$/, " h").replace(/^0(?=\d)/, "") : "";
 export const jobName = j => `${j.title}${j.plates_total > 1 ? ` · plateau ${j.plate}` : ""}${j.qty > 1 ? ` · ${j.copy}/${j.qty}` : ""}`;
 // le plateau qui termine un objet : « 🏁 Objet terminé » (« 1 sur 2 » quand il en faut plusieurs)
-export const doneTxt = j => j.completes ? `🏁 Objet terminé${j.qty > 1 ? ` · ${j.completes} sur ${j.qty}` : ""}` : null;
+// deux niveaux (06/11/2026) : 🏁 un exemplaire termine (il en reste), 🏆 le modele entierement fini (le dernier exemplaire)
+export const isFinal = j => !!j.completes && j.completes >= (j.qty || 1);
+export const finIc = (j, sep = "") => j.completes ? `${isFinal(j) ? "🏆" : "🏁"}${sep}` : "";
+export const doneTxt = j => !j.completes ? null : isFinal(j) ? `🏆 Fini${j.qty > 1 ? ` · les ${j.qty} exemplaires` : ""}` : `🏁 Exemplaire ${j.completes}/${j.qty}`;
+// les couleurs : le modele fini, franc ; un exemplaire, pale
+export const finBorder = j => isFinal(j) ? "2.5px solid #059669" : "1.5px solid #10B981";
+export const finBg = (j, base = "var(--surface)") => isFinal(j)
+  ? `linear-gradient(135deg, color-mix(in srgb, #10B981 30%, ${base}), color-mix(in srgb, #10B981 12%, ${base}))`
+  : `color-mix(in srgb, #10B981 10%, ${base})`;
 // le plateau qui termine un objet : vert profond, plein (05/11/2026 : en dore, il faisait penser a un avertissement)
 const GOLD = "#059669";
 const toMin = v => { const m = /^(\d{1,2}):(\d{2})$/.exec(v || ""); return m ? +m[1] * 60 + +m[2] : null; };
@@ -111,9 +119,9 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
     onDrop={e => { const k = e.dataTransfer.getData("text/bn-job"); setOver(false); if (k && k !== j.key) { e.preventDefault(); e.stopPropagation(); onDropBefore?.(k, j.key); } }}
     onClick={compact ? onOpen : undefined}
     style={{ display: "flex", flexDirection: "column", gap: 6, padding: 8, borderRadius: 13, cursor: compact ? "pointer" : edit ? "grab" : "default", opacity: dragging === j.key ? 0.45 : 1,
-      border: `${j.locked ? 2 : 1.5}px ${j.completes || j.locked ? "solid" : "dashed"} ${j.too_long ? "#EF4444" : j.locked ? "#4F46E5" : unretained(j) ? UNRET : j.completes ? GOLD : "color-mix(in srgb, #22C55E 50%, var(--border))"}`,
+      border: `${j.locked || isFinal(j) ? 2 : 1.5}px ${j.completes || j.locked ? "solid" : "dashed"} ${j.too_long ? "#EF4444" : j.locked ? "#4F46E5" : unretained(j) ? UNRET : j.completes ? (isFinal(j) ? GOLD : "#10B981") : "color-mix(in srgb, #22C55E 50%, var(--border))"}`,
       boxShadow: over ? "0 -3px 0 0 #6366F1" : "none",
-      background: j.completes ? `linear-gradient(120deg, color-mix(in srgb, ${GOLD} 14%, transparent), transparent 60%), var(--surface2)`
+      background: j.completes ? `linear-gradient(120deg, color-mix(in srgb, ${GOLD} ${isFinal(j) ? 22 : 9}%, transparent), transparent 60%), var(--surface2)`
         : unretained(j) ? "var(--surface2)" : "color-mix(in srgb, #22C55E 5%, var(--surface2))" }}>
     <div style={{ display: "flex", gap: 9, minWidth: 0 }}>
       <PlateThumb j={j} onClick={onOpen}/>
@@ -143,7 +151,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
       {j.low_after?.length > 0 && tag(`📉 sous le seuil : ${j.low_after.join(", ")}`, "#DC2626", "Après ce plateau, il restera moins d'un quart de bobine de ce filament")}
       {j.locked && tag(`🔒 figé à ${hhmm(j.start)}`, "#4F46E5", "Figé à ce jour et cette heure : optimiser, journée couleur, au mieux ou plus tard ne le déplacent pas")}
       {unretained(j) && tag("○ non retenu", "#64748B", "Profil par défaut, pas retenu dans « À faire » : planifié après les modèles retenus. Retiens-le depuis sa fiche (sa vignette) pour le planifier en priorité")}
-      {j.completes && tag(doneTxt(j), "#047857", "Avec ce plateau, tous ceux de l'objet sont faits")}
+      {j.completes && tag(doneTxt(j), "#047857", isFinal(j) ? "Avec ce plateau, le modèle est entièrement fini" : "Avec ce plateau, un exemplaire de l'objet est complet ; il en reste d'autres")}
       {j.intercalated && tag(`↔ intercalé dans ${j.intercalated.in}`, "#0EA5E9", { nuit: "Pour remplir la nuit", filaments: "Pour charger moins de filaments" }[j.intercalated.why]
         || "Pour optimiser le planning")}
       {j.due && tag(`🎯 avant le ${dueTxt(j.due)}`, j.due_ok ? "#16A34A" : "#EF4444", j.due_ok ? "L'objet sera fini à temps" : "Le dernier plateau de l'objet finit après cette date")}
@@ -186,7 +194,7 @@ export const DAY_KIND = { absent: ["🏖", "Absent", "#0EA5E9", "Rien ne se lanc
 export const dayKindOf = (settings, day) => (settings?.days_off || []).find(x => x.from <= day && day <= x.to)?.kind || null;
 // les signes d'un plateau prevu (06/11/2026), les memes partout dans le calendrier ; LEGEND les explique
 export const PRIO_IC = { 2: "🔥", 1: "⬆", "-1": "⬇", "-2": "⏬" };
-export const planIcons = j => [j.locked ? "🔒" : j.pinned ? "📌" : "", PRIO_IC[j.prio_m] || "", j.completes ? "🏁" : "", unretained(j) ? "○" : "",
+export const planIcons = j => [j.locked ? "🔒" : j.pinned ? "📌" : "", PRIO_IC[j.prio_m] || "", finIc(j), unretained(j) ? "○" : "",
   j.due && !j.due_ok ? "🎯" : "", j.intercalated ? "↔" : "", j.bed_change ? "🔲" : "", j.load?.length ? "🧵" : "", j.runout?.length ? "🔄" : ""].filter(Boolean).join("");
 export const LEGEND = [
   ["Les impressions", [["▮", "Bloc plein, de la couleur de son état : une impression faite (réussie, échouée, annulée) ou en cours"],
@@ -199,7 +207,7 @@ export const LEGEND = [
     ["🔄", "La bobine chargée se videra pendant l'impression : en préparer une autre"],
     ["🔲", "Changer de plateau d'impression avant de lancer (celui que demande le profil, ou un qui va au filament)"], ["🚚", "Compte sur une commande pas encore reçue"],
     ["📉", "Un filament passera sous le seuil (un quart de bobine)"]]],
-  ["Le reste", [["🏁", "Avec ce plateau, l'objet est fini"], ["🎯", "Date limite (rouge : il finira après)"],
+  ["Le reste", [["🏆", "Avec ce plateau, le modèle est entièrement fini (tous ses exemplaires)"], ["🏁", "Avec ce plateau, un exemplaire est complet (il en reste d'autres)"], ["🎯", "Date limite (rouge : il finira après)"],
     ["↔", "Intercalé dans un objet « au mieux » (pour remplir une nuit, ou charger moins)"], ["⛔", "Non planifiable : le stock et les commandes ne suffisent pas"],
     ["🏖", "Jour où tu es absent"], ["⏳", "Jour peu dispo"], ["↶", "Annuler le dernier geste"]]],
 ];
@@ -491,7 +499,7 @@ export function NowNextTiles({ pd, onOpenPrint, onPickJob, wide }) {
         <PlateThumb j={j} size={34}/>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: "block", fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {j.completes ? "🏁 " : ""}{unretained(j) ? "○ " : ""}{j.title}<span style={{ color: "#6366F1" }}>{j.plates_total > 1 ? ` · ${j.plate}/${j.plates_total}` : ""}</span></span>
+            {finIc(j, " ")}{unretained(j) ? "○ " : ""}{j.title}<span style={{ color: "#6366F1" }}>{j.plates_total > 1 ? ` · ${j.plate}/${j.plates_total}` : ""}</span></span>
           <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             <span style={{ color: "var(--text2)" }}>{whenTxt(j.start, now)} → {whenTxt(j.end, now)}</span> · {hm(j.seconds)}
             {j.bed_change ? <span style={{ color: "#0369A1" }}> · 🔲 {BED_NAMES[j.bed_change.to] || j.bed_change.to}</span> : ""}

@@ -11,7 +11,7 @@ import { usePlanActs } from "./planActs";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
 import { UndoPill, PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, poolGroups, BlockedList, LowStockBanner } from "./PlanPanels";
 import { PlanDashboard, Legend } from "./PlanDay";
-import { OPT_MODES, DAY_KIND, dayKindOf, DayStrip, onDay, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained } from "./PlanDay";
+import { OPT_MODES, DAY_KIND, dayKindOf, DayStrip, onDay, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained, isFinal } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
 // chacune, liseree de son etat) posee sur la barre de ses heures machine (une impression qui
@@ -263,7 +263,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
             {finished.length > 0 && <span data-tip={finished.map(j => `${doneTxt(j)} : ${j.title}`).join(" · ")}
               style={{ position: "absolute", top: wide ? 3 : 2, right: wide ? 4 : 2, zIndex: 2, display: "inline-flex", alignItems: "center", gap: 2,
                 padding: wide ? "1px 6px" : "0 4px", borderRadius: 9, background: "#D1FAE5", color: "#065F46", fontSize: wide ? 10.5 : 9, fontWeight: 900,
-                boxShadow: "0 1px 3px rgba(0,0,0,.25)" }}>🏁{finished.length > 1 || wide ? ` ${finished.length}` : ""}</span>}
+                boxShadow: "0 1px 3px rgba(0,0,0,.25)" }}>{finished.some(isFinal) ? "🏆" : "🏁"}{finished.length > 1 || wide ? ` ${finished.length}` : ""}</span>}
             {wide && p.length > 0 && !finished.length && cellW >= 74 && <span style={{ position: "absolute", top: 5, right: 6, fontSize: 9.5, fontWeight: 900,
               color: "#16A34A" }}>{hm((pd?.days?.[k]?.seconds) || 0)}</span>}
             {wide && !p.length && x?.duration > 0 && cellW >= 74 && <span style={{ position: "absolute", top: 5, right: 6, fontSize: 9.5, fontWeight: 800, color: "var(--text2)" }}>{hm(x.duration)}</span>}

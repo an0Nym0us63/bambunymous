@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
-import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks } from "./PlanDay";
+import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc } from "./PlanDay";
 
 // Les fenetres du planning (05/11/2026) : une fenetre (en bas au telephone, au centre sur ordinateur), la fiche
 // d'actions d'un plateau, la file regroupee par objet, les plateaux non planifiables.
@@ -412,7 +412,7 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act, jobs }) {
           <PlateThumb j={j} size={38}/>
           <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
             <span style={{ fontSize: 12, fontWeight: 900, color: bad ? "#DC2626" : "#6366F1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {j.locked ? "🔒 " : ""}{j.pinned && !j.locked ? "📌 " : ""}{j.completes ? "🏁 " : ""}{plateTxt(j)}{j.qty > 1 ? ` · ${j.copy}e/${j.qty}` : ""}
+              {j.locked ? "🔒 " : ""}{j.pinned && !j.locked ? "📌 " : ""}{finIc(j, " ")}{plateTxt(j)}{j.qty > 1 ? ` · ${j.copy}e/${j.qty}` : ""}
               {j.load?.length ? " 🧵" : ""}{j.runout?.length ? " 🔄" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}{j.intercalated ? " ↔" : ""}
               {j.prio_p ? ` ${prioOf(j.prio_p)[1]}` : ""}</span>
             {bad ? <span style={{ fontSize: 11.5, fontWeight: 800, color: "#DC2626" }}>⛔ non planifiable · {(j.blockedWhy || []).join(" · ")}</span>
@@ -530,7 +530,7 @@ export function PoolGrouped({ jobs, blocked = [], now, edit, drag, onDrag, onOpe
               <PlateThumb j={j} size={28}/>
               <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.15, minWidth: 0, overflow: "hidden" }}>
                 <span style={{ fontSize: 11, fontWeight: 900, color: bad ? "#DC2626" : "#6366F1", whiteSpace: "nowrap" }}>
-                  {j.locked ? "🔒 " : ""}{j.completes ? "🏁 " : ""}{lbl || "Plateau"}{j.load?.length ? " 🧵" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}</span>
+                  {j.locked ? "🔒 " : ""}{finIc(j, " ")}{lbl || "Plateau"}{j.load?.length ? " 🧵" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}</span>
                 {bad ? <span style={{ fontSize: 11.5, fontWeight: 900, color: "#DC2626", whiteSpace: "nowrap" }}>⛔ non planifiable</span>
                   : <span style={{ fontSize: 12, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{dayOf(j.start, now)}
                     <span style={{ fontWeight: 700, color: "var(--muted)" }}> {hhmm(j.start)}</span></span>}
