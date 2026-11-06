@@ -273,6 +273,30 @@ async def loop_watch() -> None:
             _LOOP["lags"].append((time.perf_counter() - t) * 1000 - 50)
 
 
+# Les retours au premier plan vus par les appareils (07/11/2026) : apres une capture d'ecran, la page restait blanche
+# quelques secondes sur Android. Chaque appareil mesure 8 s apres son retour : le temps avant de pouvoir redessiner,
+# le plus long trou entre deux images, et les taches longues de la page. Les 20 derniers, en memoire.
+_CLIENT: deque = deque(maxlen=20)
+
+
+def client_report(d: dict, user: str) -> None:
+    def num(k, hi=600000):
+        try:
+            return max(-1, min(hi, int(float(d.get(k)))))
+        except (TypeError, ValueError):
+            return None
+    top = []
+    for t in (d.get("top") or [])[:5]:
+        if isinstance(t, dict):
+            try:
+                top.append({"d": int(t.get("d") or 0), "at": int(t.get("at") or 0), "n": str(t.get("n") or "")[:80]})
+            except (TypeError, ValueError):
+                pass
+    _CLIENT.append({"at": time.time(), "user": str(user or "")[:40], "why": str(d.get("why") or "")[:20],
+                    "ua": str(d.get("ua") or "")[:140], "path": str(d.get("path") or "")[:80],
+                    **{k: num(k) for k in ("first_frame", "max_gap", "frames", "long_n", "long_ms", "hidden_ms", "gap")}, "top": top})
+
+
 def _loop_view() -> dict:
     lags = list(_LOOP["lags"])
     def view(book):
@@ -284,12 +308,13 @@ def _loop_view() -> dict:
             "threads": threading.active_count(), "cores": os.cpu_count(),
             "lag_p50": round(_pct(lags, .5), 1), "lag_p95": round(_pct(lags, .95), 1),
             "lag_max": round(max(lags), 1) if lags else 0, "stall_ms": STALL_MS, "stalls": stalls[:15],
-            "boot_stalls": view(_STALLS_BOOT)[:10]}
+            "boot_stalls": view(_STALLS_BOOT)[:10], "client": list(_CLIENT)[::-1]}
 
 
 def reset() -> None:
     _STALLS.clear()
     _STALLS_BOOT.clear()
+    _CLIENT.clear()
     _LOOP["lags"].clear()
     _LOOP["cpu"].clear()
     _STATS.clear()

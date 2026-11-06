@@ -10,6 +10,7 @@ import { installChunkReload } from "./utils/importRetry";
 import { installDragClickGuard } from "./utils/dragClickGuard";
 import { installEscClose } from "./utils/escClose";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { installResumeProbe } from "./utils/resumeProbe";
 
 // Coquille Android : les rangees horizontales n'arment plus le tirer-pour-rafraichir.
 installPullRefreshGuard();
@@ -42,6 +43,7 @@ const _mtEnd = e => { if (!e.touches.length) document.documentElement.classList.
 document.addEventListener("touchend", _mtEnd, { capture: true, passive: true });
 document.addEventListener("touchcancel", _mtEnd, { capture: true, passive: true });
 
+installResumeProbe();        // la mesure du retour au premier plan (page blanche apres une capture, 07/11/2026)
 const root = ReactDOM.createRoot(document.getElementById("root"));
 // le dernier filet (06/11/2026) : une erreur hors des pages (barre, menu) ne laisse plus une page blanche
 root.render(<BrowserRouter><ErrorBoundary where="appli"><App /></ErrorBoundary></BrowserRouter>);

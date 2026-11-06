@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from typing import Optional
@@ -448,6 +448,14 @@ async def tasks_status(_: str = Depends(require_admin)):
 async def perf_status(_: str = Depends(require_admin)):
     from ....core import perf
     return perf.snapshot()
+
+
+@router.post("/perf/client")
+async def perf_client(body: dict = Body({}), user: str = Depends(get_current_user)):
+    """Ce qu'un appareil a mesure apres un retour au premier plan (07/11/2026, page blanche apres une capture)."""
+    from ....core import perf
+    perf.client_report(body if isinstance(body, dict) else {}, user)
+    return {"ok": True}
 
 
 @router.post("/perf/reset")
