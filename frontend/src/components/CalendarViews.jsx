@@ -119,7 +119,7 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
             background: d === pick && !one ? "color-mix(in srgb, #6366F1 4%, transparent)" : "transparent" }}>
           {/* les heures de fonctionnement en fond, celles de lancement en liseré a gauche */}
           {/* les absences (06/11/2026) : hachurees, rien ne se lance ; un jour absent l'est en entier */}
-          {(info[d].off === "absent" ? [[0, 1440]] : info[d].away).map(([a, b], i) => <span key={`a${i}`} data-tip={info[d].off === "absent" ? "Absent ce jour-là" : `Absent de ${hhm(a)} à ${hhm(b)} : rien ne se lance`}
+          {[...(info[d].offIv || []).filter(x => x[2] === "absent"), ...info[d].away].map(([a, b], i) => <span key={`a${i}`} data-tip={`Absent de ${hhm(a)} à ${hhm(b)} : rien ne se lance`}
             style={{ position: "absolute", left: 0, right: 0, top: a / 60 * hourPx, height: (b - a) / 60 * hourPx, zIndex: 1, pointerEvents: "none",
               background: "repeating-linear-gradient(-45deg, color-mix(in srgb, #F59E0B 16%, transparent) 0 4px, transparent 4px 9px)" }}/>)}
           {(spans(info[d].run) || null)?.map(([a, b], i) => <span key={`r${i}`} style={{ position: "absolute", left: 0, right: 0, top: a / 60 * hourPx, height: (b - a) / 60 * hourPx,

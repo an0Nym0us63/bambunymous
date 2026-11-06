@@ -208,8 +208,19 @@ async def set_settings(body: dict) -> dict:
                 raise PlanError("Jour particulier : une date invalide")
             if x.get("kind") not in DAY_KINDS:
                 raise PlanError("Jour particulier : absent ou peu dispo")
-            out.append({"from": min(a, b), "to": max(a, b), "kind": x["kind"], "note": str(x.get("note") or "")[:60]})
-        d["days_off"] = sorted(out, key=lambda x: x["from"])
+            # l'heure de depart et de retour (06/11/2026) : facultatives (sans elles, des journees entieres)
+            tt = {}
+            for k in ("from_t", "to_t"):
+                v = x.get(k)
+                if v not in (None, ""):
+                    if _hm(v) is None:
+                        raise PlanError("Période : une heure invalide")
+                    tt[k] = str(v)[:5]
+            a, b = min(a, b), max(a, b)
+            if a == b and tt.get("from_t") and tt.get("to_t") and _hm(tt["to_t"]) <= _hm(tt["from_t"]):
+                raise PlanError("Période : le retour avant le départ")
+            out.append({"from": a, "to": b, "kind": x["kind"], "note": str(x.get("note") or "")[:60], **tt})
+        d["days_off"] = sorted(out, key=lambda x: (x["from"], x.get("from_t") or ""))
     if isinstance(body.get("plates"), list):
         from . import plates as PL
         out = []
@@ -415,11 +426,16 @@ class Rules:
         self.launch_txt = d.get("launch")
         # les jours particuliers : {"AAAA-MM-JJ": "absent" | "light"}
         self.off = {}
+        # les memes en intervalles (06/11/2026) : avec leur heure de depart et de retour (sans elles, des journees entieres)
+        self.periods = []
         for x in d.get("days_off") or []:
             try:
                 a, b = datetime.strptime(x["from"], "%Y-%m-%d"), datetime.strptime(x["to"], "%Y-%m-%d")
             except (ValueError, KeyError, TypeError):
                 continue
+            p0 = a + timedelta(minutes=_hm(x.get("from_t")) or 0)
+            p1 = b + (timedelta(minutes=_hm(x["to_t"])) if x.get("to_t") and _hm(x["to_t"]) is not None else timedelta(days=1))
+            self.periods.append((p0, p1, x.get("kind")))
             while a <= b:
                 self.off[a.date().isoformat()] = x.get("kind")
                 a += timedelta(days=1)
@@ -490,12 +506,23 @@ class Rules:
         if not self.launch and not self.off and not self.away and not (self.we and self.we_launch):
             return None
         iv = self._days_iv("launch", c, horizon) if (self.launch or self.we) else self._iv((0, 1440), c, horizon)
-        out = []
-        for a, b in iv:
-            k = self.off.get(a.date().isoformat())
-            if k == "absent":
-                continue
-            out.append((a, min(b, a + timedelta(hours=1))) if k == "light" else (a, b))
+        out = list(iv)
+        # les periodes (06/11/2026, a l'heure pres) : absent, rien ne se lance ; peu dispo, seule la premiere heure de
+        # lancement de chaque journee qu'elles couvrent
+        for p0, p1, k in self.periods:
+            cut = []
+            for a, b in out:
+                if p1 <= a or p0 >= b:
+                    cut.append((a, b))
+                    continue
+                if a < p0:
+                    cut.append((a, p0))
+                if k == "light":
+                    s0 = max(a, p0)
+                    cut.append((s0, min(b, p1, s0 + timedelta(hours=1))))
+                if p1 < b:
+                    cut.append((p1, b))
+            out = cut
         for x, y in self.away:                         # les absences decoupent les plages
             cut = []
             for a, b in out:

@@ -52,12 +52,15 @@ export function frHolidays(y) {
 // ce qu'un jour a de particulier pour le planning (06/11/2026) : ses horaires (ceux du week-end ces jours-la), ferie,
 // jour absent ou peu dispo, absences de quelques heures [[debut, fin] en minutes]
 export function dayInfo(st, d) {
-  if (!st || !d) return { run: null, launch: null, away: [] };
+  if (!st || !d) return { run: null, launch: null, away: [], offIv: [] };
   const wd = new Date(`${d}T12:00`).getDay(), holiday = frHolidays(+d.slice(0, 4))[d] || null;
   const special = !!st.we?.on && (wd === 0 || wd === 6 || (st.we.holidays && !!holiday));
   const off = (st.days_off || []).find(x => x.from <= d && d <= x.to)?.kind || null;
+  // ce que les periodes couvrent de ce jour (06/11/2026, heures de depart et de retour) : [[debut, fin, sorte]]
+  const offIv = (st.days_off || []).filter(x => x.from <= d && d <= x.to).map(x => [x.from === d && x.from_t ? toMin(x.from_t) : 0,
+    x.to === d && x.to_t ? toMin(x.to_t) : 1440, x.kind]).filter(([a, b]) => a != null && b != null && b > a);
   const away = (st.away || []).filter(x => x.date === d).map(x => [toMin(x.from), toMin(x.to)]).filter(x => x[0] != null && x[1] != null);
-  return { special, holiday, off, away, run: special ? st.we.run : st.run, launch: special ? st.we.launch : st.launch };
+  return { special, holiday, off, offIv, away, run: special ? st.we.run : st.run, launch: special ? st.we.launch : st.launch };
 }
 const hhm0 = m => `${Math.floor(m / 60) % 24} h${m % 60 ? ` ${String(m % 60).padStart(2, "0")}` : ""}`;
 export function DayMarks({ settings, day, full = true }) {
@@ -69,8 +72,8 @@ export function DayMarks({ settings, day, full = true }) {
     x.holiday && pill(`🎉 ${full ? x.holiday : "férié"}`, "#BE185D", "#FCE7F3", `Férié : ${x.holiday}`),
     x.special && pill(full ? `🏖 Horaires du week-end${w ? ` · lancement ${hh(w.from)} – ${hh(w.to)}` : ""}` : "🏖",
       "#0E7490", "#CFFAFE", "Les horaires du week-end s'appliquent ce jour-là"),
-    x.off && pill(x.off === "absent" ? "🚶 Absent toute la journée" : "⏳ Peu dispo", "#B45309", "#FEF3C7",
-      x.off === "absent" ? "Rien ne se lance ce jour-là" : "Une seule heure de lancement"),
+    ...(x.offIv || []).map(([a, b, k], i) => <React.Fragment key={`o${i}`}>{pill(`${k === "absent" ? "🚶 Absent" : "⏳ Peu dispo"}${a === 0 && b === 1440 ? (k === "absent" ? " toute la journée" : "") : a === 0 ? ` jusqu'à ${hhm0(b)}` : b === 1440 ? ` dès ${hhm0(a)}` : ` ${hhm0(a)} – ${hhm0(b)}`}`,
+      "#B45309", "#FEF3C7", k === "absent" ? "Rien ne se lance" : "Une seule heure de lancement")}</React.Fragment>),
     ...x.away.map(([a, b], i) => <React.Fragment key={i}>{pill(`🚶 Absent ${hhm0(a)} – ${hhm0(b)}`, "#B45309", "#FEF3C7", "Rien ne se lance pendant")}</React.Fragment>),
   ].filter(Boolean);
   if (!items.length) return null;
@@ -88,7 +91,7 @@ export function DayStrip({ day, done = [], jobs = [], settings, now, live = null
   // les horaires de ce jour (06/11/2026 : ceux du week-end ces jours-la) et ses absences
   const di = dayInfo(settings, day);
   const run = spans(di.run), launch = spans(di.launch);
-  const awayIv = di.off === "absent" ? [[0, 1440]] : di.away;
+  const awayIv = [...(di.offIv || []).filter(x => x[2] === "absent"), ...di.away];
   const nowM = now && now.slice(0, 10) === day ? minOf(now, day) : null;
   return <div style={{ position: "relative", height: 34, marginTop: 2 }}>
     <div style={{ position: "absolute", left: 0, right: 0, top: 6, height: 18, borderRadius: 7, background: run ? "color-mix(in srgb, #94A3B8 16%, var(--surface2))" : "var(--surface2)",
@@ -392,28 +395,44 @@ function LoadWins({ list, set }) {
       style={{ ...seg, alignSelf: "flex-start" }}>＋ {list.length ? "Un autre créneau" : "Un créneau"}</button>}
   </div>;
 }
+// les periodes (06/11/2026) : absent ou peu dispo, du jour et de l'heure de depart au jour et a l'heure de retour (les
+// heures, facultatives : sans elles, des journees entieres)
 function DaysOff({ list, set }) {
   const [kind, setKind] = useState("absent");
-  const [a, setA] = useState(""), [b, setB] = useState("");
+  const [a, setA] = useState(""), [b, setB] = useState(""), [at, setAt] = useState(""), [bt, setBt] = useState("");
   const fr = d => new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+  const h = t => t ? ` ${t.replace(/^0(?=\d)/, "").replace(":", " h ").replace(/ h 00$/, " h")}` : "";
   const today = new Date().toISOString().slice(0, 10);
-  return <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+  const field = (lbl, d, setD, t, setT, min) => <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 230px", minWidth: 0 }}>
+    <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>{lbl}</span>
+    <div style={{ display: "flex", gap: 6 }}>
+      <input type="date" value={d} min={min} onChange={e => setD(e.target.value)} style={{ ...tin, flex: 1, minWidth: 0 }}/>
+      <input type="time" value={t} onChange={e => setT(e.target.value)} data-tip="L'heure (facultative : sans elle, toute la journée)" style={{ ...tin, width: 96 }}/>
+    </div></div>;
+  return <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
     {list.map((x, i) => { const [ic, l, c] = DAY_KIND[x.kind] || DAY_KIND.absent;
-      return <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 10,
-        border: `1px solid color-mix(in srgb, ${c} 40%, var(--border))`, background: `color-mix(in srgb, ${c} 8%, var(--surface2))` }}>
-        <span style={{ fontSize: 15 }}>{ic}</span>
-        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 800, color: "var(--text)" }}>{l} · {x.from === x.to ? fr(x.from) : `du ${fr(x.from)} au ${fr(x.to)}`}</span>
+      return <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 12,
+        border: `1px solid color-mix(in srgb, ${c} 40%, var(--border))`, background: `color-mix(in srgb, ${c} 8%, var(--surface))` }}>
+        <span style={{ fontSize: 18 }}>{ic}</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 12.5, fontWeight: 900, color: c }}>{l}</span>
+          <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "var(--text)" }}>
+            {x.from === x.to && !x.from_t && !x.to_t ? fr(x.from) : `du ${fr(x.from)}${h(x.from_t)} au ${fr(x.to)}${h(x.to_t)}`}</span></span>
         <button type="button" onClick={() => set(list.filter((_, k) => k !== i))} aria-label="Retirer" style={mini}>✕</button>
       </div>; })}
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-      {Object.entries(DAY_KIND).map(([k, [ic, l, , tip]]) => <button key={k} type="button" data-tip={tip} onClick={() => setKind(k)}
-        style={{ ...seg, ...(kind === k ? segOn : {}) }}>{ic} {l}</button>)}
-      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>du</span>
-      <input type="date" value={a} min={today} onChange={e => { setA(e.target.value); if (!b || b < e.target.value) setB(e.target.value); }} style={tin}/>
-      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>au</span>
-      <input type="date" value={b} min={a || today} onChange={e => setB(e.target.value)} style={tin}/>
-      <button type="button" disabled={!a} onClick={() => { set([...list, { from: a, to: b || a, kind }].sort((x, y) => x.from.localeCompare(y.from))); setA(""); setB(""); }}
-        style={{ ...seg, ...(a ? segOn : { opacity: 0.5 }) }}>＋ Ajouter</button>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, borderRadius: 14, border: "1px dashed color-mix(in srgb, #6366F1 30%, var(--border))",
+      background: "color-mix(in srgb, #6366F1 4%, var(--surface))" }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {Object.entries(DAY_KIND).map(([k, [ic, l, , tip]]) => <button key={k} type="button" data-tip={tip} onClick={() => setKind(k)}
+          style={{ ...seg, ...(kind === k ? segOn : {}) }}>{ic} {l}</button>)}</div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {field("Départ", a, v => { setA(v); if (!b || b < v) setB(v); }, at, setAt, today)}
+        {field("Retour", b, setB, bt, setBt, a || today)}
+      </div>
+      <button type="button" disabled={!a} onClick={() => {
+        set([...list, { from: a, to: b || a, kind, ...(at ? { from_t: at } : {}), ...(bt ? { to_t: bt } : {}) }].sort((x, y) => x.from.localeCompare(y.from)));
+        setA(""); setB(""); setAt(""); setBt(""); }}
+        style={{ ...seg, ...(a ? segOn : { opacity: 0.5 }), alignSelf: "flex-start" }}>＋ Ajouter la période</button>
     </div>
   </div>;
 }
@@ -742,6 +761,8 @@ const mini = { width: 26, height: 24, borderRadius: 7, border: "1px solid var(--
   fontSize: 12, fontWeight: 900, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 4px" };
 const seg = { padding: "5px 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--muted)", fontSize: 12, fontWeight: 800, cursor: "pointer" };
 const segOn = { color: "#6366F1", borderColor: "color-mix(in srgb, #6366F1 45%, var(--border))", background: "color-mix(in srgb, #6366F1 10%, var(--surface2))" };
-const tin = { padding: "5px 8px", borderRadius: 9, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 13, fontWeight: 700 };
+const tin = { padding: "7px 10px", borderRadius: 11, border: "1px solid color-mix(in srgb, #6366F1 22%, var(--border))", background: "var(--surface)",
+  color: "var(--text)", fontSize: 13, fontWeight: 800, fontFamily: "inherit", colorScheme: "light dark", outline: "none",
+  boxShadow: "0 1px 2px rgba(15,23,42,.06), inset 0 1px 0 rgba(255,255,255,.4)", minHeight: 36 };
 const lab = { fontSize: 12.5, fontWeight: 900, color: "var(--text2)", marginBottom: 6 };
 const hint = { fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45, marginTop: 5 };
