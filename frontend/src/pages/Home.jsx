@@ -777,11 +777,15 @@ function HubSwatch({ t, active, h, radius = 6, onPick = null, label = null }) {
   const p = trayPct(t), c = trayHex(t), r = p != null ? p / 100 : null;
   // une bobine posee pour le sechage (emplacement vide) : sa couleur, hachuree, comme dans le detail de l'AMS
   const posee = !c && t?.empty && t.drying_spool;
+  // la bobine qui a pris la suite d'une bobine finie, posee a la main la ou l'AMS voit vide (06/11/2026) : sa couleur,
+  // un pointille orange qui clignote, jusqu'a ce que l'AMS la relise (a faire a la fin de l'impression)
+  const suite = !c && t?.empty && !posee && t.suite_spool;
   const [pop] = useState(() => active && Date.now() - hubShownAt > 1500);
   // l'emplacement qui imprime est vide (04/11/2026) : la bobine s'est videe dans l'AMS, le reste du filament s'imprime
   // depuis le tube -- un encadre pointille orange, en attendant le relais
-  const dry = active && !c && !posee;
+  const dry = active && !c && !posee && !suite;
   const tip = dry ? "vide dans l'AMS · le reste du filament s'imprime depuis le tube"
+    : suite ? `${suite.translated_name || suite.name} · posée à la main, pas encore lue par l'AMS : fais-la relire à la fin de l'impression`
     : posee ? `posée pour le séchage : ${posee.translated_name || posee.name}` : t?.empty ? "vide" : [t?.filament_type, r != null ? `${Math.round(r * 100)} %` : null].filter(Boolean).join(" · ");
   // toucher la pastille ouvre la fiche de la bobine (28/10/2026) : un bouton, nomme pour le lecteur d'ecran,
   // qui ne declenche pas le clic de l'unite derriere
@@ -792,14 +796,15 @@ function HubSwatch({ t, active, h, radius = 6, onPick = null, label = null }) {
       onClick={pick} onKeyDown={onPick ? e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(e); } } : undefined}
       style={{ position: "relative", display: "block", height: h, minWidth: 0, borderRadius: radius, cursor: onPick ? "pointer" : undefined,
         ...(c ? trayBg(t, r != null && h >= 18 ? `linear-gradient(to bottom, rgba(0,0,0,0.30) ${(1 - r) * 100}%, transparent ${(1 - r) * 100}%)` : null, h)
+          : suite ? colorBg(parseColorsList(suite.color, suite.colors_array), suite.multicolor_type, finishOf(suite), { size: h })
           : posee ? { ...bgWithTop(colorBg(parseColorsList(posee.color, posee.colors_array), posee.multicolor_type, finishOf(posee), { size: h }),
               "repeating-linear-gradient(-45deg, rgba(255,255,255,0.45) 0 2px, transparent 2px 6px)"), opacity: 0.8 }
           : { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0 2px, transparent 2px 6px)" }),
         // vide qui imprime : le seul contour, celui de dehors (05/11/2026 : bord et contour pointilles se doublaient)
-        border: c ? "1px solid rgba(0,0,0,0.18)" : dry ? "none" : "1px dashed rgba(148,163,184,0.6)",
-        outline: dry ? "2px dashed #f59e0b" : active ? "2px solid #3b82f6" : "none", outlineOffset: 1.5,
+        border: c ? "1px solid rgba(0,0,0,0.18)" : dry || suite ? "none" : "1px dashed rgba(148,163,184,0.6)",
+        outline: dry || suite ? "2px dashed #f59e0b" : active ? "2px solid #3b82f6" : "none", outlineOffset: 1.5,
         ...(dry ? { background: "repeating-linear-gradient(-45deg, rgba(245,158,11,0.28) 0 2px, transparent 2px 6px)" } : null),
-        animation: active ? (pop ? "bn-swap .55s ease-out, bn-ring 2s ease-out .55s infinite" : "bn-ring 2s ease-out infinite") : "none" }}/>
+        animation: suite ? "bn-suite-blink 1.2s ease-in-out infinite" : active ? (pop ? "bn-swap .55s ease-out, bn-ring 2s ease-out .55s infinite" : "bn-ring 2s ease-out infinite") : "none" }}/>
   );
 }
 // une unite : son nom, ses badges (entree de l'aiguillage, sechage), ses emplacements

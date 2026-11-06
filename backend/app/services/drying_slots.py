@@ -26,13 +26,15 @@ def current() -> dict:
     return _slots
 
 
-def spool_at(ams_id, tray_id):
+def spool_at(ams_id, tray_id, kind: str = ""):
+    """La bobine posee la (kind « suite » : celle qui a pris la suite d'une bobine finie, 06/11/2026 ; « » : pour le
+    sechage)."""
     e = _slots.get(_key(ams_id, tray_id))
-    return e["spool_id"] if e else None
+    return e["spool_id"] if e and (e.get("kind") or "") == kind else None
 
 
 def spools_in_ams(ams_id) -> list:
-    return [e["spool_id"] for k, e in _slots.items() if k.split(":")[0] == str(int(ams_id))]
+    return [e["spool_id"] for k, e in _slots.items() if k.split(":")[0] == str(int(ams_id)) and not e.get("kind")]
 
 
 async def load() -> dict:
@@ -57,11 +59,14 @@ async def _save() -> None:
         await set_setting(db, KEY, json.dumps(_slots))
 
 
-async def place(ams_id, tray_id, spool_id: int) -> None:
+async def place(ams_id, tray_id, spool_id: int, kind: str = "") -> None:
+    """kind « suite » (06/11/2026) : la bobine choisie pour prendre la suite d'une bobine finie en pleine impression,
+    mise a la place de l'ancienne dans un emplacement que l'AMS voit vide (il ne relit pas pendant l'impression) :
+    montree en attente de relecture, oubliee des que l'AMS y lit un filament."""
     # une bobine n'est posee qu'a un seul endroit
     for k in [k for k, e in _slots.items() if e["spool_id"] == int(spool_id)]:
         _slots.pop(k)
-    _slots[_key(ams_id, tray_id)] = {"spool_id": int(spool_id), "since": datetime.utcnow().isoformat()}
+    _slots[_key(ams_id, tray_id)] = {"spool_id": int(spool_id), "since": datetime.utcnow().isoformat(), **({"kind": kind} if kind else {})}
     await _save()
 
 

@@ -303,8 +303,10 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
   // Bobine POSEE pour le sechage (emplacement vide) : memes details qu'une
   // bobine chargee (matiere, jauge, poids, nom), avec la bobine attenuee et ☀.
   const posee = empty ? tray.drying_spool : null;
-  const spoolInfo = posee || loaded;
-  const vide = empty && !posee;
+  // la suite d'une bobine finie, posee a la main la ou l'AMS voit vide (06/11/2026) : montree, pointille orange qui clignote
+  const suiteP = empty && !posee ? tray.suite_spool : null;
+  const spoolInfo = posee || suiteP || loaded;
+  const vide = empty && !posee && !suiteP;
   const colors = parseColors(tray, spoolInfo);
   const c1 = colors?.[0];
   const name = spoolInfo?.translated_name ?? spoolInfo?.name ?? spoolInfo?.filament_name ?? tray.catalog_name ?? null;
@@ -371,6 +373,12 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
               transform:"translate(-50%,-50%)", borderRadius:"50%", pointerEvents:"none",
               background:"repeating-linear-gradient(-45deg, rgba(255,255,255,0.28) 0px, rgba(255,255,255,0.28) 1.5px, transparent 1.5px, transparent 7px)" }}/>
           </div>
+        ) : suiteP ? (
+          <div style={{ position:"relative" }} title="Posée à la main, pas encore lue par l'AMS : fais-la relire à la fin de l'impression">
+            <SpoolSVG colors={parseColors({}, suiteP)} finish={finishOf(suiteP)} empty={false} size={size} active={isActive} type={multicolorType({}, suiteP)}/>
+            <span aria-hidden="true" style={{ position:"absolute", left:"50%", top:"50%", width:size + 6, height:size + 6, transform:"translate(-50%,-50%)",
+              borderRadius:"50%", border:"2px dashed #f59e0b", pointerEvents:"none", animation:"bn-suite-blink 1.2s ease-in-out infinite" }}/>
+          </div>
         ) : (
           <SpoolSVG colors={empty?null:colors} finish={finishOf(spoolInfo, tray)} empty={empty} size={size} active={isActive} type={mcType}/>
         )}
@@ -405,6 +413,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
         {empty
           ? (tray.drying_spool
               ? <span style={{ color:"#f59e0b" }}>☀ {tray.drying_spool.translated_name || tray.drying_spool.name}</span>
+              : suiteP ? <span style={{ color:"#d97706" }}>↻ {suiteP.translated_name || suiteP.name} · à faire relire</span>
               : "Vide")
           : (name || "")}
       </p>}

@@ -167,6 +167,8 @@ class TrayOut(BaseModel):
     # Emplacement VIDE ou une bobine est posee pour le sechage (sans etre
     # inseree) : services/drying_slots.
     drying_spool: Optional[SpoolInfoOut] = None
+    # la bobine qui a pris la suite, posee dans un emplacement que l'AMS voit encore vide (06/11/2026)
+    suite_spool: Optional[SpoolInfoOut] = None
     cols: list = []     # couleurs Bambu raw (champ 'cols' MQTT) — liste hex
     ctype: str = ""     # type couleur Bambu (int ou str selon firmware) ('gradient','coaxial'…)
 
@@ -513,6 +515,8 @@ async def printer_status(_: str = Depends(get_current_user)):
                     spool_info=_tray_spool_info(t, _spools_map, _stock_map),
                     drying_spool=(_spool_info(_dslots.spool_at(a.id, t.id), _spools_map)
                                   if t.empty and _dslots.spool_at(a.id, t.id) else None),
+                    suite_spool=(_spool_info(_dslots.spool_at(a.id, t.id, "suite"), _spools_map)
+                                 if t.empty and _dslots.spool_at(a.id, t.id, "suite") else None),
                     cols=getattr(t, "cols", []) or [],
                     ctype=str(getattr(t, "ctype", "") or ""),
                     catalog_name=(

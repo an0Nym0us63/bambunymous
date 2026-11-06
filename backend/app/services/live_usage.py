@@ -530,7 +530,7 @@ async def successor(spool_id: Optional[int], tag: str = "", here: tuple = ()) ->
     return new
 
 
-async def _follow_tray(old_id: int, new_id: int) -> None:
+async def _follow_tray(old_id: int, new_id: int, slot: int | None = None) -> None:
     """La bobine choisie a la main a ete posee a la place de l'ancienne (03/11/2026) : l'AMS ne relit pas l'emplacement
     en pleine impression, il montrerait encore l'ancienne (a 0 g). L'emplacement de l'ancienne est associe a la
     nouvelle, tant que l'AMS y voit le meme filament (ou la meme puce) ; une relecture l'efface d'elle-meme. Rien si la
@@ -542,9 +542,30 @@ async def _follow_tray(old_id: int, new_id: int) -> None:
         trays = [(a.id, t) for a in (s.ams_list or []) for t in a.trays if not getattr(t, "empty", False)] if s else []
         if any(t.spool_id == new_id for _a, t in trays):
             return
+        hit = False
         for ams_id, t in trays:
             if t.spool_id == old_id:
                 await set_override(ams_id, t.id, tray_signature(t), new_id, kind="suite")
+                hit = True
+        if hit:
+            return
+        # l'AMS voit l'emplacement vide (06/11/2026 : la bobine finie, retiree, la nouvelle posee sans relecture) : la
+        # nouvelle y est montree en attente, jusqu'a ce que l'AMS la lise. L'emplacement : celui du filament dans la
+        # correspondance de l'impression (octet haut : l'AMS, octet bas : l'emplacement), sinon l'emplacement actif
+        from . import drying_slots
+        empty = {(a.id, t.id) for a in (s.ams_list or []) for t in a.trays if getattr(t, "empty", False)} if s else set()
+        where = None
+        try:
+            v = int((s.ams_mapping or [])[int(slot)]) if slot is not None else 65535
+            if v != 65535 and ((v >> 8) & 0xFF, v & 0xFF) in empty:
+                where = ((v >> 8) & 0xFF, v & 0xFF)
+        except (TypeError, ValueError, IndexError):
+            pass
+        if where is None and s and (s.active_ams_id, s.active_tray_id) in empty:
+            where = (s.active_ams_id, s.active_tray_id)
+        if where:
+            await drying_slots.place(where[0], where[1], new_id, kind="suite")
+            logger.info(f"[LIVE] bobine #{new_id} posee dans {where[0]}/{where[1]} (vide pour l'AMS), en attente de relecture")
     except Exception:
         logger.exception("[LIVE] emplacement de la nouvelle bobine non associe")
 
@@ -608,7 +629,7 @@ async def switch(pid: int, slot: int, spool_id: int, auto: bool = False) -> dict
         await _costs(db, p)
         await db.commit()
     if not auto and last.spool_id:
-        await _follow_tray(last.spool_id, spool_id)
+        await _follow_tray(last.spool_id, spool_id, int(slot))
     try:
         from ..core.mqtt import invalidate_tray_cache
         invalidate_tray_cache()
