@@ -47,7 +47,9 @@ KEY = "PRINT_PLAN"
 HORIZON_DAYS = 60
 SHIFT_MIN = 180          # un plateau « decale » : son depart a bouge d'au moins 3 h (06/11/2026)
 DEFAULTS = {"gap": 15, "run": None, "launch": None, "opt_mode": "mix", "auto_new": "off", "days_off": [], "load_win": [],
-            "dur_mode": "off", "dur_pct": 0, "plates": []}
+            "dur_mode": "off", "dur_pct": 0, "plates": [], "away": [], "we": None}
+# away (06/11/2026) : des absences de quelques heures, [{date, from, to}] ; rien ne se lance pendant, elles s'effacent une
+# fois passees. we : d'autres horaires le week-end (et les jours feries, au choix) : {on, run, launch, holidays}
 # les plateaux d'impression possedes (06/11/2026) : [{kind, n, name, avoid: [matieres ou sous-types]}] ; vide, le
 # planning ne s'occupe pas des plateaux (voir services/plates.py)
 # les durees (06/11/2026) : tes impressions durent souvent un peu plus (ou moins) que prevu, en proportion de leur duree.
@@ -173,6 +175,29 @@ async def set_settings(body: dict) -> dict:
                 if b - a < 30:
                     raise PlanError("Une plage d'au moins 30 minutes")
                 d[k] = {"from": w["from"], "to": w["to"]}
+    if isinstance(body.get("away"), list):
+        out = []
+        for x in body["away"][:20]:
+            try:
+                day = datetime.strptime(str(x.get("date")), "%Y-%m-%d").date().isoformat()
+            except (ValueError, TypeError, AttributeError):
+                raise PlanError("Absence : une date invalide")
+            if _hm(x.get("from")) is None or _hm(x.get("to")) is None or _hm(x.get("to")) <= _hm(x.get("from")):
+                raise PlanError("Absence : une heure de début avant celle de fin")
+            out.append({"date": day, "from": x["from"], "to": x["to"]})
+        d["away"] = sorted(out, key=lambda x: (x["date"], x["from"]))
+    if "we" in body:
+        w = body.get("we")
+        if not isinstance(w, dict) or not w.get("on"):
+            d["we"] = None
+        else:
+            we = {"on": True, "holidays": bool(w.get("holidays"))}
+            for k in ("run", "launch"):
+                v = w.get(k)
+                if v is not None and not _window(v):
+                    raise PlanError("Week-end : une plage invalide")
+                we[k] = {"from": v["from"], "to": v["to"]} if v else None
+            d["we"] = we
     if isinstance(body.get("days_off"), list):
         out = []
         for x in body["days_off"][:60]:
@@ -363,6 +388,24 @@ def _day_fr(t: datetime, today) -> str:
     return f"{j} {t.day}"
 
 
+def fr_holidays(year: int) -> set:
+    """Les jours feries en France (06/11/2026) : les fixes, puis lundi de Paques, Ascension, lundi de Pentecote."""
+    from datetime import date
+    a, b, c = year % 19, year // 100, year % 100
+    d, e = b // 4, b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    l_ = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l_) // 451
+    month = (h + l_ - 7 * m + 114) // 31
+    day = ((h + l_ - 7 * m + 114) % 31) + 1
+    easter = date(year, month, day)
+    fixed = {date(year, mm, dd) for mm, dd in ((1, 1), (5, 1), (5, 8), (7, 14), (8, 15), (11, 1), (11, 11), (12, 25))}
+    return fixed | {easter + timedelta(days=n) for n in (1, 39, 50)}
+
+
 class Rules:
     def __init__(self, d: dict):
         self.gap = timedelta(minutes=int(d.get("gap") or 0))
@@ -380,8 +423,20 @@ class Rules:
             while a <= b:
                 self.off[a.date().isoformat()] = x.get("kind")
                 a += timedelta(days=1)
-        # des moments sans lancement (une plage, ou des jours particuliers) : les nuits et les trous se remplissent
-        self.limits = bool(self.launch or self.off)
+        # les absences de quelques heures (06/11/2026) : [(debut, fin)] sans lancement
+        self.away = []
+        for x in d.get("away") or []:
+            try:
+                day = datetime.strptime(x["date"], "%Y-%m-%d")
+                self.away.append((day + timedelta(minutes=_hm(x["from"])), day + timedelta(minutes=_hm(x["to"]))))
+            except (ValueError, KeyError, TypeError):
+                continue
+        # d'autres horaires le week-end et, au choix, les jours feries (06/11/2026)
+        we = d.get("we") if isinstance(d.get("we"), dict) and d["we"].get("on") else None
+        self.we = we
+        self.we_run, self.we_launch = (_window(we.get("run")), _window(we.get("launch"))) if we else (None, None)
+        # des moments sans lancement (une plage, des jours particuliers, des absences) : les nuits et les trous se remplissent
+        self.limits = bool(self.launch or self.off or self.away or self.we)
         # les creneaux de chargement
         self.load = [w for w in (_window(x) for x in d.get("load_win") or []) if w]
         self.load_txt = [f"{x.get('from')}–{x.get('to')}" for x in d.get("load_win") or []]
@@ -402,18 +457,56 @@ class Rules:
     def in_load(self, s: datetime) -> bool:
         return not self.load or self.load_at(s) == s
 
+    def special(self, day) -> bool:
+        """Un jour aux horaires du week-end : samedi, dimanche, et les jours feries si on l'a voulu."""
+        return bool(self.we) and (day.weekday() >= 5 or (self.we.get("holidays") and day in fr_holidays(day.year)))
+
+    def _days_iv(self, kind: str, t0: datetime, days: int):
+        """Les plages de lancement (ou de fonctionnement) jour par jour, celles du week-end ces jours-la ; une journee
+        sans plage est entiere. Les plages qui se touchent sont reunies (une impression peut passer minuit)."""
+        base = self.launch if kind == "launch" else self.run
+        alt = self.we_launch if kind == "launch" else self.we_run
+        d0 = datetime(t0.year, t0.month, t0.day) - timedelta(days=1)
+        out = []
+        for i in range(days + 2):
+            day = d0 + timedelta(days=i)
+            w = alt if self.special(day.date()) else base
+            a, b = (day + timedelta(minutes=w[0]), day + timedelta(minutes=w[1])) if w else (day, day + timedelta(days=1))
+            if out and a <= out[-1][1]:
+                out[-1] = (out[-1][0], max(out[-1][1], b))
+            else:
+                out.append((a, b))
+        return out
+
+    def _run_iv(self, c: datetime, horizon: int):
+        if not self.run and not (self.we and self.we_run):
+            return None
+        return self._days_iv("run", c, horizon)
+
     def _launch_iv(self, c: datetime, horizon: int):
         """Les plages de lancement autour de c, jours particuliers compris : un jour absent n'en a pas, un jour peu dispo
-        n'en garde que la premiere heure. Sans plage reglee et sans jour particulier : None (a toute heure)."""
-        if not self.launch and not self.off:
+        n'en garde que la premiere heure ; les absences de quelques heures en sont retirees. Sans plage reglee, sans jour
+        particulier ni absence : None (a toute heure)."""
+        if not self.launch and not self.off and not self.away and not (self.we and self.we_launch):
             return None
-        iv = self._iv(self.launch or (0, 1440), c, horizon)
+        iv = self._days_iv("launch", c, horizon) if (self.launch or self.we) else self._iv((0, 1440), c, horizon)
         out = []
         for a, b in iv:
             k = self.off.get(a.date().isoformat())
             if k == "absent":
                 continue
             out.append((a, min(b, a + timedelta(hours=1))) if k == "light" else (a, b))
+        for x, y in self.away:                         # les absences decoupent les plages
+            cut = []
+            for a, b in out:
+                if y <= a or x >= b:
+                    cut.append((a, b))
+                    continue
+                if a < x:
+                    cut.append((a, x))
+                if y < b:
+                    cut.append((y, b))
+            out = cut
         return out
 
     @staticmethod
@@ -425,7 +518,7 @@ class Rules:
     def earliest(self, c: datetime, secs: float, horizon: int = 30):
         """Le premier debut possible a partir de c : (debut, pourquoi pas c, trop long)."""
         dur = timedelta(seconds=secs)
-        runs = self._iv(self.run, c, horizon) if self.run else None
+        runs = self._run_iv(c, horizon)
         lnch = self._launch_iv(c, horizon)
 
         def ok_launch(s):
@@ -462,6 +555,13 @@ def _reason(why, c: datetime, s: datetime, secs: float, rules: Rules, today) -> 
         return None
     nxt = f"{_day_fr(s, today)} à {_fmt(s)}" if s.date() != c.date() else f"à {_fmt(s)}"
     if why == "launch":
+        # une absence de quelques heures (06/11/2026)
+        aw = next(((a, b) for a, b in rules.away if a <= c < b or c < a < s), None)
+        if aw:
+            return f"Absent de {_fmt(aw[0])} à {_fmt(aw[1])}{' ' + _day_fr(aw[0], today) if aw[0].date() != c.date() else ''} : lancée {nxt}"
+        if rules.special(c.date()) and rules.we_launch:
+            lt = (rules.we or {}).get("launch") or {}
+            return f"Le week-end, pas de lancement entre {lt.get('to')} et {lt.get('from')} : lancée {nxt}"
         # un jour particulier entre les deux : il le dit
         k = next((rules.off.get((c + timedelta(days=i)).date().isoformat()) for i in range((s.date() - c.date()).days + 1)
                   if rules.off.get((c + timedelta(days=i)).date().isoformat())), None)
@@ -475,8 +575,8 @@ def _reason(why, c: datetime, s: datetime, secs: float, rules: Rules, today) -> 
     if kind == "end":
         return (f"Finirait à {_fmt(c + timedelta(seconds=secs))}, après l'arrêt de {_fmt(end)} : "
                 + (f"reportée au lendemain, {nxt}" if s.date() != c.date() else f"reportée {nxt}"))
-    rt = rules.run_txt or {}
-    return f"Imprimante à l'arrêt (fonctionne de {rt.get('from')} à {rt.get('to')}) : lancée {nxt}"
+    rt = ((rules.we or {}).get("run") if rules.special(s.date()) and rules.we_run else None) or rules.run_txt or {}
+    return f"Imprimante à l'arrêt (fonctionne de {rt.get('from')} à {rt.get('to')}{' le week-end' if rules.special(s.date()) and rules.we_run else ''}) : lancée {nxt}"
 
 
 async def _live_print(d: dict) -> dict:
@@ -1575,6 +1675,11 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
             d["order"] = [nk if x == g else x for x in d["order"]]
             dirty = True
             logger.info(f"[PLAN] {g} -> {nk} : meme modele et meme plateau (variante rattachee autrement), son jour et son heure suivent")
+    # les absences passees (06/11/2026) : inutile de les garder une fois l'heure atteinte
+    left = [x for x in d.get("away") or [] if f"{x.get('date')}T{x.get('to')}" > now.isoformat(timespec="minutes")]
+    if len(left) != len(d.get("away") or []):
+        d["away"] = left
+        dirty = True
     miss = d.setdefault("missing", {})
     for k in list(miss):
         if k in keys or (k not in d["pins"] and k not in d["locked"]):

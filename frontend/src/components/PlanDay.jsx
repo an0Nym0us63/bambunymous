@@ -315,6 +315,21 @@ export const dayEnd = p => {
 };
 // une bobine qui se videra en pleine impression (06/11/2026) : vers quelle heure
 export const runoutTxt = r => `🔄 ${r.name} se vide vers ${+r.at.slice(11, 13)} h${r.at.slice(14, 16) !== "00" ? ` ${r.at.slice(14, 16)}` : ""} (reste ${r.left} g, il en faut ${r.need})`;
+// les absences de quelques heures (06/11/2026) : un jour, de telle heure a telle heure ; jusqu'a vingt
+function AwayList({ list, set }) {
+  const tomorrow = (() => { const t = new Date(); t.setDate(t.getDate() + 1); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; })();
+  return <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    {list.map((w, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      <input type="date" value={w.date} onChange={e => set(list.map((x, k) => k === i ? { ...x, date: e.target.value } : x))} style={tin}/>
+      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>de</span>
+      <input type="time" value={w.from} onChange={e => set(list.map((x, k) => k === i ? { ...x, from: e.target.value } : x))} style={tin}/>
+      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>à</span>
+      <input type="time" value={w.to} onChange={e => set(list.map((x, k) => k === i ? { ...x, to: e.target.value } : x))} style={tin}/>
+      <button type="button" onClick={() => set(list.filter((_, k) => k !== i))} aria-label="Retirer" style={mini}>✕</button>
+    </div>)}
+    {list.length < 20 && <button type="button" onClick={() => set([...list, { date: tomorrow, from: "13:00", to: "16:00" }])} style={{ ...seg, alignSelf: "flex-start" }}>＋ Une absence</button>}
+  </div>;
+}
 // les creneaux de chargement (06/11/2026) : jusqu'a quatre plages
 function LoadWins({ list, set }) {
   return <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -364,6 +379,8 @@ export function PlanSettings({ s, dur, onSave, onClose }) {
   const [loadWin, setLoadWin] = useState(s?.load_win || []);
   const [durMode, setDurMode] = useState(s?.dur_mode || "off");
   const [durPct, setDurPct] = useState(String(s?.dur_pct ?? 0));
+  const [away, setAway] = useState(s?.away || []);
+  const [we, setWe] = useState(s?.we || null);
   const [busy, setBusy] = useState(false);
   const range = (v, set, def, offTxt, onTxt) => <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -374,7 +391,7 @@ export function PlanSettings({ s, dur, onSave, onClose }) {
       de <input type="time" value={v.from} onChange={e => set({ ...v, from: e.target.value })} style={tin}/>
       à <input type="time" value={v.to} onChange={e => set({ ...v, to: e.target.value })} style={tin}/></div>}
   </div>;
-  const save = async () => { setBusy(true); try { await onSave({ gap: Math.max(0, parseInt(gap) || 0), run, launch, opt_mode: optMode, auto_new: autoNew, days_off: daysOff, load_win: loadWin, dur_mode: durMode, dur_pct: parseInt(durPct) || 0 }); } finally { setBusy(false); } };
+  const save = async () => { setBusy(true); try { await onSave({ gap: Math.max(0, parseInt(gap) || 0), run, launch, opt_mode: optMode, auto_new: autoNew, days_off: daysOff, load_win: loadWin, dur_mode: durMode, dur_pct: parseInt(durPct) || 0, away, we }); } finally { setBusy(false); } };
   const modes = (v, set, extra) => <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
     {[...(extra ? [extra] : []), ...OPT_MODES].map(([k, ic, l, tip]) => <button key={k} type="button" data-tip={tip} onClick={() => set(k)}
       style={{ ...seg, ...(v === k ? segOn : {}) }}>{ic} {l}</button>)}</div>;
@@ -398,6 +415,23 @@ export function PlanSettings({ s, dur, onSave, onClose }) {
       <div style={hint}>Quand quelqu'un est là pour lancer. Avec 8 h – minuit, une impression peut finir à 2 h du matin, mais la suivante attend 8 h.</div>
     </div>
     <div>
+      {/* le week-end et les jours feries (06/11/2026) : d'autres horaires, au choix */}
+      <div style={lab}>🏖 Week-end et jours fériés</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <button type="button" onClick={() => setWe(null)} style={{ ...seg, ...(we ? {} : segOn) }}>Mêmes horaires</button>
+        <button type="button" onClick={() => setWe(we || { on: true, run, launch: launch ? { ...launch, from: "10:00" } : { from: "10:00", to: "00:00" }, holidays: true })}
+          style={{ ...seg, ...(we ? segOn : {}) }}>D'autres horaires</button>
+      </div>
+      {we && <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8, padding: "10px 12px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface2)" }}>
+        <div><div style={{ ...lab, fontSize: 12 }}>🔌 Fonctionnement le week-end</div>{range(we.run, v => setWe({ ...we, run: v }), { from: "08:00", to: "22:00" }, "24 h/24", "Une plage")}</div>
+        <div><div style={{ ...lab, fontSize: 12 }}>▶ Lancement le week-end</div>{range(we.launch, v => setWe({ ...we, launch: v }), { from: "10:00", to: "00:00" }, "À toute heure", "Une plage")}</div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 700, color: "var(--text2)", cursor: "pointer" }}>
+          <input type="checkbox" checked={!!we.holidays} onChange={e => setWe({ ...we, holidays: e.target.checked })}/> Aussi les jours fériés</label>
+      </div>}
+      <div style={hint}>Le samedi et le dimanche (et les jours fériés, au choix : 1er janvier, lundi de Pâques, 1er et 8 mai, Ascension, lundi de
+        Pentecôte, 14 juillet, 15 août, 1er et 11 novembre, Noël), ces heures remplacent celles de la semaine.</div>
+    </div>
+    <div>
       {/* les durees (06/11/2026) : l'ecart mesure, en proportion, et le choix de le corriger */}
       <div style={lab}>⏱ Durées des impressions</div>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>{dur?.n
@@ -418,6 +452,13 @@ export function PlanSettings({ s, dur, onSave, onClose }) {
       <LoadWins list={loadWin} set={setLoadWin}/>
       <div style={hint}>Quand tu peux changer une bobine. Sans créneau : à toute heure de lancement. Avec « 8 h – 9 h » et « 19 h – 23 h », un plateau qui
         demande une bobine à charger attend l'un d'eux ; les autres partent à toute heure. L'optimiseur en tient compte.</div>
+    </div>
+    <div>
+      {/* les absences de quelques heures (06/11/2026) : rien ne se lance ; elles s'effacent une fois passees */}
+      <div style={lab}>🚶 Absences sur une journée</div>
+      <AwayList list={away} set={setAway}/>
+      <div style={hint}>« Demain de 13 h à 16 h, je ne suis pas là » : rien ne se lance pendant ; le planning et l'optimiseur y font passer une
+        impression lancée avant. Une absence passée s'efface d'elle-même.</div>
     </div>
     <div>
       <div style={lab}>📅 Jours particuliers</div>
