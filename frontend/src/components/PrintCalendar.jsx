@@ -384,10 +384,11 @@ export default function PrintCalendar() {
   </div> : null;
   return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
     {/* le mois et ses chiffres ; la date et ‹ › restent en haut au defilement (05/11/2026 au telephone, 06/11/2026 partout) */}
-    <div style={{ display: "flex", alignItems: "center", gap: 8, position: "sticky", top: 0, zIndex: 20,
+    {/* sur ordinateur, la page a 16 px de marge en haut : la barre colle au bord (top negatif), sinon le contenu passe au-dessus */}
+    <div style={{ display: "flex", alignItems: "center", gap: 8, position: "sticky", zIndex: 20,
       background: "color-mix(in srgb, var(--bg) 88%, transparent)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
-      ...(wide ? { margin: "-6px 0 0", padding: "6px 0", borderBottom: "1px solid var(--border)" }
-        : { margin: "-6px -16px 0", padding: "6px 16px", borderBottom: "1px solid var(--border)" }) }}>
+      ...(width >= 768 ? { top: "calc(-16px - var(--sat, 0px))", margin: "-16px -16px 0", padding: "12px 16px 8px", borderBottom: "1px solid var(--border)" }
+        : { top: 0, margin: "-6px -16px 0", padding: "6px 16px", borderBottom: "1px solid var(--border)" }) }}>
       <button type="button" onClick={() => go(-1)} aria-label={`${unit} précédent`} data-tip={`${unit} précédent`} style={navBtn}><ChevronLeft size={18}/></button>
       <div style={{ flex: 1, minWidth: 0, textAlign: "center", fontSize: wide ? 19 : 16.5, fontWeight: 900, color: "var(--text)", textTransform: "capitalize",
         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
