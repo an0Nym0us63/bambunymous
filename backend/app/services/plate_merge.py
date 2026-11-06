@@ -7,7 +7,7 @@ chauffe, une calibration, une purge) au lieu de plusieurs. Seulement entre plate
 Ce que l'on sait, sans trancher : la taille de chaque plateau (la vue 3D l'a mesuree : largeur, profondeur, hauteur de
 l'ensemble de ses objets, gardes tels qu'ils sont poses), le plateau d'impression (le 3MF du profil : sa surface, le mode
 d'impression, les degagements de la tete). On cherche a ranger les plateaux cote a cote (rangees, rotation permise) :
-  - couche par couche : un espacement de 5 mm ;
+  - couche par couche (seulement un seul et meme filament partout) : un espacement de 5 mm ;
   - objet par objet (comme le profil, ou d'office quand les plateaux n'ont pas les memes couleurs : couche par couche,
     chaque couche changerait de filament, le temps s'envolerait) : tous sauf le plus haut sous la tige
     (extruder_clearance_height_to_rod), le plus haut sous le capot, et entre deux objets le degagement de la tete
@@ -60,6 +60,7 @@ def profile_info(did, iid) -> dict | None:
                         sizes[int(p["n"])] = [float(x) for x in p["size_mm"]]
             out = {"W": W, "H": H, "seq": str(ps.get("print_sequence") or "by layer"), "sizes": sizes,
                    "rod_h": num("extruder_clearance_height_to_rod", 40), "lid_h": num("extruder_clearance_height_to_lid", 200),
+                   "max_h": num("printable_height", 0) or num("extruder_clearance_height_to_lid", 200),
                    "rod_d": num("extruder_clearance_dist_to_rod", 50),
                    "head_r": num("extruder_clearance_max_radius", num("extruder_clearance_radius", 65))}
     except Exception:
@@ -92,6 +93,12 @@ def pack(rects: list, W: float, H: float, gap: float):
     return sum(a * b for a, b in rects) / (W * H)
 
 
+def _mixed(fils: list) -> bool:
+    """Couche par couche seulement entre plateaux d'un seul et meme filament (06/11/2026) : des couleurs differentes,
+    meme deja presentes sur un des plateaux, ajouteraient des changements d'outil a chaque couche."""
+    return not (all(len(f) == 1 for f in fils) and len(set().union(*fils)) == 1)
+
+
 def fits(info: dict, plates: list, by_obj: bool = False):
     """Ces plateaux (leurs numeros) tiennent-ils ensemble ? (confiance « haute » | « moyenne », mode) ou (None, mode).
     by_obj : objet par objet d'office (des couleurs differentes)."""
@@ -101,7 +108,8 @@ def fits(info: dict, plates: list, by_obj: bool = False):
     by_obj = by_obj or info["seq"].replace("_", " ").startswith("by object")
     if by_obj:
         hs = sorted(s[2] for s in sz)
-        if hs[-1] > info["lid_h"] or any(h > info["rod_h"] for h in hs[:-1]):
+        # le dernier imprime peut monter jusqu'a la hauteur d'impression de la machine (06/11/2026 : 325 mm sur une H2C)
+        if hs[-1] > info.get("max_h", info["lid_h"]) or any(h > info["rod_h"] for h in hs[:-1]):
             return None, "objet par objet"
         gap = info.get("head_r") or info["rod_d"]
     else:
@@ -140,7 +148,7 @@ def proposals(jobs: list, slots: int, cap: int = 12) -> list:
                     continue
                 # d'autres couleurs que celles de chaque plateau : objet par objet, sinon chaque couche changerait de filament
                 fo = [{f.get("filament_id") for f in x["fils"] if f.get("filament_id")} for x in grp + [j]]
-                mixed = len(set().union(*fo)) > max(len(s) for s in fo)
+                mixed = _mixed(fo)
                 c, m = fits(info, [x["plate"] for x in grp + [j]], mixed)
                 if c:
                     grp.append(j)
@@ -149,7 +157,7 @@ def proposals(jobs: list, slots: int, cap: int = 12) -> list:
             if len(grp) >= 2:
                 secs = sum(x["seconds"] for x in grp)
                 fo = [{f.get("filament_id") for f in x["fils"] if f.get("filament_id")} for x in grp]
-                swaps = len(grp) - 1 if len(set().union(*fo)) > max(len(s) for s in fo) else 0
+                swaps = len(grp) - 1 if _mixed(fo) else 0
                 saved = PREP_S * (len(grp) - 1) - SWAP_S * swaps
                 if saved <= 0:
                     continue
