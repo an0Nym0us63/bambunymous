@@ -23,6 +23,7 @@ K_WEEK = "NOTIF_WEEKLY_SENT"        # "AAAA-MM-JJ" du dernier resume
 K_IDLE = "NOTIF_IDLE_SENT"          # id du dernier print au moment du rappel
 K_UPD = "NOTIF_UPDATE_SENT"         # dernier commit annonce
 K_QREADY = "NOTIF_QUEUE_READY"      # modeles de « A faire » deja imprimables
+K_PGONE = "NOTIF_PROFILE_GONE"      # profils retenus disparus de MakerWorld, deja signales
 K_DRYN = "NOTIF_DRY_NEEDED"         # bobines a secher deja signalees
 K_DRYF = "NOTIF_DRY_FORGOTTEN"      # par unite AMS : {"was", "idle", "sent"}
 K_ACC = "NOTIF_ACCESSORIES"         # {id accessoire: "low" | "out"} deja signales
@@ -637,6 +638,26 @@ async def boost_tokens_tick(cfg) -> int:
     return sent
 
 
+async def profile_gone_tick(cfg) -> int:
+    """Un profil retenu dans « A faire » qui n'existe plus sur MakerWorld (06/11/2026) : une fois par profil."""
+    from . import mw_queue as Q
+    models = (Q._CACHE[1] or {}).get("models") or []
+    gone = {f"{r['design_id']}|{r['profile_gone']}": r for r in models if r.get("profile_gone")}
+    prev = await _get(K_PGONE, None)
+    await _put(K_PGONE, sorted(gone))
+    news = [r for k, r in gone.items() if k not in (prev or [])]
+    if prev is None or not news:
+        return 0
+    name = lambda r: r.get("title_fr") or r.get("title") or r["design_id"]
+    title = f"⚠️ Profil retiré de MakerWorld : {name(news[0])}" if len(news) == 1 else f"⚠️ {len(news)} profils retenus retirés de MakerWorld"
+    lines = [f"• {name(r)}" for r in news[:6]]
+    lines.append("Le profil que tu avais retenu n'existe plus (retiré ou remplacé par son créateur). « À faire » prend le profil "
+                 "par défaut en attendant : choisis-en un dans sa fiche.")
+    await N.notify("mw_profile_gone", title, "\n".join(lines), click=N.app_link(cfg, "/prints?tab=queue"),
+                   attach=news[0].get("cover_url"), priority=3)
+    return 1
+
+
 async def plan_tick(cfg) -> int:
     """Le planning (05/11/2026) : a l'heure prevue, l'imprimante libre, ce qu'il faut lancer."""
     from . import planner
@@ -648,7 +669,7 @@ async def plan_tick(cfg) -> int:
 # tiennent a jour meme quand leur notification est coupee).
 _TICKS = [(("attention_new",), attention_tick), (("weekly_summary",), weekly_tick), (("printer_idle",), idle_tick),
           (None, achievements_tick), (("friend_achievement",), friend_achievements_tick),
-          (("mw_queue_ready",), queue_ready_tick),
+          (("mw_queue_ready",), queue_ready_tick), (("mw_profile_gone",), profile_gone_tick),
           (("dry_needed_loaded",), dry_needed_tick), (("dry_forgotten",), dry_forgotten_tick),
           (("accessory_low", "accessory_out"), accessories_tick), (("objects_unsold",), unsold_tick),
           (("print_overdue",), overdue_tick), (("mw_auth_lost",), mw_auth_tick),

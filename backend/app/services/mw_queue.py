@@ -920,6 +920,10 @@ async def _compute(fresh: bool = False) -> dict:
                "plates_ready": [], "plates_count": 0, "_need": {}, "_miss": {}, "_inprog": m.get("in_progress") or 0,
                "profile": None, "seconds": None, "weight_g": 0.0, "filaments": [], "status": "unknown",
                "default_instance": next((p.get("instance_id") for p in profiles if p.get("default")), None)}
+        # le profil retenu n'existe plus sur MakerWorld (06/11/2026 : retire ou remplace par son createur) ; la liste prend
+        # en attendant le profil par defaut, et le dit (une notification aussi)
+        if chosen_plan and profiles and not m.get("error") and not any(p.get("instance_id") == plan.get("instance_id") for p in profiles):
+            row["profile_gone"] = str(plan.get("instance_id"))
         if prof:
             sel = plan.get("plates") if plan and plan.get("instance_id") == prof.get("instance_id") else None
             plates = [pl for pl in prof.get("plates") or [] if sel is None or pl.get("index") in sel]

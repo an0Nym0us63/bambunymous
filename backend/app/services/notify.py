@@ -501,6 +501,15 @@ EVENTS["mw_queue_ready"] = {
     "sample": {"title": "✅ Prêt à imprimer : Lampe lune", "priority": 2, "attach": _SAMPLE_COVER, "link": "/prints?tab=queue",
                "message": "🧵 Tout le filament est en stock (2 couleurs, 184 g).\n✨ Déjà dans l'AMS."},
 }
+EVENTS["mw_profile_gone"] = {
+    "section": "mw", "label": "Profil retenu retiré de MakerWorld",
+    "description": "Le profil que tu avais retenu pour un modèle de « À faire » n'existe plus sur MakerWorld (retiré ou "
+                   "remplacé par son créateur) : « À faire » prend le profil par défaut en attendant que tu en choisisses un. "
+                   "Une fois par profil (relevé toutes les 15 min).",
+    "options": [],
+    "sample": {"title": "⚠️ Profil retiré de MakerWorld : Lampe lune", "priority": 3, "attach": _SAMPLE_COVER, "link": "/prints?tab=queue",
+               "message": "• Lampe lune\nLe profil que tu avais retenu n'existe plus (retiré ou remplacé par son créateur). « À faire » prend le profil par défaut en attendant : choisis-en un dans sa fiche."},
+}
 EVENTS["plan_due"] = {
     "section": "prints", "label": "Impression du planning à lancer",
     "description": "À l'heure prévue par le planning (calendrier des impressions), l'imprimante libre : ce qu'il faut lancer, "
@@ -562,7 +571,7 @@ _ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_en
           "printer_hms", "printer_offline", "bed_cooled", "printer_firmware",
           "dry_started", "dry_done", "dry_needed_loaded", "dry_forgotten",
           "spool_loaded", "spool_removed", "ams_humidity", "spool_runout", "spool_low", "spool_short", "stock_low", "fil_to_order", "order_mail",
-          "printer_idle", "weekly_summary", "mw_queue_ready", "app_update", "app_started"]
+          "printer_idle", "weekly_summary", "mw_queue_ready", "mw_profile_gone", "app_update", "app_started"]
 EVENTS = {**{k: EVENTS[k] for k in _ORDER if k in EVENTS}, **{k: v for k, v in EVENTS.items() if k not in _ORDER}}
 
 

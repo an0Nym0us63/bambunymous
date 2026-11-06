@@ -512,6 +512,8 @@ export default function MwQueue() {
                     {r.printing && <span data-tip="En cours d'impression" style={{ ...tag, color:"white", background:"linear-gradient(135deg, #3B82F6, #6366F1)" }}>
                       🖨️ En cours{r.progress != null ? ` · ${r.progress} %` : ""}{r.remaining_min ? ` · ${fmtDur(r.remaining_min * 60)}` : ""}</span>}
                     {r.new && <span style={{ ...tag, color:"#3b82f6", background:"rgba(59,130,246,0.14)" }}>✨ Nouveau</span>}
+                    {r.profile_gone && <span data-tip="Le profil retenu n'existe plus sur MakerWorld (retiré ou remplacé par son créateur) : le profil par défaut le remplace en attendant ; choisis-en un dans sa fiche"
+                      style={{ ...tag, color:"#B45309", background:"rgba(245,158,11,0.16)" }}>⚠️ Profil retiré</span>}
                     {r.planned
                       ? <span data-tip="Profil, plateaux et filaments retenus depuis la fiche" style={{ ...tag, color:"#16a34a", background:"rgba(34,197,94,0.14)" }}>📌 Retenu</span>
                       : <span data-tip="Profil retenu par l'appli, tous les plateaux, filament le plus proche du stock" style={{ ...tag, color:"var(--muted)", background:"var(--surface)", border:"1px dashed var(--border)" }}>Par défaut</span>}
