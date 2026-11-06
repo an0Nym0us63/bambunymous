@@ -245,13 +245,14 @@ export function PlanDashboard({ s, dur, now, onLegend }) {
   </div>;
 }
 
-// le changement de bobine d'un plateau (06/11/2026), en court : « Bleu ciel ⇄ Silver » (charger l'un a la place de
+// le changement de bobine d'un plateau (06/11/2026), en court : « Bleu ciel à la place de Silver » (la double fleche ⇄ ne disait pas
+// laquelle charger ; charger l'un a la place de
 // l'autre), « Bleu ciel (place libre) » ; swapLong le dit en phrase
 // qui remplace qui (06/11/2026) : swap_out, aligne sur load, dit pour chacun la bobine dont il prend la place (null : une
 // place libre ; les premiers charges prennent les places libres) ; l'ancien appariement par rang sinon
 const outOf = (j, i) => j.swap_out ? [j.swap_out[i], j.swap_out_ids?.[i]] : [j.unload?.[i], j.unload_ids?.[i]];
 const freeOf = (j, i) => j.swap_out ? j.swap_out[i] == null : !!j.free_slot;
-export const swapTxt = j => !j.load?.length ? "" : j.load.map((x, i) => outOf(j, i)[0] ? `${x} ⇄ ${outOf(j, i)[0]}` : `${x}${freeOf(j, i) ? " (place libre)" : ""}`).join(", ");
+export const swapTxt = j => !j.load?.length ? "" : j.load.map((x, i) => outOf(j, i)[0] ? `${x} à la place de ${outOf(j, i)[0]}` : `${x}${freeOf(j, i) ? " (place libre)" : ""}`).join(", ");
 export const swapLong = j => !j.load?.length ? "" : j.load.map((x, i) => outOf(j, i)[0] ? `charger ${x} à la place de ${outOf(j, i)[0]}`
   : `charger ${x}${freeOf(j, i) ? " dans l'emplacement libre" : ""}`).join(", ");
 // le plateau d'impression (06/11/2026) : son nom, et le changement a faire avant un plateau du planning
@@ -274,9 +275,9 @@ export function FilLink({ id, label }) {
   return <span role="link" tabIndex={0} data-tip="Ouvrir la fiche du filament" onClick={e => { e.stopPropagation(); nav(`/filaments?id=${id}`); }}
     style={{ cursor: "pointer", whiteSpace: "normal" }}><FilDot id={id}/><span style={{ textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>{label}</span></span>;
 }
-// le changement de bobine, en court et en pastilles : « ● X ⇄ ● Y », « ● X (place libre) »
+// le changement de bobine, en court et en pastilles : « ● X à la place de ● Y » (celle qui sort, plus pale), « ● X (place libre) »
 export const SwapShort = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={j.load_ids?.[i]} label={x}/>
-  {outOf(j, i)[0] ? <> ⇄ <FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]}/></> : freeOf(j, i) ? " (place libre)" : ""}</React.Fragment>)}</>;
+  {outOf(j, i)[0] ? <><span style={{ fontWeight: 600, opacity: 0.75 }}> à la place de </span><span style={{ opacity: 0.7 }}><FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]}/></span></> : freeOf(j, i) ? " (place libre)" : ""}</React.Fragment>)}</>;
 export const FilLinks = ({ labels, ids }) => <>{(labels || []).map((l, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={ids?.[i]} label={l}/></React.Fragment>)}</>;
 // le changement de bobine en phrase, ses filaments cliquables : « charger X a la place de Y »
 export const SwapLinks = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}charger <FilLink id={j.load_ids?.[i]} label={x}/>
