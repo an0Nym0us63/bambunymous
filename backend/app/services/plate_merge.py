@@ -107,7 +107,7 @@ def fits(info: dict, plates: list):
     return ("haute" if used <= 0.6 else "moyenne"), ("objet par objet" if by_obj else "couche par couche")
 
 
-def proposals(jobs: list, slots: int, cap: int = 6) -> list:
+def proposals(jobs: list, slots: int, cap: int = 12) -> list:
     """Les regroupements possibles dans la file : par modele et profil, les plateaux libres (ni figes, ni au jour fige),
     du plus gros au plus petit, ajoutes tant qu'ils tiennent et que leurs filaments tiennent dans l'AMS.
     [{keys, plates, design_id, title, conf, mode, saved_s, seconds}]"""
@@ -143,4 +143,5 @@ def proposals(jobs: list, slots: int, cap: int = 6) -> list:
                 out.append({"keys": [x["key"] for x in grp], "plates": [x["plate"] for x in grp], "design_id": grp[0]["design_id"],
                             "title": grp[0]["title"], "conf": conf, "mode": mode, "saved_s": PREP_S * (len(grp) - 1),
                             "seconds": max(60, secs - PREP_S * (len(grp) - 1))})
-    return out
+    # les plus rentables d'abord (06/11/2026 : onze echantillons passaient apres deux regroupements de quatre)
+    return sorted(out, key=lambda p: (p["conf"] != "haute", -p["saved_s"]))

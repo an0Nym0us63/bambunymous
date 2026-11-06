@@ -1036,7 +1036,7 @@ def _merge_advice(placed: list) -> list:
     try:
         from .plate_merge import proposals
         out = []
-        for p in proposals(placed, _slots())[:3]:
+        for p in proposals(placed, _slots())[:5]:
             out.append({"kind": "merge", "icon": "🧩", "conf": p["conf"],
                         "text": f"{p['title']} : les plateaux {', '.join(str(x) for x in p['plates'])} tiennent sur un seul plateau "
                                 f"({p['mode']}) : {len(p['keys']) - 1} lancement{'s' if len(p['keys']) > 2 else ''} de moins, "
