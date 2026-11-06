@@ -361,7 +361,23 @@ def account_totals(hist: dict, daily: dict, ms: list, days) -> dict:
     return {"totals": tot, "complete": covered}
 
 
+_OV: dict = {}
+
+
 async def overview(fresh: bool = False, period: str = "30") -> dict:
+    """(06/11/2026) gardee une minute : la tuile, la page et le bandeau la redemandaient, 0,25 s a chaque fois (les points
+    d'une annee repris un par un) ; « fresh » la refait."""
+    import copy
+    import time as _t
+    hit = _OV.get(str(period))
+    if not fresh and hit and _t.monotonic() - hit[0] < 60:
+        return copy.deepcopy(hit[1])
+    out = await _overview(fresh, period)
+    _OV[str(period)] = (_t.monotonic(), copy.deepcopy(out))
+    return out
+
+
+async def _overview(fresh: bool = False, period: str = "30") -> dict:
     prof = await profile(fresh)
     ms = await models(fresh)
     days = PERIODS.get(str(period), 30)

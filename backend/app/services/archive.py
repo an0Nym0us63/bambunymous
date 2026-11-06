@@ -214,11 +214,34 @@ def _index() -> dict:
 
 
 def _index_save() -> None:
+    _NAS_SEEN.clear()                          # l'index change : les presences retenues se reverifient
     p = _index_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps(_INDEX["v"] or {}, ensure_ascii=False), encoding="utf-8")
     tmp.replace(p)
+
+
+# (06/11/2026) la presence d'un fichier sur le NAS, retenue un moment : le bilan des 3MF d'origine la demandait pour
+# chaque impression a chaque ouverture (5 s au demarrage, NAS en reseau). Vue 10 min, absente 1 min.
+_NAS_SEEN: dict = {}
+
+
+def _nas_file(q: Path) -> bool:
+    import time as _t
+    k = str(q)
+    hit = _NAS_SEEN.get(k)
+    now = _t.monotonic()
+    if hit and now - hit[0] < (600 if hit[1] else 60):
+        return hit[1]
+    try:
+        ok = q.is_file()
+    except OSError:
+        ok = False
+    if len(_NAS_SEEN) > 20000:
+        _NAS_SEEN.clear()
+    _NAS_SEEN[k] = (now, ok)
+    return ok
 
 
 def local_or_archive(rel: str) -> Path | None:
@@ -230,7 +253,7 @@ def local_or_archive(rel: str) -> Path | None:
     if not e:
         return None
     q = Path(e.get("root") or DEFAULT_ROOT) / e["to"]
-    return q if q.is_file() else None
+    return q if _nas_file(q) else None
 
 
 # Ce qui n'est plus que sur le NAS, par dossier (28/10/2026) : la fiche d'une impression ou d'un groupe le signale
@@ -298,10 +321,7 @@ def archived_path(key: str) -> Path | None:
     if not isinstance(e, dict) or not e.get("to"):
         return None
     q = Path(e.get("root") or DEFAULT_ROOT) / e["to"]
-    try:
-        return q if q.is_file() else None
-    except OSError:
-        return None
+    return q if _nas_file(q) else None
 
 
 # ── Ce qui, pour un MODELE MakerWorld, n'est plus que sur le NAS (28/10/2026) : vue 3D, 3MF d'origine, documents ──

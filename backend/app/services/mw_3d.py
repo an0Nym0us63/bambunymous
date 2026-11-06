@@ -1933,6 +1933,9 @@ def _all_sources() -> list:
     return out
 
 
+_NAS_OK: dict = {}
+
+
 def _view_ok(src: Path, key: str) -> bool:
     """La vue est prete : en local, ou sa copie a jour sur le NAS (la vue la reprend a l'ouverture ; pas recopiee
     en local d'avance, ce qui defairait le vidage)."""
@@ -1942,8 +1945,18 @@ def _view_ok(src: Path, key: str) -> bool:
         from .archive import _index, DEFAULT_ROOT
         e = _index().get(f"3d:{key}")
         if isinstance(e, dict) and e.get("to"):
-            m = json.loads((Path(e.get("root") or DEFAULT_ROOT) / e["to"] / "plates.json").read_text(encoding="utf-8"))
-            return _fresh(m)
+            # (06/11/2026) la copie du NAS relue au plus toutes les 10 min (2 s au demarrage pour toutes les vues)
+            import time as _t
+            q = Path(e.get("root") or DEFAULT_ROOT) / e["to"] / "plates.json"
+            hit = _NAS_OK.get(str(q))
+            if hit and _t.monotonic() - hit[0] < 600:
+                return hit[1]
+            try:
+                ok = _fresh(json.loads(q.read_text(encoding="utf-8")))
+            except (OSError, ValueError):
+                ok = False
+            _NAS_OK[str(q)] = (_t.monotonic(), ok)
+            return ok
     except (OSError, ValueError, ImportError):
         pass
     return False
