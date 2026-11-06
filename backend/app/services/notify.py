@@ -656,9 +656,17 @@ def options_of(cfg: dict, event: str) -> dict:
     return {o["key"]: _opt_value(o, stored.get(o["key"], o["default"])) for o in EVENTS[event]["options"]}
 
 
+# une notification jamais reglee suit celle dont elle decoule (06/11/2026) : « Filament a charger » arrivait desactivee
+# chez qui recevait deja « Impression du planning a lancer »
+FOLLOWS = {"plan_load": "plan_due"}
+
+
 def global_on(cfg, event: str) -> bool:
     """Active par l'administrateur : part sur ntfy et Telegram."""
-    return bool(cfg and ((cfg.get("events") or {}).get(event) or {}).get("enabled"))
+    ev = (cfg or {}).get("events") or {}
+    if event in FOLLOWS and "enabled" not in (ev.get(event) or {}):
+        return global_on(cfg, FOLLOWS[event])
+    return bool(cfg and (ev.get(event) or {}).get("enabled"))
 
 
 def app_wants(cfg, user, event: str) -> bool:
@@ -666,6 +674,8 @@ def app_wants(cfg, user, event: str) -> bool:
     part : comme l'administrateur."""
     prefs = (cfg.get("app_prefs") or {}).get(user or "") if user else None
     v = prefs.get(event) if isinstance(prefs, dict) else None
+    if v is None and event in FOLLOWS and isinstance(prefs, dict) and prefs.get(FOLLOWS[event]) is not None:
+        return app_wants(cfg, user, FOLLOWS[event])  # jamais reglee sur ce telephone : comme celle dont elle decoule
     if isinstance(v, dict):
         return bool(v.get("app"))
     if v is not None:                       # anciens choix : vrai / faux, "off" / "journal" / "app"
