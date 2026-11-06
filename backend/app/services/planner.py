@@ -1042,7 +1042,10 @@ def _merge_advice(placed: list) -> list:
                                 + (f"{len(p['plates'])} exemplaires du plateau {p['plates'][0]}" if len(set(p['plates'])) == 1
                                    else f"les plateaux {', '.join(str(x) for x in p['plates'])}")
                                 + f"{' (couleurs différentes)' if p.get('colors') else ''} tiennent sur un seul plateau "
-                                f"({p['mode']}) : {len(p['keys']) - 1} lancement{'s' if len(p['keys']) > 2 else ''} de moins, "
+                                f"({p['mode']}"
+                                + (f" ; en dernier objet {'le plateau ' + str(p['last']['plate']) if len(set(p['plates'])) > 1 else p['last']['title']}, "
+                                   f"{p['last']['h']} mm, plus haut que la tige à {p['last']['rod_h']} mm" if p.get("last") else "")
+                                + f") : {len(p['keys']) - 1} lancement{'s' if len(p['keys']) > 2 else ''} de moins, "
                                 f"{_dur(p['saved_s'])} gagnées. Confiance {p['conf']}. À regrouper ensuite dans Bambu Studio.",
                         "action": {"kind": "merge", "keys": p["keys"]}})
         return out

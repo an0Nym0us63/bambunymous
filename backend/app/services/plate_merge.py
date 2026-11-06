@@ -155,8 +155,16 @@ def proposals(jobs: list, slots: int, cap: int = 12) -> list:
                     continue
                 ts = [x["title"] for x in grp]
                 title = ts[0] if len(set(ts)) == 1 else (lambda p: p[:p.rfind(" · ")] if " · " in p else p)(ts[0])
+                # objet par objet, un objet plus haut que la tige (06/11/2026) : il passe, mais imprime en dernier (en
+                # redescendant sur les autres, la tete butterait sur la tige) ; le conseil le dit
+                last = None
+                if mode == "objet par objet":
+                    hi = max(grp, key=lambda x: (info["sizes"].get(x["plate"]) or [0, 0, 0])[2])
+                    h = (info["sizes"].get(hi["plate"]) or [0, 0, 0])[2]
+                    if h > info["rod_h"]:
+                        last = {"key": hi["key"], "plate": hi["plate"], "title": hi["title"], "h": round(h), "rod_h": round(info["rod_h"])}
                 out.append({"keys": [x["key"] for x in grp], "plates": [x["plate"] for x in grp], "design_id": grp[0]["design_id"],
-                            "title": title, "conf": conf, "mode": mode, "saved_s": saved, "colors": bool(swaps),
+                            "title": title, "conf": conf, "mode": mode, "saved_s": saved, "colors": bool(swaps), "last": last,
                             "seconds": max(60, secs - saved)})
     # les plus rentables d'abord (06/11/2026 : onze echantillons passaient apres deux regroupements de quatre)
     return sorted(out, key=lambda p: (p["conf"] != "haute", -p["saved_s"]))
