@@ -2908,14 +2908,22 @@ def _vue3d_clause():
 
 
 def _v3slots(folder: Path) -> dict:
-    """{numero: date} des vues 3D gardees dans ce dossier."""
+    """{numero: date} des vues 3D gardees dans ce dossier. (06/11/2026) une lecture du dossier au lieu de quatre stat :
+    la liste des impressions le demande deux fois par impression."""
+    want = {_v3name(n): n for n in range(1, V3_MAX + 1)}
     out = {}
-    for n in range(1, V3_MAX + 1):
-        try:
-            out[n] = int((folder / _v3name(n)).stat().st_mtime)
-        except OSError:
-            pass
-    return out
+    try:
+        with os.scandir(folder) as it:
+            for e in it:
+                n = want.get(e.name)
+                if n:
+                    try:
+                        out[n] = int(e.stat().st_mtime)
+                    except OSError:
+                        pass
+    except OSError:
+        pass
+    return dict(sorted(out.items()))
 
 
 async def _save_vue3d(folder: Path, file: UploadFile, slot: int = 0) -> int:
