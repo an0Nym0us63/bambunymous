@@ -4062,7 +4062,8 @@ function Spool({ status, o, sz }) {
   const type = si.fila_type || si.material || t.filament_type;
   const g = lv?.now ?? si.remaining_weight_g, tot = si.initial_weight_g;
   const pct = g != null && tot ? Math.max(0, Math.min(1, g / tot)) : t.remain != null && t.remain >= 0 ? t.remain / 100 : null;
-  const slot = `${slotOf(t)} · ${amsLab(t.ams)}`;
+  // « B3 · AMS-B » ; un HT ou un externe n'a qu'un nom (06/11/2026 : « HT-A · HT-A »)
+  const slot = t.ams.id >= 128 ? slotOf(t) : `${slotOf(t)} · ${amsLab(t.ams)}`;
   const weight = g != null ? `${lv ? "≈ " : ""}${Math.round(g)} g` : pct != null ? `${Math.round(pct * 100)} %` : "—";
   const barCol = pct == null ? "#94a3b8" : pct < 0.15 ? "#ef4444" : pct < 0.35 ? "#f59e0b" : color;
   // une couleur tres claire (blanc, jade…) se perd sur le fond : la barre garde un contour, le texte du % passe en sombre
@@ -4204,7 +4205,9 @@ function Spool({ status, o, sz }) {
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
             {H >= 90 && <div>{chip(slot, "#8B5CF6")}</div>}
             <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-              <span style={{ fontSize: 20, fontWeight: 900, color: "var(--text)", lineHeight: 1.15, minWidth: 0, ...clamp(1) }}>{name}</span>
+              {/* sur une ligne, coupe en fin seulement (06/11/2026 : la ligne tronquee coupait « Pri-White » au tiret, « Pri-… ») */}
+              <span style={{ fontSize: 20, fontWeight: 900, color: "var(--text)", lineHeight: 1.15, minWidth: 0, flex: "0 1 auto",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
               {pctPill(H < 80 ? 12 : 14)}</span>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {[type, si.brand, H < 80 && g != null ? `${Math.round(g)} g` : null].filter(Boolean).join(" · ")}</span>
