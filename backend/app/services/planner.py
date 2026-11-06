@@ -495,13 +495,33 @@ def _live():
     return None
 
 
+_SLOTS = {"n": None}
+
+
 def _slots() -> int:
-    """Les emplacements de tous les AMS (et la bobine externe)."""
+    """Les places du planning dans les AMS (06/11/2026) : un filament par place. Les filaments charges, plus les
+    emplacements vraiment vides ; une bobine non reconnue occupe sa place (elle ne compte plus comme libre), deux
+    bobines du meme filament n'en font qu'un, et la bobine externe n'en est pas une (on charge dans l'AMS). Calcule par
+    _context ; sans lui, le nombre d'emplacements."""
+    if _SLOTS["n"]:
+        return _SLOTS["n"]
     try:
         from ..core.mqtt import get_state
-        return sum(len(a.trays or []) for a in get_state().ams_list or []) + 1
+        return max(1, sum(len(a.trays or []) for a in get_state().ams_list or []))
     except Exception:
-        return 5
+        return 4
+
+
+def _count_slots(ams: dict) -> int | None:
+    try:
+        from ..core.mqtt import get_state
+        trays = [t for a in get_state().ams_list or [] for t in a.trays or []]
+    except Exception:
+        return None
+    if not trays:
+        return None
+    empty = sum(1 for t in trays if t.empty or not (t.filament_type or t.spool_id))
+    return max(1, len(ams) + empty)
 
 
 # ── le planning ──────────────────────────────────────────────────────────────
@@ -649,6 +669,7 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
         placed.append({**j, "awaits_order": awaits, "low_after": low, "low_info": low_info, "start": s.isoformat(timespec="minutes"), "end": e.isoformat(timespec="minutes"),
                        "day": s.date().isoformat(), "pinned": j["key"] in pins, "locked": j["key"] in locked, "reasons": rs, "too_long": too_long,
                        "load": [f["name"] for f in need], "unload": unload, "runout": runout,
+                       "free_slot": bool(need) and len(unload) < len(need),
                        "wait_s": int((s - c).total_seconds()) if s > c else 0})
         cursor = e + rules.gap
 
@@ -1112,6 +1133,7 @@ async def _context(tz: int | None):
     ams = await Q._ams_stock()
     loaded = set(ams.keys())
     d["_ams"] = ams
+    _SLOTS["n"] = _count_slots(ams)
     d["_names"] = {int(k): v.get("name") for k, v in stock_of.items() if v.get("name")}
     miss = [f for f in loaded if f not in d["_names"]]
     if miss:
@@ -1861,6 +1883,8 @@ async def tick(cfg, r: dict | None = None) -> int:
             body = f"Pour {_title(j)} ({_dur(j['seconds'])}), prévue {when}."
             if j.get("unload"):
                 body += f"\nÀ retirer : {', '.join(j['unload'])} (elle ne resservira pas de sitôt)"
+            elif j.get("free_slot"):
+                body += "\nUn emplacement est libre : rien à retirer"
             if kept:
                 body += f"\nDéjà dans l'AMS : {', '.join(dict.fromkeys(kept))}"
             await N.notify("plan_load", f"🧵 À charger pour {_fmt(s)} : {', '.join(j['load'])}", body,

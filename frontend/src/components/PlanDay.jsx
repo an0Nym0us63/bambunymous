@@ -146,7 +146,8 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
       {j.intercalated && tag(`↔ intercalé dans ${j.intercalated.in}`, "#0EA5E9", { nuit: "Pour remplir la nuit", filaments: "Pour charger moins de filaments" }[j.intercalated.why]
         || "Pour optimiser le planning")}
       {j.due && tag(`🎯 avant le ${dueTxt(j.due)}`, j.due_ok ? "#16A34A" : "#EF4444", j.due_ok ? "L'objet sera fini à temps" : "Le dernier plateau de l'objet finit après cette date")}
-      {j.load?.length > 0 && tag(`🧵 À charger : ${j.load.join(", ")}`, "#EA580C", "Pas dans l'AMS à ce moment-là")}
+      {j.load?.length > 0 && tag(`🧵 À charger : ${j.load.join(", ")}${j.free_slot && !j.unload?.length ? " (emplacement libre)" : ""}`, "#EA580C",
+        j.free_slot && !j.unload?.length ? "Pas dans l'AMS à ce moment-là ; un emplacement est libre, rien à retirer" : "Pas dans l'AMS à ce moment-là")}
       {j.unload?.length > 0 && tag(`↩ À retirer : ${j.unload.join(", ")}`, "#64748B", "Celle qui resservira le plus tard (ou plus du tout) : on la sort pour faire la place")}
       {(j.runout || []).map(r => <React.Fragment key={r.name}>{tag(runoutTxt(r), "#B45309", "La bobine chargée ne suffit pas : prépare-en une autre de ce filament pour cette heure-là")}</React.Fragment>)}
     </div>}

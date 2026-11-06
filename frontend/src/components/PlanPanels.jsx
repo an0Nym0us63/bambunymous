@@ -104,7 +104,7 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
           {j.intercalated && <span style={{ fontSize: 11, fontWeight: 900, color: "#0EA5E9" }}>{interTxt(j)}</span>}
           {j.due && <span style={{ fontSize: 11, fontWeight: 900, color: j.due_ok ? "#16A34A" : "#EF4444" }}>🎯 avant le {dueTxt(j.due)}</span>}
           {prioChip(j.prio_m)}{j.prio_p ? prioChip(j.prio_p, { opacity: 0.85 }) : null}
-          {j.load?.length > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "#EA580C" }}>🧵 à charger : {j.load.join(", ")}</span>}
+          {j.load?.length > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "#EA580C" }}>🧵 à charger : {j.load.join(", ")}{j.free_slot && !j.unload?.length ? " (emplacement libre)" : ""}</span>}
           {j.unload?.length > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "#64748B" }}>↩ à retirer : {j.unload.join(", ")}</span>}
           {(j.runout || []).map(r => <span key={r.name} style={{ fontSize: 11, fontWeight: 900, color: "#B45309" }}>{runoutTxt(r)}</span>)}
           <StockTags j={j}/>
