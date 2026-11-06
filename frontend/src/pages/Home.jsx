@@ -1941,7 +1941,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
       {label && nozzles.length > 1 && label.startsWith("Buse") && <span style={{ fontSize: size - 2, fontWeight: 900 }}>{label.slice(-1)}</span>}
       {Math.round(v || 0)}°{target && t > 0 && <sup style={{ fontSize: "0.72em", color: "var(--muted)", fontWeight: 700, lineHeight: 0, marginLeft: 1 }}>/{Math.round(t)}°</sup>}</span>
   );
-  // le plateau en place (06/11/2026) : sur ordinateur au bout de la ligne du filament, sinon avec les temperatures
+  // le plateau en place (06/11/2026) : sur ordinateur sous les temperatures (le filament au-dessus), sinon avec elles
   const plateChip = (size, withName = true) => plate && <span data-pk=""
     data-tip={`Plateau en place : ${plate.label}${plate.name ? ` « ${plate.name} »` : ""}${plate.how === "printer" ? " (reconnu par l'imprimante)" : " (celui de la dernière impression)"}`}
     style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: size, fontWeight: 800, whiteSpace: "nowrap", color: "#0369A1" }}><IcoPlate/>
@@ -1998,10 +1998,9 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
             {tray && !tray.empty && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>
               <span style={{ width: 14, height: 14, borderRadius: "50%", ...(trayBg(tray, null, 14) || { background: "#888888" }),
                 boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2)" }}/>{tray.filament_type || "?"}
-              <span style={{ color: "var(--muted)", fontWeight: 700 }}>{slotLabel(status.active_ams_id, status.active_tray_id)}</span>
-              {plate && <span style={{ width: 6 }}/>}{plateChip(12)}</span>}
-            {(!tray || tray.empty) && plateChip(12)}
+              <span style={{ color: "var(--muted)", fontWeight: 700 }}>{slotLabel(status.active_ams_id, status.active_tray_id)}</span></span>}
             {temps(12, 10)}
+            {plateChip(12)}
           </div>
         )}
       </div>
