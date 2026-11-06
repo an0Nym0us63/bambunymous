@@ -259,6 +259,9 @@ def _manual(raw):
 _PROF_RX = None
 
 
+_IN3MF: dict = {}
+
+
 def profile_in_3mf(path) -> str | None:
     """L'identifiant du profil MakerWorld ecrit dans un 3MF tranche (DesignProfileId), None s'il n'y est pas."""
     import re
@@ -275,20 +278,28 @@ def profile_in_3mf(path) -> str | None:
     return m.group(1) if m else None
 
 
-async def profiles_from_files(rows) -> dict:
+async def profiles_from_files(rows, known: set | None = None) -> dict:
     """{print_id: profil} lu dans le 3MF tranche garde des impressions sans profil (28/10/2026), et pose sur elles
-    (une fois : la prochaine fois, l'impression le sait). rows : (id, mw_profile_id, model_3mf)."""
+    (une fois : la prochaine fois, l'impression le sait). rows : (id, mw_profile_id, model_3mf). known (06/11/2026) :
+    les profils du modele ; un profil donne qui n'en est pas (renumerote par Studio) est remplace par celui du 3MF
+    s'il en est un. Lectures gardees en memoire (un 3MF ne change pas)."""
     from sqlalchemy import update
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print
     from .archive import local_or_archive
     found = {}
     for pid, prof, m3 in rows:
-        if (prof and str(prof) != "0") or not m3:
+        has = bool(prof and str(prof) != "0")
+        if not m3 or (has and (known is None or str(prof) in known)):
             continue
-        f = local_or_archive(m3)
-        p = await asyncio.to_thread(profile_in_3mf, f) if f else None
-        if p:
+        if m3 in _IN3MF:
+            p = _IN3MF[m3]
+        else:
+            f = local_or_archive(m3)
+            p = await asyncio.to_thread(profile_in_3mf, f) if f else None
+            if f:
+                _IN3MF[m3] = p
+        if p and (not has or (p in known and p != str(prof))):
             found[pid] = p
     if found:
         async with AsyncSessionLocal() as db:
@@ -318,20 +329,23 @@ async def printed_profile(design_id: str) -> dict:
     if not rows:
         return {"profile": None, "sure": False}
     # le profil ecrit dans le 3MF tranche (imprime depuis MakerWorld) : l'indice le plus sur, et il manquait
+    base = await _base(did, True)
+    profs = [p for p in ((base.get("profiles") if isinstance(base, dict) else None) or []) if isinstance(p, dict)]
+    # (06/11/2026) aussi quand l'imprimante donne un profil que le modele n'a pas : Studio renumerote le profil a
+    # l'envoi, le 3MF garde celui d'origine
+    kn = {str(p.get(k) or "") for p in profs for k in ("instance_id", "profile_id")} - {""}
     try:
-        from_files = await profiles_from_files([(r.id, r.mw_profile_id, r.model_3mf) for r in rows])
+        from_files = await profiles_from_files([(r.id, r.mw_profile_id, r.model_3mf) for r in rows], kn or None)
     except Exception:
         logger.exception("[MW] profil lu dans les 3MF")
         from_files = {}
-    base = await _base(did, True)
-    profs = [p for p in ((base.get("profiles") if isinstance(base, dict) else None) or []) if isinstance(p, dict)]
     avec = [p for p in profs if p.get("plates")]
     if not avec:
         return {"profile": None, "sure": False}
     by_inst = {str(p.get("instance_id")): str(p.get("profile_id")) for p in profs if p.get("instance_id")}
     known: dict = {}
     for r in rows:
-        pp = str((_manual(r.mw_plates) or {}).get("profile") or r.mw_profile_id or from_files.get(r.id) or "")
+        pp = str((_manual(r.mw_plates) or {}).get("profile") or from_files.get(r.id) or r.mw_profile_id or "")
         pp = by_inst.get(pp, pp)
         if pp and pp != "0":
             known[pp] = known.get(pp, 0) + 1
@@ -410,19 +424,22 @@ async def profile_per_print(design_id: str, print_ids: list) -> dict:
             k = _rgb(hx)
             if k:
                 cols.setdefault(pid_, {})[k] = cols.get(pid_, {}).get(k, 0.0) + float(g_ or 0) + 0.1
+    base = await _base(did, True)
+    profs = [p for p in ((base.get("profiles") if isinstance(base, dict) else None) or []) if isinstance(p, dict)]
+    # (06/11/2026) aussi quand l'imprimante donne un profil que le modele n'a pas : Studio renumerote le profil a
+    # l'envoi, le 3MF garde celui d'origine
+    kn = {str(p.get(k) or "") for p in profs for k in ("instance_id", "profile_id")} - {""}
     try:
-        from_files = await profiles_from_files([(r.id, r.mw_profile_id, r.model_3mf) for r in rows])
+        from_files = await profiles_from_files([(r.id, r.mw_profile_id, r.model_3mf) for r in rows], kn or None)
     except Exception:
         logger.exception("[MW] profil lu dans les 3MF")
         from_files = {}
-    base = await _base(did, True)
-    profs = [p for p in ((base.get("profiles") if isinstance(base, dict) else None) or []) if isinstance(p, dict)]
     avec = [p for p in profs if p.get("plates")]
     by_inst = {str(p.get("instance_id")): str(p.get("profile_id")) for p in profs if p.get("instance_id")}
     out, todo = {}, []
     for r in rows:
         m = _manual(r.mw_plates) or {}
-        pp = str(m.get("profile") or r.mw_profile_id or from_files.get(r.id) or "")
+        pp = str(m.get("profile") or from_files.get(r.id) or r.mw_profile_id or "")
         pp = by_inst.get(pp, pp)
         # un profil que le modele n'a plus (04/11/2026 : identifiants changes par une mise a jour du createur) se
         # deduit comme une impression sans profil -- le nom de la tache le cite le plus souvent
