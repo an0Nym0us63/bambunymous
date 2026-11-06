@@ -123,23 +123,11 @@ def _disk_put(k: str, v) -> None:
 def bed_of_3mf(path, plate=None) -> str | None:
     """Le type de plateau d'un 3MF : celui du plateau `plate` (son reglage propre, ou celui du G-code tranche), sinon celui
     du projet. Garde en memoire selon la date du fichier."""
-    p = Path(path)
-    # une copie du NAS (hors du dossier de donnees) ne change plus une fois archivee : ni existence ni date a verifier
-    # (chaque acces au NAS passe par le reseau, 06/11/2026)
-    nas = not str(p).startswith(str(DATA_DIR))
-    if nas:
-        key = (str(p), "nas", str(plate or ""))
-        if key in _CACHE:
-            return _CACHE[key]
-        hit = _disk().get(f"{key[0]}|nas|{key[2]}", "∅")
-        if hit != "∅":
-            _CACHE[key] = hit
-            return hit
+    # la date du fichier est toujours relue, NAS compris (une copie peut y etre remplacee) : un fichier change est relu
     try:
-        if not p.is_file():
-            return None
-        if not nas:
-            key = (str(p), p.stat().st_mtime, str(plate or ""))
+        p = Path(path)
+        st = p.stat()
+        key = (str(p), st.st_mtime, str(plate or ""))
     except OSError:
         return None
     if key in _CACHE:
