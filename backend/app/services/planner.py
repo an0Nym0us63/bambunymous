@@ -1501,6 +1501,12 @@ async def plan(tz: int | None = None) -> dict:
     mark_complete(r["jobs"])
     # avance ou retard : chaque debut, compare a celui du dernier rangement
     p0 = d["plan0"]
+    # (06/11/2026) depuis quand : l'heure du dernier rangement, pour dire « par rapport a quoi »
+    if not p0 or not d.get("plan0_at"):
+        d["plan0_at"] = now.isoformat(timespec="minutes")
+        dirty = True
+    ref = datetime.fromisoformat(d["plan0_at"])
+    ref_txt = f"le planning {_day_fr(ref, now.date())} à {_fmt(ref)}" if ref.date() != now.date() else f"le planning de {_fmt(ref)}"
     for j in r["jobs"]:
         if j["key"] not in p0:
             p0[j["key"]] = j["start"]
@@ -1521,10 +1527,10 @@ async def plan(tz: int | None = None) -> dict:
                       "text": f"À lancer maintenant : {_title(first)}" + (f" (prévu il y a {_dur(late * 60)})" if late >= 10 else "")}
         elif first["drift_min"] >= 10:
             status = {"state": "late", "late_min": first["drift_min"],
-                      "text": f"{_dur(first['drift_min'] * 60)} de retard sur le planning : la suite est décalée d'autant, dans les consignes"}
+                      "text": f"{_dur(first['drift_min'] * 60)} de retard sur {ref_txt} (son dernier rangement) : la suite est décalée d'autant, dans les consignes"}
         elif first["drift_min"] <= -10:
             status = {"state": "ahead", "late_min": first["drift_min"],
-                      "text": f"{_dur(-first['drift_min'] * 60)} d'avance : la suite est avancée d'autant"}
+                      "text": f"{_dur(-first['drift_min'] * 60)} d'avance sur {ref_txt} (son dernier rangement) : la suite est avancée d'autant"}
         else:
             status = {"state": "ontime", "late_min": 0, "text": "Dans les temps"}
     # un objet « au mieux » coupe : les plateaux places entre deux de ses morceaux disent qu'ils y sont intercales
