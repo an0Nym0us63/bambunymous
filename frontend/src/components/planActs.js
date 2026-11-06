@@ -64,6 +64,13 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
         o.splice(o.indexOf(ks[0]) + 1, 0, ...ks.slice(1));
         return arrange({ order: o, pins: Object.fromEntries(ks.map(k => [k, day])) });
       },
+      // figer tout le modele (06/11/2026) : libre, le jour, ou le jour et l'heure (ses plateaux non planifiables a part)
+      freeze: async mode => {
+        const all = (pd?.jobs || []).filter(j => j.design_id === did), locked = all.filter(j => j.locked).map(j => j.key);
+        if (mode === "time") return send("/makerworld/plan/lock", { keys: all.map(j => j.key), lock: true }, "post").then(ok => { if (ok) egg("planning_fige"); });
+        if (locked.length && !(await send("/makerworld/plan/lock", { keys: locked, lock: false }, "post"))) return;
+        return arrange({ pins: Object.fromEntries(all.map(j => [j.key, mode === "day" ? j.day : null])) });
+      },
       pinAll: () => arrange({ pins: Object.fromEntries((pd?.jobs || []).filter(j => ks.includes(j.key) && !j.pinned && j.day).map(j => [j.key, j.day])) }),
       laterAll: () => j0 && send("/makerworld/plan/later", { key: j0.key, whole: true }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
       chain: mode => send("/makerworld/plan/chain", { design_id: did, mode }, "post").then(ok => { if (ok && mode) egg("planning_traite"); }),

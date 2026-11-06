@@ -1528,19 +1528,24 @@ async def set_prio(target: str, level) -> dict:
     return await arrange({"order": order})
 
 
-async def lock(key: str, on: bool = True) -> dict:
+async def lock(key: str, on: bool = True, keys: list | None = None) -> dict:
     """Figer un plateau (05/11/2026) : il garde son jour et son heure (ceux du planning a cet instant), pose sur ce
-    jour ; rien ne le deplace plus. Defiger le rend au planning (il reste pose sur son jour)."""
+    jour ; rien ne le deplace plus. Defiger le rend au planning (il reste pose sur son jour). keys (06/11/2026) :
+    plusieurs a la fois (tout un modele) ; ceux absents du planning sont passes."""
     r = await plan()
-    j = next((x for x in r["jobs"] if x["key"] == key), None)
+    by = {x["key"]: x for x in r["jobs"]}
     d = await _load()
-    if on:
-        if not j:
-            raise PlanError("Plateau introuvable dans le planning (non planifiable ?)")
-        d["locked"][key] = j["start"]
-        d["pins"][key] = j["day"]
-    else:
-        d["locked"].pop(key, None)
+    for k in [str(x) for x in keys][:500] if keys else [key]:
+        j = by.get(k)
+        if on:
+            if not j:
+                if keys:
+                    continue
+                raise PlanError("Plateau introuvable dans le planning (non planifiable ?)")
+            d["locked"][k] = j["start"]
+            d["pins"][k] = j["day"]
+        else:
+            d["locked"].pop(k, None)
     d["plan0"] = {}
     d["rev"] = int(d.get("rev") or 0) + 1
     await _save(d)

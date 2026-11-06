@@ -200,6 +200,33 @@ function PrioPick({ value, busy, run, onPick, plate }) {
 }
 export const prioChip = (v, style) => v ? <span data-tip={`Priorité ${prioOf(v)[2].toLowerCase()}`} style={{ ...chipS(prioOf(v)[3]), ...style }}>{prioOf(v)[1]} {prioOf(v)[2]}</span> : null;
 
+// Figer tout un modele (06/11/2026), comme un plateau : libre, le jour, ou le jour et l'heure. Ses plateaux dans des etats
+// differents : aucun choix allume, la ligne le dit.
+function ModelFreezePick({ ok, busy, run, act }) {
+  const n = ok.length, nl = ok.filter(j => j.locked).length, np = ok.filter(j => j.pinned && !j.locked).length;
+  const cur = nl === n ? "time" : np === n ? "day" : !nl && !np ? null : "mix";
+  const opts = [[null, "Libre", "Le planning place ses plateaux où ils tiennent, et les optimiseurs peuvent les déplacer"],
+    ["day", "Le jour", "Chaque plateau reste le jour où il est prévu ; l'heure peut bouger"],
+    ["time", "Jour et heure", "Chaque plateau part au jour et à l'heure prévus : rien ne les déplace, le reste s'organise autour"]];
+  const tip = cur === "mix" ? `En partie : ${[nl && `${nl} figé${nl > 1 ? "s" : ""} jour et heure`, np && `${np} au jour figé`, n - nl - np && `${n - nl - np} libre${n - nl - np > 1 ? "s" : ""}`].filter(Boolean).join(", ")}`
+    : opts.find(o => o[0] === cur)[2];
+  const tone = cur === "time" ? "#4F46E5" : cur === "day" ? "#7C3AED" : "var(--text)";
+  return <div style={{ padding: "10px 12px", borderRadius: 12, border: `1px solid ${cur ? "color-mix(in srgb, #6366F1 40%, var(--border))" : "var(--border)"}`, background: "var(--surface)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 7 }}>
+      <span style={{ fontSize: 18, width: 24, textAlign: "center" }}>{busy === "freeze" ? "…" : cur === "time" ? "🔒" : cur === "day" ? "📌" : cur === "mix" ? "◐" : "🔓"}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 13.5, fontWeight: 900, color: tone }}>Figer {n > 1 ? `ses ${n} plateaux` : "le plateau"}</span>
+        <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.35 }}>{tip}</span></span></div>
+    <div role="radiogroup" style={{ display: "flex", padding: 3, borderRadius: 11, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+      {opts.map(([k, l]) => <button key={l} type="button" role="radio" aria-checked={cur === k} disabled={!!busy}
+        onClick={() => cur !== k && run("freeze", () => act.freeze(k))}
+        style={{ flex: 1, padding: "6px 4px", borderRadius: 9, border: "none", cursor: "pointer", font: "inherit", fontSize: 12, fontWeight: 900,
+          color: cur === k ? "#fff" : "var(--muted)", background: cur === k ? (k === "time" ? "linear-gradient(135deg, #4F46E5, #6366F1)"
+            : k === "day" ? "linear-gradient(135deg, #7C3AED, #A855F7)" : "linear-gradient(135deg, #64748B, #94A3B8)") : "transparent" }}>{l}</button>)}
+    </div>
+  </div>;
+}
+
 // 06/11/2026 : les mots disent l'objet, pas ses plateaux. Un seul exemplaire : libre ou d'une traite (les deux reglages
 // reviennent au meme). Plusieurs : chaque exemplaire d'une traite (entre deux, d'autres objets passent), ou tous les
 // exemplaires a la suite. Un modele d'un seul plateau : seul « tous les exemplaires » a un sens.
@@ -344,9 +371,8 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act, jobs }) {
               "Ils prennent la tête de ce jour, à la suite ; ce qui n'y tient pas passe au lendemain, puis au jour d'après", f.day, v => v && act.dayAll(v), today)}
             {row("front", "⏫", "Tout en tête de file", "Ses plateaux passent avant tous les autres (ceux posés sur un jour y retournent à la file)", () => run("front", act.front))}
             {row("later", "⏬", "Tout plus tard", "Ses plateaux passent en fin de file, dans leur ordre (un modèle retenu reste devant les non retenus)", () => run("later", act.laterAll))}
-            {free.some(j => !j.pinned) && row("pinall", "📌", "Figer leurs jours", "Chaque plateau garde le jour où il est prévu ; l'heure peut encore bouger", () => run("pinall", act.pinAll))}
-            {x.pinned > 0 && row("unpin", "🔓", "Défiger leurs jours", `${x.pinned} plateau${x.pinned > 1 ? "x ont leur" : " a son"} jour figé : ils se replacent où ils tiennent (les jours et heures figés restent)`, () => run("unpin", act.unpinAll))}
           </>}
+        {!un && x.ok.length > 0 && act.freeze && <ModelFreezePick ok={x.ok} busy={busy} run={run} act={act}/>}
         {act.prio && <PrioPick value={f.prio_m} busy={busy} run={run} onPick={act.prio}/>}
         {act.chain && (f.plates_total > 1 || f.qty > 1) && <ChainPick j={f} busy={busy} run={run} act={act}/>}
         {dateRow("due", "🎯", f.due ? "Changer la date limite" : "Une date limite", f.due ? `Fini avant le ${dueTxt(f.due)} (son dernier plateau)` : "Son dernier plateau fini avant ce jour ; le planning prévient s'il déborde", f.due, v => act.due(v))}

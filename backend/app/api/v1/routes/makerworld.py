@@ -457,7 +457,8 @@ async def mw_plan_lock(body: dict = Body({}), _: str = Depends(require_mw)):
     """Figer ({key, lock: true}) ou defiger ({key, lock: false}) un plateau du planning."""
     from ....services import planner as P
     try:
-        return await P.lock(str(body.get("key") or ""), body.get("lock", True) is not False)
+        keys = body.get("keys") if isinstance(body.get("keys"), list) else None
+        return await P.lock(str(body.get("key") or ""), body.get("lock", True) is not False, keys)
     except P.PlanError as e:
         raise HTTPException(400, str(e))
 
