@@ -1595,6 +1595,29 @@ async def tick(cfg, r: dict | None = None) -> int:
                        f"Son dernier plateau finit {_day_fr(end, today)} à {_fmt(end)}, {_late(-x['margin_min'])} trop tard.\n"
                        f"Le planning propose quoi faire.", click=N.app_link(cfg, "/prints?tab=calendar"), priority=3)
         sent += 1
+    # le filament a charger (06/11/2026) : un peu avant chaque plateau qui en demande un, lequel, pour quoi, a quelle heure
+    if N.enabled_in(cfg, "plan_load"):
+        mins = N.options_of(cfg, "plan_load")["minutes"]
+        nowt = datetime.fromisoformat(r["now"])
+        today = nowt.date()
+        for j in (r.get("jobs") or [])[:8]:
+            s = datetime.fromisoformat(j["start"])
+            if s - nowt > timedelta(minutes=mins):
+                break
+            k = f"load:{j['key']}"
+            if not j.get("load") or d["notified"].get(k):
+                continue
+            d["notified"][k] = 1
+            changed = True
+            left = int((s - nowt).total_seconds() // 60)
+            when = f"{_day_fr(s, today)} à {_fmt(s)}" + (f", dans {_dur(left * 60)}" if left > 0 else ", maintenant")
+            kept = [f.get("name") for f in j.get("fils") or [] if f.get("name") and f.get("name") not in j["load"]]
+            body = f"Pour {_title(j)} ({_dur(j['seconds'])}), prévue {when}."
+            if kept:
+                body += f"\nDéjà dans l'AMS : {', '.join(dict.fromkeys(kept))}"
+            await N.notify("plan_load", f"🧵 À charger pour {_fmt(s)} : {', '.join(j['load'])}", body,
+                           click=N.app_link(cfg, "/prints?tab=calendar"), priority=3)
+            sent += 1
     if changed:
         await _save(d)
     st, j = r.get("status"), (r.get("jobs") or [None])[0]
@@ -1605,7 +1628,8 @@ async def tick(cfg, r: dict | None = None) -> int:
     step = 2 if st["late_min"] >= 30 else 1
     if seen >= step:
         return 0
-    d["notified"] = {k: v for k, v in d["notified"].items() if k in {x["key"] for x in r["jobs"]} or k.startswith("due:")}
+    ks = {x["key"] for x in r["jobs"]}
+    d["notified"] = {k: v for k, v in d["notified"].items() if k in ks or k.startswith("due:") or (k.startswith("load:") and k[5:] in ks)}
     d["notified"][j["key"]] = step
     await _save(d)
     name = _title(j)
@@ -1729,7 +1753,7 @@ async def check(cfg=None) -> dict:
                       "moved": moved[-60:], "overflow": overflow, "count": len(r["jobs"]), "last_end": last})
     sent = 0
     # les rappels : a lancer, date limite (la logique d'avant, tick)
-    if N.enabled_in(cfg, "plan_due") or N.enabled_in(cfg, "plan_deadline"):
+    if N.enabled_in(cfg, "plan_due") or N.enabled_in(cfg, "plan_deadline") or N.enabled_in(cfg, "plan_load"):
         sent += await tick(cfg, r)
     # un decalage de plusieurs heures : un seul message, qui dit le premier plateau decale, de quand a quand, et
     # pourquoi ; la suite le suit (le nombre de plateaux ne disait rien)
