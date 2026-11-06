@@ -6,6 +6,7 @@ import { useAuth, ROLE_ADMIN } from "../store/auth";
 import { egg } from "../eggs";
 import { showConfirm } from "../utils/dialog";
 import { normalize, pack, placesOf, PLACES, MOBILE_SLOTS, useNavStore, loadNavMenu } from "../utils/navMenu";
+import { useFriend } from "../store/friend";
 
 // Parametres › Affichage › Menu (05/11/2026) : quelles pages, dans quel ordre, et ou (menu, « Plus », profil, masquee).
 // Chacun regle le sien ; l'administrateur regle aussi celui de chaque compte. Enregistre a chaque changement.
@@ -27,6 +28,7 @@ export default function MenuSettings() {
   const [copyOpen, setCopyOpen] = useState(false);
   const timer = useRef(null);
   const mine = useNavStore(s => s.saved), mineLoaded = useNavStore(s => s.loaded);
+  const visiting = useFriend(s => s.friend);
 
   useEffect(() => {
     if (isAdmin) client.get("/home/menu/accounts").then(r => setAccounts(r.data.accounts || [])).catch(() => setAccounts([]));
@@ -72,6 +74,9 @@ export default function MenuSettings() {
   const inMore = needMore ? [...bar.slice(MOBILE_SLOTS - 1), ...more] : [];
   const prof = list.filter(x => x.place === "profile");
 
+  // chez un copain (06/11/2026) : le menu montre est le sien, en lecture ; le mien se regle chez moi
+  if (visiting) return <div className="card" style={{ padding: 16, fontSize: 13, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45 }}>
+    <b style={{ color: "var(--text)" }}>Menu</b><br/>Tu es chez {visiting.name} : tu vois son menu, tel qu'il l'a réglé. Le tien se règle chez toi.</div>;
   return <div className="card" style={{ padding: 16 }}>
     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
       <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", flex: 1, minWidth: 120 }}>Menu</div>

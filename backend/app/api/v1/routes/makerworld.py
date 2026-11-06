@@ -469,7 +469,7 @@ async def mw_plan_lock(body: dict = Body({}), _: str = Depends(require_mw)):
 
 
 @router.get("/plan/plates")
-async def mw_plan_plates(_: str = Depends(require_mw)):
+async def mw_plan_plates(_: str = Depends(get_current_user)):           # en lecture : un copain voit le plateau en place
     """Les plateaux d'impression : ceux possedes, les types, ce que Bambu deconseille sur chacun, celui en place."""
     from ....services import planner as P, plates as PL
     d = await P._load()

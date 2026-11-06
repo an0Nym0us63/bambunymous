@@ -135,10 +135,17 @@ async def _menus(db) -> dict:
 
 @router.get("/menu")
 async def nav_menu(username: str = Depends(get_current_user), token: str = Depends(oauth2_scheme)):
-    if str(token or "").startswith("fk_"):
-        return {"menu": None}
+    """Mon menu ; un copain qui passe (cle fk_) voit celui du compte principal (06/11/2026 : il voyait le menu par
+    defaut, et le reglait chez lui en croyant regler le mien), comme l'accueil."""
     async with AsyncSessionLocal() as db:
-        return {"menu": (await _menus(db)).get(username)}
+        d = await _menus(db)
+        if not str(token or "").startswith("fk_"):
+            return {"menu": d.get(username)}
+        from sqlalchemy import select
+        from ....models.user import User, ROLE_ADMIN
+        admins = (await db.execute(select(User.username).where(User.role == ROLE_ADMIN).order_by(User.id))).scalars().all()
+        main = next((u for u in admins if u in d), None)
+        return {"menu": d.get(main) if main else None, "from": main}
 
 
 @router.put("/menu")

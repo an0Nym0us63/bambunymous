@@ -8,13 +8,19 @@ import { currentFriend } from "../store/friend";
 // « deja chez moi ? », et toute ecriture -- chez lui je ne peux rien ecrire,
 // une ecriture est donc forcement une action sur MES collections MakerWorld.
 const HOME_PREFIXES = ["/auth", "/friends", "/users", "/settings", "/notify",
-  "/makerworld/mine", "/makerworld/model/", "/makerworld/similar/", "/makerworld/design/",
-  // Mes evaluations (file de publication, messages tout faits) : toujours chez moi.
-  "/makerworld/rate-queue", "/makerworld/rate-templates"];
+  "/makerworld/mine", "/makerworld/model/", "/makerworld/similar/", "/makerworld/design/"];
+// (06/11/2026) la file d'evaluation n'est plus « chez moi » : chez un copain, sa tuile montrait la mienne
 // Le ping d'activite part chez le copain visite : son journal suit ma visite. La disposition de ses AMS aussi
 // (03/11/2026 : ses AMS s'affichaient dans l'ordre des miens, sous /settings comme mes reglages).
 const RELAYED = ["/users/activity/ping", "/settings/ams-order"];
 const isHome = (url) => !RELAYED.some(p => url.startsWith(p)) && HOME_PREFIXES.some(p => url === p || url.startsWith(p.endsWith("/") ? p : p + "/") || url.startsWith(p + "?"));
+// Chez un copain, on regarde, on ne touche a rien (06/11/2026 : un ami venu chez moi changeait SON menu et SA disposition
+// d'accueil en croyant regler les miens, l'ecriture partant chez lui). Seules passent les ecritures qui ne concernent que
+// moi, quel que soit l'endroit : ma session, mes succes et mon guide, mes notifications, mon telephone, mes copains, et
+// mon compte MakerWorld (collections, j'aime, boost, suivre un createur). Tout le reste est refuse avant de partir.
+const VISIT_WRITES = ["/auth/", "/achievements/", "/guide/", "/notify/me", "/notify/devices", "/users/activity", "/friends",
+  "/makerworld/collections", "/makerworld/design/", "/makerworld/creators/", "/makerworld/login", "/makerworld/logout"];
+const visitWriteOk = (url) => VISIT_WRITES.some(p => url === p || url.startsWith(p)) || /^\/makerworld\/model\/[^/]+\/(like|boost)$/.test(url);
 
 /** URL d'une image (ou d'un fichier) de l'API, chez moi ou chez le copain
  *  visite. Une <img> n'envoie pas d'en-tete : le relais recoit le jeton en _t. */
@@ -40,6 +46,12 @@ client.interceptors.request.use((config) => {
   const url = config.url || "";
   if (f && !config.home && (config.method || "get").toLowerCase() === "get" && !isHome(url)) {
     config.url = `/friends/${f.id}/p${url.startsWith("/") ? url : "/" + url}`;
+  }
+  if (f && (config.method || "get").toLowerCase() !== "get" && !visitWriteOk(url.split("?")[0])) {
+    const e = new Error("visite");
+    e.response = { status: 403, data: { detail: `Chez ${f.name || "un copain"}, on regarde : rien ne se modifie` } };
+    e.config = config;
+    return Promise.reject(e);
   }
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
