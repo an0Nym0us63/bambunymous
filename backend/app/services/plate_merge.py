@@ -8,7 +8,7 @@ Ce que l'on sait, sans trancher : la taille de chaque plateau (la vue 3D l'a mes
 l'ensemble de ses objets, gardes tels qu'ils sont poses), le plateau d'impression (le 3MF du profil : sa surface, le mode
 d'impression, les degagements de la tete). On cherche a ranger les plateaux cote a cote (rangees, rotation permise) :
   - couche par couche (seulement un seul et meme filament partout) : un espacement de 5 mm ;
-  - objet par objet (comme le profil, ou d'office quand les plateaux n'ont pas les memes couleurs : couche par couche,
+  - objet par objet (seulement quand les plateaux n'ont pas les memes couleurs : couche par couche,
     chaque couche changerait de filament, le temps s'envolerait) : tous sauf le plus haut sous la tige
     (extruder_clearance_height_to_rod), le plus haut sous le capot, et entre deux objets le degagement de la tete
     (extruder_clearance_max_radius : 96 mm sur une H2C, 9 echantillons de 25 mm au plus, comme Bambu Studio).
@@ -132,7 +132,8 @@ def fits(info: dict, plates: list, by_obj: bool = False):
     sz = [info["sizes"].get(n) for n in plates]
     if not sz or any(s is None for s in sz):
         return None, None
-    by_obj = by_obj or info["seq"].replace("_", " ").startswith("by object")
+    # objet par objet seulement pour des couleurs differentes (06/11/2026) : un seul et meme filament partout se regroupe
+    # couche par couche, meme si le profil d'origine etait objet par objet
     obs = [o for n in plates for o in _objects(info, n)]
     if by_obj:
         if any(_too_close(info, n, info.get("head_r") or info["rod_d"]) for n in set(plates)):
