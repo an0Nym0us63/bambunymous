@@ -636,7 +636,7 @@ export default function MwQueue() {
         onClose={() => setPlanSel(null)} onPick={setPlanJob}
         act={{ ...modelAct(planSel), calendar: () => navTo(`/prints?tab=calendar&plan=${encodeURIComponent(planSel)}`) }}/>}
       {planJob && <JobSheet j={planJob} now={pd?.now} edit={isAdmin} onClose={() => setPlanJob(null)} act={jobAct(planJob)} jobs={pd?.jobs}/>}
-      {model && <MakerWorldModelSheet designId={model.design_id} preview={model}
+      {model && <MakerWorldModelSheet designId={model.design_id} preview={model} z={5300}
         onClose={() => { setModel(null); refresh(); }}/>}
     </div>
   );

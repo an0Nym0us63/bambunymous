@@ -7,7 +7,7 @@ import { mwCollections } from "../utils/mwSync";
 // creation rapide. MakerWorld REMPLACE la liste a chaque enregistrement :
 // si l'appli n'a pas su lire ou se trouve deja le modele, elle refuse
 // d'enregistrer plutot que de le retirer des autres collections.
-export default function MakerWorldCollectionsPicker({ designId, title, item, onClose, onSaved }) {
+export default function MakerWorldCollectionsPicker({ designId, title, item, onClose, onSaved, z = 4500 }) {
   const [data, setData] = useState(null);         // { collections, in, known } | { error }
   const [sel, setSel] = useState(new Set());
   const [q, setQ] = useState("");
@@ -49,7 +49,7 @@ export default function MakerWorldCollectionsPicker({ designId, title, item, onC
   const nIn = sel.size;
 
   return createPortal(
-    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4500, background:"rgba(0,0,0,0.6)",
+    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:z, background:"rgba(0,0,0,0.6)",
       display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"22px 22px 0 0", overflow:"hidden",
         width:"100%", maxWidth:480, maxHeight:"80dvh", display:"flex", flexDirection:"column",

@@ -470,8 +470,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
             })()}
 
             {zoom && <Lightbox images={zoom.images} index={zoom.index} title={zoom.title || m.title_fr || m.title} onClose={() => setZoom(null)}/>}
-            {sharing && <span onClick={e => e.stopPropagation()}><ShareSheet kind="design" id={id} z={4400} onClose={() => setSharing(false)}/></span>}
-            {pick && <MakerWorldCollectionsPicker designId={id} title={m.title} item={tile()} onClose={() => setPick(false)}/>}
+            {sharing && <span onClick={e => e.stopPropagation()}><ShareSheet kind="design" id={id} z={z + 200} onClose={() => setSharing(false)}/></span>}
+            {pick && <MakerWorldCollectionsPicker designId={id} title={m.title} item={tile()} z={z + 300} onClose={() => setPick(false)}/>}
 
             {m.categories?.length > 0 && (
               <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:12 }}>

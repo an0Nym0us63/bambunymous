@@ -81,9 +81,10 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
       },
       pinAll: () => arrange({ pins: Object.fromEntries((pd?.jobs || []).filter(j => ks.includes(j.key) && !j.pinned && j.day).map(j => [j.key, j.day])) }),
       // plus tard, tout le modele : chacune de ses lignes (ses variantes aussi)
+      laterAll: () => j0 && send("/makerworld/plan/later", { key: j0.key, whole: true }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
+      // (06/11/2026) apres la version simple : posee avant, elle etait ecrasee, et les autres variantes ne suivaient pas
       ...(dids.length > 1 ? { laterAll: async () => { for (const ds of dids) { const x = (pd?.jobs || []).find(j => j.design_id === ds);
         if (x && !(await send("/makerworld/plan/later", { key: x.key, whole: true }, "post"))) return; } egg("planning_glisse"); } } : {}),
-      laterAll: () => j0 && send("/makerworld/plan/later", { key: j0.key, whole: true }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
       chain: mode => send("/makerworld/plan/chain", { design_id: did, mode }, "post").then(ok => { if (ok && mode) egg("planning_traite"); }),
       due: v => setDue(did, v),
       sheet: () => setSheet(sheetRef(j0, did)),

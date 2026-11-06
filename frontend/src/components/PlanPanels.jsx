@@ -293,6 +293,7 @@ const gInfo = g => {
   const starts = ok.map(j => j.start).filter(Boolean).sort(), ends = ok.map(j => j.end).filter(Boolean).sort();
   return { ok, f, nb: g.jobs.length - ok.length, tot: ok.reduce((a, j) => a + j.seconds, 0), first: starts[0], last: ends[ends.length - 1],
     locked: ok.filter(j => j.locked).length, pinned: ok.filter(j => j.pinned && !j.locked).length, load: ok.some(j => j.load?.length),
+    merged: ok.filter(j => j.merged).length,                       // ses plateaux regroupes (06/11/2026)
     low: ok.some(j => j.low_after?.length), wait: ok.some(j => j.awaits_order?.length) };
 };
 // « du … au … » en bon francais (06/11/2026 : « du Aujourd'hui au Demain ») : d'aujourd'hui, de demain, du sam. 7 nov. ;
@@ -361,13 +362,14 @@ export function PoolSummary({ jobs, blocked = [], now, onOpenModel, bulk }) {
           <span style={{ display: "flex", gap: 2, height: 5 }}>
             {g.jobs.map(j => <span key={j.key} style={{ flex: 1, borderRadius: 3, background: j.blockedWhy ? "#DC2626" : j.locked ? "#4F46E5"
               : un ? UNRET : j.completes ? "#059669" : "color-mix(in srgb, #22C55E 55%, var(--border))" }}/>)}</span>
-          {(x.nb || f.due || f.chain || f.prio_m || x.locked || x.pinned || x.load || x.low || x.wait) ? <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {(x.nb || f.due || f.chain || f.prio_m || x.locked || x.pinned || x.merged || x.load || x.low || x.wait) ? <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
             {prioChip(f.prio_m)}
             {x.nb > 0 && <span style={chipS("#DC2626")}>⛔ {x.nb} non planifiable{x.nb > 1 ? "s" : ""}</span>}
             {f.due && <span style={chipS(f.due_ok ? "#16A34A" : "#EF4444")}>🎯 {dueTxt(f.due)}</span>}
             {f.chain && <span style={chipS("#0EA5E9")}>{chainTxt(f)}</span>}
             {x.locked > 0 && <span style={chipS("#4F46E5")}>🔒 {x.locked}</span>}
             {x.pinned > 0 && <span style={chipS("#7C3AED")} data-tip="Plateaux au jour figé">📌 {x.pinned}</span>}
+            {x.merged > 0 && <span style={chipS("#6366F1")} data-tip="Plateaux regroupés : plusieurs plateaux réunis en une seule impression (à regrouper dans Bambu Studio)">🧩 {x.merged}</span>}
             {x.load && <span style={chipS("#EA580C")}>🧵</span>}
             {x.wait && <span style={chipS("#0EA5E9")}>🚚</span>}
             {x.low && <span style={chipS("#DC2626")}>📉</span>}
@@ -460,7 +462,7 @@ export function ModelSheet({ g: g0, now, edit, onClose, onPick, act: act0, jobs 
           <PlateThumb j={j} size={38}/>
           <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
             <span style={{ fontSize: 12, fontWeight: 900, color: bad ? "#DC2626" : "#6366F1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {j.locked ? "🔒 " : ""}{j.pinned && !j.locked ? "📌 " : ""}{finIc(j, " ")}{plateTxt(j)}{j.qty > 1 ? ` · ${j.copy}e/${j.qty}` : ""}
+              {j.locked ? "🔒 " : ""}{j.pinned && !j.locked ? "📌 " : ""}{j.merged ? "🧩 " : ""}{finIc(j, " ")}{plateTxt(j)}{j.qty > 1 ? ` · ${j.copy}e/${j.qty}` : ""}
               {j.load?.length ? " 🧵" : ""}{j.runout?.length ? " 🔄" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}{j.intercalated ? " ↔" : ""}
               {j.prio_p ? ` ${prioOf(j.prio_p)[1]}` : ""}</span>
             {bad ? <span style={{ fontSize: 11.5, fontWeight: 800, color: "#DC2626" }}>⛔ non planifiable · {(j.blockedWhy || []).join(" · ")}</span>

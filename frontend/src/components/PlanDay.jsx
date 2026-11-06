@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
+import { showConfirm } from "../utils/dialog";
 import { useNavigate } from "react-router-dom";
 import { apiThumb, apiUrl } from "../api/client";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
@@ -135,9 +137,9 @@ const Dot = ({ f }) => <span data-tip={f.name} style={{ width: 11, height: 11, b
 // boutons en bas, sur toute la largeur, pour que le texte respire. On le range en le glissant (ordinateur) ou avec ses
 // boutons (telephone).
 export const dueTxt = d => new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-export function PlateThumb({ j, size = 52, onClick }) {
+export function PlateThumb({ j, size = 52, onClick, tip }) {
   const src = j.thumb || j.cover;
-  return <span onClick={onClick} data-tip={onClick ? "Profil, plateaux et filaments retenus" : undefined}
+  return <span onClick={onClick} data-tip={onClick ? tip || "Profil, plateaux et filaments retenus" : undefined}
     style={{ position: "relative", width: size, height: size, borderRadius: 10, flexShrink: 0, overflow: "hidden", cursor: onClick ? "pointer" : "default",
       background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center" }}>
     {/* une image MakerWorld (couverture du modele ou du profil) passe par la reduction de son CDN (06/11/2026 : apiThumb ne
@@ -697,13 +699,16 @@ const AdvText = ({ t }) => { const i = String(t || "").indexOf(" : ");
   return i > 0 && i < 90 ? <><b style={{ color: "var(--text)", fontWeight: 800 }}>{t.slice(0, i)}</b><span style={{ color: "var(--muted)" }}> · {t.slice(i + 3)}</span></> : t; };
 // un regroupement en carte (06/11/2026 : la phrase entiere etait indigeste) : la vignette, le modele, quels plateaux,
 // et en pastilles ce qu'on y gagne, comment, et l'objet a imprimer en dernier
-function MergeCard({ a, edit, onApply, c: cc = "#6366F1" }) {
+// la carte d'un regroupement (06/11/2026) : sa vignette ouvre la galerie des plateaux concernes, « Fiche » ouvre la fiche
+// MakerWorld du modele pour verifier, « Appliquer » demande confirmation (un toucher de trop regroupait pour de bon)
+function MergeCard({ a, edit, onApply, onSheet, c: cc = "#6366F1" }) {
+  const [gal, setGal] = useState(false);
   const m = a.m, dur = s => { const n = Math.round(s / 60); return n < 60 ? `${n} min` : `${Math.floor(n / 60)} h${n % 60 ? ` ${String(n % 60).padStart(2, "0")}` : ""}`; };
   const pill = (t, c, tip) => <span data-tip={tip} style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 800,
     whiteSpace: "nowrap", color: c, background: `color-mix(in srgb, ${c} 12%, transparent)` }}>{t}</span>;
   return <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: 10, borderRadius: 14,
     border: `1px solid color-mix(in srgb, ${cc} 18%, var(--border))`, background: `linear-gradient(135deg, color-mix(in srgb, ${cc} 7%, var(--surface)), var(--surface) 80%)` }}>
-    <PlateThumb j={{ thumb: m.thumb }} size={46}/>
+    <PlateThumb j={{ thumb: m.thumb }} size={46} onClick={m.items?.length ? () => setGal(true) : undefined} tip="Voir les plateaux concernés"/>
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
       <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text)", lineHeight: 1.25, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{m.title}</div>
       <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>
@@ -717,15 +722,44 @@ function MergeCard({ a, edit, onApply, c: cc = "#6366F1" }) {
         {m.last && pill(`⬆ ${m.last.label} en dernier`, "#B45309", `${m.last.h} mm, plus haut que la tige (${m.last.rod_h} mm) : à imprimer en dernier`)}
       </div>
     </div>
-    {edit && a.action && <button type="button" onClick={() => onApply(a.action)} data-tip="Les regroupe au planning ; à regrouper ensuite dans Bambu Studio"
-      style={{ ...seg, ...segOn, padding: "3px 9px", flexShrink: 0 }}>Appliquer</button>}
+    <div style={{ display: "flex", flexDirection: "column", gap: 5, flexShrink: 0, alignItems: "stretch" }}>
+      {edit && a.action && <button type="button" data-tip="Les regroupe au planning ; à regrouper ensuite dans Bambu Studio"
+        onClick={async () => {
+          const what = m.same ? `${m.plates.length} × le plateau ${m.plates[0]}` : `les plateaux ${m.plates.join(", ")}`;
+          if (await showConfirm(`Regrouper ${what} de « ${m.title} » sur un seul plateau ? Ils deviennent une seule impression au planning ` +
+            `(à regrouper ensuite dans Bambu Studio). Le menu du plateau regroupé permet de les dégrouper.`)) onApply(a.action);
+        }} style={{ ...seg, ...segOn, padding: "3px 9px" }}>Appliquer</button>}
+      {onSheet && m.ref && <button type="button" onClick={() => onSheet(m.ref)} data-tip="Ouvrir la fiche MakerWorld du modèle, sur le profil planifié"
+        style={{ ...seg, padding: "3px 9px" }}>🧾 Fiche</button>}
+    </div>
+    {gal && createPortal(<div onClick={() => setGal(false)} style={{ position: "fixed", inset: 0, zIndex: 9600, background: "rgba(15,23,42,.6)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "min(560px, 100%)", maxHeight: "85vh", overflowY: "auto", borderRadius: 18, padding: 14,
+        background: "var(--sheet-bg, var(--surface))", border: "1px solid var(--border)", boxShadow: "0 20px 50px rgba(0,0,0,.35)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 15 }}>🧩</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</span>
+          <button type="button" onClick={() => setGal(false)} aria-label="Fermer" style={mini}>✕</button>
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginBottom: 10 }}>
+          {m.items.length} plateaux réunis sur un seul{m.last ? ` · ${m.last.label} en dernier (${m.last.h} mm)` : ""}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
+          {m.items.map((x, i) => <div key={x.key || i} style={{ borderRadius: 14, overflow: "hidden", border: `1px solid color-mix(in srgb, ${cc} 22%, var(--border))`, background: "var(--surface)" }}>
+            <div style={{ aspectRatio: "1", background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {x.thumb ? <MwImg src={x.thumb} w={300} style={{ width: "100%", height: "100%", objectFit: "contain" }}/> : <span style={{ fontSize: 30 }}>🧩</span>}</div>
+            <div style={{ padding: "6px 8px", fontSize: 12, fontWeight: 800, color: "var(--text)" }}>Plateau {x.plate}{x.name ? <span style={{ color: "var(--muted)", fontWeight: 700 }}> · {x.name}</span> : null}</div>
+          </div>)}
+        </div>
+        {onSheet && m.ref && <button type="button" onClick={() => { setGal(false); onSheet(m.ref); }} style={{ ...seg, ...segOn, marginTop: 12, padding: "6px 12px" }}>🧾 Ouvrir la fiche MakerWorld</button>}
+      </div>
+    </div>, document.body)}
   </div>;
 }
 // chaque sorte, sa couleur (06/11/2026 : des accordeons gris et des cartes blanches)
 const ADV_KINDS = [["deadline", "🎯", "Dates limites", "#EF4444"], ["merge", "🧩", "Regrouper des plateaux", "#6366F1"],
   ["colors", "🎨", "Enchaîner les mêmes couleurs", "#EC4899"], ["gap", "⏱", "Remplir un creux", "#0EA5E9"],
   ["load", "🧵", "Bobines à charger", "#0891B2"], ["long", "⚠️", "Trop longs pour les horaires", "#F59E0B"]];
-export function PlanAdvice({ items, edit, onApply, at = null }) {
+export function PlanAdvice({ items, edit, onApply, onSheet, at = null }) {
   // fermees a l'ouverture (06/11/2026) : toutes les sortes se voient d'un coup d'oeil, on deplie celle qui interesse
   const [open, setOpen] = useState({});
   if (!items?.length) return null;
@@ -750,7 +784,7 @@ export function PlanAdvice({ items, edit, onApply, at = null }) {
           fontSize: 11.5, fontWeight: 900, color: "#fff", background: c }}>{list.length}</span>
         <span style={{ color: c, fontSize: 12, transform: shut[k] ? "rotate(-90deg)" : "none", transition: "transform .15s" }}>▾</span></button>
       {!shut[k] && <div style={{ display: "flex", flexDirection: "column", gap: 7, padding: "4px 10px 10px" }}>
-        {list.map((a, i) => a.m ? <MergeCard key={i} a={a} c={c} edit={edit} onApply={onApply}/>
+        {list.map((a, i) => a.m ? <MergeCard key={i} a={a} c={c} edit={edit} onApply={onApply} onSheet={onSheet}/>
           : <div key={i} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "9px 10px", borderRadius: 12,
             border: `1px solid color-mix(in srgb, ${c} 18%, var(--border))`, background: `color-mix(in srgb, ${c} 6%, var(--surface))` }}>
           <span style={{ fontSize: 15 }}>{a.icon}</span>

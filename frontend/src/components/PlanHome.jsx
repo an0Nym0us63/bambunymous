@@ -272,6 +272,6 @@ export function PlanZoom({ p: p0 }) {
     <button type="button" onClick={() => nav("/prints?tab=calendar")} style={{ alignSelf: "flex-start", padding: "9px 16px", borderRadius: 12, border: "none", cursor: "pointer",
       background: `linear-gradient(135deg, ${C}, #8B5CF6)`, color: "#fff", fontSize: 13, fontWeight: 900, boxShadow: `0 8px 18px -10px ${C}` }}>📅 Ouvrir le calendrier</button>
     {sel && <JobSheet j={sel} now={p.now} edit={edit} onClose={() => setSel(null)} act={act(sel)} jobs={p.jobs}/>}
-    {sheet && <MakerWorldModelSheet designId={String(sheet)} onClose={() => setSheet(null)}/>}
+    {sheet && <MakerWorldModelSheet designId={String(sheet)} z={5300} onClose={() => setSheet(null)}/>}
   </div>;
 }

@@ -7,7 +7,7 @@ import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 import MwImg, { thumbSrc } from "./MwImg";
 import { currentFriend } from "../store/friend";
-import { usePlanActs } from "./planActs";
+import { usePlanActs, sheetRef } from "./planActs";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
 import { UndoPill, PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, poolGroups, BlockedList, LowStockBanner } from "./PlanPanels";
 import { PlanDashboard, Legend, dayEnd, hhmm, dayInfo } from "./PlanDay";
@@ -526,7 +526,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
       onClose={() => setPop(null)}/>}
     {pop === "legend" && <PlanPopup title="Ce que disent les signes" icon="?" color="#6366F1" onClose={() => setPop(null)}><Legend/></PlanPopup>}
     {pop === "advice" && <PlanPopup title={`Conseils (${pd?.advice?.length || 0})`} icon="💡" color="#F59E0B" onClose={() => setPop(null)}>
-      <PlanAdvice items={pd?.advice} at={pd?.advice_at} edit={edit} onApply={a => { applyAdvice(a); setPop(null); }}/></PlanPopup>}
+      <PlanAdvice items={pd?.advice} at={pd?.advice_at} edit={edit} onApply={a => { applyAdvice(a); setPop(null); }} onSheet={r => setSheet(sheetRef(r))}/></PlanPopup>}
     {pop === "locked" && <PlanPopup title="Plateaux figés" icon="🔒" color="#4F46E5" onClose={() => setPop(null)}>
       <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45, marginBottom: 8 }}>
         Ils gardent leur jour et leur heure : le reste s'organise autour. Touche-en un pour le défiger.</div>
@@ -542,7 +542,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
       <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 12, maxHeight: "calc(100dvh - 40px)", overflowY: "auto" }}>{detail}{advice}</div>
     </div> : dayList ? <>{dayToggle}<div {...swipeProps}>{detail}</div>{advice}</>
       : <>{dayToggle}<div {...swipeProps}>{viewMain}</div>{advice}{view === "week" ? null : detail}</>}
-    {sheet && <MakerWorldModelSheet designId={String(sheet)} onClose={() => { setSheet(null);
+    {/* au-dessus des fenetres du planning (5200), d'ou elle s'ouvre (06/11/2026 : elle s'ouvrait derriere) */}
+    {sheet && <MakerWorldModelSheet designId={String(sheet)} z={5300} onClose={() => { setSheet(null);
       client.get("/makerworld/plan", { params: { tz: -new Date().getTimezoneOffset() } }).then(r => setPd(r.data)).catch(() => {}); }}/>}
   </div>;
 }

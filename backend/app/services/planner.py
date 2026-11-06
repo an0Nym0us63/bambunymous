@@ -1201,7 +1201,12 @@ def _merge_advice(placed: list) -> list:
                               "colors": bool(p.get("colors")), "saved_s": p["saved_s"], "launches": len(p["keys"]) - 1,
                               "last": ({"label": f"plateau {p['last']['plate']}" if len(set(p['plates'])) > 1 else p["last"]["title"],
                                         "h": p["last"]["h"], "rod_h": p["last"]["rod_h"]} if p.get("last") else None),
-                              "thumb": next((x.get("thumb") or x.get("cover") for x in placed if x["key"] == p["keys"][0]), None)}})
+                              "thumb": next((x.get("thumb") or x.get("cover") for x in placed if x["key"] == p["keys"][0]), None),
+                              # chaque plateau concerne, pour la galerie de la carte, et de quoi ouvrir la fiche du modele (06/11/2026)
+                              "items": [{"key": x["key"], "plate": x.get("plate"), "name": x.get("plate_name") or "",
+                                         "thumb": x.get("thumb") or x.get("cover")} for k in p["keys"] for x in placed if x["key"] == k],
+                              "ref": next(({"mw_id": x.get("mw_id"), "iid": x.get("iid"), "design_id": x.get("design_id")}
+                                           for x in placed if x["key"] == p["keys"][0]), None)}})
         return out
     except Exception:
         logger.exception("[PLAN] regroupements")
