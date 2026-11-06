@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
 import { egg } from "../eggs";
-import { useCanMw } from "../store/auth";
+import { useCanMw, useAuth } from "../store/auth";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 import MwImg, { thumbSrc } from "./MwImg";
 import { currentFriend } from "../store/friend";
@@ -118,6 +118,21 @@ function mosaic(n, w, h, min, max = 64) {
 // puis se relisent en fond (avant : un ecran vide le temps des deux lectures)
 const CACHES = {};
 const cacheOf = () => { const k = currentFriend()?.id || "me"; return (CACHES[k] = CACHES[k] || { pd: null, days: {} }); };
+// et d'une ouverture de l'appli a l'autre (06/11/2026) : le dernier planning garde dans ce navigateur, par compte et par
+// BambuNymous visite, s'affiche aussitot ; le frais le remplace en une seconde. Efface a la deconnexion (bn_tiles_snap*).
+const pdKey = () => { try { return `bn_tiles_snap_plan:${useAuth.getState().username || ""}:${currentFriend()?.id || "me"}`; } catch { return null; } };
+const pdStored = () => {
+  try { const o = JSON.parse(localStorage.getItem(pdKey()) || "null"); return o && Date.now() - (o.at || 0) < 3 * 86400000 && o.pd?.jobs ? o.pd : null; }
+  catch { return null; }
+};
+let pdSaveT = null;
+const pdStore = pd => {
+  const k = pdKey();
+  clearTimeout(pdSaveT);
+  pdSaveT = setTimeout(() => {
+    try { const v = JSON.stringify({ at: Date.now(), pd }); if (v.length < 600000) localStorage.setItem(k, v); } catch { /* plein ou indisponible */ }
+  }, 1500);
+};
 
 // onOpenPrint (06/11/2026) : la page des impressions ouvre la fiche d'une impression passee par-dessus le calendrier
 // (sans changer d'onglet) ; sans lui, on y va par ?id=
@@ -138,8 +153,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   const [month, setMonth] = useState(() => { const d = dayParam.current ? new Date(`${dayParam.current}T12:00`) : new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [days, setDays] = useState(null);       // {date: {count, duration, items}}
   // le planning (05/11/2026) : « A faire » plateau par plateau, pose par le serveur selon les consignes
-  const [pd, setPd] = useState(() => cacheOf().pd);
-  useEffect(() => { if (pd && pd.jobs) cacheOf().pd = pd; }, [pd]);
+  const [pd, setPd] = useState(() => cacheOf().pd || pdStored());
+  useEffect(() => { if (pd && pd.jobs) { cacheOf().pd = pd; pdStore(pd); } }, [pd]);
   setFilColors(pd?.fcolors);
   // venu d'« À faire » (06/11/2026) : ?plan=… ouvre la fiche de ce modele du planning (?model= ouvre la fiche MakerWorld)
   const modelParam = useRef(new URLSearchParams(window.location.search).get("plan"));
