@@ -16,7 +16,7 @@ const MOBILE = "(max-width: 767px)";
 export default function RfidScanBridge() {
   const { available, listening, wakeLock, stop } = useRfidScan();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const [mobile, setMobile] = useState(() => window.matchMedia(MOBILE).matches);
   const [slot, setSlot] = useState(null);
 
@@ -37,12 +37,17 @@ export default function RfidScanBridge() {
       // qui s'efface seul (2 s), pour enchainer le scan sans cliquer « OK ».
       if (d.error) { toast(`Lecture RFID : ${d.error}`, "error", 2000); return; }
       const qs = (d.redirect || "").split("?")[1] || "";
-      // La fiche (ou la creation) s'ouvre sur la page Filaments, d'ou que l'on scanne.
+      // La fiche (ou la creation) s'ouvre sur la page Filaments, d'ou que l'on scanne ; la refermer ramene la ou l'on
+      // etait (06/11/2026 : depuis la tuile Planning de l'accueil, on se retrouvait dans les bobines)
+      try {
+        if (pathname === "/filaments") sessionStorage.removeItem("bn_rfid_back");
+        else sessionStorage.setItem("bn_rfid_back", pathname + (search || ""));
+      } catch { /* indisponible */ }
       navigate(`/filaments${qs ? `?${qs}` : ""}`, { replace: pathname === "/filaments" });
     };
     window.addEventListener("bambu-rfid-scan", handler);
     return () => window.removeEventListener("bambu-rfid-scan", handler);
-  }, [available, navigate, pathname]);
+  }, [available, navigate, pathname, search]);
 
   if (!listening || pathname === "/filaments" || !slot) return null;
   const title = "Scan RFID actif — appuyer pour l'arrêter"

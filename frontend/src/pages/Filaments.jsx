@@ -3,7 +3,7 @@ import { usePromotedTabs, tabLabel } from "../utils/navMenu";
 import HiddenMark from "../components/HiddenMark";
 import Cachettes, { Hide } from "../components/Cachettes";
 import { createPortal } from "react-dom";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useUrlTab, keepTabs } from "../utils/useUrlTab";
 import ScanSheet from "../components/ScanSheet";
 import RfidSheet from "../components/RfidSheet";
@@ -3598,7 +3598,18 @@ export default function Filaments() {
     return () => { cancelled = true; };
   }, [deepId, deepSpool, deepSwatch]);
 
+  // la fiche ouverte par un scan RFID fait depuis une autre page : la refermer y ramene (06/11/2026)
+  const navTo = useNavigate();
+  const backFromScan = () => {
+    let b = null;
+    try { b = sessionStorage.getItem("bn_rfid_back"); sessionStorage.removeItem("bn_rfid_back"); } catch { /* indisponible */ }
+    if (b && b.startsWith("/") && !b.startsWith("/filaments")) { navTo(b, { replace: true }); return true; }
+    return false;
+  };
+  // quitter la page autrement oublie le retour (il ne servirait plus a une fiche ouverte plus tard)
+  useEffect(() => () => { try { sessionStorage.removeItem("bn_rfid_back"); } catch { /* indisponible */ } }, []);
   const closeDeep = () => {
+    if (backFromScan()) return;
     setDeepFil(null); setDeepErr(null);
     const next = new URLSearchParams(searchParams);
     next.delete("id"); next.delete("spool"); next.delete("swatch");
@@ -3611,6 +3622,7 @@ export default function Filaments() {
   //   bobine inconnue -> /filaments?rfid=<scan_id>   (creation guidee)
   const rfidId = searchParams.get("rfid");
   const closeRfid = () => {
+    if (backFromScan()) return;
     const next = new URLSearchParams(searchParams);
     next.delete("rfid");
     setSearchParams(next, { replace: true });
