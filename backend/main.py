@@ -219,6 +219,21 @@ async def lifespan(app: FastAPI):
     from app.services import notify_extra as _nx
     _tasks.track("notify_extra", _bg(_nx.loop()))
     _tasks.track("update", _bg(_nx.update_loop()))
+    # (06/11/2026) ce que l'accueil et ses fenetres demandent d'abord, calcule une fois avant la premiere visite : apres
+    # une mise a jour, la premiere ouverture refaisait tout a froid (vue createur 2 s, galerie 0,7 s, statistiques 0,9 s)
+    async def _prewarm():
+        await _aio.sleep(25)
+        from app.services import mw_creator as _cr, mw_rate as _rt, friends_shared as _fs
+        from app.api.v1.routes import prints as _pr
+        for name, fn in (("createur", lambda: _cr.overview(False, "30")), ("a evaluer", lambda: _rt.to_rate(False)),
+                         ("galerie", lambda: _pr.prints_gallery("photos", "")), ("galerie 3D", lambda: _pr.prints_gallery("vue3d", "")),
+                         ("statistiques", lambda: _pr.prints_stats(0, None, None, "")), ("copains", lambda: _fs.printing())):
+            try:
+                await fn()
+            except Exception as e:
+                logger.info(f"[demarrage] prechauffage {name} : {e}")
+            await _aio.sleep(1)                      # un a la fois, sans gener les premieres requetes
+    _bg(_prewarm())
     from app.services import planner as _planner
     _tasks.track("planner", _bg(_planner.loop()))            # planning : decale, deborde, rappelle (5 min, et a chaque impression)
     from app.services import achievements as _ach
