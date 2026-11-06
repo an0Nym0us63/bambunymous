@@ -1322,6 +1322,12 @@ async def _context(tz: int | None):
     if d.get("plates"):
         from . import plates as PL
         d["_bed_now"] = await PL.mounted(d.get("plates"))
+    try:                                         # les degagements de mon imprimante, pour regrouper des plateaux
+        from .makerworld import my_printer
+        from . import plate_merge as PM
+        PM.MY["model"] = await my_printer()
+    except Exception:
+        pass
     d["_stock"] = await _stock_ledger(stock_of)
     live = _live()
     busy = now + timedelta(minutes=live[0]) if live else None

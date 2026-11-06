@@ -26,6 +26,17 @@ PREP_S = 360            # ce qu'un lancement coute en plus (chauffe, calibration
 SWAP_S = 90             # un changement de filament entre deux objets de couleurs differentes (objet par objet)
 GAP_LAYER = 5.0         # mm entre deux plateaux regroupes, couche par couche
 _PROF: dict = {}
+# Les degagements de MA machine (06/11/2026), pas ceux du profil : un profil fait pour une autre imprimante (A1 : tige a
+# 25 mm, H3C : 26 mm) les portait, et une H2C passe sous 47,4 mm. Releves dans les profils machine de Bambu Studio
+# (buse 0,4) : (largeur, profondeur, tige, capot, rayon de la tete, hauteur d'impression).
+MACHINES = {
+    "H2C": (330, 320, 47.4, 201, 96, 325), "H2D": (350, 320, 47.4, 201, 96, 325), "H2D Pro": (350, 320, 47.4, 201, 96, 325),
+    "H2S": (340, 320, 33, 187, 81, 340), "H3C": (330, 320, 26, 172, 95, 325), "A2L": (330, 320, 25, 325, 73, 325),
+    "X1 Carbon": (256, 256, 34, 90, 68, 250), "X1": (256, 256, 34, 90, 68, 250), "X1E": (256, 256, 34, 90, 68, 250),
+    "P1S": (256, 256, 34, 90, 68, 250), "P1P": (256, 256, 34, 90, 68, 250), "P2S": (256, 256, 32.5, 141.5, 72, 256),
+    "X2D": (256, 256, 32.8, 133, 60, 261), "A1": (256, 256, 25, 256, 73, 256), "A1 mini": (180, 180, 25, 180, 73, 180),
+}
+MY = {"model": ""}                       # mon imprimante (posee par le planning, qui sait la lire)
 
 
 def _profile_3mf(did, iid):
@@ -38,7 +49,7 @@ def _profile_3mf(did, iid):
 
 def profile_info(did, iid) -> dict | None:
     """Ce qu'il faut savoir du profil : surface du plateau, mode, degagements, et la taille de chacun de ses plateaux."""
-    key = (str(did), str(iid))
+    key = (str(did), str(iid), MY["model"])
     if key in _PROF:
         return _PROF[key]
     out = None
@@ -58,11 +69,15 @@ def profile_info(did, iid) -> dict | None:
                 for p in json.loads(mf.read_text(encoding="utf-8")).get("plates") or []:
                     if p.get("size_mm") and not p.get("assembled"):
                         sizes[int(p["n"])] = [float(x) for x in p["size_mm"]]
+            mc = MACHINES.get(MY["model"])
+            if mc:                               # ma machine passe avant le profil
+                W, H = mc[0], mc[1]
             out = {"W": W, "H": H, "seq": str(ps.get("print_sequence") or "by layer"), "sizes": sizes,
                    "rod_h": num("extruder_clearance_height_to_rod", 40), "lid_h": num("extruder_clearance_height_to_lid", 200),
                    "max_h": num("printable_height", 0) or num("extruder_clearance_height_to_lid", 200),
                    "rod_d": num("extruder_clearance_dist_to_rod", 50),
-                   "head_r": num("extruder_clearance_max_radius", num("extruder_clearance_radius", 65))}
+                   "head_r": num("extruder_clearance_max_radius", num("extruder_clearance_radius", 65)),
+                   **({"rod_h": mc[2], "lid_h": mc[3], "head_r": mc[4], "max_h": mc[5]} if mc else {})}
     except Exception:
         logger.exception("[REGROUPER] profil illisible")
         out = None
