@@ -372,7 +372,7 @@ async def _group_copies(db, pids) -> dict:
     return out
 
 
-async def _printed_plates(dids) -> dict:
+async def _printed_plates(dids, statuses: tuple = ("SUCCESS", "PARTIAL")) -> dict:
     """Mes impressions reussies de ces modeles, une entree par print : {design_id: [{"prof", "plates", "g", "copies"}]}
     (profil « » : pas connu ; plates : les plateaux qu'il couvre, un print qui en regroupe plusieurs comptant pour
     chacun ; g : le filament qu'il a pris ; copies : les exemplaires de ses plateaux dits a la main, sinon None)."""
@@ -386,7 +386,7 @@ async def _printed_plates(dids) -> dict:
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(Print.design_id, Print.plate_id, Print.mw_profile_id, Print.mw_plates,
                                         Print.total_weight_g, Print.number_of_items, Print.id, Print.model_3mf).where(
-            Print.design_id.in_(dids), Print.status.in_(("SUCCESS", "PARTIAL"))))).all()
+            Print.design_id.in_(dids), Print.status.in_(statuses)))).all()
         gcop = await _group_copies(db, [r[6] for r in rows])
         # les filaments de chaque impression (06/11/2026, variantes de couleur) : ceux de ses bobines
         from ..models.print_history import FilamentUsage
@@ -674,6 +674,19 @@ async def queue(fresh: bool = False, until: str | None = None, pick: list | None
     # En cours d'impression (etat MQTT en direct, ou impression ouverte dans l'historique) : en tete.
     live = _live_print()
     on_plates = await _printing_plates()
+    # les variantes de couleur d'un profil qui imprime (06/11/2026) : l'impression en cours repartie entre elles comme
+    # les impressions faites (ses objets et leurs couleurs), meme envoyee d'un fichier retranche (autre numero de profil)
+    vcount = {}
+    vgroups = {k: v for k, v in _variant_groups(raw["models"]).items() if k[0] in on_plates}
+    if vgroups:
+        try:
+            from .makerworld import model_detail
+            inprog = await _printed_plates(list({k[0] for k in vgroups}), ("IN_PROGRESS",))
+            for (did, iid), rows in vgroups.items():
+                vcount[(did, iid)] = _variant_counts(rows, inprog.get(str(did), []), await model_detail(str(did), stale_ok=True), iid)
+        except Exception:
+            logger.exception("[QUEUE] variantes en cours")
+            vcount = {}
     models = []
     for r in raw["models"]:
         mw = mw_of(r["design_id"])
@@ -687,6 +700,12 @@ async def queue(fresh: bool = False, until: str | None = None, pick: list | None
             ids = {str((r.get("profile") or {}).get(k) or "") for k in ("instance_id", "profile_id")} - {""}
             ents = [e for e in on_plates[mw] if e["prof"] in ids]
             printing = bool(ents)
+        if r.get("color_variant") and (mw, (r.get("profile") or {}).get("instance_id")) in vcount:
+            # une variante de couleur (06/11/2026) : ce que l'impression en cours lui donne, d'apres ses objets et leurs couleurs
+            vc = vcount[(mw, r["profile"]["instance_id"])].get(r["design_id"]) or {}
+            printing = bool(vc)
+            r = {**r, "plates": [{**p, "printing": bool(vc.get(p.get("index"))), "printing_n": vc.get(p.get("index"), 0)} for p in r["plates"]]}
+            ents = None
         if ents and r.get("plates"):
             # combien d'exemplaires chaque plateau en cours va donner (dits a la main, elements, poids)
             pg = {p.get("index"): p.get("weight_g") for p in r["plates"]}
@@ -763,60 +782,73 @@ def _split_variants(models: list, done_plates: dict, details: dict) -> None:
     """Les variantes de couleur d'un meme profil (06/11/2026) : chaque impression de ce profil compte pour UNE variante,
     celle a laquelle on l'a rattachee, sinon celle dont elle a le plus de filaments (a egalite, la premiere). Les
     plateaux faits de chaque variante sont recomptes."""
+    for (did, iid), rows in _variant_groups(models).items():
+        counts = _variant_counts(rows, done_plates.get(str(did), []), details.get(did) or {}, iid)
+        for r in rows:
+            for pl in r.get("plates") or []:
+                pl["printed"] = counts[r["design_id"]].get(pl["index"], 0)
+
+
+def _variant_groups(models: list) -> dict:
     groups = {}
     for r in models:
         if r.get("color_variant") and r.get("profile"):
             groups.setdefault((r["mw_id"], r["profile"]["instance_id"]), []).append(r)
-    for (did, iid), rows in groups.items():
-        m = details.get(did) or {}
-        prof = next((p for p in m.get("profiles") or [] if p.get("instance_id") == iid), None) or {}
-        ids = {str(prof.get("instance_id") or ""), str(prof.get("profile_id") or "")} - {""}
-        plate_g = {pl.get("index"): _num(pl.get("weight_g")) or sum(_num(f.get("g")) for f in pl.get("filaments") or [])
-                   for pl in prof.get("plates") or []}
-        pieces = plate_pieces(did, prof)
-        counts = {r["design_id"]: {} for r in rows}
-        for e in done_plates.get(str(did), []):
-            if e["prof"] not in ids:
-                continue
-            to = next((r for r in rows if e.get("variant") == r["design_id"]), None)
-            c = copies_of(e, plate_g, pieces)[0]
-            fids = e.get("fids") or set()
-            # objet par objet (06/11/2026) : le 3MF tranche dit les objets poses et leur filament ; chacun va a la variante
-            # qui a ses couleurs. Le nombre d'objets d'une variante, sur les pieces d'un exemplaire, fait ses exemplaires
-            if to is None and len(rows) > 1:
-                objs = print_objects(e.get("tmf"), e.get("plate_id"))
-                per = max(1, sum(pieces.get(n) or 0 for n in e["plates"]) or 1)
-                got = {}
-                for cols in objs:
-                    of = {(e.get("fcol") or {}).get(x) for x in cols} - {None}
-                    if not of:
-                        continue
-                    cand = [r for r in rows if r["_fids"] and of <= r["_fids"]]
-                    if cand:
-                        r = min(cand, key=lambda r: (len(r["_fids"]), rows.index(r)))
-                        got[r["design_id"]] = got.get(r["design_id"], 0) + 1
-                if len(got) >= 2 or (got and sum(got.values()) >= per * 2):
-                    for rid, nobj in got.items():
-                        k = max(1, round(nobj / per))
-                        for n in e["plates"]:
-                            counts[rid][n] = counts[rid].get(n, 0) + k
+    return groups
+
+
+def _variant_counts(rows: list, entries: list, m: dict, iid) -> dict:
+    """{ligne: {plateau: exemplaires}} : ces impressions reparties entre les variantes de couleur d'un profil (faites, ou
+    en cours). Une impression d'un profil que MakerWorld ne connait pas pour ce modele (le fichier retranche et envoye
+    depuis Bambu Studio porte un nouveau numero, 06/11/2026 : les 4 echantillons de Guillaume) compte pour lui ; celle
+    d'un autre profil MakerWorld du modele, non."""
+    prof = next((p for p in m.get("profiles") or [] if p.get("instance_id") == iid), None) or {}
+    ids = {str(prof.get("instance_id") or ""), str(prof.get("profile_id") or "")} - {""}
+    others = {str(p.get(k) or "") for p in m.get("profiles") or [] if p is not prof for k in ("instance_id", "profile_id")} - {""} - ids
+    plate_g = {pl.get("index"): _num(pl.get("weight_g")) or sum(_num(f.get("g")) for f in pl.get("filaments") or [])
+               for pl in prof.get("plates") or []}
+    pieces = plate_pieces(rows[0]["mw_id"], prof)
+    counts = {r["design_id"]: {} for r in rows}
+    for e in entries:
+        if e["prof"] not in ids and (e["prof"] in others or not m.get("profiles")):
+            continue
+        to = next((r for r in rows if e.get("variant") == r["design_id"]), None)
+        c = copies_of(e, plate_g, pieces)[0]
+        fids = e.get("fids") or set()
+        # objet par objet (06/11/2026) : le 3MF tranche dit les objets poses et leur filament ; chacun va a la variante
+        # qui a ses couleurs. Le nombre d'objets d'une variante, sur les pieces d'un exemplaire, fait ses exemplaires
+        if to is None and len(rows) > 1:
+            objs = print_objects(e.get("tmf"), e.get("plate_id"))
+            per = max(1, sum(pieces.get(n) or 0 for n in e["plates"]) or 1)
+            got = {}
+            for cols in objs:
+                of = {(e.get("fcol") or {}).get(x) for x in cols} - {None}
+                if not of:
                     continue
-            # plusieurs variantes sur un meme plateau (06/11/2026 : 4 echantillons de 4 couleurs, en un seul print de x4) :
-            # chaque variante dont il a tous les filaments en prend sa part, a parts egales (le reste aux premieres)
-            full = [r for r in rows if r["_fids"] and r["_fids"] <= fids] if to is None and c > 1 else []
-            if len(full) >= 2:
-                share = [c // len(full) + (1 if i < c % len(full) else 0) for i in range(len(full))]
-                for r, k in zip(full, share):
+                cand = [r for r in rows if r["_fids"] and of <= r["_fids"]]
+                if cand:
+                    r = min(cand, key=lambda r: (len(r["_fids"]), rows.index(r)))
+                    got[r["design_id"]] = got.get(r["design_id"], 0) + 1
+            if len(got) >= 2 or (got and sum(got.values()) >= per * 2):
+                for rid, nobj in got.items():
+                    k = max(1, round(nobj / per))
                     for n in e["plates"]:
-                        counts[r["design_id"]][n] = counts[r["design_id"]].get(n, 0) + k
+                        counts[rid][n] = counts[rid].get(n, 0) + k
                 continue
-            if to is None:
-                to = max(rows, key=lambda r: (len(fids & r["_fids"]) / max(1, len(r["_fids"])), -rows.index(r)))
-            for n in e["plates"]:
-                counts[to["design_id"]][n] = counts[to["design_id"]].get(n, 0) + c
-        for r in rows:
-            for pl in r.get("plates") or []:
-                pl["printed"] = counts[r["design_id"]].get(pl["index"], 0)
+        # plusieurs variantes sur un meme plateau (06/11/2026 : 4 echantillons de 4 couleurs, en un seul print de x4) :
+        # chaque variante dont il a tous les filaments en prend sa part, a parts egales (le reste aux premieres)
+        full = [r for r in rows if r["_fids"] and r["_fids"] <= fids] if to is None and c > 1 else []
+        if len(full) >= 2:
+            share = [c // len(full) + (1 if i < c % len(full) else 0) for i in range(len(full))]
+            for r, k in zip(full, share):
+                for n in e["plates"]:
+                    counts[r["design_id"]][n] = counts[r["design_id"]].get(n, 0) + k
+            continue
+        if to is None:
+            to = max(rows, key=lambda r: (len(fids & r["_fids"]) / max(1, len(r["_fids"])), -rows.index(r)))
+        for n in e["plates"]:
+            counts[to["design_id"]][n] = counts[to["design_id"]].get(n, 0) + c
+    return counts
 
 
 async def _compute(fresh: bool = False) -> dict:
