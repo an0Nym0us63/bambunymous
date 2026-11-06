@@ -784,9 +784,12 @@ class MQTTManager:
                     # Les filaments custom n'ont pas de tray_sub_brands mais ont un UUID valide
                     tray_uuid = tr.get("tray_uuid", "") or ""
                     tray_color = tr.get("tray_color", "") or ""
-                    t.empty = (
-                        tray_uuid.replace("0", "") == "" and
-                        tray_color.replace("0", "") == ""
+                    # (06/11/2026) un externe sans rien dedans : ni type, ni profil (le 2e externe d'une H2C vide dit
+                    # tray_color FFFFFF00, sans type ; il s'affichait comme une bobine blanche a 0 %). Pas dans
+                    # l'AMS : une bobine inconnue, sans reglage, y est bien la (« manual »)
+                    t.empty = tray_uuid.replace("0", "") == "" and (
+                        tray_color.replace("0", "") == "" or
+                        (ams.id in (254, 255) and not ((tr.get("tray_type") or "").strip() or (tr.get("tray_info_idx") or "").strip()))
                     )
                     t.drying_temp = int(tr.get("drying_temp") or 0)
                     t.drying_time = int(tr.get("drying_time") or 0)
