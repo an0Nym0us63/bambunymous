@@ -156,9 +156,12 @@ def bambu_no(kind: str) -> list:
 
 
 def owned(plates: list) -> list:
-    """Les types de plateau possedes, dans l'ordre de preference."""
-    have = {p.get("kind") for p in plates or [] if p.get("kind") in KINDS and int(p.get("n") or 0) > 0}
-    return [k for k in ORDER if k in have]
+    """Les types de plateau possedes, dans l'ordre de preference de l'utilisateur (celui de la liste, 06/11/2026)."""
+    out = []
+    for p in plates or []:
+        if p.get("kind") in KINDS and int(p.get("n") or 0) > 0 and p["kind"] not in out:
+            out.append(p["kind"])
+    return out
 
 
 def avoid_map(plates: list) -> dict:

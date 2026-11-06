@@ -635,8 +635,8 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
     # de route ; on dit vers quelle heure (au prorata de la duree), pour preparer la suivante. Une bobine chargee
     # ensuite : on ne sait pas laquelle, on la suppose assez pleine
     ams_g = {fid: float(v.get("g") or 0) for fid, v in (d.get("_ams") or {}).items()}
-    # les plateaux d'impression (06/11/2026) : celui que demande le profil s'il est possede et convient au filament, sinon
-    # celui en place s'il convient, sinon le premier possede qui convient ; un changement compte comme une bobine
+    # les plateaux d'impression (06/11/2026) : le premier de l'ordre de preference qui convient aux filaments (apres un
+    # TPU passe sur le PEI texture, le PLA suivant revient sur le SuperTack prefere) ; un changement compte comme une bobine
     from . import plates as PL
     own = PL.owned(d.get("plates"))
     avoid = PL.avoid_map(d.get("plates"))
@@ -652,12 +652,13 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
             bad |= PL.bad_kinds(mt, ft, avoid)
         ok = [k for k in own if k not in bad]
         want = j.get("bed_want")
-        need = want if want in ok else bed["cur"] if bed["cur"] in ok else ok[0] if ok else (want or bed["cur"])
+        need = ok[0] if ok else (want or bed["cur"])
         warn = None
         if not ok:
             warn = "Aucun de tes plateaux ne convient à ce filament"
-        elif want and want not in ok:
-            warn = f"Prévu pour {PL.KINDS[want]}, " + ("que tu n'as pas" if want not in own else "déconseillé pour ce filament")
+        elif want and want != need:
+            warn = f"Le profil est prévu pour {PL.KINDS[want]}" + (" (que tu n'as pas)" if want not in own else
+                                                                   " (déconseillé pour ce filament)" if want not in ok else "")
         ch = {"from": bed["cur"], "to": need} if need and need != bed["cur"] else None
         bed["cur"] = need or bed["cur"]
         return need, ch, warn
