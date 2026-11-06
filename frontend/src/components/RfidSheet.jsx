@@ -14,7 +14,7 @@ import { colorBg, parseColorsList, finishOf } from "../utils/colors";
  * - prix de la bobine : toujours demandé (il varie d'un achat à l'autre) ;
  * - prix du filament : uniquement si le filament doit être créé.
  */
-export default function RfidSheet({ scanId, onClose, onCreated }) {
+export default function RfidSheet({ scanId, onClose, onCreated, z = 4000 }) {
   useTrackDetail("Filaments · Étiquette RFID");
   const [data, setData]   = useState(null);
   const [err, setErr]     = useState(null);
@@ -78,7 +78,7 @@ export default function RfidSheet({ scanId, onClose, onCreated }) {
   const lbl = { display:"block", fontSize:11, color:"var(--muted)", marginBottom:4 };
 
   return createPortal(
-    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4000,
+    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:z,
       background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"flex-end",
       justifyContent:"center" }}>
       <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:520,
