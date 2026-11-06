@@ -144,11 +144,6 @@ input, textarea, select, [contenteditable]:not([contenteditable="false"]) { care
   will-change: transform;
 }
 
-/* Diagnostic d'affichage (07/11/2026, Parametres > Outils) : sans flou, sans animations, sur cet appareil */
-html.bn-diag-noblur *, html.bn-diag-noblur *::before, html.bn-diag-noblur *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
-html.bn-diag-noblur .app-header, html.bn-diag-noblur .show-mobile { background-color: var(--sheet-bg, #1a1d27) !important; }
-html.bn-diag-noanim *, html.bn-diag-noanim *::before, html.bn-diag-noanim *::after { animation: none !important; transition: none !important; }
-
 /* Un geste a plusieurs doigts (capture d'ecran Android) : pas de rafraichissement natif (06/11/2026) */
 html.bn-multitouch, html.bn-multitouch body { overscroll-behavior-y: contain; }
 
