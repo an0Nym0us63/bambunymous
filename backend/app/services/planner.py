@@ -37,6 +37,7 @@ faits a la main, plus celui qui imprime). Deux objets de 7 plateaux, un plateau 
 deux fois : il reste un plateau a faire une fois et un autre deux fois. Les plateaux de modeles differents peuvent
 s'intercaler (l'optimiseur enchaine ceux de memes couleurs) ; le plateau qui termine un objet le dit.
 """
+import functools
 import json
 import logging
 from datetime import datetime, timedelta
@@ -399,7 +400,8 @@ def _day_fr(t: datetime, today) -> str:
     return f"{j} {t.day}"
 
 
-def fr_holidays(year: int) -> set:
+@functools.lru_cache(maxsize=16)
+def fr_holidays(year: int) -> frozenset:
     """Les jours feries en France (06/11/2026) : les fixes, puis lundi de Paques, Ascension, lundi de Pentecote."""
     from datetime import date
     a, b, c = year % 19, year // 100, year % 100
@@ -414,7 +416,7 @@ def fr_holidays(year: int) -> set:
     day = ((h + l_ - 7 * m + 114) % 31) + 1
     easter = date(year, month, day)
     fixed = {date(year, mm, dd) for mm, dd in ((1, 1), (5, 1), (5, 8), (7, 14), (8, 15), (11, 1), (11, 11), (12, 25))}
-    return fixed | {easter + timedelta(days=n) for n in (1, 39, 50)}
+    return frozenset(fixed | {easter + timedelta(days=n) for n in (1, 39, 50)})
 
 
 class Rules:
@@ -479,7 +481,16 @@ class Rules:
 
     def _days_iv(self, kind: str, t0: datetime, days: int):
         """Les plages de lancement (ou de fonctionnement) jour par jour, celles du week-end ces jours-la ; une journee
-        sans plage est entiere. Les plages qui se touchent sont reunies (une impression peut passer minuit)."""
+        sans plage est entiere. Les plages qui se touchent sont reunies (une impression peut passer minuit). Gardees par
+        jour de depart (06/11/2026 : refaites a chaque essai du planning, 11 s au demarrage)."""
+        ck = (kind, t0.date(), days)
+        memo = self.__dict__.setdefault("_ivmemo", {})
+        if ck in memo:
+            return memo[ck]
+        memo[ck] = r = self._days_iv0(kind, t0, days)
+        return r
+
+    def _days_iv0(self, kind: str, t0: datetime, days: int):
         base = self.launch if kind == "launch" else self.run
         alt = self.we_launch if kind == "launch" else self.we_run
         d0 = datetime(t0.year, t0.month, t0.day) - timedelta(days=1)
@@ -505,6 +516,13 @@ class Rules:
         particulier ni absence : None (a toute heure)."""
         if not self.launch and not self.off and not self.away and not (self.we and self.we_launch):
             return None
+        ck = ("L", c.date(), horizon)
+        memo = self.__dict__.setdefault("_ivmemo", {})
+        if ck not in memo:
+            memo[ck] = self._launch_iv0(c, horizon)
+        return memo[ck]
+
+    def _launch_iv0(self, c: datetime, horizon: int):
         iv = self._days_iv("launch", c, horizon) if (self.launch or self.we) else self._iv((0, 1440), c, horizon)
         out = list(iv)
         # les periodes (06/11/2026, a l'heure pres) : absent, rien ne se lance ; peu dispo, seule la premiere heure de
