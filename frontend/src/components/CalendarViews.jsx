@@ -146,8 +146,11 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
               data-tip={`${plan ? jobName(e.j) : title} · ${String(Math.floor(e.a / 60)).padStart(2, "0")}:${String(e.a % 60).padStart(2, "0")}`}
               style={{ position: "absolute", left: 4, right: 3, top, height: h, zIndex: 1, overflow: "hidden", cursor: "pointer", textAlign: "left", font: "inherit",
                 display: "flex", alignItems: big ? "flex-start" : "center", gap: 6, padding: big ? "4px 6px" : "0 6px", borderRadius: 8, boxSizing: "border-box",
-                border: plan ? `${e.j.locked ? 2 : 1.5}px ${e.j.completes || e.j.locked ? "solid" : "dashed"} ${e.color}` : "none",
-                background: plan ? `color-mix(in srgb, ${e.color} 14%, var(--surface))`
+                // la fin d'un objet (06/11/2026 : trop discrete) : bord vert franc, fond plus vert, et un fanion dans le coin
+                border: plan ? (e.j.completes ? "2.5px solid #059669" : `${e.j.locked ? 2 : 1.5}px ${e.j.locked ? "solid" : "dashed"} ${e.color}`) : "none",
+                boxShadow: plan && e.j.completes ? "0 0 0 2px color-mix(in srgb, #10B981 25%, transparent)" : "none",
+                background: plan ? (e.j.completes ? "linear-gradient(135deg, color-mix(in srgb, #10B981 30%, var(--surface)), color-mix(in srgb, #10B981 12%, var(--surface)))"
+                  : `color-mix(in srgb, ${e.color} 14%, var(--surface))`)
                   : `linear-gradient(135deg, color-mix(in srgb, ${e.color} 80%, #000 0%), color-mix(in srgb, ${e.color} 55%, transparent))`,
                 color: plan ? "var(--text)" : "#fff" }}>
               {big && <Thumb e={e} size={Math.min(one ? 44 : 28, h - 8)}/>}
@@ -161,6 +164,8 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
                 {big && one && plan && e.j.low_info?.length > 0 && <span style={{ display: "block", fontSize: 10.5, fontWeight: 900, color: "#DC2626", whiteSpace: "nowrap", overflow: "hidden",
                   textOverflow: "ellipsis" }}>📉 {e.j.low_info.map(x => x.name).join(", ")} sous le seuil</span>}
               </span>
+              {plan && e.j.completes && <span data-tip={doneTxt(e.j)} style={{ position: "absolute", right: 2, bottom: 2, padding: "0 6px", borderRadius: 6,
+                background: "#059669", color: "#fff", fontSize: 10, fontWeight: 900, lineHeight: "15px", whiteSpace: "nowrap" }}>🏁{big ? " fini" : ""}</span>}
               {plan && e.j.low_info?.length > 0 && <span data-tip={`📉 ${e.j.low_info.map(x => `${x.name} sous le seuil (il en restera ${x.left} g)`).join(" · ")}`}
                 style={{ position: "absolute", top: 2, right: 2, padding: "0 4px", borderRadius: 6, background: "#FEE2E2", border: "1px solid #FCA5A5", fontSize: 10, lineHeight: "14px" }}>📉</span>}
             </button>;
@@ -198,8 +203,8 @@ export function WeekAgenda({ dates, days, jobs, settings, now, live, pick, onPic
           const plan = e.kind === "plan";
           return <button key={e.key} type="button" onClick={() => plan ? onOpenJob(e.j) : onOpenPrint(e.it)}
             style={{ display: "flex", alignItems: "center", gap: 8, padding: 5, borderRadius: 11, cursor: "pointer", textAlign: "left", font: "inherit",
-              border: plan ? `1.5px ${e.j.completes ? "solid" : "dashed"} ${e.color}` : "1px solid var(--border)",
-              background: plan ? `color-mix(in srgb, ${e.color} 7%, var(--surface2))` : "var(--surface2)" }}>
+              border: plan ? (e.j.completes ? "2px solid #059669" : `1.5px dashed ${e.color}`) : "1px solid var(--border)",
+              background: plan ? (e.j.completes ? "color-mix(in srgb, #10B981 18%, var(--surface2))" : `color-mix(in srgb, ${e.color} 7%, var(--surface2))`) : "var(--surface2)" }}>
             <span style={{ width: 44, flexShrink: 0, fontSize: 12, fontWeight: 900, color: plan ? "#16A34A" : e.color, textAlign: "center" }}>
               {String(Math.floor(e.a / 60)).padStart(2, "0")}:{String(e.a % 60).padStart(2, "0")}</span>
             <Thumb e={e} size={34}/>

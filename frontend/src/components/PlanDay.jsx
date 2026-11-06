@@ -449,7 +449,8 @@ export function NowNextTiles({ pd, onOpenPrint, onPickJob, wide }) {
             <span style={{ color: "var(--muted)", fontWeight: 700 }}> · encore {hm(live.remaining_min * 60)}</span></span>
           {live.planned_end && (() => { const dr = endDrift(live.planned_end, pd.busy_until); return dr && <span style={{ display: "flex", alignItems: "center", gap: 6,
             fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
-            prévue au lancement : <b style={{ color: "var(--text2)" }}>{whenTxt(live.planned_end, now)}</b>
+            <span data-tip={live.planned_pct ? `Durée annoncée par le fichier, corrigée de ton écart habituel (${live.planned_pct > 0 ? "+" : ""}${live.planned_pct} %)` : "Durée annoncée par le fichier"}>
+              prévue au lancement{live.planned_pct ? ` (${live.planned_pct > 0 ? "+" : ""}${live.planned_pct} %)` : ""} :</span> <b style={{ color: "var(--text2)" }}>{whenTxt(live.planned_end, now)}</b>
             <span style={{ fontWeight: 900, color: dr.c, background: `color-mix(in srgb, ${dr.c} 14%, transparent)`, borderRadius: 7, padding: "0 6px" }}>{dr.txt}</span></span>; })()}
           {pct != null && <span style={{ height: 6, borderRadius: 4, background: "var(--surface2)", overflow: "hidden" }}>
             <span style={{ display: "block", height: "100%", width: `${pct * 100}%`, background: "linear-gradient(90deg, #3B82F6, #60A5FA)" }}/></span>}

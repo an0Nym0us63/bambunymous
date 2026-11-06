@@ -468,9 +468,12 @@ async def _live_print(d: dict) -> dict:
         return {}
     tzm = d.get("tz") if isinstance(d.get("tz"), int) else 60
     st = p[1] + timedelta(minutes=tzm) if p[1] else None
-    # la fin prevue au lancement (05/11/2026) : le debut plus la duree estimee par le fichier tranche
-    planned = (st + timedelta(seconds=int(p[4]))).isoformat(timespec="minutes") if st and p[4] else None
-    return {"print_id": p[0], "start": st.isoformat(timespec="minutes") if st else None, "title": p[2] or p[3], "planned_end": planned}
+    # la fin prevue au lancement (05/11/2026) : le debut plus la duree estimee par le fichier tranche ; corrigee de
+    # l'ecart habituel quand les durees le sont (06/11/2026) : l'ecart affiche est alors ce que cette impression a de plus
+    f = float((d.get("_dur") or {}).get("factor") or 1.0)
+    planned = (st + timedelta(seconds=int(p[4] * f))).isoformat(timespec="minutes") if st and p[4] else None
+    return {"print_id": p[0], "start": st.isoformat(timespec="minutes") if st else None, "title": p[2] or p[3], "planned_end": planned,
+            "planned_pct": round((f - 1) * 100) if abs(f - 1) > 0.005 else 0}
 
 
 def _title(j) -> str:
