@@ -26,6 +26,7 @@ import { showAlert, showConfirm } from "../utils/dialog";
 import { toast } from "../store/toast";
 import { Heart } from "lucide-react";
 import ShareSheet from "./ShareSheet";
+import { useStackZ } from "../utils/zstack";
 
 // Prechargement : la fiche est demandee des qu'on touche une tuile ; a
 // l'ouverture, la reponse est souvent deja la.
@@ -81,7 +82,8 @@ function PlansStrip({ plans, profiles, onOpen }) {
   </div>;
 }
 
-export default function MakerWorldModelSheet({ designId, preview, onClose, onSearch, z = 4200 }) {
+export default function MakerWorldModelSheet({ designId, preview, onClose, onSearch, z: z0 = 4200 }) {
+  const z = useStackZ(z0);              // au-dessus de toute fenetre deja ouverte (06/11/2026)
   // « 123#456#123~456~2 » (06/11/2026, depuis le planning) : le modele, le profil a deplier, et sa variante de couleur
   const [did0, prof0, var0] = String(designId ?? "").split("#");
   const want = useRef({ iid: prof0 || null, vk: var0 && var0.split("~").length === 3 ? var0 : null });

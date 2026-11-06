@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc } from "./PlanDay";
+import { useStackZ } from "../utils/zstack";
 
 // Les fenetres du planning (05/11/2026) : une fenetre (en bas au telephone, au centre sur ordinateur), la fiche
 // d'actions d'un plateau, la file regroupee par objet, les plateaux non planifiables.
@@ -23,7 +24,8 @@ export function UndoPill({ info, onUndo, compact, style }) {
       whiteSpace: "nowrap", ...style }}>↶{compact ? "" : ` Annuler : ${info.why}`}</button>;
 }
 
-export function PlanPopup({ title, icon, color = "#6366F1", onClose, children, wide, z = 5200 }) {
+export function PlanPopup({ title, icon, color = "#6366F1", onClose, children, wide, z: z0 = 5200 }) {
+  const z = useStackZ(z0);              // au-dessus de toute fenetre deja ouverte (06/11/2026)
   const phone = typeof window !== "undefined" && window.innerWidth < 640;
   return createPortal(<div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: z, background: "rgba(2,6,23,0.55)", backdropFilter: "blur(5px)",
     display: "flex", alignItems: phone ? "flex-end" : "center", justifyContent: "center", padding: phone ? 0 : 16 }}>

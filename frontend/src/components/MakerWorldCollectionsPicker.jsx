@@ -2,12 +2,14 @@ import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import client from "../api/client";
 import { mwCollections } from "../utils/mwSync";
+import { useStackZ } from "../utils/zstack";
 
 // Ranger un modele dans mes collections MakerWorld : une case par collection,
 // creation rapide. MakerWorld REMPLACE la liste a chaque enregistrement :
 // si l'appli n'a pas su lire ou se trouve deja le modele, elle refuse
 // d'enregistrer plutot que de le retirer des autres collections.
-export default function MakerWorldCollectionsPicker({ designId, title, item, onClose, onSaved, z = 4500 }) {
+export default function MakerWorldCollectionsPicker({ designId, title, item, onClose, onSaved, z: z0 = 4500 }) {
+  const z = useStackZ(z0);              // au-dessus de toute fenetre deja ouverte (06/11/2026)
   const [data, setData] = useState(null);         // { collections, in, known } | { error }
   const [sel, setSel] = useState(new Set());
   const [q, setQ] = useState("");

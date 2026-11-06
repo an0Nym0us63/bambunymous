@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { mwImg, isVideo } from "./MwImg";
 import { apiThumb } from "../api/client";
+import { useStackZ } from "../utils/zstack";
 
 // Galerie plein ecran, la meme partout (25/10/2026) : photos d'une impression, galerie, fiche
 // MakerWorld, copains, accueil. On fait defiler en grand (glisser sur telephone, fleches ou
@@ -13,6 +14,7 @@ import { apiThumb } from "../api/client";
 // navigateur ne sait pas la lire, « fallback » (une version convertie) prend le relais (26/10/2026).
 // data-no-pull : le tirer-pour-rafraichir de la coquille Android reste coupe pendant ce temps.
 export default function Lightbox({ images, index = 0, onClose, title = null, actions = null, onIndex = null }) {
+  const zTop = useStackZ(6000);         // au-dessus de toute fenetre deja ouverte (06/11/2026)
   const items = (images || []).map(x => typeof x === "string" ? { url: x, label: "" } : x);
   const box = useRef(null);
   const strip = useRef(null);
@@ -69,7 +71,7 @@ export default function Lightbox({ images, index = 0, onClose, title = null, act
   const small = (u, n) => String(u || "").startsWith("/api/") ? apiThumb(u, n) : mwImg(u, n);
 
   return createPortal(
-    <div data-no-pull="" onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 6000, background: "#05060a",
+    <div data-no-pull="" onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: zTop, background: "#05060a",
       display: "flex", flexDirection: "column", animation: "bn-fade .18s ease-out", overflow: "hidden" }}>
       {/* le fond : l'image en cours, tres floutee, assombrie */}
       {now.url && !isVideo(now.url) && <img key={now.url} src={small(now.url, 96)} alt="" aria-hidden="true" referrerPolicy="no-referrer"

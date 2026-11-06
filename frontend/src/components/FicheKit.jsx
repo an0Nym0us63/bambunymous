@@ -2,6 +2,7 @@ import React from "react";
 import { Search, SlidersHorizontal, Plus } from "lucide-react";
 import AdminOnly from "./AdminOnly";
 import { useKeyboardInset } from "../utils/keyboard";
+import { useStackZ } from "../utils/zstack";
 
 // Le langage des fiches et des pages de liste (25/10/2026) : sorti de la page Filaments pour etre partage
 // (Objets et accessoires le reprennent). La coque d'une fiche, ses tuiles de chiffres, ses cartes de faits,
@@ -29,7 +30,8 @@ export const agoFr = iso => { if (!iso) return null; const d = Math.floor((Date.
 // la coque : fond assombri, feuille (en bas au telephone, centree a l'ordinateur), barre du haut et barre d'actions
 // (28/10/2026) la feuille remonte au-dessus du clavier virtuel : la barre du bas (Enregistrer/Annuler) reste visible,
 // et le champ qui prend le focus est recentre dans la zone qui defile une fois le clavier sorti.
-export function FSheet({ onClose, top = null, bottom = null, children, z = 1000 }) {
+export function FSheet({ onClose, top = null, bottom = null, children, z: z0 = 1000 }) {
+  const z = useStackZ(z0);              // au-dessus de toute fenetre deja ouverte (06/11/2026)
   const wide = typeof window !== "undefined" && window.innerWidth >= 900;
   const kb = useKeyboardInset();
   const maxH = wide ? "90dvh" : "94dvh";
