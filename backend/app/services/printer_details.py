@@ -240,6 +240,8 @@ def build(state) -> dict:
     _row(r, "Surveillance de l'impression", _yes(x.get("printing_monitor")))
     _row(r, "Contrôle de la première couche", _yes(x.get("first_layer_inspector")))
     _row(r, "Repère du plateau", _yes(x.get("buildplate_marker_detector")))
+    _row(r, "Code du plateau lu", ((p.get("device") or {}).get("plate") or {}).get("cur_id") or None,
+         "Le code du plateau en place ; associé à l'un des tiens dans Paramètres › Imprimante")
     _row(r, "Arrêt sur défaut", _yes(x.get("print_halt")))
     _row(r, "Sensibilité", {"low": "faible", "medium": "moyenne", "high": "haute"}.get(x.get("halt_print_sensitivity"), x.get("halt_print_sensitivity")))
     _row(r, "Saut d'objets autorisé", _yes(x.get("allow_skip_parts"), "oui", "non"))

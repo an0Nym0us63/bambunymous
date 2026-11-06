@@ -141,15 +141,59 @@ async def mounted(plates: list | None = None) -> dict | None:
     """Le plateau en place (06/11/2026) : celui dont l'imprimante voit le code, s'il a ete reconnu (« C'est celui en
     place ») ; sinon celui de l'impression en cours ou de la derniere (son 3MF tranche). {kind, name, code, how}."""
     code = printer_code()
+    learned = await _learn(plates, code) if code else None
     if code:
         hits = [(p["kind"], (u.get("name") or f"{KINDS[p['kind']]} {i + 1}")) for p in plates or [] if p.get("kind") in KINDS
                 for i, u in enumerate(p.get("units") or []) if u.get("code") == code]
         if hits:
-            return {"kind": hits[0][0], "name": " ou ".join(h[1] for h in hits), "code": code, "how": "printer"}
+            return {"kind": hits[0][0], "name": " ou ".join(h[1] for h in hits), "code": code, "how": "printer",
+                    **({"learned": True} if learned else {})}
     out = await _mounted_3mf()
     if out:
         out["code"] = code
     return out or ({"kind": None, "code": code, "how": None} if code else None)
+
+
+async def _learn(plates: list | None, code: str) -> bool:
+    """Un code que l'imprimante lit pour la premiere fois (06/11/2026) : si une impression tourne, son 3MF dit le type
+    du plateau ; s'il ne reste qu'un plateau de ce type sans code, c'est lui : le code lui est associe (et enregistre).
+    Plusieurs candidats, ou aucun : rien (« C'est celui en place » dans Parametres › Imprimante)."""
+    if not plates or any(u.get("code") == code for p in plates for u in p.get("units") or []):
+        return False
+    try:
+        from ..core.mqtt import get_state
+        if str(get_state().status or "").upper() not in ("RUNNING", "PAUSE", "PREPARE"):
+            return False
+        from sqlalchemy import select
+        from ..db.session import AsyncSessionLocal
+        from ..models.print_history import Print
+        async with AsyncSessionLocal() as db:
+            row = (await db.execute(select(Print.model_3mf, Print.plate_id).where(Print.status == "IN_PROGRESS")
+                                    .order_by(Print.print_date.desc()).limit(1))).first()
+    except Exception:
+        logger.exception("[PLATEAUX] apprendre le code")
+        return False
+    k = bed_of_3mf(DATA_DIR / row[0], row[1]) if row and row[0] else None
+    p = next((x for x in plates if x.get("kind") == k), None)
+    if not p:
+        return False
+    n = int(p.get("n") or 0)
+    units = list(p.get("units") or [])[:n]
+    while len(units) < n:
+        units.append({"name": "", "code": None})
+    free = [i for i, u in enumerate(units) if not u.get("code")]
+    if len(free) != 1:
+        return False
+    units[free[0]] = {**units[free[0]], "code": code}
+    p["units"] = units                       # en place : la config deja chargee le garde aussi
+    try:
+        from . import planner as P
+        await P.set_settings({"plates": plates})
+    except Exception:
+        logger.exception("[PLATEAUX] enregistrer le code appris")
+        return False
+    logger.info(f"[PLATEAUX] code {code} appris : {KINDS.get(k, k)} n°{free[0] + 1} (d'apres le 3MF de l'impression)")
+    return True
 
 
 async def _mounted_3mf() -> dict | None:

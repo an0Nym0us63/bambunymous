@@ -495,6 +495,9 @@ async def mw_plan_plates_bind(body: dict = Body({}), _: str = Depends(require_mw
     units = list(p.get("units") or [])
     while len(units) <= i:
         units.append({"name": "", "code": None})
+    for x in d.get("plates") or []:                # un code ne va qu'a un plateau
+        x["units"] = [{**u, "code": None} if u.get("code") == code else u for u in x.get("units") or []]
+    units = [{**u, "code": None} if u.get("code") == code else u for u in units]
     units[i] = {**units[i], "code": code}
     p["units"] = units
     try:

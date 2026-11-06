@@ -43,7 +43,7 @@ export default function BuildPlatesCard({ card, cardTitle }) {
       Ceux que tu as, <b>dans ton ordre de préférence</b> (↑ ↓) : chaque impression prend le premier qui convient à ses filaments, et le planning
       te dit quand en changer (carte, tuile, notification). Ce que Bambu déconseille vient de Bambu Studio.
       {mounted && <> En place : <b style={{ color: "var(--text)" }}>{mounted.label}{d.mounted.how === "printer" && d.mounted.name ? ` « ${d.mounted.name} »` : ""}</b>
-        {d.mounted.how === "printer" ? " (reconnu par l'imprimante)." : " (celui de la dernière impression)."}</>}
+        {d.mounted.how === "printer" ? ` (reconnu par l'imprimante, code ${d.mounted.code}).` : " (celui de la dernière impression)."}</>}
       {d.mounted?.code && d.mounted.how !== "printer" && <> L'imprimante voit le code <b>{d.mounted.code}</b> : touche « C'est celui en place » sur le bon plateau
         pour qu'elle le reconnaisse ensuite.</>}</div>
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -71,7 +71,9 @@ export default function BuildPlatesCard({ card, cardTitle }) {
                   onBlur={e => { const v = e.target.value.trim(); if (v !== (u.name || "")) setUnit(k.kind, i, { name: v }); }}
                   style={{ flex: "1 1 120px", minWidth: 0, padding: "5px 8px", borderRadius: 9, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 12.5 }}/>
                 {u.code && <span data-tip="Le code que l'imprimante lit sur ce plateau" style={{ fontSize: 10.5, fontWeight: 900, color: here ? "#fff" : c,
-                  background: here ? c : `color-mix(in srgb, ${c} 12%, transparent)`, borderRadius: 6, padding: "1px 6px" }}>{here ? "● en place" : u.code}</span>}
+                  background: here ? c : `color-mix(in srgb, ${c} 12%, transparent)`, borderRadius: 6, padding: "1px 6px" }}>{here ? `● en place · ${u.code}` : u.code}</span>}
+                {!u.code && <span data-tip="Pas encore de code : « C'est celui en place » quand il est sur l'imprimante (ou reconnu tout seul par le 3MF de l'impression, s'il est le seul de son type sans code)"
+                  style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)", border: "1px dashed var(--border)", borderRadius: 6, padding: "1px 6px" }}>sans code</span>}
                 <button type="button" disabled={busy || !d.mounted?.code} onClick={() => bind(k.kind, i)}
                   data-tip={d.mounted?.code ? `Associer le code que l'imprimante voit maintenant (${d.mounted.code}) à ce plateau` : "L'imprimante ne dit pas quel plateau est en place"}
                   style={{ padding: "4px 9px", borderRadius: 9, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)",
