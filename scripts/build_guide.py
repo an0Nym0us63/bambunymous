@@ -82,6 +82,8 @@ body { padding: 0 16px; }
 /*GUIDE_CSS*/
 /* le site seul (hors appli) */
 .bn-guide .gd-bar { top: 0; }
+/* un lien vers une partie : son titre sous la barre collee en haut, pas derriere */
+.bn-guide [id] { scroll-margin-top: 76px; }
 .bn-guide .gd-col { top: 70px; }
 .bn-guide .gd-theme { width: 40px; height: 40px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); cursor: pointer; flex: none; font-size: 17px; }
 .bn-guide .gd-menu { display: none; }
