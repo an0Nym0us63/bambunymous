@@ -16,6 +16,7 @@ import Cachettes from "../components/Cachettes";
 // - les captures vont dans backend/guide/img, nommees <chapitre>-<sujet>.webp, en WebP pour rester leger.
 // Quand une fonctionnalite change, on modifie sa section (et sa capture) dans le meme commit.
 const CHAPTERS = [
+  ["installation", "Installer et configurer"],
   ["premiers-pas", "Premiers pas"],
   ["accueil", "Accueil"],
   ["tuiles", "Les tuiles de l'accueil"],
@@ -32,7 +33,7 @@ const CHAPTERS = [
 ];
 // chaque chapitre : son icone et sa couleur (celles de sa page dans l'appli) ; la feuille de style les reprend
 const CH_LOOK = {
-  "premiers-pas": ["👋", "#6366F1"], accueil: ["🏠", "#3B82F6"], tuiles: ["🧩", "#06B6D4"], imprimante: ["🖨️", "#0EA5E9"],
+  installation: ["📦", "#10B981"], "premiers-pas": ["👋", "#6366F1"], accueil: ["🏠", "#3B82F6"], tuiles: ["🧩", "#06B6D4"], imprimante: ["🖨️", "#0EA5E9"],
   impressions: ["🕓", "#3B82F6"], filaments: ["🧵", "#F97316"], objets: ["🎁", "#8B5CF6"], stats: ["📊", "#22C55E"],
   makerworld: ["🌐", "#06B6D4"], notifications: ["🔔", "#F59E0B"], copains: ["👥", "#14B8A6"], succes: ["🏆", "#EAB308"],
   parametres: ["⚙️", "#64748B"],

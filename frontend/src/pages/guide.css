@@ -52,6 +52,9 @@
 .bn-guide h2:hover a.anchor, .bn-guide h3:hover a.anchor, .bn-guide h4:hover a.anchor { opacity: 1; }
 .bn-guide p, .bn-guide li { color: var(--text); }
 .bn-guide .lead { font-size: 18px; color: var(--muted); }
+/* les commandes et fichiers a recopier (06/11/2026, chapitre Installer) */
+.bn-guide pre { margin: 10px 0 16px; padding: 12px 14px; border-radius: 12px; overflow-x: auto; background: var(--gd-code); border: 1px solid var(--border); }
+.bn-guide pre code { background: none; padding: 0; font-size: 13.5px; line-height: 1.5; white-space: pre; }
 .bn-guide code, .bn-guide kbd { font: 14px ui-monospace, SFMono-Regular, Consolas, monospace; background: var(--gd-code); padding: 1px 6px; border-radius: 6px; }
 .bn-guide .ui { font-weight: 650; background: var(--surface2); border: 1px solid var(--border); padding: 0 6px; border-radius: 6px; font-size: .94em;
   -webkit-box-decoration-break: clone; box-decoration-break: clone; overflow-wrap: anywhere; }

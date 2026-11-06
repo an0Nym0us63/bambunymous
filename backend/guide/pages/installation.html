@@ -1,0 +1,122 @@
+<h1>Installer et configurer</h1>
+<p class="lead">Pas à pas, pour qui n'a jamais installé de serveur : de rien du tout à BambuNymous qui suit ton imprimante, en une demi-heure environ.</p>
+
+<section id="installation-principe">
+  <h2>Ce qu'il te faut</h2>
+  <p>BambuNymous est un petit serveur qui tourne chez toi, sur ton réseau, et que tu ouvres dans le navigateur (ordinateur ou téléphone). Il lui faut :</p>
+  <ul>
+    <li><b>une machine allumée en permanence</b>, sur le même réseau que l'imprimante : un NAS (Synology, QNAP…), un Raspberry Pi 4 ou 5, un mini PC, un serveur maison. Un ordinateur de bureau marche aussi, mais l'appli ne suit l'imprimante que quand il est allumé ;</li>
+    <li><b>Docker</b> sur cette machine (le logiciel qui fait tourner l'appli dans sa boîte, sans rien installer d'autre) ;</li>
+    <li><b>ton imprimante Bambu Lab</b> branchée au réseau, avec trois informations lues sur son écran : son <b>adresse IP</b>, son <b>numéro de série</b> et son <b>code d'accès</b> (code LAN).</li>
+  </ul>
+  <div class="tip"><p>Tout reste chez toi : la base de données, les photos et les réglages vivent sur ta machine. Rien ne passe par un service extérieur, sauf ce que tu branches toi-même (MakerWorld, copains, notifications).</p></div>
+</section>
+
+<section id="installation-docker">
+  <h2>1. Installer Docker</h2>
+  <dl class="opts">
+    <dt>NAS Synology</dt><dd>Centre de paquets → <span class="ui">Container Manager</span> → Installer.</dd>
+    <dt>NAS QNAP</dt><dd>App Center → <span class="ui">Container Station</span> → Installer.</dd>
+    <dt>Raspberry Pi, Linux</dt><dd>Dans un terminal : <code>curl -fsSL https://get.docker.com | sh</code>, puis <code>sudo usermod -aG docker $USER</code> et reconnecte-toi.</dd>
+    <dt>Windows, Mac</dt><dd>Installe <b>Docker Desktop</b> depuis docker.com et lance-le une fois.</dd>
+  </dl>
+  <p>Si tu as déjà <b>Portainer</b>, tu peux tout faire depuis son interface (voir plus bas).</p>
+</section>
+
+<section id="installation-fichiers">
+  <h2>2. Préparer les deux fichiers</h2>
+  <p>Crée un dossier <code>bambunymous</code> sur la machine (sur un NAS, dans un partage, par exemple <code>docker/bambunymous</code>). Mets-y deux fichiers texte.</p>
+  <h3>Le fichier <code>compose.yaml</code></h3>
+  <p>Il dit à Docker quelle appli lancer et où garder ses données :</p>
+<pre><code>services:
+  bambunymous:
+    image: ghcr.io/an0nym0us63/bambunymous:latest
+    container_name: bambunymous
+    restart: unless-stopped
+    ports:
+      - "7914:8000"
+    volumes:
+      - bambunymous_data:/data
+    environment:
+      - DATA_DIR=/data
+      - DATABASE_URL=sqlite+aiosqlite:////data/bambunymous.db
+      - UPLOADS_DIR=/data/uploads
+    env_file:
+      - .env
+
+volumes:
+  bambunymous_data:</code></pre>
+  <p><code>7914</code> est le port où tu ouvriras l'appli ; change-le s'il est déjà pris sur ta machine (par exemple <code>"8090:8000"</code>).</p>
+  <h3>Le fichier <code>.env</code></h3>
+  <p>Une seule ligne obligatoire : une clé secrète, qui protège les connexions. Mets une longue suite de lettres et de chiffres au hasard, que personne ne connaît :</p>
+<pre><code>SECRET_KEY=remplace-moi-par-une-longue-suite-au-hasard-8f3k2l9q</code></pre>
+  <div class="warn"><p>Ne garde pas l'exemple ci-dessus tel quel, et ne partage jamais ce fichier. Sous Linux, <code>openssl rand -hex 32</code> en fabrique une. Si tu la changes plus tard, tout le monde devra se reconnecter (rien n'est perdu).</p></div>
+</section>
+
+<section id="installation-lancer">
+  <h2>3. Lancer l'appli</h2>
+  <p>Dans un terminal ouvert dans le dossier <code>bambunymous</code> :</p>
+<pre><code>docker compose up -d</code></pre>
+  <p>Docker télécharge l'appli (quelques centaines de Mo la première fois) puis la démarre. Elle redémarrera toute seule avec la machine.</p>
+  <h3>Avec Portainer</h3>
+  <p><span class="ui">Stacks</span> → <span class="ui">Add stack</span> → nomme-la <code>bambunymous</code>, colle le contenu de <code>compose.yaml</code> dans l'éditeur, et dans <span class="ui">Environment variables</span> ajoute <code>SECRET_KEY</code> avec ta clé (retire alors les deux lignes <code>env_file</code> du texte collé). Puis <span class="ui">Deploy the stack</span>.</p>
+  <h3>Avec Container Manager (Synology)</h3>
+  <p><span class="ui">Projet</span> → <span class="ui">Créer</span> → choisis le dossier <code>bambunymous</code> : il trouve <code>compose.yaml</code> tout seul. Valide, il construit et démarre le projet.</p>
+</section>
+
+<section id="installation-premiere-connexion">
+  <h2>4. Première connexion</h2>
+  <ol>
+    <li>Ouvre <code>http://ADRESSE-DE-LA-MACHINE:7914</code> dans ton navigateur (par exemple <code>http://192.168.1.20:7914</code> ; sur la machine elle-même, <code>http://localhost:7914</code>).</li>
+    <li>Connecte-toi avec l'identifiant <b>admin</b> et le mot de passe <b>admin</b>.</li>
+    <li><b>Change tout de suite ce mot de passe</b> : <a href="#parametres-accounts-password">Paramètres › Comptes › Mon compte</a>. Tant qu'il reste « admin », n'importe qui sur ton réseau peut entrer.</li>
+    <li>Si tu veux, active la <a href="#premiers-pas-2fa">double authentification</a> et crée un compte pour chaque personne de la maison (<a href="#parametres-accounts-users">Utilisateurs</a>).</li>
+  </ol>
+</section>
+
+<section id="installation-imprimante">
+  <h2>5. Brancher l'imprimante</h2>
+  <p>Sur l'écran de l'imprimante, relève :</p>
+  <dl class="opts">
+    <dt>Adresse IP</dt><dd>Réglages → <span class="ui">Réseau</span> (ou WLAN) : quatre nombres comme <code>192.168.1.42</code>. Pour qu'elle ne change pas, réserve-la dans ta box internet (bail DHCP fixe).</dd>
+    <dt>Code d'accès</dt><dd>Au même endroit : le <b>code d'accès</b> (Access Code), 8 caractères.</dd>
+    <dt>Numéro de série</dt><dd>Réglages → <span class="ui">Appareil</span> (ou À propos) ; aussi dans Bambu Studio et Bambu Handy.</dd>
+  </dl>
+  <p>Puis dans BambuNymous : <a href="#parametres-printer">Paramètres › Imprimante</a>, remplis les trois champs et touche <span class="ui">Sauvegarder</span>. La connexion part dès que les trois sont renseignés : en quelques secondes l'accueil montre l'état de l'imprimante et ses AMS.</p>
+  <div class="note"><p>Rien ne s'affiche ? Vérifie que l'imprimante et la machine sont sur le même réseau (pas un réseau invité), que l'adresse est la bonne, et que le code d'accès n'a pas changé (il change si on le régénère sur l'imprimante). <a href="#parametres-logs">Le journal du serveur</a> dit ce qui coince.</p></div>
+</section>
+
+<section id="installation-ensuite">
+  <h2>6. Et ensuite</h2>
+  <p>L'appli marche dès maintenant. Pour en tirer tout le parti, dans l'ordre qui te plaît :</p>
+  <ul>
+    <li><b>tes filaments</b> : crée tes références et tes bobines (<a href="#filaments-stock">Filaments</a>), ou scanne leurs étiquettes NFC avec l'<a href="#premiers-pas-android">appli Android</a> ;</li>
+    <li><b>le tarif de l'électricité</b> (Paramètres › Imprimante) pour le coût de chaque impression ;</li>
+    <li><b>ton compte MakerWorld</b> (<a href="#parametres-links-makerworld">Paramètres › Connexions</a>) : liste « À faire », planning, collections, évaluations ;</li>
+    <li><b>les notifications</b> (<a href="#parametres-notify">Paramètres › Notifs</a>) : fin d'impression, pause, humidité, sur le téléphone ;</li>
+    <li><b>les copains</b> (<a href="#parametres-links-copains">Paramètres › Connexions</a>) pour voir le BambuNymous de tes amis ;</li>
+    <li><b>la sauvegarde vers un NAS</b> (<a href="#parametres-tools">Paramètres › Outils</a>), si tu en as un.</li>
+  </ul>
+</section>
+
+<section id="installation-mise-a-jour">
+  <h2>Mettre à jour</h2>
+  <p>La <a href="#parametres-version">ligne de version</a> te dit quand une nouvelle version existe. Pour l'installer, dans le dossier <code>bambunymous</code> :</p>
+<pre><code>docker compose pull
+docker compose up -d</code></pre>
+  <p>Avec Portainer : ouvre la stack et <span class="ui">Update the stack</span> en cochant <span class="ui">Re-pull image</span>. Tes données ne bougent pas : elles vivent dans le volume <code>bambunymous_data</code>, pas dans l'appli.</p>
+</section>
+
+<section id="installation-donnees">
+  <h2>Où sont mes données, et les sauvegarder</h2>
+  <p>Tout est dans le volume Docker <code>bambunymous_data</code> : la base (<code>bambunymous.db</code>), les photos, les 3MF, les vues 3D. Ne supprime jamais ce volume (<code>docker compose down -v</code> l'effacerait). Pour une sauvegarde automatique chaque nuit vers un NAS, monte le dossier du NAS sur <code>/nas</code> dans <code>compose.yaml</code> :</p>
+<pre><code>    volumes:
+      - bambunymous_data:/data
+      - /chemin/vers/le/partage/du/nas:/nas</code></pre>
+  <p>puis active-la dans <a href="#parametres-tools">Paramètres › Outils › Sauvegarde et NAS</a>.</p>
+</section>
+
+<section id="installation-dehors">
+  <h2>Y accéder hors de chez toi</h2>
+  <p>Par défaut, l'appli ne s'ouvre que depuis ton réseau. Pour l'ouvrir de partout (et recevoir les notifications sur le téléphone hors du Wi-Fi), le plus sûr est un <b>VPN</b> vers chez toi (WireGuard, Tailscale, celui de ta box ou de ton NAS) : rien n'est exposé sur internet. Sinon, un reverse proxy en HTTPS (Nginx Proxy Manager, Traefik, le proxy inversé de Synology) avec un nom de domaine ; dans ce cas, mot de passe solide et double authentification obligatoires.</p>
+</section>
