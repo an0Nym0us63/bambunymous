@@ -757,6 +757,12 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
             ams_g.pop(v, None)
             unload.append(names.get(v) or f"filament {v}")
             unload_ids.append(v)
+        # qui prend la place de qui (06/11/2026) : les premiers charges prennent les places libres, les suivants celles
+        # des bobines sorties ; aligne sur « load » (None : une place libre)
+        fr = max(0, len(need) - len(unload_ids))
+        swap_out = [None] * fr + list(unload_ids[:len(need) - fr])
+        if ext_load is not None:
+            swap_out.append(ext_out)
         # le TPU en dernier (comme dans la liste a charger) : ce qu'il remplace dehors ou dans l'AMS HT
         if ext_load is not None and ext_out is not None:
             unload.append(names.get(ext_out) or f"filament {ext_out}")
@@ -782,6 +788,7 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
                        "load_ids": [f["filament_id"] for f in need] + ([ext_load["filament_id"]] if ext_load else []),
                        "load_where": {str(ext_load["filament_id"]): where_ext} if ext_load else {},
                        "unload": unload, "unload_ids": unload_ids, "runout": runout,
+                       "swap_out": [None if x is None else names.get(x) or f"filament {x}" for x in swap_out], "swap_out_ids": swap_out,
                        "free_slot": bool(need) and len(unload) < len(need),
                        "bed": b_need, "bed_change": b_change, "bed_warn": b_warn,
                        "wait_s": int((s - c).total_seconds()) if s > c else 0})
@@ -2098,6 +2105,13 @@ def _bed_name(k) -> str:
     return PL.KINDS.get(k, k or "?")
 
 
+def _swap_txt(j: dict) -> str:
+    """Qui prend la place de qui (06/11/2026) : « Bleu ciel à la place de Silver, Rouge dans l'emplacement libre »."""
+    outs = j.get("swap_out") or [None] * len(j.get("load") or [])
+    parts = [f"{x} à la place de {o}" if o else f"{x} dans l'emplacement libre" for x, o in zip(j.get("load") or [], outs)]
+    return "🔁 " + ", ".join(parts) + (" (ce qui sort ne resservira pas de sitôt)" if any(outs) else "")
+
+
 def _bed_txt(ch: dict) -> str:
     """« Mets le PEI texturé (à la place du SuperTack) »."""
     return f"🔲 Mets le plateau {_bed_name(ch['to'])}" + (f" (à la place du {_bed_name(ch['from'])})" if ch.get("from") else "")
@@ -2143,10 +2157,7 @@ async def tick(cfg, r: dict | None = None) -> int:
             when = f"{_day_fr(s, today)} à {_fmt(s)}" + (f", dans {_dur(left * 60)}" if left > 0 else ", maintenant")
             kept = [f.get("name") for f in j.get("fils") or [] if f.get("name") and f.get("name") not in j["load"]]
             body = f"Pour {_title(j)} ({_dur(j['seconds'])}), prévue {when}."
-            if j.get("unload"):
-                body += f"\nÀ retirer : {', '.join(j['unload'])} (elle ne resservira pas de sitôt)"
-            elif j.get("free_slot"):
-                body += "\nUn emplacement est libre : rien à retirer"
+            body += f"\n{_swap_txt(j)}"
             if kept:
                 body += f"\nDéjà dans l'AMS : {', '.join(dict.fromkeys(kept))}"
             if j.get("bed_change"):
@@ -2190,10 +2201,7 @@ async def tick(cfg, r: dict | None = None) -> int:
     lines = [f"⏱ {_dur(j['seconds'])} · prévue à {_fmt(datetime.fromisoformat(r['now']) - timedelta(minutes=st['late_min']))}"]
     if j["load"]:
         lines.append(f"🧵 À charger : {', '.join(j['load'])}")
-        if j.get("unload"):
-            lines.append(f"↩ À retirer : {', '.join(j['unload'])}")
-        elif j.get("free_slot"):
-            lines.append("Un emplacement est libre : rien à retirer")
+        lines.append(_swap_txt(j))
     if j.get("bed_change"):
         lines.append(_bed_txt(j["bed_change"]))
     for ro in j.get("runout") or []:

@@ -247,9 +247,13 @@ export function PlanDashboard({ s, dur, now, onLegend }) {
 
 // le changement de bobine d'un plateau (06/11/2026), en court : « Bleu ciel ⇄ Silver » (charger l'un a la place de
 // l'autre), « Bleu ciel (place libre) » ; swapLong le dit en phrase
-export const swapTxt = j => !j.load?.length ? "" : j.load.map((x, i) => j.unload?.[i] ? `${x} ⇄ ${j.unload[i]}` : `${x}${j.free_slot ? " (place libre)" : ""}`).join(", ");
-export const swapLong = j => !j.load?.length ? "" : j.load.map((x, i) => j.unload?.[i] ? `charger ${x} à la place de ${j.unload[i]}`
-  : `charger ${x}${j.free_slot ? " dans l'emplacement libre" : ""}`).join(", ");
+// qui remplace qui (06/11/2026) : swap_out, aligne sur load, dit pour chacun la bobine dont il prend la place (null : une
+// place libre ; les premiers charges prennent les places libres) ; l'ancien appariement par rang sinon
+const outOf = (j, i) => j.swap_out ? [j.swap_out[i], j.swap_out_ids?.[i]] : [j.unload?.[i], j.unload_ids?.[i]];
+const freeOf = (j, i) => j.swap_out ? j.swap_out[i] == null : !!j.free_slot;
+export const swapTxt = j => !j.load?.length ? "" : j.load.map((x, i) => outOf(j, i)[0] ? `${x} ⇄ ${outOf(j, i)[0]}` : `${x}${freeOf(j, i) ? " (place libre)" : ""}`).join(", ");
+export const swapLong = j => !j.load?.length ? "" : j.load.map((x, i) => outOf(j, i)[0] ? `charger ${x} à la place de ${outOf(j, i)[0]}`
+  : `charger ${x}${freeOf(j, i) ? " dans l'emplacement libre" : ""}`).join(", ");
 // le plateau d'impression (06/11/2026) : son nom, et le changement a faire avant un plateau du planning
 export const BED_NAMES = { textured: "PEI texturé", supertack: "SuperTack", cool: "Cool Plate", hot: "PEI lisse", eng: "Engineering" };
 export const bedTxt = ch => ch ? `🔲 Mets le ${BED_NAMES[ch.to] || ch.to}${ch.from ? ` (à la place du ${BED_NAMES[ch.from] || ch.from})` : ""}` : "";
@@ -272,11 +276,11 @@ export function FilLink({ id, label }) {
 }
 // le changement de bobine, en court et en pastilles : « ● X ⇄ ● Y », « ● X (place libre) »
 export const SwapShort = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={j.load_ids?.[i]} label={x}/>
-  {j.unload?.[i] ? <> ⇄ <FilLink id={j.unload_ids?.[i]} label={j.unload[i]}/></> : j.free_slot ? " (place libre)" : ""}</React.Fragment>)}</>;
+  {outOf(j, i)[0] ? <> ⇄ <FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]}/></> : freeOf(j, i) ? " (place libre)" : ""}</React.Fragment>)}</>;
 export const FilLinks = ({ labels, ids }) => <>{(labels || []).map((l, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={ids?.[i]} label={l}/></React.Fragment>)}</>;
 // le changement de bobine en phrase, ses filaments cliquables : « charger X a la place de Y »
 export const SwapLinks = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}charger <FilLink id={j.load_ids?.[i]} label={x}/>
-  {j.unload?.[i] ? <> à la place de <FilLink id={j.unload_ids?.[i]} label={j.unload[i]}/></> : j.free_slot ? " dans l'emplacement libre" : ""}</React.Fragment>)}</>;
+  {outOf(j, i)[0] ? <> à la place de <FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]}/></> : freeOf(j, i) ? " dans l'emplacement libre" : ""}</React.Fragment>)}</>;
 // une bobine qui se videra en pleine impression (06/11/2026) : vers quelle heure
 export const runoutTxt = r => `🔄 ${r.name} se vide vers ${+r.at.slice(11, 13)} h${r.at.slice(14, 16) !== "00" ? ` ${r.at.slice(14, 16)}` : ""} (reste ${r.left} g, il en faut ${r.need})`;
 // les creneaux de chargement (06/11/2026) : jusqu'a quatre plages
