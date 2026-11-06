@@ -160,9 +160,9 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   const [jobSel, setJobSel] = useState(null);
   const [modelSel, setModelSel] = useState(null);     // la fiche d'un modele de la file (06/11/2026)
   const [pop, setPop] = useState(null);
-  // au telephone, la grille horaire par defaut (06/11/2026 ; la liste reste au choix)
-  const [dayMode, setDayModeS] = useState(() => { try { return localStorage.getItem("bn_cal_mode") || "grid"; } catch { return "grid"; } });
-  const setDayMode = v => { setDayModeS(v); try { localStorage.setItem("bn_cal_mode", v); } catch { /* rien */ } };
+  // au telephone (06/11/2026) : le jour en grille horaire par defaut, la semaine en liste ; chacun garde son choix
+  const [dayModeD, setDayModeD] = useState(() => { try { return localStorage.getItem("bn_cal_mode") || "grid"; } catch { return "grid"; } });
+  const [dayModeW, setDayModeW] = useState(() => { try { return localStorage.getItem("bn_cal_wmode") || "list"; } catch { return "list"; } });
   const [optPrev, setOptPrev] = useState(null);       // l'apercu d'une optimisation (06/11/2026)               // "advice" | "pool" | "blocked"
   const [pick, setPick] = useState(() => dayParam.current || iso(new Date()));
   // la vue (05/11/2026) : le mois, la semaine (grille horaire ; un agenda au telephone) ou le jour
@@ -421,6 +421,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   const live = pd?.live && pd?.busy_until ? { now: pd.now, end: pd.busy_until, name: pd.live.name, planned: pd.live.planned_end, id: pd.live.print_id } : null;
   const openJob = j => setJobSel(j);
   // le jour au telephone (06/11/2026) : la grille horaire ou la liste (les courts y sont lisibles) ; garde dans ce navigateur
+  const dayMode = view === "week" ? dayModeW : dayModeD;
+  const setDayMode = v => { (view === "week" ? setDayModeW : setDayModeD)(v); try { localStorage.setItem(view === "week" ? "bn_cal_wmode" : "bn_cal_mode", v); } catch { /* rien */ } };
   const dayList = !wide && view === "day" && dayMode === "list";
   const dayToggle = !wide && (view === "day" || view === "week") ? <div role="tablist" style={{ display: "flex", padding: 3, borderRadius: 12, background: "var(--surface2)", border: "1px solid var(--border)" }}>
     {[["list", "☰ Liste"], ["grid", "🕒 Horaire"]].map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={dayMode === k} onClick={() => setDayMode(k)}
