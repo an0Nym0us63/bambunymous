@@ -549,7 +549,8 @@ export default function PrintCalendar() {
     {pd && showPlan && <NowNextTiles pd={pd} wide={wide} onOpenPrint={it => nav(`/prints?id=${it.id}`)} onPickJob={j => setJobSel(j)}/>}
     {showPlan && (pd?.deadlines || []).filter(x => !x.ok).map(x => <PlanStatus key={x.design_id}
       st={{ state: "deadline", text: `${x.title} ne sera pas fini avant le ${dueTxt(x.due)} : voir les conseils` }}/>)}
-    {setOpen && <PlanSettings s={pd?.settings} onSave={saveSettings} onClose={() => setSetOpen(false)}/>}
+    {setOpen && <PlanPopup title="Les consignes du planning" icon="⚙" color="#6366F1" onClose={() => setSetOpen(false)}>
+      <PlanSettings s={pd?.settings} onSave={saveSettings} onClose={() => setSetOpen(false)}/></PlanPopup>}
     {view === "month" && <div style={{ display: "flex", gap: wide ? 8 : 5, flexWrap: wide ? "wrap" : "nowrap" }}>
       {chip("Impressions", days ? mCount : "…", "#3B82F6")}
       {chip("Heures machine", days ? hm(mTotal) : "…", "#8B5CF6")}

@@ -221,10 +221,8 @@ export function PlanSettings({ s, onSave, onClose }) {
   const modes = (v, set, extra) => <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
     {[...(extra ? [extra] : []), ...OPT_MODES].map(([k, ic, l, tip]) => <button key={k} type="button" data-tip={tip} onClick={() => set(k)}
       style={{ ...seg, ...(v === k ? segOn : {}) }}>{ic} {l}</button>)}</div>;
-  return <div style={{ borderRadius: 16, border: "1px solid var(--border)", background: "var(--surface)", padding: 12, display: "flex", flexDirection: "column", gap: 12 }}>
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <span style={{ fontSize: 14.5, fontWeight: 900, color: "var(--text)", flex: 1 }}>⚙ Les consignes du planning</span>
-      <button type="button" onClick={onClose} aria-label="Fermer" style={mini}>✕</button></div>
+  // dans une fenetre (06/11/2026) : le titre et la croix sont ceux de la fenetre, Enregistrer reste en bas
+  return <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
     <div>
       <div style={lab}>⏸ Pause entre deux impressions</div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -259,8 +257,11 @@ export function PlanSettings({ s, onSave, onClose }) {
       <div style={hint}>Un modèle que tu retiens, un exemplaire de plus : ses plateaux vont en fin de file, ou se placent tout seuls à la
         meilleure place selon ce mode. Rien d'autre ne bouge : ce que tu as rangé ou optimisé reste tel quel.</div>
     </div>
-    <button type="button" disabled={busy} onClick={save} style={{ alignSelf: "flex-end", padding: "8px 16px", borderRadius: 12, border: "none", cursor: "pointer",
-      background: "linear-gradient(135deg, #6366F1, #8B5CF6)", color: "#fff", fontSize: 13, fontWeight: 900 }}>{busy ? "…" : "Enregistrer"}</button>
+    <div style={{ position: "sticky", bottom: -12, margin: "0 -12px -12px", padding: "10px 12px", display: "flex", gap: 8, justifyContent: "flex-end",
+      background: "var(--sheet-bg)", borderTop: "1px solid var(--border)" }}>
+      <button type="button" onClick={onClose} style={{ ...seg, padding: "8px 14px" }}>Annuler</button>
+      <button type="button" disabled={busy} onClick={save} style={{ padding: "8px 16px", borderRadius: 12, border: "none", cursor: "pointer",
+        background: "linear-gradient(135deg, #6366F1, #8B5CF6)", color: "#fff", fontSize: 13, fontWeight: 900 }}>{busy ? "…" : "Enregistrer"}</button></div>
   </div>;
 }
 
