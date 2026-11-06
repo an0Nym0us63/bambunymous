@@ -115,7 +115,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   // les fenetres (05/11/2026) : un plateau et ses actions, les conseils, la file (telephone), les non planifiables
   const [jobSel, setJobSel] = useState(null);
   const [modelSel, setModelSel] = useState(null);     // la fiche d'un modele de la file (06/11/2026)
-  const [pop, setPop] = useState(null);               // "advice" | "pool" | "blocked"
+  const [pop, setPop] = useState(null);
+  const [optPrev, setOptPrev] = useState(null);       // l'apercu d'une optimisation (06/11/2026)               // "advice" | "pool" | "blocked"
   const [pick, setPick] = useState(() => dayParam.current || iso(new Date()));
   // la vue (05/11/2026) : le mois, la semaine (grille horaire ; un agenda au telephone) ou le jour
   const [view, setViewS] = useState(() => { if (dayParam.current) return "day"; try { return localStorage.getItem("bn_cal_view") || (window.innerWidth >= 760 ? "month" : "day"); } catch { return "month"; } });
@@ -158,7 +159,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
     return out;
   }, [pd, showPlan]);
   // les gestes du planning, partages avec « A faire » (06/11/2026)
-  const { undo, keys, byKey, send, arrange, moveBefore, moveAfter, moveDay, unpin, placeDay, toFront, modelAct, applyAdvice, setDue, markDone, colorDay, optimize, optimizeFrom, jobAct } = usePlanActs({ pd, setPd, setSheet, setModelSel,
+  const { undo, keys, byKey, send, arrange, moveBefore, moveAfter, moveDay, unpin, placeDay, toFront, modelAct, applyAdvice, setDue, markDone, colorDay, optimize, optimizeFrom, applyOptimized, jobAct } = usePlanActs({ pd, setPd, setSheet, setModelSel,
     onDayView: day => { setPick(day); setView("day"); } });
   const saveSettings = async v => { if (await send("/makerworld/plan/settings", v)) { egg("planning_consignes"); setSetOpen(false); } };
   const today = iso(new Date());
@@ -448,7 +449,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
     {modelSel && <ModelSheet g={poolGroups(pd?.jobs, pd?.blocked).find(g => g.id === modelSel)} now={pd?.now} edit={edit} jobs={pd?.jobs}
       onClose={() => setModelSel(null)} onPick={setJobSel} act={modelAct(modelSel)}/>}
     {jobSel && <JobSheet j={jobSel} now={pd?.now} edit={edit} onClose={() => setJobSel(null)} act={jobAct(jobSel)} jobs={pd?.jobs}/>}
-    {pop === "optimize" && <OptimizePick today={today} mode0={pd?.settings?.opt_mode} onPick={(from, mode) => { setPop(null); optimizeFrom(from, mode); }}
+    {optPrev && <OptimizePreview p={optPrev} onClose={() => setOptPrev(null)} onApply={() => { const p = optPrev; setOptPrev(null); applyOptimized(p); }}/>}
+    {pop === "optimize" && <OptimizePick today={today} mode0={pd?.settings?.opt_mode} onPick={(from, mode, keep) => { setPop(null); optimizeFrom(from, mode, keep).then(r => r && setOptPrev(r)); }}
       onClose={() => setPop(null)}/>}
     {pop === "advice" && <PlanPopup title={`Conseils (${pd?.advice?.length || 0})`} icon="💡" color="#F59E0B" onClose={() => setPop(null)}>
       <PlanAdvice items={pd?.advice} edit={edit} onApply={a => { applyAdvice(a); setPop(null); }}/></PlanPopup>}
@@ -474,10 +476,40 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
 const navBtn = { width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)", cursor: "pointer",
   display: "flex", alignItems: "center", justifyContent: "center" };
 // « Optimiser la file » : a partir de quand (06/11/2026). Ce qui est prevu avant reste a sa place.
+// l'apercu d'une optimisation (06/11/2026) : avant, apres, ce qui change ; Appliquer ou garder tel quel
+function OptimizePreview({ p, onApply, onClose }) {
+  const a = p.preview.before, b = p.preview.after;
+  const day = iso => iso ? new Date(iso).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }) + ` ${+iso.slice(11, 13)} h${iso.slice(14, 16) !== "00" ? ` ${iso.slice(14, 16)}` : ""}` : "—";
+  const rows = [["🧵", "Bobines à charger", a.loads, b.loads, x => x], ["🌙", "Nuits perdues", a.nights, b.nights, x => x],
+    ["⏸", "Temps mort la nuit", a.idle_min, b.idle_min, x => hm(x * 60)], ["⏱", "Fin moyenne d'un plateau", a.avg_h, b.avg_h, x => `${x} h`],
+    ["🏁", "Tout fini", a.end, b.end, day], ["🎯", "Dates limites ratées", a.late, b.late, x => x]];
+  const better = (x, y, i) => i === 4 ? (y < x ? 1 : y > x ? -1 : 0) : (y < x ? 1 : y > x ? -1 : 0);
+  const mode = OPT_MODES.find(m => m[0] === p.preview.mode);
+  return <PlanPopup title="Ce que ça donnerait" icon="✨" color="#6366F1" onClose={onClose}>
+    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45, marginBottom: 10 }}>
+      {mode ? `${mode[1]} ${mode[2]} · ` : ""}{p.preview.moved ? `${p.preview.moved} plateau${p.preview.moved > 1 ? "x changeraient" : " changerait"} vraiment de place sur ${a.plates}` : "Presque rien ne bougerait"}. Rien n'a encore bougé.</div>
+    <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto auto", gap: "6px 10px", alignItems: "center", fontSize: 13 }}>
+      <span/><span/><span style={{ fontSize: 11, fontWeight: 900, color: "var(--muted)" }}>Avant</span><span/><span style={{ fontSize: 11, fontWeight: 900, color: "var(--muted)" }}>Après</span>
+      {rows.map(([ic, l, x, y, f], i) => { const g = better(x, y, i);
+        return <React.Fragment key={l}><span>{ic}</span><span style={{ fontWeight: 800, color: "var(--text2)" }}>{l}</span>
+          <span style={{ fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>{f(x)}</span><span style={{ color: "var(--muted)" }}>→</span>
+          <span style={{ fontWeight: 900, whiteSpace: "nowrap", color: g > 0 ? "#16A34A" : g < 0 ? "#DC2626" : "var(--text)" }}>{f(y)}</span></React.Fragment>; })}
+    </div>
+    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+      <button type="button" onClick={onClose} style={{ ...pill, padding: "8px 14px" }}>Garder tel quel</button>
+      <button type="button" onClick={onApply} style={{ padding: "8px 16px", borderRadius: 12, border: "none", cursor: "pointer", font: "inherit",
+        background: "linear-gradient(135deg, #6366F1, #8B5CF6)", color: "#fff", fontSize: 13, fontWeight: 900 }}>Appliquer</button>
+    </div>
+  </PlanPopup>;
+}
+
 function OptimizePick({ today, mode0, onPick: pick, onClose }) {
   const [free, setFree] = useState("");
   const [mode, setMode] = useState(mode0 || "mix");
-  const onPick = from => pick(from, mode);
+  // bouger le moins possible (06/11/2026) : garde dans ce navigateur
+  const [keep, setKeepS] = useState(() => { try { return localStorage.getItem("bn_opt_keep") === "1"; } catch { return false; } });
+  const setKeep = v => { setKeepS(v); try { localStorage.setItem("bn_opt_keep", v ? "1" : "0"); } catch { /* rien */ } };
+  const onPick = from => pick(from, mode, keep);
   const cur = OPT_MODES.find(m => m[0] === mode) || OPT_MODES[0];
   const plus = n => { const t = new Date(`${today}T12:00`); t.setDate(t.getDate() + n);
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; };
@@ -499,7 +531,13 @@ function OptimizePick({ today, mode0, onPick: pick, onClose }) {
           border: `1.5px solid ${mode === k ? "#6366F1" : "var(--border)"}`, color: mode === k ? "#fff" : "var(--text2)",
           background: mode === k ? "linear-gradient(135deg, #6366F1, #8B5CF6)" : "var(--surface)" }}>{ic} {l}</button>)}
     </div>
-    <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", lineHeight: 1.4, marginBottom: 10 }}>{cur[3]}</div>
+    <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", lineHeight: 1.4, marginBottom: 8 }}>{cur[3]}</div>
+    <label style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "9px 12px", borderRadius: 12, marginBottom: 10, cursor: "pointer",
+      border: `1px solid ${keep ? "color-mix(in srgb, #6366F1 45%, var(--border))" : "var(--border)"}`, background: keep ? "color-mix(in srgb, #6366F1 8%, var(--surface))" : "var(--surface)" }}>
+      <input type="checkbox" checked={keep} onChange={e => setKeep(e.target.checked)} style={{ marginTop: 2 }}/>
+      <span><span style={{ display: "block", fontSize: 13, fontWeight: 900, color: "var(--text)" }}>Bouger le moins possible</span>
+        <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.35 }}>Il part de ton ordre et ne déplace que ce qui
+          rapporte vraiment (une bobine, une nuit). Sinon, il refait toute la file.</span></span></label>
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {opt("all", "✨", "Toute la file", "Dès maintenant", null)}
       {opt("tomorrow", "🌅", "Sans toucher à aujourd'hui", `À partir de demain, ${fr(plus(1))}`, plus(1))}

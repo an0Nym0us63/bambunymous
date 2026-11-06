@@ -107,11 +107,18 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
   const optimize = day => send("/makerworld/plan/optimize", day ? { day } : {}, "post").then(ok => { if (ok) egg("planning_optimise"); });
   // toute la file, a partir d'un jour (06/11/2026) : ce qui est prevu avant ne bouge pas
   // quelques secondes de calcul (06/11/2026) : on le dit, puis ce qui a ete fait
-  const optimizeFrom = (from, mode) => {
-    toast("✨ Optimisation en cours… quelques secondes", "info", 8000);
-    return send("/makerworld/plan/optimize", { ...(from ? { from } : {}), ...(mode ? { mode } : {}) }, "post")
-      .then(ok => { if (ok) { egg("planning_optimise"); toast("✨ Planning optimisé", "ok", 3000); } });
+  // l'apercu d'abord (06/11/2026) : le serveur calcule, rend les chiffres avant et apres, et l'ordre propose ; rien ne
+  // change tant qu'on n'a pas touche « Appliquer » (applyOptimized). keep : bouger le moins possible
+  const optimizeFrom = async (from, mode, keep) => {
+    toast("✨ Optimisation en cours… quelques secondes", "info", 9000);
+    try {
+      const r = await client.post("/makerworld/plan/optimize", { ...(from ? { from } : {}), ...(mode ? { mode } : {}), preview: true, keep: !!keep });
+      toast("✨ Voilà ce que ça donnerait", "ok", 1500);
+      return r.data;
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); return null; }
   };
+  const applyOptimized = p => send("/makerworld/plan/arrange", { order: p.order, soft_why: p.soft_why, why: "Optimiser la file" })
+    .then(ok => { if (ok) { egg("planning_optimise"); toast("✨ Planning optimisé", "ok", 3000); } });
   const jobAct = j => ({
     smart: () => send("/makerworld/plan/smart", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
     later: () => send("/makerworld/plan/later", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
@@ -141,5 +148,5 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
   });
   // « Annuler » (06/11/2026) : le dernier geste defait
   const undo = () => send("/makerworld/plan/undo", {}, "post").then(d => { if (d?.undone) toast(`↶ Annulé : ${d.undone}`, "ok", 3500); });
-  return { undo, keys, byKey, send, arrange, moveBefore, moveAfter, moveDay, unpin, placeDay, toFront, modelAct, applyAdvice, setDue, markDone, colorDay, optimize, optimizeFrom, jobAct };
+  return { undo, keys, byKey, send, arrange, moveBefore, moveAfter, moveDay, unpin, placeDay, toFront, modelAct, applyAdvice, setDue, markDone, colorDay, optimize, optimizeFrom, applyOptimized, jobAct };
 }

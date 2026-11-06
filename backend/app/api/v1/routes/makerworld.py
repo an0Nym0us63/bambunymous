@@ -397,7 +397,8 @@ async def mw_plan_arrange(body: dict = Body({}), _: str = Depends(require_mw)):
     """Ranger : {order: [cles], pins: {cle: "AAAA-MM-JJ" | null}}."""
     from ....services import planner as P
     try:
-        return await P.arrange(body)
+        why = str(body.get("why") or "Rangement")[:40]
+        return await P.arrange(body, why)
     except P.PlanError as e:
         raise HTTPException(400, str(e))
 
@@ -509,7 +510,7 @@ async def mw_plan_optimize(body: dict = Body({}), _: str = Depends(require_mw)):
     from ....services import planner as P
     try:
         return await P.optimize_plan(str(body.get("day") or "") or None, str(body.get("from") or "") or None,
-                                     str(body.get("mode") or "") or None)
+                                     str(body.get("mode") or "") or None, bool(body.get("preview")), bool(body.get("keep")))
     except P.PlanError as e:
         raise HTTPException(400, str(e))
 

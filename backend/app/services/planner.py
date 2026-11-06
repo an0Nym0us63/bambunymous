@@ -1296,7 +1296,20 @@ async def arrange(body: dict, why: str = "Rangement", merge: bool = False) -> di
     return await plan()
 
 
-async def optimize_plan(day: str | None = None, start: str | None = None, mode: str | None = None) -> dict:
+def plan_metrics(r: dict, d: dict, now: datetime) -> dict:
+    """Les chiffres d'un planning (06/11/2026), pour comparer avant et apres : bobines a charger, nuits perdues et leur
+    temps mort, dates limites ratees, quand tout est fini, et la fin moyenne (en heures d'ici)."""
+    rules = Rules(d)
+    w = _night_waits(r, rules) if rules.limits else []
+    js = r["jobs"]
+    return {"loads": sum(len(j.get("load") or []) for j in js), "nights": len(w), "idle_min": int(sum(x for _, x in w) // 60),
+            "late": sum(1 for x in deadlines(js, d, now) if not x["ok"]), "end": max((j["end"] for j in js), default=None),
+            "avg_h": round(sum((datetime.fromisoformat(j["end"]) - now).total_seconds() / 3600 for j in js) / max(1, len(js)), 1),
+            "plates": len(js)}
+
+
+async def optimize_plan(day: str | None = None, start: str | None = None, mode: str | None = None,
+                        preview: bool = False, keep: bool = False) -> dict:
     """« Optimiser » : toute la file, ou un seul jour (ses travaux remis dans un ordre qui enchaine les couleurs).
     start (06/11/2026) : « a partir de » ce jour ; ce qui est prevu avant reste a sa place, dans son ordre, et seule la
     suite est reordonnee (couleurs, nuits, dates limites)."""
@@ -1364,10 +1377,19 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
     import time as _t
     t0 = _t.monotonic()
 
+    # « bouger le moins possible » (06/11/2026, au choix quand on optimise a la main) : chaque plateau qui change de
+    # place de plus de deux rangs coute ; seul ce qui rapporte vraiment bouge
+    pos0 = {k: i for i, k in enumerate(j["key"] for j in jobs)}
+
+    def moved(o):
+        return sum(1 for i, k in enumerate(o) if abs(pos0.get(k, i) - i) > 2)
+
     def score(o):
-        return mode_score(place(_ordered(jobs, o, d["pins"]), d, now, busy, loaded, _slots()), d, now, mode)
+        return mode_score(place(_ordered(jobs, o, d["pins"]), d, now, busy, loaded, _slots()), d, now, mode) + (25 * moved(o) if keep else 0)
+    if keep:
+        order = [j["key"] for j in jobs]               # on part de ton ordre, les retouches ne gardent que ce qui gagne
     cur = score(order)
-    if mode == "mix":
+    if mode == "mix" and not keep:
         # le mode intelligent (06/11/2026) : plusieurs departs (les couleurs enchainees, l'ordre actuel, les plus courtes
         # d'abord) ; les departs bruts se comparent vite, le remplissage des nuits (le plus long) se fait sur le meilleur
         o0 = head + [j["key"] for j in _soft_grouped(jobs) if j["key"] not in hs]
@@ -1413,6 +1435,13 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
             break
         front = [k for x in broke for k in x["keys"] if k not in hs]
         order = head + front + [k for k in order if k not in set(front) and k not in hs]
+    if preview:
+        # l'apercu (06/11/2026) : les chiffres avant et apres ; rien n'est enregistre, « Appliquer » envoie l'ordre
+        before = plan_metrics(place(jobs, d, now, busy, loaded, _slots()), d, now)
+        after_r = place(_ordered(jobs, order, d["pins"]), d, now, busy, loaded, _slots())
+        return {"preview": {"before": before, "after": plan_metrics(after_r, d, now), "mode": mode,
+                            "moved": moved(order)},              # ceux qui changent de plus de deux rangs
+                "order": order, "soft_why": sw}
     return await arrange({"order": order, "soft_why": sw}, "Optimiser la file")
 
 
