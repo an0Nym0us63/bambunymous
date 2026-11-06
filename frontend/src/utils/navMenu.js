@@ -34,7 +34,7 @@ export const NAV_ITEMS = [
   { k: "makerworld",to: "/prints?tab=makerworld",   icon: Globe,        label: "MakerWorld",  c: "#6366F1", def: "hidden" },
   { k: "queue",     to: "/prints?tab=queue",        icon: ListChecks,   label: "À faire",     c: "#22C55E", def: "hidden" },
   { k: "gallery",   to: "/prints?tab=gallery",      icon: Images,       label: "Galerie",     c: "#EC4899", def: "hidden" },
-  { k: "calendar",  to: "/prints?tab=calendar",     icon: CalendarDays, label: "Calendrier",  c: "#EAB308", def: "hidden" },
+  { k: "calendar",  to: "/prints?tab=calendar",     icon: CalendarDays, label: "Calendrier",  c: "#F43F5E", def: "hidden" },
   { k: "archived",  to: "/filaments?tab=archived",  icon: Archive,      label: "Archivées",   c: "#64748B", def: "hidden" },
   { k: "drying",    to: "/stats?tab=drying",        icon: Droplets,     label: "Séchage",     c: "#06B6D4", def: "hidden" },
   { k: "notifications", to: "/notifications",       icon: Bell,         label: "Notifications", c: "#3B82F6", def: "profile" },
