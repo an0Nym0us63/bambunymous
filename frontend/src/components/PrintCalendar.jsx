@@ -76,7 +76,9 @@ function mosaic(n, w, h, min, max = 64) {
 const CACHES = {};
 const cacheOf = () => { const k = currentFriend()?.id || "me"; return (CACHES[k] = CACHES[k] || { pd: null, days: {} }); };
 
-export default function PrintCalendar() {
+// onOpenPrint (06/11/2026) : la page des impressions ouvre la fiche d'une impression passee par-dessus le calendrier
+// (sans changer d'onglet) ; sans lui, on y va par ?id=
+export default function PrintCalendar({ onOpenPrint } = {}) {
   const nav = useNavigate();
   const width = useWidth(), wide = width >= 760, side = width >= 1180;   // side : le detail du jour a cote de la grille
   const detailRef = useRef(null);
@@ -328,7 +330,7 @@ export default function PrintCalendar() {
     {!sel?.items?.length && !selPlan.length && pick < today && <div style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)" }}>
       {days ? "Rien d'imprimé ce jour-là" : "Chargement…"}</div>}
     {(sel?.items || []).map((it, i) => { const [c, l] = ST[it.status] || ST.SUCCESS;
-      return <button key={`${it.id}${i}`} type="button" onClick={() => nav(`/prints?id=${it.id}`)}
+      return <button key={`${it.id}${i}`} type="button" onClick={() => openPrint(it)}
         style={{ display: "flex", alignItems: "center", gap: 10, padding: 6, borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface2)", cursor: "pointer", textAlign: "left" }}>
         <img src={apiThumb(apiUrl(`/prints/${it.id}/image`), 96)} alt="" loading="lazy" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
           style={{ width: 42, height: 42, borderRadius: 10, objectFit: "cover", flexShrink: 0, background: "var(--surface)" }}/>
@@ -358,7 +360,7 @@ export default function PrintCalendar() {
         {edit ? "Rien de prévu : glisse ici un plateau de la file (sous le calendrier), pose-le avec son 📅, ou fais-en une journée couleur." : "Rien de prévu ce jour-là."}</span>
       {edit && <ColorDay colors={pd?.colors} onPick={fid => colorDay(pick, fid)}/>}</div>}
   </div>;
-  const openPrint = it => nav(`/prints?id=${it.id}`);
+  const openPrint = it => onOpenPrint ? onOpenPrint(it) : nav(`/prints?id=${it.id}`);
   // l'impression en cours et sa fin estimee : la grille prolonge son bloc jusque-la
   const live = pd?.live && pd?.busy_until ? { now: pd.now, end: pd.busy_until, name: pd.live.name, planned: pd.live.planned_end } : null;
   const openJob = j => setJobSel(j);
@@ -431,7 +433,7 @@ export default function PrintCalendar() {
         style={{ ...pill, color: "#16A34A", borderColor: "color-mix(in srgb, #22C55E 45%, var(--border))" }}>📋 {wide ? `La file (${pd.jobs.length})` : `File ${pd.jobs.length}`}</button>}
     </div>
     {pd?.status && showPlan && <PlanStatus st={pd.status} live={null} check={pd.check} compact={!wide}/>}
-    {pd && showPlan && <NowNextTiles pd={pd} wide={wide} onOpenPrint={it => nav(`/prints?id=${it.id}`)} onPickJob={j => setJobSel(j)}/>}
+    {pd && showPlan && <NowNextTiles pd={pd} wide={wide} onOpenPrint={openPrint} onPickJob={j => setJobSel(j)}/>}
     {showPlan && (pd?.deadlines || []).filter(x => !x.ok).map(x => <PlanStatus key={x.design_id}
       st={{ state: "deadline", text: `${x.title} ne sera pas fini avant le ${dueTxt(x.due)} : voir les conseils` }}/>)}
     {setOpen && <PlanPopup title="Les consignes du planning" icon="⚙" color="#6366F1" onClose={() => setSetOpen(false)}>

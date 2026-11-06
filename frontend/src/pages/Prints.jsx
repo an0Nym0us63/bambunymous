@@ -3961,7 +3961,7 @@ export default function Prints() {
       {/* File : modeles des collections « a imprimer », besoins en filament, pret / stock / manque. */}
       {viewMode==="queue" && <MwQueue/>}
       {/* le calendrier : les jours, leurs heures machine, et la file a venir (04/11/2026) */}
-      {viewMode==="calendar" && <PrintCalendar/>}
+      {viewMode==="calendar" && <PrintCalendar onOpenPrint={it => client.get(`/prints/${it.id}`).then(r => setSelected(r.data)).catch(() => {})}/>}
       {viewMode==="makerworld" && (
         <MakerWorldView onSearch={x => { setSearch(x.title || ""); setViewMode("list"); }}/>
       )}
