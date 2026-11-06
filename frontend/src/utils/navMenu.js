@@ -21,7 +21,9 @@ export const Spool = ({ size = 24, ...p }) => (
   React.createElement("path", { d: "M19 12c1.5 1.5 2 4.5 2.5 8" }))
 );
 
-// le catalogue : chaque page (ou onglet) qu'on peut mettre au menu, et sa place par defaut (le menu d'avant)
+// le catalogue : chaque page (ou onglet) qu'on peut mettre au menu, et sa place par defaut (le menu d'avant). Les
+// couleurs se distinguent entre voisines du menu (06/11/2026 : Calendrier etait violet comme Objets, MakerWorld cyan
+// comme Impressions)
 export const NAV_ITEMS = [
   { k: "home",      to: "/",                        icon: Home,         label: "Accueil",     c: "#3B82F6", def: "bar" },
   { k: "prints",    to: "/prints",                  icon: Printer,      label: "Impressions", c: "#06B6D4", def: "bar" },
@@ -29,10 +31,10 @@ export const NAV_ITEMS = [
   { k: "objects",   to: "/objects",                 icon: ShoppingBag,  label: "Objets",      c: "#8B5CF6", def: "bar" },
   { k: "stats",     to: "/stats",                   icon: BarChart2,    label: "Stats",       c: "#22C55E", def: "bar" },
   { k: "settings",  to: "/settings",                icon: Settings,     label: "Paramètres",  c: "#64748B", def: "bar" },
-  { k: "makerworld",to: "/prints?tab=makerworld",   icon: Globe,        label: "MakerWorld",  c: "#06B6D4", def: "hidden" },
+  { k: "makerworld",to: "/prints?tab=makerworld",   icon: Globe,        label: "MakerWorld",  c: "#6366F1", def: "hidden" },
   { k: "queue",     to: "/prints?tab=queue",        icon: ListChecks,   label: "À faire",     c: "#22C55E", def: "hidden" },
   { k: "gallery",   to: "/prints?tab=gallery",      icon: Images,       label: "Galerie",     c: "#EC4899", def: "hidden" },
-  { k: "calendar",  to: "/prints?tab=calendar",     icon: CalendarDays, label: "Calendrier",  c: "#8B5CF6", def: "hidden" },
+  { k: "calendar",  to: "/prints?tab=calendar",     icon: CalendarDays, label: "Calendrier",  c: "#EAB308", def: "hidden" },
   { k: "archived",  to: "/filaments?tab=archived",  icon: Archive,      label: "Archivées",   c: "#64748B", def: "hidden" },
   { k: "drying",    to: "/stats?tab=drying",        icon: Droplets,     label: "Séchage",     c: "#06B6D4", def: "hidden" },
   { k: "notifications", to: "/notifications",       icon: Bell,         label: "Notifications", c: "#3B82F6", def: "profile" },
