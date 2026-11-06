@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import HumidityOffsetCard from "../components/HumidityOffsetCard";
+import BuildPlatesCard from "../components/BuildPlatesCard";
 import CardHelp from "../components/CardHelp";
 import Cachettes from "../components/Cachettes";
 import { Save, Wifi, RefreshCw, Sun, Moon, Users, KeyRound, Trash2, Activity } from "lucide-react";
@@ -2272,6 +2273,8 @@ export default function Settings() {
       </form>
       {/* le decalage d'humidite de chaque AMS (03/11/2026) : enregistre tout de suite, hors du formulaire */}
       <div style={{ marginTop:16 }}><HumidityOffsetCard card={card} cardTitle={cardTitle}/></div>
+      {/* les plateaux d'impression possedes (06/11/2026) : le planning dit quand en changer */}
+      <div style={{ marginTop:16 }}><BuildPlatesCard card={card} cardTitle={cardTitle}/></div>
       </div></AdminOnly>
       )}
 

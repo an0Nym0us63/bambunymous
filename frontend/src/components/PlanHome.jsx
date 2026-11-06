@@ -5,7 +5,7 @@ import { egg } from "../eggs";
 import { showAlert } from "../utils/dialog";
 import { toast } from "../store/toast";
 import { useCanMw } from "../store/auth";
-import { DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt } from "./PlanDay";
+import { DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt, bedTxt, BED_NAMES } from "./PlanDay";
 import { JobSheet, LowStockBanner, BlockedList } from "./PlanPanels";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 
@@ -76,7 +76,7 @@ function Agenda({ jobs, now, max, onOpen }) {
             <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {r.j.locked ? "🔒 " : ""}{r.j.completes ? "🏁 " : ""}{unretained(r.j) ? "○ " : ""}{r.j.title}</span>
             <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              → {hhmm(r.j.end)} · {plateTxt(r.j)}{r.j.load?.length ? <span style={{ color: "#EA580C" }}> · 🧵 {swapTxt(r.j)}</span> : ""}{r.j.runout?.length ? <span style={{ color: "#B45309" }}> · 🔄</span> : ""}
+              → {hhmm(r.j.end)} · {plateTxt(r.j)}{r.j.bed_change ? <span style={{ color: "#0369A1" }}> · 🔲 {BED_NAMES[r.j.bed_change.to] || r.j.bed_change.to}</span> : ""}{r.j.load?.length ? <span style={{ color: "#EA580C" }}> · 🧵 {swapTxt(r.j)}</span> : ""}{r.j.runout?.length ? <span style={{ color: "#B45309" }}> · 🔄</span> : ""}
               {r.j.low_info?.length ? <span style={{ color: "#DC2626" }}> · 📉</span> : ""}</span>
           </span>
         </span>
@@ -180,14 +180,15 @@ export function PlanZoom({ p: p0 }) {
     <AlertChips p={p} big/>
     {/* le prochain changement de bobine (06/11/2026) : quand, pour quoi, quoi charger a la place de quoi ; et une bobine
         qui se videra en route */}
-    {(() => { const j = (p.jobs || []).find(x => x.load?.length), ro = (p.jobs || []).find(x => x.runout?.length);
-      if (!j && !ro) return null;
+    {(() => { const j = (p.jobs || []).find(x => x.load?.length), ro = (p.jobs || []).find(x => x.runout?.length), bj = (p.jobs || []).find(x => x.bed_change);
+      if (!j && !ro && !bj) return null;
       const line = (ic, c, head, txt, x) => <div onClick={() => setSel(x)} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "9px 11px", borderRadius: 12,
         cursor: "pointer", border: `1px solid color-mix(in srgb, ${c} 35%, var(--border))`, background: `color-mix(in srgb, ${c} 8%, var(--surface))` }}>
         <span style={{ fontSize: 17 }}>{ic}</span>
         <span style={{ minWidth: 0 }}><span style={{ display: "block", fontSize: 12.5, fontWeight: 900, color: c }}>{head}</span>
           <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "var(--text2)", lineHeight: 1.4 }}>{txt}</span></span></div>;
-      return <>{sec("Prochain changement de bobine")}
+      return <>{sec(bj && !j ? "Prochain changement de plateau" : "Prochain changement")}
+        {bj && line("🔲", "#0369A1", `${dayLabel(bj.day, p.now)} à ${hhmm(bj.start)}`, <>Pour {bj.title}{bj.plates_total > 1 ? ` · ${plateTxt(bj)}` : ""} : {bedTxt(bj.bed_change).replace(/^🔲 /, "").toLowerCase()}.</>, bj)}
         {j && line("🧵", "#EA580C", `${dayLabel(j.day, p.now)} à ${hhmm(j.start)}`, <>Pour {j.title}{j.plates_total > 1 ? ` · ${plateTxt(j)}` : ""} : {swapLong(j)}.</>, j)}
         {ro && line("🔄", "#B45309", `${dayLabel(ro.runout[0].at.slice(0, 10), p.now)} vers ${hhmm(ro.runout[0].at)}`, <>Pendant {ro.title} : {runoutTxt(ro.runout[0]).replace(/^🔄 /, "")}. Prépare une autre bobine.</>, ro)}
       </>; })()}

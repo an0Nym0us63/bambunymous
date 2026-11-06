@@ -464,6 +464,15 @@ async def mw_plan_lock(body: dict = Body({}), _: str = Depends(require_mw)):
         raise HTTPException(400, str(e))
 
 
+@router.get("/plan/plates")
+async def mw_plan_plates(_: str = Depends(require_mw)):
+    """Les plateaux d'impression : ceux possedes, les types, ce que Bambu deconseille sur chacun, celui en place."""
+    from ....services import planner as P, plates as PL
+    d = await P._load()
+    return {"plates": d.get("plates") or [], "kinds": [{"kind": k, "label": PL.KINDS[k], "bambu_no": PL.bambu_no(k)} for k in PL.ORDER],
+            "mounted": await PL.mounted()}
+
+
 @router.post("/plan/undo")
 async def mw_plan_undo(_: str = Depends(require_mw)):
     """« Annuler » le dernier geste du planning."""

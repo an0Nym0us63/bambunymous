@@ -137,7 +137,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
         </div>
       </div>
     </div>
-    {(j.completes || j.due || j.load?.length > 0 || j.runout?.length > 0 || unretained(j) || j.locked || j.awaits_order?.length > 0 || j.low_after?.length > 0) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+    {(j.completes || j.due || j.load?.length > 0 || j.runout?.length > 0 || j.bed_change || j.bed_warn || unretained(j) || j.locked || j.awaits_order?.length > 0 || j.low_after?.length > 0) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
       {j.awaits_order?.length > 0 && tag(`🚚 compte sur la commande : ${j.awaits_order.join(", ")}`, "#0EA5E9", "Le stock ne suffit pas : ce plateau prend sur une bobine commandée, pas encore reçue")}
       {j.low_after?.length > 0 && tag(`📉 sous le seuil : ${j.low_after.join(", ")}`, "#DC2626", "Après ce plateau, il restera moins d'un quart de bobine de ce filament")}
       {j.locked && tag(`🔒 figé à ${hhmm(j.start)}`, "#4F46E5", "Figé à ce jour et cette heure : optimiser, journée couleur, au mieux ou plus tard ne le déplacent pas")}
@@ -148,6 +148,8 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
       {j.due && tag(`🎯 avant le ${dueTxt(j.due)}`, j.due_ok ? "#16A34A" : "#EF4444", j.due_ok ? "L'objet sera fini à temps" : "Le dernier plateau de l'objet finit après cette date")}
       {j.load?.length > 0 && tag(`🧵 À charger : ${j.load.join(", ")}${j.free_slot && !j.unload?.length ? " (emplacement libre)" : ""}`, "#EA580C",
         j.free_slot && !j.unload?.length ? "Pas dans l'AMS à ce moment-là ; un emplacement est libre, rien à retirer" : "Pas dans l'AMS à ce moment-là")}
+      {j.bed_change && tag(bedTxt(j.bed_change), "#0369A1", j.bed_warn || "Le plateau que demande ce profil, ou un des tiens qui va à ce filament")}
+      {!j.bed_change && j.bed_warn && tag(`🔲 ${j.bed_warn}`, "#B45309", "Paramètres › Imprimante › Plateaux d'impression")}
       {j.unload?.length > 0 && tag(`↩ À retirer : ${j.unload.join(", ")}`, "#64748B", "Celle qui resservira le plus tard (ou plus du tout) : on la sort pour faire la place")}
       {(j.runout || []).map(r => <React.Fragment key={r.name}>{tag(runoutTxt(r), "#B45309", "La bobine chargée ne suffit pas : prépare-en une autre de ce filament pour cette heure-là")}</React.Fragment>)}
     </div>}
@@ -184,7 +186,7 @@ export const dayKindOf = (settings, day) => (settings?.days_off || []).find(x =>
 // les signes d'un plateau prevu (06/11/2026), les memes partout dans le calendrier ; LEGEND les explique
 export const PRIO_IC = { 2: "🔥", 1: "⬆", "-1": "⬇", "-2": "⏬" };
 export const planIcons = j => [j.locked ? "🔒" : j.pinned ? "📌" : "", PRIO_IC[j.prio_m] || "", j.completes ? "🏁" : "", unretained(j) ? "○" : "",
-  j.due && !j.due_ok ? "🎯" : "", j.intercalated ? "↔" : "", j.load?.length ? "🧵" : "", j.runout?.length ? "🔄" : ""].filter(Boolean).join("");
+  j.due && !j.due_ok ? "🎯" : "", j.intercalated ? "↔" : "", j.bed_change ? "🔲" : "", j.load?.length ? "🧵" : "", j.runout?.length ? "🔄" : ""].filter(Boolean).join("");
 export const LEGEND = [
   ["Les impressions", [["▮", "Bloc plein, de la couleur de son état : une impression faite (réussie, échouée, annulée) ou en cours"],
     ["┆", "Bloc hachuré, bord en pointillés : un plateau prévu par le planning, libre"],
@@ -193,7 +195,8 @@ export const LEGEND = [
   ["Figer", [["📌", "Jour figé : il reste ce jour-là, l'heure peut bouger"], ["🔒", "Jour et heure figés : rien ne le déplace"]]],
   ["Priorité", [["🔥", "Urgent : devant tous les autres retenus"], ["⬆", "Haute"], ["⬇", "Basse"], ["⏬", "Très basse"]]],
   ["Filaments", [["🧵", "Une bobine à charger avant de le lancer"], ["↩", "La bobine à retirer pour faire la place"],
-    ["🔄", "La bobine chargée se videra pendant l'impression : en préparer une autre"], ["🚚", "Compte sur une commande pas encore reçue"],
+    ["🔄", "La bobine chargée se videra pendant l'impression : en préparer une autre"],
+    ["🔲", "Changer de plateau d'impression avant de lancer (celui que demande le profil, ou un qui va au filament)"], ["🚚", "Compte sur une commande pas encore reçue"],
     ["📉", "Un filament passera sous le seuil (un quart de bobine)"]]],
   ["Le reste", [["🏁", "Avec ce plateau, l'objet est fini"], ["🎯", "Date limite (rouge : il finira après)"],
     ["↔", "Intercalé dans un objet « au mieux » (pour remplir une nuit, ou charger moins)"], ["⛔", "Non planifiable : le stock et les commandes ne suffisent pas"],
@@ -221,6 +224,7 @@ export function PlanDashboard({ s, dur, now, onLegend }) {
     {chip("p", `📋 ${s.plates} plateau${s.plates > 1 ? "x" : ""}`, "Les plateaux prévus")}
     {s.end && chip("e", `🏁 tout fini ${when(s.end)}`, "Quand le dernier plateau de la file finira", "var(--text)")}
     {chip("l", `🧵 ${s.loads} bobine${s.loads > 1 ? "s" : ""} à charger`, "Les chargements de bobine que demande toute la file", s.loads ? "#EA580C" : "var(--text2)")}
+    {s.beds > 0 && chip("b", `🔲 ${s.beds} changement${s.beds > 1 ? "s" : ""} de plateau`, "Les changements de plateau d'impression que demande toute la file", "#0369A1")}
     {s.nights > 0 && chip("n", `🌙 ${s.nights} nuit${s.nights > 1 ? "s" : ""} perdue${s.nights > 1 ? "s" : ""} · ${hm(s.idle_min * 60)}`, "Les nuits où l'imprimante attend l'heure de lancement : « Optimiser » peut les remplir", "#6366F1")}
     {s.late > 0 && chip("d", `🎯 ${s.late} date${s.late > 1 ? "s" : ""} limite${s.late > 1 ? "s" : ""} ratée${s.late > 1 ? "s" : ""}`, "Voir les conseils", "#DC2626")}
     {dur && Math.abs((dur.factor || 1) - 1) > 0.005 && chip("u", `⏱ durées ${dur.factor > 1 ? "+" : ""}${Math.round((dur.factor - 1) * 100)} %`, "Durées corrigées (Consignes › Durées)")}
@@ -235,6 +239,9 @@ export function PlanDashboard({ s, dur, now, onLegend }) {
 export const swapTxt = j => !j.load?.length ? "" : j.load.map((x, i) => j.unload?.[i] ? `${x} ⇄ ${j.unload[i]}` : `${x}${j.free_slot ? " (place libre)" : ""}`).join(", ");
 export const swapLong = j => !j.load?.length ? "" : j.load.map((x, i) => j.unload?.[i] ? `charger ${x} à la place de ${j.unload[i]}`
   : `charger ${x}${j.free_slot ? " dans l'emplacement libre" : ""}`).join(", ");
+// le plateau d'impression (06/11/2026) : son nom, et le changement a faire avant un plateau du planning
+export const BED_NAMES = { textured: "PEI texturé", supertack: "SuperTack", cool: "Cool Plate", hot: "PEI lisse", eng: "Engineering" };
+export const bedTxt = ch => ch ? `🔲 Mets le ${BED_NAMES[ch.to] || ch.to}${ch.from ? ` (à la place du ${BED_NAMES[ch.from] || ch.from})` : ""}` : "";
 // une bobine qui se videra en pleine impression (06/11/2026) : vers quelle heure
 export const runoutTxt = r => `🔄 ${r.name} se vide vers ${+r.at.slice(11, 13)} h${r.at.slice(14, 16) !== "00" ? ` ${r.at.slice(14, 16)}` : ""} (reste ${r.left} g, il en faut ${r.need})`;
 // les creneaux de chargement (06/11/2026) : jusqu'a quatre plages
@@ -475,6 +482,7 @@ export function NowNextTiles({ pd, onOpenPrint, onPickJob, wide }) {
             {j.completes ? "🏁 " : ""}{unretained(j) ? "○ " : ""}{j.title}<span style={{ color: "#6366F1" }}>{j.plates_total > 1 ? ` · ${j.plate}/${j.plates_total}` : ""}</span></span>
           <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             <span style={{ color: "var(--text2)" }}>{whenTxt(j.start, now)} → {whenTxt(j.end, now)}</span> · {hm(j.seconds)}
+            {j.bed_change ? <span style={{ color: "#0369A1" }}> · 🔲 {BED_NAMES[j.bed_change.to] || j.bed_change.to}</span> : ""}
             {j.load?.length ? <span style={{ color: "#EA580C" }}> · 🧵 {swapTxt(j)}</span> : ""}
             {j.runout?.length ? <span style={{ color: "#B45309" }}> · 🔄 {j.runout.map(r => r.name).join(", ")}</span> : ""}</span>
         </span>

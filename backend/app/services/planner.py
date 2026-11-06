@@ -47,7 +47,9 @@ KEY = "PRINT_PLAN"
 HORIZON_DAYS = 60
 SHIFT_MIN = 180          # un plateau « decale » : son depart a bouge d'au moins 3 h (06/11/2026)
 DEFAULTS = {"gap": 15, "run": None, "launch": None, "opt_mode": "mix", "auto_new": "off", "days_off": [], "load_win": [],
-            "dur_mode": "off", "dur_pct": 0}
+            "dur_mode": "off", "dur_pct": 0, "plates": []}
+# les plateaux d'impression possedes (06/11/2026) : [{kind, n, name, avoid: [matieres ou sous-types]}] ; vide, le
+# planning ne s'occupe pas des plateaux (voir services/plates.py)
 # les durees (06/11/2026) : tes impressions durent souvent un peu plus (ou moins) que prevu, en proportion de leur duree.
 # dur_mode "off" : les durees telles quelles ; "auto" : corrigees de l'ecart mesure sur tes dernieres impressions ;
 # "manual" : de dur_pct % (de -30 a +60)
@@ -181,6 +183,19 @@ async def set_settings(body: dict) -> dict:
                 raise PlanError("Jour particulier : absent ou peu dispo")
             out.append({"from": min(a, b), "to": max(a, b), "kind": x["kind"], "note": str(x.get("note") or "")[:60]})
         d["days_off"] = sorted(out, key=lambda x: x["from"])
+    if isinstance(body.get("plates"), list):
+        from . import plates as PL
+        out = []
+        for x in body["plates"][:10]:
+            if not isinstance(x, dict) or x.get("kind") not in PL.KINDS:
+                raise PlanError("Plateau : un type inconnu")
+            try:
+                n = max(0, min(9, int(x.get("n") or 0)))
+            except (TypeError, ValueError):
+                raise PlanError("Plateau : un nombre")
+            out.append({"kind": x["kind"], "n": n, "name": str(x.get("name") or "")[:40],
+                        "avoid": [str(a).strip()[:30] for a in (x.get("avoid") or []) if str(a).strip()][:20]})
+        d["plates"] = out
     if body.get("dur_mode") in ("off", "auto", "manual"):
         d["dur_mode"] = body["dur_mode"]
     if "dur_pct" in body:
@@ -232,6 +247,13 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
             units.append((0, "", m["seconds"] / qty, fils, 0, 1 if m.get("printing") else 0, round((m.get("weight_g") or 0) / qty, 1), None))
         # l'objet : combien chaque plateau en a deja donne, pour savoir quel plateau en termine un
         obj = {"qty": qty, "plates": {}}
+        # le plateau d'impression que demande chaque plateau (06/11/2026) : dans le 3MF du profil, s'il est deja la
+        beds = {}
+        if d.get("plates"):
+            from . import plates as PL
+            prof = (m.get("profile") or {}).get("profile_id")
+            for u in units:
+                beds[u[0]] = PL.profile_bed(m.get("mw_id") or did.split("~")[0], prof, u[0] or 1)
         for idx, pname, secs, fils, printed, printing, wg, thumb in units:
             bk = f"{did}:{idx}"
             mk = manual.get(bk)
@@ -251,7 +273,8 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
                             "plate": idx, "plate_name": pname, "plates_total": len(plates), "copy": c, "qty": qty,
                             "seconds": int(secs), "weight_g": wg, "fils": fl, "_obj": obj, "thumb": thumb,
                             "chain": d.get("chain", {}).get(did),
-                            "prio_m": int(d.get("prio", {}).get(did) or 0), "prio_p": int(d.get("prio", {}).get(f"{did}:{idx}") or 0)})
+                            "prio_m": int(d.get("prio", {}).get(did) or 0), "prio_p": int(d.get("prio", {}).get(f"{did}:{idx}") or 0),
+                            "bed_want": beds.get(idx)})
     return out, changed
 
 
@@ -612,6 +635,32 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
     # de route ; on dit vers quelle heure (au prorata de la duree), pour preparer la suivante. Une bobine chargee
     # ensuite : on ne sait pas laquelle, on la suppose assez pleine
     ams_g = {fid: float(v.get("g") or 0) for fid, v in (d.get("_ams") or {}).items()}
+    # les plateaux d'impression (06/11/2026) : celui que demande le profil s'il est possede et convient au filament, sinon
+    # celui en place s'il convient, sinon le premier possede qui convient ; un changement compte comme une bobine
+    from . import plates as PL
+    own = PL.owned(d.get("plates"))
+    avoid = PL.avoid_map(d.get("plates"))
+    ftype = d.get("_ftype") or {}
+    bed = {"cur": (d.get("_bed_now") or {}).get("kind")}
+
+    def bed_for(j):
+        if not own:
+            return None, None, None
+        bad = set()
+        for f in j["fils"]:
+            mt, ft = ftype.get(f.get("filament_id")) or (f.get("type"), None)
+            bad |= PL.bad_kinds(mt, ft, avoid)
+        ok = [k for k in own if k not in bad]
+        want = j.get("bed_want")
+        need = want if want in ok else bed["cur"] if bed["cur"] in ok else ok[0] if ok else (want or bed["cur"])
+        warn = None
+        if not ok:
+            warn = "Aucun de tes plateaux ne convient à ce filament"
+        elif want and want not in ok:
+            warn = f"Prévu pour {PL.KINDS[want]}, " + ("que tu n'as pas" if want not in own else "déconseillé pour ce filament")
+        ch = {"from": bed["cur"], "to": need} if need and need != bed["cur"] else None
+        bed["cur"] = need or bed["cur"]
+        return need, ch, warn
 
     def put(j, s, why, c, too_long, extra=None):
         nonlocal cursor
@@ -623,6 +672,7 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
                       f"elle ne peut pas finir avant l'arrêt")
         need = [f for f in j["fils"] if f.get("filament_id") and f["filament_id"] not in have]
         mine = {f.get("filament_id") for f in j["fils"] if f.get("filament_id")}
+        b_need, b_change, b_warn = bed_for(j)
         runout = []
         for f in j["fils"]:
             fid, g = f.get("filament_id"), f.get("g") or 0
@@ -672,6 +722,7 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
                        "day": s.date().isoformat(), "pinned": j["key"] in pins, "locked": j["key"] in locked, "reasons": rs, "too_long": too_long,
                        "load": [f["name"] for f in need], "unload": unload, "runout": runout,
                        "free_slot": bool(need) and len(unload) < len(need),
+                       "bed": b_need, "bed_change": b_change, "bed_warn": b_warn,
                        "wait_s": int((s - c).total_seconds()) if s > c else 0})
         cursor = e + rules.gap
 
@@ -989,7 +1040,7 @@ def mode_score(r: dict, d: dict, now: datetime, mode: str) -> float:
     """Ce que coute un planning selon le mode (plus petit = mieux) : une date limite ratee compte toujours enorme."""
     rules = Rules(d)
     late = 100000 * sum(1 for x in deadlines(r["jobs"], d, now) if not x["ok"])
-    loads = sum(len(j.get("load") or []) for j in r["jobs"])
+    loads = sum(len(j.get("load") or []) + (1 if j.get("bed_change") else 0) for j in r["jobs"])
     idle = sum(w for _, w in _night_waits(r, rules)) / 60 if rules.limits else 0
     # le plus d'impressions tot : la somme des heures de fin (les courtes d'abord la font baisser)
     ends = sum((datetime.fromisoformat(j["end"]) - now).total_seconds() / 3600 for j in r["jobs"]) / max(1, len(r["jobs"]))
@@ -1157,6 +1208,20 @@ async def _context(tz: int | None):
         for j in jobs:
             j["est_seconds"] = j["seconds"]
             j["seconds"] = int(j["seconds"] * f)
+    if d.get("plates"):
+        from . import plates as PL
+        d["_bed_now"] = await PL.mounted()
+        try:
+            from sqlalchemy import select
+            from ..db.session import AsyncSessionLocal
+            from ..models.filament import Filament
+            fids = {f.get("filament_id") for j in jobs for f in j["fils"] if f.get("filament_id")}
+            if fids:
+                async with AsyncSessionLocal() as db:
+                    d["_ftype"] = {int(i): (m, t) for i, m, t in (await db.execute(
+                        select(Filament.id, Filament.material, Filament.fila_type).where(Filament.id.in_(fids)))).all()}
+        except Exception:
+            logger.exception("[PLANNING] sous-types des filaments")
     d["_stock"] = await _stock_ledger(stock_of)
     live = _live()
     busy = now + timedelta(minutes=live[0]) if live else None
@@ -1347,7 +1412,7 @@ async def plan(tz: int | None = None) -> dict:
     return {"settings": {k: d[k] for k in DEFAULTS}, "now": now.isoformat(timespec="minutes"),
             "busy_until": busy.isoformat(timespec="minutes") if busy else None,
             "live": ({"name": live[1], "design_id": live[2], "remaining_min": live[0], **(await _live_print(d))} if live else None),
-            "dur": d.get("_dur"), "summary": plan_metrics(r, d, now),
+            "dur": d.get("_dur"), "summary": plan_metrics(r, d, now), "bed_now": d.get("_bed_now"),
             "undo": ({"why": d["undo"][-1].get("why"), "at": d["undo"][-1].get("at")} if d["undo"] else None),
             "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix, gain), "status": status,
             "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),
@@ -1493,7 +1558,7 @@ def plan_metrics(r: dict, d: dict, now: datetime) -> dict:
     rules = Rules(d)
     w = _night_waits(r, rules) if rules.limits else []
     js = r["jobs"]
-    return {"loads": sum(len(j.get("load") or []) for j in js), "nights": len(w), "idle_min": int(sum(x for _, x in w) // 60),
+    return {"loads": sum(len(j.get("load") or []) for j in js), "beds": sum(1 for j in js if j.get("bed_change")), "nights": len(w), "idle_min": int(sum(x for _, x in w) // 60),
             "late": sum(1 for x in deadlines(js, d, now) if not x["ok"]), "end": max((j["end"] for j in js), default=None),
             "avg_h": round(sum((datetime.fromisoformat(j["end"]) - now).total_seconds() / 3600 for j in js) / max(1, len(js)), 1),
             "plates": len(js)}
@@ -1841,6 +1906,14 @@ def _replace(order: list, old: list, new: list) -> list:
 
 
 # ── les rappels (boucle des notifications) ───────────────────────────────────
+def _bed_name(k) -> str:
+    from . import plates as PL
+    return PL.KINDS.get(k, k or "?")
+
+
+def _bed_txt(ch: dict) -> str:
+    """« Mets le PEI texturé (à la place du SuperTack) »."""
+    return f"🔲 Mets le plateau {_bed_name(ch['to'])}" + (f" (à la place du {_bed_name(ch['from'])})" if ch.get("from") else "")
 async def tick(cfg, r: dict | None = None) -> int:
     """Toutes les 15 min : a l'heure prevue, imprimante libre, « a lancer » ; une fois en retard d'une demi-heure,
     un second rappel. Un rappel par travail."""
@@ -1875,7 +1948,7 @@ async def tick(cfg, r: dict | None = None) -> int:
             if s - nowt > timedelta(minutes=mins):
                 break
             k = f"load:{j['key']}"
-            if not j.get("load") or d["notified"].get(k):
+            if not (j.get("load") or j.get("bed_change")) or d["notified"].get(k):
                 continue
             d["notified"][k] = 1
             changed = True
@@ -1889,7 +1962,11 @@ async def tick(cfg, r: dict | None = None) -> int:
                 body += "\nUn emplacement est libre : rien à retirer"
             if kept:
                 body += f"\nDéjà dans l'AMS : {', '.join(dict.fromkeys(kept))}"
-            await N.notify("plan_load", f"🧵 À charger pour {_fmt(s)} : {', '.join(j['load'])}", body,
+            if j.get("bed_change"):
+                body += "\n" + _bed_txt(j["bed_change"])
+            head = f"🧵 À charger pour {_fmt(s)} : {', '.join(j['load'])}" if j.get("load") else \
+                f"🔲 Plateau à changer pour {_fmt(s)} : {_bed_name(j['bed_change']['to'])}"
+            await N.notify("plan_load", head, body,
                            click=N.app_link(cfg, "/prints?tab=calendar"), priority=3)
             sent += 1
         # une bobine qui se videra en pleine impression (06/11/2026) : un peu avant, laquelle et vers quelle heure
@@ -1929,6 +2006,8 @@ async def tick(cfg, r: dict | None = None) -> int:
             lines.append(f"↩ À retirer : {', '.join(j['unload'])}")
         elif j.get("free_slot"):
             lines.append("Un emplacement est libre : rien à retirer")
+    if j.get("bed_change"):
+        lines.append(_bed_txt(j["bed_change"]))
     for ro in j.get("runout") or []:
         lines.append(f"🔄 {ro['name']} se videra vers {_fmt(datetime.fromisoformat(ro['at']))} (reste {ro['left']} g, il en faut {ro['need']}) : prépare une autre bobine")
     nx = r["jobs"][1] if len(r["jobs"]) > 1 else None

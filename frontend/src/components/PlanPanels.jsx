@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
-import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt } from "./PlanDay";
+import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt } from "./PlanDay";
 
 // Les fenetres du planning (05/11/2026) : une fenetre (en bas au telephone, au centre sur ordinateur), la fiche
 // d'actions d'un plateau, la file regroupee par objet, les plateaux non planifiables.
@@ -106,6 +106,8 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
           {prioChip(j.prio_m)}{j.prio_p ? prioChip(j.prio_p, { opacity: 0.85 }) : null}
           {j.load?.length > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "#EA580C" }}>🧵 à charger : {j.load.join(", ")}{j.free_slot && !j.unload?.length ? " (emplacement libre)" : ""}</span>}
           {j.unload?.length > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "#64748B" }}>↩ à retirer : {j.unload.join(", ")}</span>}
+          {j.bed_change && <span style={{ fontSize: 11, fontWeight: 900, color: "#0369A1" }}>{bedTxt(j.bed_change)}</span>}
+          {j.bed_warn && <span style={{ fontSize: 11, fontWeight: 800, color: "#B45309" }}>🔲 {j.bed_warn}</span>}
           {(j.runout || []).map(r => <span key={r.name} style={{ fontSize: 11, fontWeight: 900, color: "#B45309" }}>{runoutTxt(r)}</span>)}
           <StockTags j={j}/>
         </span>
