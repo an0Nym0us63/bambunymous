@@ -103,6 +103,39 @@ function AlertChips({ p, big }) {
 }
 
 // l'en-tete : l'etat en couleur, et dans combien de temps le prochain
+// la synthese du prochain plateau (06/11/2026) : lequel, quand, combien de temps, et ce qu'il faudra faire avant (bobines,
+// plateau d'impression, regroupement), puis sa fiche sur le profil a lancer (d'ou l'ouvrir dans Bambu Studio)
+function NextUp({ p, onSheet }) {
+  const j = p.jobs[0], mins = (new Date(j.start) - new Date(p.now)) / 60000;
+  const todo = [
+    j.load?.length > 0 && ["🧵", "#EA580C", <SwapLinks j={j}/>],
+    j.bed_change && ["🔲", "#0369A1", bedTxt(j.bed_change).replace(/^🔲 /, "")],
+    j.merged && ["🧩", "#6366F1", "Regrouper ses plateaux dans Bambu Studio avant de lancer"],
+    ...(j.runout || []).map(r => ["🔄", "#B45309", runoutTxt(r).replace(/^🔄 /, "") + " : prépare une autre bobine"]),
+    j.awaits_order?.length > 0 && ["📬", "#0EA5E9", `Attend une commande : ${j.awaits_order.join(", ")}`],
+  ].filter(Boolean);
+  return <div style={{ borderRadius: 14, padding: 10, display: "flex", flexDirection: "column", gap: 7,
+    border: `1px solid color-mix(in srgb, ${C} 35%, var(--border))`, background: `linear-gradient(140deg, color-mix(in srgb, ${C} 10%, transparent), transparent 75%), var(--surface)` }}>
+    <div style={{ display: "flex", gap: 9, alignItems: "center", minWidth: 0 }}>
+      <PlateThumb j={j} size={46}/>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".05em", textTransform: "uppercase", color: C }}>
+          ⏭ Prochain · {mins <= 1 ? "maintenant" : `${dayLabel(j.day, p.now).toLowerCase()} à ${hhmm(j.start)} (dans ${dur(mins)})`}</div>
+        <div style={{ fontSize: 13.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{j.title}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{[j.plates_total > 1 ? plateTxt(j) : null, dur(j.seconds / 60)].filter(Boolean).join(" · ")}</div>
+      </div>
+    </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {todo.length ? todo.map(([ic, c, t], i) => <div key={i} style={{ display: "flex", gap: 7, alignItems: "baseline", fontSize: 12.5, fontWeight: 700, color: "var(--text2)", lineHeight: 1.4 }}>
+        <span style={{ flexShrink: 0 }}>{ic}</span><span style={{ color: c, minWidth: 0 }}>{t}</span></div>)
+        : <div style={{ fontSize: 12.5, fontWeight: 700, color: "#16A34A" }}>✓ Rien à préparer : les bobines et le plateau sont en place</div>}
+    </div>
+    <button type="button" onClick={() => onSheet(j)} style={{ alignSelf: "flex-start", padding: "6px 12px", borderRadius: 11, cursor: "pointer",
+      border: `1px solid color-mix(in srgb, ${C} 40%, var(--border))`, background: `color-mix(in srgb, ${C} 10%, var(--surface))`, color: "#4F46E5",
+      fontSize: 12.5, fontWeight: 900 }}>🧾 Sa fiche, sur le profil à lancer</button>
+  </div>;
+}
+
 function StateHead({ p }) {
   const st = p.status, [ic, c, word] = STATE[st?.state] || ["📅", "#64748B", "Planning"];
   const next = (p.jobs || [])[0];
@@ -176,12 +209,9 @@ export function PlanZoom({ p: p0 }) {
   const sec = t => <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: C, margin: "4px 0 2px" }}>{t}</div>;
   return <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
     <StateHead p={p}/>
-    {p.status?.text && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", marginTop: -4 }}>{p.status.text}</div>}
-    {/* a lancer (06/11/2026) : sa fiche, sur le bon profil (et sa variante), d'ou l'ouvrir dans Bambu Studio */}
-    {(p.jobs || [])[0] && (p.status?.state === "due" || p.status?.state === "ontime" || !p.live) && (() => { const j0 = p.jobs[0];
-      return <button type="button" onClick={() => setSheet(sheetRef(j0))} style={{ alignSelf: "flex-start", marginTop: -2, padding: "7px 13px", borderRadius: 12, cursor: "pointer",
-        border: "1px solid color-mix(in srgb, #6366F1 40%, var(--border))", background: "color-mix(in srgb, #6366F1 10%, var(--surface))", color: "#4F46E5",
-        fontSize: 12.5, fontWeight: 900 }}>🧾 Sa fiche, sur le profil à lancer{j0.plates_total > 1 ? ` · ${plateTxt(j0)}` : ""}</button>; })()}
+    {/* l'etat dit autre chose que son mot (un retard, une avance) : la phrase ; « Dans les temps » ne se repete plus */}
+    {p.status?.text && p.status.state !== "ontime" && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", marginTop: -4 }}>{p.status.text}</div>}
+    {(p.jobs || [])[0] && <NextUp p={p} onSheet={j => setSheet(sheetRef(j))}/>}
     <DayStrip day={(p.now || "").slice(0, 10)} done={p.today_items || []} jobs={(p.jobs || []).filter(j => onDay(j, (p.now || "").slice(0, 10)))} settings={p.settings} now={p.now} live={live}/>
     <NowNextTiles pd={p} wide onOpenPrint={it => nav(`/prints?id=${it.id}`)} onPickJob={setSel}/>
     <AlertChips p={p} big/>
