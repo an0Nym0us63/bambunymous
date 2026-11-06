@@ -182,27 +182,47 @@ async def history(hours: float = 24, end: datetime | None = None) -> dict:
     plus recent : {points: [{t, printing, nozzle, nozzle2, bed,
     chamber, ams: {id: [h, t]}}], every}. Au-dela de MAX_POINTS, moyennes par paquets consecutifs (un trou de plus de
     15 minutes coupe un paquet : la courbe garde ses trous)."""
+    import time as _time
+    hours = max(1.0, min(float(hours or 24), KEEP_DAYS * 24.0))
+    # (06/11/2026) la meme fenetre « jusqu'a maintenant » redemandee par plusieurs courbes et tuiles a la fois : rendue
+    # telle quelle pendant 20 s (0,5 s de calcul a chaque fois sur 3 jours)
+    key = (round(hours, 3), end.isoformat() if end else None)
+    hit = _HIST.get(key)
+    if hit and _time.monotonic() - hit[0] < 20:
+        return hit[1]
+    out = await _history(hours, end)
+    if len(_HIST) > 40:
+        _HIST.clear()
+    _HIST[key] = (_time.monotonic(), out)
+    return out
+
+
+_HIST: dict = {}
+
+
+async def _history(hours: float, end: datetime | None) -> dict:
     from ..db.session import AsyncSessionLocal
     from ..models.sensor import SensorSample
-    hours = max(1.0, min(float(hours or 24), KEEP_DAYS * 24.0))
     now = datetime.utcnow()
     end = min(end, now) if end else now
     since = end - timedelta(hours=hours)
+    # les colonnes seulement (06/11/2026 : des objets complets pour 3 jours de releves coutaient)
+    cols = [SensorSample.ts, SensorSample.printing, SensorSample.nozzle, SensorSample.nozzle2, SensorSample.bed, SensorSample.chamber,
+            SensorSample.ams, *(getattr(SensorSample, k) for k in EXTRA)]
     async with AsyncSessionLocal() as db:
-        rows = (await db.execute(select(SensorSample).where(SensorSample.ts >= since, SensorSample.ts <= end)
-                                 .order_by(SensorSample.ts))).scalars().all()
+        rows = (await db.execute(select(*cols).where(SensorSample.ts >= since, SensorSample.ts <= end)
+                                 .order_by(SensorSample.ts))).all()
     from .machine_events import between
     events = await between(since, end)
-    pts = [{"t": r.ts.isoformat() + "Z", "printing": bool(r.printing), "nozzle": r.nozzle, "nozzle2": r.nozzle2,
-            "bed": r.bed, "chamber": r.chamber, **{k: getattr(r, k) for k in EXTRA},
-            "ams": json.loads(r.ams) if r.ams else {}} for r in rows]
+    ts = [r[0] for r in rows]
+    pts = [{"t": r[0].isoformat() + "Z", "printing": bool(r[1]), "nozzle": r[2], "nozzle2": r[3], "bed": r[4], "chamber": r[5],
+            **dict(zip(EXTRA, r[7:])), "ams": json.loads(r[6]) if r[6] else {}} for r in rows]
     # les vrais trous (06/11/2026) : un point qui suit plus de 15 minutes sans releve (imprimante injoignable) porte
     # gap ; la courbe ne coupe que la. Elle coupait aussi la ou les moyennes espacaient les points au repos (la nuit,
     # entre deux impressions), et la ligne disparaissait alors que les valeurs etaient la
-    for i in range(1, len(pts)):
-        pts[i]["gap"] = _gap(pts[i - 1]["t"], pts[i]["t"]) > 900
-    if pts:
-        pts[0]["gap"] = False
+    big = [False] + [(ts[i] - ts[i - 1]).total_seconds() > 900 for i in range(1, len(ts))]
+    for p, g in zip(pts, big):
+        p["gap"] = g
     if len(pts) <= MAX_POINTS:
         return {"points": pts, "events": events, "hours": hours, "end": end.isoformat() + "Z"}
     step = -(-len(pts) // MAX_POINTS)
@@ -210,7 +230,7 @@ async def history(hours: float = 24, end: datetime | None = None) -> dict:
     while i < len(pts):
         chunk = [pts[i]]
         j = i + 1
-        while j < len(pts) and len(chunk) < step and _gap(pts[j - 1]["t"], pts[j]["t"]) <= 900:
+        while j < len(pts) and len(chunk) < step and not big[j]:
             chunk.append(pts[j])
             j += 1
         m = _mean(chunk)
