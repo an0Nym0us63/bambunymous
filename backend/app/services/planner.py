@@ -1038,7 +1038,10 @@ def _merge_advice(placed: list) -> list:
         out = []
         for p in proposals(placed, _slots())[:5]:
             out.append({"kind": "merge", "icon": "🧩", "conf": p["conf"],
-                        "text": f"{p['title']} : les plateaux {', '.join(str(x) for x in p['plates'])} tiennent sur un seul plateau "
+                        "text": f"{p['title']} : "
+                                + (f"{len(p['plates'])} exemplaires du plateau {p['plates'][0]}" if len(set(p['plates'])) == 1
+                                   else f"les plateaux {', '.join(str(x) for x in p['plates'])}")
+                                + f"{' (couleurs différentes)' if p.get('colors') else ''} tiennent sur un seul plateau "
                                 f"({p['mode']}) : {len(p['keys']) - 1} lancement{'s' if len(p['keys']) > 2 else ''} de moins, "
                                 f"{_dur(p['saved_s'])} gagnées. Confiance {p['conf']}. À regrouper ensuite dans Bambu Studio.",
                         "action": {"kind": "merge", "keys": p["keys"]}})

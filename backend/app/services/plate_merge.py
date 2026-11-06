@@ -8,8 +8,10 @@ Ce que l'on sait, sans trancher : la taille de chaque plateau (la vue 3D l'a mes
 l'ensemble de ses objets, gardes tels qu'ils sont poses), le plateau d'impression (le 3MF du profil : sa surface, le mode
 d'impression, les degagements de la tete). On cherche a ranger les plateaux cote a cote (rangees, rotation permise) :
   - couche par couche : un espacement de 5 mm ;
-  - objet par objet (comme le profil) : tous sauf le plus haut sous la tige (extruder_clearance_height_to_rod), le plus
-    haut sous le capot, et un degagement de tete entre chacun (extruder_clearance_dist_to_rod).
+  - objet par objet (comme le profil, ou d'office quand les plateaux n'ont pas les memes couleurs : couche par couche,
+    chaque couche changerait de filament, le temps s'envolerait) : tous sauf le plus haut sous la tige
+    (extruder_clearance_height_to_rod), le plus haut sous le capot, et entre deux objets le degagement de la tete
+    (extruder_clearance_max_radius : 96 mm sur une H2C, 9 echantillons de 25 mm au plus, comme Bambu Studio).
 La confiance : elevee quand tout tient avec de la marge (surface occupee <= 60 %), moyenne quand ca tient juste. Le
 regroupement reste a faire dans Bambu Studio ; l'appli le prevoit et le reconnait ensuite.
 """
@@ -21,6 +23,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 PREP_S = 360            # ce qu'un lancement coute en plus (chauffe, calibration, purge) : gagne a chaque plateau regroupe
+SWAP_S = 90             # un changement de filament entre deux objets de couleurs differentes (objet par objet)
 GAP_LAYER = 5.0         # mm entre deux plateaux regroupes, couche par couche
 _PROF: dict = {}
 
@@ -57,7 +60,8 @@ def profile_info(did, iid) -> dict | None:
                         sizes[int(p["n"])] = [float(x) for x in p["size_mm"]]
             out = {"W": W, "H": H, "seq": str(ps.get("print_sequence") or "by layer"), "sizes": sizes,
                    "rod_h": num("extruder_clearance_height_to_rod", 40), "lid_h": num("extruder_clearance_height_to_lid", 200),
-                   "rod_d": num("extruder_clearance_dist_to_rod", 50)}
+                   "rod_d": num("extruder_clearance_dist_to_rod", 50),
+                   "head_r": num("extruder_clearance_max_radius", num("extruder_clearance_radius", 65))}
     except Exception:
         logger.exception("[REGROUPER] profil illisible")
         out = None
@@ -88,17 +92,18 @@ def pack(rects: list, W: float, H: float, gap: float):
     return sum(a * b for a, b in rects) / (W * H)
 
 
-def fits(info: dict, plates: list):
-    """Ces plateaux (leurs numeros) tiennent-ils ensemble ? (confiance « haute » | « moyenne », mode) ou (None, mode)."""
+def fits(info: dict, plates: list, by_obj: bool = False):
+    """Ces plateaux (leurs numeros) tiennent-ils ensemble ? (confiance « haute » | « moyenne », mode) ou (None, mode).
+    by_obj : objet par objet d'office (des couleurs differentes)."""
     sz = [info["sizes"].get(n) for n in plates]
     if not sz or any(s is None for s in sz):
         return None, None
-    by_obj = info["seq"].replace("_", " ").startswith("by object")
+    by_obj = by_obj or info["seq"].replace("_", " ").startswith("by object")
     if by_obj:
         hs = sorted(s[2] for s in sz)
         if hs[-1] > info["lid_h"] or any(h > info["rod_h"] for h in hs[:-1]):
             return None, "objet par objet"
-        gap = info["rod_d"]
+        gap = info.get("head_r") or info["rod_d"]
     else:
         gap = GAP_LAYER
     used = pack([(s[0], s[1]) for s in sz], info["W"] - 10, info["H"] - 10, gap)   # 5 mm de bord
@@ -133,15 +138,25 @@ def proposals(jobs: list, slots: int, cap: int = 12) -> list:
                 fids = {f.get("filament_id") for x in grp + [j] for f in x["fils"] if f.get("filament_id")}
                 if len(fids) > slots or (j.get("bed_want") and grp[0].get("bed_want") and j["bed_want"] != grp[0]["bed_want"]):
                     continue
-                c, m = fits(info, [x["plate"] for x in grp + [j]])
+                # d'autres couleurs que celles de chaque plateau : objet par objet, sinon chaque couche changerait de filament
+                fo = [{f.get("filament_id") for f in x["fils"] if f.get("filament_id")} for x in grp + [j]]
+                mixed = len(set().union(*fo)) > max(len(s) for s in fo)
+                c, m = fits(info, [x["plate"] for x in grp + [j]], mixed)
                 if c:
                     grp.append(j)
                     rest.remove(j)
                     conf, mode = c, m
             if len(grp) >= 2:
                 secs = sum(x["seconds"] for x in grp)
+                fo = [{f.get("filament_id") for f in x["fils"] if f.get("filament_id")} for x in grp]
+                swaps = len(grp) - 1 if len(set().union(*fo)) > max(len(s) for s in fo) else 0
+                saved = PREP_S * (len(grp) - 1) - SWAP_S * swaps
+                if saved <= 0:
+                    continue
+                ts = [x["title"] for x in grp]
+                title = ts[0] if len(set(ts)) == 1 else (lambda p: p[:p.rfind(" · ")] if " · " in p else p)(ts[0])
                 out.append({"keys": [x["key"] for x in grp], "plates": [x["plate"] for x in grp], "design_id": grp[0]["design_id"],
-                            "title": grp[0]["title"], "conf": conf, "mode": mode, "saved_s": PREP_S * (len(grp) - 1),
-                            "seconds": max(60, secs - PREP_S * (len(grp) - 1))})
+                            "title": title, "conf": conf, "mode": mode, "saved_s": saved, "colors": bool(swaps),
+                            "seconds": max(60, secs - saved)})
     # les plus rentables d'abord (06/11/2026 : onze echantillons passaient apres deux regroupements de quatre)
     return sorted(out, key=lambda p: (p["conf"] != "haute", -p["saved_s"]))
