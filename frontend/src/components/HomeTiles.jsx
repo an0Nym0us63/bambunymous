@@ -4030,7 +4030,11 @@ function activeTray(status) {
   return tray ? { ...tray, ams } : null;
 }
 function Spool({ status, o, sz }) {
-  const t = activeTray(status);
+  // une bobine posee a la main que l'AMS n'a pas encore lue (06/11/2026) : la tuile la montre comme la bobine qui imprime
+  // (avec « ↻ suite · pas lue »), plus comme un emplacement vide qui inquiete
+  const t0 = activeTray(status);
+  const t = t0?.empty && t0.suite_spool ? { ...t0, empty: false, spool_id: t0.suite_spool.id, spool_info: t0.suite_spool, match_mode: "suite",
+    color: String(t0.suite_spool.color || "").replace("#", "") } : t0;
   const live = isLive(status);
   // suivi couche par couche (02/11/2026) : le poids de la bobine maintenant, et sa cible a la fin
   const lv = useLiveSpool(live ? t?.spool_id : null);
@@ -4215,7 +4219,9 @@ function Spool({ status, o, sz }) {
         return <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
           {spool(sp)}
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-            {H >= 90 && <div>{chip(slot, "#8B5CF6")}</div>}
+            {H >= 90 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{chip(slot, "#8B5CF6")}
+              {t.match_mode === "suite" && <span data-tip="Posée à la main pour prendre la suite, pas encore lue par l'AMS : fais-la relire à la fin de l'impression">
+                {chip("↻ à faire relire", "#D97706")}</span>}</div>}
             <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
               {/* sur une ligne, coupe en fin seulement (06/11/2026 : la ligne tronquee coupait « Pri-White » au tiret, « Pri-… ») */}
               <span style={{ fontSize: 20, fontWeight: 900, color: "var(--text)", lineHeight: 1.15, minWidth: 0, flex: "0 1 auto",

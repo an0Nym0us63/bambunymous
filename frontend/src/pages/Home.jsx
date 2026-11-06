@@ -909,7 +909,8 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
             onPick={onTray ? x => onTray(a, x) : null} label={slotLabel(a.id, t.id)}/>)}</span>
         {h >= 62 && <span style={{ display: "grid", gridTemplateColumns: `repeat(${trays.length || 1}, minmax(0, 1fr))`, gap: big ? 6 : 3 }}>
           {trays.map(t => <span key={t.id} style={{ fontSize: pctFs, fontWeight: 800, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden",
-            color: act && t.id === actTray ? "#3b82f6" : "var(--muted)" }}>{trayHex(t) ? (trayPct(t) != null ? `${trayPct(t)}${pctSign ? "%" : ""}` : t.filament_type || "") : "—"}</span>)}</span>}
+            color: act && t.id === actTray ? "#3b82f6" : "var(--muted)" }}>{trayHex(t) ? (trayPct(t) != null ? `${trayPct(t)}${pctSign ? "%" : ""}` : t.filament_type || "")
+              : t.empty && t.suite_spool && trayPct({ spool_info: t.suite_spool }) != null ? `${trayPct({ spool_info: t.suite_spool })}${pctSign ? "%" : ""}` : "—"}</span>)}</span>}
       </span>
     </button></div>
   );
