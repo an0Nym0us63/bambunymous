@@ -533,11 +533,18 @@ def copies_of(e: dict, plate_g: dict, pieces: dict) -> tuple:
     if e.get("gcopies") is not None:                 # le nombre d'elements du groupe, reparti (06/11/2026)
         return e["gcopies"], "groupe"
     ps = e["plates"]
-    if all(plate_g.get(n) for n in ps) and e.get("g"):
+    items = e.get("items") or 1
+    # bien moins lourd qu'un plateau MakerWorld, mais plusieurs elements (06/11/2026 : 4 patins de TPU, 0,96 g, sur un
+    # plateau d'origine de 3 g) : le plateau a ete refait autrement, le poids ne dit plus rien ; on compte les elements
+    w = sum(plate_g.get(n) or 0 for n in ps)
+    light = bool(e.get("g") and w and e["g"] < 0.6 * w and items > 1)
+    if all(plate_g.get(n) for n in ps) and e.get("g") and not light:
         return guess_copies(e.get("g"), ps, plate_g), "poids"
     pc = sum(pieces.get(n) or 0 for n in ps)
-    if (e.get("items") or 1) > 1 and pc and all(pieces.get(n) for n in ps) and e["items"] >= pc:
-        return max(1, min(50, round(e["items"] / pc))), "elements"
+    if items > 1 and pc and all(pieces.get(n) for n in ps) and items >= pc:
+        return max(1, min(50, round(items / pc))), "elements"
+    if light:                                         # sans le 3MF d'origine : un objet par exemplaire
+        return max(1, min(50, round(items / max(1, len(ps))))), "elements"
     return 1, "defaut"
 
 
