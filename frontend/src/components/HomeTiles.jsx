@@ -4034,6 +4034,15 @@ function Spool({ status, o, sz }) {
   const live = isLive(status);
   // suivi couche par couche (02/11/2026) : le poids de la bobine maintenant, et sa cible a la fin
   const lv = useLiveSpool(live ? t?.spool_id : null);
+  // la bobine qui imprimait dans cet emplacement, maintenant vide pour l'AMS (06/11/2026) : celle du suivi qui sert
+  // encore a l'impression et qu'aucun emplacement plein ne porte (celle de cet emplacement d'abord)
+  const liveD = useLiveCurrent();
+  const gone = (() => {
+    if (!live || !t?.empty) return null;
+    const held = new Set((status?.ams_list || []).flatMap(a => (a.trays || []).filter(x => !x.empty && x.spool_id).map(x => x.spool_id)));
+    const c = (liveD?.items || []).filter(i => i.current && i.spool_id && !held.has(i.spool_id) && i.row_used < i.row_planned - 0.5);
+    return c.find(i => String(i.ams_tray || "").toUpperCase() === slotOf(t).toUpperCase()) || (c.length === 1 ? c[0] : null);
+  })();
   if (!t) return (
     <Tile icon={<Disc3 size={15}/>} color="#8B5CF6" label="Filament en cours">
       <Empty>{live ? "Bobine inconnue" : "Pas d'impression en cours"}</Empty>
@@ -4041,15 +4050,22 @@ function Spool({ status, o, sz }) {
   );
   // la bobine s'est videe dans l'AMS (04/11/2026) : l'emplacement est vide, mais le reste du filament, dans le tube,
   // s'imprime encore -- un encadre pointille, en attendant le relais de l'AMS (ou une nouvelle bobine)
-  if (live && t.empty) return (
-    <Tile icon={<Disc3 size={15}/>} color="#F59E0B" label="Filament en cours">
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 14,
-        border: "2px dashed #f59e0b", background: "repeating-linear-gradient(-45deg, rgba(245,158,11,0.10) 0 3px, transparent 3px 9px)" }}>
-        <span style={{ fontSize: 15, fontWeight: 900, color: "var(--text)" }}>{slotOf(t)} · vide dans l'AMS</span>
-        <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", lineHeight: 1.35 }}>Le reste du filament, dans le tube, s'imprime encore. L'AMS prendra le relais avec une bobine identique s'il en a une.</span>
-      </div>
-    </Tile>
-  );
+  // touchee (06/11/2026) : la fenetre de la bobine qui imprimait, d'ou dire « bobine finie, voici la suite » quand l'AMS
+  // n'a pas de bobine identique pour prendre le relais
+  if (live && t.empty) {
+    const gName = gone ? (gone.name || gone.type || "Bobine") : null, gCol = gone ? hexCss(gone.fil_color || gone.color) : "#f59e0b";
+    const body = big => <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, padding: big ? "14px 16px" : "10px 12px", borderRadius: 14,
+      border: "2px dashed #f59e0b", background: "repeating-linear-gradient(-45deg, rgba(245,158,11,0.10) 0 3px, transparent 3px 9px)" }}>
+      <span style={{ fontSize: big ? 17 : 15, fontWeight: 900, color: "var(--text)" }}>{slotOf(t)} · vide dans l'AMS</span>
+      {gone && <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 800, color: "var(--text2)", minWidth: 0 }}>
+        <span style={{ width: 14, height: 14, borderRadius: "50%", background: gCol, border: "1px solid rgba(0,0,0,.2)", flexShrink: 0 }}/>
+        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{gName}{gone.brand ? ` · ${gone.brand}` : ""}</span>
+        <Muted size={12}>{Math.round(gone.row_used)} / {Math.round(gone.row_planned)} g</Muted></span>}
+      <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", lineHeight: 1.35 }}>Le reste du filament, dans le tube, s'imprime encore. L'AMS prendra le relais avec une bobine identique s'il en a une ; sinon, dis quelle bobine prend la suite.</span>
+      {big && gone && <LiveSwitchButton lv={gone} style={{ alignSelf: "flex-start", marginTop: 4 }}/>}
+    </div>;
+    return <Tile icon={<Disc3 size={15}/>} color="#F59E0B" label="Filament en cours" zoom={gone ? body(true) : undefined}>{body(false)}</Tile>;
+  }
   const si = t.spool_info || {};
   const color = hexCss(si.color || t.color);
   // les couleurs du dessin gardent leur transparence (01/11/2026 : coupees a 6 caracteres, un translucide perdait son damier)
