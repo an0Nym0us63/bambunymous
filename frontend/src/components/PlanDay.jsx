@@ -34,6 +34,31 @@ export function spans(w) {
   return b > 1440 ? [[a, 1440], [0, b - 1440]] : [[a, b]];
 }
 
+// les jours feries en France (06/11/2026), comme le serveur : les fixes, lundi de Paques, Ascension, lundi de Pentecote
+const HOL = {};
+export function frHolidays(y) {
+  if (HOL[y]) return HOL[y];
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mo = Math.floor((h + l - 7 * m + 114) / 31), da = ((h + l - 7 * m + 114) % 31) + 1;
+  const p2 = n => String(n).padStart(2, "0"), at = (dt, n) => { const x = new Date(dt); x.setDate(x.getDate() + n); return `${x.getFullYear()}-${p2(x.getMonth() + 1)}-${p2(x.getDate())}`; };
+  const easter = new Date(y, mo - 1, da, 12);
+  const out = { [`${y}-01-01`]: "Jour de l'an", [`${y}-05-01`]: "Fête du travail", [`${y}-05-08`]: "8 mai", [`${y}-07-14`]: "14 juillet",
+    [`${y}-08-15`]: "Assomption", [`${y}-11-01`]: "Toussaint", [`${y}-11-11`]: "11 novembre", [`${y}-12-25`]: "Noël",
+    [at(easter, 1)]: "Lundi de Pâques", [at(easter, 39)]: "Ascension", [at(easter, 50)]: "Lundi de Pentecôte" };
+  HOL[y] = out;
+  return out;
+}
+// ce qu'un jour a de particulier pour le planning (06/11/2026) : ses horaires (ceux du week-end ces jours-la), ferie,
+// jour absent ou peu dispo, absences de quelques heures [[debut, fin] en minutes]
+export function dayInfo(st, d) {
+  if (!st || !d) return { run: null, launch: null, away: [] };
+  const wd = new Date(`${d}T12:00`).getDay(), holiday = frHolidays(+d.slice(0, 4))[d] || null;
+  const special = !!st.we?.on && (wd === 0 || wd === 6 || (st.we.holidays && !!holiday));
+  const off = (st.days_off || []).find(x => x.from <= d && d <= x.to)?.kind || null;
+  const away = (st.away || []).filter(x => x.date === d).map(x => [toMin(x.from), toMin(x.to)]).filter(x => x[0] != null && x[1] != null);
+  return { special, holiday, off, away, run: special ? st.we.run : st.run, launch: special ? st.we.launch : st.launch };
+}
 // la journee en frise : 0 h a 24 h, la plage de fonctionnement en vert pale, celle de lancement soulignee, les
 // impressions faites en violet, les prevues hachurees de leur couleur
 // un plateau sur ce jour : commence ce jour-la, ou commence avant et deborde dessus (06/11/2026 : lance a 22 h 54 et fini
@@ -370,7 +395,9 @@ function DaysOff({ list, set }) {
     </div>
   </div>;
 }
-export function PlanSettings({ s, dur, onSave, onClose }) {
+// deux fenetres (06/11/2026) : part « global » (les consignes : horaires, week-end, durees, chargement, optimisation) ou
+// « away » (absences de quelques heures, jours et periodes particuliers) ; chaque section en carte
+export function PlanSettings({ s, dur, onSave, onClose, part = "global" }) {
   const [gap, setGap] = useState(String(s?.gap ?? 15));
   const [optMode, setOptMode] = useState(s?.opt_mode || "mix");
   const [autoNew, setAutoNew] = useState(s?.auto_new || "off");
@@ -397,7 +424,11 @@ export function PlanSettings({ s, dur, onSave, onClose }) {
     {[...(extra ? [extra] : []), ...OPT_MODES].map(([k, ic, l, tip]) => <button key={k} type="button" data-tip={tip} onClick={() => set(k)}
       style={{ ...seg, ...(v === k ? segOn : {}) }}>{ic} {l}</button>)}</div>;
   // dans une fenetre (06/11/2026) : le titre et la croix sont ceux de la fenetre, Enregistrer reste en bas
-  return <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+  return <div className="bn-sets" data-show={part} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <style>{`.bn-sets > div:not(.bn-sets-foot){padding:12px 14px;border-radius:16px;border:1px solid var(--border);
+      background:linear-gradient(160deg,color-mix(in srgb,#6366F1 4%,var(--surface)),var(--surface) 60%)}
+      .bn-sets[data-show=global] > [data-part=away]{display:none}
+      .bn-sets[data-show=away] > div:not([data-part=away]):not(.bn-sets-foot){display:none}`}</style>
     <div>
       <div style={lab}>⏸ Pause entre deux impressions</div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -454,15 +485,15 @@ export function PlanSettings({ s, dur, onSave, onClose }) {
       <div style={hint}>Quand tu peux changer une bobine. Sans créneau : à toute heure de lancement. Avec « 8 h – 9 h » et « 19 h – 23 h », un plateau qui
         demande une bobine à charger attend l'un d'eux ; les autres partent à toute heure. L'optimiseur en tient compte.</div>
     </div>
-    <div>
+    <div data-part="away">
       {/* les absences de quelques heures (06/11/2026) : rien ne se lance ; elles s'effacent une fois passees */}
       <div style={lab}>🚶 Absences sur une journée</div>
       <AwayList list={away} set={setAway}/>
       <div style={hint}>« Demain de 13 h à 16 h, je ne suis pas là » : rien ne se lance pendant ; le planning et l'optimiseur y font passer une
         impression lancée avant. Une absence passée s'efface d'elle-même.</div>
     </div>
-    <div>
-      <div style={lab}>📅 Jours particuliers</div>
+    <div data-part="away">
+      <div style={lab}>📅 Jours et périodes particuliers</div>
       <DaysOff list={daysOff} set={setDaysOff}/>
       <div style={hint}><b>Absent</b> : rien ne se lance (une impression lancée avant finit quand même). <b>Peu dispo</b> : une seule heure de
         lancement, la première de ta plage ; le planning y lance un long qui couvre la journée, et un long la veille au soir.</div>
@@ -478,7 +509,7 @@ export function PlanSettings({ s, dur, onSave, onClose }) {
       <div style={hint}>Un modèle que tu retiens, un exemplaire de plus : ses plateaux vont en fin de file, ou se placent tout seuls à la
         meilleure place selon ce mode. Rien d'autre ne bouge : ce que tu as rangé ou optimisé reste tel quel.</div>
     </div>
-    <div style={{ position: "sticky", bottom: -12, margin: "0 -12px -12px", padding: "10px 12px", display: "flex", gap: 8, justifyContent: "flex-end",
+    <div className="bn-sets-foot" style={{ position: "sticky", bottom: -12, margin: "0 -12px -12px", padding: "10px 12px", display: "flex", gap: 8, justifyContent: "flex-end",
       background: "var(--sheet-bg)", borderTop: "1px solid var(--border)" }}>
       <button type="button" onClick={onClose} style={{ ...seg, padding: "8px 14px" }}>Annuler</button>
       <button type="button" disabled={busy} onClick={save} style={{ padding: "8px 16px", borderRadius: 12, border: "none", cursor: "pointer",

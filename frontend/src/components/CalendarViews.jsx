@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { apiUrl, apiThumb } from "../api/client";
 import MwImg, { thumbSrc } from "./MwImg";
-import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift, planIcons, isFinal, finBorder, finBg } from "./PlanDay";
+import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift, planIcons, isFinal, finBorder, finBg, dayInfo } from "./PlanDay";
 import { ST, iso, DAYS } from "./PrintCalendar";
 
 // Les vues Semaine et Jour du calendrier (05/11/2026) : une grille horaire ou ce qui est imprime, ce qui imprime et
@@ -54,8 +54,10 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
   // glisser un plateau a une heure (06/11/2026) : ou il tomberait, le temps du glisser
   const [over, setOver] = useState(null);
   const minAt = (e, el) => Math.max(0, Math.min(1439, Math.round(((e.clientY - el.getBoundingClientRect().top) / hourPx * 60) / 15) * 15));
-  const run = spans(settings?.run), launch = spans(settings?.launch);
+  // les horaires de chaque jour (06/11/2026 : ceux du week-end ces jours-la), et ce qu'il a de particulier
+  const info = Object.fromEntries(dates.map(d => [d, dayInfo(settings, d)]));
   const today = now?.slice(0, 10), nowM = now ? minOf(now, today) : null;
+  const hhm = m => `${Math.floor(m / 60)} h${m % 60 ? ` ${String(m % 60).padStart(2, "0")}` : ""}`;
   const evs = Object.fromEntries(dates.map(d => [d, dayEvents(d, days, (jobs || []).filter(j => j.start.slice(0, 10) <= d && j.end.slice(0, 10) >= d), live)]));
   // a l'ouverture : la grille descend vers ce qui compte (l'heure qu'il est, ou le premier evenement, moins une heure)
   useEffect(() => {
@@ -86,7 +88,15 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
             {evs[d].some(e => e.kind === "plan" && e.j.low_info?.length) && <span data-tip="Un filament passe sous le seuil ce jour-là"
               style={{ padding: "0 5px", borderRadius: 6, background: "#FEE2E2", color: "#B91C1C", fontSize: 10, fontWeight: 900 }}>📉</span>}
             {evs[d].some(e => e.kind === "plan" && e.j.locked) && <span data-tip="Un plateau figé ce jour-là"
-              style={{ padding: "0 5px", borderRadius: 6, background: "#E0E7FF", color: "#4F46E5", fontSize: 10, fontWeight: 900 }}>🔒</span>}</div>
+              style={{ padding: "0 5px", borderRadius: 6, background: "#E0E7FF", color: "#4F46E5", fontSize: 10, fontWeight: 900 }}>🔒</span>}
+            {/* ses particularites (06/11/2026) : ferie, horaires du week-end, absent, peu dispo, absences de quelques heures */}
+            {info[d].holiday && <span data-tip={`Férié : ${info[d].holiday}${info[d].special ? " (horaires du week-end)" : ""}`}
+              style={{ padding: "0 5px", borderRadius: 6, background: "#FCE7F3", color: "#BE185D", fontSize: 10, fontWeight: 900 }}>🎉</span>}
+            {info[d].special && !info[d].holiday && <span data-tip="Horaires du week-end" style={{ padding: "0 5px", borderRadius: 6, background: "#CFFAFE", color: "#0E7490", fontSize: 10, fontWeight: 900 }}>🏖</span>}
+            {info[d].off && <span data-tip={info[d].off === "absent" ? "Absent : rien ne se lance" : "Peu dispo : une seule heure de lancement"}
+              style={{ padding: "0 5px", borderRadius: 6, background: "#FEF3C7", color: "#B45309", fontSize: 10, fontWeight: 900 }}>{info[d].off === "absent" ? "🚶 absent" : "⏳"}</span>}
+            {info[d].away.length > 0 && <span data-tip={`Absent : ${info[d].away.map(([a, b]) => `${hhm(a)} – ${hhm(b)}`).join(", ")}`}
+              style={{ padding: "0 5px", borderRadius: 6, background: "#FEF3C7", color: "#B45309", fontSize: 10, fontWeight: 900 }}>🚶 {hhm(info[d].away[0][0])}</span>}</div>
         </button>;
       })}
     </div>}
@@ -108,9 +118,13 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
           style={{ position: "relative", borderLeft: "1px solid var(--border)", cursor: one ? "default" : "pointer",
             background: d === pick && !one ? "color-mix(in srgb, #6366F1 4%, transparent)" : "transparent" }}>
           {/* les heures de fonctionnement en fond, celles de lancement en liseré a gauche */}
-          {run && run.map(([a, b], i) => <span key={`r${i}`} style={{ position: "absolute", left: 0, right: 0, top: a / 60 * hourPx, height: (b - a) / 60 * hourPx,
+          {/* les absences (06/11/2026) : hachurees, rien ne se lance ; un jour absent l'est en entier */}
+          {(info[d].off === "absent" ? [[0, 1440]] : info[d].away).map(([a, b], i) => <span key={`a${i}`} data-tip={info[d].off === "absent" ? "Absent ce jour-là" : `Absent de ${hhm(a)} à ${hhm(b)} : rien ne se lance`}
+            style={{ position: "absolute", left: 0, right: 0, top: a / 60 * hourPx, height: (b - a) / 60 * hourPx, zIndex: 1, pointerEvents: "none",
+              background: "repeating-linear-gradient(-45deg, color-mix(in srgb, #F59E0B 16%, transparent) 0 4px, transparent 4px 9px)" }}/>)}
+          {(spans(info[d].run) || null)?.map(([a, b], i) => <span key={`r${i}`} style={{ position: "absolute", left: 0, right: 0, top: a / 60 * hourPx, height: (b - a) / 60 * hourPx,
             background: "color-mix(in srgb, #22C55E 5%, transparent)" }}/>)}
-          {launch && launch.map(([a, b], i) => <span key={`l${i}`} data-tip="Heures de lancement" style={{ position: "absolute", left: 0, width: 3,
+          {(spans(info[d].launch) || null)?.map(([a, b], i) => <span key={`l${i}`} data-tip={info[d].special ? "Heures de lancement du week-end" : "Heures de lancement"} style={{ position: "absolute", left: 0, width: 3,
             top: a / 60 * hourPx, height: (b - a) / 60 * hourPx, background: "color-mix(in srgb, #6366F1 45%, transparent)" }}/>)}
           {Array.from({ length: 24 }, (_, h) => <span key={h} style={{ position: "absolute", left: 0, right: 0, top: h * hourPx, borderTop: "1px solid color-mix(in srgb, var(--border) 60%, transparent)" }}/>)}
           {/* la partie hachuree (06/11/2026) : comme le debut de l'impression, elle ouvre sa fiche */}

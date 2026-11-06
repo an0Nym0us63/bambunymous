@@ -477,6 +477,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
       {showPlan && pd?.blocked?.length > 0 && <BarBtn c="#DC2626" n={pd.blocked.length} onClick={() => setPop("blocked")}
         tip="Plateaux que le stock et les commandes ne permettent pas de poser">non planifiable{pd.blocked.length > 1 ? "s" : ""}</BarBtn>}
       {showPlan && !side && pd?.jobs?.length > 0 && <BarBtn c="#16A34A" n={pd.jobs.length} onClick={() => setPop("pool")} tip="La file : chaque plateau prévu, par objet">La file</BarBtn>}
+      <BarBtn c="#B45309" n={(pd?.settings?.away?.length || 0) + (pd?.settings?.days_off?.length || 0) || null} onClick={() => setPop("away")}
+        tip="Absences de quelques heures, jours et périodes où tu n'es pas là (vacances…)">🚶 Absences</BarBtn>
       <BarBtn c={setOpen ? "#6366F1" : "var(--text2)"} onClick={() => setSetOpen(v => !v)} tip="Pause entre deux impressions, heures de fonctionnement et de lancement">⚙ Consignes</BarBtn>
     </div>}
     {!wide && <div data-noswipe="" className="bn-bar" style={{ display: "flex", gap: 6, alignItems: "center", overflowX: "auto", margin: "0 -16px", padding: "1px 16px", scrollbarWidth: "none" }}>
@@ -489,6 +491,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
       {showPlan && pd?.jobs?.some(j => j.low_info?.length) && <BarBtn c="#DC2626" n={pd.jobs.reduce((a, j) => a + (j.low_info?.length || 0), 0)} onClick={() => setPop("low")} label="Sous le seuil">📉</BarBtn>}
       {showPlan && pd?.blocked?.length > 0 && <BarBtn c="#DC2626" n={pd.blocked.length} onClick={() => setPop("blocked")} label="Non planifiables">⛔</BarBtn>}
       {showPlan && !side && pd?.jobs?.length > 0 && <BarBtn c="#16A34A" n={pd.jobs.length} onClick={() => setPop("pool")} label="La file">📋</BarBtn>}
+      <BarBtn c="#B45309" n={(pd?.settings?.away?.length || 0) + (pd?.settings?.days_off?.length || 0) || null} onClick={() => setPop("away")} label="Absences et congés">🚶</BarBtn>
       <BarBtn c={setOpen ? "#6366F1" : "var(--text2)"} onClick={() => setSetOpen(v => !v)} label="Consignes">⚙</BarBtn>
     </div>}
     {pd?.status && showPlan && <PlanHero st={pd.status} check={pd.check} end={dayEnd(pd)} compact={!wide}>
@@ -498,6 +501,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
       st={{ state: "deadline", text: `${x.title} ne sera pas fini avant le ${dueTxt(x.due)} : voir les conseils` }}/>)}
     {setOpen && <PlanPopup title="Les consignes du planning" icon="⚙" color="#6366F1" onClose={() => setSetOpen(false)}>
       <PlanSettings s={pd?.settings} dur={pd?.dur} onSave={saveSettings} onClose={() => setSetOpen(false)}/></PlanPopup>}
+    {pop === "away" && <PlanPopup title="Absences et congés" icon="🚶" color="#B45309" onClose={() => setPop(null)}>
+      <PlanSettings part="away" s={pd?.settings} dur={pd?.dur} onSave={async b => { await saveSettings(b); setPop(null); }} onClose={() => setPop(null)}/></PlanPopup>}
     {view === "month" && <div style={{ display: "flex", gap: wide ? 8 : 5, flexWrap: wide ? "wrap" : "nowrap" }}>
       {chip("Impressions", days ? mCount : "…", "#3B82F6")}
       {chip("Heures machine", days ? hm(mTotal) : "…", "#8B5CF6")}
