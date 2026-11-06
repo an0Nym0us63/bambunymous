@@ -19,7 +19,7 @@ export function UndoPill({ info, onUndo, compact, style }) {
   const ago = min < 1 ? "à l'instant" : min < 60 ? `il y a ${min} min` : min < 1440 ? `il y a ${Math.round(min / 60)} h` : `il y a ${Math.round(min / 1440)} j`;
   return <button type="button" onClick={onUndo} data-tip={`Annuler : ${info.why} (${ago}) ; l'ordre, les jours figés, les priorités… redeviennent comme avant`}
     aria-label={`Annuler : ${info.why}`} style={{ padding: "6px 12px", borderRadius: 20, border: "1px solid color-mix(in srgb, #F59E0B 45%, var(--border))",
-      background: "color-mix(in srgb, #F59E0B 10%, var(--surface2))", color: "#B45309", fontSize: 12, fontWeight: 800, cursor: "pointer", font: "inherit",
+      background: "color-mix(in srgb, #F59E0B 10%, var(--surface2))", color: "#B45309", fontFamily: "inherit", fontSize: 12, fontWeight: 800, cursor: "pointer",
       whiteSpace: "nowrap", ...style }}>↶{compact ? "" : ` Annuler : ${info.why}`}</button>;
 }
 

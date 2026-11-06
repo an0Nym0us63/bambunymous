@@ -57,35 +57,38 @@ function PlanStatus({ st, live, check, compact, end = null }) {
 }
 // l'en-tete du planning sur ordinateur (06/11/2026 : bandeau, pastilles et chiffres en vrac) : une carte, l'etat en
 // titre avec sa ligne de detail et la verification, la fin de la journee a droite, puis les chiffres de la file en cases
-function PlanHero({ st, check, end, children }) {
+function PlanHero({ st, check, end, children, compact }) {
   const c = { due: "#6366F1", late: "#F97316", ahead: "#16A34A", ontime: "#16A34A" }[st.state] || "#64748B";
   const ic = { due: "⏰", late: "🐢", ahead: "🚀", ontime: "✅" }[st.state] || "📅";
   const at = check?.at ? check.at.slice(11, 16).replace(":", " h ") : null;
   return <div style={{ borderRadius: 18, border: `1px solid color-mix(in srgb, ${c} 30%, var(--border))`, overflow: "hidden",
     background: `linear-gradient(120deg, color-mix(in srgb, ${c} 11%, var(--surface)), var(--surface) 55%)`, boxShadow: "0 8px 24px -18px rgba(15,23,42,.35)" }}>
-    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 18px" }}>
-      <span style={{ width: 44, height: 44, borderRadius: 14, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22,
+    <div style={{ display: "flex", alignItems: "center", gap: compact ? 10 : 14, padding: compact ? "10px 12px" : "14px 18px" }}>
+      <span style={{ width: compact ? 36 : 44, height: compact ? 36 : 44, borderRadius: compact ? 12 : 14, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: compact ? 18 : 22,
         background: `color-mix(in srgb, ${c} 16%, var(--surface))`, border: `1px solid color-mix(in srgb, ${c} 30%, transparent)` }}>{ic}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 18, fontWeight: 900, color: c, lineHeight: 1.2 }}>{st.head || st.text}</div>
-        {(st.sub || at) && <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+        <div style={{ fontSize: compact ? 15.5 : 18, fontWeight: 900, color: c, lineHeight: 1.2 }}>{st.head || st.text}</div>
+        {(st.sub || at) && <div style={{ fontSize: compact ? 11.5 : 12.5, fontWeight: 600, color: "var(--muted)", marginTop: 2, lineHeight: 1.35,
+          ...(compact ? { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }) }}
           data-tip="La tâche « Planning des impressions » refait le planning toutes les 5 min et à chaque impression (Paramètres › Tâches)">
           {st.sub}{st.sub && at ? " · " : ""}{at && <>vérifié à {at}{check.moved > 0 ? `, ${check.moved} plateau${check.moved > 1 ? "x" : ""} décalé${check.moved > 1 ? "s" : ""} en 24 h` : ""}
             {check.overflow?.length > 0 ? <span style={{ color: "#DC2626" }}>{`, ${check.overflow.length} débordement${check.overflow.length > 1 ? "s" : ""}`}</span> : null}</>}</div>}
       </div>
-      {end && <div style={{ flexShrink: 0, textAlign: "right", paddingLeft: 16, borderLeft: "1px solid var(--border)" }}>
-        <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>🌙 Fin de journée</div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: "var(--text)", lineHeight: 1.15 }}>{hhmm(end.end)}</div>
-        <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{end.n} plateau{end.n > 1 ? "x" : ""} encore aujourd'hui</div>
+      {end && <div data-tip={end.txt} style={{ flexShrink: 0, textAlign: "right", paddingLeft: compact ? 10 : 16, borderLeft: "1px solid var(--border)" }}>
+        <div style={{ fontSize: compact ? 10 : 11, fontWeight: 900, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>🌙 {compact ? "Fin" : "Fin de journée"}</div>
+        <div style={{ fontSize: compact ? 16 : 20, fontWeight: 900, color: "var(--text)", lineHeight: 1.15 }}>{hhmm(end.end)}</div>
+        <div style={{ fontSize: compact ? 10.5 : 11.5, fontWeight: 700, color: "var(--muted)" }}>{end.n} plateau{end.n > 1 ? "x" : ""}{compact ? "" : " encore aujourd'hui"}</div>
       </div>}
     </div>
-    {children && <div style={{ padding: "10px 6px", borderTop: "1px solid var(--border)", background: "color-mix(in srgb, var(--surface2) 55%, transparent)" }}>{children}</div>}
+    {children && <div style={{ padding: compact ? "8px 2px" : "10px 6px", borderTop: "1px solid var(--border)", background: "color-mix(in srgb, var(--surface2) 55%, transparent)",
+      ...(compact ? { overflowX: "auto", scrollbarWidth: "none" } : {}) }} data-noswipe="">{children}</div>}
   </div>;
 }
 // un bouton de la barre du planning sur ordinateur (06/11/2026) : meme hauteur, meme forme ; un nombre en pastille
-function BarBtn({ onClick, tip, c = "var(--text2)", n, children, strong }) {
-  return <button type="button" onClick={onClick} data-tip={tip} style={{ height: 34, padding: "0 12px", borderRadius: 11, cursor: "pointer", display: "inline-flex",
-    alignItems: "center", gap: 7, fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap", color: c, font: "inherit",
+function BarBtn({ onClick, tip, c = "var(--text2)", n, children, strong, label }) {
+  // la police de l'appli (06/11/2026 : « font: inherit » place apres la taille la remettait a celle du texte courant)
+  return <button type="button" onClick={onClick} data-tip={tip} aria-label={label} style={{ height: 34, padding: "0 12px", borderRadius: 11, cursor: "pointer", display: "inline-flex",
+    alignItems: "center", gap: 7, fontFamily: "inherit", fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap", color: c, flexShrink: 0,
     border: `1px solid ${strong ? `color-mix(in srgb, ${c} 40%, var(--border))` : "var(--border)"}`, background: strong ? `color-mix(in srgb, ${c} 9%, var(--surface))` : "var(--surface)" }}>
     {n != null && <span style={{ minWidth: 20, height: 20, padding: "0 6px", borderRadius: 10, background: c, color: "#fff", fontSize: 11, fontWeight: 900,
       display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{n}</span>}
@@ -457,8 +460,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
           color: view === k ? "#fff" : "var(--muted)", background: view === k ? "linear-gradient(135deg, #6366F1, #8B5CF6)" : "transparent",
           boxShadow: view === k ? "0 6px 14px -8px #6366F1" : "none" }}>{l}</button>)}
     </div>
-    {/* au telephone (06/11/2026) : une seule ligne qui defile au doigt, libelles courts (sur quatre lignes, elles
-        prenaient presque tout l'ecran) */}
+    {/* au telephone (06/11/2026) : la meme barre, en icones et nombres, sur une ligne qui defile au doigt */}
     {wide && <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
       <div style={{ display: "inline-flex", gap: 6 }}>
         <BarBtn c="#6366F1" strong onClick={() => { const d = new Date(); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setPick(iso(d)); }}>Aujourd'hui</BarBtn>
@@ -477,39 +479,20 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
       {showPlan && !side && pd?.jobs?.length > 0 && <BarBtn c="#16A34A" n={pd.jobs.length} onClick={() => setPop("pool")} tip="La file : chaque plateau prévu, par objet">La file</BarBtn>}
       <BarBtn c={setOpen ? "#6366F1" : "var(--text2)"} onClick={() => setSetOpen(v => !v)} tip="Pause entre deux impressions, heures de fonctionnement et de lancement">⚙ Consignes</BarBtn>
     </div>}
-    {!wide && <div data-noswipe="" className={wide ? undefined : "bn-pills"} style={wide ? { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }
-      : { display: "flex", gap: 6, alignItems: "center", overflowX: "auto", margin: "0 -16px", padding: "1px 16px", scrollbarWidth: "none" }}>
-      {!wide && <style>{".bn-pills::-webkit-scrollbar{display:none}.bn-pills>button{flex-shrink:0;white-space:nowrap;padding:5px 10px !important}"}</style>}
-      <button type="button" onClick={() => { const d = new Date(); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setPick(iso(d)); }}
-        style={{ ...pill, color: "#6366F1", borderColor: "color-mix(in srgb, #6366F1 40%, var(--border))" }}>Aujourd'hui</button>
-      <button type="button" onClick={() => setSetOpen(v => !v)} data-tip="Pause entre deux impressions, heures de fonctionnement et de lancement"
-        style={{ ...pill, ...(setOpen ? { color: "#6366F1" } : {}) }} aria-label="Consignes">{wide ? "⚙ Consignes" : "⚙"}</button>
-      {edit && nPlanned > 1 && <button type="button" onClick={() => setPop("optimize")}
-        data-tip="Enchaîner les plateaux de mêmes couleurs dans toute la file (les impressions posées sur un jour ne bougent pas)"
-        aria-label="Optimiser la file" style={{ ...pill, color: "#6366F1" }}>{wide ? "✨ Optimiser la file" : "✨"}</button>}
-      {edit && <UndoPill info={pd?.undo} onUndo={undo} compact={!wide}/>}
-      {showPlan && pd?.advice?.length > 0 && <button type="button" onClick={() => setPop("advice")} data-tip="Les conseils du planning"
-        style={{ ...pill, color: "#D97706", borderColor: "color-mix(in srgb, #F59E0B 45%, var(--border))", background: "color-mix(in srgb, #F59E0B 10%, var(--surface2))" }}>
-        💡 {pd.advice.length}</button>}
-      {/* les plateaux figes : combien, et leur liste */}
-      {showPlan && pd?.jobs?.some(j => j.locked) && <button type="button" onClick={() => setPop("locked")} data-tip="Plateaux figés : optimiser, journée couleur, au mieux ou plus tard ne les déplacent pas"
-        style={{ ...pill, color: "#4F46E5", borderColor: "color-mix(in srgb, #4F46E5 40%, var(--border))", background: "color-mix(in srgb, #4F46E5 8%, var(--surface2))" }}>
-        🔒 {pd.jobs.filter(j => j.locked).length}{wide ? ` figé${pd.jobs.filter(j => j.locked).length > 1 ? "s" : ""}` : ""}</button>}
-      {/* le seuil, comme les conseils (05/11/2026) : un bouton, la liste dans une fenetre */}
-      {showPlan && pd?.jobs?.some(j => j.low_info?.length) && <button type="button" onClick={() => setPop("low")}
-        data-tip="Des filaments passeront sous le seuil (un quart de bobine) pendant le planning"
-        style={{ ...pill, color: "#DC2626", borderColor: "color-mix(in srgb, #DC2626 40%, var(--border))", background: "color-mix(in srgb, #DC2626 7%, var(--surface2))" }}>
-        📉 {pd.jobs.reduce((a, j) => a + (j.low_info?.length || 0), 0)}{wide ? " sous le seuil" : ""}</button>}
-      {showPlan && pd?.blocked?.length > 0 && <button type="button" onClick={() => setPop("blocked")} data-tip="Plateaux que le stock et les commandes ne permettent pas de poser"
-        style={{ ...pill, color: "#DC2626", borderColor: "color-mix(in srgb, #DC2626 45%, var(--border))", background: "color-mix(in srgb, #DC2626 9%, var(--surface2))" }}>
-        ⛔ {pd.blocked.length}{wide ? ` non planifiable${pd.blocked.length > 1 ? "s" : ""}` : ""}</button>}
-      {showPlan && !side && pd?.jobs?.length > 0 && <button type="button" onClick={() => setPop("pool")} data-tip="La file : chaque plateau prévu, par objet"
-        style={{ ...pill, color: "#16A34A", borderColor: "color-mix(in srgb, #22C55E 45%, var(--border))" }}>📋 {wide ? `La file (${pd.jobs.length})` : `File ${pd.jobs.length}`}</button>}
+    {!wide && <div data-noswipe="" className="bn-bar" style={{ display: "flex", gap: 6, alignItems: "center", overflowX: "auto", margin: "0 -16px", padding: "1px 16px", scrollbarWidth: "none" }}>
+      <style>{".bn-bar::-webkit-scrollbar{display:none}"}</style>
+      <BarBtn c="#6366F1" strong onClick={() => { const d = new Date(); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setPick(iso(d)); }}>Aujourd'hui</BarBtn>
+      {edit && nPlanned > 1 && <BarBtn c="#6366F1" label="Optimiser la file" onClick={() => setPop("optimize")}>✨ Optimiser</BarBtn>}
+      {edit && <UndoPill info={pd?.undo} onUndo={undo} compact style={{ height: 34, borderRadius: 11, padding: "0 12px", flexShrink: 0 }}/>}
+      {showPlan && pd?.advice?.length > 0 && <BarBtn c="#D97706" n={pd.advice.length} onClick={() => setPop("advice")} label="Conseils">💡</BarBtn>}
+      {showPlan && pd?.jobs?.some(j => j.locked) && <BarBtn c="#4F46E5" n={pd.jobs.filter(j => j.locked).length} onClick={() => setPop("locked")} label="Plateaux figés">🔒</BarBtn>}
+      {showPlan && pd?.jobs?.some(j => j.low_info?.length) && <BarBtn c="#DC2626" n={pd.jobs.reduce((a, j) => a + (j.low_info?.length || 0), 0)} onClick={() => setPop("low")} label="Sous le seuil">📉</BarBtn>}
+      {showPlan && pd?.blocked?.length > 0 && <BarBtn c="#DC2626" n={pd.blocked.length} onClick={() => setPop("blocked")} label="Non planifiables">⛔</BarBtn>}
+      {showPlan && !side && pd?.jobs?.length > 0 && <BarBtn c="#16A34A" n={pd.jobs.length} onClick={() => setPop("pool")} label="La file">📋</BarBtn>}
+      <BarBtn c={setOpen ? "#6366F1" : "var(--text2)"} onClick={() => setSetOpen(v => !v)} label="Consignes">⚙</BarBtn>
     </div>}
-    {wide && pd?.status && showPlan && <PlanHero st={pd.status} check={pd.check} end={dayEnd(pd)}>
-      {pd.summary?.plates ? <PlanDashboard cells s={pd.summary} dur={pd.dur} now={pd.now} onLegend={() => setPop("legend")}/> : null}</PlanHero>}
-    {!wide && pd?.status && showPlan && <PlanStatus st={pd.status} live={null} check={pd.check} compact end={dayEnd(pd)}/>}
-    {!wide && pd && showPlan && <PlanDashboard s={pd.summary} dur={pd.dur} now={pd.now} onLegend={() => setPop("legend")}/>}
+    {pd?.status && showPlan && <PlanHero st={pd.status} check={pd.check} end={dayEnd(pd)} compact={!wide}>
+      {pd.summary?.plates ? <PlanDashboard cells compact={!wide} s={pd.summary} dur={pd.dur} now={pd.now} onLegend={() => setPop("legend")}/> : null}</PlanHero>}
     {pd && showPlan && <NowNextTiles pd={pd} wide={wide} onOpenPrint={openPrint} onPickJob={j => setJobSel(j)}/>}
     {showPlan && (pd?.deadlines || []).filter(x => !x.ok).map(x => <PlanStatus key={x.design_id}
       st={{ state: "deadline", text: `${x.title} ne sera pas fini avant le ${dueTxt(x.due)} : voir les conseils` }}/>)}

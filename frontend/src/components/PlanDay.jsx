@@ -225,7 +225,7 @@ export function Legend() {
 }
 // le tableau de bord du planning (06/11/2026) : une ligne, l'essentiel ; tout fini quand, les bobines a charger, les
 // nuits perdues, les dates limites, les durees corrigees
-export function PlanDashboard({ s, dur, now, onLegend, cells = false }) {
+export function PlanDashboard({ s, dur, now, onLegend, cells = false, compact = false }) {
   if (!s || !s.plates) return null;
   // en cases (06/11/2026, l'en-tete du calendrier sur ordinateur) : un chiffre et son libelle, alignes, sans pastilles
   if (cells) {
@@ -240,8 +240,9 @@ export function PlanDashboard({ s, dur, now, onLegend, cells = false }) {
       dur && Math.abs((dur.factor || 1) - 1) > 0.005 && ["⏱", `${dur.factor > 1 ? "+" : ""}${Math.round((dur.factor - 1) * 100)} %`, "sur les durées", null, "Durées corrigées (Consignes › Durées)"],
     ].filter(Boolean);
     return <div style={{ display: "flex", alignItems: "stretch", minWidth: 0 }}>
-      {cs.map(([ic, v, l, c, tip], i) => <div key={i} data-tip={tip} style={{ flex: "1 1 0", minWidth: 0, padding: "2px 12px", borderLeft: i ? "1px solid var(--border)" : "none" }}>
-        <div style={{ fontSize: 16, fontWeight: 900, color: c || "var(--text)", whiteSpace: "nowrap", lineHeight: 1.2 }}><span style={{ fontSize: 13, marginRight: 5 }}>{ic}</span>{v}</div>
+      {cs.map(([ic, v, l, c, tip], i) => <div key={i} data-tip={tip} style={{ flex: compact ? "0 0 auto" : "1 1 0", minWidth: compact ? 92 : 0, padding: compact ? "1px 10px" : "2px 12px",
+        borderLeft: i ? "1px solid var(--border)" : "none" }}>
+        <div style={{ fontSize: compact ? 14.5 : 16, fontWeight: 900, color: c || "var(--text)", whiteSpace: "nowrap", lineHeight: 1.2 }}><span style={{ fontSize: compact ? 12 : 13, marginRight: 5 }}>{ic}</span>{v}</div>
         <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l}</div>
       </div>)}
       {onLegend && <button type="button" onClick={onLegend} aria-label="Ce que disent les signes" data-tip="Ce que disent les signes et les couleurs"
