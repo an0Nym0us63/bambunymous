@@ -49,13 +49,28 @@ def _pending_of(h) -> dict:
             "success": h.get("successPrinted"), "creator_name": (inst.get("instUser") or {}).get("name")}
 
 
+_RATINGS_TASK = {"t": None}
+
+
 async def my_ratings(fresh: bool = False):
-    """(modeles evalues, evaluations a remplir par modele) ; None si illisible."""
-    from .makerworld import _get_json
-    from .makerworld_account import token
+    """(modeles evalues, evaluations a remplir par modele) ; None si illisible.
+    (06/11/2026) passe les 10 min, la liste connue est rendue aussitot et relue en fond : la tuile de l'accueil
+    attendait sinon la relecture page par page chez MakerWorld (11 s mesurees). « fresh » attend la relecture."""
     hit = _CACHE.get("ratings")
     if hit and not fresh and time.time() - hit[0] < 600:          # 10 min : une impression finie y entre vite
         return hit[1]
+    t = _RATINGS_TASK["t"]
+    if t is None or t.done():
+        t = _RATINGS_TASK["t"] = asyncio.ensure_future(_read_ratings())
+        t.add_done_callback(lambda f: f.cancelled() or f.exception())     # une erreur en fond ne reste pas orpheline
+    if hit and not fresh:
+        return hit[1]
+    return await asyncio.shield(t)
+
+
+async def _read_ratings():
+    from .makerworld import _get_json
+    from .makerworld_account import token
     tok = await token()
     if not tok:
         return None
