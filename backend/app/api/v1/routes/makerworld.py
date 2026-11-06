@@ -780,9 +780,13 @@ async def mw_model_studio(design_id: str, instance_id: str, dev_model: str = "",
     if not tok:
         raise HTTPException(400, "Compte MakerWorld non connecté (Paramètres → Données → MakerWorld)")
     try:
-        return await asyncio.to_thread(download_link, instance_id, tok, (dev_model or "")[:40])
+        out = await asyncio.to_thread(download_link, instance_id, tok, (dev_model or "")[:40])
     except ExactError as e:
         raise HTTPException(400, str(e))
+    # retenu (06/11/2026) : Studio renumerote le profil a l'envoi, l'impression qui suit lui revient par la
+    from ....services.mw_plate_guess import note_studio_open
+    note_studio_open(design_id, instance_id)
+    return out
 
 
 @router.get("/comment/{kind}/{cid}/replies")

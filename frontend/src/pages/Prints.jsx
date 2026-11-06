@@ -1040,11 +1040,11 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
   });
   const nProbable = Object.keys(probable).length;
   const acceptAll = () => Object.entries(probable).forEach(([i, l]) => l.forEach(({ pr }) => save(pr, [Number(i)])));
-  const save = async (pr, plates, reset = false, copies) => {
+  const save = async (pr, plates, reset = false, copies, profileId = prof.profile_id) => {
     // les exemplaires dits a la main restent, sauf quand on les change
     const keep = copies === undefined ? manualPlates(pr.mw_plates)?.copies ?? null : copies;
     try {
-      const { data } = await client.put(`/prints/${pr.id}/mw-plates`, { profile: prof.profile_id, plates, reset, copies: keep });
+      const { data } = await client.put(`/prints/${pr.id}/mw-plates`, { profile: profileId, plates, reset, copies: keep });
       PLATES_OVER[pr.id] = data.mw_plates;
       setOver(o => ({ ...o, [pr.id]: data.mw_plates }));
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
@@ -1109,6 +1109,20 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
     }
     setPid(null);
   };
+  // choisir un profil dans la liste l'enregistre aussitot (06/11/2026 : sans la coche, le choix ne faisait que changer
+  // l'affichage, et le planning gardait l'ancien) ; les plateaux suivent : ceux deja designes s'il les a, sinon le
+  // numero lu dans le fichier
+  const choose = async (v) => {
+    setPid(v);
+    const np = avec.find(x => String(x.profile_id) === String(v));
+    if (!np || !isAdmin || visiting) return;
+    for (const pr of prints) {
+      const i = parseInt(pr.plate_id, 10), has = n => np.plates.some(q => q.index === n);
+      const m = manualPlates(pr.mw_plates)?.plates?.filter(has);
+      await save(pr, m?.length ? m : i && has(i) ? [i] : [], false, undefined, np.profile_id);
+    }
+    setPid(null);
+  };
   const nDone = prof.plates.filter(pl => done[pl.index]).length;
   return (
     <div style={{ padding:"8px 10px 10px", borderTop:"1px solid var(--border)" }}>
@@ -1117,7 +1131,8 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
           Plateaux · {nDone}/{prof.plates.length} imprimé{nDone > 1 ? "s" : ""}
         </span>
         {avec.length > 1 ? (
-          <select value={prof.profile_id} onChange={e => setPid(e.target.value)}
+          <select value={prof.profile_id} onChange={e => choose(e.target.value)}
+            data-tip={isAdmin && !visiting ? "Le profil de ces impressions : le choisir l'enregistre" : undefined}
             style={{ maxWidth:"100%", fontSize:11, padding:"2px 6px", borderRadius:6, background:"var(--surface)",
               border:"1px solid var(--border)", color:"var(--muted)" }}>
             {avec.map(x => <option key={x.profile_id} value={x.profile_id}>{x.title || `Profil ${x.profile_id}`}</option>)}

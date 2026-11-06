@@ -608,6 +608,33 @@ async def print_copies(design_id: str) -> dict:
     return out
 
 
+_PPP: dict = {}
+
+
+async def _resolve_profiles(did, entries: list) -> list:
+    """Plusieurs profils retenus d'un meme modele (06/11/2026) : une impression au profil inconnu (fichier renvoye par
+    Studio, qui le renumerote) ne comptait pour aucun ; elle prend le profil deduit comme sur sa carte (profil ouvert
+    dans Studio depuis l'appli, couleurs, nom, image, poids). Deductions gardees 5 min."""
+    try:
+        from .makerworld import model_detail
+        from .mw_plate_guess import profile_per_print
+        m = await model_detail(str(did), stale_ok=True)
+        known = {str(p.get(k) or "") for p in m.get("profiles") or [] for k in ("instance_id", "profile_id")} - {""}
+        todo = [e for e in entries if e.get("id") and (not e.get("prof") or e["prof"] not in known)]
+        if not todo or not known:
+            return entries
+        now = time.time()
+        need = [e["id"] for e in todo if not (e["id"] in _PPP and now - _PPP[e["id"]][0] < 300)]
+        if need:
+            got = await profile_per_print(str(did), need)
+            for pid in need:
+                _PPP[pid] = (now, str((got.get(pid) or {}).get("profile") or ""))
+        return [{**e, "prof": _PPP[e["id"]][1]} if e in todo and _PPP.get(e["id"], (0, ""))[1] else e for e in entries]
+    except Exception:
+        logger.exception("[QUEUE] profil deduit")
+        return entries
+
+
 async def _printing_plates() -> dict:
     """Plateaux en cours d'impression (impression ouverte dans l'historique) :
     {design_id: [{"prof", "plates", "g", "copies", "items"}]}, comme _printed_plates : l'impression en cours compte
@@ -698,7 +725,7 @@ async def queue(fresh: bool = False, until: str | None = None, pick: list | None
         if r.get("multi") and mw in on_plates:
             # plusieurs profils retenus : seule la ligne du profil qui imprime (06/11/2026)
             ids = {str((r.get("profile") or {}).get(k) or "") for k in ("instance_id", "profile_id")} - {""}
-            ents = [e for e in on_plates[mw] if e["prof"] in ids]
+            ents = [e for e in await _resolve_profiles(mw, on_plates[mw]) if e["prof"] in ids]
             printing = bool(ents)
         if r.get("color_variant") and (mw, (r.get("profile") or {}).get("instance_id")) in vcount:
             # une variante de couleur (06/11/2026) : ce que l'impression en cours lui donne, d'apres ses objets et leurs couleurs
@@ -904,6 +931,9 @@ async def _compute(fresh: bool = False) -> dict:
     nlines = {}
     for _, did, _ in lines:
         nlines[did] = nlines.get(did, 0) + 1
+    for did_, n_ in nlines.items():                   # plusieurs profils retenus : chaque impression au sien
+        if n_ > 1 and done_plates.get(str(did_)):
+            done_plates[str(did_)] = await _resolve_profiles(did_, done_plates[str(did_)])
     for rid, did, plan in lines:
         base = designs[did]
         m = details.get(did) or {}

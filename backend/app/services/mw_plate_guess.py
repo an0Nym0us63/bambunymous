@@ -169,6 +169,76 @@ async def guess(design_id: str, print_ids: list) -> dict:
 _STOP = {"plate", "plateau", "the", "and", "for", "with", "de", "du", "la", "le", "les", "et"}
 
 
+# ── Les profils ouverts dans Bambu Studio depuis l'appli (06/11/2026) ──
+# Studio renumerote le profil du fichier qu'il envoie a l'imprimante (le Kaki imprime portait 1125112156, inconnu du
+# modele) : le profil ouvert juste avant, depuis la fiche ou le planning, est alors l'indice le plus sur.
+def _opens_path() -> Path:
+    return _data() / "cache" / "studio_opens.json"
+
+
+def note_studio_open(design_id: str, instance_id: str) -> None:
+    import json
+    import time
+    p = _opens_path()
+    try:
+        d = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        d = {}
+    if not isinstance(d, dict):
+        d = {}
+    now = time.time()
+    lst = [x for x in d.get(str(design_id)) or [] if isinstance(x, dict) and now - float(x.get("at") or 0) < 30 * 86400]
+    lst.append({"iid": str(instance_id), "at": now})
+    d[str(design_id)] = lst[-20:]
+    d = {k: v for k, v in d.items() if v and now - float(v[-1].get("at") or 0) < 30 * 86400}
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps(d), encoding="utf-8")
+        tmp.replace(p)
+    except OSError:
+        pass
+
+
+def _studio_open_before(design_id: str, when) -> str | None:
+    """L'instance ouverte dans Studio en dernier avant cette impression (48 h au plus), ou None."""
+    import json
+    from datetime import timezone
+    if when is None:
+        return None
+    try:
+        lst = json.loads(_opens_path().read_text(encoding="utf-8")).get(str(design_id)) or []
+    except (OSError, ValueError, AttributeError):
+        return None
+    t = when.replace(tzinfo=timezone.utc).timestamp() if when.tzinfo is None else when.timestamp()
+    best = None
+    for x in lst:
+        at = float(x.get("at") or 0)
+        if at <= t + 300 and t - at < 48 * 3600 and (best is None or at > best[0]):
+            best = (at, str(x.get("iid") or ""))
+    return best[1] if best else None
+
+
+def _rgb(h):
+    h = str(h or "").lstrip("#")[:6]
+    try:
+        return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4)) if len(h) == 6 else None
+    except ValueError:
+        return None
+
+
+def _color_dist(a: dict, b: dict) -> float | None:
+    """Ecart entre deux jeux de couleurs {rgb: grammes}, dans les deux sens (chaque couleur vers la plus proche de
+    l'autre jeu, ponderee par ses grammes) : 0 identiques, ~40 meme teintes, au-dela de 100 autre chose."""
+    if not a or not b:
+        return None
+
+    def one(x, y):
+        tot = sum(x.values()) or 1.0
+        return sum(g * min(sum((c1 - c2) ** 2 for c1, c2 in zip(k, k2)) ** 0.5 for k2 in y) for k, g in x.items()) / tot
+    return (one(a, b) + one(b, a)) / 2
+
+
 def _words(t) -> set:
     import re
     import unicodedata
@@ -331,7 +401,15 @@ async def profile_per_print(design_id: str, print_ids: list) -> dict:
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(Print.id, Print.status, Print.plate_id, Print.mw_profile_id, Print.mw_plates,
                                         Print.original_name, Print.task_name, Print.file_name, Print.total_weight_g,
-                                        Print.model_3mf).where(Print.id.in_(ids)))).all()
+                                        Print.model_3mf, Print.print_date).where(Print.id.in_(ids)))).all()
+        # les couleurs imprimees (06/11/2026) : celles des bobines, en grammes
+        from ..models.print_history import FilamentUsage
+        cols: dict = {}
+        for pid_, hx, g_ in (await db.execute(select(FilamentUsage.print_id, FilamentUsage.color_hex, FilamentUsage.grams_used)
+                                              .where(FilamentUsage.print_id.in_(ids)))).all():
+            k = _rgb(hx)
+            if k:
+                cols.setdefault(pid_, {})[k] = cols.get(pid_, {}).get(k, 0.0) + float(g_ or 0) + 0.1
     try:
         from_files = await profiles_from_files([(r.id, r.mw_profile_id, r.model_3mf) for r in rows])
     except Exception:
@@ -377,8 +455,28 @@ async def profile_per_print(design_id: str, print_ids: list) -> dict:
         except (TypeError, ValueError):
             i = 0
         best_p, best_sc = None, 0.0
+        # le profil ouvert dans Studio depuis l'appli juste avant (06/11/2026)
+        opened = _studio_open_before(did, r.print_date)
+        opened = by_inst.get(opened, opened) if opened else None
         for p in avec:
             sc = 0.0
+            if opened and opened == str(p.get("profile_id")):
+                sc += 25
+            # ses couleurs face a celles du profil (06/11/2026 : le Kaki vert et orange pris pour le Mangoustan violet,
+            # silhouettes proches) : nettement les memes, un fort indice ; nettement autres, un contre-indice
+            pc = {}
+            for pl in p["plates"]:
+                if not i or pl.get("index") == i:
+                    for f in pl.get("filaments") or []:
+                        k = _rgb(f.get("color"))
+                        if k:
+                            try:
+                                pc[k] = pc.get(k, 0.0) + float(f.get("g") or 0) + 0.1
+                            except (TypeError, ValueError):
+                                pc[k] = pc.get(k, 0.0) + 0.1
+            dc = _color_dist(cols.get(r.id) or {}, pc)
+            if dc is not None:
+                sc += max(-8.0, 20 * (1 - dc / 80))
             pws = [w for w in (_words(p.get("title")) - mwords, _words(p.get("title_original")) - mwords) if len(w) >= 2]
             ns = max((len(pw & nw) / len(pw) for pw in pws), default=0)
             if ns >= 0.5:
