@@ -466,7 +466,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
       onClose={() => setModelSel(null)} onPick={setJobSel} act={modelAct(modelSel)}/>}
     {jobSel && <JobSheet j={jobSel} now={pd?.now} edit={edit} onClose={() => setJobSel(null)} act={jobAct(jobSel)} jobs={pd?.jobs}/>}
     {optPrev && <OptimizePreview p={optPrev} onClose={() => setOptPrev(null)} onApply={() => { const p = optPrev; setOptPrev(null); applyOptimized(p); }}/>}
-    {pop === "optimize" && <OptimizePick today={today} mode0={pd?.settings?.opt_mode} onPick={(from, mode, keep) => { setPop(null); optimizeFrom(from, mode, keep).then(r => r && setOptPrev(r)); }}
+    {pop === "optimize" && <OptimizePick today={today} mode0={pd?.settings?.opt_mode} onPick={(from, mode, keep, merge) => { setPop(null); optimizeFrom(from, mode, keep, merge).then(r => r && setOptPrev(r)); }}
       onClose={() => setPop(null)}/>}
     {pop === "legend" && <PlanPopup title="Ce que disent les signes" icon="?" color="#6366F1" onClose={() => setPop(null)}><Legend/></PlanPopup>}
     {pop === "advice" && <PlanPopup title={`Conseils (${pd?.advice?.length || 0})`} icon="💡" color="#F59E0B" onClose={() => setPop(null)}>
@@ -505,7 +505,7 @@ function OptimizePreview({ p, onApply, onClose }) {
   const mode = OPT_MODES.find(m => m[0] === p.preview.mode);
   return <PlanPopup title="Ce que ça donnerait" icon="✨" color="#6366F1" onClose={onClose}>
     <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45, marginBottom: 10 }}>
-      {mode ? `${mode[1]} ${mode[2]} · ` : ""}{p.preview.moved ? `${p.preview.moved} plateau${p.preview.moved > 1 ? "x changeraient" : " changerait"} vraiment de place sur ${a.plates}` : "Presque rien ne bougerait"}. Rien n'a encore bougé.</div>
+      {mode ? `${mode[1]} ${mode[2]} · ` : ""}{p.preview.moved ? `${p.preview.moved} plateau${p.preview.moved > 1 ? "x changeraient" : " changerait"} vraiment de place sur ${a.plates}` : "Presque rien ne bougerait"}. {p.preview.merged ? ` 🧩 ${p.preview.merged} regroupement${p.preview.merged > 1 ? "s" : ""} de plateaux.` : ""} Rien n'a encore bougé.</div>
     <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto auto", gap: "6px 10px", alignItems: "center", fontSize: 13 }}>
       <span/><span/><span style={{ fontSize: 11, fontWeight: 900, color: "var(--muted)" }}>Avant</span><span/><span style={{ fontSize: 11, fontWeight: 900, color: "var(--muted)" }}>Après</span>
       {rows.map(([ic, l, x, y, f], i) => { const g = better(x, y, i);
@@ -527,7 +527,10 @@ function OptimizePick({ today, mode0, onPick: pick, onClose }) {
   // bouger le moins possible (06/11/2026) : garde dans ce navigateur
   const [keep, setKeepS] = useState(() => { try { return localStorage.getItem("bn_opt_keep") === "1"; } catch { return false; } });
   const setKeep = v => { setKeepS(v); try { localStorage.setItem("bn_opt_keep", v ? "1" : "0"); } catch { /* rien */ } };
-  const onPick = from => pick(from, mode, keep);
+  // regrouper d'office les plateaux d'un meme modele quand c'est sur (06/11/2026) : garde dans ce navigateur
+  const [mergeOk, setMergeS] = useState(() => { try { return localStorage.getItem("bn_opt_merge") === "1"; } catch { return false; } });
+  const setMerge = v => { setMergeS(v); try { localStorage.setItem("bn_opt_merge", v ? "1" : "0"); } catch { /* rien */ } };
+  const onPick = from => pick(from, mode, keep, mergeOk);
   const cur = OPT_MODES.find(m => m[0] === mode) || OPT_MODES[0];
   const plus = n => { const t = new Date(`${today}T12:00`); t.setDate(t.getDate() + n);
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; };
@@ -556,6 +559,12 @@ function OptimizePick({ today, mode0, onPick: pick, onClose }) {
       <span><span style={{ display: "block", fontSize: 13, fontWeight: 900, color: "var(--text)" }}>Bouger le moins possible</span>
         <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.35 }}>Il part de ton ordre et ne déplace que ce qui
           rapporte vraiment (une bobine, une nuit). Sinon, il refait toute la file.</span></span></label>
+    <label style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "9px 12px", borderRadius: 12, marginBottom: 10, cursor: "pointer",
+      border: `1px solid ${mergeOk ? "color-mix(in srgb, #6366F1 45%, var(--border))" : "var(--border)"}`, background: mergeOk ? "color-mix(in srgb, #6366F1 8%, var(--surface))" : "var(--surface)" }}>
+      <input type="checkbox" checked={mergeOk} onChange={e => setMerge(e.target.checked)} style={{ marginTop: 2 }}/>
+      <span><span style={{ display: "block", fontSize: 13, fontWeight: 900, color: "var(--text)" }}>🧩 Regrouper les plateaux d'un même modèle</span>
+        <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.35 }}>Quand ils tiennent sans hésiter sur un seul plateau
+          (confiance haute) : un seul lancement. À regrouper ensuite dans Bambu Studio.</span></span></label>
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {opt("all", "✨", "Toute la file", "Dès maintenant", null)}
       {opt("tomorrow", "🌅", "Sans toucher à aujourd'hui", `À partir de demain, ${fr(plus(1))}`, plus(1))}

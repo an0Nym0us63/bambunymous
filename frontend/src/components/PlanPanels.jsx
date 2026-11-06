@@ -143,6 +143,7 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
         </>}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {j.day && chipBtn("🗓 Sa journée", "Voir sa journée dans le calendrier", () => { act.dayview(); onClose(); })}
+        {edit && act.unmerge && chipBtn(busy === "unmerge" ? "…" : "🧩 Dégrouper", "Ses plateaux redeviennent des impressions séparées", () => run("unmerge", act.unmerge))}
         {chipBtn("🧾 Fiche MakerWorld", "Retenir le profil, choisir les plateaux, les filaments et le nombre d'exemplaires", () => { act.sheet(); onClose(); })}
         {edit && chipBtn(busy === "done" ? "…" : "✓ Fait", "Imprimé hors de l'appli, ou pas reconnu : il compte comme fait", () => run("done", act.done))}
       </div>

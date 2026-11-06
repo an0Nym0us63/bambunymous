@@ -146,7 +146,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
         </div>
       </div>
     </div>
-    {(j.completes || j.due || j.load?.length > 0 || j.runout?.length > 0 || j.bed_change || j.bed_warn || unretained(j) || j.locked || j.awaits_order?.length > 0 || j.low_after?.length > 0) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+    {(j.completes || j.due || j.load?.length > 0 || j.runout?.length > 0 || j.bed_change || j.bed_warn || j.merged || unretained(j) || j.locked || j.awaits_order?.length > 0 || j.low_after?.length > 0) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
       {j.awaits_order?.length > 0 && tag(`🚚 compte sur la commande : ${j.awaits_order.join(", ")}`, "#0EA5E9", "Le stock ne suffit pas : ce plateau prend sur une bobine commandée, pas encore reçue")}
       {j.low_after?.length > 0 && tag(`📉 sous le seuil : ${j.low_after.join(", ")}`, "#DC2626", "Après ce plateau, il restera moins d'un quart de bobine de ce filament")}
       {j.locked && tag(`🔒 figé à ${hhmm(j.start)}`, "#4F46E5", "Figé à ce jour et cette heure : optimiser, journée couleur, au mieux ou plus tard ne le déplacent pas")}
@@ -157,6 +157,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
       {j.due && tag(`🎯 avant le ${dueTxt(j.due)}`, j.due_ok ? "#16A34A" : "#EF4444", j.due_ok ? "L'objet sera fini à temps" : "Le dernier plateau de l'objet finit après cette date")}
       {j.load?.length > 0 && tag(<>🧵 À charger : <FilLinks labels={j.load} ids={j.load_ids}/>{j.free_slot && !j.unload?.length ? " (emplacement libre)" : ""}</>, "#EA580C",
         j.free_slot && !j.unload?.length ? "Pas dans l'AMS à ce moment-là ; un emplacement est libre, rien à retirer" : "Pas dans l'AMS à ce moment-là")}
+      {j.merged && tag(`🧩 ${j.plate_name || "Regroupés"}`, "#6366F1", "Imprimés ensemble sur un seul plateau : regroupe-les dans Bambu Studio avant de lancer")}
       {j.bed_change && tag(bedTxt(j.bed_change), "#0369A1", j.bed_warn || "Le plateau que demande ce profil, ou un des tiens qui va à ce filament")}
       {!j.bed_change && j.bed_warn && tag(`🔲 ${j.bed_warn}`, "#B45309", "Paramètres › Imprimante › Plateaux d'impression")}
       {j.unload?.length > 0 && tag(<>↩ À retirer : <FilLinks labels={j.unload} ids={j.unload_ids}/></>, "#64748B", "Celle qui resservira le plus tard (ou plus du tout) : on la sort pour faire la place")}
@@ -195,7 +196,7 @@ export const dayKindOf = (settings, day) => (settings?.days_off || []).find(x =>
 // les signes d'un plateau prevu (06/11/2026), les memes partout dans le calendrier ; LEGEND les explique
 export const PRIO_IC = { 2: "🔥", 1: "⬆", "-1": "⬇", "-2": "⏬" };
 export const planIcons = j => [j.locked ? "🔒" : j.pinned ? "📌" : "", PRIO_IC[j.prio_m] || "", finIc(j), unretained(j) ? "○" : "",
-  j.due && !j.due_ok ? "🎯" : "", j.intercalated ? "↔" : "", j.bed_change ? "🔲" : "", j.load?.length ? "🧵" : "", j.runout?.length ? "🔄" : ""].filter(Boolean).join("");
+  j.due && !j.due_ok ? "🎯" : "", j.intercalated ? "↔" : "", j.bed_change ? "🔲" : "", j.merged ? "🧩" : "", j.load?.length ? "🧵" : "", j.runout?.length ? "🔄" : ""].filter(Boolean).join("");
 export const LEGEND = [
   ["Les impressions", [["▮", "Bloc plein, de la couleur de son état : une impression faite (réussie, échouée, annulée) ou en cours"],
     ["┆", "Bloc hachuré, bord en pointillés : un plateau prévu par le planning, libre"],
@@ -208,7 +209,8 @@ export const LEGEND = [
     ["🔲", "Changer de plateau d'impression avant de lancer (celui que demande le profil, ou un qui va au filament)"], ["🚚", "Compte sur une commande pas encore reçue"],
     ["📉", "Un filament passera sous le seuil (un quart de bobine)"]]],
   ["Le reste", [["🏆", "Avec ce plateau, le modèle est entièrement fini (tous ses exemplaires)"], ["🏁", "Avec ce plateau, un exemplaire est complet (il en reste d'autres)"], ["🎯", "Date limite (rouge : il finira après)"],
-    ["↔", "Intercalé dans un objet « au mieux » (pour remplir une nuit, ou charger moins)"], ["⛔", "Non planifiable : le stock et les commandes ne suffisent pas"],
+    ["↔", "Intercalé dans un objet « au mieux » (pour remplir une nuit, ou charger moins)"],
+    ["🧩", "Plusieurs plateaux du modèle regroupés en une seule impression (à faire dans Bambu Studio)"], ["⛔", "Non planifiable : le stock et les commandes ne suffisent pas"],
     ["🏖", "Jour où tu es absent"], ["⏳", "Jour peu dispo"], ["↶", "Annuler le dernier geste"]]],
 ];
 export function Legend() {

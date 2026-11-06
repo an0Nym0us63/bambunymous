@@ -504,6 +504,16 @@ async def mw_plan_plates_bind(body: dict = Body({}), _: str = Depends(require_mw
     return await mw_plan_plates()
 
 
+@router.post("/plan/merge")
+async def mw_plan_merge(body: dict = Body({}), _: str = Depends(require_mw)):
+    """Regrouper des plateaux d'un meme modele ({keys}) ou defaire un regroupement ({gid})."""
+    from ....services import planner as P
+    try:
+        return await P.merge(body.get("keys"), str(body.get("gid") or "") or None)
+    except P.PlanError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/plan/undo")
 async def mw_plan_undo(_: str = Depends(require_mw)):
     """« Annuler » le dernier geste du planning."""
@@ -551,7 +561,8 @@ async def mw_plan_optimize(body: dict = Body({}), _: str = Depends(require_mw)):
     from ....services import planner as P
     try:
         return await P.optimize_plan(str(body.get("day") or "") or None, str(body.get("from") or "") or None,
-                                     str(body.get("mode") or "") or None, bool(body.get("preview")), bool(body.get("keep")))
+                                     str(body.get("mode") or "") or None, bool(body.get("preview")), bool(body.get("keep")),
+                                     bool(body.get("merge")))
     except P.PlanError as e:
         raise HTTPException(400, str(e))
 

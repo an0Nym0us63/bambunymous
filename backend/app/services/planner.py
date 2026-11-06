@@ -81,7 +81,7 @@ async def _load() -> dict:
     d = d if isinstance(d, dict) else {}
     for k, v in DEFAULTS.items():
         d.setdefault(k, v)
-    for k in ("pins", "done", "plan0", "notified", "deadlines", "locked", "chain", "soft_why", "prio"):
+    for k in ("pins", "done", "plan0", "notified", "deadlines", "locked", "chain", "soft_why", "prio", "merge"):
         if not isinstance(d.get(k), dict):
             d[k] = {}
     if not isinstance(d.get("order"), list):
@@ -109,7 +109,7 @@ async def undo() -> dict:
 
 
 # « Annuler » (06/11/2026) : ce qu'un geste change, et qu'on peut remettre comme avant
-UNDO_KEYS = ("order", "pins", "locked", "chain", "prio", "done", "deadlines", "soft_why")
+UNDO_KEYS = ("order", "pins", "locked", "chain", "prio", "done", "deadlines", "soft_why", "merge")
 
 
 async def _save(d: dict, undo: str | None = None, merge: bool = False) -> None:
@@ -276,7 +276,7 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
                             "seconds": int(secs), "weight_g": wg, "fils": fl, "_obj": obj, "thumb": thumb,
                             "chain": d.get("chain", {}).get(did),
                             "prio_m": int(d.get("prio", {}).get(did) or 0), "prio_p": int(d.get("prio", {}).get(f"{did}:{idx}") or 0),
-                            "bed_want": beds.get(idx)})
+                            "bed_want": beds.get(idx), "iid": (m.get("profile") or {}).get("instance_id")})
     return out, changed
 
 
@@ -967,6 +967,24 @@ def advice(placed: list, d: dict, now: datetime, dls: list | None = None, fix=No
     return out
 
 
+def _merge_advice(placed: list) -> list:
+    """Les regroupements possibles (06/11/2026) : des plateaux d'un meme modele et profil qui tiennent ensemble sur le
+    plateau d'impression, d'apres leur taille ; « Appliquer » les regroupe au planning, a faire ensuite dans Bambu Studio."""
+    try:
+        from .plate_merge import proposals
+        out = []
+        for p in proposals(placed, _slots())[:3]:
+            out.append({"kind": "merge", "icon": "🧩", "conf": p["conf"],
+                        "text": f"{p['title']} : les plateaux {', '.join(str(x) for x in p['plates'])} tiennent sur un seul plateau "
+                                f"({p['mode']}) : {len(p['keys']) - 1} lancement{'s' if len(p['keys']) > 2 else ''} de moins, "
+                                f"{_dur(p['saved_s'])} gagnées. Confiance {p['conf']}. À regrouper ensuite dans Bambu Studio.",
+                        "action": {"kind": "merge", "keys": p["keys"]}})
+        return out
+    except Exception:
+        logger.exception("[PLAN] regroupements")
+        return []
+
+
 def _soft_grouped(seq: list) -> list:
     """Les objets « au mieux » regroupes a la place de leur premier plateau (le point de depart des optimiseurs)."""
     groups = {}
@@ -1224,6 +1242,7 @@ async def _context(tz: int | None):
         for j in jobs:
             j["est_seconds"] = j["seconds"]
             j["seconds"] = int(j["seconds"] * f)
+    jobs = _merged(jobs, d)
     if d.get("plates"):
         from . import plates as PL
         d["_bed_now"] = await PL.mounted(d.get("plates"))
@@ -1278,6 +1297,65 @@ def fil_label(name, material=None, fila_type=None, brand=None) -> str:
         t = ""
     head = " ".join(x for x in (t, b) if x)
     return f"{head} · {n}" if head and n else head or n or "?"
+
+
+def _merged(jobs: list, d: dict) -> list:
+    """Les plateaux regroupes (06/11/2026, d["merge"] : {id: [cles]}) : un seul travail, a la place du premier, pour
+    tous ; sa duree, celle de ses plateaux moins un lancement par plateau regroupe ; ses filaments, ceux de tous. Un
+    regroupement dont il ne reste qu'un plateau (les autres imprimes, ou sortis de la file) s'efface."""
+    from .plate_merge import PREP_S
+    if not d.get("merge"):
+        return jobs
+    by = {j["key"]: j for j in jobs}
+    gone, drop = set(), []
+    for gid, keys in list(d["merge"].items()):
+        there = [k for k in keys if k in by and k not in gone]
+        if len(there) < 2:
+            drop.append(gid)
+            continue
+        ms = [by[k] for k in there]
+        head = dict(ms[0])
+        fl = {}
+        for x in ms:
+            for f in x["fils"]:
+                k = f.get("filament_id") or f.get("name")
+                if k in fl:
+                    fl[k] = {**fl[k], "g": round((fl[k].get("g") or 0) + (f.get("g") or 0), 1)}
+                else:
+                    fl[k] = dict(f)
+        head.update(seconds=max(60, sum(x["seconds"] for x in ms) - PREP_S * (len(ms) - 1)), fils=list(fl.values()),
+                    merged=there, merged_plates=[x["plate"] for x in ms], merge_id=gid,
+                    plate_name=f"Regroupés : plateaux {', '.join(str(x['plate']) for x in ms)}",
+                    weight_g=round(sum(x.get("weight_g") or 0 for x in ms), 1))
+        by[there[0]] = head
+        gone.update(there[1:])
+    for gid in drop:
+        d["merge"].pop(gid, None)
+    return [by[j["key"]] for j in jobs if j["key"] not in gone]
+
+
+async def merge(keys: list | None = None, gid: str | None = None) -> dict:
+    """Regrouper ces plateaux (06/11/2026 : imprimes ensemble, un seul lancement), ou defaire le regroupement gid."""
+    d = await _load()
+    if gid:
+        d["merge"].pop(str(gid), None)
+        d["plan0"] = {}
+        await _save(d, "Dégrouper")
+        return await plan()
+    ks = [str(k) for k in (keys or [])][:12]
+    if len(ks) < 2:
+        raise PlanError("Il faut au moins deux plateaux")
+    taken = {k for v in d["merge"].values() for k in v}
+    if any(k in taken for k in ks):
+        raise PlanError("Un de ces plateaux est déjà regroupé")
+    n = 1
+    while f"m{n}" in d["merge"]:
+        n += 1
+    d["merge"][f"m{n}"] = ks
+    d["plan0"] = {}
+    d["rev"] = int(d.get("rev") or 0) + 1
+    await _save(d, "Regrouper")
+    return await plan()
 
 
 async def _stock_ledger(stock_of: dict) -> dict:
@@ -1430,7 +1508,8 @@ async def plan(tz: int | None = None) -> dict:
             "live": ({"name": live[1], "design_id": live[2], "remaining_min": live[0], **(await _live_print(d))} if live else None),
             "dur": d.get("_dur"), "summary": plan_metrics(r, d, now), "bed_now": d.get("_bed_now"), "fcolors": d.get("_fcol") or {},
             "undo": ({"why": d["undo"][-1].get("why"), "at": d["undo"][-1].get("at")} if d["undo"] else None),
-            "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix, gain), "status": status,
+            "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix, gain) + _merge_advice(r["jobs"]),
+            "status": status,
             "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),
             "blocked": [{k: b.get(k) for k in ("key", "design_id", "title", "cover", "thumb", "plate", "plate_name", "plates_total", "copy", "qty",
                                                 "seconds", "retained", "why", "fils")} for b in r.get("blocked") or []],
@@ -1550,6 +1629,15 @@ async def arrange(body: dict, why: str = "Rangement", merge: bool = False) -> di
             raise PlanError("Ce plateau est figé : défige-le d'abord pour le déplacer")
     if isinstance(body.get("soft_why"), dict):
         d["soft_why"] = {str(k): str(v)[:20] for k, v in body["soft_why"].items()}
+    # les regroupements de l'apercu de l'optimiseur (06/11/2026), appliques avec son ordre
+    for ks in (body.get("merge") or [])[:20]:
+        ks = [str(k) for k in ks][:12] if isinstance(ks, list) else []
+        taken = {k for v in d["merge"].values() for k in v}
+        if len(ks) >= 2 and not any(k in taken for k in ks):
+            n = 1
+            while f"m{n}" in d["merge"]:
+                n += 1
+            d["merge"][f"m{n}"] = ks
     if isinstance(body.get("order"), list):
         new = [str(k) for k in body["order"]][:2000]
         d["order"] = new + [k for k in d["order"] if k not in set(new)]
@@ -1581,11 +1669,29 @@ def plan_metrics(r: dict, d: dict, now: datetime) -> dict:
 
 
 async def optimize_plan(day: str | None = None, start: str | None = None, mode: str | None = None,
-                        preview: bool = False, keep: bool = False) -> dict:
+                        preview: bool = False, keep: bool = False, merge_ok: bool = False) -> dict:
     """« Optimiser » : toute la file, ou un seul jour (ses travaux remis dans un ordre qui enchaine les couleurs).
     start (06/11/2026) : « a partir de » ce jour ; ce qui est prevu avant reste a sa place, dans son ordre, et seule la
     suite est reordonnee (couleurs, nuits, dates limites)."""
+    # regrouper d'office (06/11/2026, au choix) : les regroupements surs (confiance haute) d'abord ; en apercu, l'ordre
+    # rendu les suppose faits (« Appliquer » les enregistre)
+    merged_new = []
+    if merge_ok and not day:
+        from .plate_merge import proposals
+        r0 = await plan()
+        merged_new = [p["keys"] for p in proposals(r0["jobs"], _slots()) if p["conf"] == "haute"]
+        if merged_new and not preview:
+            for ks in merged_new:
+                try:
+                    await merge(ks)
+                except PlanError:
+                    pass
     d, now, jobs, _, loaded, live, busy = await _context(None)
+    if merged_new and preview:
+        n0 = len(d["merge"])
+        for i_, ks in enumerate(merged_new):
+            d["merge"][f"p{i_}"] = ks
+        jobs = _merged(jobs, d)
     jobs = _ordered(jobs, d["order"], d["pins"])
     if day:
         r = place(jobs, d, now, busy, loaded, _slots())
@@ -1711,7 +1817,7 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
         # l'apercu (06/11/2026) : les chiffres avant et apres ; rien n'est enregistre, « Appliquer » envoie l'ordre
         before = plan_metrics(place(jobs, d, now, busy, loaded, _slots()), d, now)
         after_r = place(_ordered(jobs, order, d["pins"]), d, now, busy, loaded, _slots())
-        return {"preview": {"before": before, "after": plan_metrics(after_r, d, now), "mode": mode,
+        return {"merge": merged_new, "preview": {"before": before, "after": plan_metrics(after_r, d, now), "mode": mode, "merged": len(merged_new),
                             "moved": moved(order)},              # ceux qui changent de plus de deux rangs
                 "order": order, "soft_why": sw}
     return await arrange({"order": order, "soft_why": sw}, "Optimiser la file")

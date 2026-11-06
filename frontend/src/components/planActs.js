@@ -80,7 +80,10 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
       prio: lv => send("/makerworld/plan/prio", { target: did, level: lv }, "post").then(ok => { if (ok) egg("planning_priorite"); }),
     };
   };
-  const applyAdvice = a => a.kind === "front" ? toFront(a.keys) : a.kind === "after" ? moveAfter(a.key, a.ref) : moveBefore(a.key, a.ref);
+  // regrouper (06/11/2026) : des plateaux d'un meme modele imprimes ensemble ; degrouper : gid
+  const merge = keys => send("/makerworld/plan/merge", { keys }, "post").then(ok => { if (ok) { egg("planning_regroupe"); toast("🧩 Regroupés au planning : à faire ensuite dans Bambu Studio", "ok", 4500); } });
+  const unmerge = gid => send("/makerworld/plan/merge", { gid }, "post");
+  const applyAdvice = a => a.kind === "merge" ? merge(a.action?.keys || a.keys) : a.kind === "front" ? toFront(a.keys) : a.kind === "after" ? moveAfter(a.key, a.ref) : moveBefore(a.key, a.ref);
   // le champ date se trouvait cache sous la ligne : sur ordinateur, le clic ne l'ouvrait pas (05/11/2026, showPicker) ;
   // et un message dit ce qui a ete pose
   const setDue = (did, due) => send(`/makerworld/plan/deadline/${did}`, { due }).then(d => {
@@ -109,15 +112,15 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
   // quelques secondes de calcul (06/11/2026) : on le dit, puis ce qui a ete fait
   // l'apercu d'abord (06/11/2026) : le serveur calcule, rend les chiffres avant et apres, et l'ordre propose ; rien ne
   // change tant qu'on n'a pas touche « Appliquer » (applyOptimized). keep : bouger le moins possible
-  const optimizeFrom = async (from, mode, keep) => {
+  const optimizeFrom = async (from, mode, keep, merge) => {
     toast("✨ Optimisation en cours… quelques secondes", "info", 9000);
     try {
-      const r = await client.post("/makerworld/plan/optimize", { ...(from ? { from } : {}), ...(mode ? { mode } : {}), preview: true, keep: !!keep });
+      const r = await client.post("/makerworld/plan/optimize", { ...(from ? { from } : {}), ...(mode ? { mode } : {}), preview: true, keep: !!keep, merge: !!merge });
       toast("✨ Voilà ce que ça donnerait", "ok", 1500);
       return r.data;
     } catch (e) { showAlert(e.response?.data?.detail || e.message); return null; }
   };
-  const applyOptimized = p => send("/makerworld/plan/arrange", { order: p.order, soft_why: p.soft_why, why: "Optimiser la file" })
+  const applyOptimized = p => send("/makerworld/plan/arrange", { order: p.order, soft_why: p.soft_why, why: "Optimiser la file", ...(p.merge?.length ? { merge: p.merge } : {}) })
     .then(ok => { if (ok) { egg("planning_optimise"); toast("✨ Planning optimisé", "ok", 3000); } });
   const jobAct = j => ({
     smart: () => send("/makerworld/plan/smart", { key: j.key }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
@@ -131,6 +134,7 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
     unpin: () => unpin(j.key),
     pinDay: () => arrange({ pins: { [j.key]: j.day } }),
     model: () => setModelSel(j.design_id),
+    unmerge: j.merge_id ? () => unmerge(j.merge_id) : null,
     // a sa place dans une journee : juste apres tel plateau (ou avant le premier du jour), son jour fige
     slot: (day, after) => {
       const o = keys.filter(x => x !== j.key);
