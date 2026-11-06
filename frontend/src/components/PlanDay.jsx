@@ -282,6 +282,13 @@ export const FilLinks = ({ labels, ids }) => <>{(labels || []).map((l, i) => <Re
 // le changement de bobine en phrase, ses filaments cliquables : « charger X a la place de Y »
 export const SwapLinks = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}charger <FilLink id={j.load_ids?.[i]} label={x}/>
   {outOf(j, i)[0] ? <> à la place de <FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]}/></> : freeOf(j, i) ? " dans l'emplacement libre" : ""}</React.Fragment>)}</>;
+// la fin de la journee (06/11/2026) : le dernier plateau prevu aujourd'hui finit vers telle heure ; combien encore
+export const dayEnd = p => {
+  const today = (p?.now || "").slice(0, 10), js = (p?.jobs || []).filter(j => j.day === today);
+  if (!js.length) return null;
+  const end = js.reduce((a, j) => j.end > a ? j.end : a, js[0].end);
+  return { n: js.length, end, txt: `fin de journée vers ${hhmm(end)} · ${js.length} plateau${js.length > 1 ? "x" : ""} encore` };
+};
 // une bobine qui se videra en pleine impression (06/11/2026) : vers quelle heure
 export const runoutTxt = r => `🔄 ${r.name} se vide vers ${+r.at.slice(11, 13)} h${r.at.slice(14, 16) !== "00" ? ` ${r.at.slice(14, 16)}` : ""} (reste ${r.left} g, il en faut ${r.need})`;
 // les creneaux de chargement (06/11/2026) : jusqu'a quatre plages
@@ -545,12 +552,42 @@ export function ManualDone({ items, edit, onUndo }) {
 
 // les conseils, chacun avec son « Appliquer » quand il deplace un travail ; ranges par sorte (06/11/2026), chaque
 // section se replie (garde dans ce navigateur) ; tous, plus seulement les six premiers
+// un conseil en phrase : son debut (jusqu'aux deux-points) en gras, le reste en plus doux
+const AdvText = ({ t }) => { const i = String(t || "").indexOf(" : ");
+  return i > 0 && i < 90 ? <><b style={{ color: "var(--text)", fontWeight: 800 }}>{t.slice(0, i)}</b><span style={{ color: "var(--muted)" }}> · {t.slice(i + 3)}</span></> : t; };
+// un regroupement en carte (06/11/2026 : la phrase entiere etait indigeste) : la vignette, le modele, quels plateaux,
+// et en pastilles ce qu'on y gagne, comment, et l'objet a imprimer en dernier
+function MergeCard({ a, edit, onApply }) {
+  const m = a.m, dur = s => { const n = Math.round(s / 60); return n < 60 ? `${n} min` : `${Math.floor(n / 60)} h${n % 60 ? ` ${String(n % 60).padStart(2, "0")}` : ""}`; };
+  const pill = (t, c, tip) => <span data-tip={tip} style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 800,
+    whiteSpace: "nowrap", color: c, background: `color-mix(in srgb, ${c} 12%, transparent)` }}>{t}</span>;
+  return <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: 8, borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)" }}>
+    <PlateThumb j={{ thumb: m.thumb }} size={42}/>
+    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text)", lineHeight: 1.25, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{m.title}</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>
+        {m.same ? `${m.plates.length} × le plateau ${m.plates[0]}` : `Plateaux ${m.plates.join(", ")}`} sur un seul plateau{m.colors ? ", couleurs différentes" : ""}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+        {pill(`⏱ ${dur(m.saved_s)} gagnées`, "#16A34A", "Une chauffe, une calibration, une purge par lancement en moins")}
+        {pill(`🚀 ${m.launches} lancement${m.launches > 1 ? "s" : ""} de moins`, "#6366F1")}
+        {pill(m.mode === "objet par objet" ? "▦ objet par objet" : "☰ couche par couche", "#0EA5E9",
+          m.mode === "objet par objet" ? "Chaque objet imprimé en entier, l'un après l'autre : pas de changement de filament à chaque couche" : "Un seul filament : toutes les couches ensemble")}
+        {a.conf && pill(a.conf === "haute" ? "✓ sûr" : "≈ ça tient juste", a.conf === "haute" ? "#16A34A" : "#D97706", `Confiance ${a.conf}`)}
+        {m.last && pill(`⬆ ${m.last.label} en dernier`, "#B45309", `${m.last.h} mm, plus haut que la tige (${m.last.rod_h} mm) : à imprimer en dernier`)}
+      </div>
+    </div>
+    {edit && a.action && <button type="button" onClick={() => onApply(a.action)} data-tip="Les regroupe au planning ; à regrouper ensuite dans Bambu Studio"
+      style={{ ...seg, ...segOn, padding: "3px 9px", flexShrink: 0 }}>Appliquer</button>}
+  </div>;
+}
 const ADV_KINDS = [["deadline", "🎯", "Dates limites"], ["merge", "🧩", "Regrouper des plateaux"], ["colors", "🎨", "Enchaîner les mêmes couleurs"],
   ["gap", "⏱", "Remplir un creux"], ["load", "🧵", "Bobines à charger"], ["long", "⚠️", "Trop longs pour les horaires"]];
 export function PlanAdvice({ items, edit, onApply }) {
-  const [shut, setShut] = useState(() => { try { return JSON.parse(localStorage.getItem("bn_adv_shut") || "{}"); } catch { return {}; } });
+  // fermees a l'ouverture (06/11/2026) : toutes les sortes se voient d'un coup d'oeil, on deplie celle qui interesse
+  const [open, setOpen] = useState({});
   if (!items?.length) return null;
-  const flip = k => setShut(s => { const n = { ...s, [k]: !s[k] }; try { localStorage.setItem("bn_adv_shut", JSON.stringify(n)); } catch { /* rien */ } return n; });
+  const flip = k => setOpen(s => ({ ...s, [k]: !s[k] }));
+  const shut = Object.fromEntries(ADV_KINDS.concat([["other"]]).map(([k]) => [k, !open[k]]));
   const known = new Set(ADV_KINDS.map(k => k[0]));
   const groups = [...ADV_KINDS, ["other", "💡", "Autres"]].map(([k, ic, l]) => [k, ic, l, items.filter(a => k === "other" ? !known.has(a.kind) : a.kind === k)])
     .filter(g => g[3].length);
@@ -564,9 +601,10 @@ export function PlanAdvice({ items, edit, onApply }) {
         <span>{ic}</span><span style={{ flex: 1 }}>{l}</span>
         <span style={{ fontSize: 11, fontWeight: 900, color: "#D97706", background: "color-mix(in srgb, #F59E0B 14%, transparent)", borderRadius: 20, padding: "1px 7px" }}>{list.length}</span>
         <span style={{ color: "var(--muted)", transform: shut[k] ? "rotate(-90deg)" : "none", transition: "transform .15s" }}>▾</span></button>
-      {!shut[k] && list.map((a, i) => <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", paddingLeft: 4 }}>
+      {!shut[k] && list.map((a, i) => a.m ? <MergeCard key={i} a={a} edit={edit} onApply={onApply}/>
+        : <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", paddingLeft: 4 }}>
         <span style={{ fontSize: 14 }}>{a.icon}</span>
-        <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: "var(--text2)", lineHeight: 1.4 }}>{a.text}</span>
+        <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: "var(--text2)", lineHeight: 1.4 }}><AdvText t={a.text}/></span>
         {edit && a.action && <button type="button" onClick={() => onApply(a.action)} style={{ ...seg, ...segOn, padding: "3px 9px", flexShrink: 0 }}>Appliquer</button>}
       </div>)}
     </div>)}

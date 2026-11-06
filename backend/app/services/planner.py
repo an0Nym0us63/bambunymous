@@ -1047,7 +1047,13 @@ def _merge_advice(placed: list) -> list:
                                    f"{p['last']['h']} mm, plus haut que la tige à {p['last']['rod_h']} mm" if p.get("last") else "")
                                 + f") : {len(p['keys']) - 1} lancement{'s' if len(p['keys']) > 2 else ''} de moins, "
                                 f"{_dur(p['saved_s'])} gagnées. Confiance {p['conf']}. À regrouper ensuite dans Bambu Studio.",
-                        "action": {"kind": "merge", "keys": p["keys"]}})
+                        "action": {"kind": "merge", "keys": p["keys"]},
+                        # de quoi le montrer en carte (06/11/2026 : la phrase entiere etait indigeste)
+                        "m": {"title": p["title"], "plates": p["plates"], "same": len(set(p["plates"])) == 1, "mode": p["mode"],
+                              "colors": bool(p.get("colors")), "saved_s": p["saved_s"], "launches": len(p["keys"]) - 1,
+                              "last": ({"label": f"plateau {p['last']['plate']}" if len(set(p['plates'])) > 1 else p["last"]["title"],
+                                        "h": p["last"]["h"], "rod_h": p["last"]["rod_h"]} if p.get("last") else None),
+                              "thumb": next((x.get("thumb") or x.get("cover") for x in placed if x["key"] == p["keys"][0]), None)}})
         return out
     except Exception:
         logger.exception("[PLAN] regroupements")

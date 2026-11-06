@@ -5,7 +5,7 @@ import { egg } from "../eggs";
 import { showAlert } from "../utils/dialog";
 import { toast } from "../store/toast";
 import { useCanMw } from "../store/auth";
-import { DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt, bedTxt, BED_NAMES, SwapLinks, FilLink, finIc, SwapShort, setFilColors } from "./PlanDay";
+import { dayEnd, DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt, bedTxt, BED_NAMES, SwapLinks, FilLink, finIc, SwapShort, setFilColors } from "./PlanDay";
 import { JobSheet, LowStockBanner, BlockedList } from "./PlanPanels";
 import { sheetRef } from "./planActs";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
@@ -140,12 +140,16 @@ function StateHead({ p }) {
   const st = p.status, [ic, c, word] = STATE[st?.state] || ["📅", "#64748B", "Planning"];
   const next = (p.jobs || [])[0];
   const mins = next ? (new Date(next.start) - new Date(p.now)) / 60000 : null;
+  const end = dayEnd(p);
   return <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 9px", borderRadius: 11, minWidth: 0,
     background: `linear-gradient(135deg, color-mix(in srgb, ${c} 18%, transparent), transparent 80%)`, border: `1px solid color-mix(in srgb, ${c} 30%, var(--border))` }}>
     <span style={{ fontSize: 14 }}>{ic}</span>
     <span style={{ fontSize: 12, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{word}{st?.state === "late" && st.late_min ? ` · ${dur(st.late_min)}` : ""}</span>
     {next && <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>
       {mins <= 1 ? "prochain : maintenant" : <>prochain dans <b style={{ color: "var(--text)" }}>{dur(mins)}</b></>}</span>}
+    {/* la fin de la journee (06/11/2026), a cote du prochain */}
+    {end && <span data-tip={end.txt} style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>
+      · 🌙 <b style={{ color: "var(--text)" }}>{hhmm(end.end)}</b> · {end.n} plat.</span>}
   </div>;
 }
 
