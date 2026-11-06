@@ -511,13 +511,14 @@ EVENTS["plan_due"] = {
                "message": "⏱ 3 h 20 · prévue à 14 h\n🧵 À charger : PLA Matte Turquoise\nEnsuite : Vase spirale"},
 }
 EVENTS["plan_load"] = {
-    "section": "prints", "label": "Filament à charger pour le planning",
-    "description": "Un peu avant qu'une impression du planning soit à lancer, si elle demande un filament qui n'est pas dans "
-                   "l'AMS : lequel charger, pour quel plateau et à quelle heure. Rien si tout est déjà chargé ; une fois par "
-                   "plateau (tâche « Planning des impressions », toutes les 5 min).",
-    "options": [{"key": "minutes", "type": "number", "label": "Avant", "unit": "min", "default": 30, "min": 5, "max": 240}],
-    "sample": {"title": "🧵 À charger pour 14 h : PLA Matte Turquoise", "priority": 3, "attach": _SAMPLE_COVER, "link": "/prints?tab=calendar",
-               "message": "Pour Lampe lune · plateau 2 (3 h 20), prévue à 14 h, dans 30 min.\nDéjà dans l'AMS : PLA Basic Blanc, PLA Matte Noir"},
+    "section": "prints", "label": "Prochaine impression à venir",
+    "description": "Avant la fin de l'impression en cours (la pause entre deux impressions, plus ces minutes), la prochaine "
+                   "du planning et ce qu'il faudra faire : bobines à charger à la place de quoi, plateau à changer, "
+                   "regroupement, bobine qui se videra (ou « rien à préparer »). Une fois par plateau ; à l'heure, « À lancer » "
+                   "redit ce qu'il faut faire.",
+    "options": [{"key": "minutes", "type": "number", "label": "Avant la fin de l'impression en cours", "unit": "min", "default": 30, "min": 5, "max": 240}],
+    "sample": {"title": "⏭ À venir à 14 h : Lampe lune · plateau 2", "priority": 3, "attach": _SAMPLE_COVER, "link": "/prints?tab=calendar",
+               "message": "Lampe lune · plateau 2 · 3 h 20, prévue aujourd'hui à 14 h (dans 45 min)\nÀ préparer :\n🔁 PLA Matte Turquoise à la place de PLA Basic Blanc"},
 }
 EVENTS["plan_deadline"] = {
     "section": "prints", "label": "Date limite du planning dépassée",

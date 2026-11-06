@@ -2231,6 +2231,20 @@ def _swap_txt(j: dict) -> str:
     return "🔁 " + ", ".join(parts) + (" (ce qui sort ne resservira pas de sitôt)" if any(outs) else "")
 
 
+def _todo_lines(j: dict) -> list:
+    """Ce qu'il faudra faire avant de lancer ce plateau (06/11/2026), une ligne par geste."""
+    out = []
+    if j.get("load"):
+        out.append(_swap_txt(j))
+    if j.get("bed_change"):
+        out.append(_bed_txt(j["bed_change"]))
+    if j.get("merged"):
+        out.append(f"🧩 Regrouper ses plateaux ({', '.join(str(x) for x in j.get('merged_plates') or [])}) dans Bambu Studio")
+    for ro in j.get("runout") or []:
+        out.append(f"🔄 {ro['name']} se videra vers {_fmt(datetime.fromisoformat(ro['at']))} : prépare une autre bobine")
+    return out
+
+
 def _bed_txt(ch: dict) -> str:
     """« Mets le PEI texturé (à la place du SuperTack) »."""
     return f"🔲 Mets le plateau {_bed_name(ch['to'])}" + (f" (à la place du {_bed_name(ch['from'])})" if ch.get("from") else "")
@@ -2258,35 +2272,28 @@ async def tick(cfg, r: dict | None = None) -> int:
                        f"Son dernier plateau finit {_day_fr(end, today)} à {_fmt(end)}, {_late(-x['margin_min'])} trop tard.\n"
                        f"Le planning propose quoi faire.", click=N.app_link(cfg, "/prints?tab=calendar"), priority=3)
         sent += 1
-    # le filament a charger (06/11/2026) : un peu avant chaque plateau qui en demande un, lequel, pour quoi, a quelle heure
+    # « a venir » (06/11/2026) : la prochaine impression, un peu AVANT la fin de celle en cours (la pause entre deux
+    # impressions et les minutes reglees : 30 min par defaut), et ce qu'il faudra faire ; plus jamais en meme temps que
+    # « a lancer » (si c'est deja l'heure, seul « a lancer » part, avec le meme rappel)
     if N.enabled_in(cfg, "plan_load"):
         mins = N.options_of(cfg, "plan_load")["minutes"]
         nowt = datetime.fromisoformat(r["now"])
         today = nowt.date()
-        for j in (r.get("jobs") or [])[:8]:
+        j = (r.get("jobs") or [None])[0]
+        if j:
             s = datetime.fromisoformat(j["start"])
-            if s - nowt > timedelta(minutes=mins):
-                break
-            k = f"load:{j['key']}"
-            if not (j.get("load") or j.get("bed_change")) or d["notified"].get(k):
-                continue
-            d["notified"][k] = 1
-            changed = True
-            left = int((s - nowt).total_seconds() // 60)
-            when = f"{_day_fr(s, today)} à {_fmt(s)}" + (f", dans {_dur(left * 60)}" if left > 0 else ", maintenant")
-            kept = [f.get("name") for f in j.get("fils") or [] if f.get("name") and f.get("name") not in j["load"]]
-            body = f"Pour {_title(j)} ({_dur(j['seconds'])}), prévue {when}."
-            body += f"\n{_swap_txt(j)}"
-            if kept:
-                body += f"\nDéjà dans l'AMS : {', '.join(dict.fromkeys(kept))}"
-            if j.get("bed_change"):
-                body += "\n" + _bed_txt(j["bed_change"])
-            head = f"🧵 À charger pour {_fmt(s)} : {', '.join(j['load'])}" if j.get("load") else \
-                f"🔲 Plateau à changer pour {_fmt(s)} : {_bed_name(j['bed_change']['to'])}"
-            # la toucher ouvre la fiche du filament a charger (06/11/2026), sinon le calendrier
-            await N.notify("plan_load", head, body,
-                           click=N.app_link(cfg, f"/filaments?id={j['load_ids'][0]}" if j.get("load_ids") else "/prints?tab=calendar"), priority=3)
-            sent += 1
+            gap = timedelta(minutes=int(d.get("gap") or 0)) if r.get("live") else timedelta(0)
+            k = f"soon:{j['key']}"
+            if s - gap - timedelta(minutes=mins) <= nowt < s - timedelta(minutes=5) and not d["notified"].get(k):
+                d["notified"][k] = 1
+                changed = True
+                left = int((s - nowt).total_seconds() // 60)
+                body = f"{_title(j)} · {_dur(j['seconds'])}, prévue {_day_fr(s, today)} à {_fmt(s)} (dans {_dur(left * 60)})"
+                todo = _todo_lines(j)
+                body += ("\nÀ préparer :\n" + "\n".join(todo)) if todo else "\n✓ Rien à préparer : les bobines et le plateau sont en place"
+                await N.notify("plan_load", f"⏭ À venir à {_fmt(s)} : {_title(j)}", body,
+                               click=N.app_link(cfg, f"/filaments?id={j['load_ids'][0]}" if j.get("load_ids") else "/prints?tab=calendar"), priority=3)
+                sent += 1
         # une bobine qui se videra en pleine impression (06/11/2026) : un peu avant, laquelle et vers quelle heure
         for j in (r.get("jobs") or [])[:12]:
             for ro in j.get("runout") or []:
@@ -2312,19 +2319,14 @@ async def tick(cfg, r: dict | None = None) -> int:
     if seen >= step:
         return 0
     ks = {x["key"] for x in r["jobs"]}
-    d["notified"] = {k: v for k, v in d["notified"].items() if k in ks or k.startswith("due:") or (k.startswith("load:") and k[5:] in ks)
+    d["notified"] = {k: v for k, v in d["notified"].items() if k in ks or k.startswith("due:") or (k.startswith("load:") and k[5:] in ks) or (k.startswith("soon:") and k[5:] in ks)
                    or (k.startswith("runout|") and k.split("|")[1] in ks)}
     d["notified"][j["key"]] = step
     await _save(d)
     name = _title(j)
     lines = [f"⏱ {_dur(j['seconds'])} · prévue à {_fmt(datetime.fromisoformat(r['now']) - timedelta(minutes=st['late_min']))}"]
-    if j["load"]:
-        lines.append(f"🧵 À charger : {', '.join(j['load'])}")
-        lines.append(_swap_txt(j))
-    if j.get("bed_change"):
-        lines.append(_bed_txt(j["bed_change"]))
-    for ro in j.get("runout") or []:
-        lines.append(f"🔄 {ro['name']} se videra vers {_fmt(datetime.fromisoformat(ro['at']))} (reste {ro['left']} g, il en faut {ro['need']}) : prépare une autre bobine")
+    todo = _todo_lines(j)
+    lines += (["À faire maintenant :"] + todo) if todo else ["✓ Rien à préparer : les bobines et le plateau sont en place"]
     nx = r["jobs"][1] if len(r["jobs"]) > 1 else None
     if nx:
         lines.append(f"Ensuite : {nx['title']}")
