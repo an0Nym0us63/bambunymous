@@ -82,7 +82,10 @@ function PlansStrip({ plans, profiles, onOpen }) {
 }
 
 export default function MakerWorldModelSheet({ designId, preview, onClose, onSearch, z = 4200 }) {
-  const [id, setId] = useState(designId);          // permet d'ouvrir un similaire sans empiler
+  // « 123#456#123~456~2 » (06/11/2026, depuis le planning) : le modele, le profil a deplier, et sa variante de couleur
+  const [did0, prof0, var0] = String(designId ?? "").split("#");
+  const want = useRef({ iid: prof0 || null, vk: var0 && var0.split("~").length === 3 ? var0 : null });
+  const [id, setId] = useState(did0);              // permet d'ouvrir un similaire sans empiler
   const [m, setM] = useState(null);
   const [more, setMore] = useState(false);         // descriptif deplie
   const [descLong, setDescLong] = useState(false); // descriptif plus long que le repli
@@ -293,7 +296,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     getModel(id).then(data => {
       if (!alive) return;
       setM(data);
-      setOpen(null);          // profils replies a l'ouverture : on deplie celui qu'on veut voir
+      setOpen(want.current.iid && String(id) === did0 ? want.current.iid : null);   // profils replies, sauf celui demande
       // Plans deja retenus pour la file : on les remet (plateaux, filaments), le premier deplie.
       client.get("/makerworld/queue/config").then(({ data: c }) => {
         const all = c.plans || {}, k0 = String(id);
@@ -308,7 +311,9 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
             .then(() => alive && setM(x => x && { ...x }));     // choix trouves par recherche : relus, on redessine
           if (pl.plates) setPlateSel(s => ({ ...s, [vk ? `${pl.instance_id}|${vk}` : pl.instance_id]: pl.plates }));
         }
-        setOpen(pls[0].instance_id);
+        const w = String(id) === did0 ? want.current : {};
+        setOpen(w.iid || pls[0].instance_id);
+        if (w.vk && pls.some(pl => pl.key === w.vk)) setVarSel(x => ({ ...x, [w.iid]: w.vk }));
       }).catch(() => {});
     }).catch(e => alive && setM({ error: e.response?.data?.detail || e.message }));
     client.get(`/makerworld/similar/${id}`).then(({ data }) => alive && setSim(data.items || [])).catch(() => {});

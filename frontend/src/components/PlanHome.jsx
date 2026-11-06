@@ -7,6 +7,7 @@ import { toast } from "../store/toast";
 import { useCanMw } from "../store/auth";
 import { DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt, bedTxt, BED_NAMES, SwapLinks, FilLink, finIc, SwapShort, setFilColors } from "./PlanDay";
 import { JobSheet, LowStockBanner, BlockedList } from "./PlanPanels";
+import { sheetRef } from "./planActs";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 
 // Le planning sur l'accueil (05/11/2026, revu) : la tuile (la journee en frise, l'etat, l'impression en cours, un
@@ -162,7 +163,7 @@ export function PlanZoom({ p: p0 }) {
       ks.splice(Math.max(0, at), 0, j.key);
       return send("/makerworld/plan/arrange", { order: ks, pins: { [j.key]: day } }, "put");
     },
-    sheet: () => setSheet(j.mw_id || j.design_id),
+    sheet: () => setSheet(sheetRef(j)),
     dayview: () => nav("/prints?tab=calendar"),
     due: v => send(`/makerworld/plan/deadline/${j.design_id}`, { due: v }, "put").then(d => { if (d && v) { egg("planning_echeance"); toast("🎯 Date limite posée", "ok", 3000); } }),
     done: () => send("/makerworld/plan/done", { key: j.key }),
@@ -176,6 +177,11 @@ export function PlanZoom({ p: p0 }) {
   return <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
     <StateHead p={p}/>
     {p.status?.text && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", marginTop: -4 }}>{p.status.text}</div>}
+    {/* a lancer (06/11/2026) : sa fiche, sur le bon profil (et sa variante), d'ou l'ouvrir dans Bambu Studio */}
+    {(p.jobs || [])[0] && (p.status?.state === "due" || p.status?.state === "ontime" || !p.live) && (() => { const j0 = p.jobs[0];
+      return <button type="button" onClick={() => setSheet(sheetRef(j0))} style={{ alignSelf: "flex-start", marginTop: -2, padding: "7px 13px", borderRadius: 12, cursor: "pointer",
+        border: "1px solid color-mix(in srgb, #6366F1 40%, var(--border))", background: "color-mix(in srgb, #6366F1 10%, var(--surface))", color: "#4F46E5",
+        fontSize: 12.5, fontWeight: 900 }}>🧾 Sa fiche, sur le profil à lancer{j0.plates_total > 1 ? ` · ${plateTxt(j0)}` : ""}</button>; })()}
     <DayStrip day={(p.now || "").slice(0, 10)} done={p.today_items || []} jobs={(p.jobs || []).filter(j => onDay(j, (p.now || "").slice(0, 10)))} settings={p.settings} now={p.now} live={live}/>
     <NowNextTiles pd={p} wide onOpenPrint={it => nav(`/prints?id=${it.id}`)} onPickJob={setSel}/>
     <AlertChips p={p} big/>

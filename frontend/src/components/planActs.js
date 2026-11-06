@@ -7,6 +7,11 @@ import { toast } from "../store/toast";
 // traite, date limite, priorite, optimiser. pd : le planning (GET /makerworld/plan) ; chaque geste le remplace par celui
 // que rend le serveur. setSheet : ouvrir la fiche MakerWorld d'un modele ; setModelSel : la fiche du modele au planning ;
 // onDayView : voir la journee d'un plateau.
+// la fiche MakerWorld d'un plateau du planning (06/11/2026), ouverte sur son profil et sa variante de couleur
+export const sheetRef = (j, did) => {
+  const mw = j?.mw_id || String(did || j?.design_id || "").split("~")[0], rid = String(j?.design_id || did || "");
+  return `${mw}#${j?.iid || ""}${rid.split("~").length === 3 ? `#${rid}` : ""}`;
+};
 export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
   // ranger : l'ordre voulu et les jours poses partent au serveur, qui repose tout et rend le planning
   const keys = (pd?.jobs || []).map(j => j.key);
@@ -75,7 +80,7 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
       laterAll: () => j0 && send("/makerworld/plan/later", { key: j0.key, whole: true }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
       chain: mode => send("/makerworld/plan/chain", { design_id: did, mode }, "post").then(ok => { if (ok && mode) egg("planning_traite"); }),
       due: v => setDue(did, v),
-      sheet: () => setSheet(j0?.mw_id || did),
+      sheet: () => setSheet(sheetRef(j0, did)),
       // sa priorite parmi les modeles (06/11/2026) : ses plateaux se replacent aussitot
       prio: lv => send("/makerworld/plan/prio", { target: did, level: lv }, "post").then(ok => { if (ok) egg("planning_priorite"); }),
     };
@@ -143,7 +148,7 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
       o.splice(Math.max(0, at), 0, j.key);
       return arrange({ order: o, pins: { [j.key]: day } });
     },
-    sheet: () => setSheet(j.mw_id || j.design_id),
+    sheet: () => setSheet(sheetRef(j)),
     dayview: () => onDayView(j.day),
     // sa priorite parmi les plateaux de son modele (06/11/2026)
     prioPlate: lv => send("/makerworld/plan/prio", { target: `${j.design_id}:${j.plate}`, level: lv }, "post").then(ok => { if (ok) egg("planning_priorite"); }),
