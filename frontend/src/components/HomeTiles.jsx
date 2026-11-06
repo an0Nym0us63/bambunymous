@@ -4254,7 +4254,9 @@ export function switchModel(status) {
   const nz = status?.nozzles || [];
   // rien d'engage (ams / bac negatifs) : pas d'emplacement, pas de « @0 »
   const slot = s => { if (!s || s.ams == null || s.ams < 0 || s.tray < 0) return null; const a = ams.find(x => x.id === s.ams); const t = a?.trays?.find(x => x.id === s.tray);
-    return { tr: t, label: s.ams >= 128 ? amsLab({ id: s.ams }) : `${String.fromCharCode(65 + s.ams)}${s.tray + 1}`, color: trayCol(t),
+    // une bobine posee a la main, que l'AMS n'a pas encore lue (06/11/2026) : sa couleur quand meme
+    return { tr: t, label: s.ams >= 128 ? amsLab({ id: s.ams }) : `${String.fromCharCode(65 + s.ams)}${s.tray + 1}`,
+      color: trayCol(t) || (t?.empty && t.suite_spool ? hexCss(t.suite_spool.color) : null),
       type: t?.filament_type || "" }; };
   const activeAms = ams.find(x => x.id === status?.active_ams_id);
   const activeNz = nz.find(n => n.active)?.id;

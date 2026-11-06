@@ -441,10 +441,14 @@ async def printer_status(_: str = Depends(get_current_user)):
     from ....services import drying_slots as _dslots
     # Un filament insere la ou une bobine etait posee : l'association tombe.
     await _dslots.prune(s.ams_list)
+    # la bobine qui a pris la suite dans un emplacement que l'AMS voit vide (06/11/2026) : posee a la main, sinon deduite
+    # du suivi de l'impression en cours (une suite choisie avant qu'on la pose ne se perd pas)
+    from ....services.live_usage import suite_trays as _suite_trays
+    _suites = await _suite_trays(s)
     all_spool_ids = [
         t.spool_id
         for a in s.ams_list for t in a.trays if t.spool_id
-    ] + [e["spool_id"] for e in _dslots.current().values()]
+    ] + [e["spool_id"] for e in _dslots.current().values()] + list(_suites.values())
     if all_spool_ids:
         from ....services import drying as _drying
         async with AsyncSessionLocal() as db:
@@ -515,8 +519,8 @@ async def printer_status(_: str = Depends(get_current_user)):
                     spool_info=_tray_spool_info(t, _spools_map, _stock_map),
                     drying_spool=(_spool_info(_dslots.spool_at(a.id, t.id), _spools_map)
                                   if t.empty and _dslots.spool_at(a.id, t.id) else None),
-                    suite_spool=(_spool_info(_dslots.spool_at(a.id, t.id, "suite"), _spools_map)
-                                 if t.empty and _dslots.spool_at(a.id, t.id, "suite") else None),
+                    suite_spool=(_spool_info(_dslots.spool_at(a.id, t.id, "suite") or _suites.get((a.id, t.id)), _spools_map)
+                                 if t.empty and (_dslots.spool_at(a.id, t.id, "suite") or _suites.get((a.id, t.id))) else None),
                     cols=getattr(t, "cols", []) or [],
                     ctype=str(getattr(t, "ctype", "") or ""),
                     catalog_name=(

@@ -555,12 +555,10 @@ async def _follow_tray(old_id: int, new_id: int, slot: int | None = None) -> Non
         from . import drying_slots
         empty = {(a.id, t.id) for a in (s.ams_list or []) for t in a.trays if getattr(t, "empty", False)} if s else set()
         where = None
-        try:
-            v = int((s.ams_mapping or [])[int(slot)]) if slot is not None else 65535
-            if v != 65535 and ((v >> 8) & 0xFF, v & 0xFF) in empty:
-                where = ((v >> 8) & 0xFF, v & 0xFF)
-        except (TypeError, ValueError, IndexError):
-            pass
+        if slot is not None:
+            from .print_tracker import slot_tray
+            w = slot_tray(int(slot), getattr(s, "job_id", "") or "")
+            where = w if w in empty else None
         if where is None and s and (s.active_ams_id, s.active_tray_id) in empty:
             where = (s.active_ams_id, s.active_tray_id)
         if where:
@@ -914,6 +912,49 @@ async def live(pid: int) -> dict:
             })
     return {"print_id": pid, "print_name": p.translated_name or p.file_name, "layer": prog.get("layer"), "pct": prog.get("pct"),
             "items": items, "skipped": await skipped(pid)}
+
+
+_SUITES: dict = {"at": 0.0, "key": None, "out": {}}
+
+
+async def suite_trays(s) -> dict:
+    """{(ams, tray): bobine} (06/11/2026) : pendant l'impression, les emplacements que l'AMS voit vides alors qu'une
+    bobine y a pris la suite d'une bobine finie (choisie a la main, a n'importe quel moment de l'impression) ; deduit
+    du suivi (la derniere bobine du filament, absente de tout emplacement plein) et de la correspondance de la tache.
+    Relu au plus toutes les 10 s."""
+    import time
+    if not s or str(getattr(s, "status", "") or "").upper() not in ("RUNNING", "PAUSE", "PREPARE"):
+        return {}
+    empty = {(a.id, t.id) for a in (s.ams_list or []) for t in a.trays if getattr(t, "empty", False)}
+    if not empty:
+        return {}
+    key = (getattr(s, "job_id", ""), tuple(sorted(empty)))
+    if _SUITES["key"] == key and time.time() - _SUITES["at"] < 10:
+        return _SUITES["out"]
+    out = {}
+    try:
+        from .print_tracker import slot_tray
+        pid = await current_print_id()
+        if pid:
+            held = {t.spool_id for a in (s.ams_list or []) for t in a.trays if not getattr(t, "empty", False) and t.spool_id}
+            async with AsyncSessionLocal() as db:
+                rows = await _rows(db, pid)
+            lost = []
+            for slot, rs in rows.items():
+                if len(rs) > 1 and rs[-1].spool_id and rs[-1].spool_id not in held:
+                    w = slot_tray(slot, getattr(s, "job_id", "") or "")
+                    if w in empty:
+                        out[w] = rs[-1].spool_id
+                    elif w is None:
+                        lost.append(rs[-1].spool_id)
+            # la correspondance perdue (redemarrage) : une seule suite, et l'emplacement actif vide, c'est lui
+            act = (getattr(s, "active_ams_id", None), getattr(s, "active_tray_id", None))
+            if len(lost) == 1 and act in empty and act not in out:
+                out[act] = lost[0]
+    except Exception:
+        logger.exception("[LIVE] suites des emplacements vides")
+    _SUITES.update(at=time.time(), key=key, out=out)
+    return out
 
 
 async def current_print_id() -> Optional[int]:

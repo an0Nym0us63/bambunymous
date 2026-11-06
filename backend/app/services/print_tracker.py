@@ -726,6 +726,29 @@ def on_finish(job_id: str, gcode_state: str):
         pass
 
 
+def slot_tray(slot: int, job_id: str = "") -> tuple | None:
+    """L'emplacement (ams, tray) d'un filament de l'impression (slot du 3MF, a partir de 1), d'apres l'ams_mapping de la
+    tache (06/11/2026) ; None si rien ne le dit. Les externes : AMS 255, emplacements 0 (254) et 1 (255)."""
+    try:
+        am = _job(job_id).get("ams_mapping", []) if job_id else []
+        idx = int(slot) - 1
+        if not (0 <= idx < len(am)):
+            return None
+        entry = am[idx]
+        if isinstance(entry, dict):
+            ams_id, tray_id = entry.get("ams_id", 255), entry.get("slot_id", 255)
+        else:
+            from ..core.mqtt import is_ht
+            ams_id, tray_id = (int(entry), 0) if is_ht(int(entry)) else (int(entry) // 4, int(entry) % 4)
+        if tray_id == 255:
+            return None
+        if ams_id in (255, 254):
+            return 255, (0 if ams_id == 254 else 1)
+        return int(ams_id), int(tray_id)
+    except Exception:
+        return None
+
+
 async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str, job_id: str = ""):
     """
     Retourne (spool_id, mode) pour un slot 3MF.
