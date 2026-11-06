@@ -1203,8 +1203,12 @@ def _merge_advice(placed: list) -> list:
                                         "h": p["last"]["h"], "rod_h": p["last"]["rod_h"]} if p.get("last") else None),
                               "thumb": next((x.get("thumb") or x.get("cover") for x in placed if x["key"] == p["keys"][0]), None),
                               # chaque plateau concerne, pour la galerie de la carte, et de quoi ouvrir la fiche du modele (06/11/2026)
+                              # (06/11/2026) et sa variante (« Granit rouge ») et ses filaments : des echantillons ont tous la meme vignette
                               "items": [{"key": x["key"], "plate": x.get("plate"), "name": x.get("plate_name") or "",
-                                         "thumb": x.get("thumb") or x.get("cover")} for k in p["keys"] for x in placed if x["key"] == k],
+                                         "thumb": x.get("thumb") or x.get("cover"),
+                                         "label": (str(x.get("title") or "")[len(p["title"]):].lstrip(" ·") if str(x.get("title") or "").startswith(p["title"]) else ""),
+                                         "fils": [{k2: f.get(k2) for k2 in ("name", "color", "colors_array", "multicolor_type")} for f in x.get("fils") or []]}
+                                        for k in p["keys"] for x in placed if x["key"] == k],
                               "ref": next(({"mw_id": x.get("mw_id"), "iid": x.get("iid"), "design_id": x.get("design_id")}
                                            for x in placed if x["key"] == p["keys"][0]), None)}})
         return out

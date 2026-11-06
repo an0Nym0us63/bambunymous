@@ -747,7 +747,11 @@ function MergeCard({ a, edit, onApply, onSheet, c: cc = "#6366F1" }) {
           {m.items.map((x, i) => <div key={x.key || i} style={{ borderRadius: 14, overflow: "hidden", border: `1px solid color-mix(in srgb, ${cc} 22%, var(--border))`, background: "var(--surface)" }}>
             <div style={{ aspectRatio: "1", background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {x.thumb ? <MwImg src={x.thumb} w={300} style={{ width: "100%", height: "100%", objectFit: "contain" }}/> : <span style={{ fontSize: 30 }}>🧩</span>}</div>
-            <div style={{ padding: "6px 8px", fontSize: 12, fontWeight: 800, color: "var(--text)" }}>Plateau {x.plate}{x.name ? <span style={{ color: "var(--muted)", fontWeight: 700 }}> · {x.name}</span> : null}</div>
+            <div style={{ padding: "6px 8px", display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text)" }}>{x.label || `Plateau ${x.plate}`}
+                {(x.label ? `Plateau ${x.plate}` : x.name) ? <span style={{ color: "var(--muted)", fontWeight: 700 }}> · {x.label ? `plateau ${x.plate}` : x.name}</span> : null}</span>
+              {x.fils?.length > 0 && <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>{x.fils.map((f, k) => <Dot key={k} f={f}/>)}</span>}
+            </div>
           </div>)}
         </div>
         {onSheet && m.ref && <button type="button" onClick={() => { setGal(false); onSheet(m.ref); }} style={{ ...seg, ...segOn, marginTop: 12, padding: "6px 12px" }}>🧾 Ouvrir la fiche MakerWorld</button>}
