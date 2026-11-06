@@ -605,7 +605,7 @@ function MergeCard({ a, edit, onApply }) {
 }
 const ADV_KINDS = [["deadline", "🎯", "Dates limites"], ["merge", "🧩", "Regrouper des plateaux"], ["colors", "🎨", "Enchaîner les mêmes couleurs"],
   ["gap", "⏱", "Remplir un creux"], ["load", "🧵", "Bobines à charger"], ["long", "⚠️", "Trop longs pour les horaires"]];
-export function PlanAdvice({ items, edit, onApply }) {
+export function PlanAdvice({ items, edit, onApply, at = null }) {
   // fermees a l'ouverture (06/11/2026) : toutes les sortes se voient d'un coup d'oeil, on deplie celle qui interesse
   const [open, setOpen] = useState({});
   if (!items?.length) return null;
@@ -616,7 +616,12 @@ export function PlanAdvice({ items, edit, onApply }) {
     .filter(g => g[3].length);
   return <div style={{ borderRadius: 16, border: "1px solid color-mix(in srgb, #F59E0B 35%, var(--border))", padding: 10, display: "flex", flexDirection: "column", gap: 8,
     background: "linear-gradient(150deg, color-mix(in srgb, #F59E0B 9%, transparent), transparent 70%), var(--surface)" }}>
-    <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#D97706" }}>💡 Conseils</div>
+    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+      <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#D97706" }}>💡 Conseils</span>
+      {/* calcules en fond (06/11/2026) : les derniers, et quand */}
+      {at && <span data-tip="Calculés en fond par la tâche du planning, et quelques secondes après chaque changement" style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>
+        calculés à {at.slice(11, 16).replace(":", " h ")}</span>}
+    </div>
     {groups.map(([k, ic, l, list]) => <div key={k} style={{ display: "flex", flexDirection: "column", gap: 7 }}>
       <button type="button" onClick={() => flip(k)} aria-expanded={!shut[k]}
         style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 8px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)",

@@ -512,7 +512,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
       onClose={() => setPop(null)}/>}
     {pop === "legend" && <PlanPopup title="Ce que disent les signes" icon="?" color="#6366F1" onClose={() => setPop(null)}><Legend/></PlanPopup>}
     {pop === "advice" && <PlanPopup title={`Conseils (${pd?.advice?.length || 0})`} icon="💡" color="#F59E0B" onClose={() => setPop(null)}>
-      <PlanAdvice items={pd?.advice} edit={edit} onApply={a => { applyAdvice(a); setPop(null); }}/></PlanPopup>}
+      <PlanAdvice items={pd?.advice} at={pd?.advice_at} edit={edit} onApply={a => { applyAdvice(a); setPop(null); }}/></PlanPopup>}
     {pop === "locked" && <PlanPopup title="Plateaux figés" icon="🔒" color="#4F46E5" onClose={() => setPop(null)}>
       <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45, marginBottom: 8 }}>
         Ils gardent leur jour et leur heure : le reste s'organise autour. Touche-en un pour le défiger.</div>

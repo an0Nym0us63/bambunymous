@@ -124,6 +124,7 @@ async def _save(d: dict, undo: str | None = None, merge: bool = False) -> None:
             d["undo"] = ([x for x in d.get("undo") or [] if isinstance(x, dict)] + [
                 {"at": datetime.utcnow().isoformat(timespec="seconds"), "why": undo, "state": state}])[-10:]
     _PLAN_MEMO["key"] = None
+    advise_soon()
     async with AsyncSessionLocal() as db:
         # les cles « _… » ne servent qu'au calcul (le stock du moment) : jamais enregistrees
         await set_setting(db, KEY, json.dumps({k: v for k, v in d.items() if not k.startswith("_")}, ensure_ascii=False))
@@ -1489,17 +1490,49 @@ async def _plan_key(tz) -> tuple:
     return (hash(raw), q, st, datetime.now().strftime("%Y%m%d%H%M"), tz)
 
 
-async def plan(tz: int | None = None) -> dict:
+# les conseils (06/11/2026) : calcules en fond (la tache, et quelques secondes apres un changement), jamais pendant
+# qu'on attend la page ; le planning rend les derniers, avec leur heure
+_ADVICE: dict = {"at": None, "items": []}
+_ADV_TASK = [None]
+
+
+def advise_soon(delay: float = 2.0) -> None:
+    """Recalculer les conseils dans quelques secondes, en fond (un seul a la fois ; les demandes rapprochees n'en font
+    qu'un)."""
+    import asyncio
+    t = _ADV_TASK[0]
+    if t is not None and not t.done():
+        return
+    try:
+        loop_ = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+
+    async def run():
+        await asyncio.sleep(delay)
+        try:
+            await plan(advise=True)
+        except Exception:
+            logger.exception("[PLAN] conseils")
+    _ADV_TASK[0] = loop_.create_task(run())
+
+
+async def plan(tz: int | None = None, advise: bool = False) -> dict:
     """Le planning (memorise 15 s, 06/11/2026 : le calendrier, la tuile, la tache de fond et les notifications le
-    recalculaient chacun, 0,7 s a chaque fois) ; rien de ce dont il depend n'a change dans la cle, sinon on refait."""
+    recalculaient chacun, 0,7 s a chaque fois) ; rien de ce dont il depend n'a change dans la cle, sinon on refait.
+    advise : calculer aussi les conseils (la tache de fond) ; sinon, les derniers calcules."""
     import copy
     import time
     key = await _plan_key(tz)
     m = _PLAN_MEMO
-    if m["key"] == key and time.time() - m["at"] < 15 and m["out"] is not None:
-        return copy.deepcopy(m["out"])
+    if not advise and m["key"] == key and time.time() - m["at"] < 15 and m["out"] is not None:
+        out = copy.deepcopy(m["out"])
+        out.update(advice=copy.deepcopy(_ADVICE["items"]), advice_at=_ADVICE["at"])
+        return out
     t0 = time.perf_counter()
-    out = await _plan(tz)
+    out = await _plan(tz, advise)
+    if not advise and _ADVICE["at"] is None:
+        advise_soon(0.5)                         # pas encore de conseils (le serveur demarre) : en fond, tout de suite
     out["timing_ms"] = {**(out.get("timing_ms") or {}), "total": round((time.perf_counter() - t0) * 1000)}
     m.update(key=await _plan_key(tz), at=time.time(), out=copy.deepcopy(out))
     return out
@@ -1509,7 +1542,7 @@ def forget_plan() -> None:
     _PLAN_MEMO["key"] = None
 
 
-async def _plan(tz: int | None = None) -> dict:
+async def _plan(tz: int | None = None, advise: bool = False) -> dict:
     import time
     tm, t0 = {}, time.perf_counter()
     d, now, jobs, dirty, loaded, live, busy = await _context(tz)
@@ -1645,16 +1678,20 @@ async def _plan(tz: int | None = None) -> dict:
         return all(x["ok"] for x in deadlines(rr["jobs"], d, now) if x["keys"] and x["keys"][0] in set(ks))
     t1 = time.perf_counter()
     tm["place"] = round((t1 - t0) * 1000) - tm["context"]
-    adv = advice(r["jobs"], d, now, dls, fix, gain)
-    t2 = time.perf_counter()
-    madv = _merge_advice(r["jobs"])
-    tm.update(advice=round((t2 - t1) * 1000), merge=round((time.perf_counter() - t2) * 1000))
+    if advise:
+        adv = advice(r["jobs"], d, now, dls, fix, gain)
+        t2 = time.perf_counter()
+        madv = _merge_advice(r["jobs"])
+        tm.update(advice=round((t2 - t1) * 1000), merge=round((time.perf_counter() - t2) * 1000))
+        _ADVICE.update(at=datetime.now().isoformat(timespec="seconds"), items=adv + madv)
+    else:
+        adv, madv = list(_ADVICE["items"]), []
     return {"settings": {k: d[k] for k in DEFAULTS}, "now": now.isoformat(timespec="minutes"), "timing_ms": tm,
             "busy_until": busy.isoformat(timespec="minutes") if busy else None,
             "live": ({"name": live[1], "design_id": live[2], "remaining_min": live[0], **(await _live_print(d))} if live else None),
             "dur": d.get("_dur"), "summary": plan_metrics(r, d, now), "bed_now": d.get("_bed_now"), "fcolors": d.get("_fcol") or {},
             "undo": ({"why": d["undo"][-1].get("why"), "at": d["undo"][-1].get("at")} if d["undo"] else None),
-            "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": adv + madv,
+            "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": adv + madv, "advice_at": _ADVICE["at"],
             "status": status,
             "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),
             "blocked": [{k: b.get(k) for k in ("key", "design_id", "title", "cover", "thumb", "plate", "plate_name", "plates_total", "copy", "qty",
@@ -2353,7 +2390,7 @@ async def check(cfg=None) -> dict:
     if cfg is None:
         cfg = await N._load()
     d0 = await _load()
-    r = await plan()
+    r = await plan(advise=True)
     now = r["now"]
     snap = await _snap_load()
     prev = snap.get("days") or {}
