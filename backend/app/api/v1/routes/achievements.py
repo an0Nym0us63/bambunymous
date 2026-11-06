@@ -7,7 +7,7 @@ from ....db.session import get_db
 from ....models.user import ROLE_ADMIN, User
 from fastapi import HTTPException
 
-from .auth import get_current_role, get_current_user, oauth2_scheme, require_admin, require_own_account
+from .auth import get_current_role, get_current_user, oauth2_scheme, own_or_main, require_admin, require_own_account
 
 router = APIRouter()
 
@@ -18,11 +18,11 @@ MINE_HEADER = "x-bn-achievements"
 
 
 @router.get("/podium")
-async def achievements_podium(fresh: bool = False, acc=Depends(require_own_account)):
-    """Podium entre copains : mon score par section et celui de chacun d'eux.
-    Jamais par une cle de copain (on ne fait pas lire ses copains par un autre)."""
+async def achievements_podium(fresh: bool = False, who: str = Depends(own_or_main), token: str = Depends(oauth2_scheme)):
+    """Podium entre copains : mon score par section et celui de chacun d'eux. Un copain qui passe voit celui du compte
+    principal (06/11/2026), tel quel : sans le relire chez les autres (fresh ignore)."""
     from ....services import achievements as A
-    return await A.podium(acc[0], fresh)
+    return await A.podium(who, fresh and not str(token or "").startswith("fk_"))
 
 
 @router.get("/users")
@@ -322,9 +322,11 @@ async def _egg(name: str, acc):
 
 
 @router.get("/family-board")
-async def achievements_family_board(acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
-    """Le classement de la famille (secrets a chercher seulement) : pour le compte principal et la famille."""
+async def achievements_family_board(who: str = Depends(own_or_main), db: AsyncSession = Depends(get_db)):
+    """Le classement de la famille (secrets a chercher seulement) : pour le compte principal et la famille ; un copain
+    qui passe voit celui du compte principal (06/11/2026)."""
     from ....services import achievements as A
+    acc = (who,)
     me = await _me(acc[0], db)
     fam = await A.family()
     if not (me["main"] or me["family"]) or not me["house"] or not fam["secrets"]:

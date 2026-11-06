@@ -587,6 +587,9 @@ async def switch(pid: int, slot: int, spool_id: int, auto: bool = False) -> dict
             raise ValueError("Ce filament n'est pas dans l'impression")
         last = rs[-1]
         if last.spool_id == spool_id:
+            # deja la suite : re-choisie, elle se repose dans l'emplacement que l'AMS voit vide (06/11/2026)
+            if not auto and len(rs) > 1 and rs[-2].spool_id:
+                await _follow_tray(rs[-2].spool_id, spool_id, int(slot))
             return {"ok": True, "same": True}
         new = await db.get(Spool, spool_id)
         if not new:

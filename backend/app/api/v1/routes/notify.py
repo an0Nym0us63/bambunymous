@@ -3,7 +3,7 @@ import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 
-from .auth import require_admin, require_own_account
+from .auth import own_or_main, require_admin, require_own_account
 from ....services import notify as N
 
 router = APIRouter()
@@ -126,11 +126,12 @@ async def notify_me_events(body: dict = Body({}), acc=Depends(require_own_accoun
 
 @router.get("/me/history")
 async def notify_my_history(before: int = 0, sections: str = None, events: str = None,
-                            acc=Depends(require_own_account)):
-    """Mes notifications des 15 derniers jours, la plus recente d'abord ;
+                            who: str = Depends(own_or_main)):
+    """Mes notifications des 15 derniers jours, la plus recente d'abord ; un copain qui passe lit celles du compte
+    principal (06/11/2026, la tuile « Le fil du jour »), sans les marquer vues.
     sections, events : listes separees par des virgules (absentes : toutes)."""
     split = lambda v: None if v is None else [x for x in v.split(",") if x]
-    return await N.history(acc[0], before, sections=split(sections), events=split(events))
+    return await N.history(who, before, sections=split(sections), events=split(events))
 
 
 @router.get("/me/unseen")

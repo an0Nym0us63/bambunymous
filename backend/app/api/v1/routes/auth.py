@@ -222,6 +222,24 @@ async def require_own_account(
     return await _resolve(token, db)
 
 
+async def own_or_main(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> str:
+    """En LECTURE (06/11/2026) : le compte de la maison qui demande ; un copain qui passe (cle fk_) lit au nom du compte
+    principal (son fil du jour, ses copains, sa famille), comme il voit son accueil et son menu."""
+    if (token or "").startswith("fk_"):
+        await _resolve(token, db)                       # une cle valide (revoquee : refusee)
+        from .users import _root_admin_id
+        from ....models.user import User as _U
+        mid = await _root_admin_id(db)
+        u = await db.get(_U, mid) if mid else None
+        if not u:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Pas de compte principal")
+        return u.username
+    return (await _resolve(token, db))[0]
+
+
 async def require_admin(role: str = Depends(get_current_role)) -> str:
     """A poser sur toute route reservee aux administrateurs."""
     if role != ROLE_ADMIN:

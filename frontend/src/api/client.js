@@ -12,7 +12,8 @@ const HOME_PREFIXES = ["/auth", "/friends", "/users", "/settings", "/notify",
 // (06/11/2026) la file d'evaluation n'est plus « chez moi » : chez un copain, sa tuile montrait la mienne
 // Le ping d'activite part chez le copain visite : son journal suit ma visite. La disposition de ses AMS aussi
 // (03/11/2026 : ses AMS s'affichaient dans l'ordre des miens, sous /settings comme mes reglages).
-const RELAYED = ["/users/activity/ping", "/settings/ams-order"];
+// (06/11/2026) son fil du jour et ses copains aussi : ses tuiles les montrent comme chez lui
+const RELAYED = ["/users/activity/ping", "/settings/ams-order", "/notify/me/history", "/friends/shared/printing"];
 const isHome = (url) => !RELAYED.some(p => url.startsWith(p)) && HOME_PREFIXES.some(p => url === p || url.startsWith(p.endsWith("/") ? p : p + "/") || url.startsWith(p + "?"));
 // Chez un copain, on regarde, on ne touche a rien (06/11/2026 : un ami venu chez moi changeait SON menu et SA disposition
 // d'accueil en croyant regler les miens, l'ecriture partant chez lui). Seules passent les ecritures qui ne concernent que

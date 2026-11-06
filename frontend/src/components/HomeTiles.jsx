@@ -730,7 +730,7 @@ export function useTilesData(status = null, want = null) {
       dry: () => put("dry", get("/filaments/drying/overview")),
       // chez un copain : ni mes copains ni mon fil (les siens ne sont pas relayes), la tuile le dit
       // (null, pas rien : sinon la tuile attendait sans fin, 05/11/2026)
-      friends: () => put("friends", currentFriend() ? Promise.resolve(null) : get("/friends/shared/printing")),
+      friends: () => put("friends", get("/friends/shared/printing")),
       ach: () => put("ach", get("/achievements")),
       month: () => {
         const now = new Date();
@@ -740,7 +740,7 @@ export function useTilesData(status = null, want = null) {
           .then(([cur, prev]) => ({ ...cur, prev })));
       },
       sales: () => put("sales", get("/objects/objects/stats")),
-      feed: () => put("feed", currentFriend() ? Promise.resolve(null) : get("/notify/me/history")),
+      feed: () => put("feed", get("/notify/me/history")),
       attention: () => put("attention", get("/attention")),
       orders: () => put("orders", get("/filaments/incoming").then(r => r.orders || [])),
       // le planning (05/11/2026)
@@ -756,9 +756,8 @@ export function useTilesData(status = null, want = null) {
       // « À faire » aussi : ce qui imprime, ce qui vient de finir, ce qui devient faisable bougent sans cesse
       queue: () => put("queue", get("/makerworld/queue")),
       mw: () => put("mw", get("/makerworld/creator")),
-      // chez un copain : ni ses copains, ni sa famille (la tuile le dit)
-      podium: () => put("podium", currentFriend() ? Promise.resolve(null) : get("/achievements/podium")),
-      family: () => put("family", currentFriend() ? Promise.resolve(null) : get("/achievements/family-board")),
+      podium: () => put("podium", get("/achievements/podium")),
+      family: () => put("family", get("/achievements/family-board")),
     };
     // ce que les tuiles demandent (sans liste : tout, comme avant)
     const wanted = () => (wantRef.current ? [...wantRef.current] : Object.keys(F));
@@ -2074,8 +2073,6 @@ function FriendsZoom({ p, states, thumbs }) {
   </>;
 }
 function Friends({ f, o, sz }) {
-  const visiting = useFriend(s => s.friend);
-  if (visiting) return <TileEmpty icon={<Users size={15}/>} color={FR_C} label="Copains" sz={sz} text={`Les copains de ${visiting.name} ne sont pas partagés`}/>;
   return <FriendsTile f={f} o={o} sz={sz}/>;
 }
 function FriendsTile({ f, o, sz }) {
@@ -3427,8 +3424,6 @@ function FeedRow({ x, h = 40, detail, narrow, time = true, nav, big = false }) {
   </div>;
 }
 function Feed({ f, o, sz }) {
-  const visiting = useFriend(s => s.friend);
-  if (visiting) return <TileEmpty icon={<Rss size={15}/>} color="#0EA5E9" label="Le fil du jour" sz={sz} text={`Le fil de ${visiting.name} n'est pas partagé`}/>;
   return <FeedTile f={f} o={o} sz={sz}/>;
 }
 function FeedTile({ f, o, sz }) {
@@ -5070,11 +5065,9 @@ export const TILES = {
   shortcuts: { label: "Raccourcis", w: [2, 1], h: [1, 0.5], render: (d, st, o, it) => <Shortcuts o={o} sz={sz(it)}/>,
     options: [B("iconsOnly", "Icônes seules", false, { hint: "Sinon le nom s'affiche quand il tient." }),
       ...SHORTCUTS.map(([k, l], i) => B(`s_${k}`, l, i < 6, { group: "Raccourcis affichés" }))] },
-  family: { label: "Classement de la famille", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => currentFriend() ? <TileEmpty icon={<Trophy size={15}/>} color="#F59E0B" label="Classement de la famille" sz={sz(it)}
-      text={`La famille de ${currentFriend().name} n'est pas partagée`}/> : <FamilyBoard b={d.family} o={o} sz={sz(it)}/>,
+  family: { label: "Classement de la famille", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <FamilyBoard b={d.family} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "list", [["list", "liste"], ["podium", "podium (4 places)"]], { hint: "Le podium a besoin d'un peu de hauteur ; trop bas, la liste revient." })] },
-  podium: { label: "Classement des copains", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => currentFriend() ? <TileEmpty icon={<Trophy size={15}/>} color="#F59E0B" label="Classement des copains" sz={sz(it)}
-      text={`Les copains de ${currentFriend().name} ne sont pas partagés`}/> : <Podium p={d.podium} a={d.ach} o={o} sz={sz(it)}/>,
+  podium: { label: "Classement des copains", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Podium p={d.podium} a={d.ach} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "list", [["list", "liste"], ["podium", "podium"]]), B("bars", "Barres de score", true), SCROLL(false)] },
   alerts: { label: "Alertes en bref", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Alerts a={d.attention} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "chips", [["chips", "rangées"], ["icons", "icônes"], ["list", "rangées et exemples"]], { hint: "Rangées : une par catégorie, sa couleur, une barre et le nombre. Icônes : une grosse icône, le nombre en badge. Rangées et exemples : les premières alertes sous chaque catégorie quand il y a la place." }),
