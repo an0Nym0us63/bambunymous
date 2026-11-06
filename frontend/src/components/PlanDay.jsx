@@ -100,8 +100,9 @@ export const plateTxt = j => j.plates_total > 1 ? `Plateau ${j.plate}/${j.plates
 export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, onUnpin, onOpen, onDue, onDone, dragging, compact = false }) {
   const [over, setOver] = useState(false);
   const drift = j.drift_min;
-  const tag = (txt, c, tip) => <span data-tip={tip} style={{ fontSize: 11, fontWeight: 900, whiteSpace: "nowrap", color: c, borderRadius: 7, padding: "1px 7px",
-    background: `color-mix(in srgb, ${c} 13%, transparent)` }}>{txt}</span>;
+  // un long tag passe a la ligne dans la carte (06/11/2026 : « intercale dans … » debordait)
+  const tag = (txt, c, tip) => <span data-tip={tip} style={{ fontSize: 11, fontWeight: 900, maxWidth: "100%", overflowWrap: "anywhere", lineHeight: 1.35, color: c,
+    borderRadius: 7, padding: "1px 7px", background: `color-mix(in srgb, ${c} 13%, transparent)` }}>{txt}</span>;
   return <div draggable={edit} onDragStart={e => { e.dataTransfer.setData("text/bn-job", j.key); e.dataTransfer.effectAllowed = "move"; onDrag?.(j.key); }}
     onDragEnd={() => onDrag?.(null)}
     onDragOver={e => { if (edit && e.dataTransfer.types.includes("text/bn-job")) { e.preventDefault(); e.stopPropagation(); setOver(true); } }}
