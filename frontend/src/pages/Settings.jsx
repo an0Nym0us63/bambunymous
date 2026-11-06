@@ -10,6 +10,7 @@ import TasksPanel from "../components/TasksPanel";
 import CatalogSyncSheet from "../components/CatalogSyncSheet";
 import client from "../api/client";
 import { FriendsCard, FriendKeyButtons } from "../components/Friends";
+import { useFriend } from "../store/friend";
 import { showAlert, showConfirm } from "../utils/dialog";
 import PriceReview from "../components/PriceReview";
 import Select from "../components/Select";
@@ -2008,7 +2009,7 @@ const SET_TABS = [
   { id:"display",  label:"🎨 Affichage",  admin:false, c:"#EC4899" },
   { id:"accounts", label:"👤 Comptes",    admin:false, c:"#8B5CF6" },
   { id:"links",    label:"🔗 Connexions", admin:true,  c:"#06B6D4" },   // MakerWorld, Telegram, messages types : administrateur
-  { id:"notify",   label:"🔔 Notifs",     admin:false, c:"#F59E0B" },
+  { id:"notify",   label:"🔔 Notifs",     admin:false, c:"#F59E0B", visit:false },   // chez un copain : pas ses notifications (06/11/2026)
   { id:"share",    label:"📤 Partage",    admin:true,  c:"#0EA5E9" },
   { id:"android",  label:"📱 Appli Android", admin:false, c:"#22C55E" },
   { id:"tools",    label:"🛠️ Outils",     admin:true,  c:"#64748B" },
@@ -2072,7 +2073,8 @@ export default function Settings() {
   };
 
   const isAdmin = useIsAdmin();
-  const tabs = SET_TABS.filter(t => isAdmin || !t.admin);
+  const visiting = !!useFriend(s => s.friend);
+  const tabs = SET_TABS.filter(t => (isAdmin || !t.admin) && !(visiting && t.visit === false));
   // Dernier onglet ouvert (ce navigateur) ; sinon selon le role : « Imprimante »
   // n'existe pas pour un compte en lecture seule, il atterrit sur « Affichage ».
   // L'adresse (?tab=…) d'abord : rafraichir ou changer de maison garde l'onglet.
@@ -2080,7 +2082,7 @@ export default function Settings() {
   const [defTab] = React.useState(() => {
     let t = null;
     try { t = localStorage.getItem("settingsTab"); } catch { /* indisponible */ }
-    return SET_TABS.some(x => x.id === t && (isAdmin || !x.admin)) ? t : (isAdmin ? "printer" : "display");
+    return SET_TABS.some(x => x.id === t && (isAdmin || !x.admin) && !(visiting && x.visit === false)) ? t : (isAdmin ? "printer" : "display");
   });
   const [tab, setUrlTab] = useUrlTab("tab", defTab, tabs.map(t => t.id));
   const setTab = t => { setUrlTab(t); try { localStorage.setItem("settingsTab", t); } catch { /* indisponible */ } };
