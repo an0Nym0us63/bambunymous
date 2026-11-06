@@ -52,6 +52,8 @@ export const useAuth = create(
 
       logout: () => {
         localStorage.removeItem("token");
+        // les dernieres donnees des tuiles de l'accueil (06/11/2026) : rien ne reste apres une deconnexion
+        try { Object.keys(localStorage).filter(k => k.startsWith("bn_tiles_snap")).forEach(k => localStorage.removeItem(k)); } catch { /* indisponible */ }
         set({ token: null, isAuthenticated: false, role: ROLE_ADMIN, username: "" });
       },
     }),

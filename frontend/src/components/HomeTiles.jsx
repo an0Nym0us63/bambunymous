@@ -10,7 +10,7 @@ import { liveOfSpool, LiveHatch, LiveTo, LiveSwitchButton, LiveBar } from "./Liv
 import { egg } from "../eggs";
 import { useLiveSpool, useLiveCurrent } from "../store/liveUsage";
 import { useLayer, LayerCanvas, LayerExplorer, Layer3D, useShell, useLayerMode } from "./LayerView";
-import { useIsAdmin } from "../store/auth";
+import { useIsAdmin, useAuth } from "../store/auth";
 import { showAlert } from "../utils/dialog";
 import { relayed } from "./Friends";
 import { stageLabel } from "../utils/printStage";
@@ -693,8 +693,36 @@ export const TILE_NEEDS = {
 // lues une fois (pas relues toutes les 2 min avec le reste)
 const ONCE = new Set(["mw", "podium", "family"]);
 
+// L'accueil tout de suite (06/11/2026) : les dernieres donnees de chaque tuile, gardees dans ce navigateur, s'affichent
+// des l'ouverture ; les fraiches les remplacent des qu'elles arrivent. Par compte et par BambuNymous visite (jamais
+// celles d'un copain chez soi), une semaine au plus ; les tres grosses (les succes) ne sont pas gardees.
+const SNAP_V = 1, SNAP_MAX = 250000, SNAP_AGE = 7 * 86400000;
+const snapKey = () => {
+  try { return `bn_tiles_snap${SNAP_V}:${useAuth.getState().username || ""}:${currentFriend()?.id || "me"}`; } catch { return null; }
+};
+function readSnap(key) {
+  try {
+    const o = key && JSON.parse(localStorage.getItem(key) || "null");
+    return o && Date.now() - (o.at || 0) < SNAP_AGE && o.d && typeof o.d === "object" ? o.d : {};
+  } catch { return {}; }
+}
+
 export function useTilesData(status = null, want = null) {
-  const [d, setD] = useState({});
+  const key0 = useRef(snapKey());
+  const snap = useRef(null);
+  if (snap.current == null) snap.current = readSnap(key0.current);
+  const [d, setD] = useState(() => ({ ...snap.current }));
+  const saveT = useRef(null);
+  const remember = (k, r) => {
+    if (!key0.current || snapKey() !== key0.current || r == null) return;      // passe chez un copain entre-temps : rien
+    try { if (JSON.stringify(r).length > SNAP_MAX) { delete snap.current[k]; return; } } catch { return; }
+    snap.current[k] = r;
+    clearTimeout(saveT.current);
+    saveT.current = setTimeout(() => {
+      try { localStorage.setItem(key0.current, JSON.stringify({ at: Date.now(), d: snap.current })); }
+      catch { try { localStorage.removeItem(key0.current); } catch { /* stockage indisponible */ } }
+    }, 1500);
+  };
   const loadRef = useRef(null);
   const fetchRef = useRef(null);
   const wantRef = useRef(want);
@@ -714,7 +742,7 @@ export function useTilesData(status = null, want = null) {
   useEffect(() => {
     let dead = false;
     const asked = new Set();
-    const put = (k, p) => p.then(r => { if (!dead) setD(x => ({ ...x, [k]: r })); }).catch(() => { if (!dead) setD(x => ({ ...x, [k]: null })); });
+    const put = (k, p) => p.then(r => { if (!dead) { setD(x => ({ ...x, [k]: r })); remember(k, r); } }).catch(() => { if (!dead) setD(x => ({ ...x, [k]: null })); });
     const get = (url, params) => client.get(url, { params }).then(r => r.data);
     const F = {
       today: () => {
