@@ -1,5 +1,5 @@
 import React from "react";
-import { useToast } from "../store/toast";
+import { useToast, dismissToast } from "../store/toast";
 
 // Affichage des messages ephemeres (store/toast) : en bas, au-dessus de la
 // barre de navigation sur telephone ; ne capte aucun clic.
@@ -19,8 +19,12 @@ export default function Toast() {
       {items.map(t => (
         <div key={t.id} style={{ padding:"9px 14px", borderRadius:12, color:"white", fontSize:13,
           fontWeight:600, lineHeight:1.35, textAlign:"center", boxShadow:"0 6px 20px rgba(0,0,0,0.35)",
-          background:(TONE[t.tone] || TONE.info).bg, animation:"toast-in 0.15s ease-out" }}>
-          {t.text}
+          background:(TONE[t.tone] || TONE.info).bg, animation:"toast-in 0.15s ease-out",
+          display:"flex", alignItems:"center", gap:10 }}>
+          <span>{t.text}</span>
+          {t.action && <button type="button" onClick={() => { dismissToast(); t.action.onClick(); }}
+            style={{ pointerEvents:"auto", flexShrink:0, padding:"5px 11px", borderRadius:9, border:"1px solid rgba(255,255,255,0.55)",
+              background:"rgba(255,255,255,0.18)", color:"white", fontSize:12.5, fontWeight:800, cursor:"pointer", fontFamily:"inherit" }}>{t.action.label}</button>}
         </div>
       ))}
       <style>{`
