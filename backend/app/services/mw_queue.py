@@ -719,10 +719,19 @@ def _split_variants(models: list, done_plates: dict, details: dict) -> None:
             if e["prof"] not in ids:
                 continue
             to = next((r for r in rows if e.get("variant") == r["design_id"]), None)
-            if to is None:
-                fids = e.get("fids") or set()
-                to = max(rows, key=lambda r: (len(fids & r["_fids"]) / max(1, len(r["_fids"])), -rows.index(r)))
             c = copies_of(e, plate_g, pieces)[0]
+            fids = e.get("fids") or set()
+            # plusieurs variantes sur un meme plateau (06/11/2026 : 4 echantillons de 4 couleurs, en un seul print de x4) :
+            # chaque variante dont il a tous les filaments en prend sa part, a parts egales (le reste aux premieres)
+            full = [r for r in rows if r["_fids"] and r["_fids"] <= fids] if to is None and c > 1 else []
+            if len(full) >= 2:
+                share = [c // len(full) + (1 if i < c % len(full) else 0) for i in range(len(full))]
+                for r, k in zip(full, share):
+                    for n in e["plates"]:
+                        counts[r["design_id"]][n] = counts[r["design_id"]].get(n, 0) + k
+                continue
+            if to is None:
+                to = max(rows, key=lambda r: (len(fids & r["_fids"]) / max(1, len(r["_fids"])), -rows.index(r)))
             for n in e["plates"]:
                 counts[to["design_id"]][n] = counts[to["design_id"]].get(n, 0) + c
         for r in rows:
