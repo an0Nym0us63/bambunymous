@@ -1553,6 +1553,28 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
     # apres leur disparition seulement (06/11/2026 : une liste un instant incomplete -- le serveur qui redemarre,
     # « A faire » relu pendant une optimisation -- effacait pour de bon les echantillons figes de Guillaume, replaces
     # ensuite librement). Revenu entre-temps, il retrouve sa place et son heure
+    # (06/11/2026) un plateau d'une variante de couleur qui disparait au moment ou un plateau du meme modele et du meme
+    # numero apparait : c'est le meme, l'attribution des impressions deja faites a bascule d'une variante a l'autre
+    # (deux variantes identiques, un comptage qui change avec une mise a jour) -- son jour, son heure figee et sa
+    # priorite le suivent, au lieu de rester sur l'ancien et de laisser le nouveau libre
+    known = set(d.get("known") or [])
+    if known:
+        mp = lambda k: (k.split(":")[0].split("~")[0], k.split(":")[1] if ":" in k else "")
+        gone = sorted(k for k in set(d["pins"]) | set(d["locked"]) if k not in keys and k in known)
+        fresh = sorted(k for k in keys if k not in known and k not in d["pins"] and k not in d["locked"])
+        for g in gone:
+            nk = next((f for f in fresh if mp(f) == mp(g)), None)
+            if not nk:
+                continue
+            fresh.remove(nk)
+            for kk in ("locked", "pins", "prio"):
+                if g in d[kk]:
+                    d[kk][nk] = d[kk].pop(g)
+            if g in d.get("plan0", {}):
+                d["plan0"][nk] = d["plan0"].pop(g)
+            d["order"] = [nk if x == g else x for x in d["order"]]
+            dirty = True
+            logger.info(f"[PLAN] {g} -> {nk} : meme modele et meme plateau (variante rattachee autrement), son jour et son heure suivent")
     miss = d.setdefault("missing", {})
     for k in list(miss):
         if k in keys or (k not in d["pins"] and k not in d["locked"]):
