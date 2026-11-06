@@ -33,6 +33,15 @@ installEscClose();
 const savedTheme = localStorage.getItem("bambu-theme") || "dark";
 document.documentElement.setAttribute("data-theme", savedTheme === "light" ? "light" : "");
 
+// un geste a plusieurs doigts (06/11/2026 : la capture d'ecran a trois doigts vers le bas, sur Android) ne doit pas
+// declencher le rafraichissement natif du navigateur, qui rechargeait toute l'appli (page blanche le temps du chargement)
+document.addEventListener("touchstart", e => {
+  if (e.touches.length > 1) document.documentElement.classList.add("bn-multitouch");
+}, { capture: true, passive: true });
+const _mtEnd = e => { if (!e.touches.length) document.documentElement.classList.remove("bn-multitouch"); };
+document.addEventListener("touchend", _mtEnd, { capture: true, passive: true });
+document.addEventListener("touchcancel", _mtEnd, { capture: true, passive: true });
+
 const root = ReactDOM.createRoot(document.getElementById("root"));
 // le dernier filet (06/11/2026) : une erreur hors des pages (barre, menu) ne laisse plus une page blanche
 root.render(<BrowserRouter><ErrorBoundary where="appli"><App /></ErrorBoundary></BrowserRouter>);

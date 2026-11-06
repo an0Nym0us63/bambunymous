@@ -55,9 +55,10 @@ export function installPullRefreshGuard() {
     setTimeout(() => { pending = false; report(); }, 0);
   }, { capture: true, passive: true });
   document.addEventListener("touchstart", e => {
-    if (inHorizontalScroller(e.target) || noPageGesture(e.target)) { touching = true; report(); }
+    // plusieurs doigts (06/11/2026) : la capture d'ecran a trois doigts vers le bas rechargeait l'appli (page blanche)
+    if (e.touches.length > 1 || inHorizontalScroller(e.target) || noPageGesture(e.target)) { touching = true; report(); }
   }, { capture: true, passive: true });
-  const end = () => { if (touching) { touching = false; report(); } };
+  const end = e => { if (touching && !(e?.touches?.length)) { touching = false; report(); } };
   document.addEventListener("touchend", end, { capture: true, passive: true });
   document.addEventListener("touchcancel", end, { capture: true, passive: true });
   // Ouverture / fermeture d'une feuille : la position change sans defilement.

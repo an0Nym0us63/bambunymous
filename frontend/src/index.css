@@ -144,6 +144,9 @@ input, textarea, select, [contenteditable]:not([contenteditable="false"]) { care
   will-change: transform;
 }
 
+/* Un geste a plusieurs doigts (capture d'ecran Android) : pas de rafraichissement natif (06/11/2026) */
+html.bn-multitouch, html.bn-multitouch body { overscroll-behavior-y: contain; }
+
 /* Empêcher pull-to-refresh sous les bottom sheets */
 .sheet-inner {
   overscroll-behavior: contain;
