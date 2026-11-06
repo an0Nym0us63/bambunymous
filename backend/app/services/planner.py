@@ -315,7 +315,8 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
                             "seconds": int(secs), "weight_g": wg, "fils": fl, "_obj": obj, "thumb": thumb,
                             "chain": d.get("chain", {}).get(did),
                             "prio_m": int(d.get("prio", {}).get(did) or 0), "prio_p": int(d.get("prio", {}).get(f"{did}:{idx}") or 0),
-                            "bed_want": beds.get(idx), "iid": (m.get("profile") or {}).get("instance_id")})
+                            "bed_want": beds.get(idx), "iid": (m.get("profile") or {}).get("instance_id"),
+                            "dev_model": (m.get("profile") or {}).get("dev_model")})
     return out, changed
 
 

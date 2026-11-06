@@ -942,7 +942,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
 
 // Section, depliable si onToggle est donne (le titre garde son compte).
 // Mac (pas un iPad, qui se dit aussi « Mac » mais a un ecran tactile).
-const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform || navigator.userAgent)
+export const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform || navigator.userAgent)
   && !(navigator.maxTouchPoints > 1);
 
 // Telephone ou tablette (iPad compris, qui se dit « Mac ») : pas de Bambu Studio.
@@ -1066,17 +1066,17 @@ function PicStrip({ pictures, onOpen, small = false }) {
     </div>
   );
 }
-const IS_MOBILE = typeof navigator !== "undefined" && (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+export const IS_MOBILE = typeof navigator !== "undefined" && (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
   || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
 
-function handyUrl(designId, p) {
+export function handyUrl(designId, p) {
   const path = `/design/model/detail?design_id=${designId}${p ? `&instance_id=${p.instance_id}` : ""}`;
   return `https://makerworld.com/fr/open-app?toPath=${encodeURIComponent(path)}&from=Model`;
 }
 
 // Lien vers une appli installee (schema personnalise) : par un <a> clique,
 // comme le site, pour ne pas quitter la page.
-function launch(href) {
+export function launch(href) {
   const a = document.createElement("a");
   a.href = href; a.style.display = "none";
   document.body.appendChild(a); a.click(); document.body.removeChild(a);

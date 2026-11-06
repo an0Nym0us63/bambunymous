@@ -931,7 +931,7 @@ async def _compute(fresh: bool = False) -> dict:
             picks = (plan or {}).get("picks") or {}
             row["profile"] = {"instance_id": prof.get("instance_id"), "profile_id": prof.get("profile_id"), "title": prof.get("title"),
                               "cover": prof.get("cover"),
-                              "printer": prof.get("printer"), "plates": len(plates), "plates_total": len(prof.get("plates") or [])}
+                              "printer": prof.get("printer"), "dev_model": prof.get("dev_model"), "plates": len(plates), "plates_total": len(prof.get("plates") or [])}
             one = sum(_num(pl.get("seconds")) for pl in plates) if sel is not None else _num(prof.get("seconds"))
             row["seconds"] = one * qty if one else None
             plate_picks = (plan or {}).get("plate_picks") or {}

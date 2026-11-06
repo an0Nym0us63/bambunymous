@@ -4,11 +4,11 @@ import client, { apiUrl, apiThumb } from "../api/client";
 import { egg } from "../eggs";
 import { showAlert } from "../utils/dialog";
 import { toast } from "../store/toast";
-import { useCanMw } from "../store/auth";
+import { useCanMw, useCanMwHome } from "../store/auth";
 import { dayEnd, DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt, bedTxt, BED_NAMES, SwapLinks, FilLink, finIc, SwapShort, setFilColors } from "./PlanDay";
 import { JobSheet, LowStockBanner, BlockedList } from "./PlanPanels";
 import { sheetRef } from "./planActs";
-import MakerWorldModelSheet from "./MakerWorldModelSheet";
+import MakerWorldModelSheet, { IS_MAC, IS_MOBILE, handyUrl, launch } from "./MakerWorldModelSheet";
 
 // Le planning sur l'accueil (05/11/2026, revu) : la tuile (la journee en frise, l'etat, l'impression en cours, un
 // agenda des prochains plateaux, les alertes) et sa vue en grand (en cours, prochaines, les 3 prochains jours, les
@@ -107,6 +107,29 @@ function AlertChips({ p, big }) {
 // plateau d'impression, regroupement), puis sa fiche sur le profil a lancer (d'ou l'ouvrir dans Bambu Studio)
 function NextUp({ p, onSheet }) {
   const j = p.jobs[0], mins = (new Date(j.start) - new Date(p.now)) / 60000;
+  // l'ouvrir directement (06/11/2026) : Handy au telephone, Bambu Studio a l'ordinateur, sur LE profil planifie (celui
+  // retenu dans « A faire », avec son imprimante) ; les plateaux regroupes viennent du meme profil, a regrouper dans Studio
+  const canHome = useCanMwHome();
+  const [busy, setBusy] = useState(false);
+  const mw = String(j.mw_id || j.design_id || "").split("~")[0];
+  const studio = async () => {
+    setBusy(true);
+    try {
+      const { data } = await client.get(`/makerworld/model/${mw}/studio/${j.iid}`, { params: j.dev_model ? { dev_model: j.dev_model } : {} });
+      const n = encodeURIComponent(`${data.url}&name=${String(data.name || "modele.3mf").replace(/[\\/:*?"<>|&\s#]/g, "_")}`);
+      launch(IS_MAC ? `bambustudioopen://${n}` : `bambustudio://open?file=${n}`);
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    setBusy(false);
+  };
+  const where = j.merged ? " : regroupe ses plateaux avant de lancer" : j.plates_total > 1 ? ` : lance le plateau ${j.plate}` : "";
+  const btn = { padding: "6px 12px", borderRadius: 11, cursor: "pointer", fontSize: 12.5, fontWeight: 900, textDecoration: "none",
+    display: "inline-flex", alignItems: "center", gap: 5 };
+  const open = canHome && j.iid && mw ? (IS_MOBILE
+    ? <a href={handyUrl(mw, { instance_id: j.iid })} target="_blank" rel="noopener noreferrer" data-tip={`Ouvrir le profil planifié dans Bambu Handy${where}`}
+      style={{ ...btn, border: "1px solid color-mix(in srgb, #22C55E 45%, var(--border))", background: "color-mix(in srgb, #22C55E 12%, var(--surface))", color: "color-mix(in srgb, #16A34A 75%, var(--text))" }}>📱 Ouvrir dans Handy</a>
+    : <button type="button" disabled={busy} onClick={studio} data-tip={`Ouvrir le profil planifié dans Bambu Studio${where}`}
+      style={{ ...btn, border: "1px solid color-mix(in srgb, #22C55E 45%, var(--border))", background: "color-mix(in srgb, #22C55E 12%, var(--surface))", color: "color-mix(in srgb, #16A34A 75%, var(--text))",
+        opacity: busy ? 0.6 : 1 }}>🖥️ {busy ? "Ouverture…" : "Ouvrir dans Studio"}</button>) : null;
   const todo = [
     j.load?.length > 0 && ["🧵", "color-mix(in srgb, #0891B2 78%, var(--text2))", <SwapLinks j={j}/>],
     j.bed_change && ["🔲", "#0369A1", bedTxt(j.bed_change).replace(/^🔲 /, "")],
@@ -130,9 +153,11 @@ function NextUp({ p, onSheet }) {
         <span style={{ flexShrink: 0 }}>{ic}</span><span style={{ color: c, minWidth: 0 }}>{t}</span></div>)
         : <div style={{ fontSize: 12.5, fontWeight: 700, color: "#16A34A" }}>✓ Rien à préparer : les bobines et le plateau sont en place</div>}
     </div>
-    <button type="button" onClick={() => onSheet(j)} style={{ alignSelf: "flex-start", padding: "6px 12px", borderRadius: 11, cursor: "pointer",
-      border: `1px solid color-mix(in srgb, ${C} 40%, var(--border))`, background: `color-mix(in srgb, ${C} 10%, var(--surface))`, color: "#4F46E5",
-      fontSize: 12.5, fontWeight: 900 }}>🧾 Sa fiche, sur le profil à lancer</button>
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      <button type="button" onClick={() => onSheet(j)} style={{ ...btn,
+        border: `1px solid color-mix(in srgb, ${C} 40%, var(--border))`, background: `color-mix(in srgb, ${C} 10%, var(--surface))`, color: "#4F46E5" }}>🧾 Sa fiche, sur le profil à lancer</button>
+      {open}
+    </div>
   </div>;
 }
 
