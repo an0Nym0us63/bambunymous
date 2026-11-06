@@ -220,7 +220,7 @@ function DaysOff({ list, set }) {
     </div>
   </div>;
 }
-export function PlanSettings({ s, onSave, onClose }) {
+export function PlanSettings({ s, dur, onSave, onClose }) {
   const [gap, setGap] = useState(String(s?.gap ?? 15));
   const [optMode, setOptMode] = useState(s?.opt_mode || "mix");
   const [autoNew, setAutoNew] = useState(s?.auto_new || "off");
@@ -228,6 +228,8 @@ export function PlanSettings({ s, onSave, onClose }) {
   const [run, setRun] = useState(s?.run || null);
   const [launch, setLaunch] = useState(s?.launch || null);
   const [loadWin, setLoadWin] = useState(s?.load_win || []);
+  const [durMode, setDurMode] = useState(s?.dur_mode || "off");
+  const [durPct, setDurPct] = useState(String(s?.dur_pct ?? 0));
   const [busy, setBusy] = useState(false);
   const range = (v, set, def, offTxt, onTxt) => <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -238,7 +240,7 @@ export function PlanSettings({ s, onSave, onClose }) {
       de <input type="time" value={v.from} onChange={e => set({ ...v, from: e.target.value })} style={tin}/>
       à <input type="time" value={v.to} onChange={e => set({ ...v, to: e.target.value })} style={tin}/></div>}
   </div>;
-  const save = async () => { setBusy(true); try { await onSave({ gap: Math.max(0, parseInt(gap) || 0), run, launch, opt_mode: optMode, auto_new: autoNew, days_off: daysOff, load_win: loadWin }); } finally { setBusy(false); } };
+  const save = async () => { setBusy(true); try { await onSave({ gap: Math.max(0, parseInt(gap) || 0), run, launch, opt_mode: optMode, auto_new: autoNew, days_off: daysOff, load_win: loadWin, dur_mode: durMode, dur_pct: parseInt(durPct) || 0 }); } finally { setBusy(false); } };
   const modes = (v, set, extra) => <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
     {[...(extra ? [extra] : []), ...OPT_MODES].map(([k, ic, l, tip]) => <button key={k} type="button" data-tip={tip} onClick={() => set(k)}
       style={{ ...seg, ...(v === k ? segOn : {}) }}>{ic} {l}</button>)}</div>;
@@ -260,6 +262,22 @@ export function PlanSettings({ s, onSave, onClose }) {
       <div style={lab}>▶ Heures de lancement</div>
       {range(launch, setLaunch, { from: "08:00", to: "00:00" }, "À toute heure", "Une plage")}
       <div style={hint}>Quand quelqu'un est là pour lancer. Avec 8 h – minuit, une impression peut finir à 2 h du matin, mais la suivante attend 8 h.</div>
+    </div>
+    <div>
+      {/* les durees (06/11/2026) : l'ecart mesure, en proportion, et le choix de le corriger */}
+      <div style={lab}>⏱ Durées des impressions</div>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>{dur?.n
+        ? <>Tes impressions durent en moyenne <b style={{ color: dur.pct > 0 ? "#EA580C" : dur.pct < 0 ? "#16A34A" : "var(--text)" }}>
+          {dur.pct > 0 ? `${dur.pct} % de plus` : dur.pct < 0 ? `${-dur.pct} % de moins` : "le temps prévu"}</b>{dur.pct ? " que prévu" : ""} (sur tes {dur.n} dernières réussies).</>
+        : "Pas encore assez d'impressions réussies pour mesurer l'écart."}</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        {[["off", "Telles quelles"], ["auto", `Corrigées${dur?.n ? ` (${dur.pct > 0 ? "+" : ""}${dur.pct} %)` : ""}`], ["manual", "À la main"]].map(([k, l]) =>
+          <button key={k} type="button" disabled={k === "auto" && !dur?.n} onClick={() => setDurMode(k)} style={{ ...seg, ...(durMode === k ? segOn : {}), ...(k === "auto" && !dur?.n ? { opacity: 0.5 } : {}) }}>{l}</button>)}
+        {durMode === "manual" && <><input inputMode="numeric" value={durPct} onChange={e => setDurPct(e.target.value.replace(/[^-\d]/g, "").slice(0, 3))} style={{ ...tin, width: 60 }}/>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>%</span></>}
+      </div>
+      <div style={hint}>En proportion de la durée : +5 %, c'est 3 min sur une heure et 30 min sur 10 h. Corrigées, chaque plateau prévu dure d'autant plus
+        (ou moins), et le planning tombe plus juste. L'impression en cours suit toujours l'imprimante.</div>
     </div>
     <div>
       <div style={lab}>🧵 Créneaux de chargement</div>

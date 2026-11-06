@@ -46,7 +46,11 @@ logger = logging.getLogger(__name__)
 KEY = "PRINT_PLAN"
 HORIZON_DAYS = 60
 SHIFT_MIN = 180          # un plateau « decale » : son depart a bouge d'au moins 3 h (06/11/2026)
-DEFAULTS = {"gap": 15, "run": None, "launch": None, "opt_mode": "mix", "auto_new": "off", "days_off": [], "load_win": []}
+DEFAULTS = {"gap": 15, "run": None, "launch": None, "opt_mode": "mix", "auto_new": "off", "days_off": [], "load_win": [],
+            "dur_mode": "off", "dur_pct": 0}
+# les durees (06/11/2026) : tes impressions durent souvent un peu plus (ou moins) que prevu, en proportion de leur duree.
+# dur_mode "off" : les durees telles quelles ; "auto" : corrigees de l'ecart mesure sur tes dernieres impressions ;
+# "manual" : de dur_pct % (de -30 a +60)
 # les creneaux de chargement (06/11/2026) : [{from, to}] ; vide, on charge a toute heure (de lancement). Sinon un plateau
 # qui demande de charger une bobine ne part que dans l'un d'eux (« je ne change de bobine que le matin et le soir »)
 # les jours particuliers (06/11/2026) : [{from, to, kind}] ; "absent" : aucun lancement ces jours-la (une impression
@@ -177,6 +181,13 @@ async def set_settings(body: dict) -> dict:
                 raise PlanError("Jour particulier : absent ou peu dispo")
             out.append({"from": min(a, b), "to": max(a, b), "kind": x["kind"], "note": str(x.get("note") or "")[:60]})
         d["days_off"] = sorted(out, key=lambda x: x["from"])
+    if body.get("dur_mode") in ("off", "auto", "manual"):
+        d["dur_mode"] = body["dur_mode"]
+    if "dur_pct" in body:
+        try:
+            d["dur_pct"] = max(-30, min(60, int(body.get("dur_pct") or 0)))
+        except (TypeError, ValueError):
+            raise PlanError("Durées : un pourcentage")
     if isinstance(body.get("load_win"), list):
         out = []
         for w in body["load_win"][:4]:
@@ -1111,10 +1122,54 @@ async def _context(tz: int | None):
         except Exception:
             logger.exception("[PLANNING] noms des filaments charges")
     jobs, changed = _jobs(q.get("models") or [], d, stock_of)
+    # les durees corrigees (06/11/2026) : en proportion de la duree de chaque plateau
+    st = await duration_stats()
+    f = dur_factor(d, st)
+    d["_dur"] = {**st, "mode": d.get("dur_mode") or "off", "factor": round(f, 3)}
+    if abs(f - 1) > 0.005:
+        for j in jobs:
+            j["est_seconds"] = j["seconds"]
+            j["seconds"] = int(j["seconds"] * f)
     d["_stock"] = await _stock_ledger(stock_of)
     live = _live()
     busy = now + timedelta(minutes=live[0]) if live else None
     return d, now, jobs, changed or tz is not None, loaded, live, busy
+
+
+_DUR = {"at": None, "v": None}
+
+
+async def duration_stats() -> dict:
+    """L'ecart entre la duree prevue et la duree reelle (06/11/2026), sur les 40 dernieres impressions reussies d'au
+    moins 20 min : la mediane du rapport (reelle, pauses deduites / prevue). Gardee une demi-heure."""
+    now = datetime.utcnow()
+    if _DUR["at"] and (now - _DUR["at"]).total_seconds() < 1800:
+        return _DUR["v"]
+    v = {"ratio": 1.0, "n": 0, "pct": 0}
+    try:
+        from sqlalchemy import select
+        from ..db.session import AsyncSessionLocal
+        from ..models.print_history import Print
+        async with AsyncSessionLocal() as db:
+            rows = (await db.execute(select(Print.estimated_seconds, Print.duration_seconds, Print.paused_seconds)
+                                     .where(Print.status == "SUCCESS", Print.estimated_seconds > 1200, Print.duration_seconds > 1200)
+                                     .order_by(Print.print_date.desc()).limit(40))).all()
+        rs = sorted(r for r in ((float(dur) - float(pz or 0)) / float(est) for est, dur, pz in rows) if 0.5 < r < 2.5)
+        if len(rs) >= 5:
+            m = rs[len(rs) // 2] if len(rs) % 2 else (rs[len(rs) // 2 - 1] + rs[len(rs) // 2]) / 2
+            v = {"ratio": round(m, 3), "n": len(rs), "pct": round((m - 1) * 100)}
+    except Exception:
+        logger.exception("[PLANNING] durees")
+    _DUR.update(at=now, v=v)
+    return v
+
+
+def dur_factor(d: dict, st: dict) -> float:
+    if d.get("dur_mode") == "auto":
+        return float(st.get("ratio") or 1.0)
+    if d.get("dur_mode") == "manual":
+        return 1 + int(d.get("dur_pct") or 0) / 100
+    return 1.0
 
 
 async def _stock_ledger(stock_of: dict) -> dict:
@@ -1265,6 +1320,7 @@ async def plan(tz: int | None = None) -> dict:
     return {"settings": {k: d[k] for k in DEFAULTS}, "now": now.isoformat(timespec="minutes"),
             "busy_until": busy.isoformat(timespec="minutes") if busy else None,
             "live": ({"name": live[1], "design_id": live[2], "remaining_min": live[0], **(await _live_print(d))} if live else None),
+            "dur": d.get("_dur"),
             "undo": ({"why": d["undo"][-1].get("why"), "at": d["undo"][-1].get("at")} if d["undo"] else None),
             "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix, gain), "status": status,
             "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),

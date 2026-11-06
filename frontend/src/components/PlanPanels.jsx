@@ -94,7 +94,8 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
       <PlateThumb j={j} size={64}/>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
         <span style={{ fontSize: 13, fontWeight: 900, color: "#6366F1" }}>{plateTxt(j)}{j.qty > 1 ? ` · ${j.copy}e sur ${j.qty}` : ""}</span>
-        {j.start && <span style={{ fontSize: 14, fontWeight: 900, color: "var(--text)" }}>{when(j.start, now)} → {when(j.end, now)} <span style={{ fontSize: 12, color: "var(--muted)" }}>{hm(j.seconds)}</span></span>}
+        {j.start && <span style={{ fontSize: 14, fontWeight: 900, color: "var(--text)" }}>{when(j.start, now)} → {when(j.end, now)} <span style={{ fontSize: 12, color: "var(--muted)" }}>{hm(j.seconds)}</span>
+          {j.est_seconds ? <span data-tip="Durée corrigée selon tes impressions passées (Consignes › Durées)" style={{ fontSize: 11, color: "var(--muted)" }}> · {hm(j.est_seconds)} annoncé</span> : null}</span>}
         <span style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
           {j.locked ? <span style={{ fontSize: 11, fontWeight: 900, color: "#4F46E5" }}>🔒 jour et heure figés</span>
             : j.pinned && <span style={{ fontSize: 11, fontWeight: 900, color: "#7C3AED" }}>📌 jour figé</span>}
