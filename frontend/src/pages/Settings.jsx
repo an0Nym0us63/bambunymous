@@ -39,6 +39,7 @@ import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
 import { refreshUpdates } from "../utils/updates";
 import { egg, tapper, useEggFound } from "../eggs";
+import { diagGet, diagSet } from "../utils/diag";
 
 const inp = {
   width:"100%", background:"var(--surface)", border:"1px solid var(--border)",
@@ -1147,6 +1148,26 @@ function RecalculateSection() {
 // L'espace de stockage : un bouton, et la fenetre (anneau par sorte de fichiers, disque, impressions lourdes)
 // La vitesse du serveur (26/10/2026) : pour chaque route de l'API, le delai de reponse (jusqu'au premier
 // octet) depuis le demarrage, les plus lentes d'abord. Sert a optimiser ce qui est lent pour de vrai.
+// Le diagnostic d'affichage (07/11/2026) : pour trouver ce qui rend la page blanche quelques secondes apres une
+// capture d'ecran ; chaque interrupteur ne vaut que pour cet appareil
+function DiagSection() {
+  const [o, setO] = useState(() => diagGet());
+  const row = (k, label, hint, reload) => <label key={k} style={{ display:"flex", gap:10, alignItems:"flex-start", padding:"8px 0", cursor:"pointer" }}>
+    <input type="checkbox" checked={!!o[k]} onChange={e => { setO(diagSet(k, e.target.checked)); if (reload) window.location.reload(); }} style={{ marginTop:3 }}/>
+    <span><span style={{ display:"block", fontSize:13.5, fontWeight:800, color:"var(--text)" }}>{label}</span>
+      <span style={{ display:"block", fontSize:12, color:"var(--muted)", lineHeight:1.4 }}>{hint}</span></span></label>;
+  return (
+    <div className="card" style={card}>
+      <p style={cardTitle}>Diagnostic d'affichage</p>
+      <p style={{ fontSize:12.5, color:"var(--muted)", margin:"0 0 6px", lineHeight:1.45 }}>
+        Pour chercher ce qui rend la page blanche quelques secondes (après une capture d'écran) : coupe un réglage, refais une capture, regarde si ça change. Ces réglages ne valent que pour cet appareil.</p>
+      {row("noblur", "Sans flou", "Les barres du haut et du bas, au fond flouté, deviennent opaques.")}
+      {row("noanim", "Sans animations", "Plus aucune animation ni transition dans l'appli.")}
+      {row("nofx", "Sans les effets des succès", "Fêtes de cartes, annonces de grade, nouvelles et surprises ne sont plus chargées (l'appli se recharge).", true)}
+    </div>
+  );
+}
+
 function PerfSection() {
   const [d, setD] = useState(null);
   const [open, setOpen] = useState(false);
@@ -2306,6 +2327,7 @@ export default function Settings() {
       <AdminOnly><div className="wide-flow">
         <StorageSection/>
         <PerfSection/>
+        <DiagSection/>
         <ArchiveSection/>
         <SdProbeSection/>
         <SourceBackfillSection/>
