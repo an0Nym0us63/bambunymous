@@ -9,6 +9,7 @@ import { installDesktopHScroll } from "./utils/desktopHScroll";
 import { installChunkReload } from "./utils/importRetry";
 import { installDragClickGuard } from "./utils/dragClickGuard";
 import { installEscClose } from "./utils/escClose";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 // Coquille Android : les rangees horizontales n'arment plus le tirer-pour-rafraichir.
 installPullRefreshGuard();
@@ -33,7 +34,8 @@ const savedTheme = localStorage.getItem("bambu-theme") || "dark";
 document.documentElement.setAttribute("data-theme", savedTheme === "light" ? "light" : "");
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<BrowserRouter><App /></BrowserRouter>);
+// le dernier filet (06/11/2026) : une erreur hors des pages (barre, menu) ne laisse plus une page blanche
+root.render(<BrowserRouter><ErrorBoundary where="appli"><App /></ErrorBoundary></BrowserRouter>);
 
 // Masquer le splash screen une fois React monté
 requestAnimationFrame(() => {

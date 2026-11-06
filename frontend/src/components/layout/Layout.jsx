@@ -25,6 +25,7 @@ import { Hide } from "../Cachettes";
 import { MwLinkHost } from "../MwCreatorPage";
 import { useIsAdmin } from "../../store/auth";
 import { useUpdates, updatesTip } from "../../utils/updates";
+import ErrorBoundary from "../ErrorBoundary";
 
 // le menu : propre a chaque compte (05/11/2026, utils/navMenu.js) ; chaque page a sa couleur (celle de ses onglets)
 // Titre affiche dans le header mobile : evite de redonder le <h1> de chaque page.
@@ -374,7 +375,7 @@ export default function Layout() {
 
         <main className="page-content" style={S.page}>
           {/* une page chargee a la demande : la place reste tenue pendant les quelques ms */}
-          <React.Suspense fallback={<div style={{ minHeight: "70vh" }}/>}><Outlet /></React.Suspense></main>
+          <ErrorBoundary where={`page ${pathname}`} resetKey={pathname}><React.Suspense fallback={<div style={{ minHeight: "70vh" }}/>}><Outlet /></React.Suspense></ErrorBoundary></main>
         <PrankHost/>
         <CardFx/>
         <GradeFx/>

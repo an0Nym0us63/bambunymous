@@ -8,6 +8,7 @@ import { toast } from "../store/toast";
 import { TILES, TILE_NEEDS, useTilesData, tileWaiting, TileWaiting } from "./HomeTiles";
 import { showConfirm } from "../utils/dialog";
 import { useIsAdmin } from "../store/auth";
+import ErrorBoundary from "./ErrorBoundary";
 
 // La grille de l'accueil, a la carte (22/10/2026). Une disposition par nombre
 // de colonnes (1 a 4), propre a chaque compte ; celle a une colonne est aussi
@@ -308,7 +309,8 @@ function Cell({ item, def, edit, children, actions, options, drag, selected, onS
           cursor: "pointer",
           opacity: drag?.dragging ? 0.4 : 1 } : {}) }}>
       <div ref={body} style={{ height: auto ? "auto" : "100%", pointerEvents: edit ? "none" : undefined, filter: edit ? "saturate(0.85)" : undefined }}>
-{children}</div>
+{/* une tuile en erreur ne fait plus tomber tout l'accueil (06/11/2026) */}
+<ErrorBoundary variant="tile" where={`tuile ${item?.id || ""}`}>{children}</ErrorBoundary></div>
       {edit && !selected && (
         <span style={{ position: "absolute", left: 8, top: 8, zIndex: 3, display: "inline-flex", alignItems: "center", gap: 4, maxWidth: "calc(100% - 16px)",
           padding: "3px 9px 3px 6px", borderRadius: 20, background: "rgba(15,23,42,0.82)", color: "#fff", fontSize: 11.5, fontWeight: 800,
