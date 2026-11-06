@@ -123,6 +123,7 @@ async def _save(d: dict, undo: str | None = None, merge: bool = False) -> None:
         if any(state[k] != d.get(k) for k in UNDO_KEYS):
             d["undo"] = ([x for x in d.get("undo") or [] if isinstance(x, dict)] + [
                 {"at": datetime.utcnow().isoformat(timespec="seconds"), "why": undo, "state": state}])[-10:]
+    _PLAN_MEMO["key"] = None
     async with AsyncSessionLocal() as db:
         # les cles « _… » ne servent qu'au calcul (le stock du moment) : jamais enregistrees
         await set_setting(db, KEY, json.dumps({k: v for k, v in d.items() if not k.startswith("_")}, ensure_ascii=False))
@@ -956,7 +957,7 @@ def advice(placed: list, d: dict, now: datetime, dls: list | None = None, fix=No
     def good(action):
         if gain is None:
             return True
-        if tries[0] >= 24:                            # le temps de la page : au-dela, on ne conseille plus
+        if tries[0] >= 14:                            # le temps de la page : au-dela, on ne conseille plus
             return False
         tries[0] += 1
         return gain(action) >= 20
@@ -1466,8 +1467,53 @@ async def _stock_ledger(stock_of: dict) -> dict:
     return out
 
 
+_PLAN_MEMO: dict = {"key": None, "at": 0.0, "out": None}
+
+
+async def _plan_key(tz) -> tuple:
+    """Ce dont depend le planning, en bref (06/11/2026) : ses reglages enregistres, « A faire » (son dernier calcul),
+    l'etat de l'imprimante et de l'AMS, la minute, le fuseau."""
+    raw = json.dumps(await _load(), sort_keys=True, default=str)
+    try:
+        from . import mw_queue as Q
+        q = (Q._CACHE[0], id(Q._CACHE[1]))
+    except Exception:
+        q = None
+    try:
+        from ..core.mqtt import get_state
+        s = get_state()
+        st = (s.status, s.job_id, int(s.progress or 0) // 2, s.remaining_minutes,
+              tuple((a.id, t.id, t.spool_id, t.empty) for a in (s.ams_list or []) for t in a.trays or []))
+    except Exception:
+        st = None
+    return (hash(raw), q, st, datetime.now().strftime("%Y%m%d%H%M"), tz)
+
+
 async def plan(tz: int | None = None) -> dict:
+    """Le planning (memorise 15 s, 06/11/2026 : le calendrier, la tuile, la tache de fond et les notifications le
+    recalculaient chacun, 0,7 s a chaque fois) ; rien de ce dont il depend n'a change dans la cle, sinon on refait."""
+    import copy
+    import time
+    key = await _plan_key(tz)
+    m = _PLAN_MEMO
+    if m["key"] == key and time.time() - m["at"] < 15 and m["out"] is not None:
+        return copy.deepcopy(m["out"])
+    t0 = time.perf_counter()
+    out = await _plan(tz)
+    out["timing_ms"] = {**(out.get("timing_ms") or {}), "total": round((time.perf_counter() - t0) * 1000)}
+    m.update(key=await _plan_key(tz), at=time.time(), out=copy.deepcopy(out))
+    return out
+
+
+def forget_plan() -> None:
+    _PLAN_MEMO["key"] = None
+
+
+async def _plan(tz: int | None = None) -> dict:
+    import time
+    tm, t0 = {}, time.perf_counter()
     d, now, jobs, dirty, loaded, live, busy = await _context(tz)
+    tm["context"] = round((time.perf_counter() - t0) * 1000)
     jobs = _ordered(jobs, d["order"], d["pins"])
     keys = {j["key"] for j in jobs}
     # les poses de travaux sortis du planning (imprimes, retires de « A faire ») s'en vont
@@ -1597,12 +1643,18 @@ async def plan(tz: int | None = None) -> dict:
         o = ks + [j["key"] for j in jobs if j["key"] not in set(ks)]
         rr = place(_ordered(jobs, o, d["pins"]), d, now, busy, loaded, _slots())
         return all(x["ok"] for x in deadlines(rr["jobs"], d, now) if x["keys"] and x["keys"][0] in set(ks))
-    return {"settings": {k: d[k] for k in DEFAULTS}, "now": now.isoformat(timespec="minutes"),
+    t1 = time.perf_counter()
+    tm["place"] = round((t1 - t0) * 1000) - tm["context"]
+    adv = advice(r["jobs"], d, now, dls, fix, gain)
+    t2 = time.perf_counter()
+    madv = _merge_advice(r["jobs"])
+    tm.update(advice=round((t2 - t1) * 1000), merge=round((time.perf_counter() - t2) * 1000))
+    return {"settings": {k: d[k] for k in DEFAULTS}, "now": now.isoformat(timespec="minutes"), "timing_ms": tm,
             "busy_until": busy.isoformat(timespec="minutes") if busy else None,
             "live": ({"name": live[1], "design_id": live[2], "remaining_min": live[0], **(await _live_print(d))} if live else None),
             "dur": d.get("_dur"), "summary": plan_metrics(r, d, now), "bed_now": d.get("_bed_now"), "fcolors": d.get("_fcol") or {},
             "undo": ({"why": d["undo"][-1].get("why"), "at": d["undo"][-1].get("at")} if d["undo"] else None),
-            "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix, gain) + _merge_advice(r["jobs"]),
+            "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": adv + madv,
             "status": status,
             "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),
             "blocked": [{k: b.get(k) for k in ("key", "design_id", "title", "cover", "thumb", "plate", "plate_name", "plates_total", "copy", "qty",
