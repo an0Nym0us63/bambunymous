@@ -382,10 +382,19 @@ export function PoolSummary({ jobs, blocked = [], now, onOpenModel, bulk }) {
 // La fiche d'un modele du planning (06/11/2026) : en haut ce qui vaut pour tout le modele (caler tous ses plateaux
 // sur un jour, en tete, plus tard, d'une traite, date limite…), dessous chacun de ses plateaux, a toucher pour ses
 // actions a lui. Elle reste ouverte apres une action : on voit les plateaux bouger.
-export function ModelSheet({ g, now, edit, onClose, onPick, act, jobs }) {
+export function ModelSheet({ g: g0, now, edit, onClose, onPick, act: act0, jobs }) {
   const { busy, run, row, dateRow } = useActRows(null);
   const [slot, setSlot] = useState(false);            // caler tout le modele dans une journee (06/11/2026)
-  if (!g) return null;
+  // ses variantes de couleur (06/11/2026 : caler 11 echantillons sur un jour se faisait un par un) : le meme modele et le
+  // meme profil, d'autres couleurs ; « avec ses variantes » les traite d'un coup (par defaut)
+  const [withVar, setWithVar] = useState(true);
+  if (!g0) return null;
+  const f0 = g0.jobs[0] || {};
+  const sibs = (jobs || []).filter(j => j.design_id !== g0.id && f0.iid && j.iid === f0.iid && (j.mw_id || String(j.design_id).split("~")[0]) === (f0.mw_id || String(g0.id).split("~")[0]));
+  const vdids = [...new Set(sibs.map(j => j.design_id))];
+  const on = withVar && vdids.length > 0;
+  const g = on ? { ...g0, jobs: [...g0.jobs, ...sibs] } : g0;
+  const act = on && act0.forDids ? act0.forDids([g0.id, ...vdids]) : act0;
   const x = gInfo(g), f = x.f, un = unretained(f), free = x.ok.filter(j => !j.locked);
   if (slot && jobs) return <SlotPicker j={f} jobs={jobs} now={now} own={g.jobs.map(j => j.key)} onClose={() => setSlot(false)}
     title={`Placer ${free.length > 1 ? `ses ${free.length} plateaux` : "le plateau"}`}
@@ -416,6 +425,11 @@ export function ModelSheet({ g, now, edit, onClose, onPick, act, jobs }) {
     </div>
     {edit && <>
       {sec("Tout le modèle")}
+      {vdids.length > 0 && <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 11, marginBottom: 6, cursor: "pointer",
+        border: `1px solid ${withVar ? "color-mix(in srgb, #8B5CF6 40%, var(--border))" : "var(--border)"}`, background: withVar ? "color-mix(in srgb, #8B5CF6 8%, var(--surface))" : "var(--surface)" }}>
+        <input type="checkbox" checked={withVar} onChange={e => setWithVar(e.target.checked)}/>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text)" }}>🎨 Avec ses {vdids.length} autre{vdids.length > 1 ? "s" : ""} variante{vdids.length > 1 ? "s" : ""} de couleur</span>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>· placer, figer, en tête… pour toutes d'un coup</span></label>}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {un ? <div style={{ padding: "10px 12px", borderRadius: 12, border: "1px dashed color-mix(in srgb, #94A3B8 60%, var(--border))", background: "var(--surface2)",
             fontSize: 12, fontWeight: 700, color: "var(--text2)", lineHeight: 1.4 }}>○ Pas retenu : ses plateaux passent après tous les plateaux retenus, sans jour.

@@ -43,10 +43,13 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
   // un objet en tete de file (pour tenir sa date limite)
   const toFront = ks => arrange({ order: [...ks, ...keys.filter(k => !ks.includes(k))] });
   // tout un modele (06/11/2026) : ses plateaux libres (pas figes), dans leur ordre
-  const modelKeys = did => (pd?.jobs || []).filter(j => j.design_id === did && !j.locked).map(j => j.key);
-  const modelAct = did => {
-    const ks = modelKeys(did), j0 = (pd?.jobs || []).find(j => j.design_id === did) || (pd?.blocked || []).find(j => j.design_id === did);
+  // dids (06/11/2026) : le modele et ses variantes de couleur, traites ensemble (caler 11 echantillons sur un jour d'un coup)
+  const modelKeys = (did, dids = [did]) => (pd?.jobs || []).filter(j => dids.includes(j.design_id) && !j.locked).map(j => j.key);
+  const modelAct = (did, dids = [did]) => {
+    const ks = modelKeys(did, dids), j0 = (pd?.jobs || []).find(j => j.design_id === did) || (pd?.blocked || []).find(j => j.design_id === did);
     return {
+      // le meme, avec ces lignes (ses variantes de couleur) en plus
+      forDids: ds => modelAct(did, ds),
       // caler sur un jour : en tete de ce jour, a la suite ; ce qui n'y tient pas glisse au lendemain
       dayAll: day => arrange({ order: [...ks, ...keys.filter(k => !ks.includes(k))], pins: Object.fromEntries(ks.map(k => [k, day])) }),
       // en tete : les plateaux au jour fige y restent
@@ -71,12 +74,15 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
       },
       // figer tout le modele (06/11/2026) : libre, le jour, ou le jour et l'heure (ses plateaux non planifiables a part)
       freeze: async mode => {
-        const all = (pd?.jobs || []).filter(j => j.design_id === did), locked = all.filter(j => j.locked).map(j => j.key);
+        const all = (pd?.jobs || []).filter(j => dids.includes(j.design_id)), locked = all.filter(j => j.locked).map(j => j.key);
         if (mode === "time") return send("/makerworld/plan/lock", { keys: all.map(j => j.key), lock: true }, "post").then(ok => { if (ok) egg("planning_fige"); });
         if (locked.length && !(await send("/makerworld/plan/lock", { keys: locked, lock: false }, "post"))) return;
         return arrange({ pins: Object.fromEntries(all.map(j => [j.key, mode === "day" ? j.day : null])), why: "Figer" });
       },
       pinAll: () => arrange({ pins: Object.fromEntries((pd?.jobs || []).filter(j => ks.includes(j.key) && !j.pinned && j.day).map(j => [j.key, j.day])) }),
+      // plus tard, tout le modele : chacune de ses lignes (ses variantes aussi)
+      ...(dids.length > 1 ? { laterAll: async () => { for (const ds of dids) { const x = (pd?.jobs || []).find(j => j.design_id === ds);
+        if (x && !(await send("/makerworld/plan/later", { key: x.key, whole: true }, "post"))) return; } egg("planning_glisse"); } } : {}),
       laterAll: () => j0 && send("/makerworld/plan/later", { key: j0.key, whole: true }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
       chain: mode => send("/makerworld/plan/chain", { design_id: did, mode }, "post").then(ok => { if (ok && mode) egg("planning_traite"); }),
       due: v => setDue(did, v),
