@@ -1755,7 +1755,8 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
             continue
         if ch.get("fil") is not None and len(h6(ch.get("color"))) == 6:
             out[a] = h6(ch["color"])
-            detail = [d for d in detail if d["from"] != a] + [{"from": a, "to": out[a], "e": e, "how": "choisi", "fil": ch["fil"], "todo": True, **grp}]
+            detail = [d for d in detail if d["from"] != a] + [{"from": a, "to": out[a], "e": e, "how": "choisi", "fil": ch["fil"], "todo": True,
+                                                               "finish": ch.get("finish"), **grp}]
             continue
         try:
             cp, es = int(ch.get("print")), int(ch.get("slot"))
@@ -2077,7 +2078,9 @@ async def mw_model_3d_colors_set(body: dict = Body(...), _=Depends(require_own_a
         # un filament retenu dans « A faire » (06/11/2026) : sa couleur, gardee avec lui
         col = str(body.get("color") or "").lstrip("#")[:6].upper()
         try:
-            choice = {"fil": int(body.get("fil")), "color": col}
+            # sa finition aussi (06/11/2026 : un phosphorescent choisi ici ne luisait pas, ni « lumiere eteinte »)
+            fin = str(body.get("finish") or "")[:20] or None
+            choice = {"fil": int(body.get("fil")), "color": col, **({"finish": fin} if fin else {})}
         except (TypeError, ValueError):
             raise HTTPException(400, "Choix incomplet")
         if len(col) != 6:

@@ -38,7 +38,7 @@ export function ColorPairs({ detail = [], options = [], chosen = {}, scope = nul
       .filter(o => { const k = `${o.fil}|${o.todo}`; if (seenT.has(k)) return false; seenT.add(k); return true; })
       .map(o => ({ icon: <Sw c={o.color} size={16}/>, label: `${o.name}${o.kind ? ` — ${o.kind}` : ""}`,
         hint: `${o.origin === x.from ? "prévu pour cette couleur · " : ""}À faire${o.label ? ` · ${o.label}` : ""}`,
-        onClick: () => onChoose(x.from, { fil: o.fil, color: o.color }) }));
+        onClick: () => onChoose(x.from, { fil: o.fil, color: o.color, finish: o.finish || null }) }));
     const head = t => ({ label: t, disabled: true });
     openMenu(e, { title: `Couleur n°${x.e} du créateur : quelle bobine la remplace ?`, items: [
       // d'abord ce qui est imprime ; puis ce qui est prevu (06/11/2026 : pour l'assemblage et sa vignette avant d'avoir tout imprime)
