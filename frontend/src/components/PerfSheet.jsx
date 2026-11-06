@@ -102,23 +102,6 @@ function LoopView({ loop }) {
           </div>))}
       </div>
     </details>}
-    {/* ce que les appareils ont mesure a leur retour au premier plan (07/11/2026) */}
-    {loop.client?.length > 0 && <details open style={{ padding: "8px 12px", borderRadius: 14, background: "var(--surface2)" }}>
-      <summary style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text2)", cursor: "pointer" }}>Retours au premier plan ({loop.client.length})</summary>
-      <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "6px 0", lineHeight: 1.4 }}>
-        Mesuré par l'appareil pendant 8 s : avant la première image, le plus long trou entre deux images, et le temps pris par le code de la page.
-        Long trou avec beaucoup de code : c'est l'appli ; long trou sans code : c'est le dessin.</p>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {loop.client.map((c, i) => (
-          <div key={i} style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", borderTop: i ? "1px solid var(--border)" : "none", paddingTop: i ? 6 : 0 }}>
-            <div style={{ color: "var(--text2)" }}>{ago(c.at)} · {c.why}{c.hidden_ms > 0 ? ` (caché ${perfMs(c.hidden_ms)})` : ""}{c.gap > 0 ? ` (trou ${perfMs(c.gap)})` : ""} · {c.path} · {c.user}</div>
-            <div>1re image <b style={{ color: tone(c.first_frame) }}>{perfMs(c.first_frame)}</b> · pire trou <b style={{ color: tone(c.max_gap) }}>{perfMs(c.max_gap)}</b>
-              {" "}· code <b style={{ color: tone(c.long_ms) }}>{perfMs(c.long_ms)}</b> ({c.long_n} tâches) · {c.frames} images</div>
-            {c.top?.length > 0 && <div style={{ fontFamily: "monospace", fontSize: 10.5 }}>{c.top.map(t => `${t.d} ms à +${t.at} ms${t.n ? ` (${t.n})` : ""}`).join(" · ")}</div>}
-            <div style={{ fontSize: 10, opacity: 0.7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.ua}</div>
-          </div>))}
-      </div>
-    </details>}
   </>);
 }
 
