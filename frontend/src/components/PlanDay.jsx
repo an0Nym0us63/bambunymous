@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiThumb, apiUrl } from "../api/client";
-import { colorBg, parseColorsList } from "../utils/colors";
+import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import MwImg from "./MwImg";
 
 // Le planning des impressions (05/11/2026) : les briques du calendrier. La journee en frise (heures de fonctionnement,
@@ -251,13 +251,26 @@ export const swapLong = j => !j.load?.length ? "" : j.load.map((x, i) => j.unloa
 // le plateau d'impression (06/11/2026) : son nom, et le changement a faire avant un plateau du planning
 export const BED_NAMES = { textured: "PEI texturé", supertack: "SuperTack", cool: "Cool Plate", hot: "PEI lisse", eng: "Engineering" };
 export const bedTxt = ch => ch ? `🔲 Mets le ${BED_NAMES[ch.to] || ch.to}${ch.from ? ` (à la place du ${BED_NAMES[ch.from] || ch.from})` : ""}` : "";
-// un filament nomme en entier (« TPU 95A Bambu · Noir »), qui ouvre sa fiche (06/11/2026)
+// les couleurs des filaments du planning (06/11/2026), rendues par le serveur avec le planning : chaque page qui le lit
+// les donne (setFilColors) ; FilLink y prend la pastille
+const FCOL = {};
+export const setFilColors = m => { if (m) Object.assign(FCOL, m); };
+export function FilDot({ id, size = 10 }) {
+  const c = FCOL[id];
+  if (!c) return null;
+  return <span aria-hidden="true" style={{ display: "inline-block", width: size, height: size, borderRadius: "50%", verticalAlign: "-1px", marginRight: 4, flexShrink: 0,
+    boxShadow: "inset 0 0 0 1px rgba(0,0,0,.18)", ...colorBg(parseColorsList(c.color, c.colors_array), c.multicolor_type, finishOf(c), { size }) }}/>;
+}
+// un filament nomme en entier (« TPU 95A Bambu · Noir »), avec sa pastille, qui ouvre sa fiche (06/11/2026)
 export function FilLink({ id, label }) {
   const nav = useNavigate();
   if (!id) return <>{label}</>;
   return <span role="link" tabIndex={0} data-tip="Ouvrir la fiche du filament" onClick={e => { e.stopPropagation(); nav(`/filaments?id=${id}`); }}
-    style={{ cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>{label}</span>;
+    style={{ cursor: "pointer", whiteSpace: "normal" }}><FilDot id={id}/><span style={{ textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>{label}</span></span>;
 }
+// le changement de bobine, en court et en pastilles : « ● X ⇄ ● Y », « ● X (place libre) »
+export const SwapShort = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={j.load_ids?.[i]} label={x}/>
+  {j.unload?.[i] ? <> ⇄ <FilLink id={j.unload_ids?.[i]} label={j.unload[i]}/></> : j.free_slot ? " (place libre)" : ""}</React.Fragment>)}</>;
 export const FilLinks = ({ labels, ids }) => <>{(labels || []).map((l, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={ids?.[i]} label={l}/></React.Fragment>)}</>;
 // le changement de bobine en phrase, ses filaments cliquables : « charger X a la place de Y »
 export const SwapLinks = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}charger <FilLink id={j.load_ids?.[i]} label={x}/>
@@ -503,7 +516,7 @@ export function NowNextTiles({ pd, onOpenPrint, onPickJob, wide }) {
           <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             <span style={{ color: "var(--text2)" }}>{whenTxt(j.start, now)} → {whenTxt(j.end, now)}</span> · {hm(j.seconds)}
             {j.bed_change ? <span style={{ color: "#0369A1" }}> · 🔲 {BED_NAMES[j.bed_change.to] || j.bed_change.to}</span> : ""}
-            {j.load?.length ? <span style={{ color: "#EA580C" }}> · 🧵 {swapTxt(j)}</span> : ""}
+            {j.load?.length ? <span style={{ color: "#EA580C" }}> · 🧵 <SwapShort j={j}/></span> : ""}
             {j.runout?.length ? <span style={{ color: "#B45309" }}> · 🔄 {j.runout.map(r => r.name).join(", ")}</span> : ""}</span>
         </span>
       </button>)}

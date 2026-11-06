@@ -1203,10 +1203,14 @@ async def _context(tz: int | None):
         ids = list({int(k) for k in stock_of} | {int(f) for f in loaded})
         if ids:
             async with AsyncSessionLocal() as db:
-                for fid, nm, mt, ft, br in (await db.execute(select(Filament.id, Filament.name, Filament.material, Filament.fila_type,
-                                                                    Filament.manufacturer).where(Filament.id.in_(ids)))).all():
+                for fid, nm, mt, ft, br, col, arr, mct, fin in (await db.execute(select(
+                        Filament.id, Filament.name, Filament.material, Filament.fila_type, Filament.manufacturer, Filament.color,
+                        Filament.colors_array, Filament.multicolor_type, Filament.fila_finish).where(Filament.id.in_(ids)))).all():
                     d["_names"][int(fid)] = fil_label(nm, mt, ft, br)
                     d["_ftype"][int(fid)] = (mt, ft)
+                    # sa pastille (06/11/2026) : couleurs, multicolore, finition
+                    d.setdefault("_fcol", {})[int(fid)] = {"color": col, "colors_array": arr, "multicolor_type": mct, "fila_finish": fin,
+                                                          "name": nm, "fila_type": ft}
     except Exception:
         logger.exception("[PLANNING] noms des filaments")
     jobs, changed = _jobs(q.get("models") or [], d, stock_of)
@@ -1422,7 +1426,7 @@ async def plan(tz: int | None = None) -> dict:
     return {"settings": {k: d[k] for k in DEFAULTS}, "now": now.isoformat(timespec="minutes"),
             "busy_until": busy.isoformat(timespec="minutes") if busy else None,
             "live": ({"name": live[1], "design_id": live[2], "remaining_min": live[0], **(await _live_print(d))} if live else None),
-            "dur": d.get("_dur"), "summary": plan_metrics(r, d, now), "bed_now": d.get("_bed_now"),
+            "dur": d.get("_dur"), "summary": plan_metrics(r, d, now), "bed_now": d.get("_bed_now"), "fcolors": d.get("_fcol") or {},
             "undo": ({"why": d["undo"][-1].get("why"), "at": d["undo"][-1].get("at")} if d["undo"] else None),
             "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": advice(r["jobs"], d, now, dls, fix, gain), "status": status,
             "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),

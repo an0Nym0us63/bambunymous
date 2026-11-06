@@ -17,6 +17,7 @@ import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
 import { useNavigate } from "react-router-dom";
 import { usePlanActs } from "./planActs";
 import { JobSheet, ModelSheet, poolGroups, prioOf, UndoPill, PRIOS } from "./PlanPanels";
+import { setFilColors } from "./PlanDay";
 import Model3D from "./Model3D";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import { moneyVal } from "../utils/money";
@@ -206,6 +207,7 @@ export default function MwQueue() {
     client.get("/makerworld/plan", { params: { tz: -new Date().getTimezoneOffset() } }).then(({ data }) => { if (alive) setPd(data); }).catch(() => {});
     return () => { alive = false; };
   }, [reload]);
+  setFilColors(pd?.fcolors);
   const plan = useMemo(() => {
     if (!pd) return null;
     const by = {};

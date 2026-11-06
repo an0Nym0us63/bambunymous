@@ -1878,8 +1878,35 @@ function trayHex(t) {
 // toute la largeur sur une rangee : un bandeau. La vignette (un clic l'ouvre en grand),
 // le nom, le pourcentage en grand, le temps restant, l'heure de fin, la couche, la barre ;
 // plus large, les temperatures et la bobine en cours a droite
+// le plateau d'impression en place (06/11/2026) : relu toutes les 5 minutes et quand l'impression change ; rien sans
+// plateaux declares (ou sans le droit MakerWorld)
+const PLATE_SHORT = { textured: "PEI tex.", supertack: "SuperTack", cool: "Cool", hot: "PEI lisse", eng: "Eng." };
+const PLATE_CACHE = { at: 0, v: null };
+function useMountedPlate(key) {
+  const [v, setV] = useState(PLATE_CACHE.v);
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      if (Date.now() - PLATE_CACHE.at < 60000 && PLATE_CACHE.v !== undefined) { setV(PLATE_CACHE.v); return; }
+      client.get("/makerworld/plan/plates").then(r => {
+        const m = r.data?.mounted, lbl = m?.kind && (r.data.kinds || []).find(k => k.kind === m.kind)?.label;
+        PLATE_CACHE.at = Date.now();
+        PLATE_CACHE.v = (r.data?.plates || []).length && m?.kind ? { kind: m.kind, label: lbl || m.kind, name: m.name, how: m.how } : null;
+        if (alive) setV(PLATE_CACHE.v);
+      }).catch(() => { PLATE_CACHE.at = Date.now(); PLATE_CACHE.v = null; });
+    };
+    load();
+    const t = setInterval(() => { PLATE_CACHE.at = 0; load(); }, 300000);
+    return () => { alive = false; clearInterval(t); };
+  }, [key]);
+  return v;
+}
+const IcoPlate = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+  strokeLinejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h.01M11 14h.01M15 14h.01"/></svg>;
+
 function PrinterStrip({ status, showFin = true, showLayer = true }) {
   const info = useLivePrint(status);
+  const plate = useMountedPlate(info?.id);
   const [big, setBig] = useState(false);
   const [pop, setPop] = useState(false);
   const box = useRef(null);
@@ -1918,6 +1945,9 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
     {nozzles.map(n => <React.Fragment key={n.id}>{tempItem(IcoNozzle, nozzles.length > 1 ? `Buse ${n.id === 1 ? "G" : "D"}` : "Buse", n.temp, n.target, "#ea580c", size, target)}</React.Fragment>)}
     {tempItem(IcoBed, "Plateau", status?.bed_temp, status?.target_bed_temp, "#dc2626", size, target)}
     {status?.chamber_temp > 0 && tempItem(IcoChamber, "Chambre", status.chamber_temp, status.target_chamber_temp, "#ca8a04", size, target)}
+    {plate && <span data-pk="" data-tip={`Plateau en place : ${plate.label}${plate.name ? ` « ${plate.name} »` : ""}${plate.how === "printer" ? " (reconnu par l'imprimante)" : " (celui de la dernière impression)"}`}
+      style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: size, fontWeight: 800, whiteSpace: "nowrap", color: "#0369A1" }}><IcoPlate/>
+      {PLATE_SHORT[plate.kind] || plate.label}{plate.name && target ? <span style={{ fontWeight: 700, color: "var(--muted)" }}> · {plate.name}</span> : null}</span>}
     {status?.connected && <PrinterFlags status={status} size={size + 1}/>}
   </span>;
   // la ligne du bas (toute la largeur) : la couche et les temperatures, quand il n'y a pas de colonne a droite

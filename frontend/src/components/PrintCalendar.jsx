@@ -11,7 +11,7 @@ import { usePlanActs } from "./planActs";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
 import { UndoPill, PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, poolGroups, BlockedList, LowStockBanner } from "./PlanPanels";
 import { PlanDashboard, Legend } from "./PlanDay";
-import { OPT_MODES, DAY_KIND, dayKindOf, DayStrip, onDay, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained, isFinal } from "./PlanDay";
+import { OPT_MODES, DAY_KIND, dayKindOf, DayStrip, onDay, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained, isFinal, setFilColors } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
 // chacune, liseree de son etat) posee sur la barre de ses heures machine (une impression qui
@@ -98,6 +98,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   // le planning (05/11/2026) : « A faire » plateau par plateau, pose par le serveur selon les consignes
   const [pd, setPd] = useState(() => cacheOf().pd);
   useEffect(() => { if (pd && pd.jobs) cacheOf().pd = pd; }, [pd]);
+  setFilColors(pd?.fcolors);
   // venu d'« À faire » (06/11/2026) : ?plan=… ouvre la fiche de ce modele du planning (?model= ouvre la fiche MakerWorld)
   const modelParam = useRef(new URLSearchParams(window.location.search).get("plan"));
   useEffect(() => {

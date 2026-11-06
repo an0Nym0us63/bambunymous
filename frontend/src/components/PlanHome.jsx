@@ -5,7 +5,7 @@ import { egg } from "../eggs";
 import { showAlert } from "../utils/dialog";
 import { toast } from "../store/toast";
 import { useCanMw } from "../store/auth";
-import { DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt, bedTxt, BED_NAMES, SwapLinks, FilLink, finIc } from "./PlanDay";
+import { DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt, bedTxt, BED_NAMES, SwapLinks, FilLink, finIc, SwapShort, setFilColors } from "./PlanDay";
 import { JobSheet, LowStockBanner, BlockedList } from "./PlanPanels";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 
@@ -76,7 +76,7 @@ function Agenda({ jobs, now, max, onOpen }) {
             <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {r.j.locked ? "🔒 " : ""}{finIc(r.j, " ")}{unretained(r.j) ? "○ " : ""}{r.j.title}</span>
             <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              → {hhmm(r.j.end)} · {plateTxt(r.j)}{r.j.bed_change ? <span style={{ color: "#0369A1" }}> · 🔲 {BED_NAMES[r.j.bed_change.to] || r.j.bed_change.to}</span> : ""}{r.j.load?.length ? <span style={{ color: "#EA580C" }}> · 🧵 {swapTxt(r.j)}</span> : ""}{r.j.runout?.length ? <span style={{ color: "#B45309" }}> · 🔄</span> : ""}
+              → {hhmm(r.j.end)} · {plateTxt(r.j)}{r.j.bed_change ? <span style={{ color: "#0369A1" }}> · 🔲 {BED_NAMES[r.j.bed_change.to] || r.j.bed_change.to}</span> : ""}{r.j.load?.length ? <span style={{ color: "#EA580C" }}> · 🧵 <SwapShort j={r.j}/></span> : ""}{r.j.runout?.length ? <span style={{ color: "#B45309" }}> · 🔄</span> : ""}
               {r.j.low_info?.length ? <span style={{ color: "#DC2626" }}> · 📉</span> : ""}</span>
           </span>
         </span>
@@ -170,6 +170,7 @@ export function PlanZoom({ p: p0 }) {
     unlock: () => send("/makerworld/plan/lock", { key: j.key, lock: false }),
   });
   const live = liveOf(p);
+  setFilColors(p.fcolors);
   const days = [...new Set((p.jobs || []).map(j => j.day))].slice(0, 3);
   const sec = t => <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: C, margin: "4px 0 2px" }}>{t}</div>;
   return <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
