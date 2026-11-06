@@ -1057,6 +1057,7 @@ async def mw_model_3d(design_id: str, profile: str = "", print_id: int = 0, get_
             "used_palette": used_palette, "used_detail": used_detail, "fetch_error": fetch_error,
             # les filaments de ces impressions (pour choisir a la main), les choix faits, et la portee de ces choix
             "used_options": used_options, "chosen": chosen, "scope": scope if _SCOPE.fullmatch(scope or "") else None,
+            "todo_options": await _todo_options(did) if used_detail else [],
             # la lueur des phosphorescents qui ne luisent pas de leur couleur : {couleur du filament : lueur}
             "glows": {o["color"]: o["glow"] for o in used_options if o.get("glow")},
             # par plateau (vide : aucune impression rattachee a un plateau precis, on garde le melange ci-dessus)
@@ -1752,6 +1753,10 @@ async def _used_palette(src, print_ids: list, did: str = "", prof: str = "", det
             out.pop(a, None)
             detail = [d for d in detail if d["from"] != a] + [{"from": a, "to": None, "e": e, "how": "choisi", **grp}]
             continue
+        if ch.get("fil") is not None and len(h6(ch.get("color"))) == 6:
+            out[a] = h6(ch["color"])
+            detail = [d for d in detail if d["from"] != a] + [{"from": a, "to": out[a], "e": e, "how": "choisi", "fil": ch["fil"], "todo": True, **grp}]
+            continue
         try:
             cp, es = int(ch.get("print")), int(ch.get("slot"))
         except (TypeError, ValueError):
@@ -1858,6 +1863,48 @@ async def _with_group(scope: str, ids: list, did: str) -> list:
         others = (await db.execute(select(Print.id).where(Print.group_id == gid, Print.design_id == str(did), Print.id != pid)
                                    .order_by(Print.id.desc()).limit(60))).scalars().all()
     return [pid] + [x for x in ids if x != pid and x not in others] + list(others)
+
+
+async def _todo_options(did: str) -> list:
+    """Les filaments retenus dans « A faire » pour ce modele (06/11/2026), a choisir pour l'assemblage : chaque ligne
+    (profil, variante de couleur), la couleur du createur qu'il remplace et le filament retenu pour elle.
+    [{todo, label, origin, fil, color, name, kind, finish}]"""
+    from sqlalchemy import select
+    from ....db.session import AsyncSessionLocal
+    from ....models.filament import Filament
+    from ....services import mw_queue as Q
+    from ....services import mw_3d as T
+    h6 = lambda c: str(c or "").lstrip("#")[:6].upper()
+    did = str(did or "").split("~")[0]
+    if not did.isdigit():
+        return []
+    try:
+        q = await Q.queue()
+    except Exception:
+        return []
+    pairs, labels = [], {}
+    for m in q.get("models") or []:
+        if str(m.get("mw_id") or str(m.get("design_id") or "").split("~")[0]) != did:
+            continue
+        labels[m["design_id"]] = (m.get("variant") or (m.get("profile") or {}).get("title") or m.get("title") or "")[:50]
+        for pl in m.get("plates") or []:
+            for f in pl.get("fils") or []:
+                if f.get("filament_id") and len(h6(f.get("color"))) == 6:
+                    pairs.append((m["design_id"], h6(f["color"]), int(f["filament_id"])))
+    if not pairs:
+        return []
+    async with AsyncSessionLocal() as db:
+        fils = {f.id: f for f in (await db.execute(select(Filament).where(Filament.id.in_({p[2] for p in pairs})))).scalars().all()}
+    out, seen = [], set()
+    for row, origin, fid in pairs:
+        f = fils.get(fid)
+        if not f or (row, origin, fid) in seen or len(h6(f.color)) != 6:
+            continue
+        seen.add((row, origin, fid))
+        out.append({"todo": row, "label": labels.get(row) or "", "origin": origin, "fil": fid, "color": h6(f.color),
+                    "name": (f.translated_name or f.name or "")[:60], "kind": " · ".join(x for x in (f.manufacturer, f.fila_type or f.material) if x)[:60],
+                    "finish": (None if f.fila_finish == "none" else f.fila_finish) if f.fila_finish else T.finish_of(f.fila_type, f.name, color=f.color)})
+    return out
 
 
 async def _used_options(print_ids: list) -> list:
@@ -1967,7 +2014,7 @@ async def mw_model_3d_colors(design_id: str, profile: str = "", print_id: int = 
     except Exception:
         logger.exception("[3D] couleurs")
         colors = []
-    return {"colors": colors, "detail": detail, "options": await _used_options(ids), "chosen": chosen,
+    return {"colors": colors, "detail": detail, "options": await _used_options(ids), "chosen": chosen, "todo": await _todo_options(did),
             "scope": scope if _SCOPE.fullmatch(scope or "") else None, "finishes": T.origin_finishes(src)}
 
 
@@ -2026,6 +2073,15 @@ async def mw_model_3d_colors_set(body: dict = Body(...), _=Depends(require_own_a
         choice = None
     elif body.get("none"):
         choice = {"none": True}
+    elif body.get("fil") is not None:
+        # un filament retenu dans « A faire » (06/11/2026) : sa couleur, gardee avec lui
+        col = str(body.get("color") or "").lstrip("#")[:6].upper()
+        try:
+            choice = {"fil": int(body.get("fil")), "color": col}
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Choix incomplet")
+        if len(col) != 6:
+            raise HTTPException(400, "Choix incomplet")
     else:
         try:
             choice = {"print": int(body.get("print")), "slot": int(body.get("slot"))}

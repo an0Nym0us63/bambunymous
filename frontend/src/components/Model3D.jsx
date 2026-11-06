@@ -2443,7 +2443,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
               border: perPlate === v ? "1px solid color-mix(in srgb, #0EA5E9 55%, transparent)" : "1px solid var(--border)",
               background: perPlate === v ? "color-mix(in srgb, #0EA5E9 14%, var(--surface2))" : "var(--surface2)", color: perPlate === v ? "#0EA5E9" : "var(--muted)" }}>{l}</button>)}
         </div>}
-        {shown && !palette && usedDetail.length > 0 && <ColorPairs detail={usedDetail} options={meta?.used_options || []} chosen={meta?.chosen || {}}
+        {shown && !palette && usedDetail.length > 0 && <ColorPairs detail={usedDetail} options={meta?.used_options || []} todo={meta?.todo_options || []} chosen={meta?.chosen || {}}
           plate={plateOnly != null && perPlate ? plateOnly : null}
           scope={fr ? null : meta?.scope || null} onChoose={async (o, body) => {
             try { await chooseColor(meta.scope, o, { ...body, ...(plateOnly != null && perPlate ? { plate: plateOnly } : {}) }); if (plateOnly != null && perPlate && !body.auto) egg("couleur_plateau"); } catch { /* rien */ }

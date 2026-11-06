@@ -15,7 +15,7 @@ const Sw = ({ c, size = 14 }) => <span style={{ width: size, height: size, borde
 
 // la rangee de paires ; scope : on peut choisir (onChoose(origin, body) envoie le choix) ; plate : le choix vaut pour ce
 // plateau seulement (03/11/2026 : l'assemble prend les couleurs de chaque plateau)
-export function ColorPairs({ detail = [], options = [], chosen = {}, scope = null, onChoose = null, label = "Correspondance :", plate = null }) {
+export function ColorPairs({ detail = [], options = [], chosen = {}, scope = null, onChoose = null, label = "Correspondance :", plate = null, todo = [] }) {
   if (!detail.length) return null;
   const ck = o => (plate != null ? `${o}@${plate}` : o);
   const pick = (e, x) => {
@@ -32,7 +32,16 @@ export function ColorPairs({ detail = [], options = [], chosen = {}, scope = nul
     const items = [...byFil.values()].map(o => ({ icon: <Sw c={o.color} size={16}/>, label: `${o.name || `Filament n°${o.slot}`}${o.kind ? ` — ${o.kind}` : ""}`,
         hint: `${o.n > 1 ? `${o.n} impressions` : o.print_name}${o.grams ? ` · ${g(o.grams)} g` : ""}`,
         onClick: () => onChoose(x.from, { print: o.print, slot: o.slot }) }));
-    openMenu(e, { title: `Couleur n°${x.e} du créateur : quelle bobine l'a remplacée ?`, items: [
+    // les filaments retenus dans « A faire » (06/11/2026) : celui prevu pour cette couleur d'abord, puis les autres
+    const seenT = new Set();
+    const tItems = [...todo].sort((a, b) => (b.origin === x.from) - (a.origin === x.from))
+      .filter(o => { const k = `${o.fil}|${o.todo}`; if (seenT.has(k)) return false; seenT.add(k); return true; })
+      .map(o => ({ icon: <Sw c={o.color} size={16}/>, label: `${o.name}${o.kind ? ` — ${o.kind}` : ""}`,
+        hint: `${o.origin === x.from ? "prévu pour cette couleur · " : ""}À faire${o.label ? ` · ${o.label}` : ""}`,
+        onClick: () => onChoose(x.from, { fil: o.fil, color: o.color }) }));
+    const head = t => ({ label: t, disabled: true });
+    openMenu(e, { title: `Couleur n°${x.e} du créateur : quelle bobine la remplace ?`, items: [
+      ...(tItems.length ? [head("📋 Prévu dans « À faire »"), ...tItems, "-", head("🖨️ Déjà imprimé")] : []),
       ...items, items.length ? "-" : null,
       { icon: "🚫", label: "Aucune", hint: "Cette couleur n'a pas été imprimée", onClick: () => onChoose(x.from, { none: true }) },
       chosen?.[ck(x.from)] && !chosen[ck(x.from)].group ? { icon: "✨", label: plate != null ? "Comme les autres plateaux" : "Automatique",
@@ -43,7 +52,8 @@ export function ColorPairs({ detail = [], options = [], chosen = {}, scope = nul
   return <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
     <span>{label}</span>
     {detail.map(x => {
-      const tip = (x.to ? `Filament n°${x.e} du projet → n°${x.es} de l'impression (${HOW[x.how] || "par son numéro"})`
+      const tip = (x.todo ? `Filament n°${x.e} du projet → un filament retenu dans « À faire » (choisi à la main)`
+        : x.to ? `Filament n°${x.e} du projet → n°${x.es} de l'impression (${HOW[x.how] || "par son numéro"})`
         : `Filament n°${x.e} : ${x.how === "choisi" ? "aucune, choisi à la main" : "aucune de ces impressions ne l'a utilisé"}`)
         + (x.other_profile ? " · impression d'un autre profil du modèle" : "") + (x.group ? " · choix fait sur le groupe" : "")
         + (x.plate != null ? ` · choisi pour le plateau ${x.plate} seulement` : "") + (scope ? " · touche pour choisir" : "");
@@ -78,6 +88,6 @@ export default function ColorMap({ designId, profileId = null, printId = null, u
   if (!d?.colors?.length || !d.detail?.length) return null;
   const onChoose = async (origin, body) => { try { await chooseColor(d.scope, origin, body); } catch { /* rien */ } setTick(t => t + 1); };
   return <div style={style} onClick={e => e.stopPropagation()}>
-    <ColorPairs detail={d.detail} options={d.options} chosen={d.chosen} scope={d.scope} onChoose={onChoose} label="🎨 Couleurs :"/>
+    <ColorPairs detail={d.detail} options={d.options} todo={d.todo || []} chosen={d.chosen} scope={d.scope} onChoose={onChoose} label="🎨 Couleurs :"/>
   </div>;
 }
