@@ -115,6 +115,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const plan = plans[0] || null;
   const planOf = iid => plans.find(x => x.instance_id === iid) || null;
   const [planBusy, setPlanBusy] = useState(false);
+  const [varSel, setVarSel] = useState({});          // la variante de couleur choisie, par profil (06/11/2026)
+  const scopeOf = (iid, vk) => vk ? `${id}|${iid}|${vk}` : `${id}|${iid}`;
   const [studioBusy, setStudioBusy] = useState(false);
   useTrackDetail(`Fiche MakerWorld · ${m?.title || "#" + id}`);
   // Profil a imprimer : celui qui est deplie, sinon celui retenu.
@@ -216,9 +218,10 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const pinPlan = async (p, add = false) => {
     setPlanBusy(p.instance_id);
     try {
-      const body = { instance_id: p.instance_id, plates: plateSel[p.instance_id] || null, add,
-        picks: picksOf(`${id}|${p.instance_id}`, m.stock?.[p.instance_id]),
-        plate_picks: platePicksOf(`${id}|${p.instance_id}`, m.stock?.[p.instance_id]) };
+      const vk = add ? null : varSel[p.instance_id] || null, sc = scopeOf(p.instance_id, vk), pk = vk ? `${p.instance_id}|${vk}` : p.instance_id;
+      const body = { instance_id: p.instance_id, plates: plateSel[pk] || null, add, ...(vk ? { key: vk } : {}),
+        picks: picksOf(sc, m.stock?.[p.instance_id]),
+        plate_picks: platePicksOf(sc, m.stock?.[p.instance_id]) };
       const updating = !!planOf(p.instance_id);
       const { data } = await client.put(`/makerworld/queue/plan/${id}`, body);
       setPlans(data.plans || []);
@@ -229,8 +232,39 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setPlanBusy(false);
   };
+  // une autre couleur (06/11/2026) : une variante qui part des choix affiches, puis s'ouvre pour qu'on change ses filaments
+  const addVariant = async (p) => {
+    setPlanBusy(p.instance_id);
+    try {
+      const vk = varSel[p.instance_id] || null, sc = scopeOf(p.instance_id, vk), pk = vk ? `${p.instance_id}|${vk}` : p.instance_id;
+      const picks = picksOf(sc, m.stock?.[p.instance_id]), plate_picks = platePicksOf(sc, m.stock?.[p.instance_id]);
+      const { data } = await client.put(`/makerworld/queue/plan/${id}`, { instance_id: p.instance_id, plates: plateSel[pk] || null, variant: true, qty: 1, picks, plate_picks });
+      const pls = data.plans || [];
+      setPlans(pls);
+      const nv = pls.filter(x => x.instance_id === p.instance_id).pop();
+      if (nv) {
+        await setPicksFromPlan(scopeOf(p.instance_id, nv.key), m.stock?.[p.instance_id], picks, plate_picks);
+        if (plateSel[pk]) setPlateSel(s => ({ ...s, [`${p.instance_id}|${nv.key}`]: plateSel[pk] }));
+        setVarSel(x => ({ ...x, [p.instance_id]: nv.key }));
+        egg("variantes_couleur");
+        toast("🎨 Nouvelle couleur : choisis ses filaments, puis 📌 Mettre à jour", "ok", 4500);
+      }
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    setPlanBusy(false);
+  };
   const unpinPlan = async (p) => {
     setPlanBusy(p.instance_id);
+    const vk = varSel[p.instance_id] || null;
+    if (vk) {                                          // une variante : elle seule s'en va
+      try {
+        const { data } = await client.delete(`/makerworld/queue/plan/${id}`, { params: { key: vk } });
+        clearPicks(scopeOf(p.instance_id, vk));
+        setPlans(data?.plans || plans.filter(x => x.key !== vk));
+        setVarSel(x => ({ ...x, [p.instance_id]: null }));
+      } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+      setPlanBusy(false);
+      return;
+    }
     try {
       const { data } = await client.delete(`/makerworld/queue/plan/${id}`, { params: { instance_id: p.instance_id } });
       // le plan oublie : filaments et plateaux reviennent aux choix par defaut, sans recharger
@@ -255,7 +289,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
 
   useEffect(() => {
     let alive = true;
-    setM(null); setPlans([]); setCom(null); setSim(null); setMore(false); setAllProfs(false); setShowCom(false);
+    setM(null); setPlans([]); setVarSel({}); setCom(null); setSim(null); setMore(false); setAllProfs(false); setShowCom(false);
     getModel(id).then(data => {
       if (!alive) return;
       setM(data);
@@ -263,15 +297,16 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
       // Plans deja retenus pour la file : on les remet (plateaux, filaments), le premier deplie.
       client.get("/makerworld/queue/config").then(({ data: c }) => {
         const all = c.plans || {}, k0 = String(id);
-        const pls = [all[k0], ...Object.keys(all).filter(k => k.startsWith(`${k0}~`)).map(k => all[k])]
+        const pls = [{ key: k0, ...(all[k0] || {}) }, ...Object.keys(all).filter(k => k.startsWith(`${k0}~`)).map(k => ({ key: k, ...all[k] }))]
           .filter(pl => pl?.instance_id);
         if (!alive) return;
         setPlans(all[k0]?.instance_id ? pls : []);
         if (!all[k0]?.instance_id) return;
         for (const pl of pls) {
-          setPicksFromPlan(`${id}|${pl.instance_id}`, data.stock?.[pl.instance_id], pl.picks, pl.plate_picks)
+          const vk = pl.key.split("~").length === 3 ? pl.key : null;     // une variante de couleur : ses propres choix
+          setPicksFromPlan(scopeOf(pl.instance_id, vk), data.stock?.[pl.instance_id], pl.picks, pl.plate_picks)
             .then(() => alive && setM(x => x && { ...x }));     // choix trouves par recherche : relus, on redessine
-          if (pl.plates) setPlateSel(s => ({ ...s, [pl.instance_id]: pl.plates }));
+          if (pl.plates) setPlateSel(s => ({ ...s, [vk ? `${pl.instance_id}|${vk}` : pl.instance_id]: pl.plates }));
         }
         setOpen(pls[0].instance_id);
       }).catch(() => {});
@@ -483,7 +518,11 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                 {shown.map(p => {
                   const isOpen = open === p.instance_id;
                   const nDone = p.plates.filter(pl => plateDone(p, pl.index)).length;
-                  const mine = planOf(p.instance_id);
+                  // les variantes de couleur (06/11/2026) : celle choisie dans les onglets ; ses filaments et ses plateaux
+                  const vkey = varSel[p.instance_id] || null;
+                  const sk = vkey ? `${id}|${p.instance_id}|${vkey}` : `${id}|${p.instance_id}`, pk = vkey ? `${p.instance_id}|${vkey}` : p.instance_id;
+                  const mine = vkey ? plans.find(x => x.key === vkey) || planOf(p.instance_id) : planOf(p.instance_id);
+                  const vars = plans.filter(x => x.instance_id === p.instance_id);
                   return (
                     <div key={p.instance_id} style={{ borderRadius:16, marginBottom:8, overflow:"hidden",
                       border: mine ? "1.5px solid rgba(34,197,94,0.55)" : isOpen ? "1px solid rgba(6,182,212,0.45)" : "1px solid var(--border)",
@@ -545,6 +584,20 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                       {isOpen && p.summary && <ProfileSummary p={p} onImage={(images, index) => setZoom({ images, index, title: p.title })} onModel={setId}/>}
                       {/* Imprimer CE profil : Handy (telephone, page open-app de MakerWorld)
                           ou Bambu Studio (ordinateur, lien du 3MF de ce profil). */}
+                      {/* les variantes de couleur (06/11/2026) : ① ② … et « ＋ Une autre couleur » ; l'onglet choisi est celui qu'on
+                          regle ci-dessous (filaments, plateaux, quantite) */}
+                      {isOpen && !friend && vars.length > 0 && <AdminOnly mw><div style={{ display:"flex", gap:5, padding:"0 10px 8px", flexWrap:"wrap", alignItems:"center" }}>
+                        <span style={{ fontSize:11, fontWeight:900, color:"var(--muted)", marginRight:2 }}>🎨 Couleurs</span>
+                        {vars.map((v, i) => { const on = (vkey || vars[0].key) === v.key;
+                          return <button key={v.key} onClick={() => setVarSel(x => ({ ...x, [p.instance_id]: i ? v.key : null }))} data-tip={`Variante ${i + 1} : ×${v.qty || 1}`}
+                            style={{ ...linkBtn, padding:"4px 10px", fontSize:12, cursor:"pointer", fontWeight:900, color: on ? "white" : "#8B5CF6",
+                              background: on ? "linear-gradient(135deg, #8B5CF6, #6366F1)" : "rgba(139,92,246,0.10)", borderColor: on ? "transparent" : "rgba(139,92,246,0.35)" }}>
+                            {"①②③④⑤⑥⑦⑧⑨"[i] || i + 1} ×{v.qty || 1}</button>; })}
+                        <button onClick={() => addVariant(p)} disabled={!!planBusy}
+                          data-tip="Le même profil dans d'autres couleurs : sa propre ligne dans « À faire », sa quantité, ses filaments et ses plateaux"
+                          style={{ ...linkBtn, padding:"4px 10px", fontSize:12, cursor:"pointer", fontWeight:900, color:"#8B5CF6", background:"transparent",
+                            borderColor:"rgba(139,92,246,0.35)", borderStyle:"dashed" }}>＋ Une autre couleur</button>
+                      </div></AdminOnly>}
                       {isOpen && (
                         <div style={{ display:"flex", gap:6, padding:"0 10px 8px", flexWrap:"wrap" }}>
                           {!friend && (
@@ -577,7 +630,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                 const n = mine.qty || 1;
                                 const setN = async v => {
                                   const q = Math.max(1, Math.min(99, v));
-                                  setPlans(xs => xs.map(x => x.instance_id === p.instance_id ? { ...x, qty: q } : x));
+                                  setPlans(xs => xs.map(x => x.key === mine.key ? { ...x, qty: q } : x));
                                   try { await client.put(`/makerworld/queue/qty/${mine.key || id}`, { qty: q }); }
                                   catch (e) { showAlert(e.response?.data?.detail || e.message); }
                                 };
@@ -614,11 +667,11 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                               : "🔎 Filaments exacts (finition, référence) — lire le 3MF"}</button>
                         </AdminOnly>
                       )}
-                      {isOpen && <MwStockMatch items={m.stock?.[p.instance_id]} plates={p.plates} scope={`${id}|${p.instance_id}`}
-                        selected={plateSel[p.instance_id]} onNavigate={onClose}/>}
+                      {isOpen && <MwStockMatch items={m.stock?.[p.instance_id]} plates={p.plates} scope={sk}
+                        selected={plateSel[pk]} onNavigate={onClose}/>}
                       {isOpen && p.plates.length > 1 && (() => {
-                        const sel = plateSel[p.instance_id];
-                        const setSel = v => setPlateSel(s => ({ ...s, [p.instance_id]: v }));
+                        const sel = plateSel[pk];
+                        const setSel = v => setPlateSel(s => ({ ...s, [pk]: v }));
                         return (
                           <div style={{ display:"flex", alignItems:"center", gap:8, padding:"0 10px 8px", fontSize:11.5, color:"var(--text2)" }}>
                             <span style={{ flex:1 }}>{sel ? `Stock calculé pour ${sel.length} plateau${sel.length > 1 ? "x" : ""} sur ${p.plates.length}`
@@ -629,9 +682,9 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                       })()}
                       {isOpen && p.plates.length > 1 && (() => {
                         // retenus, faisables tout de suite avec l'AMS, et pas encore imprimes
-                        const sel = plateSel[p.instance_id];
+                        const sel = plateSel[pk];
                         const can = p.plates.filter(pl => (!sel || sel.includes(pl.index))
-                          && plateInAms(m.stock?.[p.instance_id], pl, `${id}|${p.instance_id}`));
+                          && plateInAms(m.stock?.[p.instance_id], pl, sk));
                         // en series : les plateaux retenus, ou j'en suis (un modele refait des mois plus tard repart d'une serie)
                         const kept = p.plates.filter(pl => !sel || sel.includes(pl.index));
                         const round = plateRound(kept.map(pl => plateTimes(p, pl.index)));
@@ -653,20 +706,20 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))", gap:8, padding:"0 10px 10px" }}>
                           {p.plates.map((pl, _i, all) => {
                             // fait POUR LA SERIE EN COURS (sur les plateaux retenus) ; imprime avant, mais a refaire : en gris
-                            const _sel = plateSel[p.instance_id];
+                            const _sel = plateSel[pk];
                             const _round = plateRound(all.filter(x => !_sel || _sel.includes(x.index)).map(x => plateTimes(p, x.index)));
                             const ok = plateDoneInRound(plateTimes(p, pl.index), _round);
                             const before = !ok && plateTimes(p, pl.index) > 0;
                             const live = platePrinting(p, pl.index);
-                            const sel0 = plateSel[p.instance_id];
+                            const sel0 = plateSel[pk];
                             // un plateau ecarte ne dit pas s'il est pret : il ne sera pas lance
-                            const ready = !sel0 || sel0.includes(pl.index) ? plateInAms(m.stock?.[p.instance_id], pl, `${id}|${p.instance_id}`) : null;
-                            const sel = plateSel[p.instance_id];
+                            const ready = !sel0 || sel0.includes(pl.index) ? plateInAms(m.stock?.[p.instance_id], pl, sk) : null;
+                            const sel = plateSel[pk];
                             const on = !sel || sel.includes(pl.index);
                             const toggle = () => canPlan && setPlateSel(s => {
-                              const cur = s[p.instance_id] || p.plates.map(x => x.index);
+                              const cur = s[pk] || p.plates.map(x => x.index);
                               const next = on ? cur.filter(i => i !== pl.index) : [...cur, pl.index];
-                              return { ...s, [p.instance_id]: next.length === p.plates.length ? undefined : next };
+                              return { ...s, [pk]: next.length === p.plates.length ? undefined : next };
                             });
                             return (
                               <div key={pl.index} onClick={p.plates.length > 1 && canPlan ? toggle : undefined}
@@ -684,7 +737,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                       n'importe quel fond. Image entiere, jamais recadree. */}
                                   <div style={{ background:"var(--surface2)" }}>
                                     {pl.thumb ? <PlateRecolor src={pl.thumb} w={200}
-                                      map={plateColorMap(m.stock?.[p.instance_id], pl, `${id}|${p.instance_id}`)}
+                                      map={plateColorMap(m.stock?.[p.instance_id], pl, sk)}
                                       style={{ width:"100%", aspectRatio:"1", objectFit:"contain", display:"block", padding:6,
                                         boxSizing:"border-box",
                                         filter:"drop-shadow(0 0 0.6px rgba(0,0,0,.75)) drop-shadow(0 0 0.6px rgba(255,255,255,.7)) drop-shadow(0 3px 5px rgba(0,0,0,.28))" }}/>
@@ -717,7 +770,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                   <div style={{ fontSize:10.5, color:"var(--muted)" }}>
                                     {[pl.weight_g ? `${Math.round(pl.weight_g)} g` : null, fmtDur(pl.seconds)].filter(Boolean).join(" · ")}
                                   </div>
-                                  <PlateColors items={m.stock?.[p.instance_id]} plate={pl} scope={`${id}|${p.instance_id}`}
+                                  <PlateColors items={m.stock?.[p.instance_id]} plate={pl} scope={sk}
                                     canEdit={canPlan && on} onNavigate={onClose}/>
                                 </div>
                               </div>

@@ -111,8 +111,9 @@ def mw_of(rid) -> str:
 
 
 def _rid_ok(rid: str) -> bool:
-    a, _, b = str(rid or "").partition("~")
-    return a.isdigit() and (not b or b.isdigit())
+    """« 123 », « 123~456 » (le profil 456), « 123~456~2 » (06/11/2026 : sa 2e variante de couleur)."""
+    parts = str(rid or "").split("~")
+    return 1 <= len(parts) <= 3 and all(x.isdigit() for x in parts)
 
 
 def _plans_of(d: dict, did: str) -> list:
@@ -187,15 +188,24 @@ async def set_collections(ids: list) -> dict:
     return await config()
 
 
-async def set_plan(design_id: str, plan, add: bool = False, which: str | None = None) -> dict:
+async def set_plan(design_id: str, plan, add: bool = False, which: str | None = None, key: str | None = None,
+                   variant: bool = False) -> dict:
     """Retenir un profil (plan : profil, plateaux, filaments) ou l'oublier (plan None ; which : son instance, sinon le
     premier). Un profil deja retenu est mis a jour ; add (06/11/2026) en retient un de plus au lieu de remplacer le
-    premier. Rend tous les profils retenus du modele."""
+    premier. Les variantes de couleur (06/11/2026) : variant cree une variante du profil (le meme, d'autres filaments,
+    d'autres plateaux, sa quantite : « 123~456~2 ») ; key vise une ligne precise (mettre a jour, oublier une variante).
+    Rend tous les profils retenus du modele."""
     did = str(design_id or "").strip()
     if not did.isdigit():
         raise QueueError("Modèle inconnu")
     d = await _load()
     mine = _plans_of(d, did)
+    if key and key != did and not (key.startswith(did + "~") and _rid_ok(key)):
+        raise QueueError("Ligne inconnue")
+    if plan is None and key and key != did and key in d["plans"]:
+        d["plans"].pop(key, None)                    # une variante (ou un profil en plus) : elle seule
+        await _save(d)
+        return {"plans": _plans_of(d, did)}
     if plan is None:
         gone = next((x for x in mine if which and str(x.get("instance_id")) == str(which)), None) or (mine[0] if mine else None)
         if gone and gone["key"] != did:
@@ -228,11 +238,19 @@ async def set_plan(design_id: str, plan, add: bool = False, which: str | None = 
                 one = {str(k)[:40]: int(v) for k, v in pk.items() if str(v).isdigit()}
                 if one:
                     plate_picks[str(int(pn))] = one
-        same = next((x for x in mine if str(x.get("instance_id")) == iid), None)
-        key = same["key"] if same else f"{did}~{iid}" if add and mine else did
-        if len(mine) >= 30 and not same and key != did:
+        same = next((x for x in mine if (x["key"] == key if key else str(x.get("instance_id")) == iid)), None)
+        if variant:
+            if not any(str(x.get("instance_id")) == iid for x in mine):
+                raise QueueError("Retiens d'abord ce profil")
+            n = 2
+            while f"{did}~{iid}~{n}" in d["plans"]:
+                n += 1
+            same, key = None, f"{did}~{iid}~{n}"
+        else:
+            key = same["key"] if same else f"{did}~{iid}" if add and mine else did
+        if len(mine) >= 30 and not same and key != did:   # variantes comprises
             raise QueueError("Trente profils retenus au plus")
-        qty = _qty(plan.get("qty", (d["plans"].get(key) or {}).get("qty", 1)))
+        qty = _qty(plan.get("qty", (d["plans"].get(key) or {}).get("qty", 1)) if not variant else plan.get("qty", 1))
         d["plans"][key] = {"instance_id": iid, "plates": plates, "picks": picks, "plate_picks": plate_picks, "qty": qty}
     await _save(d)
     return {"plans": _plans_of(d, did)}
@@ -370,6 +388,14 @@ async def _printed_plates(dids) -> dict:
                                         Print.total_weight_g, Print.number_of_items, Print.id).where(
             Print.design_id.in_(dids), Print.status.in_(("SUCCESS", "PARTIAL"))))).all()
         gcop = await _group_copies(db, [r[6] for r in rows])
+        # les filaments de chaque impression (06/11/2026, variantes de couleur) : ceux de ses bobines
+        from ..models.print_history import FilamentUsage
+        from ..models.filament import Spool
+        used = {}
+        if rows:
+            for pid_, fid_ in (await db.execute(select(FilamentUsage.print_id, Spool.filament_id).join(Spool, Spool.id == FilamentUsage.spool_id)
+                                                .where(FilamentUsage.print_id.in_([r[6] for r in rows])))).all():
+                used.setdefault(pid_, set()).add(int(fid_))
     out = {}
     for did, plate, prof, manual, g, items, pid in rows:
         # les plateaux designes a la main (regroupes, renumerotes) passent avant le numero du fichier,
@@ -384,8 +410,19 @@ async def _printed_plates(dids) -> dict:
         copies = plate_copies(manual)
         for pr, ns in by.items():
             out.setdefault(str(did), []).append({"prof": pr, "plates": ns, "g": _num(g), "copies": copies,
-                                                 "gcopies": gcop.get(pid), "items": int(items or 1), "id": pid})
+                                                 "gcopies": gcop.get(pid), "items": int(items or 1), "id": pid,
+                                                 "fids": used.get(pid, set()), "variant": plate_variant(manual)})
     return out
+
+
+def plate_variant(manual) -> str | None:
+    """La variante de couleur a laquelle un print a ete rattache a la main (06/11/2026), sinon None."""
+    try:
+        m = json.loads(manual) if manual else None
+        v = m.get("variant") if isinstance(m, dict) else None
+    except (ValueError, TypeError):
+        return None
+    return str(v) if v else None
 
 
 def plate_copies(manual) -> int | None:
@@ -662,6 +699,37 @@ def _aggregate(models: list, stock_of: dict) -> dict:
     }
 
 
+def _split_variants(models: list, done_plates: dict, details: dict) -> None:
+    """Les variantes de couleur d'un meme profil (06/11/2026) : chaque impression de ce profil compte pour UNE variante,
+    celle a laquelle on l'a rattachee, sinon celle dont elle a le plus de filaments (a egalite, la premiere). Les
+    plateaux faits de chaque variante sont recomptes."""
+    groups = {}
+    for r in models:
+        if r.get("color_variant") and r.get("profile"):
+            groups.setdefault((r["mw_id"], r["profile"]["instance_id"]), []).append(r)
+    for (did, iid), rows in groups.items():
+        m = details.get(did) or {}
+        prof = next((p for p in m.get("profiles") or [] if p.get("instance_id") == iid), None) or {}
+        ids = {str(prof.get("instance_id") or ""), str(prof.get("profile_id") or "")} - {""}
+        plate_g = {pl.get("index"): _num(pl.get("weight_g")) or sum(_num(f.get("g")) for f in pl.get("filaments") or [])
+                   for pl in prof.get("plates") or []}
+        pieces = plate_pieces(did, prof)
+        counts = {r["design_id"]: {} for r in rows}
+        for e in done_plates.get(str(did), []):
+            if e["prof"] not in ids:
+                continue
+            to = next((r for r in rows if e.get("variant") == r["design_id"]), None)
+            if to is None:
+                fids = e.get("fids") or set()
+                to = max(rows, key=lambda r: (len(fids & r["_fids"]) / max(1, len(r["_fids"])), -rows.index(r)))
+            c = copies_of(e, plate_g, pieces)[0]
+            for n in e["plates"]:
+                counts[to["design_id"]][n] = counts[to["design_id"]].get(n, 0) + c
+        for r in rows:
+            for pl in r.get("plates") or []:
+                pl["printed"] = counts[r["design_id"]].get(pl["index"], 0)
+
+
 async def _compute(fresh: bool = False) -> dict:
     """fresh (« Relire maintenant », 02/11/2026) : les collections relues chez MakerWorld, pas dans le cache de 2 h ;
     un modele ajoute sur le site apparait tout de suite."""
@@ -842,7 +910,21 @@ async def _compute(fresh: bool = False) -> dict:
             row["status"] = ("ams" if ok_ams and items else "partial" if ready else
                              "stock" if ok_stock and items else "short" if items else "unknown")
         row["weight_g"] = round(row["weight_g"], 1)
-        if multi and prof:
+        same_prof = sum(1 for k, dd, pp in lines if dd == did and (pp or {}).get("instance_id") == (plan or {}).get("instance_id")) > 1
+        row["_fids"] = set(row["_need"].keys())
+        if multi and prof and same_prof:
+            # des variantes de couleur du meme profil (06/11/2026) : chaque ligne dit ses couleurs
+            names = []
+            for x in row["filaments"]:
+                n = (x.get("chosen") or {}).get("name")
+                if n and n not in names:
+                    names.append(n)
+            row["variant"] = " + ".join(names[:3]) or prof.get("title") or None
+            row["color_variant"] = True
+            if row["variant"]:
+                row["title"] = f"{row['title'] or ''} · {row['variant']}"
+                row["title_fr"] = f"{row['title_fr']} · {row['variant']}" if row.get("title_fr") else None
+        elif multi and prof:
             # plusieurs profils retenus : chaque ligne dit le sien, avec son image (06/11/2026)
             row["variant"] = prof.get("title") or None
             if row["variant"]:
@@ -851,6 +933,7 @@ async def _compute(fresh: bool = False) -> dict:
             row["cover_url"] = prof.get("cover") or row["cover_url"]
         models.append(row)
 
+    _split_variants(models, done_plates, details)
     rank = {did: i for i, did in enumerate(cfg.get("order") or [])}
     # les retenus toujours devant les autres (06/11/2026), puis l'ordre choisi (les nouveaux en tete de leur groupe)
     models.sort(key=lambda r: (not r["planned"], r["design_id"] in rank, rank.get(r["design_id"], 0)))

@@ -337,7 +337,8 @@ async def mw_queue_plan(design_id: str, body: dict = Body({}), _: str = Depends(
     """Profil, plateaux et filaments retenus pour ce modele (depuis sa fiche)."""
     from ....services import mw_queue as Q
     try:
-        return await Q.set_plan(design_id, body, add=bool(body.get("add")))
+        return await Q.set_plan(design_id, body, add=bool(body.get("add")), key=str(body.get("key") or "") or None,
+                                variant=bool(body.get("variant")))
     except Q.QueueError as e:
         raise HTTPException(400, str(e))
 
@@ -360,12 +361,15 @@ async def mw_queue_qty(design_id: str, body: dict = Body({}), _: str = Depends(r
 
 
 @router.delete("/queue/plan/{design_id}")
-async def mw_queue_plan_delete(design_id: str, instance_id: str | None = None, _: str = Depends(require_mw)):
-    """Oublier un profil retenu (instance_id), sinon le premier ; « 123~456 » vise le profil 456 du modele 123."""
+async def mw_queue_plan_delete(design_id: str, instance_id: str | None = None, key: str | None = None, _: str = Depends(require_mw)):
+    """Oublier un profil retenu (instance_id), sinon le premier ; « 123~456 » vise le profil 456 du modele 123 ;
+    key (06/11/2026) : une variante de couleur precise (« 123~456~2 »)."""
     from ....services import mw_queue as Q
     did, _sep, iid = str(design_id).partition("~")
+    if "~" in iid:
+        key, iid = key or str(design_id), iid.split("~")[0]
     try:
-        out = await Q.set_plan(did, None, which=instance_id or iid or None)
+        out = await Q.set_plan(did, None, which=instance_id or iid or None, key=key)
     except Q.QueueError as e:
         raise HTTPException(400, str(e))
     return {"ok": True, **out}

@@ -1797,13 +1797,18 @@ async def place_day(key: str, day: str) -> dict:
     return await arrange({"order": pick[1], "pins": {key: day}}, "Sur un jour")
 
 
+def _rid_ok(rid: str) -> bool:
+    """Une ligne de « A faire » : modele, modele~profil, modele~profil~variante (06/11/2026)."""
+    parts = str(rid or "").split("~")
+    return 1 <= len(parts) <= 3 and all(x.isdigit() for x in parts)
+
+
 async def set_chain(rid: str, mode) -> dict:
     """Un objet « d'une traite » (06/11/2026) : "plates" (les plateaux d'un exemplaire se suivent), "all" (tous ses
     plateaux, de tous ses exemplaires), ou None (libre, des plateaux d'autres objets peuvent s'intercaler)."""
     d = await _load()
     rid = str(rid or "").strip()
-    a, _, b = rid.partition("~")
-    if not a.isdigit() or (b and not b.isdigit()):
+    if not _rid_ok(rid):
         raise PlanError("Objet inconnu")
     if mode in ("plates", "all", "soft"):
         d["chain"][rid] = mode
@@ -1832,8 +1837,7 @@ async def set_prio(target: str, level) -> dict:
     d = await _load()
     t = str(target or "").strip()
     rid, _, plate = t.partition(":")
-    a, _, b = rid.partition("~")
-    if not a.isdigit() or (b and not b.isdigit()) or (plate and not plate.lstrip("-").isdigit()):
+    if not _rid_ok(rid) or (plate and not plate.lstrip("-").isdigit()):
         raise PlanError("Objet inconnu")
     try:
         lv = int(level or 0)
