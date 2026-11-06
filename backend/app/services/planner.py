@@ -1559,14 +1559,24 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
     # le plateau fige qu'on vient de lancer (06/11/2026) : une impression de ce modele a demarre et un de ses plateaux
     # etait fige dans les 3 h -- c'est lui (lance un peu en avance ou en retard). Son figeage tombe : il restait fige,
     # repousse apres l'impression en cours. Le compte des plateaux, lui, suit deja l'impression en cours
+    # UNE fois par impression (06/11/2026 : refait a chaque calcul du planning, chaque calcul en defigeait un de plus ; les
+    # echantillons d'un meme modele, figes a quelques minutes d'ecart, sautaient l'un apres l'autre), le plus proche
     if live and live[2]:
-        for k, at in list(d["locked"].items()):
-            if k.split(":")[0].split("~")[0] == str(live[2]) and abs((datetime.fromisoformat(at) - now).total_seconds()) <= 3 * 3600:
+        try:
+            from ..core.mqtt import get_state
+            job = str(getattr(get_state(), "job_id", "") or "") or f"{live[1]}|{live[2]}"
+        except Exception:
+            job = f"{live[1]}|{live[2]}"
+        if d.get("unlocked_for") != job:
+            near = [(abs((datetime.fromisoformat(at) - now).total_seconds()), k, at) for k, at in d["locked"].items()
+                    if k.split(":")[0].split("~")[0] == str(live[2]) and abs((datetime.fromisoformat(at) - now).total_seconds()) <= 3 * 3600]
+            d["unlocked_for"] = job
+            dirty = True
+            if near:
+                _, k, at = min(near)
                 d["locked"].pop(k, None)
                 d["pins"].pop(k, None)
-                dirty = True
                 logger.info(f"[PLAN] {k} : fige a {at}, l'impression en cours de ce modele l'a lance : defige")
-                break
     # les nouveaux plateaux (06/11/2026) : places selon le mode choisi dans les consignes, sans toucher aux autres ;
     # « known » garde ceux deja vus (la premiere fois, tous le sont : rien ne bouge)
     known = d.get("known")
