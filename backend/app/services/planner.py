@@ -1059,7 +1059,7 @@ def mode_score(r: dict, d: dict, now: datetime, mode: str) -> float:
     return late + idle + 30 * loads + ends
 
 
-def auto_insert(jobs: list, d: dict, now: datetime, busy, loaded: set, new: list, mode: str) -> list:
+def auto_insert(jobs: list, d: dict, now: datetime, busy, loaded: set, new: list, mode: str, fair: bool = False) -> list:
     """Les nouveaux plateaux places selon le mode (06/11/2026), sans toucher a l'ordre des autres. Chacun cherche en deux
     temps : une place sur vingt dans toute la file, puis toutes les places autour de la meilleure (une quarantaine
     d'essais : un modele de 13 plateaux ne fait pas attendre la page). Rend l'ordre."""
@@ -1077,7 +1077,9 @@ def auto_insert(jobs: list, d: dict, now: datetime, busy, loaded: set, new: list
                 return
             o = rest[:i] + [k] + rest[i:]
             r = place(_ordered(jobs, o, d["pins"]), d, now, busy, loaded, _slots())
-            tried[i] = mode_score(r, d, now, mode) if any(j["key"] == k for j in r["jobs"]) else None
+            # fair (06/11/2026, un nouveau venu) : chaque plateau deja prevu qu'il double coute ; il ne passe devant que pour
+            # un vrai gain (une bobine, une nuit). Sinon un modele court se mettait en tete (la fin moyenne de la file avancait)
+            tried[i] = (mode_score(r, d, now, mode) + (6 * (len(rest) - i) if fair else 0)) if any(j["key"] == k for j in r["jobs"]) else None
         step = max(1, len(rest) // 20)
         for i in list(range(0, len(rest) + 1, step)) + [len(rest)]:
             at(i)
@@ -1338,7 +1340,7 @@ async def plan(tz: int | None = None) -> dict:
         new = [k for k in cur if k not in ks]
         if new and d.get("auto_new") in MODES:
             try:
-                d["order"] = auto_insert(jobs, d, now, busy, loaded, new, d["auto_new"])
+                d["order"] = auto_insert(jobs, d, now, busy, loaded, new, d["auto_new"], fair=True)
                 d["rev"] = int(d.get("rev") or 0) + 1
                 jobs = _ordered(jobs, d["order"], d["pins"])
                 logger.info(f"[PLAN] {len(new)} nouveau(x) plateau(x) place(s) en mode {d['auto_new']}")
