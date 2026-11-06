@@ -225,8 +225,30 @@ export function Legend() {
 }
 // le tableau de bord du planning (06/11/2026) : une ligne, l'essentiel ; tout fini quand, les bobines a charger, les
 // nuits perdues, les dates limites, les durees corrigees
-export function PlanDashboard({ s, dur, now, onLegend }) {
+export function PlanDashboard({ s, dur, now, onLegend, cells = false }) {
   if (!s || !s.plates) return null;
+  // en cases (06/11/2026, l'en-tete du calendrier sur ordinateur) : un chiffre et son libelle, alignes, sans pastilles
+  if (cells) {
+    const when = iso => { const d = new Date(iso), t = new Date(`${(now || "").slice(0, 10)}T12:00`), days = Math.round((new Date(`${iso.slice(0, 10)}T12:00`) - t) / 864e5);
+      return [days === 0 ? "aujourd'hui" : days === 1 ? "demain" : d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }), hhmm(iso)]; };
+    const cs = [["📋", `${s.plates}`, `plateau${s.plates > 1 ? "x" : ""} prévu${s.plates > 1 ? "s" : ""}`, null, "Les plateaux prévus"],
+      s.end && ["🏁", when(s.end)[1], `tout fini ${when(s.end)[0]}`, null, "Quand le dernier plateau de la file finira"],
+      ["🧵", `${s.loads}`, `bobine${s.loads > 1 ? "s" : ""} à charger`, s.loads ? "#EA580C" : null, "Les chargements de bobine que demande toute la file"],
+      s.beds > 0 && ["🔲", `${s.beds}`, `changement${s.beds > 1 ? "s" : ""} de plateau`, "#0369A1", "Les changements de plateau d'impression que demande toute la file"],
+      s.nights > 0 && ["🌙", `${s.nights}`, `nuit${s.nights > 1 ? "s" : ""} perdue${s.nights > 1 ? "s" : ""} · ${hm(s.idle_min * 60)}`, "#6366F1", "Les nuits où l'imprimante attend l'heure de lancement : « Optimiser » peut les remplir"],
+      s.late > 0 && ["🎯", `${s.late}`, `date${s.late > 1 ? "s" : ""} limite${s.late > 1 ? "s" : ""} ratée${s.late > 1 ? "s" : ""}`, "#DC2626", "Voir les conseils"],
+      dur && Math.abs((dur.factor || 1) - 1) > 0.005 && ["⏱", `${dur.factor > 1 ? "+" : ""}${Math.round((dur.factor - 1) * 100)} %`, "sur les durées", null, "Durées corrigées (Consignes › Durées)"],
+    ].filter(Boolean);
+    return <div style={{ display: "flex", alignItems: "stretch", minWidth: 0 }}>
+      {cs.map(([ic, v, l, c, tip], i) => <div key={i} data-tip={tip} style={{ flex: "1 1 0", minWidth: 0, padding: "2px 12px", borderLeft: i ? "1px solid var(--border)" : "none" }}>
+        <div style={{ fontSize: 16, fontWeight: 900, color: c || "var(--text)", whiteSpace: "nowrap", lineHeight: 1.2 }}><span style={{ fontSize: 13, marginRight: 5 }}>{ic}</span>{v}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l}</div>
+      </div>)}
+      {onLegend && <button type="button" onClick={onLegend} aria-label="Ce que disent les signes" data-tip="Ce que disent les signes et les couleurs"
+        style={{ alignSelf: "center", flexShrink: 0, width: 28, height: 28, marginLeft: 8, borderRadius: "50%", border: "1px solid var(--border)", background: "var(--surface2)",
+          color: "var(--muted)", fontSize: 13, fontWeight: 900, cursor: "pointer" }}>?</button>}
+    </div>;
+  }
   const when = iso => { const d = new Date(iso), t = new Date(`${(now || "").slice(0, 10)}T12:00`), days = Math.round((new Date(`${iso.slice(0, 10)}T12:00`) - t) / 864e5);
     return `${days === 0 ? "aujourd'hui" : days === 1 ? "demain" : d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} ${hhmm(iso)}`; };
   const chip = (k, txt, tip, c = "var(--text2)") => <span key={k} data-tip={tip} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4,

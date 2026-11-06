@@ -1545,6 +1545,12 @@ async def plan(tz: int | None = None) -> dict:
                       "text": f"{_dur(-first['drift_min'] * 60)} d'avance sur {ref_txt} (son dernier rangement) : la suite est avancée d'autant"}
         else:
             status = {"state": "ontime", "late_min": 0, "text": "Dans les temps"}
+        # (06/11/2026) un titre court et sa ligne de detail, pour l'en-tete du calendrier
+        dm = abs(first["drift_min"])
+        status.update({"due": {"head": "À lancer maintenant", "sub": status["text"].replace("À lancer maintenant : ", "")},
+                       "late": {"head": f"{_dur(dm * 60)} de retard", "sub": f"sur {ref_txt}, ton dernier rangement · la suite est décalée d'autant"},
+                       "ahead": {"head": f"{_dur(dm * 60)} d'avance", "sub": f"sur {ref_txt}, ton dernier rangement · la suite est avancée d'autant"},
+                       "ontime": {"head": "Dans les temps", "sub": f"par rapport à {ref_txt}, ton dernier rangement"}}[status["state"]])
     # un objet « au mieux » coupe : les plateaux places entre deux de ses morceaux disent qu'ils y sont intercales
     soft = {}
     seq = sorted(r["jobs"], key=lambda x: x["start"])
