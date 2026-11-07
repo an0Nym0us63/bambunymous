@@ -27,6 +27,7 @@ import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { useMine, MineBadge, FriendsPrints, useHasFriends, useShared, sharedCount, relayed } from "../components/Friends";
 import MwQueue from "../components/MwQueue";
+import ModelLabels from "../components/ModelLabels";
 import PrintCalendar from "../components/PrintCalendar";
 import { ShowcaseBanner } from "../components/ShowcaseManager";
 import { mwImg } from "../components/MwImg";
@@ -1737,6 +1738,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         onRestore={() => setShowDeleteConfirm("restore")} onUnmap={setUnmapping}/>}
       {p.design_id && <MakerWorldCard designId={p.design_id} prints={[p]} rateElsewhere/>}
       {!p.design_id && p.source_3mf && <OwnSourceCard designId={`p${p.id}`} prints={[p]}/>}
+      <ModelLabels printId={p.id ?? pProp.id} onPick={onClose}/>
       {p.status_note && <div style={{ position: "relative", padding: "12px 14px 12px 18px", borderRadius: 16, overflow: "hidden",
         background: "linear-gradient(135deg, color-mix(in srgb, #A855F7 12%, transparent), transparent 70%), var(--surface2)", border: "1px solid var(--border)" }}>
         <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 4, borderRadius: 4, background: "linear-gradient(#A855F7, #EC4899)" }}/>

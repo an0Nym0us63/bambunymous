@@ -239,7 +239,7 @@ def _search_condition(search: str):
     mots = [m for m in (search or "").split() if m]
     if not mots:
         return None
-    from ....models.print_history import MakerWorldDesign as _MW
+    from ....models.print_history import MakerWorldDesign as _MW, ModelLabel as _ML
 
     def esc(m):
         return m.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -256,6 +256,7 @@ def _search_condition(search: str):
         e = esc(m)
         pats = [f"{e}%"] + [f"%{sep}{e}%" for sep in SEPS]
         lk = lambda col, pats=pats: or_(*(col.ilike(p, escape="\\") for p in pats))
+        lab = or_(lk(_ML.families), lk(_ML.categories), lk(_ML.tags))
         hexa = re.fullmatch(r"#?([0-9a-fA-F]{6})", m)
         hx = f"%{hexa.group(1)}%" if hexa else None
 
@@ -286,6 +287,11 @@ def _search_condition(search: str):
                     lk(_MW.title), lk(_MW.title_fr), lk(_MW.tags),
                     lk(_MW.categories), lk(_MW.creator_name)))
             ),
+            # Les familles, categories et etiquettes donnees par Claude (07/11/2026), rangees par modele : la
+            # ligne d'un modele MakerWorld, d'un groupe ou de l'impression elle-meme.
+            Print.design_id.in_(_sel(_ML.design_id).where(and_(_ML.design_id.isnot(None), lab))),
+            Print.group_id.in_(_sel(_ML.group_id).where(and_(_ML.group_id.isnot(None), lab))),
+            Print.id.in_(_sel(_ML.print_id).where(and_(_ML.print_id.isnot(None), lab))),
             # Le nom du groupe fait partie de la condition, et non plus un ajout
             # apres coup : ses prints passent ainsi par les autres filtres
             # (etat, dates, filament) et entrent dans le total.
@@ -445,7 +451,8 @@ async def list_prints(
     except Exception:
         src_v = None
     key = (status, search, group_id, tag, material, fila_type, filament_id, color, date_from, date_to, vue3d, sort, limit, offset,
-           data_version("prints", "filament_usage", "print_tags", "groups", "print_snapshots", "bobines", "filaments"),
+           data_version("prints", "filament_usage", "print_tags", "groups", "print_snapshots", "bobines", "filaments",
+                        "model_labels"),
            _GALLERY["disk"], src_v)
     gz_ok = request is not None and "gzip" in (request.headers.get("accept-encoding") or "")
     memo = _LIST_MEMO.get(key)
@@ -2413,6 +2420,13 @@ async def delete_snapshot(print_id: int, snapshot_id: int, _: str = Depends(get_
         await db.delete(s)
         await db.commit()
     return {"ok": True}
+
+
+@router.get("/{print_id}/labels")
+async def print_labels(print_id: int, _: str = Depends(get_current_user)):
+    """Les familles, categories et etiquettes du modele de cette impression, donnees par Claude (vide sinon)."""
+    from ....services import ai_tags as AI
+    return await AI.labels_for_print(print_id)
 
 
 @router.post("/{print_id}/tags")

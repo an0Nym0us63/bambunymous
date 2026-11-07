@@ -95,29 +95,47 @@ def _clean(t: str, n: int) -> str:
     return t[:n]
 
 
-async def _models(n: int) -> list:
-    """Les n derniers modeles imprimes (un par modele MakerWorld ; sans modele, un par groupe ou par impression)."""
+def model_key(did, gid, pid) -> str:
+    """La cle du modele d'une impression : son modele MakerWorld, sinon son groupe, sinon elle-meme."""
+    did = str(did or "").strip()
+    return f"mw:{did}" if did.isdigit() else f"g:{gid}" if gid else f"p:{pid}"
+
+
+async def _select(n: int | None = None) -> list:
+    """Les modeles imprimes, du plus recent au plus ancien (un par modele MakerWorld ; sans modele, un par groupe ou
+    par impression) ; les n premiers, ou tous."""
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print
     out, seen = [], set()
     async with AsyncSessionLocal() as db:
-        rows = (await db.execute(select(Print.id, Print.design_id, Print.task_name, Print.group_id)
-                                 .order_by(Print.created_at.desc()).limit(n * 30))).all()
+        q = select(Print.id, Print.design_id, Print.task_name, Print.group_id).order_by(Print.created_at.desc())
+        rows = (await db.execute(q.limit(n * 30) if n else q)).all()
         groups = {}
         gids = {r[3] for r in rows if r[3]}
         if gids:
             from ..models.print_history import Group
             groups = {g: nm for g, nm in (await db.execute(select(Group.id, Group.name).where(Group.id.in_(gids)))).all()}
     for pid, did, task, gid in rows:
-        did = str(did or "").strip()
-        key = f"mw:{did}" if did.isdigit() else f"g:{gid}" if gid else f"p:{pid}"
+        key = model_key(did, gid, pid)
         if key in seen:
             continue
         seen.add(key)
-        out.append({"key": key, "did": did if did.isdigit() else None, "task": task or "", "group": groups.get(gid), "print_id": pid})
-        if len(out) >= n:
+        did = str(did or "").strip()
+        out.append({"key": key, "did": did if did.isdigit() else None, "gid": gid, "task": task or "", "group": groups.get(gid),
+                    "print_id": pid})
+        if n and len(out) >= n:
             break
+    return out
+
+
+async def _models(n: int) -> list:
+    """Les n derniers modeles imprimes, prets a envoyer."""
+    return await _prepare(await _select(n))
+
+
+async def _prepare(out: list) -> list:
+    """Ce qu'on dit de chaque modele : la fiche MakerWorld (titre, categories, mots-cles, description) et son image."""
     from .makerworld import _base
     for m in out:
         if not m["did"]:
@@ -179,7 +197,15 @@ _SYSTEM = """Tu ranges les objets imprimes en 3D d'une personne, pour qu'elle le
 Pour chaque objet, tu donnes :
 - "families" : 1 ou 2 familles, larges. Prends-les dans la liste des familles fournie ; n'en cree une que si aucune ne convient du tout.
 - "categories" : 1 a 3 categories plus fines (par exemple Figurines, Fan art, Luminaires, Porte-cles, Vehicules, Supports, Rangement, Miniatures, Repliques...), chacune rattachee a une famille. Reutilise d'abord les categories deja existantes (fournies) des qu'elles conviennent ; n'en cree une nouvelle que pour un objet vraiment different. Maille moyenne : ni « Objet », ni « Support de manette Switch 2 ».
-- "tags" : 5 a 12 etiquettes exhaustives qui disent ce qu'est l'objet, son sujet, sa marque ou son univers (noms propres : Porsche, Nintendo, Scrat), pour qui (enfants...), comment il est fait (articule, imprime en place, multicolore, TPU, multi-plateaux...), a quoi il sert. Reutilise les etiquettes deja existantes quand elles disent la meme chose.
+- "tags" : 8 a 15 etiquettes variees, pour qu'on retrouve l'objet par n'importe quel bout. Couvre plusieurs angles, autant qu'ils s'appliquent :
+  * ce qu'est l'objet, du plus precis au plus general (Porsche 911, voiture, vehicule ; chat, felin, animal) ;
+  * son sujet : personnage, animal, lieu, metier, theme (espace, mer, dinosaure, musique...) ;
+  * son univers, son oeuvre, sa marque (noms propres : L'Âge de glace, Scrat, Nintendo, Porsche) ;
+  * a quoi il sert, ou il va : bureau, cuisine, salle de bain, chambre d'enfant, jardin, voiture... ;
+  * pour qui ou pour quelle occasion : enfants, cadeau, Noel, Paques, anniversaire, fete des meres... ;
+  * son style ou son allure : realiste, kawaii, low poly, steampunk, minimaliste, geometrique... ;
+  * son mecanisme : articule, imprime en place, a monter, a remonter, ressort, engrenage...
+  Reutilise les etiquettes deja existantes quand elles disent la meme chose.
 
 Regles :
 - Regarde d'abord l'image de chaque objet (quand elle est fournie, juste apres le texte, annoncee par sa reference) : c'est elle qui dit ce qu'est vraiment l'objet. Le titre et la description precisent (nom du personnage, usage, mecanisme).
@@ -228,7 +254,7 @@ def _err(e) -> str:
     return f"{type(e).__name__} : {e}"
 
 
-async def _ask(client, batch: list, fams: list, cats: dict, tags: list) -> list:
+async def _ask(client, batch: list, fams: list, cats: dict, tags: list, acc: dict | None = None) -> list:
     objs = []
     for m in batch:
         o = {"ref": m["key"], "titre": m["title"]}
@@ -251,6 +277,9 @@ async def _ask(client, batch: list, fams: list, cats: dict, tags: list) -> list:
         output_config={"format": {"type": "json_schema", "schema": _SCHEMA}},
     )
     await _count(r.usage)
+    if acc is not None:
+        acc["in"] += int(getattr(r.usage, "input_tokens", 0) or 0)
+        acc["out"] += int(getattr(r.usage, "output_tokens", 0) or 0)
     text = next((b.text for b in r.content if b.type == "text"), "")
     return (json.loads(text) if text else {}).get("items") or []
 
@@ -317,7 +346,7 @@ _TASKS: set = set()
 
 
 def start_simulation(n: int = 50) -> dict:
-    if _SIM["running"]:
+    if _SIM["running"] or _RUN["running"]:
         return status()
     _SIM.update(running=True, done=0, total=0, error=None)
     t = asyncio.get_running_loop().create_task(_simulate(max(5, min(100, int(n or 50)))))
@@ -335,3 +364,185 @@ def status() -> dict:
     except Exception:
         pass
     return out
+
+
+# ── Toute la collection (07/11/2026) ───────────────────────────────────────────
+# Les modeles pas encore classes, du plus recent au plus ancien, par lots de 10 : chaque lot est ecrit des sa
+# reponse (un arret, une coupure, un credit epuise : on reprend la ou on en etait). Un classement fait a la main
+# (source « manual ») n'est jamais ecrase.
+_RUN = {"running": False, "done": 0, "total": 0, "error": None, "stop": False, "in": 0, "out": 0, "at": None}
+_RUN_KEYS = ("running", "done", "total", "error", "in", "out", "at")
+
+
+def _jl(s, default):
+    try:
+        v = json.loads(s) if s else default
+    except ValueError:
+        v = default
+    return v if isinstance(v, type(default)) else default
+
+
+def _uniq(xs) -> list:
+    out, low = [], set()
+    for x in xs or []:
+        x = re.sub(r"\s+", " ", str(x or "")).strip()
+        if x and x.lower() not in low:
+            low.add(x.lower())
+            out.append(x)
+    return out
+
+
+async def _known() -> tuple:
+    """Ce qui est deja classe : les cles (et celles faites a la main), et le vocabulaire (familles, categories avec
+    leur famille, etiquettes comptees)."""
+    from collections import Counter
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import ModelLabel
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(ModelLabel.key, ModelLabel.source, ModelLabel.families, ModelLabel.catmap,
+                                        ModelLabel.tags))).all()
+    fams, cats, tc = list(FAMILIES), {}, Counter()
+    for _, _, f, cm, t in rows:
+        for x in _jl(f, []):
+            if x and x not in fams:
+                fams.append(x)
+        for k, v in _jl(cm, {}).items():
+            cats.setdefault(k, v)
+        tc.update(x for x in _jl(t, []) if x)
+    return {r[0] for r in rows}, {r[0] for r in rows if r[1] == "manual"}, fams, cats, tc
+
+
+async def _save(batch: list, res: dict) -> int:
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import ModelLabel
+    n = 0
+    async with AsyncSessionLocal() as db:
+        for m in batch:
+            it = res.get(m["key"])
+            if not it:
+                continue
+            row = await db.get(ModelLabel, m["key"])
+            if row is not None and row.source == "manual":
+                continue
+            if row is None:
+                row = ModelLabel(key=m["key"])
+                db.add(row)
+            kind = m["key"].split(":", 1)[0]
+            cats = [c for c in it.get("categories") or [] if (c.get("name") or "").strip()]
+            row.design_id = m["did"] if kind == "mw" else None
+            row.group_id = m["gid"] if kind == "g" else None
+            row.print_id = m["print_id"] if kind == "p" else None
+            row.title = m.get("title")
+            row.families = json.dumps(_uniq(it.get("families")), ensure_ascii=False)
+            row.categories = json.dumps(_uniq(c["name"] for c in cats), ensure_ascii=False)
+            row.catmap = json.dumps({c["name"].strip(): (c.get("family") or "").strip() for c in cats}, ensure_ascii=False)
+            row.tags = json.dumps(_uniq(it.get("tags")), ensure_ascii=False)
+            row.source, row.model, row.seen, row.updated_at = "ai", MODEL, 1 if m.get("img") else 0, datetime.utcnow()
+            n += 1
+        await db.commit()
+    return n
+
+
+async def _run(redo: bool) -> None:
+    from anthropic import AsyncAnthropic
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    try:
+        async with AsyncSessionLocal() as db:
+            key = await get_setting(db, K_KEY, "")
+        if not key:
+            raise RuntimeError("Aucune clé : colle-la d'abord dans Paramètres › Connexions › Claude.")
+        known, manual, fams, cats, tc = await _known()
+        skip = manual if redo else known
+        todo = [m for m in await _select() if m["key"] not in skip]
+        _RUN.update(total=len(todo), done=0)
+        client = AsyncAnthropic(api_key=key, timeout=180.0, max_retries=2)
+        for i in range(0, len(todo), BATCH):
+            if _RUN["stop"]:
+                break
+            batch = await _prepare(todo[i:i + BATCH])
+            items = await _ask(client, batch, fams, cats, [t for t, _ in tc.most_common(400)], _RUN)
+            await _save(batch, {it.get("ref"): it for it in items})
+            for it in items:
+                for f in it.get("families") or []:
+                    if f and f not in fams:
+                        fams.append(f)
+                for c in it.get("categories") or []:
+                    if c.get("name") and c["name"] not in cats:
+                        cats[c["name"]] = c.get("family") or ""
+                tc.update(_uniq(it.get("tags")))
+            for m in batch:
+                m.pop("img", None)
+            _RUN["done"] = min(len(todo), i + BATCH)
+        _RUN["error"] = None
+        logger.info(f"[IA-TAGS] collection : {_RUN['done']}/{_RUN['total']} modèles, {_RUN['in']} jetons envoyés, {_RUN['out']} reçus")
+    except Exception as e:
+        try:
+            msg = _err(e)
+        except Exception:
+            msg = f"{type(e).__name__} : {e}"
+        _RUN["error"] = msg
+        logger.warning(f"[IA-TAGS] collection : {msg}")
+    finally:
+        _RUN.update(running=False, stop=False, at=datetime.now().isoformat(timespec="seconds"))
+
+
+def start_run(redo: bool = False) -> dict:
+    if not _RUN["running"] and not _SIM["running"]:
+        _RUN.update({"running": True, "done": 0, "total": 0, "error": None, "stop": False, "in": 0, "out": 0})
+        t = asyncio.get_running_loop().create_task(_run(bool(redo)))
+        _TASKS.add(t)
+        t.add_done_callback(_TASKS.discard)
+    return {k: _RUN[k] for k in _RUN_KEYS}
+
+
+def stop_run() -> dict:
+    if _RUN["running"]:
+        _RUN["stop"] = True
+    return {k: _RUN[k] for k in _RUN_KEYS}
+
+
+async def overview() -> dict:
+    """Ou en est la collection : modeles classes sur le total, et ce qui en sort (familles, categories, etiquettes
+    les plus courantes), avec le classement en cours."""
+    from collections import Counter
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import ModelLabel
+    keys = {m["key"] for m in await _select()}
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(ModelLabel.key, ModelLabel.families, ModelLabel.categories, ModelLabel.catmap,
+                                        ModelLabel.tags))).all()
+    fc, cc, tc, cmap, done = Counter(), Counter(), Counter(), {}, 0
+    for k, f, c, cm, t in rows:
+        if k not in keys:
+            continue
+        done += 1
+        fc.update(_jl(f, []))
+        cc.update(_jl(c, []))
+        tc.update(_jl(t, []))
+        for a, b in _jl(cm, {}).items():
+            cmap.setdefault(a, b)
+    return {"models": len(keys), "classified": done, "missing": len(keys) - done,
+            "families": [{"name": k, "n": v} for k, v in fc.most_common()],
+            "categories": [{"name": k, "family": cmap.get(k) or "", "n": v} for k, v in cc.most_common()],
+            "tags": [{"name": k, "n": v} for k, v in tc.most_common(60)], "tag_count": len(tc),
+            "run": {k: _RUN[k] for k in _RUN_KEYS}}
+
+
+async def labels_for_print(print_id: int) -> dict:
+    """Le classement du modele d'une impression (vide s'il n'est pas classe)."""
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import ModelLabel, Print
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if p is None:
+            return {}
+        row = await db.get(ModelLabel, model_key(p.design_id, p.group_id, p.id))
+    if row is None:
+        return {}
+    cm = _jl(row.catmap, {})
+    return {"families": _jl(row.families, []),
+            "categories": [{"name": c, "family": cm.get(c) or ""} for c in _jl(row.categories, [])],
+            "tags": _jl(row.tags, []), "source": row.source, "seen": bool(row.seen)}

@@ -196,6 +196,36 @@ class PrintTag(Base):
     )
 
 
+class ModelLabel(Base):
+    """
+    Les familles, categories et etiquettes d'un modele, proposees par Claude (07/11/2026) : une ligne par modele,
+    pas par impression. La cle : « mw:{design_id} » (modele MakerWorld), sinon « g:{group_id} », sinon « p:{print_id} » ;
+    une seule des trois colonnes design_id / group_id / print_id est remplie, celle de la cle (la recherche s'y joint).
+    families, categories (noms) et tags en listes JSON ; catmap : la famille de chaque categorie.
+    """
+    __tablename__ = "model_labels"
+
+    key        = Column(String(160), primary_key=True)
+    design_id  = Column(String(128), nullable=True)
+    group_id   = Column(Integer,     nullable=True)
+    print_id   = Column(Integer,     nullable=True)
+    title      = Column(Text,        nullable=True)
+    families   = Column(Text,        nullable=True)
+    categories = Column(Text,        nullable=True)
+    catmap     = Column(Text,        nullable=True)
+    tags       = Column(Text,        nullable=True)
+    source     = Column(String(16),  nullable=False, default="ai")
+    model      = Column(String(64),  nullable=True)
+    seen       = Column(Integer,     nullable=False, default=0)   # Claude a vu son image
+    updated_at = Column(DateTime,    nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_model_labels_design", "design_id"),
+        Index("idx_model_labels_group",  "group_id"),
+        Index("idx_model_labels_print",  "print_id"),
+    )
+
+
 class Group(Base):
     """
     Groupe de prints, identifié par son propre id BambuNymous (exactement

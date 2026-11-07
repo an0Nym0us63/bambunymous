@@ -424,6 +424,26 @@ async def claude_tags_sim_status(_: str = Depends(get_current_user)):
     return AI.status()
 
 
+@router.get("/claude/labels")
+async def claude_labels(_: str = Depends(get_current_user)):
+    """Toute la collection : modeles classes sur le total, familles, categories et etiquettes qui en sortent."""
+    from ....services import ai_tags as AI
+    return await AI.overview()
+
+
+@router.post("/claude/labels/run")
+async def claude_labels_run(body: dict = None, _: str = Depends(require_admin)):
+    """Classe les modeles qui ne le sont pas encore (redo : tous, sauf ceux classes a la main)."""
+    from ....services import ai_tags as AI
+    return AI.start_run(bool((body or {}).get("redo")))
+
+
+@router.post("/claude/labels/stop")
+async def claude_labels_stop(_: str = Depends(require_admin)):
+    from ....services import ai_tags as AI
+    return AI.stop_run()
+
+
 # ── Commandes Bambu Lab lues dans les mails (28/10/2026) ──
 @router.get("/mail")
 async def mail_status(_: str = Depends(require_admin)):

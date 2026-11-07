@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import client from "../api/client";
-import { showAlert } from "../utils/dialog";
+import { showAlert, showConfirm } from "../utils/dialog";
 
 // Claude (07/11/2026) : la cle de l'API Claude Platform (collee ici, jamais dans le code), ce qui a ete consomme ce
 // mois-ci, et la simulation des categories et etiquettes : les derniers modeles imprimes classes par Claude, sans rien
@@ -57,6 +57,8 @@ export default function ClaudeSettings({ card, cardTitle }) {
         <div style={{ fontSize:12, color:"var(--muted)" }}>
           Ce mois-ci : {num(s.usage.calls)} demande{s.usage.calls > 1 ? "s" : ""} · {num(s.usage.in)} jetons envoyés · {num(s.usage.out)} reçus · modèle {s.model}</div>
 
+        <CollectionLabels hasKey={s.has_key} onIdle={load}/>
+
         <div style={{ borderTop:"1px solid var(--border)", paddingTop:10, display:"flex", flexDirection:"column", gap:8 }}>
           <b style={{ fontSize:13.5, color:"var(--text)" }}>🧪 Simulation des catégories</b>
           <span style={{ fontSize:12.5, color:"var(--text2)", lineHeight:1.45 }}>Tes 50 derniers modèles imprimés, classés par Claude en familles, catégories
@@ -72,6 +74,66 @@ export default function ClaudeSettings({ card, cardTitle }) {
       </div>
     </div>
   );
+}
+
+// $ par million de jetons (claude-sonnet-5-5) : envoyes, recus
+const cost = (i, o) => (Number(i || 0) * 2 + Number(o || 0) * 10) / 1e6;
+const usd = v => v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " $";
+
+// Toute la collection (07/11/2026) : les modeles pas encore classes, par lots de 10, ecrits au fur et a mesure (un
+// arret ou une erreur : la relance reprend la ou on en etait). Puis ce qui en sort.
+function CollectionLabels({ hasKey, onIdle }) {
+  const [o, setO] = useState(null);
+  const poll = useRef(null), was = useRef(false);
+  const load = () => client.get("/settings/claude/labels").then(r => {
+    setO(r.data);
+    clearTimeout(poll.current);
+    if (r.data.run?.running) { was.current = true; poll.current = setTimeout(load, 3000); }
+    else if (was.current) { was.current = false; onIdle?.(); }
+  }).catch(() => {});
+  useEffect(() => { load(); return () => clearTimeout(poll.current); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const run = async (redo) => {
+    if (redo && !(await showConfirm(`Reclasser les ${o.models} modèles (sauf ceux corrigés à la main) ? Compte environ ${usd(o.models * 0.005)}.`))) return;
+    try { await client.post("/settings/claude/labels/run", { redo }); setTimeout(load, 800); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
+  const stop = () => client.post("/settings/claude/labels/stop").then(load).catch(e => showAlert(e.response?.data?.detail || e.message));
+  if (!o) return null;
+  const r = o.run || {}, fams = {};
+  for (const c of o.categories || []) (fams[c.family || "?"] = fams[c.family || "?"] || []).push(c);
+  const pct = o.models ? Math.round(o.classified / o.models * 100) : 0;
+  return <div style={{ borderTop:"1px solid var(--border)", paddingTop:10, display:"flex", flexDirection:"column", gap:8 }}>
+    <b style={{ fontSize:13.5, color:"var(--text)" }}>📚 Toute la collection</b>
+    <span style={{ fontSize:12.5, color:"var(--text2)", lineHeight:1.45 }}>
+      {num(o.classified)} modèle{o.classified > 1 ? "s" : ""} classé{o.classified > 1 ? "s" : ""} sur {num(o.models)}.
+      {" "}Leurs catégories et étiquettes s'affichent sur la fiche de chaque impression, et la recherche des impressions les trouve.</span>
+    <div style={{ height:6, borderRadius:3, background:"var(--surface2)", overflow:"hidden" }}>
+      <div style={{ width:`${r.running && r.total ? Math.round(r.done / r.total * 100) : pct}%`, height:"100%", background:"linear-gradient(90deg, #D97757, #B45309)", transition:"width .4s" }}/></div>
+    <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+      {r.running ? <>
+        <span style={{ fontSize:12.5, fontWeight:700, color:"var(--text)" }}>Classement… {num(r.done)}/{num(r.total)} · {usd(cost(r.in, r.out))}</span>
+        <button type="button" onClick={stop} style={btn(false)}>Arrêter</button>
+      </> : <>
+        <button type="button" disabled={!hasKey || !o.missing} onClick={() => run(false)} style={btn(true, !hasKey || !o.missing)}>
+          {o.missing ? `Classer les ${num(o.missing)} modèle${o.missing > 1 ? "s" : ""} restant${o.missing > 1 ? "s" : ""} (≈ ${usd(Math.max(0.01, o.missing * 0.005))})` : "Tout est classé"}</button>
+        {o.classified > 0 && <button type="button" disabled={!hasKey} onClick={() => run(true)} style={btn(false, !hasKey)}>Tout reclasser</button>}
+      </>}
+    </div>
+    {!r.running && r.at && (r.in > 0 || r.error) && <span style={{ fontSize:11.5, color:"var(--muted)" }}>
+      Dernier passage : {new Date(r.at).toLocaleString("fr-FR")} · {num(r.done)} modèle{r.done > 1 ? "s" : ""} · {usd(cost(r.in, r.out))}</span>}
+    {r.error && <div style={{ fontSize:12.5, fontWeight:700, color:"#ef4444" }}>{r.error} — relance pour reprendre là où il s'est arrêté.</div>}
+    {o.categories?.length > 0 && <div style={{ padding:10, borderRadius:12, background:"var(--surface2)", border:"1px solid var(--border)", display:"flex", flexDirection:"column", gap:6 }}>
+      <b style={{ fontSize:12.5, color:"var(--text)" }}>{o.categories.length} catégories · {num(o.tag_count)} étiquettes</b>
+      {Object.entries(fams).sort((a, b) => b[1].reduce((s, c) => s + c.n, 0) - a[1].reduce((s, c) => s + c.n, 0)).map(([f, cs]) => <div key={f} style={{ fontSize:12 }}>
+        <span style={chip("#B45309", true)}>{f}</span>
+        {cs.map(c => <span key={c.name} style={chip("#6366F1")}>{c.name} · {c.n}</span>)}
+      </div>)}
+      {o.tags?.length > 0 && <div style={{ fontSize:12, marginTop:2 }}>
+        <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginRight:6 }}>Étiquettes les plus courantes</span>
+        {o.tags.slice(0, 40).map(t => <span key={t.name} style={chip("#64748B")}>{t.name} · {t.n}</span>)}
+      </div>}
+    </div>}
+  </div>;
 }
 
 function SimResult({ res }) {
