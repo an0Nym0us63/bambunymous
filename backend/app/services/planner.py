@@ -1082,7 +1082,13 @@ def mark_complete(placed: list) -> None:
             continue
         st = seen.setdefault(id(o), {"n": dict(o["plates"]), "qty": o["qty"]})
         before = min(st["n"].values()) if st["n"] else 0
-        st["n"][j["plate"]] = st["n"].get(j["plate"], 0) + 1
+        # des plateaux regroupes (07/11/2026) : tous comptent (seul le premier comptait, et le dernier plateau de Scrat
+        # ne terminait jamais l'objet : le plateau 6, regroupe avec le 2, restait a faire)
+        # (seulement ceux de ce modele : la cle d'un plateau est « modele:plateau:exemplaire »)
+        did = str(j.get("design_id") or "")
+        ns = [int(k.rsplit(":", 2)[1]) for k in (j.get("merged") or []) if k.rsplit(":", 2)[0] == did] or [j["plate"]]
+        for n in ns:
+            st["n"][n] = st["n"].get(n, 0) + 1
         after = min(st["n"].values())
         if after > before:
             j["completes"] = after
