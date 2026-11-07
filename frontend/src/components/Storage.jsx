@@ -158,6 +158,10 @@ export function StorageSettingsCard({ card, cardTitle }) {
       p.leaf && { icon: p.single ? "📚" : "🔲", label: p.single ? "En faire un rangement commun" : "En faire une case (une seule bobine)",
         hint: p.single ? "Autant de bobines qu'on veut" : "Réservée à une bobine tant qu'elle ne va pas ailleurs",
         onClick: () => write("patch", `/storage/places/${p.id}`, { single: !p.single }) },
+      { icon: "📦", label: p.stock ? "Ce n'est plus du stock" : "C'est du stock (cartons, réserve)", disabled: !p.stock && p.in_stock,
+        hint: !p.stock && p.in_stock ? "Déjà dans un rangement de stock" : p.stock ? "Une bobine qui en sort pour l'AMS n'y revient pas"
+          : "Une bobine qui en sort pour l'AMS le quitte pour de bon ; l'échange intelligent n'y range jamais rien" + (p.leaf ? "" : " (tout ce qu'il contient)"),
+        onClick: () => write("patch", `/storage/places/${p.id}`, { stock: !p.stock }) },
       !p.leaf && { icon: "▦", label: "Colonnes de la grille", hint: p.cols ? `${p.cols} colonnes` : "automatique", onClick: () => openMenu(null, {
         title: `Colonnes de « ${p.name} »`, subtitle: "pour afficher son contenu en grille", color: "#8B5CF6",
         items: [null, 1, 2, 3, 4, 5, 6, 8, 10, 12].map(n => ({ icon: n === (p.cols || null) ? "✓" : "▦", label: n ? `${n} colonne${n > 1 ? "s" : ""}` : "Automatique",
@@ -174,13 +178,15 @@ export function StorageSettingsCard({ card, cardTitle }) {
     return <>
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 6px", paddingLeft: 6 + p.depth * 18, borderRadius: 10,
         background: p.depth ? "transparent" : "color-mix(in srgb, #8B5CF6 6%, transparent)" }}>
-        <span style={{ fontSize: 14, width: 18, textAlign: "center" }}>{p.icon || (p.leaf ? (p.single ? "🔲" : "📚") : "🗂")}</span>
+        <span style={{ fontSize: 14, width: 18, textAlign: "center" }}>{p.icon || (p.stock ? "📦" : p.leaf ? (p.single ? "🔲" : "📚") : "🗂")}</span>
         {renaming?.id === p.id
           ? <input autoFocus defaultValue={p.name} onBlur={e => rename(p, e.target.value)} onKeyDown={e => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") setRenaming(null); }}
             style={{ ...inp, padding: "4px 8px", flex: 1 }}/>
           : <button type="button" onClick={() => setRenaming({ id: p.id, name: p.name })} data-tip="Renommer"
             style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "text", color: "var(--text)",
               fontSize: 13.5, fontWeight: p.leaf ? 700 : 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</button>}
+        {p.stock && <span data-tip="Rangement de stock" style={{ fontSize: 10.5, fontWeight: 900, padding: "1px 7px", borderRadius: 20, flexShrink: 0,
+          color: "#B45309", background: "color-mix(in srgb, #F59E0B 16%, transparent)" }}>📦 stock</span>}
         <span style={{ ...small, flexShrink: 0 }}>{p.leaf ? (p.single ? (n ? "case prise" : "case libre") : `${n} bobine${n > 1 ? "s" : ""}`)
           : `${(kids[p.id] || []).length} dedans${n ? ` · ${n} bob.` : ""}`}</span>
         <button type="button" onClick={() => write("post", `/storage/places/${p.id}/move`, { d: -1 })} aria-label="Monter" style={{ ...seg, padding: "2px 7px" }}>↑</button>
@@ -211,6 +217,18 @@ export function StorageSettingsCard({ card, cardTitle }) {
           </button>;
         })}
       </div>
+
+      {st.mode !== "single" && <label style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", borderRadius: 14, marginBottom: 12, cursor: "pointer",
+        border: `1px solid ${st.smart ? "color-mix(in srgb, #8B5CF6 45%, var(--border))" : "var(--border)"}`, background: st.smart ? "color-mix(in srgb, #8B5CF6 8%, var(--surface))" : "var(--surface)" }}>
+        <input type="checkbox" checked={!!st.smart} onChange={e => write("put", "/storage/settings", { smart: e.target.checked })} style={{ marginTop: 3 }}/>
+        <span style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 900, color: "var(--text)" }}>🧠 Échange intelligent</span>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.4 }}>
+            Tu remplaces une bobine par une autre dans le même emplacement de l'AMS (dans la demi-heure) : celle qui sort prend la place que l'autre vient de quitter
+            {st.mode === "manual" ? " (rangée d'office, sans rappel)" : " (elles échangent leurs places)"}. Jamais une place de <b>stock</b> 📦 : une bobine qui sort d'un carton
+            le quitte pour de bon, et celle qu'elle remplace attend que tu dises où elle est.</span>
+        </span>
+      </label>}
 
       {st.mode === "single" && <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 12 }}>
         <label style={{ flex: 1 }}><span style={{ ...small, display: "block", marginBottom: 4 }}>Nom du rangement</span>
@@ -269,6 +287,7 @@ function PlaceMaker({ parent, onClose }) {
   const [levels, setLevels] = useState([]);
   const [combine, setCombine] = useState(false);
   const [single, setSingle] = useState(false);
+  const [stock, setStock] = useState(false);
   const [inside, setInside] = useState(!!parent);    // creer directement dans le parent, sans groupe
   const [busy, setBusy] = useState(false);
   const pick = p => { setPreset(p); setName(p.name || ""); setLevels(p.levels.map(x => ({ ...x }))); setCombine(!!p.combine); setSingle(p.k === "one" ? false : p.single !== false); };
@@ -286,7 +305,7 @@ function PlaceMaker({ parent, onClose }) {
         for (const c of kids) { const r = await write("post", "/storage/places", { ...c, parent_id: parent.id }); if (!r) return; }
         if (cols && cols !== parent.cols) await write("patch", `/storage/places/${parent.id}`, { cols });
       } else {
-        const body = { name: name.trim(), single: levels.length ? false : single, parent_id: parent?.id ?? null, cols: kids.length ? cols : null, children: kids };
+        const body = { name: name.trim(), single: levels.length ? false : single, parent_id: parent?.id ?? null, cols: kids.length ? cols : null, children: kids, stock };
         if (!(await write("post", "/storage/places", body))) return;
       }
       onClose();
@@ -326,6 +345,9 @@ function PlaceMaker({ parent, onClose }) {
         <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>
           <input type="checkbox" checked={single} onChange={e => setSingle(e.target.checked)}/>
           {levels.length ? "Chaque emplacement est une case (une seule bobine)" : "Une case (une seule bobine)"}</label>
+        {!(inside && parent && levels.length) && <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}
+          data-tip="Cartons, réserve : une bobine qui en sort pour l'AMS le quitte pour de bon, et l'échange intelligent n'y range jamais rien">
+          <input type="checkbox" checked={stock} onChange={e => setStock(e.target.checked)}/>📦 C'est du stock (cartons, réserve)</label>}
       </div>
       {kids.length > 0 && <div style={{ padding: 10, borderRadius: 12, border: "1px dashed var(--border)", background: "var(--surface)" }}>
         <div style={{ ...small, marginBottom: 6 }}>Aperçu · {leafCount(kids)} {single ? "cases" : "emplacements où ranger"}
@@ -384,7 +406,7 @@ export function PlacePicker({ spools, onClose, onDone, pickOnly = false, onPicke
     const allLeaves = ch.every(c => c.leaf);
     return <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: p.depth ? "6px 0 0" : 10, borderRadius: 14,
       border: p.depth ? "none" : "1px solid var(--border)", background: p.depth ? "transparent" : "color-mix(in srgb, #8B5CF6 4%, var(--surface2))" }}>
-      <div style={{ fontSize: p.depth ? 12 : 13.5, fontWeight: 900, color: p.depth ? "var(--text2)" : "var(--text)" }}>{p.icon || "🗂"} {p.name}</div>
+      <div style={{ fontSize: p.depth ? 12 : 13.5, fontWeight: 900, color: p.depth ? "var(--text2)" : "var(--text)" }}>{p.icon || (p.stock ? "📦" : "🗂")} {p.name}{p.stock ? " · stock" : ""}</div>
       {allLeaves
         ? <div style={{ display: "grid", gap: 5, gridTemplateColumns: p.cols ? `repeat(${p.cols}, minmax(0, 1fr))` : "repeat(auto-fill, minmax(92px, 1fr))" }}>
           {ch.map(c => <Leaf key={c.id} p={c} compact={!!p.cols && p.cols > 3}/>)}</div>
@@ -579,7 +601,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
     {st.mode === "single"
       ? (elsewhere.length > 0 && <Section k="single" icon="🗄" title={st.name} n={elsewhere.length}><div style={grid}>{elsewhere.map(s => renderSpool(s))}</div></Section>)
       : <>
-        {roots.map(p => <Section key={p.id} k={`p${p.id}`} icon={p.icon || (p.leaf ? (p.single ? "🔲" : "📚") : "🗂")} title={p.name} n={countIn(p)}>
+        {roots.map(p => <Section key={p.id} k={`p${p.id}`} icon={p.icon || (p.stock ? "📦" : p.leaf ? (p.single ? "🔲" : "📚") : "🗂")} title={p.stock ? `${p.name} · stock` : p.name} n={countIn(p)}>
           {p.leaf ? (p.single ? <div style={{ maxWidth: 120 }}><Cell p={p}/></div> : <Common p={p}/>) : <Group p={p}/>}
         </Section>)}
         {elsewhere.length > 0 && <Section k="else" icon="❔" title="Ailleurs" n={elsewhere.length} tone="#64748B"><div style={grid}>{elsewhere.map(s => renderSpool(s))}</div></Section>}

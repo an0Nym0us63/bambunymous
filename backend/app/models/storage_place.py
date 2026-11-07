@@ -19,4 +19,7 @@ class StoragePlace(Base):
     sort       = Column(Integer, nullable=False, default=0)
     cols       = Column(Integer, nullable=True)                   # groupe : ses enfants en grille de cols colonnes
     icon       = Column(String(8), nullable=True)
+    # du stock (cartons, reserve) : une bobine qui en sort pour l'AMS n'y revient pas, et l'echange intelligent n'y
+    # range jamais celle qu'elle remplace (07/11/2026) ; vaut pour tout ce que le noeud contient
+    stock      = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, default=datetime.utcnow)

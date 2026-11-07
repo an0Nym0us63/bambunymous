@@ -44,6 +44,8 @@ async def update_spool_location(spool_id: int, location: str):
             else:
                 loc = location
                 if _sp.in_printer(loc):
+                    if not _sp.in_printer(spool.location):
+                        await _sp.into_printer(db, spool, loc)   # sortie du stock, echange intelligent
                     spool.unstored_at = None      # revenue dans l'AMS : plus rien a ranger
             if spool.location != loc or db.is_modified(spool):
                 old = spool.location or ""

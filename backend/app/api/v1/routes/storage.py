@@ -34,9 +34,9 @@ async def storage_overview(db: AsyncSession = Depends(get_db), _: str = Depends(
 
 @router.put("/settings")
 async def storage_settings(body: dict = Body({}), db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
-    """{mode: single|assigned|manual, name: le nom du rangement unique}."""
+    """{mode: single|assigned|manual, name: le nom du rangement unique, smart: l'echange intelligent}."""
     try:
-        await SP.set_config(db, body.get("mode"), body.get("name"))
+        await SP.set_config(db, body.get("mode"), body.get("name"), body.get("smart"))
     except SP.StorageError as e:
         _err(e)
     return await _done(db)

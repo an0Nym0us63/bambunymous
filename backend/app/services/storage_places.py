@@ -9,6 +9,12 @@ ecrit par core/mqtt), ou rangee. Trois modes, au choix dans Parametres > Filamen
   - manual   : on ne range jamais au meme endroit. En sortant de l'AMS, la bobine passe « À ranger » (unstored_at) et
                l'appli rappelle de dire ou on l'a mise ; sa derniere place reste proposee (« remise à sa place »).
 
+Echange intelligent (case a cocher, modes « sa place » et « manuel ») : une bobine B entre dans le slot qu'une bobine A
+vient de quitter (dans les 30 min) ; A a de fortes chances d'avoir pris la place que B occupait. En mode manuel, A y
+est rangee d'office (plus de rappel) ; en mode « sa place », A et B echangent leurs places. Une place de STOCK (cartons,
+reserve, et tout ce qu'elle contient) ne se devine jamais : une bobine qui en sort pour l'AMS la quitte pour de bon, et
+celle qu'elle remplace attend qu'on dise ou elle est (on ne peut pas le deviner).
+
 Les places forment un arbre (models/storage_place.py) : seules les feuilles recoivent des bobines ; une feuille commune
 en prend autant qu'on veut, une feuille unique (une case) une seule : tant que la bobine qui l'occupe n'est pas rangee
 ailleurs ou archivee, on ne peut pas y en mettre une autre (sauf a la deloger, elle repasse alors « À ranger »). Une
@@ -27,7 +33,8 @@ from sqlalchemy import select
 logger = logging.getLogger(__name__)
 
 MODES = ("single", "assigned", "manual")
-K_MODE, K_NAME = "STORAGE_MODE", "STORAGE_NAME"
+K_MODE, K_NAME, K_SMART = "STORAGE_MODE", "STORAGE_NAME", "STORAGE_SMART"
+SWAP_WINDOW = timedelta(minutes=30)     # echange intelligent : la bobine entree dans le slot dans ce delai
 DEFAULT_NAME = "Tiroir"
 TO_STORE = "À ranger"
 STORED = "@rangement"         # demande a spool_location : « sortie de l'imprimante, range-la selon le mode »
@@ -67,7 +74,8 @@ async def config(db) -> dict:
     from .settings_service import get_setting
     mode = (await get_setting(db, K_MODE, "single")) or "single"
     return {"mode": mode if mode in MODES else "single",
-            "name": (await get_setting(db, K_NAME, DEFAULT_NAME)) or DEFAULT_NAME}
+            "name": (await get_setting(db, K_NAME, DEFAULT_NAME)) or DEFAULT_NAME,
+            "smart": (await get_setting(db, K_SMART, "0")) == "1"}
 
 
 async def places(db) -> dict:
@@ -94,6 +102,17 @@ def path_of(pl: dict, pid) -> str | None:
     return SEP.join(reversed(names)) if names and pid is None else None
 
 
+def is_stock(pl: dict, pid) -> bool:
+    """La place, ou un de ses groupes, est du stock."""
+    seen = set()
+    while pid is not None and pid in pl and pid not in seen:
+        seen.add(pid)
+        if getattr(pl[pid], "stock", False):
+            return True
+        pid = pl[pid].parent_id
+    return False
+
+
 def is_leaf(pl: dict, pid, kids=None) -> bool:
     kids = kids if kids is not None else _kids(pl)
     return pid in pl and not kids.get(pid)
@@ -109,8 +128,13 @@ def resolve(s, conf: dict, pl: dict, kids=None) -> str:
     return p if (p and s.unstored_at is None) else TO_STORE
 
 
+_LEFT: dict = {}          # slot (« AMS-A slot 2 ») -> (bobine sortie, quand) : pour l'echange intelligent
+
+
 async def out_of_printer(db, s) -> str:
     """Sortie de l'imprimante : ou elle va, selon le mode (unstored_at pose quand il faut dire ou on l'a mise)."""
+    if in_printer(s.location):
+        _LEFT[s.location] = (s.id, datetime.utcnow())
     conf, pl = await config(db), await places(db)
     kids = _kids(pl)
     has = bool(s.place_id and is_leaf(pl, s.place_id, kids))
@@ -131,6 +155,40 @@ async def place_new(db, s, place_id=None) -> None:
         except StorageError:
             pass
     s.location = await out_of_printer(db, s)
+
+
+async def into_printer(db, b, loc: str) -> None:
+    """La bobine b entre dans l'imprimante (slot loc), venant du stock : elle quitte une place de stock pour de bon ;
+    echange intelligent : celle qui vient de quitter ce slot prend la place que b laisse (voir l'en-tete)."""
+    from ..models.filament import Spool
+    conf = await config(db)
+    left = _LEFT.pop(loc, None)
+    if conf["mode"] == "single" or not stored(b):
+        return
+    pl = await places(db)
+    kids = _kids(pl)
+    here = b.place_id if (b.place_id and is_leaf(pl, b.place_id, kids) and b.location != TO_STORE) else None
+    if b.place_id and is_stock(pl, b.place_id):
+        b.place_id, here = None, None                 # sortie du stock : elle n'y reviendra pas
+        logger.info(f"[RANGEMENT] bobine #{b.id} sortie du stock pour {loc}")
+    if not (conf["smart"] and left and left[0] != b.id and datetime.utcnow() - left[1] <= SWAP_WINDOW):
+        return
+    a = await db.get(Spool, left[0])
+    if a is None or a.archived or not stored(a):
+        return
+    if conf["mode"] == "manual":
+        # pas encore dite rangee depuis sa sortie : elle a pris la place de b
+        if here and a.location == TO_STORE and a.unstored_at is not None and a.unstored_at >= left[1] - timedelta(minutes=1):
+            b.place_id = None
+            a.place_id, a.unstored_at = here, None
+            a.location = resolve(a, conf, pl, kids)
+            logger.info(f"[RANGEMENT] échange : #{a.id} rangée à la place de #{b.id} ({a.location})")
+    elif here:
+        old = a.place_id if (a.place_id and a.place_id in pl and not is_stock(pl, a.place_id)) else None
+        a.place_id, b.place_id = here, old            # elles echangent leurs places
+        a.unstored_at = None
+        a.location = resolve(a, conf, pl, kids)
+        logger.info(f"[RANGEMENT] échange : #{a.id} prend la place de #{b.id} ({a.location})")
 
 
 def archived(s) -> None:
@@ -268,6 +326,7 @@ async def overview(db) -> dict:
     def walk(parent, depth):
         for p in kids.get(parent, []):
             out.append({"id": p.id, "parent_id": p.parent_id, "name": p.name, "single": bool(p.single),
+                        "stock": bool(getattr(p, "stock", False)), "in_stock": is_stock(pl, p.id),
                         "sort": p.sort or 0, "cols": p.cols, "icon": p.icon, "depth": depth, "path": path_of(pl, p.id),
                         "leaf": not kids.get(p.id), "spools": by_place.get(p.id, [])})
             walk(p.id, depth + 1)
@@ -294,6 +353,7 @@ async def create(db, body: dict, parent_id=None) -> list:
 
     async def mk(b, par, sort):
         p = StoragePlace(parent_id=par, name=check_name(b.get("name")), single=bool(b.get("single")), sort=sort,
+                         stock=bool(b.get("stock")),
                          cols=(int(b["cols"]) if b.get("cols") else None), icon=(b.get("icon") or None))
         db.add(p)
         await db.flush()
@@ -323,6 +383,8 @@ async def update(db, pid: int, body: dict) -> None:
             if n > 1:
                 raise StorageError(f"« {p.name} » tient {n} bobines : une case n'en prend qu'une")
         p.single = single
+    if "stock" in body:
+        p.stock = bool(body["stock"])
     if "cols" in body:
         p.cols = int(body["cols"]) if body["cols"] else None
     if "icon" in body:
@@ -387,8 +449,10 @@ async def delete(db, pid: int) -> int:
     return len([s for s in sp if not s.archived])
 
 
-async def set_config(db, mode=None, name=None) -> None:
+async def set_config(db, mode=None, name=None, smart=None) -> None:
     from .settings_service import set_setting
+    if smart is not None:
+        await set_setting(db, K_SMART, "1" if smart else "0")
     if name is not None:
         await set_setting(db, K_NAME, check_name(name, "Le nom du rangement"))
     if mode is not None:
