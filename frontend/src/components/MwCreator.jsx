@@ -12,11 +12,11 @@ import { Boxes, Coins, Download, Heart, Printer, Users, Zap } from "lucide-react
 // sont ceux reellement verses par MakerWorld (point-bill), pas recalcules.
 const fmt = (v, d = 0) => v == null ? "—" : Number(v).toLocaleString("fr-FR", { maximumFractionDigits: d });
 const pts = v => fmt(v, 2);
-const PERIODS = [["7", "7 jours"], ["30", "30 jours"], ["90", "90 jours"], ["365", "1 an"], ["all", "Depuis le début"]];
+const PERIODS = [["1", "24 heures"], ["7", "7 jours"], ["30", "30 jours"], ["90", "90 jours"], ["365", "1 an"], ["all", "Depuis le début"]];
 const TYPES = [["points", "Points", "pts"], ["downloads", "Téléchargements", "téléch."], ["prints", "Impressions", "impr."],
   ["boosts", "Boosts", "boosts"], ["likes", "J'aime", "j'aime"]];
-const SHORT = { "7": "7 j", "30": "30 j", "90": "90 j", "365": "1 an", "all": "total" };
-const HEAD = [["7", "7 j"], ["30", "30 j"], ["365", "1 an"]];   // lignes des vignettes d'en-tete
+const SHORT = { "1": "24 h", "7": "7 j", "30": "30 j", "90": "90 j", "365": "1 an", "all": "total" };
+const HEAD = [["1", "24 h"], ["7", "7 j"], ["30", "30 j"], ["365", "1 an"]];   // lignes des vignettes d'en-tete
 
 export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
   const [data, setData] = useState(null);
@@ -195,7 +195,7 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
               <div style={{ fontSize:22, fontWeight:900, margin:"7px 0 8px", letterSpacing:"-0.02em", lineHeight:1.1,
                 ...grad(c, `color-mix(in srgb, ${c} 55%, #ffffff)`) }}>{v}</div>
               {sub && (
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:3 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(46px,1fr))", gap:3 }}>
                   {sub.map(([k, n, x]) => (
                     <span key={k} style={{ padding:"4px 1px 3px", borderRadius:8, textAlign:"center", minWidth:0,
                       background:"var(--surface)", border:"1px solid var(--border)" }}>

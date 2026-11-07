@@ -244,8 +244,9 @@ def _baseline(daily: dict, days):
     return key, daily[key]
 
 
-PERIODS = {"7": 7, "30": 30, "90": 90, "365": 365, "all": None}
-HEAD_DAYS = (7, 30, 365)
+# « 1 » : les dernieres 24 h (07/11/2026) ; les compteurs partent du releve de la veille, les points a l'heure pres
+PERIODS = {"1": 1, "7": 7, "30": 30, "90": 90, "365": 365, "all": None}
+HEAD_DAYS = (1, 7, 30, 365)
 
 
 # ── Historique importe (une fois) ─────────────────────────────────────────
