@@ -148,6 +148,7 @@ async def init_db():
     from ..models import activity   # noqa - journal d'activite
     from ..models import notif_log  # noqa - historique des notifications
     from ..models import spool_move  # noqa - ce qu'on rend aux bobines, et ce qu'on annule
+    from ..models import storage_place  # noqa - les rangements des bobines
     async with engine.begin() as conn:
         # WAL mode : permet lectures concurrentes, évite les database locked
         await conn.execute(__import__("sqlalchemy").text("PRAGMA journal_mode=WAL"))
@@ -175,6 +176,11 @@ async def init_db():
     await _purge_activity_log()
     await _normalize_print_dates()
     await _repair_print_durations()
+    try:        # l'emplacement ecrit sur chaque bobine rangee suit le mode et les noms (07/11/2026)
+        from ..services import storage_places as _sp
+        await _sp.refresh_all()
+    except Exception as e:
+        print(f"[migration] rangements : {e}")
 
 
 async def _migrate():
@@ -261,6 +267,8 @@ async def _migrate():
         ("bobines",   "drift_at",             "TEXT"),
         ("bobines",   "end_reason",           "TEXT"),
         ("bobines",   "drift_off",            "TEXT"),
+        ("bobines",   "place_id",             "INTEGER"),
+        ("bobines",   "unstored_at",          "TIMESTAMP"),
         ("prints",    "number_of_items",      "INTEGER DEFAULT 1"),
         ("prints",    "sold_units",           "INTEGER DEFAULT 0"),
         ("prints",    "sold_price_total",     "REAL"),

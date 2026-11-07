@@ -1256,7 +1256,8 @@ async def _adopt_ordered(db, it: dict) -> bool:
         sp = await db.get(Spool, int(sid))
         if sp and sp.ordered:
             sp.ordered = False
-            sp.location = "Tiroir"
+            from . import storage_places as _sp
+            await _sp.place_new(db, sp)
             sp.last_dried_at = datetime.utcnow()
             return True
     return False

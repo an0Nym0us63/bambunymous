@@ -69,8 +69,29 @@
 
 <section id="parametres-filament">
   <h2>🧵 Filaments <span class="admin">admin</span></h2>
-  <p>Quatre cartes de réglages liés au stock de filaments. Le détail de leur usage est dans le chapitre <a href="#filaments">Filaments</a>.</p>
+  <p>Les cartes de réglages liés au stock de filaments : les rangements, les délais de séchage, les supports vides, les étiquettes, les catalogues et les prix. Le détail de leur usage est dans le chapitre <a href="#filaments">Filaments</a>.</p>
   <figure><img src="img/parametres-filaments.webp" alt="Onglet Filaments : délais de séchage, supports vides, étiquettes, révision des prix"><figcaption>L'onglet Filaments, avec un cas de séchage PETG et un support vide en cours d'ajout.</figcaption></figure>
+
+  <section id="parametres-filament-rangements">
+    <h3>🗄 Rangements</h3>
+    <p>Où vont les bobines qui ne sont pas dans l'imprimante. Trois modes, une carte chacun (la carte active est entourée) :</p>
+    <ul>
+      <li><span class="ui">🗄 Un seul rangement</span> (par défaut, le mode d'origine) : tout ce qui sort de l'imprimante va au même endroit. Le champ <span class="ui">Nom du rangement</span> le renomme (« Tiroir » au départ : « Étagère », « Placard »…) ; toutes les bobines rangées prennent le nouveau nom.</li>
+      <li><span class="ui">📍 Chaque bobine a sa place</span> : une bobine est dans l'imprimante ou à <b>sa</b> place, rien d'autre. En sortant de l'AMS, elle y retourne d'office. Une bobine sans place est « À ranger ».</li>
+      <li><span class="ui">✋ Je range où je veux</span> : une bobine qui sort de l'AMS, qui arrive d'une commande ou qu'on ajoute passe « À ranger », et l'appli te rappelle de dire où tu l'as mise (voir <a href="#filaments-rangement">Ranger une bobine</a>) ; sa dernière place est proposée en premier.</li>
+    </ul>
+    <p>Changer de mode ne déclenche aucun rappel : les bobines déjà rangées à une place y restent, les autres s'affichent « À ranger » sans notification. Revenir au rangement unique garde la place de chacune pour un prochain retour.</p>
+    <p><b>Les emplacements</b> se créent en arbre, sous la liste des modes. <span class="ui">＋ Ajouter</span> ouvre le générateur, avec quatre modèles :</p>
+    <ul>
+      <li><span class="ui">📦 Un emplacement</span> : un placard, un bac, une étagère ; <b>commun</b> (autant de bobines qu'on veut) ou, case cochée, une <b>case</b> (une seule bobine) ;</li>
+      <li><span class="ui">🗄 Tiroir › colonnes › lignes</span> : « Tiroir 1 » avec 3 colonnes de 4 lignes (Tiroir 1 › Colonne 2 › Ligne 3) ;</li>
+      <li><span class="ui">🔢 Rack en grille</span> : « Rack 1 » avec des codes combinés, de A1 à D6 ;</li>
+      <li><span class="ui">📚 Étagère à niveaux</span> : Niveau 1, 2, 3, communs.</li>
+    </ul>
+    <p>Chaque niveau a son nom (« Colonne », « Ligne », ou rien), son nombre et sa numérotation (<span class="ui">1, 2, 3</span> ou <span class="ui">A, B, C</span>) ; <span class="ui">＋ Un niveau</span> en ajoute un (trois au plus), ✕ en retire un, <span class="ui">Codes combinés (A1, A2…)</span> fond deux niveaux en une grille, et <span class="ui">Chaque emplacement est une case</span> en fait des cases. L'aperçu montre ce qui sera créé, le bouton en donne le nombre. Ouvert sur un emplacement existant (son ⋯, <span class="ui">Ajouter dedans</span>), il propose aussi de créer <b>directement dedans</b>, sans groupe intermédiaire.</p>
+    <p>Dans l'arbre, chaque ligne dit ce qu'elle contient (« case libre », « case prise », « 3 bobines », « 4 dedans ») ; toucher un nom le renomme, ↑ ↓ changent l'ordre, et ⋯ donne : renommer, ajouter dedans (impossible dans un emplacement qui tient des bobines : range-les d'abord ailleurs), en faire une case ou un rangement commun (une case ne prend qu'une bobine), le nombre de colonnes de sa grille, le déplacer dans un autre groupe, le supprimer (ses bobines perdent leur place et passent « À ranger »). Un nom ne peut pas ressembler à un emplacement de l'imprimante (AMS…, HT-…, Externe) ni reprendre « À ranger », « Archives » ou « En commande ».</p>
+    <p>Une <b>case</b> appartient à une seule bobine tant que celle-ci n'est pas rangée ailleurs ou archivée, même pendant qu'elle est dans l'AMS. Ranger une autre bobine dans une case prise demande confirmation : l'ancienne est délogée et passe « À ranger ».</p>
+  </section>
 
   <section id="parametres-filament-sechage">
     <h3>Délais de séchage</h3>

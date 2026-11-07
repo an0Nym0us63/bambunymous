@@ -390,7 +390,8 @@ async def rfid_create(
         if adopted:
             # une bobine « en commande » choisie dans la liste : c'est elle qui arrive, elle repasse en stock
             spool.ordered = False
-            spool.location = "Tiroir"
+            from ....services import storage_places as _sp
+            await _sp.place_new(db, spool)
             spool.remaining_weight_g = body.remaining_weight_g if body.remaining_weight_g is not None else scan["spool_weight_g"]
             spool.last_dried_at = datetime.utcnow()
         if before is not None:
@@ -423,7 +424,8 @@ async def rfid_create(
     if ordered is not None:
         ordered.tag_number = tray_uid
         ordered.ordered = False
-        ordered.location = "Tiroir"
+        from ....services import storage_places as _sp
+        await _sp.place_new(db, ordered)
         if body.spool_price is not None:
             ordered.price_override = body.spool_price
         ordered.remaining_weight_g = body.remaining_weight_g if body.remaining_weight_g is not None else scan["spool_weight_g"]
@@ -450,11 +452,14 @@ async def rfid_create(
                             else scan["spool_weight_g"]),
         # location par defaut ; le worker spool_location la basculera en "AMS xxx"
         # si la bobine est vue dans un AMS. L'utilisateur n'y touche jamais.
-        location="Tiroir",
+        location="Tiroir",                   # remplace aussitot par le rangement (services/storage_places)
         comment=body.comment,
         last_dried_at=datetime.utcnow(),     # neuve = seche (cf. filaments.create_spool)
     )
     db.add(spool)
+    await db.flush()
+    from ....services import storage_places as _sp
+    await _sp.place_new(db, spool)
     await db.commit()
     await db.refresh(spool)
     try:                                         # attendue d'une commande (mails) : arrivee

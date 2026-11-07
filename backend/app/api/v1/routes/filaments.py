@@ -164,6 +164,8 @@ class SpoolOut(BaseModel):
     id: int
     filament_id: int
     ordered: bool = False                 # commandee, pas encore recue
+    place_id: Optional[int] = None        # sa place de rangement (gardee pendant qu'elle est dans l'AMS)
+    unstored_at: Optional[datetime] = None  # attend qu'on dise ou elle est rangee, depuis
     # Filament catalogue
     filament_name: str
     filament_translated_name: Optional[str] = None
@@ -217,9 +219,10 @@ class SpoolCreate(BaseModel):
     filament_id: int
     remaining_weight_g: Optional[float] = None
     price_override: Optional[float] = None
-    location: Optional[str] = None
+    location: Optional[str] = None        # ignore : l'emplacement suit le rangement (place_id) et l'AMS
     tag_number: Optional[str] = None
     comment: Optional[str] = None
+    place_id: Optional[int] = None        # ou la ranger (modes « sa place » et « manuel », 07/11/2026)
 
 class SpoolUpdate(BaseModel):
     remaining_weight_g: Optional[float] = None
@@ -1410,10 +1413,10 @@ async def create_spool(
     if not fil:
         raise HTTPException(404, "Filament introuvable")
     data = body.model_dump()
-    # location est gere automatiquement (Tiroir / AMS xxx) par le worker
-    # spool_location ; l'utilisateur n'y touche pas. Defaut "Tiroir" a la creation.
-    if not data.get("location"):
-        data["location"] = "Tiroir"
+    # l'emplacement est gere par l'appli (AMS xxx par le worker spool_location, sinon le rangement : voir
+    # services/storage_places) ; l'utilisateur n'y touche pas, il choisit au plus sa place (place_id)
+    place_id = data.pop("place_id", None)
+    data.pop("location", None)
     # Une bobine neuve arrive seche (sous vide) : son ajout vaut sechage, sinon
     # elle partirait aussitot dans l'alerte « a secher ».
     data["last_dried_at"] = datetime.utcnow()
@@ -1429,6 +1432,9 @@ async def create_spool(
     else:
         s = Spool(**data)
         db.add(s)
+    await db.flush()
+    from ....services import storage_places as _sp
+    await _sp.place_new(db, s, place_id)
 
     # Ajouter une bobine physique avec son tag NFC signifie qu'on la possede :
     # le filament n'est donc plus a commander. On ne le fait QUE si un tag est
@@ -1486,6 +1492,7 @@ async def update_spool(
     for k in ("tag_number", "location", "comment"):
         if k in data and isinstance(data[k], str) and not data[k].strip():
             data[k] = None
+    data.pop("location", None)          # l'emplacement suit l'AMS et le rangement (07/11/2026), jamais saisi
 
     if data.get("last_dried_at") is not None:
         d = data["last_dried_at"]
@@ -1504,8 +1511,16 @@ async def update_spool(
 
     changed_price = "price_override" in data
     before = s.remaining_weight_g
+    was_archived = bool(s.archived)
     for k, v in data.items():
         setattr(s, k, v)
+    if "archived" in data and bool(s.archived) != was_archived:
+        from ....services import storage_places as _sp
+        if s.archived:
+            _sp.archived(s)
+            s.location = "Archives"
+        else:
+            await _sp.place_new(db, s)        # desarchivee : rangee selon le mode
     if "remaining_weight_g" in data:
         if abs(float(s.remaining_weight_g or 0) - float(before or 0)) >= 0.1:
             drift.weighed(s)
@@ -1544,6 +1559,8 @@ async def archive_spool(
     # sur son dernier tray AMS et son poids continuerait a fausser les cumuls.
     s.remaining_weight_g = 0.0
     s.location = "Archives"
+    from ....services import storage_places as _sp
+    _sp.archived(s)                       # sa place se libere (07/11/2026)
     _log_weight(db, s, before, {"finie": "Bobine archivée : finie", "jetee": "Bobine archivée : jetée",
                                 "autre": "Bobine archivée : autre raison"}.get(reason or "", "Bobine archivée"))
     await db.commit()
@@ -1815,6 +1832,8 @@ def _spool_out(s: Spool, sib: tuple | None = None) -> SpoolOut:
         external_spool_id=s.external_spool_id,
         found_mode=getattr(s, "found_mode", None),
         ordered=bool(getattr(s, "ordered", False)),
+        place_id=getattr(s, "place_id", None),
+        unstored_at=getattr(s, "unstored_at", None),
         # On retranche la bobine courante : l'interface veut savoir ce qu'il
         # reste A COTE, pas le total du filament. Une bobine archivee n'est pas
         # dans le compte (actives seulement) : rien a retrancher (25/10/2026).

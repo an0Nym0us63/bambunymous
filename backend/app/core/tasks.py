@@ -36,6 +36,7 @@ CATALOG = {
     "catalog_ofd":  ("Catalogue des autres marques", "Télécharge l'Open Filament Database (Sunlu, Geeetech, Polymaker…) et les poids des supports de SpoolmanDB : une minute après le démarrage, puis chaque semaine.", "Serveur"),
     "catalog":      ("Catalogue des filaments Bambu", "Télécharge le catalogue des filaments Bambu (codes, couleurs) : au démarrage, puis toutes les 24 h s'il a changé.", "Serveur"),
     "ai_tags":      ("Catégories par Claude", "Chaque nuit à 4 h : reprend le classement des modèles groupés, reliés ou dégroupés depuis, puis fait classer par Claude ce qui manque encore (impression ratée mais gardée, importée…), si le classement automatique est coché.", "Impressions"),
+    "storage_remind": ("Bobines à ranger", "Toutes les 2 min : rappelle les bobines sorties de l'AMS, reçues ou ajoutées qui attendent que tu dises où tu les as rangées (rangement manuel, ou bobine sans place), selon la notification « Bobine à ranger ».", "Notifications"),
     "nas":          ("Sauvegarde de nuit", "Sauvegarde vers le NAS (et vidage du local) chaque nuit, si elle est activée ; vérifie toutes les 5 min.", "Serveur"),
 }
 _ST: dict = {}

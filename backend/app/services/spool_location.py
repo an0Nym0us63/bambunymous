@@ -34,17 +34,29 @@ async def update_spool_location(spool_id: int, location: str):
             spool = await db.get(Spool, spool_id)
             if spool is None:
                 return
-            if spool.location != location:
+            from . import storage_places as _sp
+            if location == _sp.STORED:
+                # sortie de l'imprimante (07/11/2026) : rangee selon le mode (sa place, le rangement unique, « À ranger »)
+                if spool.archived or spool.ordered or not _sp.in_printer(spool.location):
+                    loc = spool.location
+                else:
+                    loc = await _sp.out_of_printer(db, spool)
+            else:
+                loc = location
+                if _sp.in_printer(loc):
+                    spool.unstored_at = None      # revenue dans l'AMS : plus rien a ranger
+            if spool.location != loc or db.is_modified(spool):
                 old = spool.location or ""
-                spool.location = location
+                spool.location = loc
                 await db.commit()
-                logger.info(f"[LOCATION] Bobine #{spool_id}: {old!r} → {location!r}")
+                if old != loc:
+                    logger.info(f"[LOCATION] Bobine #{spool_id}: {old!r} → {loc!r}")
         with _lock:
             _ACTIVE_AMS_SPOOLS[spool_id] = location
     except Exception as e:
         logger.warning(f"[LOCATION] ecriture impossible pour la bobine #{spool_id} ({location!r}) : {e}")
 
 
-# NB : le retour en Tiroir n'est PAS gere ici mais dans core/mqtt, qui compare
+# NB : le retour au rangement (STORED) n'est PAS declenche ici mais dans core/mqtt, qui compare
 # les trays presents d'un tick a l'autre (cache _MATCH_CACHE). Ce module ne fait
 # qu'ecrire les emplacements.

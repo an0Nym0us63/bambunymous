@@ -1,0 +1,476 @@
+"""
+Le rangement des bobines (07/11/2026). Une bobine est dans l'imprimante (AMS, HT, support externe : son emplacement est
+ecrit par core/mqtt), ou rangee. Trois modes, au choix dans Parametres > Filaments :
+
+  - single   : un seul rangement hors de l'imprimante (le mode d'origine). Il s'appelait toujours « Tiroir » ; on peut
+               le renommer (« Étagère », « Placard »...). Une installation qui se met a jour reste dans ce mode.
+  - assigned : chaque bobine a SA place (place_id) : elle est dans l'imprimante, ou a cette place, rien d'autre. En
+               sortant de l'AMS, elle y retourne d'office. Sans place, elle est « À ranger ».
+  - manual   : on ne range jamais au meme endroit. En sortant de l'AMS, la bobine passe « À ranger » (unstored_at) et
+               l'appli rappelle de dire ou on l'a mise ; sa derniere place reste proposee (« remise à sa place »).
+
+Les places forment un arbre (models/storage_place.py) : seules les feuilles recoivent des bobines ; une feuille commune
+en prend autant qu'on veut, une feuille unique (une case) une seule : tant que la bobine qui l'occupe n'est pas rangee
+ailleurs ou archivee, on ne peut pas y en mettre une autre (sauf a la deloger, elle repasse alors « À ranger »). Une
+bobine garde sa place pendant qu'elle est dans l'AMS : sa case lui reste reservee.
+
+L'emplacement ecrit sur la bobine (Spool.location, lu partout : listes, recherche, notifications) est le chemin de sa
+place (« Rack 1 › A2 »), le nom du rangement unique, ou « À ranger ». refresh_all() le recalcule apres un changement
+de mode ou de l'arbre (et au demarrage).
+"""
+import asyncio
+import logging
+from datetime import datetime, timedelta
+
+from sqlalchemy import select
+
+logger = logging.getLogger(__name__)
+
+MODES = ("single", "assigned", "manual")
+K_MODE, K_NAME = "STORAGE_MODE", "STORAGE_NAME"
+DEFAULT_NAME = "Tiroir"
+TO_STORE = "À ranger"
+STORED = "@rangement"         # demande a spool_location : « sortie de l'imprimante, range-la selon le mode »
+SEP = " › "
+RESERVED = {"à ranger", "a ranger", "archives", "en commande"}
+_PRINTER = ("AMS", "EXTERNE", "HT-")
+
+
+class StorageError(Exception):
+    def __init__(self, msg, status=400, extra=None):
+        super().__init__(msg)
+        self.status, self.extra = status, extra or {}
+
+
+def in_printer(loc) -> bool:
+    """L'emplacement est-il dans l'imprimante (AMS, HT, support externe) ?"""
+    return (loc or "").strip().upper().startswith(_PRINTER)
+
+
+def stored(s) -> bool:
+    """La bobine est hors de l'imprimante, en stock (ni archivee, ni en commande)."""
+    return not s.archived and not getattr(s, "ordered", False) and not in_printer(s.location)
+
+
+def check_name(name: str, what="Le nom") -> str:
+    n = " ".join((name or "").split())[:60]
+    if not n:
+        raise StorageError(f"{what} est vide")
+    if n.lower() in RESERVED:
+        raise StorageError(f"« {n} » est réservé par l'appli")
+    if in_printer(n):
+        raise StorageError(f"« {n} » ressemble à un emplacement de l'imprimante (AMS, HT, Externe) : choisis un autre nom")
+    return n
+
+
+async def config(db) -> dict:
+    from .settings_service import get_setting
+    mode = (await get_setting(db, K_MODE, "single")) or "single"
+    return {"mode": mode if mode in MODES else "single",
+            "name": (await get_setting(db, K_NAME, DEFAULT_NAME)) or DEFAULT_NAME}
+
+
+async def places(db) -> dict:
+    from ..models.storage_place import StoragePlace
+    return {p.id: p for p in (await db.execute(select(StoragePlace))).scalars().all()}
+
+
+def _kids(pl: dict) -> dict:
+    out = {}
+    for p in pl.values():
+        out.setdefault(p.parent_id, []).append(p)
+    for v in out.values():
+        v.sort(key=lambda p: (p.sort or 0, p.id))
+    return out
+
+
+def path_of(pl: dict, pid) -> str | None:
+    """« Rack 1 › A2 » ; None si la place n'existe plus."""
+    names, seen = [], set()
+    while pid is not None and pid in pl and pid not in seen:
+        seen.add(pid)
+        names.append(pl[pid].name)
+        pid = pl[pid].parent_id
+    return SEP.join(reversed(names)) if names and pid is None else None
+
+
+def is_leaf(pl: dict, pid, kids=None) -> bool:
+    kids = kids if kids is not None else _kids(pl)
+    return pid in pl and not kids.get(pid)
+
+
+def resolve(s, conf: dict, pl: dict, kids=None) -> str:
+    """L'emplacement d'une bobine rangee, selon le mode."""
+    if conf["mode"] == "single":
+        return conf["name"]
+    p = path_of(pl, s.place_id) if s.place_id and is_leaf(pl, s.place_id, kids) else None
+    if conf["mode"] == "assigned":
+        return p or TO_STORE
+    return p if (p and s.unstored_at is None) else TO_STORE
+
+
+async def out_of_printer(db, s) -> str:
+    """Sortie de l'imprimante : ou elle va, selon le mode (unstored_at pose quand il faut dire ou on l'a mise)."""
+    conf, pl = await config(db), await places(db)
+    kids = _kids(pl)
+    has = bool(s.place_id and is_leaf(pl, s.place_id, kids))
+    if conf["mode"] == "manual" or (conf["mode"] == "assigned" and not has):
+        s.unstored_at = datetime.utcnow()
+    else:
+        s.unstored_at = None
+    return resolve(s, conf, pl, kids)
+
+
+async def place_new(db, s, place_id=None) -> None:
+    """Une bobine qui arrive en stock (creee, recue, scannee) : rangee selon le mode, a place_id si on l'a donnee."""
+    conf = await config(db)
+    if place_id and conf["mode"] != "single":
+        try:
+            await assign(db, [s], int(place_id))
+            return
+        except StorageError:
+            pass
+    s.location = await out_of_printer(db, s)
+
+
+def archived(s) -> None:
+    """Archivee : sa place se libere."""
+    s.place_id = None
+    s.unstored_at = None
+
+
+async def occupant(db, pid, but=None):
+    """La bobine (active) qui tient une place, None si libre."""
+    from ..models.filament import Spool
+    q = select(Spool).where(Spool.place_id == pid, Spool.archived.is_(False))
+    if but:
+        q = q.where(Spool.id.not_in(list(but)))
+    return (await db.execute(q.limit(1))).scalar_one_or_none()
+
+
+async def assign(db, spools: list, pid: int, force: bool = False) -> list:
+    """Range des bobines a une place (feuille). Une case (single) n'en prend qu'une : occupee par une autre, refus
+    (StorageError 409 avec l'occupante), sauf force : l'occupante perd sa place et repasse « À ranger » si elle y
+    etait. Renvoie les bobines delogees."""
+    conf, pl = await config(db), await places(db)
+    kids = _kids(pl)
+    if pid not in pl:
+        raise StorageError("Emplacement introuvable", 404)
+    if not is_leaf(pl, pid, kids):
+        raise StorageError(f"« {pl[pid].name} » contient d'autres emplacements : choisis-en un dedans")
+    moved = []
+    if pl[pid].single:
+        if len(spools) > 1:
+            raise StorageError(f"« {path_of(pl, pid)} » ne prend qu'une bobine")
+        occ = await occupant(db, pid, but={s.id for s in spools})
+        if occ is not None:
+            if not force:
+                raise StorageError(f"« {path_of(pl, pid)} » est déjà prise par la bobine #{occ.id}", 409,
+                                   {"occupant": occ.id})
+            occ.place_id = None
+            if stored(occ):
+                occ.unstored_at = datetime.utcnow() if conf["mode"] != "single" else None
+                occ.location = resolve(occ, conf, pl, kids)
+            moved.append(occ)
+    for s in spools:
+        if s.archived:
+            raise StorageError(f"La bobine #{s.id} est archivée")
+        s.place_id = pid
+        if stored(s):
+            s.unstored_at = None
+            s.location = resolve(s, conf, pl, kids)
+    return moved
+
+
+async def unassign(db, spools: list) -> None:
+    conf, pl = await config(db), await places(db)
+    kids = _kids(pl)
+    for s in spools:
+        s.place_id = None
+        if stored(s):
+            s.location = resolve(s, conf, pl, kids)
+
+
+async def refresh(db) -> int:
+    """Reecrit l'emplacement des bobines rangees (mode, noms, arbre changes). Renvoie le nombre de bobines touchees."""
+    from ..models.filament import Spool
+    conf, pl = await config(db), await places(db)
+    kids = _kids(pl)
+    n = 0
+    for s in (await db.execute(select(Spool).where(Spool.archived.is_(False)))).scalars().all():
+        if s.place_id and s.place_id not in pl:
+            s.place_id = None                      # place supprimee
+        if not stored(s):
+            if in_printer(s.location) and s.unstored_at is not None:
+                s.unstored_at = None
+            continue
+        loc = resolve(s, conf, pl, kids)
+        if s.location != loc:
+            s.location = loc
+            n += 1
+    for s in (await db.execute(select(Spool).where(Spool.archived.is_(True), Spool.place_id.is_not(None)))).scalars().all():
+        archived(s)
+    return n
+
+
+async def refresh_all() -> int:
+    from ..db.session import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        n = await refresh(db)
+        await db.commit()
+    if n:
+        logger.info(f"[RANGEMENT] {n} emplacement(s) de bobine réécrit(s)")
+    _clear_cache()
+    return n
+
+
+def _clear_cache():
+    """Le cache des emplacements deja ecrits (spool_location) : apres un changement fait ici, l'imprimante doit pouvoir
+    reecrire le sien."""
+    try:
+        from . import spool_location
+        with spool_location._lock:
+            spool_location._ACTIVE_AMS_SPOOLS.clear()
+    except Exception:
+        pass
+
+
+# ── l'arbre, pour l'interface ──
+def _spool_mini(s, f) -> dict:
+    return {"id": s.id, "filament_id": s.filament_id,
+            "name": ((getattr(f, "translated_name", None) or f.name) if f else f"Bobine #{s.id}"),
+            "color": f.color if f else None, "colors_array": f.colors_array if f else None,
+            "multicolor_type": f.multicolor_type if f else None, "fila_finish": getattr(f, "fila_finish", None) if f else None,
+            "material": ((f.fila_type or f.material) if f else None), "brand": f.manufacturer if f else None,
+            "remaining_weight_g": s.remaining_weight_g, "location": s.location,
+            "in_printer": in_printer(s.location), "ordered": bool(getattr(s, "ordered", False)),
+            "unstored_at": s.unstored_at.isoformat() if s.unstored_at else None}
+
+
+async def overview(db) -> dict:
+    """Le mode, l'arbre (chemin, feuille, occupantes) et les bobines a ranger."""
+    from ..models.filament import Filament, Spool
+    conf, pl = await config(db), await places(db)
+    kids = _kids(pl)
+    rows = (await db.execute(select(Spool, Filament).outerjoin(Filament, Filament.id == Spool.filament_id)
+                             .where(Spool.archived.is_(False)))).all()
+    by_place, to_store = {}, []
+    for s, f in rows:
+        if s.place_id in pl:
+            by_place.setdefault(s.place_id, []).append(_spool_mini(s, f))
+        if stored(s) and s.location == TO_STORE:
+            m = _spool_mini(s, f)
+            m["last_place"] = s.place_id if s.place_id in pl else None
+            to_store.append(m)
+    to_store.sort(key=lambda m: m["unstored_at"] or "", reverse=True)
+    out = []
+
+    def walk(parent, depth):
+        for p in kids.get(parent, []):
+            out.append({"id": p.id, "parent_id": p.parent_id, "name": p.name, "single": bool(p.single),
+                        "sort": p.sort or 0, "cols": p.cols, "icon": p.icon, "depth": depth, "path": path_of(pl, p.id),
+                        "leaf": not kids.get(p.id), "spools": by_place.get(p.id, [])})
+            walk(p.id, depth + 1)
+    walk(None, 0)
+    return {**conf, "places": out, "to_store": to_store, "to_store_label": TO_STORE}
+
+
+# ── l'arbre, en ecriture ──
+async def create(db, body: dict, parent_id=None) -> list:
+    """Cree une place et, recursivement, ses enfants (body["children"]) : le generateur de l'interface envoie tout
+    l'arbre d'un coup (Tiroir 1 > Colonne 1..3 > Ligne 1..4, Rack 1 > A1..D6)."""
+    from ..models.storage_place import StoragePlace
+    pl = await places(db)
+    kids = _kids(pl)
+    parent_id = body.get("parent_id", parent_id)
+    if parent_id is not None:
+        parent_id = int(parent_id)
+        if parent_id not in pl:
+            raise StorageError("Emplacement parent introuvable", 404)
+        if is_leaf(pl, parent_id, kids) and await occupant(db, parent_id) is not None:
+            raise StorageError(f"« {path_of(pl, parent_id)} » contient des bobines : range-les ailleurs avant d'y "
+                               "créer des emplacements")
+    made = []
+
+    async def mk(b, par, sort):
+        p = StoragePlace(parent_id=par, name=check_name(b.get("name")), single=bool(b.get("single")), sort=sort,
+                         cols=(int(b["cols"]) if b.get("cols") else None), icon=(b.get("icon") or None))
+        db.add(p)
+        await db.flush()
+        made.append(p.id)
+        if len(made) > 2000:
+            raise StorageError("Trop d'emplacements d'un coup (2 000 au plus)")
+        for i, c in enumerate(b.get("children") or []):
+            await mk(c, p.id, i)
+    base = max([q.sort or 0 for q in kids.get(parent_id, [])] or [-1]) + 1
+    await mk(body, parent_id, base)
+    return made
+
+
+async def update(db, pid: int, body: dict) -> None:
+    from ..models.filament import Spool
+    pl = await places(db)
+    kids = _kids(pl)
+    p = pl.get(pid)
+    if p is None:
+        raise StorageError("Emplacement introuvable", 404)
+    if "name" in body:
+        p.name = check_name(body["name"])
+    if "single" in body:
+        single = bool(body["single"])
+        if single and not p.single:
+            n = len((await db.execute(select(Spool.id).where(Spool.place_id == pid, Spool.archived.is_(False)))).all())
+            if n > 1:
+                raise StorageError(f"« {p.name} » tient {n} bobines : une case n'en prend qu'une")
+        p.single = single
+    if "cols" in body:
+        p.cols = int(body["cols"]) if body["cols"] else None
+    if "icon" in body:
+        p.icon = (body["icon"] or None)
+    if "parent_id" in body:
+        np = body["parent_id"]
+        np = int(np) if np not in (None, "") else None
+        if np is not None:
+            if np not in pl:
+                raise StorageError("Emplacement parent introuvable", 404)
+            q = np
+            while q is not None:                   # pas dans sa propre descendance
+                if q == pid:
+                    raise StorageError("Un emplacement ne peut pas aller dans lui-même ou dans ce qu'il contient")
+                q = pl[q].parent_id if q in pl else None
+            if is_leaf(pl, np, kids) and await occupant(db, np) is not None:
+                raise StorageError(f"« {path_of(pl, np)} » contient des bobines : range-les ailleurs d'abord")
+        if np != p.parent_id:
+            p.parent_id = np
+            p.sort = max([q.sort or 0 for q in kids.get(np, []) if q.id != pid] or [-1]) + 1
+
+
+async def move(db, pid: int, d: int) -> None:
+    """Monte (d=-1) ou descend (d=+1) une place parmi ses soeurs."""
+    pl = await places(db)
+    p = pl.get(pid)
+    if p is None:
+        raise StorageError("Emplacement introuvable", 404)
+    sib = _kids(pl).get(p.parent_id, [])
+    i = next(k for k, q in enumerate(sib) if q.id == pid)
+    j = i + (1 if d > 0 else -1)
+    if 0 <= j < len(sib):
+        sib[i], sib[j] = sib[j], sib[i]
+    for k, q in enumerate(sib):
+        q.sort = k
+
+
+def subtree(pl: dict, pid) -> list:
+    kids, out, todo = _kids(pl), [], [pid]
+    while todo:
+        q = todo.pop()
+        out.append(q)
+        todo += [c.id for c in kids.get(q, [])]
+    return out
+
+
+async def delete(db, pid: int) -> int:
+    """Supprime une place et tout ce qu'elle contient ; leurs bobines perdent leur place (« À ranger » hors du mode
+    unique). Renvoie le nombre de bobines concernees."""
+    from ..models.filament import Spool
+    from ..models.storage_place import StoragePlace
+    pl = await places(db)
+    if pid not in pl:
+        raise StorageError("Emplacement introuvable", 404)
+    ids = subtree(pl, pid)
+    sp = (await db.execute(select(Spool).where(Spool.place_id.in_(ids)))).scalars().all()
+    for s in sp:
+        s.place_id = None
+    for q in ids:
+        await db.delete(await db.get(StoragePlace, q))
+    await db.flush()
+    return len([s for s in sp if not s.archived])
+
+
+async def set_config(db, mode=None, name=None) -> None:
+    from .settings_service import set_setting
+    if name is not None:
+        await set_setting(db, K_NAME, check_name(name, "Le nom du rangement"))
+    if mode is not None:
+        if mode not in MODES:
+            raise StorageError("Mode inconnu")
+        old = (await config(db))["mode"]
+        await set_setting(db, K_MODE, mode)
+        if old != mode:
+            # changer de mode ne declenche aucun rappel : les bobines sans place s'affichent « À ranger », sans
+            # notification pour chacune (seules celles qui sortent ensuite de l'AMS en demandent une)
+            from ..models.filament import Spool
+            for s in (await db.execute(select(Spool).where(Spool.unstored_at.is_not(None)))).scalars().all():
+                s.unstored_at = None
+
+
+# ── les rappels (mode manuel, ou bobine sans place) ──
+_LAST: dict = {}          # bobine -> (sa sortie, dernier rappel) ; en memoire : au demarrage, on ne rappelle pas ce qui
+                          # attendait deja ; une nouvelle sortie (unstored_at change) rappelle a nouveau
+_STARTED = {"at": None}
+
+
+async def pending(db) -> list:
+    """Les bobines qui attendent qu'on dise ou elles sont rangees (sorties de l'AMS, recues, creees)."""
+    from ..models.filament import Filament, Spool
+    rows = (await db.execute(select(Spool, Filament).outerjoin(Filament, Filament.id == Spool.filament_id)
+                             .where(Spool.archived.is_(False), Spool.location == TO_STORE,
+                                    Spool.unstored_at.is_not(None)))).all()
+    return [(s, f) for s, f in rows if stored(s)]
+
+
+def _ago(dt) -> str:
+    m = int((datetime.utcnow() - dt).total_seconds() // 60)
+    return f"{m} min" if m < 60 else f"{m // 60} h {m % 60:02d}" if m < 1440 else f"{m // 1440} j"
+
+
+async def remind_once(now=None) -> int:
+    """Un passage : une notification pour les bobines a ranger dont le delai est passe (puis a chaque intervalle de
+    rappel s'il est regle). Renvoie le nombre de bobines rappelees."""
+    from ..db.session import AsyncSessionLocal
+    from . import notify as N, notify_events as E
+    now = now or datetime.utcnow()
+    cfg = await E._cfg_for("spool_to_store")
+    async with AsyncSessionLocal() as db:
+        rows = await pending(db)
+    ids = {s.id for s, _ in rows}
+    for k in list(_LAST):
+        if k not in ids:
+            _LAST.pop(k, None)
+    if _STARTED["at"] is None:              # premier passage : ce qui attendait deja ne sonne pas tout de suite
+        _STARTED["at"] = now
+        for s, _ in rows:
+            _LAST[s.id] = (s.unstored_at, now)
+        return 0
+    if not cfg or not rows:
+        return 0
+    opt = N.options_of(cfg, "spool_to_store")
+    delay = timedelta(minutes=float(opt.get("minutes", 15) or 15))
+    every = float(opt.get("repeat_h", 0) or 0)
+    def _due(s):
+        last = _LAST.get(s.id)
+        return last is None or last[0] != s.unstored_at or bool(every and now - last[1] >= timedelta(hours=every))
+    due = [(s, f) for s, f in rows if s.unstored_at <= now - delay and _due(s)]
+    if not due:
+        return 0
+    ready = [(s, f) for s, f in rows if s.unstored_at <= now - delay]
+    for s, _ in ready:
+        _LAST[s.id] = (s.unstored_at, now)
+    n = len(ready)
+    lines = [f"• {E._fil_label(f) if f else f'Bobine #{s.id}'} · sortie il y a {_ago(s.unstored_at)}" for s, f in ready[:8]]
+    if n > 8:
+        lines.append(f"… et {n - 8} autre{'s' if n - 8 > 1 else ''}")
+    lines.append("👉 Dis où tu l'as rangée" if n == 1 else "👉 Dis où tu les as rangées")
+    await E._send(cfg, "spool_to_store", f"📥 {n} bobine{'s' if n > 1 else ''} à ranger", "\n".join(lines),
+                  link="/filaments?ranger=1", priority=2)
+    return n
+
+
+async def remind_loop():
+    from ..core import tasks
+    while True:
+        try:
+            await remind_once()
+        except Exception as e:
+            logger.warning(f"[RANGEMENT] rappel : {e}")
+        await tasks.sleep("storage_remind", 120)

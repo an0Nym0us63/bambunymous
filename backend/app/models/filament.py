@@ -117,6 +117,10 @@ class Spool(Base):
     end_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)   # a l'archivage : finie, jetee, autre
     # ecartee des stats de precision, et pourquoi (jetee en partie, pretee, mal initialisee...) ; drift_g reste lisible
     drift_off: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # le rangement (07/11/2026, voir services/storage_places.py) : sa place (gardee pendant qu'elle est dans l'AMS), et
+    # depuis quand elle attend d'etre rangee (sortie de l'AMS, recue, creee) quand on doit dire ou on l'a mise
+    place_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    unstored_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     filament: Mapped["Filament"] = relationship("Filament", back_populates="spools")

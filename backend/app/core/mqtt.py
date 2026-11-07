@@ -953,7 +953,7 @@ class MQTTManager:
             state.ams_list = _new_ams
 
             # Retrait AMS : supprimer du cache les trays qui ne sont plus présents
-            # → sera mis en Tiroir au prochain tick via spool_location
+            # → rangee (selon le mode de rangement) via spool_location
             try:
                 current_keys = {
                     (a.id, t.id, t.uuid or t.tray_info_idx or "")
@@ -969,13 +969,14 @@ class MQTTManager:
                             # state.ams_list comme les autres. Log explicite pour
                             # pouvoir le verifier au retrait d'une bobine externe.
                             _where = ams_label(_k[0])
-                            logger.info(f"[LOC] bobine #{_old} retiree de {_where} → Tiroir")
+                            logger.info(f"[LOC] bobine #{_old} retiree de {_where} → rangement")
                             import asyncio as _lio3, threading as _lth3
                             def _mk_drawer(_sid=_old):
                                 lp = _lio3.new_event_loop()
                                 async def _d():
                                     from ..services.spool_location import update_spool_location
-                                    await update_spool_location(_sid, "Tiroir")
+                                    from ..services.storage_places import STORED
+                                    await update_spool_location(_sid, STORED)
                                 try: lp.run_until_complete(_d())
                                 finally: lp.close()
                             _lth3.Thread(target=_mk_drawer, daemon=True).start()

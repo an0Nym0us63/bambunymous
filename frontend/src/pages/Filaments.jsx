@@ -37,6 +37,7 @@ import { LiveHatch, LiveTo } from "../components/LiveUsage";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 import { FriendsPrints, useHasFriends, useShared, sharedCount } from "../components/Friends";
 import { FitBox } from "../components/FitThumb";
+import { useStorage, reloadStorage, PlacePicker, ToStoreSheet, ToStoreBanner, StorageMap, inPrinter } from "../components/Storage";
 
 const MATERIALS = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","BVOH","PLA-CF","PETG-CF","PA-CF","PPS"];
 
@@ -154,6 +155,11 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect, p
     remaining_weight_g:"", price_override:"", tag_number:"", comment:"" });
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState("");
+  // sa place (07/11/2026), hors du mode « un seul rangement » ; sans place, elle sera « À ranger »
+  const stor = useStorage();
+  const [place, setPlace] = useState(null);
+  const [placeOpen, setPlaceOpen] = useState(false);
+  const placePath = place != null ? stor?.places.find(p => p.id === place)?.path : null;
 
   // Ouvrable depuis la fiche filament, qui ne connait pas la liste complete.
   const [fetched, setFetched] = useState(null);
@@ -177,7 +183,9 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect, p
         price_override: form.price_override ? parseFloat(form.price_override) : null,
         tag_number: form.tag_number || null,
         comment: form.comment || null,
+        place_id: place,
       });
+      if (stor && stor.mode !== "single") reloadStorage();
       onSave();
     } finally { setSaving(false); }
   };
@@ -319,8 +327,14 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect, p
           <p style={{ fontSize:11.5, fontWeight:600, color:"var(--muted)", margin:"8px 0 0" }}>Vides, ils valent une bobine pleine au prix du filament.</p>
         </FCard>
 
-        {/* location n'est PAS editable : geree automatiquement (Tiroir / AMS xxx)
-            par le worker spool_location selon la presence en AMS. */}
+        {/* location n'est PAS editable : geree par l'appli (AMS xxx selon la presence en AMS, sinon le rangement) ;
+            hors du mode « un seul rangement », on peut choisir sa place des l'ajout. */}
+        {stor && stor.mode !== "single" && <FCard t="Rangement" i="🗄" c="#8B5CF6">
+          <button type="button" onClick={() => setPlaceOpen(true)} style={{ ...field, display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", marginTop:4 }}>
+            <span style={{ color: placePath ? "var(--text)" : "#D97706" }}>{placePath ? `📍 ${placePath}` : "📥 À ranger (choisir sa place…)"}</span>
+            <span style={{ color:"var(--muted)" }}>✎</span></button>
+          {placeOpen && <PlacePicker spools={[]} pickOnly title="Où vas-tu la ranger ?" onPicked={setPlace} onClose={() => setPlaceOpen(false)}/>}
+        </FCard>}
         <FCard t="Le reste (facultatif)" i="🏷️" c="#06B6D4">
           {[["Tag NFC","tag_number","text","UUID"],["Commentaire","comment","text",""]].map(([l,n,t,p])=>(
             <div key={n} style={{ marginTop:6 }}>
@@ -974,6 +988,12 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
   const [weighKey, setWeighKey] = useState(0);     // ouvre l'ajustement du poids depuis la barre ou la tuile
   const [addOpen, setAddOpen] = useState(false);   // une autre bobine de ce filament
   const [detail, setDetail] = useState(null);      // une impression de l'historique, ouverte en fiche
+  // le rangement (07/11/2026) : sa place, la choisir ; hors du mode « un seul rangement »
+  const stor = useStorage();
+  const [placeOpen, setPlaceOpen] = useState(false);
+  const canPlace = isAdmin && stor && stor.mode !== "single" && spool && !spool.archived && !spool.ordered;
+  const homePath = spool?.place_id && stor ? stor.places.find(p => p.id === spool.place_id)?.path : null;
+  const toStore = spool && !spool.ordered && !spool.archived && spool.location === TO_STORE;
   const openFilament = async () => {
     try {
       const r = await client.get(`/filaments/filaments/${spool.filament_id}`);
@@ -1127,7 +1147,9 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
         chips={[fChip(`#${spool.id}`, "#64748B"), spool.archived && fChip("Archivée", "#94a3b8"),
           // commandee, pas encore recue : son statut, et ce qu'il faut faire a l'arrivee (28/10/2026)
           spool.ordered && <span key="ord" data-tip="Créée depuis une commande lue dans les mails : hors du stock jusqu'à l'arrivée. Le scan RFID, ou l'ajout d'une bobine de ce filament, l'adoptera.">{fChip("📬 Commandée, pas encore reçue", "#0EA5E9")}</span>,
-          !spool.ordered && spool.location && fChip(`📍 ${spool.location}`, "#8B5CF6"),
+          !spool.ordered && spool.location && <span key="loc" onClick={canPlace ? () => setPlaceOpen(true) : undefined} style={{ cursor: canPlace ? "pointer" : "default" }}
+            data-tip={canPlace ? (toStore ? "Dire où elle est rangée" : "Changer sa place") : undefined}>
+            {fChip(`${toStore ? "📥" : "📍"} ${spool.location}${canPlace ? " ✎" : ""}`, toStore ? "#D97706" : "#8B5CF6")}</span>,
           !spool.archived && spool.sibling_count > 0 && fChip(`🧵 +${spool.sibling_count} en stock${spool.sibling_weight_g ? ` · ${fmtStock(spool.sibling_weight_g)}` : ""}`, "#22C55E"),
           !spool.archived && spool.ordered_siblings > 0 && <span key="osib" data-tip="D'autres bobines de ce filament sont commandées, pas encore reçues">{fChip(`📬 +${spool.ordered_siblings} en commande`, "#0EA5E9")}</span>,
           found && <span key="found" data-tip={found[2]}>{fChip(found[0], found[1])}</span>,
@@ -1186,7 +1208,12 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
             <PriceEditRow spoolId={spool.id} current={spool.price_override} filamentPrice={spool.filament_price} onUpdated={refresh}/>
             <FRow l="Ce qu'il en reste" v={worth != null ? eur(worth) : null} vc="#16a34a"/>
             <TagEditRow spoolId={spool.id} current={spool.tag_number} onUpdated={refresh}/>
-            <FRow l="Emplacement" v={spool.location}/>
+            {canPlace
+              ? <div style={{ ...FROW, cursor:"pointer" }} onClick={() => setPlaceOpen(true)} data-tip={toStore ? "Dire où elle est rangée" : "Changer sa place"}>
+                <span style={FLAB}>Emplacement</span>
+                <span style={{ ...FVAL, color: toStore ? "#D97706" : FVAL.color }}>{toStore ? "📥 " : ""}{spool.location} <span style={{ color:"var(--muted)" }}>✎</span></span></div>
+              : <FRow l="Emplacement" v={spool.location}/>}
+            {homePath && inAms(spool) && <FRow l={stor?.mode === "manual" ? "Sa dernière place" : "Sa place"} v={homePath}/>}
           </FCard>
           <FCard t="Son histoire" i="🗓️" c="#3B82F6">
             <FRow l="Ajoutée le" v={dayFr(spool.created_at)} d={agoFr(spool.created_at)}/>
@@ -1250,6 +1277,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
       {dryOpen && <DryNowDialog spoolId={spool.id} spoolName={name}
         onClose={() => setDryOpen(false)} onDone={() => { setDryOpen(false); refresh(); }}/>}
       {/* une bobine de plus : la fiche reste ouverte, ses compteurs « +n en stock » se mettent a jour */}
+      {placeOpen && <PlacePicker spools={[spool]} onClose={() => setPlaceOpen(false)} onDone={refresh}/>}
       {addOpen && <AddSpoolModal preselect={spool.filament_id} onClose={() => setAddOpen(false)}
         onSave={() => { setAddOpen(false); refresh(); }}/>}
       {showUsage && createPortal(
@@ -1468,12 +1496,16 @@ function KpiTiles({ kpis, icons = {} }) {
 // Les etats d'une bobine et d'un filament (28/10/2026) : [cle, libelle, test, icone]. Dans la feuille des filtres,
 // un bloc « Etat » multi-choix propre a l'onglet ; tous les etats coches doivent etre vrais (une bobine
 // « a secher » ET « dans un AMS »), contrairement aux matieres ou aux marques ou une valeur suffit.
-const inAms = s => !!s.ams_tray || (s.location || "").toUpperCase().startsWith("AMS");
+// dans l'imprimante : un AMS, un HT, le support externe (07/11/2026 : « Externe slot 1 » n'etait pas compte)
+const inAms = s => !!s.ams_tray || inPrinter(s.location);
+const TO_STORE = "À ranger";
 const SPOOL_STATES = [
   ["dry",     "À sécher",         s => !!s.needs_drying, "💧"],
   ["notag",   "Sans tag NFC",     s => !s.tag_number, "📡"],
-  ["ams",     "Dans un AMS",      s => inAms(s), "🎰"],
-  ["drawer",  "Au tiroir",        s => !inAms(s) && !s.archived && !s.ordered && (s.location || "Tiroir") === "Tiroir", "🗄"],
+  ["ams",     "Dans l'imprimante", s => inAms(s), "🎰"],
+  // rangee (07/11/2026, ex « Au tiroir ») : hors de l'imprimante, a sa place ou au rangement unique ; « À ranger » a part
+  ["drawer",  "Rangée",           s => !inAms(s) && !s.archived && !s.ordered && s.location !== TO_STORE, "🗄"],
+  ["tostore", "À ranger",         s => !inAms(s) && !s.archived && !s.ordered && s.location === TO_STORE, "📥"],
   ["single",  "Seule bobine",     s => !(s.sibling_count > 0), "1️⃣"],
   ["noprice", "Prix non défini",  s => s.price_override == null && s.filament_price == null, "💶"],
 ];
@@ -1626,9 +1658,10 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
         {s.location && (
           <span data-tip={s.ordered ? "Commandée, pas encore reçue : le scan RFID ou l'ajout d'une bobine de ce filament l'adoptera" : undefined}
             style={{ fontSize:9, fontWeight:800, padding:"3px 6px", borderRadius:20,
-            background: s.ordered ? "rgba(14,165,233,0.16)" : "rgba(139,92,246,0.14)", color: s.ordered ? "#0EA5E9" : "#8B5CF6", textAlign:"center",
+            background: s.ordered ? "rgba(14,165,233,0.16)" : s.location === TO_STORE ? "rgba(245,158,11,0.18)" : "rgba(139,92,246,0.14)",
+            color: s.ordered ? "#0EA5E9" : s.location === TO_STORE ? "#D97706" : "#8B5CF6", textAlign:"center",
             overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis" }}>
-            {s.ordered ? "📬" : "📍"} {s.location}
+            {s.ordered ? "📬" : s.location === TO_STORE ? "📥" : "📍"} {s.location}
           </span>
         )}
       </div>
@@ -2139,6 +2172,8 @@ function SpoolsView({ filaments, showArchived }) {
         { icon: "📄", label: "Ouvrir la bobine", tone: "#3B82F6", onClick: () => setSelected(s) },
         fil && { icon: "🧵", label: "Voir le filament", tone: "#EC4899", onClick: () => setSelFil(fil) },
         isAdmin && fil && { icon: "＋", label: "Ajouter une bobine de ce filament", tone: "#22C55E", onClick: () => setShowAdd(fil.id) },
+        isAdmin && !s.archived && !s.ordered && stor && stor.mode !== "single" && { icon: s.location === TO_STORE ? "📥" : "📍",
+          label: s.location === TO_STORE ? "Dire où elle est rangée…" : "Changer sa place…", hint: s.location, tone: "#8B5CF6", onClick: () => setPlaceFor(s) },
         isAdmin && !s.archived && "-",
         isAdmin && !s.archived && { icon: "📦", label: "Archiver…", hint: "Quantité remise à 0, sort du stock", tone: "#64748B", onClick: async () => {
           if (await archiveSpool(s)) load();
@@ -2184,6 +2219,14 @@ function SpoolsView({ filaments, showArchived }) {
   }, [showArchived, KEY]);
 
   useEffect(() => { load(); }, [load]);
+  // le rangement (07/11/2026) : la vue « par rangement », et la liste rechargee quand une bobine est rangee
+  const stor = useStorage();
+  const [view, setView] = useState(() => { try { return localStorage.getItem("bn_spool_view") || "grid"; } catch { return "grid"; } });
+  const pickView = v => { setView(v); try { localStorage.setItem("bn_spool_view", v); } catch { /* indisponible */ } };
+  const [toStoreOpen, setToStoreOpen] = useState(false);
+  const [placeFor, setPlaceFor] = useState(null);
+  const storV = stor?._v || 0;
+  useEffect(() => { if (storV) load(); }, [storV]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filtrage + recherche client-side (options depuis allSpools = pas de cascade cassée)
   const spools = useMemo(() => {
@@ -2293,13 +2336,24 @@ function SpoolsView({ filaments, showArchived }) {
           onClose={()=>setFilterOpen(false)}
         />
       )}
+      {!showArchived && <ToStoreBanner onOpen={() => setToStoreOpen(true)}/>}
+      {!showArchived && spools.length > 0 && <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+        {[["grid", "▦ Grille", "Toutes les bobines, dans l'ordre du tri"], ["storage", "🗄 Par rangement", "Regroupées : imprimante, à ranger, puis chaque rangement"]].map(([k, l, tip]) =>
+          <button key={k} type="button" onClick={() => pickView(k)} data-tip={tip} style={{ padding:"6px 12px", borderRadius:10, fontSize:12.5, fontWeight:800, cursor:"pointer",
+            border: view === k ? "1px solid transparent" : "1px solid var(--border)", color: view === k ? "#fff" : "var(--text2)",
+            background: view === k ? "linear-gradient(135deg, #8B5CF6, #6366F1)" : "var(--surface)" }}>{l}</button>)}
+      </div>}
+      {toStoreOpen && <ToStoreSheet onClose={() => setToStoreOpen(false)}/>}
+      {placeFor && <PlacePicker spools={[placeFor]} onClose={() => setPlaceFor(null)}/>}
       {/* 104px mini : trois colonnes des 360px de large, donc sur les plus
           petits telephones aussi, et la grille s'elargit ensuite d'elle-meme
           sur tablette et bureau -- aucun point de rupture a maintenir. */}
       {!loading && !spools.length && <EmptyCard icon={showArchived ? "🗄" : "🧵"} text={allSpools.length ? "Aucune bobine ne correspond." : showArchived ? "Aucune bobine archivée." : "Aucune bobine en stock."}/>}
       {/* 01/11/2026 : plus larges des que l'ecran le permet (136px sur ordinateur), pour lire le sous-type en entier */}
       {showArchived && spools.length > 0 && <ArchiveWall spools={spools} onOpen={setSelected} menu={spoolMenu}/>}
-      {!showArchived && <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(clamp(108px, 28vw, 136px),1fr))", gap:8 }}>
+      {!showArchived && view === "storage" && spools.length > 0 && <StorageMap spools={spools} admin={isAdmin} onOpen={setSelected}
+        renderSpool={s => <SpoolCard key={s.id} s={s} colorsList={parseColorsList(s.filament_color, s.filament_colors_array)} onClick={()=>setSelected(s)} menu={() => spoolMenu(s)}/>}/>}
+      {!showArchived && view !== "storage" && <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(clamp(108px, 28vw, 136px),1fr))", gap:8 }}>
         {spools.map(s => {
           const colorsList = parseColorsList(s.filament_color, s.filament_colors_array);
           return (
@@ -3578,6 +3632,15 @@ export default function Filaments() {
   const deepId    = searchParams.get("id");
   const deepSpool = searchParams.get("spool");
   const deepOrder = searchParams.get("order");     // une commande (mails) depuis une notification
+  // ?ranger=1 : les bobines a ranger (notification « Bobine à ranger ») ; ?ranger=<id> : ranger cette bobine-la
+  const deepRanger = searchParams.get("ranger");
+  const [rangerSpool, setRangerSpool] = useState(null);
+  useEffect(() => {
+    setRangerSpool(null);
+    if (!deepRanger || deepRanger === "1") return;
+    client.get(`/filaments/spools/${deepRanger}`).then(r => setRangerSpool(r.data)).catch(() => {});
+  }, [deepRanger]);
+  const closeRanger = () => { const next = new URLSearchParams(searchParams); next.delete("ranger"); setSearchParams(next, { replace: true }); };
 
   // ?swatch=1 dans l'URL = on arrive par le scan du QR d'un echantillon (le QR
   // imprime sur la planche encode ce parametre). Dans ce seul cas on coche la
@@ -3844,6 +3907,8 @@ export default function Filaments() {
           filamentId={deepId ? Number(deepId) : undefined}
           onClose={closeDeep}/>
       )}
+      {deepRanger === "1" && <ToStoreSheet onClose={closeRanger}/>}
+      {rangerSpool && <PlacePicker spools={[rangerSpool]} onClose={closeRanger}/>}
       {deepOrder && <OrderSheet id={Number(deepOrder)} onClose={() => { const n = new URLSearchParams(searchParams); n.delete("order"); setSearchParams(n, { replace: true }); }}/>}
       {deepErr && (
         <div style={{ padding:"12px 16px", borderRadius:10,

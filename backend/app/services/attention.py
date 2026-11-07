@@ -434,6 +434,29 @@ async def _bambu_without_color_code(db) -> list[Alert]:
     ]
 
 
+@check("spool_to_store", "Bobines à ranger", "📥", random_sample=False)
+async def _spools_to_store(db) -> list[Alert]:
+    """Hors du rangement unique (07/11/2026) : une bobine sortie de l'AMS, recue ou ajoutee attend qu'on dise ou
+    elle est rangee, ou n'a pas encore de place (mode « sa place »)."""
+    from .storage_places import TO_STORE, stored
+    rows = [(s, f) for s, f in await _pairs(db) if s.location == TO_STORE and stored(s)]
+    rows.sort(key=lambda r: r[0].unstored_at or datetime.min, reverse=True)
+    return [
+        Alert(
+            key=f"spool_to_store:spool:{s.id}",
+            category="spool_to_store",
+            title=_fil_title(f),
+            detail=f"Bobine #{s.id} · " + ("sortie de l'AMS ou arrivée, où l'as-tu rangée ?" if s.unstored_at else "pas encore de place"),
+            severity="warn" if s.unstored_at else "info",
+            link=f"/filaments?ranger={s.id}",
+            entity="spool", entity_id=s.id, filament_id=f.id,
+            rank=i,
+            **_fil_visual(f),
+        )
+        for i, (s, f) in enumerate(rows)
+    ]
+
+
 @check("spool_no_price", "Bobines sans prix", "🏷")
 async def _spools_without_price(db) -> list[Alert]:
     """

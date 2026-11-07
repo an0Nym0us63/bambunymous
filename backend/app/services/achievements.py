@@ -2418,6 +2418,8 @@ CATALOG += [
        lore="Dix réglages changés dans la journée : tu cherches LA bonne configuration."),
     _a("duo_dry", "secret", "🧖", "Spa en duo", "Faire sécher deux AMS en même temps", [1],
        lore="Deux AMS au chaud en même temps : séance de spa pour toutes les bobines."),
+    _a("all_placed", "secret", "🗄️", "Une place pour chaque chose", "Au moins 10 bobines, chacune à sa place, aucune à ranger", [1],
+       lore="Chaque bobine a son adresse, et chacune y est (ou l'imprimante l'a empruntée) : un atelier où l'on trouve tout."),
     # Lot du 22/10/2026 : file, surprises, fetes ; releves de l'imprimante et des copains (ach_watch)
     _a("sur_mesure", "mw", "🎯", "Sur mesure", "{n} plateaux imprimés avec un filament choisi plateau par plateau", [1]),
     _a("bon_public", "app", "🎭", "Bon public", "{n} surprises vécues à l'ouverture de l'appli", [1]),
@@ -2530,7 +2532,7 @@ SECRET_SUBS = [
      "rainbow_day triplets broken_record pi314 err404 devil666 almost1000 byte256 kilobyte ten_thousand onetwothree seventh lucky13 forager perfect_month all_hours plate7 unfaithful mega_group novelist"),
     ("ups", "🎢", "Hauts et bas", "doctor comeback phoenix bad_day insomniac comeback30 hibernation first_try so_close big_fall black_week revenge flawless_month"),
     ("trade", "🛒", "Ventes et bobines", "penny luxury market_day museum sold_hot finally_sold eternal_spool "
-     "devoured_spool big_order pit_stop psycho_price one_euro big_spool gold_spool bargain spring_clean sauna duo_dry"),
+     "devoured_spool big_order pit_stop psycho_price one_euro big_spool gold_spool bargain spring_clean sauna duo_dry all_placed"),
     ("mw", "🌐", "MakerWorld", "self_print bestseller pioneer harsh recycled"),
     ("social", "🤝", "Copains", "night_owl_visit mutual_visit share_all same_taste"),
     ("famous", "🗿", "Modèles célèbres", "benchy_print calib_print dragon_print skull_print"),
@@ -2815,6 +2817,7 @@ HINTS = {
     "purge_day": "Un grand ménage dans l'appli, en une seule journée.",
     "tinkerer": "Une journée à tourner les boutons des réglages, encore et encore.",
     "duo_dry": "Plusieurs AMS, une même envie de chaleur, au même moment.",
+    "all_placed": "Un atelier bien tenu : chaque chose à sa place, et une place pour chaque chose.",
     "cameleon": "Choisis tes couleurs plateau par plateau, et surtout pas celles prévues.",
     "queue_cleared": "Une longue liste d'envies… jusqu'à la dernière.",
     "fete_year": "Chaque mois a sa fête. Toutes les saisons, sans en manquer une.",
@@ -2861,13 +2864,15 @@ LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_l
         "band_prints", "queue_cleared", "rainbow_ams", "zero_alert", "mille_feuille", "doctor", "oven", "door_dance", "marathon_online",
         "door_impatient", "door_patient", "door_hot_bed", "furnace_door",
         "same_taste", "home_saves", "home_tiles", "home_tweaks", "cam_hours", "home_first", "home_multi", "home_four",
-        "home_three", "home_two", "home_copy", "home_minimal", "home_all", "home_pages",
+        "home_three", "home_two", "home_copy", "home_minimal", "home_all", "home_pages", "all_placed",
         "guide_minutes", "guide_sections", "guide_opens", "guide_searches"}
 # Lus au present ET retires si on defait ce qui les donne (l'etat de la disposition de l'accueil).
 # Regagne apres une perte, un palier revient sans notification ni cle (pas de cles a la chaine).
 REVOCABLE = {"home_multi", "home_minimal", "home_all", "home_pages",
              # un modele rendu puis retire, un assemblage oublie (« Vue du 3MF »), une vue refaite plus tard
-             "mw_relinked", "asm_edited", "views_3d", "vue3d_thumbs"}
+             "mw_relinked", "asm_edited", "views_3d", "vue3d_thumbs",
+             # le rangement (07/11/2026) : perdu des qu'une bobine n'a plus de place ou attend d'etre rangee
+             "all_placed"}
 for _x in CATALOG:
     _x["live"] = _x["id"] in LIVE
 # Seuils : six paliers (bronze -> legende), etendus a neuf (mythique, cosmique,
@@ -5094,6 +5099,11 @@ async def _live_values() -> dict:
             from .attention import build_attention
             cats, _errs = await build_attention(db)
             out["zero_alert"] = 0 if cats else 1
+            from sqlalchemy import select as _sel
+            from ..models.filament import Spool as _Sp
+            from .storage_places import TO_STORE as _TS
+            act = (await db.execute(_sel(_Sp.place_id, _Sp.location).where(_Sp.archived.is_(False), _Sp.ordered.is_(False)))).all()
+            out["all_placed"] = 1 if len(act) >= 10 and all(pid and loc != _TS for pid, loc in act) else 0
         best = ((await _state_get() or {}).get("best") or {}).get("queue_size") or 0
         out["queue_cleared"] = 1 if best >= 10 and _queue_size() == 0 else 0
     except Exception as e:

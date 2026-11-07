@@ -250,6 +250,8 @@ async def lifespan(app: FastAPI):
     from app.services import archive as _arch
     from app.services import ai_tags as _ai
     _tasks.track("ai_tags", _bg(_ai.nightly_loop()))      # categories : reprises et rattrapage chaque nuit a 4 h
+    from app.services import storage_places as _stp
+    _tasks.track("storage_remind", _bg(_stp.remind_loop()))   # bobines a ranger : les rappels
     _tasks.track("nas", _bg(_arch.nightly_loop()))        # sauvegarde vers le NAS (et vidage du local) chaque nuit, si activee
     from app.services import mail_orders as _mail
     _tasks.track("mail", _bg(_mail.loop()))               # commandes Bambu Lab lues dans les mails, si active

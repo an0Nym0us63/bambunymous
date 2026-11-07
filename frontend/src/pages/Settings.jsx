@@ -26,6 +26,7 @@ import ClaudeSettings from "../components/ClaudeSettings";
 import SwitchCard, { phoneWidth } from "../components/SwitchCard";
 import DryRulesCard from "../components/DryRulesCard";
 import SpoolTaresCard from "../components/SpoolTaresCard";
+import { StorageSettingsCard } from "../components/Storage";
 import CatalogMappingsCard from "../components/CatalogMappingsCard";
 import MakerWorldSettings from "../components/MakerWorldSettings";
 import RateTemplatesSettings from "../components/RateTemplatesSettings";
@@ -2213,6 +2214,7 @@ export default function Settings() {
       {/* ── Filaments ─────────────────────────────────────────────── */}
       {tab === "filament" && (
       <AdminOnly><div className="wide-flow">
+        <StorageSettingsCard card={card} cardTitle={cardTitle}/>
         <DryRulesCard card={card} cardTitle={cardTitle}/>
         <SpoolTaresCard card={card} cardTitle={cardTitle}/>
         <LabelsCard card={card} cardTitle={cardTitle}/>

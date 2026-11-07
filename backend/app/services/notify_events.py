@@ -25,6 +25,7 @@ import time
 from pathlib import Path
 
 from . import notify as N
+from .storage_places import in_printer as _in_printer
 
 logger = logging.getLogger(__name__)
 DATA_DIR = Path("/data")
@@ -153,7 +154,7 @@ async def _print_info(pid: int) -> dict:
     fils = []
     for u, s, f in rows:
         label = _fil_label(f, with_brand=False) if f else (u.filament_type or "Filament inconnu")
-        where = f" ({s.location})" if s is not None and s.location and s.location != "Tiroir" else ""
+        where = f" ({s.location})" if s is not None and _in_printer(s.location) else ""
         grams = f" — {u.grams_used:.0f} g" if u.grams_used else ""
         fils.append(f"{label}{grams}{where}")
     if cover and "bblmw.com" in cover and "?" not in cover:

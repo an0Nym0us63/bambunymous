@@ -326,6 +326,14 @@ EVENTS["spool_removed"] = {
     "sample": {"title": "📤 Bobine retirée · AMS-A slot 2", "priority": 2, "link": "/",
                "message": "Prune — PLA Matte · Bambu Lab"},
 }
+EVENTS["spool_to_store"] = {
+    "section": "spools", "label": "Bobine à ranger",
+    "description": "Rangement manuel (ou bobine sans place) : une bobine sortie de l'AMS, reçue ou ajoutée attend que tu dises où tu l'as mise.",
+    "options": [{"key": "minutes", "type": "number", "label": "Après", "unit": "min", "default": 15, "min": 1, "max": 1440},
+                {"key": "repeat_h", "type": "number", "label": "Rappeler toutes les", "unit": "h (0 : une fois)", "default": 4, "min": 0, "max": 72}],
+    "sample": {"title": "📥 2 bobines à ranger", "priority": 2, "link": "/filaments?ranger=1",
+               "message": "• Prune — PLA Matte · Bambu Lab · sortie il y a 20 min\n• Bleu glacier — PLA Basic · Bambu Lab · sortie il y a 18 min\n👉 Dis où tu les as rangées"},
+}
 EVENTS["mw_to_rate"] = {
     "section": "mw", "label": "Impressions à évaluer",
     "description": "De nouveaux modèles imprimés attendent ton avis sur MakerWorld (relevé toutes les 6 h).",
@@ -570,7 +578,7 @@ _ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_en
           "print_paused", "print_resumed", "print_speed",
           "printer_hms", "printer_offline", "bed_cooled", "printer_firmware",
           "dry_started", "dry_done", "dry_needed_loaded", "dry_forgotten",
-          "spool_loaded", "spool_removed", "ams_humidity", "spool_runout", "spool_low", "spool_short", "stock_low", "fil_to_order", "order_mail",
+          "spool_loaded", "spool_removed", "spool_to_store", "ams_humidity", "spool_runout", "spool_low", "spool_short", "stock_low", "fil_to_order", "order_mail",
           "printer_idle", "weekly_summary", "mw_queue_ready", "mw_profile_gone", "app_update", "app_started"]
 EVENTS = {**{k: EVENTS[k] for k in _ORDER if k in EVENTS}, **{k: v for k, v in EVENTS.items() if k not in _ORDER}}
 

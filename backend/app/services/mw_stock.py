@@ -124,6 +124,8 @@ async def stock_rows():
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(Spool, Filament).join(Filament, Filament.id == Spool.filament_id)
                                  .where(Spool.archived.is_(False), Spool.ordered.is_(False)))).all()
+        from .storage_places import config as _sc, TO_STORE
+        plain = {(await _sc(db))["name"], TO_STORE}      # rien a dire : le rangement unique, ou pas encore rangee
     out = {}
     for s, f in rows:
         rem = s.remaining_weight_g if s.remaining_weight_g is not None else (f.filament_weight_g or 0)
@@ -131,9 +133,9 @@ async def stock_rows():
             continue
         e = out.setdefault(f.id, {"f": f, "remaining_g": 0.0, "spools": 0, "where": [], "spool_g": []})
         e["remaining_g"] += rem
-        e["spool_g"].append((round(rem), s.location if s.location and s.location != "Tiroir" else None))
+        e["spool_g"].append((round(rem), s.location if s.location and s.location not in plain else None))
         e["spools"] += 1
-        if s.location and s.location != "Tiroir":
+        if s.location and s.location not in plain:
             e["where"].append(s.location)
     return list(out.values())
 
