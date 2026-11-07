@@ -1553,10 +1553,23 @@ def _merged(jobs: list, d: dict) -> list:
         return jobs
     by = {j["key"]: j for j in jobs}
     gone, drop = set(), []
+    # un regroupement a qui il manque un plateau (07/11/2026) : garde 12 h, comme un jour fige -- une liste un instant
+    # incomplete (redemarrage, « A faire » relu, variante rattachee autrement) l'effacait pour de bon, et ses plateaux
+    # revenaient seuls, places comme des nouveaux (les echantillons regroupes et figes de Guillaume)
+    mm = d.setdefault("merge_missing", {})
+    now_s = datetime.utcnow().isoformat(timespec="minutes")
     for gid, keys in list(d["merge"].items()):
         there = [k for k in keys if k in by and k not in gone]
+        if len(there) < len(keys):
+            if gid not in mm:
+                mm[gid] = now_s
+                d["_merge_dirty"] = True         # enregistre : sinon chaque calcul repartirait de zero
+            if datetime.utcnow() - datetime.fromisoformat(mm[gid]) > timedelta(hours=12):
+                drop.append(gid)
+                continue
+        elif mm.pop(gid, None):
+            d["_merge_dirty"] = True
         if len(there) < 2:
-            drop.append(gid)
             continue
         ms = [by[k] for k in there]
         head = dict(ms[0])
@@ -1576,6 +1589,10 @@ def _merged(jobs: list, d: dict) -> list:
         gone.update(there[1:])
     for gid in drop:
         d["merge"].pop(gid, None)
+        mm.pop(gid, None)
+        d["_merge_dirty"] = True
+    for gid in [g for g in mm if g not in d["merge"]]:
+        mm.pop(gid, None)
     return [by[j["key"]] for j in jobs if j["key"] not in gone]
 
 
@@ -1707,9 +1724,12 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
     import time
     tm, t0 = {}, time.perf_counter()
     d, now, jobs, dirty, loaded, live, busy = await _context(tz)
+    dirty = d.pop("_merge_dirty", False) or dirty
     tm["context"] = round((time.perf_counter() - t0) * 1000)
     jobs = _ordered(jobs, d["order"], d["pins"])
-    keys = {j["key"] for j in jobs}
+    # les plateaux regroupes sous la carte d'un autre sont la aussi (07/11/2026 : comptes absents, leur jour fige tombait
+    # au bout de 12 h, et ils revenaient comme nouveaux quand le regroupement se defaisait)
+    keys = {j["key"] for j in jobs} | {k for j in jobs for k in (j.get("merged") or [])}
     # les poses et les figeages de travaux sortis du planning (imprimes, retires de « A faire ») s'en vont, mais 12 h
     # apres leur disparition seulement (06/11/2026 : une liste un instant incomplete -- le serveur qui redemarre,
     # « A faire » relu pendant une optimisation -- effacait pour de bon les echantillons figes de Guillaume, replaces
@@ -1721,18 +1741,25 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
     known = set(d.get("known") or [])
     if known:
         mp = lambda k: (k.split(":")[0].split("~")[0], k.split(":")[1] if ":" in k else "")
-        gone = sorted(k for k in set(d["pins"]) | set(d["locked"]) if k not in keys and k in known)
+        in_merge = {k for v in d["merge"].values() for k in v}
+        gone = sorted(k for k in set(d["pins"]) | set(d["locked"]) | in_merge if k not in keys and k in known)
         fresh = sorted(k for k in keys if k not in known and k not in d["pins"] and k not in d["locked"])
         for g in gone:
-            nk = next((f for f in fresh if mp(f) == mp(g)), None)
-            if not nk:
+            # seulement sans ambiguite (07/11/2026) : les echantillons d'un meme modele (une variante par couleur, tous
+            # « plateau 1 ») s'echangeaient leurs jours ; plusieurs disparus ou plusieurs nouveaux pareils : on ne
+            # devine pas
+            cands = [f for f in fresh if mp(f) == mp(g)]
+            if len(cands) != 1 or sum(1 for x in gone if mp(x) == mp(g)) != 1:
                 continue
+            nk = cands[0]
             fresh.remove(nk)
             for kk in ("locked", "pins", "prio"):
                 if g in d[kk]:
                     d[kk][nk] = d[kk].pop(g)
             if g in d.get("plan0", {}):
                 d["plan0"][nk] = d["plan0"].pop(g)
+            for gid, ks in d["merge"].items():
+                d["merge"][gid] = [nk if x == g else x for x in ks]
             d["order"] = [nk if x == g else x for x in d["order"]]
             dirty = True
             logger.info(f"[PLAN] {g} -> {nk} : meme modele et meme plateau (variante rattachee autrement), son jour et son heure suivent")
@@ -1779,13 +1806,14 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
     # les nouveaux plateaux (06/11/2026) : places selon le mode choisi dans les consignes, sans toucher aux autres ;
     # « known » garde ceux deja vus (la premiere fois, tous le sont : rien ne bouge)
     known = d.get("known")
-    cur = [j["key"] for j in jobs]
+    cur = [j["key"] for j in jobs] + [k for j in jobs for k in (j.get("merged") or [])[1:]]
     if not isinstance(known, list):
         d["known"] = cur
         dirty = True
     else:
         ks = set(known)
-        new = [k for k in cur if k not in ks]
+        heads = {j["key"] for j in jobs}
+        new = [k for k in cur if k not in ks and k in heads]
         if new and d.get("auto_new") in MODES:
             try:
                 d["order"] = auto_insert(jobs, d, now, busy, loaded, new, d["auto_new"], fair=True)
