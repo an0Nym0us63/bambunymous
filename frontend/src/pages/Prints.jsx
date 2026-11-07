@@ -1054,6 +1054,19 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
   // peuvent venir d'un meme print).
   const pick = (e, pl) => {
     if (!isAdmin || visiting) return;
+    // les impressions qui comptent pour ce plateau (07/11/2026) : les dissocier de CE plateau seulement ; « Revenir a la
+    // detection » ne vise plus qu'elles (il oubliait les choix de toutes les impressions du modele, d'autres plateaux avec)
+    const here = prints.filter(pr => (platesOf(pr) || []).includes(pl.index));
+    const hand = here.filter(pr => manualPlates(pr.mw_plates));
+    const nm = pr => pr.translated_name || pr.file_name;
+    const backToAuto = async () => {
+      const wide = hand.filter(pr => (manualPlates(pr.mw_plates)?.plates || []).some(i => i !== pl.index));
+      if (wide.length && !(await showConfirm(wide.map(pr => `« ${nm(pr)} » compte aussi pour le${(manualPlates(pr.mw_plates).plates.length > 2) ? "s" : ""} plateau${(manualPlates(pr.mw_plates).plates.length > 2) ? "x" : ""} `
+        + manualPlates(pr.mw_plates).plates.filter(i => i !== pl.index).join(", ")).join("\n")
+        + "\nLa détection reprendra aussi ces plateaux-là pour ces impressions. Pour ne retirer que celui-ci, choisis plutôt « Dissocier ».",
+        { title: "Revenir à la détection ?", confirmLabel: "Revenir à la détection" }))) return;
+      for (const pr of hand) await save(pr, [], true);
+    };
     openMenu(e, {
       title: `${pl.index}. ${pl.name || "Plateau"}`, subtitle: "Imprimé par…", img: pl.thumb ? mwImg(pl.thumb, 120) : null,
       items: [
@@ -1063,11 +1076,18 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
             + (sure === false ? " · d'autres plateaux se ressemblent : le plus proche, départagé au poids" : ""),
           onClick: () => save(pr, [pl.index]) })),
         probable[pl.index] && "-",
+        ...here.map(pr => {
+          const cur = platesOf(pr) || [], rest = cur.filter(i => i !== pl.index);
+          return { icon: "✂", tone: "#DC2626", label: `Dissocier : ${nm(pr)}`,
+            hint: `Ce plateau ne compte plus pour cette impression${rest.length ? ` ; ses plateaux ${rest.join(", ")} restent` : ""}`,
+            onClick: () => save(pr, rest) };
+        }),
+        here.length > 0 && "-",
         ...prints.map(pr => {
           const cur = platesOf(pr) || [];
           const on = cur.includes(pl.index);
           return { icon: on ? "✅" : "⬜", img: apiThumb(apiUrl(`/prints/${pr.id}/image`), 128), label: pr.translated_name || pr.file_name,
-            hint: [fmtDate(pr.print_date), STATUS_CFG[pr.status]?.label].filter(Boolean).join(" · "),
+            hint: [fmtDate(pr.print_date), STATUS_CFG[pr.status]?.label, on ? "compte pour ce plateau : toucher le dissocie" : "toucher l'associe à ce plateau"].filter(Boolean).join(" · "),
             onClick: () => save(pr, on ? cur.filter(i => i !== pl.index) : [...cur, pl.index]) };
         }),
         // combien d'exemplaires ce print a donnes (plateau duplique sur le plateau d'impression)
@@ -1093,10 +1113,10 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
             try { await client.patch(`/prints/${pr.id}`, { design_id: designId }); await save(pr, [pl.index]); onLinked?.(); }
             catch (e) { showAlert(e.response?.data?.detail || e.message); }
           } })),
-        prints.some(pr => manualPlates(pr.mw_plates)) && "-",
-        prints.some(pr => manualPlates(pr.mw_plates)) && { icon: "↺", label: "Revenir à la détection",
-          hint: "Oublie les choix faits à la main sur ces prints",
-          onClick: () => prints.filter(pr => manualPlates(pr.mw_plates)).forEach(pr => save(pr, [], true)) },
+        hand.length > 0 && "-",
+        hand.length > 0 && { icon: "↺", label: "Revenir à la détection pour ce plateau",
+          hint: `Oublie le choix fait à la main sur ${hand.length > 1 ? `les ${hand.length} impressions` : "l'impression"} de ce plateau (les autres plateaux ne bougent pas)`,
+          onClick: backToAuto },
       ],
     });
   };
