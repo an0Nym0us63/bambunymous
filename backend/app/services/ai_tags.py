@@ -510,11 +510,12 @@ async def auto_on() -> bool:
         return (await get_setting(db, K_AUTO, "1")) != "0" and bool(await get_setting(db, K_KEY, ""))
 
 
-async def after_print(pid: int) -> None:
-    """A la fin d'une impression : son modele, s'il n'est pas encore classe, part chez Claude (avec ceux qui manquent
-    encore). Rien sans cle, ni quand le classement automatique est coupe."""
+async def after_print(pid: int, status: str = "SUCCESS") -> None:
+    """A la fin d'une impression reussie (ou en partie) : son modele, s'il n'est pas encore classe, part chez Claude
+    (avec ceux qui manquent encore). Rien pour une impression annulee ou ratee, sans cle, ni quand le classement
+    automatique est coupe."""
     try:
-        if _RUN["running"] or not await auto_on():
+        if status not in ("SUCCESS", "PARTIAL") or _RUN["running"] or not await auto_on():
             return
         from ..db.session import AsyncSessionLocal
         from ..models.print_history import ModelLabel, Print

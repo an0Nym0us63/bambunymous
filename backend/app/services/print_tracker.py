@@ -894,7 +894,7 @@ async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float],
         return
     try:
         from . import ai_tags
-        await ai_tags.after_print(pid)           # son modele classe par Claude s'il ne l'est pas encore
+        await ai_tags.after_print(pid, status)   # son modele classe par Claude s'il ne l'est pas encore (reussie seulement)
     except Exception:
         pass
     from . import notify_events as _ne

@@ -49,7 +49,7 @@ export default function ClaudeSettings({ card, cardTitle }) {
 
         <label style={{ display:"flex", gap:8, alignItems:"flex-start", fontSize:12.5, color:"var(--text2)", lineHeight:1.4, cursor:"pointer" }}>
           <input type="checkbox" checked={!!s.auto} onChange={e => setAuto(e.target.checked)} style={{ marginTop:2 }}/>
-          <span><b style={{ color:"var(--text)" }}>Classer automatiquement les nouveaux modèles</b> : à la fin d'une impression, si son modèle
+          <span><b style={{ color:"var(--text)" }}>Classer automatiquement les nouveaux modèles</b> : à la fin d'une impression réussie, si son modèle
             n'est pas encore classé, Claude s'en charge (environ un demi-centime).</span></label>
 
         <CollectionLabels hasKey={s.has_key} onIdle={load}/>
