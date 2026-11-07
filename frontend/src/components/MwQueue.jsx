@@ -632,7 +632,7 @@ export default function MwQueue() {
         fetchSource={view3d.planned}
         title={view3d.title_fr || view3d.title} palette={view3d.planned ? paletteOf(view3d) : null}
         paletteFinishes={view3d.planned ? finishesOf(view3d) : null} onClose={() => setView3d(null)}/>}
-      {planSel && <ModelSheet g={poolGroups(pd?.jobs, pd?.blocked).find(g => g.id === planSel)} now={pd?.now} edit={isAdmin} jobs={pd?.jobs}
+      {planSel && <ModelSheet g={poolGroups(pd?.jobs, pd?.blocked).find(g => g.id === planSel)} now={pd?.now} edit={isAdmin} jobs={pd?.jobs} done={pd?.done_plates}
         onClose={() => setPlanSel(null)} onPick={setPlanJob}
         act={{ ...modelAct(planSel), calendar: () => navTo(`/prints?tab=calendar&plan=${encodeURIComponent(planSel)}`) }}/>}
       {planJob && <JobSheet j={planJob} now={pd?.now} edit={isAdmin} onClose={() => setPlanJob(null)} act={jobAct(planJob)} jobs={pd?.jobs}/>}

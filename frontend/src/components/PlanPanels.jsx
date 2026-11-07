@@ -388,7 +388,7 @@ export function PoolSummary({ jobs, blocked = [], now, onOpenModel, bulk }) {
 // La fiche d'un modele du planning (06/11/2026) : en haut ce qui vaut pour tout le modele (caler tous ses plateaux
 // sur un jour, en tete, plus tard, d'une traite, date limite…), dessous chacun de ses plateaux, a toucher pour ses
 // actions a lui. Elle reste ouverte apres une action : on voit les plateaux bouger.
-export function ModelSheet({ g: g0, now, edit, onClose, onPick, act: act0, jobs }) {
+export function ModelSheet({ g: g0, now, edit, onClose, onPick, act: act0, jobs, done = null }) {
   const { busy, run, row, dateRow } = useActRows(null);
   const [slot, setSlot] = useState(false);            // caler tout le modele dans une journee (06/11/2026)
   // ses variantes de couleur (06/11/2026 : caler 11 echantillons sur un jour se faisait un par un) : le meme modele et le
@@ -458,9 +458,24 @@ export function ModelSheet({ g: g0, now, edit, onClose, onPick, act: act0, jobs 
         {dateRow("due", "🎯", f.due ? "Changer la date limite" : "Une date limite", f.due ? `Fini avant le ${dueTxt(f.due)} (son dernier plateau)` : "Son dernier plateau fini avant ce jour ; le planning prévient s'il déborde", f.due, v => act.due(v))}
       </div>
     </>}
-    {sec(`Plateau par plateau (${g.jobs.length})`)}
+    {/* les plateaux deja faits (07/11/2026), a leur rang parmi ceux qui restent : imprimes, marques faits, en cours */}
+    {(() => { const dl = [g0.id, ...(on ? vdids : [])].flatMap(id => (done || {})[id] || []);
+      const nd = dl.filter(p => p.done >= p.qty).length;
+      return sec(`Plateau par plateau (${g.jobs.length} à faire${nd ? ` · ${nd} fait${nd > 1 ? "s" : ""}` : ""})`); })()}
     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-      {g.jobs.map(j => {
+      {[...g.jobs.map(j => ({ j })), ...[g0.id, ...(on ? vdids : [])].flatMap(id => (done || {})[id] || []).filter(p => p.done >= p.qty).map(p => ({ p }))]
+        .sort((a, b) => ((a.j || a.p).plate ?? 0) - ((b.j || b.p).plate ?? 0) || (a.p ? -1 : 0) - (b.p ? -1 : 0)).map(({ j, p }) => {
+        if (p) return <div key={`done${p.key}`} data-tip={p.printing ? "En cours d'impression" : p.manual && !p.printed ? "Marqué fait à la main" : "Imprimé"}
+          style={{ display: "flex", alignItems: "center", gap: 9, padding: "5px 10px 5px 5px", borderRadius: 12, opacity: 0.75,
+            border: "1.5px solid color-mix(in srgb, #10B981 45%, var(--border))", background: "color-mix(in srgb, #10B981 7%, var(--surface))" }}>
+          <PlateThumb j={{ thumb: p.thumb, plate: p.plate, plates_total: p.plates_total }} size={38}/>
+          <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
+            <span style={{ fontSize: 12, fontWeight: 900, color: "#059669", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {plateTxt({ ...p, copy: 1, qty: 1 })}</span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>{p.printing ? "🖨 en cours" : p.manual && !p.printed ? "✓ marqué fait" : "✅ fait"}
+              {p.qty > 1 ? ` · ${p.done}/${p.qty} exemplaires` : ""} <span style={{ fontWeight: 700, color: "var(--muted)" }}>· {hm(p.seconds)}</span></span>
+          </span>
+        </div>;
         const bad = !!j.blockedWhy;
         const c = bad ? "#DC2626" : j.locked ? "#4F46E5" : un ? UNRET : j.completes ? "#059669" : "color-mix(in srgb, #22C55E 50%, var(--border))";
         return <button key={j.key} type="button" onClick={() => onPick(bad ? { ...j, why: j.blockedWhy } : j)}

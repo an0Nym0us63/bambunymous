@@ -270,6 +270,7 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
     """Les travaux a planifier, dans l'ordre de « A faire » ; rend aussi si base a change (a garder)."""
     out, changed = [], False
     manual = d["done"]
+    d["_done"] = {}         # les plateaux deja faits, par modele (07/11/2026 : la fiche du modele ne montrait que le reste)
     for m in models:
         did = str(m.get("design_id"))
         if m.get("error") or not m.get("profile"):
@@ -300,6 +301,11 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
             mk = manual.get(bk)
             done = printed + (int(mk.get("n") or 0) if isinstance(mk, dict) else 0) + printing   # en cours : ses exemplaires
             obj["plates"][idx] = done
+            if done:
+                mn = int(mk.get("n") or 0) if isinstance(mk, dict) else 0
+                d["_done"].setdefault(did, []).append({"key": bk, "plate": idx, "plate_name": pname, "plates_total": len(plates), "thumb": thumb,
+                                                       "qty": qty, "done": min(done, qty), "printed": printed, "manual": mn, "printing": printing,
+                                                       "seconds": int(secs)})
             for c in range(done + 1, qty + 1):
                 fl = []
                 for f in fils:
@@ -1947,6 +1953,7 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
             "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),
             "blocked": [{k: b.get(k) for k in ("key", "design_id", "title", "cover", "thumb", "plate", "plate_name", "plates_total", "copy", "qty",
                                                 "seconds", "retained", "why", "fils")} for b in r.get("blocked") or []],
+            "done_plates": d.get("_done") or {},
             "manual_done": [{"key": k, "title": v.get("title"), "plate": k.split(":")[-1], "n": v.get("n")}
                             for k, v in d["done"].items() if isinstance(v, dict) and v.get("n")]}
 

@@ -555,7 +555,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
       {chip("Occupation", days ? `${Math.round(occ * 100)} %` : "…", "#EC4899")}
       {chip("Jours actifs", days ? `${mActive} / ${monthDays.length}` : "…", "#22C55E")}
     </div>}
-    {modelSel && <ModelSheet g={poolGroups(pd?.jobs, pd?.blocked).find(g => g.id === modelSel)} now={pd?.now} edit={edit} jobs={pd?.jobs}
+    {modelSel && <ModelSheet g={poolGroups(pd?.jobs, pd?.blocked).find(g => g.id === modelSel)} now={pd?.now} edit={edit} jobs={pd?.jobs} done={pd?.done_plates}
       onClose={() => setModelSel(null)} onPick={setJobSel} act={modelAct(modelSel)}/>}
     {jobSel && <JobSheet j={jobSel} now={pd?.now} edit={edit} onClose={() => setJobSel(null)} act={jobAct(jobSel)} jobs={pd?.jobs}/>}
     {optPrev && <OptimizePreview p={optPrev} onClose={() => setOptPrev(null)} onApply={() => { const p = optPrev; setOptPrev(null); applyOptimized(p); }}/>}
