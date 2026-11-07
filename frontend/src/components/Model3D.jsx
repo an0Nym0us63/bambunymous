@@ -279,7 +279,16 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
   // la transparence des couches d'un HueForge (30/10/2026) : une valeur par filament, reglable, gardee par couleur
   const [hueL, setHueL] = useState(null), [tdOpen, setTdOpen] = useState(false);
   // un ecran etroit (telephone) : les boutons de la vue en icones seules (30/10/2026 : la rangee debordait)
-  const narrow = typeof window !== "undefined" && window.innerWidth < 600;
+  // et une vue etroite dans une fiche, sur ordinateur (07/11/2026 : « Rallumer » chevauchait les boutons de gauche)
+  const [boxW, setBoxW] = useState(0);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setBoxW(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const narrow = typeof window !== "undefined" && (window.innerWidth < 600 || (boxW > 0 && boxW < 900));
   // les valeurs gardees sur le modele arrivent parfois apres la vue : elles s'y appliquent alors
   useEffect(() => {
     if (!tdMap || !hueL) return;
@@ -1023,8 +1032,9 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>{l}</button>)}
     </div>}
     {lampOpen && !lit && !bare && <LampPanel lamp={lamp} onChange={putLamp} onClose={() => setLampOpen(false)}/>}
-    {/* lumiere eteinte : la force de la lueur, a regler selon le modele */}
-    {dark && glow && !bare && <div onPointerDown={e => e.stopPropagation()} style={{ position: "absolute", left: 10, bottom: 10, zIndex: 3,
+    {/* lumiere eteinte : la force de la lueur, a regler selon le modele ; au-dessus des rangees de boutons du bas
+        (07/11/2026 : posee a leur hauteur, elle recouvrait plein ecran, vignette et « Éditer l'assemblage ») */}
+    {dark && glow && !bare && <div onPointerDown={e => e.stopPropagation()} style={{ position: "absolute", left: 10, bottom: 58, zIndex: 3,
       width: "min(230px, calc(100% - 170px))", minWidth: 120, padding: "6px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 8,
       background: "color-mix(in srgb, #0f172a 82%, transparent)", border: "1px solid rgba(250,204,21,.35)", backdropFilter: "blur(6px)", color: "#fde68a" }}>
       <span style={{ fontSize: 14, flexShrink: 0 }} data-tip="La force de la lueur : moins pour garder les détails, plus pour qu'il luise davantage (gardée pour ce modèle)">✨</span>
