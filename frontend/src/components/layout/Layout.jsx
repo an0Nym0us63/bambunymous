@@ -40,6 +40,18 @@ const TITLES = {
   "/notifications": "Notifications",
 };
 
+// TEMPORAIRE (07/11/2026) : la page blanche apres une capture d'ecran, sur Android. Elle ne se produit pas hors du cadre
+// de l'appli : on coupe ce cadre morceau par morceau, par l'adresse (?bnbisect=header,nav ; ?bnbisect= pour tout
+// remettre). Garde dans ce navigateur jusqu'a ce qu'on le remette. A retirer une fois le coupable trouve.
+const BISECT = (() => {
+  try {
+    const q = new URLSearchParams(window.location.search).get("bnbisect");
+    if (q !== null) { if (q) localStorage.setItem("bn_bisect", q); else localStorage.removeItem("bn_bisect"); }
+    return new Set((localStorage.getItem("bn_bisect") || "").split(",").map(s => s.trim()).filter(Boolean));
+  } catch { return new Set(); }
+})();
+const cut = k => BISECT.has(k);
+
 const S = {
   // height:100% plutot que 100dvh : la chaine html > body > #root porte le
   // correctif de hauteur iOS (voir index.css). Avec 100dvh, ce conteneur
@@ -204,7 +216,7 @@ export default function Layout() {
   const upd = useUpdates(isAdmin);
   const headerRef = React.useRef(null);
   // gestes caches (voir eggs.js) ; le logo, lui, a le tournis facile
-  React.useEffect(() => { installEggs(); }, []);
+  React.useEffect(() => { if (!cut("eggs")) installEggs(); }, []);
   // three.js (la vue 3D d'un modele) n'est plus charge avec l'appli (06/11/2026) : il se telecharge en fond, quelques
   // secondes apres l'ouverture, quand le navigateur n'a rien d'autre a faire ; la premiere vue 3D n'a pas a l'attendre
   React.useEffect(() => {
@@ -283,7 +295,7 @@ export default function Layout() {
 
 
   return (
-    <div style={S.app}>
+    <div style={cut("scroll") ? { ...S.app, height: "auto", overflow: "visible" } : S.app}>
       {/* Sidebar desktop */}
       <aside className="hidden-mobile" style={{ ...S.aside, width: mini ? 72 : 212 }}>
         <style>{`.bn-nav:hover { background: color-mix(in srgb, var(--c) 10%, transparent); }
@@ -338,8 +350,9 @@ export default function Layout() {
         </div>
       </aside>
 
-      <div style={S.main}>
+      <div style={cut("scroll") ? { ...S.main, overflow: "visible" } : S.main}>
         {/* Header mobile */}
+        {cut("header") ? <div ref={headerRef} style={{ height: 52 }}/> :
         <header ref={headerRef} className="show-mobile app-header" style={S.header}>
           <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0, cursor:"pointer" }}
             onClick={() => { logoTap(); navigate("/"); }}>
@@ -371,11 +384,14 @@ export default function Layout() {
           <GlobalSearch/>
           {!friend && <NotifBell/>}
           <UserMenu placement="bottom"/>
-        </header>
+        </header>}
 
-        <main className="page-content" style={S.page}>
+        <main className="page-content" style={cut("scroll") ? { ...S.page, overflowY: "visible" } : S.page}>
+          {BISECT.size > 0 && <div style={{ margin: "0 0 10px", padding: "6px 10px", borderRadius: 10, background: "#F59E0B", color: "#000",
+            fontSize: 12, fontWeight: 800 }}>Test coupé : {[...BISECT].join(", ")}</div>}
           {/* une page chargee a la demande : la place reste tenue pendant les quelques ms */}
-          <ErrorBoundary where={`page ${pathname}`} resetKey={pathname}><React.Suspense fallback={<div style={{ minHeight: "70vh" }}/>}><Outlet /></React.Suspense></ErrorBoundary></main>
+          {!cut("page") && <ErrorBoundary where={`page ${pathname}`} resetKey={pathname}><React.Suspense fallback={<div style={{ minHeight: "70vh" }}/>}><Outlet /></React.Suspense></ErrorBoundary>}</main>
+        {!cut("hosts") && <>
         <PrankHost/>
         <CardFx/>
         <GradeFx/>
@@ -388,9 +404,10 @@ export default function Layout() {
         <FriendLinkBridge/>
         <Toast/>
         <NoAutofill/>
+        </>}
 
         {/* Bottom nav mobile */}
-        <nav className="show-mobile" style={S.bottomNav}>
+        {!cut("nav") && <nav className="show-mobile" style={S.bottomNav}>
           {/* la page ouverte : son icone dans une pastille de sa couleur, son nom dans cette couleur */}
           {bottom.map(it => <BottomItem key={it.k} to={it.to} icon={it.icon} label={it.short || it.label} c={it.c} isActive={isActiveItem(it, loc, visible)} fitTo={longest}
             dot={it.k === "settings" && upd.any ? <UpdDot tip={updatesTip(upd)} style={{ top:1, right:9, boxShadow:"0 0 0 2px var(--surface)" }}/> : null}/>)}
@@ -399,7 +416,7 @@ export default function Layout() {
             dot={moreList.some(it => it.k === "settings") && upd.any ? <UpdDot tip={updatesTip(upd)} style={{ top:1, right:9, boxShadow:"0 0 0 2px var(--surface)" }}/> : null}/>}
           {moreOpen && <MoreSheet items={moreList} loc={loc} visible={visible} upd={upd} onClose={() => setMoreOpen(false)}/>}
           <span style={{ position:"absolute", top:1, left:"50%", transform:"translateX(-50%)" }}><Hide at="nav" size={9}/></span>
-        </nav>
+        </nav>}
       </div>
 
       <style>{`
