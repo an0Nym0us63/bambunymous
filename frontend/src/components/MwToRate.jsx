@@ -7,6 +7,7 @@ import client, { PHOTOS_CHANGED } from "../api/client";
 import { useShares, setOnRateFailed } from "../store/shares";
 import MwImg from "./MwImg";
 import Lightbox from "./Lightbox";
+import { useStackZ } from "../utils/zstack";
 
 // « ⭐ À évaluer » : mes impressions de modèles MakerWorld pas encore évaluées,
 // avec mes photos (du print, sinon de son groupe) prêtes à joindre.
@@ -68,6 +69,14 @@ function freshToRate() { if (Date.now() - _t > 3000) { forgetToRate(); readToRat
 // une photo vient d'etre ajoutee ou retiree : la liste (et ses photos a joindre) se relit tout de suite
 if (typeof window !== "undefined") window.addEventListener(PHOTOS_CHANGED, () => { if (_last) { forgetToRate(); readToRate(); } });
 
+// le fond d'une fenetre d'evaluation, dans la pile des fenetres (07/11/2026 : ouverte depuis la fiche MakerWorld, elle passait derriere)
+function ZLayer({ base, onClose, children }) {
+  const z = useStackZ(base);
+  return createPortal(
+    <div data-no-pull="" onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: z, background: "rgba(0,0,0,0.6)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>{children}</div>, document.body);
+}
+
 // Bouton « Évaluer » pour un modele : formulaire dans l'appli quand MakerWorld
 // attend l'evaluation (on connait sa fiche), sinon lien vers MakerWorld.
 export function RateButton({ did, style, label = "⭐ Évaluer", doneLabel = "✓ Évalué", ext = " ↗" }) {
@@ -81,9 +90,7 @@ export function RateButton({ did, style, label = "⭐ Évaluer", doneLabel = "�
   if (!x?.rating_id) return <a href={x?.url || rateUrl(did)} target="_blank" rel="noopener noreferrer" style={style}>{label}{ext}</a>;
   return (<>
     <button onClick={() => { freshToRate(); setOpen(true); }} style={{ ...style, cursor: "pointer" }}>{label}</button>
-    {open && createPortal(
-      <div data-no-pull="" onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 4300, background: "rgba(0,0,0,0.6)",
-        display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+    {open && <ZLayer base={4300} onClose={() => setOpen(false)}>
         <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto",
           borderRadius: 16, border: "1px solid var(--border)", padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -97,8 +104,7 @@ export function RateButton({ did, style, label = "⭐ Évaluer", doneLabel = "�
           </div>
           <RateForm x={x} onDone={() => { setOpen(false); setGone(true); }}/>
         </div>
-      </div>, document.body
-    )}
+      </ZLayer>}
   </>);
 }
 // L'etoile du haut d'une fiche (impression, groupe) : un seul modele a evaluer -> son evaluation
@@ -114,13 +120,11 @@ export function RateStar({ designs, name, enabled = true, style }) {
     <RateButton did={items[0].design_id} label="⭐" ext="" doneLabel="✓" style={st}/></span>;
   return <>
     <button type="button" onClick={() => setOpen(true)} aria-label="À évaluer sur MakerWorld" data-tip={`${items.length} modèles à évaluer sur MakerWorld`} style={st}>⭐</button>
-    {open && createPortal(
-      <div data-no-pull="" onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 4250, background: "rgba(0,0,0,0.6)",
-        display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+    {open && <ZLayer base={4250} onClose={() => setOpen(false)}>
         <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto", borderRadius: 20,
           background: "var(--sheet-bg, var(--surface))", boxShadow: "0 20px 50px rgba(0,0,0,.45)" }}>
           <GroupToRate designs={designs} name={name} enabled={enabled}/></div>
-      </div>, document.body)}
+      </ZLayer>}
   </>;
 }
 
@@ -157,9 +161,7 @@ export function GroupToRate({ designs, name, enabled = true, label = null, ancho
           <RateButton did={x.design_id} style={btn}/>
         </div>
       ))}
-      {open && createPortal(
-        <div data-no-pull="" onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 4300, background: "rgba(0,0,0,0.6)",
-          display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      {open && <ZLayer base={4300} onClose={() => setOpen(false)}>
           <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ width: "100%", maxWidth: 520, maxHeight: "90vh",
             overflowY: "auto", borderRadius: 16, border: "1px solid var(--border)", padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -172,8 +174,7 @@ export function GroupToRate({ designs, name, enabled = true, label = null, ancho
             </div>
             <RateForm x={{ ...ready[0], photos }} targets={ready} onDone={() => setOpen(false)}/>
           </div>
-        </div>, document.body
-      )}
+        </ZLayer>}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import client from "../api/client";
 import { useCanMw } from "../store/auth";
 import { useNavigate } from "react-router-dom";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
+import { useStackZ } from "../utils/zstack";
 
 // Filaments d'un profil MakerWorld face au stock : pour chacun, le filament
 // en stock de la meme matiere dont la couleur s'en approche le plus (ecart
@@ -372,9 +373,7 @@ export function PlateColors({ items, plate, scope, canEdit, onNavigate }) {
     <div onClick={e => e.stopPropagation()} style={{ marginTop:3 }}>
       <button type="button" onClick={() => setOpen(true)} title="Couleurs de ce plateau"
         style={{ background:"none", border:"none", padding:0, cursor:"pointer" }}>{dots}</button>
-      {open && rows.length > 1 && pickRow == null && createPortal(
-        <div onClick={e => { e.stopPropagation(); setOpen(false); }} style={{ position:"fixed", inset:0, zIndex:4300,
-          background:"rgba(0,0,0,0.55)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      {open && rows.length > 1 && pickRow == null && <StackLayer base={4300} onClick={e => { e.stopPropagation(); setOpen(false); }}>
           <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:520, maxHeight:"85dvh", overflowY:"auto",
             background:"var(--sheet-bg, var(--surface))", borderRadius:"22px 22px 0 0", padding:"0 14px calc(14px + env(safe-area-inset-bottom,0px))",
             boxShadow:"0 -8px 30px rgba(0,0,0,.35)", display:"flex", flexDirection:"column", gap:8 }}>
@@ -404,7 +403,7 @@ export function PlateColors({ items, plate, scope, canEdit, onNavigate }) {
               </button>
             ))}
           </div>
-        </div>, document.body)}
+        </StackLayer>}
       {open && cur && <FilamentPicker x={cur.x} g={num(cur.f.g)} chosen={cur.c}
         title={`Plateau ${plate.index}${plate.name ? ` · ${plate.name}` : ""} : filament pour cette couleur`}
         onPick={mt => { setPlatePick(scope, plate.index, cur.i, mt); setPickRow(null); if (rows.length <= 1) setOpen(false); }}
@@ -412,6 +411,14 @@ export function PlateColors({ items, plate, scope, canEdit, onNavigate }) {
         onGo={go} onClose={() => { setPickRow(null); if (rows.length <= 1) setOpen(false); }}/>}
     </div>
   );
+}
+
+// le fond d'une fenetre du bas, dans la pile des fenetres (07/11/2026 : ouverte depuis la fiche MakerWorld, elle passait derriere)
+function StackLayer({ base, onClick, children }) {
+  const z = useStackZ(base);
+  return createPortal(
+    <div onClick={onClick} style={{ position:"fixed", inset:0, zIndex:z,
+      background:"rgba(0,0,0,0.55)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>{children}</div>, document.body);
 }
 
 // Fenetre de choix d'un filament, en onglets : proches en couleur, deja charges
@@ -432,9 +439,8 @@ export function FilamentPicker({ x, g, chosen, title, onPick, onReset, resetLabe
   const list = tab === "near" ? x.matches : tab === "ams" ? ams : tab === "other" ? others : null;
   const empty = { near: "Aucun filament proche en stock.", ams: "Rien de chargé dans l'AMS pour cette matière.",
     other: "Aucune autre matière proche." }[tab];
-  return createPortal(
-    <div onClick={e => { e.stopPropagation(); onClose(); }} style={{ position:"fixed", inset:0, zIndex:4400,
-      background:"rgba(0,0,0,0.55)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+  return (
+    <StackLayer base={4400} onClick={e => { e.stopPropagation(); onClose(); }}>
       <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:540, height:"min(640px, 88dvh)", display:"flex",
         flexDirection:"column", background:"var(--sheet-bg, var(--surface))", borderRadius:"22px 22px 0 0",
         boxShadow:"0 -8px 30px rgba(0,0,0,.35)", overflow:"hidden" }}>
@@ -474,7 +480,7 @@ export function FilamentPicker({ x, g, chosen, title, onPick, onReset, resetLabe
                 onPick={() => onPick(mt)} onGo={onGo}/>)}
         </div>
       </div>
-    </div>, document.body);
+    </StackLayer>);
 }
 
 // Chercher dans tout le stock (toutes matieres, nom, marque, couleur, #id),
