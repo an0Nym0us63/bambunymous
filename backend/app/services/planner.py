@@ -2209,6 +2209,10 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
     if keep:
         order = [j["key"] for j in jobs]               # on part de ton ordre, les retouches ne gardent que ce qui gagne
     cur = score(order)
+    # ton planning tel qu'il est (07/11/2026) : un depart parmi les autres, et le plancher -- « Optimiser » ne rend jamais
+    # pire que l'existant selon son propre critere (le depart « ordre actuel » regroupait d'abord les objets « au mieux »,
+    # defaisait les petits intercales, et un planning a 10 h de nuits perdues de plus ressortait pour 3 bobines de moins)
+    floor = (score(base), base, {})
     if mode == "mix" and not keep:
         # le mode intelligent (06/11/2026) : plusieurs departs (les couleurs enchainees, l'ordre actuel, les plus courtes
         # d'abord) ; les departs bruts se comparent vite, le remplissage des nuits (le plus long) se fait sur le meilleur
@@ -2217,13 +2221,22 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
         o1 = _replace(base, [j["key"] for j in free], [j["key"] for j in spt])
         # avec des priorites : aussi l'ordre de la file trie par priorite
         o2 = _replace(base, [j["key"] for j in free], [j["key"] for j in _soft_grouped(_by_prio(free))])
-        cands = [(cur, order)] + [(score(o), o) for o in (o0, o1) + ((o2,) if any(j.get("prio_m") or j.get("prio_p") for j in free) else ())]
+        cands = [(cur, order), floor[:2]] + [(score(o), o) for o in (o0, o1) + ((o2,) if any(j.get("prio_m") or j.get("prio_p") for j in free) else ())]
         cur, order = min(cands, key=lambda c: c[0])
         if Rules(d).limits:
             nf = night_fill(jobs, order, d, now, busy, loaded, movable, why=sw, budget=4)
             sc = score(nf)
             if sc < cur:
                 cur, order = sc, nf
+    if Rules(d).limits and order != base:
+        # l'existant aussi, nuits et soirees remplies : souvent le meilleur depart quand il a deja ete optimise
+        swb = {}
+        nfb = night_fill(jobs, base, d, now, busy, loaded, movable, why=swb, budget=3)
+        scb = score(nfb)
+        if scb < floor[0]:
+            floor = (scb, nfb, swb)
+        if floor[0] < cur:
+            cur, order, sw = floor[0], floor[1], dict(floor[2])
     # les retouches, tous modes (06/11/2026) : chaque plateau deplacable essaie 1 a 3 places plus tot ou plus tard, ce
     # qui fait gagner reste ; dans un temps borne (le bouton attend)
     mv = [k for k in order if k in movable and k not in d["pins"]]
@@ -2245,6 +2258,8 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
                     break
         if not better:
             break
+    if score(order) > floor[0]:
+        order, sw = list(floor[1]), dict(floor[2])
     # enchainer les couleurs ne doit pas faire deborder une date limite : un objet qui ne tient pas passe en tete,
     # les dates les plus proches d'abord (s'il ne tient pas meme en tete, il y reste : c'est le plus urgent)
     for _ in range(3):
