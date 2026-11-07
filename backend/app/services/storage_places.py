@@ -166,7 +166,8 @@ _LEFT: dict = {}          # slot (« AMS-A slot 2 ») -> (bobine sortie, quand) 
 
 async def out_of_printer(db, s) -> str:
     """Sortie de l'imprimante : ou elle va, selon le mode (unstored_at pose quand il faut dire ou on l'a mise)."""
-    if in_printer(s.location):
+    was = s.location if in_printer(s.location) else None
+    if was:
         _LEFT[s.location] = (s.id, datetime.utcnow())
     conf, pl = await config(db), await places(db)
     kids = _kids(pl)
@@ -175,7 +176,10 @@ async def out_of_printer(db, s) -> str:
         s.unstored_at = datetime.utcnow()
     else:
         s.unstored_at = None
-    return resolve(s, conf, pl, kids)
+    loc = resolve(s, conf, pl, kids)
+    if was and conf["mode"] == "assigned" and has:
+        await _note(db, "home", s, None, was, loc)        # retour d'office a sa place (07/11/2026)
+    return loc
 
 
 async def place_new(db, s, place_id=None) -> None:
@@ -206,6 +210,7 @@ async def into_printer(db, b, loc: str) -> None:
         from_stock = path_of(pl, b.place_id)
         b.place_id, here = None, None                 # sortie du stock : elle n'y reviendra pas
         logger.info(f"[RANGEMENT] bobine #{b.id} sortie du stock pour {loc}")
+        await _note(db, "stock_out", b, None, loc, from_stock)
     if not (conf["smart"] and left and left[0] != b.id and datetime.utcnow() - left[1] <= SWAP_WINDOW):
         return
     a = await db.get(Spool, left[0])
@@ -240,11 +245,19 @@ async def _note(db, kind, a, b, loc, where=None, other=None):
     from ..models.filament import Filament
     from . import notify_events as E
     try:
-        fa, fb = await db.get(Filament, a.filament_id), await db.get(Filament, b.filament_id)
-        la, lb = f"« {spool_label(fa, a)} »", f"« {spool_label(fb, b)} »"
+        fa = await db.get(Filament, a.filament_id)
+        fb = await db.get(Filament, b.filament_id) if b is not None else None
+        la = f"« {spool_label(fa, a)} »"
+        lb = f"« {spool_label(fb, b)} »" if b is not None else ""
     except Exception:
-        la, lb = f"la bobine #{a.id}", f"la bobine #{b.id}"
-    if kind == "swap":
+        la, lb = f"la bobine #{a.id}", (f"la bobine #{b.id}" if b is not None else "")
+    if kind == "home":
+        t, m = "📍 Bobine retournée à sa place", (f"{la}, sortie de {loc}, retourne à sa place : {where}.\n"
+                                                 f"Rangement « Chaque bobine a sa place » : elle est dans l'imprimante ou à sa place, rien d'autre.")
+    elif kind == "stock_out":
+        t, m = "📦 Bobine sortie du stock", (f"{la} est entrée dans {loc} depuis le stock « {where} » : elle le quitte pour de bon.\n"
+                                             f"En sortant de l'AMS, elle sera à ranger : on te demandera où tu la mets.")
+    elif kind == "swap":
         t, m = "🧠 Bobine rangée d'office", (f"{la}, sortie de {loc}, est rangée en {where} : elle a pris la place de {lb}, "
                                             f"qui vient d'entrer dans {loc}.\nSi ce n'est pas ça, change sa place dans l'appli.")
     elif kind == "exchange":
@@ -256,7 +269,8 @@ async def _note(db, kind, a, b, loc, where=None, other=None):
     else:
         t, m = "📥 Bobine à ranger", (f"{la}, sortie de {loc}, a été remplacée par {lb}, qui n'avait pas de place connue : "
                                       f"impossible de deviner où tu l'as mise.\n👉 Dis-le dans l'appli.")
-    _NOTES.append((t, m, f"/filaments?ranger={a.id}" if kind in ("stock", "unknown") else f"/filaments?spool={a.id}&id={a.filament_id}"))
+    _NOTES.append((t, m, f"/filaments?ranger={a.id}" if kind in ("stock", "unknown")
+                   else f"/filaments?locate={a.id}" if kind in ("home", "swap", "exchange") else f"/filaments?spool={a.id}&id={a.filament_id}"))
 
 
 async def send_notes() -> None:

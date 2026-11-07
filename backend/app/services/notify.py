@@ -328,7 +328,7 @@ EVENTS["spool_removed"] = {
 }
 EVENTS["spool_auto_store"] = {
     "section": "spools", "label": "Rangement automatique",
-    "description": "Échange intelligent : la bobine sortie de l'AMS rangée d'office à la place de celle qui l'a remplacée, ou à ranger parce que la nouvelle venait du stock (ou n'avait pas de place connue).",
+    "description": "Ce que le rangement décide seul, expliqué : une bobine qui retourne à sa place en sortant de l'AMS, qui sort du stock, rangée d'office à la place de celle qui l'a remplacée (échange intelligent, ou échange de places), ou à ranger parce que la nouvelle venait du stock (ou n'avait pas de place connue).",
     "options": [],
     "sample": {"title": "🧠 Bobine rangée d'office", "priority": 2, "link": "/filaments",
                "message": "« Prune — PLA Matte · Bambu Lab », sortie de AMS-A slot 2, est rangée en Tiroir bas › Colonne 1-3 : elle a pris la place de « Bleu glacier — PLA Basic · Bambu Lab », qui vient d'entrer dans AMS-A slot 2.\nSi ce n'est pas ça, change sa place dans l'appli."},
