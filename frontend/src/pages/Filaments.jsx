@@ -11,7 +11,7 @@ import { useRfidScan } from "../store/rfidScan";
 import DryNowDialog from "../components/DryNowDialog";
 import TarePicker, { useSpoolTares, tareForBrand } from "../components/TarePicker";
 import HeaderAction from "../components/HeaderAction";
-import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette, Tag, Sun } from "lucide-react";
+import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette, Tag, Sun, LayoutGrid } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
 import StoreLink from "../components/StoreLink";
 import { egg } from "../eggs";
@@ -2338,8 +2338,8 @@ function SpoolsView({ filaments, showArchived }) {
       )}
       {!showArchived && <ToStoreBanner onOpen={() => setToStoreOpen(true)}/>}
       {!showArchived && spools.length > 0 && <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-        {[["grid", "▦ Grille", "Toutes les bobines, dans l'ordre du tri"], ["storage", "🗄 Par rangement", "Regroupées : imprimante, à ranger, puis chaque rangement"]].map(([k, l, tip]) =>
-          <button key={k} type="button" onClick={() => pickView(k)} data-tip={tip} style={{ padding:"6px 12px", borderRadius:10, fontSize:12.5, fontWeight:800, cursor:"pointer",
+        {[["grid", <><LayoutGrid size={14}/> Grille</>, "Toutes les bobines, dans l'ordre du tri"], ["storage", <><Archive size={14}/> Par rangement</>, "Regroupées : l'imprimante, chaque rangement, ce qui est en commande, à ranger"]].map(([k, l, tip]) =>
+          <button key={k} type="button" onClick={() => pickView(k)} data-tip={tip} style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:10, fontSize:12.5, fontWeight:800, cursor:"pointer",
             border: view === k ? "1px solid transparent" : "1px solid var(--border)", color: view === k ? "#fff" : "var(--text2)",
             background: view === k ? "linear-gradient(135deg, #8B5CF6, #6366F1)" : "var(--surface)" }}>{l}</button>)}
       </div>}

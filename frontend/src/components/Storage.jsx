@@ -7,6 +7,7 @@ import { FSheet, fBtn } from "./FicheKit";
 import { openMenu } from "./ContextMenu";
 import { showAlert, showConfirm, showChoice } from "../utils/dialog";
 import { parseColorsList, finishOf } from "../utils/colors";
+import { Archive, HelpCircle, Inbox, Layers, Package, Printer, Truck } from "lucide-react";
 import { useRfidScan } from "../store/rfidScan";
 import { toast } from "../store/toast";
 
@@ -150,6 +151,13 @@ export function SpoolEdge({ s, vertical = false, len = "100%", thick = 18, dim =
 const edgeOf = (p, by) => { let q = p, seen = 0; while (q && q.parent_id != null && by[q.parent_id] && seen++ < 20) q = by[q.parent_id]; return q?.edge || null; };
 const infoOf = (occ, full) => [full?.filament_fila_type || full?.filament_material || occ?.material, full?.filament_manufacturer || occ?.brand].filter(Boolean);
 
+// les icones des rangements (07/11/2026 : des emojis 🗄 📥, illisibles sur telephone) : dessinees, a la couleur de la
+// section ; une icone choisie par l'utilisateur (emoji, p.icon) reste la sienne
+const PlaceIco = ({ p, size = 16 }) => p?.icon ? <span style={{ fontSize: size }}>{p.icon}</span>
+  : React.createElement(p?.stock ? Package : p?.leaf && !p?.single ? Layers : Archive, { size, strokeWidth: 2.2 });
+const icoBox = (c, size = 30, r = 10) => ({ width: size, height: size, borderRadius: r, display: "grid", placeItems: "center", flexShrink: 0, color: c,
+  background: `color-mix(in srgb, ${c} 16%, var(--surface))`, border: `1px solid color-mix(in srgb, ${c} 35%, var(--border))` });
+
 const spoolName = s => s.filament_translated_name || s.filament_name || s.name || `Bobine #${s.id}`;
 
 const seg = { padding: "7px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)",
@@ -277,7 +285,7 @@ export function StorageSettingsCard({ card, cardTitle }) {
             background: "color-mix(in srgb, #8B5CF6 5%, var(--surface))" }}>
             <button type="button" onClick={() => setOpenId(p.id)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, background: "none", border: "none",
               padding: 0, cursor: "pointer", textAlign: "left", color: "var(--text)" }}>
-              <span style={{ fontSize: 22 }}>{p.icon || (p.stock ? "📦" : p.leaf ? "📚" : "🗄")}</span>
+              <span style={icoBox(p.stock ? "#D97706" : "#8B5CF6", 38, 12)}><PlaceIco p={p} size={19}/></span>
               <span style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
                 <span style={{ fontSize: 14, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}
                   {p.stock && <span style={{ fontSize: 10.5, fontWeight: 900, marginLeft: 6, padding: "1px 7px", borderRadius: 20, color: "#B45309",
@@ -428,7 +436,7 @@ function PlaceEditor({ id, onClose }) {
       <button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Fermer</button></>}>
       <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 26 }}>{root.icon || (root.stock ? "📦" : root.leaf ? "📚" : "🗄")}</span>
+          <span style={icoBox(root.stock ? "#D97706" : "#8B5CF6", 42, 13)}><PlaceIco p={root} size={21}/></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>{root.name}{root.stock && <span style={{ fontSize: 11, fontWeight: 900, marginLeft: 8, padding: "1px 8px",
               borderRadius: 20, color: "#B45309", background: "color-mix(in srgb, #F59E0B 16%, transparent)" }}>📦 stock</span>}</div>
@@ -674,7 +682,7 @@ export function ToStoreBanner({ onOpen }) {
   return <button type="button" onClick={onOpen} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 16, cursor: "pointer",
     border: "1px solid color-mix(in srgb, #F59E0B 45%, var(--border))", background: "linear-gradient(135deg, color-mix(in srgb, #F59E0B 14%, var(--surface)), var(--surface))",
     color: "var(--text)", textAlign: "left" }}>
-    <span style={{ fontSize: 22 }}>📥</span>
+    <span style={icoBox("#D97706", 36, 11)}><Inbox size={19} strokeWidth={2.2}/></span>
     <span style={{ flex: 1, minWidth: 0 }}>
       <span style={{ display: "block", fontSize: 14, fontWeight: 900 }}>{n} bobine{n > 1 ? "s" : ""} à ranger</span>
       <span style={small}>{waiting ? `${waiting} sortie${waiting > 1 ? "s" : ""} de l'AMS ou arrivée${waiting > 1 ? "s" : ""} : où ${waiting > 1 ? "sont-elles" : "est-elle"} ?` : "sans place pour l'instant"}</span>
@@ -712,7 +720,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
       <button type="button" onClick={() => toggle(k)} style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0, background: "none", border: "none",
         padding: 0, cursor: "pointer", color: "var(--text)", textAlign: "left" }}>
         <span style={{ width: 30, height: 30, borderRadius: 10, display: "grid", placeItems: "center", fontSize: 15, flexShrink: 0,
-          background: `color-mix(in srgb, ${tone} 16%, var(--surface))`, border: `1px solid color-mix(in srgb, ${tone} 35%, var(--border))` }}>{icon}</span>
+          background: `color-mix(in srgb, ${tone} 16%, var(--surface))`, border: `1px solid color-mix(in srgb, ${tone} 35%, var(--border))`, color: tone }}>{icon}</span>
         <span style={{ fontSize: 15, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</span>
         <span style={{ ...small, flexShrink: 0 }}>{n}</span>
         <span style={{ marginLeft: "auto", color: "var(--muted)", fontSize: 12 }}>{fold[k] ? "▸" : "▾"}</span>
@@ -775,23 +783,23 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
   };
 
   return <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-    {printer.length > 0 && <Section k="printer" icon="🖨" title="Dans l'imprimante" n={printer.length} tone="#0EA5E9">
+    {printer.length > 0 && <Section k="printer" icon={<Printer size={16} strokeWidth={2.2}/>} title="Dans l'imprimante" n={printer.length} tone="#0EA5E9">
       {units.map(u => <div key={u} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text2)" }}>{u}</div>
         <div style={grid}>{printer.filter(s => unitOf(s.location) === u).sort((a, b) => (a.location || "").localeCompare(b.location || "", "fr", { numeric: true })).map(s => renderSpool(s))}</div>
       </div>)}
     </Section>}
     {st.mode === "single"
-      ? (elsewhere.length > 0 && <Section k="single" icon="🗄" title={st.name} n={elsewhere.length}><div style={grid}>{elsewhere.map(s => renderSpool(s))}</div></Section>)
+      ? (elsewhere.length > 0 && <Section k="single" icon={<Archive size={16} strokeWidth={2.2}/>} title={st.name} n={elsewhere.length}><div style={grid}>{elsewhere.map(s => renderSpool(s))}</div></Section>)
       : <>
-        {roots.map(p => <Section key={p.id} k={`p${p.id}`} icon={p.icon || (p.stock ? "📦" : p.leaf ? (p.single ? "🔲" : "📚") : "🗂")} title={p.stock ? `${p.name} · stock` : p.name} n={countIn(p)}>
+        {roots.map(p => <Section key={p.id} k={`p${p.id}`} icon={<PlaceIco p={p}/>} tone={p.stock ? "#D97706" : "#8B5CF6"} title={p.stock ? `${p.name} · stock` : p.name} n={countIn(p)}>
           {p.leaf ? (p.single ? <div style={{ maxWidth: 120 }}><Cell p={p}/></div> : <Common p={p}/>) : <Group p={p}/>}
         </Section>)}
-        {elsewhere.length > 0 && <Section k="else" icon="❔" title="Ailleurs" n={elsewhere.length} tone="#64748B"><div style={grid}>{elsewhere.map(s => renderSpool(s))}</div></Section>}
+        {elsewhere.length > 0 && <Section k="else" icon={<HelpCircle size={16} strokeWidth={2.2}/>} title="Ailleurs" n={elsewhere.length} tone="#64748B"><div style={grid}>{elsewhere.map(s => renderSpool(s))}</div></Section>}
       </>}
-    {ordered.length > 0 && <Section k="ordered" icon="📬" title="En commande" n={ordered.length} tone="#0EA5E9"><div style={grid}>{ordered.map(s => renderSpool(s))}</div></Section>}
+    {ordered.length > 0 && <Section k="ordered" icon={<Truck size={16} strokeWidth={2.2}/>} title="En commande" n={ordered.length} tone="#0EA5E9"><div style={grid}>{ordered.map(s => renderSpool(s))}</div></Section>}
     {/* a ranger, en dernier (07/11/2026) : la liste peut etre longue, les rangements d'abord */}
-    {waiting.length > 0 && <Section k="tostore" icon="📥" title="À ranger" n={waiting.length} tone="#F59E0B"
+    {waiting.length > 0 && <Section k="tostore" icon={<Inbox size={16} strokeWidth={2.2}/>} title="À ranger" n={waiting.length} tone="#F59E0B"
       aside={admin && <button type="button" onClick={() => setToStore(true)} style={{ ...seg, ...segOn }}>Ranger</button>}>
       <div style={grid}>{waiting.map(s => renderSpool(s))}</div>
     </Section>}
