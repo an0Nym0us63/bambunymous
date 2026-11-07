@@ -3064,6 +3064,53 @@ async def group_vue3d_drop(group_id: int, n: int, _: str = Depends(require_admin
     return {"ok": True}
 
 
+def _v3swap(folder: Path, a: int, b: int, val) -> int:
+    """Echange deux vues 3D de place (07/11/2026 : leur ordre est celui ou elles defilent sur la vignette, la premiere
+    servant d'image seule). Les fichiers changent de nom, rien de nouveau n'est ecrit : une version d'avant les lit
+    pareil. Les deux sont re-datees (leur date sert de version aux vignettes en cache). Rend la selection echangee."""
+    if not (1 <= a <= V3_MAX and 1 <= b <= V3_MAX) or a == b:
+        raise HTTPException(400, "Place invalide")
+    sl = _v3slots(folder)
+    if a not in sl:
+        raise HTTPException(404, "Vue introuvable")
+    ns = _v3sel(val, sl)
+    fa, fb, tmp = folder / _v3name(a), folder / _v3name(b), folder / (_v3name(a) + ".swap")
+    os.replace(fa, tmp)
+    if fb.is_file():
+        os.replace(fb, fa)
+    os.replace(tmp, fb)
+    for f in (fa, fb):
+        if f.is_file():
+            os.utime(f)
+    _V3IDS["at"] = 0
+    gallery_touched()
+    return _v3val([b if n == a else a if n == b else n for n in ns])
+
+
+@router.post("/{print_id}/vue3d/{n}/swap/{m}")
+async def print_vue3d_swap(print_id: int, n: int, m: int, _: str = Depends(require_admin)):
+    """Echange deux vues 3D de l'impression (l'ordre ou elles defilent sur la vignette)."""
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if not p:
+            raise HTTPException(404, "Impression introuvable")
+        p.thumb_3d = _v3swap(DATA_DIR / "prints" / str(print_id), n, m, p.thumb_3d)
+        p.updated_at = datetime.utcnow()                 # les vignettes en cache se renouvellent
+        await db.commit()
+    return {"ok": True}
+
+
+@router.post("/groups/{group_id}/vue3d/{n}/swap/{m}")
+async def group_vue3d_swap(group_id: int, n: int, m: int, _: str = Depends(require_admin)):
+    async with AsyncSessionLocal() as db:
+        g = await db.get(Group, group_id)
+        if not g:
+            raise HTTPException(404, "Groupe introuvable")
+        g.thumb_3d = _v3swap(DATA_DIR / "groups" / str(group_id), n, m, g.thumb_3d)
+        await db.commit()
+    return {"ok": True}
+
+
 def _slot_of(body: dict, folder: Path) -> int:
     """Les vues choisies : « slots » (plusieurs : une mosaique ; vide : la vignette par defaut), ou « slot » (0 = par
     defaut) ; « use3d » (ancien appel) : la premiere."""

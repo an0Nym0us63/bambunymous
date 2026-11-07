@@ -31,6 +31,8 @@ function Picker({ kind, id, shot, onDone, close }) {
   const sel = d?.sel || [];
   const toggle = n => act(() => client.put(`${base}/thumb`, { slots: sel.includes(n) ? sel.filter(x => x !== n) : [...sel, n] }));
   const none = () => act(() => client.put(`${base}/thumb`, { slots: [] }));
+  // changer une vue de place (07/11/2026) : l'ordre est celui ou les vues choisies defilent, la premiere sert d'image seule
+  const swap = (a, b) => act(() => client.post(`${base}/vue3d/${a}/swap/${b}`));
   const drop = n => { if (sure !== n) { setSure(n); setTimeout(() => setSure(0), 4000); return; } setSure(0); act(() => client.delete(`${base}/vue3d/${n}`)); };
   const full = d && d.slots.length >= d.max;
   // la vue prise est gardee d'office (31/10/2026 : « ＋ La garder » etait une etape de trop ; ici on la retire, la
@@ -78,7 +80,7 @@ function Picker({ kind, id, shot, onDone, close }) {
           {sel.length ? <button type="button" disabled={busy} onClick={none} style={btn(false)}>Par défaut</button>
             : <span style={{ fontSize: 11.5, fontWeight: 800, color: "#0EA5E9", textAlign: "center" }}>★ Vignette</span>}
         </div>
-        {d.slots.map(s => <div key={s.n} ref={fresh === s.n ? freshRef : null} style={tile}>
+        {d.slots.map((s, i) => <div key={s.n} ref={fresh === s.n ? freshRef : null} style={tile}>
           <img src={apiUrl(s.url.replace(/^\/api\/v1/, ""))} alt="" style={fresh === s.n
             ? { ...img(false), border: "2px solid #22c55e", boxShadow: "0 0 0 4px rgba(34,197,94,.22)", animation: "bn-pop .35s ease-out" } : img(sel.includes(s.n))}/>
           {fresh === s.n && <span style={{ position: "absolute", top: 6, left: 6, padding: "2px 8px", borderRadius: 999, fontSize: 10.5, fontWeight: 800,
@@ -87,6 +89,13 @@ function Picker({ kind, id, shot, onDone, close }) {
               style={btn(false, { color: "#0EA5E9", borderColor: "#0EA5E9" })}>★ Choisie</button>
             : <button type="button" disabled={busy} onClick={() => toggle(s.n)} data-tip="L'ajouter à la vignette (plusieurs : elles défilent l'une après l'autre)" style={btn(true)}>⭐ Vignette</button>}
           {shot && !saved && <button type="button" disabled={busy} onClick={() => put(s.n)} style={btn(false)}>↻ Remplacer</button>}
+          {d.slots.length > 1 && <div style={{ display: "flex", gap: 6 }}>
+            <button type="button" disabled={busy || i === 0} onClick={() => swap(s.n, d.slots[i - 1].n)} aria-label="Avancer"
+              data-tip="Avancer cette vue (la première sert d'image seule ; les vues choisies défilent dans cet ordre)"
+              style={btn(false, { flex: 1, opacity: i === 0 ? 0.35 : 1 })}>◀</button>
+            <button type="button" disabled={busy || i === d.slots.length - 1} onClick={() => swap(s.n, d.slots[i + 1].n)} aria-label="Reculer"
+              data-tip="Reculer cette vue" style={btn(false, { flex: 1, opacity: i === d.slots.length - 1 ? 0.35 : 1 })}>▶</button>
+          </div>}
           <button type="button" disabled={busy} onClick={() => drop(s.n)} style={sure === s.n ? btn(false, { color: "#fff", background: "#991b1b", borderColor: "#991b1b", boxShadow: "0 4px 12px -4px #991b1b" })
             : btn(false, { color: "#ef4444" })}>{sure === s.n ? "⚠ Confirmer" : "🗑 Supprimer"}</button>
         </div>)}
