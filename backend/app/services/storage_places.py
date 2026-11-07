@@ -179,7 +179,9 @@ async def into_printer(db, b, loc: str) -> None:
     pl = await places(db)
     kids = _kids(pl)
     here = b.place_id if (b.place_id and is_leaf(pl, b.place_id, kids) and b.location != TO_STORE) else None
+    from_stock = None
     if b.place_id and is_stock(pl, b.place_id):
+        from_stock = path_of(pl, b.place_id)
         b.place_id, here = None, None                 # sortie du stock : elle n'y reviendra pas
         logger.info(f"[RANGEMENT] bobine #{b.id} sortie du stock pour {loc}")
     if not (conf["smart"] and left and left[0] != b.id and datetime.utcnow() - left[1] <= SWAP_WINDOW):
@@ -189,17 +191,65 @@ async def into_printer(db, b, loc: str) -> None:
         return
     if conf["mode"] == "manual":
         # pas encore dite rangee depuis sa sortie : elle a pris la place de b
-        if here and a.location == TO_STORE and a.unstored_at is not None and a.unstored_at >= left[1] - timedelta(minutes=1):
-            b.place_id = None
-            a.place_id, a.unstored_at = here, None
-            a.location = resolve(a, conf, pl, kids)
-            logger.info(f"[RANGEMENT] échange : #{a.id} rangée à la place de #{b.id} ({a.location})")
+        if a.location == TO_STORE and a.unstored_at is not None and a.unstored_at >= left[1] - timedelta(minutes=1):
+            if here:
+                b.place_id = None
+                a.place_id, a.unstored_at = here, None
+                a.location = resolve(a, conf, pl, kids)
+                logger.info(f"[RANGEMENT] échange : #{a.id} rangée à la place de #{b.id} ({a.location})")
+                await _note(db, "swap", a, b, loc, a.location)
+            else:
+                # rien a deviner : b sortait du stock, ou n'avait pas de place connue (07/11/2026 : le dire tout de suite)
+                await _note(db, "stock" if from_stock else "unknown", a, b, loc, from_stock)
     elif here:
         old = a.place_id if (a.place_id and a.place_id in pl and not is_stock(pl, a.place_id)) else None
         a.place_id, b.place_id = here, old            # elles echangent leurs places
         a.unstored_at = None
         a.location = resolve(a, conf, pl, kids)
         logger.info(f"[RANGEMENT] échange : #{a.id} prend la place de #{b.id} ({a.location})")
+        await _note(db, "exchange", a, b, loc, a.location, path_of(pl, old) if old else None)
+
+
+# les notifications du rangement automatique (07/11/2026), envoyees apres l'ecriture (send_notes)
+_NOTES: list = []
+
+
+async def _note(db, kind, a, b, loc, where=None, other=None):
+    from ..models.filament import Filament
+    from . import notify_events as E
+    try:
+        fa, fb = await db.get(Filament, a.filament_id), await db.get(Filament, b.filament_id)
+        la = f"« {E._fil_label(fa)} »" if fa else f"la bobine #{a.id}"
+        lb = f"« {E._fil_label(fb)} »" if fb else f"la bobine #{b.id}"
+    except Exception:
+        la, lb = f"la bobine #{a.id}", f"la bobine #{b.id}"
+    if kind == "swap":
+        t, m = "🧠 Bobine rangée d'office", (f"{la}, sortie de {loc}, est rangée en {where} : elle a pris la place de {lb}, "
+                                            f"qui vient d'entrer dans {loc}.\nSi ce n'est pas ça, change sa place dans l'appli.")
+    elif kind == "exchange":
+        t, m = "🧠 Échange de places", (f"{la}, sortie de {loc}, prend la place de {lb} : {where}."
+                                        + (f"\n{lb} prend la sienne : {other}." if other else f"\n{lb} n'a plus de place : elle sera à ranger en sortant de l'AMS."))
+    elif kind == "stock":
+        t, m = "📥 Bobine à ranger", (f"{la}, sortie de {loc}, a été remplacée par {lb}, sortie du stock « {where} » : "
+                                      f"impossible de deviner où tu l'as mise.\n👉 Dis-le dans l'appli.")
+    else:
+        t, m = "📥 Bobine à ranger", (f"{la}, sortie de {loc}, a été remplacée par {lb}, qui n'avait pas de place connue : "
+                                      f"impossible de deviner où tu l'as mise.\n👉 Dis-le dans l'appli.")
+    _NOTES.append((t, m, f"/filaments?ranger={a.id}" if kind in ("stock", "unknown") else f"/filaments?spool={a.id}&id={a.filament_id}"))
+
+
+async def send_notes() -> None:
+    """Envoie les notifications du rangement automatique (notification « Rangement automatique »)."""
+    if not _NOTES:
+        return
+    notes = list(_NOTES)
+    _NOTES.clear()
+    from . import notify_events as E
+    cfg = await E._cfg_for("spool_auto_store")
+    if not cfg:
+        return
+    for t, m, link in notes:
+        await E._send(cfg, "spool_auto_store", t, m, link=link, priority=2)
 
 
 def archived(s) -> None:

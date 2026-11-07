@@ -326,6 +326,13 @@ EVENTS["spool_removed"] = {
     "sample": {"title": "📤 Bobine retirée · AMS-A slot 2", "priority": 2, "link": "/",
                "message": "Prune — PLA Matte · Bambu Lab"},
 }
+EVENTS["spool_auto_store"] = {
+    "section": "spools", "label": "Rangement automatique",
+    "description": "Échange intelligent : la bobine sortie de l'AMS rangée d'office à la place de celle qui l'a remplacée, ou à ranger parce que la nouvelle venait du stock (ou n'avait pas de place connue).",
+    "options": [],
+    "sample": {"title": "🧠 Bobine rangée d'office", "priority": 2, "link": "/filaments",
+               "message": "« Prune — PLA Matte · Bambu Lab », sortie de AMS-A slot 2, est rangée en Tiroir bas › Colonne 1-3 : elle a pris la place de « Bleu glacier — PLA Basic · Bambu Lab », qui vient d'entrer dans AMS-A slot 2.\nSi ce n'est pas ça, change sa place dans l'appli."},
+}
 EVENTS["spool_to_store"] = {
     "section": "spools", "label": "Bobine à ranger",
     "description": "Rangement manuel (ou bobine sans place) : une bobine sortie de l'AMS, reçue ou ajoutée attend que tu dises où tu l'as mise.",
@@ -578,7 +585,7 @@ _ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_en
           "print_paused", "print_resumed", "print_speed",
           "printer_hms", "printer_offline", "bed_cooled", "printer_firmware",
           "dry_started", "dry_done", "dry_needed_loaded", "dry_forgotten",
-          "spool_loaded", "spool_removed", "spool_to_store", "ams_humidity", "spool_runout", "spool_low", "spool_short", "stock_low", "fil_to_order", "order_mail",
+          "spool_loaded", "spool_removed", "spool_to_store", "spool_auto_store", "ams_humidity", "spool_runout", "spool_low", "spool_short", "stock_low", "fil_to_order", "order_mail",
           "printer_idle", "weekly_summary", "mw_queue_ready", "mw_profile_gone", "app_update", "app_started"]
 EVENTS = {**{k: EVENTS[k] for k in _ORDER if k in EVENTS}, **{k: v for k, v in EVENTS.items() if k not in _ORDER}}
 

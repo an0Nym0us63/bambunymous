@@ -53,6 +53,10 @@ async def update_spool_location(spool_id: int, location: str):
                 await db.commit()
                 if old != loc:
                     logger.info(f"[LOCATION] Bobine #{spool_id}: {old!r} → {loc!r}")
+                try:
+                    await _sp.send_notes()        # l'echange intelligent, explique (07/11/2026)
+                except Exception as _ne:
+                    logger.warning(f"[LOCATION] notification du rangement : {_ne}")
         with _lock:
             _ACTIVE_AMS_SPOOLS[spool_id] = location
     except Exception as e:
