@@ -12,7 +12,7 @@ import { useRfidScan } from "../store/rfidScan";
 import { haptic } from "../utils/haptic";
 import { usePrinter } from "../store/printer";
 import { amsName, slotLabel, isExternal, isHt, grilleAccueil, lireDisposition, columnWeight, slotCount } from "../utils/ams";
-import { colorBg } from "../utils/colors";
+import { colorBg, trayBg, bgWithTop } from "../utils/colors";
 import { toast } from "../store/toast";
 
 // Les rangements des bobines (07/11/2026) : le mode (un seul rangement, chaque bobine a sa place, rangement manuel),
@@ -142,12 +142,17 @@ export function SpoolEdge({ s, vertical = false, len = "100%", thick = 18, dim =
   const fill = list.length > 1 ? `linear-gradient(${along}, ${list.map((c, i) => `${c} ${i / list.length * 100}% ${(i + 1) / list.length * 100}%`).join(", ")})` : list[0];
   const wind = `repeating-linear-gradient(${across}, rgba(0,0,0,.13) 0 1px, transparent 1px 3px)`;
   const shade = `linear-gradient(${along}, rgba(0,0,0,.22), rgba(255,255,255,.18) 30%, transparent 55%, rgba(0,0,0,.25))`;
+  // la matiere (07/11/2026 : la tranche etait d'une couleur plate) : le rendu des pastilles (finition, transparence), puis
+  // le volume et les spires par-dessus ; plusieurs couleurs : en bandes le long de la tranche
+  const base = list.length > 1 ? { background: fill }
+    : colorBg(list, s.filament_multicolor_type ?? s.multicolor_type, finishOf(s), { size: 40 });
+  const band = bgWithTop(bgWithTop(base, shade), wind);
   const fl = { flexShrink: 0, background: "linear-gradient(" + along + ", #cbd5e1, #f8fafc 40%, #e2e8f0)", borderRadius: 2,
     boxShadow: "0 0 0 1px rgba(15,23,42,.18)", [vertical ? "width" : "height"]: Math.max(2, Math.round(thick / 7)) };
   return <span aria-hidden="true" style={{ display: "flex", flexDirection: vertical ? "row" : "column", alignItems: "stretch", flexShrink: 0, opacity: dim ? 0.4 : 1,
     width: vertical ? thick : len, height: vertical ? len : thick }}>
     <span style={fl}/>
-    <span style={{ flex: 1, margin: vertical ? "5% 0" : "0 5%", background: `${wind}, ${shade}, ${fill}`, boxShadow: "inset 0 0 0 1px rgba(0,0,0,.12)" }}/>
+    <span style={{ flex: 1, margin: vertical ? "5% 0" : "0 5%", ...band, boxShadow: "inset 0 0 0 1px rgba(0,0,0,.12)" }}/>
     <span style={fl}/>
   </span>;
 }
@@ -576,13 +581,13 @@ function PrinterLocate({ sp, spoolId, banner, onClose, home }) {
           <div style={{ display: "flex", gap: 5, margin: "0 auto", width: w ? `${w * 100}%` : "100%" }}>
             {a.trays.map(t => {
               const hit = hitOf(a, t), empty = t.empty || !t.filament_type;
-              const cols = empty ? [] : parseColorsList(t.color, t.cols);
+              // le fond de la tuile AMS (07/11/2026) : couleurs de la bobine, transparence, finition (soie, mat, paillettes...)
+              const bg = empty ? null : trayBg(t, null, 60);
               return <div key={t.id} data-tip={`${slotLabel(a.id, t.id)}${empty ? " — vide" : t.spool_info?.translated_name || t.spool_info?.name ? ` — ${t.spool_info.translated_name || t.spool_info.name}` : ""}`}
                 style={{ flex: 1, height: 46, borderRadius: 9, position: "relative", zIndex: hit ? 2 : undefined,
                   border: hit ? "2px solid #F59E0B" : empty ? "1.5px dashed rgba(148,163,184,0.7)" : "1px solid rgba(0,0,0,0.15)",
-                  animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined, opacity: hit || empty ? 1 : 0.55,
-                  ...(empty ? { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 2px, transparent 2px, transparent 6px)" }
-                    : colorBg(cols, null, null, { size: 60 })) }}>
+                  animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined,
+                  ...(bg || { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 2px, transparent 2px, transparent 6px)" }) }}>
                 <span style={{ position: "absolute", left: 0, right: 0, bottom: 2, textAlign: "center", fontSize: 9.5, fontWeight: 900,
                   color: hit ? "#F59E0B" : "var(--muted)", textShadow: "0 0 3px var(--surface2)" }}>{slotLabel(a.id, t.id)}</span>
               </div>;
