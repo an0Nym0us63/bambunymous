@@ -241,8 +241,7 @@ async def _note(db, kind, a, b, loc, where=None, other=None):
     from . import notify_events as E
     try:
         fa, fb = await db.get(Filament, a.filament_id), await db.get(Filament, b.filament_id)
-        la = f"« {E._fil_label(fa)} »" if fa else f"la bobine #{a.id}"
-        lb = f"« {E._fil_label(fb)} »" if fb else f"la bobine #{b.id}"
+        la, lb = f"« {spool_label(fa, a)} »", f"« {spool_label(fb, b)} »"
     except Exception:
         la, lb = f"la bobine #{a.id}", f"la bobine #{b.id}"
     if kind == "swap":
@@ -591,6 +590,16 @@ async def pending(db) -> list:
     return [(s, f) for s, f in rows if stored(s)]
 
 
+def spool_label(f, s=None) -> str:
+    """« PLA Basic Rouge — PLA Basic · Bambu Lab · #12 » : le nom, toujours le sous-type et la marque (07/11/2026 : le
+    libelle des notifications taisait le sous-type quand le nom le contenait), et le numero de la bobine."""
+    if f is None:
+        return f"Bobine #{s.id}" if s is not None else "Bobine"
+    bits = [x for x in ((f.fila_type or f.material), f.manufacturer) if x]
+    return (f"{f.translated_name or f.name}" + (f" — {' · '.join(bits)}" if bits else "")
+            + (f" · #{s.id}" if s is not None else ""))
+
+
 def _ago(dt) -> str:
     m = int((datetime.utcnow() - dt).total_seconds() // 60)
     return f"{m} min" if m < 60 else f"{m // 60} h {m % 60:02d}" if m < 1440 else f"{m // 1440} j"
@@ -629,7 +638,7 @@ async def remind_once(now=None) -> int:
     for s, _ in ready:
         _LAST[s.id] = (s.unstored_at, now)
     n = len(ready)
-    lines = [f"• {E._fil_label(f) if f else f'Bobine #{s.id}'} · sortie il y a {_ago(s.unstored_at)}" for s, f in ready[:8]]
+    lines = [f"• {spool_label(f, s)} · sortie il y a {_ago(s.unstored_at)}" for s, f in ready[:8]]
     if n > 8:
         lines.append(f"… et {n - 8} autre{'s' if n - 8 > 1 else ''}")
     lines.append("👉 Dis où tu l'as rangée" if n == 1 else "👉 Dis où tu les as rangées")

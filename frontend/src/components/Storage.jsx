@@ -338,12 +338,15 @@ function PlaceEditor({ id, onClose }) {
     title: `Une zone dans « ${parent.name} »`,
     fields: [{ key: "name", label: "Nom de la zone", placeholder: "Colonne 4, Dessus, Étage 2…", required: true,
       value: `Zone ${(kids[parent.id] || []).filter(c => !c.leaf).length + 1}` },
-      { key: "n", label: "Combien d'emplacements ?", type: "number", value: "4", required: true },
+      { key: "vrac", label: "En vrac : pas de cases, autant de bobines qu'on veut", type: "check", value: false },
+      { key: "n", label: "Combien d'emplacements ? (ignoré en vrac)", type: "number", value: "4", required: true },
       { key: "single", label: "Des cases (une seule bobine chacune)", type: "check", value: true }],
     okLabel: "Créer la zone",
-    onOk: ({ name, n, single }) => {
+    onOk: ({ name, n, single, vrac }) => {
       const z = name.trim(), cnt = Math.max(1, Math.min(200, parseInt(n) || 1));
-      return write("post", "/storage/places", { parent_id: parent.id, items: [{ name: z, children: Array.from({ length: cnt }, (_, i) => ({ name: cellName(z, i + 1), single })) }] }).then(r => !!r);
+      // en vrac (07/11/2026) : la zone est elle-meme un emplacement commun
+      const item = vrac ? { name: z, single: false } : { name: z, children: Array.from({ length: cnt }, (_, i) => ({ name: cellName(z, i + 1), single })) };
+      return write("post", "/storage/places", { parent_id: parent.id, items: [item] }).then(r => !!r);
     },
   });
   const rename = p => setAsk({ title: `Renommer « ${p.name} »`, fields: [{ key: "name", label: "Nom", value: p.name, required: true }], okLabel: "Renommer",
@@ -403,6 +406,21 @@ function PlaceEditor({ id, onClose }) {
       {!p.single && p.spools.length > 1 && <span style={{ ...small, fontSize: 9 }}>{p.spools.length}</span>}
     </button>;
   };
+  // une zone en vrac (un emplacement commun parmi les zones) : comme une zone, ses bobines en pastilles
+  const Vrac = ({ p }) => <div style={{ display: "flex", flexDirection: "column", gap: 3, padding: 4, borderRadius: 10, minWidth: 0,
+    border: "1px dashed color-mix(in srgb, #8B5CF6 45%, var(--border))", background: "color-mix(in srgb, #8B5CF6 4%, var(--surface2))" }}>
+    <button type="button" onClick={e => menu(e, p)} data-tip={`${p.name} · en vrac · ${p.spools.length} bobine${p.spools.length > 1 ? "s" : ""}`}
+      style={{ display: "flex", flexDirection: "column", alignItems: "center", background: "none", border: "none", padding: "1px 0", cursor: "pointer", color: "var(--text)", minWidth: 0 }}>
+      <span style={{ fontSize: 11, fontWeight: 900, maxWidth: "100%", lineHeight: 1.15, textAlign: "center", overflowWrap: "anywhere",
+        display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.name}</span>
+      <span style={{ ...small, fontSize: 10 }}>vrac · {p.spools.length}</span>
+    </button>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 3, justifyContent: "center", minHeight: 24, alignItems: "center" }}>
+      {p.spools.slice(0, 24).map(x => <span key={x.id} data-tip={`${x.name} · #${x.id}`} style={{ display: "inline-flex" }}><Swatch s={x} size={16}/></span>)}
+      {p.spools.length > 24 && <span style={{ ...small, fontSize: 10 }}>+{p.spools.length - 24}</span>}
+      {!p.spools.length && <span style={{ ...small, fontSize: 10 }}>vide</span>}
+    </div>
+  </div>;
   const Zone = ({ p, many }) => {
     const ch = kids[p.id] || [];
     const cells = ch.filter(c => c.leaf), subs = ch.filter(c => !c.leaf);
@@ -424,9 +442,10 @@ function PlaceEditor({ id, onClose }) {
   // les zones cote a cote, chacune a sa hauteur (07/11/2026 : elles s'etiraient a la plus haute) ; 5 tiennent sur un telephone
   const Zones = ({ parent, list }) => { const a = arrange(list, parent, false, "repeat(auto-fit, minmax(58px, 1fr))");
     return <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl, alignItems: "start" }}>
-      {a.items.map(z => <Zone key={z.id} p={z} many={list.length > 1}/>)}</div>; };
+      {a.items.map(z => z.leaf ? <Vrac key={z.id} p={z}/> : <Zone key={z.id} p={z} many={list.length > 1}/>)}</div>; };
   const ch = kids[root.id] || [];
-  const direct = ch.filter(c => c.leaf), zones = ch.filter(c => !c.leaf);
+  // les cases sans zone d'un cote ; les zones et les emplacements en vrac (communs) de l'autre, cote a cote
+  const direct = ch.filter(c => c.leaf && c.single), zones = ch.filter(c => !c.leaf || !c.single);
   const n = leafCountOf(root, kids), t = takenOf(root, kids);
 
   return createPortal(<>
@@ -472,7 +491,7 @@ function PlaceMaker({ onClose, onMade }) {
   const [quick, setQuick] = useState({ prefix: "Colonne", count: "3", n: "7" });
   const [busy, setBusy] = useState(false);
   const nd = Math.max(0, Math.min(200, parseInt(direct) || 0));
-  const zs = zones.map(z => ({ name: z.name.trim(), n: Math.max(0, Math.min(200, parseInt(z.n) || 0)) })).filter(z => z.name && z.n);
+  const zs = zones.map(z => ({ name: z.name.trim(), vrac: !!z.vrac, n: z.vrac ? 1 : Math.max(0, Math.min(200, parseInt(z.n) || 0)) })).filter(z => z.name && z.n);
   const total = kind === "common" ? 0 : nd + zs.reduce((s, z) => s + z.n, 0);
   const ok = name.trim() && (kind === "common" || total > 0);
   const create = async () => {
@@ -480,7 +499,8 @@ function PlaceMaker({ onClose, onMade }) {
     try {
       const children = kind === "common" ? [] : [
         ...Array.from({ length: nd }, (_, i) => ({ name: cellName(null, i + 1), single })),
-        ...zs.map(z => ({ name: z.name, children: Array.from({ length: z.n }, (_, i) => ({ name: cellName(z.name, i + 1), single })) })),
+        ...zs.map(z => z.vrac ? { name: z.name, single: false }
+          : { name: z.name, children: Array.from({ length: z.n }, (_, i) => ({ name: cellName(z.name, i + 1), single })) }),
       ];
       const r = await write("post", "/storage/places", { name: name.trim(), single: false, stock, children });
       if (r) { onClose(); if (r.made?.[0] && kind !== "common") onMade?.(r.made[0]); }
@@ -490,7 +510,7 @@ function PlaceMaker({ onClose, onMade }) {
   const addQuick = () => {
     const c = Math.max(1, Math.min(26, parseInt(quick.count) || 1)), n = String(Math.max(1, parseInt(quick.n) || 1));
     const base = zones.filter(z => z.name.startsWith(quick.prefix)).length;
-    setZones(l => [...l, ...Array.from({ length: c }, (_, i) => ({ name: `${quick.prefix} ${base + i + 1}`.trim(), n }))]);
+    setZones(l => [...l, ...Array.from({ length: c }, (_, i) => ({ name: `${quick.prefix} ${base + i + 1}`.trim(), n, vrac: !!quick.vrac }))]);
   };
 
   return createPortal(<FSheet onClose={onClose} z={1200} bottom={<>
@@ -514,7 +534,9 @@ function PlaceMaker({ onClose, onMade }) {
           <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text)" }}>Zones <span style={small}>chacune son nom et son nombre d'emplacements (« Colonne 1-3 »)</span></div>
           {zones.map((z, i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <input value={z.name} onChange={e => setZ(i, "name", e.target.value)} placeholder="Colonne 1, Dessus…" style={{ ...inp, flex: 1 }}/>
-            <input type="number" min={1} max={200} value={z.n} onChange={e => setZ(i, "n", e.target.value)} style={{ ...inp, width: 70 }}/>
+            {!z.vrac && <input type="number" min={1} max={200} value={z.n} onChange={e => setZ(i, "n", e.target.value)} style={{ ...inp, width: 70 }}/>}
+            <button type="button" onClick={() => setZ(i, "vrac", !z.vrac)} data-tip="En vrac : pas de cases, autant de bobines qu'on veut"
+              style={{ ...seg, ...(z.vrac ? segOn : {}) }}>Vrac</button>
             <button type="button" onClick={() => setZones(l => l.filter((_, j) => j !== i))} aria-label="Retirer la zone" style={seg}>✕</button>
           </div>)}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -522,8 +544,10 @@ function PlaceMaker({ onClose, onMade }) {
             <span style={small}>ou d'un coup :</span>
             <input value={quick.prefix} onChange={e => setQuick(q => ({ ...q, prefix: e.target.value }))} style={{ ...inp, width: 96 }}/>
             <input type="number" min={1} max={26} value={quick.count} onChange={e => setQuick(q => ({ ...q, count: e.target.value }))} style={{ ...inp, width: 56 }}/>
-            <span style={small}>de</span>
-            <input type="number" min={1} max={200} value={quick.n} onChange={e => setQuick(q => ({ ...q, n: e.target.value }))} style={{ ...inp, width: 56 }}/>
+            {!quick.vrac && <><span style={small}>de</span>
+            <input type="number" min={1} max={200} value={quick.n} onChange={e => setQuick(q => ({ ...q, n: e.target.value }))} style={{ ...inp, width: 56 }}/></>}
+            <button type="button" onClick={() => setQuick(q => ({ ...q, vrac: !q.vrac }))} data-tip="Des zones en vrac (caisses, bacs) : pas de cases"
+              style={{ ...seg, ...(quick.vrac ? segOn : {}) }}>Vrac</button>
             <button type="button" onClick={addQuick} style={seg}>Ajouter</button>
           </div>
         </div>
@@ -540,8 +564,9 @@ function PlaceMaker({ onClose, onMade }) {
         {zs.length > 0 && <div style={{ display: "grid", gap: 6, gridTemplateColumns: `repeat(auto-fit, minmax(${zs.length > 4 ? 90 : 70}px, 1fr))`, alignItems: "start" }}>
           {zs.map((z, i) => <div key={i} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             <div style={{ ...small, fontSize: 10.5, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{z.name}</div>
-            {Array.from({ length: Math.min(z.n, 20) }, (_, k) => <div key={k} style={cellPrev(single)}>{cellName(z.name, k + 1)}</div>)}
-            {z.n > 20 && <div style={{ ...small, textAlign: "center" }}>… {z.n}</div>}
+            {z.vrac ? <div style={{ ...cellPrev(false), padding: "10px 2px" }}>en vrac</div> : <>
+              {Array.from({ length: Math.min(z.n, 20) }, (_, k) => <div key={k} style={cellPrev(single)}>{cellName(z.name, k + 1)}</div>)}
+              {z.n > 20 && <div style={{ ...small, textAlign: "center" }}>… {z.n}</div>}</>}
           </div>)}
         </div>}
       </div>}
@@ -619,7 +644,7 @@ export function PlacePicker({ spools, onClose, onDone, pickOnly = false, onPicke
         {one && <Swatch s={one} size={40}/>}
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>{title || (one ? "Où est-elle rangée ?" : `Ranger ${ids.length} bobines`)}</div>
-          {one && <div style={small}>{spoolName(one)} · #{one.id}{one.location ? ` · ${one.location}` : ""}</div>}
+          {one && <div style={small}>{[spoolName(one), one.filament_fila_type || one.filament_material || one.material, one.filament_manufacturer || one.brand, `#${one.id}`, one.location].filter(Boolean).join(" · ")}</div>}
         </div>
       </div>
       {!st.places.some(p => p.leaf)
@@ -662,7 +687,8 @@ export function ToStoreSheet({ onClose, onDone }) {
             <Swatch s={s} size={34}/>
             <div style={{ flex: "1 1 140px", minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</div>
-              <div style={small}>#{s.id}{s.material ? ` · ${s.material}` : ""}{s.remaining_weight_g != null ? ` · ${Math.round(s.remaining_weight_g)} g` : ""}{s.unstored_at ? ` · sortie ${agoTxt(s.unstored_at)}` : ""}</div>
+              <div style={{ ...small, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[s.material, s.brand].filter(Boolean).join(" · ")}</div>
+              <div style={small}>#{s.id}{s.remaining_weight_g != null ? ` · ${Math.round(s.remaining_weight_g)} g` : ""}{s.unstored_at ? ` · sortie ${agoTxt(s.unstored_at)}` : ""}</div>
             </div>
             {lp?.leaf && <button type="button" onClick={async () => { if (await assignSpools([s.id], lp.id)) onDone?.(); }} style={{ ...seg, ...segOn }} data-tip="La remettre où elle était">↩ {lp.path}</button>}
             <button type="button" onClick={() => setPick(s)} style={seg}>Ranger…</button>
@@ -883,7 +909,8 @@ Que veux-tu faire ?`, [
     const cellNm = (by[curId] || cur).path;
     placedIn.current[s.id] = cellNm;
     buzz(70);
-    if (chain) { setLast(l => ({ s: (spools0 || []).find(x => x.id === s.id) || s, cell: cellNm, n: (l?.n || 0) + 1 })); setQ(""); goNext(); } else onClose();
+    // sur un emplacement en vrac (commun), on y reste : chaque bobine scannee y va, jusqu'a « Passer » (07/11/2026)
+    if (chain) { setLast(l => ({ s: (spools0 || []).find(x => x.id === s.id) || s, cell: cellNm, n: (l?.n || 0) + 1 })); setQ(""); if ((by[curId] || cur).single) goNext(); } else onClose();
   };
   pickRef.current = pick;
   const startScan = async () => {
@@ -930,7 +957,7 @@ Que veux-tu faire ?`, [
       <div>
         {chain ? <div key={`cur${curId}`} style={{ padding: "10px 12px", borderRadius: 14, border: "2px solid #8B5CF6", animation: last ? "bnNext 1.2s ease-out" : undefined,
           background: "color-mix(in srgb, #8B5CF6 10%, var(--surface))" }}>
-          <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#8B5CF6" }}>{last ? "➡ Maintenant" : "Emplacement"} · {pos + 1} sur {seq.length}</div>
+          <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#8B5CF6" }}>{last ? (cur.single ? "➡ Maintenant" : "↻ On reste ici") : "Emplacement"} · {pos + 1} sur {seq.length}{!cur.single ? " · en vrac : scanne tant que tu veux, « Passer » pour continuer" : ""}</div>
           <div style={{ fontSize: 20, fontWeight: 900, color: "var(--text)" }}>{cur.path}</div>
           <div style={small}>{done.length} rangée{done.length > 1 ? "s" : ""} pendant la série</div>
         </div>
@@ -954,7 +981,9 @@ Que veux-tu faire ?`, [
         <Swatch s={s} size={32}/>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: "block", fontSize: 13, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{spoolName(s)}</span>
-          <span style={small}>#{s.id} · {s.location === TO ? "📥 à ranger" : s.location}</span>
+          <span style={{ ...small, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {[s.filament_fila_type || s.filament_material, s.filament_manufacturer].filter(Boolean).join(" · ")}</span>
+          <span style={small}>#{s.id}{s.remaining_weight_g != null ? ` · ${Math.round(s.remaining_weight_g)} g` : ""} · {s.location === TO ? "📥 à ranger" : s.location}</span>
         </span>
       </button>)}
       {!list.length && <div style={small}>Aucune bobine.</div>}
