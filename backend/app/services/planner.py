@@ -1180,7 +1180,7 @@ def advice(placed: list, d: dict, now: datetime, dls: list | None = None, fix=No
         if j["load"]:
             s = datetime.fromisoformat(j["start"])
             out.append({"kind": "load", "icon": "🧵",
-                        "text": f"Charge {', '.join(j['load'])} avant {_day_fr(s, today)} à {_fmt(s)} pour {title(j)}."})
+                        "text": f"Charge {', '.join(x + _spot_txt(sp) for x, sp in zip(j['load'], list(j.get('load_spots') or []) + [None] * len(j['load'])))} avant {_day_fr(s, today)} à {_fmt(s)} pour {title(j)}."})
     # 4. ce qui ne peut pas respecter les consignes
     for j in placed:
         if j["too_long"]:
@@ -1850,6 +1850,7 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
             dirty = True
     r = place(jobs, d, now, busy, loaded, _slots())
     mark_complete(r["jobs"])
+    await _load_spots(r["jobs"])
     # avance ou retard : chaque debut, compare a celui du dernier rangement
     p0 = d["plan0"]
     # (06/11/2026) depuis quand : l'heure du dernier rangement, pour dire « par rapport a quoi »
@@ -2502,6 +2503,47 @@ def _replace(order: list, old: list, new: list) -> list:
     return [next(it) if k in olds else k for k in order]
 
 
+async def _load_spots(jobs: list) -> None:
+    """Ou prendre chaque bobine a charger (07/11/2026) : aligne sur load_ids, la bobine conseillee de ce filament (rangee,
+    hors de l'imprimante ; une entamee d'abord, pour la finir), son emplacement, et combien d'autres sont rangees."""
+    fids = {f for j in jobs for f in (j.get("load_ids") or []) if f}
+    if not fids:
+        return
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.filament import Filament, Spool
+    from .storage_places import in_printer
+    by = {}
+    try:
+        async with AsyncSessionLocal() as db:
+            rows = (await db.execute(select(Spool.id, Spool.filament_id, Spool.location, Spool.remaining_weight_g, Spool.place_id,
+                                            Filament.filament_weight_g)
+                                     .join(Filament, Filament.id == Spool.filament_id)
+                                     .where(Spool.filament_id.in_(fids), Spool.archived.is_(False), Spool.ordered.is_(False)))).all()
+    except Exception:
+        logger.exception("[PLANNING] emplacements des bobines a charger")
+        return
+    for sid, fid, loc, rem, pid, full in rows:
+        if in_printer(loc) or (rem is not None and rem <= 0):
+            continue
+        by.setdefault(fid, []).append((sid, loc, rem, full or 1000.0))
+    for fid, l in by.items():
+        # entamee d'abord (la moins pleine), puis les neuves
+        l.sort(key=lambda x: (0 if (x[2] is not None and x[2] < x[3] - 5) else 1, x[2] if x[2] is not None else x[3]))
+    for j in jobs:
+        spots = []
+        for f in j.get("load_ids") or []:
+            l = by.get(f) or []
+            spots.append({"spool": l[0][0], "where": l[0][1], "g": round(l[0][2]) if l[0][2] is not None else None,
+                          "others": len(l) - 1} if l else None)
+        if spots:
+            j["load_spots"] = spots
+
+
+def _spot_txt(sp) -> str:
+    return f" (📍 {sp['where']})" if sp and sp.get("where") else ""
+
+
 # ── les rappels (boucle des notifications) ───────────────────────────────────
 def _bed_name(k) -> str:
     from . import plates as PL
@@ -2511,7 +2553,10 @@ def _bed_name(k) -> str:
 def _swap_txt(j: dict) -> str:
     """Qui prend la place de qui (06/11/2026) : « Bleu ciel à la place de Silver, Rouge dans l'emplacement libre »."""
     outs = j.get("swap_out") or [None] * len(j.get("load") or [])
-    parts = [f"{x} à la place de {o}" if o else f"{x} dans l'emplacement libre" for x, o in zip(j.get("load") or [], outs)]
+    spots = j.get("load_spots") or [None] * len(j.get("load") or [])
+    # ou la prendre (07/11/2026) : « Bleu ciel (📍 Tiroir bas › Colonne 1-3) a la place de Silver »
+    parts = [f"{x}{_spot_txt(sp)} à la place de {o}" if o else f"{x}{_spot_txt(sp)} dans l'emplacement libre"
+             for x, o, sp in zip(j.get("load") or [], outs, list(spots) + [None] * len(outs))]
     return "🔁 " + ", ".join(parts) + (" (ce qui sort ne resservira pas de sitôt)" if any(outs) else "")
 
 

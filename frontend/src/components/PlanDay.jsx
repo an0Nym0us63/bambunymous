@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { apiThumb, apiUrl } from "../api/client";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import MwImg from "./MwImg";
+import { LocateSheet } from "./Storage";
 
 // Le planning des impressions (05/11/2026) : les briques du calendrier. La journee en frise (heures de fonctionnement,
 // de lancement, impressions faites et prevues), ses travaux prevus a ranger, les consignes, les conseils.
@@ -207,7 +208,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
       {j.intercalated && tag(`↔ intercalé dans ${j.intercalated.in}`, "#0EA5E9", { nuit: "Pour remplir la nuit", filaments: "Pour charger moins de filaments" }[j.intercalated.why]
         || "Pour optimiser le planning")}
       {j.due && tag(`🎯 avant le ${dueTxt(j.due)}`, j.due_ok ? "#16A34A" : "#EF4444", j.due_ok ? "L'objet sera fini à temps" : "Le dernier plateau de l'objet finit après cette date")}
-      {j.load?.length > 0 && tag(<>🧵 À charger : <FilLinks labels={j.load} ids={j.load_ids}/>{j.free_slot && !j.unload?.length ? " (emplacement libre)" : ""}</>, "#6366F1",
+      {j.load?.length > 0 && tag(<>🧵 À charger : <LoadLinks j={j}/>{j.free_slot && !j.unload?.length ? " (emplacement libre)" : ""}</>, "#6366F1",
         j.free_slot && !j.unload?.length ? "Pas dans l'AMS à ce moment-là ; un emplacement est libre, rien à retirer" : "Pas dans l'AMS à ce moment-là")}
       {j.merged && tag(`🧩 ${j.plate_name || "Regroupés"}`, "#6366F1", "Imprimés ensemble sur un seul plateau : regroupe-les dans Bambu Studio avant de lancer")}
       {j.bed_change && tag(bedTxt(j.bed_change), "#0369A1", j.bed_warn || "Le plateau que demande ce profil, ou un des tiens qui va à ce filament")}
@@ -353,11 +354,22 @@ export function FilLink({ id, label }) {
     style={{ cursor: "pointer", whiteSpace: "normal" }}><FilDot id={id}/><span style={{ textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>{label}</span></span>;
 }
 // le changement de bobine, en court et en pastilles : « ● X à la place de ● Y » (celle qui sort, plus pale), « ● X (place libre) »
-export const SwapShort = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={j.load_ids?.[i]} label={x}/>
+export const SwapShort = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={j.load_ids?.[i]} label={x}/><LoadSpot sp={j.load_spots?.[i]}/>
   {outOf(j, i)[0] ? <><span style={{ fontWeight: 600, opacity: 0.75 }}> à la place de </span><span style={{ opacity: 0.6 }}><FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]}/></span></> : freeOf(j, i) ? " (place libre)" : ""}</React.Fragment>)}</>;
+// ou prendre une bobine a charger (07/11/2026) : « 📍 Tiroir bas › Colonne 1-3 », qui ouvre son rangement (sa case clignote)
+export function LoadSpot({ sp }) {
+  const [open, setOpen] = useState(false);
+  if (!sp?.where) return null;
+  return <><span role="button" tabIndex={0} data-tip={`Bobine #${sp.spool}${sp.g != null ? ` · ${sp.g} g` : ""}${sp.others ? ` · ${sp.others} autre${sp.others > 1 ? "s" : ""} rangée${sp.others > 1 ? "s" : ""}` : ""} — toucher pour la localiser`}
+    onClick={e => { e.stopPropagation(); setOpen(true); }}
+    style={{ cursor: "pointer", fontWeight: 800, color: "#B45309", whiteSpace: "nowrap" }}> (📍 {sp.where})</span>
+    {open && <LocateSheet spoolId={sp.spool} onClose={() => setOpen(false)}/>}</>;
+}
+// la liste a charger, chacune avec ou la prendre
+export const LoadLinks = ({ j }) => <>{(j.load || []).map((l, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={j.load_ids?.[i]} label={l}/><LoadSpot sp={j.load_spots?.[i]}/></React.Fragment>)}</>;
 export const FilLinks = ({ labels, ids }) => <>{(labels || []).map((l, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={ids?.[i]} label={l}/></React.Fragment>)}</>;
 // le changement de bobine en phrase, ses filaments cliquables : « charger X a la place de Y »
-export const SwapLinks = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}charger <FilLink id={j.load_ids?.[i]} label={x}/>
+export const SwapLinks = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}charger <FilLink id={j.load_ids?.[i]} label={x}/><LoadSpot sp={j.load_spots?.[i]}/>
   {outOf(j, i)[0] ? <><span style={{ fontWeight: 600, opacity: 0.75 }}> à la place de </span><span style={{ opacity: 0.6 }}><FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]}/></span></>
     : freeOf(j, i) ? <span style={{ fontWeight: 600, opacity: 0.75 }}> dans l'emplacement libre</span> : ""}</React.Fragment>)}</>;
 // la fin de la journee (06/11/2026) : le dernier plateau prevu aujourd'hui finit vers telle heure ; combien encore

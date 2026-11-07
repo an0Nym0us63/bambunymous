@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
-import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc } from "./PlanDay";
+import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc, LoadLinks } from "./PlanDay";
 import { useStackZ } from "../utils/zstack";
 import { useSwipeClose } from "../utils/swipeClose";
 
@@ -108,7 +108,7 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
           {j.intercalated && <span style={{ fontSize: 11, fontWeight: 900, color: "#0EA5E9" }}>{interTxt(j)}</span>}
           {j.due && <span style={{ fontSize: 11, fontWeight: 900, color: j.due_ok ? "#16A34A" : "#EF4444" }}>🎯 avant le {dueTxt(j.due)}</span>}
           {prioChip(j.prio_m)}{j.prio_p ? prioChip(j.prio_p, { opacity: 0.85 }) : null}
-          {j.load?.length > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "color-mix(in srgb, #0891B2 78%, var(--text2))" }}>🧵 à charger : <FilLinks labels={j.load} ids={j.load_ids}/>{j.free_slot && !j.unload?.length ? " (emplacement libre)" : ""}</span>}
+          {j.load?.length > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "color-mix(in srgb, #0891B2 78%, var(--text2))" }}>🧵 à charger : <LoadLinks j={j}/>{j.free_slot && !j.unload?.length ? " (emplacement libre)" : ""}</span>}
           {j.unload?.length > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "#64748B" }}>↩ à retirer : <FilLinks labels={j.unload} ids={j.unload_ids}/></span>}
           {j.bed_change && <span style={{ fontSize: 11, fontWeight: 900, color: "#0369A1" }}>{bedTxt(j.bed_change)}</span>}
           {j.bed_warn && <span style={{ fontSize: 11, fontWeight: 800, color: "#B45309" }}>🔲 {j.bed_warn}</span>}

@@ -37,7 +37,7 @@ import { LiveHatch, LiveTo } from "../components/LiveUsage";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 import { FriendsPrints, useHasFriends, useShared, sharedCount } from "../components/Friends";
 import { FitBox } from "../components/FitThumb";
-import { useStorage, reloadStorage, PlacePicker, ToStoreSheet, ToStoreBanner, StorageMap, inPrinter } from "../components/Storage";
+import { useStorage, reloadStorage, PlacePicker, ToStoreSheet, ToStoreBanner, StorageMap, inPrinter, LocateSheet } from "../components/Storage";
 
 const MATERIALS = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","BVOH","PLA-CF","PETG-CF","PA-CF","PPS"];
 
@@ -991,6 +991,8 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
   // le rangement (07/11/2026) : sa place, la choisir ; hors du mode « un seul rangement »
   const stor = useStorage();
   const [placeOpen, setPlaceOpen] = useState(false);
+  const [locOpen, setLocOpen] = useState(false);      // « Localiser » (07/11/2026) : son rangement s'ouvre, sa case clignote
+  const canLocate = spool && !spool.archived && !spool.ordered && stor && stor.places?.length > 0;
   const canPlace = isAdmin && stor && stor.mode !== "single" && spool && !spool.archived && !spool.ordered;
   const homePath = spool?.place_id && stor ? stor.places.find(p => p.id === spool.place_id)?.path : null;
   const toStore = spool && !spool.ordered && !spool.archived && spool.location === TO_STORE;
@@ -1125,6 +1127,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
       isAdmin && { icon: "⚖", label: "Ajuster le poids", hint: "Restant, retirer, ajouter, pesée", tone: "#F59E0B", onClick: weigh },
       isAdmin && !arch && { icon: "☀", label: "Je viens de la sécher", hint: spool.last_dried_at ? `Dernier séchage ${agoFr(spool.last_dried_at)}` : "Jamais séchée", tone: "#0EA5E9",
         onClick: () => setDryOpen(true) },
+      canLocate && { icon: "📍", label: "Localiser", hint: "Ouvre son rangement, sa case clignote", tone: "#F59E0B", onClick: () => setLocOpen(true) },
       { icon: "📋", label: "Historique d'utilisation", hint: "Les impressions qui l'ont consommée", tone: "#8B5CF6", onClick: loadUsage },
       spool.filament_id && { icon: "🧵", label: "Voir le filament", hint: `Filament #${spool.filament_id}`, tone: "#EC4899", onClick: openFilament },
       isAdmin && spool.filament_id && { icon: "＋", label: "Ajouter une bobine de ce filament", tone: "#22C55E", onClick: () => setAddOpen(true) },
@@ -1214,6 +1217,9 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                 <span style={{ ...FVAL, color: toStore ? "#D97706" : FVAL.color }}>{toStore ? "📥 " : ""}{spool.location} <span style={{ color:"var(--muted)" }}>✎</span></span></div>
               : <FRow l="Emplacement" v={spool.location}/>}
             {homePath && inAms(spool) && <FRow l={stor?.mode === "manual" ? "Sa dernière place" : "Sa place"} v={homePath}/>}
+            {canLocate && <button type="button" onClick={() => setLocOpen(true)} style={{ ...fBtn, marginTop: 4, padding: "8px 12px", display: "flex", alignItems: "center",
+              justifyContent: "center", gap: 6, color: "#B45309", borderColor: "color-mix(in srgb, #F59E0B 45%, var(--border))",
+              background: "color-mix(in srgb, #F59E0B 10%, var(--surface))" }}>📍 Localiser</button>}
           </FCard>
           <FCard t="Son histoire" i="🗓️" c="#3B82F6">
             <FRow l="Ajoutée le" v={dayFr(spool.created_at)} d={agoFr(spool.created_at)}/>
@@ -1278,6 +1284,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
         onClose={() => setDryOpen(false)} onDone={() => { setDryOpen(false); refresh(); }}/>}
       {/* une bobine de plus : la fiche reste ouverte, ses compteurs « +n en stock » se mettent a jour */}
       {placeOpen && <PlacePicker spools={[spool]} onClose={() => setPlaceOpen(false)} onDone={refresh}/>}
+      {locOpen && <LocateSheet spoolId={spool.id} onClose={() => setLocOpen(false)}/>}
       {addOpen && <AddSpoolModal preselect={spool.filament_id} onClose={() => setAddOpen(false)}
         onSave={() => { setAddOpen(false); refresh(); }}/>}
       {showUsage && createPortal(
@@ -3641,6 +3648,9 @@ export default function Filaments() {
     client.get(`/filaments/spools/${deepRanger}`).then(r => setRangerSpool(r.data)).catch(() => {});
   }, [deepRanger]);
   const closeRanger = () => { const next = new URLSearchParams(searchParams); next.delete("ranger"); setSearchParams(next, { replace: true }); };
+  // ?locate=<bobine> (07/11/2026) : la localiser (depuis le planning, une notification)
+  const deepLocate = Number(searchParams.get("locate")) || null;
+  const closeLocate = () => { const next = new URLSearchParams(searchParams); next.delete("locate"); setSearchParams(next, { replace: true }); };
 
   // ?swatch=1 dans l'URL = on arrive par le scan du QR d'un echantillon (le QR
   // imprime sur la planche encode ce parametre). Dans ce seul cas on coche la
@@ -3908,6 +3918,7 @@ export default function Filaments() {
           onClose={closeDeep}/>
       )}
       {deepRanger === "1" && <ToStoreSheet onClose={closeRanger}/>}
+      {deepLocate && <LocateSheet spoolId={deepLocate} onClose={closeLocate}/>}
       {rangerSpool && <PlacePicker spools={[rangerSpool]} onClose={closeRanger}/>}
       {deepOrder && <OrderSheet id={Number(deepOrder)} onClose={() => { const n = new URLSearchParams(searchParams); n.delete("order"); setSearchParams(n, { replace: true }); }}/>}
       {deepErr && (

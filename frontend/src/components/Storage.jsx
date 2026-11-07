@@ -307,8 +307,17 @@ export function StorageSettingsCard({ card, cardTitle }) {
 }
 
 // ── La fenetre d'un rangement : ses zones, ses emplacements, tout se retouche ──
-function PlaceEditor({ id, onClose }) {
+// readOnly + focus / focusPlace (07/11/2026, « Localiser ») : la fenetre en consultation, le rangement s'ouvre comme un
+// tiroir qu'on tire, puis la case de la bobine (ou sa place) clignote et vient a l'ecran
+function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace = null, banner = null }) {
   const st = useStorage();
+  const bodyRef = useRef(null);
+  useEffect(() => {
+    if (!focus && !focusPlace) return undefined;
+    const t = setTimeout(() => { try { bodyRef.current?.querySelector("[data-hit='1']")?.scrollIntoView({ block: "center", behavior: "smooth" }); } catch { /* ancien navigateur */ } }, 450);
+    return () => clearTimeout(t);
+  }, [focus, focusPlace]);
+  const isHit = p => (focus && p.spools.some(x => x.id === focus)) || (focusPlace != null && p.id === focusPlace);
   const [ask, setAsk] = useState(null);
   const [fill, setFill] = useState(null);             // { place, spools } : y ranger une bobine
   const fillCell = async p => {
@@ -358,7 +367,7 @@ function PlaceEditor({ id, onClose }) {
       for (const c of kids[p.id] || []) if (c.name.startsWith(p.name + "-")) await patch(c, { name: nv + c.name.slice(p.name.length) });
       return true;
     } });
-  const menu = (e, p) => openMenu(e, {
+  const menu = (e, p) => readOnly ? null : openMenu(e, {
     title: p.leaf ? shortName(p, by) : p.name, subtitle: p.path, color: "#8B5CF6",
     items: [
       { icon: "✏️", label: "Renommer", onClick: () => rename(p) },
@@ -397,10 +406,11 @@ function PlaceEditor({ id, onClose }) {
     ],
   });
   const Cell = ({ p }) => {
-    const occ = p.spools[0], edge = edgeOf(p, by), info = infoOf(occ, null);
-    return <button type="button" onClick={e => menu(e, p)} data-tip={occ ? [occ.name, ...info, `#${occ.id}`].join(" · ") : p.single ? "Case libre" : "Emplacement commun"}
+    const occ = (focus && p.spools.find(x => x.id === focus)) || p.spools[0], edge = edgeOf(p, by), info = infoOf(occ, null), hit = isHit(p);
+    return <button type="button" onClick={e => menu(e, p)} data-hit={hit ? "1" : undefined} data-tip={occ ? [occ.name, ...info, `#${occ.id}`].join(" · ") : p.single ? "Case libre" : "Emplacement commun"}
       style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, minWidth: 0, minHeight: 28,
-        padding: "2px 1px", borderRadius: 7, cursor: "pointer", color: "var(--text)",
+        padding: "2px 1px", borderRadius: 7, cursor: readOnly ? "default" : "pointer", color: "var(--text)", zIndex: hit ? 2 : undefined,
+        animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined,
         border: `1px ${p.single ? "solid" : "dashed"} color-mix(in srgb, #8B5CF6 ${occ ? 55 : 25}%, var(--border))`, background: occ ? "color-mix(in srgb, #8B5CF6 10%, var(--surface))" : "transparent" }}>
       {occ && (edge ? <SpoolEdge s={occ} vertical={edge === "v"} len={edge === "v" ? 34 : "92%"} thick={edge === "v" ? 18 : 18}/> : <Swatch s={occ} size={15}/>)}
       {occ && edge && info.length > 0 && <span style={{ fontSize: 8.5, fontWeight: 800, color: "var(--muted)", maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{info.join(" · ")}</span>}
@@ -409,7 +419,8 @@ function PlaceEditor({ id, onClose }) {
     </button>;
   };
   // une zone en vrac (un emplacement commun parmi les zones) : comme une zone, ses bobines en pastilles
-  const Vrac = ({ p }) => <div style={{ display: "flex", flexDirection: "column", gap: 3, padding: 4, borderRadius: 10, minWidth: 0,
+  const Vrac = ({ p }) => <div data-hit={isHit(p) ? "1" : undefined} style={{ display: "flex", flexDirection: "column", gap: 3, padding: 4, borderRadius: 10, minWidth: 0,
+    animation: isHit(p) ? "bnHit 1s ease-in-out .7s infinite" : undefined,
     border: "1px dashed color-mix(in srgb, #8B5CF6 45%, var(--border))", background: "color-mix(in srgb, #8B5CF6 4%, var(--surface2))" }}>
     <button type="button" onClick={e => menu(e, p)} data-tip={`${p.name} · en vrac · ${p.spools.length} bobine${p.spools.length > 1 ? "s" : ""}`}
       style={{ display: "flex", flexDirection: "column", alignItems: "center", background: "none", border: "none", padding: "1px 0", cursor: "pointer", color: "var(--text)", minWidth: 0 }}>
@@ -418,7 +429,8 @@ function PlaceEditor({ id, onClose }) {
       <span style={{ ...small, fontSize: 10 }}>{p.stock ? "📦 stock · " : ""}vrac · {p.spools.length}</span>
     </button>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 3, justifyContent: "center", minHeight: 24, alignItems: "center" }}>
-      {p.spools.slice(0, 24).map(x => <span key={x.id} data-tip={`${x.name} · #${x.id}`} style={{ display: "inline-flex" }}><Swatch s={x} size={16}/></span>)}
+      {p.spools.slice(0, 24).map(x => <span key={x.id} data-tip={`${x.name} · #${x.id}`} style={{ display: "inline-flex", borderRadius: "50%",
+        animation: focus === x.id ? "bnHit 1s ease-in-out .7s infinite" : undefined }}><Swatch s={x} size={focus === x.id ? 22 : 16}/></span>)}
       {p.spools.length > 24 && <span style={{ ...small, fontSize: 10 }}>+{p.spools.length - 24}</span>}
       {!p.spools.length && <span style={{ ...small, fontSize: 10 }}>vide</span>}
     </div>
@@ -437,8 +449,8 @@ function PlaceEditor({ id, onClose }) {
       {cells.length > 0 && (a => <div style={{ display: "grid", gap: 3, gridTemplateColumns: a.tpl }}>
         {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(30px, 1fr))"))}
       {subs.length > 0 && <Zones parent={p} list={subs}/>}
-      <button type="button" onClick={() => addCells(p, p.name)} aria-label={`Des emplacements dans ${p.name}`}
-        style={{ ...seg, padding: "0 4px", fontSize: 11, lineHeight: "18px" }}>＋</button>
+      {!readOnly && <button type="button" onClick={() => addCells(p, p.name)} aria-label={`Des emplacements dans ${p.name}`}
+        style={{ ...seg, padding: "0 4px", fontSize: 11, lineHeight: "18px" }}>＋</button>}
     </div>;
   };
   // les zones cote a cote, chacune a sa hauteur (07/11/2026 : elles s'etiraient a la plus haute) ; 5 tiennent sur un telephone
@@ -451,26 +463,33 @@ function PlaceEditor({ id, onClose }) {
   const n = leafCountOf(root, kids), t = takenOf(root, kids);
 
   return createPortal(<>
-    <FSheet onClose={onClose} z={1250} bottom={<>
-      {!root.leaf || !root.spools.length ? <>
+    <FSheet onClose={onClose} z={readOnly ? 1500 : 1250} bottom={<>
+      {!readOnly && (!root.leaf || !root.spools.length) ? <>
         <button onClick={() => addZone()} style={{ ...fBtn, flex: 1 }}>＋ Une zone</button>
         <button onClick={() => addCells(root, null)} style={{ ...fBtn, flex: 1 }}>＋ Des emplacements</button></> : null}
       <button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Fermer</button></>}>
-      <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <style>{`@keyframes bnDrawer{0%{opacity:0;transform:perspective(900px) rotateX(38deg) translateY(-34px) scale(.92)}
+        60%{opacity:1;transform:perspective(900px) rotateX(-4deg) translateY(4px) scale(1.01)}100%{transform:none}}
+        @keyframes bnHit{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.9);transform:scale(1);border-color:#F59E0B}
+        50%{box-shadow:0 0 0 7px rgba(245,158,11,0),0 0 18px 4px rgba(245,158,11,.55);transform:scale(1.1);border-color:#FBBF24;background:color-mix(in srgb,#F59E0B 22%,var(--surface))}}`}</style>
+      <div ref={bodyRef} style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12,
+        animation: (focus || focusPlace != null) ? "bnDrawer .75s cubic-bezier(.2,.9,.25,1.05) both" : undefined, transformOrigin: "50% 0" }}>
+        {banner}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={icoBox(root.stock ? "#D97706" : "#8B5CF6", 42, 13)}><PlaceIco p={root} size={21}/></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>{root.name}{root.stock && <span style={{ fontSize: 11, fontWeight: 900, marginLeft: 8, padding: "1px 8px",
               borderRadius: 20, color: "#B45309", background: "color-mix(in srgb, #F59E0B 16%, transparent)" }}>📦 stock</span>}</div>
             <div style={small}>{root.leaf ? `Emplacement commun · ${root.spools.length} bobine${root.spools.length > 1 ? "s" : ""}`
+              : readOnly ? `${n} emplacement${n > 1 ? "s" : ""} · ${t} pris`
               : `${n} emplacement${n > 1 ? "s" : ""} · ${t} pris · touche une zone ou une case pour la retoucher${st.mode !== "single" ? " ou y ranger une bobine" : ""}`}</div>
           </div>
-          <button type="button" onClick={e => menu(e, root)} aria-label="Actions du rangement" style={{ ...seg, padding: "6px 11px" }}>⋯</button>
+          {!readOnly && <button type="button" onClick={e => menu(e, root)} aria-label="Actions du rangement" style={{ ...seg, padding: "6px 11px" }}>⋯</button>}
         </div>
-        {st.mode === "single" && <div style={{ ...small, padding: "8px 12px", borderRadius: 12, color: "#B45309", background: "color-mix(in srgb, #F59E0B 10%, var(--surface))" }}>
+        {!readOnly && st.mode === "single" && <div style={{ ...small, padding: "8px 12px", borderRadius: 12, color: "#B45309", background: "color-mix(in srgb, #F59E0B 10%, var(--surface))" }}>
           Tu es en « Un seul rangement » : les bobines ne vont pas encore dans ces emplacements. Choisis « Chaque bobine a sa place » ou « Je range où je veux »
           dans la carte Rangements pour y ranger tes bobines.</div>}
-        {root.leaf && <div style={{ ...small, padding: 12, border: "1px dashed var(--border)", borderRadius: 12 }}>
+        {root.leaf && !readOnly && <div style={{ ...small, padding: 12, border: "1px dashed var(--border)", borderRadius: 12 }}>
           Un emplacement commun : autant de bobines qu'on veut.{root.spools.length ? " Il tient des bobines : range-les ailleurs pour le découper en zones ou en cases." : " « ＋ Une zone » ou « ＋ Des emplacements » le découpent."}</div>}
         {direct.length > 0 && (a => <div style={{ display: "grid", gap: 3, gridTemplateColumns: a.tpl }}>
           {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(direct, root, false, "repeat(auto-fill, minmax(34px, 1fr))"))}
@@ -480,6 +499,41 @@ function PlaceEditor({ id, onClose }) {
     {ask && <Ask {...ask} onClose={() => setAsk(null)}/>}
     {fill && <CellFiller place={fill.place} spools={fill.spools} onClose={() => setFill(null)}/>}
   </>, document.body);
+}
+
+// ── Localiser une bobine (07/11/2026) ─────────────────────────────────────────
+// Son rangement s'ouvre et sa case clignote ; dans l'imprimante : ou elle est, et la place qui l'attend si elle en a une.
+export function LocateSheet({ spoolId, onClose }) {
+  const st = useStorage();
+  const [sp, setSp] = useState(null);
+  useEffect(() => { client.get(`/filaments/spools/${spoolId}`).then(r => setSp(r.data)).catch(() => setSp({ id: spoolId })); }, [spoolId]);
+  if (!st || !sp) return null;
+  const { by } = index(st);
+  const here = st.places.find(p => p.spools.some(x => x.id === spoolId));
+  const pid = here?.id ?? (sp.place_id && by[sp.place_id] ? sp.place_id : null);
+  let root = pid != null ? by[pid] : null;
+  while (root && root.parent_id != null && by[root.parent_id]) root = by[root.parent_id];
+  const inPr = inPrinter(sp.location);
+  const name = sp.filament_translated_name || sp.filament_name || `Bobine #${spoolId}`;
+  const banner = <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 14,
+    border: `2px solid ${inPr ? "#0EA5E9" : "#F59E0B"}`, background: `color-mix(in srgb, ${inPr ? "#0EA5E9" : "#F59E0B"} 12%, var(--surface))` }}>
+    <Swatch s={sp} size={32}/>
+    <span style={{ flex: 1, minWidth: 0 }}>
+      <span style={{ display: "block", fontSize: 14, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name} <span style={{ color: "var(--muted)" }}>#{spoolId}</span></span>
+      <span style={{ ...small, display: "block" }}>{[sp.filament_fila_type || sp.filament_material, sp.filament_manufacturer].filter(Boolean).join(" · ")}</span>
+      <span style={{ fontSize: 12.5, fontWeight: 900, color: inPr ? "#0284C7" : "#B45309" }}>
+        {inPr ? `🖨 Dans l'imprimante : ${sp.location}${pid != null ? ` · sa place : ${by[pid]?.path}` : ""}` : `📍 ${sp.location || "?"}`}</span>
+    </span>
+  </div>;
+  if (!root) return createPortal(<FSheet onClose={onClose} z={1500} bottom={<button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Fermer</button>}>
+    <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>📍 Localiser</div>
+      {banner}
+      {!inPr && <div style={small}>{sp.location === (st.to_store_label || "À ranger") ? "Elle n'a pas encore de place : dis où tu l'as rangée depuis sa fiche."
+        : st.mode === "single" ? `Rangement unique : elle est dans « ${st.name} ».` : "Pas d'emplacement connu."}</div>}
+    </div>
+  </FSheet>, document.body);
+  return <PlaceEditor id={root.id} onClose={onClose} readOnly focus={here ? spoolId : null} focusPlace={here ? null : pid} banner={banner}/>;
 }
 
 // ── Nouveau rangement ────────────────────────────────────────────────────────
