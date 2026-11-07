@@ -583,13 +583,14 @@ function PrinterLocate({ sp, spoolId, banner, onClose, home }) {
               const hit = hitOf(a, t), empty = t.empty || !t.filament_type;
               // le fond de la tuile AMS (07/11/2026) : couleurs de la bobine, transparence, finition (soie, mat, paillettes...)
               const bg = empty ? null : trayBg(t, null, 60);
-              return <div key={t.id} data-tip={`${slotLabel(a.id, t.id)}${empty ? " — vide" : t.spool_info?.translated_name || t.spool_info?.name ? ` — ${t.spool_info.translated_name || t.spool_info.name}` : ""}`}
-                style={{ flex: 1, height: 46, borderRadius: 9, position: "relative", zIndex: hit ? 2 : undefined,
+              // le numero sous le slot, en clair (07/11/2026 : ecrit dessus, il se lisait mal sur les couleurs)
+              return <div key={t.id} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}
+                data-tip={`${slotLabel(a.id, t.id)}${empty ? " — vide" : t.spool_info?.translated_name || t.spool_info?.name ? ` — ${t.spool_info.translated_name || t.spool_info.name}` : ""}`}>
+                <div style={{ width: "100%", height: 40, borderRadius: 9, position: "relative", zIndex: hit ? 2 : undefined,
                   border: hit ? "2px solid #F59E0B" : empty ? "1.5px dashed rgba(148,163,184,0.7)" : "1px solid rgba(0,0,0,0.15)",
                   animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined,
-                  ...(bg || { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 2px, transparent 2px, transparent 6px)" }) }}>
-                <span style={{ position: "absolute", left: 0, right: 0, bottom: 2, textAlign: "center", fontSize: 9.5, fontWeight: 900,
-                  color: hit ? "#F59E0B" : "var(--muted)", textShadow: "0 0 3px var(--surface2)" }}>{slotLabel(a.id, t.id)}</span>
+                  ...(bg || { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 2px, transparent 2px, transparent 6px)" }) }}/>
+                <span style={{ fontSize: hit ? 11 : 10, fontWeight: 900, lineHeight: 1, color: hit ? "#D97706" : "var(--text2)" }}>{slotLabel(a.id, t.id)}</span>
               </div>;
             })}
           </div>
