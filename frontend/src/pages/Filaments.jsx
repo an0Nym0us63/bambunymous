@@ -30,6 +30,7 @@ import { Pressable, openMenu } from "../components/ContextMenu";
 import { colorBg, parseColorsList, finishOf, isDark, autoFinishOf, FINISHES, COLOR_BUCKETS, BUCKET_FR, BUCKET_HEX, bucketsOf } from "../utils/colors";
 import SpoolSVG from "../components/SpoolSVG";
 import { Ghost, GhostBadge, HeroSpool, ORD_C, ORD_BG, tipStock, tipOrdered } from "../components/SpoolGhost";
+import { fRound } from "../components/FicheKit";
 import { EmptyCard, FCard, FLAB, FROW, FRow, FSheet, FTile, FVAL, PageTabs, SearchRow, agoFr, dayFr, fBtn, fChip, fGrad, isLight, lighten, fOutline } from "../components/FicheKit";
 import GalleryCompare from "../components/GalleryCompare";
 import { useLiveCurrent, useLiveSpool } from "../store/liveUsage";
@@ -1139,6 +1140,9 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
 
   return (
     <FSheet onClose={onClose} /* le menu ⋯ est dans la barre du bas, toujours visible (05/11/2026 : en haut aussi, il faisait doublon) */
+      // Localiser (07/11/2026) : un bouton discret dans l'en-tete, a cote de la croix
+      top={canLocate && <button type="button" onClick={() => setLocOpen(true)} aria-label="Localiser la bobine" data-tip="Localiser : son rangement s'ouvre, sa case clignote"
+        className="hit" style={{ ...fRound, fontSize: 17 }}>📍</button>}
       bottom={<>
         {isAdmin && <button onClick={weigh} style={{ ...fBtn, flex:1, color:"#d97706", borderColor:"rgba(245,158,11,0.4)", background:"rgba(245,158,11,0.1)" }}>⚖ Ajuster le poids</button>}
         <button onClick={loadUsage} disabled={loadingUsage} style={{ ...fBtn, flex:1 }}>📋 {loadingUsage ? "…" : "Historique"}</button>
@@ -1217,9 +1221,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                 <span style={{ ...FVAL, color: toStore ? "#D97706" : FVAL.color }}>{toStore ? "📥 " : ""}{spool.location} <span style={{ color:"var(--muted)" }}>✎</span></span></div>
               : <FRow l="Emplacement" v={spool.location}/>}
             {homePath && inAms(spool) && <FRow l={stor?.mode === "manual" ? "Sa dernière place" : "Sa place"} v={homePath}/>}
-            {canLocate && <button type="button" onClick={() => setLocOpen(true)} style={{ ...fBtn, marginTop: 4, padding: "8px 12px", display: "flex", alignItems: "center",
-              justifyContent: "center", gap: 6, color: "#B45309", borderColor: "color-mix(in srgb, #F59E0B 45%, var(--border))",
-              background: "color-mix(in srgb, #F59E0B 10%, var(--surface))" }}>📍 Localiser</button>}
+
           </FCard>
           <FCard t="Son histoire" i="🗓️" c="#3B82F6">
             <FRow l="Ajoutée le" v={dayFr(spool.created_at)} d={agoFr(spool.created_at)}/>

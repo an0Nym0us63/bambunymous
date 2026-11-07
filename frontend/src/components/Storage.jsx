@@ -10,6 +10,9 @@ import { parseColorsList, finishOf } from "../utils/colors";
 import { Archive, HelpCircle, Inbox, Layers, Package, Printer, Truck } from "lucide-react";
 import { useRfidScan } from "../store/rfidScan";
 import { haptic } from "../utils/haptic";
+import { usePrinter } from "../store/printer";
+import { amsName, slotLabel, isExternal, isHt, grilleAccueil, lireDisposition, columnWeight, slotCount } from "../utils/ams";
+import { colorBg } from "../utils/colors";
 import { toast } from "../store/toast";
 
 // Les rangements des bobines (07/11/2026) : le mode (un seul rangement, chaque bobine a sa place, rangement manuel),
@@ -506,6 +509,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
 export function LocateSheet({ spoolId, onClose }) {
   const st = useStorage();
   const [sp, setSp] = useState(null);
+  const [showHome, setShowHome] = useState(false);   // dans l'imprimante : voir la place qui l'attend
   useEffect(() => { client.get(`/filaments/spools/${spoolId}`).then(r => setSp(r.data)).catch(() => setSp({ id: spoolId })); }, [spoolId]);
   if (!st || !sp) return null;
   const { by } = index(st);
@@ -525,6 +529,7 @@ export function LocateSheet({ spoolId, onClose }) {
         {inPr ? `🖨 Dans l'imprimante : ${sp.location}${pid != null ? ` · sa place : ${by[pid]?.path}` : ""}` : `📍 ${sp.location || "?"}`}</span>
     </span>
   </div>;
+  if (inPr && !showHome) return <PrinterLocate sp={sp} spoolId={spoolId} banner={banner} onClose={onClose} home={root ? () => setShowHome(true) : null}/>;
   if (!root) return createPortal(<FSheet onClose={onClose} z={1500} bottom={<button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Fermer</button>}>
     <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>📍 Localiser</div>
@@ -534,6 +539,66 @@ export function LocateSheet({ spoolId, onClose }) {
     </div>
   </FSheet>, document.body);
   return <PlaceEditor id={root.id} onClose={onClose} readOnly focus={here ? spoolId : null} focusPlace={here ? null : pid} banner={banner}/>;
+}
+
+// dans l'imprimante (07/11/2026) : ses AMS, HT et support externe, le slot de la bobine qui clignote
+function PrinterLocate({ sp, spoolId, banner, onClose, home }) {
+  const status = usePrinter(s => s.status);
+  useEffect(() => { if (!status) usePrinter.getState().fetch?.(); }, [status]);
+  // la disposition de la tuile AMS de l'accueil (07/11/2026) : les unites a la meme place que sur l'accueil
+  const [order, setOrder] = useState(undefined);
+  useEffect(() => { client.get("/settings/ams-order").then(({ data }) => setOrder(data.order ?? null)).catch(() => setOrder(null)); }, []);
+  const units = (status?.ams_list || []).filter(a => (a.trays || []).length);
+  const rank = a => isExternal(a.id) ? 2 : isHt(a.id) ? 1 : 0;
+  units.sort((a, b) => rank(a) - rank(b) || a.id - b.id);
+  // le slot : celui ou l'imprimante voit la bobine, sinon celui que dit son emplacement (« AMS-A slot 2 »)
+  const hitOf = (a, t) => t.spool_id === spoolId || (!units.some(u => u.trays.some(x => x.spool_id === spoolId))
+    && (sp.location === `${amsName(a.id)} slot ${t.id + 1}` || (isHt(a.id) && sp.location === `AMS ${amsName(a.id)}`)));
+  return createPortal(<FSheet onClose={onClose} z={1500} bottom={<>
+    {home && <button onClick={home} style={{ ...fBtn, flex: 1 }} data-tip="La place qui l'attend dans tes rangements">📍 Sa place</button>}
+    <button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Fermer</button></>}>
+    <style>{`@keyframes bnDrawer{0%{opacity:0;transform:perspective(900px) rotateX(38deg) translateY(-34px) scale(.92)}
+      60%{opacity:1;transform:perspective(900px) rotateX(-4deg) translateY(4px) scale(1.01)}100%{transform:none}}
+      @keyframes bnHit{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.9);transform:scale(1)}
+      50%{box-shadow:0 0 0 7px rgba(245,158,11,0),0 0 18px 4px rgba(245,158,11,.55);transform:scale(1.12)}}`}</style>
+    <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12, animation: "bnDrawer .75s cubic-bezier(.2,.9,.25,1.05) both", transformOrigin: "50% 0" }}>
+      {banner}
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={icoBox("#0EA5E9", 42, 13)}><Printer size={21} strokeWidth={2.2}/></span>
+        <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>Dans l'imprimante</div>
+      </div>
+      {!units.length && <div style={small}>L'état de l'imprimante n'est pas disponible pour l'instant.</div>}
+      {(() => {
+        const grid = units.filter(a => !isExternal(a.id)), ext = units.filter(a => isExternal(a.id));
+        const cols = grid.length ? grilleAccueil(grid, order === undefined ? null : lireDisposition(order)) : [];
+        const Unit = ({ a, w }) => <div style={{ padding: "8px 6px 9px", borderRadius: 14, background: "var(--surface2)", border: "1px solid var(--border)", minWidth: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 900, color: "var(--muted)", textAlign: "center", marginBottom: 6 }}>{amsName(a.id)}</div>
+          <div style={{ display: "flex", gap: 5, margin: "0 auto", width: w ? `${w * 100}%` : "100%" }}>
+            {a.trays.map(t => {
+              const hit = hitOf(a, t), empty = t.empty || !t.filament_type;
+              const cols = empty ? [] : parseColorsList(t.color, t.cols);
+              return <div key={t.id} data-tip={`${slotLabel(a.id, t.id)}${empty ? " — vide" : t.spool_info?.translated_name || t.spool_info?.name ? ` — ${t.spool_info.translated_name || t.spool_info.name}` : ""}`}
+                style={{ flex: 1, height: 46, borderRadius: 9, position: "relative", zIndex: hit ? 2 : undefined,
+                  border: hit ? "2px solid #F59E0B" : empty ? "1.5px dashed rgba(148,163,184,0.7)" : "1px solid rgba(0,0,0,0.15)",
+                  animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined, opacity: hit || empty ? 1 : 0.55,
+                  ...(empty ? { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 2px, transparent 2px, transparent 6px)" }
+                    : colorBg(cols, null, null, { size: 60 })) }}>
+                <span style={{ position: "absolute", left: 0, right: 0, bottom: 2, textAlign: "center", fontSize: 9.5, fontWeight: 900,
+                  color: hit ? "#F59E0B" : "var(--muted)", textShadow: "0 0 3px var(--surface2)" }}>{slotLabel(a.id, t.id)}</span>
+              </div>;
+            })}
+          </div>
+        </div>;
+        return <>
+          {cols.length > 0 && <div style={{ display: "grid", gap: 8, gridTemplateColumns: cols.map(c => `minmax(0, ${columnWeight(c)}fr)`).join(" ") }}>
+            {cols.flatMap((col, ci) => col.map((a, ri) => a && <div key={a.id} style={{ gridColumn: ci + 1, gridRow: ri + 1, minWidth: 0 }}>
+              <Unit a={a} w={slotCount(a) / columnWeight(col)}/></div>))}
+          </div>}
+          {ext.length > 0 && <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>{ext.map(a => <Unit key={a.id} a={a}/>)}</div>}
+        </>;
+      })()}
+    </div>
+  </FSheet>, document.body);
 }
 
 // ── Nouveau rangement ────────────────────────────────────────────────────────
