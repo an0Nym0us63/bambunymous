@@ -1464,6 +1464,9 @@ async def _context(tz: int | None):
     tzm = d.get("tz") if isinstance(d.get("tz"), int) else 60
     now = (datetime.utcnow() + timedelta(minutes=tzm)).replace(second=0, microsecond=0)
     q = await Q.queue()
+    # l'instantane de « A faire » garde sur disque (redemarrage, 07/11/2026) : ses plateaux faits peuvent dater ; le
+    # planning s'affiche avec, mais rien ne s'enregistre (voir _plan) et la verification de fond attend le calcul frais
+    d["_stale"] = bool(q.get("stale"))
     stock_of = ((Q._CACHE[1] or {}).get("stock_of")) or {}
     stock_of = {int(k): v for k, v in stock_of.items() if str(k).isdigit()}
     ams = await Q._ams_stock()
@@ -1863,7 +1866,7 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
     for k in [k for k in p0 if k not in keys]:
         p0.pop(k)
         dirty = True
-    if dirty:
+    if dirty and not d.get("_stale"):
         await _save(d)
     first = r["jobs"][0] if r["jobs"] else None
     status = None
@@ -2673,6 +2676,21 @@ async def check(cfg=None) -> dict:
     if cfg is None:
         cfg = await N._load()
     d0 = await _load()
+    # (07/11/2026) apres un redemarrage, « A faire » sort d'abord de son instantane sur disque, pendant que le calcul se
+    # refait : des plateaux deja imprimes y paraissaient a faire, le planning les replacait et prevenait d'un decalage de
+    # 12 h. On attend le calcul frais ; sans lui, cette verification n'agit pas (ni rappel ni decalage)
+    from . import mw_queue as Q
+    import asyncio as _aio
+    if (await Q.queue()).get("stale"):
+        t = Q._TASK[0]
+        if t is not None and not t.done():
+            try:
+                await _aio.wait_for(_aio.shield(t), 240)
+            except Exception:
+                pass
+        if Q._CACHE[0] == 0.0:
+            logger.info("[PLANNING] « A faire » pas encore recalcule depuis le demarrage : verification remise")
+            return {"jobs": 0, "moved": 0, "overflow": 0, "sent": 0, "stale": True}
     r = await plan(advise=True)
     now = r["now"]
     snap = await _snap_load()

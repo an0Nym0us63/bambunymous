@@ -373,8 +373,10 @@ function PlaceEditor({ id, onClose }) {
         items: [[null, "🟣", "Pastille"], ["h", "▬", "Sur la tranche, à plat (horizontale)"], ["v", "▮", "Sur la tranche, debout (verticale)"]].map(([k, ic, l]) =>
           ({ icon: (p.edge || null) === k ? "✓" : ic, label: l, onClick: () => patch(p, { edge: k }) })),
       }) },
-      p.id === root.id && { icon: "📦", label: p.stock ? "Ce n'est plus du stock" : "C'est du stock (cartons, réserve)",
-        hint: p.stock ? "Une bobine qui en sort pour l'AMS n'y revient pas" : "Une bobine qui en sort pour l'AMS le quitte pour de bon ; l'échange intelligent n'y range jamais rien",
+      // du stock : le rangement entier, ou une zone, une caisse en vrac (07/11/2026 : seulement le rangement avant)
+      (!p.leaf || !p.single) && { icon: "📦", label: p.stock ? "Ce n'est plus du stock" : "C'est du stock (cartons, réserve)", disabled: !p.stock && p.in_stock,
+        hint: !p.stock && p.in_stock ? "Déjà dans du stock (le rangement ou une zone au-dessus)" : p.stock ? "Une bobine qui en sort pour l'AMS n'y revient pas"
+          : "Une bobine qui en sort pour l'AMS le quitte pour de bon ; l'échange intelligent n'y range jamais rien" + (p.leaf ? "" : " (tout ce qu'elle contient)"),
         onClick: () => patch(p, { stock: !p.stock }) },
       p.id !== root.id && { icon: "↑", label: "Avant", onClick: () => write("post", `/storage/places/${p.id}/move`, { d: -1 }) },
       p.id !== root.id && { icon: "↓", label: "Après", onClick: () => write("post", `/storage/places/${p.id}/move`, { d: 1 }) },
@@ -413,7 +415,7 @@ function PlaceEditor({ id, onClose }) {
       style={{ display: "flex", flexDirection: "column", alignItems: "center", background: "none", border: "none", padding: "1px 0", cursor: "pointer", color: "var(--text)", minWidth: 0 }}>
       <span style={{ fontSize: 11, fontWeight: 900, maxWidth: "100%", lineHeight: 1.15, textAlign: "center", overflowWrap: "anywhere",
         display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.name}</span>
-      <span style={{ ...small, fontSize: 10 }}>vrac · {p.spools.length}</span>
+      <span style={{ ...small, fontSize: 10 }}>{p.stock ? "📦 stock · " : ""}vrac · {p.spools.length}</span>
     </button>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 3, justifyContent: "center", minHeight: 24, alignItems: "center" }}>
       {p.spools.slice(0, 24).map(x => <span key={x.id} data-tip={`${x.name} · #${x.id}`} style={{ display: "inline-flex" }}><Swatch s={x} size={16}/></span>)}
@@ -430,7 +432,7 @@ function PlaceEditor({ id, onClose }) {
         alignItems: "center", gap: 0, background: "none", border: "none", padding: "1px 0", cursor: "pointer", color: "var(--text)", minWidth: 0 }}>
         <span style={{ fontSize: 11, fontWeight: 900, maxWidth: "100%", lineHeight: 1.15, textAlign: "center", overflowWrap: "anywhere",
           display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.name}</span>
-        <span style={{ ...small, fontSize: 10 }}>{takenOf(p, kids)}/{leafCountOf(p, kids)}</span>
+        <span style={{ ...small, fontSize: 10 }}>{p.stock ? "📦 " : ""}{takenOf(p, kids)}/{leafCountOf(p, kids)}</span>
       </button>
       {cells.length > 0 && (a => <div style={{ display: "grid", gap: 3, gridTemplateColumns: a.tpl }}>
         {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(30px, 1fr))"))}
