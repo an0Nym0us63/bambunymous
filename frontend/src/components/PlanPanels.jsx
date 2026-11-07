@@ -312,8 +312,18 @@ const smallBtn = { padding: "5px 10px", borderRadius: 10, border: "1px solid var
   fontSize: 12, fontWeight: 800, color: "var(--text2)" };
 const chipS = c => ({ fontSize: 10.5, fontWeight: 900, color: c, background: `color-mix(in srgb, ${c} 13%, transparent)`, borderRadius: 7,
   padding: "1px 6px", whiteSpace: "nowrap" });
+// la recherche « contient », sans accents ni majuscules, mot par mot
+const foldTxt = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
 export function PoolSummary({ jobs, blocked = [], now, onOpenModel, bulk }) {
-  const groups = poolGroups(jobs, blocked);
+  const all = poolGroups(jobs, blocked);
+  // la recherche (07/11/2026) : nom du modele, de ses plateaux, ses filaments (nom, matiere) ; chaque mot doit y etre
+  const [q, setQ] = useState("");
+  const words = foldTxt(q).split(/\s+/).filter(Boolean);
+  const groups = !words.length ? all : all.filter(g => {
+    const hay = foldTxt(g.jobs.flatMap(j => [j.title, j.plate_name, ...(j.fils || []).flatMap(f => [f.name, f.type])]).join(" "));
+    return words.every(w => hay.includes(w));
+  });
   // les actions de masse (06/11/2026) : « Sélectionner », des cases sur les cartes, une barre d'actions
   const [picking, setPicking] = useState(false);
   const [sel, setSel] = useState([]);
@@ -324,6 +334,15 @@ export function PoolSummary({ jobs, blocked = [], now, onOpenModel, bulk }) {
     style={{ padding: "5px 10px", borderRadius: 10, border: `1px solid color-mix(in srgb, ${c} 40%, var(--border))`, background: `color-mix(in srgb, ${c} 10%, var(--surface))`,
       color: c, cursor: sel.length ? "pointer" : "default", font: "inherit", fontSize: 12, fontWeight: 900, opacity: sel.length ? 1 : 0.5, whiteSpace: "nowrap" }}>{busyB === k ? "…" : label}</button>;
   return <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    {all.length > 3 && <div style={{ position: "relative" }}>
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder="Chercher un modèle, un plateau, un filament…" aria-label="Chercher dans la file"
+        style={{ width: "100%", boxSizing: "border-box", padding: "9px 34px 9px 12px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)",
+          color: "var(--text)", font: "inherit", fontSize: 13.5, fontWeight: 700, outline: "none" }}/>
+      {q && <button type="button" onClick={() => setQ("")} aria-label="Effacer la recherche" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+        width: 24, height: 24, borderRadius: 12, border: "none", background: "var(--surface2)", color: "var(--muted)", cursor: "pointer", font: "inherit" }}>✕</button>}
+    </div>}
+    {words.length > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>
+      {groups.length ? `${groups.length} modèle${groups.length > 1 ? "s" : ""} sur ${all.length}` : "Aucun modèle ne correspond."}</div>}
     {bulk && <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
       <button type="button" onClick={() => { setPicking(v => !v); setSel([]); }} style={{ padding: "5px 11px", borderRadius: 10, cursor: "pointer", font: "inherit",
         fontSize: 12, fontWeight: 900, border: "1px solid var(--border)", background: picking ? "linear-gradient(135deg, #6366F1, #8B5CF6)" : "var(--surface2)",
