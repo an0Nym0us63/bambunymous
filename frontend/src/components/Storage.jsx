@@ -9,6 +9,7 @@ import { showAlert, showConfirm, showChoice } from "../utils/dialog";
 import { parseColorsList, finishOf } from "../utils/colors";
 import { Archive, HelpCircle, Inbox, Layers, Package, Printer, Truck } from "lucide-react";
 import { useRfidScan } from "../store/rfidScan";
+import { haptic } from "../utils/haptic";
 import { toast } from "../store/toast";
 
 // Les rangements des bobines (07/11/2026) : le mode (un seul rangement, chaque bobine a sa place, rangement manuel),
@@ -842,7 +843,7 @@ function CellFiller({ place, spools: spools0, onClose }) {
   const buzz = p => {
     try { if (Array.isArray(p)) tone(196, 0, 0.32, "square", 0.08); else { tone(880, 0, 0.11); tone(1320, 0.12, 0.16); } } catch { /* pas de son */ }
     // l'appli Android vibre par son pont (la WebView n'a pas navigator.vibrate) ; sinon le navigateur
-    if (!Array.isArray(p)) setTimeout(() => { try { if (window.BambuScan?.vibrate) window.BambuScan.vibrate("70,90,70"); else navigator.vibrate?.([70, 90, 70]); } catch { /* pas de vibreur */ } }, 350);
+    if (!Array.isArray(p)) setTimeout(() => haptic("ok"), 350);
   };
   const [busy, setBusy] = useState(false);
   const scan = useRfidScan();
