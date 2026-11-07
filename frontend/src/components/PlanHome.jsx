@@ -9,6 +9,7 @@ import { dayEnd, DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, en
 import { JobSheet, LowStockBanner, BlockedList } from "./PlanPanels";
 import { sheetRef } from "./planActs";
 import MakerWorldModelSheet, { IS_MAC, IS_MOBILE, handyUrl, launch } from "./MakerWorldModelSheet";
+import Lightbox from "./Lightbox";
 
 // Le planning sur l'accueil (05/11/2026, revu) : la tuile (la journee en frise, l'etat, l'impression en cours, un
 // agenda des prochains plateaux, les alertes) et sa vue en grand (en cours, prochaines, les 3 prochains jours, les
@@ -111,6 +112,10 @@ function NextUp({ p, onSheet }) {
   // retenu dans « A faire », avec son imprimante) ; les plateaux regroupes viennent du meme profil, a regrouper dans Studio
   const canHome = useCanMwHome();
   const [busy, setBusy] = useState(false);
+  // la vignette en grand (07/11/2026) : le plateau a lancer, puis la couverture du modele, pour ne pas se tromper
+  const [zoom, setZoom] = useState(false);
+  const pics = [j.thumb && { url: j.thumb, label: j.plates_total > 1 ? plateTxt(j) : "Le plateau" },
+    j.cover && j.cover !== j.thumb && { url: j.cover, label: "Le modèle" }].filter(Boolean);
   const mw = String(j.mw_id || j.design_id || "").split("~")[0];
   const studio = async () => {
     setBusy(true);
@@ -140,7 +145,8 @@ function NextUp({ p, onSheet }) {
   return <div style={{ borderRadius: 14, padding: 10, display: "flex", flexDirection: "column", gap: 7,
     border: `1px solid color-mix(in srgb, ${C} 35%, var(--border))`, background: `linear-gradient(140deg, color-mix(in srgb, ${C} 10%, transparent), transparent 75%), var(--surface)` }}>
     <div style={{ display: "flex", gap: 9, alignItems: "center", minWidth: 0 }}>
-      <PlateThumb j={j} size={46}/>
+      <PlateThumb j={j} size={46} onClick={pics.length ? e => { e.stopPropagation(); setZoom(true); } : undefined} tip="Voir en grand"/>
+      {zoom && <div onClick={e => e.stopPropagation()}><Lightbox images={pics} title={j.title} onClose={() => setZoom(false)}/></div>}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".05em", textTransform: "uppercase", color: C }}>
           ⏭ Prochain · {mins <= 1 ? "maintenant" : `${dayLabel(j.day, p.now).toLowerCase()} à ${hhmm(j.start)} (dans ${dur(mins)})`}</div>
