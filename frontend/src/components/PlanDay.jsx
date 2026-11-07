@@ -290,7 +290,7 @@ export function PlanDashboard({ s, dur, now, onLegend, cells = false, compact = 
       s.nights > 0 && ["🌙", `${s.nights}`, `nuit${s.nights > 1 ? "s" : ""} perdue${s.nights > 1 ? "s" : ""} · ${hm(s.idle_min * 60)}`, "#6366F1", "Les nuits où l'imprimante attend l'heure de lancement : « Optimiser » peut les remplir"],
       s.away_min > 0 && ["🚶", hm(s.away_min * 60), `temps mort en absence`, "#B45309", "L'imprimante à l'arrêt pendant tes absences : « Optimiser » y fait passer une impression lancée juste avant"],
       s.late > 0 && ["🎯", `${s.late}`, `date${s.late > 1 ? "s" : ""} limite${s.late > 1 ? "s" : ""} ratée${s.late > 1 ? "s" : ""}`, "#DC2626", "Voir les conseils"],
-      dur && Math.abs((dur.factor || 1) - 1) > 0.005 && ["⏱", `${dur.factor > 1 ? "+" : ""}${Math.round((dur.factor - 1) * 100)} %`, "sur les durées", null, "Durées corrigées (Consignes › Durées)"],
+      dur && Math.abs((dur.factor || 1) - 1) > 0.005 && ["⏱", `${dur.factor > 1 ? "+" : ""}${Math.round((dur.factor - 1) * 100)} %`, "sur les durées", null, "Durées corrigées (Réglages › Durées)"],
     ].filter(Boolean);
     // au telephone (06/11/2026) : en grille de trois, sur plusieurs lignes, dans l'ecran (elles defilaient au-dela du bord)
     return <div style={compact ? { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", rowGap: 8, minWidth: 0 } : { display: "flex", alignItems: "stretch", minWidth: 0 }}>
@@ -315,7 +315,7 @@ export function PlanDashboard({ s, dur, now, onLegend, cells = false, compact = 
     {s.beds > 0 && chip("b", `🔲 ${s.beds} changement${s.beds > 1 ? "s" : ""} de plateau`, "Les changements de plateau d'impression que demande toute la file", "#0369A1")}
     {s.nights > 0 && chip("n", `🌙 ${s.nights} nuit${s.nights > 1 ? "s" : ""} perdue${s.nights > 1 ? "s" : ""} · ${hm(s.idle_min * 60)}`, "Les nuits où l'imprimante attend l'heure de lancement : « Optimiser » peut les remplir", "#6366F1")}
     {s.late > 0 && chip("d", `🎯 ${s.late} date${s.late > 1 ? "s" : ""} limite${s.late > 1 ? "s" : ""} ratée${s.late > 1 ? "s" : ""}`, "Voir les conseils", "#DC2626")}
-    {dur && Math.abs((dur.factor || 1) - 1) > 0.005 && chip("u", `⏱ durées ${dur.factor > 1 ? "+" : ""}${Math.round((dur.factor - 1) * 100)} %`, "Durées corrigées (Consignes › Durées)")}
+    {dur && Math.abs((dur.factor || 1) - 1) > 0.005 && chip("u", `⏱ durées ${dur.factor > 1 ? "+" : ""}${Math.round((dur.factor - 1) * 100)} %`, "Durées corrigées (Réglages › Durées)")}
     {onLegend && <button type="button" onClick={onLegend} aria-label="Ce que disent les signes" data-tip="Ce que disent les signes et les couleurs"
       style={{ flexShrink: 0, width: 28, height: 28, borderRadius: "50%", border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--muted)",
         fontSize: 13, fontWeight: 900, cursor: "pointer" }}>?</button>}
@@ -441,7 +441,7 @@ function DaysOff({ list, set }) {
 }
 // deux fenetres (06/11/2026) : part « global » (les consignes : horaires, week-end, durees, chargement, optimisation) ou
 // « away » (absences de quelques heures, jours et periodes particuliers) ; chaque section en carte
-export function PlanSettings({ s, dur, onSave, onClose, part = "global" }) {
+export function PlanSettings({ s, dur, onSave, onClose, part = "global", edit = true }) {
   const [gap, setGap] = useState(String(s?.gap ?? 15));
   const [optMode, setOptMode] = useState(s?.opt_mode || "mix");
   const [autoNew, setAutoNew] = useState(s?.auto_new || "off");
@@ -468,11 +468,13 @@ export function PlanSettings({ s, dur, onSave, onClose, part = "global" }) {
     {[...(extra ? [extra] : []), ...OPT_MODES].map(([k, ic, l, tip]) => <button key={k} type="button" data-tip={tip} onClick={() => set(k)}
       style={{ ...seg, ...(v === k ? segOn : {}) }}>{ic} {l}</button>)}</div>;
   // dans une fenetre (06/11/2026) : le titre et la croix sont ceux de la fenetre, Enregistrer reste en bas
-  return <div className="bn-sets" data-show={part} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+  // sans droit (chez un copain, compte en lecture) : on lit les réglages, rien ne se touche (07/11/2026)
+  return <div className="bn-sets" data-show={part} data-ro={edit ? undefined : ""} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
     <style>{`.bn-sets > div:not(.bn-sets-foot){padding:12px 14px;border-radius:16px;border:1px solid var(--border);
       background:linear-gradient(160deg,color-mix(in srgb,#6366F1 4%,var(--surface)),var(--surface) 60%)}
       .bn-sets[data-show=global] > [data-part=away]{display:none}
-      .bn-sets[data-show=away] > div:not([data-part=away]):not(.bn-sets-foot){display:none}`}</style>
+      .bn-sets[data-show=away] > div:not([data-part=away]):not(.bn-sets-foot){display:none}
+      .bn-sets[data-ro] > div:not(.bn-sets-foot){pointer-events:none;user-select:text}`}</style>
     <div>
       <div style={lab}>⏸ Pause entre deux impressions</div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -555,9 +557,10 @@ export function PlanSettings({ s, dur, onSave, onClose, part = "global" }) {
     </div>
     <div className="bn-sets-foot" style={{ position: "sticky", bottom: -12, margin: "0 -12px -12px", padding: "10px 12px", display: "flex", gap: 8, justifyContent: "flex-end",
       background: "var(--sheet-bg)", borderTop: "1px solid var(--border)" }}>
-      <button type="button" onClick={onClose} style={{ ...seg, padding: "8px 14px" }}>Annuler</button>
-      <button type="button" disabled={busy} onClick={save} style={{ padding: "8px 16px", borderRadius: 12, border: "none", cursor: "pointer",
-        background: "linear-gradient(135deg, #6366F1, #8B5CF6)", color: "#fff", fontSize: 13, fontWeight: 900 }}>{busy ? "…" : "Enregistrer"}</button></div>
+      {!edit && <span style={{ marginRight: "auto", alignSelf: "center", fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>👀 En lecture seule</span>}
+      <button type="button" onClick={onClose} style={{ ...seg, padding: "8px 14px" }}>{edit ? "Annuler" : "Fermer"}</button>
+      {edit && <button type="button" disabled={busy} onClick={save} style={{ padding: "8px 16px", borderRadius: 12, border: "none", cursor: "pointer",
+        background: "linear-gradient(135deg, #6366F1, #8B5CF6)", color: "#fff", fontSize: 13, fontWeight: 900 }}>{busy ? "…" : "Enregistrer"}</button>}</div>
   </div>;
 }
 
