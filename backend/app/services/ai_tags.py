@@ -6,8 +6,8 @@ modele, la liste reste ouverte : Claude reutilise d'abord celles qui existent, e
 vraiment nouveau), et des etiquettes (ce qu'est l'objet, son sujet, sa marque ou son univers, pour qui, comment il est
 fait). Une demande par modele, pas par impression.
 
-Pour commencer, une simulation : les derniers modeles imprimes, classes par lots, sans rien ecrire sur les impressions ;
-le resultat est garde dans un fichier pour etre relu.
+Toute la collection se classe par lots (voir plus bas) ; le resultat vit dans la table model_labels, une ligne par
+modele.
 
 La cle de l'API se colle dans Parametres (jamais dans le code) ; ce qui est consomme est compte par mois.
 """
@@ -30,15 +30,10 @@ BATCH = 10                      # modeles par demande : la liste des categories 
 FAMILIES = ["Déco & art", "Figurines & personnages", "Jeux & jouets", "Casse-têtes", "Maison & rangement", "Cuisine",
             "Bureau & école", "Gaming & tech", "Atelier 3D", "Outils & bricolage", "Mode & accessoires",
             "Jardin & extérieur", "Divers"]
-_SIM = {"running": False, "done": 0, "total": 0, "error": None}
 
 
 def _data() -> Path:
     return Path(os.getenv("DATA_DIR", "/data"))
-
-
-def _sim_file() -> Path:
-    return _data() / "ai_tags_sim.json"
 
 
 # ── Reglages ─────────────────────────────────────────────────────────────────────
@@ -129,11 +124,6 @@ async def _select(n: int | None = None) -> list:
     return out
 
 
-async def _models(n: int) -> list:
-    """Les n derniers modeles imprimes, prets a envoyer."""
-    return await _prepare(await _select(n))
-
-
 async def _prepare(out: list) -> list:
     """Ce qu'on dit de chaque modele : la fiche MakerWorld (titre, categories, mots-cles, description) et son image."""
     from .makerworld import _base
@@ -211,7 +201,9 @@ Regles :
 - Regarde d'abord l'image de chaque objet (quand elle est fournie, juste apres le texte, annoncee par sa reference) : c'est elle qui dit ce qu'est vraiment l'objet. Le titre et la description precisent (nom du personnage, usage, mecanisme).
 - Une categorie dit ce qu'est l'objet ou a quoi il sert. Un univers, une franchise ou un style (fan art, Disney, Halloween, Minecraft...) n'est jamais une categorie : c'est une etiquette.
 - Pas d'etiquette sur la facon de l'imprimer : ni matiere (PLA, PETG...), ni imprimante (H2D, P2S, AMS...), ni « sans AMS », « multicolore », « multi-pieces », « impression rapide », « supports requis », « sans colle ». Seule exception : une propriete qui fait la nature de l'objet (articule, imprime en place, flexible).
-- Pas d'etiquette qui repete la categorie de l'objet, ni de mot fourre-tout (« decoration », « objet », « collection », « mignon »).
+- Pas d'etiquette qui repete la categorie de l'objet, ni de mot fourre-tout (« decoration », « objet », « collection », « piece de collection », « mignon », « fonctionnel », « utilitaire »).
+- Pas de couleur en etiquette (rouge, noir, bleu, colore...) : la couleur depend du filament choisi, elle se cherche deja par les filaments. Sauf quand la couleur fait l'objet (arc-en-ciel, drapeau).
+- Pas le nom du createur du modele (il se cherche deja par sa fiche MakerWorld).
 - Une seule forme par nom : le titre francais d'une oeuvre quand il existe (« L'Âge de glace », pas aussi « Ice Age »).
 - Tout en francais, sauf les noms propres, qui gardent leur forme.
 - Une etiquette en minuscules (sauf noms propres), au singulier, sans doublon ni variante (pas « porte clé » et « porte-clés »).
@@ -284,86 +276,7 @@ async def _ask(client, batch: list, fams: list, cats: dict, tags: list, acc: dic
     return (json.loads(text) if text else {}).get("items") or []
 
 
-async def _simulate(n: int) -> None:
-    from anthropic import AsyncAnthropic
-    from ..db.session import AsyncSessionLocal
-    from .settings_service import get_setting
-    t0 = time.time()
-    try:
-        async with AsyncSessionLocal() as db:
-            key = await get_setting(db, K_KEY, "")
-        if not key:
-            raise RuntimeError("Aucune clé : colle-la d'abord dans Paramètres › Connexions › Claude.")
-        models = await _models(n)
-        _SIM.update(total=len(models), done=0)
-        client = AsyncAnthropic(api_key=key, timeout=180.0, max_retries=2)
-        fams, cats, tags, res = list(FAMILIES), {}, [], {}
-        for i in range(0, len(models), BATCH):
-            batch = models[i:i + BATCH]
-            for it in await _ask(client, batch, fams, cats, tags):
-                res[it.get("ref")] = it
-                for f in it.get("families") or []:
-                    if f and f not in fams:
-                        fams.append(f)
-                for c in it.get("categories") or []:
-                    if c.get("name") and c["name"] not in cats:
-                        cats[c["name"]] = c.get("family") or ""
-                for t in it.get("tags") or []:
-                    if t and t not in tags:
-                        tags.append(t)
-            _SIM["done"] = min(len(models), i + BATCH)
-        rows = []
-        for m in models:
-            it = res.get(m["key"]) or {}
-            rows.append({"ref": m["key"], "title": m["title"], "print_id": m["print_id"], "design_id": m.get("did"),
-                         "mw_categories": m.get("mw_categories") or [], "seen": bool(m.get("img")), "families": it.get("families") or [],
-                         "categories": it.get("categories") or [], "tags": it.get("tags") or []})
-        new_fams = [f for f in fams if f not in FAMILIES]
-        out = {"at": datetime.now().isoformat(timespec="seconds"), "model": MODEL, "seconds": round(time.time() - t0),
-               "rows": rows, "families": fams, "new_families": new_fams,
-               "categories": [{"name": k, "family": v, "n": sum(1 for r in rows for c in r["categories"] if c.get("name") == k)}
-                              for k, v in cats.items()],
-               "tags": len(tags)}
-        f = _sim_file()
-        f.parent.mkdir(parents=True, exist_ok=True)
-        tmp = f.with_suffix(".part")
-        tmp.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(f)
-        _SIM["error"] = None
-        logger.info(f"[IA-TAGS] simulation : {len(rows)} modèles, {len(cats)} catégories, {len(tags)} étiquettes, {out['seconds']} s")
-    except Exception as e:
-        try:
-            msg = _err(e)
-        except Exception:
-            msg = f"{type(e).__name__} : {e}"
-        _SIM["error"] = msg
-        logger.warning(f"[IA-TAGS] simulation : {msg}")
-    finally:
-        _SIM["running"] = False
-
-
 _TASKS: set = set()
-
-
-def start_simulation(n: int = 50) -> dict:
-    if _SIM["running"] or _RUN["running"]:
-        return status()
-    _SIM.update(running=True, done=0, total=0, error=None)
-    t = asyncio.get_running_loop().create_task(_simulate(max(5, min(100, int(n or 50)))))
-    _TASKS.add(t)
-    t.add_done_callback(_TASKS.discard)
-    return status()
-
-
-def status() -> dict:
-    out = {"running": _SIM["running"], "done": _SIM["done"], "total": _SIM["total"], "error": _SIM["error"], "result": None}
-    try:
-        f = _sim_file()
-        if f.is_file():
-            out["result"] = json.loads(f.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return out
 
 
 # ── Toute la collection (07/11/2026) ───────────────────────────────────────────
@@ -489,7 +402,7 @@ async def _run(redo: bool) -> None:
 
 
 def start_run(redo: bool = False) -> dict:
-    if not _RUN["running"] and not _SIM["running"]:
+    if not _RUN["running"]:
         _RUN.update({"running": True, "done": 0, "total": 0, "error": None, "stop": False, "in": 0, "out": 0})
         t = asyncio.get_running_loop().create_task(_run(bool(redo)))
         _TASKS.add(t)
@@ -511,6 +424,10 @@ async def overview() -> dict:
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import ModelLabel
     keys = {m["key"] for m in await _select()}
+    try:
+        (_data() / "ai_tags_sim.json").unlink(missing_ok=True)   # l'ancienne simulation, retiree le 07/11/2026
+    except OSError:
+        pass
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(ModelLabel.key, ModelLabel.families, ModelLabel.categories, ModelLabel.catmap,
                                         ModelLabel.tags))).all()

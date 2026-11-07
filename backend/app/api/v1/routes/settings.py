@@ -411,19 +411,6 @@ async def claude_settings_set(body: dict, _: str = Depends(require_admin)):
     return await AI.settings_set(body or {})
 
 
-@router.post("/claude/tags-sim")
-async def claude_tags_sim(body: dict = None, _: str = Depends(require_admin)):
-    """La simulation : les N derniers modeles imprimes classes par Claude, sans rien ecrire sur les impressions."""
-    from ....services import ai_tags as AI
-    return AI.start_simulation((body or {}).get("n") or 50)
-
-
-@router.get("/claude/tags-sim")
-async def claude_tags_sim_status(_: str = Depends(get_current_user)):
-    from ....services import ai_tags as AI
-    return AI.status()
-
-
 @router.get("/claude/labels")
 async def claude_labels(_: str = Depends(get_current_user)):
     """Toute la collection : modeles classes sur le total, familles, categories et etiquettes qui en sortent."""

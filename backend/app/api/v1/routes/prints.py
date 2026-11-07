@@ -261,8 +261,11 @@ def _search_condition(search: str):
         hx = f"%{hexa.group(1)}%" if hexa else None
 
         usage_cols = [lk(_FU.filament_type)]
+        # la teinte (« bleu », « rose » : celle des filtres, cf. core/colors.py), la finition choisie (silk, marble...) et le
+        # nom anglais officiel (07/11/2026)
         fil_cols = [lk(_Fil.name), lk(_Fil.translated_name), lk(_Fil.material),
-                    lk(_Fil.manufacturer), lk(_Fil.fila_type), lk(_Fil.profile_id)]
+                    lk(_Fil.manufacturer), lk(_Fil.fila_type), lk(_Fil.profile_id),
+                    lk(_Fil.color_bucket), lk(_Fil.fila_finish), lk(_Fil.name_en)]
         if hx:
             usage_cols.append(_FU.color_hex.ilike(hx))
             fil_cols.append(_Fil.color.ilike(hx))
