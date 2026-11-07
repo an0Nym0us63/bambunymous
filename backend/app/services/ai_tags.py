@@ -130,8 +130,47 @@ async def _models(n: int) -> list:
         m["title"] = b.get("title_fr") or b.get("title") or m["group"] or m["task"]
         m["mw_categories"] = [c for c in (b.get("categories") or []) if c]
         m["mw_tags"] = [t for t in (b.get("tags") or []) if t][:25]
-        m["description"] = _clean(b.get("description") or "", 700)
+        m["description"] = _clean(b.get("description") or "", 1500)
+        m["img_url"] = b.get("cover_url") or (b.get("pictures") or [None])[0]
+    # l'image de l'objet (07/11/2026) : c'est elle qui dit ce qu'il est vraiment (le « Kimono de gi » rangé en vêtement)
+    await asyncio.gather(*(asyncio.to_thread(_image, m) for m in out))
     return out
+
+
+def _image(m: dict) -> None:
+    """L'image principale du modele (sans modele MakerWorld : celle du plateau imprime), reduite a 384 px en JPEG
+    (quelques centaines de jetons) dans m["img"] (base64), ou rien."""
+    import base64
+    from io import BytesIO
+    try:
+        raw = None
+        if m.get("img_url"):
+            from .makerworld import session
+            r = session().get(m["img_url"], timeout=20)
+            raw = r.content if r.status_code == 200 else None
+        else:
+            d = _data() / "prints" / str(m["print_id"])
+            for n in ("plate.png", "plate.jpg"):
+                if (d / n).is_file():
+                    raw = (d / n).read_bytes()
+                    break
+        if not raw:
+            return
+        from PIL import Image
+        im = Image.open(BytesIO(raw))
+        if im.mode in ("RGBA", "LA", "P"):
+            im = im.convert("RGBA")
+            bg = Image.new("RGB", im.size, (255, 255, 255))
+            bg.paste(im, mask=im.split()[-1])
+            im = bg
+        else:
+            im = im.convert("RGB")
+        im.thumbnail((384, 384))
+        buf = BytesIO()
+        im.save(buf, "JPEG", quality=80)
+        m["img"] = base64.standard_b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        logger.debug(f"[IA-TAGS] image de {m.get('key')} illisible", exc_info=True)
 
 
 # ── La demande ──────────────────────────────────────────────────────────────────
@@ -143,10 +182,15 @@ Pour chaque objet, tu donnes :
 - "tags" : 5 a 12 etiquettes exhaustives qui disent ce qu'est l'objet, son sujet, sa marque ou son univers (noms propres : Porsche, Nintendo, Scrat), pour qui (enfants...), comment il est fait (articule, imprime en place, multicolore, TPU, multi-plateaux...), a quoi il sert. Reutilise les etiquettes deja existantes quand elles disent la meme chose.
 
 Regles :
+- Regarde d'abord l'image de chaque objet (quand elle est fournie, juste apres le texte, annoncee par sa reference) : c'est elle qui dit ce qu'est vraiment l'objet. Le titre et la description precisent (nom du personnage, usage, mecanisme).
+- Une categorie dit ce qu'est l'objet ou a quoi il sert. Un univers, une franchise ou un style (fan art, Disney, Halloween, Minecraft...) n'est jamais une categorie : c'est une etiquette.
+- Pas d'etiquette sur la facon de l'imprimer : ni matiere (PLA, PETG...), ni imprimante (H2D, P2S, AMS...), ni « sans AMS », « multicolore », « multi-pieces », « impression rapide », « supports requis », « sans colle ». Seule exception : une propriete qui fait la nature de l'objet (articule, imprime en place, flexible).
+- Pas d'etiquette qui repete la categorie de l'objet, ni de mot fourre-tout (« decoration », « objet », « collection », « mignon »).
+- Une seule forme par nom : le titre francais d'une oeuvre quand il existe (« L'Âge de glace », pas aussi « Ice Age »).
 - Tout en francais, sauf les noms propres, qui gardent leur forme.
 - Une etiquette en minuscules (sauf noms propres), au singulier, sans doublon ni variante (pas « porte clé » et « porte-clés »).
-- Les categories et etiquettes MakerWorld fournies sont souvent fausses ou floues : sers-t'en comme d'indices, pas comme d'une verite. Juge sur ce qu'est vraiment l'objet (titre, description).
-- Un objet sans modele MakerWorld n'a que son nom de fichier : devine au mieux, sans inventer de details.
+- Les categories et etiquettes MakerWorld fournies sont souvent fausses ou floues : sers-t'en comme d'indices, pas comme d'une verite.
+- Un objet sans modele MakerWorld n'a que son nom de fichier et l'image de son plateau : devine au mieux, sans inventer de details.
 - Reponds pour chaque objet fourni, avec sa reference "ref" telle quelle."""
 
 _SCHEMA = {
@@ -196,9 +240,14 @@ async def _ask(client, batch: list, fams: list, cats: dict, tags: list) -> list:
         objs.append(o)
     ctx = {"familles": fams, "categories_existantes": [{"name": k, "family": v} for k, v in cats.items()],
            "etiquettes_existantes": tags[:400], "objets": objs}
+    content = [{"type": "text", "text": json.dumps(ctx, ensure_ascii=False)}]
+    for m in batch:
+        if m.get("img"):
+            content += [{"type": "text", "text": f"Image de {m['key']} :"},
+                        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": m["img"]}}]
     r = await client.messages.create(
         model=MODEL, max_tokens=8000, system=_SYSTEM,
-        messages=[{"role": "user", "content": json.dumps(ctx, ensure_ascii=False)}],
+        messages=[{"role": "user", "content": content}],
         output_config={"format": {"type": "json_schema", "schema": _SCHEMA}},
     )
     await _count(r.usage)
@@ -238,7 +287,7 @@ async def _simulate(n: int) -> None:
         for m in models:
             it = res.get(m["key"]) or {}
             rows.append({"ref": m["key"], "title": m["title"], "print_id": m["print_id"], "design_id": m.get("did"),
-                         "mw_categories": m.get("mw_categories") or [], "families": it.get("families") or [],
+                         "mw_categories": m.get("mw_categories") or [], "seen": bool(m.get("img")), "families": it.get("families") or [],
                          "categories": it.get("categories") or [], "tags": it.get("tags") or []})
         new_fams = [f for f in fams if f not in FAMILIES]
         out = {"at": datetime.now().isoformat(timespec="seconds"), "model": MODEL, "seconds": round(time.time() - t0),

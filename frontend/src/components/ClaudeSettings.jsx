@@ -95,7 +95,7 @@ function SimResult({ res }) {
           <th style={{ padding:"6px 8px" }}>Modèle</th><th style={{ padding:"6px 8px" }}>Famille</th>
           <th style={{ padding:"6px 8px" }}>Catégories</th><th style={{ padding:"6px 8px" }}>Étiquettes</th></tr></thead>
         <tbody>{res.rows.map(r => <tr key={r.ref} style={{ borderTop:"1px solid var(--border)", verticalAlign:"top" }}>
-          <td style={{ padding:"6px 8px", minWidth:160, color:"var(--text)", fontWeight:700 }}>{r.title}
+          <td style={{ padding:"6px 8px", minWidth:160, color:"var(--text)", fontWeight:700 }}>{r.seen && <span data-tip="Claude a vu son image" style={{ marginRight:4 }}>🖼</span>}{r.title}
             {r.mw_categories?.length > 0 && <div style={{ fontWeight:500, fontSize:11, color:"var(--muted)" }}>MakerWorld : {r.mw_categories.join(" · ")}</div>}</td>
           <td style={{ padding:"6px 8px", minWidth:110 }}>{r.families.map(f => <span key={f} style={chip("#B45309", true)}>{f}</span>)}</td>
           <td style={{ padding:"6px 8px", minWidth:120 }}>{r.categories.map(c => <span key={c.name} style={chip("#6366F1", true)}>{c.name}</span>)}</td>
