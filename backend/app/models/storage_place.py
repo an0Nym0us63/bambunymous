@@ -22,4 +22,8 @@ class StoragePlace(Base):
     # du stock (cartons, reserve) : une bobine qui en sort pour l'AMS n'y revient pas, et l'echange intelligent n'y
     # range jamais celle qu'elle remplace (07/11/2026) ; vaut pour tout ce que le noeud contient
     stock      = Column(Boolean, nullable=False, default=False, server_default="0")
+    # la disposition de son contenu (07/11/2026) : auto, col (en colonne), row (en ligne), grid (cols par ligne) ; rev : le
+    # 1 en bas (colonne, grille) ou a droite (ligne), comme un tiroir qu'on remplit par le fond
+    layout     = Column(String(8), nullable=True)
+    rev        = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, default=datetime.utcnow)

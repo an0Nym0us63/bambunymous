@@ -87,6 +87,21 @@ export const unitOf = loc => {
   return l.replace(/ slot \d+$/i, "");
 };
 
+// la disposition du contenu d'un rangement ou d'une zone (07/11/2026) : l'ordre affiche et la grille. layout : auto, col
+// (en colonne), row (en ligne), grid (cols par ligne) ; rev : le 1 en bas (colonne, grille : les rangees remontent) ou a
+// droite (ligne). many : la zone a des soeurs, en auto elle se range en colonne.
+export function arrange(list, p, many, fallback) {
+  const n = list.length, lay = p.layout || "auto";
+  const cols = lay === "col" ? 1 : lay === "row" ? Math.max(1, n) : lay === "grid" ? (p.cols || 3) : (p.cols || (many ? 1 : null));
+  let items = list;
+  if (p.rev) {
+    if (!cols || cols === 1 || lay === "row") items = [...list].reverse();
+    else { const rows = []; for (let i = 0; i < n; i += cols) rows.push(list.slice(i, i + cols)); items = rows.reverse().flat(); }
+  }
+  return { items, tpl: cols ? `repeat(${cols}, minmax(0, 1fr))` : fallback };
+}
+const layTxt = p => ({ col: "en colonne", row: "en ligne", grid: `grille de ${p.cols || 3}` }[p.layout] || (p.cols ? `${p.cols} par ligne` : "automatique")) + (p.rev ? " · 1 en bas" : "");
+
 function index(st) {
   const by = {}, kids = {};
   for (const p of st?.places || []) { by[p.id] = p; (kids[p.parent_id ?? "root"] ||= []).push(p); }
@@ -259,6 +274,14 @@ export function StorageSettingsCard({ card, cardTitle }) {
 function PlaceEditor({ id, onClose }) {
   const st = useStorage();
   const [ask, setAsk] = useState(null);
+  const [fill, setFill] = useState(null);             // { place, spools } : y ranger une bobine
+  const fillCell = async p => {
+    try {
+      const { data } = await client.get("/filaments/spools", { params: { archived: false } });
+      const TO = st.to_store_label || "À ranger", pri = s => s.location === TO ? 0 : !s.place_id ? 1 : 2;
+      setFill({ place: p, spools: (data || []).filter(s => !s.ordered && s.place_id !== p.id).sort((a, b) => pri(a) - pri(b)) });
+    } catch (e) { showAlert(errMsg(e)); }
+  };
   if (!st) return null;
   const { by, kids } = index(st);
   const root = by[id];
@@ -302,6 +325,8 @@ function PlaceEditor({ id, onClose }) {
       { icon: "✏️", label: "Renommer", onClick: () => rename(p) },
       !p.leaf && { icon: "＋", label: "Ajouter des emplacements", onClick: () => addCells(p, p.id === root.id ? null : p.name) },
       !p.leaf && { icon: "🗂", label: "Ajouter une zone dedans", hint: p.id === root.id ? "Colonne, étage, dessus…" : "Un niveau de plus : une zone dans cette zone", onClick: () => addZone(p) },
+      p.leaf && st.mode !== "single" && { icon: "📥", label: "Y ranger une bobine…", tone: "#8B5CF6", hint: p.single && p.spools.length ? `Prise par #${p.spools[0].id} : elle sera délogée` : undefined,
+        onClick: () => fillCell(p) },
       p.leaf && { icon: p.single ? "📚" : "🔲", label: p.single ? "En faire un emplacement commun" : "En faire une case (une seule bobine)",
         hint: p.single ? "Autant de bobines qu'on veut" : "Réservée à une bobine tant qu'elle ne va pas ailleurs", onClick: () => patch(p, { single: !p.single }) },
       p.id === root.id && { icon: "📦", label: p.stock ? "Ce n'est plus du stock" : "C'est du stock (cartons, réserve)",
@@ -309,10 +334,18 @@ function PlaceEditor({ id, onClose }) {
         onClick: () => patch(p, { stock: !p.stock }) },
       p.id !== root.id && { icon: "↑", label: "Avant", onClick: () => write("post", `/storage/places/${p.id}/move`, { d: -1 }) },
       p.id !== root.id && { icon: "↓", label: "Après", onClick: () => write("post", `/storage/places/${p.id}/move`, { d: 1 }) },
-      !p.leaf && { icon: "▦", label: "Disposition", hint: p.cols ? `${p.cols} par ligne` : "automatique", onClick: () => openMenu(null, {
-        title: `Disposition de « ${p.name} »`, subtitle: "combien côte à côte", color: "#8B5CF6",
-        items: [null, 1, 2, 3, 4, 5, 6, 8, 10, 12].map(n => ({ icon: n === (p.cols || null) ? "✓" : "▦", label: n ? `${n} par ligne` : "Automatique", onClick: () => patch(p, { cols: n }) })),
+      !p.leaf && { icon: "▦", label: "Disposition", hint: layTxt(p), onClick: () => openMenu(null, {
+        title: `Disposition de « ${p.name} »`, subtitle: "son contenu : en colonne, en ligne, en grille", color: "#8B5CF6",
+        items: [
+          { icon: (p.layout || "auto") === "auto" && !p.cols ? "✓" : "✨", label: "Automatique", onClick: () => patch(p, { layout: "auto", cols: null }) },
+          { icon: p.layout === "col" ? "✓" : "⬇", label: "En colonne", onClick: () => patch(p, { layout: "col" }) },
+          { icon: p.layout === "row" ? "✓" : "➡", label: "En ligne", onClick: () => patch(p, { layout: "row" }) },
+          ...[2, 3, 4, 5, 6, 8].map(n => ({ icon: p.layout === "grid" && (p.cols || 3) === n ? "✓" : "▦", label: `Grille de ${n} par ligne`,
+            onClick: () => patch(p, { layout: "grid", cols: n }) })),
+        ],
       }) },
+      !p.leaf && { icon: "⇅", label: p.rev ? "Le 1 en haut (ordre normal)" : p.layout === "row" ? "Le 1 à droite" : "Le 1 en bas",
+        hint: p.rev ? "Numéros de haut en bas" : "Comme un tiroir qu'on remplit par le fond", onClick: () => patch(p, { rev: !p.rev }) },
       "-",
       { icon: "🗑", label: "Supprimer…", danger: true, onClick: async () => { if (await delPlace(p, kids) && p.id === root.id) onClose(); } },
     ],
@@ -338,15 +371,15 @@ function PlaceEditor({ id, onClose }) {
         <span style={{ fontSize: 12.5, fontWeight: 900, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
         <span style={{ ...small, flexShrink: 0 }}>{leafCountOf(p, kids)}</span><span style={{ color: "var(--muted)" }}>⋯</span>
       </button>
-      {cells.length > 0 && <div style={{ display: "grid", gap: 4, gridTemplateColumns: p.cols ? `repeat(${p.cols}, minmax(0, 1fr))` : many ? "1fr" : "repeat(auto-fill, minmax(56px, 1fr))" }}>
-        {cells.map(c => <Cell key={c.id} p={c}/>)}</div>}
+      {cells.length > 0 && (a => <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl }}>
+        {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(56px, 1fr))"))}
       {subs.length > 0 && <Zones parent={p} list={subs}/>}
       <button type="button" onClick={() => addCells(p, p.name)} style={{ ...seg, padding: "3px 6px", fontSize: 11.5 }}>＋</button>
     </div>;
   };
-  const Zones = ({ parent, list }) => <div style={{ display: "grid", gap: 6,
-    gridTemplateColumns: parent.cols ? `repeat(${parent.cols}, minmax(0, 1fr))` : `repeat(auto-fit, minmax(${list.length > 4 ? 110 : 90}px, 1fr))` }}>
-    {list.map(z => <Zone key={z.id} p={z} many={list.length > 1}/>)}</div>;
+  const Zones = ({ parent, list }) => { const a = arrange(list, parent, false, `repeat(auto-fit, minmax(${list.length > 4 ? 110 : 90}px, 1fr))`);
+    return <div style={{ display: "grid", gap: 6, gridTemplateColumns: a.tpl }}>
+      {a.items.map(z => <Zone key={z.id} p={z} many={list.length > 1}/>)}</div>; };
   const ch = kids[root.id] || [];
   const direct = ch.filter(c => c.leaf), zones = ch.filter(c => !c.leaf);
   const n = leafCountOf(root, kids), t = takenOf(root, kids);
@@ -364,18 +397,23 @@ function PlaceEditor({ id, onClose }) {
             <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>{root.name}{root.stock && <span style={{ fontSize: 11, fontWeight: 900, marginLeft: 8, padding: "1px 8px",
               borderRadius: 20, color: "#B45309", background: "color-mix(in srgb, #F59E0B 16%, transparent)" }}>📦 stock</span>}</div>
             <div style={small}>{root.leaf ? `Emplacement commun · ${root.spools.length} bobine${root.spools.length > 1 ? "s" : ""}`
-              : `${n} emplacement${n > 1 ? "s" : ""} · ${t} pris · touche une zone ou une case pour la retoucher`}</div>
+              : `${n} emplacement${n > 1 ? "s" : ""} · ${t} pris · touche une zone ou une case pour la retoucher${st.mode !== "single" ? " ou y ranger une bobine" : ""}`}</div>
           </div>
           <button type="button" onClick={e => menu(e, root)} aria-label="Actions du rangement" style={{ ...seg, padding: "6px 11px" }}>⋯</button>
         </div>
+        {st.mode === "single" && <div style={{ ...small, padding: "8px 12px", borderRadius: 12, color: "#B45309", background: "color-mix(in srgb, #F59E0B 10%, var(--surface))" }}>
+          Tu es en « Un seul rangement » : les bobines ne vont pas encore dans ces emplacements. Choisis « Chaque bobine a sa place » ou « Je range où je veux »
+          dans la carte Rangements pour y ranger tes bobines.</div>}
         {root.leaf && <div style={{ ...small, padding: 12, border: "1px dashed var(--border)", borderRadius: 12 }}>
           Un emplacement commun : autant de bobines qu'on veut.{root.spools.length ? " Il tient des bobines : range-les ailleurs pour le découper en zones ou en cases." : " « ＋ Une zone » ou « ＋ Des emplacements » le découpent."}</div>}
-        {direct.length > 0 && <div style={{ display: "grid", gap: 4, gridTemplateColumns: root.cols ? `repeat(${root.cols}, minmax(0, 1fr))` : "repeat(auto-fill, minmax(56px, 1fr))" }}>
-          {direct.map(c => <Cell key={c.id} p={c}/>)}</div>}
+        {direct.length > 0 && (a => <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl }}>
+          {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(direct, root, false, "repeat(auto-fill, minmax(56px, 1fr))"))}
         {zones.length > 0 && <Zones parent={root} list={zones}/>}
       </div>
     </FSheet>
     {ask && <Ask {...ask} onClose={() => setAsk(null)}/>}
+    {fill && <SpoolChooser title={`Ranger dans « ${fill.place.path} »`} spools={fill.spools} TO={st.to_store_label || "À ranger"} onClose={() => setFill(null)}
+      onPick={async s => { if (await assignSpools([s.id], fill.place.id)) setFill(null); }}/>}
   </>, document.body);
 }
 
@@ -512,10 +550,10 @@ export function PlacePicker({ spools, onClose, onDone, pickOnly = false, onPicke
       border: "1px solid var(--border)", background: p.depth ? "var(--surface)" : "color-mix(in srgb, #8B5CF6 4%, var(--surface2))" }}>
       <div style={{ fontSize: p.depth ? 12 : 13.5, fontWeight: 900, color: p.depth ? "var(--text2)" : "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {p.depth ? "" : `${p.icon || (p.stock ? "📦" : "🗄")} `}{p.name}{p.stock ? " · stock" : ""}</div>
-      {cells.length > 0 && <div style={{ display: "grid", gap: 5, gridTemplateColumns: p.cols ? `repeat(${p.cols}, minmax(0, 1fr))` : many ? "1fr" : "repeat(auto-fill, minmax(92px, 1fr))" }}>
-        {cells.map(c => <Leaf key={c.id} p={c} compact={many || (!!p.cols && p.cols > 3)}/>)}</div>}
-      {subs.length > 0 && <div style={{ display: "grid", gap: 6, gridTemplateColumns: p.cols ? `repeat(${p.cols}, minmax(0, 1fr))` : `repeat(auto-fit, minmax(${subs.length > 4 ? 100 : 84}px, 1fr))` }}>
-        {subs.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>}
+      {cells.length > 0 && (a => <div style={{ display: "grid", gap: 5, gridTemplateColumns: a.tpl }}>
+        {a.items.map(c => <Leaf key={c.id} p={c} compact={many || p.layout === "row" || p.layout === "grid" || (!!p.cols && p.cols > 3)}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(92px, 1fr))"))}
+      {subs.length > 0 && (a => <div style={{ display: "grid", gap: 6, gridTemplateColumns: a.tpl }}>
+        {a.items.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>)(arrange(subs, p, false, `repeat(auto-fit, minmax(${subs.length > 4 ? 100 : 84}px, 1fr))`))}
     </div>;
   };
   const found = ql ? st.places.filter(p => p.leaf && p.path.toLowerCase().includes(ql)) : null;
@@ -677,12 +715,11 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
     return <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: p.depth ? 6 : 0, borderRadius: 14,
       border: p.depth ? "1px solid var(--border)" : "none", background: p.depth ? "color-mix(in srgb, #8B5CF6 3%, var(--surface2))" : "transparent", minWidth: 0 }}>
       {p.depth > 0 && <div style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.icon ? `${p.icon} ` : ""}{p.name} <span style={small}>{countIn(p)}</span></div>}
-      {cells.length > 0 && <div style={{ display: "grid", gap: 6, gridTemplateColumns: p.cols ? `repeat(${p.cols}, minmax(0, 1fr))` : many ? "1fr" : "repeat(auto-fill, minmax(76px, 1fr))" }}>
-        {cells.map(c => <Cell key={c.id} p={c}/>)}</div>}
+      {cells.length > 0 && (a => <div style={{ display: "grid", gap: 6, gridTemplateColumns: a.tpl }}>
+        {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(76px, 1fr))"))}
       {commons.map(c => <Common key={c.id} p={c} nested/>)}
-      {subs.length > 0 && <div style={{ display: "grid", gap: 6, gridTemplateColumns: p.cols && p.cols <= 6 ? `repeat(${p.cols}, minmax(0, 1fr))`
-          : `repeat(auto-fit, minmax(${subs.length > 4 ? 100 : 84}px, 1fr))` }}>
-        {subs.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>}
+      {subs.length > 0 && (a => <div style={{ display: "grid", gap: 6, gridTemplateColumns: a.tpl }}>
+        {a.items.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>)(arrange(subs, p, false, `repeat(auto-fit, minmax(${subs.length > 4 ? 100 : 84}px, 1fr))`))}
     </div>;
   };
   // les bobines qu'on peut mettre dans une case libre : a ranger d'abord, puis rangees sans place, puis les autres

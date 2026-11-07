@@ -34,7 +34,8 @@ logger = logging.getLogger(__name__)
 
 MODES = ("single", "assigned", "manual")
 K_MODE, K_NAME, K_SMART = "STORAGE_MODE", "STORAGE_NAME", "STORAGE_SMART"
-SWAP_WINDOW = timedelta(minutes=30)     # echange intelligent : la bobine entree dans le slot dans ce delai
+SWAP_WINDOW = timedelta(minutes=30)
+LAYOUTS = ("auto", "col", "row", "grid")     # echange intelligent : la bobine entree dans le slot dans ce delai
 DEFAULT_NAME = "Tiroir"
 TO_STORE = "À ranger"
 STORED = "@rangement"         # demande a spool_location : « sortie de l'imprimante, range-la selon le mode »
@@ -337,6 +338,7 @@ async def overview(db) -> dict:
         for p in kids.get(parent, []):
             out.append({"id": p.id, "parent_id": p.parent_id, "name": p.name, "single": bool(p.single),
                         "stock": bool(getattr(p, "stock", False)), "in_stock": is_stock(pl, p.id),
+                        "layout": getattr(p, "layout", None) or "auto", "rev": bool(getattr(p, "rev", False)),
                         "sort": p.sort or 0, "cols": p.cols, "icon": p.icon, "depth": depth, "path": path_of(pl, p.id),
                         "leaf": not kids.get(p.id), "spools": by_place.get(p.id, [])})
             walk(p.id, depth + 1)
@@ -363,7 +365,8 @@ async def create(db, body: dict, parent_id=None) -> list:
 
     async def mk(b, par, sort):
         p = StoragePlace(parent_id=par, name=check_name(b.get("name")), single=bool(b.get("single")), sort=sort,
-                         stock=bool(b.get("stock")),
+                         stock=bool(b.get("stock")), rev=bool(b.get("rev")),
+                         layout=(b.get("layout") if b.get("layout") in LAYOUTS else None),
                          cols=(int(b["cols"]) if b.get("cols") else None), icon=(b.get("icon") or None))
         db.add(p)
         await db.flush()
@@ -402,6 +405,10 @@ async def update(db, pid: int, body: dict) -> None:
         p.single = single
     if "stock" in body:
         p.stock = bool(body["stock"])
+    if "layout" in body:
+        p.layout = body["layout"] if body["layout"] in LAYOUTS else None
+    if "rev" in body:
+        p.rev = bool(body["rev"])
     if "cols" in body:
         p.cols = int(body["cols"]) if body["cols"] else None
     if "icon" in body:
