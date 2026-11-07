@@ -3,8 +3,10 @@ La recherche globale (04/11/2026) : une seule barre, des resultats par categorie
 MakerWorld, filaments, bobines, objets, pages du guide. Lecture seule : un compte en lecture seule et un copain (par
 le relais) cherchent aussi ; le guide reste aux comptes de la maison, comme sa route.
 
-Chaque mot doit COMMENCER un mot du champ, comme la recherche des impressions (« ara » trouve « Ara bleu », pas
-« caramel ») ; tous les mots doivent se retrouver, chacun dans l'un des champs de la categorie.
+Chaque mot doit se trouver quelque part, n'importe ou dans un champ, sans accents ni majuscules (07/11/2026, comme
+la recherche des impressions : « deco » trouve « Déco ») ; tous les mots doivent se retrouver, chacun dans l'un des
+champs de la categorie. Les impressions cherchent partout (categories, etiquettes, filaments, teintes, createur...),
+avec la condition meme de leur page.
 """
 import html as _html
 import re
@@ -22,7 +24,6 @@ from .auth import get_current_user, oauth2_scheme
 router = APIRouter()
 
 PER = 5                                    # resultats montres par categorie
-SEPS = [" ", "-", "\\_", ".", "(", '"', ",", "/", "'"]
 GUIDE = Path(__file__).resolve().parents[4] / "guide" / "pages"
 CHAPTERS = ["premiers-pas", "accueil", "tuiles", "imprimante", "impressions", "filaments", "objets", "stats",
             "makerworld", "notifications", "copains", "succes", "parametres"]
@@ -33,15 +34,9 @@ def _words(q: str) -> list:
 
 
 def _cond(cols: list, words: list):
-    """Chaque mot commence un mot de l'un des champs (ET entre les mots)."""
-    def esc(m):
-        return m.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    parts = []
-    for m in words:
-        e = esc(m)
-        pats = [f"{e}%"] + [f"%{s}{e}%" for s in SEPS]
-        parts.append(or_(*(c.ilike(p, escape="\\") for c in cols for p in pats)))
-    return and_(*parts)
+    """Chaque mot se trouve dans l'un des champs, n'importe ou, sans accents (ET entre les mots)."""
+    from ....db.textsearch import contains
+    return and_(*(or_(*(contains(c, m) for c in cols)) for m in words))
 
 
 def _norm(s: str) -> str:
@@ -128,7 +123,7 @@ def _guide_index() -> list:
 
 def _guide(words: list) -> list:
     ws = [_norm(w) for w in words]
-    starts = lambda t, w: t.startswith(w) or re.search(r"[^a-z0-9]" + re.escape(w), t) is not None
+    starts = lambda t, w: w in t
     found = []
     for b in _guide_index():
         if not all(starts(b["n_title"], w) or starts(b["n_text"], w) for w in ws):
@@ -164,8 +159,8 @@ async def search(q: str = Query("", max_length=120), _: str = Depends(get_curren
             return rows, total
 
         # impressions : leur nom (pas leurs filaments, qui ont leur categorie) et le modele MakerWorld
-        c = or_(_cond([Print.file_name, Print.original_name, Print.translated_name, Print.task_name], words),
-                Print.design_id.in_(select(MW.design_id).where(_cond([MW.title, MW.title_fr], words))))
+        from .prints import _search_condition
+        c = _search_condition(" ".join(words))      # partout, comme la page Impressions (07/11/2026)
         rows, total = await run(select(Print.id, Print.translated_name, Print.file_name, Print.print_date, Print.status)
                                 .where(c).order_by(Print.print_date.desc()),
                                 select(func.count(Print.id)).where(c))

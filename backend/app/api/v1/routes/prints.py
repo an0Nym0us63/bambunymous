@@ -241,21 +241,14 @@ def _search_condition(search: str):
         return None
     from ....models.print_history import MakerWorldDesign as _MW, ModelLabel as _ML
 
-    def esc(m):
-        return m.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-    # Chaque mot doit COMMENCER un mot du champ (26/10/2026) : « ara » trouve « Ara bleu », « ara-macaw »,
-    # « billy_ara » ou le mot-cle "ara", mais plus « character », « caramel » ni « separate » (les mots-cles
-    # MakerWorld et les noms de filaments ramenaient des groupes entiers au hasard). Le debut d'un mot : en
-    # tete du champ, ou apres une espace, un tiret, un souligne, un point, une parenthese, un guillemet, une
-    # virgule, une barre ou une apostrophe (les mots-cles sont gardes en liste JSON : ["ara","parrot"]).
-    SEPS = [" ", "-", "\\_", ".", "(", '"', ",", "/", "'"]
+    # Chaque mot doit se trouver quelque part, n'importe ou dans un champ (07/11/2026, a la demande : « une recherche
+    # cherche tout ce qui contient », les filtres affinent ensuite), sans tenir compte des accents ni des majuscules
+    # (« deco » trouve « Déco & art »). Du 26/10 au 07/11, un mot devait commencer un mot du champ.
+    from ....db.textsearch import contains
 
     par_mot = []
     for m in mots:
-        e = esc(m)
-        pats = [f"{e}%"] + [f"%{sep}{e}%" for sep in SEPS]
-        lk = lambda col, pats=pats: or_(*(col.ilike(p, escape="\\") for p in pats))
+        lk = lambda col, m=m: contains(col, m)
         lab = or_(lk(_ML.families), lk(_ML.categories), lk(_ML.tags))
         hexa = re.fullmatch(r"#?([0-9a-fA-F]{6})", m)
         hx = f"%{hexa.group(1)}%" if hexa else None

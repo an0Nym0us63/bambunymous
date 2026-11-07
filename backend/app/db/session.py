@@ -46,6 +46,8 @@ from sqlalchemy import event as _event
 def _sqlite_pragmas(dbapi_conn, _rec):
     if not str(settings.DATABASE_URL).startswith("sqlite"):
         return
+    from .textsearch import register
+    register(dbapi_conn)                 # bn_fold : la recherche sans accents (07/11/2026)
     cur = dbapi_conn.cursor()
     try:
         for p in ("journal_mode=WAL", "synchronous=NORMAL", "busy_timeout=30000",
