@@ -353,32 +353,35 @@ function PlaceEditor({ id, onClose }) {
   const Cell = ({ p }) => {
     const occ = p.spools[0];
     return <button type="button" onClick={e => menu(e, p)} data-tip={occ ? `${occ.name} · #${occ.id}` : p.single ? "Case libre" : "Emplacement commun"}
-      style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, minWidth: 0, minHeight: 50,
-        padding: "4px 3px", borderRadius: 10, cursor: "pointer", color: "var(--text)",
-        border: `1px ${p.single ? "solid" : "dashed"} color-mix(in srgb, #8B5CF6 ${occ ? 45 : 25}%, var(--border))`, background: occ ? "var(--surface)" : "transparent" }}>
-      {occ ? <Swatch s={occ} size={22}/> : <span style={{ fontSize: 11, color: "var(--muted)" }}>{p.single ? "▫" : "📚"}</span>}
-      <span style={{ fontSize: 11, fontWeight: 900, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{shortName(p, by)}</span>
-      {!p.single && p.spools.length > 1 && <span style={{ ...small, fontSize: 9.5 }}>{p.spools.length} bob.</span>}
+      style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, minWidth: 0, minHeight: 28,
+        padding: "2px 1px", borderRadius: 7, cursor: "pointer", color: "var(--text)",
+        border: `1px ${p.single ? "solid" : "dashed"} color-mix(in srgb, #8B5CF6 ${occ ? 55 : 25}%, var(--border))`, background: occ ? "color-mix(in srgb, #8B5CF6 10%, var(--surface))" : "transparent" }}>
+      {occ && <Swatch s={occ} size={15}/>}
+      <span style={{ fontSize: 10.5, fontWeight: 900, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.single ? "" : "📚"}{shortName(p, by)}</span>
+      {!p.single && p.spools.length > 1 && <span style={{ ...small, fontSize: 9 }}>{p.spools.length}</span>}
     </button>;
   };
   const Zone = ({ p, many }) => {
     const ch = kids[p.id] || [];
     const cells = ch.filter(c => c.leaf), subs = ch.filter(c => !c.leaf);
-    return <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 8, borderRadius: 12, border: "1px solid var(--border)", minWidth: 0,
+    return <div style={{ display: "flex", flexDirection: "column", gap: 3, padding: 4, borderRadius: 10, border: "1px solid var(--border)", minWidth: 0,
       background: "color-mix(in srgb, #8B5CF6 4%, var(--surface2))" }}>
-      <button type="button" onClick={e => menu(e, p)} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: "pointer",
-        color: "var(--text)", textAlign: "left", minWidth: 0 }}>
-        <span style={{ fontSize: 12.5, fontWeight: 900, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
-        <span style={{ ...small, flexShrink: 0 }}>{leafCountOf(p, kids)}</span><span style={{ color: "var(--muted)" }}>⋯</span>
+      <button type="button" onClick={e => menu(e, p)} data-tip={`${p.name} · ${takenOf(p, kids)} pris sur ${leafCountOf(p, kids)}`} style={{ display: "flex", flexDirection: "column",
+        alignItems: "center", gap: 0, background: "none", border: "none", padding: "1px 0", cursor: "pointer", color: "var(--text)", minWidth: 0 }}>
+        <span style={{ fontSize: 11, fontWeight: 900, maxWidth: "100%", lineHeight: 1.15, textAlign: "center", overflowWrap: "anywhere",
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.name}</span>
+        <span style={{ ...small, fontSize: 10 }}>{takenOf(p, kids)}/{leafCountOf(p, kids)}</span>
       </button>
-      {cells.length > 0 && (a => <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl }}>
-        {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(56px, 1fr))"))}
+      {cells.length > 0 && (a => <div style={{ display: "grid", gap: 3, gridTemplateColumns: a.tpl }}>
+        {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(30px, 1fr))"))}
       {subs.length > 0 && <Zones parent={p} list={subs}/>}
-      <button type="button" onClick={() => addCells(p, p.name)} style={{ ...seg, padding: "3px 6px", fontSize: 11.5 }}>＋</button>
+      <button type="button" onClick={() => addCells(p, p.name)} aria-label={`Des emplacements dans ${p.name}`}
+        style={{ ...seg, padding: "0 4px", fontSize: 11, lineHeight: "18px" }}>＋</button>
     </div>;
   };
-  const Zones = ({ parent, list }) => { const a = arrange(list, parent, false, `repeat(auto-fit, minmax(${list.length > 4 ? 110 : 90}px, 1fr))`);
-    return <div style={{ display: "grid", gap: 6, gridTemplateColumns: a.tpl }}>
+  // les zones cote a cote, chacune a sa hauteur (07/11/2026 : elles s'etiraient a la plus haute) ; 5 tiennent sur un telephone
+  const Zones = ({ parent, list }) => { const a = arrange(list, parent, false, "repeat(auto-fit, minmax(58px, 1fr))");
+    return <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl, alignItems: "start" }}>
       {a.items.map(z => <Zone key={z.id} p={z} many={list.length > 1}/>)}</div>; };
   const ch = kids[root.id] || [];
   const direct = ch.filter(c => c.leaf), zones = ch.filter(c => !c.leaf);
@@ -406,8 +409,8 @@ function PlaceEditor({ id, onClose }) {
           dans la carte Rangements pour y ranger tes bobines.</div>}
         {root.leaf && <div style={{ ...small, padding: 12, border: "1px dashed var(--border)", borderRadius: 12 }}>
           Un emplacement commun : autant de bobines qu'on veut.{root.spools.length ? " Il tient des bobines : range-les ailleurs pour le découper en zones ou en cases." : " « ＋ Une zone » ou « ＋ Des emplacements » le découpent."}</div>}
-        {direct.length > 0 && (a => <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl }}>
-          {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(direct, root, false, "repeat(auto-fill, minmax(56px, 1fr))"))}
+        {direct.length > 0 && (a => <div style={{ display: "grid", gap: 3, gridTemplateColumns: a.tpl }}>
+          {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(direct, root, false, "repeat(auto-fill, minmax(34px, 1fr))"))}
         {zones.length > 0 && <Zones parent={root} list={zones}/>}
       </div>
     </FSheet>
@@ -531,11 +534,11 @@ export function PlacePicker({ spools, onClose, onDone, pickOnly = false, onPicke
     const occ = occOf(p), taken = p.single && occ.length > 0, mine = p.spools.some(x => ids.includes(x.id));
     const off = p.single && (ids.length > 1 || (pickOnly && taken));
     return <button type="button" disabled={busy || off} onClick={() => go(p.id)} data-tip={off ? (taken ? `Prise par la bobine #${occ[0].id}` : "Une case ne prend qu'une bobine") : taken ? `Prise par la bobine #${occ[0].id} : la toucher propose de la déloger` : undefined}
-      style={{ display: "flex", alignItems: "center", gap: 6, padding: compact ? "6px 6px" : "8px 10px", borderRadius: 12, cursor: off ? "not-allowed" : "pointer",
+      style={{ display: "flex", alignItems: "center", gap: compact ? 2 : 6, padding: compact ? "3px 2px" : "8px 10px", borderRadius: compact ? 8 : 12, cursor: off ? "not-allowed" : "pointer",
         minWidth: 0, opacity: off ? 0.4 : 1, textAlign: "left", color: "var(--text)",
         border: mine ? "2px solid #8B5CF6" : `1px ${p.single ? "solid" : "dashed"} ${taken ? "color-mix(in srgb, #F59E0B 50%, var(--border))" : "var(--border)"}`,
         background: taken ? "color-mix(in srgb, #F59E0B 7%, var(--surface))" : "var(--surface)", flexDirection: compact ? "column" : "row", justifyContent: "center" }}>
-      {taken ? <Swatch s={occ[0]} size={compact ? 22 : 26}/> : <span style={{ fontSize: compact ? 13 : 15 }}>{p.single ? "🔲" : "📚"}</span>}
+      {taken ? <Swatch s={occ[0]} size={compact ? 16 : 26}/> : !compact && <span style={{ fontSize: 15 }}>{p.single ? "🔲" : "📚"}</span>}
       <span style={{ minWidth: 0, display: "flex", flexDirection: "column", alignItems: compact ? "center" : "flex-start" }}>
         <span style={{ fontSize: compact ? 11.5 : 13, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{p.full ? p.path : shortName(p, by)}</span>
         {!compact && <span style={small}>{mine ? "ici en ce moment" : p.single ? (taken ? `prise · #${occ[0].id}` : "libre") : `${occ.length} bobine${occ.length > 1 ? "s" : ""}`}</span>}
@@ -552,8 +555,8 @@ export function PlacePicker({ spools, onClose, onDone, pickOnly = false, onPicke
         {p.depth ? "" : `${p.icon || (p.stock ? "📦" : "🗄")} `}{p.name}{p.stock ? " · stock" : ""}</div>
       {cells.length > 0 && (a => <div style={{ display: "grid", gap: 5, gridTemplateColumns: a.tpl }}>
         {a.items.map(c => <Leaf key={c.id} p={c} compact={many || p.layout === "row" || p.layout === "grid" || (!!p.cols && p.cols > 3)}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(92px, 1fr))"))}
-      {subs.length > 0 && (a => <div style={{ display: "grid", gap: 6, gridTemplateColumns: a.tpl }}>
-        {a.items.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>)(arrange(subs, p, false, `repeat(auto-fit, minmax(${subs.length > 4 ? 100 : 84}px, 1fr))`))}
+      {subs.length > 0 && (a => <div style={{ display: "grid", gap: 5, gridTemplateColumns: a.tpl, alignItems: "start" }}>
+        {a.items.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>)(arrange(subs, p, false, "repeat(auto-fit, minmax(62px, 1fr))"))}
     </div>;
   };
   const found = ql ? st.places.filter(p => p.leaf && p.path.toLowerCase().includes(ql)) : null;
@@ -685,16 +688,17 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
     const free = !occ;
     return <button type="button" onClick={() => full ? onOpen(full) : free && admin ? setFill(p) : null}
       data-tip={occ ? `${occ.name} · #${occ.id}${out ? ` · dans l'imprimante (${occ.location}), sa case l'attend` : ""}` : admin ? "Libre : toucher pour y ranger une bobine" : "Libre"}
-      style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, minWidth: 0, minHeight: 74,
+      style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, minWidth: 0, minHeight: 46,
         padding: "6px 4px", borderRadius: 14, cursor: full || (free && admin) ? "pointer" : "default", color: "var(--text)",
         border: free ? "1.5px dashed var(--border)" : `1px solid color-mix(in srgb, ${out ? "#0EA5E9" : "#8B5CF6"} 35%, var(--border))`,
         background: free ? "transparent" : "var(--surface)", opacity: occ && !full && !out ? 0.55 : 1 }}>
-      <span style={{ position: "absolute", top: 3, left: 6, right: 4, fontSize: 9.5, fontWeight: 900, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{shortName(p, by)}</span>
+      <span style={occ ? { position: "absolute", top: 2, left: 4, right: 3, fontSize: 9.5, fontWeight: 900, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
+        : { fontSize: 12, fontWeight: 900, color: "var(--muted)" }}>{shortName(p, by)}</span>
       {occ ? <>
-        <Swatch s={full || occ} size={34} dim={out}/>
+        <Swatch s={full || occ} size={26} dim={out}/>
         <span style={{ fontSize: 10, fontWeight: 800, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--text2)" }}>
           {out ? `🖨 ${unitOf(occ.location)}` : (full ? (full.filament_translated_name || full.filament_name) : occ.name)}</span>
-      </> : <span style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", marginTop: 8 }}>libre</span>}
+      </> : null}
     </button>;
   };
   const Common = ({ p, nested }) => {
@@ -712,14 +716,18 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
   const Group = ({ p, many }) => {
     const ch = kids[p.id] || [];
     const cells = ch.filter(c => c.leaf && c.single), commons = ch.filter(c => c.leaf && !c.single), subs = ch.filter(c => !c.leaf);
-    return <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: p.depth ? 6 : 0, borderRadius: 14,
+    const tot = leafCountOf(p, kids), took = takenOf(p, kids);
+    return <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: p.depth ? 4 : 0, borderRadius: 12,
       border: p.depth ? "1px solid var(--border)" : "none", background: p.depth ? "color-mix(in srgb, #8B5CF6 3%, var(--surface2))" : "transparent", minWidth: 0 }}>
-      {p.depth > 0 && <div style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.icon ? `${p.icon} ` : ""}{p.name} <span style={small}>{countIn(p)}</span></div>}
+      {p.depth > 0 && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 0 }}>
+        <span style={{ fontSize: 11.5, fontWeight: 900, color: "var(--text2)", maxWidth: "100%", lineHeight: 1.15, textAlign: "center", overflowWrap: "anywhere",
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.icon ? `${p.icon} ` : ""}{p.name}</span>
+        <span style={{ ...small, fontSize: 10 }}>{took}/{tot}</span></div>}
       {cells.length > 0 && (a => <div style={{ display: "grid", gap: 6, gridTemplateColumns: a.tpl }}>
         {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(76px, 1fr))"))}
       {commons.map(c => <Common key={c.id} p={c} nested/>)}
-      {subs.length > 0 && (a => <div style={{ display: "grid", gap: 6, gridTemplateColumns: a.tpl }}>
-        {a.items.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>)(arrange(subs, p, false, `repeat(auto-fit, minmax(${subs.length > 4 ? 100 : 84}px, 1fr))`))}
+      {subs.length > 0 && (a => <div style={{ display: "grid", gap: 5, gridTemplateColumns: a.tpl, alignItems: "start" }}>
+        {a.items.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>)(arrange(subs, p, false, "repeat(auto-fit, minmax(58px, 1fr))"))}
     </div>;
   };
   // les bobines qu'on peut mettre dans une case libre : a ranger d'abord, puis rangees sans place, puis les autres
