@@ -41,6 +41,7 @@ export function useStorage() {
   return d;
 }
 
+const foldTxt = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const errMsg = e => { const d = e?.response?.data?.detail; return typeof d === "string" ? d : d?.message || e?.message || "Erreur"; };
 
 async function write(method, url, body) {
@@ -417,8 +418,7 @@ function PlaceEditor({ id, onClose }) {
       </div>
     </FSheet>
     {ask && <Ask {...ask} onClose={() => setAsk(null)}/>}
-    {fill && <SpoolChooser title={`Ranger dans « ${fill.place.path} »`} spools={fill.spools} TO={st.to_store_label || "À ranger"} onClose={() => setFill(null)}
-      onPick={async s => { if (await assignSpools([s.id], fill.place.id)) setFill(null); }}/>}
+    {fill && <CellFiller place={fill.place} spools={fill.spools} onClose={() => setFill(null)}/>}
   </>, document.body);
 }
 
@@ -732,11 +732,6 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
         {a.items.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>)(arrange(subs, p, false, "repeat(auto-fit, minmax(58px, 1fr))"))}
     </div>;
   };
-  // les bobines qu'on peut mettre dans une case libre : a ranger d'abord, puis rangees sans place, puis les autres
-  const candidates = () => {
-    const pri = s => s.location === TO ? 0 : !s.place_id ? 1 : 2;
-    return spools.filter(s => !s.ordered && !s.archived && s.place_id !== fill?.id).sort((a, b) => pri(a) - pri(b));
-  };
 
   return <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
     {printer.length > 0 && <Section k="printer" icon="🖨" title="Dans l'imprimante" n={printer.length} tone="#0EA5E9">
@@ -759,19 +754,52 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
       </>}
     {ordered.length > 0 && <Section k="ordered" icon="📬" title="En commande" n={ordered.length} tone="#0EA5E9"><div style={grid}>{ordered.map(s => renderSpool(s))}</div></Section>}
     {!spools.length && <div style={{ padding: 20, textAlign: "center", ...small }}>Aucune bobine ne correspond.</div>}
-    {fill && <SpoolChooser title={`Ranger dans « ${fill.path} »`} spools={candidates()} TO={TO} onClose={() => setFill(null)}
-      onPick={async s => { if (await assignSpools([s.id], fill.id)) setFill(null); }}/>}
+    {fill && <CellFiller place={fill} spools={spools} onClose={() => setFill(null)}/>}
     {toStore && <ToStoreSheet onClose={() => setToStore(false)}/>}
   </div>;
 }
 
-function SpoolChooser({ title, spools, TO, onClose, onPick }) {
+// Ranger dans une case (07/11/2026) : une bobine de la liste, ou scannee (appli Android). « Enchainer » : la bobine
+// rangee, on passe a l'emplacement suivant du meme rangement (dans l'ordre des zones et sous-zones), le scan reste actif,
+// la liste reste la ; on peut passer une case, revenir, terminer. Les cases prises sont sautees, sauf si on le decoche.
+const CHAIN_KEY = "bn_store_chain", SKIP_KEY = "bn_store_skip";
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v === "1"; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v ? "1" : "0"); } catch { /* indisponible */ } };
+
+function CellFiller({ place, spools: spools0, onClose }) {
+  const st = useStorage();
   const [q, setQ] = useState("");
-  // le scan RFID (07/11/2026, appli Android) : le prochain tag lu designe la bobine a ranger ici
+  const [chain, setChain] = useState(() => lsGet(CHAIN_KEY, false));
+  const [skip, setSkip] = useState(() => lsGet(SKIP_KEY, true));
+  const [curId, setCurId] = useState(place.id);
+  const [done, setDone] = useState([]);              // bobines rangees pendant la serie
+  const [busy, setBusy] = useState(false);
   const scan = useRfidScan();
   const [waiting, setWaiting] = useState(false);
-  const started = useRef(false);                       // l'ecoute lancee ici : coupee en partant
+  const started = useRef(false);                     // l'ecoute lancee ici : coupee en partant
+  const pickRef = useRef(null);
   useEffect(() => () => { useRfidScan.getState().setCapture(null); if (started.current) useRfidScan.getState().stop(); }, []);
+  const TO = st?.to_store_label || "À ranger";
+  const { by } = index(st);
+  const rootOf = id => { let p = by[id]; while (p && p.parent_id != null && by[p.parent_id]) p = by[p.parent_id]; return p?.id; };
+  const root = rootOf(place.id);
+  // les emplacements du rangement, dans l'ordre (zones puis sous-zones, comme dans l'arbre)
+  const seq = (st?.places || []).filter(p => p.leaf && rootOf(p.id) === root);
+  const cur = by[curId] || place;
+  const pos = seq.findIndex(p => p.id === curId);
+  const freeOk = p => !(p.single && p.spools.length);
+  const nextFrom = (i, d) => { for (let k = i + d; k >= 0 && k < seq.length; k += d) if (!skip || freeOk(seq[k]) || d < 0) return seq[k]; return null; };
+  const goNext = () => { const n = nextFrom(pos, 1); if (n) setCurId(n.id); else { toast("Dernier emplacement de ce rangement : série terminée", "success", 2500); onClose(); } };
+  const pick = async s => {
+    if (busy) return;
+    setBusy(true);
+    const r = await assignSpools([s.id], curId);
+    setBusy(false);
+    if (!r) return;
+    setDone(d => [...d, s.id]);
+    if (chain) { toast(`#${s.id} rangée en ${shortName(by[curId] || cur, by)}`, "success", 1500); setQ(""); goNext(); } else onClose();
+  };
+  pickRef.current = pick;
   const startScan = async () => {
     if (!scan.listening) { await scan.start(); started.current = true; }
     setWaiting(true);
@@ -779,24 +807,43 @@ function SpoolChooser({ title, spools, TO, onClose, onPick }) {
       const qs = new URLSearchParams((d.redirect || "").split("?")[1] || "");
       const sid = Number(qs.get("spool"));
       if (!sid) { toast(qs.get("rfid") ? "Bobine inconnue : ajoute-la d'abord (scan depuis la page Filaments)" : "Tag non reconnu", "error", 3000); return; }
-      useRfidScan.getState().setCapture(null);
-      setWaiting(false);
-      onPick(spools.find(s => s.id === sid) || { id: sid });
+      pickRef.current?.((spools0 || []).find(s => s.id === sid) || { id: sid });
     });
   };
-  const ql = q.trim().toLowerCase();
-  const list = spools.filter(s => !ql || [spoolName(s), s.filament_manufacturer, s.filament_fila_type, s.filament_material, String(s.id), s.location]
-    .filter(Boolean).join(" ").toLowerCase().includes(ql)).slice(0, 80);
-  return createPortal(<FSheet onClose={onClose} z={1300} bottom={<button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Annuler</button>}>
+  const stopScan = () => { useRfidScan.getState().setCapture(null); setWaiting(false); };
+  if (!st) return null;
+  const pri = s => s.location === TO ? 0 : !s.place_id ? 1 : 2;
+  const ql = foldTxt(q.trim());
+  const list = (spools0 || []).filter(s => !done.includes(s.id) && s.place_id !== curId && !s.ordered)
+    .filter(s => !ql || foldTxt([spoolName(s), s.filament_manufacturer, s.filament_fila_type, s.filament_material, String(s.id), s.location].filter(Boolean).join(" ")).includes(ql))
+    .sort((a, b) => pri(a) - pri(b)).slice(0, 80);
+  const occ = cur.single ? cur.spools[0] : null;
+  const toggle = (k, set) => v => { set(v); lsSet(k, v); };
+
+  return createPortal(<FSheet onClose={onClose} z={1300} bottom={chain ? <>
+    <button onClick={() => { const p = nextFrom(pos, -1); if (p) setCurId(p.id); }} disabled={pos <= 0} style={{ ...fBtn, flex: 1, opacity: pos <= 0 ? 0.5 : 1 }}>⏮</button>
+    <button onClick={goNext} style={{ ...fBtn, flex: 2 }}>⏭ Passer</button>
+    <button onClick={onClose} style={{ ...fBtn, flex: 2 }}>Terminer{done.length ? ` (${done.length})` : ""}</button></>
+    : <button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Annuler</button>}>
     <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>{title}</div>
-      {scan.available && <button type="button" onClick={waiting ? () => { useRfidScan.getState().setCapture(null); setWaiting(false); } : startScan}
+      <div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>Ranger dans « {cur.path} »</div>
+        {chain && <div style={small}>Emplacement {pos + 1} sur {seq.length} · {done.length} rangée{done.length > 1 ? "s" : ""} pendant la série</div>}
+        {occ && <div style={{ ...small, color: "#B45309" }}>Prise par « {occ.name} » (#{occ.id}) : la bobine choisie la délogera, après confirmation.</div>}
+      </div>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, fontWeight: 800, color: "var(--text2)" }}>
+          <input type="checkbox" checked={chain} onChange={e => toggle(CHAIN_KEY, setChain)(e.target.checked)}/>🔁 Enchaîner les emplacements suivants</label>
+        {chain && <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>
+          <input type="checkbox" checked={skip} onChange={e => toggle(SKIP_KEY, setSkip)(e.target.checked)}/>sauter les cases prises</label>}
+      </div>
+      {scan.available && <button type="button" onClick={waiting ? stopScan : startScan}
         style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px 12px", borderRadius: 14, cursor: "pointer", font: "inherit",
           fontSize: 14, fontWeight: 900, border: "none", color: "#fff", background: waiting ? "linear-gradient(135deg, #22C55E, #16A34A)" : "linear-gradient(135deg, #8B5CF6, #6366F1)",
           boxShadow: waiting ? "0 0 0 4px rgba(34,197,94,0.25)" : "none" }}>
-        📡 {waiting ? "Approche la bobine du téléphone… (toucher pour arrêter)" : "Scanner la bobine (RFID)"}</button>}
+        📡 {waiting ? (busy ? "Rangement…" : "Approche la bobine du téléphone… (toucher pour arrêter)") : "Scanner la bobine (RFID)"}</button>}
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="Chercher une bobine" style={inp}/>
-      {list.map(s => <button key={s.id} type="button" onClick={() => onPick(s)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
+      {list.map(s => <button key={s.id} type="button" disabled={busy} onClick={() => pick(s)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
         borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer", textAlign: "left", color: "var(--text)" }}>
         <Swatch s={s} size={32}/>
         <span style={{ flex: 1, minWidth: 0 }}>
