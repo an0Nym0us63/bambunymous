@@ -1413,6 +1413,20 @@ def night_fill(jobs: list, order: list, d: dict, now: datetime, busy, loaded: se
         others.sort(key=lambda x: abs(x["seconds"] - want))
         if ga and head in pos:
             tries += [("before", x["key"], head) for x in others[:6]]
+        # des petits plateaux d'apres (07/11/2026), passes devant le dernier lance : il part plus tard dans la soiree et
+        # finit plus pres de la reprise (un plateau de 5 h lance a 20 h 50 finissait a 1 h 52 ; lance a 23 h 29, il
+        # finit a 4 h 30 et la soiree imprime deux petits). Libres seulement (ni figes ni au jour fige ailleurs) ; la
+        # simulation dit si ca tient avant la coupure, et la nuit suivante y revient pour en ajouter un autre
+        # ce qui tient dans la soiree : avant la fin de la plage de lancement, pause comprise, le dernier lance doit
+        # encore pouvoir partir (un petit de 3 h le renvoyait au lendemain)
+        iv = next(((x0, y0) for x0, y0 in (rules._launch_iv(a_s, 2) or []) if x0 <= a_s < y0), None)
+        room = (iv[1] - a_s - rules.gap).total_seconds() if iv else 0
+        small = [x for x in pl[i + 1:] if x["key"] in movable and x["key"] in pos and not x.get("chain_g")
+                 and x["key"] not in d["pins"] and 0 < x["seconds"] <= room and x["seconds"] < a["seconds"]
+                 and (x.get("retained", True) or not a.get("retained", True))]
+        small.sort(key=lambda x: -x["seconds"])
+        if head in pos:
+            tries += [("before", x["key"], head) for x in small[:8]]
         best = None
         for how, k, ref in tries:
             if how == "swap":
