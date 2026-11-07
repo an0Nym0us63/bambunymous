@@ -277,6 +277,11 @@
     <li>Une notification <b>Commande Bambu Lab (mail)</b> (section Bobines des notifications) prévient à chaque étape, avec le suivi du transporteur à l'expédition ; pour une commande ancienne lue après coup, une notification « à confirmer » ouvre la fenêtre de la commande depuis la liste des notifications.</li>
   </ul>
   </section>
+  <section id="parametres-links-claude">
+    <h3>🤖 Claude</h3>
+  <p><span class="admin">admin</span> La carte <b>🤖 Claude</b> relie BambuNymous à l'API Claude Platform, pour proposer des <b>catégories et étiquettes</b> à tes impressions. Crée une clé sur <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">platform.claude.com</a> (avec un abonnement Claude Max, son crédit mensuel d'API y passe d'abord), colle-la, <span class="ui">Enregistrer</span> : elle reste sur ton serveur et ne se réaffiche jamais (<span class="ui">Oublier la clé</span> l'efface). Une ligne dit ce qui a été consommé ce mois-ci (demandes, jetons envoyés et reçus).</p>
+  <p><b>🧪 Simulation des catégories</b> : <span class="ui">Lancer la simulation</span> fait classer par Claude tes 50 derniers modèles imprimés (un par modèle ; sans modèle MakerWorld, un par groupe ou par impression), en trois niveaux : des <b>familles</b> larges, des <b>catégories</b> plus fines (une à trois par modèle, la liste reste ouverte : il réutilise celles qui existent et n'en crée que pour un objet vraiment nouveau) et des <b>étiquettes</b> (ce qu'est l'objet, son sujet, sa marque ou son univers, pour qui, comment il est fait). Il juge sur le titre et la description du modèle ; les catégories MakerWorld ne lui servent que d'indices. Rien n'est écrit sur tes impressions : le tableau montre ce qu'il proposerait, et les catégories qui en sortent, rangées par famille (✨ : une famille qu'il a ajoutée).</p>
+  </section>
   <section id="parametres-links-copains">
     <h3>👀 Copains</h3>
     <p>Ici, tu ajoutes le BambuNymous d'un ami pour le parcourir en lecture seule. La <b>vue 3D</b> d'une impression ou d'un modèle n'est pas calculée chez lui à ta demande (c'est un travail de son serveur) : le bouton 🧊 n'est actif que si la vue existe déjà chez lui, parce qu'il l'a ouverte une fois ; sinon il reste grisé avec « pas encore calculée chez lui » (voir <a href="#makerworld-vue3d-copains">La vue 3D chez un copain</a>).</p>

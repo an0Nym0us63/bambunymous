@@ -22,6 +22,7 @@ import AdminOnly from "../components/AdminOnly";
 import TelegramSettings from "../components/TelegramSettings";
 import PublicLinksCard from "../components/PublicLinksCard";
 import MailOrdersSettings from "../components/MailOrdersSettings";
+import ClaudeSettings from "../components/ClaudeSettings";
 import SwitchCard, { phoneWidth } from "../components/SwitchCard";
 import DryRulesCard from "../components/DryRulesCard";
 import SpoolTaresCard from "../components/SpoolTaresCard";
@@ -2295,6 +2296,8 @@ export default function Settings() {
       <AdminOnly home mw><RateTemplatesSettings/></AdminOnly>
       {/* la boite mail (commandes Bambu Lab) : un lien avec l'exterieur, comme MakerWorld (28/10/2026) */}
       <AdminOnly><MailOrdersSettings card={card} cardTitle={cardTitle}/></AdminOnly>
+      {/* Claude (07/11/2026) : la cle de l'API, et les categories et etiquettes des impressions qu'il propose */}
+      <AdminOnly><ClaudeSettings card={card} cardTitle={cardTitle}/></AdminOnly>
       <FriendsCard/>
       </div>)}
 

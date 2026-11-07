@@ -398,6 +398,32 @@ async def archive_backup(_: str = Depends(require_admin)):
     return {"started": True}
 
 
+# ── Claude : categories et etiquettes des impressions (07/11/2026) ──
+@router.get("/claude")
+async def claude_settings(_: str = Depends(require_admin)):
+    from ....services import ai_tags as AI
+    return await AI.settings_get()
+
+
+@router.put("/claude")
+async def claude_settings_set(body: dict, _: str = Depends(require_admin)):
+    from ....services import ai_tags as AI
+    return await AI.settings_set(body or {})
+
+
+@router.post("/claude/tags-sim")
+async def claude_tags_sim(body: dict = None, _: str = Depends(require_admin)):
+    """La simulation : les N derniers modeles imprimes classes par Claude, sans rien ecrire sur les impressions."""
+    from ....services import ai_tags as AI
+    return AI.start_simulation((body or {}).get("n") or 50)
+
+
+@router.get("/claude/tags-sim")
+async def claude_tags_sim_status(_: str = Depends(get_current_user)):
+    from ....services import ai_tags as AI
+    return AI.status()
+
+
 # ── Commandes Bambu Lab lues dans les mails (28/10/2026) ──
 @router.get("/mail")
 async def mail_status(_: str = Depends(require_admin)):
