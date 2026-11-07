@@ -148,7 +148,7 @@ export function SpoolEdge({ s, vertical = false, len = "100%", thick = 18, dim =
     : colorBg(list, s.filament_multicolor_type ?? s.multicolor_type, finishOf(s), { size: 40 });
   const band = bgWithTop(bgWithTop(base, shade), wind);
   const fl = { flexShrink: 0, background: "linear-gradient(" + along + ", #cbd5e1, #f8fafc 40%, #e2e8f0)", borderRadius: 2,
-    boxShadow: "0 0 0 1px rgba(15,23,42,.18)", [vertical ? "width" : "height"]: Math.max(2, Math.round(thick / 7)) };
+    boxShadow: "0 0 0 1px rgba(15,23,42,.18)", [vertical ? "width" : "height"]: typeof thick === "number" ? Math.max(2, Math.round(thick / 7)) : 3 };
   return <span aria-hidden="true" style={{ display: "flex", flexDirection: vertical ? "row" : "column", alignItems: "stretch", flexShrink: 0, opacity: dim ? 0.4 : 1,
     width: vertical ? thick : len, height: vertical ? len : thick }}>
     <span style={fl}/>
@@ -158,6 +158,8 @@ export function SpoolEdge({ s, vertical = false, len = "100%", thick = 18, dim =
 }
 // comment un rangement montre ses bobines : la pastille, ou la tranche (h a plat, v debout), pose sur le rangement
 const edgeOf = (p, by) => { let q = p, seen = 0; while (q && q.parent_id != null && by[q.parent_id] && seen++ < 20) q = by[q.parent_id]; return q?.edge || null; };
+// l'epaisseur de la tranche couchee suit la largeur de la case (unites de conteneur) : les proportions d'une bobine
+const EDGE_H = "clamp(20px, 30cqw, 46px)";
 const infoOf = (occ, full) => [full?.filament_fila_type || full?.filament_material || occ?.material, full?.filament_manufacturer || occ?.brand].filter(Boolean);
 
 // les icones des rangements (07/11/2026 : des emojis 🗄 📥, illisibles sur telephone) : dessinees, a la couleur de la
@@ -885,33 +887,46 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
   </div>;
 
   // une case : sa bobine (ou son fantome si elle est dans l'imprimante / hors du filtre), sinon « libre »
+  // une case (08/11/2026, refaite) : comme dans le tiroir, la bobine sur sa tranche en pleine largeur, son numero en
+  // pastille ; le texte suit la largeur de la case (container queries, CSS plus bas) : nom sur deux lignes et sous-type ·
+  // marque dans une grande, le nom seul dans une moyenne, la tranche seule dans une petite (le detail au toucher)
   const Cell = ({ p }) => {
     const occ = p.spools[0], full = occ ? byId[occ.id] : null, out = occ && occ.in_printer;
-    const free = !occ, edge = edgeOf(p, by), info = infoOf(occ, full);
-    return <button type="button" onClick={() => full ? onOpen(full) : free && admin ? setFill(p) : null}
-      data-tip={occ ? `${occ.name} · #${occ.id}${out ? ` · dans l'imprimante (${occ.location}), sa case l'attend` : ""}` : admin ? "Libre : toucher pour y ranger une bobine" : "Libre"}
-      style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, minWidth: 0, minHeight: 46,
-        padding: "6px 4px", borderRadius: 14, cursor: full || (free && admin) ? "pointer" : "default", color: "var(--text)",
-        border: free ? "1.5px dashed var(--border)" : `1px solid color-mix(in srgb, ${out ? "#0EA5E9" : "#8B5CF6"} 35%, var(--border))`,
-        background: free ? "transparent" : "var(--surface)", opacity: occ && !full && !out ? 0.55 : 1 }}>
-      <span style={occ ? { position: "absolute", top: 2, left: 4, right: 3, fontSize: 9.5, fontWeight: 900, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
-        : { fontSize: 12, fontWeight: 900, color: "var(--muted)" }}>{shortName(p, by)}</span>
-      {occ ? <>
-        {edge ? <span style={{ marginTop: 10 }}><SpoolEdge s={full || occ} vertical={edge === "v"} len={edge === "v" ? 40 : 62} thick={edge === "v" ? 22 : 24} dim={out}/></span>
-          : <Swatch s={full || occ} size={26} dim={out}/>}
-        <span style={{ fontSize: 10, fontWeight: 800, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--text2)" }}>
-          {out ? `🖨 ${unitOf(occ.location)}` : (full ? (full.filament_translated_name || full.filament_name) : occ.name)}</span>
-        {edge && !out && info.length > 0 && <span style={{ fontSize: 8.5, fontWeight: 700, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--muted)" }}>
-          {info.join(" · ")}</span>}
-      </> : null}
+    const free = !occ, edge = edgeOf(p, by), info = infoOf(occ, full), num = shortName(p, by);
+    const nm = out ? `🖨 ${unitOf(occ.location)}` : (full ? (full.filament_translated_name || full.filament_name) : occ?.name);
+    return <button type="button" className={`bn-cell${free ? " bn-free" : ""}`} onClick={() => full ? onOpen(full) : free && admin ? setFill(p) : null}
+      data-tip={occ ? [occ.name, ...info, `#${occ.id}`, out ? `dans l'imprimante (${occ.location}), sa case l'attend` : null].filter(Boolean).join(" · ")
+        : admin ? `${num} · libre : toucher pour y ranger une bobine` : `${num} · libre`}
+      style={{ cursor: full || (free && admin) ? "pointer" : "default", opacity: occ && !full && !out ? 0.55 : 1 }}>
+      {free ? <span className="bn-num-free">{num}</span> : <>
+        <span className="bn-num">{num}</span>
+        <span className="bn-band">
+          {edge === "v" ? <SpoolEdge s={full || occ} vertical len={44} thick={22} dim={out}/>
+            : edge ? <SpoolEdge s={full || occ} len="100%" thick={EDGE_H} dim={out}/>
+            : <Swatch s={full || occ} size={28} dim={out}/>}
+        </span>
+        <span className="bn-ct-name">{nm}</span>
+        {!out && info.length > 0 && <span className="bn-ct-sub">{info.join(" · ")}</span>}
+      </>}
     </button>;
   };
+  // une bobine en vrac (08/11/2026) : la meme tuile qu'une case, sans numero (les grandes cartes du stock etaient trop grosses)
+  const Tile = ({ s }) => {
+    const edge = edgeOf(p0Of(s), by), info = [s.filament_fila_type || s.filament_material, s.filament_manufacturer].filter(Boolean);
+    return <button type="button" className="bn-cell" onClick={() => onOpen(s)} data-tip={[spoolName(s), ...info, `#${s.id}`].join(" · ")}>
+      <span className="bn-band">{edge === "v" ? <SpoolEdge s={s} vertical len={44} thick={22}/> : edge ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/> : <Swatch s={s} size={28}/>}</span>
+      <span className="bn-ct-name">{spoolName(s)}</span>
+      {info.length > 0 && <span className="bn-ct-sub">{info.join(" · ")}</span>}
+    </button>;
+  };
+  const p0Of = s => by[s.place_id] || {};
   const Common = ({ p, nested }) => {
     const here = storedHere(p);
     const away = p.spools.filter(x => x.in_printer);
-    return <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: nested ? 0 : 0 }}>
-      {nested && <div style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text2)" }}>{p.icon || "📚"} {p.name} <span style={small}>{here.length}</span></div>}
-      {here.length ? <div style={grid}>{here.map(s => renderSpool(s))}</div>
+    return <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: nested ? 8 : 0, borderRadius: 12,
+      border: nested ? "1px dashed color-mix(in srgb, #8B5CF6 40%, var(--border))" : "none", background: nested ? "color-mix(in srgb, #8B5CF6 3%, var(--surface2))" : "transparent" }}>
+      {nested && <div style={{ fontSize: 12, fontWeight: 900, color: "var(--text2)" }}>{p.name} <span style={small}>vrac · {here.length}</span></div>}
+      {here.length ? <div style={{ display: "grid", gap: 6, gridTemplateColumns: "repeat(auto-fill, minmax(86px, 1fr))" }}>{here.map(s => <Tile key={s.id} s={s}/>)}</div>
         : <div style={{ padding: 10, borderRadius: 12, border: "1.5px dashed var(--border)", textAlign: "center", ...small }}>vide</div>}
       {away.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", ...small }}>🖨 dans l'imprimante :
         {away.map(x => <span key={x.id} data-tip={`${x.name} · ${x.location}`} style={{ display: "inline-flex" }}><Swatch s={x} size={20} dim/></span>)}</div>}
@@ -937,6 +952,18 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
   };
 
   return <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+    <style>{`.bn-cell{position:relative;container-type:inline-size;display:flex;flex-direction:column;align-items:stretch;gap:3px;min-width:0;
+        padding:5px 5px 6px;border-radius:12px;border:1px solid color-mix(in srgb,#8B5CF6 22%,var(--border));background:var(--surface);color:var(--text);
+        overflow:hidden;font:inherit;text-align:center;transition:transform .12s, box-shadow .12s}
+      .bn-cell:not(.bn-free):hover{transform:translateY(-1px);box-shadow:0 6px 14px -8px rgba(15,23,42,.35)}
+      .bn-cell.bn-free{min-height:40px;justify-content:center;align-items:center;background:transparent;border:1.5px dashed color-mix(in srgb,var(--border) 85%,transparent)}
+      .bn-num-free{font-size:12px;font-weight:900;color:var(--muted);opacity:.75}
+      .bn-band{position:relative;display:flex;justify-content:center;align-items:center;min-height:24px;overflow:hidden;border-radius:6px}
+      .bn-num{align-self:flex-start;font-size:9.5px;font-weight:900;line-height:1;color:var(--muted);margin:-1px 0 -1px 1px}
+      .bn-ct-name{font-size:11px;font-weight:900;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+      .bn-ct-sub{font-size:9px;font-weight:700;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      @container (max-width:84px){.bn-ct-sub{display:none}.bn-ct-name{font-size:10px;-webkit-line-clamp:1}}
+      @container (max-width:48px){.bn-ct-name{display:none}.bn-cell{padding:3px}.bn-num{font-size:8.5px}}`}</style>
     {printer.length > 0 && <Section k="printer" icon={<Printer size={16} strokeWidth={2.2}/>} title="Dans l'imprimante" n={printer.length} tone="#0EA5E9">
       {units.map(u => <div key={u} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text2)" }}>{u}</div>
