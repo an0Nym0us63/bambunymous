@@ -43,13 +43,14 @@ async def settings_get() -> dict:
     async with AsyncSessionLocal() as db:
         key = await get_setting(db, K_KEY, "")
         raw = await get_setting(db, K_USAGE, "")
+        auto = await get_setting(db, "CLAUDE_AUTO", "1")
     try:
         use = json.loads(raw) if raw else {}
     except ValueError:
         use = {}
     if use.get("month") != datetime.now().strftime("%Y-%m"):
         use = {}
-    return {"has_key": bool(key), "model": MODEL, "usage": {"in": int(use.get("in") or 0), "out": int(use.get("out") or 0),
+    return {"has_key": bool(key), "model": MODEL, "auto": auto != "0", "usage": {"in": int(use.get("in") or 0), "out": int(use.get("out") or 0),
                                                             "calls": int(use.get("calls") or 0)}}
 
 
@@ -62,6 +63,10 @@ async def settings_set(body: dict) -> dict:
         if k == "-" or k:
             async with AsyncSessionLocal() as db:
                 await set_setting(db, K_KEY, "" if k == "-" else k)
+    if "auto" in body and body["auto"] is not None:
+        # le classement automatique des nouveaux modeles, a la fin de chaque impression
+        async with AsyncSessionLocal() as db:
+            await set_setting(db, "CLAUDE_AUTO", "1" if body["auto"] else "0")
     return await settings_get()
 
 
@@ -463,3 +468,61 @@ async def labels_for_print(print_id: int) -> dict:
     return {"families": _jl(row.families, []),
             "categories": [{"name": c, "family": cm.get(c) or ""} for c in _jl(row.categories, [])],
             "tags": _jl(row.tags, []), "source": row.source, "seen": bool(row.seen)}
+
+
+# ── Ce qui sert ailleurs : filtres, statistiques, classement automatique (07/11/2026) ──
+async def label_map() -> dict:
+    """Toutes les lignes : cle -> (familles, categories, etiquettes, famille de chaque categorie)."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import ModelLabel
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(ModelLabel.key, ModelLabel.families, ModelLabel.categories, ModelLabel.tags,
+                                        ModelLabel.catmap))).all()
+    return {k: (_jl(f, []), _jl(c, []), _jl(t, []), _jl(cm, {})) for k, f, c, t, cm in rows}
+
+
+async def facets() -> dict:
+    """Les choix des filtres : familles, categories (avec leur famille) et etiquettes, comptees en modeles imprimes."""
+    from collections import Counter
+    keys = {m["key"] for m in await _select()}
+    fc, cc, tc, cmap = Counter(), Counter(), Counter(), {}
+    for k, (f, c, t, cm) in (await label_map()).items():
+        if k not in keys:
+            continue
+        fc.update(f)
+        cc.update(c)
+        tc.update(t)
+        for a, b in cm.items():
+            cmap.setdefault(a, b)
+    return {"families": [{"name": k, "n": v} for k, v in fc.most_common()],
+            "categories": [{"name": k, "family": cmap.get(k) or "", "n": v} for k, v in cc.most_common()],
+            "tags": [{"name": k, "n": v} for k, v in tc.most_common()]}
+
+
+K_AUTO = "CLAUDE_AUTO"
+
+
+async def auto_on() -> bool:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        return (await get_setting(db, K_AUTO, "1")) != "0" and bool(await get_setting(db, K_KEY, ""))
+
+
+async def after_print(pid: int) -> None:
+    """A la fin d'une impression : son modele, s'il n'est pas encore classe, part chez Claude (avec ceux qui manquent
+    encore). Rien sans cle, ni quand le classement automatique est coupe."""
+    try:
+        if _RUN["running"] or not await auto_on():
+            return
+        from ..db.session import AsyncSessionLocal
+        from ..models.print_history import ModelLabel, Print
+        async with AsyncSessionLocal() as db:
+            p = await db.get(Print, pid)
+            if p is None or await db.get(ModelLabel, model_key(p.design_id, p.group_id, p.id)) is not None:
+                return
+        logger.info(f"[IA-TAGS] impression #{pid} : son modèle n'est pas classé, Claude s'en charge")
+        start_run()
+    except Exception:
+        logger.debug(f"[IA-TAGS] classement après l'impression #{pid}", exc_info=True)

@@ -3453,7 +3453,7 @@ const STATUS_LABELS = {"":"Tous","IN_PROGRESS":"En cours","SUCCESS":"Réussis",
   "PARTIAL":"Partiels","TO_REDO":"À refaire","FAILED":"Échoués"};
 const SORT_KEYS = ["recent", "oldest", "cost", "weight", "duration"];
 // Les filtres de la liste dans l'adresse (28/10/2026) : cles courtes, une valeur par defaut n'y est pas ecrite.
-const FILTER_DEFAULTS = { q: "", st: "", sort: "recent", mat: "", type: "", fil: "", col: "", from: "", to: "", v3: "" };
+const FILTER_DEFAULTS = { q: "", st: "", sort: "recent", mat: "", type: "", fil: "", col: "", from: "", to: "", v3: "", cat: "", etq: "" };
 const FILTER_KEYS = Object.keys(FILTER_DEFAULTS);
 const isYmd = s => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
 
@@ -3610,6 +3610,11 @@ export default function Prints() {
   const colorF = urlVal("col"), setColorF = v => patchUrl({ col: v });
   // ce qui a des vues 3D (« 1 ») ou n'en a pas (« 0 ») (31/10/2026) ; vide : tout
   const vue3dF = ["1", "0"].includes(urlVal("v3")) ? urlVal("v3") : "", setVue3dF = v => patchUrl({ v3: v });
+  // famille ou categorie, et etiquette, donnees par Claude (07/11/2026)
+  const catF = urlVal("cat"), setCatF = v => patchUrl({ cat: v });
+  const etqF = urlVal("etq"), setEtqF = v => patchUrl({ etq: v });
+  const [labelFacets, setLabelFacets] = useState(null);
+  const [etqSearch, setEtqSearch] = useState("");
   const dateFrom = isYmd(searchParams.get("from")) ? searchParams.get("from") : "";  // borne debut plage temporelle
   const dateTo = isYmd(searchParams.get("to")) ? searchParams.get("to") : "";        // borne fin (incluse)
   const setDateFrom = v => patchUrl({ from: v });
@@ -3713,11 +3718,13 @@ export default function Prints() {
     if (dateFrom)    p.set("date_from", dateFrom);
     if (dateTo)      p.set("date_to", dateTo);
     if (vue3dF)      p.set("vue3d", vue3dF === "1" ? "1" : "-1");
+    if (catF)        p.set("cat", catF);
+    if (etqF)        p.set("etq", etqF);
     try {
       const { data } = await client.get("/prints/kpis?" + p);
       if (gen === kpiGen.current) setKpis(data);
     } catch {}
-  }, [searchQ, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, vue3dF]);
+  }, [searchQ, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, vue3dF, catF, etqF]);
 
   // la liste et ses KPI ne servent qu'a l'onglet Liste : en galerie, MakerWorld ou file, on note seulement que les
   // filtres ont change, et on recharge au retour sur la liste si besoin (28/10/2026 : chaque recherche en galerie
@@ -3744,6 +3751,10 @@ export default function Prints() {
       setAllFilaTypes([...new Set(fils.map(f=>f.fila_type).filter(Boolean))].sort());
     }).catch(()=>{});
   }, [needFilterOpts]);
+  useEffect(() => {
+    if (!filterOpen || labelFacets) return;
+    client.get("/prints/labels/facets").then(r => setLabelFacets(r.data || {})).catch(() => setLabelFacets({}));
+  }, [filterOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // une liste qui se recharge (filtre, groupe cree…) : la suite au defilement attend qu'elle soit la
   const reloadingRef = useRef(false);
@@ -3765,6 +3776,8 @@ export default function Prints() {
       if (dateFrom)    params.set("date_from", dateFrom);
       if (dateTo)      params.set("date_to", dateTo);
       if (vue3dF)      params.set("vue3d", vue3dF === "1" ? "1" : "-1");
+      if (catF)        params.set("cat", catF);
+      if (etqF)        params.set("etq", etqF);
       if (sortF)       params.set("sort", sortF);
       const { data } = await client.get("/prints?" + params);
       if (gen !== loadGen.current) return;   // une demande plus recente est partie
@@ -3778,7 +3791,7 @@ export default function Prints() {
     }
     if (gen === loadGen.current) reloadingRef.current = false;
     setLoading(false);
-  }, [searchQ, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, sortF, vue3dF]);
+  }, [searchQ, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, sortF, vue3dF, catF, etqF]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || loadingMoreRef.current || reloadingRef.current) return;
@@ -3814,6 +3827,8 @@ export default function Prints() {
         if (dateFrom)    params.set("date_from", dateFrom);
         if (dateTo)      params.set("date_to", dateTo);
         if (vue3dF)      params.set("vue3d", vue3dF === "1" ? "1" : "-1");
+        if (catF)        params.set("cat", catF);
+        if (etqF)        params.set("etq", etqF);
         if (sortF)       params.set("sort", sortF);
         const { data } = await client.get("/prints?" + params);
         if (gen !== loadGen.current) { more = false; acc = null; break; }
@@ -3832,7 +3847,7 @@ export default function Prints() {
     } catch(e) {}
     setLoadingMore(false);
     loadingMoreRef.current = false;
-  }, [loadingMore, hasMore, offset, statusF, searchQ, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, sortF, vue3dF]);
+  }, [loadingMore, hasMore, offset, statusF, searchQ, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, sortF, vue3dF, catF, etqF]);
 
   useEffect(() => {
     const container = document.querySelector(".page-content");
@@ -4020,6 +4035,8 @@ export default function Prints() {
           colorF && ["🎨", bucket?.label || colorF, () => setColorF("")],
           filamentIdF && ["🧵", fil ? (fil.translated_name || fil.name) : `#${filamentIdF}`, () => setFilamentIdF("")],
           vue3dF && ["🧊", vue3dF === "1" ? "Avec une vue 3D" : "Sans vue 3D", () => setVue3dF("")],
+          catF && ["📂", catF, () => setCatF("")],
+          etqF && ["#", etqF, () => setEtqF("")],
         ].filter(Boolean);
         const round = on => ({ width:40, height:40, borderRadius:14, border:"1px solid var(--border)", flexShrink:0, cursor:"pointer",
           display:"flex", alignItems:"center", justifyContent:"center", background: on ? "rgba(59,130,246,0.14)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--muted)" });
@@ -4077,7 +4094,7 @@ export default function Prints() {
         const PERIODS = [["all", "Tout", "", ""], ["7", "7 jours", back(7), ""], ["30", "30 jours", back(30), ""],
           ["month", "Ce mois", ymdL(new Date(today.getFullYear(), today.getMonth(), 1)), ""], ["year", "Cette année", ymdL(new Date(today.getFullYear(), 0, 1)), ""]];
         const period = PERIODS.find(([, , a, b]) => a === dateFrom && b === dateTo);
-        const anyF = !!(searchQ || statusF || sortF !== "recent" || materialF || filaTypeF || filamentIdF || colorF || dateFrom || dateTo || vue3dF);   // la recherche aussi : « Tout effacer » la vide
+        const anyF = !!(searchQ || statusF || sortF !== "recent" || materialF || filaTypeF || filamentIdF || colorF || dateFrom || dateTo || vue3dF || catF || etqF);   // la recherche aussi : « Tout effacer » la vide
         const clearAll = clearFilters;
         const chip = (on, c = "#3b82f6") => ({ display:"inline-flex", alignItems:"center", gap:5, padding:"7px 13px", borderRadius:20, fontSize:12.5, fontWeight:800,
           cursor:"pointer", border:`1px solid ${on ? c : "var(--border)"}`, background: on ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 72%, #ffffff))` : "var(--surface)",
@@ -4174,6 +4191,36 @@ export default function Prints() {
                       <span style={{ fontSize:9.5, fontWeight:700, color:"var(--muted)" }}>{b.count}</span>
                     </button>; })}
                 </div></>)}
+
+              {(labelFacets?.families?.length > 0 || catF || etqF) && (() => {
+                const fams = labelFacets?.families || [], cats = labelFacets?.categories || [], tags = labelFacets?.tags || [];
+                // la famille ouverte : celle choisie, ou celle de la categorie choisie
+                const openFam = fams.some(f => f.name === catF) ? catF : (cats.find(c => c.name === catF)?.family || "");
+                const q = etqSearch.trim().toLowerCase();
+                const shownTags = (q ? tags.filter(t => t.name.toLowerCase().includes(q)) : tags).slice(0, q ? 60 : 30);
+                const small = (on, c) => ({ ...chip(on, c), fontSize:12, padding:"5px 10px" });
+                return sec("🏷", "Catégorie et étiquette", [catF, etqF && "#" + etqF].filter(Boolean).join(" · ") || null, "#6366F1", <>
+                  <div style={{ fontSize:11.5, color:"var(--muted)", marginTop:-4 }}>Données par Claude à chaque modèle (Paramètres › Claude).</div>
+                  <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                    <button onClick={() => setCatF("")} style={chip(!catF, "#B45309")}>Toutes</button>
+                    {fams.map(f => <button key={f.name} onClick={() => setCatF(catF === f.name ? "" : f.name)} data-tip={`${f.n} modèle${f.n > 1 ? "s" : ""}`}
+                      style={chip(catF === f.name, "#B45309")}>{f.name}</button>)}
+                  </div>
+                  {openFam && <>
+                    <div style={{ fontSize:10.5, fontWeight:800, letterSpacing:".06em", textTransform:"uppercase", color:"var(--muted)" }}>Catégories ({openFam})</div>
+                    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                      {cats.filter(c => c.family === openFam).map(c => <button key={c.name} onClick={() => setCatF(catF === c.name ? openFam : c.name)}
+                        data-tip={`${c.n} modèle${c.n > 1 ? "s" : ""}`} style={small(catF === c.name, "#6366F1")}>{c.name} · {c.n}</button>)}
+                    </div></>}
+                  <div style={{ fontSize:10.5, fontWeight:800, letterSpacing:".06em", textTransform:"uppercase", color:"var(--muted)" }}>Étiquette</div>
+                  <input value={etqSearch} onChange={e => setEtqSearch(e.target.value)} placeholder={`Chercher parmi ${tags.length} étiquettes…`}
+                    style={{ height:36, padding:"0 12px", borderRadius:12, border:"1px solid var(--border)", background:"var(--surface)", color:"var(--text)", fontSize:13, outline:"none" }}/>
+                  <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                    {etqF && !shownTags.some(t => t.name === etqF) && <button onClick={() => setEtqF("")} style={small(true, "#64748B")}>#{etqF}</button>}
+                    {shownTags.map(t => <button key={t.name} onClick={() => setEtqF(etqF === t.name ? "" : t.name)} style={small(etqF === t.name, "#64748B")}>#{t.name} · {t.n}</button>)}
+                    {q && !shownTags.length && <span style={{ fontSize:12, color:"var(--muted)" }}>Aucune étiquette ne contient « {etqSearch.trim()} ».</span>}
+                  </div></>);
+              })()}
 
               {sec("🧵", "Filament exact", selFil ? (selFil.translated_name || selFil.name) : null, "#14B8A6", <>
                 {selFil && <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 8px 7px 10px", borderRadius:12, background:"rgba(20,184,166,0.12)",

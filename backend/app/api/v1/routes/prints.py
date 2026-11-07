@@ -303,6 +303,30 @@ def _search_condition(search: str):
     return and_(*par_mot)
 
 
+def _label_clause(cat: Optional[str] = None, etq: Optional[str] = None):
+    """Les impressions dont le modele a cette famille ou cette categorie (cat), ou cette etiquette (etq), donnees
+    par Claude (07/11/2026) : le nom exact, element d'une liste JSON (« "Jouets" », pas « Jouets de bureau »).
+    Rend None sans critere."""
+    import json as _json
+    from sqlalchemy import and_, or_, select as _sel
+    from ....models.print_history import ModelLabel as _ML
+
+    def pat(v):
+        e = _json.dumps(v.strip(), ensure_ascii=False).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        return f"%{e}%"
+    conds = []
+    if cat and cat.strip():
+        conds.append(or_(_ML.families.like(pat(cat), escape="\\"), _ML.categories.like(pat(cat), escape="\\")))
+    if etq and etq.strip():
+        conds.append(_ML.tags.like(pat(etq), escape="\\"))
+    if not conds:
+        return None
+    lab = and_(*conds)
+    return or_(Print.design_id.in_(_sel(_ML.design_id).where(and_(_ML.design_id.isnot(None), lab))),
+               Print.group_id.in_(_sel(_ML.group_id).where(and_(_ML.group_id.isnot(None), lab))),
+               Print.id.in_(_sel(_ML.print_id).where(and_(_ML.print_id.isnot(None), lab))))
+
+
 def _apply_search(q, search: str):
     c = _search_condition(search)
     return q.where(c) if c is not None else q
@@ -426,6 +450,8 @@ async def list_prints(
     date_from: Optional[str] = None,  # borne debut (ISO / YYYY-MM-DD)
     date_to:   Optional[str] = None,  # borne fin incluse
     vue3d:     int = 0,               # 1 : seulement celles (ou leur groupe) qui ont des vues 3D ; -1 : celles qui n'en ont pas
+    cat:       Optional[str] = None,  # famille ou categorie donnee par Claude (07/11/2026)
+    etq:       Optional[str] = None,  # etiquette donnee par Claude
     sort:     str = "recent",
     limit:    int = Query(40, le=200),
     offset:   int = 0,
@@ -453,7 +479,7 @@ async def list_prints(
         src_v = (_SIDX.get("mt"), len(_SIDX.get("v") or {}))
     except Exception:
         src_v = None
-    key = (status, search, group_id, tag, material, fila_type, filament_id, color, date_from, date_to, vue3d, sort, limit, offset,
+    key = (status, search, group_id, tag, material, fila_type, filament_id, color, date_from, date_to, vue3d, sort, limit, offset, cat, etq,
            data_version("prints", "filament_usage", "print_tags", "groups", "print_snapshots", "bobines", "filaments",
                         "model_labels"),
            _GALLERY["disk"], src_v)
@@ -465,7 +491,7 @@ async def list_prints(
             return Response(memo[2], media_type="application/json", headers={"Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
         return Response(memo[1], media_type="application/json")
     out = await _list_prints(status, search, group_id, tag, material, fila_type, filament_id, color, date_from, date_to,
-                             vue3d, sort, limit, offset)
+                             vue3d, sort, limit, offset, cat, etq)
     if len(_LIST_MEMO) > 30:
         _LIST_MEMO.clear()
     r = json_response(out)                     # gardee encodee : rien a refaire au prochain appel
@@ -478,7 +504,7 @@ _LIST_MEMO: dict = {}
 
 
 async def _list_prints(status, search, group_id, tag, material, fila_type, filament_id, color, date_from, date_to,
-                       vue3d, sort, limit, offset) -> dict:
+                       vue3d, sort, limit, offset, cat=None, etq=None) -> dict:
     from sqlalchemy import exists
     from ....models.print_history import PrintTag as _PT
 
@@ -506,6 +532,9 @@ async def _list_prints(status, search, group_id, tag, material, fila_type, filam
             q = q.where(c)
         if vue3d:
             q = q.where(_vue3d_clause() if vue3d > 0 else ~_vue3d_clause())
+        lc = _label_clause(cat, etq)
+        if lc is not None:
+            q = q.where(lc)
 
         # le total (affiche en tete) seulement pour la premiere page : chaque lot du defilement le recomptait sur
         # toute la table filtree (28/10/2026) ; la suite sait d'elle-meme s'il reste des cartes
@@ -1167,6 +1196,61 @@ def _clean_name(fn: Optional[str]) -> str:
 _SUMMARY_CACHE: dict = {}
 
 
+@router.get("/labels/facets")
+async def label_facets(_: str = Depends(get_current_user)):
+    """Les choix des filtres Categorie et Etiquette : ce que Claude a donne aux modeles imprimes, compte en modeles."""
+    from ....services import ai_tags as AI
+    return await AI.facets()
+
+
+@router.get("/stats/labels")
+async def label_stats(date_from: Optional[str] = None, date_to: Optional[str] = None, _: str = Depends(get_current_user)):
+    """Les impressions de la periode (hors en cours) par famille, categorie et etiquette donnees par Claude
+    (07/11/2026) : nombre, modeles, poids, cout, temps. Une impression compte dans chacune de ses familles,
+    categories et etiquettes ; « classed » : celles dont le modele est classe, sur le total."""
+    from ....services import ai_tags as AI
+    lm = await AI.label_map()
+    async with AsyncSessionLocal() as db:
+        q = select(Print.id, Print.design_id, Print.group_id, func.coalesce(Print.total_weight_g, 0),
+                   func.coalesce(Print.total_cost, 0), _PRINT_DURATION, Print.status).where(Print.status != "IN_PROGRESS")
+        for c in _period_clauses(date_from, date_to):
+            q = q.where(c)
+        rows = (await db.execute(q)).all()
+    agg = {"families": {}, "categories": {}, "tags": {}}
+    cmap, classed = {}, 0
+
+    def add(kind, name, key, w, c, d, ok):
+        a = agg[kind].setdefault(name, {"name": name, "prints": 0, "models": set(), "weight_g": 0.0, "cost": 0.0, "seconds": 0, "ok": 0})
+        a["prints"] += 1
+        a["models"].add(key)
+        a["weight_g"] += float(w or 0)
+        a["cost"] += float(c or 0)
+        a["seconds"] += int(d or 0)
+        a["ok"] += ok
+    for pid, did, gid, w, c, d, st in rows:
+        key = AI.model_key(did, gid, pid)
+        lab = lm.get(key)
+        if not lab:
+            continue
+        classed += 1
+        fams, cats, tags, cm = lab
+        ok = 1 if st in ("SUCCESS", "PARTIAL") else 0
+        for f in fams:
+            add("families", f, key, w, c, d, ok)
+        for x in cats:
+            add("categories", x, key, w, c, d, ok)
+            cmap.setdefault(x, cm.get(x) or "")
+        for t in tags:
+            add("tags", t, key, w, c, d, ok)
+
+    def out(kind, n=None):
+        lst = sorted(agg[kind].values(), key=lambda a: -a["prints"])[:n]
+        return [{**a, "models": len(a["models"]), "weight_g": round(a["weight_g"], 1), "cost": round(a["cost"], 2),
+                 **({"family": cmap.get(a["name"], "")} if kind == "categories" else {})} for a in lst]
+    return {"total": len(rows), "classed": classed, "families": out("families"), "categories": out("categories"),
+            "tags": out("tags", 60)}
+
+
 @router.get("/stats/summary")
 async def prints_stats(
     days: int = 0,   # retro-compat : fenetre glissante en jours (0 = tout)
@@ -1768,6 +1852,8 @@ async def prints_kpis(
     date_from: Optional[str] = None,
     date_to:   Optional[str] = None,
     vue3d:     int = 0,
+    cat:       Optional[str] = None,
+    etq:       Optional[str] = None,
     _: str = Depends(get_current_user),
 ):
     async with AsyncSessionLocal() as db:
@@ -1792,6 +1878,9 @@ async def prints_kpis(
             q = q.where(c)
         if vue3d:
             q = q.where(_vue3d_clause() if vue3d > 0 else ~_vue3d_clause())
+        lc = _label_clause(cat, etq)
+        if lc is not None:
+            q = q.where(lc)
         r = (await db.execute(q)).one()
         return {"count": r.count or 0, "duration": int(r.duration or 0),
                 "weight_g": float(r.weight or 0), "cost": round(float(r.cost or 0), 2),

@@ -3,16 +3,17 @@
 
 <section id="stats-organisation">
   <h2>Organisation de la page</h2>
-  <p>La page a cinq onglets, chacun sa couleur et son icône. Ils tiennent sur une ligne même sur un petit téléphone : l'onglet actif montre son nom, les autres seulement leur icône.</p>
+  <p>La page a sept onglets, chacun sa couleur et son icône. Ils tiennent sur une ligne même sur un petit téléphone : l'onglet actif montre son nom, les autres seulement leur icône.</p>
   <dl class="opts">
     <dt>🖨️ Impressions</dt><dd>Tes impressions : volume, réussite, temps, coûts, habitudes, évolution et classements. Onglet par défaut. Voir <a href="#stats-prints">Onglet Impressions</a>.</dd>
+    <dt>🏷 Catégories</dt><dd>Tes impressions par famille, catégorie et étiquette. Voir <a href="#stats-categories">Onglet Catégories</a>.</dd>
     <dt>🧵 Filaments</dt><dd>Ton stock de bobines et ta consommation. Voir <a href="#stats-filaments">Onglet Filaments</a>.</dd>
     <dt>💧 Séchage</dt><dd>L'état de séchage de tes bobines. Voir <a href="#stats-sechage">Onglet Séchage</a>.</dd>
     <dt>📈 Machine</dt><dd>Les relevés des capteurs de l'imprimante sur 7 jours : humidité et température des AMS, buse, plateau, chambre. Voir <a href="#stats-machine">Onglet Machine</a>.</dd>
     <dt>🎁 Objets</dt><dd>Ton inventaire d'objets, tes ventes, tes marges et tes accessoires. Voir <a href="#stats-objets">Onglet Objets</a>.</dd>
     <dt>🏆 Succès</dt><dd>Tes succès et la roue. Ils sont décrits dans le chapitre <a href="#succes">Succès</a>.</dd>
   </dl>
-  <p>L'onglet choisi s'inscrit dans l'adresse de la page (<code>/stats?tab=filaments</code>, <code>?tab=drying</code>, <code>?tab=machine</code>, <code>?tab=objects</code>, <code>?tab=achievements</code>) : tu peux mettre un onglet en favori.</p>
+  <p>L'onglet choisi s'inscrit dans l'adresse de la page (<code>/stats?tab=labels</code>, <code>?tab=filaments</code>, <code>?tab=drying</code>, <code>?tab=machine</code>, <code>?tab=objects</code>, <code>?tab=achievements</code>) : tu peux mettre un onglet en favori.</p>
   <figure class="phone"><img src="img/stats-telephone.webp" alt="Page Statistiques sur téléphone, onglet Impressions"><figcaption>Sur téléphone, le bouton de période (« Tout ») est dans l'en-tête, à côté du titre.</figcaption></figure>
   <p>Chaque onglet (sauf Succès) s'ouvre sur un <b>en-tête</b> : le chiffre qui compte en grand, quelques pastilles, et un anneau de taux (la réussite des impressions, les bobines à jour de séchage, les objets vendus). Viennent ensuite les sections, chacune avec son icône. Les chiffres sont présentés en <b>cartes</b> teintées de leur couleur (un libellé, une valeur, parfois une précision en dessous) et en graphiques (barres, anneaux). Les durées s'écrivent « 3h 12min », les poids « 1.23 kg » ou « 97.4 g », les montants « 12.34 € ». Un tiret « — » signifie qu'il n'y a pas de valeur.</p>
   <p>Certaines sections portent une pastille <span class="ui">🌐 toutes périodes</span> : elles ne dépendent pas de la période choisie.</p>
@@ -116,6 +117,17 @@
     </dl>
     <p>Chaque classement a une bascule <span class="ui">Impressions</span> / <span class="ui">Groupes</span> : en mode Groupes, ce sont tes <a href="#impressions">groupes d'impressions</a> qui sont classés (le préfixe « ×N » donne leur nombre d'impressions). « Groupes » est grisé si tu n'en as pas. Seules les impressions <b>réussies</b> entrent dans les classements. Une impression ou un groupe marqué <span class="ui">📊 hors classements</span> (dans sa fiche, menu ⋯ : utile pour un groupe d'échantillons ou de supports de bobine qui fausserait « le plus de couleurs » ou « les plus lourds ») n'y figure plus, mais reste compté dans tous les totaux, puisque son filament a bien été consommé. Touche une ligne pour ouvrir la fiche de l'impression ou du groupe.</p>
   </section>
+</section>
+
+<section id="stats-categories">
+  <h2>Onglet Catégories</h2>
+  <p>Les impressions de la période, rangées selon les familles, catégories et étiquettes que Claude a données à leur modèle (voir <a href="#parametres-links-claude">Paramètres › Claude</a>). En haut, choisis ce que mesurent les barres : <span class="ui">Impressions</span> (leur nombre), <span class="ui">Poids</span>, <span class="ui">Coût</span> ou <span class="ui">Temps</span> ; à droite, combien d'impressions de la période ont un modèle classé.</p>
+  <dl class="opts">
+    <dt>📂 Par famille</dt><dd>Chaque famille, avec son chiffre et son nombre de modèles.</dd>
+    <dt>🏷 Par catégorie</dt><dd>Les 15 premières catégories, dans la couleur de leur famille (son nom à droite) ; <span class="ui">Les N catégories</span> les montre toutes.</dd>
+    <dt># Étiquettes les plus présentes</dt><dd>Les 25 premières.</dd>
+  </dl>
+  <p>Une impression compte dans <b>chacune</b> de ses familles, catégories et étiquettes : les barres ne s'additionnent pas. Toucher une ligne ouvre la liste des impressions filtrée dessus, sur la même période.</p>
 </section>
 
 <section id="stats-filaments">

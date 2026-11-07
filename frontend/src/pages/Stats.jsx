@@ -1139,6 +1139,65 @@ function PeriodFilterSheet({ value, onApply, onClose }) {
   );
 }
 
+// Les impressions par famille, categorie et etiquette donnees par Claude (07/11/2026) : sur la periode choisie, par
+// nombre, poids, cout ou temps. Une impression compte dans chacune de ses familles, categories et etiquettes. Une
+// ligne touchee ouvre la liste des impressions filtree dessus (meme periode).
+const LAB_METRICS = [["prints", "Impressions", n => `${n}`], ["weight_g", "Poids", fmtKg], ["cost", "Coût", fmtEur], ["seconds", "Temps", fmtH]];
+function LabelsStats({ period }) {
+  const navigate = useNavigate();
+  const [d, setD] = useState(null);
+  const [m, setM] = useState("prints");
+  const [allCats, setAllCats] = useState(false);
+  useEffect(() => {
+    setD(null);
+    client.get("/prints/stats/labels", { params: { date_from: period.from || undefined, date_to: period.to || undefined } })
+      .then(r => setD(r.data)).catch(() => setD({ error: true }));
+  }, [period.from, period.to]);
+  if (!d) return <p style={{ textAlign: "center", color: "var(--muted)", padding: 40 }}>Chargement…</p>;
+  if (d.error) return <p style={{ textAlign: "center", color: "var(--muted)", padding: 40 }}>Statistiques indisponibles.</p>;
+  if (!d.classed) return <Section title="Par catégorie">
+    <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>Aucune impression de la période n'a encore de catégorie : le classement se lance dans
+      Paramètres › Connexions › Claude.</p></Section>;
+  const fmt = LAB_METRICS.find(x => x[0] === m)[2];
+  const metric = isMoneyHidden() ? LAB_METRICS.filter(x => x[0] !== "cost") : LAB_METRICS;
+  const go = (k, v) => {
+    const q = new URLSearchParams({ [k]: v });
+    if (period.from) q.set("from", period.from);
+    if (period.to) q.set("to", period.to);
+    navigate(`/prints?${q}`);
+  };
+  const sorted = lst => [...lst].sort((a, b) => b[m] - a[m]);
+  const bars = (lst, k, color, sub) => {
+    const max = Math.max(...lst.map(x => x[m]), 0);
+    return lst.map(x => <Bar key={x.name} stacked label={x.name} value={x[m]} max={max} color={typeof color === "function" ? color(x) : color}
+      sublabel={`${fmt(x[m])}${sub ? sub(x) : ""}`} onClick={() => go(k, x.name)}/>);
+  };
+  const FAM_C = ["#B45309", "#6366F1", "#EC4899", "#0EA5E9", "#22C55E", "#F97316", "#8B5CF6", "#14B8A6", "#EF4444", "#EAB308", "#64748B", "#06B6D4", "#A855F7"];
+  const famC = Object.fromEntries(d.families.map((f, i) => [f.name, FAM_C[i % FAM_C.length]]));
+  const cats = sorted(d.categories);
+  const box = c => statCard(c, { padding: "6px 12px 10px", display: "flex", flexDirection: "column" });
+  const pill = on => ({ padding: "6px 12px", borderRadius: 999, fontSize: 12.5, fontWeight: 800, cursor: "pointer",
+    border: `1px solid ${on ? "#6366F1" : "var(--border)"}`, background: on ? "linear-gradient(135deg, #6366F1, #818CF8)" : "var(--surface2)", color: on ? "#fff" : "var(--text2)" });
+  return <>
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+      {metric.map(([k, l]) => <button key={k} type="button" onClick={() => setM(k)} style={pill(m === k)}>{l}</button>)}
+      <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted)" }}>
+        {d.classed === d.total ? `${d.total} impressions` : `${d.classed} impressions classées sur ${d.total}`}</span>
+    </div>
+    <Section title="Par famille" icon="📂"><div style={box("#B45309")}>
+      {bars(sorted(d.families), "cat", x => famC[x.name], x => ` · ${x.models} modèle${x.models > 1 ? "s" : ""}`)}
+    </div></Section>
+    <Section title="Par catégorie" icon="🏷"><div style={box("#6366F1")}>
+      {bars(allCats ? cats : cats.slice(0, 15), "cat", x => famC[x.family] || "#6366F1", x => x.family ? ` · ${x.family}` : "")}
+      {cats.length > 15 && <button type="button" onClick={() => setAllCats(v => !v)} style={{ ...pill(false), marginTop: 8, alignSelf: "flex-start" }}>
+        {allCats ? "Moins" : `Les ${cats.length} catégories`}</button>}
+    </div></Section>
+    <Section title="Étiquettes les plus présentes" icon="#"><div style={box("#64748B")}>
+      {bars(sorted(d.tags).slice(0, 25), "etq", "#64748B")}
+    </div></Section>
+  </>;
+}
+
 export default function Stats() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
@@ -1148,8 +1207,8 @@ export default function Stats() {
   const [groupPrints, setGroupPrints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [tab, setTab] = useUrlTab("tab", "prints", ["prints", "filaments", "drying", "machine", "objects", "achievements"]);
-  useTrackDetail(`Stats · ${ {prints:"Impressions", filaments:"Filaments",
+  const [tab, setTab] = useUrlTab("tab", "prints", ["prints", "labels", "filaments", "drying", "machine", "objects", "achievements"]);
+  useTrackDetail(`Stats · ${ {prints:"Impressions", labels:"Catégories", filaments:"Filaments",
     objects:"Objets"}[tab] || tab }`);
   const [objStats, setObjStats] = useState(null);
   const [objDetail, setObjDetail] = useState(null);
@@ -1256,7 +1315,7 @@ export default function Stats() {
     </div>
   );
 
-  const tabs = [{ id:"prints", label:"Impressions", ic:"🖨️", c:"#3B82F6" }, { id:"filaments", label:"Filaments", ic:"🧵", c:"#F97316" },
+  const tabs = [{ id:"prints", label:"Impressions", ic:"🖨️", c:"#3B82F6" }, { id:"labels", label:"Catégories", ic:"🏷", c:"#6366F1" }, { id:"filaments", label:"Filaments", ic:"🧵", c:"#F97316" },
     { id:"drying", label:"Séchage", ic:"💧", c:"#06B6D4" }, { id:"machine", label:"Machine", ic:"📈", c:"#0EA5E9" }, { id:"objects", label:"Objets", ic:"🎁", c:"#8B5CF6" },
     { id:"achievements", label:"Succès", ic:"🏆", c:"#F59E0B" }];
 
@@ -1541,6 +1600,7 @@ export default function Stats() {
       <DriftStats/>
       </>)}
 
+      {tab === "labels" && <LabelsStats period={period}/>}
       {tab === "drying" && <DryingStats/>}
       {tab === "machine" && <React.Suspense fallback={null}><MachineStats/></React.Suspense>}
 

@@ -892,6 +892,11 @@ async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float],
     except Exception as e:
         logger.error(f"_finalize pid={pid}: {e}", exc_info=True)
         return
+    try:
+        from . import ai_tags
+        await ai_tags.after_print(pid)           # son modele classe par Claude s'il ne l'est pas encore
+    except Exception:
+        pass
     from . import notify_events as _ne
     await _ne.print_finished(pid, status, pct, print_error)
 
