@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import client from "../api/client";
 import CardHelp from "./CardHelp";
@@ -7,6 +7,8 @@ import { FSheet, fBtn } from "./FicheKit";
 import { openMenu } from "./ContextMenu";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { parseColorsList, finishOf } from "../utils/colors";
+import { useRfidScan } from "../store/rfidScan";
+import { toast } from "../store/toast";
 
 // Les rangements des bobines (07/11/2026) : le mode (un seul rangement, chaque bobine a sa place, rangement manuel),
 // l'arbre des emplacements (Tiroir 1 › Colonne 1 › Ligne 3, Rack 1 › A2…), ranger une bobine, les bobines « À ranger »
@@ -765,12 +767,34 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
 
 function SpoolChooser({ title, spools, TO, onClose, onPick }) {
   const [q, setQ] = useState("");
+  // le scan RFID (07/11/2026, appli Android) : le prochain tag lu designe la bobine a ranger ici
+  const scan = useRfidScan();
+  const [waiting, setWaiting] = useState(false);
+  const started = useRef(false);                       // l'ecoute lancee ici : coupee en partant
+  useEffect(() => () => { useRfidScan.getState().setCapture(null); if (started.current) useRfidScan.getState().stop(); }, []);
+  const startScan = async () => {
+    if (!scan.listening) { await scan.start(); started.current = true; }
+    setWaiting(true);
+    useRfidScan.getState().setCapture(d => {
+      const qs = new URLSearchParams((d.redirect || "").split("?")[1] || "");
+      const sid = Number(qs.get("spool"));
+      if (!sid) { toast(qs.get("rfid") ? "Bobine inconnue : ajoute-la d'abord (scan depuis la page Filaments)" : "Tag non reconnu", "error", 3000); return; }
+      useRfidScan.getState().setCapture(null);
+      setWaiting(false);
+      onPick(spools.find(s => s.id === sid) || { id: sid });
+    });
+  };
   const ql = q.trim().toLowerCase();
   const list = spools.filter(s => !ql || [spoolName(s), s.filament_manufacturer, s.filament_fila_type, s.filament_material, String(s.id), s.location]
     .filter(Boolean).join(" ").toLowerCase().includes(ql)).slice(0, 80);
   return createPortal(<FSheet onClose={onClose} z={1300} bottom={<button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Annuler</button>}>
     <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>{title}</div>
+      {scan.available && <button type="button" onClick={waiting ? () => { useRfidScan.getState().setCapture(null); setWaiting(false); } : startScan}
+        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px 12px", borderRadius: 14, cursor: "pointer", font: "inherit",
+          fontSize: 14, fontWeight: 900, border: "none", color: "#fff", background: waiting ? "linear-gradient(135deg, #22C55E, #16A34A)" : "linear-gradient(135deg, #8B5CF6, #6366F1)",
+          boxShadow: waiting ? "0 0 0 4px rgba(34,197,94,0.25)" : "none" }}>
+        📡 {waiting ? "Approche la bobine du téléphone… (toucher pour arrêter)" : "Scanner la bobine (RFID)"}</button>}
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="Chercher une bobine" style={inp}/>
       {list.map(s => <button key={s.id} type="button" onClick={() => onPick(s)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
         borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer", textAlign: "left", color: "var(--text)" }}>

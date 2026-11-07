@@ -43,6 +43,8 @@ export default function RfidScanBridge() {
       // Mauvaise lecture, tag non Bambu, donnees incompletes... : un message
       // qui s'efface seul (2 s), pour enchainer le scan sans cliquer « OK ».
       if (d.error) { toast(`Lecture RFID : ${d.error}`, "error", 2000); return; }
+      const cap = useRfidScan.getState().capture;
+      if (cap) { cap(d); return; }                    // un ecran attend ce scan (ranger une bobine…)
       const qs = (d.redirect || "").split("?")[1] || "";
       if (pathname === "/filaments") { navigate(`/filaments${qs ? `?${qs}` : ""}`, { replace: true }); return; }
       const q = new URLSearchParams(qs);

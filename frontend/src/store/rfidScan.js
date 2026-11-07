@@ -37,6 +37,10 @@ export const useRfidScan = create((set, get) => ({
   available: isAvailable(),
   listening: false,
   wakeLock: null,
+  // un ecran qui attend un scan pour lui (07/11/2026 : ranger une bobine dans une case) : le prochain scan lui revient
+  // au lieu d'ouvrir la fiche de la bobine ; null quand personne n'attend
+  capture: null,
+  setCapture: fn => set({ capture: fn }),
 
   start: async () => {
     if (!get().available || get().listening) return;
