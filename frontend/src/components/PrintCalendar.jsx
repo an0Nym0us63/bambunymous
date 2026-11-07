@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
 import { egg } from "../eggs";
 import { useCanMw, useAuth } from "../store/auth";
@@ -136,6 +136,23 @@ const pdStore = pd => {
 
 // onOpenPrint (06/11/2026) : la page des impressions ouvre la fiche d'une impression passee par-dessus le calendrier
 // (sans changer d'onglet) ; sans lui, on y va par ?id=
+// le dernier etat connu, en attendant le planning recalcule (07/11/2026) : « Mise a jour… » qui tourne, ou « Hors ligne »
+// si la lecture a echoue ; rien une fois le frais arrive (les relectures de chaque minute ne la rallument pas)
+function SyncPill({ pd, fresh, compact = false }) {
+  if (fresh === true || !pd) return null;
+  const err = fresh === "err";
+  const c = err ? "#DC2626" : "#6366F1";
+  const at = pd.now ? new Date(pd.now).toLocaleString("fr-FR", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : null;
+  return <span role="status" data-tip={err ? "Le serveur n'a pas répondu : c'est le dernier planning connu" + (at ? ` (calculé ${at})` : "")
+    : "Le dernier planning connu s'affiche" + (at ? ` (calculé ${at})` : "") + " ; le planning à jour arrive"}
+    style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 11px", borderRadius: 11, flexShrink: 0, fontSize: 12.5, fontWeight: 800,
+      color: c, background: `color-mix(in srgb, ${c} 10%, var(--surface))`, border: `1px solid color-mix(in srgb, ${c} 35%, var(--border))` }}>
+    <style>{"@keyframes bn-sync-spin { to { transform: rotate(360deg) } }"}</style>
+    {err ? "⚠" : <RefreshCw size={14} style={{ animation: "bn-sync-spin 1s linear infinite" }}/>}
+    {!compact && (err ? "Hors ligne" : "Mise à jour…")}
+  </span>;
+}
+
 export default function PrintCalendar({ onOpenPrint } = {}) {
   const nav = useNavigate();
   const width = useWidth(), wide = width >= 760, side = width >= 1180;   // side : le detail du jour a cote de la grille
@@ -154,6 +171,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   const [days, setDays] = useState(null);       // {date: {count, duration, items}}
   // le planning (05/11/2026) : « A faire » plateau par plateau, pose par le serveur selon les consignes
   const [pd, setPd] = useState(() => cacheOf().pd || pdStored());
+  // le planning affiche d'abord le dernier etat connu (07/11/2026) : tant que le frais n'est pas arrive, une pastille le dit
+  const [pdFresh, setPdFresh] = useState(false);
   useEffect(() => { if (pd && pd.jobs) { cacheOf().pd = pd; pdStore(pd); } }, [pd]);
   setFilColors(pd?.fcolors);
   // venu d'« À faire » (06/11/2026) : ?plan=… ouvre la fiche de ce modele du planning (?model= ouvre la fiche MakerWorld)
@@ -210,7 +229,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   useEffect(() => {
     let alive = true;
     const load = () => client.get("/makerworld/plan", { params: { tz: -new Date().getTimezoneOffset() } })
-      .then(r => alive && setPd(r.data)).catch(() => alive && setPd(x => x || { jobs: [], days: {} }));
+      .then(r => { if (alive) { setPd(r.data); setPdFresh(true); } })
+      .catch(() => { if (alive) { setPd(x => x || { jobs: [], days: {} }); setPdFresh("err"); } });
     load();
     // le planning suit l'impression en cours : relu chaque minute (avance, retard, ce qui est a lancer)
     const t = setInterval(() => { if (!document.hidden) load(); }, 60000);
@@ -490,6 +510,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
         {edit && nPlanned > 1 && <BarBtn c="#6366F1" onClick={() => setPop("optimize")}
           tip="Enchaîner les plateaux de mêmes couleurs dans toute la file (les impressions posées sur un jour ne bougent pas)">✨ Optimiser la file</BarBtn>}
         {edit && <UndoPill info={pd?.undo} onUndo={undo} style={{ height: 34, borderRadius: 11, padding: "0 12px" }}/>}
+        <SyncPill pd={pd} fresh={pdFresh}/>
       </div>
       <div style={{ flex: 1 }}/>
       {showPlan && pd?.advice?.length > 0 && <BarBtn c="#D97706" n={pd.advice.length} onClick={() => setPop("advice")} tip="Les conseils du planning">Conseils</BarBtn>}
@@ -510,6 +531,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
       <BarBtn c="#6366F1" strong onClick={() => { const d = new Date(); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setPick(iso(d)); }}>Aujourd'hui</BarBtn>
       {edit && nPlanned > 1 && <BarBtn c="#6366F1" label="Optimiser la file" onClick={() => setPop("optimize")}>✨</BarBtn>}
       {edit && <UndoPill info={pd?.undo} onUndo={undo} compact style={{ height: 34, borderRadius: 11, padding: "0 12px", flexShrink: 0 }}/>}
+      <SyncPill pd={pd} fresh={pdFresh} compact/>
       {showPlan && pd?.advice?.length > 0 && <BarBtn c="#D97706" n={pd.advice.length} onClick={() => setPop("advice")} label="Conseils">💡</BarBtn>}
       {showPlan && pd?.jobs?.some(j => j.locked) && <BarBtn c="#4F46E5" n={pd.jobs.filter(j => j.locked).length} onClick={() => setPop("locked")} label="Plateaux figés">🔒</BarBtn>}
       {showPlan && pd?.jobs?.some(j => j.low_info?.length) && <BarBtn c="#DC2626" n={pd.jobs.reduce((a, j) => a + (j.low_info?.length || 0), 0)} onClick={() => setPop("low")} label="Sous le seuil">📉</BarBtn>}
