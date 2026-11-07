@@ -158,6 +158,20 @@ export function SpoolEdge({ s, vertical = false, len = "100%", thick = 18, dim =
 }
 // comment un rangement montre ses bobines : la pastille, ou la tranche (h a plat, v debout), pose sur le rangement
 const edgeOf = (p, by) => { let q = p, seen = 0; while (q && q.parent_id != null && by[q.parent_id] && seen++ < 20) q = by[q.parent_id]; return q?.edge || null; };
+// les cases des rangements (08/11/2026) : le meme dessin dans la vue du stock et la fenetre d'un rangement ; le texte suit
+// la largeur de la case (le nom toujours, sur une ligne quand c'est etroit ; rien que la tranche dans une toute petite case)
+const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:flex;flex-direction:column;align-items:stretch;gap:3px;min-width:0;
+        padding:5px 5px 6px;border-radius:12px;border:1px solid color-mix(in srgb,#8B5CF6 22%,var(--border));background:var(--surface);color:var(--text);
+        overflow:hidden;font:inherit;text-align:center;transition:transform .12s, box-shadow .12s}
+      .bn-cell:not(.bn-free):hover{transform:translateY(-1px);box-shadow:0 6px 14px -8px rgba(15,23,42,.35)}
+      .bn-cell.bn-free{min-height:40px;justify-content:center;align-items:center;background:transparent;border:1.5px dashed color-mix(in srgb,var(--border) 85%,transparent)}
+      .bn-num-free{font-size:12px;font-weight:900;color:var(--muted);opacity:.75}
+      .bn-band{position:relative;display:flex;justify-content:center;align-items:center;min-height:24px;overflow:hidden;border-radius:6px}
+      .bn-num{align-self:flex-start;font-size:9.5px;font-weight:900;line-height:1;color:var(--muted);margin:-1px 0 -1px 1px}
+      .bn-ct-name{font-size:11px;font-weight:900;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+      .bn-ct-sub{font-size:9px;font-weight:700;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      @container (max-width:84px){.bn-ct-sub{display:none}.bn-ct-name{font-size:10px;-webkit-line-clamp:1}}
+      @container (max-width:34px){.bn-ct-name{display:none}.bn-cell{padding:3px}.bn-num{font-size:8.5px}}`;
 // l'epaisseur de la tranche couchee suit la largeur de la case (unites de conteneur) : les proportions d'une bobine
 const EDGE_H = "clamp(20px, 30cqw, 46px)";
 const infoOf = (occ, full) => [full?.filament_fila_type || full?.filament_material || occ?.material, full?.filament_manufacturer || occ?.brand].filter(Boolean);
@@ -368,6 +382,15 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       return write("post", "/storage/places", { parent_id: parent.id, items: [item] }).then(r => !!r);
     },
   });
+  // (08/11/2026) « − » sous une zone : retire son dernier emplacement (le plus grand numero) ; s'il tient une bobine, on demande
+  const removeLast = async z => {
+    const cs = (kids[z.id] || []).filter(c => c.leaf);
+    if (!cs.length) return;
+    const last = cs.reduce((a, b) => (parseInt((b.name.match(/(\d+)$/) || [])[1] || "0", 10) >= parseInt((a.name.match(/(\d+)$/) || [])[1] || "0", 10) ? b : a));
+    if (last.spools.length && !(await showConfirm(`« ${last.path} » tient ${last.spools.length > 1 ? `${last.spools.length} bobines` : `« ${last.spools[0].name} »`} : `
+      + `${last.spools.length > 1 ? "elles perdront leur place et passeront" : "elle perdra sa place et passera"} « À ranger ». Le retirer quand même ?`, { danger: true, confirmLabel: "Retirer" }))) return;
+    await write("delete", `/storage/places/${last.id}`);
+  };
   const rename = p => setAsk({ title: `Renommer « ${p.name} »`, fields: [{ key: "name", label: "Nom", value: p.name, required: true }], okLabel: "Renommer",
     onOk: async ({ name }) => {
       const nv = name.trim();
@@ -417,15 +440,17 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
   });
   const Cell = ({ p }) => {
     const occ = (focus && p.spools.find(x => x.id === focus)) || p.spools[0], edge = edgeOf(p, by), info = infoOf(occ, null), hit = isHit(p);
-    return <button type="button" onClick={e => menu(e, p)} data-hit={hit ? "1" : undefined} data-tip={occ ? [occ.name, ...info, `#${occ.id}`].join(" · ") : p.single ? "Case libre" : "Emplacement commun"}
-      style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, minWidth: 0, minHeight: 28,
-        padding: "2px 1px", borderRadius: 7, cursor: readOnly ? "default" : "pointer", color: "var(--text)", zIndex: hit ? 2 : undefined,
-        animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined,
-        border: `1px ${p.single ? "solid" : "dashed"} color-mix(in srgb, #8B5CF6 ${occ ? 55 : 25}%, var(--border))`, background: occ ? "color-mix(in srgb, #8B5CF6 10%, var(--surface))" : "transparent" }}>
-      {occ && (edge ? <SpoolEdge s={occ} vertical={edge === "v"} len={edge === "v" ? 34 : "92%"} thick={edge === "v" ? 18 : 18}/> : <Swatch s={occ} size={15}/>)}
-      {occ && edge && info.length > 0 && <span style={{ fontSize: 8.5, fontWeight: 800, color: "var(--muted)", maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{info.join(" · ")}</span>}
-      <span style={{ fontSize: 10.5, fontWeight: 900, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.single ? "" : "📚"}{shortName(p, by)}</span>
-      {!p.single && p.spools.length > 1 && <span style={{ ...small, fontSize: 9 }}>{p.spools.length}</span>}
+    const num = `${p.single ? "" : "📚"}${shortName(p, by)}`;
+    // (08/11/2026) le meme dessin que la vue du stock : numero, tranche, nom, sous-type · marque
+    return <button type="button" className={`bn-cell${occ ? "" : " bn-free"}`} onClick={e => menu(e, p)} data-hit={hit ? "1" : undefined}
+      data-tip={occ ? [occ.name, ...info, `#${occ.id}`].join(" · ") : p.single ? `${num} · case libre` : `${num} · emplacement commun`}
+      style={{ cursor: readOnly ? "default" : "pointer", zIndex: hit ? 2 : undefined, animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined }}>
+      {occ ? <>
+        <span className="bn-num">{num}{!p.single && p.spools.length > 1 ? ` · ${p.spools.length}` : ""}</span>
+        <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={40} thick={20}/> : edge ? <SpoolEdge s={occ} len="100%" thick={EDGE_H}/> : <Swatch s={occ} size={24}/>}</span>
+        <span className="bn-ct-name">{occ.name}</span>
+        {info.length > 0 && <span className="bn-ct-sub">{info.join(" · ")}</span>}
+      </> : <span className="bn-num-free">{num}</span>}
     </button>;
   };
   // une zone en vrac (un emplacement commun parmi les zones) : comme une zone, ses bobines en pastilles
@@ -459,12 +484,15 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       {cells.length > 0 && (a => <div style={{ display: "grid", gap: 3, gridTemplateColumns: a.tpl }}>
         {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(30px, 1fr))"))}
       {subs.length > 0 && <Zones parent={p} list={subs}/>}
-      {!readOnly && <button type="button" onClick={() => addCells(p, p.name)} aria-label={`Des emplacements dans ${p.name}`}
-        style={{ ...seg, padding: "0 4px", fontSize: 11, lineHeight: "18px" }}>＋</button>}
+      {!readOnly && <div style={{ display: "flex", gap: 3 }}>
+        <button type="button" onClick={() => removeLast(p)} disabled={!cells.length} aria-label={`Retirer le dernier emplacement de ${p.name}`}
+          data-tip="Retirer le dernier emplacement" style={{ ...seg, flex: 1, padding: "0 4px", fontSize: 12, lineHeight: "18px", opacity: cells.length ? 1 : 0.4 }}>−</button>
+        <button type="button" onClick={() => addCells(p, p.name)} aria-label={`Des emplacements dans ${p.name}`}
+          data-tip="Ajouter des emplacements" style={{ ...seg, flex: 1, padding: "0 4px", fontSize: 11, lineHeight: "18px" }}>＋</button></div>}
     </div>;
   };
   // les zones cote a cote, chacune a sa hauteur (07/11/2026 : elles s'etiraient a la plus haute) ; 5 tiennent sur un telephone
-  const Zones = ({ parent, list }) => { const a = arrange(list, parent, false, "repeat(auto-fit, minmax(58px, 1fr))");
+  const Zones = ({ parent, list }) => { const a = arrange(list, parent, false, `repeat(${Math.min(list.length, 4)}, minmax(0, 1fr))`);
     return <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl, alignItems: "start" }}>
       {a.items.map(z => z.leaf ? <Vrac key={z.id} p={z}/> : <Zone key={z.id} p={z} many={list.length > 1}/>)}</div>; };
   const ch = kids[root.id] || [];
@@ -478,6 +506,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
         <button onClick={() => addZone()} style={{ ...fBtn, flex: 1 }}>＋ Une zone</button>
         <button onClick={() => addCells(root, null)} style={{ ...fBtn, flex: 1 }}>＋ Des emplacements</button></> : null}
       <button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Fermer</button></>}>
+      <style>{CELL_CSS}</style>
       <style>{`@keyframes bnDrawer{0%{opacity:0;transform:perspective(900px) rotateX(38deg) translateY(-34px) scale(.92)}
         60%{opacity:1;transform:perspective(900px) rotateX(-4deg) translateY(4px) scale(1.01)}100%{transform:none}}
         @keyframes bnHit{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.9);transform:scale(1);border-color:#F59E0B}
@@ -755,7 +784,7 @@ export function PlacePicker({ spools, onClose, onDone, pickOnly = false, onPicke
       {cells.length > 0 && (a => <div style={{ display: "grid", gap: 5, gridTemplateColumns: a.tpl }}>
         {a.items.map(c => <Leaf key={c.id} p={c} compact={many || p.layout === "row" || p.layout === "grid" || (!!p.cols && p.cols > 3)}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(92px, 1fr))"))}
       {subs.length > 0 && (a => <div style={{ display: "grid", gap: 5, gridTemplateColumns: a.tpl, alignItems: "start" }}>
-        {a.items.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>)(arrange(subs, p, false, "repeat(auto-fit, minmax(62px, 1fr))"))}
+        {a.items.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>)(arrange(subs, p, false, `repeat(${Math.min(subs.length, 4)}, minmax(0, 1fr))`))}
     </div>;
   };
   const found = ql ? st.places.filter(p => p.leaf && p.path.toLowerCase().includes(ql)) : null;
@@ -947,23 +976,12 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
         {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(76px, 1fr))"))}
       {commons.map(c => <Common key={c.id} p={c} nested/>)}
       {subs.length > 0 && (a => <div style={{ display: "grid", gap: 5, gridTemplateColumns: a.tpl, alignItems: "start" }}>
-        {a.items.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>)(arrange(subs, p, false, "repeat(auto-fit, minmax(58px, 1fr))"))}
+        {a.items.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>)(arrange(subs, p, false, `repeat(${Math.min(subs.length, 4)}, minmax(0, 1fr))`))}
     </div>;
   };
 
   return <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-    <style>{`.bn-cell{position:relative;container-type:inline-size;display:flex;flex-direction:column;align-items:stretch;gap:3px;min-width:0;
-        padding:5px 5px 6px;border-radius:12px;border:1px solid color-mix(in srgb,#8B5CF6 22%,var(--border));background:var(--surface);color:var(--text);
-        overflow:hidden;font:inherit;text-align:center;transition:transform .12s, box-shadow .12s}
-      .bn-cell:not(.bn-free):hover{transform:translateY(-1px);box-shadow:0 6px 14px -8px rgba(15,23,42,.35)}
-      .bn-cell.bn-free{min-height:40px;justify-content:center;align-items:center;background:transparent;border:1.5px dashed color-mix(in srgb,var(--border) 85%,transparent)}
-      .bn-num-free{font-size:12px;font-weight:900;color:var(--muted);opacity:.75}
-      .bn-band{position:relative;display:flex;justify-content:center;align-items:center;min-height:24px;overflow:hidden;border-radius:6px}
-      .bn-num{align-self:flex-start;font-size:9.5px;font-weight:900;line-height:1;color:var(--muted);margin:-1px 0 -1px 1px}
-      .bn-ct-name{font-size:11px;font-weight:900;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
-      .bn-ct-sub{font-size:9px;font-weight:700;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      @container (max-width:84px){.bn-ct-sub{display:none}.bn-ct-name{font-size:10px;-webkit-line-clamp:1}}
-      @container (max-width:48px){.bn-ct-name{display:none}.bn-cell{padding:3px}.bn-num{font-size:8.5px}}`}</style>
+    <style>{CELL_CSS}</style>
     {printer.length > 0 && <Section k="printer" icon={<Printer size={16} strokeWidth={2.2}/>} title="Dans l'imprimante" n={printer.length} tone="#0EA5E9">
       {units.map(u => <div key={u} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text2)" }}>{u}</div>
