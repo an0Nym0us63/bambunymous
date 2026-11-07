@@ -5,7 +5,7 @@ import CardHelp from "./CardHelp";
 import SpoolSVG from "./SpoolSVG";
 import { FSheet, fBtn } from "./FicheKit";
 import { openMenu } from "./ContextMenu";
-import { showAlert, showConfirm } from "../utils/dialog";
+import { showAlert, showConfirm, showChoice } from "../utils/dialog";
 import { parseColorsList, finishOf } from "../utils/colors";
 import { useRfidScan } from "../store/rfidScan";
 import { toast } from "../store/toast";
@@ -126,20 +126,23 @@ function Swatch({ s, size = 28, dim = false }) {
   return <span style={{ display: "inline-flex", opacity: dim ? 0.4 : 1, flexShrink: 0 }}>
     <SpoolSVG colors={colors} finish={finishOf(s)} size={size} type={s.filament_multicolor_type ?? s.multicolor_type}/></span>;
 }
-// une bobine vue sur la tranche (07/11/2026) : ses deux flasques et le filament enroule entre, a sa couleur (plusieurs
-// couleurs : en bandes). vertical : la bobine debout, la tranche en hauteur.
-export function SpoolEdge({ s, vertical = false, len = "100%", thick = 10, dim = false }) {
+// une bobine vue sur la tranche (07/11/2026) : comme dans le tiroir, couchee, ses deux flasques dessus et dessous et le
+// filament enroule entre, en large bande a sa couleur (plusieurs couleurs : en bandes) ; vertical : la meme, debout
+// (flasques a gauche et a droite).
+export function SpoolEdge({ s, vertical = false, len = "100%", thick = 18, dim = false }) {
   const cs = parseColorsList(s.filament_color ?? s.color, s.filament_colors_array ?? s.colors_array) || [];
   const list = cs.length ? cs : ["#94a3b8"];
-  const dir = vertical ? "180deg" : "90deg";
-  const fill = list.length > 1 ? `linear-gradient(${dir}, ${list.map((c, i) => `${c} ${i / list.length * 100}% ${(i + 1) / list.length * 100}%`).join(", ")})` : list[0];
-  const wind = `repeating-linear-gradient(${dir}, rgba(0,0,0,.10) 0 1px, transparent 1px 3px)`;
-  const fl = { background: "color-mix(in srgb, var(--text) 55%, transparent)", borderRadius: 2, flexShrink: 0, [vertical ? "height" : "width"]: 3 };
-  return <span aria-hidden="true" style={{ display: "flex", flexDirection: vertical ? "column" : "row", alignItems: "stretch", flexShrink: 0, opacity: dim ? 0.4 : 1,
+  const along = vertical ? "180deg" : "90deg";         // le long de la bande
+  const across = vertical ? "90deg" : "180deg";        // en travers : les spires
+  const fill = list.length > 1 ? `linear-gradient(${along}, ${list.map((c, i) => `${c} ${i / list.length * 100}% ${(i + 1) / list.length * 100}%`).join(", ")})` : list[0];
+  const wind = `repeating-linear-gradient(${across}, rgba(0,0,0,.13) 0 1px, transparent 1px 3px)`;
+  const shade = `linear-gradient(${along}, rgba(0,0,0,.22), rgba(255,255,255,.18) 30%, transparent 55%, rgba(0,0,0,.25))`;
+  const fl = { flexShrink: 0, background: "linear-gradient(" + along + ", #cbd5e1, #f8fafc 40%, #e2e8f0)", borderRadius: 2,
+    boxShadow: "0 0 0 1px rgba(15,23,42,.18)", [vertical ? "width" : "height"]: Math.max(2, Math.round(thick / 7)) };
+  return <span aria-hidden="true" style={{ display: "flex", flexDirection: vertical ? "row" : "column", alignItems: "stretch", flexShrink: 0, opacity: dim ? 0.4 : 1,
     width: vertical ? thick : len, height: vertical ? len : thick }}>
     <span style={fl}/>
-    <span style={{ flex: 1, margin: vertical ? "0 1.5px" : "1.5px 0", backgroundImage: `${wind}, linear-gradient(${vertical ? "90deg" : "180deg"}, rgba(255,255,255,.35), transparent 45%, rgba(0,0,0,.18))`,
-      backgroundColor: list.length > 1 ? undefined : fill, ...(list.length > 1 ? { background: `${wind}, ${fill}` } : {}), boxShadow: "inset 0 0 0 1px rgba(0,0,0,.15)" }}/>
+    <span style={{ flex: 1, margin: vertical ? "5% 0" : "0 5%", background: `${wind}, ${shade}, ${fill}`, boxShadow: "inset 0 0 0 1px rgba(0,0,0,.12)" }}/>
     <span style={fl}/>
   </span>;
 }
@@ -385,7 +388,7 @@ function PlaceEditor({ id, onClose }) {
       style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, minWidth: 0, minHeight: 28,
         padding: "2px 1px", borderRadius: 7, cursor: "pointer", color: "var(--text)",
         border: `1px ${p.single ? "solid" : "dashed"} color-mix(in srgb, #8B5CF6 ${occ ? 55 : 25}%, var(--border))`, background: occ ? "color-mix(in srgb, #8B5CF6 10%, var(--surface))" : "transparent" }}>
-      {occ && (edge ? <SpoolEdge s={occ} vertical={edge === "v"} len={edge === "v" ? 28 : "90%"} thick={edge === "v" ? 13 : 13}/> : <Swatch s={occ} size={15}/>)}
+      {occ && (edge ? <SpoolEdge s={occ} vertical={edge === "v"} len={edge === "v" ? 34 : "92%"} thick={edge === "v" ? 18 : 18}/> : <Swatch s={occ} size={15}/>)}
       {occ && edge && info.length > 0 && <span style={{ fontSize: 8.5, fontWeight: 800, color: "var(--muted)", maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{info.join(" · ")}</span>}
       <span style={{ fontSize: 10.5, fontWeight: 900, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.single ? "" : "📚"}{shortName(p, by)}</span>
       {!p.single && p.spools.length > 1 && <span style={{ ...small, fontSize: 9 }}>{p.spools.length}</span>}
@@ -724,7 +727,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
       <span style={occ ? { position: "absolute", top: 2, left: 4, right: 3, fontSize: 9.5, fontWeight: 900, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
         : { fontSize: 12, fontWeight: 900, color: "var(--muted)" }}>{shortName(p, by)}</span>
       {occ ? <>
-        {edge ? <span style={{ marginTop: 10 }}><SpoolEdge s={full || occ} vertical={edge === "v"} len={edge === "v" ? 34 : 56} thick={edge === "v" ? 15 : 15} dim={out}/></span>
+        {edge ? <span style={{ marginTop: 10 }}><SpoolEdge s={full || occ} vertical={edge === "v"} len={edge === "v" ? 40 : 62} thick={edge === "v" ? 22 : 24} dim={out}/></span>
           : <Swatch s={full || occ} size={26} dim={out}/>}
         <span style={{ fontSize: 10, fontWeight: 800, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--text2)" }}>
           {out ? `🖨 ${unitOf(occ.location)}` : (full ? (full.filament_translated_name || full.filament_name) : occ.name)}</span>
@@ -804,6 +807,26 @@ function CellFiller({ place, spools: spools0, onClose }) {
   const [skip, setSkip] = useState(() => lsGet(SKIP_KEY, true));
   const [curId, setCurId] = useState(place.id);
   const [done, setDone] = useState([]);              // bobines rangees pendant la serie
+  // (07/11/2026) ce qui vient d'etre range, bien visible : « c'etait subtil, j'ai failli rescanner la meme »
+  const [last, setLast] = useState(null);            // { s, cell, n }
+  const placedIn = useRef({});                       // bobine -> emplacement ou elle a ete rangee pendant la serie
+  // le son dit si c'est bon (07/11/2026) : l'appli Android vibre deja a chaque lecture, ratee comprise ; deux notes
+  // montantes = rangee, une note grave = rien (tag inconnu, deja rangee). Le contexte audio nait au toucher du bouton
+  // de scan (le navigateur n'autorise le son qu'apres un geste).
+  const audio = useRef(null);
+  const tone = (f, t0, d, type = "sine", vol = 0.18) => {
+    const ctx = audio.current; if (!ctx) return;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+    const t = ctx.currentTime + t0;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.start(t); o.stop(t + d + 0.02);
+  };
+  // rangee : aussi une double vibration (telephone en silencieux), un peu apres celle de la lecture pour la distinguer
+  const buzz = p => {
+    try { if (Array.isArray(p)) tone(196, 0, 0.32, "square", 0.08); else { tone(880, 0, 0.11); tone(1320, 0.12, 0.16); } } catch { /* pas de son */ }
+    if (!Array.isArray(p)) setTimeout(() => { try { navigator.vibrate?.([70, 90, 70]); } catch { /* pas de vibreur */ } }, 350);
+  };
   const [busy, setBusy] = useState(false);
   const scan = useRfidScan();
   const [waiting, setWaiting] = useState(false);
@@ -823,21 +846,38 @@ function CellFiller({ place, spools: spools0, onClose }) {
   const goNext = () => { const n = nextFrom(pos, 1); if (n) setCurId(n.id); else { toast("Dernier emplacement de ce rangement : série terminée", "success", 2500); onClose(); } };
   const pick = async s => {
     if (busy) return;
+    // deja rangee ailleurs (07/11/2026) : on demande, au lieu de la deplacer sans rien dire
+    const fromId = s.place_id ?? (st?.places || []).find(p => p.spools.some(x => x.id === s.id))?.id;
+    if (fromId && fromId !== curId && by[fromId]) {
+      const from = by[fromId];
+      const v = await showChoice(`« ${spoolName(s)} » (#${s.id}) est déjà rangée en ${from.path}.
+Que veux-tu faire ?`, [
+        { value: "move", icon: "➡", label: `La déplacer en ${(by[curId] || cur).path}`, hint: `${from.path} redevient libre`, tone: "#8B5CF6" },
+        { value: "keep", icon: "✋", label: "La laisser où elle est", hint: chain ? "On reste sur cet emplacement : scanne ou choisis une autre bobine" : undefined },
+      ], { title: "Déjà rangée ailleurs" });
+      if (v !== "move") return;
+    }
     setBusy(true);
     const r = await assignSpools([s.id], curId);
     setBusy(false);
     if (!r) return;
     setDone(d => [...d, s.id]);
-    if (chain) { toast(`#${s.id} rangée en ${shortName(by[curId] || cur, by)}`, "success", 1500); setQ(""); goNext(); } else onClose();
+    const cellNm = (by[curId] || cur).path;
+    placedIn.current[s.id] = cellNm;
+    buzz(70);
+    if (chain) { setLast(l => ({ s: (spools0 || []).find(x => x.id === s.id) || s, cell: cellNm, n: (l?.n || 0) + 1 })); setQ(""); goNext(); } else onClose();
   };
   pickRef.current = pick;
   const startScan = async () => {
+    try { if (!audio.current) audio.current = new (window.AudioContext || window.webkitAudioContext)(); audio.current.resume?.(); } catch { /* pas d'audio */ }
     if (!scan.listening) { await scan.start(); started.current = true; }
     setWaiting(true);
     useRfidScan.getState().setCapture(d => {
       const qs = new URLSearchParams((d.redirect || "").split("?")[1] || "");
       const sid = Number(qs.get("spool"));
-      if (!sid) { toast(qs.get("rfid") ? "Bobine inconnue : ajoute-la d'abord (scan depuis la page Filaments)" : "Tag non reconnu", "error", 3000); return; }
+      if (!sid) { toast(qs.get("rfid") ? "Bobine inconnue : ajoute-la d'abord (scan depuis la page Filaments)" : "Tag non reconnu", "error", 3000); buzz([60, 40, 60]); return; }
+      // deja rangee pendant cette serie : on ne la deplace pas (un second scan de la meme, par doute)
+      if (placedIn.current[sid]) { toast(`Déjà rangée (${placedIn.current[sid]}) : scanne la suivante`, "error", 3000); buzz([60, 40, 60]); return; }
       pickRef.current?.((spools0 || []).find(s => s.id === sid) || { id: sid });
     });
   };
@@ -857,9 +897,26 @@ function CellFiller({ place, spools: spools0, onClose }) {
     <button onClick={onClose} style={{ ...fBtn, flex: 2 }}>Terminer{done.length ? ` (${done.length})` : ""}</button></>
     : <button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Annuler</button>}>
     <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <style>{`@keyframes bnOk{0%{transform:scale(.96);box-shadow:0 0 0 0 rgba(34,197,94,.7)}60%{transform:scale(1.01);box-shadow:0 0 0 10px rgba(34,197,94,0)}100%{transform:scale(1)}}
+        @keyframes bnNext{0%{background:color-mix(in srgb,#8B5CF6 35%,var(--surface))}100%{background:color-mix(in srgb,#8B5CF6 10%,var(--surface))}}`}</style>
+      {chain && last && <div key={`ok${last.n}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 14, animation: "bnOk .7s ease-out",
+        border: "2px solid #22C55E", background: "color-mix(in srgb, #22C55E 14%, var(--surface))" }}>
+        <span style={{ fontSize: 22 }}>✅</span>
+        <Swatch s={last.s} size={30}/>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 14, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            Rangée : {spoolName(last.s)} <span style={{ color: "var(--muted)", fontWeight: 800 }}>#{last.s.id}</span></span>
+          <span style={{ fontSize: 12, fontWeight: 800, color: "#16A34A" }}>dans {last.cell}</span>
+        </span>
+      </div>}
       <div>
-        <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>Ranger dans « {cur.path} »</div>
-        {chain && <div style={small}>Emplacement {pos + 1} sur {seq.length} · {done.length} rangée{done.length > 1 ? "s" : ""} pendant la série</div>}
+        {chain ? <div key={`cur${curId}`} style={{ padding: "10px 12px", borderRadius: 14, border: "2px solid #8B5CF6", animation: last ? "bnNext 1.2s ease-out" : undefined,
+          background: "color-mix(in srgb, #8B5CF6 10%, var(--surface))" }}>
+          <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#8B5CF6" }}>{last ? "➡ Maintenant" : "Emplacement"} · {pos + 1} sur {seq.length}</div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: "var(--text)" }}>{cur.path}</div>
+          <div style={small}>{done.length} rangée{done.length > 1 ? "s" : ""} pendant la série</div>
+        </div>
+          : <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>Ranger dans « {cur.path} »</div>}
         {occ && <div style={{ ...small, color: "#B45309" }}>Prise par « {occ.name} » (#{occ.id}) : la bobine choisie la délogera, après confirmation.</div>}
       </div>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
