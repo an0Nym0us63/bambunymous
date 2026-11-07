@@ -35,6 +35,7 @@ CATALOG = {
     "catalog_fc":   ("Couleurs mesurées", "Relit FilamentColors.xyz (couleurs mesurées et transparence des filaments, 300 marques) quand sa bibliothèque a changé : deux minutes après le démarrage, puis chaque semaine.", "Serveur"),
     "catalog_ofd":  ("Catalogue des autres marques", "Télécharge l'Open Filament Database (Sunlu, Geeetech, Polymaker…) et les poids des supports de SpoolmanDB : une minute après le démarrage, puis chaque semaine.", "Serveur"),
     "catalog":      ("Catalogue des filaments Bambu", "Télécharge le catalogue des filaments Bambu (codes, couleurs) : au démarrage, puis toutes les 24 h s'il a changé.", "Serveur"),
+    "ai_tags":      ("Catégories par Claude", "Chaque nuit à 4 h : reprend le classement des modèles groupés, reliés ou dégroupés depuis, puis fait classer par Claude ce qui manque encore (impression ratée mais gardée, importée…), si le classement automatique est coché.", "Impressions"),
     "nas":          ("Sauvegarde de nuit", "Sauvegarde vers le NAS (et vidage du local) chaque nuit, si elle est activée ; vérifie toutes les 5 min.", "Serveur"),
 }
 _ST: dict = {}

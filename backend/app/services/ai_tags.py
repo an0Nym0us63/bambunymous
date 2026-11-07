@@ -371,6 +371,8 @@ async def _run(redo: bool) -> None:
             key = await get_setting(db, K_KEY, "")
         if not key:
             raise RuntimeError("Aucune clé : colle-la d'abord dans Paramètres › Connexions › Claude.")
+        if not redo:
+            await inherit()                      # groupe, relie ou degroupe depuis : repris sans Claude
         known, manual, fams, cats, tc = await _known()
         skip = manual if redo else known
         todo = [m for m in await _select() if m["key"] not in skip]
@@ -461,7 +463,11 @@ async def labels_for_print(print_id: int) -> dict:
         p = await db.get(Print, print_id)
         if p is None:
             return {}
-        row = await db.get(ModelLabel, model_key(p.design_id, p.group_id, p.id))
+        row = None
+        for k in _cands(p.design_id, p.group_id, p.id):
+            row = await db.get(ModelLabel, k)
+            if row is not None:
+                break
     if row is None:
         return {}
     cm = _jl(row.catmap, {})
@@ -523,7 +529,85 @@ async def after_print(pid: int, status: str = "SUCCESS") -> None:
             p = await db.get(Print, pid)
             if p is None or await db.get(ModelLabel, model_key(p.design_id, p.group_id, p.id)) is not None:
                 return
+        if await inherit():
+            async with AsyncSessionLocal() as db:
+                if await db.get(ModelLabel, model_key(p.design_id, p.group_id, p.id)) is not None:
+                    return
         logger.info(f"[IA-TAGS] impression #{pid} : son modèle n'est pas classé, Claude s'en charge")
         start_run()
     except Exception:
         logger.debug(f"[IA-TAGS] classement après l'impression #{pid}", exc_info=True)
+
+
+# ── Un modele qui change de cle, et le rattrapage de nuit (07/11/2026) ──
+# Une impression groupee apres coup passe de « p:{id} » a « g:{groupe} » ; reliee a MakerWorld, a « mw:{design} » ;
+# degroupee, revient a « p:{id} ». Le classement deja fait sous une autre de ses cles est repris tel quel (rien chez
+# Claude). La nuit, le reste : ce qui n'a pas ete classe en fin d'impression (une impression ratee mais gardee, une
+# importee, un modele relie plus tard).
+def _cands(did, gid, pid) -> list:
+    """Toutes les cles qu'une impression a pu avoir, la sienne d'abord."""
+    did = str(did or "").strip()
+    out = [model_key(did, gid, pid)]
+    for k in ([f"mw:{did}"] if did.isdigit() else []) + ([f"g:{gid}"] if gid else []) + [f"p:{pid}"]:
+        if k not in out:
+            out.append(k)
+    return out
+
+
+async def inherit() -> int:
+    """Les modeles sans classement qui en ont un sous une autre cle d'une de leurs impressions : repris. Rend le nombre."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import ModelLabel, Print
+    n = 0
+    async with AsyncSessionLocal() as db:
+        have = {r[0]: r for r in (await db.execute(select(ModelLabel.key, ModelLabel.title, ModelLabel.families, ModelLabel.categories,
+                                                                ModelLabel.catmap, ModelLabel.tags, ModelLabel.source,
+                                                                ModelLabel.model, ModelLabel.seen))).all()}
+        prints = (await db.execute(select(Print.id, Print.design_id, Print.group_id))).all()
+        done = set()
+        for pid, did, gid in prints:
+            cs = _cands(did, gid, pid)
+            key = cs[0]
+            if key in have or key in done:
+                continue
+            src = next((have[k] for k in cs[1:] if k in have), None)
+            if src is None:
+                continue
+            kind = key.split(":", 1)[0]
+            d = str(did or "").strip()
+            db.add(ModelLabel(key=key, design_id=d if kind == "mw" else None, group_id=gid if kind == "g" else None,
+                              print_id=pid if kind == "p" else None, title=src.title, families=src.families,
+                              categories=src.categories, catmap=src.catmap, tags=src.tags, source=src.source,
+                              model=src.model, seen=src.seen or 0, updated_at=datetime.utcnow()))
+            done.add(key)
+            n += 1
+        if n:
+            await db.commit()
+    if n:
+        logger.info(f"[IA-TAGS] {n} modèle(s) repris d'un classement fait sous une autre clé (groupé, relié, dégroupé)")
+    return n
+
+
+NIGHT_HOUR = 4
+
+
+async def nightly_loop() -> None:
+    """Chaque nuit a 4 h : les classements repris, puis ce qui manque encore part chez Claude (si le classement
+    automatique est coche et qu'une cle est la)."""
+    from ..core import tasks as _tasks
+    from .archive import _local
+    await _tasks.sleep("ai_tags", 180)
+    done_day = None
+    while True:
+        try:
+            now = _local(datetime.utcnow())
+            if now.hour == NIGHT_HOUR and done_day != now.date():
+                done_day = now.date()
+                await inherit()
+                if await auto_on() and not _RUN["running"]:
+                    start_run()
+        except Exception:
+            _tasks.error("ai_tags")
+            logger.exception("[IA-TAGS] passage de nuit")
+        await _tasks.sleep("ai_tags", 300)
