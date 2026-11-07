@@ -60,6 +60,28 @@ def stored(s) -> bool:
     return not s.archived and not getattr(s, "ordered", False) and not in_printer(s.location)
 
 
+def live_loaded():
+    """Les bobines vraiment dans l'imprimante en ce moment (etat MQTT), None si on ne le sait pas (imprimante muette)."""
+    try:
+        from ..core.mqtt import get_state
+        st = get_state()
+        ams = getattr(st, "ams_list", None) or []
+        if not ams:
+            return None
+        return {t.spool_id for a in ams for t in (a.trays or []) if getattr(t, "spool_id", None)}
+    except Exception:
+        return None
+
+
+def stale_printer(s, loaded=None) -> bool:
+    """L'emplacement dit « dans l'imprimante » mais l'AMS ne l'a pas (07/11/2026 : une vieille bobine gardait son
+    « AMS-B slot 3 » ; la ranger a la main ne changeait rien)."""
+    if not in_printer(s.location):
+        return False
+    loaded = live_loaded() if loaded is None else loaded
+    return loaded is not None and s.id not in loaded
+
+
 def check_name(name: str, what="Le nom") -> str:
     n = " ".join((name or "").split())[:60]
     if not n:
@@ -291,22 +313,31 @@ async def assign(db, spools: list, pid: int, force: bool = False) -> list:
                 occ.unstored_at = datetime.utcnow() if conf["mode"] != "single" else None
                 occ.location = resolve(occ, conf, pl, kids)
             moved.append(occ)
+    loaded = live_loaded()
     for s in spools:
         if s.archived:
             raise StorageError(f"La bobine #{s.id} est archivée")
         s.place_id = pid
+        if stale_printer(s, loaded):                 # un vieux slot AMS en memoire : on la range vraiment
+            s.location, s.ams_tray = TO_STORE, None
         if stored(s):
             s.unstored_at = None
             s.location = resolve(s, conf, pl, kids)
     return moved
 
 
-async def unassign(db, spools: list) -> None:
+async def unassign(db, spools: list, to_store: bool = False) -> None:
+    """Retire leur place ; to_store (07/11/2026, « 📥 À ranger ») : elles attendent qu'on dise ou elles sont (rappels)."""
     conf, pl = await config(db), await places(db)
     kids = _kids(pl)
+    loaded = live_loaded()
     for s in spools:
         s.place_id = None
+        if to_store and stale_printer(s, loaded):
+            s.location, s.ams_tray = TO_STORE, None
         if stored(s):
+            if to_store and conf["mode"] != "single":
+                s.unstored_at = datetime.utcnow()
             s.location = resolve(s, conf, pl, kids)
 
 

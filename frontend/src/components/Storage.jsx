@@ -560,7 +560,11 @@ export function PlacePicker({ spools, onClose, onDone, pickOnly = false, onPicke
     setBusy(false);
     if (r) { onDone?.(r); onClose(); }
   };
-  const unassign = async () => { setBusy(true); const r = await write("post", "/storage/assign", { spool_ids: ids, place_id: null }); setBusy(false); if (r) { onDone?.(r); onClose(); } };
+  const unassign = async (toStore = false) => { setBusy(true); const r = await write("post", "/storage/assign", { spool_ids: ids, place_id: null, to_store: toStore }); setBusy(false); if (r) { onDone?.(r); onClose(); } };
+  // « 📥 À ranger » (07/11/2026) : elle quitte sa place et attend qu'on dise ou elle est ; pour une bobine hors de
+  // l'imprimante (ou dont le vieux slot AMS est reste en memoire)
+  const TO = st.to_store_label || "À ranger";
+  const canToStore = !pickOnly && st.mode !== "single" && ids.length > 0 && (spools || []).some(s => !s.ordered && s.location !== TO);
   const occOf = p => p.spools.filter(x => !ids.includes(x.id));
   const Leaf = ({ p, compact }) => {
     const occ = occOf(p), taken = p.single && occ.length > 0, mine = p.spools.some(x => ids.includes(x.id));
@@ -596,8 +600,10 @@ export function PlacePicker({ spools, onClose, onDone, pickOnly = false, onPicke
   const lastP = last != null ? by[last] : null;
 
   return createPortal(<FSheet onClose={onClose} z={1300} bottom={<>
-    {!pickOnly && st.mode !== "single" && ids.length > 0 && (spools || []).some(s => s.place_id) &&
-      <button onClick={unassign} disabled={busy} style={{ ...fBtn, flex: 1, color: "var(--muted)" }} data-tip="Elle n'aura plus de place : « À ranger » si elle n'est pas dans l'imprimante">Retirer sa place</button>}
+    {canToStore && <button onClick={() => unassign(true)} disabled={busy} style={{ ...fBtn, flex: 1, color: "#D97706" }}
+      data-tip="Elle quitte sa place et passe « À ranger » : l'appli te rappellera de dire où elle est">📥 À ranger</button>}
+    {!pickOnly && st.mode !== "single" && ids.length > 0 && (spools || []).some(s => s.place_id && inPrinter(s.location)) &&
+      <button onClick={() => unassign(false)} disabled={busy} style={{ ...fBtn, flex: 1, color: "var(--muted)" }} data-tip="Dans l'imprimante : elle n'aura plus de place qui l'attend">Retirer sa place</button>}
     <button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Annuler</button></>}>
     <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -690,7 +696,9 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
   const { kids, roots, by } = index(st);
   const TO = st.to_store_label || "À ranger";
   const printer = spools.filter(s => !s.ordered && inPrinter(s.location));
-  const units = [...new Set(printer.map(s => unitOf(s.location)))].sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));
+  // les AMS, puis les HT, et le support externe toujours en dernier (07/11/2026)
+  const unitRank = u => /^externe/i.test(u) ? 2 : /^HT-/i.test(u) ? 1 : 0;
+  const units = [...new Set(printer.map(s => unitOf(s.location)))].sort((a, b) => unitRank(a) - unitRank(b) || a.localeCompare(b, "fr", { numeric: true }));
   const waiting = spools.filter(s => !s.ordered && s.location === TO);
   const ordered = spools.filter(s => s.ordered);
   const storedHere = p => spools.filter(s => s.place_id === p.id && !s.ordered && !inPrinter(s.location) && s.location !== TO);
@@ -825,7 +833,8 @@ function CellFiller({ place, spools: spools0, onClose }) {
   // rangee : aussi une double vibration (telephone en silencieux), un peu apres celle de la lecture pour la distinguer
   const buzz = p => {
     try { if (Array.isArray(p)) tone(196, 0, 0.32, "square", 0.08); else { tone(880, 0, 0.11); tone(1320, 0.12, 0.16); } } catch { /* pas de son */ }
-    if (!Array.isArray(p)) setTimeout(() => { try { navigator.vibrate?.([70, 90, 70]); } catch { /* pas de vibreur */ } }, 350);
+    // l'appli Android vibre par son pont (la WebView n'a pas navigator.vibrate) ; sinon le navigateur
+    if (!Array.isArray(p)) setTimeout(() => { try { if (window.BambuScan?.vibrate) window.BambuScan.vibrate("70,90,70"); else navigator.vibrate?.([70, 90, 70]); } catch { /* pas de vibreur */ } }, 350);
   };
   const [busy, setBusy] = useState(false);
   const scan = useRfidScan();

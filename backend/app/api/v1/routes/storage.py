@@ -103,7 +103,7 @@ async def storage_assign(body: dict = Body({}), db: AsyncSession = Depends(get_d
     moved = []
     try:
         if body.get("place_id") in (None, ""):
-            await SP.unassign(db, sp)
+            await SP.unassign(db, sp, bool(body.get("to_store")))
         else:
             moved = await SP.assign(db, sp, int(body["place_id"]), bool(body.get("force")))
     except SP.StorageError as e:
