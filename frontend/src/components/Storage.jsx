@@ -117,84 +117,66 @@ const inp = { width: "100%", boxSizing: "border-box", background: "var(--surface
   padding: "8px 10px", fontSize: 13.5, fontWeight: 700, color: "var(--text)", outline: "none" };
 const small = { fontSize: 11.5, fontWeight: 700, color: "var(--muted)" };
 
-// ── Parametres › Filaments : le mode et l'arbre ───────────────────────────────
+// ── Parametres › Filaments : le mode et les rangements ───────────────────────
+// (07/11/2026, refait) une seule philosophie : un rangement contient des emplacements, directement (« 12 emplacements »)
+// ou par zones nommees (« Colonne 1 : 7, Colonne 2 : 7, Colonne 3 : 3, Dessus : 4 ») ; un emplacement s'appelle
+// « zone-numero » (« Colonne 1-3 »), ou son numero sans zone. La liste ne montre que les rangements ; un clic ouvre sa
+// fenetre, avec ses zones et ses cases, ou tout se retouche.
+const leafCountOf = (p, kids) => p.leaf ? 1 : (kids[p.id] || []).reduce((n, c) => n + leafCountOf(c, kids), 0);
+const takenOf = (p, kids) => p.leaf ? (p.spools.length ? 1 : 0) : (kids[p.id] || []).reduce((n, c) => n + takenOf(c, kids), 0);
+const spoolsOf = (p, kids) => p.leaf ? p.spools.length : (kids[p.id] || []).reduce((n, c) => n + spoolsOf(c, kids), 0);
+// le nom court d'un emplacement dans sa zone : « Colonne 1-3 » -> « 3 »
+export const shortName = (p, by) => { const par = by?.[p.parent_id]; return par && p.name.startsWith(par.name + "-") ? p.name.slice(par.name.length + 1) : p.name; };
+// le numero suivant d'une zone (ou d'un rangement) : apres le plus grand « …-n » ou « n » de ses emplacements
+const nextNum = (p, kids) => 1 + Math.max(0, ...(kids[p.id] || []).map(c => parseInt((c.name.match(/(\d+)$/) || [])[1] || "0", 10)));
+const cellName = (zone, n) => zone ? `${zone}-${n}` : String(n);
+
+async function delPlace(p, kids) {
+  const n = spoolsOf(p, kids), sub = (kids[p.id] || []).length;
+  if (!(await showConfirm(`Supprimer « ${p.path} »${sub ? " et tout ce qu'il contient" : ""} ?`
+    + (n ? `\n${n} bobine${n > 1 ? "s" : ""} y ${n > 1 ? "perdent" : "perd"} leur place et ${n > 1 ? "passent" : "passe"} « À ranger ».` : ""),
+    { danger: true, confirmLabel: "Supprimer" }))) return false;
+  return !!(await write("delete", `/storage/places/${p.id}`));
+}
+
+// une petite fenetre de saisie (nom, nombre, cases)
+function Ask({ title, fields, okLabel = "Valider", onOk, onClose }) {
+  const [v, setV] = useState(() => Object.fromEntries(fields.map(f => [f.key, f.value ?? (f.type === "check" ? false : "")])));
+  const [busy, setBusy] = useState(false);
+  const ok = fields.every(f => !f.required || String(v[f.key]).trim());
+  const go = async () => { setBusy(true); try { if ((await onOk(v)) !== false) onClose(); } finally { setBusy(false); } };
+  return createPortal(<FSheet onClose={onClose} z={1400} bottom={<>
+    <button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Annuler</button>
+    <button onClick={go} disabled={busy || !ok} style={{ ...fBtn, flex: 2, border: "none", color: "#fff", opacity: busy || !ok ? 0.5 : 1,
+      background: "linear-gradient(135deg, #8B5CF6, #6366F1)" }}>{busy ? "…" : okLabel}</button></>}>
+    <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ fontSize: 17, fontWeight: 900, color: "var(--text)" }}>{title}</div>
+      {fields.map((f, i) => f.type === "check"
+        ? <label key={f.key} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>
+          <input type="checkbox" checked={!!v[f.key]} onChange={e => setV(o => ({ ...o, [f.key]: e.target.checked }))}/>{f.label}</label>
+        : <label key={f.key}><span style={{ ...small, display: "block", marginBottom: 4 }}>{f.label}</span>
+          <input autoFocus={i === 0} type={f.type === "number" ? "number" : "text"} min={f.type === "number" ? 1 : undefined} max={f.type === "number" ? 200 : undefined}
+            value={v[f.key]} placeholder={f.placeholder} onChange={e => setV(o => ({ ...o, [f.key]: e.target.value }))}
+            onKeyDown={e => { if (e.key === "Enter" && ok) go(); }} style={inp}/></label>)}
+    </div>
+  </FSheet>, document.body);
+}
+
 export function StorageSettingsCard({ card, cardTitle }) {
   const st = useStorage();
   const [name, setName] = useState("");
-  const [maker, setMaker] = useState(null);          // { parent } : le generateur ouvert
-  const [renaming, setRenaming] = useState(null);    // { id, name }
+  const [maker, setMaker] = useState(false);
+  const [openId, setOpenId] = useState(null);         // la fenetre d'un rangement
   useEffect(() => { if (st) setName(st.name); }, [st?.name]);
   if (!st) return null;
-  const { by, kids, roots } = index(st);
-  const count = p => p.leaf ? p.spools.length : (kids[p.id] || []).reduce((n, c) => n + count(c), 0);
+  const { kids, roots } = index(st);
   const leaves = st.places.filter(p => p.leaf).length;
 
   const setMode = async m => {
     if (m === st.mode) return;
-    if (m !== "single" && !leaves && !(await showConfirm("Tu n'as encore créé aucun emplacement : toutes les bobines rangées passeront « À ranger » "
+    if (m !== "single" && !leaves && !(await showConfirm("Tu n'as encore créé aucun rangement : toutes les bobines rangées passeront « À ranger » "
       + "jusqu'à ce que tu leur en donnes un. Changer quand même ?", { confirmLabel: "Changer" }))) return;
     await write("put", "/storage/settings", { mode: m });
-  };
-  const rename = async (p, v) => { setRenaming(null); if (v.trim() && v.trim() !== p.name) await write("patch", `/storage/places/${p.id}`, { name: v }); };
-  const del = async p => {
-    const n = count(p), sub = (kids[p.id] || []).length;
-    if (!(await showConfirm(`Supprimer « ${p.path} »${sub ? " et tout ce qu'il contient" : ""} ?`
-      + (n ? `\n${n} bobine${n > 1 ? "s" : ""} y ${n > 1 ? "perdent" : "perd"} leur place et ${n > 1 ? "passent" : "passe"} « À ranger ».` : ""),
-      { danger: true, confirmLabel: "Supprimer" }))) return;
-    await write("delete", `/storage/places/${p.id}`);
-  };
-  const moveTo = async p => {
-    const groups = st.places.filter(q => q.id !== p.id && !q.path.startsWith(p.path + " › ") && (!q.leaf || !q.spools.length));
-    const items = [{ icon: "⬆", label: "À la racine", onClick: () => write("patch", `/storage/places/${p.id}`, { parent_id: null }) },
-      ...groups.map(q => ({ icon: q.leaf ? "▫" : "🗂", label: q.path, onClick: () => write("patch", `/storage/places/${p.id}`, { parent_id: q.id }) }))];
-    openMenu(null, { title: `Déplacer « ${p.name} »`, subtitle: "dans…", color: "#8B5CF6", items });
-  };
-  const menu = (e, p) => openMenu(e, {
-    title: p.name, subtitle: p.path, color: "#8B5CF6",
-    items: [
-      { icon: "✏️", label: "Renommer", onClick: () => setRenaming({ id: p.id, name: p.name }) },
-      { icon: "＋", label: p.leaf ? "Créer des emplacements dedans" : "Ajouter dedans", hint: p.leaf && p.spools.length ? "Range d'abord ses bobines ailleurs" : undefined,
-        disabled: p.leaf && p.spools.length > 0, onClick: () => setMaker({ parent: p }) },
-      p.leaf && { icon: p.single ? "📚" : "🔲", label: p.single ? "En faire un rangement commun" : "En faire une case (une seule bobine)",
-        hint: p.single ? "Autant de bobines qu'on veut" : "Réservée à une bobine tant qu'elle ne va pas ailleurs",
-        onClick: () => write("patch", `/storage/places/${p.id}`, { single: !p.single }) },
-      { icon: "📦", label: p.stock ? "Ce n'est plus du stock" : "C'est du stock (cartons, réserve)", disabled: !p.stock && p.in_stock,
-        hint: !p.stock && p.in_stock ? "Déjà dans un rangement de stock" : p.stock ? "Une bobine qui en sort pour l'AMS n'y revient pas"
-          : "Une bobine qui en sort pour l'AMS le quitte pour de bon ; l'échange intelligent n'y range jamais rien" + (p.leaf ? "" : " (tout ce qu'il contient)"),
-        onClick: () => write("patch", `/storage/places/${p.id}`, { stock: !p.stock }) },
-      !p.leaf && { icon: "▦", label: "Colonnes de la grille", hint: p.cols ? `${p.cols} colonnes` : "automatique", onClick: () => openMenu(null, {
-        title: `Colonnes de « ${p.name} »`, subtitle: "pour afficher son contenu en grille", color: "#8B5CF6",
-        items: [null, 1, 2, 3, 4, 5, 6, 8, 10, 12].map(n => ({ icon: n === (p.cols || null) ? "✓" : "▦", label: n ? `${n} colonne${n > 1 ? "s" : ""}` : "Automatique",
-          onClick: () => write("patch", `/storage/places/${p.id}`, { cols: n }) })),
-      }) },
-      { icon: "↕", label: "Déplacer dans…", onClick: () => moveTo(p) },
-      "-",
-      { icon: "🗑", label: "Supprimer…", danger: true, onClick: () => del(p) },
-    ],
-  });
-
-  const Row = ({ p }) => {
-    const n = count(p);
-    return <>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 6px", paddingLeft: 6 + p.depth * 18, borderRadius: 10,
-        background: p.depth ? "transparent" : "color-mix(in srgb, #8B5CF6 6%, transparent)" }}>
-        <span style={{ fontSize: 14, width: 18, textAlign: "center" }}>{p.icon || (p.stock ? "📦" : p.leaf ? (p.single ? "🔲" : "📚") : "🗂")}</span>
-        {renaming?.id === p.id
-          ? <input autoFocus defaultValue={p.name} onBlur={e => rename(p, e.target.value)} onKeyDown={e => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") setRenaming(null); }}
-            style={{ ...inp, padding: "4px 8px", flex: 1 }}/>
-          : <button type="button" onClick={() => setRenaming({ id: p.id, name: p.name })} data-tip="Renommer"
-            style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "text", color: "var(--text)",
-              fontSize: 13.5, fontWeight: p.leaf ? 700 : 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</button>}
-        {p.stock && <span data-tip="Rangement de stock" style={{ fontSize: 10.5, fontWeight: 900, padding: "1px 7px", borderRadius: 20, flexShrink: 0,
-          color: "#B45309", background: "color-mix(in srgb, #F59E0B 16%, transparent)" }}>📦 stock</span>}
-        <span style={{ ...small, flexShrink: 0 }}>{p.leaf ? (p.single ? (n ? "case prise" : "case libre") : `${n} bobine${n > 1 ? "s" : ""}`)
-          : `${(kids[p.id] || []).length} dedans${n ? ` · ${n} bob.` : ""}`}</span>
-        <button type="button" onClick={() => write("post", `/storage/places/${p.id}/move`, { d: -1 })} aria-label="Monter" style={{ ...seg, padding: "2px 7px" }}>↑</button>
-        <button type="button" onClick={() => write("post", `/storage/places/${p.id}/move`, { d: 1 })} aria-label="Descendre" style={{ ...seg, padding: "2px 7px" }}>↓</button>
-        <button type="button" onClick={e => menu(e, p)} aria-label="Actions" style={{ ...seg, padding: "2px 9px" }}>⋯</button>
-      </div>
-      {(kids[p.id] || []).map(c => <Row key={c.id} p={c}/>)}
-    </>;
   };
 
   return (
@@ -202,9 +184,9 @@ export function StorageSettingsCard({ card, cardTitle }) {
       <div style={cardTitle}>🗄 Rangements</div>
       <CardHelp title="Rangements">
         Où vont les bobines qui ne sont pas dans l'imprimante. Trois façons de faire : un seul rangement (le mode d'origine),
-        une place pour chaque bobine, ou un rangement libre où l'appli te demande où tu as mis la bobine. Les emplacements
-        se créent ici, en arbre : un groupe (Tiroir 1, Rack 1) contient des emplacements (Colonne 1 › Ligne 3, A2…). Un emplacement
-        est commun (un placard : autant de bobines qu'on veut) ou une case (une seule bobine, gardée pendant qu'elle est dans l'AMS).
+        une place pour chaque bobine, ou un rangement libre où l'appli te demande où tu as mis la bobine. Un rangement (un tiroir,
+        un placard, un carton) contient des emplacements, directement ou par zones (Colonne 1, Colonne 2, Dessus…) ; un emplacement
+        est une case (une seule bobine, gardée pendant qu'elle est dans l'AMS), ou commun (autant de bobines qu'on veut).
       </CardHelp>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 8, marginBottom: 12 }}>
         {STORAGE_MODES.map(([k, ic, l, d]) => {
@@ -238,127 +220,248 @@ export function StorageSettingsCard({ card, cardTitle }) {
       </div>}
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "4px 0 6px" }}>
-        <span style={{ fontSize: 13, fontWeight: 900, color: "var(--text)", flex: 1 }}>Emplacements
-          <span style={{ ...small, marginLeft: 6 }}>{leaves ? `${leaves} où ranger` : "aucun"}</span></span>
-        <button type="button" onClick={() => setMaker({ parent: null })} style={{ ...seg, ...segOn }}>＋ Ajouter</button>
+        <span style={{ fontSize: 13, fontWeight: 900, color: "var(--text)", flex: 1 }}>Mes rangements
+          <span style={{ ...small, marginLeft: 6 }}>{leaves ? `${leaves} emplacement${leaves > 1 ? "s" : ""} où ranger` : "aucun"}</span></span>
+        <button type="button" onClick={() => setMaker(true)} style={{ ...seg, ...segOn }}>＋ Nouveau rangement</button>
       </div>
       {st.mode === "single" && <p style={{ ...small, margin: "0 0 6px" }}>
         Inutilisés dans ce mode : prépare-les avant de passer à « Chaque bobine a sa place » ou « Je range où je veux ».</p>}
       {!roots.length && <div style={{ padding: 14, textAlign: "center", border: "1px dashed var(--border)", borderRadius: 12, ...small }}>
-        Aucun emplacement. « ＋ Ajouter » crée un placard, un tiroir à colonnes et lignes, un rack en grille (A1, A2…)…</div>}
-      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>{roots.map(p => <Row key={p.id} p={p}/>)}</div>
-      {maker && <PlaceMaker parent={maker.parent} onClose={() => setMaker(null)}/>}
+        Aucun rangement. « ＋ Nouveau rangement » : un tiroir, un placard, un carton… avec ses emplacements, directement ou par zones.</div>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 8 }}>
+        {roots.map(p => {
+          const n = leafCountOf(p, kids), t = takenOf(p, kids), zones = (kids[p.id] || []).filter(c => !c.leaf).length;
+          return <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 10px 10px 12px", borderRadius: 14, border: "1px solid var(--border)",
+            background: "color-mix(in srgb, #8B5CF6 5%, var(--surface))" }}>
+            <button type="button" onClick={() => setOpenId(p.id)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, background: "none", border: "none",
+              padding: 0, cursor: "pointer", textAlign: "left", color: "var(--text)" }}>
+              <span style={{ fontSize: 22 }}>{p.icon || (p.stock ? "📦" : p.leaf ? "📚" : "🗄")}</span>
+              <span style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
+                <span style={{ fontSize: 14, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}
+                  {p.stock && <span style={{ fontSize: 10.5, fontWeight: 900, marginLeft: 6, padding: "1px 7px", borderRadius: 20, color: "#B45309",
+                    background: "color-mix(in srgb, #F59E0B 16%, transparent)" }}>📦 stock</span>}</span>
+                <span style={small}>{p.leaf ? `commun · ${p.spools.length} bobine${p.spools.length > 1 ? "s" : ""}`
+                  : `${n} emplacement${n > 1 ? "s" : ""}${zones ? ` · ${zones} zone${zones > 1 ? "s" : ""}` : ""} · ${t} pris`}</span>
+              </span>
+            </button>
+            <button type="button" onClick={() => write("post", `/storage/places/${p.id}/move`, { d: -1 })} aria-label="Monter" style={{ ...seg, padding: "2px 7px" }}>↑</button>
+            <button type="button" onClick={() => write("post", `/storage/places/${p.id}/move`, { d: 1 })} aria-label="Descendre" style={{ ...seg, padding: "2px 7px" }}>↓</button>
+          </div>;
+        })}
+      </div>
+      {maker && <PlaceMaker onClose={() => setMaker(false)} onMade={id => setOpenId(id)}/>}
+      {openId != null && st.places.some(p => p.id === openId) && <PlaceEditor id={openId} onClose={() => setOpenId(null)}/>}
     </div>
   );
 }
 
-// ── Le generateur d'emplacements ──────────────────────────────────────────────
-const PRESETS = [
-  { k: "one", ic: "📦", l: "Un emplacement", d: "Un placard, un bac, une étagère", levels: [] },
-  { k: "drawer", ic: "🗄", l: "Tiroir › colonnes › lignes", d: "Tiroir 1 › Colonne 1 › Ligne 3", name: "Tiroir 1",
-    levels: [{ label: "Colonne", count: 3, style: "num" }, { label: "Ligne", count: 4, style: "num" }] },
-  { k: "rack", ic: "🔢", l: "Rack en grille", d: "A1, A2 … D6", name: "Rack 1", combine: true,
-    levels: [{ label: "", count: 4, style: "alpha" }, { label: "", count: 6, style: "num" }] },
-  { k: "shelf", ic: "📚", l: "Étagère à niveaux", d: "Étagère › Niveau 1, 2, 3", name: "Étagère", single: false,
-    levels: [{ label: "Niveau", count: 3, style: "num" }] },
-];
-const tag = (style, i) => style === "alpha" ? (i < 26 ? String.fromCharCode(65 + i) : `${String.fromCharCode(64 + Math.floor(i / 26))}${String.fromCharCode(65 + i % 26)}`) : String(i + 1);
-
-function build(levels, combine, single) {
-  if (!levels.length) return [];
-  if (combine && levels.length === 2) {
-    const [a, b] = levels, out = [];
-    for (let i = 0; i < a.count; i++) for (let j = 0; j < b.count; j++)
-      out.push({ name: `${a.label}${tag(a.style, i)}${b.label}${tag(b.style, j)}`.trim(), single });
-    return out;
-  }
-  const [l, ...rest] = levels;
-  return Array.from({ length: l.count }, (_, i) => {
-    const kids = build(rest, false, single);
-    const n = { name: `${l.label}${l.label ? " " : ""}${tag(l.style, i)}`, single };
-    if (kids.length) { n.children = kids; n.single = false; if (rest.length === 1) n.cols = 1; }
-    return n;
+// ── La fenetre d'un rangement : ses zones, ses emplacements, tout se retouche ──
+function PlaceEditor({ id, onClose }) {
+  const st = useStorage();
+  const [ask, setAsk] = useState(null);
+  if (!st) return null;
+  const { by, kids } = index(st);
+  const root = by[id];
+  if (!root) return null;
+  const patch = (p, b) => write("patch", `/storage/places/${p.id}`, b);
+  const addCells = (parent, zoneName) => setAsk({
+    title: zoneName ? `Des emplacements dans « ${parent.name} »` : `Des emplacements dans « ${parent.name} »`,
+    fields: [{ key: "n", label: "Combien ?", type: "number", value: "4", required: true },
+      { key: "single", label: "Des cases (une seule bobine chacune)", type: "check", value: true }],
+    okLabel: "Ajouter",
+    onOk: ({ n, single }) => {
+      const k0 = nextNum(parent, kids), cnt = Math.max(1, Math.min(200, parseInt(n) || 1));
+      return write("post", "/storage/places", { parent_id: parent.id, items: Array.from({ length: cnt }, (_, i) => ({ name: cellName(zoneName, k0 + i), single })) }).then(r => !!r);
+    },
   });
+  // une zone, dans le rangement ou dans une autre zone (des niveaux : Étage 1 › Colonne 2 › ses emplacements)
+  const addZone = (parent = root) => setAsk({
+    title: `Une zone dans « ${parent.name} »`,
+    fields: [{ key: "name", label: "Nom de la zone", placeholder: "Colonne 4, Dessus, Étage 2…", required: true,
+      value: `Zone ${(kids[parent.id] || []).filter(c => !c.leaf).length + 1}` },
+      { key: "n", label: "Combien d'emplacements ?", type: "number", value: "4", required: true },
+      { key: "single", label: "Des cases (une seule bobine chacune)", type: "check", value: true }],
+    okLabel: "Créer la zone",
+    onOk: ({ name, n, single }) => {
+      const z = name.trim(), cnt = Math.max(1, Math.min(200, parseInt(n) || 1));
+      return write("post", "/storage/places", { parent_id: parent.id, items: [{ name: z, children: Array.from({ length: cnt }, (_, i) => ({ name: cellName(z, i + 1), single })) }] }).then(r => !!r);
+    },
+  });
+  const rename = p => setAsk({ title: `Renommer « ${p.name} »`, fields: [{ key: "name", label: "Nom", value: p.name, required: true }], okLabel: "Renommer",
+    onOk: async ({ name }) => {
+      const nv = name.trim();
+      if (nv === p.name) return true;
+      if (!(await patch(p, { name: nv }))) return false;
+      // une zone renommee : ses emplacements « ancien-n » suivent (« Colonne 1-3 » -> « Gauche-3 »)
+      for (const c of kids[p.id] || []) if (c.name.startsWith(p.name + "-")) await patch(c, { name: nv + c.name.slice(p.name.length) });
+      return true;
+    } });
+  const menu = (e, p) => openMenu(e, {
+    title: p.leaf ? shortName(p, by) : p.name, subtitle: p.path, color: "#8B5CF6",
+    items: [
+      { icon: "✏️", label: "Renommer", onClick: () => rename(p) },
+      !p.leaf && { icon: "＋", label: "Ajouter des emplacements", onClick: () => addCells(p, p.id === root.id ? null : p.name) },
+      !p.leaf && { icon: "🗂", label: "Ajouter une zone dedans", hint: p.id === root.id ? "Colonne, étage, dessus…" : "Un niveau de plus : une zone dans cette zone", onClick: () => addZone(p) },
+      p.leaf && { icon: p.single ? "📚" : "🔲", label: p.single ? "En faire un emplacement commun" : "En faire une case (une seule bobine)",
+        hint: p.single ? "Autant de bobines qu'on veut" : "Réservée à une bobine tant qu'elle ne va pas ailleurs", onClick: () => patch(p, { single: !p.single }) },
+      p.id === root.id && { icon: "📦", label: p.stock ? "Ce n'est plus du stock" : "C'est du stock (cartons, réserve)",
+        hint: p.stock ? "Une bobine qui en sort pour l'AMS n'y revient pas" : "Une bobine qui en sort pour l'AMS le quitte pour de bon ; l'échange intelligent n'y range jamais rien",
+        onClick: () => patch(p, { stock: !p.stock }) },
+      p.id !== root.id && { icon: "↑", label: "Avant", onClick: () => write("post", `/storage/places/${p.id}/move`, { d: -1 }) },
+      p.id !== root.id && { icon: "↓", label: "Après", onClick: () => write("post", `/storage/places/${p.id}/move`, { d: 1 }) },
+      !p.leaf && { icon: "▦", label: "Disposition", hint: p.cols ? `${p.cols} par ligne` : "automatique", onClick: () => openMenu(null, {
+        title: `Disposition de « ${p.name} »`, subtitle: "combien côte à côte", color: "#8B5CF6",
+        items: [null, 1, 2, 3, 4, 5, 6, 8, 10, 12].map(n => ({ icon: n === (p.cols || null) ? "✓" : "▦", label: n ? `${n} par ligne` : "Automatique", onClick: () => patch(p, { cols: n }) })),
+      }) },
+      "-",
+      { icon: "🗑", label: "Supprimer…", danger: true, onClick: async () => { if (await delPlace(p, kids) && p.id === root.id) onClose(); } },
+    ],
+  });
+  const Cell = ({ p }) => {
+    const occ = p.spools[0];
+    return <button type="button" onClick={e => menu(e, p)} data-tip={occ ? `${occ.name} · #${occ.id}` : p.single ? "Case libre" : "Emplacement commun"}
+      style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, minWidth: 0, minHeight: 50,
+        padding: "4px 3px", borderRadius: 10, cursor: "pointer", color: "var(--text)",
+        border: `1px ${p.single ? "solid" : "dashed"} color-mix(in srgb, #8B5CF6 ${occ ? 45 : 25}%, var(--border))`, background: occ ? "var(--surface)" : "transparent" }}>
+      {occ ? <Swatch s={occ} size={22}/> : <span style={{ fontSize: 11, color: "var(--muted)" }}>{p.single ? "▫" : "📚"}</span>}
+      <span style={{ fontSize: 11, fontWeight: 900, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{shortName(p, by)}</span>
+      {!p.single && p.spools.length > 1 && <span style={{ ...small, fontSize: 9.5 }}>{p.spools.length} bob.</span>}
+    </button>;
+  };
+  const Zone = ({ p, many }) => {
+    const ch = kids[p.id] || [];
+    const cells = ch.filter(c => c.leaf), subs = ch.filter(c => !c.leaf);
+    return <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 8, borderRadius: 12, border: "1px solid var(--border)", minWidth: 0,
+      background: "color-mix(in srgb, #8B5CF6 4%, var(--surface2))" }}>
+      <button type="button" onClick={e => menu(e, p)} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: "pointer",
+        color: "var(--text)", textAlign: "left", minWidth: 0 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 900, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+        <span style={{ ...small, flexShrink: 0 }}>{leafCountOf(p, kids)}</span><span style={{ color: "var(--muted)" }}>⋯</span>
+      </button>
+      {cells.length > 0 && <div style={{ display: "grid", gap: 4, gridTemplateColumns: p.cols ? `repeat(${p.cols}, minmax(0, 1fr))` : many ? "1fr" : "repeat(auto-fill, minmax(56px, 1fr))" }}>
+        {cells.map(c => <Cell key={c.id} p={c}/>)}</div>}
+      {subs.length > 0 && <Zones parent={p} list={subs}/>}
+      <button type="button" onClick={() => addCells(p, p.name)} style={{ ...seg, padding: "3px 6px", fontSize: 11.5 }}>＋</button>
+    </div>;
+  };
+  const Zones = ({ parent, list }) => <div style={{ display: "grid", gap: 6,
+    gridTemplateColumns: parent.cols ? `repeat(${parent.cols}, minmax(0, 1fr))` : `repeat(auto-fit, minmax(${list.length > 4 ? 110 : 90}px, 1fr))` }}>
+    {list.map(z => <Zone key={z.id} p={z} many={list.length > 1}/>)}</div>;
+  const ch = kids[root.id] || [];
+  const direct = ch.filter(c => c.leaf), zones = ch.filter(c => !c.leaf);
+  const n = leafCountOf(root, kids), t = takenOf(root, kids);
+
+  return createPortal(<>
+    <FSheet onClose={onClose} z={1250} bottom={<>
+      {!root.leaf || !root.spools.length ? <>
+        <button onClick={() => addZone()} style={{ ...fBtn, flex: 1 }}>＋ Une zone</button>
+        <button onClick={() => addCells(root, null)} style={{ ...fBtn, flex: 1 }}>＋ Des emplacements</button></> : null}
+      <button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Fermer</button></>}>
+      <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 26 }}>{root.icon || (root.stock ? "📦" : root.leaf ? "📚" : "🗄")}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>{root.name}{root.stock && <span style={{ fontSize: 11, fontWeight: 900, marginLeft: 8, padding: "1px 8px",
+              borderRadius: 20, color: "#B45309", background: "color-mix(in srgb, #F59E0B 16%, transparent)" }}>📦 stock</span>}</div>
+            <div style={small}>{root.leaf ? `Emplacement commun · ${root.spools.length} bobine${root.spools.length > 1 ? "s" : ""}`
+              : `${n} emplacement${n > 1 ? "s" : ""} · ${t} pris · touche une zone ou une case pour la retoucher`}</div>
+          </div>
+          <button type="button" onClick={e => menu(e, root)} aria-label="Actions du rangement" style={{ ...seg, padding: "6px 11px" }}>⋯</button>
+        </div>
+        {root.leaf && <div style={{ ...small, padding: 12, border: "1px dashed var(--border)", borderRadius: 12 }}>
+          Un emplacement commun : autant de bobines qu'on veut.{root.spools.length ? " Il tient des bobines : range-les ailleurs pour le découper en zones ou en cases." : " « ＋ Une zone » ou « ＋ Des emplacements » le découpent."}</div>}
+        {direct.length > 0 && <div style={{ display: "grid", gap: 4, gridTemplateColumns: root.cols ? `repeat(${root.cols}, minmax(0, 1fr))` : "repeat(auto-fill, minmax(56px, 1fr))" }}>
+          {direct.map(c => <Cell key={c.id} p={c}/>)}</div>}
+        {zones.length > 0 && <Zones parent={root} list={zones}/>}
+      </div>
+    </FSheet>
+    {ask && <Ask {...ask} onClose={() => setAsk(null)}/>}
+  </>, document.body);
 }
 
-function PlaceMaker({ parent, onClose }) {
-  const [preset, setPreset] = useState(PRESETS[0]);
+// ── Nouveau rangement ────────────────────────────────────────────────────────
+function PlaceMaker({ onClose, onMade }) {
   const [name, setName] = useState("");
-  const [levels, setLevels] = useState([]);
-  const [combine, setCombine] = useState(false);
-  const [single, setSingle] = useState(false);
+  const [kind, setKind] = useState("cells");          // cells : des emplacements ; common : un seul, commun
+  const [direct, setDirect] = useState("");           // emplacements sans zone
+  const [zones, setZones] = useState([]);             // [{ name, n }]
+  const [single, setSingle] = useState(true);
   const [stock, setStock] = useState(false);
-  const [inside, setInside] = useState(!!parent);    // creer directement dans le parent, sans groupe
+  const [quick, setQuick] = useState({ prefix: "Colonne", count: "3", n: "7" });
   const [busy, setBusy] = useState(false);
-  const pick = p => { setPreset(p); setName(p.name || ""); setLevels(p.levels.map(x => ({ ...x }))); setCombine(!!p.combine); setSingle(p.k === "one" ? false : p.single !== false); };
-  useEffect(() => { pick(PRESETS[0]); }, []);
-  const kids = build(levels, combine, single);
-  const flat = n => n.reduce((s, x) => s + 1 + flat(x.children || []), 0);
-  const leafCount = n => n.reduce((s, x) => s + (x.children ? leafCount(x.children) : 1), 0);
-  const total = (inside && parent && levels.length ? 0 : 1) + flat(kids);
-  const cols = combine && levels.length === 2 ? levels[1].count : levels.length >= 2 ? levels[0].count : null;
-  const ok = (inside && parent && levels.length) || name.trim();
+  const nd = Math.max(0, Math.min(200, parseInt(direct) || 0));
+  const zs = zones.map(z => ({ name: z.name.trim(), n: Math.max(0, Math.min(200, parseInt(z.n) || 0)) })).filter(z => z.name && z.n);
+  const total = kind === "common" ? 0 : nd + zs.reduce((s, z) => s + z.n, 0);
+  const ok = name.trim() && (kind === "common" || total > 0);
   const create = async () => {
     setBusy(true);
     try {
-      if (inside && parent && levels.length) {
-        for (const c of kids) { const r = await write("post", "/storage/places", { ...c, parent_id: parent.id }); if (!r) return; }
-        if (cols && cols !== parent.cols) await write("patch", `/storage/places/${parent.id}`, { cols });
-      } else {
-        const body = { name: name.trim(), single: levels.length ? false : single, parent_id: parent?.id ?? null, cols: kids.length ? cols : null, children: kids, stock };
-        if (!(await write("post", "/storage/places", body))) return;
-      }
-      onClose();
+      const children = kind === "common" ? [] : [
+        ...Array.from({ length: nd }, (_, i) => ({ name: cellName(null, i + 1), single })),
+        ...zs.map(z => ({ name: z.name, children: Array.from({ length: z.n }, (_, i) => ({ name: cellName(z.name, i + 1), single })) })),
+      ];
+      const r = await write("post", "/storage/places", { name: name.trim(), single: false, stock, children });
+      if (r) { onClose(); if (r.made?.[0] && kind !== "common") onMade?.(r.made[0]); }
     } finally { setBusy(false); }
   };
-  const setL = (i, k, v) => setLevels(ls => ls.map((l, j) => j === i ? { ...l, [k]: v } : l));
-  // l'apercu : la grille des feuilles du premier groupe (ou de la liste)
-  // l'apercu : des colonnes (un groupe et ses emplacements empiles), ou une grille de feuilles ; a trois niveaux, le premier groupe
-  const sample = kids[0]?.children?.[0]?.children ? kids[0].children : kids;
+  const setZ = (i, k, v) => setZones(l => l.map((z, j) => j === i ? { ...z, [k]: v } : z));
+  const addQuick = () => {
+    const c = Math.max(1, Math.min(26, parseInt(quick.count) || 1)), n = String(Math.max(1, parseInt(quick.n) || 1));
+    const base = zones.filter(z => z.name.startsWith(quick.prefix)).length;
+    setZones(l => [...l, ...Array.from({ length: c }, (_, i) => ({ name: `${quick.prefix} ${base + i + 1}`.trim(), n }))]);
+  };
 
   return createPortal(<FSheet onClose={onClose} z={1200} bottom={<>
     <button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Annuler</button>
     <button onClick={create} disabled={busy || !ok} style={{ ...fBtn, flex: 2, border: "none", color: "#fff", opacity: busy || !ok ? 0.5 : 1,
-      background: "linear-gradient(135deg, #8B5CF6, #6366F1)" }}>{busy ? "…" : `Créer ${total} emplacement${total > 1 ? "s" : ""}`}</button></>}>
+      background: "linear-gradient(135deg, #8B5CF6, #6366F1)" }}>{busy ? "…" : kind === "common" ? "Créer le rangement" : `Créer · ${total} emplacement${total > 1 ? "s" : ""}`}</button></>}>
     <div style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>＋ Emplacements{parent ? <span style={{ ...small, fontSize: 13 }}> dans « {parent.path} »</span> : null}</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 6 }}>
-        {PRESETS.map(p => <button key={p.k} type="button" onClick={() => pick(p)} style={{ textAlign: "left", padding: "8px 10px", borderRadius: 12, cursor: "pointer",
-          border: preset.k === p.k ? "2px solid #8B5CF6" : "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
-          <div style={{ fontSize: 13, fontWeight: 900 }}>{p.ic} {p.l}</div><div style={small}>{p.d}</div></button>)}
+      <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>＋ Nouveau rangement</div>
+      <label><span style={{ ...small, display: "block", marginBottom: 4 }}>Nom</span>
+        <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="Tiroir bas, Placard, Carton réserve…" maxLength={60} style={inp}/></label>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {[["cells", "🔢 Des emplacements"], ["common", "📚 Un seul, commun (autant de bobines qu'on veut)"]].map(([k, l]) =>
+          <button key={k} type="button" onClick={() => setKind(k)} style={{ ...seg, ...(kind === k ? segOn : {}) }}>{l}</button>)}
       </div>
-      {parent && levels.length > 0 && <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>
-        <input type="checkbox" checked={inside} onChange={e => setInside(e.target.checked)}/>Directement dans « {parent.name} » (sans groupe intermédiaire)</label>}
-      {!(inside && parent && levels.length) && <label><span style={{ ...small, display: "block", marginBottom: 4 }}>Nom</span>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder={preset.k === "one" ? "Placard, Bac du bas…" : preset.name} maxLength={60} style={inp}/></label>}
-      {levels.map((l, i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-        <span style={{ ...small, width: 56 }}>Niveau {i + 1}</span>
-        <input value={l.label} onChange={e => setL(i, "label", e.target.value)} placeholder={combine ? "(rien)" : "Ligne"} style={{ ...inp, width: 110, flex: "1 1 90px" }}/>
-        <input type="number" min={1} max={50} value={l.count} onChange={e => setL(i, "count", Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))} style={{ ...inp, width: 64 }}/>
-        <button type="button" onClick={() => setL(i, "style", l.style === "num" ? "alpha" : "num")} style={seg}>{l.style === "num" ? "1, 2, 3" : "A, B, C"}</button>
-        <button type="button" onClick={() => setLevels(ls => ls.filter((_, j) => j !== i))} aria-label="Retirer ce niveau" style={seg}>✕</button>
-      </div>)}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        {levels.length < 3 && <button type="button" onClick={() => setLevels(ls => [...ls, { label: "", count: 4, style: ls.length ? "num" : "alpha" }])} style={seg}>＋ Un niveau</button>}
-        {levels.length === 2 && <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>
-          <input type="checkbox" checked={combine} onChange={e => setCombine(e.target.checked)}/>Codes combinés (A1, A2…)</label>}
-        <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>
-          <input type="checkbox" checked={single} onChange={e => setSingle(e.target.checked)}/>
-          {levels.length ? "Chaque emplacement est une case (une seule bobine)" : "Une case (une seule bobine)"}</label>
-        {!(inside && parent && levels.length) && <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}
-          data-tip="Cartons, réserve : une bobine qui en sort pour l'AMS le quitte pour de bon, et l'échange intelligent n'y range jamais rien">
-          <input type="checkbox" checked={stock} onChange={e => setStock(e.target.checked)}/>📦 C'est du stock (cartons, réserve)</label>}
-      </div>
-      {kids.length > 0 && <div style={{ padding: 10, borderRadius: 12, border: "1px dashed var(--border)", background: "var(--surface)" }}>
-        <div style={{ ...small, marginBottom: 6 }}>Aperçu · {leafCount(kids)} {single ? "cases" : "emplacements où ranger"}
-          {sample !== kids ? ` (dans ${kids[0].name}, ${kids.length > 1 ? `et pareil dans les ${kids.length - 1} autres` : ""})` : ""}</div>
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(sample[0]?.children ? sample.length : (combine ? levels[1].count : Math.min(sample.length, 8)), 10)}, minmax(0, 1fr))`, gap: 4 }}>
-          {sample.slice(0, 60).map((c, i) => <div key={i} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-            {c.children ? <><div style={{ ...small, textAlign: "center", fontSize: 10 }}>{c.name}</div>
-              {c.children.slice(0, 8).map((x, j) => <div key={j} style={cellPrev(single)}>{x.name}</div>)}</>
-              : <div style={cellPrev(single)}>{c.name}</div>}
+      {kind === "cells" && <>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 800, color: "var(--text2)" }}>
+          Emplacements sans zone
+          <input type="number" min={0} max={200} value={direct} onChange={e => setDirect(e.target.value)} placeholder="0" style={{ ...inp, width: 80 }}/>
+          <span style={small}>numérotés 1, 2, 3…</span></label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text)" }}>Zones <span style={small}>chacune son nom et son nombre d'emplacements (« Colonne 1-3 »)</span></div>
+          {zones.map((z, i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input value={z.name} onChange={e => setZ(i, "name", e.target.value)} placeholder="Colonne 1, Dessus…" style={{ ...inp, flex: 1 }}/>
+            <input type="number" min={1} max={200} value={z.n} onChange={e => setZ(i, "n", e.target.value)} style={{ ...inp, width: 70 }}/>
+            <button type="button" onClick={() => setZones(l => l.filter((_, j) => j !== i))} aria-label="Retirer la zone" style={seg}>✕</button>
           </div>)}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <button type="button" onClick={() => setZones(l => [...l, { name: `Zone ${l.length + 1}`, n: "4" }])} style={seg}>＋ Une zone</button>
+            <span style={small}>ou d'un coup :</span>
+            <input value={quick.prefix} onChange={e => setQuick(q => ({ ...q, prefix: e.target.value }))} style={{ ...inp, width: 96 }}/>
+            <input type="number" min={1} max={26} value={quick.count} onChange={e => setQuick(q => ({ ...q, count: e.target.value }))} style={{ ...inp, width: 56 }}/>
+            <span style={small}>de</span>
+            <input type="number" min={1} max={200} value={quick.n} onChange={e => setQuick(q => ({ ...q, n: e.target.value }))} style={{ ...inp, width: 56 }}/>
+            <button type="button" onClick={addQuick} style={seg}>Ajouter</button>
+          </div>
         </div>
+        <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>
+          <input type="checkbox" checked={single} onChange={e => setSingle(e.target.checked)}/>Des cases (une seule bobine chacune)</label>
+      </>}
+      <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}
+        data-tip="Cartons, réserve : une bobine qui en sort pour l'AMS le quitte pour de bon, et l'échange intelligent n'y range jamais rien">
+        <input type="checkbox" checked={stock} onChange={e => setStock(e.target.checked)}/>📦 C'est du stock (cartons, réserve)</label>
+      {kind === "cells" && total > 0 && <div style={{ padding: 10, borderRadius: 12, border: "1px dashed var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={small}>Aperçu · {total} {single ? "cases" : "emplacements"}</div>
+        {nd > 0 && <div style={{ display: "grid", gap: 3, gridTemplateColumns: "repeat(auto-fill, minmax(36px, 1fr))" }}>
+          {Array.from({ length: Math.min(nd, 60) }, (_, i) => <div key={i} style={cellPrev(single)}>{i + 1}</div>)}</div>}
+        {zs.length > 0 && <div style={{ display: "grid", gap: 6, gridTemplateColumns: `repeat(auto-fit, minmax(${zs.length > 4 ? 90 : 70}px, 1fr))`, alignItems: "start" }}>
+          {zs.map((z, i) => <div key={i} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <div style={{ ...small, fontSize: 10.5, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{z.name}</div>
+            {Array.from({ length: Math.min(z.n, 20) }, (_, k) => <div key={k} style={cellPrev(single)}>{cellName(z.name, k + 1)}</div>)}
+            {z.n > 20 && <div style={{ ...small, textAlign: "center" }}>… {z.n}</div>}
+          </div>)}
+        </div>}
       </div>}
     </div>
   </FSheet>, document.body);
@@ -396,22 +499,23 @@ export function PlacePicker({ spools, onClose, onDone, pickOnly = false, onPicke
         background: taken ? "color-mix(in srgb, #F59E0B 7%, var(--surface))" : "var(--surface)", flexDirection: compact ? "column" : "row", justifyContent: "center" }}>
       {taken ? <Swatch s={occ[0]} size={compact ? 22 : 26}/> : <span style={{ fontSize: compact ? 13 : 15 }}>{p.single ? "🔲" : "📚"}</span>}
       <span style={{ minWidth: 0, display: "flex", flexDirection: "column", alignItems: compact ? "center" : "flex-start" }}>
-        <span style={{ fontSize: compact ? 11.5 : 13, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{p.name}</span>
+        <span style={{ fontSize: compact ? 11.5 : 13, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{p.full ? p.path : shortName(p, by)}</span>
         {!compact && <span style={small}>{mine ? "ici en ce moment" : p.single ? (taken ? `prise · #${occ[0].id}` : "libre") : `${occ.length} bobine${occ.length > 1 ? "s" : ""}`}</span>}
       </span>
     </button>;
   };
-  const Group = ({ p }) => {
+  // un rangement : ses emplacements sans zone, puis ses zones cote a cote (07/11/2026), chacune en colonne
+  const Group = ({ p, many }) => {
     const ch = kids[p.id] || [];
-    const allLeaves = ch.every(c => c.leaf);
-    return <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: p.depth ? "6px 0 0" : 10, borderRadius: 14,
-      border: p.depth ? "none" : "1px solid var(--border)", background: p.depth ? "transparent" : "color-mix(in srgb, #8B5CF6 4%, var(--surface2))" }}>
-      <div style={{ fontSize: p.depth ? 12 : 13.5, fontWeight: 900, color: p.depth ? "var(--text2)" : "var(--text)" }}>{p.icon || (p.stock ? "📦" : "🗂")} {p.name}{p.stock ? " · stock" : ""}</div>
-      {allLeaves
-        ? <div style={{ display: "grid", gap: 5, gridTemplateColumns: p.cols ? `repeat(${p.cols}, minmax(0, 1fr))` : "repeat(auto-fill, minmax(92px, 1fr))" }}>
-          {ch.map(c => <Leaf key={c.id} p={c} compact={!!p.cols && p.cols > 3}/>)}</div>
-        : <div style={{ display: "grid", gap: 8, gridTemplateColumns: p.cols ? `repeat(${p.cols}, minmax(0, 1fr))` : "1fr" }}>
-          {ch.map(c => c.leaf ? <Leaf key={c.id} p={c}/> : <Group key={c.id} p={c}/>)}</div>}
+    const cells = ch.filter(c => c.leaf), subs = ch.filter(c => !c.leaf);
+    return <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: p.depth ? 6 : 10, borderRadius: 14, minWidth: 0,
+      border: "1px solid var(--border)", background: p.depth ? "var(--surface)" : "color-mix(in srgb, #8B5CF6 4%, var(--surface2))" }}>
+      <div style={{ fontSize: p.depth ? 12 : 13.5, fontWeight: 900, color: p.depth ? "var(--text2)" : "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {p.depth ? "" : `${p.icon || (p.stock ? "📦" : "🗄")} `}{p.name}{p.stock ? " · stock" : ""}</div>
+      {cells.length > 0 && <div style={{ display: "grid", gap: 5, gridTemplateColumns: p.cols ? `repeat(${p.cols}, minmax(0, 1fr))` : many ? "1fr" : "repeat(auto-fill, minmax(92px, 1fr))" }}>
+        {cells.map(c => <Leaf key={c.id} p={c} compact={many || (!!p.cols && p.cols > 3)}/>)}</div>}
+      {subs.length > 0 && <div style={{ display: "grid", gap: 6, gridTemplateColumns: p.cols ? `repeat(${p.cols}, minmax(0, 1fr))` : `repeat(auto-fit, minmax(${subs.length > 4 ? 100 : 84}px, 1fr))` }}>
+        {subs.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>}
     </div>;
   };
   const found = ql ? st.places.filter(p => p.leaf && p.path.toLowerCase().includes(ql)) : null;
@@ -442,7 +546,7 @@ export function PlacePicker({ spools, onClose, onDone, pickOnly = false, onPicke
           </div>}
           {found
             ? <div style={{ display: "grid", gap: 6, gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
-              {found.map(p => <Leaf key={p.id} p={{ ...p, name: p.path }}/>)}
+              {found.map(p => <Leaf key={p.id} p={{ ...p, full: true }}/>)}
               {!found.length && <div style={small}>Aucun emplacement ne correspond.</div>}</div>
             : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {roots.map(p => p.leaf ? <Leaf key={p.id} p={p}/> : <Group key={p.id} p={p}/>)}</div>}
@@ -510,7 +614,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
   const toggle = k => setFold(f => { const n = { ...f, [k]: !f[k] }; try { localStorage.setItem("bn_storage_fold", JSON.stringify(n)); } catch { /* indisponible */ } return n; });
   const byId = useMemo(() => Object.fromEntries((spools || []).map(s => [s.id, s])), [spools]);
   if (!st) return null;
-  const { kids, roots } = index(st);
+  const { kids, roots, by } = index(st);
   const TO = st.to_store_label || "À ranger";
   const printer = spools.filter(s => !s.ordered && inPrinter(s.location));
   const units = [...new Set(printer.map(s => unitOf(s.location)))].sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));
@@ -547,7 +651,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
         padding: "6px 4px", borderRadius: 14, cursor: full || (free && admin) ? "pointer" : "default", color: "var(--text)",
         border: free ? "1.5px dashed var(--border)" : `1px solid color-mix(in srgb, ${out ? "#0EA5E9" : "#8B5CF6"} 35%, var(--border))`,
         background: free ? "transparent" : "var(--surface)", opacity: occ && !full && !out ? 0.55 : 1 }}>
-      <span style={{ position: "absolute", top: 3, left: 6, fontSize: 9.5, fontWeight: 900, color: "var(--muted)" }}>{p.name}</span>
+      <span style={{ position: "absolute", top: 3, left: 6, right: 4, fontSize: 9.5, fontWeight: 900, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{shortName(p, by)}</span>
       {occ ? <>
         <Swatch s={full || occ} size={34} dim={out}/>
         <span style={{ fontSize: 10, fontWeight: 800, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--text2)" }}>
@@ -566,19 +670,19 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
         {away.map(x => <span key={x.id} data-tip={`${x.name} · ${x.location}`} style={{ display: "inline-flex" }}><Swatch s={x} size={20} dim/></span>)}</div>}
     </div>;
   };
-  const Group = ({ p }) => {
+  // ses cases sans zone, ses emplacements communs, puis ses zones cote a cote (07/11/2026), chacune en colonne
+  const Group = ({ p, many }) => {
     const ch = kids[p.id] || [];
-    const cellsOnly = ch.length && ch.every(c => c.leaf && c.single);
+    const cells = ch.filter(c => c.leaf && c.single), commons = ch.filter(c => c.leaf && !c.single), subs = ch.filter(c => !c.leaf);
     return <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: p.depth ? 6 : 0, borderRadius: 14,
       border: p.depth ? "1px solid var(--border)" : "none", background: p.depth ? "color-mix(in srgb, #8B5CF6 3%, var(--surface2))" : "transparent", minWidth: 0 }}>
-      {p.depth > 0 && <div style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text2)" }}>{p.icon || "🗂"} {p.name} <span style={small}>{countIn(p)}</span></div>}
-      {cellsOnly
-        ? <div style={{ display: "grid", gap: 6, gridTemplateColumns: p.cols ? `repeat(${p.cols}, minmax(0, 1fr))` : "repeat(auto-fill, minmax(76px, 1fr))" }}>
-          {ch.map(c => <Cell key={c.id} p={c}/>)}</div>
-        // des colonnes de cases (Tiroir › Colonne › Ligne) restent cote a cote jusqu'a 4, meme sur telephone
-        : <div style={{ display: "grid", gap: 6, gridTemplateColumns: !p.cols ? "1fr" : p.cols <= 4 && ch.every(c => !c.leaf && (kids[c.id] || []).every(x => x.leaf && x.single))
-            ? `repeat(${p.cols}, minmax(0, 1fr))` : `repeat(auto-fit, minmax(max(150px, calc(100% / ${p.cols} - 8px)), 1fr))` }}>
-          {ch.map(c => c.leaf ? (c.single ? <Cell key={c.id} p={c}/> : <Common key={c.id} p={c} nested/>) : <Group key={c.id} p={c}/>)}</div>}
+      {p.depth > 0 && <div style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.icon ? `${p.icon} ` : ""}{p.name} <span style={small}>{countIn(p)}</span></div>}
+      {cells.length > 0 && <div style={{ display: "grid", gap: 6, gridTemplateColumns: p.cols ? `repeat(${p.cols}, minmax(0, 1fr))` : many ? "1fr" : "repeat(auto-fill, minmax(76px, 1fr))" }}>
+        {cells.map(c => <Cell key={c.id} p={c}/>)}</div>}
+      {commons.map(c => <Common key={c.id} p={c} nested/>)}
+      {subs.length > 0 && <div style={{ display: "grid", gap: 6, gridTemplateColumns: p.cols && p.cols <= 6 ? `repeat(${p.cols}, minmax(0, 1fr))`
+          : `repeat(auto-fit, minmax(${subs.length > 4 ? 100 : 84}px, 1fr))` }}>
+        {subs.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>}
     </div>;
   };
   // les bobines qu'on peut mettre dans une case libre : a ranger d'abord, puis rangees sans place, puis les autres

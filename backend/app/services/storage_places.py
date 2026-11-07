@@ -93,13 +93,23 @@ def _kids(pl: dict) -> dict:
 
 
 def path_of(pl: dict, pid) -> str | None:
-    """« Rack 1 › A2 » ; None si la place n'existe plus."""
+    """« Rack 1 › A2 » ; None si la place n'existe plus. Un emplacement code « zone-numero » (« Colonne 1-3 », 07/11/2026)
+    porte deja le nom de sa zone : « Tiroir › Colonne 1-3 », pas « Tiroir › Colonne 1 › Colonne 1-3 »."""
     names, seen = [], set()
     while pid is not None and pid in pl and pid not in seen:
         seen.add(pid)
         names.append(pl[pid].name)
         pid = pl[pid].parent_id
-    return SEP.join(reversed(names)) if names and pid is None else None
+    if not names or pid is not None:
+        return None
+    names.reverse()
+    out = []
+    for n in names:
+        if out and n.startswith(out[-1] + "-") and len(out) > 1:
+            out[-1] = n
+        else:
+            out.append(n)
+    return SEP.join(out)
 
 
 def is_stock(pl: dict, pid) -> bool:
@@ -363,6 +373,13 @@ async def create(db, body: dict, parent_id=None) -> list:
         for i, c in enumerate(b.get("children") or []):
             await mk(c, p.id, i)
     base = max([q.sort or 0 for q in kids.get(parent_id, [])] or [-1]) + 1
+    if body.get("items") is not None:
+        # plusieurs emplacements d'un coup dans parent_id (une zone, des cases de plus), sans noeud de plus
+        if parent_id is None and not body["items"]:
+            raise StorageError("Rien à créer")
+        for i, it in enumerate(body["items"]):
+            await mk(it, parent_id, base + i)
+        return made
     await mk(body, parent_id, base)
     return made
 
