@@ -126,6 +126,27 @@ function Swatch({ s, size = 28, dim = false }) {
   return <span style={{ display: "inline-flex", opacity: dim ? 0.4 : 1, flexShrink: 0 }}>
     <SpoolSVG colors={colors} finish={finishOf(s)} size={size} type={s.filament_multicolor_type ?? s.multicolor_type}/></span>;
 }
+// une bobine vue sur la tranche (07/11/2026) : ses deux flasques et le filament enroule entre, a sa couleur (plusieurs
+// couleurs : en bandes). vertical : la bobine debout, la tranche en hauteur.
+export function SpoolEdge({ s, vertical = false, len = "100%", thick = 10, dim = false }) {
+  const cs = parseColorsList(s.filament_color ?? s.color, s.filament_colors_array ?? s.colors_array) || [];
+  const list = cs.length ? cs : ["#94a3b8"];
+  const dir = vertical ? "180deg" : "90deg";
+  const fill = list.length > 1 ? `linear-gradient(${dir}, ${list.map((c, i) => `${c} ${i / list.length * 100}% ${(i + 1) / list.length * 100}%`).join(", ")})` : list[0];
+  const wind = `repeating-linear-gradient(${dir}, rgba(0,0,0,.10) 0 1px, transparent 1px 3px)`;
+  const fl = { background: "color-mix(in srgb, var(--text) 55%, transparent)", borderRadius: 2, flexShrink: 0, [vertical ? "height" : "width"]: 3 };
+  return <span aria-hidden="true" style={{ display: "flex", flexDirection: vertical ? "column" : "row", alignItems: "stretch", flexShrink: 0, opacity: dim ? 0.4 : 1,
+    width: vertical ? thick : len, height: vertical ? len : thick }}>
+    <span style={fl}/>
+    <span style={{ flex: 1, margin: vertical ? "0 1.5px" : "1.5px 0", backgroundImage: `${wind}, linear-gradient(${vertical ? "90deg" : "180deg"}, rgba(255,255,255,.35), transparent 45%, rgba(0,0,0,.18))`,
+      backgroundColor: list.length > 1 ? undefined : fill, ...(list.length > 1 ? { background: `${wind}, ${fill}` } : {}), boxShadow: "inset 0 0 0 1px rgba(0,0,0,.15)" }}/>
+    <span style={fl}/>
+  </span>;
+}
+// comment un rangement montre ses bobines : la pastille, ou la tranche (h a plat, v debout), pose sur le rangement
+const edgeOf = (p, by) => { let q = p, seen = 0; while (q && q.parent_id != null && by[q.parent_id] && seen++ < 20) q = by[q.parent_id]; return q?.edge || null; };
+const infoOf = (occ, full) => [full?.filament_fila_type || full?.filament_material || occ?.material, full?.filament_manufacturer || occ?.brand].filter(Boolean);
+
 const spoolName = s => s.filament_translated_name || s.filament_name || s.name || `Bobine #${s.id}`;
 
 const seg = { padding: "7px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)",
@@ -332,6 +353,11 @@ function PlaceEditor({ id, onClose }) {
         onClick: () => fillCell(p) },
       p.leaf && { icon: p.single ? "📚" : "🔲", label: p.single ? "En faire un emplacement commun" : "En faire une case (une seule bobine)",
         hint: p.single ? "Autant de bobines qu'on veut" : "Réservée à une bobine tant qu'elle ne va pas ailleurs", onClick: () => patch(p, { single: !p.single }) },
+      p.id === root.id && { icon: "🧵", label: "Vue des bobines", hint: { h: "sur la tranche, à plat", v: "sur la tranche, debout" }[p.edge] || "pastille", onClick: () => openMenu(null, {
+        title: `Les bobines de « ${p.name} »`, subtitle: "comment les montrer dans ses cases", color: "#8B5CF6",
+        items: [[null, "🟣", "Pastille"], ["h", "▬", "Sur la tranche, à plat (horizontale)"], ["v", "▮", "Sur la tranche, debout (verticale)"]].map(([k, ic, l]) =>
+          ({ icon: (p.edge || null) === k ? "✓" : ic, label: l, onClick: () => patch(p, { edge: k }) })),
+      }) },
       p.id === root.id && { icon: "📦", label: p.stock ? "Ce n'est plus du stock" : "C'est du stock (cartons, réserve)",
         hint: p.stock ? "Une bobine qui en sort pour l'AMS n'y revient pas" : "Une bobine qui en sort pour l'AMS le quitte pour de bon ; l'échange intelligent n'y range jamais rien",
         onClick: () => patch(p, { stock: !p.stock }) },
@@ -354,12 +380,13 @@ function PlaceEditor({ id, onClose }) {
     ],
   });
   const Cell = ({ p }) => {
-    const occ = p.spools[0];
-    return <button type="button" onClick={e => menu(e, p)} data-tip={occ ? `${occ.name} · #${occ.id}` : p.single ? "Case libre" : "Emplacement commun"}
+    const occ = p.spools[0], edge = edgeOf(p, by), info = infoOf(occ, null);
+    return <button type="button" onClick={e => menu(e, p)} data-tip={occ ? [occ.name, ...info, `#${occ.id}`].join(" · ") : p.single ? "Case libre" : "Emplacement commun"}
       style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, minWidth: 0, minHeight: 28,
         padding: "2px 1px", borderRadius: 7, cursor: "pointer", color: "var(--text)",
         border: `1px ${p.single ? "solid" : "dashed"} color-mix(in srgb, #8B5CF6 ${occ ? 55 : 25}%, var(--border))`, background: occ ? "color-mix(in srgb, #8B5CF6 10%, var(--surface))" : "transparent" }}>
-      {occ && <Swatch s={occ} size={15}/>}
+      {occ && (edge ? <SpoolEdge s={occ} vertical={edge === "v"} len={edge === "v" ? 28 : "90%"} thick={edge === "v" ? 13 : 13}/> : <Swatch s={occ} size={15}/>)}
+      {occ && edge && info.length > 0 && <span style={{ fontSize: 8.5, fontWeight: 800, color: "var(--muted)", maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{info.join(" · ")}</span>}
       <span style={{ fontSize: 10.5, fontWeight: 900, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.single ? "" : "📚"}{shortName(p, by)}</span>
       {!p.single && p.spools.length > 1 && <span style={{ ...small, fontSize: 9 }}>{p.spools.length}</span>}
     </button>;
@@ -687,7 +714,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
   // une case : sa bobine (ou son fantome si elle est dans l'imprimante / hors du filtre), sinon « libre »
   const Cell = ({ p }) => {
     const occ = p.spools[0], full = occ ? byId[occ.id] : null, out = occ && occ.in_printer;
-    const free = !occ;
+    const free = !occ, edge = edgeOf(p, by), info = infoOf(occ, full);
     return <button type="button" onClick={() => full ? onOpen(full) : free && admin ? setFill(p) : null}
       data-tip={occ ? `${occ.name} · #${occ.id}${out ? ` · dans l'imprimante (${occ.location}), sa case l'attend` : ""}` : admin ? "Libre : toucher pour y ranger une bobine" : "Libre"}
       style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, minWidth: 0, minHeight: 46,
@@ -697,9 +724,12 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
       <span style={occ ? { position: "absolute", top: 2, left: 4, right: 3, fontSize: 9.5, fontWeight: 900, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
         : { fontSize: 12, fontWeight: 900, color: "var(--muted)" }}>{shortName(p, by)}</span>
       {occ ? <>
-        <Swatch s={full || occ} size={26} dim={out}/>
+        {edge ? <span style={{ marginTop: 10 }}><SpoolEdge s={full || occ} vertical={edge === "v"} len={edge === "v" ? 34 : 56} thick={edge === "v" ? 15 : 15} dim={out}/></span>
+          : <Swatch s={full || occ} size={26} dim={out}/>}
         <span style={{ fontSize: 10, fontWeight: 800, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--text2)" }}>
           {out ? `🖨 ${unitOf(occ.location)}` : (full ? (full.filament_translated_name || full.filament_name) : occ.name)}</span>
+        {edge && !out && info.length > 0 && <span style={{ fontSize: 8.5, fontWeight: 700, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--muted)" }}>
+          {info.join(" · ")}</span>}
       </> : null}
     </button>;
   };
@@ -740,10 +770,6 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
         <div style={grid}>{printer.filter(s => unitOf(s.location) === u).sort((a, b) => (a.location || "").localeCompare(b.location || "", "fr", { numeric: true })).map(s => renderSpool(s))}</div>
       </div>)}
     </Section>}
-    {waiting.length > 0 && <Section k="tostore" icon="📥" title="À ranger" n={waiting.length} tone="#F59E0B"
-      aside={admin && <button type="button" onClick={() => setToStore(true)} style={{ ...seg, ...segOn }}>Ranger</button>}>
-      <div style={grid}>{waiting.map(s => renderSpool(s))}</div>
-    </Section>}
     {st.mode === "single"
       ? (elsewhere.length > 0 && <Section k="single" icon="🗄" title={st.name} n={elsewhere.length}><div style={grid}>{elsewhere.map(s => renderSpool(s))}</div></Section>)
       : <>
@@ -753,6 +779,11 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
         {elsewhere.length > 0 && <Section k="else" icon="❔" title="Ailleurs" n={elsewhere.length} tone="#64748B"><div style={grid}>{elsewhere.map(s => renderSpool(s))}</div></Section>}
       </>}
     {ordered.length > 0 && <Section k="ordered" icon="📬" title="En commande" n={ordered.length} tone="#0EA5E9"><div style={grid}>{ordered.map(s => renderSpool(s))}</div></Section>}
+    {/* a ranger, en dernier (07/11/2026) : la liste peut etre longue, les rangements d'abord */}
+    {waiting.length > 0 && <Section k="tostore" icon="📥" title="À ranger" n={waiting.length} tone="#F59E0B"
+      aside={admin && <button type="button" onClick={() => setToStore(true)} style={{ ...seg, ...segOn }}>Ranger</button>}>
+      <div style={grid}>{waiting.map(s => renderSpool(s))}</div>
+    </Section>}
     {!spools.length && <div style={{ padding: 20, textAlign: "center", ...small }}>Aucune bobine ne correspond.</div>}
     {fill && <CellFiller place={fill} spools={spools} onClose={() => setFill(null)}/>}
     {toStore && <ToStoreSheet onClose={() => setToStore(false)}/>}

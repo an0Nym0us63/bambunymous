@@ -271,6 +271,7 @@ async def _migrate():
         ("storage_places", "stock",           "INTEGER DEFAULT 0"),
         ("storage_places", "layout",          "TEXT"),
         ("storage_places", "rev",             "INTEGER DEFAULT 0"),
+        ("storage_places", "edge",            "TEXT"),
         ("bobines",   "unstored_at",          "TIMESTAMP"),
         ("prints",    "number_of_items",      "INTEGER DEFAULT 1"),
         ("prints",    "sold_units",           "INTEGER DEFAULT 0"),

@@ -339,6 +339,7 @@ async def overview(db) -> dict:
             out.append({"id": p.id, "parent_id": p.parent_id, "name": p.name, "single": bool(p.single),
                         "stock": bool(getattr(p, "stock", False)), "in_stock": is_stock(pl, p.id),
                         "layout": getattr(p, "layout", None) or "auto", "rev": bool(getattr(p, "rev", False)),
+                        "edge": getattr(p, "edge", None),
                         "sort": p.sort or 0, "cols": p.cols, "icon": p.icon, "depth": depth, "path": path_of(pl, p.id),
                         "leaf": not kids.get(p.id), "spools": by_place.get(p.id, [])})
             walk(p.id, depth + 1)
@@ -409,6 +410,8 @@ async def update(db, pid: int, body: dict) -> None:
         p.layout = body["layout"] if body["layout"] in LAYOUTS else None
     if "rev" in body:
         p.rev = bool(body["rev"])
+    if "edge" in body:
+        p.edge = body["edge"] if body["edge"] in ("h", "v") else None
     if "cols" in body:
         p.cols = int(body["cols"]) if body["cols"] else None
     if "icon" in body:

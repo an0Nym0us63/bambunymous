@@ -26,4 +26,7 @@ class StoragePlace(Base):
     # 1 en bas (colonne, grille) ou a droite (ligne), comme un tiroir qu'on remplit par le fond
     layout     = Column(String(8), nullable=True)
     rev        = Column(Boolean, nullable=False, default=False, server_default="0")
+    # comment montrer ses bobines (07/11/2026) : None la pastille, h sur la tranche a plat, v sur la tranche debout ;
+    # pose sur le rangement, vaut pour tout ce qu'il contient
+    edge       = Column(String(2), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
