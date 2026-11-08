@@ -2513,28 +2513,37 @@ def _replace(order: list, old: list, new: list) -> list:
 
 async def _load_spots(jobs: list) -> None:
     """Ou prendre chaque bobine a charger (07/11/2026) : aligne sur load_ids, la bobine conseillee de ce filament (rangee,
-    hors de l'imprimante ; une entamee d'abord, pour la finir), son emplacement, et combien d'autres sont rangees."""
+    hors de l'imprimante ; une entamee d'abord, pour la finir), son emplacement, et combien d'autres sont rangees.
+    Et ou ranger celle qui sort (08/11/2026, out_spots, aligne aussi) : comme le fera le rangement a sa sortie (sa place,
+    a ranger, le rangement unique ; echange intelligent : la case que libere celle qu'on charge)."""
     fids = {f for j in jobs for f in (j.get("load_ids") or []) if f}
+    outs = {f for j in jobs for f in (j.get("swap_out_ids") or []) if f}
     if not fids:
         return
-    by = {}
+    by, inpr = {}, {}
     try:                                   # une lecture qui echoue ne fait jamais tomber le planning
         from sqlalchemy import select
         from ..db.session import AsyncSessionLocal
         from ..models.filament import Filament, Spool
         from .storage_places import in_printer
+        from . import storage_places as SP
         async with AsyncSessionLocal() as db:
             rows = (await db.execute(select(Spool.id, Spool.filament_id, Spool.location, Spool.remaining_weight_g, Spool.place_id,
                                             Filament.filament_weight_g)
                                      .join(Filament, Filament.id == Spool.filament_id)
-                                     .where(Spool.filament_id.in_(fids), Spool.archived.is_(False), Spool.ordered.is_(False)))).all()
+                                     .where(Spool.filament_id.in_(fids | outs), Spool.archived.is_(False), Spool.ordered.is_(False)))).all()
+            conf, pl = await SP.config(db), await SP.places(db)
     except Exception:
         logger.exception("[PLANNING] emplacements des bobines a charger")
         return
+    kids = SP._kids(pl)
     for sid, fid, loc, rem, pid, full in rows:
-        if in_printer(loc) or (rem is not None and rem <= 0):
+        if in_printer(loc):
+            inpr.setdefault(fid, (sid, pid))
             continue
-        by.setdefault(fid, []).append((sid, loc, rem, full or 1000.0))
+        if rem is not None and rem <= 0:
+            continue
+        by.setdefault(fid, []).append((sid, loc, rem, full or 1000.0, pid))
     for fid, l in by.items():
         # entamee d'abord (la moins pleine), puis les neuves
         l.sort(key=lambda x: (0 if (x[2] is not None and x[2] < x[3] - 5) else 1, x[2] if x[2] is not None else x[3]))
@@ -2546,10 +2555,36 @@ async def _load_spots(jobs: list) -> None:
                           "others": len(l) - 1} if l else None)
         if spots:
             j["load_spots"] = spots
+        # celle qui sort : la bobine de ce filament dans l'imprimante (sinon celle qu'un plateau d'avant y aura chargee)
+        ospots = []
+        for i, o in enumerate(j.get("swap_out_ids") or []):
+            if not o:
+                ospots.append(None)
+                continue
+            a = inpr.get(o) or ((by[o][0][0], by[o][0][4]) if by.get(o) else None)      # (bobine, sa place)
+            lids = j.get("load_ids") or []
+            inc = (by.get(lids[i]) or [None])[0] if i < len(lids) else None           # celle qu'on charge a sa place
+            leaf = lambda p: bool(p and SP.is_leaf(pl, p, kids))
+            if conf["mode"] == "single":
+                ospots.append({"spool": a[0] if a else None, "where": conf["name"], "how": "single", "out": a[0] if a else None})
+            elif conf["smart"] and inc and leaf(inc[4]) and not SP.is_stock(pl, inc[4]) and inc[1] != SP.TO_STORE:
+                ospots.append({"spool": inc[0], "where": SP.path_of(pl, inc[4]), "how": "swap", "out": a[0] if a else None})   # la case qu'elle libere
+            elif conf["mode"] == "assigned" and a and leaf(a[1]):
+                ospots.append({"spool": a[0], "where": SP.path_of(pl, a[1]), "how": "home", "out": a[0]})
+            else:
+                ospots.append({"spool": a[0] if a else None, "where": SP.TO_STORE, "how": "store", "out": a[0] if a else None,
+                               "last": SP.path_of(pl, a[1]) if a and leaf(a[1]) else None})
+        if any(ospots):
+            j["out_spots"] = ospots
 
 
 def _spot_txt(sp) -> str:
     return f" (📍 {sp['where']})" if sp and sp.get("where") else ""
+
+
+def _out_txt(sp) -> str:
+    """Ou ranger la bobine qui sort (08/11/2026) : « (↩ Tiroir › Colonne 3-2) », « (↩ À ranger) »."""
+    return f" (↩ {sp['where']})" if sp and sp.get("where") else ""
 
 
 # ── les rappels (boucle des notifications) ───────────────────────────────────
@@ -2562,9 +2597,10 @@ def _swap_txt(j: dict) -> str:
     """Qui prend la place de qui (06/11/2026) : « Bleu ciel à la place de Silver, Rouge dans l'emplacement libre »."""
     outs = j.get("swap_out") or [None] * len(j.get("load") or [])
     spots = j.get("load_spots") or [None] * len(j.get("load") or [])
-    # ou la prendre (07/11/2026) : « Bleu ciel (📍 Tiroir bas › Colonne 1-3) a la place de Silver »
-    parts = [f"{x}{_spot_txt(sp)} à la place de {o}" if o else f"{x}{_spot_txt(sp)} dans l'emplacement libre"
-             for x, o, sp in zip(j.get("load") or [], outs, list(spots) + [None] * len(outs))]
+    osp = list(j.get("out_spots") or []) + [None] * len(outs)
+    # ou la prendre (07/11/2026) : « Bleu ciel (📍 Tiroir bas › Colonne 1-3) a la place de Silver (↩ ou la ranger) »
+    parts = [f"{x}{_spot_txt(sp)} à la place de {o}{_out_txt(osp[i])}" if o else f"{x}{_spot_txt(sp)} dans l'emplacement libre"
+             for i, (x, o, sp) in enumerate(zip(j.get("load") or [], outs, list(spots) + [None] * len(outs)))]
     return "🔁 " + ", ".join(parts) + (" (ce qui sort ne resservira pas de sitôt)" if any(outs) else "")
 
 

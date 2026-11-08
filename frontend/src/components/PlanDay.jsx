@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { showConfirm } from "../utils/dialog";
-import { useNavigate } from "react-router-dom";
 import { apiThumb, apiUrl } from "../api/client";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import MwImg from "./MwImg";
 import { LocateSheet } from "./Storage";
+import { FilamentSheetFromSpool } from "./LazySheets";
 
 // Le planning des impressions (05/11/2026) : les briques du calendrier. La journee en frise (heures de fonctionnement,
 // de lancement, impressions faites et prevues), ses travaux prevus a ranger, les consignes, les conseils.
@@ -352,15 +352,37 @@ export function FilDot({ id, size = 10 }) {
     boxShadow: "inset 0 0 0 1px rgba(0,0,0,.18)", ...colorBg(parseColorsList(c.color, c.colors_array), c.multicolor_type, finishOf(c), { size }) }}/>;
 }
 // un filament nomme en entier (« TPU 95A Bambu · Noir »), avec sa pastille, qui ouvre sa fiche (06/11/2026)
-export function FilLink({ id, label }) {
-  const nav = useNavigate();
+// (08/11/2026) la fiche s'ouvre sur place, par-dessus le planning (avant : on partait sur la page Filaments) ; celle de la
+// bobine quand on sait laquelle (a charger, ou qui sort), sinon celle du filament. Hors du document (createPortal) et sans
+// laisser remonter les clics : elle vit souvent dans une tuile qui s'ouvre au toucher
+export function FilLink({ id, label, spool = null }) {
+  const [open, setOpen] = useState(false);
   if (!id) return <>{label}</>;
-  return <span role="link" tabIndex={0} data-tip="Ouvrir la fiche du filament" onClick={e => { e.stopPropagation(); nav(`/filaments?id=${id}`); }}
-    style={{ cursor: "pointer", whiteSpace: "normal" }}><FilDot id={id}/><span style={{ textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>{label}</span></span>;
+  return <><span role="link" tabIndex={0} data-tip={spool ? "Ouvrir la fiche de la bobine" : "Ouvrir la fiche du filament"} onClick={e => { e.stopPropagation(); setOpen(true); }}
+    style={{ cursor: "pointer", whiteSpace: "normal" }}><FilDot id={id}/><span style={{ textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>{label}</span></span>
+    {open && createPortal(<div onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+      <FilamentSheetFromSpool filamentId={id} spoolId={spool} onClose={() => setOpen(false)}/></div>, document.body)}</>;
 }
+// ou ranger la bobine qui sort (08/11/2026) : « ↩ Tiroir › Colonne 3-2 » (la case que libere celle qu'on charge, ou sa place),
+// « ↩ À ranger » ; toucher ouvre cette case (clignotante)
+export function OutSpot({ sp }) {
+  const [open, setOpen] = useState(false);
+  if (!sp?.where) return null;
+  const tip = sp.how === "swap" ? "Range-la dans la case que libère la bobine que tu charges (échange intelligent)"
+    : sp.how === "home" ? "Range-la à sa place" : sp.how === "single" ? "Elle retourne au rangement"
+    : `Elle sera à ranger : tu diras où tu la mets${sp.last ? ` (sa dernière place : ${sp.last})` : ""}`;
+  const can = sp.spool && (sp.how === "swap" || sp.how === "home");
+  return <><span role={can ? "button" : undefined} tabIndex={can ? 0 : undefined} data-tip={tip + (can ? " — toucher pour la voir" : "")}
+    onClick={can ? e => { e.stopPropagation(); setOpen(true); } : undefined}
+    style={{ cursor: can ? "pointer" : "default", fontWeight: 800, color: "#0369A1", whiteSpace: "nowrap" }}> (↩ {sp.where})</span>
+    {open && createPortal(<div onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+      <LocateSheet spoolId={sp.spool} home={sp.how === "home"} onClose={() => setOpen(false)}/></div>, document.body)}</>;
+}
+// spool : la case a montrer ; out : la bobine qui sort
+const outSpool = (j, i) => j.out_spots?.[i]?.out;
 // le changement de bobine, en court et en pastilles : « ● X à la place de ● Y » (celle qui sort, plus pale), « ● X (place libre) »
-export const SwapShort = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={j.load_ids?.[i]} label={x}/><LoadSpot sp={j.load_spots?.[i]}/>
-  {outOf(j, i)[0] ? <><span style={{ fontWeight: 600, opacity: 0.75 }}> à la place de </span><span style={{ opacity: 0.6 }}><FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]}/></span></> : freeOf(j, i) ? " (place libre)" : ""}</React.Fragment>)}</>;
+export const SwapShort = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={j.load_ids?.[i]} label={x} spool={j.load_spots?.[i]?.spool}/><LoadSpot sp={j.load_spots?.[i]}/>
+  {outOf(j, i)[0] ? <><span style={{ fontWeight: 600, opacity: 0.75 }}> à la place de </span><span style={{ opacity: 0.6 }}><FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]} spool={outSpool(j, i)}/></span><OutSpot sp={j.out_spots?.[i]}/></> : freeOf(j, i) ? " (place libre)" : ""}</React.Fragment>)}</>;
 // ou prendre une bobine a charger (07/11/2026) : « 📍 Tiroir bas › Colonne 1-3 », qui ouvre son rangement (sa case clignote)
 export function LoadSpot({ sp }) {
   const [open, setOpen] = useState(false);
@@ -371,11 +393,11 @@ export function LoadSpot({ sp }) {
     {open && <LocateSheet spoolId={sp.spool} onClose={() => setOpen(false)}/>}</>;
 }
 // la liste a charger, chacune avec ou la prendre
-export const LoadLinks = ({ j }) => <>{(j.load || []).map((l, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={j.load_ids?.[i]} label={l}/><LoadSpot sp={j.load_spots?.[i]}/></React.Fragment>)}</>;
+export const LoadLinks = ({ j }) => <>{(j.load || []).map((l, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={j.load_ids?.[i]} label={l} spool={j.load_spots?.[i]?.spool}/><LoadSpot sp={j.load_spots?.[i]}/></React.Fragment>)}</>;
 export const FilLinks = ({ labels, ids }) => <>{(labels || []).map((l, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={ids?.[i]} label={l}/></React.Fragment>)}</>;
 // le changement de bobine en phrase, ses filaments cliquables : « charger X a la place de Y »
-export const SwapLinks = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}charger <FilLink id={j.load_ids?.[i]} label={x}/><LoadSpot sp={j.load_spots?.[i]}/>
-  {outOf(j, i)[0] ? <><span style={{ fontWeight: 600, opacity: 0.75 }}> à la place de </span><span style={{ opacity: 0.6 }}><FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]}/></span></>
+export const SwapLinks = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}charger <FilLink id={j.load_ids?.[i]} label={x} spool={j.load_spots?.[i]?.spool}/><LoadSpot sp={j.load_spots?.[i]}/>
+  {outOf(j, i)[0] ? <><span style={{ fontWeight: 600, opacity: 0.75 }}> à la place de </span><span style={{ opacity: 0.6 }}><FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]} spool={outSpool(j, i)}/></span><OutSpot sp={j.out_spots?.[i]}/></>
     : freeOf(j, i) ? <span style={{ fontWeight: 600, opacity: 0.75 }}> dans l'emplacement libre</span> : ""}</React.Fragment>)}</>;
 // la fin de la journee (06/11/2026) : le dernier plateau prevu aujourd'hui finit vers telle heure ; combien encore
 export const dayEnd = p => {

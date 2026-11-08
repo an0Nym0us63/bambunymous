@@ -549,10 +549,10 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
 
 // ── Localiser une bobine (07/11/2026) ─────────────────────────────────────────
 // Son rangement s'ouvre et sa case clignote ; dans l'imprimante : ou elle est, et la place qui l'attend si elle en a une.
-export function LocateSheet({ spoolId, onClose }) {
+export function LocateSheet({ spoolId, onClose, home = false }) {
   const st = useStorage();
   const [sp, setSp] = useState(null);
-  const [showHome, setShowHome] = useState(false);   // dans l'imprimante : voir la place qui l'attend
+  const [showHome, setShowHome] = useState(home);    // dans l'imprimante : voir la place qui l'attend (home : d'emblee)
   useEffect(() => { client.get(`/filaments/spools/${spoolId}`).then(r => setSp(r.data)).catch(() => setSp({ id: spoolId })); }, [spoolId]);
   if (!st || !sp) return null;
   const { by } = index(st);
