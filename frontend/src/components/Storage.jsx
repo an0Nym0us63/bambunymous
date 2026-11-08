@@ -563,8 +563,12 @@ export function LocateSheet({ spoolId, onClose, home = false }) {
   while (root && root.parent_id != null && by[root.parent_id]) root = by[root.parent_id];
   const inPr = inPrinter(sp.location);
   const name = sp.filament_translated_name || sp.filament_name || `Bobine #${spoolId}`;
+  // (08/11/2026) colle en haut : la fenetre descend jusqu'a la case, on garde sous les yeux de quelle bobine et quelle place
+  // il s'agit (la marge a droite laisse la croix de fermeture)
   const banner = <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 14,
-    border: `2px solid ${inPr ? "#0EA5E9" : "#F59E0B"}`, background: `color-mix(in srgb, ${inPr ? "#0EA5E9" : "#F59E0B"} 12%, var(--surface))` }}>
+    position: "sticky", top: 8, zIndex: 5, marginRight: 44, boxShadow: "0 8px 18px -10px rgba(15,23,42,.45)",
+    border: `2px solid ${inPr ? "#0EA5E9" : "#F59E0B"}`, backgroundColor: "var(--sheet-bg)",       // plein : les cases passent dessous
+    backgroundImage: `linear-gradient(color-mix(in srgb, ${inPr ? "#0EA5E9" : "#F59E0B"} 14%, transparent), color-mix(in srgb, ${inPr ? "#0EA5E9" : "#F59E0B"} 14%, transparent))` }}>
     <Swatch s={sp} size={32}/>
     <span style={{ flex: 1, minWidth: 0 }}>
       <span style={{ display: "block", fontSize: 14, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name} <span style={{ color: "var(--muted)" }}>#{spoolId}</span></span>
