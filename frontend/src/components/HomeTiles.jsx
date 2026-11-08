@@ -2653,9 +2653,13 @@ function LiveCam({ status, o, sz = { h: 2 } }) {
             value={status.remaining_minutes ? fmtDur(status.remaining_minutes * 60) : "bientôt"} unit="restantes"
             sub={[status.remaining_minutes && `fin à ${finAt(status.remaining_minutes)}`, status.total_layers > 0 && `couche ${status.layer} / ${status.total_layers}`].filter(Boolean).join(" · ")}/>
             : <Empty>Au repos</Empty>}</BoxCtx.Provider></>;
+        // (08/11/2026) une tuile plus large que l'image (16:9) la rognait en haut et en bas : l'image se cale sur la hauteur,
+        // centree, rognee un peu en haut et en bas (13 % au plus), et au-dela un bord sombre de chaque cote plutot que la tete
+        // de l'imprimante coupee
+        const camW = Math.min(W, Math.round(H * 16 / 9 * 1.15));
         return (
-        <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", flex: 1, minHeight: 0, background: "#111" }}>
-          <LiveCamera mode={o.mode} style={{ height: "100%" }}/>
+        <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", flex: 1, minHeight: 0, background: "#111", display: "flex", justifyContent: "center" }}>
+          <div style={{ position: "relative", width: camW, height: "100%", flexShrink: 0 }}><LiveCamera mode={o.mode} style={{ height: "100%" }}/></div>
           {o.overlay && live && <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "14px 10px 6px", color: "#fff", pointerEvents: "none",
             background: "linear-gradient(transparent, rgba(0,0,0,0.65))", display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 800 }}>
             <span style={{ flex: 1, height: 5, borderRadius: 5, background: "rgba(255,255,255,0.3)", overflow: "hidden" }}>
