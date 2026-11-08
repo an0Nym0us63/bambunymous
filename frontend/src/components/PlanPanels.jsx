@@ -412,7 +412,7 @@ export function PoolSummary({ jobs, blocked = [], now, onOpenModel, bulk }) {
 // La fiche d'un modele du planning (06/11/2026) : en haut ce qui vaut pour tout le modele (caler tous ses plateaux
 // sur un jour, en tete, plus tard, d'une traite, date limite…), dessous chacun de ses plateaux, a toucher pour ses
 // actions a lui. Elle reste ouverte apres une action : on voit les plateaux bouger.
-export function ModelSheet({ g: g0, now, edit, onClose, onPick, act: act0, jobs, done = null }) {
+export function ModelSheet({ g: g0, now, edit, onClose, onPick, act: act0, jobs, done = null, since = null }) {
   const { busy, run, row, dateRow } = useActRows(null);
   const [slot, setSlot] = useState(false);            // caler tout le modele dans une journee (06/11/2026)
   // ses variantes de couleur (06/11/2026 : caler 11 echantillons sur un jour se faisait un par un) : le meme modele et le
@@ -486,6 +486,10 @@ export function ModelSheet({ g: g0, now, edit, onClose, onPick, act: act0, jobs,
     {(() => { const dl = [g0.id, ...(on ? vdids : [])].flatMap(id => (done || {})[id] || []);
       const nd = dl.filter(p => p.done >= p.qty).length;
       return sec(`Plateau par plateau (${g.jobs.length} à faire${nd ? ` · ${nd} fait${nd > 1 ? "s" : ""}` : ""})`); })()}
+    {/* reparti a zero (08/11/2026) : le passe ne compte plus, il reste dit */}
+    {since?.[g0.id] && <div style={{ fontSize: 12, fontWeight: 700, color: "#0369A1", padding: "6px 10px", borderRadius: 10, background: "rgba(14,165,233,0.1)" }}>
+      ↺ Reparti à zéro le {new Date(`${since[g0.id].since}Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} : seules les impressions faites depuis comptent
+      {since[g0.id].before ? ` (${since[g0.id].before} plateau${since[g0.id].before > 1 ? "x" : ""} imprimé${since[g0.id].before > 1 ? "s" : ""} avant)` : ""}.</div>}
     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
       {[...g.jobs.map(j => ({ j })), ...[g0.id, ...(on ? vdids : [])].flatMap(id => (done || {})[id] || []).filter(p => p.done >= p.qty).map(p => ({ p }))]
         .sort((a, b) => ((a.j || a.p).plate ?? 0) - ((b.j || b.p).plate ?? 0) || (a.p ? -1 : 0) - (b.p ? -1 : 0)).map(({ j, p }) => {

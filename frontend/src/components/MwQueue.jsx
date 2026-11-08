@@ -22,6 +22,9 @@ import Model3D from "./Model3D";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import { moneyVal } from "../utils/money";
 
+// « 8 nov. » : la date d'un « repartir a zero » (enregistree en UTC)
+const sinceTxt = s => new Date(String(s).endsWith("Z") ? s : `${s}Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+
 // Impressions → File : les modeles de mes collections « a imprimer », avec le
 // profil et les filaments retenus (depuis la fiche du modele : « 📌 Retenir
 // pour la file »), les besoins additionnes par filament et ce qui est
@@ -89,6 +92,7 @@ function PlateChips({ plates, designId, edit, onChanged }) {
         const tip = `Plateau ${p.index}${p.name ? ` · ${p.name}` : ""} : `
           + (p.ready ? "faisable maintenant avec l'AMS" : "un filament manque dans l'AMS")
           + (done ? ` · déjà imprimé${p.printed > 1 ? ` ${p.printed}×` : ""}` : " · pas encore imprimé")
+          + ((p.printed_all || 0) > (p.printed || 0) ? ` · ${p.printed_all}× au total (avant de repartir à zéro compris)` : "")
           + (p.printing ? " · en cours d'impression" : "");
         return (
           <span key={p.index} data-tip={tip + (edit && p.printed ? " · touche pour corriger ce qui compte" : "")} onClick={e => pick(e, p)}
@@ -249,6 +253,11 @@ export default function MwQueue() {
     setQ(x => ({ ...x, models: ids.map(d => ({ ...byId[d], new: false })) }));
     try { await client.put("/makerworld/queue/order", { ids }); } catch { refresh(); }
   };
+  // repartir a zero (08/11/2026) : seules les impressions faites desormais comptent ; off : tout le passe recompte
+  const setSince = async (did, on) => {
+    try { await client.put(`/makerworld/queue/since/${did}`, { on }); egg("repartir_zero"); } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    refresh();
+  };
   const forget = async did => {
     try { await client.delete(`/makerworld/queue/plan/${did}`); } finally { refresh(); }
   };
@@ -280,6 +289,9 @@ export default function MwQueue() {
         isAdmin && "-",
         isAdmin && { icon: "＋", tone: "#8B5CF6", label: `Un exemplaire de plus (×${(r.qty || 1) + 1})`, onClick: () => setQty(r.design_id, Math.min(99, (r.qty || 1) + 1)) },
         isAdmin && (r.qty || 1) > 1 && { icon: "－", tone: "#8B5CF6", label: `Un de moins (×${r.qty - 1})`, onClick: () => setQty(r.design_id, r.qty - 1) },
+        isAdmin && (r.since
+          ? { icon: "↺", tone: "#0EA5E9", label: "Recompter tout le passé", hint: `Reparti à zéro le ${sinceTxt(r.since)} : les impressions d'avant compteront de nouveau`, onClick: () => setSince(r.design_id, false) }
+          : { icon: "↺", tone: "#0EA5E9", label: "Repartir à zéro", hint: "Pour le refaire : seules les impressions faites désormais comptent (le passé reste visible)", onClick: () => setSince(r.design_id, true) }),
         isAdmin && r.planned && { icon: "📌", label: "Oublier le plan retenu", hint: "Revient au profil et aux filaments par défaut", danger: true, onClick: () => forget(r.design_id) },
       ],
     };
@@ -518,6 +530,11 @@ export default function MwQueue() {
                       ? <span data-tip="Profil, plateaux et filaments retenus depuis la fiche" style={{ ...tag, color:"#16a34a", background:"rgba(34,197,94,0.14)" }}>📌 Retenu</span>
                       : <span data-tip="Profil retenu par l'appli, tous les plateaux, filament le plus proche du stock" style={{ ...tag, color:"var(--muted)", background:"var(--surface)", border:"1px dashed var(--border)" }}>Par défaut</span>}
                     {r.printed > 0 && <span style={{ ...tag, color:"#8B5CF6", background:"rgba(139,92,246,0.14)" }}>✓ imprimé {r.printed}×</span>}
+                    {r.since && (() => { const before = (r.plates || []).reduce((s, p) => s + Math.max(0, (p.printed_all || 0) - (p.printed || 0)), 0);
+                      const all = (r.plates || []).reduce((s, p) => s + (p.printed_all || 0), 0);
+                      return <span data-tip={`Reparti à zéro le ${sinceTxt(r.since)} : seules les impressions faites depuis comptent pour le planning. `
+                        + `Avant : ${before} plateau${before > 1 ? "x" : ""} imprimé${before > 1 ? "s" : ""} · au total ${all}`}
+                        style={{ ...tag, color:"#0369A1", background:"rgba(14,165,233,0.14)" }}>↺ depuis le {sinceTxt(r.since)}{before ? ` · ${before} avant` : ""}</span>; })()}
                   </span>
                   <span style={{ display:"block", fontSize:11, fontWeight:600, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {r.profile ? `${r.profile.title || "Profil"}${r.profile.plates < r.profile.plates_total ? ` · ${r.profile.plates}/${r.profile.plates_total} plateaux` : ""}` : "profil inconnu"}</span>
@@ -548,6 +565,14 @@ export default function MwQueue() {
                       📅 {pr ? `${prioOf(pr)[1]} ` : ""}{x.n ? `Planning : ${x.n} plateau${x.n > 1 ? "x" : ""} · dès ${when(x.first)} · fini ${when(x.last)}` : "Planning : non planifiable"}
                       {x.n > 0 && x.blocked > 0 && <span style={{ color:"#DC2626", whiteSpace:"nowrap" }}> · ⛔ {x.blocked}</span>}</span>{acts}</span>; })()}
                   {r.plates?.length > 1 && <PlateChips plates={r.plates} designId={r.mw_id || r.design_id} edit={isAdmin} onChanged={refresh}/>}
+                  {/* deja fait en entier (08/11/2026) : remis dans la file pour le refaire, il ne planifiait rien sans rien dire */}
+                  {r.redo_hint && <span style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginTop:6, padding:"5px 6px 5px 10px", borderRadius:12,
+                    fontSize:11.5, fontWeight:800, color:"#0369A1", background:"rgba(14,165,233,0.1)", border:"1px dashed rgba(14,165,233,0.45)" }}>
+                    <span style={{ flex:1, minWidth:0 }}>✅ Déjà fait en entier : rien à planifier.</span>
+                    {isAdmin && <button type="button" onClick={e => { e.stopPropagation(); setSince(r.design_id, true); }}
+                      data-tip="Seules les impressions faites désormais compteront ; le passé reste visible"
+                      style={{ padding:"3px 10px", borderRadius:20, border:"none", cursor:"pointer", fontSize:11.5, fontWeight:900, color:"#fff",
+                        background:"linear-gradient(135deg, #0EA5E9, #6366F1)" }}>↺ Le refaire</button>}</span>}
                   {r.ready_now?.plates > 0 && (
                     <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:800, color:"#16a34a", marginTop:5, padding:"2px 8px",
                       borderRadius:20, background:"rgba(34,197,94,0.12)" }}>
@@ -632,7 +657,7 @@ export default function MwQueue() {
         fetchSource={view3d.planned}
         title={view3d.title_fr || view3d.title} palette={view3d.planned ? paletteOf(view3d) : null}
         paletteFinishes={view3d.planned ? finishesOf(view3d) : null} onClose={() => setView3d(null)}/>}
-      {planSel && <ModelSheet g={poolGroups(pd?.jobs, pd?.blocked).find(g => g.id === planSel)} now={pd?.now} edit={isAdmin} jobs={pd?.jobs} done={pd?.done_plates}
+      {planSel && <ModelSheet g={poolGroups(pd?.jobs, pd?.blocked).find(g => g.id === planSel)} now={pd?.now} edit={isAdmin} jobs={pd?.jobs} done={pd?.done_plates} since={pd?.since}
         onClose={() => setPlanSel(null)} onPick={setPlanJob}
         act={{ ...modelAct(planSel), calendar: () => navTo(`/prints?tab=calendar&plan=${encodeURIComponent(planSel)}`) }}/>}
       {planJob && <JobSheet j={planJob} now={pd?.now} edit={isAdmin} onClose={() => setPlanJob(null)} act={jobAct(planJob)} jobs={pd?.jobs}/>}

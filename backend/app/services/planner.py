@@ -271,6 +271,7 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
     out, changed = [], False
     manual = d["done"]
     d["_done"] = {}         # les plateaux deja faits, par modele (07/11/2026 : la fiche du modele ne montrait que le reste)
+    d["_since"] = {}        # repartis a zero (08/11/2026) : leur date, et ce qui avait ete imprime avant
     for m in models:
         did = str(m.get("design_id"))
         if m.get("error") or not m.get("profile"):
@@ -282,11 +283,14 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
         if plates:
             for p in plates:
                 units.append((p.get("index"), p.get("name") or "", p.get("seconds"), p.get("fils") or [],
-                              p.get("printed") or 0, (p.get("printing_n") or 1) if p.get("printing") else 0, p.get("weight_g"), p.get("thumb")))
+                              p.get("printed") or 0, (p.get("printing_n") or 1) if p.get("printing") else 0, p.get("weight_g"), p.get("thumb"),
+                              p.get("printed_all") or p.get("printed") or 0))
+            if m.get("since"):
+                d["_since"][did] = {"since": m["since"], "before": sum(max(0, (p.get("printed_all") or 0) - (p.get("printed") or 0)) for p in plates)}
         elif m.get("seconds"):
             fils = [{"filament_id": (f.get("chosen") or {}).get("filament_id"), "type": f.get("type"), "color": f.get("color"),
                      "g": round((f.get("g") or 0) / qty, 1)} for f in m.get("filaments") or []]
-            units.append((0, "", m["seconds"] / qty, fils, 0, 1 if m.get("printing") else 0, round((m.get("weight_g") or 0) / qty, 1), None))
+            units.append((0, "", m["seconds"] / qty, fils, 0, 1 if m.get("printing") else 0, round((m.get("weight_g") or 0) / qty, 1), None, 0))
         # l'objet : combien chaque plateau en a deja donne, pour savoir quel plateau en termine un
         obj = {"qty": qty, "plates": {}}
         # le plateau d'impression que demande chaque plateau (06/11/2026) : dans le 3MF du profil, s'il est deja la
@@ -296,7 +300,7 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
             prof = (m.get("profile") or {}).get("profile_id")
             for u in units:
                 beds[u[0]] = PL.profile_bed(m.get("mw_id") or did.split("~")[0], prof, u[0] or 1)
-        for idx, pname, secs, fils, printed, printing, wg, thumb in units:
+        for idx, pname, secs, fils, printed, printing, wg, thumb, pall in units:
             bk = f"{did}:{idx}"
             mk = manual.get(bk)
             done = printed + (int(mk.get("n") or 0) if isinstance(mk, dict) else 0) + printing   # en cours : ses exemplaires
@@ -305,6 +309,7 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
                 mn = int(mk.get("n") or 0) if isinstance(mk, dict) else 0
                 d["_done"].setdefault(did, []).append({"key": bk, "plate": idx, "plate_name": pname, "plates_total": len(plates), "thumb": thumb,
                                                        "qty": qty, "done": min(done, qty), "printed": printed, "manual": mn, "printing": printing,
+                                                       "printed_all": pall,
                                                        "seconds": int(secs)})
             for c in range(done + 1, qty + 1):
                 fl = []
@@ -1959,6 +1964,7 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
             "blocked": [{k: b.get(k) for k in ("key", "design_id", "title", "cover", "thumb", "plate", "plate_name", "plates_total", "copy", "qty",
                                                 "seconds", "retained", "why", "fils")} for b in r.get("blocked") or []],
             "done_plates": d.get("_done") or {},
+            "since": d.get("_since") or {},
             "manual_done": [{"key": k, "title": v.get("title"), "plate": k.split(":")[-1], "n": v.get("n")}
                             for k, v in d["done"].items() if isinstance(v, dict) and v.get("n")]}
 

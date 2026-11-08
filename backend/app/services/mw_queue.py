@@ -8,6 +8,9 @@ Reglage MW_QUEUE (JSON) :
    "plans": {"<design_id>": {"instance_id": "1452154", "plates": [1, 3] | null,
                              "picks": {"PLA|#646941": 12, ...}, "qty": 2}}}
 qty : nombre d'exemplaires voulus (temps, filament, cout et stock multiplies).
+"since" (08/11/2026) : {"<cle de ligne>": "2026-11-08T14:02:00"} : « repartir a zero » ; pour cette ligne, seules les
+impressions faites depuis cette date comptent comme faites (un modele deja imprime, remis dans la file pour le refaire).
+Le passe n'est pas perdu : chaque plateau garde aussi son total (printed_all).
 Plusieurs profils retenus (06/11/2026, un modele qui regroupe des objets differents : pêche, banane…) : le premier
 reste sous "<design_id>", les suivants sous "<design_id>~<instance_id>". Chacun fait sa ligne dans « A faire » (son
 design_id est cette cle, mw_id le modele) et ses plateaux dans le planning.
@@ -139,6 +142,7 @@ async def _load() -> dict:
     d.setdefault("collections", [])
     d.setdefault("plans", {})
     d.setdefault("order", [])
+    d.setdefault("since", {})
     return d
 
 
@@ -290,6 +294,29 @@ async def set_qty(design_id: str, qty) -> dict:
     return pl
 
 
+async def set_since(design_id: str, on: bool) -> dict:
+    """Repartir a zero (08/11/2026) : seules les impressions faites a partir de maintenant comptent pour cette ligne
+    (un modele, ou un de ses profils retenus « 123~456 ») ; off : le passe recompte, comme avant."""
+    from datetime import datetime
+    did = str(design_id or "").strip()
+    if not _rid_ok(did):
+        raise QueueError("Modèle inconnu")
+    d = await _load()
+    if on:
+        d["since"][did] = datetime.utcnow().replace(microsecond=0).isoformat()
+    else:
+        d["since"].pop(did, None)
+    await _save(d)
+    return {"since": d["since"].get(did)}
+
+
+def _after(entries: list, since: str | None) -> list:
+    """Les impressions faites depuis « since » (repartir a zero) ; sans date, toutes."""
+    if not since:
+        return entries
+    return [e for e in entries if e.get("at") and e["at"] >= since]
+
+
 def fkey(t, c) -> str:
     return f"{str(t or '').upper()}|{str(c or '').upper()}"
 
@@ -385,7 +412,8 @@ async def _printed_plates(dids, statuses: tuple = ("SUCCESS", "PARTIAL")) -> dic
     from .makerworld import plate_keys
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(Print.design_id, Print.plate_id, Print.mw_profile_id, Print.mw_plates,
-                                        Print.total_weight_g, Print.number_of_items, Print.id, Print.model_3mf).where(
+                                        Print.total_weight_g, Print.number_of_items, Print.id, Print.model_3mf,
+                                        Print.print_date).where(
             Print.design_id.in_(dids), Print.status.in_(statuses)))).all()
         gcop = await _group_copies(db, [r[6] for r in rows])
         # les filaments de chaque impression (06/11/2026, variantes de couleur) : ceux de ses bobines
@@ -400,7 +428,7 @@ async def _printed_plates(dids, statuses: tuple = ("SUCCESS", "PARTIAL")) -> dic
                 if col_:
                     colors.setdefault(pid_, {})[_hex6(col_)] = int(fid_)    # la couleur du 3MF -> le filament de la bobine
     out = {}
-    for did, plate, prof, manual, g, items, pid, tmf in rows:
+    for did, plate, prof, manual, g, items, pid, tmf, at in rows:
         # les plateaux designes a la main (regroupes, renumerotes) passent avant le numero du fichier,
         # comme sur la fiche (avant le 24/10/2026, « A faire » ne lisait que le numero)
         by = {}
@@ -415,7 +443,8 @@ async def _printed_plates(dids, statuses: tuple = ("SUCCESS", "PARTIAL")) -> dic
             out.setdefault(str(did), []).append({"prof": pr, "plates": ns, "g": _num(g), "copies": copies,
                                                  "gcopies": gcop.get(pid), "items": int(items or 1), "id": pid,
                                                  "fids": used.get(pid, set()), "variant": plate_variant(manual),
-                                                 "tmf": tmf, "plate_id": plate, "fcol": colors.get(pid, {})})
+                                                 "tmf": tmf, "plate_id": plate, "fcol": colors.get(pid, {}),
+                                                 "at": at.replace(microsecond=0).isoformat() if at else None})
     return out
 
 
@@ -810,10 +839,14 @@ def _split_variants(models: list, done_plates: dict, details: dict) -> None:
     celle a laquelle on l'a rattachee, sinon celle dont elle a le plus de filaments (a egalite, la premiere). Les
     plateaux faits de chaque variante sont recomptes."""
     for (did, iid), rows in _variant_groups(models).items():
-        counts = _variant_counts(rows, done_plates.get(str(did), []), details.get(did) or {}, iid)
+        entries = done_plates.get(str(did), [])
+        counts = _variant_counts(rows, entries, details.get(did) or {}, iid)
         for r in rows:
+            # repartir a zero (08/11/2026) : la meme repartition, sur les impressions faites depuis sa date
+            mine = _variant_counts(rows, _after(entries, r.get("since")), details.get(did) or {}, iid) if r.get("since") else counts
             for pl in r.get("plates") or []:
-                pl["printed"] = counts[r["design_id"]].get(pl["index"], 0)
+                pl["printed"] = mine[r["design_id"]].get(pl["index"], 0)
+                pl["printed_all"] = counts[r["design_id"]].get(pl["index"], 0)
 
 
 def _profiles_fresh(models: list, done_plates: dict, details: dict) -> None:
@@ -1056,12 +1089,17 @@ async def _compute(fresh: bool = False) -> dict:
             row["plates_ready"] = ready
             row["plates_count"] = len(plates)
             # chaque plateau : faisable tout de suite avec l'AMS ? deja imprime (par moi) ?
-            mine = _printed_of(done_plates.get(str(did), []), prof,
-                               {str(x.get(i) or "") for x in profiles for i in ("instance_id", "profile_id")} - {""},
-                               {pl.get("index"): _num(pl.get("weight_g")) or sum(_num(f.get("g")) for f in pl.get("filaments") or [])
-                                for pl in prof.get("plates") or []}, plate_pieces(did, prof), strict=multi)
+            # repartir a zero (08/11/2026) : ce qui compte depuis sa date ; le total de toujours reste a cote
+            ids_, pg_, pc_ = ({str(x.get(i) or "") for x in profiles for i in ("instance_id", "profile_id")} - {""},
+                              {pl.get("index"): _num(pl.get("weight_g")) or sum(_num(f.get("g")) for f in pl.get("filaments") or [])
+                               for pl in prof.get("plates") or []}, plate_pieces(did, prof))
+            since = (cfg.get("since") or {}).get(rid)
+            row["since"] = since
+            every = _printed_of(done_plates.get(str(did), []), prof, ids_, pg_, pc_, strict=multi)
+            mine = _printed_of(_after(done_plates.get(str(did), []), since), prof, ids_, pg_, pc_, strict=multi) if since else every
             row["plates"] = [{"index": pl.get("index"), "name": pl.get("name") or "", "thumb": pl.get("thumb"),
                               "ready": pl.get("index") in ready, "printed": mine.get(pl.get("index"), 0),
+                              "printed_all": every.get(pl.get("index"), 0),
                               "seconds": _num(pl.get("seconds")) or None,
                               "weight_g": round(sum(_num(f.get("g")) for f in pl.get("filaments") or []), 1) or None,
                               # ses filaments retenus (05/11/2026) : le planning y lit ce qu'il faut charger et enchaine
@@ -1107,6 +1145,11 @@ async def _compute(fresh: bool = False) -> dict:
 
     _split_variants(models, done_plates, details)
     _profiles_fresh(models, done_plates, details)
+    # deja fait en entier (08/11/2026) : un modele remis dans la file pour le refaire ne planifiait rien ; on propose
+    # de repartir a zero
+    for r in models:
+        pls = r.get("plates") or []
+        r["redo_hint"] = bool(pls and not r.get("since") and all((p.get("printed") or 0) >= (r.get("qty") or 1) for p in pls))
     rank = {did: i for i, did in enumerate(cfg.get("order") or [])}
     # les retenus toujours devant les autres (06/11/2026), puis l'ordre choisi (les nouveaux en tete de leur groupe)
     models.sort(key=lambda r: (not r["planned"], r["design_id"] in rank, rank.get(r["design_id"], 0)))

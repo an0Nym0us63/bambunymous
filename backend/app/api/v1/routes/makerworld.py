@@ -360,6 +360,16 @@ async def mw_queue_qty(design_id: str, body: dict = Body({}), _: str = Depends(r
         raise HTTPException(400, str(e))
 
 
+@router.put("/queue/since/{design_id}")
+async def mw_queue_since(design_id: str, body: dict = Body({}), _: str = Depends(require_mw)):
+    """Repartir a zero (on) : seules les impressions faites desormais comptent pour ce modele ; off : tout recompte."""
+    from ....services import mw_queue as Q
+    try:
+        return await Q.set_since(design_id, bool(body.get("on")))
+    except Q.QueueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.delete("/queue/plan/{design_id}")
 async def mw_queue_plan_delete(design_id: str, instance_id: str | None = None, key: str | None = None, _: str = Depends(require_mw)):
     """Oublier un profil retenu (instance_id), sinon le premier ; « 123~456 » vise le profil 456 du modele 123 ;
