@@ -565,8 +565,11 @@ export function SwapSheet({ j, onClose }) {
               {half(p.fid, p.name, p.sp?.where || p.where, "#B45309", "📍", null, false)}
               <ArrowLeftRight size={14} strokeWidth={2.6} style={{ flexShrink: 0, color: "#6366F1" }}/>
               {p.free ? half(null, "Emplacement libre", null, null, null, <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>rien à retirer</span>, true)
-                : half(p.ofid, p.oname, p.os?.slot, "#0284C7", "🖨", p.os?.where && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    ↩ {p.os.how === "swap" ? `sa case (${p.os.where})` : p.os.how === "home" ? `sa place (${p.os.where})` : p.os.where}</span>, false)}
+                : half(p.ofid, p.oname, p.os?.slot, "#0284C7", "🖨", p.os?.where && (([d1, d2]) =>
+                    // ou elle va ensuite, en entier (08/11/2026) : le rangement, puis la case
+                    <span data-tip={p.os.how === "swap" ? "Elle prend la case que libère l'autre" : p.os.how === "home" ? "Elle retourne à sa place" : "Ensuite"}
+                      style={{ display: "flex", flexDirection: "column", fontSize: 10, fontWeight: 700, color: "var(--muted)", lineHeight: 1.2, minWidth: 0 }}>
+                      <span style={{ overflowWrap: "anywhere" }}>↩ {d1}</span>{d2 && <b style={{ fontWeight: 900, color: "var(--text2)" }}>{d2}</b>}</span>)(two(p.os.where)), false)}
             </div>; })}
         </div>
       </div>
