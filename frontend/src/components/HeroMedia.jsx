@@ -18,13 +18,14 @@ export default function HeroMedia({ u, on = true, durs = null, className = "bn-p
 // est choisi est allume et defile ; toucher un mode ne montre que lui, le retoucher revient a tout.
 export function HeroModes({ modes, mode, setMode, style }) {
   if (modes.length < 2) return null;
-  return <span onClick={e => e.stopPropagation()} style={{ position: "absolute", zIndex: 3, display: "flex", gap: 3, padding: 3, borderRadius: 12,
-    background: "color-mix(in srgb, var(--sheet-bg) 78%, transparent)", border: "1px solid color-mix(in srgb, var(--border) 80%, #fff)",
-    boxShadow: "0 6px 16px rgba(0,0,0,.2)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", ...style }}>
+  // (08/11/2026) de petites icones seules, discretes : les etiquettes ecrites gachaient l'image ; leur nom en infobulle
+  return <span onClick={e => e.stopPropagation()} style={{ position: "absolute", zIndex: 3, display: "flex", gap: 2, padding: 2, borderRadius: 10,
+    background: "color-mix(in srgb, var(--sheet-bg) 55%, transparent)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", opacity: .85, ...style }}>
     {modes.map(([k, l, tip]) => { const on = mode ? mode === k : k !== "plate";
-      return <button key={k} type="button" onClick={() => setMode(mode === k ? null : k)} data-tip={tip} style={{ padding: "4px 8px", borderRadius: 9, border: "none",
-        cursor: "pointer", fontSize: 11, fontWeight: 900, whiteSpace: "nowrap", color: on ? "#fff" : "var(--text2)",
-        background: on ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "transparent" }}>{l}</button>; })}
+      return <button key={k} type="button" onClick={() => setMode(mode === k ? null : k)} data-tip={tip} aria-label={tip} style={{ width: 24, height: 22, padding: 0,
+        borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center",
+        filter: on ? "none" : "grayscale(1)", opacity: on ? 1 : 0.55,
+        background: on ? "color-mix(in srgb, #0EA5E9 35%, transparent)" : "transparent" }}>{l.split(" ")[0]}</button>; })}
   </span>;
 }
 

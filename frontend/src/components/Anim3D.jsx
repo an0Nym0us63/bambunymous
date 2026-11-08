@@ -41,15 +41,16 @@ const OPTS = {
   dive: ["Direction", [[false, "Fondre sur l'objet"], [true, "S'envoler"]], "rev"],
   crane: ["Direction", [[false, "Monter"], [true, "Descendre"]], "rev"],
 };
-const DEF = { style: "turntable", secs: 12, short: 720, ratio: "16:9", bg: "studio", dir: 1, arc: 360, trip: "loop", rev: false, start: "view", ease: "smooth" };
+const DEF = { style: "turntable", secs: 6, short: 720, ratio: "1:1", bg: "studio", dir: 1, arc: 360, trip: "loop", rev: false, start: "view", ease: "smooth" };
 const RATIOS = [["1:1", "◻ Carré"], ["16:9", "▭ Paysage"], ["9:16", "▯ Portrait"]];
 const DURS = [4, 6, 8, 12];
 const SIZES = [[480, "Légère"], [720, "Nette"], [1080, "HD"]];
 const BGS = BACKDROPS;
 const KEY = "bn_anim3d";
-// (08/11/2026) par defaut 16:9 et 12 s : les choix gardes avant (carre, 6 s) cedent une fois a ce nouveau defaut (d: 2)
-const load = () => { try { const o = JSON.parse(localStorage.getItem(KEY) || "{}"); return { ...DEF, ...o, ...(o.d === 2 ? {} : { ratio: DEF.ratio, secs: DEF.secs }), d: 2 }; }
-  catch { return { ...DEF, d: 2 }; } };
+// (08/11/2026) par defaut carre et 6 s (un essai en 16:9 et 12 s est revenu en arriere) : les choix gardes cedent une fois
+// a ce defaut (d: 3), puis sont retenus
+const load = () => { try { const o = JSON.parse(localStorage.getItem(KEY) || "{}"); return { ...DEF, ...o, ...(o.d === 3 ? {} : { ratio: DEF.ratio, secs: DEF.secs }), d: 3 }; }
+  catch { return { ...DEF, d: 3 }; } };
 // ce que l'effet choisi recoit vraiment : ses options, les autres a leur valeur par defaut (une amplitude de balancement
 // n'est pas un demi-tour de plateau)
 export const animOpts = o => { const st = ANIM_STYLES.find(s => s[0] === o.style) || ANIM_STYLES[0], keys = st[5].map(k => OPTS[k][2]);
