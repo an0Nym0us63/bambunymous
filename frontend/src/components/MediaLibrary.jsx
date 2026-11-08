@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import { showConfirm } from "../utils/dialog";
 import Lightbox from "./Lightbox";
 import { fBtn } from "./FicheKit";
+import { useStackZ } from "../utils/zstack";
 
 const KINDS = [["all", "Tout"], ["photo", "📸 Photos"], ["vue", "🧊 Vues 3D"], ["anim", "🎞 Animations"], ["tl", "🎬 Timelapses"], ["snap", "🛠 Captures"], ["plate", "🖼 Plateaux"]];
 const KIND_RANK = { photo: 0, vue: 1, anim: 2, tl: 3, snap: 4, plate: 5 };
@@ -45,9 +46,16 @@ export default function MediaLibrary({ title, group, admin, ents, allOf, cover, 
   const [picking, setPicking] = useState(false);
   const [sel, setSel] = useState(() => new Set());
   const [lb, setLb] = useState(null);
+  // la technique (timelapses, captures des couches) : masquee d'office, on la montre a la demande (08/11/2026)
+  const [tech, setTech] = useState(false);
+  // dans la pile des fenetres : la visionneuse ouverte d'ici passe devant (08/11/2026 : elle s'ouvrait derriere)
+  const z = useStackZ(6500);
 
-  const all = useMemo(() => ents.flatMap(e => allOf(e)), [ents, allOf]);
-  const counts = useMemo(() => { const n = { all: 0 }; all.forEach(it => { n[it.kind] = (n[it.kind] || 0) + 1; n.all++; }); return n; }, [all]);
+  const isTech = it => it.kind === "tl" || it.kind === "snap";
+  const everything = useMemo(() => ents.flatMap(e => allOf(e)), [ents, allOf]);
+  const nTech = everything.filter(isTech).length;
+  const all = tech ? everything : everything.filter(it => !isTech(it));
+  const counts = (() => { const n = { all: 0 }; all.forEach(it => { n[it.kind] = (n[it.kind] || 0) + 1; n.all++; }); return n; })();
   const list = all.filter(it => (kind === "all" || it.kind === kind) && (from === "all" || it.e.key === from));
   const sorted = [...list].sort((a, b) => sort === "new" ? (b.t || 0) - (a.t || 0) : sort === "old" ? (a.t || 0) - (b.t || 0)
     : sort === "kind" ? KIND_RANK[a.kind] - KIND_RANK[b.kind] || ents.indexOf(a.e) - ents.indexOf(b.e) : 0);
@@ -95,7 +103,7 @@ export default function MediaLibrary({ title, group, admin, ents, allOf, cover, 
     : it.kind === "anim" && it.top ? C.top : null;
 
   const sel_ = { padding: "6px 9px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 12.5, fontWeight: 700, fontFamily: "inherit" };
-  return createPortal(<div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 6500, background: "rgba(2,6,23,.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+  return createPortal(<div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: z, background: "rgba(2,6,23,.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
     {lb && lb.i >= 0 && <Lightbox images={lb.items} index={lb.i} onClose={() => setLb(null)}/>}
     <div onClick={e => e.stopPropagation()} style={{ width: "min(1240px, 100%)", height: "min(100%, 94vh)", maxHeight: "100dvh", display: "flex", flexDirection: "column",
       background: "var(--sheet-bg)", borderRadius: "min(18px, 2.5vw)", border: "1px solid var(--border)", boxShadow: "0 24px 70px rgba(0,0,0,.45)", overflow: "hidden", color: "var(--text2)" }}>
@@ -118,6 +126,8 @@ export default function MediaLibrary({ title, group, admin, ents, allOf, cover, 
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           {KINDS.filter(([k]) => k === "all" || counts[k]).map(([k, l]) => <Pill key={k} on={kind === k} c="#6366F1" onClick={() => setKind(k)}>{l} {counts[k] || 0}</Pill>)}
+          {nTech > 0 && <Pill on={tech} c="#3B82F6" onClick={() => { setTech(t => !t); if (tech && (kind === "tl" || kind === "snap")) setKind("all"); }}
+            tip="Les timelapses et les captures des couches prises par l'imprimante">{tech ? "🛠 Masquer la technique" : `🛠 Afficher la technique (${nTech})`}</Pill>}
           <span style={{ flex: 1 }}/>
           {group && <select value={from} onChange={e => setFrom(e.target.value)} style={sel_} aria-label="D'où">
             <option value="all">Le groupe et ses impressions</option>

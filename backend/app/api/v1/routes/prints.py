@@ -3107,13 +3107,17 @@ V3_MULTI = 16
 
 
 # l'animation (08/11/2026) : prise dans la vue 3D (WebM, ou MP4 la ou le navigateur ne sait faire que ca) ; rangee avec
-# les vues (« Vues 3D/Animation - <effet> » sur le NAS), jamais parmi les photos. Une par effet, suffixee de l'effet
-# (Vue3D_anim_orbit.webm) : on en garde plusieurs ; refaire le meme effet remplace celle-la. Vue3D_anim.webm (sans
-# effet) : les toutes premieres, relues telles quelles. En tete de fiche : la plus recente (« mettre en tete » la touche).
+# les vues (« Vues 3D/Animation - <effet> » sur le NAS), jamais parmi les photos. Chacune garde son nom : l'effet, le
+# fond et l'instant (Vue3D_anim_orbit-sky-t3k9x2.webm) ; refaire un effet avec d'autres reglages ne remplace plus rien
+# (08/11/2026). Vue3D_anim_orbit.webm (l'effet seul) et Vue3D_anim.webm (sans effet) : les premieres, relues telles
+# quelles. En tete de fiche : la plus recente (« mettre en tete » la touche).
 V3_ANIM_STYLES = {"turntable": "Plateau tournant", "orbit": "Tour de caméra", "swing": "Balancement", "travel": "Travelling",
                   "zoom": "Zoom", "reveal": "Révélation", "spiral": "Spirale", "drone": "Survol",
                   "float": "Lévitation", "vertigo": "Effet vertigo", "dive": "Plongée", "crane": "Grue", "spotlight": "Projecteur"}
-_V3ANIM_RE = re.compile(r"Vue3D_anim(?:_([a-z]+))?\.(webm|mp4)")
+V3_ANIM_BGS = {"studio": "Studio sombre", "light": "Studio clair", "sky": "Ciel", "mountain": "Montagne", "jungle": "Jungle",
+               "sunset": "Coucher de soleil", "aurora": "Aurore", "lagoon": "Lagon", "night": "Nuit étoilée", "bokeh": "Bokeh",
+               "ocean": "Océan", "transparent": "Transparent"}
+_V3ANIM_RE = re.compile(r"Vue3D_anim(?:_([a-z]+)(?:-([a-z]+)-([0-9a-z]+))?)?\.(webm|mp4)")
 V3_ANIM_MAX = 30 * 1024 * 1024
 
 
@@ -3136,7 +3140,7 @@ def _v3anims(folder: Path, fresh: bool = False) -> list:
                 m = _V3ANIM_RE.fullmatch(e.name)
                 if m:
                     try:
-                        out.append({"name": e.name, "style": m.group(1) or "", "v": int(e.stat().st_mtime)})
+                        out.append({"name": e.name, "style": m.group(1) or "", "bg": m.group(2) or "", "v": int(e.stat().st_mtime)})
                     except OSError:
                         pass
     except OSError:
@@ -3150,7 +3154,13 @@ def _v3anim(folder: Path, fresh: bool = False):
     return al[0] if al else None
 
 
-async def _save_v3anim(folder: Path, file: UploadFile, style: str = "") -> dict:
+def _v3anim_label(a: dict) -> str:
+    """« Tour de caméra · Ciel » : l'effet, et le fond quand il est connu."""
+    lab = V3_ANIM_STYLES.get(a.get("style") or "", "Animation")
+    return f"{lab} · {V3_ANIM_BGS[a['bg']]}" if a.get("bg") in V3_ANIM_BGS else lab
+
+
+async def _save_v3anim(folder: Path, file: UploadFile, style: str = "", bg: str = "") -> dict:
     raw = await file.read()
     if len(raw) > V3_ANIM_MAX:
         raise HTTPException(400, "Animation trop lourde (30 Mo au plus)")
@@ -3160,16 +3170,27 @@ async def _save_v3anim(folder: Path, file: UploadFile, style: str = "") -> dict:
         ext = "mp4"
     else:
         raise HTTPException(400, "Vidéo WebM ou MP4 attendue")
-    suf = f"_{style}" if style in V3_ANIM_STYLES else ""
-    name = f"Vue3D_anim{suf}.{ext}"
+    import time as _t
+    stamp = _b36(int(_t.time() * 1000))
+    st = style if style in V3_ANIM_STYLES else ""
+    name = f"Vue3D_anim_{st or 'anim'}-{bg if bg in V3_ANIM_BGS else 'studio'}-{stamp}.{ext}" if st or bg else f"Vue3D_anim.{ext}"
+    if not _V3ANIM_RE.fullmatch(name):
+        name = f"Vue3D_anim.{ext}"
     folder.mkdir(parents=True, exist_ok=True)
     tmp = folder / (name + ".part")
     tmp.write_bytes(raw)
     os.replace(tmp, folder / name)
-    (folder / f"Vue3D_anim{suf}.{'mp4' if ext == 'webm' else 'webm'}").unlink(missing_ok=True)   # le meme effet, l'autre format
     gallery_touched()
     _LAST_ANIM.pop(str(folder), None)
     return next(a for a in _v3anims(folder, fresh=True) if a["name"] == name)
+
+
+def _b36(n: int) -> str:
+    s = ""
+    while n:
+        n, r = divmod(n, 36)
+        s = "0123456789abcdefghijklmnopqrstuvwxyz"[r] + s
+    return s or "0"
 
 
 def _drop_v3anim(folder: Path, name: str = "") -> None:
@@ -3316,7 +3337,7 @@ def _v3list(kind: str, ident: int, folder: Path, chosen: int) -> dict:
     sl = _v3slots(folder)
     sel = _v3sel(chosen, sl)
     name, v = _v3cover(folder, chosen)
-    al = [{**a, "label": V3_ANIM_STYLES.get(a["style"], "Animation"), "url": f"{base}/{a['name']}?v={a['v']}"}
+    al = [{**a, "label": _v3anim_label(a), "url": f"{base}/{a['name']}?v={a['v']}"}
           for a in _v3anims(folder, fresh=True)]
     return {"max": V3_MAX, "chosen": sel[0] if sel else 0, "sel": sel, "cover": {"name": name, "v": v} if name else None,
             "slots": [{"n": n, "url": f"{base}/{_v3name(n)}?v={v}"} for n, v in sorted(sl.items())],
@@ -3366,24 +3387,24 @@ async def group_vue3d(group_id: int, file: UploadFile = File(...), slot: int = F
 
 
 @router.post("/{print_id}/vue3d/anim")
-async def print_vue3d_anim(print_id: int, file: UploadFile = File(...), style: str = Form(""), _: str = Depends(require_admin)):
+async def print_vue3d_anim(print_id: int, file: UploadFile = File(...), style: str = Form(""), bg: str = Form(""), _: str = Depends(require_admin)):
     """Garde l'animation prise dans la vue 3D de cette impression (elle remplace celle du meme effet)."""
     async with AsyncSessionLocal() as db:
         p = await db.get(Print, print_id)
         if not p:
             raise HTTPException(404, "Impression introuvable")
-        an = await _save_v3anim(DATA_DIR / "prints" / str(print_id), file, style)
+        an = await _save_v3anim(DATA_DIR / "prints" / str(print_id), file, style, bg)
         p.updated_at = datetime.utcnow()
         await db.commit()
     return {"ok": True, "anim": an}
 
 
 @router.post("/groups/{group_id}/vue3d/anim")
-async def group_vue3d_anim(group_id: int, file: UploadFile = File(...), style: str = Form(""), _: str = Depends(require_admin)):
+async def group_vue3d_anim(group_id: int, file: UploadFile = File(...), style: str = Form(""), bg: str = Form(""), _: str = Depends(require_admin)):
     async with AsyncSessionLocal() as db:
         if not await db.get(Group, group_id):
             raise HTTPException(404, "Groupe introuvable")
-    return {"ok": True, "anim": await _save_v3anim(DATA_DIR / "groups" / str(group_id), file, style)}
+    return {"ok": True, "anim": await _save_v3anim(DATA_DIR / "groups" / str(group_id), file, style, bg)}
 
 
 @router.delete("/{print_id}/vue3d/anim")

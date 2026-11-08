@@ -109,7 +109,7 @@ export function AnimSheet({ targets, onStart, onClose }) {
       {row("Fond", BGS.map(([k, l]) => <button key={k} type="button" onClick={() => set("bg", k)} style={chip(o.bg === k)}>{l}</button>))}
       <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", lineHeight: 1.4 }}>
         Transparent : seulement si le navigateur sait garder la transparence dans une vidéo (c'est rare) ; sinon, studio sombre. La vue de nuit et la lumière par derrière ne sont pas reprises :
-        l'animation se fait de jour. Une animation par effet : refaire le même effet remplace la sienne.</div>
+        l'animation se fait de jour. Chaque animation est gardée, même un effet refait avec d'autres réglages.</div>
     </div>
   </FSheet>, document.body);
 }
@@ -167,7 +167,8 @@ export async function startAnim(animate, opts, target, onSaved) {
     show({ state: "upload", text: `Envoi · ${(r.blob.size / 1048576).toFixed(1)} Mo`, p: 0 });
     const fd = new FormData();
     fd.append("file", r.blob, r.type.includes("mp4") ? "anim.mp4" : "anim.webm");
-    fd.append("style", opts.style || "");          // une animation par effet : refaire le meme effet remplace celle-la
+    fd.append("style", opts.style || "");          // l'effet et le fond nomment l'animation ; refaire un effet n'ecrase plus rien
+    fd.append("bg", r.alpha ? "transparent" : opts.bg === "transparent" ? "studio" : opts.bg || "studio");
     const base = target.kind === "group" ? `/prints/groups/${target.id}` : `/prints/${target.id}`;
     const { data } = await client.post(`${base}/vue3d/anim`, fd, { timeout: 180000, onUploadProgress: e => e.total && show({ state: "upload", text: `Envoi · ${(r.blob.size / 1048576).toFixed(1)} Mo`, p: e.loaded / e.total }) });
     const url = data.anim ? `/api/v1${target.kind === "group" ? `/prints/groups/${target.id}/photo` : `/prints/${target.id}/file`}/${data.anim.name}?v=${data.anim.v}` : null;

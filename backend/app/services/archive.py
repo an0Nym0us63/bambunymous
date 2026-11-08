@@ -166,6 +166,9 @@ def _local(dt: datetime) -> datetime:
 
 
 # le nom de l'effet d'une animation de la vue 3D, pour le NAS (08/11/2026)
+_ANIM_BGS = {"studio": "Studio sombre", "light": "Studio clair", "sky": "Ciel", "mountain": "Montagne", "jungle": "Jungle",
+             "sunset": "Coucher de soleil", "aurora": "Aurore", "lagoon": "Lagon", "night": "Nuit étoilée", "bokeh": "Bokeh",
+             "ocean": "Océan", "transparent": "Transparent"}
 _ANIM_NAMES = {"turntable": "Plateau tournant", "orbit": "Tour de caméra", "swing": "Balancement", "travel": "Travelling",
                "zoom": "Zoom", "reveal": "Révélation", "spiral": "Spirale", "drone": "Survol",
                "float": "Lévitation", "vertigo": "Effet vertigo", "dive": "Plongée", "crane": "Grue", "spotlight": "Projecteur"}
@@ -196,9 +199,10 @@ def human_name(rel_name: str, model: str) -> str | None:
         return f"Vues 3D/Vue {m.group(1) or 1}.png"
     if low.startswith("vue3d_mix"):
         return None
-    m = re.fullmatch(r"vue3d_anim(?:_([a-z]+))?\.(webm|mp4)", low)   # les animations prises dans la vue 3D (08/11/2026)
+    m = re.fullmatch(r"vue3d_anim(?:_([a-z]+)(?:-([a-z]+)-([0-9a-z]+))?)?\.(webm|mp4)", low)   # les animations de la vue 3D (08/11/2026)
     if m:
-        return f"Vues 3D/Animation{' - ' + _ANIM_NAMES.get(m.group(1), m.group(1)) if m.group(1) else ''}{ext}"
+        parts = [_ANIM_NAMES.get(m.group(1), m.group(1)) if m.group(1) else None, _ANIM_BGS.get(m.group(2), m.group(2)) if m.group(2) else None, m.group(3)]
+        return f"Vues 3D/Animation{''.join(' - ' + p for p in parts if p)}{ext}"
     if ext == ".3mf":
         return f"3MF/{model} - tranché.3mf"
     if ext in (".mp4", ".webm", ".mov", ".m4v"):

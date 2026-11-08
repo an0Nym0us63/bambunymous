@@ -413,7 +413,7 @@ def _v3_of_dir(d: Path) -> list[Path]:
     if not d.exists():
         return []
     vues = sorted(f for f in d.iterdir() if f.is_file() and _re.fullmatch(r"Vue3D(_[2-4])?\.png", f.name))
-    anims = sorted((f for f in d.iterdir() if f.is_file() and _re.fullmatch(r"Vue3D_anim(_[a-z]+)?\.(webm|mp4)", f.name)),
+    anims = sorted((f for f in d.iterdir() if f.is_file() and _re.fullmatch(r"Vue3D_anim(?:_([a-z]+)(?:-([a-z]+)-([0-9a-z]+))?)?\.(webm|mp4)", f.name)),
                    key=lambda f: -f.stat().st_mtime)
     return vues + anims
 
@@ -424,13 +424,18 @@ _ANIM_FX = {"turntable": "🎠 Plateau tournant", "orbit": "🎥 Tour de caméra
             "vertigo": "🌪️ Effet vertigo", "dive": "🦅 Plongée", "crane": "🏗️ Grue", "spotlight": "🔦 Projecteur"}
 
 
+_ANIM_BG = {"light": "Clair", "sky": "Ciel", "mountain": "Montagne", "jungle": "Jungle", "sunset": "Couchant", "aurora": "Aurore",
+            "lagoon": "Lagon", "night": "Nuit", "bokeh": "Bokeh", "ocean": "Océan", "transparent": "Transparent"}
+
+
 def media_label(name: str) -> str:
     """Ce qu'est un media, en clair, pour sa vignette dans l'appli (08/11/2026 : des vignettes sans nom)."""
     import re as _re
     low = name.lower()
-    m = _re.fullmatch(r"vue3d_anim(?:_([a-z]+))?\.(webm|mp4)", low)
+    m = _re.fullmatch(r"vue3d_anim(?:_([a-z]+)(?:-([a-z]+)-([0-9a-z]+))?)?\.(webm|mp4)", low)
     if m:
-        return _ANIM_FX.get(m.group(1) or "", "🎞 Animation")
+        fx = _ANIM_FX.get(m.group(1) or "", "🎞 Animation")
+        return f"{fx} · {_ANIM_BG[m.group(2)]}" if m.group(2) in _ANIM_BG else fx
     m = _re.fullmatch(r"vue3d(?:_(\d))?\.png", low)
     if m:
         return f"🧊 Vue {m.group(1) or 1}"

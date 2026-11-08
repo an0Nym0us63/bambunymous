@@ -3,6 +3,8 @@
 // (Photo, Vue 2, Tour de camera, Capture 50 %…), d'ou elle vient en infobulle.
 import React from "react";
 
+const BG = { light: "Clair", sky: "Ciel", mountain: "Montagne", jungle: "Jungle", sunset: "Couchant", aurora: "Aurore", lagoon: "Lagon",
+  night: "Nuit", bokeh: "Bokeh", ocean: "Océan", transparent: "Transparent" };
 const ANIM = { turntable: "🎠 Plateau tournant", orbit: "🎥 Tour de caméra", swing: "↔️ Balancement", travel: "🛤️ Travelling", zoom: "🔍 Zoom",
   reveal: "🎬 Révélation", spiral: "🌀 Spirale", drone: "🚁 Survol", float: "🎈 Lévitation", vertigo: "🌪️ Effet vertigo", dive: "🦅 Plongée",
   crane: "🏗️ Grue", spotlight: "🔦 Projecteur" };
@@ -13,8 +15,8 @@ export const isAnimSrc = u => /\/vue3d_anim[^/]*\.(webm|mp4)(\?|$)/i.test(u || "
 // ce qu'est un media d'apres son adresse (l'evaluation n'a que des adresses)
 export function labelOf(u) {
   const n = String(u || "").split("?")[0].split("/").pop().toLowerCase();
-  let m = n.match(/^vue3d_anim(?:_([a-z]+))?\.(webm|mp4)$/);
-  if (m) return ANIM[m[1]] || "🎞 Animation";
+  let m = n.match(/^vue3d_anim(?:_([a-z]+)(?:-([a-z]+)-([0-9a-z]+))?)?\.(webm|mp4)$/);
+  if (m) return (ANIM[m[1]] || "🎞 Animation") + (BG[m[2]] ? ` · ${BG[m[2]]}` : "");
   m = n.match(/^vue3d(?:_(\d))?\.png$/);
   if (m) return `🧊 Vue ${m[1] || 1}`;
   if (u && u.includes("/rate-card/")) return "🎨 Filaments";

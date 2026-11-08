@@ -4,7 +4,8 @@
 // les nuages, les etoiles, boucle sans saut).
 export const BACKDROPS = [
   ["studio", "🌑 Studio sombre"], ["light", "🌕 Studio clair"], ["sky", "☁️ Ciel"], ["mountain", "🏔 Montagne"], ["jungle", "🌿 Jungle"],
-  ["sunset", "🌅 Coucher de soleil"], ["ocean", "🌊 Océan"], ["night", "🌌 Nuit étoilée"], ["bokeh", "✨ Bokeh"], ["transparent", "◌ Transparent"],
+  ["sunset", "🌅 Coucher de soleil"], ["aurora", "🌠 Aurore"], ["lagoon", "🏝 Lagon"], ["night", "🌌 Nuit étoilée"], ["bokeh", "✨ Bokeh"],
+  ["transparent", "◌ Transparent"],
 ];
 
 // un tirage repetable (le meme decor d'une image a l'autre)
@@ -68,8 +69,11 @@ function paintStatic(key, x, W, H) {
       x.filter = `blur(${Math.round(M * 0.005)}px)`;
       ridge(x, W, H, H * 0.93, H * 0.1, "rgba(60,35,70,.6)", 4, 4); x.filter = "none"; break;
     }
-    case "ocean":
-      x.fillStyle = vgrad(x, H, [[0, "#6fa8d6"], [0.6, "#cfe3f1"], [0.6001, "#3d7fa6"], [1, "#1f5675"]]); x.fillRect(0, 0, W, H); break;
+    // (08/11/2026) l'ocean s'en va : un horizon net contre un objet qui tourne cassait l'effet ; les decors restent lointains et flous
+    case "aurora":
+      x.fillStyle = vgrad(x, H, [[0, "#06121f"], [0.55, "#0b2233"], [1, "#10172e"]]); x.fillRect(0, 0, W, H); break;
+    case "lagoon":
+      x.fillStyle = vgrad(x, H, [[0, "#3fc1c9"], [0.5, "#1f9bb0"], [1, "#0b5c78"]]); x.fillRect(0, 0, W, H); break;
     case "night":
       x.fillStyle = vgrad(x, H, [[0, "#070b1d"], [0.6, "#141c3d"], [1, "#24305a"]]); x.fillRect(0, 0, W, H);
       x.save(); x.translate(W / 2, H / 2); x.rotate(-0.5); x.filter = `blur(${Math.round(M * 0.05)}px)`;   // la voie lactee, a peine
@@ -111,6 +115,23 @@ export function makeBackdrop(key, W, H) {
   const clouds = key === "sky" || key === "mountain" ? Array.from({ length: key === "sky" ? 9 : 4 }, () =>
     ({ x: r(), y: r() * (key === "sky" ? 0.75 : 0.35), s: M * (0.08 + r() * 0.1), k: 1 + Math.floor(r() * 2) })) : null;
   const stars = key === "night" ? Array.from({ length: 140 }, () => ({ x: r() * W, y: r() * H * 0.85, s: 0.4 + r() * 1.4, p: r() })) : null;
+  // aurore et lagon : des nappes de lumiere floutees une fois (une image chacune), qui ondulent ou derivent en boucle
+  const glows = key === "aurora" || key === "lagoon" ? (key === "aurora"
+    ? [["#3df5a0", 0.30, 0.55], ["#7c5cff", 0.42, 0.45], ["#2fd4ff", 0.24, 0.4]]
+    : [["#d8fff7", 0.25, 0.35], ["#8ff0e6", 0.6, 0.4], ["#ffffff", 0.45, 0.25], ["#5fe0d8", 0.8, 0.35]]).map(([col, y, a], k) => {
+      const c = document.createElement("canvas"), cw = Math.round(W * 1.6), ch = Math.round(H * (key === "aurora" ? 0.5 : 0.6));
+      c.width = cw; c.height = ch; const g = c.getContext("2d");
+      g.filter = `blur(${Math.round(M * (key === "aurora" ? 0.05 : 0.07))}px)`; g.globalAlpha = a; g.fillStyle = col;
+      if (key === "aurora") {                                   // un rideau : une bande ondulee
+        g.beginPath(); g.moveTo(0, ch * 0.5);
+        for (let i = 0; i <= 24; i++) g.lineTo(cw * i / 24, ch * (0.35 + 0.2 * Math.sin(i * 0.9 + k * 2)));
+        for (let i = 24; i >= 0; i--) g.lineTo(cw * i / 24, ch * (0.62 + 0.18 * Math.sin(i * 0.7 + k)));
+        g.closePath(); g.fill();
+      } else {                                                  // des reflets : quelques taches de lumiere
+        for (let i = 0; i < 7; i++) { g.beginPath(); g.ellipse(cw * (0.08 + i * 0.14), ch * (0.3 + 0.4 * ((i * 37 + k * 11) % 10) / 10), M * 0.12, M * 0.06, 0, 0, TAU); g.fill(); }
+      }
+      return { c, y, k, cw, ch };
+    }) : null;
   return (x, u) => {
     x.clearRect(0, 0, W, H);
     x.drawImage(still, 0, 0);
@@ -126,14 +147,16 @@ export function makeBackdrop(key, W, H) {
       x.fillStyle = `rgba(255,255,255,${0.35 + 0.55 * (0.5 + 0.5 * Math.sin(TAU * (u * 2 + s.p)))})`;
       x.beginPath(); x.arc(s.x, s.y, s.s, 0, TAU); x.fill();
     }
-    if (key === "ocean") {
-      x.save(); x.strokeStyle = "rgba(255,255,255,.18)"; x.lineWidth = Math.max(1, M * 0.003);
-      for (let k = 0; k < 7; k++) {
-        const y0 = H * (0.64 + k * 0.05); x.beginPath();
-        for (let px = 0; px <= W; px += W / 40) x.lineTo(px, y0 + Math.sin(TAU * (px / W * 3 + u + k * 0.3)) * M * 0.006);
-        x.stroke();
+    if (glows) {
+      x.save(); x.globalCompositeOperation = "screen";
+      for (const gl of glows) {
+        const dx = (Math.sin(TAU * (u + gl.k * 0.31)) * 0.5 + 0.5) * (gl.cw - W), dy = Math.sin(TAU * (u + gl.k * 0.17)) * H * 0.04;
+        x.drawImage(gl.c, -dx, gl.y * H - gl.ch / 2 + dy);
       }
       x.restore();
+      // le halo et le vignetage par-dessus la lumiere qui bouge : l'objet reste le sujet
+      const v = x.createRadialGradient(W / 2, H / 2, M * 0.45, W / 2, H / 2, Math.hypot(W, H) * 0.6);
+      v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,.25)"); x.fillStyle = v; x.fillRect(0, 0, W, H);
     }
   };
 }

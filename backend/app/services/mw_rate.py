@@ -205,7 +205,7 @@ def v3_urls(print_ids) -> list:
             continue
         names = sorted(f.name for f in d.iterdir())
         out += [f"/api/v1/prints/{pid}/file/{n}" for n in names if re.fullmatch(r"Vue3D(_[2-4])?\.png", n)]
-        out += [f"/api/v1/prints/{pid}/file/{n}" for n in sorted((n for n in names if re.fullmatch(r"Vue3D_anim(_[a-z]+)?\.(webm|mp4)", n)),
+        out += [f"/api/v1/prints/{pid}/file/{n}" for n in sorted((n for n in names if re.fullmatch(r"Vue3D_anim(?:_([a-z]+)(?:-([a-z]+)-([0-9a-z]+))?)?\.(webm|mp4)", n)),
                                                                  key=lambda n: -(d / n).stat().st_mtime)]
     return list(dict.fromkeys(out))
 
@@ -430,7 +430,7 @@ def _local_photo(url: str):
     m = m or g
     base = (Path(os.getenv("DATA_DIR", "/data")) / ("prints" if m is not g else "groups") / m.group(1)).resolve()
     f = (base / m.group(2)).resolve()
-    if f.parent == base and f.is_file() and re.fullmatch(r"Vue3D_anim(_[a-z]+)?\.(webm|mp4)", f.name):
+    if f.parent == base and f.is_file() and re.fullmatch(r"Vue3D_anim(?:_([a-z]+)(?:-([a-z]+)-([0-9a-z]+))?)?\.(webm|mp4)", f.name):
         return _anim_webp(f)
     if f.parent != base or not f.is_file() or f.suffix.lower() not in _MIME:
         return None
