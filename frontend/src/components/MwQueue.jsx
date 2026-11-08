@@ -421,7 +421,8 @@ export default function MwQueue() {
         </div>
 
         {tab === "filaments" && (
-          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+          // (08/11/2026) en cartes sur plusieurs colonnes : en pleine largeur, la jauge s'etirait sur tout l'ecran
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(min(100%, 340px), 1fr))", gap:6, alignItems:"start" }}>
             {q.filaments.map(f => {
               const ok = !f.missing_g, c = ok ? "#22C55E" : "#EF4444";
               const fill = f.stock_g > 0 ? Math.min(1, f.need_g / f.stock_g) : 1;

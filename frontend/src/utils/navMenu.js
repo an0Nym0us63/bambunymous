@@ -32,7 +32,7 @@ export const NAV_ITEMS = [
   { k: "stats",     to: "/stats",                   icon: BarChart2,    label: "Stats",       c: "#22C55E", def: "bar" },
   { k: "settings",  to: "/settings",                icon: Settings,     label: "Paramètres",  c: "#64748B", def: "bar" },
   { k: "makerworld",to: "/prints?tab=makerworld",   icon: Globe,        label: "MakerWorld",  c: "#6366F1", def: "hidden" },
-  { k: "queue",     to: "/prints?tab=queue",        icon: ListChecks,   label: "À faire",     c: "#22C55E", def: "hidden" },
+  { k: "queue",     to: "/prints?tab=queue",        icon: ListChecks,   label: "À faire",     c: "#14B8A6", def: "hidden" },
   { k: "gallery",   to: "/prints?tab=gallery",      icon: Images,       label: "Galerie",     c: "#EC4899", def: "hidden" },
   { k: "calendar",  to: "/prints?tab=calendar",     icon: CalendarDays, label: "Calendrier",  c: "#F43F5E", def: "hidden" },
   { k: "archived",  to: "/filaments?tab=archived",  icon: Archive,      label: "Archivées",   c: "#64748B", def: "hidden" },

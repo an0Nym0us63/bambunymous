@@ -1215,7 +1215,7 @@ function Next({ q, o, sz }) {
   const counts = W => <ListCounts W={W} n={all.length} label="à faire" items={[[busy, "#3b82f6", "🖨️", "en cours"],
     [ready, "#16a34a", "●", ready > 1 ? "prêts" : "prêt"], [part, "#22c55e", "◐", "en partie"], [stock, "#d97706", "○", "à charger"], [short, "#dc2626", "✕", "manque"]]}/>;
   return (
-    <Tile icon={<ListChecks size={15}/>} color="#22C55E" label="À faire" to="/prints?tab=queue"
+    <Tile icon={<ListChecks size={15}/>} color="#14B8A6" label="À faire" to="/prints?tab=queue"
       mini={sz.h === 0.5} summary={q ? <>{ready + part}<span style={{ fontSize: 12, color: "var(--muted)" }}>/ {all.length} prêts</span></> : "…"}
       badge={all.length ? <span data-tip="prêts avec l'AMS / dans la liste" style={{ fontSize: 11, fontWeight: 800, color: ready + part ? "#16a34a" : "var(--muted)" }}>
         {ready + part}/{all.length}</span> : null}
