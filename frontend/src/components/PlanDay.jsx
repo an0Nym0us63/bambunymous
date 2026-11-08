@@ -532,21 +532,6 @@ export function SwapSheet({ j, onClose }) {
               {jobName(j)}{when ? ` · ${when}` : ""}</span>
           </span>
         </div>
-        {/* le resume : « 1 ● Vivid Yellow ⇄ ● Pri-White » ; toucher une ligne montre sa section et son lien */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          {pairs.map(p => <div key={p.n} onClick={() => { const k = sections.findIndex(x => x.ps.includes(p)); if (k >= 0) go(k); setReq({ n: p.n, t: Date.now() }); }}
-            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: "var(--text)", minWidth: 0, cursor: "pointer",
-              opacity: !sections[cur] || !shown[sections[cur].key] || shown[sections[cur].key].includes(p.n) ? 1 : 0.4, transition: "opacity .3s" }}>
-            <span className="bn-sw-n">{p.n}</span>
-            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FilDot id={p.fid}/>{p.name}</span>
-            <ArrowLeftRight size={13} strokeWidth={2.6} style={{ flexShrink: 0, color: "#6366F1" }}/>
-            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: p.free ? "var(--muted)" : "var(--text)" }}>
-              {p.free ? "emplacement libre" : <><FilDot id={p.ofid}/>{p.oname}</>}</span>
-            {!p.free && p.os?.where && <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: "#0284C7", whiteSpace: "nowrap" }}
-              data-tip={p.os.how === "swap" ? `Elle prend la case que libère l'autre : ${p.os.where}` : p.os.how === "home" ? `Elle retourne à sa place : ${p.os.where}` : `Ensuite : ${p.os.where}`}>
-              ↩ {p.os.how === "swap" ? "sa case" : p.os.how === "home" ? "sa place" : p.os.where}</span>}
-          </div>)}
-        </div>
         {sections.length > 1 && <div style={{ display: "flex", gap: 6, overflowX: "auto" }}>
           {sections.map((x, k) => <button key={x.key} type="button" onClick={() => go(k)} style={{ flexShrink: 0, padding: "5px 11px", borderRadius: 20, fontSize: 12, fontWeight: 800,
             fontFamily: "inherit", cursor: "pointer", color: "var(--text)", border: k === cur ? "1.5px solid #F59E0B" : "1px solid var(--border)",
@@ -555,6 +540,34 @@ export function SwapSheet({ j, onClose }) {
         <div ref={rail} className="bn-sw-rail" onScroll={onScroll}>
           {sections.map(x => <SwapSection key={x.key} title={x.title} root={x.root} ps={x.ps} rootOf={id => rootOfSpool(st, id)} loose={x.root == null ? x.ps : []} tgtOf={tgtOf}
             grpReq={req && x.ps.some(p => p.n === req.n) ? req : null} onShow={ns => setShown(m => ({ ...m, [x.key]: ns }))}/>)}
+        </div>
+        {/* (08/11/2026) le detail, en tuiles sous les vues : chaque echange, la source (son nom entier, son rangement et sa
+            case) ⇄ la cible (son nom, son slot, ou elle va ensuite) ; toucher une tuile montre sa section et son lien */}
+        <div style={{ display: "grid", gap: 6, gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 330px), 1fr))" }}>
+          {pairs.map(p => {
+            const two = loc => { const x = String(loc || ""), m = x.match(/^(.+?) (slot \d+)$/); if (m) return [m[1], m[2]];
+              const q = x.split(" › "); return q.length > 1 ? [q.slice(0, -1).join(" › "), q[q.length - 1]] : [x, null]; };
+            const half = (fid, name, where, tone, icon, extra, muted) => { const [w1, w2] = two(where);
+              return <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                <span style={{ fontSize: 11.5, fontWeight: 900, lineHeight: 1.2, color: muted ? "var(--muted)" : "var(--text)", display: "-webkit-box", WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical", overflow: "hidden" }}>{fid ? <FilDot id={fid}/> : null}{name}</span>
+                {where && <span style={{ display: "flex", flexDirection: "column", fontSize: 10.5, fontWeight: 800, color: tone, lineHeight: 1.2, minWidth: 0 }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{icon} {w1}</span>
+                  {w2 && <b style={{ fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w2}</b>}</span>}
+                {extra}
+              </span>; };
+            const on = !sections[cur] || !shown[sections[cur].key] || shown[sections[cur].key].includes(p.n);
+            return <div key={p.n} role="button" tabIndex={0} onClick={() => { const k = sections.findIndex(x => x.ps.includes(p)); if (k >= 0) go(k); setReq({ n: p.n, t: Date.now() }); }}
+              style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 9px", borderRadius: 13, cursor: "pointer", minWidth: 0,
+                border: `1px solid ${on ? "color-mix(in srgb, #F59E0B 40%, var(--border))" : "var(--border)"}`, background: "var(--surface2)",
+                opacity: on ? 1 : 0.5, transition: "opacity .3s, border-color .3s" }}>
+              <span className="bn-sw-n" style={{ flexShrink: 0 }}>{p.n}</span>
+              {half(p.fid, p.name, p.sp?.where || p.where, "#B45309", "📍", null, false)}
+              <ArrowLeftRight size={14} strokeWidth={2.6} style={{ flexShrink: 0, color: "#6366F1" }}/>
+              {p.free ? half(null, "Emplacement libre", null, null, null, <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>rien à retirer</span>, true)
+                : half(p.ofid, p.oname, p.os?.slot, "#0284C7", "🖨", p.os?.where && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    ↩ {p.os.how === "swap" ? `sa case (${p.os.where})` : p.os.how === "home" ? `sa place (${p.os.where})` : p.os.where}</span>, false)}
+            </div>; })}
         </div>
       </div>
     </FSheet>
