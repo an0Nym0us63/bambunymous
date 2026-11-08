@@ -399,7 +399,11 @@ export function LoadSpot({ sp }) {
 // « 📍 la bobine a prendre ⇄ celle qu'elle remplace 🖨 » pour chaque filament a charger ; toucher un nom la localise
 // une section par rangement source (08/11/2026) : le rangement (reduit) face a l'imprimante, cote a cote meme sur un
 // telephone ; ses liens seulement, deux par deux au-dela de deux
-function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow }) {
+// le retour de celle qui sort (08/11/2026) : avec l'echange intelligent (« je range ou je veux »), dans la case que libere
+// celle qu'on charge (le meme lien, a rebours) ; en « chaque bobine a sa place », a SA place (un lien a part, du slot a sa
+// case, marquee « ↩1 », si elle est dans ce rangement) ; « a ranger » : pas de retour dessine
+function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow, rootOf }) {
+  const homeOf = p => p.os?.how === "home" && p.os.out && root != null && rootOf(p.os.out) === root ? p.os.out : null;
   const wrap = React.useRef(null);
   const [links, setLinks] = useState([]);
   const groups = Math.ceil(ps.length / 2), [grp, setGrp] = useState(0), [hold, setHold] = useState(0);
@@ -422,7 +426,14 @@ function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow }) {
         const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
         const ax = ra.right - o.left - 2, ay = ra.top + ra.height / 2 - o.top, bx = rb.left - o.left + 2, by = rb.top + rb.height / 2 - o.top;
         const mx = (ax + bx) / 2;
-        out.push({ n: p.n, d: `M${ax},${ay} C${mx},${ay} ${mx},${by} ${bx},${by}`, a: FCOL[p.fid], b: FCOL[p.ofid] });
+        const h = homeOf(p) ? el.querySelector(`[data-swap-src="↩${p.n}"]`) : null;
+        let back = null;
+        if (h) {                                      // du slot a sa case : de la gauche du slot a la droite de la case
+          const rh = h.getBoundingClientRect(), hx = rh.right - o.left - 2, hy = rh.top + rh.height / 2 - o.top, m2 = (hx + bx) / 2;
+          back = `M${bx},${by + 4} C${m2},${by + 4} ${m2},${hy} ${hx},${hy}`;
+        }
+        out.push({ n: p.n, d: `M${ax},${ay} C${mx},${ay} ${mx},${by} ${bx},${by}`, a: FCOL[p.fid], b: FCOL[p.ofid],
+          swap: p.os?.how === "swap", back });
       }
       setLinks(l => JSON.stringify(l) === JSON.stringify(out) ? l : out);
     };
@@ -438,7 +449,8 @@ function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow }) {
     <div ref={wrap} className="bn-sw">
       <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
         {head("📍", title)}
-        {root != null ? <PlaceView id={root} focus={ps.map(p => p.sp.spool)} marks={Object.fromEntries(ps.map(p => [p.sp.spool, p.n]))}/>
+        {root != null ? <PlaceView id={root} focus={[...ps.map(p => p.sp.spool), ...ps.map(homeOf).filter(Boolean)]}
+            marks={Object.fromEntries([...ps.map(p => [p.sp.spool, p.n]), ...ps.filter(homeOf).map(p => [homeOf(p), `↩${p.n}`])])}/>
           : loose.map(p => <div key={p.n} data-swap-src={p.n} style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text2)", padding: "6px 8px", borderRadius: 10,
               background: "var(--surface2)", border: "1px solid var(--border)" }}><span className="bn-sw-n">{p.n}</span> <FilDot id={p.fid}/>{p.name}
               <span style={{ display: "block", color: "#B45309" }}>{p.sp?.where || p.where || "pas de bobine rangée connue"}</span></div>)}
@@ -455,8 +467,13 @@ function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow }) {
           <path id={`bnSw${title}${l.n}`.replace(/\W/g, "")} className="bn-sw-link" d={l.d}/>
           <circle className="bn-sw-ghost" r="5" fill={hex(l.a)} stroke="#fff" strokeWidth="1.5">
             <animateMotion dur="2.4s" repeatCount="indefinite" keyPoints="0;1" keyTimes="0;1" calcMode="linear"><mpath href={`#${`bnSw${title}${l.n}`.replace(/\W/g, "")}`}/></animateMotion></circle>
-          {l.b && <circle className="bn-sw-ghost" r="5" fill={hex(l.b)} stroke="#fff" strokeWidth="1.5">
+          {l.b && l.swap && <circle className="bn-sw-ghost" r="5" fill={hex(l.b)} stroke="#fff" strokeWidth="1.5">
             <animateMotion dur="2.4s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href={`#${`bnSw${title}${l.n}`.replace(/\W/g, "")}`}/></animateMotion></circle>}
+          {l.back && <>
+            <path id={`bnSwB${title}${l.n}`.replace(/\W/g, "")} className="bn-sw-link back" d={l.back}/>
+            {l.b && <circle className="bn-sw-ghost" r="5" fill={hex(l.b)} stroke="#fff" strokeWidth="1.5">
+              <animateMotion dur="2.4s" repeatCount="indefinite" calcMode="linear"><mpath href={`#${`bnSwB${title}${l.n}`.replace(/\W/g, "")}`}/></animateMotion></circle>}
+          </>}
         </g>)}
       </svg>
     </div>
@@ -496,6 +513,7 @@ export function SwapSheet({ j, onClose }) {
         @media (min-width:760px){.bn-sw{gap:44px}}
         .bn-sw-n{display:inline-block;min-width:16px;height:16px;padding:0 4px;border-radius:8px;font-size:10px;font-weight:900;line-height:16px;text-align:center;color:#fff;background:#F59E0B}
         .bn-sw-link{fill:none;stroke:url(#bnSwGrad);stroke-width:2.5;stroke-linecap:round;stroke-dasharray:6 7;animation:bnSwDash 1.1s linear infinite;opacity:.9}
+        .bn-sw-link.back{stroke:#0284C7;stroke-width:2;stroke-dasharray:3 6;opacity:.75}
         @keyframes bnSwDash{to{stroke-dashoffset:-26}}
         @keyframes bnSwIn{from{opacity:0}to{opacity:1}}
         .bn-sw-ar{animation:bnBreath 1.9s ease-in-out infinite}
@@ -524,6 +542,9 @@ export function SwapSheet({ j, onClose }) {
             <ArrowLeftRight size={13} strokeWidth={2.6} style={{ flexShrink: 0, color: "#6366F1" }}/>
             <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: p.free ? "var(--muted)" : "var(--text)" }}>
               {p.free ? "emplacement libre" : <><FilDot id={p.ofid}/>{p.oname}</>}</span>
+            {!p.free && p.os?.where && <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: "#0284C7", whiteSpace: "nowrap" }}
+              data-tip={p.os.how === "swap" ? `Elle prend la case que libère l'autre : ${p.os.where}` : p.os.how === "home" ? `Elle retourne à sa place : ${p.os.where}` : `Ensuite : ${p.os.where}`}>
+              ↩ {p.os.how === "swap" ? "sa case" : p.os.how === "home" ? "sa place" : p.os.where}</span>}
           </div>)}
         </div>
         {sections.length > 1 && <div style={{ display: "flex", gap: 6, overflowX: "auto" }}>
@@ -532,7 +553,7 @@ export function SwapSheet({ j, onClose }) {
             background: k === cur ? "rgba(245,158,11,0.14)" : "var(--surface2)" }}>📍 {x.title} · {x.ps.length}</button>)}
         </div>}
         <div ref={rail} className="bn-sw-rail" onScroll={onScroll}>
-          {sections.map(x => <SwapSection key={x.key} title={x.title} root={x.root} ps={x.ps} loose={x.root == null ? x.ps : []} tgtOf={tgtOf}
+          {sections.map(x => <SwapSection key={x.key} title={x.title} root={x.root} ps={x.ps} rootOf={id => rootOfSpool(st, id)} loose={x.root == null ? x.ps : []} tgtOf={tgtOf}
             grpReq={req && x.ps.some(p => p.n === req.n) ? req : null} onShow={ns => setShown(m => ({ ...m, [x.key]: ns }))}/>)}
         </div>
       </div>

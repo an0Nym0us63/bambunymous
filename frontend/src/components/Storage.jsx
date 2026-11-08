@@ -457,7 +457,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       data-swap-src={occ && marks?.[occ.id] != null ? marks[occ.id] : undefined}
       data-tip={occ ? [occ.name, ...info, `#${occ.id}`].join(" · ") : p.single ? `${num} · case libre` : `${num} · emplacement commun`}
       style={{ cursor: readOnly ? "default" : "pointer", zIndex: hit ? 2 : undefined, animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined }}>
-      {occ && marks?.[occ.id] != null && <span className="bn-mark">{marks[occ.id]}</span>}
+      {occ && marks?.[occ.id] != null && <span className={`bn-mark${String(marks[occ.id]).startsWith("↩") ? " home" : ""}`}>{marks[occ.id]}</span>}
       {occ ? <>
         <span className="bn-num">{num}{!p.single && p.spools.length > 1 ? ` · ${p.spools.length}` : ""}</span>
         <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={embed ? 26 : 40} thick={embed ? 12 : 20}/>
@@ -529,7 +529,9 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
         .bn-compact .bn-cell.bn-free{min-height:16px;border-width:1px}
         .bn-compact .bn-num-free{font-size:8.5px}
         .bn-compact .bn-band{min-height:0;padding-top:0}
-        .bn-compact .bn-mark{min-width:14px;height:14px;line-height:14px;font-size:9px;top:-4px;right:-4px}`}</style></>;
+        .bn-compact .bn-mark{min-width:11px;height:11px;line-height:11px;font-size:7.5px;top:1px;right:1px;padding:0 2px;border-radius:6px;
+          box-shadow:none;background:rgba(245,158,11,.85)}
+        .bn-compact .bn-mark.home{background:rgba(2,132,199,.85)}`}</style></>;
   // integree (08/11/2026, les echanges) : en reduit, rien que les tranches des bobines, pour voir le chemin
   const body = <div ref={bodyRef} className={embed ? "bn-compact" : undefined} style={{ padding: embed ? 0 : "52px 16px 18px", display: "flex", flexDirection: "column", gap: embed ? 8 : 12,
         animation: (fkey || focusPlace != null) ? "bnDrawer .75s cubic-bezier(.2,.9,.25,1.05) both" : undefined, transformOrigin: "50% 0" }}>
@@ -664,8 +666,9 @@ export function AmsMap({ isHit = () => false, mark = () => null, compact = false
                   border: hit ? "2px solid #F59E0B" : empty ? "1.5px dashed rgba(148,163,184,0.7)" : "1px solid rgba(0,0,0,0.15)",
                   animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined,
                   ...(bg || { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 2px, transparent 2px, transparent 6px)" }) }}>
-                  {mark(a, t) != null && <span style={{ position: "absolute", top: -6, right: -6, minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8,
-                    fontSize: 10, fontWeight: 900, lineHeight: "16px", textAlign: "center", color: "#fff", background: "#F59E0B", boxShadow: "0 0 0 2px var(--surface2)" }}>{mark(a, t)}</span>}
+                  {mark(a, t) != null && <span style={{ position: "absolute", top: compact ? 1 : -6, right: compact ? 1 : -6, minWidth: compact ? 11 : 16, height: compact ? 11 : 16,
+                    padding: compact ? "0 2px" : "0 4px", borderRadius: compact ? 6 : 8, fontSize: compact ? 7.5 : 10, fontWeight: 900, lineHeight: compact ? "11px" : "16px",
+                    textAlign: "center", color: "#fff", background: compact ? "rgba(245,158,11,.85)" : "#F59E0B", boxShadow: compact ? "none" : "0 0 0 2px var(--surface2)" }}>{mark(a, t)}</span>}
                 </div>
                 <span style={{ fontSize: compact ? 8.5 : hit ? 11 : 10, fontWeight: 900, lineHeight: 1, color: hit ? "#D97706" : "var(--text2)" }}>{slotLabel(a.id, t.id)}</span>
               </div>;
