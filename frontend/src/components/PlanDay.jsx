@@ -7,6 +7,8 @@ import MwImg from "./MwImg";
 import { LocateSheet, SpoolEdge, PlaceView, AmsMap, rootOfSpool, slotIs, useStorage } from "./Storage";
 import { FSheet, fBtn } from "./FicheKit";
 import { ArrowLeftRight } from "lucide-react";
+import { usePrinter } from "../store/printer";
+import { isExternal, slotLabel } from "../utils/ams";
 import { FilamentSheetFromSpool } from "./LazySheets";
 
 // Le planning des impressions (05/11/2026) : les briques du calendrier. La journee en frise (heures de fonctionnement,
@@ -458,7 +460,8 @@ function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow, rootOf }) 
       <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
         {head("🖨", "Dans l'imprimante")}
         <AmsMap compact isHit={(a, t) => { const q = tgtOf(a, t); return !!q && ps.includes(q); }} mark={(a, t) => { const q = tgtOf(a, t); return q && ps.includes(q) ? q.n : null; }}/>
-        {ps.some(p => p.free) && <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>{ps.filter(p => p.free).map(p => `${p.n} : un emplacement libre`).join(" · ")}</div>}
+        {ps.some(p => p.free) && <div style={{ fontSize: 10.5, fontWeight: 700, color: ps.some(p => p.noFree) ? "#B45309" : "var(--muted)" }}>
+          {ps.filter(p => p.free).map(p => p.freeAt ? `${p.n} : l'emplacement libre ${p.freeAt.label}` : p.noFree ? `${p.n} : le planning comptait une place libre, aucune n'est vide en ce moment` : `${p.n} : un emplacement libre`).join(" · ")}</div>}
       </div>
       {/* les allers-retours : la bobine a prendre part vers son slot, celle qui sort en revient */}
       <svg aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible", zIndex: 4 }}>
@@ -500,8 +503,14 @@ export function SwapSheet({ j, onClose }) {
   const placeName = r => st?.places?.find(x => x.id === r)?.name || "Rangement";
   const sections = [...[...byRoot.entries()].map(([r, ps]) => ({ key: `r${r}`, title: placeName(r), root: r, ps })),
     ...(loose.length ? [{ key: "loose", title: "Ailleurs", root: null, ps: loose }] : [])];
-  const tgts = pairs.filter(p => p.os?.slot);
-  const tgtOf = (a, t) => tgts.find(p => (p.os.live && p.os.out && t.spool_id === p.os.out) || slotIs(a, t, p.os.slot));
+  // une place libre (08/11/2026) : on montre laquelle, les emplacements vides de l'AMS dans l'ordre (le support externe
+  // seulement pour ce qui va dehors) ; aucun vide maintenant : on le dit (le planning se refera a l'arrivee de l'imprimante)
+  const amsList = usePrinter(s => s.status?.ams_list) || [];
+  const empties = amsList.filter(a => !isExternal(a.id)).flatMap(a => (a.trays || []).filter(t => t.empty || !t.filament_type).map(t => ({ a, t })));
+  pairs.filter(p => p.free && !p.where).forEach((p, k) => { const e = empties[k]; if (e) p.freeAt = { a: e.a, t: e.t, label: slotLabel(e.a.id, e.t.id) }; else p.noFree = true; });
+  const tgts = pairs.filter(p => p.os?.slot || p.freeAt);
+  const tgtOf = (a, t) => tgts.find(p => p.freeAt ? p.freeAt.a.id === a.id && p.freeAt.t.id === t.id
+    : (p.os.live && p.os.out && t.spool_id === p.os.out) || slotIs(a, t, p.os.slot));
   const rail = React.useRef(null);
   const [cur, setCur] = useState(0);
   const go = k => { setCur(k); const el = rail.current?.children?.[k]; el && rail.current.scrollTo({ left: el.offsetLeft - rail.current.offsetLeft, behavior: "smooth" }); };
@@ -566,7 +575,8 @@ export function SwapSheet({ j, onClose }) {
               <span className="bn-sw-n" style={{ flexShrink: 0 }}>{p.n}</span>
               {half(p.fid, p.name, p.sp?.where || p.where, "#B45309", "📍", null, false)}
               <ArrowLeftRight size={14} strokeWidth={2.6} style={{ flexShrink: 0, color: "#6366F1" }}/>
-              {p.free ? half(null, "Emplacement libre", null, null, null, <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>rien à retirer</span>, true)
+              {p.free ? half(null, p.freeAt ? `Emplacement libre ${p.freeAt.label}` : "Emplacement libre", p.freeAt ? p.freeAt.label : null, "#0284C7", "🖨",
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: p.noFree ? "#B45309" : "var(--muted)" }}>{p.noFree ? "aucun n'est vide en ce moment : rouvre le planning" : "rien à retirer"}</span>, true)
                 : half(p.ofid, p.oname, p.os?.slot, "#0284C7", "🖨", p.os?.where && (([d1, d2]) =>
                     // ou elle va ensuite, en entier (08/11/2026) : le rangement, puis la case
                     <span data-tip={p.os.how === "swap" ? "Elle prend la case que libère l'autre" : p.os.how === "home" ? "Elle retourne à sa place" : "Ensuite"}
