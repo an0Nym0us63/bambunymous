@@ -13,6 +13,7 @@ import { showAlert, showConfirm } from "../utils/dialog";
 import MwImg from "./MwImg";
 import { openVue3D } from "./Vue3DPicker";
 import { AnimSheet, startAnim } from "./Anim3D";
+import { makeBackdrop } from "./animBackdrops";
 import Select from "./Select";
 import { useHasFriends, useShared } from "./Friends";
 
@@ -1014,7 +1015,12 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
         // opts : style (voir ANIM_STYLES), secs, short (le petit cote, en pixels), ratio (1:1, 16:9, 9:16), bg (studio, light,
         // transparent) ; onProgress(0..1)
         const animate = async (opts = {}, onProgress = () => {}) => {
-          const { style = "turntable", secs = 6, short = 720, ratio = "1:1", bg = "studio" } = opts;
+          // (08/11/2026) les options d'un effet : dir (1 / -1, le sens), arc (360, 180, 90 : un tour, un demi, un quart ;
+          // moins d'un tour fait l'aller-retour), trip (loop : boucle sans saut, A -> B -> A ; once : aller simple A -> B),
+          // rev (B -> A), start (view : depuis ma vue, front, three, side, top), ease (smooth : adouci, linear : constant)
+          const { style = "turntable", secs = 6, short = 720, ratio = "1:1", bg = "studio",
+                  dir = 1, arc = 360, trip = "loop", rev = false, start = "view", ease = "smooth" } = opts;
+          const once = trip === "once";
           const fps = 30, n = Math.max(30, Math.round(secs * fps));
           const [rw, rh] = ratio === "16:9" ? [16, 9] : ratio === "9:16" ? [9, 16] : [1, 1];
           const even = v => Math.max(2, Math.round(v / 2) * 2);
@@ -1028,61 +1034,89 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           const cam = new THREE.PerspectiveCamera(camera.fov, W / H, 1, 5000);
           const sp = visibleBox(THREE, model).getBoundingSphere(new THREE.Sphere());
           const c = sp.center.clone(), rad = Math.max(1, sp.radius);
-          // depuis l'angle ou l'on regarde : son azimut et sa hauteur
-          const dir0 = camera.position.clone().sub(controls.target).normalize();
-          const az0 = Math.atan2(dir0.x, dir0.z), el0 = Math.asin(THREE.MathUtils.clamp(dir0.y, -0.95, 0.95));
-          const vf = THREE.MathUtils.degToRad(cam.fov), hf = 2 * Math.atan(Math.tan(vf / 2) * cam.aspect);
-          const d0 = rad / Math.sin(Math.min(vf, hf) / 2) * 1.1;
           const up = new THREE.Vector3(0, 1, 0), TAU = Math.PI * 2, lerp = THREE.MathUtils.lerp, rad2 = THREE.MathUtils.degToRad;
+          // le point de depart : l'angle ou l'on regarde (son azimut et sa hauteur), ou un angle donne
+          const dir0 = camera.position.clone().sub(controls.target).normalize();
+          let az0 = Math.atan2(dir0.x, dir0.z), el0 = Math.asin(THREE.MathUtils.clamp(dir0.y, -0.95, 0.95));
+          if (start === "front") { az0 = 0; el0 = rad2(12); }
+          else if (start === "three") { az0 = rad2(40); el0 = rad2(28); }
+          else if (start === "side") { az0 = Math.PI / 2; el0 = rad2(10); }
+          else if (start === "top") el0 = rad2(78);
+          const fov0 = cam.fov, vf = rad2(cam.fov), hf = 2 * Math.atan(Math.tan(vf / 2) * cam.aspect);
+          const d0 = rad / Math.sin(Math.min(vf, hf) / 2) * 1.1;
           const place = (az, el, d, look = c) => {
             cam.position.set(c.x + d * Math.cos(el) * Math.sin(az), c.y + d * Math.sin(el), c.z + d * Math.cos(el) * Math.cos(az));
-            cam.up.copy(up); cam.lookAt(look); cam.near = Math.max(0.1, d / 100); cam.far = d * 20; cam.updateProjectionMatrix();
+            cam.up.copy(up); cam.lookAt(look); cam.fov = fov0; cam.near = Math.max(0.1, d / 100); cam.far = d * 20; cam.updateProjectionMatrix();
           };
           const q0 = model.quaternion.clone(), p0 = model.position.clone(), qa = new THREE.Quaternion();
           const spin = th => { qa.setFromAxisAngle(up, th); model.quaternion.copy(qa).multiply(q0); model.position.copy(p0).sub(c).applyQuaternion(qa).add(c); };
           const wave = u => 0.5 - 0.5 * Math.cos(TAU * u);           // 0 -> 1 -> 0 sur la boucle : chaque effet boucle sans saut
+          const sm = ease !== "linear";
+          const e1 = t => sm ? 0.5 - 0.5 * Math.cos(Math.PI * t) : t;
+          // A -> B : en boucle A -> B -> A (adouci, ou en dents de scie a vitesse constante) ; aller simple A -> B ; rev : B -> A
+          const ab = u => { const t = once ? e1(u) : sm ? wave(u) : 1 - Math.abs(2 * u - 1); return rev ? 1 - t : t; };
+          // une rotation : un tour complet boucle de lui-meme ; un arc fait l'aller-retour (ou l'aller simple), centre sur le depart
+          const full = arc >= 360;
+          const rot = u => full ? dir * TAU * (once ? e1(u) : u) : dir * rad2(arc) * (ab(u) - 0.5);
           const pose = u => {
             switch (style) {
-              case "orbit": place(az0 + TAU * u, el0, d0); break;                                  // la camera fait le tour
-              case "swing": place(az0, el0, d0); spin(0.6 * Math.sin(TAU * u)); break;           // balancement de +-35 degres
+              case "orbit": place(az0 + rot(u), el0, d0); break;                                   // la camera fait le tour
+              case "swing": place(az0, el0, d0); spin(dir * rad2(full ? 70 : arc) * (ab(u) - 0.5)); break;   // balancement
               case "travel": {                                                                     // travelling lateral, parallaxe
-                const s = Math.sin(TAU * u), right = new THREE.Vector3(Math.cos(az0), 0, -Math.sin(az0));
-                place(az0 + 0.42 * s, el0 + 0.07 * Math.cos(TAU * u), d0 * 0.88, c.clone().addScaledVector(right, rad * 0.16 * s)); break;
+                const s = (2 * ab(u) - 1) * dir, right = new THREE.Vector3(Math.cos(az0), 0, -Math.sin(az0));
+                place(az0 + 0.42 * s, el0, d0 * 0.88, c.clone().addScaledVector(right, rad * 0.16 * s)); break;
               }
-              case "zoom": place(az0 + 0.45 * Math.sin(TAU * u), el0, d0 * (1 - 0.45 * wave(u))); break;  // on s'approche, on recule
-              case "reveal": { const s = wave(u);                                                  // vu du dessus, on descend en tournant
-                place(az0 + Math.PI * s, lerp(rad2(76), el0, s), d0 * (1.18 - 0.22 * s)); break; }
-              case "spiral": place(az0 + TAU * u, THREE.MathUtils.clamp(el0 + 0.45 * Math.sin(TAU * u), -0.25, 1.35),
+              case "zoom": { const t = ab(u); place(az0 + 0.45 * dir * (t - 0.5), el0, d0 * (1 - 0.45 * t)); break; }   // s'approcher
+              case "reveal": { const t = ab(u);                                                    // vu du dessus, on descend en tournant
+                place(az0 - dir * Math.PI * (1 - t), lerp(rad2(76), el0, t), d0 * (1.18 - 0.22 * t)); break; }
+              case "spiral": place(az0 + rot(u), THREE.MathUtils.clamp(el0 + 0.45 * Math.sin(TAU * u), -0.25, 1.35),
                 d0 * (1 - 0.14 * Math.sin(2 * TAU * u))); break;                                  // le tour, en montant et descendant
-              case "drone": place(az0 + TAU * u, rad2(58), d0 * (1.05 - 0.2 * wave(u))); break;  // de haut, en survol
-              default: place(az0, el0, d0); spin(TAU * u);                                         // plateau tournant
+              case "drone": place(az0 + rot(u), rad2(58), d0 * (1.05 - 0.2 * wave(u))); break;   // de haut, en survol
+              case "float": place(az0, el0, d0); spin(dir * 0.35 * Math.sin(TAU * u));           // levitation : il flotte et ondule
+                model.position.y += rad * 0.07 * Math.sin(TAU * u); break;
+              case "vertigo": { const t = ab(u), d = d0 * lerp(0.75, 2.4, t);                      // effet vertigo : la taille reste,
+                place(az0, el0, d); cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(vf / 2) * d0 / d));  // le decor s'ecrase
+                cam.updateProjectionMatrix(); break; }
+              case "dive": { const t = ab(u);                                                      // plongee : de loin et de haut, jusqu'au detail
+                place(az0 + dir * rad2(70) * (1 - t), lerp(rad2(62), el0, t), d0 * lerp(2.3, 0.8, t)); break; }
+              case "crane": { const t = ab(u);                                                     // grue : du ras du sol jusqu'au-dessus
+                place(az0 + dir * rad2(25) * (t - 0.5), lerp(rad2(2), rad2(72), t), d0 * 1.02); break; }
+              case "spotlight": place(az0, el0, d0); break;                                        // projecteur : la lumiere tourne (frame)
+              default: place(az0, el0, d0); spin(rot(u));                                          // plateau tournant
             }
           };
-          // le fond : studio sombre ou clair (un degrade doux), ou transparent si l'encodeur sait garder la transparence
-          let useAlpha = bg === "transparent";
-          const paint = () => {
-            cx.clearRect(0, 0, W, H);
-            if (!useAlpha) {
-              const g = cx.createRadialGradient(W / 2, H * 0.42, Math.min(W, H) * 0.08, W / 2, H / 2, Math.max(W, H) * 0.75);
-              if (bg === "light") { g.addColorStop(0, "#ffffff"); g.addColorStop(1, "#d9dee7"); }
-              else { g.addColorStop(0, "#2d3446"); g.addColorStop(1, "#0d1016"); }
-              cx.fillStyle = g; cx.fillRect(0, 0, W, H);
-            }
+          // le fond (animBackdrops) : un studio, un decor doux (ciel, montagne, jungle…), ou transparent si l'encodeur sait
+          // garder la transparence (sinon, studio sombre) ; choisi une fois l'encodeur connu
+          let useAlpha = bg === "transparent", backdrop = null;
+          const paint = u => {
+            if (!backdrop) backdrop = makeBackdrop(useAlpha ? "transparent" : bg === "transparent" ? "studio" : bg, W, H);
+            backdrop(cx, u);
             cx.drawImage(glc, 0, 0, W, H);
           };
           const head = new THREE.DirectionalLight(0xffffff, 0.55);     // une lumiere qui vient de l'oeil : rien ne reste dans le noir
+          const key = new THREE.DirectionalLight(0xffffff, 2.2);       // le projecteur qui tourne (style spotlight)
           const frame = u => {
             const was = { grid: grid.visible, bg: scene.background };
             grid.visible = false; scene.background = null;
             pose(u);
+            let dimmed = null;
+            if (style === "spotlight") {                                // les lumieres de la vue baissent, un seul projecteur tourne
+              dimmed = [];
+              scene.traverse(o => { if (o.isLight) { dimmed.push([o, o.intensity]); o.intensity *= 0.2; } });
+              const a = az0 + rot(u) + Math.PI / 3, e = rad2(32);
+              key.position.set(c.x + d0 * Math.cos(e) * Math.sin(a), c.y + d0 * Math.sin(e), c.z + d0 * Math.cos(e) * Math.cos(a));
+              key.target.position.copy(c); scene.add(key, key.target);
+            }
+            head.intensity = style === "spotlight" ? 0.1 : 0.55;
             head.position.copy(cam.position); head.target.position.copy(c); scene.add(head, head.target);
             try { r2.render(scene, cam); }
             finally {
               scene.remove(head, head.target);
+              if (dimmed) { dimmed.forEach(([o, i]) => { o.intensity = i; }); scene.remove(key, key.target); }
               model.quaternion.copy(q0); model.position.copy(p0);
               grid.visible = was.grid; scene.background = was.bg;
             }
-            paint();
+            paint(u);
           };
           const nap = ms => new Promise(r => setTimeout(r, ms));
           let blob = null, type = "video/webm";
@@ -1108,7 +1142,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               enc.configure(conf);
               for (let i = 0; i < n; i++) {
                 if (err) throw err;
-                frame(i / n);
+                frame(once ? i / Math.max(1, n - 1) : i / n);       // aller simple : la derniere image est l'arrivee
                 const vfr = new VideoFrame(out, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps), alpha: useAlpha ? "keep" : "discard" });
                 enc.encode(vfr, { keyFrame: i % (fps * 2) === 0 });
                 vfr.close();
@@ -1142,7 +1176,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
             }
           } finally {
             try { r2.dispose(); r2.forceContextLoss(); } catch { /* rien */ }
-            head.dispose?.();
+            head.dispose?.(); key.dispose?.();
           }
           return { blob, type, w: W, h: H, alpha: useAlpha };
         };

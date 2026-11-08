@@ -167,7 +167,8 @@ def _local(dt: datetime) -> datetime:
 
 # le nom de l'effet d'une animation de la vue 3D, pour le NAS (08/11/2026)
 _ANIM_NAMES = {"turntable": "Plateau tournant", "orbit": "Tour de caméra", "swing": "Balancement", "travel": "Travelling",
-               "zoom": "Zoom", "reveal": "Révélation", "spiral": "Spirale", "drone": "Survol"}
+               "zoom": "Zoom", "reveal": "Révélation", "spiral": "Spirale", "drone": "Survol",
+               "float": "Lévitation", "vertigo": "Effet vertigo", "dive": "Plongée", "crane": "Grue", "spotlight": "Projecteur"}
 
 
 def human_name(rel_name: str, model: str) -> str | None:

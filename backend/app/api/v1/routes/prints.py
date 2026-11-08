@@ -3102,7 +3102,8 @@ V3_MULTI = 16
 # (Vue3D_anim_orbit.webm) : on en garde plusieurs ; refaire le meme effet remplace celle-la. Vue3D_anim.webm (sans
 # effet) : les toutes premieres, relues telles quelles. En tete de fiche : la plus recente (« mettre en tete » la touche).
 V3_ANIM_STYLES = {"turntable": "Plateau tournant", "orbit": "Tour de caméra", "swing": "Balancement", "travel": "Travelling",
-                  "zoom": "Zoom", "reveal": "Révélation", "spiral": "Spirale", "drone": "Survol"}
+                  "zoom": "Zoom", "reveal": "Révélation", "spiral": "Spirale", "drone": "Survol",
+                  "float": "Lévitation", "vertigo": "Effet vertigo", "dive": "Plongée", "crane": "Grue", "spotlight": "Projecteur"}
 _V3ANIM_RE = re.compile(r"Vue3D_anim(?:_([a-z]+))?\.(webm|mp4)")
 V3_ANIM_MAX = 30 * 1024 * 1024
 
