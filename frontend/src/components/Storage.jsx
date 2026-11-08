@@ -905,6 +905,8 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
   const placed = new Set(st.mode === "single" ? [] : st.places.flatMap(p => storedHere(p).map(s => s.id)));
   const elsewhere = spools.filter(s => !s.ordered && !inPrinter(s.location) && s.location !== TO && !placed.has(s.id));
   const grid = { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(clamp(108px, 28vw, 136px),1fr))", gap: 8 };
+  const tiles = { display: "grid", gap: 6, gridTemplateColumns: "repeat(auto-fill, minmax(86px, 1fr))" };
+  const slotTag = s => { const m = (s.location || "").match(/slot (\d+)$/); return m ? m[1] : null; };
   const countIn = p => p.leaf ? storedHere(p).length : (kids[p.id] || []).reduce((n, c) => n + countIn(c), 0);
 
   const Section = ({ k, icon, title, n, tone = "#8B5CF6", aside = null, children }) => <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -947,10 +949,12 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
     </button>;
   };
   // une bobine en vrac (08/11/2026) : la meme tuile qu'une case, sans numero (les grandes cartes du stock etaient trop grosses)
-  const Tile = ({ s }) => {
-    const edge = edgeOf(p0Of(s), by), info = [s.filament_fila_type || s.filament_material, s.filament_manufacturer].filter(Boolean);
-    return <button type="button" className="bn-cell" onClick={() => onOpen(s)} data-tip={[spoolName(s), ...info, `#${s.id}`].join(" · ")}>
-      <span className="bn-band">{edge === "v" ? <SpoolEdge s={s} vertical len={44} thick={22}/> : edge ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/> : <Swatch s={s} size={28}/>}</span>
+  // vertical / tag (08/11/2026) : imprimante, en commande et a ranger en tuiles, la bobine debout ; tag = son slot (« A2 »)
+  const Tile = ({ s, vertical = false, tag = null }) => {
+    const edge = vertical ? "v" : edgeOf(p0Of(s), by), info = [s.filament_fila_type || s.filament_material, s.filament_manufacturer].filter(Boolean);
+    return <button type="button" className="bn-cell" onClick={() => onOpen(s)} data-tip={[spoolName(s), ...info, tag ? s.location : null, `#${s.id}`].filter(Boolean).join(" · ")}>
+      <span className="bn-band">{edge === "v" ? <SpoolEdge s={s} vertical len={44} thick={22}/> : edge ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/> : <Swatch s={s} size={28}/>}
+        {tag && <span className="bn-num">{tag}</span>}</span>
       <span className="bn-ct-name">{spoolName(s)}</span>
       {info.length > 0 && <span className="bn-ct-sub">{info.join(" · ")}</span>}
     </button>;
@@ -992,7 +996,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
     {printer.length > 0 && <Section k="printer" icon={<Printer size={16} strokeWidth={2.2}/>} title="Dans l'imprimante" n={printer.length} tone="#0EA5E9">
       {units.map(u => <div key={u} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text2)" }}>{u}</div>
-        <div style={grid}>{printer.filter(s => unitOf(s.location) === u).sort((a, b) => (a.location || "").localeCompare(b.location || "", "fr", { numeric: true })).map(s => renderSpool(s))}</div>
+        <div style={{ ...tiles, gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>{printer.filter(s => unitOf(s.location) === u).sort((a, b) => (a.location || "").localeCompare(b.location || "", "fr", { numeric: true })).map(s => <Tile key={s.id} s={s} vertical tag={slotTag(s)}/>)}</div>
       </div>)}
     </Section>}
     {st.mode === "single"
@@ -1003,11 +1007,11 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
         </Section>)}
         {elsewhere.length > 0 && <Section k="else" icon={<HelpCircle size={16} strokeWidth={2.2}/>} title="Ailleurs" n={elsewhere.length} tone="#64748B"><div style={grid}>{elsewhere.map(s => renderSpool(s))}</div></Section>}
       </>}
-    {ordered.length > 0 && <Section k="ordered" icon={<Truck size={16} strokeWidth={2.2}/>} title="En commande" n={ordered.length} tone="#0EA5E9"><div style={grid}>{ordered.map(s => renderSpool(s))}</div></Section>}
+    {ordered.length > 0 && <Section k="ordered" icon={<Truck size={16} strokeWidth={2.2}/>} title="En commande" n={ordered.length} tone="#0EA5E9"><div style={tiles}>{ordered.map(s => <Tile key={s.id} s={s} vertical/>)}</div></Section>}
     {/* a ranger, en dernier (07/11/2026) : la liste peut etre longue, les rangements d'abord */}
     {waiting.length > 0 && <Section k="tostore" icon={<Inbox size={16} strokeWidth={2.2}/>} title="À ranger" n={waiting.length} tone="#F59E0B"
       aside={admin && <button type="button" onClick={() => setToStore(true)} style={{ ...seg, ...segOn }}>Ranger</button>}>
-      <div style={grid}>{waiting.map(s => renderSpool(s))}</div>
+      <div style={tiles}>{waiting.map(s => <Tile key={s.id} s={s} vertical/>)}</div>
     </Section>}
     {!spools.length && <div style={{ padding: 20, textAlign: "center", ...small }}>Aucune bobine ne correspond.</div>}
     {fill && <CellFiller place={fill} spools={spools} onClose={() => setFill(null)}/>}
