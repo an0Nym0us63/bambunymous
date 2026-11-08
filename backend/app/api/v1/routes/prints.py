@@ -718,6 +718,15 @@ async def prints_gallery(kind: str = "photos", _: str = Depends(get_current_user
     return json_response(out)
 
 
+def _v3pick(pid: int, name: str, vue3d_prints: dict):
+    """La vue 3D « name » de cette impression, en photo de galerie, si elle est gardee ; sinon None."""
+    if not _V3RE.fullmatch(name or "") or "_mix" in name or pid not in vue3d_prints:
+        return None
+    n = 1 if name == VUE3D else int(name.split("_")[1].split(".")[0])
+    sl = vue3d_prints[pid][2]
+    return {"url": f"/api/v1/prints/{pid}/file/{name}?v={sl[n]}", "name": name, "label": "vue3d"} if n in sl else None
+
+
 def _mw_profile(pid, plates):
     from ....services.mw_source import _profile
     try:
@@ -759,7 +768,7 @@ async def _build_gallery(kind: str = "photos") -> dict:
             sl = _v3slots(base / str(r.id))
             if sl:
                 nm, v = _v3cover(base / str(r.id), r.thumb_3d)
-                out[r.id] = (nm, v) if nm else (_v3name(min(sl)), sl[min(sl)])
+                out[r.id] = ((nm, v) if nm else (_v3name(min(sl)), sl[min(sl)])) + (sl,)
         return out
     import asyncio as _aio0
     vue3d_prints = await _aio0.to_thread(_vue3d_prints)
@@ -789,8 +798,13 @@ async def _build_gallery(kind: str = "photos") -> dict:
             photos = [{"url": f"/api/v1/prints/{p.id}/file/{nm}?v={v}", "name": nm, "label": "vue3d", "sel": se} for nm, v, se in vue3d_all.get(p.id, ())]
         # pas de photo, mais une vignette prise dans la vue 3D assemblee : elle remonte (29/10/2026)
         elif not photos and p.id in vue3d_prints:
-            nm, v = vue3d_prints[p.id]
+            nm, v, _sl = vue3d_prints[p.id]
             photos = [{"url": f"/api/v1/prints/{p.id}/file/{nm}?v={v}", "name": nm, "label": "vue3d"}]
+        # une vue 3D choisie comme couverture de la galerie (08/11/2026) : elle passe devant les photos
+        if kind != "vue3d" and p.cover_photo:
+            v3 = _v3pick(p.id, p.cover_photo, vue3d_prints)
+            if v3 and not any(ph["name"] == p.cover_photo for ph in photos):
+                photos.insert(0, v3)
         # La vignette de la galerie est photos[0] : on remonte la photo choisie.
         if p.cover_photo and kind != "vue3d":
             photos.sort(key=lambda ph: ph["name"] != p.cover_photo)
@@ -808,7 +822,7 @@ async def _build_gallery(kind: str = "photos") -> dict:
             })
             acc["prints"]              += 1
             acc["print_ids"].append(p.id)
-            acc["photos"].extend(photos)
+            acc["photos"].extend({**ph, "pid": p.id} for ph in photos)      # pid : la couverture d'un groupe les distingue
             if p.design_id:
                 acc["_designs"].add(str(p.design_id))
                 acc["_dcount"][str(p.design_id)] = acc["_dcount"].get(str(p.design_id), 0) + 1
@@ -859,11 +873,20 @@ async def _build_gallery(kind: str = "photos") -> dict:
             own.sort(key=lambda ph: not ph["sel"])
             acc["photos"] = own + acc["photos"]
             continue
+        cover = acc.get("cover_photo")
         for name, mt in files:
-            if _V3RE.fullmatch(name):
+            if _V3RE.fullmatch(name) and name != cover:          # une vue 3D du groupe : seulement choisie en couverture
                 continue
             acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{name}?v={mt}",
-                                  "label": name, "name": name})
+                                  "label": "vue3d" if _V3RE.fullmatch(name) else name, "name": name})
+        # la couverture prise parmi les vues 3D d'une de ses impressions (08/11/2026)
+        cm = re.fullmatch(r"p(\d+)/(.+)", cover or "")
+        if cm and int(cm.group(1)) in acc["print_ids"] and not any(ph.get("pid") == int(cm.group(1)) and ph["name"] == cm.group(2) for ph in acc["photos"]):
+            v3 = _v3pick(int(cm.group(1)), cm.group(2), vue3d_prints)
+            if not v3 and (DATA_DIR / "prints" / cm.group(1) / cm.group(2)).is_file():      # une photo hors des captures notees
+                v3 = {"url": f"/api/v1/prints/{cm.group(1)}/file/{cm.group(2)}", "name": cm.group(2), "label": "manual"}
+            if v3:
+                acc["photos"].insert(0, {**v3, "pid": int(cm.group(1))})
         # pas de photo, mais une vignette prise dans la vue 3D assemblee : elle remonte (29/10/2026)
         v3s = sorted((name, mt) for name, mt in files if _V3RE.fullmatch(name) and "_mix" not in name)
         if not acc["photos"] and v3s:
@@ -871,9 +894,11 @@ async def _build_gallery(kind: str = "photos") -> dict:
             acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{nm}?v={v3}", "label": "vue3d", "name": nm})
         # La vignette est photos[0]. Si une photo de couverture est definie pour
         # le groupe, on la remonte en tete -- meme principe que Print.cover_photo.
-        cover = acc.get("cover_photo")
         if cover:
-            acc["photos"].sort(key=lambda ph: (ph.get("name") or ph.get("label")) != cover)
+            acc["photos"].sort(key=lambda ph: (f"p{ph['pid']}/{ph['name']}" if ph.get("pid") else (ph.get("name") or ph.get("label"))) != cover)
+            # la mosaique reconnait la couverture a la fin de son adresse : « p12/x » se lit « 12/file/x »
+            if cm:
+                acc["cover_photo"] = f"{cm.group(1)}/file/{cm.group(2)}"
 
     groups = [
         # cover_photo est CONSERVE dans la reponse : la mosaique s'en sert pour
@@ -1005,6 +1030,104 @@ async def group_tech(group_id: int):
                         "plate": next((f"/api/v1/prints/{pid}/file/{n}" for n in ("plate.png", "plate.jpg") if n in names), None),
                         "snaps": [{"name": n, "url": f"/api/v1/prints/{pid}/file/{n}"} for n in snaps]})
     return {"prints": out}
+
+
+# La galerie d'une fiche (08/11/2026) : tout ce qu'une impression ou un groupe garde, range en une lecture -- les photos
+# et videos (Photo-*, Video-*), la 3D (les vues prises dans la vue 3D, les animations) et la technique (le timelapse, les
+# captures des couches). Un groupe y ajoute, impression par impression, ce de ses impressions. La couverture de la
+# galerie (cover_photo) : une photo ou une vue 3D ; pour un groupe, aussi celle d'une de ses impressions, notee
+# « p<id>/<nom> » (les memes noms reviennent d'une impression a l'autre).
+_MEDIA_IMG = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+_MEDIA_VID = (".mp4", ".webm", ".mov", ".m4v")
+
+
+def _media_photos(names, base: str, group: bool = False) -> list:
+    out = []
+    for n in sorted(names):
+        ext = os.path.splitext(n)[1].lower()
+        if n == "Video-Timelapse.mp4" or _V3RE.fullmatch(n) or is_v3anim(n) or n.startswith(("Joint-", "snapshot-", "plate")):
+            continue
+        # le dossier d'un groupe : tout ce qu'on y a mis (cf. group_photos) ; celui d'une impression : ses photos et videos
+        if (ext in _MEDIA_IMG + _MEDIA_VID) if group else \
+                ((n.startswith("Photo-") and ext in _MEDIA_IMG) or (n.startswith("Video-") and ext in _MEDIA_VID)):
+            out.append({"name": n, "url": f"{base}/{n}", "video": ext in _MEDIA_VID})
+    return out
+
+
+def _v3part(v3: dict) -> dict:
+    return {k: v3[k] for k in ("max", "sel", "slots", "anims")}
+
+
+def _print_media(pid: int, thumb: int) -> dict:
+    """Ce que garde une impression, range (lit son dossier, et ce qui n'est plus que sur le NAS)."""
+    from ....services.archive import archived_names
+    d = DATA_DIR / "prints" / str(pid)
+    names = ({f.name for f in d.iterdir()} if d.exists() else set()) | set(archived_names(f"prints/{pid}"))
+    base = f"/api/v1/prints/{pid}/file"
+    snaps = sorted(n for n in names if n.startswith("snapshot-") and os.path.splitext(n)[1].lower() in _MEDIA_IMG)
+    return {"photos": _media_photos(names, base),
+            "vue3d": _v3part(_v3list("print", pid, d, thumb or 0)),
+            "tech": {"timelapse": f"{base}/Video-Timelapse.mp4" if "Video-Timelapse.mp4" in names else None,
+                     "snaps": [{"name": n, "url": f"{base}/{n}"} for n in snaps]},
+            "plate": next((f"{base}/{n}" for n in ("plate.png", "plate.jpg") if n in names), None)}
+
+
+@router.get("/{print_id}/media")
+async def print_media(print_id: int, _: str = Depends(get_current_user)):
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if not p:
+            raise HTTPException(404, "Impression introuvable")
+        thumb, cover = p.thumb_3d or 0, p.cover_photo
+    return {**await asyncio.to_thread(_print_media, print_id, thumb), "cover_photo": cover}
+
+
+@router.get("/groups/{group_id}/media")
+async def group_media(group_id: int, _: str = Depends(get_current_user)):
+    async with AsyncSessionLocal() as db:
+        g = await db.get(Group, group_id)
+        if not g:
+            raise HTTPException(404, "Groupe introuvable")
+        thumb, cover = g.thumb_3d or 0, g.cover_photo
+        rows = (await db.execute(select(Print.id, Print.translated_name, Print.file_name, Print.print_date, Print.thumb_3d)
+                                 .where(Print.group_id == group_id).order_by(Print.print_date))).all()
+
+    def _all():
+        d = DATA_DIR / "groups" / str(group_id)
+        names = {f.name for f in d.iterdir()} if d.exists() else set()
+        own = {"photos": _media_photos(names, f"/api/v1/prints/groups/{group_id}/photo", group=True),
+               "vue3d": _v3part(_v3list("group", group_id, d, thumb))}
+        kids = [{"id": pid, "name": tr or fn or f"Impression {pid}", "print_date": pd.isoformat() if pd else None,
+                 **_print_media(pid, th or 0)} for pid, tr, fn, pd, th in rows]
+        return own, kids
+    own, kids = await asyncio.to_thread(_all)
+    return {"cover_photo": cover, **own, "prints": kids}
+
+
+@router.post("/groups/{group_id}/cover")
+async def set_group_cover(group_id: int, ref: str = Body("", embed=True), _: str = Depends(get_current_user)):
+    """La couverture de la galerie d'un groupe : une de ses photos ou vues 3D (« nom »), celle d'une de ses impressions
+    (« p<id>/nom »), ou aucune (vide)."""
+    from ....services.archive import local_or_archive
+    m = re.fullmatch(r"(?:p(\d+)/)?([^/\\]+)", ref or "")
+    if ref and (not m or ".." in ref):
+        raise HTTPException(400, "Référence invalide")
+    async with AsyncSessionLocal() as db:
+        g = await db.get(Group, group_id)
+        if not g:
+            raise HTTPException(404, "Groupe introuvable")
+        if ref and m.group(1):
+            pid = int(m.group(1))
+            if (await db.execute(select(Print.group_id).where(Print.id == pid))).scalar() != group_id:
+                raise HTTPException(400, "Cette impression n'est pas du groupe")
+            if not local_or_archive(f"prints/{pid}/{m.group(2)}"):
+                raise HTTPException(404, "Introuvable")
+        elif ref and not (DATA_DIR / "groups" / str(group_id) / ref).is_file():
+            raise HTTPException(404, "Introuvable")
+        g.cover_photo = ref or None
+        await db.commit()
+    gallery_touched()
+    return {"ok": True, "cover_photo": ref or None}
 
 
 @router.get("/groups/{group_id}/photo/{filename}")

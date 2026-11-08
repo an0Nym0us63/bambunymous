@@ -171,14 +171,22 @@
   </section>
 
   <section id="impressions-fiche-photos">
-    <h3>Photos</h3>
-    <p>Les médias de la fiche tiennent dans une carte à deux onglets ; une seule bande est visible à la fois. La fiche s'ouvre sur <span class="ui">📸 Souvenirs</span>, ou sur <span class="ui">🛠 Technique</span> quand il n'y a aucun souvenir. Chaque onglet affiche son nombre de médias.</p>
+    <h3>La galerie de la fiche</h3>
+    <p>Tout ce que garde une impression tient dans une seule carte, en trois onglets, chacun avec son nombre. La fiche s'ouvre sur le premier qui a quelque chose. Les tuiles sont rangées en grille (trois par rangée sur téléphone).</p>
     <dl class="opts">
-      <dt>📸 Souvenirs</dt><dd>Les photos et vidéos que tu as ajoutées (les vidéos tournent en boucle). <span class="admin">admin</span> : le bouton bleu <span class="ui">+</span> en ajoute, plusieurs à la fois (l'ordre est gardé). Les photos sont réduites, une vidéo devient une petite animation.</dd>
-      <dt>🛠 Technique</dt><dd>Le <b>timelapse</b> copié depuis l'imprimante, en grande tuile : il ne se lit que si tu le touches. Dessous, les <b>captures des couches</b> prises par la caméra de l'imprimante, de la fin vers le début : <b>Fin</b> (ou <b>Échec</b> si elle a échoué), <b>99 %</b>, <b>50 %</b>, <b>Couche 2</b>, <b>Couche 1</b>.</dd>
+      <dt>📸 Photos</dt><dd>Les photos et vidéos que tu as ajoutées (les vidéos tournent en boucle). <span class="admin">admin</span> : le bouton bleu <span class="ui">+</span> en ajoute, plusieurs à la fois (l'ordre est gardé). Les photos sont réduites, une vidéo devient une petite animation.</dd>
+      <dt>🧊 3D</dt><dd>Les <b>vues</b> prises avec 📸 dans la vue 3D (Vue 1 à Vue 4) et les <b>animations</b> faites avec 🎞 (une par effet, avec son nom : Plateau tournant, Tour de caméra…). <span class="ui">Gérer les vues</span> <span class="admin">admin</span> ouvre « Vues 3D et vignette » pour changer l'ordre où elles défilent ou en remplacer une.</dd>
+      <dt>🛠 Technique</dt><dd>Le <b>timelapse</b> copié depuis l'imprimante, puis les <b>captures des couches</b> prises par la caméra de l'imprimante, de la fin vers le début : <b>Fin</b> (ou <b>Échec</b> si elle a échoué), <b>99 %</b>, <b>50 %</b>, <b>Couche 2</b>, <b>Couche 1</b>.</dd>
     </dl>
-    <p>Dans la fiche d'un <b>groupe</b>, même principe. Souvenirs : les photos du groupe. Technique : pour chacune de ses impressions (nom et date), son timelapse et ses captures. Les 4 premières impressions sont affichées, <span class="ui">Voir les N autres</span> montre le reste. Chaque impression y a la vignette de son plateau ; le nombre de l'onglet s'affiche dès l'ouverture de la fiche (une seule requête légère).</p>
-    <p>Sur chaque photo ajoutée <span class="admin">admin</span> : l'étoile en haut à gauche en fait la <b>photo principale</b> (étoile dorée), celle qu'on voit dans la galerie et dans la mosaïque d'un groupe ; la corbeille en haut à droite la supprime, en deux temps. Touche une photo pour la voir en plein écran : flèches pour passer à la suivante (dans l'onglet ouvert seulement), compteur « 3 / 7 », touche à côté pour fermer.</p>
+    <p>Sur les tuiles <span class="admin">admin</span>, ce qu'on en fait, rappelé en une ligne sous les onglets :</p>
+    <ul>
+      <li><b>⭐ en haut à gauche</b> d'une photo ou d'une vue 3D : la <b>couverture de la galerie</b> (cadre orange), celle qu'on voit en premier dans la galerie et dans la mosaïque d'un groupe. Une vue 3D choisie passe devant les photos.</li>
+      <li><b>🧊 en bas à droite</b> d'une vue 3D : la mettre dans la <b>vignette 3D</b> (cadre bleu), celle qui remplace l'image du plateau dans les listes et en tête de la fiche ; plusieurs : elles défilent l'une après l'autre ; aucune : l'image du plateau revient.</li>
+      <li><b>⭐ violette</b> d'une animation : celle qui <b>tourne en tête de la fiche</b> (cadre violet ; d'office la dernière faite).</li>
+      <li><b>🗑 en haut à droite</b> : supprimer, en deux temps (« Supprimer ? »).</li>
+    </ul>
+    <p>Touche une tuile pour la voir en grand : flèches ou glisser pour passer aux autres de l'onglet, compteur « 3 / 7 » avec ce que c'est, touche à côté pour fermer.</p>
+    <p>Dans la fiche d'un <b>groupe</b>, la même galerie montre d'abord ce du groupe lui-même (📁 Le groupe : ses photos, ses vues 3D, ses animations), puis, impression par impression (vignette du plateau, nom, date), ce de chacune : leurs photos, leurs vues et animations, leurs timelapses et captures. Les 4 premières impressions sont affichées, <span class="ui">Voir les N autres impressions</span> montre le reste. La ⭐ d'une photo ou d'une vue 3D d'une impression en fait la couverture <b>du groupe</b> dans la galerie (la toucher à nouveau l'enlève) ; 🧊 la met dans la vignette 3D <b>de cette impression</b> ; <span class="ui">Gérer</span> au bout de chaque ligne ouvre les vues 3D de celle-ci.</p>
   </section>
 
   <section id="impressions-fiche-filaments">
@@ -338,7 +346,7 @@
 
   <section id="impressions-groupes-photos">
     <h3>Photos de groupe <span class="admin">admin</span></h3>
-    <p>Le <span class="ui">+</span> à côté de <b>Photos</b> ajoute des photos ou vidéos au groupe lui-même (pas à un print). Sur chaque photo : l'étoile la choisit comme <b>vignette de la galerie</b> pour ce groupe, la corbeille la supprime (en deux temps). Touche une photo pour l'agrandir ; en plein écran, glisse ou utilise les flèches (← → et Échap au clavier).</p>
+    <p>Le <span class="ui">+</span> de l'onglet <b>📸 Photos</b> de la galerie ajoute des photos ou vidéos au groupe lui-même (pas à un print). La ⭐ de n'importe quelle photo ou vue 3D, celle du groupe ou celle d'une de ses impressions, la choisit comme <b>couverture de la galerie</b> pour ce groupe ; la corbeille la supprime (en deux temps). Voir <a href="#impressions-fiche-photos">La galerie de la fiche</a>.</p>
     <p>La mosaïque du groupe, dans la liste et la galerie, mélange les photos du groupe et celles de ses prints.</p>
   </section>
 

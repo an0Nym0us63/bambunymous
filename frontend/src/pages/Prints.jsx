@@ -40,7 +40,7 @@ import { useTrackDetail } from "../utils/track";
 import GalleryCompare from "../components/GalleryCompare";
 import { FilamentSheetFromSpool } from "./Filaments";
 import { useKeyboardInset } from "../utils/keyboard";
-import PhotoAddButton from "../components/PhotoAddButton";
+import MediaGallery from "../components/MediaGallery";
 import GroupMosaic from "../components/GroupMosaic";
 import ObjectCreateSheet from "../components/ObjectCreateSheet";
 import FilesSheet, { openBlob, saveBlob } from "../components/FilesSheet";
@@ -1443,10 +1443,6 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
   const [sharing, setSharing] = useState(false);
   const [ungrouped, setUngrouped] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  const [userPhotos, setUserPhotos] = useState([]);
-  const loadUserPhotos = () => client.get(`/prints/${pProp.id}/photos`).then(r => setUserPhotos(Array.isArray(r.data) ? r.data : [])).catch(() => {});
-  useEffect(() => { loadUserPhotos(); }, [pProp.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const uploadPhoto = async (file) => { const fd = new FormData(); fd.append("file", file); await client.post(`/prints/${pProp.id}/photos/upload`, fd, { headers: { "Content-Type": "multipart/form-data" } }); loadUserPhotos(); };
   const [p, setP] = useState(pProp);
   const [editFr, setEditFr] = useState(false);
   const [frVal, setFrVal] = useState("");
@@ -1508,7 +1504,6 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
   const [refreshKey, setRefreshKey] = useState(0);
   const [objCreate, setObjCreate] = useState(null);
   const [unmapping, setUnmapping] = useState(null);
-  const [, setPhotoCount] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [own3d, setOwn3d] = useState(false);       // la vue 3D de mon 3MF d'origine (impression sans modele MakerWorld)
   const [files, setFiles] = useState(false);       // les fichiers associes (03/11/2026)
@@ -1736,11 +1731,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
   const canRate = !!p.design_id && (p.status === "SUCCESS" || p.status === "PARTIAL") && toRateSet.has(String(p.design_id));
   const sections = (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <SnapshotGallery snaps={[]} printId={p.id} userPhotos={userPhotos}
-        onDelete={() => {}} onUpload={async f => { await uploadPhoto(f); }}
-        onDeleteUpload={async filename => { await client.delete(`/prints/${p.id}/upload/${filename}`); loadUserPhotos(); }}
-        onCountChange={setPhotoCount} coverPhoto={p.cover_photo}
-        onCoverChange={name => { setP(prev => ({ ...prev, cover_photo: name })); onChanged?.(); }}/>
+      {/* la galerie de la fiche (08/11/2026) : photos, 3D (vues et animations), technique */}
+      <MediaGallery kind="print" id={p.id} refreshKey={p.updated_at || ""}
+        onCover={name => setP(prev => ({ ...prev, cover_photo: name }))} onChanged={() => { reload(); onChanged?.(); }}/>
       {/* en cours, suivi couche par couche (alpha) : ce que chaque filament a vraiment consomme ; rien sur « Actuel » */}
       {p.status === "IN_PROGRESS" && !currentFriend() && <LiveUsageCard printId={p.id}/>}
       {/* les pieces annulees en cours de route (05/11/2026), et ce qui est revenu aux bobines */}
@@ -1909,96 +1902,6 @@ function GroupEditSheet({ groupId, name, onClose, onSaved }) {
 }
 
 // les photos du groupe (nouvelle fiche) : une bande qui defile ; ⭐ la vignette, 🗑 en deux temps, visionneuse
-function GroupPhotosV2({ groupId, onUpdated, prints = [] }) {   // prints : relire Technique quand la liste change
-  const [photos, setPhotos] = useState([]);
-  const [tab, setTab] = useState("souv");
-  const [tech, setTech] = useState(null);        // par impression : { p, tl, snaps }
-  const [tlb, setTlb] = useState(-1);
-  const [allTech, setAllTech] = useState(false);   // les 4 premieres impressions, puis « Voir les autres »
-  const [cover, setCover] = useState(null);
-  const [armed, setArmed] = useState(null);
-  const [lb, setLb] = useState(-1);
-  const load = () => client.get(`/prints/groups/${groupId}/photos`).then(r => { setPhotos(r.data?.files || []); setCover(r.data?.cover_photo || null); }).catch(() => {});
-  useEffect(() => { if (groupId) load(); }, [groupId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const upload = async file => { const fd = new FormData(); fd.append("file", file);
-    await client.post(`/prints/groups/${groupId}/photos/upload`, fd, { headers: { "Content-Type": "multipart/form-data" } }); load(); };
-  const setCoverPhoto = async name => { try { await client.post(`/prints/groups/${groupId}/photo/${name}/cover`); setCover(name); onUpdated?.(); } catch (e) { showAlert(e.response?.data?.detail || e.message); } };
-  const del = async name => { try { await client.delete(`/prints/groups/${groupId}/photo/${name}`); setArmed(null); load(); } catch (e) { showAlert(e.response?.data?.detail || e.message); } };
-  const imgs = photos.filter(x => !isVideoUrl(x.url));
-  // Technique : pour chaque impression du groupe, son timelapse et ses captures des couches (une requete,
-  // faite a l'ouverture : l'onglet affiche son nombre tout de suite)
-  const pkey = prints.map(x => x.id).join(",");
-  useEffect(() => {
-    if (!groupId) return undefined;
-    let alive = true;
-    client.get(`/prints/groups/${groupId}/tech`).then(r => {
-      if (!alive) return;
-      setTech((r.data?.prints || []).map(x => ({ p: { id: x.id, translated_name: x.name, print_date: x.print_date }, plate: x.plate,
-        tl: x.timelapse ? { url: x.timelapse } : null,
-        snaps: (x.snaps || []).sort((a, b) => snapRank(a.name) - snapRank(b.name))
-          .map(f => ({ url: f.url, label: SNAP_NAMES[snapKey(f.name)] || snapKey(f.name) })) })));
-    }).catch(() => { if (alive) setTech([]); });
-    return () => { alive = false; };
-  }, [groupId, pkey]);
-  const techFlat = (tech || []).flatMap(r => [...(r.tl ? [{ url: r.tl.url, label: `Timelapse · ${r.p.translated_name || r.p.file_name || ""}` }] : []),
-    ...r.snaps.map(s => ({ url: s.url, label: `${s.label} · ${r.p.translated_name || r.p.file_name || ""}` }))]);
-  const techN = tech ? techFlat.length : 0;
-  const when = d => d ? new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "";
-  return (
-    <div className="card-sm" style={{ display: "flex", flexDirection: "column", gap: 4, padding: "10px 12px" }}>
-      {lb >= 0 && <Lightbox images={imgs.map(x => x.url)} index={lb} onClose={() => setLb(-1)}/>}
-      {tlb >= 0 && <Lightbox images={techFlat} index={tlb} onClose={() => setTlb(-1)}/>}
-      <MediaTabs tab={tab} setTab={setTab} souv={photos.length} tech={techN}
-        right={tab === "souv" ? <PhotoAddButton onPick={f => upload(f)}/> : null}/>
-      {tab === "tech" && (!tech ? <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 6px" }}>⏳ Lecture des impressions du groupe…</p>
-        : !tech.length ? <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 6px" }}>Ni timelapse ni capture des couches pour ses impressions.</p>
-        : <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {(allTech ? tech : tech.slice(0, 4)).map(r => { const base = techFlat.findIndex(x => x.url === (r.tl?.url || r.snaps[0]?.url));
-            return (
-              <div key={r.p.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                  {r.plate && <img src={r.plate} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
-                    style={{ width: 30, height: 30, borderRadius: 8, objectFit: "contain", flexShrink: 0, background: "var(--surface2)", border: "1px solid var(--border)" }}/>}
-                  <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
-                    {r.p.translated_name || r.p.file_name || `Impression ${r.p.id}`} <span style={{ color: "var(--muted)", fontWeight: 700 }}>· {when(r.p.print_date)}</span></span></span>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, alignItems: "center", touchAction: "pan-x pan-y", overscrollBehaviorX: "contain" }}>
-                  {r.tl && <TimelapseTile small url={r.tl.url} onOpen={() => setTlb(base)}/>}
-                  {r.snaps.map((s, i) => (
-                    <div key={s.url} onClick={() => setTlb(base + (r.tl ? 1 : 0) + i)} style={{ position: "relative", flexShrink: 0, cursor: "zoom-in" }}>
-                      <img src={s.url} alt={s.label} style={{ height: 84, width: "auto", borderRadius: 8, display: "block", boxShadow: "0 0 0 1px var(--border)" }}/>
-                      <span style={{ position: "absolute", bottom: 4, left: 4, background: "rgba(0,0,0,0.65)", color: "white", fontSize: 9, fontWeight: 700,
-                        padding: "2px 6px", borderRadius: 4, pointerEvents: "none" }}>{s.label}</span>
-                    </div>))}
-                </div>
-              </div>); })}
-          {!allTech && tech.length > 4 && <button onClick={() => setAllTech(true)} style={{ ...fBtn, alignSelf: "flex-start", fontSize: 12.5, padding: "6px 12px" }}>
-            Voir les {tech.length - 4} autres impressions</button>}
-        </div>)}
-      {tab === "souv" && !photos.length && <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 6px" }}>Aucune photo du groupe : ajoute la première avec ＋.</p>}
-      {tab === "souv" && photos.length > 0 && <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, touchAction: "pan-x pan-y", overscrollBehaviorX: "contain" }}>
-        {photos.map((ph, i) => { const isCover = cover === ph.name, arm = armed === ph.name;
-          return (
-            <div key={i} style={{ position: "relative", flexShrink: 0, borderRadius: 14, overflow: "hidden",
-              boxShadow: isCover ? "0 0 0 2px #22c55e" : "0 0 0 1px var(--border)" }}>
-              {isVideoUrl(ph.url)
-                ? <video src={ph.url} muted loop autoPlay playsInline preload="metadata" style={{ height: 110, width: 110, objectFit: "cover", display: "block" }}/>
-                : <img src={ph.url} alt="" onClick={() => setLb(imgs.findIndex(x => x.url === ph.url))}
-                  style={{ height: 110, width: 110, objectFit: "cover", display: "block", cursor: "zoom-in" }}/>}
-              <AdminOnly>
-                <button onClick={() => !isCover && setCoverPhoto(ph.name)} data-tip={isCover ? "Vignette de la galerie" : "Définir comme vignette"}
-                  style={{ position: "absolute", top: 5, left: 5, width: 24, height: 24, borderRadius: "50%", border: "none", cursor: isCover ? "default" : "pointer",
-                    background: "rgba(0,0,0,0.55)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center",
-                    filter: isCover ? "none" : "grayscale(1)", opacity: isCover ? 1 : 0.8 }}>⭐</button>
-                <button onClick={() => arm ? del(ph.name) : setArmed(ph.name)} onBlur={() => setArmed(null)} data-tip={arm ? "Confirmer la suppression" : "Supprimer"}
-                  style={{ position: "absolute", top: 5, right: 5, height: 24, width: arm ? "auto" : 24, padding: arm ? "0 8px" : 0, borderRadius: 12, border: "none",
-                    cursor: "pointer", background: arm ? "#ef4444" : "rgba(0,0,0,0.55)", color: "white", fontSize: arm ? 10.5 : 12, fontWeight: 700,
-                    display: "flex", alignItems: "center", justifyContent: "center" }}>{arm ? "Supprimer ?" : "🗑"}</button>
-              </AdminOnly>
-            </div>); })}
-      </div>}
-    </div>);
-}
-
 export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, cover_print_id: coverPrintIdProp, onClose, onDelete, onUngroup, onUpdated }) {
   useTrackDetail(`Fiche groupe · ${name || "#" + groupId}`);
   const isAdmin = useIsAdmin();
@@ -2376,7 +2279,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     </div>);
   const sections = (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <GroupPhotosV2 groupId={groupId} onUpdated={onUpdated} prints={prints}/>
+      <MediaGallery kind="group" id={groupId} refreshKey={prints.map(x => `${x.id}:${x.updated_at || ""}`).join(",")} onChanged={() => { loadPrints(); onUpdated?.(); }}/>
       {printsBlock}
       {filaments.length > 0 && <FilamentsV2 filaments={filaments} onSpoolClick={setSelSpool} onUnmap={setUnmapping}/>}
       {cards.map(({ d, prof, list }) => <MakerWorldCard key={`${d}:${prof || ""}`} designId={d} profile={prof} rateElsewhere group prints={list}
@@ -2778,297 +2681,6 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
       }}/>}
   </>);
 }
-
-
-function PhotoDeleteConfirm({ label, onCancel, onConfirm }) {
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:4000,
-      display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:16,
-        width:"100%", maxWidth:340, padding:20, border:"1px solid var(--border)" }}>
-        <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Supprimer la photo ?</p>
-        <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 18px" }}>{label}</p>
-        <div style={{ display:"flex", gap:8 }}>
-          <button onClick={onCancel} style={{ flex:1, padding:"10px", borderRadius:10,
-            border:"1px solid var(--border)", background:"var(--surface2)",
-            color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Annuler</button>
-          <button onClick={onConfirm} style={{ flex:2, padding:"10px", borderRadius:10,
-            border:"none", background:"#ef4444", color:"white", fontSize:13,
-            fontWeight:700, cursor:"pointer" }}>Supprimer</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const isVideoUrl = (u) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u || "");
-
-// Les medias d'une fiche (26/10/2026) : deux onglets, « Souvenirs » (mes photos et videos) et « Technique »
-// (le timelapse, les captures des couches dans l'ordre de l'impression). Une seule bande visible a la fois.
-const TL_NAME = "Video-Timelapse.mp4";
-// la fin d'abord (le resultat), puis en remontant vers la premiere couche
-const SNAP_ORDER = ["fail", "pct100", "pct99", "pct50", "layer2", "layer1"];
-const SNAP_NAMES = { layer1: "Couche 1", layer2: "Couche 2", pct50: "50 %", pct99: "99 %", pct100: "Fin", fail: "Échec" };
-const snapKey = name => (name || "").replace(/^snapshot-/, "").replace(/\.[^.]+$/, "");
-const snapRank = name => { const i = SNAP_ORDER.indexOf(snapKey(name)); return i < 0 ? 99 : i; };
-function MediaTabs({ tab, setTab, souv, tech, right }) {
-  const b = (k, label, n, c) => {
-    const on = tab === k;
-    return <button onClick={() => setTab(k)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "7px 10px",
-      borderRadius: 10, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, transition: "background .15s",
-      color: on ? "#fff" : n ? "var(--text2)" : "var(--muted)", opacity: on || n ? 1 : .6,
-      background: on ? `linear-gradient(135deg, ${c}, ${lighten(c)})` : "transparent", boxShadow: on ? `0 6px 14px -8px ${c}` : "none" }}>
-      {label}<span style={{ fontSize: 11, fontWeight: 900, padding: "0 6px", borderRadius: 8, background: on ? "rgba(255,255,255,.25)" : "var(--surface)" }}>{n}</span></button>;
-  };
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-      <div style={{ flex: 1, display: "flex", gap: 4, padding: 3, borderRadius: 13, background: "var(--surface2)" }}>
-        {b("souv", "📸 Souvenirs", souv, "#EC4899")}{b("tech", "🛠 Technique", tech, "#3B82F6")}</div>
-      {right}
-    </div>);
-}
-// le timelapse : une tuile large, lancee a la demande (rien ne se lit tant qu'on ne touche pas)
-function TimelapseTile({ url, label = "Timelapse", sub, onOpen, small }) {
-  return (
-    <div onClick={onOpen} data-tip="Lire le timelapse" style={{ position: "relative", flexShrink: 0, cursor: "pointer", borderRadius: 12, overflow: "hidden",
-      width: small ? 150 : "min(100%, 300px)", aspectRatio: "16 / 9", background: "linear-gradient(135deg, #1e293b, #0f172a)", boxShadow: "0 0 0 1px var(--border)" }}>
-      <video src={`${url}#t=1`} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", pointerEvents: "none" }}/>
-      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ width: small ? 34 : 44, height: small ? 34 : 44, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
-          background: "linear-gradient(135deg, #3B82F6, #8B5CF6)", color: "#fff", fontSize: small ? 13 : 16, boxShadow: "0 6px 16px rgba(0,0,0,.35)" }}>▶</span></span>
-      <span style={{ position: "absolute", left: 6, bottom: 6, right: 6, display: "flex", flexDirection: "column", gap: 1, pointerEvents: "none" }}>
-        <span style={{ alignSelf: "flex-start", fontSize: 10.5, fontWeight: 800, color: "#fff", padding: "2px 7px", borderRadius: 6, background: "rgba(0,0,0,.6)" }}>🎬 {label}</span>
-        {sub && <span style={{ alignSelf: "flex-start", fontSize: 10, fontWeight: 700, color: "#e2e8f0", padding: "1px 6px", borderRadius: 6, background: "rgba(0,0,0,.5)",
-          maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</span>}
-      </span>
-    </div>);
-}
-
-// Bande de vignettes d'un onglet de la galerie. Definie au niveau module (28/10/2026) : declaree dans
-// SnapshotGallery, elle etait recreee a chaque rendu du parent, React demontait donc la bande (defilement
-// remis au debut, videos relancees) des qu'un etat changeait. Tout ce qu'elle lit du parent arrive en props.
-// onDeleteItem est recu mais inutilise (la corbeille passe par onDeleteUpload), garde pour ne pas changer l'appel.
-function SnapRow({ title, items, startIdx = 0, onAdd, onDeleteItem, canCover = false,
-                   isAdmin, coverPhoto, confirmDelPhoto, setConfirmDelPhoto, setAsCover,
-                   flatItems, setLightbox, handleDelete, setDeletedNames, onDeleteUpload }) {
-  const scrollRef = React.useRef(null);
-  if (!items.length && !onAdd) return null;
-  const scroll = (dir) => scrollRef.current?.scrollBy({ left: dir * 120, behavior: "smooth" });
-  return (
-    <div style={{ marginBottom:12 }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <p style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", margin:0 }}>
-            {title} ({items.length})
-          </p>
-          {onAdd && (
-            <PhotoAddButton onPick={(f)=>onAdd(f)}/>
-          )}
-        </div>
-        {items.length > 2 && (
-          <div style={{ display:"flex", gap:4 }}>
-            <button onClick={()=>scroll(-1)} style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:"50%", width:22, height:22, cursor:"pointer", fontSize:14, color:"var(--text)", display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
-            <button onClick={()=>scroll(1)}  style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:"50%", width:22, height:22, cursor:"pointer", fontSize:14, color:"var(--text)", display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
-          </div>
-        )}
-      </div>
-      {/* pan-x pan-y : le glisse vertical fait defiler la fiche ; la fiche porte data-no-pull, le
-          tirer-pour-rafraichir ne se declenche donc pas depuis cette bande. */}
-      <div ref={scrollRef} style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6,
-        scrollbarWidth:"none", touchAction:"pan-x pan-y", overscrollBehaviorX:"contain" }}>
-        {items.map((item, i) => {
-          const isCover = item.name && item.name === coverPhoto;
-          const armed   = confirmDelPhoto === item.url;
-          return (
-          <div key={i} style={{ position:"relative", flexShrink:0 }}>
-            {/* Aucun handler tactile ici : le defilement reste 100% natif. */}
-            <div onClick={() => setLightbox(flatItems[startIdx + i])}
-              style={{ cursor:"pointer" }}>
-              {isVideoUrl(item.url) ? (
-                <video src={item.url} muted loop autoPlay playsInline preload="metadata"
-                  style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
-                    border: isCover ? "2px solid #22c55e" : "1px solid var(--border)", display:"block" }}/>
-              ) : (
-                <img src={item.url} alt={item.label}
-                  style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
-                    border: isCover ? "2px solid #22c55e" : "1px solid var(--border)",
-                    display:"block" }}
-                  onError={e => { e.currentTarget.style.display="none"; }}/>
-              )}
-            </div>
-            <span style={{ position:"absolute", bottom:4, left:4,
-              background:"rgba(0,0,0,0.65)", color:"white",
-              fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:4,
-              pointerEvents:"none" }}>
-              {item.label}
-            </span>
-            {/* Etoile a gauche, doree si principale et grise sinon. Reservee
-                aux vraies photos : les milestones sont des captures
-                automatiques, pas des cliches a mettre en avant. */}
-            {isAdmin && canCover && item.name && (
-              <button onClick={()=> !isCover && setAsCover(item.name)}
-                title={isCover ? "Photo principale" : "Définir comme photo principale"}
-                style={{ position:"absolute", top:4, left:4,
-                  width:22, height:22, borderRadius:"50%", border:"none",
-                  cursor: isCover ? "default" : "pointer",
-                  background:"rgba(0,0,0,0.6)", fontSize:11, lineHeight:1,
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  filter: isCover ? "none" : "grayscale(1)", opacity: isCover ? 1 : 0.75 }}>⭐</button>
-            )}
-            {!isAdmin && isCover && (
-              <span style={{ position:"absolute", top:4, left:4, fontSize:11,
-                pointerEvents:"none" }}>⭐</span>
-            )}
-            {isAdmin && (
-              <div style={{ position:"absolute", top:4, right:4 }}>
-                <button
-                  onClick={() => {
-                    if (!armed) { setConfirmDelPhoto(item.url); return; }
-                    setConfirmDelPhoto(null);
-                    if (item.snap) handleDelete({ stopPropagation(){} }, item.snap);
-                    else { setDeletedNames(prev=>new Set([...prev,item.name])); onDeleteUpload?.(item.name); }
-                  }}
-                  onBlur={()=>setConfirmDelPhoto(null)}
-                  title={armed ? "Confirmer la suppression" : "Supprimer"}
-                  style={{ height:22, width: armed ? "auto" : 22, padding: armed ? "0 7px" : 0,
-                    borderRadius: armed ? 11 : "50%", border:"none", cursor:"pointer",
-                    background: armed ? "#ef4444" : "rgba(0,0,0,0.6)", color:"white",
-                    fontSize: armed ? 9 : 11, fontWeight:600, lineHeight:1,
-                    display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  {armed ? "Supprimer ?" : "🗑"}</button>
-              </div>
-            )}
-          </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], onDeleteUpload,
-                           onCountChange, coverPhoto, onCoverChange }) {
-  const [lightbox, setLightbox] = useState(null);
-  const [diskFiles, setDiskFiles] = useState([]);
-  const [photoToDelete, setPhotoToDelete] = useState(null);
-  const [deletedNames, setDeletedNames] = useState(new Set());
-  const [tab, setTab] = useState(null);
-  const isAdmin = useIsAdmin();
-
-  // Plus d'appui long : sur une bande qui defile horizontalement, le scroll
-  // natif capte le geste avant React et le menu s'ouvrait en plein
-  // defilement. Deux boutons visibles sur chaque vignette a la place.
-  const [confirmDelPhoto, setConfirmDelPhoto] = useState(null);  // url armee
-
-  const setAsCover = async (name) => {
-    if (!name) return;
-    try {
-      await client.post(`/prints/${printId}/photo/${name}/primary`);
-      onCoverChange?.(name);
-    } catch (e) { showAlert("Erreur : " + (e.response?.data?.detail || e.message)); }
-  };
-
-  const reloadDiskFiles = () => client.get("/prints/" + printId + "/snapshots")
-      .then(r => setDiskFiles(r.data.files || []))
-      .catch(() => {});
-
-  useEffect(() => { reloadDiskFiles(); }, [printId]);
-
-  const LABELS = { layer1:"Couche 1", layer2:"Couche 2", pct50:"50%", pct99:"99%", pct100:"100%", manual:"Manuel" };
-
-  const handleDelete = async (e, s) => {
-    e.stopPropagation();
-    try {
-      await client.delete("/prints/" + printId + "/snapshots/" + s.id);
-      onDelete(s.id);
-      if (lightbox && lightbox.snap && lightbox.snap.id === s.id) setLightbox(null);
-    } catch(err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
-  };
-
-  const snapByName = {};
-  (snaps||[]).forEach(s => {
-    const base = s.file_path ? s.file_path.split("/").pop() : ("snapshot-" + s.trigger + ".jpg");
-    snapByName[base] = s;
-  });
-
-  // Fusionner photos disk + photos uploadées manuellement
-  // userPhotos ignorés : déjà couverts par diskFiles via PrintSnapshot(trigger=manual)
-  const extraPhotos = [];
-  const baseItems = diskFiles.length > 0
-    ? diskFiles.map(f => {
-        const s = snapByName[f.name] || null;
-        const FNAME_LABELS = {
-          "snapshot-layer1":"Couche 1","snapshot-layer2":"Couche 2",
-          "snapshot-pct50":"50%","snapshot-pct99":"99%","snapshot-pct100":"100%"
-        };
-        const fname = f.name?.replace(/\.[^.]+$/, "") || "";
-        return { url: f.url, name: f.name, snap: s,
-          label: s ? (LABELS[s.trigger] || FNAME_LABELS[s.trigger] || s.trigger)
-                   : (FNAME_LABELS[fname] || fname) };
-      })
-    : (snaps||[]).map(s => ({
-        url: apiUrl("/prints/" + printId + "/snapshot/" + s.trigger),
-        name: "snapshot-" + s.trigger + ".jpg", snap: s,
-        label: LABELS[s.trigger] || s.trigger,
-      }));
-
-  const allItems = [...baseItems, ...extraPhotos].filter(i => !deletedNames.has(i.name));
-  useEffect(()=>{ onCountChange?.(allItems.length); }, [allItems.length]);
-
-  // Souvenirs : mes photos, puis mes videos (en boucle) ; Technique : le timelapse, puis les captures des
-  // couches de la fin vers le debut (Fin -> 99 % -> 50 % -> Couche 2 -> Couche 1)
-  const isSnapName = n => /^snapshot-/.test(n || "");
-  const vids = (userPhotos || []).filter(x => isVideoUrl(x.url) && x.filename !== TL_NAME && !deletedNames.has(x.filename))
-    .map(x => ({ url: x.url, name: x.filename, label: "Vidéo" }));
-  const photoItems = [...allItems.filter(i => !isSnapName(i.name)), ...vids];
-  const milestoneItems = allItems.filter(i => isSnapName(i.name))
-    .map(i => ({ ...i, label: SNAP_NAMES[snapKey(i.name)] || i.label }))
-    .sort((a, b) => snapRank(a.name) - snapRank(b.name));
-  const tl = (userPhotos || []).find(x => x.filename === TL_NAME && !deletedNames.has(x.filename));
-  const techItems = [...(tl ? [{ url: tl.url, name: tl.filename, label: "Timelapse" }] : []), ...milestoneItems];
-  const cur = tab || (photoItems.length || !techItems.length ? "souv" : "tech");
-
-  const flatItems = cur === "souv" ? photoItems : techItems;   // la visionneuse reste dans l'onglet ouvert
-  const lbIdx = lightbox ? flatItems.findIndex(i => i.url === lightbox.url) : -1;
-  const moveLb = (dir) => {
-    const ni = (lbIdx + dir + flatItems.length) % flatItems.length;
-    setLightbox(flatItems[ni]);
-  };
-
-  return (
-    <>
-      <div className="card-sm" style={{ padding: "10px 12px 4px" }}>
-        <MediaTabs tab={cur} setTab={setTab} souv={photoItems.length} tech={techItems.length}/>
-        {cur === "souv"
-          ? <SnapRow title="Photos et vidéos" items={photoItems} startIdx={0} canCover
-              onAdd={async(f)=>{ await onUpload?.(f); reloadDiskFiles(); }} onDeleteItem={onDeleteUpload}
-              isAdmin={isAdmin} coverPhoto={coverPhoto} confirmDelPhoto={confirmDelPhoto}
-              setConfirmDelPhoto={setConfirmDelPhoto} setAsCover={setAsCover} flatItems={flatItems}
-              setLightbox={setLightbox} handleDelete={handleDelete} setDeletedNames={setDeletedNames}
-              onDeleteUpload={onDeleteUpload}/>
-          : <>
-            {tl && <div style={{ marginBottom: 12 }}><TimelapseTile url={tl.url} onOpen={() => setLightbox(techItems[0])}/></div>}
-            <SnapRow title="Captures des couches" items={milestoneItems} startIdx={tl ? 1 : 0}
-              isAdmin={isAdmin} coverPhoto={coverPhoto} confirmDelPhoto={confirmDelPhoto}
-              setConfirmDelPhoto={setConfirmDelPhoto} setAsCover={setAsCover} flatItems={flatItems}
-              setLightbox={setLightbox} handleDelete={handleDelete} setDeletedNames={setDeletedNames}
-              onDeleteUpload={onDeleteUpload}/>
-            {!techItems.length && <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>
-              Ni timelapse ni capture des couches pour cette impression.</p>}
-          </>}
-      </div>
-      {/* Hors de la fiche (portail) : dans le panneau qui defile, la visionneuse
-          restait coincee a l'interieur au lieu de couvrir l'ecran. */}
-      {lightbox && lbIdx >= 0 && <Lightbox images={flatItems.map(i => ({ url: i.url, label: i.label }))} index={lbIdx}
-        onClose={() => setLightbox(null)}/>}
-    {photoToDelete && <PhotoDeleteConfirm
-      label={photoToDelete.label||photoToDelete.name}
-      onCancel={()=>setPhotoToDelete(null)}
-      onConfirm={()=>{ setDeletedNames(prev=>new Set([...prev,photoToDelete.name])); onDeleteUpload&&onDeleteUpload(photoToDelete.name); setPhotoToDelete(null); }}/> }
-    </>
-  );
-}
-
 
 
 // Galerie : la mienne, ou celles de mes copains reunies (onglet a part, en
