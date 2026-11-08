@@ -2514,13 +2514,15 @@ def _replace(order: list, old: list, new: list) -> list:
 async def _load_spots(jobs: list) -> None:
     """Ou prendre chaque bobine a charger (07/11/2026) : aligne sur load_ids, la bobine conseillee de ce filament (rangee,
     hors de l'imprimante ; une entamee d'abord, pour la finir), son emplacement, et combien d'autres sont rangees.
-    Et ou ranger celle qui sort (08/11/2026, out_spots, aligne aussi) : comme le fera le rangement a sa sortie (sa place,
-    a ranger, le rangement unique ; echange intelligent : la case que libere celle qu'on charge)."""
+    Et celle qui sort (08/11/2026, out_spots, aligne aussi) : son slot dans l'imprimante (« AMS-A slot 3 » : celui ou elle
+    est, ou celui que lui aura donne un plateau d'avant, chaque bobine chargee prenant le slot de celle qu'elle remplace ;
+    live : elle y est deja), et ou la ranger ensuite, comme le fera le rangement a sa sortie (sa place, a ranger, le
+    rangement unique ; echange intelligent : la case que libere celle qu'on charge)."""
     fids = {f for j in jobs for f in (j.get("load_ids") or []) if f}
     outs = {f for j in jobs for f in (j.get("swap_out_ids") or []) if f}
     if not fids:
         return
-    by, inpr = {}, {}
+    by, inpr, slot_of = {}, {}, {}
     try:                                   # une lecture qui echoue ne fait jamais tomber le planning
         from sqlalchemy import select
         from ..db.session import AsyncSessionLocal
@@ -2540,6 +2542,7 @@ async def _load_spots(jobs: list) -> None:
     for sid, fid, loc, rem, pid, full in rows:
         if in_printer(loc):
             inpr.setdefault(fid, (sid, pid))
+            slot_of.setdefault(fid, (loc, sid))                     # (slot, bobine qui y est)
             continue
         if rem is not None and rem <= 0:
             continue
@@ -2574,6 +2577,17 @@ async def _load_spots(jobs: list) -> None:
             else:
                 ospots.append({"spool": a[0] if a else None, "where": SP.TO_STORE, "how": "store", "out": a[0] if a else None,
                                "last": SP.path_of(pl, a[1]) if a and leaf(a[1]) else None})
+        # les slots, plateau apres plateau : celle qu'on charge prend le slot de celle qui sort
+        for i, o in enumerate(j.get("swap_out_ids") or []):
+            if not o or i >= len(ospots) or not ospots[i]:
+                continue
+            got = slot_of.pop(o, None)
+            if got:
+                ospots[i]["slot"] = got[0]
+                ospots[i]["live"] = bool(got[1] and got[1] == ospots[i].get("out"))
+                lids = j.get("load_ids") or []
+                if i < len(lids) and lids[i]:
+                    slot_of[lids[i]] = (got[0], None)
         if any(ospots):
             j["out_spots"] = ospots
 
@@ -2583,8 +2597,12 @@ def _spot_txt(sp) -> str:
 
 
 def _out_txt(sp) -> str:
-    """Ou ranger la bobine qui sort (08/11/2026) : « (↩ Tiroir › Colonne 3-2) », « (↩ À ranger) »."""
-    return f" (↩ {sp['where']})" if sp and sp.get("where") else ""
+    """La bobine qui sort (08/11/2026) : son slot, puis ou la ranger : « (🖨 AMS-A slot 3, puis ↩ Tiroir › Colonne 3-2) »."""
+    if not sp:
+        return ""
+    bits = [f"🖨 {sp['slot']}" if sp.get("slot") else None, f"↩ {sp['where']}" if sp.get("where") else None]
+    bits = [b for b in bits if b]
+    return f" ({', puis '.join(bits)})" if bits else ""
 
 
 # ── les rappels (boucle des notifications) ───────────────────────────────────

@@ -363,20 +363,21 @@ export function FilLink({ id, label, spool = null }) {
     {open && createPortal(<div onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
       <FilamentSheetFromSpool filamentId={id} spoolId={spool} onClose={() => setOpen(false)}/></div>, document.body)}</>;
 }
-// ou ranger la bobine qui sort (08/11/2026) : « ↩ Tiroir › Colonne 3-2 » (la case que libere celle qu'on charge, ou sa place),
-// « ↩ À ranger » ; toucher ouvre cette case (clignotante)
+// la bobine qui sort (08/11/2026) : son slot dans l'imprimante, « 🖨 AMS-A slot 3 » (toucher montre l'imprimante, le slot
+// clignote, quand elle y est deja) ; ou la ranger ensuite au survol (la case que libere celle qu'on charge, sa place, a ranger)
 export function OutSpot({ sp }) {
   const [open, setOpen] = useState(false);
-  if (!sp?.where) return null;
-  const tip = sp.how === "swap" ? "Range-la dans la case que libère la bobine que tu charges (échange intelligent)"
-    : sp.how === "home" ? "Range-la à sa place" : sp.how === "single" ? "Elle retourne au rangement"
-    : `Elle sera à ranger : tu diras où tu la mets${sp.last ? ` (sa dernière place : ${sp.last})` : ""}`;
-  const can = sp.spool && (sp.how === "swap" || sp.how === "home");
-  return <><span role={can ? "button" : undefined} tabIndex={can ? 0 : undefined} data-tip={tip + (can ? " — toucher pour la voir" : "")}
+  if (!sp?.slot) return null;
+  const after = !sp.where ? "" : sp.how === "swap" ? `ensuite, range-la dans la case que libère celle que tu charges : ${sp.where} (échange intelligent)`
+    : sp.how === "home" ? `ensuite, range-la à sa place : ${sp.where}` : sp.how === "single" ? `ensuite, elle retourne au rangement (${sp.where})`
+    : `ensuite, elle sera à ranger${sp.last ? ` (sa dernière place : ${sp.last})` : ""}`;
+  const can = !!(sp.live && sp.out);
+  return <><span role={can ? "button" : undefined} tabIndex={can ? 0 : undefined}
+    data-tip={`Dans ${sp.slot}${sp.live ? "" : " (d'ici là)"}${after ? ` · ${after}` : ""}${can ? " — toucher pour la voir" : ""}`}
     onClick={can ? e => { e.stopPropagation(); setOpen(true); } : undefined}
-    style={{ cursor: can ? "pointer" : "default", fontWeight: 800, color: "#0369A1", whiteSpace: "nowrap" }}> (↩ {sp.where})</span>
+    style={{ cursor: can ? "pointer" : "default", fontWeight: 800, color: "#0369A1", whiteSpace: "nowrap" }}> (🖨 {sp.slot})</span>
     {open && createPortal(<div onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
-      <LocateSheet spoolId={sp.spool} home={sp.how === "home"} onClose={() => setOpen(false)}/></div>, document.body)}</>;
+      <LocateSheet spoolId={sp.out} onClose={() => setOpen(false)}/></div>, document.body)}</>;
 }
 // spool : la case a montrer ; out : la bobine qui sort
 const outSpool = (j, i) => j.out_spots?.[i]?.out;
