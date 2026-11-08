@@ -286,7 +286,8 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
                               p.get("printed") or 0, (p.get("printing_n") or 1) if p.get("printing") else 0, p.get("weight_g"), p.get("thumb"),
                               p.get("printed_all") or p.get("printed") or 0))
             if m.get("since"):
-                d["_since"][did] = {"since": m["since"], "before": sum(max(0, (p.get("printed_all") or 0) - (p.get("printed") or 0)) for p in plates)}
+                d["_since"][did] = {"since": m["since"], "auto": bool(m.get("since_auto")),
+                                    "before": sum(max(0, (p.get("printed_all") or 0) - (p.get("printed") or 0)) for p in plates)}
         elif m.get("seconds"):
             fils = [{"filament_id": (f.get("chosen") or {}).get("filament_id"), "type": f.get("type"), "color": f.get("color"),
                      "g": round((f.get("g") or 0) / qty, 1)} for f in m.get("filaments") or []]

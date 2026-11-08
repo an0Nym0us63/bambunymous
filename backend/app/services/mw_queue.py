@@ -10,7 +10,10 @@ Reglage MW_QUEUE (JSON) :
 qty : nombre d'exemplaires voulus (temps, filament, cout et stock multiplies).
 "since" (08/11/2026) : {"<cle de ligne>": "2026-11-08T14:02:00"} : « repartir a zero » ; pour cette ligne, seules les
 impressions faites depuis cette date comptent comme faites (un modele deja imprime, remis dans la file pour le refaire).
-Le passe n'est pas perdu : chaque plateau garde aussi son total (printed_all).
+Le passe n'est pas perdu : chaque plateau garde aussi son total (printed_all). "" : explicitement tout le passe.
+"added" (08/11/2026) : {"<design_id>": date} : quand un modele est apparu dans la file ; sans « since » pour la ligne, ses
+impressions comptent a partir de la (un modele deja imprime qu'on y remet, c'est pour le refaire). "seen" : les modeles
+deja vus dans la file (date d'arrivee : reprise du journal des succes pour ceux d'avant le 08/11/2026, ou None) ; "seen_colls" : les collections lues.
 Plusieurs profils retenus (06/11/2026, un modele qui regroupe des objets differents : pêche, banane…) : le premier
 reste sous "<design_id>", les suivants sous "<design_id>~<instance_id>". Chacun fait sa ligne dans « A faire » (son
 design_id est cette cle, mw_id le modele) et ses plateaux dans le planning.
@@ -304,10 +307,80 @@ async def set_since(design_id: str, on: bool) -> dict:
     d = await _load()
     if on:
         d["since"][did] = datetime.utcnow().replace(microsecond=0).isoformat()
+    elif (d.get("added") or {}).get(did.split("~")[0]):
+        d["since"][did] = ""                          # une arrivee datee : « tout le passe » doit se dire
     else:
         d["since"].pop(did, None)
     await _save(d)
-    return {"since": d["since"].get(did)}
+    return {"since": since_of(d, did)}
+
+
+def since_of(cfg: dict, rid: str) -> str | None:
+    """A partir de quand les impressions comptent pour cette ligne : son « repartir a zero », sinon l'arrivee du modele
+    dans la file ; None : tout le passe."""
+    s = cfg.get("since") or {}
+    if rid in s:
+        return s[rid] or None
+    return (cfg.get("added") or {}).get(str(rid).split("~")[0]) or None
+
+
+async def _track_added(cfg: dict, designs: dict, where: dict, chosen: list) -> None:
+    """Les modeles arrives dans la file (08/11/2026) : datés, pour que leurs impressions d'avant ne comptent plus. Ceux
+    d'avant la premiere lecture, et ceux d'une collection qu'on vient de choisir, ne le sont pas (rien n'y a ete ajoute) ;
+    un modele sorti de la file l'oublie (remis plus tard, il repart de ce moment)."""
+    from datetime import datetime
+    now = datetime.utcnow().replace(microsecond=0).isoformat()
+    seen, changed = cfg.get("seen"), False
+    old_colls = set(cfg.get("seen_colls") or [])
+    if not isinstance(seen, dict):
+        # la premiere fois : la date d'arrivee que le journal des succes a deja notee (queue_seen) ; celles de sa toute
+        # premiere lecture (le meme quart d'heure que la plus ancienne) ne disent pas quand le modele est arrive
+        qs = {}
+        try:
+            from .ach_log import _get as _alog
+            qs = {str(k): str(v)[:19] for k, v in ((await _alog()).get("queue_seen") or {}).items() if v}
+        except Exception:
+            logger.exception("[FILE] journal des arrivees illisible")
+        boot = min(qs.values()) if qs else None
+        cfg["seen"], added = {}, cfg.setdefault("added", {})
+        for d in designs:
+            t = qs.get(str(d))
+            late = bool(t and boot and (datetime.fromisoformat(t) - datetime.fromisoformat(boot)).total_seconds() > 900)
+            cfg["seen"][d] = t if late else None
+            if late:
+                added[d] = t
+        changed = True
+    else:
+        added = cfg.setdefault("added", {})
+        for d in designs:
+            if d in seen:
+                continue
+            fresh_coll = all(c not in old_colls for c in where.get(d, []))   # que des collections qu'on vient de choisir
+            seen[d] = None if fresh_coll else now
+            if not fresh_coll:
+                added[d] = now
+            changed = True
+        for d in [x for x in seen if x not in designs]:
+            seen.pop(d)
+            added.pop(d, None)
+            for k in [k for k in cfg.get("since") or {} if k == d or k.startswith(d + "~")]:
+                cfg["since"].pop(k)
+            changed = True
+    if sorted(chosen) != sorted(old_colls):
+        cfg["seen_colls"], changed = list(chosen), True
+    if changed:
+        # ecrit sans invalider le calcul en cours : il se sert deja de ces dates
+        from ..db.session import AsyncSessionLocal
+        from .settings_service import set_setting
+        try:
+            raw = await _load()
+            for k in ("seen", "added", "since", "seen_colls"):
+                if k in cfg:
+                    raw[k] = cfg[k]
+            async with AsyncSessionLocal() as db:
+                await set_setting(db, KEY, json.dumps(raw, ensure_ascii=False))
+        except Exception:
+            logger.exception("[FILE] arrivees dans la file")
 
 
 def _after(entries: list, since: str | None) -> list:
@@ -941,6 +1014,7 @@ async def _compute(fresh: bool = False) -> dict:
         for x in await _collection_designs(cid, fresh):
             designs.setdefault(x["design_id"], x)
             where.setdefault(x["design_id"], []).append(colls[cid])
+    await _track_added(cfg, designs, {d: [c for c in chosen if colls[c] in w] for d, w in where.items()}, chosen)
 
     sem = asyncio.Semaphore(4)
 
@@ -1093,8 +1167,10 @@ async def _compute(fresh: bool = False) -> dict:
             ids_, pg_, pc_ = ({str(x.get(i) or "") for x in profiles for i in ("instance_id", "profile_id")} - {""},
                               {pl.get("index"): _num(pl.get("weight_g")) or sum(_num(f.get("g")) for f in pl.get("filaments") or [])
                                for pl in prof.get("plates") or []}, plate_pieces(did, prof))
-            since = (cfg.get("since") or {}).get(rid)
+            since = since_of(cfg, rid)
             row["since"] = since
+            # arrive dans la file a cette date, sans « repartir a zero » a la main (08/11/2026)
+            row["since_auto"] = bool(since and rid not in (cfg.get("since") or {}))
             every = _printed_of(done_plates.get(str(did), []), prof, ids_, pg_, pc_, strict=multi)
             mine = _printed_of(_after(done_plates.get(str(did), []), since), prof, ids_, pg_, pc_, strict=multi) if since else every
             row["plates"] = [{"index": pl.get("index"), "name": pl.get("name") or "", "thumb": pl.get("thumb"),

@@ -487,8 +487,8 @@ export function ModelSheet({ g: g0, now, edit, onClose, onPick, act: act0, jobs,
       const nd = dl.filter(p => p.done >= p.qty).length;
       return sec(`Plateau par plateau (${g.jobs.length} à faire${nd ? ` · ${nd} fait${nd > 1 ? "s" : ""}` : ""})`); })()}
     {/* reparti a zero (08/11/2026) : le passe ne compte plus, il reste dit */}
-    {since?.[g0.id] && <div style={{ fontSize: 12, fontWeight: 700, color: "#0369A1", padding: "6px 10px", borderRadius: 10, background: "rgba(14,165,233,0.1)" }}>
-      ↺ Reparti à zéro le {new Date(`${since[g0.id].since}Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} : seules les impressions faites depuis comptent
+    {since?.[g0.id] && (!since[g0.id].auto || since[g0.id].before > 0) && <div style={{ fontSize: 12, fontWeight: 700, color: "#0369A1", padding: "6px 10px", borderRadius: 10, background: "rgba(14,165,233,0.1)" }}>
+      {since[g0.id].auto ? "➕ Ajouté à la liste" : "↺ Reparti à zéro"} le {new Date(`${since[g0.id].since}Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} : seules les impressions faites depuis comptent
       {since[g0.id].before ? ` (${since[g0.id].before} plateau${since[g0.id].before > 1 ? "x" : ""} imprimé${since[g0.id].before > 1 ? "s" : ""} avant)` : ""}.</div>}
     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
       {[...g.jobs.map(j => ({ j })), ...[g0.id, ...(on ? vdids : [])].flatMap(id => (done || {})[id] || []).filter(p => p.done >= p.qty).map(p => ({ p }))]

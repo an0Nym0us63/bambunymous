@@ -53,7 +53,7 @@ function statusText(r) {
 // Les plateaux d'un modele, un par pastille : vert = faisable tout de suite avec
 // l'AMS ; coche = deja imprime par moi ; gris = il manque un filament dans l'AMS ;
 // orange avec sablier = en cours d'impression.
-function PlateChips({ plates, designId, edit, onChanged }) {
+function PlateChips({ plates, designId, edit, onChanged, since = null }) {
   // un plateau deja fait : ses prints, et pour chacun ce qu'il compte (05/11/2026 : un plateau relance comptait pour
   // une deuxieme serie) ; on dit « ne compte pas », ou combien d'exemplaires il a donnes
   const pick = async (e, p) => {
@@ -92,7 +92,7 @@ function PlateChips({ plates, designId, edit, onChanged }) {
         const tip = `Plateau ${p.index}${p.name ? ` · ${p.name}` : ""} : `
           + (p.ready ? "faisable maintenant avec l'AMS" : "un filament manque dans l'AMS")
           + (done ? ` · déjà imprimé${p.printed > 1 ? ` ${p.printed}×` : ""}` : " · pas encore imprimé")
-          + ((p.printed_all || 0) > (p.printed || 0) ? ` · ${p.printed_all}× au total (avant de repartir à zéro compris)` : "")
+          + (since ? ` (depuis le ${sinceTxt(since)}) · avant : ${Math.max(0, (p.printed_all || 0) - (p.printed || 0))}× · au total : ${p.printed_all || 0}×` : "")
           + (p.printing ? " · en cours d'impression" : "");
         return (
           <span key={p.index} data-tip={tip + (edit && p.printed ? " · touche pour corriger ce qui compte" : "")} onClick={e => pick(e, p)}
@@ -290,7 +290,7 @@ export default function MwQueue() {
         isAdmin && { icon: "＋", tone: "#8B5CF6", label: `Un exemplaire de plus (×${(r.qty || 1) + 1})`, onClick: () => setQty(r.design_id, Math.min(99, (r.qty || 1) + 1)) },
         isAdmin && (r.qty || 1) > 1 && { icon: "－", tone: "#8B5CF6", label: `Un de moins (×${r.qty - 1})`, onClick: () => setQty(r.design_id, r.qty - 1) },
         isAdmin && (r.since
-          ? { icon: "↺", tone: "#0EA5E9", label: "Recompter tout le passé", hint: `Reparti à zéro le ${sinceTxt(r.since)} : les impressions d'avant compteront de nouveau`, onClick: () => setSince(r.design_id, false) }
+          ? { icon: "↺", tone: "#0EA5E9", label: "Recompter tout le passé", hint: `${r.since_auto ? "Ajouté" : "Reparti à zéro"} le ${sinceTxt(r.since)} : les impressions d'avant compteront de nouveau`, onClick: () => setSince(r.design_id, false) }
           : { icon: "↺", tone: "#0EA5E9", label: "Repartir à zéro", hint: "Pour le refaire : seules les impressions faites désormais comptent (le passé reste visible)", onClick: () => setSince(r.design_id, true) }),
         isAdmin && r.planned && { icon: "📌", label: "Oublier le plan retenu", hint: "Revient au profil et aux filaments par défaut", danger: true, onClick: () => forget(r.design_id) },
       ],
@@ -531,10 +531,12 @@ export default function MwQueue() {
                       : <span data-tip="Profil retenu par l'appli, tous les plateaux, filament le plus proche du stock" style={{ ...tag, color:"var(--muted)", background:"var(--surface)", border:"1px dashed var(--border)" }}>Par défaut</span>}
                     {r.printed > 0 && <span style={{ ...tag, color:"#8B5CF6", background:"rgba(139,92,246,0.14)" }}>✓ imprimé {r.printed}×</span>}
                     {r.since && (() => { const before = (r.plates || []).reduce((s, p) => s + Math.max(0, (p.printed_all || 0) - (p.printed || 0)), 0);
-                      const all = (r.plates || []).reduce((s, p) => s + (p.printed_all || 0), 0);
-                      return <span data-tip={`Reparti à zéro le ${sinceTxt(r.since)} : seules les impressions faites depuis comptent pour le planning. `
-                        + `Avant : ${before} plateau${before > 1 ? "x" : ""} imprimé${before > 1 ? "s" : ""} · au total ${all}`}
-                        style={{ ...tag, color:"#0369A1", background:"rgba(14,165,233,0.14)" }}>↺ depuis le {sinceTxt(r.since)}{before ? ` · ${before} avant` : ""}</span>; })()}
+                      const all = (r.plates || []).reduce((s, p) => s + (p.printed_all || 0), 0), after = all - before;
+                      // ajoute a la file (08/11/2026) : dit seulement s'il avait deja ete imprime ; « repartir a zero » : toujours
+                      if (r.since_auto && !before) return null;
+                      return <span data-tip={`${r.since_auto ? "Ajouté à la liste" : "Reparti à zéro"} le ${sinceTxt(r.since)} : seules les impressions faites depuis comptent pour le planning. `
+                        + `Depuis : ${after} plateau${after > 1 ? "x" : ""} · avant : ${before} · au total : ${all}`}
+                        style={{ ...tag, color:"#0369A1", background:"rgba(14,165,233,0.14)" }}>{r.since_auto ? "➕ ajouté" : "↺ depuis"} le {sinceTxt(r.since)} · {after} depuis · {before} avant</span>; })()}
                   </span>
                   <span style={{ display:"block", fontSize:11, fontWeight:600, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {r.profile ? `${r.profile.title || "Profil"}${r.profile.plates < r.profile.plates_total ? ` · ${r.profile.plates}/${r.profile.plates_total} plateaux` : ""}` : "profil inconnu"}</span>
@@ -564,7 +566,7 @@ export default function MwQueue() {
                         color: x.n ? "#4F46E5" : "#DC2626", background: x.n ? "rgba(99,102,241,0.12)" : "rgba(220,38,38,0.1)", maxWidth:"100%" }}>
                       📅 {pr ? `${prioOf(pr)[1]} ` : ""}{x.n ? `Planning : ${x.n} plateau${x.n > 1 ? "x" : ""} · dès ${when(x.first)} · fini ${when(x.last)}` : "Planning : non planifiable"}
                       {x.n > 0 && x.blocked > 0 && <span style={{ color:"#DC2626", whiteSpace:"nowrap" }}> · ⛔ {x.blocked}</span>}</span>{acts}</span>; })()}
-                  {r.plates?.length > 1 && <PlateChips plates={r.plates} designId={r.mw_id || r.design_id} edit={isAdmin} onChanged={refresh}/>}
+                  {r.plates?.length > 1 && <PlateChips plates={r.plates} designId={r.mw_id || r.design_id} edit={isAdmin} onChanged={refresh} since={r.since}/>}
                   {/* deja fait en entier (08/11/2026) : remis dans la file pour le refaire, il ne planifiait rien sans rien dire */}
                   {r.redo_hint && <span style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginTop:6, padding:"5px 6px 5px 10px", borderRadius:12,
                     fontSize:11.5, fontWeight:800, color:"#0369A1", background:"rgba(14,165,233,0.1)", border:"1px dashed rgba(14,165,233,0.45)" }}>
