@@ -460,8 +460,8 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       {occ && marks?.[occ.id] != null && <span className="bn-mark">{marks[occ.id]}</span>}
       {occ ? <>
         <span className="bn-num">{num}{!p.single && p.spools.length > 1 ? ` · ${p.spools.length}` : ""}</span>
-        <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={embed ? 22 : 40} thick={embed ? 10 : 20}/>
-          : edge ? <SpoolEdge s={occ} len="100%" thick={embed ? 10 : EDGE_H}/> : <Swatch s={occ} size={embed ? 14 : 24}/>}</span>
+        <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={embed ? 26 : 40} thick={embed ? 12 : 20}/>
+          : edge ? <SpoolEdge s={occ} len="100%" thick={embed ? 15 : EDGE_H}/> : <Swatch s={occ} size={embed ? 16 : 24}/>}</span>
         <span className="bn-ct-name">{occ.name}</span>
         {info.length > 0 && <span className="bn-ct-sub">{info.join(" · ")}</span>}
       </> : <span className="bn-num-free">{num}</span>}
@@ -491,9 +491,11 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       background: "color-mix(in srgb, #8B5CF6 4%, var(--surface2))" }}>
       <button type="button" onClick={e => menu(e, p)} data-tip={`${p.name} · ${takenOf(p, kids)} pris sur ${leafCountOf(p, kids)}`} style={{ display: "flex", flexDirection: "column",
         alignItems: "center", gap: 0, background: "none", border: "none", padding: "1px 0", cursor: "pointer", color: "var(--text)", minWidth: 0 }}>
-        <span style={{ fontSize: 11, fontWeight: 900, maxWidth: "100%", lineHeight: 1.15, textAlign: "center", overflowWrap: "anywhere",
-          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.name}</span>
-        <span style={{ ...small, fontSize: 10 }}>{p.stock ? "📦 " : ""}{takenOf(p, kids)}/{leafCountOf(p, kids)}</span>
+        {/* integree, en reduit (08/11/2026) : « Colonne 1 » devient « C1 » (le nom entier au survol) */}
+        <span style={{ fontSize: embed ? 10 : 11, fontWeight: 900, maxWidth: "100%", lineHeight: 1.15, textAlign: "center", overflowWrap: embed ? "normal" : "anywhere",
+          display: "-webkit-box", WebkitLineClamp: embed ? 1 : 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+          {embed ? p.name.replace(/^(\p{L})\p{L}*\s*(\d+)$/u, "$1$2") : p.name}</span>
+        {!embed && <span style={{ ...small, fontSize: 10 }}>{p.stock ? "📦 " : ""}{takenOf(p, kids)}/{leafCountOf(p, kids)}</span>}
       </button>
       {cells.length > 0 && (a => <div style={{ display: "grid", gap: 3, gridTemplateColumns: a.tpl }}>
         {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(30px, 1fr))"))}
@@ -532,7 +534,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
   const body = <div ref={bodyRef} className={embed ? "bn-compact" : undefined} style={{ padding: embed ? 0 : "52px 16px 18px", display: "flex", flexDirection: "column", gap: embed ? 8 : 12,
         animation: (fkey || focusPlace != null) ? "bnDrawer .75s cubic-bezier(.2,.9,.25,1.05) both" : undefined, transformOrigin: "50% 0" }}>
         {banner}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {!embed && <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={icoBox(root.stock ? "#D97706" : "#8B5CF6", 42, 13)}><PlaceIco p={root} size={21}/></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>{root.name}{root.stock && <span style={{ fontSize: 11, fontWeight: 900, marginLeft: 8, padding: "1px 8px",
@@ -542,7 +544,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
               : `${n} emplacement${n > 1 ? "s" : ""} · ${t} pris · touche une zone ou une case pour la retoucher${st.mode !== "single" ? " ou y ranger une bobine" : ""}`}</div>
           </div>
           {!readOnly && <button type="button" onClick={e => menu(e, root)} aria-label="Actions du rangement" style={{ ...seg, padding: "6px 11px" }}>⋯</button>}
-        </div>
+        </div>}
         {!readOnly && st.mode === "single" && <div style={{ ...small, padding: "8px 12px", borderRadius: 12, color: "#B45309", background: "color-mix(in srgb, #F59E0B 10%, var(--surface))" }}>
           Tu es en « Un seul rangement » : les bobines ne vont pas encore dans ces emplacements. Choisis « Chaque bobine a sa place » ou « Je range où je veux »
           dans la carte Rangements pour y ranger tes bobines.</div>}
@@ -631,7 +633,8 @@ function PrinterLocate({ sp, spoolId, banner, onClose, home }) {
 
 // l'imprimante comme sur la tuile AMS de l'accueil (07/11/2026, sortie de PrinterLocate le 08/11/2026 pour les echanges) :
 // isHit(unite, slot) fait clignoter un slot, mark(unite, slot) y ecrit un numero (« 1 », l'echange qu'il attend)
-export function AmsMap({ isHit = () => false, mark = () => null }) {
+// compact (08/11/2026, les echanges) : des slots plus bas, pour tenir a cote d'un rangement sur un telephone
+export function AmsMap({ isHit = () => false, mark = () => null, compact = false }) {
   const status = usePrinter(s => s.status);
   useEffect(() => { if (!status) usePrinter.getState().fetch?.(); }, [status]);
   const [order, setOrder] = useState(undefined);
@@ -647,9 +650,9 @@ export function AmsMap({ isHit = () => false, mark = () => null }) {
       {(() => {
         const grid = units.filter(a => !isExternal(a.id)), ext = units.filter(a => isExternal(a.id));
         const cols = grid.length ? grilleAccueil(grid, order === undefined ? null : lireDisposition(order)) : [];
-        const Unit = ({ a, w }) => <div style={{ padding: "8px 6px 9px", borderRadius: 14, background: "var(--surface2)", border: "1px solid var(--border)", minWidth: 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 900, color: "var(--muted)", textAlign: "center", marginBottom: 6 }}>{amsName(a.id)}</div>
-          <div style={{ display: "flex", gap: 5, margin: "0 auto", width: w ? `${w * 100}%` : "100%" }}>
+        const Unit = ({ a, w }) => <div style={{ padding: compact ? "4px 3px 5px" : "8px 6px 9px", borderRadius: compact ? 10 : 14, background: "var(--surface2)", border: "1px solid var(--border)", minWidth: 0 }}>
+          <div style={{ fontSize: compact ? 9.5 : 11, fontWeight: 900, color: "var(--muted)", textAlign: "center", marginBottom: compact ? 3 : 6 }}>{amsName(a.id)}</div>
+          <div style={{ display: "flex", gap: compact ? 3 : 5, margin: "0 auto", width: w ? `${w * 100}%` : "100%" }}>
             {a.trays.map(t => {
               const hit = hitOf(a, t), empty = t.empty || !t.filament_type;
               // le fond de la tuile AMS (07/11/2026) : couleurs de la bobine, transparence, finition (soie, mat, paillettes...)
@@ -657,24 +660,24 @@ export function AmsMap({ isHit = () => false, mark = () => null }) {
               // le numero sous le slot, en clair (07/11/2026 : ecrit dessus, il se lisait mal sur les couleurs)
               return <div key={t.id} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}
                 data-tip={`${slotLabel(a.id, t.id)}${empty ? " — vide" : t.spool_info?.translated_name || t.spool_info?.name ? ` — ${t.spool_info.translated_name || t.spool_info.name}` : ""}`}>
-                <div data-swap-dst={mark(a, t) != null ? mark(a, t) : undefined} style={{ width: "100%", height: 40, borderRadius: 9, position: "relative", zIndex: hit ? 2 : undefined,
+                <div data-swap-dst={mark(a, t) != null ? mark(a, t) : undefined} style={{ width: "100%", height: compact ? 28 : 40, borderRadius: compact ? 6 : 9, position: "relative", zIndex: hit ? 2 : undefined,
                   border: hit ? "2px solid #F59E0B" : empty ? "1.5px dashed rgba(148,163,184,0.7)" : "1px solid rgba(0,0,0,0.15)",
                   animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined,
                   ...(bg || { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 2px, transparent 2px, transparent 6px)" }) }}>
                   {mark(a, t) != null && <span style={{ position: "absolute", top: -6, right: -6, minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8,
                     fontSize: 10, fontWeight: 900, lineHeight: "16px", textAlign: "center", color: "#fff", background: "#F59E0B", boxShadow: "0 0 0 2px var(--surface2)" }}>{mark(a, t)}</span>}
                 </div>
-                <span style={{ fontSize: hit ? 11 : 10, fontWeight: 900, lineHeight: 1, color: hit ? "#D97706" : "var(--text2)" }}>{slotLabel(a.id, t.id)}</span>
+                <span style={{ fontSize: compact ? 8.5 : hit ? 11 : 10, fontWeight: 900, lineHeight: 1, color: hit ? "#D97706" : "var(--text2)" }}>{slotLabel(a.id, t.id)}</span>
               </div>;
             })}
           </div>
         </div>;
         return <>
-          {cols.length > 0 && <div style={{ display: "grid", gap: 8, gridTemplateColumns: cols.map(c => `minmax(0, ${columnWeight(c)}fr)`).join(" ") }}>
+          {cols.length > 0 && <div style={{ display: "grid", gap: compact ? 4 : 8, gridTemplateColumns: cols.map(c => `minmax(0, ${columnWeight(c)}fr)`).join(" ") }}>
             {cols.flatMap((col, ci) => col.map((a, ri) => a && <div key={a.id} style={{ gridColumn: ci + 1, gridRow: ri + 1, minWidth: 0 }}>
               <Unit a={a} w={slotCount(a) / columnWeight(col)}/></div>))}
           </div>}
-          {ext.length > 0 && <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>{ext.map(a => <Unit key={a.id} a={a}/>)}</div>}
+          {ext.length > 0 && <div style={{ display: "grid", gap: compact ? 4 : 8, marginTop: compact ? 4 : 0, gridTemplateColumns: `repeat(auto-fit, minmax(${compact ? 90 : 150}px, 1fr))` }}>{ext.map(a => <Unit key={a.id} a={a}/>)}</div>}
         </>;
       })()}
   </>;
