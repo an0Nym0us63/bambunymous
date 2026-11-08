@@ -460,7 +460,8 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       {occ && marks?.[occ.id] != null && <span className="bn-mark">{marks[occ.id]}</span>}
       {occ ? <>
         <span className="bn-num">{num}{!p.single && p.spools.length > 1 ? ` · ${p.spools.length}` : ""}</span>
-        <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={40} thick={20}/> : edge ? <SpoolEdge s={occ} len="100%" thick={EDGE_H}/> : <Swatch s={occ} size={24}/>}</span>
+        <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={embed ? 22 : 40} thick={embed ? 10 : 20}/>
+          : edge ? <SpoolEdge s={occ} len="100%" thick={embed ? 10 : EDGE_H}/> : <Swatch s={occ} size={embed ? 14 : 24}/>}</span>
         <span className="bn-ct-name">{occ.name}</span>
         {info.length > 0 && <span className="bn-ct-sub">{info.join(" · ")}</span>}
       </> : <span className="bn-num-free">{num}</span>}
@@ -520,8 +521,15 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
         @keyframes bnHit{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.9);transform:scale(1);border-color:#F59E0B}
         50%{box-shadow:0 0 0 7px rgba(245,158,11,0),0 0 18px 4px rgba(245,158,11,.55);transform:scale(1.1);border-color:#FBBF24;background:color-mix(in srgb,#F59E0B 22%,var(--surface))}}
         .bn-mark{position:absolute;top:2px;right:2px;z-index:3;min-width:16px;height:16px;padding:0 4px;border-radius:8px;font-size:10px;font-weight:900;
-          line-height:16px;color:#fff;background:#F59E0B;box-shadow:0 0 0 2px var(--surface)}`}</style></>;
-  const body = <div ref={bodyRef} style={{ padding: embed ? 0 : "52px 16px 18px", display: "flex", flexDirection: "column", gap: embed ? 8 : 12,
+          line-height:16px;color:#fff;background:#F59E0B;box-shadow:0 0 0 2px var(--surface)}
+        .bn-compact .bn-ct-name,.bn-compact .bn-ct-sub,.bn-compact .bn-num{display:none}
+        .bn-compact .bn-cell{padding:3px;gap:0;border-radius:7px}
+        .bn-compact .bn-cell.bn-free{min-height:16px;border-width:1px}
+        .bn-compact .bn-num-free{font-size:8.5px}
+        .bn-compact .bn-band{min-height:0;padding-top:0}
+        .bn-compact .bn-mark{min-width:14px;height:14px;line-height:14px;font-size:9px;top:-4px;right:-4px}`}</style></>;
+  // integree (08/11/2026, les echanges) : en reduit, rien que les tranches des bobines, pour voir le chemin
+  const body = <div ref={bodyRef} className={embed ? "bn-compact" : undefined} style={{ padding: embed ? 0 : "52px 16px 18px", display: "flex", flexDirection: "column", gap: embed ? 8 : 12,
         animation: (fkey || focusPlace != null) ? "bnDrawer .75s cubic-bezier(.2,.9,.25,1.05) both" : undefined, transformOrigin: "50% 0" }}>
         {banner}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

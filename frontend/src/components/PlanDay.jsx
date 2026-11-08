@@ -440,6 +440,14 @@ export function SwapSheet({ j, onClose }) {
     ro?.observe(el);
     return () => { ts.forEach(clearTimeout); ro?.disconnect(); };
   }, [st, n]); // eslint-disable-line react-hooks/exhaustive-deps
+  // plus de deux echanges (08/11/2026) : les liens defilent deux par deux (toucher une ligne du resume montre son groupe)
+  const groups = Math.ceil(n / 2), [grp, setGrp] = useState(0), [hold, setHold] = useState(0);
+  React.useEffect(() => {
+    if (groups < 2) return undefined;
+    const t = setInterval(() => { if (Date.now() > hold) setGrp(g => (g + 1) % groups); }, 3200);
+    return () => clearInterval(t);
+  }, [groups, hold]);
+  const inGrp = k => groups < 2 || Math.floor((k - 1) / 2) === grp;
   const hex = c => { const l = c ? parseColorsList(c.color, c.colors_array) : null; return (l && l[0]) || "#94a3b8"; };
   const when = j.start ? new Date(j.start).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : null;
   const sec = (ic, txt) => <div style={{ fontSize: 11, fontWeight: 900, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em" }}>{ic} {txt}</div>;
@@ -450,6 +458,7 @@ export function SwapSheet({ j, onClose }) {
         .bn-sw-n{display:inline-block;min-width:16px;height:16px;padding:0 4px;border-radius:8px;font-size:10px;font-weight:900;line-height:16px;text-align:center;color:#fff;background:#F59E0B}
         .bn-sw-link{fill:none;stroke:url(#bnSwGrad);stroke-width:2.5;stroke-linecap:round;stroke-dasharray:6 7;animation:bnSwDash 1.1s linear infinite;opacity:.9}
         @keyframes bnSwDash{to{stroke-dashoffset:-26}}
+        @keyframes bnSwIn{from{opacity:0}to{opacity:1}}
         .bn-sw-ar{animation:bnBreath 1.9s ease-in-out infinite}
         @keyframes bnBreath{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(99,102,241,.45)}50%{transform:scale(1.14);box-shadow:0 0 0 8px rgba(99,102,241,0),0 0 14px 2px rgba(14,165,233,.35)}}
         @media (prefers-reduced-motion:reduce){.bn-sw-link,.bn-sw-ar{animation:none}.bn-sw-ghost{display:none}}`}</style>
@@ -465,7 +474,9 @@ export function SwapSheet({ j, onClose }) {
         </div>
         {/* le resume : « 1 ● Vivid Yellow ⇄ ● Pri-White » ; toucher un nom le localise */}
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {pairs.map(p => <div key={p.n} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: "var(--text)", minWidth: 0 }}>
+          {pairs.map(p => <div key={p.n} onClick={() => { setGrp(Math.floor((p.n - 1) / 2)); setHold(Date.now() + 9000); }}
+            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: "var(--text)", minWidth: 0,
+              opacity: inGrp(p.n) ? 1 : 0.45, transition: "opacity .3s", cursor: groups > 1 ? "pointer" : undefined }}>
             <span className="bn-sw-n">{p.n}</span>
             <span role="button" tabIndex={0} onClick={() => p.sp?.spool && setLoc(p.sp.spool)} style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: p.sp?.spool ? "pointer" : "default" }}>
               <FilDot id={p.fid}/>{p.name}</span>
@@ -491,7 +502,7 @@ export function SwapSheet({ j, onClose }) {
           {/* les allers-retours : un lien par echange, la bobine a prendre part vers son slot, celle qui sort en revient */}
           <svg aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible", zIndex: 4 }}>
             <defs><linearGradient id="bnSwGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#F59E0B"/><stop offset="1" stopColor="#6366F1"/></linearGradient></defs>
-            {links.map(l => <g key={l.n}>
+            {links.filter(l => inGrp(l.n)).map(l => <g key={l.n} style={{ animation: "bnSwIn .4s ease-out" }}>
               <path id={`bnSw${l.n}`} className="bn-sw-link" d={l.d}/>
               <circle className="bn-sw-ghost" r="5.5" fill={hex(l.a)} stroke="#fff" strokeWidth="1.5" opacity=".95">
                 <animateMotion dur="2.4s" repeatCount="indefinite" keyPoints="0;1" keyTimes="0;1" calcMode="linear"><mpath href={`#bnSw${l.n}`}/></animateMotion></circle>
