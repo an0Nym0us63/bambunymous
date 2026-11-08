@@ -194,13 +194,27 @@ async def place_new(db, s, place_id=None) -> None:
     s.location = await out_of_printer(db, s)
 
 
-async def into_printer(db, b, loc: str) -> None:
+async def eject_from(db, loc: str, but=None) -> list:
+    """Les bobines qu'on croit encore dans ce slot sortent (08/11/2026) : une autre vient d'y etre reconnue, un slot ne
+    tient qu'une bobine. Rangees selon le mode (sa place, a ranger...), et notees pour l'echange intelligent."""
+    from ..models.filament import Spool
+    rows = (await db.execute(select(Spool).where(Spool.location == loc, Spool.id != but,
+                                                 Spool.archived.is_(False)))).scalars().all()
+    for s in rows:
+        was = s.location
+        s.location = await out_of_printer(db, s)
+        logger.info(f"[RANGEMENT] bobine #{s.id} remplacée dans {was} par #{but} : {s.location}")
+    return rows
+
+
+async def into_printer(db, b, loc: str, already: bool = False) -> None:
     """La bobine b entre dans l'imprimante (slot loc), venant du stock : elle quitte une place de stock pour de bon ;
-    echange intelligent : celle qui vient de quitter ce slot prend la place que b laisse (voir l'en-tete)."""
+    echange intelligent : celle qui vient de quitter ce slot prend la place que b laisse (voir l'en-tete).
+    already (08/11/2026) : b porte deja ce slot (ecrit avant que l'occupante ne sorte) ; elle vient quand meme du stock."""
     from ..models.filament import Spool
     conf = await config(db)
     left = _LEFT.pop(loc, None)
-    if conf["mode"] == "single" or not stored(b):
+    if conf["mode"] == "single" or not (stored(b) or (already and not b.archived and not getattr(b, "ordered", False))):
         return
     pl = await places(db)
     kids = _kids(pl)

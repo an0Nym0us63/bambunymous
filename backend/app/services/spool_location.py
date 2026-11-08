@@ -35,6 +35,7 @@ async def update_spool_location(spool_id: int, location: str):
             if spool is None:
                 return
             from . import storage_places as _sp
+            out = []
             if location == _sp.STORED:
                 # sortie de l'imprimante (07/11/2026) : rangee selon le mode (sa place, le rangement unique, « À ranger »)
                 if spool.archived or spool.ordered or not _sp.in_printer(spool.location):
@@ -44,10 +45,20 @@ async def update_spool_location(spool_id: int, location: str):
             else:
                 loc = location
                 if _sp.in_printer(loc):
+                    # celle qui occupait ce slot en sort d'abord (08/11/2026 : une Sunlu blanche remplacee par une jaune
+                    # dans l'HT, sans slot vide entre les deux, y restait ; ni rangee, ni echange intelligent)
+                    out = await _sp.eject_from(db, loc, but=spool.id)
                     if not _sp.in_printer(spool.location):
                         await _sp.into_printer(db, spool, loc)   # sortie du stock, echange intelligent
+                    elif out and spool.location == loc:
+                        await _sp.into_printer(db, spool, loc, already=True)   # deja ecrite la (le meme defaut, avant)
                     spool.unstored_at = None      # revenue dans l'AMS : plus rien a ranger
-            if spool.location != loc or db.is_modified(spool):
+                    # « je range ou je veux » (08/11/2026) : aucune case n'est a elle ; partie dans l'imprimante, elle
+                    # libere la sienne (apres l'echange intelligent, qui s'en sert). Sa place ne l'attend qu'en mode « sa place »
+                    if spool.place_id is not None and (await _sp.config(db))["mode"] == "manual":
+                        spool.place_id = None
+            # out : une occupante sortie (ses changements, deja envoyes par une lecture, ne se voient plus sur spool)
+            if spool.location != loc or db.is_modified(spool) or out:
                 old = spool.location or ""
                 spool.location = loc
                 await db.commit()
