@@ -2228,6 +2228,33 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
     if keep:
         order = [j["key"] for j in jobs]               # on part de ton ordre, les retouches ne gardent que ce qui gagne
     cur = score(order)
+    if keep:
+        # (08/11/2026) les retouches de 1 a 3 places ne pouvaient ni remonter un plateau prioritaire du fond de la file
+        # (le dernier plateau de Scrat, priorite haute, restait au 16/11), ni remplir les nuits (Torii lance a 18 h 30,
+        # fini a 1 h 51, rien jusqu'a 9 h) : un prioritaire essaie aussi des places loin devant, et les nuits se
+        # remplissent ; chaque fois, seulement si ca gagne plus que ce que coute ce qui bouge
+        pri = sorted((j for j in jobs if j["key"] in movable and j["key"] not in d["pins"] and (j.get("prio_m") or 0) > 0),
+                     key=lambda j: -(j.get("prio_m") or 0))
+        for j in pri:
+            k = j["key"]
+            i = order.index(k)
+            if i <= len(head):
+                continue
+            best_o = None
+            for jx in sorted({len(head)} | set(range(len(head), i, max(1, (i - len(head)) // 8)))):
+                o = order[:i] + order[i + 1:]
+                o.insert(jx, k)
+                sc = score(o)
+                if sc + 1 < cur:
+                    cur, best_o = sc, o
+            if best_o:
+                order = best_o
+        if Rules(d).limits:
+            swk = {}
+            nf = night_fill(jobs, order, d, now, busy, loaded, movable, why=swk, budget=3)
+            sc = score(nf)
+            if sc + 1 < cur:
+                cur, order, sw = sc, nf, swk
     # ton planning tel qu'il est (07/11/2026) : un depart parmi les autres, et le plancher -- « Optimiser » ne rend jamais
     # pire que l'existant selon son propre critere (le depart « ordre actuel » regroupait d'abord les objets « au mieux »,
     # defaisait les petits intercales, et un planning a 10 h de nuits perdues de plus ressortait pour 3 bobines de moins)
