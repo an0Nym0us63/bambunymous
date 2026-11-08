@@ -545,7 +545,9 @@ export function SwapSheet({ j, onClose }) {
             case) ⇄ la cible (son nom, son slot, ou elle va ensuite) ; toucher une tuile montre sa section et son lien */}
         <div style={{ display: "grid", gap: 6, gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 330px), 1fr))" }}>
           {pairs.map(p => {
-            const two = loc => { const x = String(loc || ""), m = x.match(/^(.+?) (slot \d+)$/); if (m) return [m[1], m[2]];
+            const two = loc => { const x = String(loc || ""), m = x.match(/^(.+?) slot (\d+)$/), h = x.match(/^AMS (HT-\w+)$/);
+              if (m) return [m[1], `Slot ${m[2]}`];
+              if (h) return ["AMS HT", h[1]];
               const q = x.split(" › "); return q.length > 1 ? [q.slice(0, -1).join(" › "), q[q.length - 1]] : [x, null]; };
             const half = (fid, name, where, tone, icon, extra, muted) => { const [w1, w2] = two(where);
               return <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>

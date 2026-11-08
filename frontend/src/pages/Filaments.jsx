@@ -1668,9 +1668,11 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
           (() => {
             // un long emplacement (08/11/2026 : « Grand Tiroir B… » cachait la case) : sur deux lignes, le rangement puis la
             // precision (« Petit Tiroir » / « Colonne 3-3 ») ; l'AMS pareil (« AMS-C » / « slot 3 », « Externe » / « slot 1 »)
-            const ams = !s.ordered && s.location.match(/^(.+?) (slot \d+)$/);
+            // (08/11/2026) « Slot » avec sa majuscule ; l'HT aussi sur deux lignes : « AMS HT » / « HT-A »
+            const ams = !s.ordered && (s.location.match(/^(.+?) slot (\d+)$/) || s.location.match(/^(AMS) (HT-\w+)$/));
             const path = !s.ordered && !ams && s.location.includes(" › ") ? s.location.split(" › ") : null;
-            const parts = ams ? [ams[1], ams[2]] : path ? [path.slice(0, -1).join(" › "), path[path.length - 1]] : null;
+            const parts = ams ? (ams[2].startsWith("HT") ? ["AMS HT", ams[2]] : [ams[1], `Slot ${ams[2]}`])
+              : path ? [path.slice(0, -1).join(" › "), path[path.length - 1]] : null;
             const cell = parts ? parts[0] : s.location, where = parts ? parts[1] : null;
             const one = { overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis", display:"block" };
             return <span data-tip={s.ordered ? "Commandée, pas encore reçue : le scan RFID ou l'ajout d'une bobine de ce filament l'adoptera" : parts ? s.location : undefined}
