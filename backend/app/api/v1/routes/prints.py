@@ -1041,7 +1041,15 @@ _MEDIA_IMG = (".png", ".jpg", ".jpeg", ".webp", ".gif")
 _MEDIA_VID = (".mp4", ".webm", ".mov", ".m4v")
 
 
-def _media_photos(names, base: str, group: bool = False) -> list:
+def _mtime(folder, n: str) -> int:
+    """La date d'un fichier (0 : seulement sur le NAS) : la mediatheque trie par date."""
+    try:
+        return int((folder / n).stat().st_mtime) if folder else 0
+    except OSError:
+        return 0
+
+
+def _media_photos(names, base: str, group: bool = False, folder=None) -> list:
     out = []
     for n in sorted(names):
         ext = os.path.splitext(n)[1].lower()
@@ -1050,7 +1058,7 @@ def _media_photos(names, base: str, group: bool = False) -> list:
         # le dossier d'un groupe : tout ce qu'on y a mis (cf. group_photos) ; celui d'une impression : ses photos et videos
         if (ext in _MEDIA_IMG + _MEDIA_VID) if group else \
                 ((n.startswith("Photo-") and ext in _MEDIA_IMG) or (n.startswith("Video-") and ext in _MEDIA_VID)):
-            out.append({"name": n, "url": f"{base}/{n}", "video": ext in _MEDIA_VID})
+            out.append({"name": n, "url": f"{base}/{n}", "video": ext in _MEDIA_VID, "t": _mtime(folder, n)})
     return out
 
 
@@ -1065,10 +1073,11 @@ def _print_media(pid: int, thumb: int) -> dict:
     names = ({f.name for f in d.iterdir()} if d.exists() else set()) | set(archived_names(f"prints/{pid}"))
     base = f"/api/v1/prints/{pid}/file"
     snaps = sorted(n for n in names if n.startswith("snapshot-") and os.path.splitext(n)[1].lower() in _MEDIA_IMG)
-    return {"photos": _media_photos(names, base),
+    return {"photos": _media_photos(names, base, folder=d),
             "vue3d": _v3part(_v3list("print", pid, d, thumb or 0)),
             "tech": {"timelapse": f"{base}/Video-Timelapse.mp4" if "Video-Timelapse.mp4" in names else None,
-                     "snaps": [{"name": n, "url": f"{base}/{n}"} for n in snaps]},
+                     "timelapse_t": _mtime(d, "Video-Timelapse.mp4"),
+                     "snaps": [{"name": n, "url": f"{base}/{n}", "t": _mtime(d, n)} for n in snaps]},
             "plate": next((f"{base}/{n}" for n in ("plate.png", "plate.jpg") if n in names), None)}
 
 
@@ -1095,7 +1104,7 @@ async def group_media(group_id: int, _: str = Depends(get_current_user)):
     def _all():
         d = DATA_DIR / "groups" / str(group_id)
         names = {f.name for f in d.iterdir()} if d.exists() else set()
-        own = {"photos": _media_photos(names, f"/api/v1/prints/groups/{group_id}/photo", group=True),
+        own = {"photos": _media_photos(names, f"/api/v1/prints/groups/{group_id}/photo", group=True, folder=d),
                "vue3d": _v3part(_v3list("group", group_id, d, thumb))}
         kids = [{"id": pid, "name": tr or fn or f"Impression {pid}", "print_date": pd.isoformat() if pd else None,
                  **_print_media(pid, th or 0)} for pid, tr, fn, pd, th in rows]

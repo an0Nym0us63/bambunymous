@@ -1732,7 +1732,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
   const sections = (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {/* la galerie de la fiche (08/11/2026) : photos, 3D (vues et animations), technique */}
-      <MediaGallery kind="print" id={p.id} refreshKey={p.updated_at || ""}
+      <MediaGallery kind="print" id={p.id} title={p.translated_name || p.file_name || ""} refreshKey={p.updated_at || ""}
         onCover={name => setP(prev => ({ ...prev, cover_photo: name }))} onChanged={() => { reload(); onChanged?.(); }}/>
       {/* en cours, suivi couche par couche (alpha) : ce que chaque filament a vraiment consomme ; rien sur « Actuel » */}
       {p.status === "IN_PROGRESS" && !currentFriend() && <LiveUsageCard printId={p.id}/>}
@@ -2279,7 +2279,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     </div>);
   const sections = (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <MediaGallery kind="group" id={groupId} refreshKey={prints.map(x => `${x.id}:${x.updated_at || ""}`).join(",")} onChanged={() => { loadPrints(); onUpdated?.(); }}/>
+      <MediaGallery kind="group" id={groupId} title={name || ""} refreshKey={prints.map(x => `${x.id}:${x.updated_at || ""}`).join(",")} onChanged={() => { loadPrints(); onUpdated?.(); }}/>
       {printsBlock}
       {filaments.length > 0 && <FilamentsV2 filaments={filaments} onSpoolClick={setSelSpool} onUnmap={setUnmapping}/>}
       {cards.map(({ d, prof, list }) => <MakerWorldCard key={`${d}:${prof || ""}`} designId={d} profile={prof} rateElsewhere group prints={list}

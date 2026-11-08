@@ -14,6 +14,7 @@ import { fBtn, lighten } from "./FicheKit";
 import { ANIM_STYLES } from "./Anim3D";
 import { openVue3D } from "./Vue3DPicker";
 import { egg } from "../eggs";
+import MediaLibrary from "./MediaLibrary";
 
 const u = url => url ? apiUrl(String(url).replace(/^\/api\/v1/, "")) : null;
 const SNAP_ORDER = ["fail", "pct100", "pct99", "pct50", "layer2", "layer1"];       // la fin d'abord, puis en remontant
@@ -43,13 +44,14 @@ function Tile({ src, video, label, fit = "cover", ring = null, room = 10, onOpen
   </div>;
 }
 
-export default function MediaGallery({ kind, id, refreshKey = "", onCover = null, onChanged = null }) {
+export default function MediaGallery({ kind, id, title = "", refreshKey = "", onCover = null, onChanged = null }) {
   const [d, setD] = useState(null);
   const [tab, setTab] = useState(null);
   const [lb, setLb] = useState(null);              // { items, i }
   const [busy, setBusy] = useState(false);
   const [armed, setArmed] = useState(null);        // la tuile dont la corbeille attend sa confirmation
   const [allKids, setAllKids] = useState(false);
+  const [lib, setLib] = useState(false);           // la mediatheque (08/11/2026)
   const admin = useIsAdmin() && !currentFriend();
   const group = kind === "group";
   const load = () => client.get(group ? `/prints/groups/${id}/media` : `/prints/${id}/media`).then(r => setD(r.data)).catch(() => setD(d0 => d0 || { photos: [], prints: [] }));
@@ -81,17 +83,28 @@ export default function MediaGallery({ kind, id, refreshKey = "", onCover = null
     await client.post(group ? `/prints/groups/${id}/photos/upload` : `/prints/${id}/photos/upload`, fd, { headers: { "Content-Type": "multipart/form-data" } }); });
 
   // chaque onglet : par entite, ses tuiles { key, src, video, label, fit, ...ce qu'on en fait }
+  // t : la date du fichier (la mediatheque trie par date) ; toggle / makeTop : les gestes de la vue ou de l'animation
+  const vOf = url => +((String(url).match(/[?&]v=(\d+)/) || [])[1] || 0);
   const photosOf = e => (e.m.photos || []).map(x => ({ key: `${e.key}:${x.name}`, kind: "photo", e, name: x.name, src: u(x.url), video: x.video,
-    label: x.video ? "Vidéo" : null }));
+    label: x.video ? "Vidéo" : null, t: x.t || 0 }));
   const d3Of = e => { const v = e.m.vue3d || {}, sel = v.sel || [];
-    return [...(v.slots || []).map(s => ({ key: `${e.key}:v${s.n}`, kind: "vue", e, n: s.n, name: s.n === 1 ? "Vue3D.png" : `Vue3D_${s.n}.png`, src: u(s.url), fit: "contain",
-        label: `Vue ${s.n}`, sel: sel.includes(s.n), sl: sel })),
+    return [...(v.slots || []).map(s => { const on = sel.includes(s.n);
+        return { key: `${e.key}:v${s.n}`, kind: "vue", e, n: s.n, name: s.n === 1 ? "Vue3D.png" : `Vue3D_${s.n}.png`, src: u(s.url), fit: "contain",
+          label: `Vue ${s.n}`, sel: on, sl: sel, t: vOf(s.url), toggle: () => client.put(`${e.base}/thumb`, { slots: on ? sel.filter(x => x !== s.n) : [...sel, s.n] }) }; }),
       ...(v.anims || []).map((a, i) => ({ key: `${e.key}:${a.name}`, kind: "anim", e, name: a.name, src: u(a.url), video: true,
-        label: `${(ANIM_STYLES.find(s => s[0] === a.style) || [])[1] || "🎞"} ${a.label}`, top: i === 0 }))]; };
+        label: `${(ANIM_STYLES.find(s => s[0] === a.style) || [])[1] || "🎞"} ${a.label}`, top: i === 0, t: a.v || 0,
+        makeTop: () => client.post(`${e.base}/vue3d/anim/top`, null, { params: { name: a.name } }) }))]; };
   const techOf = e => { const t = e.m.tech || {};
-    return [...(t.timelapse ? [{ key: `${e.key}:tl`, kind: "tl", e, src: u(t.timelapse), video: true, label: "🎬 Timelapse", fit: "cover" }] : []),
+    return [...(t.timelapse ? [{ key: `${e.key}:tl`, kind: "tl", e, name: "Video-Timelapse.mp4", src: u(t.timelapse), video: true, label: "🎬 Timelapse", fit: "cover", t: t.timelapse_t || 0 }] : []),
       ...[...(t.snaps || [])].sort((a, b) => snapRank(a.name) - snapRank(b.name))
-        .map(s => ({ key: `${e.key}:${s.name}`, kind: "snap", e, name: s.name, src: u(s.url), label: SNAP_NAMES[snapKey(s.name)] || snapKey(s.name) }))]; };
+        .map(s => ({ key: `${e.key}:${s.name}`, kind: "snap", e, name: s.name, src: u(s.url), label: SNAP_NAMES[snapKey(s.name)] || snapKey(s.name), t: s.t || 0 }))]; };
+  const plateOf = e => e.m.plate ? [{ key: `${e.key}:plate`, kind: "plate", e, src: u(e.m.plate), fit: "contain", label: "🖼 Plateau", t: 0 }] : [];
+  const allOf = e => [...photosOf(e).map(x => ({ ...x, label: x.label || "📸 Photo" })), ...d3Of(e), ...techOf(e), ...plateOf(e)];
+  // supprimer une chose (sans act : la mediatheque en enchaine plusieurs dans un seul act)
+  const delItem = it => it.kind === "photo" ? (it.e.pid ? client.delete(`/prints/${it.e.pid}/upload/${it.name}`) : client.delete(`/prints/groups/${id}/photo/${it.name}`))
+    : it.kind === "vue" ? client.delete(`${it.e.base}/vue3d/${it.n}`)
+    : it.kind === "anim" ? client.delete(`${it.e.base}/vue3d/anim`, { params: { name: it.name } })
+    : it.e.pid ? client.delete(`/prints/${it.e.pid}/upload/${it.name}`) : Promise.resolve();
   const per = { photos: photosOf, "3d": d3Of, tech: techOf };
   const count = k => ents.reduce((n, e) => n + per[k](e).length, 0);
   const n = { photos: count("photos"), "3d": count("3d"), tech: count("tech") };
@@ -139,6 +152,14 @@ export default function MediaGallery({ kind, id, refreshKey = "", onCover = null
 
   return <div className="card-sm" style={{ display: "flex", flexDirection: "column", gap: 10, padding: "10px 12px 12px" }}>
     {lb && lb.i >= 0 && <Lightbox images={lb.items} index={lb.i} onClose={() => setLb(null)}/>}
+    {/* le titre, l'ajout de photos, la mediatheque ; puis les onglets sur toute la largeur (sur telephone, a cote ils s'ecrasaient) */}
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <span style={{ flex: 1, fontSize: 13, fontWeight: 900, color: "var(--text)" }}>🖼 Galerie</span>
+      {admin && cur === "photos" && <PhotoAddButton onPick={upload}/>}
+      <button type="button" onClick={() => setLib(true)} data-tip="Tout voir en grand : trier, supprimer, choisir ce qui s'affiche"
+        style={{ height: 30, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", cursor: "pointer",
+          fontSize: 12, fontWeight: 800, whiteSpace: "nowrap", flexShrink: 0 }}>⤢ Tout voir</button>
+    </div>
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <div style={{ flex: 1, display: "flex", gap: 4, padding: 3, borderRadius: 13, background: "var(--surface2)", minWidth: 0 }}>
         {TABS.map(([k, l, c]) => { const on = cur === k;
@@ -148,8 +169,9 @@ export default function MediaGallery({ kind, id, refreshKey = "", onCover = null
             background: on ? `linear-gradient(135deg, ${c}, ${lighten(c)})` : "transparent", boxShadow: on ? `0 6px 14px -8px ${c}` : "none" }}>
             {l}<span style={{ fontSize: 10.5, fontWeight: 900, padding: "0 5px", borderRadius: 8, background: on ? "rgba(255,255,255,.25)" : "var(--surface)" }}>{n[k]}</span></button>; })}
       </div>
-      {admin && cur === "photos" && <PhotoAddButton onPick={upload}/>}
     </div>
+    {lib && <MediaLibrary title={title || (group ? "Le groupe" : "L'impression")} group={group} admin={admin} ents={ents} allOf={allOf} cover={cover} busy={busy}
+      act={act} setCover={setCover} delItem={delItem} onClose={() => setLib(false)}/>}
     {n[cur] > 0 && admin && <span style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.35 }}>{legend}</span>}
     {!n[cur] && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>{empty}</span>}
     {shown.map(({ e, items }) => <div key={e.key} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
