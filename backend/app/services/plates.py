@@ -54,15 +54,18 @@ def kind_of(v) -> str | None:
     return None
 
 
+_NO_SUB_L = {k.lower(): v for k, v in NO_SUB.items()}      # (09/11/2026) sans tout passer en minuscules a chaque appel
+
+
 def bad_kinds(material: str | None, fila_type: str | None, extra: dict | None = None) -> set:
     """Les plateaux deconseilles pour ce filament : ceux de Studio (sous-type, sinon matiere), et ceux que l'utilisateur
     deconseille (extra : {plateau: [matieres ou sous-types]})."""
     out = set()
     ft = (fila_type or "").strip()
     m = (material or "").strip().upper()
-    sub = next((v for k, v in NO_SUB.items() if k.lower() == ft.lower()), None)
+    sub = _NO_SUB_L.get(ft.lower())
     if sub is None and ft.lower().startswith("bambu "):
-        sub = next((v for k, v in NO_SUB.items() if k.lower() == ft[6:].lower()), None)
+        sub = _NO_SUB_L.get(ft[6:].lower())
     out |= set(sub if sub is not None else NO_MAT.get(m, NO_MAT.get(m.split("-")[0], [])) if m else [])
     for k, mats in (extra or {}).items():
         for x in mats or []:

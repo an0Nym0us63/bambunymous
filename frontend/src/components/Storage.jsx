@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import client from "../api/client";
 import CardHelp from "./CardHelp";
@@ -946,7 +946,24 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
   const [fold, setFold] = useState(() => { try { return JSON.parse(localStorage.getItem("bn_storage_fold") || "{}"); } catch { return {}; } });
   const [fill, setFill] = useState(null);            // une case libre a remplir
   const [toStore, setToStore] = useState(false);
-  const toggle = k => setFold(f => { const n = { ...f, [k]: !f[k] }; try { localStorage.setItem("bn_storage_fold", JSON.stringify(n)); } catch { /* indisponible */ } return n; });
+  const toggle = k => { anchor.current = k; setFold(f => { const n = { ...f, [k]: !f[k] }; try { localStorage.setItem("bn_storage_fold", JSON.stringify(n)); } catch { /* indisponible */ } return n; }); };
+  // (09/11/2026) deplier ou replier une section ramenait en haut de la page : la carte entiere se redessine (ses images
+  // se rechargent, la page raccourcit un instant). La section touchee revient en haut de l'ecran, et y reste le temps que
+  // les images au-dessus reprennent leur place, sauf si on fait defiler entre-temps.
+  const anchor = useRef(null);
+  useLayoutEffect(() => {
+    const k = anchor.current;
+    if (k == null) return undefined;
+    anchor.current = null;
+    const put = () => document.querySelector(`[data-sec="${CSS.escape(k)}"]`)?.scrollIntoView({ block: "start" });
+    put();
+    let moved = false;
+    const stop = () => { moved = true; };
+    window.addEventListener("wheel", stop, { passive: true }); window.addEventListener("touchmove", stop, { passive: true });
+    const ts = [120, 350, 700].map(ms => setTimeout(() => { if (!moved) put(); }, ms));
+    const off = setTimeout(() => { window.removeEventListener("wheel", stop); window.removeEventListener("touchmove", stop); }, 800);
+    return () => { ts.forEach(clearTimeout); clearTimeout(off); window.removeEventListener("wheel", stop); window.removeEventListener("touchmove", stop); };
+  }, [fold]);
   const byId = useMemo(() => Object.fromEntries((spools || []).map(s => [s.id, s])), [spools]);
   if (!st) return null;
   const { kids, roots, by } = index(st);
@@ -966,7 +983,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
   const countIn = p => p.leaf ? storedHere(p).length : (kids[p.id] || []).reduce((n, c) => n + countIn(c), 0);
 
   const Section = ({ k, icon, title, n, tone = "#8B5CF6", aside = null, children }) => <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <div data-sec={k} style={{ display: "flex", alignItems: "center", gap: 8, scrollMarginTop: "calc(76px + env(safe-area-inset-top, 0px))" }}>
       <button type="button" onClick={() => toggle(k)} style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0, background: "none", border: "none",
         padding: 0, cursor: "pointer", color: "var(--text)", textAlign: "left" }}>
         <span style={{ width: 30, height: 30, borderRadius: 10, display: "grid", placeItems: "center", fontSize: 15, flexShrink: 0,

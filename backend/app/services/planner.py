@@ -839,13 +839,17 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
     ftype = d.get("_ftype") or {}
     bed = {"cur": (d.get("_bed_now") or {}).get("kind")}
 
+    bk = {}                                       # (09/11/2026) les plateaux deconseilles, une fois par filament et par calcul
+
     def bed_for(j):
         if not own:
             return None, None, None
         bad = set()
         for f in j["fils"]:
             mt, ft = ftype.get(f.get("filament_id")) or (f.get("type"), None)
-            bad |= PL.bad_kinds(mt, ft, avoid)
+            if (mt, ft) not in bk:
+                bk[(mt, ft)] = PL.bad_kinds(mt, ft, avoid)
+            bad |= bk[(mt, ft)]
         ok = [k for k in own if k not in bad]
         want = j.get("bed_want")
         need = ok[0] if ok else (want or bed["cur"])
@@ -1855,7 +1859,9 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
         if new or len(ks) != len(cur):
             d["known"] = cur
             dirty = True
-    r = place(jobs, d, now, busy, loaded, _slots())
+    # (09/11/2026) le calcul lui-meme dans un fil a part aussi : 0,7 s d'habitude, plusieurs secondes au demarrage
+    import asyncio
+    r = await asyncio.to_thread(place, jobs, d, now, busy, loaded, _slots())
     mark_complete(r["jobs"])
     await _load_spots(r["jobs"])
     # avance ou retard : chaque debut, compare a celui du dernier rangement
@@ -1947,9 +1953,11 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
     t1 = time.perf_counter()
     tm["place"] = round((t1 - t0) * 1000) - tm["context"]
     if advise:
-        adv = advice(r["jobs"], d, now, dls, fix, gain)
+        # (09/11/2026) dans un fil a part : des dizaines de plannings essayes, plusieurs secondes de calcul (5 a 6 s au
+        # demarrage) qui figeaient toutes les pages ; le fil laisse la main a la file toutes les quelques millisecondes
+        adv = await asyncio.to_thread(advice, r["jobs"], d, now, dls, fix, gain)
         t2 = time.perf_counter()
-        madv = _merge_advice(r["jobs"])
+        madv = await asyncio.to_thread(_merge_advice, r["jobs"])
         tm.update(advice=round((t2 - t1) * 1000), merge=round((time.perf_counter() - t2) * 1000))
         _ADVICE.update(at=datetime.now().isoformat(timespec="seconds"), items=adv + madv)
     else:
