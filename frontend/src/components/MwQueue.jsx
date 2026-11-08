@@ -290,8 +290,8 @@ export default function MwQueue() {
         isAdmin && { icon: "＋", tone: "#8B5CF6", label: `Un exemplaire de plus (×${(r.qty || 1) + 1})`, onClick: () => setQty(r.design_id, Math.min(99, (r.qty || 1) + 1)) },
         isAdmin && (r.qty || 1) > 1 && { icon: "－", tone: "#8B5CF6", label: `Un de moins (×${r.qty - 1})`, onClick: () => setQty(r.design_id, r.qty - 1) },
         isAdmin && (r.since
-          ? { icon: "↺", tone: "#0EA5E9", label: "Recompter tout le passé", hint: `${r.since_auto ? "Ajouté" : "Reparti à zéro"} le ${sinceTxt(r.since)} : les impressions d'avant compteront de nouveau`, onClick: () => setSince(r.design_id, false) }
-          : { icon: "↺", tone: "#0EA5E9", label: "Repartir à zéro", hint: "Pour le refaire : seules les impressions faites désormais comptent (le passé reste visible)", onClick: () => setSince(r.design_id, true) }),
+          ? { icon: "⟲", tone: "#0EA5E9", label: "Recompter tout le passé", hint: `${r.since_auto ? "Ajouté" : "Reparti à zéro"} le ${sinceTxt(r.since)} : les impressions d'avant compteront de nouveau`, onClick: () => setSince(r.design_id, false) }
+          : { icon: "↺", tone: "#0EA5E9", label: "Repartir de maintenant", hint: "Pour le refaire : seules les impressions faites désormais comptent (le passé reste visible)", onClick: () => setSince(r.design_id, true) }),
         isAdmin && r.planned && { icon: "📌", label: "Oublier le plan retenu", hint: "Revient au profil et aux filaments par défaut", danger: true, onClick: () => forget(r.design_id) },
       ],
     };
@@ -530,13 +530,22 @@ export default function MwQueue() {
                       ? <span data-tip="Profil, plateaux et filaments retenus depuis la fiche" style={{ ...tag, color:"#16a34a", background:"rgba(34,197,94,0.14)" }}>📌 Retenu</span>
                       : <span data-tip="Profil retenu par l'appli, tous les plateaux, filament le plus proche du stock" style={{ ...tag, color:"var(--muted)", background:"var(--surface)", border:"1px dashed var(--border)" }}>Par défaut</span>}
                     {r.printed > 0 && <span style={{ ...tag, color:"#8B5CF6", background:"rgba(139,92,246,0.14)" }}>✓ imprimé {r.printed}×</span>}
-                    {r.since && (() => { const before = (r.plates || []).reduce((s, p) => s + Math.max(0, (p.printed_all || 0) - (p.printed || 0)), 0);
+                    {(() => { const before = (r.plates || []).reduce((s, p) => s + Math.max(0, (p.printed_all || 0) - (p.printed || 0)), 0);
                       const all = (r.plates || []).reduce((s, p) => s + (p.printed_all || 0), 0), after = all - before;
-                      // ajoute a la file (08/11/2026) : dit seulement s'il avait deja ete imprime ; « repartir a zero » : toujours
-                      if (r.since_auto && !before) return null;
-                      return <span data-tip={`${r.since_auto ? "Ajouté à la liste" : "Reparti à zéro"} le ${sinceTxt(r.since)} : seules les impressions faites depuis comptent pour le planning. `
-                        + `Depuis : ${after} plateau${after > 1 ? "x" : ""} · avant : ${before} · au total : ${all}`}
-                        style={{ ...tag, color:"#0369A1", background:"rgba(14,165,233,0.14)" }}>{r.since_auto ? "➕ ajouté" : "↺ depuis"} le {sinceTxt(r.since)} · {after} depuis · {before} avant</span>; })()}
+                      // la date d'ou l'on compte, toujours dite (08/11/2026) : ajoute a la liste, ou reparti a la main ; ses comptes s'il a
+                      // deja ete imprime ; « repartir de maintenant » a cote des qu'il y a un passe (le bandeau « deja fait » a le sien)
+                      return <>
+                        {r.since && <span data-tip={`${r.since_auto ? "Ajouté à la liste" : "Reparti de zéro"} le ${sinceTxt(r.since)} : seules les impressions faites depuis comptent pour le planning et la progression. `
+                          + `Depuis : ${after} plateau${after > 1 ? "x" : ""} imprimé${after > 1 ? "s" : ""} · avant : ${before} · au total : ${all}`}
+                          style={{ ...tag, color:"#0369A1", background:"rgba(14,165,233,0.14)" }}>{r.since_auto ? "➕ ajouté" : "↺ repart"} le {sinceTxt(r.since)}{all ? ` · ${after} depuis · ${before} avant` : ""}</span>}
+                        {isAdmin && all > 0 && !r.redo_hint && (r.since && !after
+                          ? <button type="button" onClick={e => { e.stopPropagation(); setSince(r.design_id, false); }}
+                            data-tip={`Rien d'imprimé depuis le ${sinceTxt(r.since)} : les ${before} plateau${before > 1 ? "x" : ""} d'avant compteront de nouveau`}
+                            style={{ ...tag, cursor:"pointer", border:"1px solid rgba(14,165,233,0.45)", color:"#0369A1", background:"transparent", fontFamily:"inherit" }}>⟲ Recompter le passé</button>
+                          : <button type="button" onClick={e => { e.stopPropagation(); setSince(r.design_id, true); }}
+                            data-tip={`Pour le refaire : seules les impressions faites à partir de maintenant compteront (${all} plateau${all > 1 ? "x" : ""} imprimé${all > 1 ? "s" : ""} jusqu'ici, qui restent visibles)`}
+                            style={{ ...tag, cursor:"pointer", border:"1px solid rgba(14,165,233,0.45)", color:"#0369A1", background:"transparent", fontFamily:"inherit" }}>↺ Repartir de maintenant</button>)}
+                      </>; })()}
                   </span>
                   <span style={{ display:"block", fontSize:11, fontWeight:600, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {r.profile ? `${r.profile.title || "Profil"}${r.profile.plates < r.profile.plates_total ? ` · ${r.profile.plates}/${r.profile.plates_total} plateaux` : ""}` : "profil inconnu"}</span>
