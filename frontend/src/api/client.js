@@ -28,6 +28,9 @@ const visitWriteOk = (url) => VISIT_WRITES.some(p => url === p || url.startsWith
 export function apiUrl(path) {
   const f = currentFriend();
   if (!f) return `/api/v1${path}`;
+  // deja passee par le relais (09/11/2026 : les reponses du copain sont reecrites a l'arrivee, puis la galerie les
+  // repassait ici : « /friends/…/p/friends/… », refusee, ses images cassees)
+  if (/^\/friends\/[^/]+\/p\//.test(path)) return `/api/v1${path}`;
   const t = localStorage.getItem("token") || "";
   return `/api/v1/friends/${f.id}/p${path}${path.includes("?") ? "&" : "?"}_t=${encodeURIComponent(t)}`;
 }
