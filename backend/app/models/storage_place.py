@@ -29,4 +29,7 @@ class StoragePlace(Base):
     # comment montrer ses bobines (07/11/2026) : None la pastille, h sur la tranche a plat, v sur la tranche debout ;
     # pose sur le rangement, vaut pour tout ce qu'il contient
     edge       = Column(String(2), nullable=True)
+    # sa largeur parmi ses soeurs (08/11/2026) : combien de colonnes elle prend, -1 toute la largeur (« Au dessus » sous
+    # 4 colonnes), None une seule
+    span       = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

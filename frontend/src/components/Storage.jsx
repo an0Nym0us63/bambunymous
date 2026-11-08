@@ -172,6 +172,9 @@ const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:
       .bn-ct-sub{font-size:9px;font-weight:700;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       @container (max-width:84px){.bn-ct-sub{display:none}.bn-ct-name{font-size:10px;-webkit-line-clamp:1}}
       @container (max-width:34px){.bn-ct-name{display:none}.bn-cell{padding:3px}.bn-num{font-size:8.5px}}`;
+// la largeur d'une zone parmi ses soeurs (08/11/2026) : span colonnes, -1 toute la largeur ; elargie, ses cases vont en grille
+const spanOf = p => p.span === -1 ? { gridColumn: "1 / -1" } : p.span > 1 ? { gridColumn: `span ${p.span}` } : {};
+const wide = p => p.span === -1 || p.span > 1;
 // l'epaisseur de la tranche couchee suit la largeur de la case (unites de conteneur) : les proportions d'une bobine
 const EDGE_H = "clamp(20px, 30cqw, 46px)";
 const infoOf = (occ, full) => [full?.filament_fila_type || full?.filament_material || occ?.material, full?.filament_manufacturer || occ?.brand].filter(Boolean);
@@ -432,6 +435,10 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
             onClick: () => patch(p, { layout: "grid", cols: n }) })),
         ],
       }) },
+      p.id !== root.id && (!p.leaf || !p.single) && { icon: "↔", label: "Largeur", hint: p.span === -1 ? "toute la largeur" : p.span > 1 ? `${p.span} colonnes` : "une colonne",
+        onClick: () => openMenu(null, { title: `Largeur de « ${p.name} »`, subtitle: "parmi les autres zones", color: "#8B5CF6",
+          items: [[null, "Une colonne"], [2, "2 colonnes"], [3, "3 colonnes"], [4, "4 colonnes"], [-1, "Toute la largeur"]].map(([v, l]) =>
+            ({ icon: (p.span ?? null) === v ? "✓" : "↔", label: l, onClick: () => patch(p, { span: v }) })) }) },
       !p.leaf && { icon: "⇅", label: p.rev ? "Le 1 en haut (ordre normal)" : p.layout === "row" ? "Le 1 à droite" : "Le 1 en bas",
         hint: p.rev ? "Numéros de haut en bas" : "Comme un tiroir qu'on remplit par le fond", onClick: () => patch(p, { rev: !p.rev }) },
       "-",
@@ -494,7 +501,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
   // les zones cote a cote, chacune a sa hauteur (07/11/2026 : elles s'etiraient a la plus haute) ; 5 tiennent sur un telephone
   const Zones = ({ parent, list }) => { const a = arrange(list, parent, false, `repeat(${Math.min(list.length, 4)}, minmax(0, 1fr))`);
     return <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl, alignItems: "start" }}>
-      {a.items.map(z => z.leaf ? <Vrac key={z.id} p={z}/> : <Zone key={z.id} p={z} many={list.length > 1}/>)}</div>; };
+      {a.items.map(z => <div key={z.id} style={{ minWidth: 0, ...spanOf(z) }}>{z.leaf ? <Vrac p={z}/> : <Zone p={z} many={list.length > 1 && !wide(z)}/>}</div>)}</div>; };
   const ch = kids[root.id] || [];
   // les cases sans zone d'un cote ; les zones et les emplacements en vrac (communs) de l'autre, cote a cote
   const direct = ch.filter(c => c.leaf && c.single), zones = ch.filter(c => !c.leaf || !c.single);
@@ -784,7 +791,7 @@ export function PlacePicker({ spools, onClose, onDone, pickOnly = false, onPicke
       {cells.length > 0 && (a => <div style={{ display: "grid", gap: 5, gridTemplateColumns: a.tpl }}>
         {a.items.map(c => <Leaf key={c.id} p={c} compact={many || p.layout === "row" || p.layout === "grid" || (!!p.cols && p.cols > 3)}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(92px, 1fr))"))}
       {subs.length > 0 && (a => <div style={{ display: "grid", gap: 5, gridTemplateColumns: a.tpl, alignItems: "start" }}>
-        {a.items.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>)(arrange(subs, p, false, `repeat(${Math.min(subs.length, 4)}, minmax(0, 1fr))`))}
+        {a.items.map(c => <div key={c.id} style={{ minWidth: 0, ...spanOf(c) }}><Group p={c} many={subs.length > 1 && !wide(c)}/></div>)}</div>)(arrange(subs, p, false, `repeat(${Math.min(subs.length, 4)}, minmax(0, 1fr))`))}
     </div>;
   };
   const found = ql ? st.places.filter(p => p.leaf && p.path.toLowerCase().includes(ql)) : null;
@@ -976,7 +983,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
         {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(76px, 1fr))"))}
       {commons.map(c => <Common key={c.id} p={c} nested/>)}
       {subs.length > 0 && (a => <div style={{ display: "grid", gap: 5, gridTemplateColumns: a.tpl, alignItems: "start" }}>
-        {a.items.map(c => <Group key={c.id} p={c} many={subs.length > 1}/>)}</div>)(arrange(subs, p, false, `repeat(${Math.min(subs.length, 4)}, minmax(0, 1fr))`))}
+        {a.items.map(c => <div key={c.id} style={{ minWidth: 0, ...spanOf(c) }}><Group p={c} many={subs.length > 1 && !wide(c)}/></div>)}</div>)(arrange(subs, p, false, `repeat(${Math.min(subs.length, 4)}, minmax(0, 1fr))`))}
     </div>;
   };
 
