@@ -2658,13 +2658,16 @@ function LiveCam({ status, o, sz = { h: 2 } }) {
         // de l'imprimante coupee
         const camW = Math.min(W, Math.round(H * 16 / 9 * 1.15));
         return (
-        <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", flex: 1, minHeight: 0, background: "#111", display: "flex", justifyContent: "center" }}>
-          <div style={{ position: "relative", width: camW, height: "100%", flexShrink: 0 }}><LiveCamera mode={o.mode} style={{ height: "100%" }}/></div>
+        // (08/11/2026) autour de l'image, la tuile (pas de bandes noires) ; la barre d'avancement a la largeur de l'image
+        <div style={{ flex: 1, minHeight: 0, display: "flex", justifyContent: "center" }}>
+          <div style={{ position: "relative", width: camW, height: "100%", flexShrink: 0, borderRadius: 10, overflow: "hidden", background: "#111" }}>
+          <LiveCamera mode={o.mode} style={{ height: "100%" }}/>
           {o.overlay && live && <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "14px 10px 6px", color: "#fff", pointerEvents: "none",
             background: "linear-gradient(transparent, rgba(0,0,0,0.65))", display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 800 }}>
             <span style={{ flex: 1, height: 5, borderRadius: 5, background: "rgba(255,255,255,0.3)", overflow: "hidden" }}>
               <span style={{ display: "block", height: "100%", width: `${pct}%`, background: "#22c55e" }}/></span>
             {pct}%{status.remaining_minutes ? ` · ${fmtDur(status.remaining_minutes * 60)}` : ""}</div>}
+          </div>
         </div>);
       }}
     </Tile>
