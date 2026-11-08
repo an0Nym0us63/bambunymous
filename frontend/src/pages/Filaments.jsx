@@ -1666,16 +1666,19 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
             quand on veut aller chercher la bobine physiquement. */}
         {s.location && (
           (() => {
-            // un long emplacement (08/11/2026 : « Grand Tiroir B… » cachait la case) : la case en gras, le rangement dessous
-            const parts = !s.ordered && s.location.includes(" › ") ? s.location.split(" › ") : null;
-            const cell = parts ? parts[parts.length - 1] : s.location, where = parts ? parts.slice(0, -1).join(" › ") : null;
+            // un long emplacement (08/11/2026 : « Grand Tiroir B… » cachait la case) : sur deux lignes, le rangement puis la
+            // precision (« Petit Tiroir » / « Colonne 3-3 ») ; l'AMS pareil (« AMS-C » / « slot 3 », « Externe » / « slot 1 »)
+            const ams = !s.ordered && s.location.match(/^(.+?) (slot \d+)$/);
+            const path = !s.ordered && !ams && s.location.includes(" › ") ? s.location.split(" › ") : null;
+            const parts = ams ? [ams[1], ams[2]] : path ? [path.slice(0, -1).join(" › "), path[path.length - 1]] : null;
+            const cell = parts ? parts[0] : s.location, where = parts ? parts[1] : null;
             const one = { overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis", display:"block" };
             return <span data-tip={s.ordered ? "Commandée, pas encore reçue : le scan RFID ou l'ajout d'une bobine de ce filament l'adoptera" : parts ? s.location : undefined}
               style={{ fontSize:9, fontWeight:800, padding: parts ? "3px 8px 4px" : "3px 6px", borderRadius: parts ? 12 : 20, lineHeight:1.25,
               background: s.ordered ? "rgba(14,165,233,0.16)" : s.location === TO_STORE ? "rgba(245,158,11,0.18)" : "rgba(139,92,246,0.14)",
               color: s.ordered ? "#0EA5E9" : s.location === TO_STORE ? "#D97706" : "#8B5CF6", textAlign:"center", minWidth:0 }}>
               <span style={{ ...one, fontSize: parts ? 10 : 9, fontWeight: 900 }}>{s.ordered ? "📬" : s.location === TO_STORE ? "📥" : "📍"} {cell}</span>
-              {where && <span style={{ ...one, fontSize: 8.5, fontWeight: 700, opacity: 0.8 }}>{where}</span>}
+              {where && <span style={{ ...one, fontSize: 9, fontWeight: 800, opacity: 0.85 }}>{where}</span>}
             </span>;
           })()
         )}
