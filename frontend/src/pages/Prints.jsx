@@ -41,6 +41,8 @@ import GalleryCompare from "../components/GalleryCompare";
 import { FilamentSheetFromSpool } from "./Filaments";
 import { useKeyboardInset } from "../utils/keyboard";
 import MediaGallery from "../components/MediaGallery";
+import Vue3DSlides from "../components/Vue3DSlides";
+import HeroMedia, { isVid, HeroModes } from "../components/HeroMedia";
 import GroupMosaic from "../components/GroupMosaic";
 import ObjectCreateSheet from "../components/ObjectCreateSheet";
 import FilesSheet, { openBlob, saveBlob } from "../components/FilesSheet";
@@ -1447,8 +1449,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
   const [editFr, setEditFr] = useState(false);
   const [frVal, setFrVal] = useState("");
   // l'en-tete montre l'image d'origine (le plateau) au lieu de la vue 3D choisie comme vignette (30/10/2026)
-  const [heroOrig, setHeroOrig] = useState(false);
-  useEffect(() => { setHeroOrig(false); }, [p.id]);
+  const [heroMode, setHeroMode] = useState(null);     // le haut de la fiche : null (tout ce qui est choisi), anim, vues, plate
+  const heroDurs = useRef({});                          // la duree de chaque animation en tete (le defilement l'attend)
+  useEffect(() => { setHeroMode(null); }, [p.id]);
   useTrackDetail(`Fiche print · ${p?.file_name || pProp?.file_name || "#" + pProp.id}`);
   const scrollRef = useRef(null);
   const firstId = useRef(pProp.id);
@@ -1613,7 +1616,13 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       <span style={{ fontSize: 16, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", ...v2grad(c1, c2) }}>{value}</span>
       {sub && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</span>}
     </button>);
-  // l'en-tete : le plateau en grand, le titre et l'etat poses dessus
+  // l'en-tete : le plateau en grand, le titre et l'etat poses dessus ; heroCyc : ce qui y defile (vues choisies, animation)
+  const heroOrig = heroMode === "plate";
+  const heroVues = p.thumb_3d ? (p.vue3d_sel || []).map(s => apiThumb(withV(apiUrl(`/prints/${p.id}/file/${s.name}`), s.v), 512)) : [];
+  const heroAnim = p.vue3d_anim ? [withV(apiUrl(`/prints/${p.id}/file/${p.vue3d_anim.name}`), p.vue3d_anim.v)] : [];
+  const heroCyc = heroMode === "anim" ? heroAnim : heroMode === "vues" ? heroVues : [...heroVues, ...heroAnim];
+  const heroModes = [heroAnim.length && ["anim", "🎬 Animation", "Seulement l'animation"], heroVues.length && ["vues", "🧊 Vues 3D", "Seulement les vues 3D choisies"],
+    ["plate", "🖼 Plateau", "L'image d'origine : le plateau"]].filter(Boolean);
   const hero = (
     <div onTouchStart={swipeStart} onTouchEnd={swipeEnd} onTouchCancel={() => { swipe.current = null; }}
       style={{ position: "relative", height: wide ? 300 : "min(36vh, 280px)", minHeight: 200, borderRadius: wide ? 20 : 0, overflow: "hidden",
@@ -1622,28 +1631,18 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       <img src={thumbUrl(p, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
         objectFit: "cover", filter: "blur(26px) saturate(1.15)", opacity: 0.3, transform: "scale(1.3)" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
       <span aria-hidden="true" style={{ position: "absolute", inset: 0, background: `radial-gradient(60% 70% at 50% 38%, ${stC}33, transparent 72%)` }}/>
-      {/* l'animation prise dans la vue 3D (08/11/2026) : elle tourne ici, en boucle ; sinon les vues choisies defilent */}
-      {!heroOrig && p.vue3d_anim
-        ? <video key={p.vue3d_anim.v} src={withV(apiUrl(`/prints/${p.id}/file/${p.vue3d_anim.name}`), p.vue3d_anim.v)} autoPlay loop muted playsInline
-            style={{ position: "absolute", inset: "4% 8% 26%", width: "84%", height: "70%", objectFit: "contain", borderRadius: 14 }}/>
-      : !heroOrig && p.thumb_3d && p.vue3d_sel?.length > 1
+      {/* l'image de la fiche (08/11/2026) : les vues choisies et l'animation en tete defilent ensemble (l'animation le temps
+          de sa boucle, ses bords fondus dans le halo) ; seule, elle tourne en boucle */}
+      {!heroOrig && heroCyc.length > 1
         ? <span style={{ position: "absolute", inset: "4% 8% 26%" }}>
-            <CycleImg urls={p.vue3d_sel.map(s => apiThumb(withV(apiUrl(`/prints/${p.id}/file/${s.name}`), s.v), 512))}
-              render={(u, on) => <img src={u} alt="" className="bn-plate" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain",
-                filter: "drop-shadow(0 14px 24px rgba(0,0,0,.35))", opacity: on ? 1 : 0, transition: "opacity .8s ease" }}/>}/></span>
+            <CycleImg urls={heroCyc} periodOf={u => isVid(u) ? heroDurs.current[u] || 6000 : 2600} render={(u, on) => <HeroMedia u={u} on={on} durs={heroDurs}/>}/></span>
+      : !heroOrig && heroCyc.length === 1 && isVid(heroCyc[0])
+        ? <span style={{ position: "absolute", inset: "4% 8% 26%" }}><HeroMedia u={heroCyc[0]}/></span>
         : <img key={heroOrig ? "o" : "v"} src={heroOrig ? `${thumbUrl(p, 512)}&orig=1` : thumbUrl(p, 512)} alt="" className="bn-plate" style={{ position: "absolute", inset: "4% 8% 26%", width: "84%", height: "70%",
         objectFit: "contain", filter: "drop-shadow(0 14px 24px rgba(0,0,0,.35))" }}
         onError={e => { e.currentTarget.style.display = "none"; }}/>}
-      {/* la vignette choisie est une vue 3D : l'image d'origine reste a portee, en petit dans le coin ; la toucher echange */}
-      {(!!p.thumb_3d || !!p.vue3d_anim) && <button type="button" onClick={() => setHeroOrig(o => !o)}
-        data-tip={heroOrig ? "Revenir à la vue 3D" : "Voir l'image d'origine (le plateau)"}
-        style={{ position: "absolute", top: wide ? 12 : 54, right: 12, width: 64, padding: 0, borderRadius: 12, overflow: "hidden", cursor: "pointer",
-          border: "1px solid color-mix(in srgb, var(--border) 80%, #fff)", background: "color-mix(in srgb, var(--surface) 88%, transparent)",
-          boxShadow: "0 6px 16px rgba(0,0,0,.22)", backdropFilter: "blur(6px)", display: "flex", flexDirection: "column", alignItems: "stretch" }}>
-        <img src={heroOrig ? thumbUrl(p, 128) : `${thumbUrl(p, 128)}&orig=1`} alt="" style={{ width: 64, height: 52, objectFit: "contain", display: "block" }}
-          onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
-        <span style={{ fontSize: 9.5, fontWeight: 900, color: "var(--text2)", padding: "2px 0 3px", textAlign: "center" }}>{heroOrig ? "Vue 3D" : "Original"}</span>
-      </button>}
+      {/* (08/11/2026) Animation / Vues 3D / Plateau : ce qui existe ; d'office tout ce qui est choisi defile */}
+      <HeroModes modes={heroModes} mode={heroMode} setMode={setHeroMode} style={{ top: wide ? 12 : 54, right: 12 }}/>
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "34px 16px 12px",
         background: "linear-gradient(transparent, color-mix(in srgb, var(--sheet-bg) 92%, transparent) 55%)" }}>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
@@ -1905,7 +1904,8 @@ function GroupEditSheet({ groupId, name, onClose, onSaved }) {
 export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, cover_print_id: coverPrintIdProp, onClose, onDelete, onUngroup, onUpdated }) {
   useTrackDetail(`Fiche groupe · ${name || "#" + groupId}`);
   const isAdmin = useIsAdmin();
-  const [gOrig, setGOrig] = useState(false);          // le haut de la fiche : la mosaique au lieu de l'animation (08/11/2026)
+  const [gMode, setGMode] = useState(null);           // le haut de la fiche : null (tout ce qui est choisi), anim, vues, plate (08/11/2026)
+  const heroDurs = useRef({});
   const groupVisiting = useFriend(s => s.friend);
   const [prints, setPrints] = useState([]);
   const [mwAll, setMwAll] = useState(false);          // « Lier toutes au modele MakerWorld »
@@ -2126,20 +2126,25 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   const v3sel = v3u && prints[0]?.group_vue3d_sel?.length > 1 ? prints[0].group_vue3d_sel.map(s => apiThumb(withV(apiUrl(`/prints/groups/${groupId}/photo/${s.name}`), s.v), 384)) : null;
   const srcOf = (x, w) => (x._src ? x._src(w) : thumbUrl(x, w));
   const gAnim = prints[0]?.group_vue3d_anim || null;
+  // (08/11/2026) l'animation du groupe defile avec ses vues choisies, dans leur carte et avec leur halo ; seule, elle y tourne
+  const gOrig = gMode === "plate";
+  const gVues = v3sel || (v3u ? [apiThumb(v3u, 384)] : []), gAnimU = gAnim ? [withV(apiUrl(`/prints/groups/${groupId}/photo/${gAnim.name}`), gAnim.v)] : [];
+  const gCyc = gOrig ? [] : gMode === "anim" ? gAnimU : gMode === "vues" ? gVues : [...gVues, ...gAnimU];
+  const gModes = [gAnimU.length && ["anim", "🎬 Animation", "Seulement l'animation"], gVues.length && ["vues", "🧊 Vues 3D", "Seulement les vues 3D choisies"],
+    ["plate", "🖼 Plateaux", "La mosaïque de ses impressions"]].filter(Boolean);
+  const gCard = gCyc.length > 1 || (gCyc.length === 1 && isVid(gCyc[0]));
+  const heroMosaic = gOrig ? [cover, ...prints.filter(x => x !== cover)].filter(Boolean).slice(0, 4)
+    : gCard && !v3u ? [{ id: "vue3d", _src: () => thumbUrl(cover, 128) }] : mosaic;
   const hero = (
     <div style={{ position: "relative", height: wide ? 300 : "min(36vh, 280px)", minHeight: 200, borderRadius: wide ? 20 : 0, overflow: "hidden", background: "var(--surface2)" }}>
       {cover && <img src={thumbUrl(cover, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
         objectFit: "cover", filter: "blur(26px) saturate(1.15)", opacity: 0.3, transform: "scale(1.3)" }}/>}
       <span aria-hidden="true" style={{ position: "absolute", inset: 0, background: "radial-gradient(60% 70% at 50% 38%, #A78BFA33, transparent 72%)" }}/>
-      {/* l'animation du groupe choisie pour le haut de sa fiche (08/11/2026 : elle ne s'y montrait pas) ; « Original » revient a la mosaique */}
-      {gAnim && !gOrig && <video key={gAnim.v} src={withV(apiUrl(`/prints/groups/${groupId}/photo/${gAnim.name}`), gAnim.v)} autoPlay loop muted playsInline
-        style={{ position: "absolute", inset: "6% 8% 30%", width: "84%", height: "64%", objectFit: "contain", borderRadius: 16, zIndex: 1 }}/>}
-      {gAnim && <button type="button" onClick={() => setGOrig(o => !o)} data-tip={gOrig ? "Revenir à l'animation" : "Voir la mosaïque des impressions"}
-        style={{ position: "absolute", top: 10, right: 10, zIndex: 3, padding: "4px 10px", borderRadius: 10, border: "1px solid var(--border)", cursor: "pointer",
-          fontSize: 11, fontWeight: 900, color: "var(--text2)", background: "color-mix(in srgb, var(--sheet-bg) 80%, transparent)" }}>{gOrig ? "▶ Animation" : "Original"}</button>}
-      <div style={{ position: "absolute", inset: "8% 6% 34%", display: "grid", gap: 8, visibility: gAnim && !gOrig ? "hidden" : "visible",
-        gridTemplateColumns: `repeat(${Math.min(mosaic.length, 4) || 1}, minmax(0, 1fr))` }}>
-        {mosaic.map((x, i) => <div key={x.id} style={{ position: "relative", borderRadius: 14, overflow: "hidden", transform: `rotate(${[-3, 2, -1.5, 3][i]}deg)`,
+      {/* Animation / Vues 3D / Plateaux : ce qui existe ; d'office tout ce qui est choisi defile */}
+      <HeroModes modes={gModes} mode={gMode} setMode={setGMode} style={{ top: 10, right: 10 }}/>
+      <div style={{ position: "absolute", inset: "8% 6% 34%", display: "grid", gap: 8,
+        gridTemplateColumns: `repeat(${Math.min(heroMosaic.length, 4) || 1}, minmax(0, 1fr))` }}>
+        {heroMosaic.map((x, i) => <div key={x.id} style={{ position: "relative", borderRadius: 14, overflow: "hidden", transform: `rotate(${[-3, 2, -1.5, 3][i]}deg)`,
           // en sombre, des cartes grises faisaient des dalles : un verre lavande, bord clair (le clair reste tel quel)
           ...(document.documentElement.getAttribute("data-theme") === "light"
             ? { background: "color-mix(in srgb, var(--surface) 55%, transparent)", boxShadow: "0 10px 24px rgba(0,0,0,.25)" }
@@ -2148,9 +2153,12 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
           {/* le halo de chaque carte, comme celui de la fiche d'une impression : son image floutee et saturee derriere */}
           <img src={srcOf(x, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
             objectFit: "cover", filter: "blur(18px) saturate(1.2)", opacity: 0.4, transform: "scale(1.35)" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
-          {x.id === "vue3d" && v3sel && <CycleImg urls={v3sel} render={(u, on) => <img src={u} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
+          {x.id === "vue3d" && gCard && <span style={{ position: "absolute", inset: 0, zIndex: 1 }}>
+            {gCyc.length > 1 ? <CycleImg urls={gCyc} periodOf={u => isVid(u) ? heroDurs.current[u] || 6000 : 2600} render={(u, on) => <HeroMedia u={u} on={on} durs={heroDurs} shadow="none" className=""/>}/>
+              : <HeroMedia u={gCyc[0]} shadow="none" className=""/>}</span>}
+          {x.id === "vue3d" && v3sel && !gCard && <CycleImg urls={v3sel} render={(u, on) => <img src={u} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
             objectFit: "contain", opacity: on ? 1 : 0, transition: "opacity .8s ease", zIndex: 1 }}/>}/>}
-          <img src={srcOf(x, 384)} alt="" loading="lazy" decoding="async" style={{ position: "relative", width: "100%", height: "100%", objectFit: "contain", opacity: x.id === "vue3d" && v3sel ? 0 : 1 }} onError={e => { e.currentTarget.style.display = "none"; }}/>
+          <img src={srcOf(x, 384)} alt="" loading="lazy" decoding="async" style={{ position: "relative", width: "100%", height: "100%", objectFit: "contain", opacity: x.id === "vue3d" && (v3sel || gCard) ? 0 : 1 }} onError={e => { e.currentTarget.style.display = "none"; }}/>
         </div>)}
       </div>
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "34px 16px 12px",
@@ -2987,8 +2995,10 @@ function useFicheProfile(designId, printIds, group) {
 
 function MyGalleryView({ search, sortF = "recent", data, loading, kind = "photos" }) {
   const [selectedPrint, setSelectedPrint] = useState(null);
-  // la galerie des vues 3D (30/10/2026) : un clic ouvre le modele en 3D, sur sa vue assemblee (ou son plateau s'il n'en a qu'un)
+  // la galerie des vues 3D (30/10/2026) : un clic ouvre le modele en 3D, sur sa vue assemblee (ou son plateau s'il n'en a qu'un) ;
+  // (08/11/2026) d'abord un diaporama : ses vues, ses animations, puis le modele a faire tourner ; la vue complete au bout
   const [view3d, setView3d] = useState(null);
+  const [slides, setSlides] = useState(null);
   // son profil et son impression : ceux que choisit la carte MakerWorld de sa fiche (31/10/2026)
   const fp = useFicheProfile(view3d && (view3d.design_id || view3d.design_3d),
     view3d ? (view3d.kind === "print" ? [view3d.id] : view3d.print_ids || []) : null, view3d?.kind === "group");
@@ -3038,7 +3048,7 @@ function MyGalleryView({ search, sortF = "recent", data, loading, kind = "photos
       )}
       emptyLabel="Aucune photo disponible"
       onItemClick={it => {
-        if (kind === "vue3d") { if (!(it.design_id || it.design_3d)) return false; setView3d(it); return true; }
+        if (kind === "vue3d") { if (!it.photos?.length && !it.anims?.length && !(it.design_id || it.design_3d)) return false; setSlides(it); return true; }
         if (it.kind==="group") setSelectedGroup(it);
         else setSelectedPrint(it);
       }}
@@ -3053,6 +3063,9 @@ function MyGalleryView({ search, sortF = "recent", data, loading, kind = "photos
       <PrintDetail p={selectedPrint} onClose={()=>setSelectedPrint(null)}
         onDelete={()=>setSelectedPrint(null)} onChanged={()=>{}}/>
     )}
+    {slides && <Vue3DSlides item={slides} onClose={() => setSlides(null)}
+      onFull={(slides.design_id || slides.design_3d) ? () => { const it = slides; setSlides(null); setView3d(it); } : null}
+      onFiche={() => { const it = slides; setSlides(null); if (it.kind === "group") setSelectedGroup(it); else setSelectedPrint(it); }}/>}
     {view3d && <Model3D designId={view3d.design_id || view3d.design_3d} title={view3d.title} focus
       profileId={fp?.profile || null} wait={fp === undefined}
       onFiche={() => { const it = view3d; setView3d(null); if (it.kind === "group") setSelectedGroup(it); else setSelectedPrint(it); }}

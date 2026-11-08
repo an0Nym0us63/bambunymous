@@ -569,7 +569,25 @@ async def showcase_public_3d(token: str, key: str):
     cands = _pool(await _candidates(), s.get("source"))
     if key not in {it["k"] for it in _resolve(s, cands)}:
         raise HTTPException(404, "Pas de vue 3D pour cette pièce")
-    gm = _group_asm(cands[key])
+    return await _piece3d(cands[key], key)
+
+
+@router.get("/piece3d/{key}")
+async def showcase_piece3d(key: str, _: str = Depends(get_current_user)):
+    """La meme vue 3D, pour n'importe quelle impression ou groupe, dans l'appli (08/11/2026 : le diaporama de la galerie
+    des vues 3D finit sur le modele a faire tourner) : l'assemblage du groupe, sinon la vue assemblee du modele."""
+    if not _ITEM.match(key or ""):
+        raise HTTPException(404, "Pièce inconnue")
+    cands = await _candidates()
+    if key not in cands:
+        raise HTTPException(404, "Pas de vue 3D pour cette pièce")
+    return await _piece3d(cands[key], key)
+
+
+async def _piece3d(c: dict, key: str) -> dict:
+    """La vue 3D d'une piece, deja calculee (lecture seule) : l'assemblage du groupe tel que l'appli l'a monte, sinon la
+    vue du modele (son assemblage s'il en a un)."""
+    gm = _group_asm(c)
     if gm:
         from ....services import mw_3d as T
         gkey = f"grp{key[1:]}"
@@ -577,10 +595,10 @@ async def showcase_public_3d(token: str, key: str):
         fx = T._read_side(gkey, "fx.json") or {}         # les finitions et lueurs gardees par l'appli a cote de l'assemblage
         return {"plates": shown, "assembly_edit": T.load_edit(gkey, None, {x.get("k") for pl in shown for x in pl.get("pieces") or [] if isinstance(x, dict)}),
                 "used_palette": None, "used_plates": {}, "finishes": fx.get("finishes") or {}, "glows": fx.get("glows") or {}, "piece_plates": {}}
-    if not cands[key].get("design"):
+    if not c.get("design"):
         raise HTTPException(404, "Pas de vue 3D pour cette pièce")
     from .makerworld import mw_model_3d
-    r = await mw_model_3d(**_view_args(cands[key]), peek=0, _="", token="fk_vitrine")
+    r = await mw_model_3d(**_view_args(c), peek=0, _="", token="fk_vitrine")
     keep = ("plates", "used_palette", "used_plates", "used_multi", "used_multi_plates", "used_finishes", "used_finishes_plates",
             "finishes", "glows", "piece_plates", "assembly_edit", "bed")
     return {k: r.get(k) for k in keep}

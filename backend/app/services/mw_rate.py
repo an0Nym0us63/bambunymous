@@ -193,9 +193,10 @@ def imgs_of(g) -> list:
     return sorted(imgs, key=is_vue3d)
 
 
-def v3_urls(print_ids) -> list:
+def v3_urls(print_ids, group_ids=()) -> list:
     """Les vues 3D puis les animations de ces impressions (la plus recente d'abord), a joindre a une evaluation
-    (08/11/2026) : proposees apres les photos ; une animation part en image animee (MakerWorld ne prend que des images)."""
+    (08/11/2026) : proposees apres les photos ; une animation part en image animee (MakerWorld ne prend que des images).
+    group_ids : les groupes de ces impressions, dont les animations sont rangees avec le groupe."""
     import os, re
     from pathlib import Path
     out = []
@@ -207,6 +208,11 @@ def v3_urls(print_ids) -> list:
         out += [f"/api/v1/prints/{pid}/file/{n}" for n in names if re.fullmatch(r"Vue3D(_[2-4])?\.png", n)]
         out += [f"/api/v1/prints/{pid}/file/{n}" for n in sorted((n for n in names if re.fullmatch(r"Vue3D_anim(?:_([a-z]+)(?:-([a-z]+)-([0-9a-z]+))?)?\.(webm|mp4)", n)),
                                                                  key=lambda n: -(d / n).stat().st_mtime)]
+    for gid in dict.fromkeys(g for g in group_ids if g):
+        d = Path(os.getenv("DATA_DIR", "/data")) / "groups" / str(gid)
+        if d.is_dir():                        # les vues du groupe arrivent deja par ses photos ; ici ses animations
+            out += [f"/api/v1/prints/groups/{gid}/photo/{f.name}" for f in sorted((f for f in d.iterdir()
+                    if re.fullmatch(r"Vue3D_anim(?:_([a-z]+)(?:-([a-z]+)-([0-9a-z]+))?)?\.(webm|mp4)", f.name)), key=lambda f: -f.stat().st_mtime)]
     return list(dict.fromkeys(out))
 
 
@@ -314,6 +320,8 @@ async def _to_rate(rated, pending, stats, my_uid, mine) -> dict:
                                "photos": [], "photo_source": None, "print_ids": []}
         it["printed"] += 1
         it["print_ids"].append(p.id)
+        if p.group_id:
+            it.setdefault("group_ids", []).append(p.group_id)
         # la carte des filaments (30/10/2026) : ceux de toutes les impressions du modele (31/10/2026, comme le partage)
         if any(u.color_hex and (u.grams_used or 0) > 0 for u in p.filament_usage):
             it.setdefault("card_prints", []).append(p.id)
@@ -344,7 +352,7 @@ async def _to_rate(rated, pending, stats, my_uid, mine) -> dict:
             ids = {str(x.get("profile_id") or ""), str(x.get("instance_id") or "")} - {"", "None"}
             mine_p = [p for p in prints if str(p.design_id) == did and str(p.mw_profile_id or "") in ids]
             ph = next((imgs_of(by_print.get(p.id) or {}) for p in mine_p if imgs_of(by_print.get(p.id) or {})), [])[:8]
-            ph = (ph + [u for u in v3_urls([p.id for p in sorted(mine_p, key=lambda p: p.print_date or 0, reverse=True)]) if u not in ph])[:POOL_MAX]
+            ph = (ph + [u for u in v3_urls([p.id for p in sorted(mine_p, key=lambda p: p.print_date.timestamp() if p.print_date else 0, reverse=True)], [p.group_id for p in mine_p]) if u not in ph])[:POOL_MAX]
             card = [p.id for p in mine_p if any(u.color_hex and (u.grams_used or 0) > 0 for u in p.filament_usage)]
             return (ph + [card_url(card)]) if card else ph, len(mine_p)
         it["profiles"] = []
@@ -366,7 +374,7 @@ async def _to_rate(rated, pending, stats, my_uid, mine) -> dict:
     out.sort(key=lambda x: not x["photos"])                 # avec photos d'abord, puis les plus recents
     for x in out:                                           # la carte en dernier
         pids = x.pop("card_prints", None)
-        extra = [u for u in v3_urls(list(reversed(x.get("print_ids") or []))) if u not in x["photos"]]
+        extra = [u for u in v3_urls(list(reversed(x.get("print_ids") or [])), x.pop("group_ids", [])) if u not in x["photos"]]
         x["photos"] = (x["photos"] + extra)[:POOL_MAX]
         if pids:
             x["photos"] = x["photos"] + [card_url(pids)]

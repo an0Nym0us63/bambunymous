@@ -796,6 +796,9 @@ async def _build_gallery(kind: str = "photos") -> dict:
         if kind == "vue3d":
             # sel : retenue comme vignette (30/10/2026 : la tuile ne fait defiler que celles-la)
             photos = [{"url": f"/api/v1/prints/{p.id}/file/{nm}?v={v}", "name": nm, "label": "vue3d", "sel": se} for nm, v, se in vue3d_all.get(p.id, ())]
+            # ses animations (08/11/2026), celle en tete d'abord : le diaporama de la galerie les montre apres les vues
+            anims = [{"url": f"/api/v1/prints/{p.id}/file/{a['name']}?v={a['v']}", "label": _v3anim_label(a)}
+                     for a in _v3anims(DATA_DIR / "prints" / str(p.id))] if p.id in vue3d_all else []
         # pas de photo, mais une vignette prise dans la vue 3D assemblee : elle remonte (29/10/2026)
         elif not photos and p.id in vue3d_prints:
             nm, v, _sl = vue3d_prints[p.id]
@@ -823,6 +826,8 @@ async def _build_gallery(kind: str = "photos") -> dict:
             acc["prints"]              += 1
             acc["print_ids"].append(p.id)
             acc["photos"].extend({**ph, "pid": p.id} for ph in photos)      # pid : la couverture d'un groupe les distingue
+            if kind == "vue3d":
+                acc.setdefault("anims", []).extend(anims)
             if p.design_id:
                 acc["_designs"].add(str(p.design_id))
                 acc["_dcount"][str(p.design_id)] = acc["_dcount"].get(str(p.design_id), 0) + 1
@@ -847,6 +852,7 @@ async def _build_gallery(kind: str = "photos") -> dict:
                 "design_id": str(p.design_id) if p.design_id else None,
                 # le profil connu de l'impression (imprimante, ou choisi a la main) : la vue 3D de la galerie s'ouvre dessus
                 "mw_profile_id": _mw_profile(p.mw_profile_id, p.mw_plates) or None,
+                **({"anims": anims} if kind == "vue3d" else {}),
             })
 
     # Photos uploadées directement dans le dossier du groupe (pas via un print précis) : le disque est lu
@@ -858,7 +864,7 @@ async def _build_gallery(kind: str = "photos") -> dict:
             d = groups_dir / str(gid)
             if d.exists():
                 out[gid] = [(f.name, int(f.stat().st_mtime)) for f in sorted(d.iterdir())
-                            if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v") and not is_v3anim(f.name)]
+                            if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v")]   # animations : le diaporama 3D
         return out
     import asyncio as _aio
     on_disk = await _aio.to_thread(_scan, list(group_acc))
@@ -872,10 +878,14 @@ async def _build_gallery(kind: str = "photos") -> dict:
                    for name, mt in sorted(files) if _V3RE.fullmatch(name) and "_mix" not in name]
             own.sort(key=lambda ph: not ph["sel"])
             acc["photos"] = own + acc["photos"]
+            # les animations du groupe lui-meme d'abord (la plus recente), puis celles de ses impressions
+            ga = sorted(((name, mt) for name, mt in files if is_v3anim(name)), key=lambda t: -t[1])
+            acc["anims"] = [{"url": f"/api/v1/prints/groups/{gid}/photo/{name}?v={mt}", "label": _v3anim_label({"style": (_V3ANIM_RE.fullmatch(name).group(1) or ""),
+                             "bg": (_V3ANIM_RE.fullmatch(name).group(2) or "")})} for name, mt in ga] + acc.get("anims", [])
             continue
         cover = acc.get("cover_photo")
         for name, mt in files:
-            if _V3RE.fullmatch(name) and name != cover:          # une vue 3D du groupe : seulement choisie en couverture
+            if (_V3RE.fullmatch(name) and name != cover) or is_v3anim(name):   # une vue 3D du groupe : seulement choisie en couverture
                 continue
             acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{name}?v={mt}",
                                   "label": "vue3d" if _V3RE.fullmatch(name) else name, "name": name})

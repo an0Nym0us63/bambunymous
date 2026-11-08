@@ -9,7 +9,8 @@ import React, { useEffect, useRef, useState } from "react";
  */
 // (31/10/2026) un peu plus vite (3,4 s -> 2,6 s), et un filet tres fin tout en bas, un segment par vue (celle montree plus
 // foncee) : on voit que ca tourne sans rien poser sur l'image (des points blancs sur l'image empietaient)
-export default function CycleImg({ urls, render, period = 2600, dots = true }) {
+// periodOf(u) (08/11/2026) : combien de temps montrer celle-ci (une animation reste le temps de sa boucle) ; sinon period
+export default function CycleImg({ urls, render, period = 2600, dots = true, periodOf = null }) {
   const [i, setI] = useState(0);
   const box = useRef(null);
   const [onScreen, setOnScreen] = useState(false);
@@ -23,12 +24,11 @@ export default function CycleImg({ urls, render, period = 2600, dots = true }) {
   useEffect(() => {
     if (urls.length < 2 || !onScreen) return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
-    let id = 0;
-    const start = setTimeout(() => {
-      id = setInterval(() => { if (!document.hidden) setI(k => (k + 1) % urls.length); }, period);
-    }, Math.floor(Math.random() * period));
-    return () => { clearTimeout(start); clearInterval(id); };
-  }, [urls.length, onScreen, period]);
+    let id = 0, k = 0, alive = true;
+    const next = () => { if (!alive) return; if (!document.hidden) { k = (k + 1) % urls.length; setI(k); } id = setTimeout(next, (periodOf && periodOf(urls[k])) || period); };
+    const start = setTimeout(next, periodOf ? (periodOf(urls[0]) || period) : Math.floor(Math.random() * period));
+    return () => { alive = false; clearTimeout(start); clearTimeout(id); };
+  }, [urls.length, onScreen, period]); // eslint-disable-line react-hooks/exhaustive-deps
   const cur = i % urls.length;
   return <span ref={box} style={{ position: "absolute", inset: 0, display: "block" }}>
     {urls.map((u, k) => <React.Fragment key={u}>{render(u, k === cur)}</React.Fragment>)}

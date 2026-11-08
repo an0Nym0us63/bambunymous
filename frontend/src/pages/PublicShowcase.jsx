@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { apiThumb } from "../api/client";
+import Piece3D from "../components/Piece3D";
 
 // La vitrine publique (04/11/2026, refaite le meme jour) : /vitrine/<lien>, sans compte. Un portfolio sombre et vivant :
 // une aurore aux couleurs de la vitrine et un halo qui suit la souris ; en tete, le titre en grand et un jeu de cartes
@@ -162,70 +163,6 @@ function Card({ it, accent, onOpen, i, big }) {
   </Reveal>;
 }
 
-// la vue 3D d'une piece (l'assemblage s'il y en a un), avec le moteur de l'appli, charge seulement a la demande
-// les effets comme dans la vue de l'appli (04/11/2026) : finitions et multicolores du plateau montre, ceux de chaque
-// piece d'un assemblage (le plateau d'ou elle vient), la lueur des phosphorescents, les couleurs par hauteur d'un lithophane
-function Piece3D({ token, it, accent }) {
-  const [st, setSt] = useState({ load: true });
-  const [vs, setVs] = useState({});                   // ce que le moteur dit de la vue (dont « glow » : des phosphorescents)
-  const [V, setV] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    setSt({ load: true });
-    Promise.all([
-      fetch(`/api/v1/showcase/public/${encodeURIComponent(token)}/3d/${it.key}`).then(r => (r.ok ? r.json() : Promise.reject(r.status))),
-      import("../components/Model3D"),
-    ]).then(([m, mod]) => { if (!alive) return; setV(() => mod.Model3DViewer); setSt({ m, isGlb: mod.isGlb }); })
-      .catch(() => alive && setSt({ error: true }));
-    return () => { alive = false; };
-  }, [token, it.key]);
-  const m = st.m;
-  const plate = m ? ((m.plates || []).find(p => p.assembled && !p.skipped) || (m.plates || []).find(p => !p.skipped)) : null;
-  const n = plate ? String(plate.n) : null;
-  const pal = m && n ? (m.used_plates?.[n] || m.used_palette || null) : null;
-  const piecePal = useMemo(() => {
-    if (!plate?.assembled || !pal || !plate.pieces) return null;
-    const out = {};
-    for (const pc of Object.values(plate.pieces)) {
-      const pn = m.piece_plates?.[String(pc.k || "").split(":").slice(0, 2).join(":")];
-      const pp = pn != null ? m.used_plates?.[String(pn)] : null;
-      if (pp) out[pc.k] = { ...pal, ...pp };
-    }
-    return Object.keys(out).length ? out : null;
-  }, [m, plate, pal]);
-  const pieceFx = useMemo(() => {
-    if (!plate?.assembled || !pal || !plate.pieces) return null;
-    const fin = {}, mul = {};
-    for (const pc of Object.values(plate.pieces)) {
-      const pn = m.piece_plates?.[String(pc.k || "").split(":").slice(0, 2).join(":")];
-      if (pn == null || !m.used_plates?.[String(pn)]) continue;
-      fin[pc.k] = m.used_finishes_plates?.[String(pn)] || {};
-      mul[pc.k] = m.used_multi_plates?.[String(pn)] || {};
-    }
-    return Object.keys(fin).length ? { fin, mul } : null;
-  }, [m, plate, pal]);
-  // les finitions et multicolores du plateau montre (une seule fois par vue : le moteur ne doit pas recevoir un objet neuf
-  // a chaque rendu)
-  const fx = useMemo(() => {
-    if (!m || !plate) return {};
-    const byPlate = m.used_plates && Object.keys(m.used_plates).length > 0;
-    return { fin: pal ? (byPlate ? m.used_finishes_plates?.[n] || {} : m.used_finishes) : m.finishes,
-             multi: pal ? (byPlate ? m.used_multi_plates?.[n] || {} : m.used_multi) : null,
-             hue: plate.litho && (plate.z_colors || []).length ? plate.z_colors : null };
-  }, [m, plate, pal, n]);
-  if (st.error || (!st.load && V && !plate)) return <Center>La vue 3D n'est pas disponible pour cette pièce.</Center>;
-  if (st.load || !V) return <Center><span className="sc-spin" style={{ borderTopColor: accent }}/>Préparation de la vue 3D…</Center>;
-  return <div style={{ position: "absolute", inset: 0 }}>
-    <V url={plate.url} glb={st.isGlb(plate.url)} onState={setVs} palette={pal} piecePalettes={piecePal} finishes={fx.fin} multi={fx.multi} glows={m.glows || null}
-      glow={!!vs.glow} pieceFinishes={pieceFx?.fin || null} pieceMulti={pieceFx?.mul || null} hue={fx.hue}
-      pieces={plate.assembled ? plate.pieces : null} edit={plate.assembled ? m.assembly_edit : null} litho={!!plate.litho} bare/>
-    <span style={{ position: "absolute", left: 14, bottom: 14, ...glassTag, pointerEvents: "none" }}>
-      {plate.assembled ? "Assemblage · " : ""}glisser pour tourner · molette ou pincer pour zoomer</span>
-  </div>;
-}
-
-const Center = ({ children }) => <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", gap: 14, alignItems: "center", justifyContent: "center",
-  color: "rgba(255,255,255,.7)", fontSize: 14, textAlign: "center", padding: 20 }}>{children}</div>;
 
 // la visionneuse d'une piece : photos (clic pour zoomer, la souris deplace) ou vue 3D ; piece precedente / suivante
 function Viewer({ it, list, token, accent, onClose, onGo }) {
@@ -268,7 +205,7 @@ function Viewer({ it, list, token, accent, onClose, onGo }) {
       animation: "scPop .5s cubic-bezier(.2,.8,.2,1)" }}>
       <div style={{ position: "relative", minHeight: 0, borderRadius: 24, overflow: "hidden", background: "radial-gradient(120% 90% at 50% 0%, #1c1c26, #0c0c11)",
         border: "1px solid rgba(255,255,255,.07)" }}>
-        {tab === "3d" ? <Piece3D token={token} it={it} accent={accent}/> : <>
+        {tab === "3d" ? <Piece3D key={it.key} accent={accent} load={() => fetch(`/api/v1/showcase/public/${encodeURIComponent(token)}/3d/${it.key}`).then(r => (r.ok ? r.json() : Promise.reject(r.status)))}/> : <>
           <div onPointerDown={e => { start.current = e.clientX; }}
             onPointerUp={e => { if (!zoom && start.current != null && Math.abs(e.clientX - start.current) > 40) setK(x => Math.max(0, Math.min(n - 1, x + (e.clientX < start.current ? 1 : -1)))); start.current = null; }}
             onClick={e => { if (!fine()) return; const r = e.currentTarget.getBoundingClientRect(); setZoom(z => (z ? null : { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height })); }}
