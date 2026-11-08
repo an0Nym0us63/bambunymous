@@ -10,12 +10,13 @@ import { showConfirm } from "../utils/dialog";
 import Lightbox from "./Lightbox";
 import { fBtn } from "./FicheKit";
 import { useStackZ } from "../utils/zstack";
+import { Images } from "lucide-react";
 
-const KINDS = [["all", "Tout"], ["photo", "📸 Photos"], ["vue", "🧊 Vues 3D"], ["anim", "🎞 Animations"], ["tl", "🎬 Timelapses"], ["snap", "🛠 Captures"], ["plate", "🖼 Plateaux"]];
+const KINDS = [["all", "Tout"], ["photo", "📸 Photos"], ["vue", "🧊 Vues 3D"], ["anim", "🎬 Animations"], ["tl", "⏱ Timelapses"], ["snap", "🛠 Captures"], ["plate", "🖼 Plateaux"]];
 const KIND_RANK = { photo: 0, vue: 1, anim: 2, tl: 3, snap: 4, plate: 5 };
 const SORTS = [["print", "Par impression"], ["new", "Plus récentes"], ["old", "Plus anciennes"], ["kind", "Par sorte"]];
 const day = t => t ? new Date(t * 1000).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "2-digit" }) : "";
-const C = { cover: "#F59E0B", fiche: "#0EA5E9", top: "#8B5CF6" };
+const C = { cover: "#F59E0B", fiche: "#0EA5E9" };
 
 function Pill({ on, c, children, onClick, tip, disabled }) {
   return <button type="button" disabled={disabled} onClick={onClick} data-tip={tip} style={{ padding: "4px 8px", borderRadius: 9, cursor: disabled ? "default" : "pointer",
@@ -23,17 +24,21 @@ function Pill({ on, c, children, onClick, tip, disabled }) {
     color: on ? "#fff" : "var(--text2)", background: on ? c : "var(--surface)", opacity: disabled && !on ? 0.5 : 1 }}>{children}</button>;
 }
 
-// une case « ce qui s'affiche » : son titre, ses images (ou ce qui s'affiche a defaut), ce qu'il faut toucher pour changer
-function Shown({ title, c, imgs, video, empty, hint }) {
+// une case « ce qui s'affiche » : son titre, ses images (ou ce qui s'affiche a defaut), ce qu'il faut toucher pour changer ;
+// imgs : des adresses, ou des { src, video, tag } (l'animation en tete tourne, avec sa marque)
+function Shown({ title, c, imgs, empty, hint }) {
   return <div style={{ flex: "1 1 220px", minWidth: 200, display: "flex", flexDirection: "column", gap: 6, padding: "9px 11px", borderRadius: 14,
     border: `1px solid color-mix(in srgb, ${c} 45%, var(--border))`, background: `color-mix(in srgb, ${c} 7%, var(--surface2))` }}>
     <span style={{ fontSize: 12, fontWeight: 900, color: "var(--text)" }}>{title}</span>
     <div style={{ display: "flex", gap: 6, alignItems: "center", minHeight: 54 }}>
-      {imgs.length ? imgs.slice(0, 4).map(s => video
-        ? <video key={s} src={s} muted loop autoPlay playsInline style={{ width: 54, height: 54, borderRadius: 10, objectFit: "cover", background: "#111" }}/>
-        : <img key={s} src={s} alt="" style={{ width: 54, height: 54, borderRadius: 10, objectFit: "contain", background: "var(--surface)", border: `1.5px solid ${c}` }}/>)
+      {imgs.length ? imgs.slice(0, 5).map(x => { const s = typeof x === "string" ? x : x.src;
+        return <span key={s} style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+          {x.video ? <video src={s} muted loop autoPlay playsInline style={{ width: 54, height: 54, borderRadius: 10, objectFit: "cover", background: "#111", border: `1.5px solid ${c}` }}/>
+            : <img src={s} alt="" style={{ width: 54, height: 54, borderRadius: 10, objectFit: "contain", background: "var(--surface)", border: `1.5px solid ${c}` }}/>}
+          {x.tag && <span style={{ fontSize: 9, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>{x.tag}</span>}
+        </span>; })
         : <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{empty}</span>}
-      {imgs.length > 4 && <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)" }}>+{imgs.length - 4}</span>}
+      {imgs.length > 5 && <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)" }}>+{imgs.length - 5}</span>}
     </div>
     <span style={{ fontSize: 10.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.35 }}>{hint}</span>
   </div>;
@@ -95,12 +100,13 @@ export default function MediaLibrary({ title, group, admin, ents, allOf, cover, 
           🧊 Fiche{group && it.e.pid ? " de l'impr." : ""}</Pill>}
       </>;
     }
-    if (it.kind === "anim") return <Pill on={it.top} c={C.top} disabled={!admin || busy || it.top} onClick={() => act(() => it.makeTop())}
-      tip={it.top ? "Elle tourne en tête de la fiche" : "La faire tourner en tête de la fiche"}>🎞 En tête{group && it.e.pid ? " de l'impr." : ""}</Pill>;
+    if (it.kind === "anim") return <Pill on={it.top} c={C.fiche} disabled={!admin || busy} onClick={() => act(() => it.toggleTop())}
+      tip={it.top ? "Elle tourne en haut de la fiche, à la place de l'image : toucher pour l'enlever" : "La faire tourner en haut de la fiche, à la place de l'image (une seule à la fois)"}>
+      🧊 Fiche{group && it.e.pid ? " de l'impr." : ""}</Pill>;
     return null;
   };
   const ring = it => (it.kind === "photo" || it.kind === "vue") && cover && cover === it.e.ref(it.name) ? C.cover : it.kind === "vue" && it.sel ? C.fiche
-    : it.kind === "anim" && it.top ? C.top : null;
+    : it.kind === "anim" && it.top ? C.fiche : null;
 
   const sel_ = { padding: "6px 9px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 12.5, fontWeight: 700, fontFamily: "inherit" };
   return createPortal(<div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: z, background: "rgba(2,6,23,.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -111,18 +117,20 @@ export default function MediaLibrary({ title, group, admin, ents, allOf, cover, 
       <div style={{ padding: "12px 14px 10px", display: "flex", flexDirection: "column", gap: 10, borderBottom: "1px solid var(--border)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            🗂 Médiathèque <span style={{ color: "var(--muted)", fontWeight: 700, fontSize: 13 }}>· {title} · {counts.all}</span></span>
+            <Images size={18} strokeWidth={2.4} style={{ verticalAlign: -3, marginRight: 6, color: "#6366F1" }}/>Médiathèque <span style={{ color: "var(--muted)", fontWeight: 700, fontSize: 13 }}>· {title} · {counts.all}</span></span>
           <button type="button" onClick={onClose} aria-label="Fermer" style={{ width: 36, height: 36, borderRadius: "50%", border: "1px solid var(--border)", background: "var(--surface2)",
             color: "var(--text)", cursor: "pointer", fontSize: 15, flexShrink: 0 }}>✕</button>
         </div>
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
-          <Shown title={group ? "🧊 Image du groupe (fiche, listes, galerie 3D)" : "🧊 Image de la fiche (listes, galerie 3D)"} c={C.fiche} imgs={ficheVues}
+          {/* (08/11/2026) une seule case pour l'image : l'animation choisie tourne en haut de la fiche, les vues font les listes
+              et la galerie 3D (et le haut de la fiche sans animation) */}
+          <Shown title={group ? "🧊 Image du groupe" : "🧊 Image de la fiche"} c={C.fiche}
+            imgs={[...(topAnim ? [{ src: topAnim.src, video: true, tag: "en haut de fiche" }] : []), ...ficheVues.map(s => ({ src: s, tag: topAnim ? "listes" : null }))]}
             empty={group ? "La mosaïque des impressions" : plateSrc ? <span style={{ display: "flex", alignItems: "center", gap: 6 }}><img src={plateSrc} alt="" style={{ width: 54, height: 54, borderRadius: 10, objectFit: "contain", background: "var(--surface)" }}/>L'image du plateau</span> : "L'image du plateau"}
-            hint="🧊 Fiche sur une vue 3D ; plusieurs : elles défilent."/>
-          <Shown title="⭐ Couverture de la galerie" c={C.cover} imgs={coverIt ? [coverIt.src] : []} empty="La première photo"
+            hint={`🧊 Fiche sur des vues 3D (plusieurs : elles défilent) : les listes, la galerie 3D${topAnim ? "" : " et le haut de la fiche"}. Sur une animation : elle tourne en haut de la fiche à la place.`}/>
+          <Shown title="⭐ Couverture de la galerie" c={C.cover} imgs={coverIt ? [{ src: coverIt.src }] : []} empty="La première photo"
             hint={group ? "⭐ Galerie sur une photo ou une vue 3D, du groupe ou d'une de ses impressions." : "⭐ Galerie sur une photo ou une vue 3D."}/>
-          <Shown title="🎞 Animation en tête de fiche" c={C.top} imgs={topAnim ? [topAnim.src] : []} video empty="Aucune : l'image de la fiche"
-            hint="🎞 En tête sur une animation ; d'office la dernière faite."/>
+
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           {KINDS.filter(([k]) => k === "all" || counts[k]).map(([k, l]) => <Pill key={k} on={kind === k} c="#6366F1" onClick={() => setKind(k)}>{l} {counts[k] || 0}</Pill>)}

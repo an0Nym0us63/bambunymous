@@ -1063,7 +1063,7 @@ def _media_photos(names, base: str, group: bool = False, folder=None) -> list:
 
 
 def _v3part(v3: dict) -> dict:
-    return {k: v3[k] for k in ("max", "sel", "slots", "anims")}
+    return {k: v3[k] for k in ("max", "sel", "slots", "anims", "anim_off")}
 
 
 def _print_media(pid: int, thumb: int) -> dict:
@@ -3126,6 +3126,9 @@ def is_v3anim(name: str) -> bool:
 
 
 _LAST_ANIM: dict = {}                 # dossier -> ses animations, relevees par la derniere lecture du dossier (_v3slots)
+# aucune animation en tete de fiche (08/11/2026) : un fichier temoin dans le dossier ; « En tete » ou une nouvelle animation l'enleve
+V3_ANIM_OFF = ".Vue3D_anim_off"
+_ANIM_OFF: dict = {}
 
 
 def _v3anims(folder: Path, fresh: bool = False) -> list:
@@ -3148,10 +3151,16 @@ def _v3anims(folder: Path, fresh: bool = False) -> list:
     return sorted(out, key=lambda a: -a["v"])
 
 
+def _v3anim_off(folder: Path, fresh: bool = False) -> bool:
+    if not fresh and str(folder) in _ANIM_OFF:
+        return _ANIM_OFF[str(folder)]
+    return (folder / V3_ANIM_OFF).exists()
+
+
 def _v3anim(folder: Path, fresh: bool = False):
-    """{name, style, v} de l'animation montree en tete de fiche (la plus recente), ou None."""
+    """{name, style, v} de l'animation montree en tete de fiche (la plus recente), ou None (aucune, ou on n'en veut pas)."""
     al = _v3anims(folder, fresh)
-    return al[0] if al else None
+    return al[0] if al and not _v3anim_off(folder, fresh) else None
 
 
 def _v3anim_label(a: dict) -> str:
@@ -3180,6 +3189,8 @@ async def _save_v3anim(folder: Path, file: UploadFile, style: str = "", bg: str 
     tmp = folder / (name + ".part")
     tmp.write_bytes(raw)
     os.replace(tmp, folder / name)
+    (folder / V3_ANIM_OFF).unlink(missing_ok=True)          # une animation qu'on vient de faire : on veut la voir
+    _ANIM_OFF.pop(str(folder), None)
     gallery_touched()
     _LAST_ANIM.pop(str(folder), None)
     return next(a for a in _v3anims(folder, fresh=True) if a["name"] == name)
@@ -3191,6 +3202,14 @@ def _b36(n: int) -> str:
         n, r = divmod(n, 36)
         s = "0123456789abcdefghijklmnopqrstuvwxyz"[r] + s
     return s or "0"
+
+
+def _no_v3anim(folder: Path) -> None:
+    """Plus d'animation en tete de fiche : l'image (les vues choisies, ou le plateau) y revient."""
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / V3_ANIM_OFF).touch()
+    _ANIM_OFF.pop(str(folder), None); _LAST_ANIM.pop(str(folder), None)
+    gallery_touched()
 
 
 def _drop_v3anim(folder: Path, name: str = "") -> None:
@@ -3209,6 +3228,8 @@ def _top_v3anim(folder: Path, name: str) -> None:
     if not is_v3anim(name) or not (folder / name).is_file():
         raise HTTPException(404, "Animation introuvable")
     os.utime(folder / name, None)
+    (folder / V3_ANIM_OFF).unlink(missing_ok=True)
+    _ANIM_OFF.pop(str(folder), None)
     _LAST_ANIM.pop(str(folder), None)
     gallery_touched()
 
@@ -3288,10 +3309,13 @@ def _v3slots(folder: Path) -> dict:
     """{numero: date} des vues 3D gardees dans ce dossier. (06/11/2026) une lecture du dossier au lieu de quatre stat :
     la liste des impressions le demande deux fois par impression."""
     want = {_v3name(n): n for n in range(1, V3_MAX + 1)}
-    out, anims = {}, []
+    out, anims, off = {}, [], False
     try:
         with os.scandir(folder) as it:
             for e in it:
+                if e.name == V3_ANIM_OFF:
+                    off = True
+                    continue
                 m = _V3ANIM_RE.fullmatch(e.name)
                 if m:                                 # les animations, relevees au passage (08/11/2026)
                     try:
@@ -3308,8 +3332,9 @@ def _v3slots(folder: Path) -> dict:
     except OSError:
         pass
     _LAST_ANIM[str(folder)] = sorted(anims, key=lambda a: -a["v"])
+    _ANIM_OFF[str(folder)] = off
     if len(_LAST_ANIM) > 5000:
-        _LAST_ANIM.clear()
+        _LAST_ANIM.clear(); _ANIM_OFF.clear()
     return dict(sorted(out.items()))
 
 
@@ -3341,7 +3366,7 @@ def _v3list(kind: str, ident: int, folder: Path, chosen: int) -> dict:
           for a in _v3anims(folder, fresh=True)]
     return {"max": V3_MAX, "chosen": sel[0] if sel else 0, "sel": sel, "cover": {"name": name, "v": v} if name else None,
             "slots": [{"n": n, "url": f"{base}/{_v3name(n)}?v={v}"} for n, v in sorted(sl.items())],
-            "anims": al, "anim": al[0] if al else None}
+            "anims": al, "anim_off": _v3anim_off(folder, fresh=True), "anim": al[0] if al and not _v3anim_off(folder, fresh=True) else None}
 
 
 @router.get("/{print_id}/vue3d")
@@ -3422,6 +3447,18 @@ async def group_vue3d_anim_drop(group_id: int, name: str = "", _: str = Depends(
 @router.post("/{print_id}/vue3d/anim/top")
 async def print_vue3d_anim_top(print_id: int, name: str, _: str = Depends(require_admin)):
     _top_v3anim(DATA_DIR / "prints" / str(print_id), name)
+    return {"ok": True}
+
+
+@router.post("/{print_id}/vue3d/anim/none")
+async def print_vue3d_anim_none(print_id: int, _: str = Depends(require_admin)):
+    _no_v3anim(DATA_DIR / "prints" / str(print_id))
+    return {"ok": True}
+
+
+@router.post("/groups/{group_id}/vue3d/anim/none")
+async def group_vue3d_anim_none(group_id: int, _: str = Depends(require_admin)):
+    _no_v3anim(DATA_DIR / "groups" / str(group_id))
     return {"ok": True}
 
 

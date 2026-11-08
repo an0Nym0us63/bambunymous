@@ -83,7 +83,7 @@ export default function MediaGallery({ kind, id, title = "", refreshKey = "", on
     await client.post(group ? `/prints/groups/${id}/photos/upload` : `/prints/${id}/photos/upload`, fd, { headers: { "Content-Type": "multipart/form-data" } }); });
 
   // chaque onglet : par entite, ses tuiles { key, src, video, label, fit, ...ce qu'on en fait }
-  // t : la date du fichier (la mediatheque trie par date) ; toggle / makeTop : les gestes de la vue ou de l'animation
+  // t : la date du fichier (la mediatheque trie par date) ; toggle / toggleTop : les gestes de la vue ou de l'animation
   const vOf = url => +((String(url).match(/[?&]v=(\d+)/) || [])[1] || 0);
   const photosOf = e => (e.m.photos || []).map(x => ({ key: `${e.key}:${x.name}`, kind: "photo", e, name: x.name, src: u(x.url), video: x.video,
     label: x.video ? "Vidéo" : null, t: x.t || 0 }));
@@ -92,8 +92,9 @@ export default function MediaGallery({ kind, id, title = "", refreshKey = "", on
         return { key: `${e.key}:v${s.n}`, kind: "vue", e, n: s.n, name: s.n === 1 ? "Vue3D.png" : `Vue3D_${s.n}.png`, src: u(s.url), fit: "contain",
           label: `Vue ${s.n}`, sel: on, sl: sel, t: vOf(s.url), toggle: () => client.put(`${e.base}/thumb`, { slots: on ? sel.filter(x => x !== s.n) : [...sel, s.n] }) }; }),
       ...(v.anims || []).map((a, i) => ({ key: `${e.key}:${a.name}`, kind: "anim", e, name: a.name, src: u(a.url), video: true,
-        label: `${(ANIM_STYLES.find(s => s[0] === a.style) || [])[1] || "🎞"} ${a.label}`, top: i === 0, t: a.v || 0,
-        makeTop: () => client.post(`${e.base}/vue3d/anim/top`, null, { params: { name: a.name } }) }))]; };
+        label: `${(ANIM_STYLES.find(s => s[0] === a.style) || [])[1] || "🎬"} ${a.label}`, top: i === 0 && !v.anim_off, t: a.v || 0,
+        // en tete de fiche, ou (deja en tete) plus d'animation du tout : l'image revient (08/11/2026)
+        toggleTop: () => i === 0 && !v.anim_off ? client.post(`${e.base}/vue3d/anim/none`) : client.post(`${e.base}/vue3d/anim/top`, null, { params: { name: a.name } }) }))]; };
   const techOf = e => { const t = e.m.tech || {};
     return [...(t.timelapse ? [{ key: `${e.key}:tl`, kind: "tl", e, name: "Video-Timelapse.mp4", src: u(t.timelapse), video: true, label: "🎬 Timelapse", fit: "cover", t: t.timelapse_t || 0 }] : []),
       ...[...(t.snaps || [])].sort((a, b) => snapRank(a.name) - snapRank(b.name))
@@ -134,21 +135,21 @@ export default function MediaGallery({ kind, id, title = "", refreshKey = "", on
         data-tip={it.sel ? "Dans la vignette 3D : l'en retirer" : "La mettre dans la vignette 3D (plusieurs : elles défilent)"}>🧊</button>
       {trash("cette vue", () => act(() => client.delete(`${it.e.base}/vue3d/${it.n}`)))}</>;
     if (it.kind === "anim") return <>
-      <button type="button" disabled={busy || it.top} onClick={() => act(() => client.post(`${it.e.base}/vue3d/anim/top`, null, { params: { name: it.name } }))}
-        style={{ ...dot({ top: 5, left: 5 }, it.top, "#8B5CF6"), filter: it.top ? "none" : "grayscale(1)", cursor: it.top ? "default" : "pointer" }}
-        data-tip={it.top ? "Elle tourne en tête de la fiche" : "La faire tourner en tête de la fiche"}>⭐</button>
+      <button type="button" disabled={busy} onClick={() => act(() => it.toggleTop())}
+        style={{ ...dot({ bottom: 5, right: 5 }, it.top, "#0EA5E9") }}
+        data-tip={it.top ? "Elle tourne en haut de la fiche, à la place de l'image : toucher pour l'enlever" : "La faire tourner en haut de la fiche, à la place de l'image"}>🧊</button>
       {trash("cette animation", () => act(() => client.delete(`${it.e.base}/vue3d/anim`, { params: { name: it.name } })))}</>;
     if (it.kind === "snap") return trash("cette capture", () => act(() => client.delete(`/prints/${it.e.pid}/upload/${it.name}`)));
     return null;
   };
   const ringOf = it => (it.kind === "photo" || it.kind === "vue") && cover === it.e.ref(it.name) ? "#F59E0B" : it.kind === "vue" && it.sel ? "#0EA5E9"
-    : it.kind === "anim" && it.top ? "#8B5CF6" : null;
+    : it.kind === "anim" && it.top ? "#0EA5E9" : null;
 
   const legend = { photos: "⭐ la couverture de la galerie · 🗑 supprimer",
-    "3d": "⭐ la couverture de la galerie · 🧊 dans la vignette 3D (plusieurs : elles défilent) · ⭐ violette : l'animation en tête de fiche",
+    "3d": "⭐ la couverture de la galerie · 🧊 sur une vue : l'image de la fiche (plusieurs : elles défilent) · 🧊 sur une animation : elle tourne en haut de la fiche",
     tech: "Le timelapse et les captures prises pendant l'impression, de la fin vers la première couche" }[cur];
   const empty = { photos: admin ? "Aucune photo : ajoute la première avec ＋." : "Aucune photo.",
-    "3d": "Aucune vue 3D ni animation : prends-en avec 📸 et 🎞 dans la vue 3D.", tech: "Ni timelapse ni capture des couches." }[cur];
+    "3d": "Aucune vue 3D ni animation : prends-en avec 📸 Vignette et Animation dans la vue 3D.", tech: "Ni timelapse ni capture des couches." }[cur];
 
   return <div className="card-sm" style={{ display: "flex", flexDirection: "column", gap: 10, padding: "10px 12px 12px" }}>
     {lb && lb.i >= 0 && <Lightbox images={lb.items} index={lb.i} onClose={() => setLb(null)}/>}

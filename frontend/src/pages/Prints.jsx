@@ -1905,6 +1905,7 @@ function GroupEditSheet({ groupId, name, onClose, onSaved }) {
 export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, cover_print_id: coverPrintIdProp, onClose, onDelete, onUngroup, onUpdated }) {
   useTrackDetail(`Fiche groupe · ${name || "#" + groupId}`);
   const isAdmin = useIsAdmin();
+  const [gOrig, setGOrig] = useState(false);          // le haut de la fiche : la mosaique au lieu de l'animation (08/11/2026)
   const groupVisiting = useFriend(s => s.friend);
   const [prints, setPrints] = useState([]);
   const [mwAll, setMwAll] = useState(false);          // « Lier toutes au modele MakerWorld »
@@ -2124,12 +2125,19 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   // plusieurs vues 3D choisies pour le groupe : elles defilent dans sa carte (31/10/2026)
   const v3sel = v3u && prints[0]?.group_vue3d_sel?.length > 1 ? prints[0].group_vue3d_sel.map(s => apiThumb(withV(apiUrl(`/prints/groups/${groupId}/photo/${s.name}`), s.v), 384)) : null;
   const srcOf = (x, w) => (x._src ? x._src(w) : thumbUrl(x, w));
+  const gAnim = prints[0]?.group_vue3d_anim || null;
   const hero = (
     <div style={{ position: "relative", height: wide ? 300 : "min(36vh, 280px)", minHeight: 200, borderRadius: wide ? 20 : 0, overflow: "hidden", background: "var(--surface2)" }}>
       {cover && <img src={thumbUrl(cover, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
         objectFit: "cover", filter: "blur(26px) saturate(1.15)", opacity: 0.3, transform: "scale(1.3)" }}/>}
       <span aria-hidden="true" style={{ position: "absolute", inset: 0, background: "radial-gradient(60% 70% at 50% 38%, #A78BFA33, transparent 72%)" }}/>
-      <div style={{ position: "absolute", inset: "8% 6% 34%", display: "grid", gap: 8,
+      {/* l'animation du groupe choisie pour le haut de sa fiche (08/11/2026 : elle ne s'y montrait pas) ; « Original » revient a la mosaique */}
+      {gAnim && !gOrig && <video key={gAnim.v} src={withV(apiUrl(`/prints/groups/${groupId}/photo/${gAnim.name}`), gAnim.v)} autoPlay loop muted playsInline
+        style={{ position: "absolute", inset: "6% 8% 30%", width: "84%", height: "64%", objectFit: "contain", borderRadius: 16, zIndex: 1 }}/>}
+      {gAnim && <button type="button" onClick={() => setGOrig(o => !o)} data-tip={gOrig ? "Revenir à l'animation" : "Voir la mosaïque des impressions"}
+        style={{ position: "absolute", top: 10, right: 10, zIndex: 3, padding: "4px 10px", borderRadius: 10, border: "1px solid var(--border)", cursor: "pointer",
+          fontSize: 11, fontWeight: 900, color: "var(--text2)", background: "color-mix(in srgb, var(--sheet-bg) 80%, transparent)" }}>{gOrig ? "▶ Animation" : "Original"}</button>}
+      <div style={{ position: "absolute", inset: "8% 6% 34%", display: "grid", gap: 8, visibility: gAnim && !gOrig ? "hidden" : "visible",
         gridTemplateColumns: `repeat(${Math.min(mosaic.length, 4) || 1}, minmax(0, 1fr))` }}>
         {mosaic.map((x, i) => <div key={x.id} style={{ position: "relative", borderRadius: 14, overflow: "hidden", transform: `rotate(${[-3, 2, -1.5, 3][i]}deg)`,
           // en sombre, des cartes grises faisaient des dalles : un verre lavande, bord clair (le clair reste tel quel)
