@@ -13,6 +13,82 @@ import { useStackZ } from "../utils/zstack";
 // Une video ne se charge que quand elle est affichee (les voisines montrent leur image « poster ») ; si le
 // navigateur ne sait pas la lire, « fallback » (une version convertie) prend le relais (26/10/2026).
 // data-no-pull : le tirer-pour-rafraichir de la coquille Android reste coupe pendant ce temps.
+// Le zoom (08/11/2026) : pincer a deux doigts sur telephone, la molette sur ordinateur (vers le curseur), un double appui
+// ou double clic pour zoomer / revenir ; zoomee, un doigt ou la souris la deplace, et le glisser ne change plus de photo.
+// Changer de photo la remet a sa taille ; zoomee, elle passe en pleine definition (hi).
+function ZoomImg({ src, hi, alt, active, onZoom }) {
+  const ref = useRef(null);
+  const [z, setZ] = useState({ s: 1, x: 0, y: 0 });
+  const zr = useRef(z);
+  zr.current = z;
+  const g = useRef(null), tap = useRef(0);
+  const zoomed = z.s > 1.01;
+  useEffect(() => { if (!active) setZ({ s: 1, x: 0, y: 0 }); }, [active]);
+  useEffect(() => { onZoom?.(zoomed); }, [zoomed]); // eslint-disable-line react-hooks/exhaustive-deps
+  const clamp = (s, x, y) => {
+    const el = ref.current;
+    if (!el || s <= 1.01) return { s: 1, x: 0, y: 0 };
+    const mx = (s - 1) * el.clientWidth / 2, my = (s - 1) * el.clientHeight / 2;
+    return { s, x: Math.max(-mx, Math.min(mx, x)), y: Math.max(-my, Math.min(my, y)) };
+  };
+  // zoomer vers un point de l'ecran : ce point reste sous le doigt ou le curseur
+  const at = (cx, cy, s2) => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect(), { s, x, y } = zr.current;
+    const px = cx - (r.left + r.width / 2 - x), py = cy - (r.top + r.height / 2 - y);
+    s2 = Math.max(1, Math.min(6, s2));
+    setZ(clamp(s2, px - (px - x) * (s2 / s), py - (py - y) * (s2 / s)));
+  };
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !active) return undefined;
+    const wheel = e => { e.preventDefault(); at(e.clientX, e.clientY, zr.current.s * Math.exp(-e.deltaY * 0.0018)); };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  const mid = t => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
+  const toggle = (cx, cy) => zr.current.s > 1.01 ? setZ({ s: 1, x: 0, y: 0 }) : at(cx, cy, 2.5);
+  const touch = {
+    onTouchStart: e => {
+      const t = e.touches;
+      if (t.length === 2) g.current = { k: "pinch", d0: dist(t), s0: zr.current.s };
+      else if (t.length === 1 && zr.current.s > 1.01) g.current = { k: "pan", x0: t[0].clientX, y0: t[0].clientY, tx: zr.current.x, ty: zr.current.y };
+      else g.current = null;
+    },
+    onTouchMove: e => {
+      const t = e.touches, q = g.current;
+      if (!q) return;
+      if (q.k === "pinch" && t.length === 2) { const m = mid(t); at(m.x, m.y, q.s0 * dist(t) / q.d0); }
+      else if (q.k === "pan" && t.length === 1) setZ(clamp(zr.current.s, q.tx + t[0].clientX - q.x0, q.ty + t[0].clientY - q.y0));
+    },
+    onTouchEnd: e => {
+      if (e.touches.length === 0 && e.changedTouches.length === 1 && g.current?.k !== "pinch") {
+        const now = Date.now(), c = e.changedTouches[0];
+        if (now - tap.current < 300) { toggle(c.clientX, c.clientY); tap.current = 0; } else tap.current = now;
+      }
+      if (e.touches.length < 2 && g.current?.k === "pinch") g.current = null;
+    },
+  };
+  // la souris : glisser pour deplacer une photo zoomee
+  const down = e => {
+    if (e.button !== 0 || zr.current.s <= 1.01) return;
+    e.preventDefault();
+    const x0 = e.clientX, y0 = e.clientY, tx = zr.current.x, ty = zr.current.y;
+    const move = ev => setZ(clamp(zr.current.s, tx + ev.clientX - x0, ty + ev.clientY - y0));
+    const up = () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
+    window.addEventListener("mousemove", move); window.addEventListener("mouseup", up);
+  };
+  return <img ref={ref} src={zoomed && hi ? hi : src} alt={alt} referrerPolicy="no-referrer" decoding="async" draggable={false}
+    {...touch} onMouseDown={down} onClick={e => e.stopPropagation()} onDoubleClick={e => { e.stopPropagation(); toggle(e.clientX, e.clientY); }}
+    onError={e => { if (hi && e.currentTarget.src !== hi) e.currentTarget.src = hi; }}
+    style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: zoomed ? 6 : 18, userSelect: "none",
+      boxShadow: "0 24px 60px rgba(0,0,0,0.6)", transform: `translate(${z.x}px, ${z.y}px) scale(${z.s})`, transformOrigin: "center",
+      transition: g.current ? "none" : "transform .12s ease-out", cursor: zoomed ? "grab" : "zoom-in", position: "relative", zIndex: zoomed ? 2 : undefined,
+      touchAction: zoomed ? "none" : "pan-x", willChange: "transform" }}/>;
+}
+
 export default function Lightbox({ images, index = 0, onClose, title = null, actions = null, onIndex = null }) {
   const zTop = useStackZ(6000);         // au-dessus de toute fenetre deja ouverte (06/11/2026)
   const items = (images || []).map(x => typeof x === "string" ? { url: x, label: "" } : x);
@@ -20,18 +96,22 @@ export default function Lightbox({ images, index = 0, onClose, title = null, act
   const strip = useRef(null);
   const [cur, setCur] = useState(Math.min(index, Math.max(0, items.length - 1)));
   const [vstate, setVstate] = useState({});        // url -> "loading" | "ok" | "fallback" | "error"
+  const [zoomed, setZoomed] = useState(false);      // la photo en cours est zoomee : le glisser la deplace, sans changer de photo
   const curRef = useRef(cur);
   curRef.current = cur;
 
+  // zoomee, le defilement est bloque : les fleches et la bande la remettent d'abord a sa taille, puis changent de photo
   const go = d => {
     const el = box.current;
     if (!el) return;
     const i = Math.max(0, Math.min(items.length - 1, Math.round(el.scrollLeft / el.clientWidth) + d));
-    el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
+    setZoomed(false);
+    setTimeout(() => el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }), 0);
   };
   const jump = i => {
     const el = box.current;
-    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
+    setZoomed(false);
+    if (el) setTimeout(() => el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }), 0);
   };
   useEffect(() => {
     const el = box.current;
@@ -50,6 +130,7 @@ export default function Lightbox({ images, index = 0, onClose, title = null, act
   // la vignette en cours reste en vue dans la bande
   useEffect(() => {
     onIndex?.(cur);
+    setZoomed(false);                                   // une autre photo : a sa taille
     // la bande seule (scrollIntoView faisait aussi glisser toute la visionneuse : decalee sur la derniere image)
     const bar = strip.current, t = bar?.children[cur];
     if (bar && t) bar.scrollTo({ left: t.offsetLeft - (bar.clientWidth - t.offsetWidth) / 2, behavior: "smooth" });
@@ -99,7 +180,7 @@ export default function Lightbox({ images, index = 0, onClose, title = null, act
       {/* les images, cote a cote : on glisse de l'une a l'autre */}
       <div style={{ position: "relative", zIndex: 1, flex: 1, minHeight: 0 }}>
         <div ref={box} onScroll={onScroll} className="no-scrollbar"
-          style={{ height: "100%", display: "flex", overflowX: "auto", overflowY: "hidden", scrollSnapType: "x mandatory",
+          style={{ height: "100%", display: "flex", overflowX: zoomed ? "hidden" : "auto", overflowY: "hidden", scrollSnapType: "x mandatory",
             overscrollBehavior: "contain" }}>
           {items.map((it, i) => (
             <div key={i} style={{ flex: "0 0 100%", height: "100%", scrollSnapAlign: "center", display: "flex",
@@ -126,11 +207,8 @@ export default function Lightbox({ images, index = 0, onClose, title = null, act
                       fontWeight: 800, background: "rgba(239,68,68,0.8)" }}>Vidéo illisible</span>}
                   </span>;
                 })()) : (
-                  <img src={src(it.url)} alt={it.label || ""} referrerPolicy="no-referrer" decoding="async" draggable={false}
-                    onClick={e => e.stopPropagation()}
-                    onError={e => { if (e.currentTarget.src !== it.url) e.currentTarget.src = it.url; }}
-                    style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 18, userSelect: "none",
-                      boxShadow: "0 24px 60px rgba(0,0,0,0.6)" }}/>
+                  <ZoomImg src={src(it.url)} alt={it.label || ""} active={i === cur} onZoom={i === cur ? setZoomed : undefined}
+                    hi={String(it.url || "").startsWith("/api/") ? it.url : mwImg(it.url, 3000, true) || it.url}/>
                 )
               )}
             </div>
