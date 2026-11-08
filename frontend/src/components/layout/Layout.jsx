@@ -162,18 +162,19 @@ function MoreSheet({ items, loc, visible, upd, onClose }) {
   return createPortal(<>
     <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:2999, background:"rgba(0,0,0,0.35)" }}/>
     <div role="dialog" aria-label="Plus de pages" style={{ position:"fixed", left:8, right:8, zIndex:3000,
-      bottom:"calc(70px + env(safe-area-inset-bottom, 0px))", borderRadius:20, padding:12, background:"var(--sheet-bg)",
+      bottom:"calc(70px + env(safe-area-inset-bottom, 0px))", borderRadius:18, padding:8, background:"var(--sheet-bg)",
       border:"1px solid var(--border)", boxShadow:"0 14px 40px rgba(0,0,0,0.4)",
-      display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(96px, 1fr))", gap:8 }}>
+      // (08/11/2026) plus serre : quatre par ligne sur un telephone (trois grosses tuiles prenaient la moitie de l'ecran)
+      display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(72px, 1fr))", gap:6 }}>
       {items.map(it => { const on = isActiveItem(it, loc, visible); const Icon = it.icon;
         return <Link key={it.k} to={it.to} onClick={onClose} aria-current={on ? "page" : undefined}
-          style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, padding:"10px 4px", borderRadius:14, textDecoration:"none",
+          style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, padding:"7px 2px 6px", borderRadius:12, textDecoration:"none",
             background: on ? `color-mix(in srgb, ${it.c} 14%, transparent)` : "var(--surface2)", border:"1px solid var(--border)",
-            color: on ? it.c : "var(--text2)", fontSize:12, fontWeight:800 }}>
-          <span style={{ width:38, height:38, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", position:"relative",
-            background:`color-mix(in srgb, ${it.c} 16%, transparent)`, color:it.c }}><Icon size={19}/>
+            color: on ? it.c : "var(--text2)", fontSize:11, fontWeight:800, minWidth:0 }}>
+          <span style={{ width:30, height:30, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", position:"relative",
+            background:`color-mix(in srgb, ${it.c} 16%, transparent)`, color:it.c }}><Icon size={16}/>
             {it.k === "settings" && upd.any && <UpdDot tip={updatesTip(upd)}/>}</span>
-          <span style={{ textAlign:"center", lineHeight:1.15 }}>{it.short || it.label}</span>
+          <span style={{ textAlign:"center", lineHeight:1.15, maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{it.short || it.label}</span>
         </Link>; })}
     </div>
   </>, document.body);
