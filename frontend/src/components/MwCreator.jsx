@@ -5,7 +5,7 @@ import { useIsAdmin } from "../store/auth";
 import MwImg from "./MwImg";
 import { prefetchModel } from "./MakerWorldModelSheet";
 import MwAccountSheet from "./MwAccountSheet";
-import { Boxes, Coins, Download, Heart, Printer, Users, Zap } from "lucide-react";
+import { Bookmark, Boxes, Coins, Download, Heart, Printer, Users, Zap } from "lucide-react";
 
 // Onglet « Créateur » : mes points MakerWorld (solde, gains 7 / 30 jours,
 // historique jour par jour) et mes modeles avec leurs compteurs. Les points
@@ -14,7 +14,7 @@ const fmt = (v, d = 0) => v == null ? "—" : Number(v).toLocaleString("fr-FR", 
 const pts = v => fmt(v, 2);
 const PERIODS = [["1", "24 heures"], ["7", "7 jours"], ["30", "30 jours"], ["90", "90 jours"], ["365", "1 an"], ["all", "Depuis le début"]];
 const TYPES = [["points", "Points", "pts"], ["downloads", "Téléchargements", "téléch."], ["prints", "Impressions", "impr."],
-  ["boosts", "Boosts", "boosts"], ["likes", "J'aime", "j'aime"]];
+  ["boosts", "Boosts", "boosts"], ["likes", "J'aime", "j'aime"], ["collections", "Collections", "en coll."]];   // (08/11/2026) les ajouts en collection
 const SHORT = { "1": "24 h", "7": "7 j", "30": "30 j", "90": "90 j", "365": "1 an", "all": "total" };
 const HEAD = [["1", "24 h"], ["7", "7 j"], ["30", "30 j"], ["365", "1 an"]];   // lignes des vignettes d'en-tete
 
@@ -181,7 +181,9 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
             [Download, "#3b82f6", fmt(p.downloads), "téléchargements", headSub("downloads")],
             [Printer, "#8b5cf6", fmt(p.prints), "impressions", headSub("prints")],
             [Zap, "#f97316", fmt(p.boosts), "boosts reçus", headSub("boosts")],
-            [Heart, "#ec4899", fmt(p.likes), "j'aime", headSub("likes")]].map(([Icon, c, v, l, sub]) => (
+            [Heart, "#ec4899", fmt(p.likes), "j'aime", headSub("likes")],
+            // les ajouts en collection (08/11/2026) : ceux de tous mes modeles (le total du profil, egal a leur somme)
+            [Bookmark, "#14B8A6", fmt(p.collections), "ajouts en collection", headSub("collections")]].map(([Icon, c, v, l, sub]) => (
             <div key={l} style={{ padding:"11px 12px 10px", borderRadius:14, border:`1px solid ${c}2e`, minWidth:0,
               ...(l === "points gagnés" ? { gridColumn:"1 / -1" } : null),
               background:`linear-gradient(140deg, ${c}1c 0%, ${c}08 55%, transparent 100%), var(--surface2)` }}>
@@ -240,7 +242,7 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
       {view === "models" && type !== "points" && period !== "all" && data.account && (
         <div style={{ fontSize:12, color:"var(--text2)", margin:"-4px 0 0", display:"flex", gap:10, flexWrap:"wrap" }}>
           <span style={{ color:"var(--muted)" }}>Tout le compte, {PERIODS.find(x => x[0] === period)?.[1]} :</span>
-          {[["downloads", "⬇️"], ["prints", "🖨️"], ["boosts", "🚀"], ["likes", "❤"]].map(([k, ic]) => (
+          {[["downloads", "⬇️"], ["prints", "🖨️"], ["boosts", "🚀"], ["likes", "❤"], ["collections", "📚"]].map(([k, ic]) => (
             <span key={k} style={{ fontWeight: k === type ? 800 : 600, color: k === type ? "#22c55e" : "inherit" }}>
               {ic} {data.account[k] > 0 ? "+" : ""}{fmt(data.account[k])}</span>
           ))}
@@ -273,7 +275,7 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
                 <span style={{ display:"block", fontSize:12.5, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                   {m.title_fr || m.title}{m.exclusive ? <span style={{ fontSize:10, color:"#a78bfa", fontWeight:800 }}> · exclusif</span> : null}</span>
                 <span style={{ display:"block", fontSize:11, color:"var(--muted)", marginTop:2 }}>
-                  ⬇️ {fmt(m.downloads)} · 🖨️ {fmt(m.prints)} · 🚀 {fmt(m.boosts)} · ❤ {fmt(m.likes)}</span>
+                  ⬇️ {fmt(m.downloads)} · 🖨️ {fmt(m.prints)} · 🚀 {fmt(m.boosts)} · ❤ {fmt(m.likes)} · 📚 {fmt(m.collections)}</span>
                 {order !== "value" && Date.parse(m.created || "") > 0 && <span style={{ display:"block", fontSize:10.5, color:"var(--muted)", marginTop:1 }}>
                   publié le {new Date(m.created).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}</span>}
               </span>

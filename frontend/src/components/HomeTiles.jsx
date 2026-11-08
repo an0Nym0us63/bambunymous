@@ -2220,9 +2220,10 @@ function useMwSeries(on, days) {
 const MW_C = "#EAB308";
 // ce qu'on peut suivre jour par jour : la valeur d'un jour, son nom, sa couleur
 const MW_METRICS = [["points", "Points", MW_C, "⭐"], ["downloads", "Téléchargements", "#3B82F6", "⬇️"], ["prints", "Impressions", "#22C55E", "🖨️"],
-  ["boosts", "Boosts reçus", "#8B5CF6", "🚀"], ["likes", "J'aime", "#EC4899", "❤️"]];
+  ["boosts", "Boosts reçus", "#8B5CF6", "🚀"], ["likes", "J'aime", "#EC4899", "❤️"], ["collections", "Ajouts en collection", "#14B8A6", "📚"]];
 const MW_SRC = [["model", "modèles", MW_C], ["profile", "profils", "#F97316"], ["boost", "boosts", "#8B5CF6"]];
-const MW_STATS = head => [["⬇️", head?.downloads, "téléch."], ["🖨️", head?.prints, "impr."], ["🚀", head?.boosts, "boosts"], ["❤️", head?.likes, "j'aime"]];
+const MW_STATS = head => [["⬇️", head?.downloads, "téléch."], ["🖨️", head?.prints, "impr."], ["🚀", head?.boosts, "boosts"], ["❤️", head?.likes, "j'aime"],
+  ["📚", head?.collections, "en coll."]];
 const mwNum = v => { const n = Math.round(v || 0); return n >= 10000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1).replace(".", ",")} k` : n.toLocaleString("fr-FR"); };
 const mwDay = k => new Date(`${k}T12:00:00`);
 // des barres empilees : une par jour, les parts dans l'ordre de « parts »
@@ -2309,14 +2310,14 @@ function MwZoom({ c }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.title_fr || x.title}</div>
             <div style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              ⬇️ {mwNum(x.p.downloads)} · 🖨️ {mwNum(x.p.prints)} · 🚀 {mwNum(x.p.boosts)} · ❤️ {mwNum(x.p.likes)}</div></div>
+              ⬇️ {mwNum(x.p.downloads)} · 🖨️ {mwNum(x.p.prints)} · 🚀 {mwNum(x.p.boosts)} · ❤️ {mwNum(x.p.likes)}{x.p.collections != null ? ` · 📚 ${mwNum(x.p.collections)}` : ""}</div></div>
           <b style={{ fontSize: 14, color: "#16a34a", whiteSpace: "nowrap" }}>+{mwNum(x.p.points)}</b></div>)}
       </div></>}
     <H2>Depuis toujours</H2>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 8 }}>
       {card("⬇️ Téléchargements", mwNum(pr.downloads), "var(--text)", pr.profile_downloads ? `+ ${mwNum(pr.profile_downloads)} de profils` : null)}
       {card("🖨️ Impressions", mwNum(pr.prints), "var(--text)", pr.profile_prints ? `+ ${mwNum(pr.profile_prints)} de profils` : null)}
-      {card("🚀 Boosts reçus", mwNum(pr.boosts))}{card("❤️ J'aime", mwNum(pr.likes))}{card("📁 Collections", mwNum(pr.collections))}
+      {card("🚀 Boosts reçus", mwNum(pr.boosts))}{card("❤️ J'aime", mwNum(pr.likes))}{card("📚 En collection", mwNum(pr.collections))}
     </div>
     <H2>Dernières transactions</H2>
     {bill == null ? <Muted>…</Muted> : !bill.length ? <Muted>Aucune.</Muted> :
@@ -5091,8 +5092,8 @@ export const TILES = {
     options: [B("thumbs", "Vignette de leur impression", true), B("idle", "Ceux au repos", true), SCROLL(false)] },
   mw: { label: "MakerWorld", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <MwPoints c={d.mw} o={o} sz={sz(it)}/>,
     options: [C("period", "Gains sur", "7", [["7", "7 jours"], ["30", "30 jours"], ["365", "un an"]]), B("chart", "Courbe (14 jours)", true),
-      C("metric", "La courbe suit", "points", [["points", "les points"], ["downloads", "les téléchargements"], ["prints", "les impressions"], ["boosts", "les boosts reçus"], ["likes", "les j'aime"]]),
-      B("stats", "Téléchargements, impressions, boosts, j'aime", true, { hint: "Quand la tuile a la place." }),
+      C("metric", "La courbe suit", "points", [["points", "les points"], ["downloads", "les téléchargements"], ["prints", "les impressions"], ["boosts", "les boosts reçus"], ["likes", "les j'aime"], ["collections", "les ajouts en collection"]]),
+      B("stats", "Téléchargements, impressions, boosts, j'aime, collections", true, { hint: "Quand la tuile a la place." }),
       B("best", "Le modèle en tête (30 jours)", true, { hint: "Quand la tuile a de la hauteur." })] },
   rate: { label: "À évaluer", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <ToRate r={d.rate} o={o} sz={sz(it)}/>,
     options: [B("thumbs", "Vignettes", true)] },

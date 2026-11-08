@@ -204,7 +204,17 @@ async def models(fresh: bool = False) -> list:
 # eux, ont leur historique complet chez MakerWorld.
 K_DAILY = "MW_CREATOR_DAILY"
 DAILY_KEEP = 400
-METRICS = ("downloads", "prints", "boosts", "likes")
+# (08/11/2026) + les ajouts en collection : les releves d'avant n'ont que les quatre premiers ; une valeur absente d'un
+# releve ne compte pas (l'ecart d'une periode qui commence avant le premier releve qui la porte reste partiel)
+METRICS = ("downloads", "prints", "boosts", "likes", "collections")
+
+
+def _at(arr, i):
+    """La i-eme valeur d'un releve (None : ce releve ne la porte pas, il est d'avant cette metrique)."""
+    try:
+        return int(arr[i]) if arr is not None and len(arr) > i and arr[i] is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 async def _daily_get() -> dict:
@@ -359,7 +369,10 @@ def account_totals(hist: dict, daily: dict, ms: list, days) -> dict:
         for m in ms:
             b = base.get(m["design_id"])
             for i, k in enumerate(METRICS):
-                tot[k] += m[k] - b[i] if b else (m[k] if str(m.get("created") or "")[:10] >= since else 0)
+                if b:
+                    tot[k] += m[k] - _at(b, i) if _at(b, i) is not None else 0
+                else:
+                    tot[k] += m[k] if str(m.get("created") or "")[:10] >= since else 0
     if since is None or since <= target:
         return {"totals": tot, "complete": since is not None}
     # Trou entre le debut de la periode et le premier releve : le releve du jour
@@ -369,7 +382,7 @@ def account_totals(hist: dict, daily: dict, ms: list, days) -> dict:
     for d in keys:
         if target < d <= since:
             for i, k in enumerate(METRICS):
-                tot[k] += hd[d][i]
+                tot[k] += _at(hd[d], i) or 0
     covered = bool(keys) and _covers(keys[0], keys[-1], hist.get("from_start"), since, days)
     return {"totals": tot, "complete": covered}
 
@@ -437,14 +450,16 @@ async def _overview(fresh: bool = False, period: str = "30") -> dict:
         if designs_ok:
             for d, v in (hdes.get(m["design_id"]) or {}).items():
                 if target < d <= since:
-                    filled = [a + x for a, x in zip(filled, v)]
+                    filled = [a + (_at(v, i) or 0) for i, a in enumerate(filled)]
         for i, k in enumerate(METRICS):
             if days is None:
                 period_vals[k] = m[k]
             elif b is None:                         # modele absent du releve de depart
                 period_vals[k] = (m[k] if since and str(m.get("created") or "")[:10] >= since else 0) + filled[i]
+            elif _at(b, i) is None:                 # releve de depart d'avant cette metrique : rien a comparer
+                period_vals[k] = 0
             else:
-                period_vals[k] = max(0, m[k] - b[i] + filled[i])
+                period_vals[k] = max(0, m[k] - _at(b, i) + filled[i])
         m["period"] = period_vals
         m["points30"] = round(per.get(m["design_id"], 0), 2) if days == 30 else m.get("points30")
     acc = account_totals(hist, daily, ms, days)
@@ -477,7 +492,7 @@ async def series(days: int = 30, tz: int = 0, fresh: bool = False) -> dict:
     today = (datetime.now(timezone.utc) + off).date()
     keys = [(today - timedelta(days=days - 1 - i)).isoformat() for i in range(days)]
     out = {k: {"date": k, "model": 0.0, "profile": 0.0, "boost": 0.0, "spent": 0.0,
-               "downloads": 0, "prints": 0, "boosts": 0, "likes": 0, "src": None} for k in keys}
+               "downloads": 0, "prints": 0, "boosts": 0, "likes": 0, "collections": 0, "src": None} for k in keys}
     for x in await recent_points(365, max_pages=200, fresh=fresh):
         try:
             t = datetime.fromisoformat(str(x["time"]).replace("Z", "+00:00"))
@@ -501,14 +516,15 @@ async def series(days: int = 30, tz: int = 0, fresh: bool = False) -> dict:
         for did, vals in cur.items():
             base = prev.get(did) or [0] * len(METRICS)
             for i, m in enumerate(METRICS):
-                out[b][m] += max(0, int(vals[i]) - int(base[i]))
+                if _at(vals, i) is not None and _at(base, i) is not None:
+                    out[b][m] += max(0, _at(vals, i) - _at(base, i))
         out[b]["src"] = "releve"
     hd = (await _history_get()).get("days") or {}
     first = snaps[1] if len(snaps) > 1 else None
     for k, v in out.items():
         if v["src"] is None and k in hd and (first is None or k < first):
             for i, m in enumerate(METRICS):
-                v[m] = int(hd[k][i])
+                v[m] = _at(hd[k], i) or 0
             v["src"] = "historique"
     for v in out.values():
         for f in ("model", "profile", "boost", "spent"):
