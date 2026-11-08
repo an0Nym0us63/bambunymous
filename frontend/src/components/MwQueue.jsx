@@ -147,6 +147,7 @@ export default function MwQueue() {
   const [busy, setBusy] = useState(false);
   const [pick, setPick] = useState(false);
   const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");          // (08/11/2026) le titre, la collection, le profil, un filament
   // le tri au sein d'un filtre (l'ordre de priorite par defaut) ; garde dans ce navigateur
   // le tri : a chaque ouverture, l'ordre du planning (06/11/2026 ; avant, celui de la liste) ; le choix ne se garde pas
   const [sortBy, setSortBy] = useState("plan");
@@ -299,7 +300,12 @@ export default function MwQueue() {
   if (err) return <p style={msg}>{err}</p>;
   if (!q) return <p style={msg}>Lecture de la liste… (la première fois, chaque fiche est lue sur MakerWorld)</p>;
   const t = q.totals;
-  const filtered = q.models.filter(r => sorting || cutting || choosing || filter === "all" || r.status === filter);
+  const norm = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const words = sorting || cutting ? [] : norm(search).split(/\s+/).filter(Boolean);
+  const hay = r => norm([r.title, r.title_fr, r.variant, r.profile?.title, ...(r.collections || []),
+    ...(r.filaments || []).flatMap(f => [f.type, f.chosen?.name, f.chosen?.brand, f.chosen?.fila_type])].filter(Boolean).join(" "));
+  const filtered = q.models.filter(r => (sorting || cutting || choosing || filter === "all" || r.status === filter)
+    && (!words.length || (h => words.every(w => h.includes(w)))(hay(r))));
   const rows = sorting || cutting ? filtered : sortQueue(filtered, sortBy, plan?.by);
   const cutAt = q.until ? q.models.findIndex(r => r.design_id === q.until.design_id) : -1;
   const picked = q.picked ? new Set(q.picked.ids) : null;
@@ -458,6 +464,14 @@ export default function MwQueue() {
           {/* annuler le dernier geste du planning fait ici (06/11/2026) : seulement dans le quart d'heure */}
           {isAdmin && pd?.undo && Date.now() - Date.parse(`${pd.undo.at}Z`) < 15 * 60000 && <UndoPill info={pd.undo} onUndo={undoPlan} style={{ alignSelf:"flex-start" }}/>}
           {sorting && <span style={{ fontSize:12, fontWeight:700, color:"var(--muted)" }}>Ordre de priorité : ⤒ en haut, ↑ ↓, ⤓ en bas.</span>}
+          {!sorting && !cutting && <label style={{ position:"relative", display:"flex", alignItems:"center", minWidth:0 }}>
+            <span style={{ position:"absolute", left:12, fontSize:12, pointerEvents:"none" }}>🔎</span>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher : titre, collection, filament…" aria-label="Rechercher dans la liste"
+              style={{ width:"100%", height:36, borderRadius:18, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)",
+                fontWeight:700, fontSize:12.5, padding:"0 32px 0 32px", boxSizing:"border-box" }}/>
+            {search && <button type="button" onClick={() => setSearch("")} aria-label="Effacer la recherche" data-tip="Effacer"
+              style={{ position:"absolute", right:6, width:24, height:24, borderRadius:"50%", border:"none", background:"transparent", color:"var(--muted)", cursor:"pointer", fontSize:13 }}>✕</button>}
+          </label>}
           {!sorting && !cutting && (
             <label style={{ position:"relative", display:"flex", alignItems:"center", minWidth:0 }}>
               <span style={{ position:"absolute", left:12, fontSize:12, pointerEvents:"none" }}>↕</span>
@@ -477,6 +491,7 @@ export default function MwQueue() {
           </div>
         </div>
 
+        {words.length > 0 && !rows.length && <p style={msg}>Aucun modèle ne correspond à « {search.trim()} ».</p>}
         <div className="wide-list" style={{ alignItems: "stretch" }}>
           {rows.map(r => {
             const [, color, help] = STATUS[r.status] || STATUS.unknown;
