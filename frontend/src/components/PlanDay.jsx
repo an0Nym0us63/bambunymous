@@ -152,6 +152,11 @@ export function PlateThumb({ j, size = 52, onClick, tip }) {
       background: "rgba(15,23,42,.78)", color: "#fff", fontSize: 10, fontWeight: 900, lineHeight: "16px", textAlign: "center" }}>{j.plate}</span>}
   </span>;
 }
+// les images d'un plateau, pour les voir en grand (08/11/2026) : chaque plateau d'un regroupement, puis le modele
+export const platePics = j => [
+  ...(j.merged_thumbs?.length ? j.merged_thumbs.map((t, i) => t && { url: t, label: `Plateau ${j.merged_plates?.[i] ?? "?"}/${j.plates_total || "?"}` })
+    : [j.thumb && { url: j.thumb, label: j.plates_total > 1 ? plateTxt(j) : "Le plateau" }]),
+  j.cover && j.cover !== j.thumb && { url: j.cover, label: "Le modèle" }].filter(Boolean);
 // le nom d'un plateau quand il dit autre chose que « Plateau 2 » (sinon « Plateau 2/4 · Plateau 2 »)
 const pname = j => j.plate_name && !/^(plateau|plate)\s*\d+$/i.test(j.plate_name.trim()) ? j.plate_name : "";
 // un modele pas retenu dans « A faire » (05/11/2026) : planifie quand meme, apres les retenus, en gris

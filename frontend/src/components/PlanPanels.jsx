@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
-import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc, LoadLinks } from "./PlanDay";
+import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc, LoadLinks, platePics } from "./PlanDay";
+import Lightbox from "./Lightbox";
 import { useStackZ } from "../utils/zstack";
 import { useSwipeClose } from "../utils/swipeClose";
 
@@ -91,11 +92,15 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
     style={{ padding: "6px 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", cursor: "pointer", font: "inherit",
       fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>{label}</button>;
   const [slot, setSlot] = useState(false);            // choisir sa place dans une journee (06/11/2026)
+  const [zoom, setZoom] = useState(false);            // la vignette en grand (08/11/2026), chaque plateau d'un regroupement
+  const pics = platePics(j);
   if (slot) return <SlotPicker j={j} jobs={jobs || []} now={now} onClose={() => setSlot(false)}
     onPick={(day, after) => run("slot", () => act.slot(day, after))} onAuto={day => run("slot", () => act.dayBest(day))}/>;
   return <PlanPopup title={j.title} icon="🧩" color={j.why ? "#DC2626" : unretained(j) ? UNRET : j.completes ? "#059669" : "#22C55E"} onClose={onClose} z={5300}>
     <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-      <PlateThumb j={j} size={64}/>
+      <PlateThumb j={j} size={64} onClick={pics.length ? () => setZoom(true) : undefined}
+        tip={j.merged_thumbs?.length > 1 ? `Voir les ${j.merged_thumbs.length} plateaux en grand` : "Voir en grand"}/>
+      {zoom && <Lightbox images={pics} title={j.title} onClose={() => setZoom(false)}/>}
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
         <span style={{ fontSize: 13, fontWeight: 900, color: "#6366F1" }}>{plateTxt(j)}{j.qty > 1 ? ` · ${j.copy}e sur ${j.qty}` : ""}</span>
         {j.start && <span style={{ fontSize: 14, fontWeight: 900, color: "var(--text)" }}>{when(j.start, now)} → {when(j.end, now)} <span style={{ fontSize: 12, color: "var(--muted)" }}>{hm(j.seconds)}</span>

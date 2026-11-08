@@ -5,7 +5,7 @@ import { egg } from "../eggs";
 import { showAlert } from "../utils/dialog";
 import { toast } from "../store/toast";
 import { useCanMw, useCanMwHome } from "../store/auth";
-import { dayEnd, DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt, bedTxt, BED_NAMES, SwapLinks, FilLink, finIc, SwapShort, setFilColors } from "./PlanDay";
+import { dayEnd, DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt, bedTxt, BED_NAMES, SwapLinks, FilLink, finIc, SwapShort, setFilColors, platePics } from "./PlanDay";
 import { JobSheet, LowStockBanner, BlockedList } from "./PlanPanels";
 import { sheetRef } from "./planActs";
 import MakerWorldModelSheet, { IS_MAC, IS_MOBILE, handyUrl, launch } from "./MakerWorldModelSheet";
@@ -114,8 +114,7 @@ function NextUp({ p, onSheet }) {
   const [busy, setBusy] = useState(false);
   // la vignette en grand (07/11/2026) : le plateau a lancer, puis la couverture du modele, pour ne pas se tromper
   const [zoom, setZoom] = useState(false);
-  const pics = [j.thumb && { url: j.thumb, label: j.plates_total > 1 ? plateTxt(j) : "Le plateau" },
-    j.cover && j.cover !== j.thumb && { url: j.cover, label: "Le modèle" }].filter(Boolean);
+  const pics = platePics(j);
   const mw = String(j.mw_id || j.design_id || "").split("~")[0];
   const studio = async () => {
     setBusy(true);

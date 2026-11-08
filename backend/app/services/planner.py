@@ -1606,6 +1606,7 @@ def _merged(jobs: list, d: dict) -> list:
                     fl[k] = dict(f)
         head.update(seconds=max(60, sum(x["seconds"] for x in ms) - PREP_S * (len(ms) - 1)), fils=list(fl.values()),
                     merged=there, merged_plates=[x["plate"] for x in ms], merge_id=gid,
+                    merged_thumbs=[x.get("thumb") for x in ms],      # chaque plateau en grand (08/11/2026)
                     plate_name=f"Regroupés : plateaux {', '.join(str(x['plate']) for x in ms)}",
                     weight_g=round(sum(x.get("weight_g") or 0 for x in ms), 1))
         by[there[0]] = head
@@ -2509,12 +2510,12 @@ async def _load_spots(jobs: list) -> None:
     fids = {f for j in jobs for f in (j.get("load_ids") or []) if f}
     if not fids:
         return
-    from sqlalchemy import select
-    from ..db.session import AsyncSessionLocal
-    from ..models.filament import Filament, Spool
-    from .storage_places import in_printer
     by = {}
-    try:
+    try:                                   # une lecture qui echoue ne fait jamais tomber le planning
+        from sqlalchemy import select
+        from ..db.session import AsyncSessionLocal
+        from ..models.filament import Filament, Spool
+        from .storage_places import in_printer
         async with AsyncSessionLocal() as db:
             rows = (await db.execute(select(Spool.id, Spool.filament_id, Spool.location, Spool.remaining_weight_g, Spool.place_id,
                                             Filament.filament_weight_g)
