@@ -8,6 +8,7 @@ import { FSheet, FCard, fBtn } from "./FicheKit";
 import { mwImg } from "./MwImg";
 import { showAlert } from "../utils/dialog";
 import { egg } from "../eggs";
+import MediaThumb from "./MediaThumb";
 
 // Partage Telegram d'une impression, d'un groupe ou d'un modele MakerWorld (kind « design », 25/10/2026) : choix de la destination,
 // message facultatif, et APERCU exact de ce qui partira (la legende vient du
@@ -150,7 +151,7 @@ function ShareCompose({ kind, id, mode = "telegram", onClose, z = 1500 }) {
   const tlIds = new Set(tls.map(t => t.id));
   // les timelapses choisis d'un groupe rejoignent les vignettes (touche pour retirer)
   const shown = [...(preview?.pool || []), ...tls.filter(t => pick?.includes(t.id)).map(t => ({ ...t, video: true, timelapse: true }))];
-  const thumb = { width: 62, height: 62, borderRadius: 12, objectFit: "cover", cursor: "pointer", display: "block", boxSizing: "border-box" };
+  const thumb = { width: 76, height: 76, borderRadius: 12, objectFit: "cover", cursor: "pointer", display: "block", boxSizing: "border-box" };
   const T = "#229ED9";
   const canSend = !single && dests.length > 0 && !preview?.error;
   const W = "#22C55E";
@@ -232,20 +233,15 @@ function ShareCompose({ kind, id, mode = "telegram", onClose, z = 1500 }) {
                       background: "var(--surface)", border: pick?.includes("camera") ? `2.5px solid ${T}` : "2px solid var(--border)",
                       opacity: pick?.includes("camera") ? 1 : 0.45 }}>📷</div>
                 )}
+                {/* (08/11/2026) chaque vignette dit ce qu'elle est (Photo, Vue 2, Tour de caméra…) ; les vidéos tournent en boucle */}
                 {shown.map(m => {
                   const on = pick?.includes(m.id);
-                  const st = { ...thumb, border: on ? `2.5px solid ${T}` : "2px solid transparent", opacity: on ? 1 : 0.4 };
-                  if (m.timelapse) return (
-                    <span key={m.id} onClick={() => toggle(m.id)} data-tip={m.label ? `Timelapse · ${m.label}` : "Le timelapse, copié depuis l'imprimante"}
-                      style={{ position: "relative", display: "block", cursor: "pointer" }}>
-                      <video src={srcOf(m.url)} muted playsInline preload="metadata" style={{ ...st, background: "#0f172a" }}/>
-                      <span style={{ position: "absolute", left: 4, bottom: 4, fontSize: 10, fontWeight: 900, color: "#fff", padding: "1px 5px",
-                        borderRadius: 6, background: "linear-gradient(135deg, #8B5CF6, #3B82F6)", opacity: on ? 1 : .8 }}>🎬</span>
-                    </span>);
-                  return m.video
-                    ? <video key={m.id} src={srcOf(m.url)} muted playsInline preload="metadata" onClick={() => toggle(m.id)} style={st}/>
-                    : <img key={m.id} src={srcOf(m.url)} alt="" referrerPolicy="no-referrer" onClick={() => toggle(m.id)} style={st}
-                        data-tip={m.card ? "La carte des filaments : leurs vraies couleurs et finitions (le texte de Telegram n'a que des ronds approchants)" : m.id === "mwcover" ? "La couverture du modèle sur MakerWorld" : m.id === "mwavatar" ? "Son avatar" : m.id.startsWith("mw") ? "Un de ses modèles" : undefined}/>;
+                  const label = m.card ? "🎨 Filaments" : m.id === "mwcover" ? "🌐 Couverture" : m.id === "mwavatar" ? "👤 Avatar"
+                    : m.timelapse ? "🎬 Timelapse" : m.label || (m.id.startsWith("mw") ? "🌐 Modèle" : null);
+                  const tip = m.card ? "La carte des filaments : leurs vraies couleurs et finitions (le texte de Telegram n'a que des ronds approchants)"
+                    : m.id === "mwcover" ? "La couverture du modèle sur MakerWorld" : m.id === "mwavatar" ? "Son avatar" : m.id.startsWith("mw") ? "Un de ses modèles"
+                    : [label, m.timelapse ? m.label : m.from].filter(Boolean).join(" · ") || undefined;
+                  return <MediaThumb key={m.id} src={srcOf(m.url)} video={m.video} label={label} on={on} accent={T} tip={tip} onClick={() => toggle(m.id)}/>;
                 })}
               </div>
             )}

@@ -328,7 +328,17 @@ def prepare_media(paths: list[Path], workdir: Path) -> list[tuple[Path, bool]]:
     for i, p in enumerate(paths):
         ext = p.suffix.lower()
         try:
-            if ext in (".mp4", ".mov", ".m4v", ".webm"):
+            if ext == ".webm":
+                mp4 = workdir / f"{i}.mp4"
+                try:
+                    subprocess.run(["ffmpeg", "-y", "-i", str(p), "-movflags", "faststart", "-pix_fmt", "yuv420p", "-an", "-c:v", "libx264",
+                                    "-preset", "veryfast", "-crf", "22", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", str(mp4)],
+                                   check=True, capture_output=True, timeout=180)
+                    out.append((mp4, True))
+                except Exception as e:
+                    logger.warning(f"[TG] {p.name} : WebM envoye tel quel ({type(e).__name__})")
+                    out.append((p, True))
+            elif ext in (".mp4", ".mov", ".m4v"):
                 out.append((p, True))
             elif ext == ".webp" and _is_animated_webp(p):
                 gif, mp4 = workdir / f"{i}.gif", workdir / f"{i}.mp4"
@@ -355,11 +365,16 @@ def prepare_media(paths: list[Path], workdir: Path) -> list[tuple[Path, bool]]:
 TIMELAPSE = "Video-Timelapse.mp4"
 
 
+def _is_v3(name: str) -> bool:
+    """Une vue prise dans la vue 3D, ou une animation (08/11/2026) : proposees a part, avec leur nom."""
+    return name.lower().startswith("vue3d")
+
+
 def _photos_of_dir(d: Path, cover: Optional[str]) -> list[Path]:
     if not d.exists():
         return []
     files = [f for f in sorted(d.iterdir())
-             if f.is_file() and f.suffix.lower() in MEDIA_EXT and f.name != TIMELAPSE
+             if f.is_file() and f.suffix.lower() in MEDIA_EXT and f.name != TIMELAPSE and not _is_v3(f.name) and not f.name.startswith("Joint-")
              and (f.name.startswith("Photo-") or f.name.startswith("Video-") or d.parent.name == "groups")]
     if cover:
         files.sort(key=lambda f: f.name != cover)     # la couverture en tete
@@ -390,6 +405,46 @@ def _timelapse(print_id: int) -> Optional[Path]:
         return local_or_archive(f"prints/{print_id}/{TIMELAPSE}")
     except Exception:
         return None
+
+
+def _v3_of_dir(d: Path) -> list[Path]:
+    """Les vues 3D gardees (Vue 1 a 4), puis les animations, la plus recente d'abord (08/11/2026)."""
+    import re as _re
+    if not d.exists():
+        return []
+    vues = sorted(f for f in d.iterdir() if f.is_file() and _re.fullmatch(r"Vue3D(_[2-4])?\.png", f.name))
+    anims = sorted((f for f in d.iterdir() if f.is_file() and _re.fullmatch(r"Vue3D_anim(_[a-z]+)?\.(webm|mp4)", f.name)),
+                   key=lambda f: -f.stat().st_mtime)
+    return vues + anims
+
+
+# le nom d'un effet d'animation (prints._V3_ANIM_STYLES, en plus court ici : le partage ne depend pas des routes)
+_ANIM_FX = {"turntable": "🎠 Plateau tournant", "orbit": "🎥 Tour de caméra", "swing": "↔️ Balancement", "travel": "🛤️ Travelling",
+            "zoom": "🔍 Zoom", "reveal": "🎬 Révélation", "spiral": "🌀 Spirale", "drone": "🚁 Survol", "float": "🎈 Lévitation",
+            "vertigo": "🌪️ Effet vertigo", "dive": "🦅 Plongée", "crane": "🏗️ Grue", "spotlight": "🔦 Projecteur"}
+
+
+def media_label(name: str) -> str:
+    """Ce qu'est un media, en clair, pour sa vignette dans l'appli (08/11/2026 : des vignettes sans nom)."""
+    import re as _re
+    low = name.lower()
+    m = _re.fullmatch(r"vue3d_anim(?:_([a-z]+))?\.(webm|mp4)", low)
+    if m:
+        return _ANIM_FX.get(m.group(1) or "", "🎞 Animation")
+    m = _re.fullmatch(r"vue3d(?:_(\d))?\.png", low)
+    if m:
+        return f"🧊 Vue {m.group(1) or 1}"
+    if low.startswith("snapshot-"):
+        k = low[9:].rsplit(".", 1)[0]
+        return {"pct50": "📷 Capture 50 %", "pct100": "📷 Capture fin", "pct99": "📷 Capture 99 %", "layer1": "📷 Couche 1",
+                "layer2": "📷 Couche 2", "fail": "📷 Échec"}.get(k, "📷 Capture")
+    if low.startswith("plate."):
+        return "🖼 Plateau"
+    if low == TIMELAPSE.lower():
+        return "🎬 Timelapse"
+    if os.path.splitext(low)[1] in (".mp4", ".mov", ".m4v", ".webm"):
+        return "🎥 Vidéo"
+    return "📸 Photo"
 
 
 def _plate(print_id: int) -> list[Path]:
@@ -616,7 +671,9 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
             media = (_photos_of_dir(DATA_DIR / "prints" / str(p.id), p.cover_photo)
                      or _snapshots(p) or _plate(p.id))
             # Tout ce qu'on peut joindre (choix a la main dans l'appli).
-            pool = _photos_of_dir(DATA_DIR / "prints" / str(p.id), p.cover_photo) + _snapshots(p) + _plate(p.id)
+            pool = (_photos_of_dir(DATA_DIR / "prints" / str(p.id), p.cover_photo) + _v3_of_dir(DATA_DIR / "prints" / str(p.id))
+                    + _snapshots(p) + _plate(p.id))
+            origin = {}
             tl = _timelapse(p.id)
             # le timelapse : propose apres les photos, pas coche d'office
             tls = {f"prints/{p.id}/{TIMELAPSE}": (tl, None)} if tl else {}
@@ -640,9 +697,20 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
             if not media:
                 for p in ordered:
                     media += _plate(p.id)
-            pool = _photos_of_dir(DATA_DIR / "groups" / str(g.id), g.cover_photo)
+            # la couverture prise dans une de ses impressions (« p12/Photo-01.webp », 08/11/2026) : en tete
+            import re as _re
+            cm = _re.fullmatch(r"p(\d+)/([^/\\]+)", g.cover_photo or "")
+            if cm and any(p.id == int(cm.group(1)) for p in prints):
+                cf = DATA_DIR / "prints" / cm.group(1) / cm.group(2)
+                if cf.is_file():
+                    media = [cf] + [m for m in media if m != cf]
+            pool = _photos_of_dir(DATA_DIR / "groups" / str(g.id), g.cover_photo) + _v3_of_dir(DATA_DIR / "groups" / str(g.id))
             for p in ordered:
                 pool += _photos_of_dir(DATA_DIR / "prints" / str(p.id), p.cover_photo)
+            for p in ordered:
+                pool += _v3_of_dir(DATA_DIR / "prints" / str(p.id))
+            # d'ou vient chaque media (son nom d'impression), pour sa vignette
+            origin = {str(DATA_DIR / "prints" / str(p.id)): (p.translated_name or p.file_name or f"Impression {p.id}") for p in prints}
             for p in ordered:
                 pool += _snapshots(p)
             for p in ordered:
@@ -706,8 +774,9 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
     default_ids = (["camera"] if live else []) + [_media_id(f) for f in media]
     if card:                                       # la carte, en dernier, d'office (une place est gardee pour elle)
         default_ids = default_ids[:ALBUM_MAX - 1] + [CARD_ID]
-    tl_pool = [{"id": i, "url": _media_url(i), "video": True, "timelapse": True} for i in tls] if kind == "print" else []
-    pool_out = [{"id": i, "url": _media_url(i), "video": f.suffix.lower() in (".mp4", ".mov", ".webm", ".m4v")}
+    tl_pool = [{"id": i, "url": _media_url(i), "video": True, "timelapse": True, "label": "🎬 Timelapse"} for i in tls] if kind == "print" else []
+    pool_out = [{"id": i, "url": _media_url(i), "video": f.suffix.lower() in (".mp4", ".mov", ".webm", ".m4v"),
+                 "label": media_label(f.name), "from": origin.get(str(f.parent))}
                 for i, f in by_id.items()]
     if tl_pool:          # apres les photos et videos, avant les captures des couches
         at = next((n for n, m in enumerate(pool_out) if not m["video"] and not m["id"].split("/")[-1].startswith("Photo-")), len(pool_out))

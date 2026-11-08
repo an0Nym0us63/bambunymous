@@ -193,6 +193,23 @@ def imgs_of(g) -> list:
     return sorted(imgs, key=is_vue3d)
 
 
+def v3_urls(print_ids) -> list:
+    """Les vues 3D puis les animations de ces impressions (la plus recente d'abord), a joindre a une evaluation
+    (08/11/2026) : proposees apres les photos ; une animation part en image animee (MakerWorld ne prend que des images)."""
+    import os, re
+    from pathlib import Path
+    out = []
+    for pid in print_ids:
+        d = Path(os.getenv("DATA_DIR", "/data")) / "prints" / str(pid)
+        if not d.is_dir():
+            continue
+        names = sorted(f.name for f in d.iterdir())
+        out += [f"/api/v1/prints/{pid}/file/{n}" for n in names if re.fullmatch(r"Vue3D(_[2-4])?\.png", n)]
+        out += [f"/api/v1/prints/{pid}/file/{n}" for n in sorted((n for n in names if re.fullmatch(r"Vue3D_anim(_[a-z]+)?\.(webm|mp4)", n)),
+                                                                 key=lambda n: -(d / n).stat().st_mtime)]
+    return list(dict.fromkeys(out))
+
+
 def card_url(print_ids) -> str:
     """La carte des filaments de ces impressions (31/10/2026 : toutes celles du modele, comme le partage ; avant,
     une seule, et un modele imprime en plusieurs fois n'en montrait qu'une partie)."""
@@ -327,8 +344,9 @@ async def _to_rate(rated, pending, stats, my_uid, mine) -> dict:
             ids = {str(x.get("profile_id") or ""), str(x.get("instance_id") or "")} - {"", "None"}
             mine_p = [p for p in prints if str(p.design_id) == did and str(p.mw_profile_id or "") in ids]
             ph = next((imgs_of(by_print.get(p.id) or {}) for p in mine_p if imgs_of(by_print.get(p.id) or {})), [])[:8]
+            ph = (ph + [u for u in v3_urls([p.id for p in sorted(mine_p, key=lambda p: p.print_date or 0, reverse=True)]) if u not in ph])[:POOL_MAX]
             card = [p.id for p in mine_p if any(u.color_hex and (u.grams_used or 0) > 0 for u in p.filament_usage)]
-            return (ph[:MAX_PHOTOS - 1] + [card_url(card)]) if card else ph, len(mine_p)
+            return (ph + [card_url(card)]) if card else ph, len(mine_p)
         it["profiles"] = []
         for x in pds:
             if not x.get("rating_id"):
@@ -346,10 +364,12 @@ async def _to_rate(rated, pending, stats, my_uid, mine) -> dict:
     vals = [x for x in items.values() if x.get("awaited")] if rated is not None else list(items.values())
     out = sorted(vals, key=lambda x: x["last_date"] or "", reverse=True)
     out.sort(key=lambda x: not x["photos"])                 # avec photos d'abord, puis les plus recents
-    for x in out:                                           # la carte en dernier, dans la limite des photos
+    for x in out:                                           # la carte en dernier
         pids = x.pop("card_prints", None)
+        extra = [u for u in v3_urls(list(reversed(x.get("print_ids") or []))) if u not in x["photos"]]
+        x["photos"] = (x["photos"] + extra)[:POOL_MAX]
         if pids:
-            x["photos"] = x["photos"][:MAX_PHOTOS - 1] + [card_url(pids)]
+            x["photos"] = x["photos"] + [card_url(pids)]
     return {"items": out, "rated_known": rated is not None, "stats": stats}
 
 
@@ -361,6 +381,7 @@ async def _to_rate(rated, pending, stats, my_uid, mine) -> dict:
 # On ne complete que l'evaluation vide que MakerWorld attend (son id est connu).
 UPLOAD = "/design-user-service/my/upload"
 MAX_PHOTOS = 8
+POOL_MAX = 16                         # ce qui est propose (on en joint 8 au plus)
 _MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
 
 
@@ -409,9 +430,29 @@ def _local_photo(url: str):
     m = m or g
     base = (Path(os.getenv("DATA_DIR", "/data")) / ("prints" if m is not g else "groups") / m.group(1)).resolve()
     f = (base / m.group(2)).resolve()
+    if f.parent == base and f.is_file() and re.fullmatch(r"Vue3D_anim(_[a-z]+)?\.(webm|mp4)", f.name):
+        return _anim_webp(f)
     if f.parent != base or not f.is_file() or f.suffix.lower() not in _MIME:
         return None
     return f
+
+
+def _anim_webp(f):
+    """Une animation de la vue 3D en WebP anime (08/11/2026) : MakerWorld ne prend que des images. Rangee avec les
+    photos ajoutees pour une evaluation (menage au bout d'un jour), refaite si l'animation change."""
+    import subprocess
+    out = _tmp_dir() / f"anim-{f.parent.name}-{f.stem}-{int(f.stat().st_mtime)}.webp"
+    if out.is_file():
+        return out
+    out.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        subprocess.run(["ffmpeg", "-y", "-i", str(f), "-vf", "fps=12,scale='min(540,iw)':-2:flags=lanczos", "-an", "-loop", "0",
+                        "-c:v", "libwebp", "-q:v", "60", "-compression_level", "5", "-preset", "picture", str(out)],
+                       check=True, capture_output=True, timeout=180)
+    except Exception as e:
+        logger.warning(f"[MW] animation {f.name} non convertie ({type(e).__name__})")
+        return None
+    return out if out.is_file() and out.stat().st_size <= 15 * 1024 * 1024 else None
 
 
 def _urls(o, out):

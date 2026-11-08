@@ -8,6 +8,7 @@ import { useShares, setOnRateFailed } from "../store/shares";
 import MwImg from "./MwImg";
 import Lightbox from "./Lightbox";
 import { useStackZ } from "../utils/zstack";
+import MediaThumb, { isVideoSrc, isAnimSrc, labelOf } from "./MediaThumb";
 
 // « ⭐ À évaluer » : mes impressions de modèles MakerWorld pas encore évaluées,
 // avec mes photos (du print, sinon de son groupe) prêtes à joindre.
@@ -187,7 +188,7 @@ export function ToRateTile({ data, onClick, card }) {
   const n = data?.items?.length || 0;
   // la carte des filaments (jointe a l'evaluation) n'est pas une photo du modele : sans vraie photo, sa vignette MakerWorld
   const covers = (data?.items || []).flatMap(x => {
-    const ph = (x.photos || []).find(u => !u.includes("/rate-card/"));
+    const ph = (x.photos || []).find(u => !u.includes("/rate-card/") && !isVideoSrc(u));
     return ph ? [ph] : x.cover_url ? [x.cover_url] : [];
   }).slice(0, 4);
   return (
@@ -277,7 +278,8 @@ function RateOne({ x, targets, onDone, partial = false }) {
   const [text, setText] = useState("");
   // (03/11/2026) la carte des filaments est proposee, decochee : on la joint en la touchant
   const isCard = u => u.includes("/rate-card/");
-  const [picked, setPicked] = useState(() => new Set((x.photos || []).filter(u => !isCard(u)).slice(0, 8)));
+  // (08/11/2026) les animations sont proposees, decochees (elles partent en image animee) ; les vues 3D cochees comme avant
+  const [picked, setPicked] = useState(() => new Set((x.photos || []).filter(u => !isCard(u) && !isAnimSrc(u)).slice(0, 8)));
   // une photo qui arrive pendant que le formulaire est ouvert (liste relue) : cochee, dans la limite de 8
   const seenPh = useRef(new Set(x.photos || []));
   const phKey = (x.photos || []).join("|");
@@ -285,7 +287,7 @@ function RateOne({ x, targets, onDone, partial = false }) {
     const fresh = (x.photos || []).filter(u => !seenPh.current.has(u));
     if (!fresh.length) return;
     fresh.forEach(u => seenPh.current.add(u));
-    setPicked(cur => { const n = new Set(cur); for (const u of fresh) { if (n.size >= 8) break; if (!isCard(u)) n.add(u); } return n; });
+    setPicked(cur => { const n = new Set(cur); for (const u of fresh) { if (n.size >= 8) break; if (!isCard(u) && !isAnimSrc(u)) n.add(u); } return n; });
   }, [phKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -396,9 +398,9 @@ function RateOne({ x, targets, onDone, partial = false }) {
           {picked.size ? `Photos jointes (${picked.size}) : touche pour retirer ou ajouter` : "Sans photo, c'est possible aussi"}</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           {(x.photos || []).map(u => (
-            <img key={u} src={u} alt="" onClick={() => toggle(u)}
-              data-tip={u.includes("/rate-card/") ? "La carte des filaments : leurs vraies couleurs et finitions, avec le poids de chacun" : undefined} style={{ width: 58, height: 58, borderRadius: 12, objectFit: "cover",
-              cursor: "pointer", border: picked.has(u) ? "2px solid #f59e0b" : "2px solid transparent", opacity: picked.has(u) ? 1 : 0.4 }}/>
+            <MediaThumb key={u} src={u} video={isVideoSrc(u)} label={labelOf(u)} on={picked.has(u)} accent="#f59e0b" size={66} onClick={() => toggle(u)}
+              tip={isCard(u) ? "La carte des filaments : leurs vraies couleurs et finitions, avec le poids de chacun"
+                : isAnimSrc(u) ? "Une animation de la vue 3D : MakerWorld ne prend que des images, elle part en image animée" : undefined}/>
           ))}
           {extras.map(e => (
             <div key={e.key} style={{ position: "relative" }}>
@@ -488,8 +490,7 @@ export function ToRateSheet({ data, onClose, onOpen }) {
               {x.photos?.length > 0 ? (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {x.photos.map((u, i) => (
-                    <img key={i} src={u} alt="" onClick={() => setView({ images: x.photos, index: i })}
-                      style={{ width: 62, height: 62, borderRadius: 12, objectFit: "cover", cursor: "pointer", border: "1px solid var(--border)" }}/>
+                    <MediaThumb key={i} src={u} video={isVideoSrc(u)} label={labelOf(u)} on accent="var(--border)" size={62} onClick={() => setView({ images: x.photos, index: i })}/>
                   ))}
                   <span style={{ alignSelf: "center", fontSize: 10.5, color: "var(--muted)" }}>
                     {x.photos.every(u => u.includes("/rate-card/")) ? "la carte des filaments" : x.photo_source === "group" ? "photos du groupe" : "tes photos"}</span>
