@@ -799,6 +799,9 @@ async def _build_gallery(kind: str = "photos") -> dict:
             # ses animations (08/11/2026), celle en tete d'abord : le diaporama de la galerie les montre apres les vues
             anims = [{"url": f"/api/v1/prints/{p.id}/file/{a['name']}?v={a['v']}", "label": _v3anim_label(a)}
                      for a in _v3anims(DATA_DIR / "prints" / str(p.id))] if p.id in vue3d_all else []
+            # celle choisie pour le haut de la fiche (aucune : elle est retiree) : la tuile la fait defiler avec les vues
+            top = _v3anim(DATA_DIR / "prints" / str(p.id)) if p.id in vue3d_all else None
+            anim_top = {"url": f"/api/v1/prints/{p.id}/file/{top['name']}?v={top['v']}"} if top else None
         # pas de photo, mais une vignette prise dans la vue 3D assemblee : elle remonte (29/10/2026)
         elif not photos and p.id in vue3d_prints:
             nm, v, _sl = vue3d_prints[p.id]
@@ -852,7 +855,7 @@ async def _build_gallery(kind: str = "photos") -> dict:
                 "design_id": str(p.design_id) if p.design_id else None,
                 # le profil connu de l'impression (imprimante, ou choisi a la main) : la vue 3D de la galerie s'ouvre dessus
                 "mw_profile_id": _mw_profile(p.mw_profile_id, p.mw_plates) or None,
-                **({"anims": anims} if kind == "vue3d" else {}),
+                **({"anims": anims, "anim": anim_top} if kind == "vue3d" else {}),
             })
 
     # Photos uploadées directement dans le dossier du groupe (pas via un print précis) : le disque est lu
@@ -880,6 +883,8 @@ async def _build_gallery(kind: str = "photos") -> dict:
             acc["photos"] = own + acc["photos"]
             # les animations du groupe lui-meme d'abord (la plus recente), puis celles de ses impressions
             ga = sorted(((name, mt) for name, mt in files if is_v3anim(name)), key=lambda t: -t[1])
+            gtop = _v3anim(groups_dir / str(gid), fresh=True) if ga else None
+            acc["anim"] = {"url": f"/api/v1/prints/groups/{gid}/photo/{gtop['name']}?v={gtop['v']}"} if gtop else None
             acc["anims"] = [{"url": f"/api/v1/prints/groups/{gid}/photo/{name}?v={mt}", "label": _v3anim_label({"style": (_V3ANIM_RE.fullmatch(name).group(1) or ""),
                              "bg": (_V3ANIM_RE.fullmatch(name).group(2) or "")})} for name, mt in ga] + acc.get("anims", [])
             continue

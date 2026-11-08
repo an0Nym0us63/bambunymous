@@ -42,7 +42,7 @@ import { FilamentSheetFromSpool } from "./Filaments";
 import { useKeyboardInset } from "../utils/keyboard";
 import MediaGallery from "../components/MediaGallery";
 import Vue3DSlides from "../components/Vue3DSlides";
-import HeroMedia, { isVid, HeroModes } from "../components/HeroMedia";
+import HeroMedia, { isVid, HeroModes, TileVideo, animPeriod } from "../components/HeroMedia";
 import GroupMosaic from "../components/GroupMosaic";
 import ObjectCreateSheet from "../components/ObjectCreateSheet";
 import FilesSheet, { openBlob, saveBlob } from "../components/FilesSheet";
@@ -2141,7 +2141,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
         objectFit: "cover", filter: "blur(26px) saturate(1.15)", opacity: 0.3, transform: "scale(1.3)" }}/>}
       <span aria-hidden="true" style={{ position: "absolute", inset: 0, background: "radial-gradient(60% 70% at 50% 38%, #A78BFA33, transparent 72%)" }}/>
       {/* Animation / Vues 3D / Plateaux : ce qui existe ; d'office tout ce qui est choisi defile */}
-      <HeroModes modes={gModes} mode={gMode} setMode={setGMode} style={{ top: 10, right: 10 }}/>
+      <HeroModes modes={gModes} mode={gMode} setMode={setGMode} style={{ top: wide ? 12 : 54, right: 12 }}/>
       <div style={{ position: "absolute", inset: "8% 6% 34%", display: "grid", gap: 8,
         gridTemplateColumns: `repeat(${Math.min(heroMosaic.length, 4) || 1}, minmax(0, 1fr))` }}>
         {heroMosaic.map((x, i) => <div key={x.id} style={{ position: "relative", borderRadius: 14, overflow: "hidden", transform: `rotate(${[-3, 2, -1.5, 3][i]}deg)`,
@@ -2434,6 +2434,9 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
     background: selected ? "#3b82f6" : "rgba(0,0,0,0.4)" }}>{selected && <Check size={13} color="white" strokeWidth={3}/>}</div>;
   const gFrame = { position:"relative", cursor:"pointer", userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none", touchAction:"manipulation",
     outline: selected ? "2px solid #3b82f6" : "none", outlineOffset: 2 };
+  // (08/11/2026) ses vues choisies et l'animation de son haut de fiche defilent ensemble sur la tuile
+  const tileCyc = [...(prints[0]?.group_thumb_3d ? (prints[0]?.group_vue3d_sel || []).map(s => apiThumb(withV(apiUrl(`/prints/groups/${groupId}/photo/${s.name}`), s.v), 384)) : []),
+    ...(prints[0]?.group_vue3d_anim ? [withV(apiUrl(`/prints/groups/${groupId}/photo/${prints[0].group_vue3d_anim.name}`), prints[0].group_vue3d_anim.v)] : [])];
   return (
     <>
       {row ? (
@@ -2464,9 +2467,9 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
         <div style={{ position:"relative", paddingTop:"78%", background:"var(--surface)", overflow:"hidden" }}>
           <div style={{ position:"absolute", inset:0 }}>
             {/* plusieurs vues 3D choisies : l'une apres l'autre, chacune en grand (30/10/2026), plutot que leur mosaique */}
-            {prints[0]?.group_thumb_3d && prints[0]?.group_vue3d_sel?.length > 1
-              ? <CycleImg urls={prints[0].group_vue3d_sel.map(s => apiThumb(withV(apiUrl(`/prints/groups/${groupId}/photo/${s.name}`), s.v), 384))}
-                  render={(u, on) => <FitThumb src={u} loading="lazy" decoding="async" draggable={false}
+            {tileCyc.length > 1 || (tileCyc.length === 1 && isVid(tileCyc[0]))
+              ? <CycleImg urls={tileCyc} periodOf={animPeriod}
+                  render={(u, on, vis) => isVid(u) ? <TileVideo u={u} on={on} visible={vis}/> : <FitThumb src={u} loading="lazy" decoding="async" draggable={false}
               style={{ position:"absolute", inset:0, width:"100%", height:"100%", opacity: on ? 1 : 0, transition:"opacity .8s ease" }}/>}/>
               : <GroupMosaic photos={mosaicUrls} title={name}/>}
           </div>
@@ -2616,6 +2619,9 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
   const ndots = Math.max(3, 8 - 3 * ((p.number_of_items > 1) + !!rateMe));
   const frame = { position:"relative", cursor:"pointer", userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none", touchAction:"manipulation",
     outline: selected ? "2px solid #3b82f6" : "none", outlineOffset: 2 };
+  // (08/11/2026) ses vues choisies et l'animation de son haut de fiche defilent ensemble sur la tuile
+  const pCyc = [...(p.thumb_3d ? (p.vue3d_sel || []).map(s => apiThumb(withV(apiUrl(`/prints/${p.id}/file/${s.name}`), s.v), 384)) : []),
+    ...(p.vue3d_anim ? [withV(apiUrl(`/prints/${p.id}/file/${p.vue3d_anim.name}`), p.vue3d_anim.v)] : [])];
   return (<>
     {row ? (
       // en rangee : vignette (etat, ×N, ⭐), nom, etat et date, filaments ; a droite la duree et le poids
@@ -2650,9 +2656,9 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
         {/* l'objet entier, jamais rogne, cadre pour occuper sa case (FitThumb) ; la tuile garde la hauteur de celles des
             groupes, pour que les textes s'alignent */}
         {/* plusieurs vues 3D choisies : l'une apres l'autre, chacune en grand (30/10/2026), plutot que leur mosaique */}
-        {p.thumb_3d && p.vue3d_sel?.length > 1
-          ? <CycleImg urls={p.vue3d_sel.map(s => apiThumb(withV(apiUrl(`/prints/${p.id}/file/${s.name}`), s.v), 384))}
-              render={(u, on) => <FitThumb src={u} loading="lazy" decoding="async" draggable={false}
+        {pCyc.length > 1 || (pCyc.length === 1 && isVid(pCyc[0]))
+          ? <CycleImg urls={pCyc} periodOf={animPeriod}
+              render={(u, on, vis) => isVid(u) ? <TileVideo u={u} on={on} visible={vis}/> : <FitThumb src={u} loading="lazy" decoding="async" draggable={false}
               style={{ position:"absolute", inset:0, width:"100%", height:"100%", opacity: on ? 1 : 0, transition:"opacity .8s ease" }}/>}/>
           : <FitThumb src={thumbUrl(p, 384)} loading="lazy" decoding="async" draggable={false}
               style={{ position:"absolute", inset:0, width:"100%", height:"100%", WebkitTouchCallout:"none", WebkitUserDrag:"none" }}

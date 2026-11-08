@@ -22,7 +22,7 @@ export default function CycleImg({ urls, render, period = 2600, dots = true, per
     return () => io.disconnect();
   }, []);
   useEffect(() => {
-    if (urls.length < 2 || !onScreen) return;
+    if (urls.length < 2 || !onScreen) return;            // render(u, on, visible) : visible = a l'ecran (une video n'y joue que la)
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
     let id = 0, k = 0, alive = true;
     const next = () => { if (!alive) return; if (!document.hidden) { k = (k + 1) % urls.length; setI(k); } id = setTimeout(next, (periodOf && periodOf(urls[k])) || period); };
@@ -31,7 +31,7 @@ export default function CycleImg({ urls, render, period = 2600, dots = true, per
   }, [urls.length, onScreen, period]); // eslint-disable-line react-hooks/exhaustive-deps
   const cur = i % urls.length;
   return <span ref={box} style={{ position: "absolute", inset: 0, display: "block" }}>
-    {urls.map((u, k) => <React.Fragment key={u}>{render(u, k === cur)}</React.Fragment>)}
+    {urls.map((u, k) => <React.Fragment key={u}>{render(u, k === cur, onScreen)}</React.Fragment>)}
     {dots && urls.length > 1 && <span aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 2, zIndex: 2,
       display: "flex", gap: 2, pointerEvents: "none" }}>
       {urls.map((u, k) => <span key={u} style={{ flex: 1, transition: "background .5s ease",

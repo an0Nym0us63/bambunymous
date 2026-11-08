@@ -27,3 +27,16 @@ export function HeroModes({ modes, mode, setMode, style }) {
         background: on ? "linear-gradient(135deg, #0EA5E9, #6366F1)" : "transparent" }}>{l}</button>; })}
   </span>;
 }
+
+// la duree de chaque animation, partagee par les tuiles (le defilement attend la fin de sa boucle)
+export const animDurs = { current: {} };
+export const animPeriod = u => isVid(u) ? animDurs.current[u] || 6000 : 2600;
+
+// une tuile de liste ou de galerie (08/11/2026) : une animation n'y est chargee que si la tuile est a l'ecran et que c'est
+// son tour (des centaines de tuiles ne lancent pas des centaines de videos) ; ses bords fondus comme en haut de fiche
+export function TileVideo({ u, on, visible, style }) {
+  if (!on || !visible) return null;
+  return <video src={u} autoPlay loop muted playsInline aria-hidden="true"
+    onLoadedMetadata={e => { if (isFinite(e.currentTarget.duration)) animDurs.current[u] = Math.max(2500, e.currentTarget.duration * 1000); }}
+    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", WebkitMaskImage: MASK, maskImage: MASK, ...style }}/>;
+}

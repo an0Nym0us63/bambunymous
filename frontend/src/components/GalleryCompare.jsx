@@ -5,6 +5,7 @@ import AdminOnly from "./AdminOnly";
 import Lightbox from "./Lightbox";
 import { showAlert, showConfirm } from "../utils/dialog";
 import CycleImg from "./CycleImg";
+import { isVid, TileVideo, animPeriod } from "./HeroMedia";
 const isVideoUrl = (u) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u || "");
 
 /**
@@ -215,12 +216,14 @@ export default function GalleryCompare({
                     {renderCover ? renderCover(item) : (() => {
                       // seulement les vues retenues comme vignette (⭐), s'il y en a plusieurs
                       const phs = (getPhotos && getPhotos(item)) || [], kept = phs.filter(ph => ph?.sel);
-                      const urls = [...new Set(kept.map(ph => ph.url).filter(Boolean))];
+                      // (08/11/2026) et l'animation du haut de sa fiche, qui defile avec elles
+                      const urls = [...new Set([...kept.map(ph => ph.url).filter(Boolean), ...(item.anim?.url ? [item.anim.url] : [])])];
                       const one = (u, on = true) => <img className="bn-stage-img" src={`${apiThumb(u, 384)}&trim=1`} alt={getTitle(item)} loading="lazy" decoding="async"
                         onLoad={on ? lightStage : undefined}
                         style={{ position:"absolute", left:"6%", top:"5%", width:"88%", height:"83%", objectFit:"contain", objectPosition:"50% 100%",
                           filter:"drop-shadow(0 3px 3px rgba(0,0,0,.25))", transformOrigin:"50% 100%", transition:"transform .25s, opacity .8s ease", opacity: on ? 1 : 0 }}/>;
-                      return urls.length > 1 ? <CycleImg urls={urls} render={one}/> : img && one(img);
+                      const any = (u, on = true, vis = true) => isVid(u) ? <TileVideo u={u} on={on} visible={vis} style={{ left: "6%", top: "5%", width: "88%", height: "83%" }}/> : one(u, on);
+                      return urls.length > 1 || (urls.length === 1 && isVid(urls[0])) ? <CycleImg urls={urls.length > 1 ? urls : urls} periodOf={animPeriod} render={any}/> : img && one(img);
                     })()}
                   </div>
                   <div style={{ padding:"7px 10px 8px", borderTop:"1px solid var(--border)" }}>

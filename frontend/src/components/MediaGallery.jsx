@@ -176,7 +176,7 @@ export default function MediaGallery({ kind, id, title = "", refreshKey = "", on
     {n[cur] > 0 && admin && <span style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.35 }}>{legend}</span>}
     {!n[cur] && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>{empty}</span>}
     {shown.map(({ e, items }) => <div key={e.key} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      {(group && (e.title || kids.length)) && <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+      {group && !!(e.title || kids.length) && <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
         {e.plate ? <img src={u(e.plate)} alt="" onError={ev => { ev.currentTarget.style.display = "none"; }}
           style={{ width: 28, height: 28, borderRadius: 8, objectFit: "contain", flexShrink: 0, background: "var(--surface2)", border: "1px solid var(--border)" }}/>
           : !e.title && <span style={{ fontSize: 15 }}>📁</span>}
