@@ -168,6 +168,9 @@ const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:
       .bn-num-free{font-size:12px;font-weight:900;color:var(--muted);opacity:.75}
       .bn-band{position:relative;display:flex;justify-content:center;align-items:center;min-height:24px;overflow:hidden;border-radius:6px}
       .bn-num{align-self:flex-start;font-size:9.5px;font-weight:900;line-height:1;color:var(--muted);margin:-1px 0 -1px 1px}
+      .bn-slot{position:absolute;top:5px;left:5px;min-width:19px;height:19px;padding:0 5px;box-sizing:border-box;border-radius:10px;display:flex;align-items:center;
+        justify-content:center;font-size:10.5px;font-weight:900;line-height:1;color:#fff;background:linear-gradient(135deg,#0EA5E9,#6366F1);
+        box-shadow:0 3px 8px -3px rgba(79,70,229,.7),inset 0 1px 0 rgba(255,255,255,.35);pointer-events:none;z-index:1}
       .bn-ct-name{font-size:11px;font-weight:900;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
       .bn-ct-sub{font-size:9px;font-weight:700;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       @container (max-width:84px){.bn-ct-sub{display:none}.bn-ct-name{font-size:10px;-webkit-line-clamp:1}}
@@ -1005,9 +1008,11 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
   // vertical / tag (08/11/2026) : imprimante, en commande et a ranger en tuiles, la bobine debout ; tag = son slot (« A2 »)
   const Tile = ({ s, vertical = false, tag = null }) => {
     const edge = vertical ? "v" : edgeOf(p0Of(s), by), info = [s.filament_fila_type || s.filament_material, s.filament_manufacturer].filter(Boolean);
-    return <button type="button" className="bn-cell" onClick={() => onOpen(s)} data-tip={[spoolName(s), ...info, tag ? s.location : null, `#${s.id}`].filter(Boolean).join(" · ")}>
-      <span className="bn-band">{edge === "v" ? <SpoolEdge s={s} vertical len={44} thick={22}/> : edge ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/> : <Swatch s={s} size={28}/>}
-        {tag && <span className="bn-num">{tag}</span>}</span>
+    // le slot (08/11/2026) : une pastille dans le coin de la tuile, a l'ecart de la bobine (il etait colle a sa tranche)
+    return <button type="button" className="bn-cell" onClick={() => onOpen(s)} style={tag ? { position: "relative" } : undefined}
+      data-tip={[spoolName(s), ...info, tag ? s.location : null, `#${s.id}`].filter(Boolean).join(" · ")}>
+      {tag && <span className="bn-slot">{tag}</span>}
+      <span className="bn-band">{edge === "v" ? <SpoolEdge s={s} vertical len={44} thick={22}/> : edge ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/> : <Swatch s={s} size={28}/>}</span>
       <span className="bn-ct-name">{spoolName(s)}</span>
       {info.length > 0 && <span className="bn-ct-sub">{info.join(" · ")}</span>}
     </button>;
