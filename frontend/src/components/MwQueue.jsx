@@ -21,6 +21,7 @@ import { setFilColors } from "./PlanDay";
 import Model3D from "./Model3D";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import { moneyVal } from "../utils/money";
+import { FSheet, fBtn } from "./FicheKit";
 
 // « 8 nov. » : la date d'un « repartir a zero » (enregistree en UTC)
 const sinceTxt = s => new Date(String(s).endsWith("Z") ? s : `${s}Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
@@ -152,6 +153,7 @@ export default function MwQueue() {
   // le tri : a chaque ouverture, l'ordre du planning (06/11/2026 ; avant, celui de la liste) ; le choix ne se garde pas
   const [sortBy, setSortBy] = useState("plan");
   const [model, setModel] = useState(null);
+  const [filFor, setFilFor] = useState(null);       // (08/11/2026) « Filaments pour tout imprimer » : les modeles d'un filament
   const [tab, setTab] = useUrlTab("afaire", "models", ["models", "filaments"]);
   useTrackDetail(`À faire · ${tab === "filaments" ? "Filaments pour tout imprimer" : "Modèles"}`);
   const [sorting, setSorting] = useState(false);   // mode « Réorganiser »
@@ -424,7 +426,8 @@ export default function MwQueue() {
               const ok = !f.missing_g, c = ok ? "#22C55E" : "#EF4444";
               const fill = f.stock_g > 0 ? Math.min(1, f.need_g / f.stock_g) : 1;
               return (
-                <div key={f.filament_id} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:16, border:"1px solid var(--border)",
+                <div key={f.filament_id} role="button" tabIndex={0} onClick={() => setFilFor(f)} data-tip="Les modèles qui s'en servent"
+                  style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:16, border:"1px solid var(--border)", cursor:"pointer",
                   background:`linear-gradient(135deg, ${hexOf(f)}1f, transparent 55%), var(--surface2)` }}>
                   <Swatch f={f} size={30}/>
                   <span style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:3 }}>
@@ -440,7 +443,7 @@ export default function MwQueue() {
                   <span style={{ textAlign:"right", flexShrink:0 }}>
                     <span style={{ display:"block", fontSize:13, fontWeight:900, color:"var(--text)" }}>{g(f.need_g)} <span style={{ color:"var(--muted)", fontWeight:700 }}>/ {g(f.stock_g)}</span></span>
                     <span style={{ display:"inline-flex", alignItems:"center", gap:6, marginTop:3 }}>
-                      <StoreLink filamentId={f.filament_id}/>
+                      <span onClick={e => e.stopPropagation()}><StoreLink filamentId={f.filament_id}/></span>
                       <span style={{ fontSize:10.5, fontWeight:800, padding:"1px 8px", borderRadius:20, color:c, background:`${c}1f` }}>
                       {f.missing_g ? `manque ${g(f.missing_g)}` : `reste ${g(f.stock_g - f.need_g)}`}</span></span>
                   </span>
@@ -457,6 +460,38 @@ export default function MwQueue() {
             {q.filaments.length === 0 && q.unmatched.length === 0 && <p style={msg}>Aucun filament à prévoir.</p>}
           </div>
         )}
+        {filFor && (() => {
+          // les modeles de la liste qui s'en servent (dans les limites « Jusqu'ici » / « Choisir » des comptes), le plus
+          // gourmand d'abord ; toucher un modele ouvre sa fiche
+          const pk = q.picked ? new Set(q.picked.ids) : null, cut = q.until ? q.models.findIndex(r => r.design_id === q.until.design_id) : -1;
+          const list = q.models.map((r, i) => ({ r, i, g: (r.filaments || []).filter(x => x.chosen?.filament_id === filFor.filament_id).reduce((s, x) => s + (Number(x.g) || 0), 0) }))
+            .filter(x => x.g > 0 && (pk ? pk.has(x.r.design_id) : cut < 0 || x.i <= cut)).sort((a, b) => b.g - a.g);
+          return createPortal(<FSheet onClose={() => setFilFor(null)} z={1300} bottom={<button onClick={() => setFilFor(null)} style={{ ...fBtn, flex: 1 }}>Fermer</button>}>
+            <div style={{ padding:"52px 16px 18px", display:"flex", flexDirection:"column", gap:10 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <Swatch f={filFor} size={36}/>
+                <span style={{ flex:1, minWidth:0 }}>
+                  <span style={{ display:"block", fontSize:17, fontWeight:900, color:"var(--text)" }}>{filFor.name}</span>
+                  <span style={{ display:"block", fontSize:12, fontWeight:700, color:"var(--muted)" }}>
+                    {[filFor.brand, filFor.material].filter(Boolean).join(" · ")} · {g(filFor.need_g)} pour {list.length} modèle{list.length > 1 ? "s" : ""} · {g(filFor.stock_g)} en stock</span>
+                </span>
+              </div>
+              {list.map(({ r, g: gr }) => (
+                <button key={r.design_id} type="button" onClick={() => setModel({ design_id: r.mw_id || r.design_id, title: r.title, title_fr: r.title_fr, cover_url: r.cover_url })}
+                  style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 10px 7px 7px", borderRadius:14, border:"1px solid var(--border)",
+                    background:"var(--surface2)", cursor:"pointer", textAlign:"left", fontFamily:"inherit", color:"var(--text)" }}>
+                  {r.cover_url ? <MwImg src={r.cover_url} w={90} style={{ width:44, height:44, borderRadius:10, objectFit:"cover", flexShrink:0 }}/>
+                    : <span style={{ width:44, height:44, borderRadius:10, background:"var(--surface)", flexShrink:0 }}/>}
+                  <span style={{ flex:1, minWidth:0 }}>
+                    <span style={{ display:"block", fontSize:13, fontWeight:800, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.title_fr || r.title || `Modèle ${r.design_id}`}</span>
+                    <span style={{ display:"block", fontSize:11, fontWeight:700, color:"var(--muted)" }}>{statusText(r)}{(r.qty || 1) > 1 ? ` · ×${r.qty}` : ""}</span>
+                  </span>
+                  <span style={{ fontSize:13, fontWeight:900, flexShrink:0 }}>{g(gr)}</span>
+                </button>))}
+              {!list.length && <p style={msg}>Aucun modèle de la liste ne s'en sert.</p>}
+            </div>
+          </FSheet>, document.body);
+        })()}
 
         {tab === "models" && (<>
         {/* tri et modes : compter jusqu'ici, choisir, reorganiser (sur grand ecran, sur une ligne) */}
