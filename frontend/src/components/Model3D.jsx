@@ -12,6 +12,7 @@ import { useIsAdmin } from "../store/auth";
 import { showAlert, showConfirm } from "../utils/dialog";
 import MwImg from "./MwImg";
 import { openVue3D } from "./Vue3DPicker";
+import { AnimSheet, startAnim } from "./Anim3D";
 import Select from "./Select";
 import { useHasFriends, useShared } from "./Friends";
 
@@ -1007,8 +1008,146 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           camera.lookAt(controls.target); camera.updateProjectionMatrix(); controls.update(); render();
           return blob;
         };
+        // une animation de la vue (08/11/2026) : rendue a part, par un second moteur hors de l'ecran, image par image, et
+        // encodee en WebM (WebCodecs) : plus vite que le temps reel, et la vue reste libre pendant ce temps. Le modele est
+        // bouge le temps de rendre une image, puis remis (un seul fil : la vue ne le voit jamais bouge). Rend { blob, type }.
+        // opts : style (voir ANIM_STYLES), secs, short (le petit cote, en pixels), ratio (1:1, 16:9, 9:16), bg (studio, light,
+        // transparent) ; onProgress(0..1)
+        const animate = async (opts = {}, onProgress = () => {}) => {
+          const { style = "turntable", secs = 6, short = 720, ratio = "1:1", bg = "studio" } = opts;
+          const fps = 30, n = Math.max(30, Math.round(secs * fps));
+          const [rw, rh] = ratio === "16:9" ? [16, 9] : ratio === "9:16" ? [9, 16] : [1, 1];
+          const even = v => Math.max(2, Math.round(v / 2) * 2);
+          const W = even(rw >= rh ? short * rw / rh : short), H = even(rw >= rh ? short : short * rh / rw);
+          const glc = document.createElement("canvas"); glc.width = W; glc.height = H;
+          const r2 = new THREE.WebGLRenderer({ canvas: glc, antialias: true, alpha: true, preserveDrawingBuffer: true });
+          r2.setPixelRatio(1); r2.setSize(W, H, false); r2.setClearColor(0x000000, 0);
+          r2.toneMapping = renderer.toneMapping; r2.toneMappingExposure = renderer.toneMappingExposure; r2.outputColorSpace = renderer.outputColorSpace;
+          const out = document.createElement("canvas"); out.width = W; out.height = H;
+          const cx = out.getContext("2d");
+          const cam = new THREE.PerspectiveCamera(camera.fov, W / H, 1, 5000);
+          const sp = visibleBox(THREE, model).getBoundingSphere(new THREE.Sphere());
+          const c = sp.center.clone(), rad = Math.max(1, sp.radius);
+          // depuis l'angle ou l'on regarde : son azimut et sa hauteur
+          const dir0 = camera.position.clone().sub(controls.target).normalize();
+          const az0 = Math.atan2(dir0.x, dir0.z), el0 = Math.asin(THREE.MathUtils.clamp(dir0.y, -0.95, 0.95));
+          const vf = THREE.MathUtils.degToRad(cam.fov), hf = 2 * Math.atan(Math.tan(vf / 2) * cam.aspect);
+          const d0 = rad / Math.sin(Math.min(vf, hf) / 2) * 1.1;
+          const up = new THREE.Vector3(0, 1, 0), TAU = Math.PI * 2, lerp = THREE.MathUtils.lerp, rad2 = THREE.MathUtils.degToRad;
+          const place = (az, el, d, look = c) => {
+            cam.position.set(c.x + d * Math.cos(el) * Math.sin(az), c.y + d * Math.sin(el), c.z + d * Math.cos(el) * Math.cos(az));
+            cam.up.copy(up); cam.lookAt(look); cam.near = Math.max(0.1, d / 100); cam.far = d * 20; cam.updateProjectionMatrix();
+          };
+          const q0 = model.quaternion.clone(), p0 = model.position.clone(), qa = new THREE.Quaternion();
+          const spin = th => { qa.setFromAxisAngle(up, th); model.quaternion.copy(qa).multiply(q0); model.position.copy(p0).sub(c).applyQuaternion(qa).add(c); };
+          const wave = u => 0.5 - 0.5 * Math.cos(TAU * u);           // 0 -> 1 -> 0 sur la boucle : chaque effet boucle sans saut
+          const pose = u => {
+            switch (style) {
+              case "orbit": place(az0 + TAU * u, el0, d0); break;                                  // la camera fait le tour
+              case "swing": place(az0, el0, d0); spin(0.6 * Math.sin(TAU * u)); break;           // balancement de +-35 degres
+              case "travel": {                                                                     // travelling lateral, parallaxe
+                const s = Math.sin(TAU * u), right = new THREE.Vector3(Math.cos(az0), 0, -Math.sin(az0));
+                place(az0 + 0.42 * s, el0 + 0.07 * Math.cos(TAU * u), d0 * 0.88, c.clone().addScaledVector(right, rad * 0.16 * s)); break;
+              }
+              case "zoom": place(az0 + 0.45 * Math.sin(TAU * u), el0, d0 * (1 - 0.45 * wave(u))); break;  // on s'approche, on recule
+              case "reveal": { const s = wave(u);                                                  // vu du dessus, on descend en tournant
+                place(az0 + Math.PI * s, lerp(rad2(76), el0, s), d0 * (1.18 - 0.22 * s)); break; }
+              case "spiral": place(az0 + TAU * u, THREE.MathUtils.clamp(el0 + 0.45 * Math.sin(TAU * u), -0.25, 1.35),
+                d0 * (1 - 0.14 * Math.sin(2 * TAU * u))); break;                                  // le tour, en montant et descendant
+              case "drone": place(az0 + TAU * u, rad2(58), d0 * (1.05 - 0.2 * wave(u))); break;  // de haut, en survol
+              default: place(az0, el0, d0); spin(TAU * u);                                         // plateau tournant
+            }
+          };
+          // le fond : studio sombre ou clair (un degrade doux), ou transparent si l'encodeur sait garder la transparence
+          let useAlpha = bg === "transparent";
+          const paint = () => {
+            cx.clearRect(0, 0, W, H);
+            if (!useAlpha) {
+              const g = cx.createRadialGradient(W / 2, H * 0.42, Math.min(W, H) * 0.08, W / 2, H / 2, Math.max(W, H) * 0.75);
+              if (bg === "light") { g.addColorStop(0, "#ffffff"); g.addColorStop(1, "#d9dee7"); }
+              else { g.addColorStop(0, "#2d3446"); g.addColorStop(1, "#0d1016"); }
+              cx.fillStyle = g; cx.fillRect(0, 0, W, H);
+            }
+            cx.drawImage(glc, 0, 0, W, H);
+          };
+          const head = new THREE.DirectionalLight(0xffffff, 0.55);     // une lumiere qui vient de l'oeil : rien ne reste dans le noir
+          const frame = u => {
+            const was = { grid: grid.visible, bg: scene.background };
+            grid.visible = false; scene.background = null;
+            pose(u);
+            head.position.copy(cam.position); head.target.position.copy(c); scene.add(head, head.target);
+            try { r2.render(scene, cam); }
+            finally {
+              scene.remove(head, head.target);
+              model.quaternion.copy(q0); model.position.copy(p0);
+              grid.visible = was.grid; scene.background = was.bg;
+            }
+            paint();
+          };
+          const nap = ms => new Promise(r => setTimeout(r, ms));
+          let blob = null, type = "video/webm";
+          try {
+            // WebCodecs : image par image, au rythme de la machine, sans bloquer la page (une pause rendue toutes les images)
+            let conf = null, mux = null;
+            if (typeof VideoEncoder !== "undefined") {
+              const base = { width: W, height: H, bitrate: Math.round(W * H * fps * 0.11), framerate: fps };
+              for (const [codec, m] of [["vp09.00.10.08", "V_VP9"], ["vp8", "V_VP8"]]) {
+                for (const a of useAlpha ? [true, false] : [false]) {
+                  const cf = { ...base, codec, ...(a ? { alpha: "keep" } : {}) };
+                  try { if ((await VideoEncoder.isConfigSupported(cf)).supported) { conf = cf; mux = m; useAlpha = a; break; } } catch { /* suivant */ }
+                }
+                if (conf) break;
+              }
+            }
+            if (conf) {
+              const { Muxer, ArrayBufferTarget } = await import("webm-muxer");
+              const target = new ArrayBufferTarget();
+              const muxer = new Muxer({ target, video: { codec: mux, width: W, height: H, frameRate: fps, alpha: useAlpha }, firstTimestampBehavior: "offset" });
+              let err = null;
+              const enc = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => { err = e; } });
+              enc.configure(conf);
+              for (let i = 0; i < n; i++) {
+                if (err) throw err;
+                frame(i / n);
+                const vfr = new VideoFrame(out, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps), alpha: useAlpha ? "keep" : "discard" });
+                enc.encode(vfr, { keyFrame: i % (fps * 2) === 0 });
+                vfr.close();
+                onProgress((i + 1) / n);
+                while (enc.encodeQueueSize > 4) await nap(5);
+                await nap(0);
+              }
+              await enc.flush(); enc.close();
+              if (err) throw err;
+              muxer.finalize();
+              blob = new Blob([target.buffer], { type: "video/webm" });
+            } else {
+              // sans WebCodecs (Safari d'avant) : l'enregistreur du navigateur, en temps reel
+              const mt = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"].find(t => window.MediaRecorder?.isTypeSupported?.(t));
+              if (!mt) throw new Error("Ce navigateur ne sait pas enregistrer de vidéo");
+              const stream = out.captureStream(fps);
+              const rec = new MediaRecorder(stream, { mimeType: mt, videoBitsPerSecond: Math.round(W * H * fps * 0.11) });
+              const parts = [];
+              rec.ondataavailable = e => { if (e.data?.size) parts.push(e.data); };
+              const done = new Promise(r => { rec.onstop = r; });
+              frame(0); rec.start();
+              const t0 = performance.now(), dur = n * 1000 / fps;
+              while (performance.now() - t0 < dur) {
+                const u = (performance.now() - t0) / dur;
+                frame(u); onProgress(u);
+                await new Promise(r => requestAnimationFrame(r));
+              }
+              rec.stop(); await done;
+              type = mt.split(";")[0];
+              blob = new Blob(parts, { type });
+            }
+          } finally {
+            try { r2.dispose(); r2.forceContextLoss(); } catch { /* rien */ }
+            head.dispose?.();
+          }
+          return { blob, type, w: W, h: H, alpha: useAlpha };
+        };
         // la vignette se prend sur tout plateau (30/10/2026) ; l'edition, sur la vue assemblee seulement
-        if (editApi) editApi.current = { editing, toSave, origin, relayout, snapshot, untilt, get editor() { return editor; } };
+        if (editApi) editApi.current = { editing, toSave, origin, relayout, snapshot, animate, untilt, get editor() { return editor; } };
         disposables.push({ dispose: () => { try { editor?.dispose(); } catch { /* rien */ } if (editApi) editApi.current = null; } });
         const setTd = (i, v) => { if (hueU) { hueU.hT.value[i] = v; render(); } };
         api.current = { fit, night, backlight, bedShow, dragPans, zoom, floorMode, untilt, orient, setTd, setLamp, setGlowK };
@@ -2027,6 +2166,15 @@ export default function Model3D({ designId = null, profileId = null, printId = n
   const groupTarget = gid && !(shotTarget?.kind === "group") ? { kind: "group", id: String(gid) } : null;
   const canShot = isAdmin && !fr && !!p && !p.pending && !!(shotTarget || groupTarget);
   const [shotPick, setShotPick] = useState(false);
+  // l'animation (08/11/2026) : ses options, puis l'enregistrement en tache de fond (la vue reste libre)
+  const [animOpen, setAnimOpen] = useState(false);
+  const animTargets = grpAll && groupTarget ? [groupTarget] : [shotTarget, groupTarget].filter(Boolean);
+  const startAnimation = (opts, target) => {
+    setAnimOpen(false);
+    const fn = editApi.current?.animate;
+    if (!fn) { showAlert("La vue n'est pas prête"); return; }
+    startAnim(fn, opts, target);
+  };
   const shotClick = () => { if (grpAll && groupTarget) takeShot(groupTarget); else if (groupTarget && shotTarget) setShotPick(v => !v); else takeShot(shotTarget || groupTarget); };
   const takeShot = async (target = shotTarget) => {
     setShotPick(false);
@@ -2350,6 +2498,9 @@ export default function Model3D({ designId = null, profileId = null, printId = n
                 <button type="button" onClick={() => takeShot(groupTarget)} style={{ padding: "7px 12px", borderRadius: 9, border: "1px solid color-mix(in srgb, #A78BFA 45%, var(--border))",
                   cursor: "pointer", fontSize: 12.5, fontWeight: 800, background: "color-mix(in srgb, #A78BFA 14%, var(--surface2))", color: "var(--text)", textAlign: "left" }}>📁 Pour le groupe</button>
               </span>}</span>}
+            {canShot && <button type="button" onClick={() => setAnimOpen(true)} data-tip="Une animation de la vue (plateau tournant, tour de caméra, travelling, zoom…), faite en tâche de fond"
+              style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 13, fontWeight: 800,
+                background: "var(--surface)", color: "var(--text2)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>🎞 Animation</button>}
             {editable && showMine && <button type="button" onClick={startEdit} data-tip="Déplacer, tourner, poser au sol, coller les pièces (en plein écran)"
               style={{ height: 38, padding: "0 12px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff",
                 background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 4px 12px rgba(0,0,0,.15)" }}>✏️ Éditer l'assemblage</button>}
@@ -2394,6 +2545,7 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             textAlign: "center", fontSize: 13, fontWeight: 700, color: "#ef4444" }}>{err || (st.error ? `Plateau illisible : ${st.error}` : "Plateau abîmé, même refait : rouvre la vue plus tard")}</div>}
         </div>
         <div ref={setTdSlot} style={{ display: "contents" }}/>
+        {animOpen && <AnimSheet targets={animTargets} onStart={startAnimation} onClose={() => setAnimOpen(false)}/>}
         {editErr && !editing && <div style={{ alignSelf: "center", padding: "6px 12px", borderRadius: 10, fontSize: 12, fontWeight: 700, color: "#b91c1c",
           background: "color-mix(in srgb, #ef4444 12%, var(--surface))", border: "1px solid color-mix(in srgb, #ef4444 35%, transparent)" }}>
           L'édition n'a pas pu s'ouvrir : {editErr}</div>}
@@ -2406,6 +2558,9 @@ export default function Model3D({ designId = null, profileId = null, printId = n
             : <button type="button" disabled={shot === "busy"} onClick={shotClick}
             style={{ height: 40, padding: "0 14px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 13, fontWeight: 800,
               background: "var(--surface)", color: "var(--text2)" }}>{shot === "busy" ? "…" : "📸 Vignette"}</button>)}
+          {canShot && <button type="button" onClick={() => setAnimOpen(true)}
+            style={{ height: 40, padding: "0 14px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", fontSize: 13, fontWeight: 800,
+              background: "var(--surface)", color: "var(--text2)" }}>🎞 Animation</button>}
           {editable && showMine && <button type="button" onClick={startEdit}
             style={{ height: 40, padding: "0 16px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff",
               background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 6px 16px -8px #6366F1" }}>✏️ Éditer l'assemblage</button>}

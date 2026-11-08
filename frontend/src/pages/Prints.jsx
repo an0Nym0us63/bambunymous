@@ -1627,8 +1627,11 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       <img src={thumbUrl(p, 128)} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
         objectFit: "cover", filter: "blur(26px) saturate(1.15)", opacity: 0.3, transform: "scale(1.3)" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
       <span aria-hidden="true" style={{ position: "absolute", inset: 0, background: `radial-gradient(60% 70% at 50% 38%, ${stC}33, transparent 72%)` }}/>
-      {/* plusieurs vues 3D choisies : elles defilent ici aussi, comme sur la tuile (31/10/2026) */}
-      {!heroOrig && p.thumb_3d && p.vue3d_sel?.length > 1
+      {/* l'animation prise dans la vue 3D (08/11/2026) : elle tourne ici, en boucle ; sinon les vues choisies defilent */}
+      {!heroOrig && p.vue3d_anim
+        ? <video key={p.vue3d_anim.v} src={withV(apiUrl(`/prints/${p.id}/file/${p.vue3d_anim.name}`), p.vue3d_anim.v)} autoPlay loop muted playsInline
+            style={{ position: "absolute", inset: "4% 8% 26%", width: "84%", height: "70%", objectFit: "contain", borderRadius: 14 }}/>
+      : !heroOrig && p.thumb_3d && p.vue3d_sel?.length > 1
         ? <span style={{ position: "absolute", inset: "4% 8% 26%" }}>
             <CycleImg urls={p.vue3d_sel.map(s => apiThumb(withV(apiUrl(`/prints/${p.id}/file/${s.name}`), s.v), 512))}
               render={(u, on) => <img src={u} alt="" className="bn-plate" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain",
@@ -1637,7 +1640,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         objectFit: "contain", filter: "drop-shadow(0 14px 24px rgba(0,0,0,.35))" }}
         onError={e => { e.currentTarget.style.display = "none"; }}/>}
       {/* la vignette choisie est une vue 3D : l'image d'origine reste a portee, en petit dans le coin ; la toucher echange */}
-      {!!p.thumb_3d && <button type="button" onClick={() => setHeroOrig(o => !o)}
+      {(!!p.thumb_3d || !!p.vue3d_anim) && <button type="button" onClick={() => setHeroOrig(o => !o)}
         data-tip={heroOrig ? "Revenir à la vue 3D" : "Voir l'image d'origine (le plateau)"}
         style={{ position: "absolute", top: wide ? 12 : 54, right: 12, width: 64, padding: 0, borderRadius: 12, overflow: "hidden", cursor: "pointer",
           border: "1px solid color-mix(in srgb, var(--border) 80%, #fff)", background: "color-mix(in srgb, var(--surface) 88%, transparent)",

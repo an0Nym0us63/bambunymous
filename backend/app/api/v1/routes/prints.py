@@ -146,6 +146,9 @@ def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict]
     # les vues choisies une a une (30/10/2026) : plusieurs, la tuile les fait defiler au lieu de montrer leur mosaique
     d["vue3d_sel"] = [{"name": _v3name(n), "v": sl[n]} for n in _v3sel(p.thumb_3d, sl)] if sl else []
     d["group_vue3d_sel"] = [{"name": _v3name(n), "v": gsl[n]} for n in _v3sel(p.group.thumb_3d, gsl)] if gsl and p.group else []
+    # l'animation prise dans la vue 3D (08/11/2026) : {name, v} ou None
+    d["vue3d_anim"] = _v3anim(DATA_DIR / "prints" / str(p.id))
+    d["group_vue3d_anim"] = _v3anim(DATA_DIR / "groups" / str(p.group_id)) if p.group_id else None
     # le 3MF d'origine MakerWorld deja garde pour ce profil (le tranche, lui, est model_3mf)
     try:
         from ....services.mw_source import print_file as _src
@@ -157,7 +160,7 @@ def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict]
         return d
     gd = _group_dir(p.group_id) if p.group_id else None       # le disque seulement si le cache ne sait pas
     d["group_has_photos"] = bool(gd and any(f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v")
-                                            for f in gd.iterdir()))
+                                            and f.name not in V3_ANIMS for f in gd.iterdir()))
     if gcache is not None and p.group_id:
         gcache[p.group_id] = d["group_has_photos"]
     return d
@@ -841,7 +844,7 @@ async def _build_gallery(kind: str = "photos") -> dict:
             d = groups_dir / str(gid)
             if d.exists():
                 out[gid] = [(f.name, int(f.stat().st_mtime)) for f in sorted(d.iterdir())
-                            if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v")]
+                            if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v") and f.name not in V3_ANIMS]
         return out
     import asyncio as _aio
     on_disk = await _aio.to_thread(_scan, list(group_acc))
@@ -975,7 +978,7 @@ async def group_photos(group_id: int):
         return {"files": [], "cover_photo": cover}
     files = []
     for f in sorted(d.iterdir()):
-        if not _V3RE.fullmatch(f.name) and not f.name.startswith("Joint-") and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v"):
+        if not _V3RE.fullmatch(f.name) and f.name not in V3_ANIMS and not f.name.startswith("Joint-") and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v"):
             files.append({"name": f.name, "url": f"/api/v1/prints/groups/{group_id}/photo/{f.name}"})
     return {"files": files, "cover_photo": cover}
 
@@ -2971,6 +2974,50 @@ _V3RE = re.compile(r"Vue3D(_[2-4]|_mix\d+)?\.png")
 V3_MULTI = 16
 
 
+# l'animation (08/11/2026) : une par impression ou groupe, prise dans la vue 3D (WebM, ou MP4 la ou le navigateur ne
+# sait faire que ca) ; rangee avec les vues (« Vues 3D/Animation » sur le NAS), jamais parmi les photos
+V3_ANIMS = ("Vue3D_anim.webm", "Vue3D_anim.mp4")
+V3_ANIM_MAX = 30 * 1024 * 1024
+
+
+_LAST_ANIM: dict = {}                 # dossier -> son animation, relevee par la derniere lecture du dossier (_v3slots)
+
+
+def _v3anim(folder: Path, fresh: bool = False):
+    """{name, v} de l'animation de ce dossier, ou None ; sans « fresh », ce qu'a vu la lecture du dossier qui vient d'etre
+    faite (la liste des impressions ne relit pas le disque une fois de plus)."""
+    if not fresh and str(folder) in _LAST_ANIM:
+        return _LAST_ANIM[str(folder)]
+    for nm in V3_ANIMS:
+        try:
+            return {"name": nm, "v": int((folder / nm).stat().st_mtime)}
+        except OSError:
+            continue
+    return None
+
+
+async def _save_v3anim(folder: Path, file: UploadFile) -> dict:
+    raw = await file.read()
+    if len(raw) > V3_ANIM_MAX:
+        raise HTTPException(400, "Animation trop lourde (30 Mo au plus)")
+    if raw[:4] == b"\x1aE\xdf\xa3":
+        name = V3_ANIMS[0]
+    elif raw[4:8] == b"ftyp":
+        name = V3_ANIMS[1]
+    else:
+        raise HTTPException(400, "Vidéo WebM ou MP4 attendue")
+    folder.mkdir(parents=True, exist_ok=True)
+    tmp = folder / (name + ".part")
+    tmp.write_bytes(raw)
+    os.replace(tmp, folder / name)
+    for other in V3_ANIMS:                        # une seule animation : l'autre format s'en va
+        if other != name:
+            (folder / other).unlink(missing_ok=True)
+    gallery_touched()
+    _LAST_ANIM.pop(str(folder), None)
+    return _v3anim(folder, fresh=True)
+
+
 def _v3name(n: int) -> str:
     return VUE3D if n == 1 else f"Vue3D_{n}.png"
 
@@ -3046,10 +3093,16 @@ def _v3slots(folder: Path) -> dict:
     """{numero: date} des vues 3D gardees dans ce dossier. (06/11/2026) une lecture du dossier au lieu de quatre stat :
     la liste des impressions le demande deux fois par impression."""
     want = {_v3name(n): n for n in range(1, V3_MAX + 1)}
-    out = {}
+    out, anim = {}, None
     try:
         with os.scandir(folder) as it:
             for e in it:
+                if e.name in V3_ANIMS:                # l'animation, relevee au passage (08/11/2026)
+                    try:
+                        anim = {"name": e.name, "v": int(e.stat().st_mtime)}
+                    except OSError:
+                        pass
+                    continue
                 n = want.get(e.name)
                 if n:
                     try:
@@ -3058,6 +3111,9 @@ def _v3slots(folder: Path) -> dict:
                         pass
     except OSError:
         pass
+    _LAST_ANIM[str(folder)] = anim
+    if len(_LAST_ANIM) > 5000:
+        _LAST_ANIM.clear()
     return dict(sorted(out.items()))
 
 
@@ -3085,8 +3141,10 @@ def _v3list(kind: str, ident: int, folder: Path, chosen: int) -> dict:
     sl = _v3slots(folder)
     sel = _v3sel(chosen, sl)
     name, v = _v3cover(folder, chosen)
+    an = _v3anim(folder, fresh=True)
     return {"max": V3_MAX, "chosen": sel[0] if sel else 0, "sel": sel, "cover": {"name": name, "v": v} if name else None,
-            "slots": [{"n": n, "url": f"{base}/{_v3name(n)}?v={v}"} for n, v in sorted(sl.items())]}
+            "slots": [{"n": n, "url": f"{base}/{_v3name(n)}?v={v}"} for n, v in sorted(sl.items())],
+            "anim": {**an, "url": f"{base}/{an['name']}?v={an['v']}"} if an else None}
 
 
 @router.get("/{print_id}/vue3d")
@@ -3129,6 +3187,45 @@ async def group_vue3d(group_id: int, file: UploadFile = File(...), slot: int = F
             raise HTTPException(404, "Groupe introuvable")
     n = await _save_vue3d(DATA_DIR / "groups" / str(group_id), file, slot)
     return {"ok": True, "n": n}
+
+
+@router.post("/{print_id}/vue3d/anim")
+async def print_vue3d_anim(print_id: int, file: UploadFile = File(...), _: str = Depends(require_admin)):
+    """Garde l'animation prise dans la vue 3D de cette impression (elle remplace la precedente)."""
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if not p:
+            raise HTTPException(404, "Impression introuvable")
+        an = await _save_v3anim(DATA_DIR / "prints" / str(print_id), file)
+        p.updated_at = datetime.utcnow()
+        await db.commit()
+    return {"ok": True, "anim": an}
+
+
+@router.post("/groups/{group_id}/vue3d/anim")
+async def group_vue3d_anim(group_id: int, file: UploadFile = File(...), _: str = Depends(require_admin)):
+    async with AsyncSessionLocal() as db:
+        if not await db.get(Group, group_id):
+            raise HTTPException(404, "Groupe introuvable")
+    return {"ok": True, "anim": await _save_v3anim(DATA_DIR / "groups" / str(group_id), file)}
+
+
+@router.delete("/{print_id}/vue3d/anim")
+async def print_vue3d_anim_drop(print_id: int, _: str = Depends(require_admin)):
+    for nm in V3_ANIMS:
+        (DATA_DIR / "prints" / str(print_id) / nm).unlink(missing_ok=True)
+    _LAST_ANIM.pop(str(DATA_DIR / "prints" / str(print_id)), None)
+    gallery_touched()
+    return {"ok": True}
+
+
+@router.delete("/groups/{group_id}/vue3d/anim")
+async def group_vue3d_anim_drop(group_id: int, _: str = Depends(require_admin)):
+    for nm in V3_ANIMS:
+        (DATA_DIR / "groups" / str(group_id) / nm).unlink(missing_ok=True)
+    _LAST_ANIM.pop(str(DATA_DIR / "groups" / str(group_id)), None)
+    gallery_touched()
+    return {"ok": True}
 
 
 @router.delete("/{print_id}/vue3d/{n}")

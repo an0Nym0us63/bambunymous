@@ -190,6 +190,8 @@ def human_name(rel_name: str, model: str) -> str | None:
         return f"Vues 3D/Vue {m.group(1) or 1}.png"
     if low.startswith("vue3d_mix"):
         return None
+    if low in ("vue3d_anim.webm", "vue3d_anim.mp4"):            # l'animation prise dans la vue 3D (08/11/2026)
+        return f"Vues 3D/Animation{ext}"
     if ext == ".3mf":
         return f"3MF/{model} - tranché.3mf"
     if ext in (".mp4", ".webm", ".mov", ".m4v"):

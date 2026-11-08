@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import client, { apiUrl } from "../api/client";
-import { showAlert } from "../utils/dialog";
+import { showAlert, showConfirm } from "../utils/dialog";
+import { AnimPlayer } from "./Anim3D";
 
 // Les vues 3D d'une impression ou d'un groupe (30/10/2026) : jusqu'a 4, prises dans la vue 3D (un plateau, l'assemblage,
 // de jour, de nuit, eclairee par derriere…). On en choisit une comme vignette, ou la vignette par defaut ; on en supprime ;
@@ -9,6 +10,7 @@ import { showAlert } from "../utils/dialog";
 function Picker({ kind, id, shot, onDone, close }) {
   const base = kind === "group" ? `/prints/groups/${id}` : `/prints/${id}`;
   const [d, setD] = useState(null), [busy, setBusy] = useState(false), [sure, setSure] = useState(0), [saved, setSaved] = useState(!shot);
+  const [play, setPlay] = useState(false);              // l'animation en grand (08/11/2026)
   const load = async () => { try { setD((await client.get(`${base}/vue3d`)).data); } catch (e) { showAlert(e.response?.data?.detail || e.message); close(); } };
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const act = async f => {
@@ -105,6 +107,21 @@ function Picker({ kind, id, shot, onDone, close }) {
         <span>La vignette : les {sel.length} vues choisies défilent l'une après l'autre</span>
       </div>}
       {d && !d.slots.length && !shot && <span style={{ fontSize: 12.5 }}>Aucune vue : prends-en une avec 📸 dans la vue 3D.</span>}
+      {/* l'animation (08/11/2026) : en boucle ici, en grand au toucher ; une par impression ou groupe */}
+      {d?.anim && <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <video src={apiUrl(d.anim.url.replace(/^\/api\/v1/, ""))} autoPlay loop muted playsInline onClick={() => setPlay(true)}
+          style={{ width: 120, height: 120, objectFit: "cover", borderRadius: 14, cursor: "pointer", background: "#111", border: "1px solid var(--border)" }}/>
+        <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+          <span style={{ fontSize: 13, fontWeight: 900 }}>🎞 L'animation</span>
+          <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Faite avec 🎞 dans la vue 3D ; une nouvelle la remplace.</span>
+          <span style={{ display: "flex", gap: 6 }}>
+            <button type="button" onClick={() => setPlay(true)} style={{ padding: "5px 10px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>▶ En grand</button>
+            <button type="button" disabled={busy} onClick={async () => { if (await showConfirm("Supprimer l'animation ?", { danger: true, confirmLabel: "Supprimer" })) act(() => client.delete(`${base}/vue3d/anim`)); }}
+              style={{ padding: "5px 10px", borderRadius: 10, border: "1px solid color-mix(in srgb, #ef4444 40%, var(--border))", background: "transparent", color: "#ef4444", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>🗑 Supprimer</button>
+          </span>
+        </span>
+        {play && <AnimPlayer url={apiUrl(d.anim.url.replace(/^\/api\/v1/, ""))} onClose={() => setPlay(false)}/>}
+      </div>}
       <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Jusqu'à {d?.max || 4} vues, prises avec 📸 dans la vue 3D : un plateau ou l'assemblage, de jour, de nuit ou éclairé par derrière, telle qu'affichée. Plusieurs choisies : elles défilent l'une après l'autre sur la vignette.</span>
     </div>
   </div>;
