@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { apiUrl } from "../api/client";
 import { useFriend } from "../store/friend";
+import { usePinchZoom } from "../utils/pinchZoom";
 
 // La camera de l'imprimante (22/10/2026). En cascade (02/11/2026) :
 //  1. le flux continu (MJPEG) : chez soi, le plus fluide et le plus leger ;
@@ -53,7 +54,8 @@ function readStream(url, onFrame, onEnd) {
   return () => ctl.abort();
 }
 
-// Un clic ouvre la camera en grand (Echap ou un clic pour fermer).
+// Un clic ouvre la camera en grand (Echap ou un clic a cote pour fermer). En grand (09/11/2026), elle se zoome comme les
+// photos : pincer, molette, double appui ; zoomee, elle se deplace dans son cadre.
 export default function LiveCamera({ mode = "auto", style, maxHeight, expandable = true, fit = "cover", natural = false }) {
   const [big, setBig] = useState(false);
   useEffect(() => {
@@ -63,6 +65,7 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
     return () => window.removeEventListener("keydown", k);
   }, [big]);
   const img = useRef(null);
+  const pz = usePinchZoom(natural);
   // suivi (02/11/2026) : au retour de chez un copain, la camera repart sur ton direct (lue une fois, elle pouvait garder
   // le reglage du copain)
   const friend = useFriend(s => s.friend);
@@ -193,8 +196,11 @@ export default function LiveCamera({ mode = "auto", style, maxHeight, expandable
       onClick={expandable ? e => { e.stopPropagation(); setBig(true); } : undefined}>
       {/* natural (en grand) : l'image a ses vraies proportions, sans bandes noires autour */}
       {/* rien d'affiche tant qu'aucune vue n'est arrivee (ni icone cassee ni noir) : un fond doux qui patiente a la place */}
-      <img ref={img} data-pk="" alt="" style={natural
-        ? { display: broken || !ready ? "none" : "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: "74vh", borderRadius: "inherit" }
+      <img {...(natural ? { ...pz.bind, onClick: e => e.stopPropagation() } : {})} ref={el => { img.current = el; pz.bind.ref.current = el; }}
+        data-pk="" alt="" draggable={false} style={natural
+        ? { display: broken || !ready ? "none" : "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: "74vh", borderRadius: "inherit",
+          transform: `translate(${pz.z.x}px, ${pz.z.y}px) scale(${pz.z.s})`, transformOrigin: "center", transition: pz.gesture ? "none" : "transform .12s ease-out",
+          cursor: pz.zoomed ? "grab" : "zoom-in", touchAction: pz.zoomed ? "none" : "manipulation", userSelect: "none", willChange: "transform" }
         : { width: "100%", display: "block", visibility: ready && !broken ? "visible" : "hidden", aspectRatio: style?.height ? undefined : "16/9",
           height: style?.height, objectFit: fit, background: ready ? "#111" : "transparent", maxHeight, borderRadius: "inherit" }}/>
       {!ready && !broken && <div aria-label="Connexion à la caméra" style={{ ...(natural ? { width: "min(90vw, 720px)", aspectRatio: "16/9" } : { position: "absolute", inset: 0 }),
