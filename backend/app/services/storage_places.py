@@ -7,11 +7,12 @@ ecrit par core/mqtt), ou rangee. Trois modes, au choix dans Parametres > Filamen
   - assigned : chaque bobine a SA place (place_id) : elle est dans l'imprimante, ou a cette place, rien d'autre. En
                sortant de l'AMS, elle y retourne d'office. Sans place, elle est « À ranger ».
   - manual   : on ne range jamais au meme endroit. En sortant de l'AMS, la bobine passe « À ranger » (unstored_at) et
-               l'appli rappelle de dire ou on l'a mise ; sa derniere place reste proposee (« remise à sa place »).
+               l'appli rappelle de dire ou on l'a mise. Aucune case n'est a elle : partie dans l'imprimante, elle libere
+               la sienne (08/11/2026).
 
-Echange intelligent (case a cocher, modes « sa place » et « manuel ») : une bobine B entre dans le slot qu'une bobine A
-vient de quitter (dans les 30 min) ; A a de fortes chances d'avoir pris la place que B occupait. En mode manuel, A y
-est rangee d'office (plus de rappel) ; en mode « sa place », A et B echangent leurs places. Une place de STOCK (cartons,
+Echange intelligent (case a cocher, mode « manuel » seulement depuis le 08/11/2026 : en « sa place », chacune retourne a
+la sienne) : une bobine B entre dans le slot qu'une bobine A vient de quitter (dans les 30 min) ; A a de fortes chances
+d'avoir pris la place que B occupait : elle y est rangee d'office (plus de rappel). Une place de STOCK (cartons,
 reserve, et tout ce qu'elle contient) ne se devine jamais : une bobine qui en sort pour l'AMS la quitte pour de bon, et
 celle qu'elle remplace attend qu'on dise ou elle est (on ne peut pas le deviner).
 
@@ -225,30 +226,24 @@ async def into_printer(db, b, loc: str, already: bool = False) -> None:
         b.place_id, here = None, None                 # sortie du stock : elle n'y reviendra pas
         logger.info(f"[RANGEMENT] bobine #{b.id} sortie du stock pour {loc}")
         await _note(db, "stock_out", b, None, loc, from_stock)
-    if not (conf["smart"] and left and left[0] != b.id and datetime.utcnow() - left[1] <= SWAP_WINDOW):
+    # l'echange intelligent : en « je range ou je veux » seulement (08/11/2026) ; en « sa place », chacune a la sienne et y
+    # retourne, la case de celle qui entre l'attend
+    if not (conf["mode"] == "manual" and conf["smart"] and left and left[0] != b.id and datetime.utcnow() - left[1] <= SWAP_WINDOW):
         return
     a = await db.get(Spool, left[0])
     if a is None or a.archived or not stored(a):
         return
-    if conf["mode"] == "manual":
-        # pas encore dite rangee depuis sa sortie : elle a pris la place de b
-        if a.location == TO_STORE and a.unstored_at is not None and a.unstored_at >= left[1] - timedelta(minutes=1):
-            if here:
-                b.place_id = None
-                a.place_id, a.unstored_at = here, None
-                a.location = resolve(a, conf, pl, kids)
-                logger.info(f"[RANGEMENT] échange : #{a.id} rangée à la place de #{b.id} ({a.location})")
-                await _note(db, "swap", a, b, loc, a.location)
-            else:
-                # rien a deviner : b sortait du stock, ou n'avait pas de place connue (07/11/2026 : le dire tout de suite)
-                await _note(db, "stock" if from_stock else "unknown", a, b, loc, from_stock)
-    elif here:
-        old = a.place_id if (a.place_id and a.place_id in pl and not is_stock(pl, a.place_id)) else None
-        a.place_id, b.place_id = here, old            # elles echangent leurs places
-        a.unstored_at = None
-        a.location = resolve(a, conf, pl, kids)
-        logger.info(f"[RANGEMENT] échange : #{a.id} prend la place de #{b.id} ({a.location})")
-        await _note(db, "exchange", a, b, loc, a.location, path_of(pl, old) if old else None)
+    # pas encore dite rangee depuis sa sortie : elle a pris la place de b
+    if a.location == TO_STORE and a.unstored_at is not None and a.unstored_at >= left[1] - timedelta(minutes=1):
+        if here:
+            b.place_id = None
+            a.place_id, a.unstored_at = here, None
+            a.location = resolve(a, conf, pl, kids)
+            logger.info(f"[RANGEMENT] échange : #{a.id} rangée à la place de #{b.id} ({a.location})")
+            await _note(db, "swap", a, b, loc, a.location)
+        else:
+            # rien a deviner : b sortait du stock, ou n'avait pas de place connue (07/11/2026 : le dire tout de suite)
+            await _note(db, "stock" if from_stock else "unknown", a, b, loc, from_stock)
 
 
 # les notifications du rangement automatique (07/11/2026), envoyees apres l'ecriture (send_notes)

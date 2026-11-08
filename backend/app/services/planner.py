@@ -2570,7 +2570,7 @@ async def _load_spots(jobs: list) -> None:
             leaf = lambda p: bool(p and SP.is_leaf(pl, p, kids))
             if conf["mode"] == "single":
                 ospots.append({"spool": a[0] if a else None, "where": conf["name"], "how": "single", "out": a[0] if a else None})
-            elif conf["smart"] and inc and leaf(inc[4]) and not SP.is_stock(pl, inc[4]) and inc[1] != SP.TO_STORE:
+            elif conf["mode"] == "manual" and conf["smart"] and inc and leaf(inc[4]) and not SP.is_stock(pl, inc[4]) and inc[1] != SP.TO_STORE:
                 ospots.append({"spool": inc[0], "where": SP.path_of(pl, inc[4]), "how": "swap", "out": a[0] if a else None})   # la case qu'elle libere
             elif conf["mode"] == "assigned" and a and leaf(a[1]):
                 ospots.append({"spool": a[0], "where": SP.path_of(pl, a[1]), "how": "home", "out": a[0]})
