@@ -2297,6 +2297,12 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <MediaGallery kind="group" id={groupId} title={name || ""} refreshKey={prints.map(x => `${x.id}:${x.updated_at || ""}`).join(",")} onChanged={() => { loadPrints(); onUpdated?.(); }}/>
       {printsBlock}
+      {/* (08/11/2026) les categories et etiquettes : une fois par modele du groupe (le classement se range par modele) */}
+      {(() => { const seen = new Set(), ms = [];
+        for (const x of prints) { const k = /^\d+$/.test(String(x.design_id || "").trim()) ? `mw:${String(x.design_id).trim()}` : "g"; if (!seen.has(k)) { seen.add(k); ms.push(x); } }
+        return ms.map(x => <div key={x.id}>
+          {ms.length > 1 && <div style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", margin: "0 0 4px 4px" }}>{x.translated_name || x.file_name}</div>}
+          <ModelLabels printId={x.id} onPick={onClose}/></div>); })()}
       {filaments.length > 0 && <FilamentsV2 filaments={filaments} onSpoolClick={setSelSpool} onUnmap={setUnmapping}/>}
       {cards.map(({ d, prof, list }) => <MakerWorldCard key={`${d}:${prof || ""}`} designId={d} profile={prof} rateElsewhere group prints={list}
         others={prints.filter(x => !list.includes(x))} onLinked={loadPrints}

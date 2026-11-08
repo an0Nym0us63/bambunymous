@@ -362,7 +362,7 @@ async def _save(batch: list, res: dict) -> int:
     return n
 
 
-async def _run(redo: bool) -> None:
+async def _run(redo: bool, tok: float = 0) -> None:
     from anthropic import AsyncAnthropic
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting
@@ -381,8 +381,11 @@ async def _run(redo: bool) -> None:
         for i in range(0, len(todo), BATCH):
             if _RUN["stop"]:
                 break
-            batch = await _prepare(todo[i:i + BATCH])
-            items = await _ask(client, batch, fams, cats, [t for t, _ in tc.most_common(400)], _RUN)
+            # (08/11/2026) chaque etape a sa limite : un passage reste bloque 10 min sans rien envoyer (« en cours » pour
+            # toujours, plus rien ne se classait ni en fin d'impression ni la nuit)
+            batch = await asyncio.wait_for(_prepare(todo[i:i + BATCH]), PREP_S)
+            logger.info(f"[IA-TAGS] lot {i // BATCH + 1} : {len(batch)} modèle(s) prêts, demande à Claude")
+            items = await asyncio.wait_for(_ask(client, batch, fams, cats, [t for t, _ in tc.most_common(400)], _RUN), ASK_S)
             await _save(batch, {it.get("ref"): it for it in items})
             for it in items:
                 for f in it.get("families") or []:
@@ -399,19 +402,31 @@ async def _run(redo: bool) -> None:
         logger.info(f"[IA-TAGS] collection : {_RUN['done']}/{_RUN['total']} modèles, {_RUN['in']} jetons envoyés, {_RUN['out']} reçus")
     except Exception as e:
         try:
-            msg = _err(e)
+            msg = "Claude n'a pas répondu à temps (on réessaiera au prochain passage)" if isinstance(e, asyncio.TimeoutError) else _err(e)
         except Exception:
             msg = f"{type(e).__name__} : {e}"
-        _RUN["error"] = msg
+        if _RUN.get("t0") == tok:
+            _RUN["error"] = msg
         logger.warning(f"[IA-TAGS] collection : {msg}")
     finally:
-        _RUN.update(running=False, stop=False, at=datetime.now().isoformat(timespec="seconds"))
+        if _RUN.get("t0") == tok:              # un passage arrete parce que bloque ne touche pas a celui qui l'a remplace
+            _RUN.update(running=False, stop=False, at=datetime.now().isoformat(timespec="seconds"))
+
+
+PREP_S, ASK_S = 120, 420               # la preparation d'un lot (fiches, images), la reponse de Claude (avec ses reprises)
+STALE_S = 20 * 60                      # « en cours » depuis plus longtemps : bloque, le suivant le remplace
 
 
 def start_run(redo: bool = False) -> dict:
+    import time as _t
+    if _RUN["running"] and _t.time() - (_RUN.get("t0") or 0) > STALE_S:
+        logger.warning("[IA-TAGS] le passage précédent est bloqué depuis plus de 20 min : arrêté, un nouveau part")
+        for old in list(_TASKS):
+            old.cancel()
+        _RUN["running"] = False
     if not _RUN["running"]:
-        _RUN.update({"running": True, "done": 0, "total": 0, "error": None, "stop": False, "in": 0, "out": 0})
-        t = asyncio.get_running_loop().create_task(_run(bool(redo)))
+        _RUN.update({"running": True, "done": 0, "total": 0, "error": None, "stop": False, "in": 0, "out": 0, "t0": _t.time()})
+        t = asyncio.get_running_loop().create_task(_run(bool(redo), _RUN["t0"]))
         _TASKS.add(t)
         t.add_done_callback(_TASKS.discard)
     return {k: _RUN[k] for k in _RUN_KEYS}
@@ -521,7 +536,7 @@ async def after_print(pid: int, status: str = "SUCCESS") -> None:
     (avec ceux qui manquent encore). Rien pour une impression annulee ou ratee, sans cle, ni quand le classement
     automatique est coupe."""
     try:
-        if status not in ("SUCCESS", "PARTIAL") or _RUN["running"] or not await auto_on():
+        if status not in ("SUCCESS", "PARTIAL") or not await auto_on():
             return
         from ..db.session import AsyncSessionLocal
         from ..models.print_history import ModelLabel, Print
@@ -605,8 +620,8 @@ async def nightly_loop() -> None:
             if now.hour == NIGHT_HOUR and done_day != now.date():
                 done_day = now.date()
                 await inherit()
-                if await auto_on() and not _RUN["running"]:
-                    start_run()
+                if await auto_on():
+                    start_run()                  # un passage bloque depuis trop longtemps est remplace
         except Exception:
             _tasks.error("ai_tags")
             logger.exception("[IA-TAGS] passage de nuit")
