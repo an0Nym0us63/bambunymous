@@ -454,6 +454,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
     const num = `${p.single ? "" : "📚"}${shortName(p, by)}`;
     // (08/11/2026) le meme dessin que la vue du stock : numero, tranche, nom, sous-type · marque
     return <button type="button" className={`bn-cell${occ ? "" : " bn-free"}`} onClick={e => menu(e, p)} data-hit={hit ? "1" : undefined}
+      data-swap-src={occ && marks?.[occ.id] != null ? marks[occ.id] : undefined}
       data-tip={occ ? [occ.name, ...info, `#${occ.id}`].join(" · ") : p.single ? `${num} · case libre` : `${num} · emplacement commun`}
       style={{ cursor: readOnly ? "default" : "pointer", zIndex: hit ? 2 : undefined, animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined }}>
       {occ && marks?.[occ.id] != null && <span className="bn-mark">{marks[occ.id]}</span>}
@@ -476,7 +477,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       <span style={{ ...small, fontSize: 10 }}>{p.stock ? "📦 stock · " : ""}vrac · {p.spools.length}</span>
     </button>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 3, justifyContent: "center", minHeight: 24, alignItems: "center" }}>
-      {p.spools.slice(0, 24).map(x => <span key={x.id} data-tip={`${x.name} · #${x.id}`} style={{ display: "inline-flex", borderRadius: "50%",
+      {p.spools.slice(0, 24).map(x => <span key={x.id} data-tip={`${x.name} · #${x.id}`} data-swap-src={marks?.[x.id] != null ? marks[x.id] : undefined} style={{ display: "inline-flex", borderRadius: "50%",
         animation: fo(x.id) ? "bnHit 1s ease-in-out .7s infinite" : undefined }}><Swatch s={x} size={fo(x.id) ? 22 : 16}/></span>)}
       {p.spools.length > 24 && <span style={{ ...small, fontSize: 10 }}>+{p.spools.length - 24}</span>}
       {!p.spools.length && <span style={{ ...small, fontSize: 10 }}>vide</span>}
@@ -648,7 +649,7 @@ export function AmsMap({ isHit = () => false, mark = () => null }) {
               // le numero sous le slot, en clair (07/11/2026 : ecrit dessus, il se lisait mal sur les couleurs)
               return <div key={t.id} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}
                 data-tip={`${slotLabel(a.id, t.id)}${empty ? " — vide" : t.spool_info?.translated_name || t.spool_info?.name ? ` — ${t.spool_info.translated_name || t.spool_info.name}` : ""}`}>
-                <div style={{ width: "100%", height: 40, borderRadius: 9, position: "relative", zIndex: hit ? 2 : undefined,
+                <div data-swap-dst={mark(a, t) != null ? mark(a, t) : undefined} style={{ width: "100%", height: 40, borderRadius: 9, position: "relative", zIndex: hit ? 2 : undefined,
                   border: hit ? "2px solid #F59E0B" : empty ? "1.5px dashed rgba(148,163,184,0.7)" : "1px solid rgba(0,0,0,0.15)",
                   animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined,
                   ...(bg || { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 2px, transparent 2px, transparent 6px)" }) }}>

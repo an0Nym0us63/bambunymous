@@ -396,106 +396,113 @@ export function LoadSpot({ sp }) {
     {open && <LocateSheet spoolId={sp.spool} onClose={() => setOpen(false)}/>}</>;
 }
 // ── les echanges de bobines d'un plateau, en un coup d'oeil (08/11/2026) ─────────────────────────────────────────────
-// « 📍 la bobine a prendre ⇄ celle qu'elle remplace 🖨 » pour chaque filament a charger : chacune sur sa tranche, son
-// emplacement sur deux lignes (le rangement, puis la case ; l'AMS, puis le slot) ; toucher une carte la localise
-const splitLoc = loc => {
-  const s = String(loc || "");
-  const m = s.match(/^(.+?) (slot \d+)$/);
-  if (m) return [m[1], m[2]];
-  const p = s.split(" › ");
-  return p.length > 1 ? [p.slice(0, -1).join(" › "), p[p.length - 1]] : [s, null];
-};
-function SwapCard({ fid, name, where, icon, tone, sub, onTap, empty }) {
-  const c = FCOL[fid] || {};
-  const [a, b] = splitLoc(where);
-  return <button type="button" onClick={onTap || undefined} disabled={!onTap}
-    data-tip={onTap ? "Toucher pour la localiser" : undefined}
-    style={{ display: "flex", gap: 8, alignItems: "stretch", minWidth: 0, padding: 8, borderRadius: 14, textAlign: "left", fontFamily: "inherit",
-      cursor: onTap ? "pointer" : "default", color: "var(--text)",
-      border: empty ? "1.5px dashed var(--border)" : `1.5px solid color-mix(in srgb, ${tone} 40%, var(--border))`,
-      background: empty ? "transparent" : `linear-gradient(160deg, color-mix(in srgb, ${tone} 10%, var(--surface)), var(--surface))` }}>
-    {empty ? <span style={{ width: 16, borderRadius: 4, border: "1.5px dashed var(--border)", flexShrink: 0 }}/>
-      : <SpoolEdge s={c} vertical len={58} thick={18}/>}
-    <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3, justifyContent: "center" }}>
-      <span style={{ fontSize: 12, fontWeight: 900, lineHeight: 1.2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{name}</span>
-      {where && <span style={{ display: "flex", flexDirection: "column", padding: "3px 7px", borderRadius: 10, lineHeight: 1.2,
-        background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}>
-        <span style={{ fontSize: 10.5, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{icon} {a}</span>
-        {b && <span style={{ fontSize: 10, fontWeight: 800, opacity: 0.85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b}</span>}
-      </span>}
-      {sub && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", lineHeight: 1.25 }}>{sub}</span>}
-    </span>
-  </button>;
-}
+// « 📍 la bobine a prendre ⇄ celle qu'elle remplace 🖨 » pour chaque filament a charger ; toucher un nom la localise
 export function SwapSheet({ j, onClose }) {
-  const [loc, setLoc] = useState(null);                // { id, home }
+  const [loc, setLoc] = useState(null);                // la bobine a localiser
   const st = useStorage();
-  // (08/11/2026) les rangements et l'imprimante en entier, comme « Localiser » : les cases a vider et les slots a remplir
-  // clignotent, numerotes comme les echanges
-  const srcs = (j.load_spots || []).map((sp, i) => sp?.spool ? { id: sp.spool, n: i + 1 } : null).filter(Boolean);
-  const roots = {};
-  for (const s of srcs) { const r = rootOfSpool(st, s.id); if (r != null) (roots[r] = roots[r] || []).push(s); }
-  const tgts = (j.out_spots || []).map((os, i) => os?.slot ? { loc: os.slot, out: os.live ? os.out : null, n: i + 1 } : null).filter(Boolean);
-  const tgtOf = (a, t) => tgts.find(x => (x.out && t.spool_id === x.out) || slotIs(a, t, x.loc));
-  const sec = (ic, txt) => <div style={{ fontSize: 11, fontWeight: 900, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em", marginTop: 6 }}>{ic} {txt}</div>;
+  // (08/11/2026) chaque rangement concerne une seule fois, ses cases a vider clignotantes et numerotees ; l'imprimante en
+  // face, les slots a remplir numerotes pareil ; un lien anime relie chaque case a son slot, deux fantomes aux couleurs
+  // des bobines s'y croisent (l'aller, le retour). Cote a cote sur grand ecran, l'un sous l'autre sur telephone
   const n = (j.load || []).length;
+  const pairs = (j.load || []).map((x, i) => {
+    const [oname, ofid] = outOf(j, i), os = j.out_spots?.[i], sp = j.load_spots?.[i];
+    return { n: i + 1, name: x, fid: j.load_ids?.[i], sp, oname, ofid, os, free: freeOf(j, i) && !oname };
+  });
+  const roots = {}, loose = [];
+  for (const p of pairs) {
+    const r = p.sp?.spool ? rootOfSpool(st, p.sp.spool) : null;
+    if (r != null) (roots[r] = roots[r] || []).push(p); else loose.push(p);
+  }
+  const tgts = pairs.filter(p => p.os?.slot);
+  const tgtOf = (a, t) => tgts.find(p => (p.os.live && p.os.out && t.spool_id === p.os.out) || slotIs(a, t, p.os.slot));
+  // les liens : recalcules quand la fenetre bouge (ouverture animee, rotation, taille)
+  const wrap = React.useRef(null);
+  const [links, setLinks] = useState([]);
+  React.useLayoutEffect(() => {
+    const el = wrap.current;
+    if (!el) return undefined;
+    const calc = () => {
+      const o = el.getBoundingClientRect(), out = [];
+      for (const p of pairs) {
+        const a = el.querySelector(`[data-swap-src="${p.n}"]`), b = el.querySelector(`[data-swap-dst="${p.n}"]`);
+        if (!a || !b) continue;
+        const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+        const ax = ra.left + ra.width / 2 - o.left, ay = ra.top + ra.height / 2 - o.top, bx = rb.left + rb.width / 2 - o.left, by = rb.top + rb.height / 2 - o.top;
+        const side = Math.abs(bx - ax) > Math.abs(by - ay);
+        const d = side ? `M${ax},${ay} C${(ax + bx) / 2},${ay} ${(ax + bx) / 2},${by} ${bx},${by}`
+          : `M${ax},${ay} C${ax},${(ay + by) / 2} ${bx},${(ay + by) / 2} ${bx},${by}`;
+        out.push({ n: p.n, d, a: FCOL[p.fid], b: FCOL[p.ofid] });
+      }
+      setLinks(l => JSON.stringify(l) === JSON.stringify(out) ? l : out);
+    };
+    const ts = [60, 400, 900, 1400].map(t => setTimeout(calc, t));
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(calc) : null;
+    ro?.observe(el);
+    return () => { ts.forEach(clearTimeout); ro?.disconnect(); };
+  }, [st, n]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hex = c => { const l = c ? parseColorsList(c.color, c.colors_array) : null; return (l && l[0]) || "#94a3b8"; };
   const when = j.start ? new Date(j.start).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : null;
+  const sec = (ic, txt) => <div style={{ fontSize: 11, fontWeight: 900, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em" }}>{ic} {txt}</div>;
   return createPortal(<div onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
     <FSheet onClose={onClose} z={1450} bottom={<button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Fermer</button>}>
-      {/* la double fleche respire ; deux fantomes, aux couleurs des deux bobines, se croisent entre les cartes */}
-      <style>{`.bn-swap{position:relative;display:grid;grid-template-columns:16px minmax(0,1fr) 30px minmax(0,1fr);gap:6px;align-items:center}
-        .bn-swap-n{width:16px;height:16px;border-radius:8px;font-size:10px;font-weight:900;line-height:16px;text-align:center;color:#fff;background:#F59E0B}
-        .bn-swap-ar{animation:bnBreath 1.9s ease-in-out infinite;position:relative;z-index:2}
+      <style>{`.bn-sw{position:relative;display:grid;gap:14px;grid-template-columns:1fr}
+        @media (min-width:760px){.bn-sw{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:40px}}
+        .bn-sw-n{display:inline-block;min-width:16px;height:16px;padding:0 4px;border-radius:8px;font-size:10px;font-weight:900;line-height:16px;text-align:center;color:#fff;background:#F59E0B}
+        .bn-sw-link{fill:none;stroke:url(#bnSwGrad);stroke-width:2.5;stroke-linecap:round;stroke-dasharray:6 7;animation:bnSwDash 1.1s linear infinite;opacity:.9}
+        @keyframes bnSwDash{to{stroke-dashoffset:-26}}
+        .bn-sw-ar{animation:bnBreath 1.9s ease-in-out infinite}
         @keyframes bnBreath{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(99,102,241,.45)}50%{transform:scale(1.14);box-shadow:0 0 0 8px rgba(99,102,241,0),0 0 14px 2px rgba(14,165,233,.35)}}
-        .bn-ghost{position:absolute;top:50%;margin-top:-12px;pointer-events:none;z-index:1;opacity:0;filter:drop-shadow(0 2px 4px rgba(15,23,42,.3))}
-        .bn-ghost.r{animation:bnGhostR 2.6s ease-in-out infinite}
-        .bn-ghost.l{animation:bnGhostL 2.6s ease-in-out infinite}
-        @keyframes bnGhostR{0%{left:34%;opacity:0}20%{opacity:.85}50%{left:calc(50% - 5px);opacity:.9}80%{opacity:.85}100%{left:62%;opacity:0}}
-        @keyframes bnGhostL{0%{left:62%;opacity:0}20%{opacity:.85}50%{left:calc(50% - 5px);opacity:.9}80%{opacity:.85}100%{left:34%;opacity:0}}
-        @media (max-width:340px){.bn-swap{grid-template-columns:1fr;}.bn-swap .bn-swap-ar{justify-self:center;rotate:90deg}.bn-ghost{display:none}}
-        @media (prefers-reduced-motion:reduce){.bn-swap-ar,.bn-ghost{animation:none}.bn-ghost{display:none}}`}</style>
-      <div style={{ padding: "52px 14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+        @media (prefers-reduced-motion:reduce){.bn-sw-link,.bn-sw-ar{animation:none}.bn-sw-ghost{display:none}}`}</style>
+      <div style={{ padding: "52px 14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ width: 40, height: 40, borderRadius: 13, display: "grid", placeItems: "center", flexShrink: 0, color: "#fff",
-            background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 8px 18px -10px #6366F1" }}><ArrowLeftRight size={20} strokeWidth={2.4}/></span>
+          <span className="bn-sw-ar" style={{ width: 40, height: 40, borderRadius: 13, display: "grid", placeItems: "center", flexShrink: 0, color: "#fff",
+            background: "linear-gradient(135deg, #0EA5E9, #6366F1)" }}><ArrowLeftRight size={20} strokeWidth={2.4}/></span>
           <span style={{ flex: 1, minWidth: 0 }}>
             <span style={{ display: "block", fontSize: 17, fontWeight: 900, color: "var(--text)" }}>{n > 1 ? `${n} changements de bobine` : "Changement de bobine"}</span>
             <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {jobName ? jobName(j) : j.title}{when ? ` · ${when}` : ""}</span>
+              {jobName(j)}{when ? ` · ${when}` : ""}</span>
           </span>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0,1fr) 30px minmax(0,1fr)", gap: 6, fontSize: 10, fontWeight: 900, color: "var(--muted)",
-          textTransform: "uppercase", letterSpacing: ".04em" }}><span/><span>📍 À prendre</span><span/><span>🖨 À sa place</span></div>
-        {(j.load || []).map((x, i) => {
-          const sp = j.load_spots?.[i], os = j.out_spots?.[i], [oname, ofid] = outOf(j, i), free = freeOf(j, i) && !oname;
-          const after = !os?.where ? null : os.how === "swap" ? `puis range-la : ${os.where}` : os.how === "home" ? `puis à sa place : ${os.where}`
-            : os.how === "single" ? `puis : ${os.where}` : "puis à ranger";
-          return <div key={i} className="bn-swap">
-            <span className="bn-swap-n">{i + 1}</span>
-            <span className="bn-ghost r" style={{ animationDelay: `${i * 0.35}s` }}><SpoolEdge s={FCOL[j.load_ids?.[i]] || {}} vertical len={24} thick={10}/></span>
-            {!free && <span className="bn-ghost l" style={{ animationDelay: `${i * 0.35}s` }}><SpoolEdge s={FCOL[ofid] || {}} vertical len={24} thick={10}/></span>}
-            <SwapCard fid={j.load_ids?.[i]} name={x} where={sp?.where || j.load_where?.[String(j.load_ids?.[i])] || null} icon="📍" tone="#D97706"
-              sub={sp?.g != null ? `${sp.g} g${sp.others ? ` · ${sp.others} autre${sp.others > 1 ? "s" : ""} rangée${sp.others > 1 ? "s" : ""}` : ""}` : null}
-              onTap={sp?.spool ? () => setLoc({ id: sp.spool }) : null}/>
-            <span className="bn-swap-ar" style={{ width: 30, height: 30, borderRadius: "50%", display: "grid", placeItems: "center", color: "#6366F1",
-              background: "color-mix(in srgb, #6366F1 14%, var(--surface))", boxShadow: "0 0 0 1px color-mix(in srgb, #6366F1 30%, transparent)" }}>
-              <ArrowLeftRight size={15} strokeWidth={2.6}/></span>
-            {free ? <SwapCard name="Emplacement libre" empty tone="#94A3B8" sub="rien à retirer"/>
-              : <SwapCard fid={ofid} name={oname || "?"} where={os?.slot || null} icon="🖨" tone="#0284C7" sub={after}
-                  onTap={os?.live && os?.out ? () => setLoc({ id: os.out }) : null}/>}
-          </div>;
-        })}
-        {Object.entries(roots).map(([r, ss]) => <React.Fragment key={r}>
-          {sec("📍", "Où les prendre")}
-          <PlaceView id={Number(r)} focus={ss.map(s => s.id)} marks={Object.fromEntries(ss.map(s => [s.id, s.n]))}/>
-        </React.Fragment>)}
-        {tgts.length > 0 && <>
-          {sec("🖨", "Dans l'imprimante")}
-          <AmsMap isHit={(a, t) => !!tgtOf(a, t)} mark={(a, t) => tgtOf(a, t)?.n ?? null}/>
-        </>}
+        {/* le resume : « 1 ● Vivid Yellow ⇄ ● Pri-White » ; toucher un nom le localise */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {pairs.map(p => <div key={p.n} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: "var(--text)", minWidth: 0 }}>
+            <span className="bn-sw-n">{p.n}</span>
+            <span role="button" tabIndex={0} onClick={() => p.sp?.spool && setLoc(p.sp.spool)} style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: p.sp?.spool ? "pointer" : "default" }}>
+              <FilDot id={p.fid}/>{p.name}</span>
+            <ArrowLeftRight size={13} strokeWidth={2.6} style={{ flexShrink: 0, color: "#6366F1" }}/>
+            <span role="button" tabIndex={0} onClick={() => p.os?.live && p.os?.out && setLoc(p.os.out)} style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              color: p.free ? "var(--muted)" : "var(--text)", cursor: p.os?.live ? "pointer" : "default" }}>
+              {p.free ? "emplacement libre" : <><FilDot id={p.ofid}/>{p.oname}</>}</span>
+          </div>)}
+        </div>
+        <div ref={wrap} className="bn-sw">
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+            {sec("📍", "À prendre")}
+            {Object.entries(roots).map(([r, ps]) => <PlaceView key={r} id={Number(r)} focus={ps.map(p => p.sp.spool)} marks={Object.fromEntries(ps.map(p => [p.sp.spool, p.n]))}/>)}
+            {loose.map(p => <div key={p.n} style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)" }}><span className="bn-sw-n">{p.n}</span> <FilDot id={p.fid}/>{p.name}
+              <span style={{ color: "#B45309" }}> · {p.sp?.where || j.load_where?.[String(p.fid)] || "pas de bobine rangée connue"}</span></div>)}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+            {sec("🖨", "Dans l'imprimante")}
+            <AmsMap isHit={(a, t) => !!tgtOf(a, t)} mark={(a, t) => tgtOf(a, t)?.n ?? null}/>
+            {pairs.some(p => p.free) && <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+              {pairs.filter(p => p.free).map(p => `${p.n} : dans un emplacement libre`).join(" · ")}</div>}
+          </div>
+          {/* les allers-retours : un lien par echange, la bobine a prendre part vers son slot, celle qui sort en revient */}
+          <svg aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible", zIndex: 4 }}>
+            <defs><linearGradient id="bnSwGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#F59E0B"/><stop offset="1" stopColor="#6366F1"/></linearGradient></defs>
+            {links.map(l => <g key={l.n}>
+              <path id={`bnSw${l.n}`} className="bn-sw-link" d={l.d}/>
+              <circle className="bn-sw-ghost" r="5.5" fill={hex(l.a)} stroke="#fff" strokeWidth="1.5" opacity=".95">
+                <animateMotion dur="2.4s" repeatCount="indefinite" keyPoints="0;1" keyTimes="0;1" calcMode="linear"><mpath href={`#bnSw${l.n}`}/></animateMotion></circle>
+              {l.b && <circle className="bn-sw-ghost" r="5.5" fill={hex(l.b)} stroke="#fff" strokeWidth="1.5" opacity=".95">
+                <animateMotion dur="2.4s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href={`#bnSw${l.n}`}/></animateMotion></circle>}
+            </g>)}
+          </svg>
+        </div>
       </div>
     </FSheet>
-    {loc && <LocateSheet spoolId={loc.id} onClose={() => setLoc(null)}/>}
+    {loc && <LocateSheet spoolId={loc} onClose={() => setLoc(null)}/>}
   </div>, document.body);
 }
 // le bouton qui l'ouvre, a cote de « charger ... » : « ⇄ 2 »
