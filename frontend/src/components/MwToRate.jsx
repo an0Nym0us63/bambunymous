@@ -232,7 +232,47 @@ export async function forgetIt(x, onDone) {
 }
 
 // Evaluer sans quitter l'appli : note, texte et mes photos, envoyes a MakerWorld.
+// (08/11/2026) un modele aux plusieurs profils imprimes (la mangue, la noix de coco, le kaki) : MakerWorld attend une
+// evaluation par profil ; on les fait l'une apres l'autre, chacune avec les photos de SES impressions (avant, toutes
+// partaient avec celles de la plus recente du modele). « Meme evaluation pour les N » garde l'envoi groupe d'avant
 function RateForm({ x, targets, onDone }) {
+  const profs = !targets && (x.profiles || []).length > 1 ? x.profiles : null;
+  const [pi, setPi] = useState(0);
+  const [sent, setSent] = useState(() => new Set());
+  const [all, setAll] = useState(false);
+  if (!profs) return <RateOne x={x} targets={targets} onDone={onDone}/>;
+  const own = profs.some(q => q.photos?.length);           // photos rangees par profil (sinon, celles du modele pour chacun)
+  const left = profs.filter(q => !sent.has(q.rating_id));
+  const chip = on => ({ padding: "4px 11px", borderRadius: 20, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+    border: on ? "1.5px solid #f59e0b" : "1px solid var(--border)", background: on ? "rgba(245,158,11,0.14)" : "var(--surface2)", color: "var(--text)" });
+  const head = <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    {!all && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+      <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>Profil :</span>
+      {profs.map((q, i) => sent.has(q.rating_id)
+        ? <span key={q.rating_id} style={{ ...chip(false), cursor: "default", opacity: 0.55 }}>✓ {q.title || `Profil ${i + 1}`}</span>
+        : <button key={q.rating_id} type="button" onClick={() => setPi(i)} style={chip(i === pi)}
+            data-tip={q.printed ? `${q.printed} impression${q.printed > 1 ? "s" : ""} de ce profil` : undefined}>{q.title || `Profil ${i + 1}`}</button>)}
+    </div>}
+    {left.length > 1 && <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 12, fontWeight: 700, color: "var(--text2)", cursor: "pointer" }}>
+      <input type="checkbox" checked={all} onChange={e => setAll(e.target.checked)}/>
+      Même évaluation pour les {left.length} profils{sent.size ? " restants" : ""} (mêmes photos)</label>}
+  </div>;
+  if (all) {
+    const photos = [...new Set(left.flatMap(q => q.photos || []))];
+    return <>{head}<RateOne x={{ ...x, profiles: left, photos: own && photos.length ? photos : x.photos }} onDone={onDone}/></>;
+  }
+  const p = profs[pi] && !sent.has(profs[pi].rating_id) ? profs[pi] : left[0];
+  const xp = { ...x, profiles: [p], rating_id: p.rating_id, profile_title: p.title, photos: own ? (p.photos || []) : x.photos,
+    title: `${x.title || `Modèle ${x.design_id}`} · ${p.title || "profil"}` };
+  return <>{head}<RateOne key={p.rating_id} x={xp} partial onDone={() => {
+    const n = new Set(sent).add(p.rating_id);
+    setSent(n);
+    const next = profs.findIndex(q => !n.has(q.rating_id));
+    if (next < 0) { markRated(x.design_id); onDone(); } else setPi(next);
+  }}/></>;
+}
+
+function RateOne({ x, targets, onDone, partial = false }) {
   const [score, setScore] = useState(5);
   const [text, setText] = useState("");
   // (03/11/2026) la carte des filaments est proposee, decochee : on la joint en la touchant
@@ -315,7 +355,7 @@ function RateForm({ x, targets, onDone }) {
           await useShares.getState().rate(body, t.design_id,
             (t.title || `Modèle ${t.design_id}`) + (profs.length > 1 && pf.title ? ` · ${pf.title}` : ""));
         }
-        markRated(t.design_id);
+        if (!partial) markRated(t.design_id);           // un profil parmi d'autres : le modele reste dans la liste
       } catch (e) {
         setErr(e.response?.data?.detail || e.message);
         setBusy(false);

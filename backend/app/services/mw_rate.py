@@ -43,7 +43,8 @@ def _is_rated(h) -> bool:
 def _pending_of(h) -> dict:
     inst = h.get("instance") if isinstance(h.get("instance"), dict) else {}
     des = h.get("design") if isinstance(h.get("design"), dict) else {}
-    return {"rating_id": h.get("id"), "profile_id": inst.get("profileId"), "profile_title": inst.get("titleTranslated") or inst.get("title"),
+    return {"rating_id": h.get("id"), "profile_id": inst.get("profileId"), "instance_id": inst.get("id"),
+            "profile_title": inst.get("titleTranslated") or inst.get("title"),
             "profile_cover": inst.get("cover"), "title": des.get("titleTranslated") or des.get("title"),
             "cover_url": des.get("coverUrl"), "date": h.get("createTime"),
             "success": h.get("successPrinted"), "creator_name": (inst.get("instUser") or {}).get("name")}
@@ -320,7 +321,20 @@ async def _to_rate(rated, pending, stats, my_uid, mine) -> dict:
         it["awaited"] = True
         it["rating_id"] = str(pd["rating_id"]) if pd.get("rating_id") else None
         it["rating_ids"] = [str(x["rating_id"]) for x in pds if x.get("rating_id")]
-        it["profiles"] = [{"rating_id": str(x["rating_id"]), "title": x["profile_title"]} for x in pds if x.get("rating_id")]
+        # chaque profil, ses photos (08/11/2026 : evaluer la noix de coco proposait les photos de la mangue, la plus
+        # recente du modele) : celles de la plus recente de SES impressions, et la carte de ses filaments
+        def _own(x):
+            ids = {str(x.get("profile_id") or ""), str(x.get("instance_id") or "")} - {"", "None"}
+            mine_p = [p for p in prints if str(p.design_id) == did and str(p.mw_profile_id or "") in ids]
+            ph = next((imgs_of(by_print.get(p.id) or {}) for p in mine_p if imgs_of(by_print.get(p.id) or {})), [])[:8]
+            card = [p.id for p in mine_p if any(u.color_hex and (u.grams_used or 0) > 0 for u in p.filament_usage)]
+            return (ph[:MAX_PHOTOS - 1] + [card_url(card)]) if card else ph, len(mine_p)
+        it["profiles"] = []
+        for x in pds:
+            if not x.get("rating_id"):
+                continue
+            ph, n = _own(x)
+            it["profiles"].append({"rating_id": str(x["rating_id"]), "title": x["profile_title"], "photos": ph, "printed": n})
         it["profile_title"] = pd["profile_title"] if len(pds) == 1 else f"{len(pds)} profils"
         if pd["profile_id"]:
             it["url"] = f"https://makerworld.com/fr/models/{did}#profileId-{pd['profile_id']}"
