@@ -4,7 +4,9 @@ import { showConfirm } from "../utils/dialog";
 import { apiThumb, apiUrl } from "../api/client";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import MwImg from "./MwImg";
-import { LocateSheet } from "./Storage";
+import { LocateSheet, SpoolEdge } from "./Storage";
+import { FSheet, fBtn } from "./FicheKit";
+import { ArrowLeftRight } from "lucide-react";
 import { FilamentSheetFromSpool } from "./LazySheets";
 
 // Le planning des impressions (05/11/2026) : les briques du calendrier. La journee en frise (heures de fonctionnement,
@@ -383,7 +385,7 @@ export function OutSpot({ sp }) {
 const outSpool = (j, i) => j.out_spots?.[i]?.out;
 // le changement de bobine, en court et en pastilles : « ● X à la place de ● Y » (celle qui sort, plus pale), « ● X (place libre) »
 export const SwapShort = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={j.load_ids?.[i]} label={x} spool={j.load_spots?.[i]?.spool}/><LoadSpot sp={j.load_spots?.[i]}/>
-  {outOf(j, i)[0] ? <><span style={{ fontWeight: 600, opacity: 0.75 }}> à la place de </span><span style={{ opacity: 0.6 }}><FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]} spool={outSpool(j, i)}/></span><OutSpot sp={j.out_spots?.[i]}/></> : freeOf(j, i) ? " (place libre)" : ""}</React.Fragment>)}</>;
+  {outOf(j, i)[0] ? <><span style={{ fontWeight: 600, opacity: 0.75 }}> à la place de </span><span style={{ opacity: 0.6 }}><FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]} spool={outSpool(j, i)}/></span><OutSpot sp={j.out_spots?.[i]}/></> : freeOf(j, i) ? " (place libre)" : ""}</React.Fragment>)}<SwapBtn j={j}/></>;
 // ou prendre une bobine a charger (07/11/2026) : « 📍 Tiroir bas › Colonne 1-3 », qui ouvre son rangement (sa case clignote)
 export function LoadSpot({ sp }) {
   const [open, setOpen] = useState(false);
@@ -393,13 +395,109 @@ export function LoadSpot({ sp }) {
     style={{ cursor: "pointer", fontWeight: 800, color: "#B45309", whiteSpace: "nowrap" }}> (📍 {sp.where})</span>
     {open && <LocateSheet spoolId={sp.spool} onClose={() => setOpen(false)}/>}</>;
 }
+// ── les echanges de bobines d'un plateau, en un coup d'oeil (08/11/2026) ─────────────────────────────────────────────
+// « 📍 la bobine a prendre ⇄ celle qu'elle remplace 🖨 » pour chaque filament a charger : chacune sur sa tranche, son
+// emplacement sur deux lignes (le rangement, puis la case ; l'AMS, puis le slot) ; toucher une carte la localise
+const splitLoc = loc => {
+  const s = String(loc || "");
+  const m = s.match(/^(.+?) (slot \d+)$/);
+  if (m) return [m[1], m[2]];
+  const p = s.split(" › ");
+  return p.length > 1 ? [p.slice(0, -1).join(" › "), p[p.length - 1]] : [s, null];
+};
+function SwapCard({ fid, name, where, icon, tone, sub, onTap, empty }) {
+  const c = FCOL[fid] || {};
+  const [a, b] = splitLoc(where);
+  return <button type="button" onClick={onTap || undefined} disabled={!onTap}
+    data-tip={onTap ? "Toucher pour la localiser" : undefined}
+    style={{ display: "flex", gap: 8, alignItems: "stretch", minWidth: 0, padding: 8, borderRadius: 14, textAlign: "left", fontFamily: "inherit",
+      cursor: onTap ? "pointer" : "default", color: "var(--text)",
+      border: empty ? "1.5px dashed var(--border)" : `1.5px solid color-mix(in srgb, ${tone} 40%, var(--border))`,
+      background: empty ? "transparent" : `linear-gradient(160deg, color-mix(in srgb, ${tone} 10%, var(--surface)), var(--surface))` }}>
+    {empty ? <span style={{ width: 16, borderRadius: 4, border: "1.5px dashed var(--border)", flexShrink: 0 }}/>
+      : <SpoolEdge s={c} vertical len={58} thick={18}/>}
+    <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3, justifyContent: "center" }}>
+      <span style={{ fontSize: 12, fontWeight: 900, lineHeight: 1.2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{name}</span>
+      {where && <span style={{ display: "flex", flexDirection: "column", padding: "3px 7px", borderRadius: 10, lineHeight: 1.2,
+        background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}>
+        <span style={{ fontSize: 10.5, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{icon} {a}</span>
+        {b && <span style={{ fontSize: 10, fontWeight: 800, opacity: 0.85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b}</span>}
+      </span>}
+      {sub && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", lineHeight: 1.25 }}>{sub}</span>}
+    </span>
+  </button>;
+}
+export function SwapSheet({ j, onClose }) {
+  const [loc, setLoc] = useState(null);                // { id, home }
+  const n = (j.load || []).length;
+  const when = j.start ? new Date(j.start).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : null;
+  return createPortal(<div onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+    <FSheet onClose={onClose} z={1450} bottom={<button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Fermer</button>}>
+      {/* la double fleche respire ; deux fantomes, aux couleurs des deux bobines, se croisent entre les cartes */}
+      <style>{`.bn-swap{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 30px minmax(0,1fr);gap:6px;align-items:center}
+        .bn-swap-ar{animation:bnBreath 1.9s ease-in-out infinite;position:relative;z-index:2}
+        @keyframes bnBreath{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(99,102,241,.45)}50%{transform:scale(1.14);box-shadow:0 0 0 8px rgba(99,102,241,0),0 0 14px 2px rgba(14,165,233,.35)}}
+        .bn-ghost{position:absolute;top:50%;margin-top:-12px;pointer-events:none;z-index:1;opacity:0;filter:drop-shadow(0 2px 4px rgba(15,23,42,.3))}
+        .bn-ghost.r{animation:bnGhostR 2.6s ease-in-out infinite}
+        .bn-ghost.l{animation:bnGhostL 2.6s ease-in-out infinite}
+        @keyframes bnGhostR{0%{left:34%;opacity:0}20%{opacity:.85}50%{left:calc(50% - 5px);opacity:.9}80%{opacity:.85}100%{left:62%;opacity:0}}
+        @keyframes bnGhostL{0%{left:62%;opacity:0}20%{opacity:.85}50%{left:calc(50% - 5px);opacity:.9}80%{opacity:.85}100%{left:34%;opacity:0}}
+        @media (max-width:340px){.bn-swap{grid-template-columns:1fr;}.bn-swap .bn-swap-ar{justify-self:center;rotate:90deg}.bn-ghost{display:none}}
+        @media (prefers-reduced-motion:reduce){.bn-swap-ar,.bn-ghost{animation:none}.bn-ghost{display:none}}`}</style>
+      <div style={{ padding: "52px 14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ width: 40, height: 40, borderRadius: 13, display: "grid", placeItems: "center", flexShrink: 0, color: "#fff",
+            background: "linear-gradient(135deg, #0EA5E9, #6366F1)", boxShadow: "0 8px 18px -10px #6366F1" }}><ArrowLeftRight size={20} strokeWidth={2.4}/></span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", fontSize: 17, fontWeight: 900, color: "var(--text)" }}>{n > 1 ? `${n} changements de bobine` : "Changement de bobine"}</span>
+            <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {jobName ? jobName(j) : j.title}{when ? ` · ${when}` : ""}</span>
+          </span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 30px minmax(0,1fr)", gap: 6, fontSize: 10, fontWeight: 900, color: "var(--muted)",
+          textTransform: "uppercase", letterSpacing: ".04em" }}><span>📍 À prendre</span><span/><span>🖨 À sa place</span></div>
+        {(j.load || []).map((x, i) => {
+          const sp = j.load_spots?.[i], os = j.out_spots?.[i], [oname, ofid] = outOf(j, i), free = freeOf(j, i) && !oname;
+          const after = !os?.where ? null : os.how === "swap" ? `puis range-la : ${os.where}` : os.how === "home" ? `puis à sa place : ${os.where}`
+            : os.how === "single" ? `puis : ${os.where}` : "puis à ranger";
+          return <div key={i} className="bn-swap">
+            <span className="bn-ghost r" style={{ animationDelay: `${i * 0.35}s` }}><SpoolEdge s={FCOL[j.load_ids?.[i]] || {}} vertical len={24} thick={10}/></span>
+            {!free && <span className="bn-ghost l" style={{ animationDelay: `${i * 0.35}s` }}><SpoolEdge s={FCOL[ofid] || {}} vertical len={24} thick={10}/></span>}
+            <SwapCard fid={j.load_ids?.[i]} name={x} where={sp?.where || j.load_where?.[String(j.load_ids?.[i])] || null} icon="📍" tone="#D97706"
+              sub={sp?.g != null ? `${sp.g} g${sp.others ? ` · ${sp.others} autre${sp.others > 1 ? "s" : ""} rangée${sp.others > 1 ? "s" : ""}` : ""}` : null}
+              onTap={sp?.spool ? () => setLoc({ id: sp.spool }) : null}/>
+            <span className="bn-swap-ar" style={{ width: 30, height: 30, borderRadius: "50%", display: "grid", placeItems: "center", color: "#6366F1",
+              background: "color-mix(in srgb, #6366F1 14%, var(--surface))", boxShadow: "0 0 0 1px color-mix(in srgb, #6366F1 30%, transparent)" }}>
+              <ArrowLeftRight size={15} strokeWidth={2.6}/></span>
+            {free ? <SwapCard name="Emplacement libre" empty tone="#94A3B8" sub="rien à retirer"/>
+              : <SwapCard fid={ofid} name={oname || "?"} where={os?.slot || null} icon="🖨" tone="#0284C7" sub={after}
+                  onTap={os?.live && os?.out ? () => setLoc({ id: os.out }) : null}/>}
+          </div>;
+        })}
+      </div>
+    </FSheet>
+    {loc && <LocateSheet spoolId={loc.id} onClose={() => setLoc(null)}/>}
+  </div>, document.body);
+}
+// le bouton qui l'ouvre, a cote de « charger ... » : « ⇄ 2 »
+export function SwapBtn({ j }) {
+  const [open, setOpen] = useState(false);
+  const n = (j?.load || []).length;
+  if (!n) return null;
+  return <><span role="button" tabIndex={0} onClick={e => { e.stopPropagation(); setOpen(true); }}
+    data-tip={n > 1 ? `Voir les ${n} échanges de bobines` : "Voir l'échange de bobine"}
+    style={{ display: "inline-flex", alignItems: "center", gap: 3, marginLeft: 6, padding: "1px 8px", borderRadius: 20, cursor: "pointer", verticalAlign: "1px",
+      fontSize: 10.5, fontWeight: 900, color: "#fff", background: "linear-gradient(135deg, #0EA5E9, #6366F1)", whiteSpace: "nowrap" }}>
+    <ArrowLeftRight size={11} strokeWidth={2.8}/>{n > 1 ? ` ${n}` : " Voir"}</span>
+    {open && <SwapSheet j={j} onClose={() => setOpen(false)}/>}</>;
+}
 // la liste a charger, chacune avec ou la prendre
-export const LoadLinks = ({ j }) => <>{(j.load || []).map((l, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={j.load_ids?.[i]} label={l} spool={j.load_spots?.[i]?.spool}/><LoadSpot sp={j.load_spots?.[i]}/></React.Fragment>)}</>;
+export const LoadLinks = ({ j }) => <>{(j.load || []).map((l, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={j.load_ids?.[i]} label={l} spool={j.load_spots?.[i]?.spool}/><LoadSpot sp={j.load_spots?.[i]}/></React.Fragment>)}<SwapBtn j={j}/></>;
 export const FilLinks = ({ labels, ids }) => <>{(labels || []).map((l, i) => <React.Fragment key={i}>{i ? ", " : ""}<FilLink id={ids?.[i]} label={l}/></React.Fragment>)}</>;
 // le changement de bobine en phrase, ses filaments cliquables : « charger X a la place de Y »
 export const SwapLinks = ({ j }) => <>{(j.load || []).map((x, i) => <React.Fragment key={i}>{i ? ", " : ""}charger <FilLink id={j.load_ids?.[i]} label={x} spool={j.load_spots?.[i]?.spool}/><LoadSpot sp={j.load_spots?.[i]}/>
   {outOf(j, i)[0] ? <><span style={{ fontWeight: 600, opacity: 0.75 }}> à la place de </span><span style={{ opacity: 0.6 }}><FilLink id={outOf(j, i)[1]} label={outOf(j, i)[0]} spool={outSpool(j, i)}/></span><OutSpot sp={j.out_spots?.[i]}/></>
-    : freeOf(j, i) ? <span style={{ fontWeight: 600, opacity: 0.75 }}> dans l'emplacement libre</span> : ""}</React.Fragment>)}</>;
+    : freeOf(j, i) ? <span style={{ fontWeight: 600, opacity: 0.75 }}> dans l'emplacement libre</span> : ""}</React.Fragment>)}<SwapBtn j={j}/></>;
 // la fin de la journee (06/11/2026) : le dernier plateau prevu aujourd'hui finit vers telle heure ; combien encore
 export const dayEnd = p => {
   const today = (p?.now || "").slice(0, 10), js = (p?.jobs || []).filter(j => j.day === today);
