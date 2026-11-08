@@ -108,19 +108,21 @@ export async function startAnim(animate, opts, target, onSaved) {
   if (busy) { show({ state: "render", text: "Une animation est déjà en cours…", p: 0 }); return; }
   busy = true;
   const what = target.kind === "group" ? "du groupe" : "de l'impression";
+  const fx = ANIM_STYLES.find(s => s[0] === opts.style)?.[2] || "Animation";
   try {
-    show({ state: "render", text: `Animation ${what} · préparation…`, p: 0 });
+    show({ state: "render", text: `${fx} ${what} · préparation…`, p: 0 });
     let last = 0;
-    const r = await animate(opts, p => { if (p - last > 0.02 || p >= 1) { last = p; show({ state: "render", text: `Animation ${what} · ${Math.round(p * 100)} %`, p }); } });
+    const r = await animate(opts, p => { if (p - last > 0.02 || p >= 1) { last = p; show({ state: "render", text: `${fx} ${what} · ${Math.round(p * 100)} %`, p }); } });
     if (!r?.blob?.size) throw new Error("Rien d'enregistré");
     show({ state: "upload", text: `Envoi · ${(r.blob.size / 1048576).toFixed(1)} Mo`, p: 0 });
     const fd = new FormData();
     fd.append("file", r.blob, r.type.includes("mp4") ? "anim.mp4" : "anim.webm");
+    fd.append("style", opts.style || "");          // une animation par effet : refaire le meme effet remplace celle-la
     const base = target.kind === "group" ? `/prints/groups/${target.id}` : `/prints/${target.id}`;
     const { data } = await client.post(`${base}/vue3d/anim`, fd, { timeout: 180000, onUploadProgress: e => e.total && show({ state: "upload", text: `Envoi · ${(r.blob.size / 1048576).toFixed(1)} Mo`, p: e.loaded / e.total }) });
     const url = data.anim ? `/api/v1${target.kind === "group" ? `/prints/groups/${target.id}/photo` : `/prints/${target.id}/file`}/${data.anim.name}?v=${data.anim.v}` : null;
     egg("animation_3d");
-    show({ state: "done", text: `Animation ${what} enregistrée${r.alpha ? " (fond transparent)" : ""}`, url });
+    show({ state: "done", text: `${fx} ${what} enregistré${r.alpha ? " (fond transparent)" : ""} · en tête de la fiche et dans 🧊 Vues 3D`, url });
     onSaved?.(data.anim);
     setTimeout(() => { if (!busy) hide(); }, 12000);
   } catch (e) {

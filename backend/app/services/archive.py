@@ -165,6 +165,11 @@ def _local(dt: datetime) -> datetime:
         return dt
 
 
+# le nom de l'effet d'une animation de la vue 3D, pour le NAS (08/11/2026)
+_ANIM_NAMES = {"turntable": "Plateau tournant", "orbit": "Tour de caméra", "swing": "Balancement", "travel": "Travelling",
+               "zoom": "Zoom", "reveal": "Révélation", "spiral": "Spirale", "drone": "Survol"}
+
+
 def human_name(rel_name: str, model: str) -> str | None:
     """Le chemin, dans le dossier d'une impression, d'un fichier de son dossier de donnees (None : ne pas copier)."""
     low = rel_name.lower()
@@ -190,8 +195,9 @@ def human_name(rel_name: str, model: str) -> str | None:
         return f"Vues 3D/Vue {m.group(1) or 1}.png"
     if low.startswith("vue3d_mix"):
         return None
-    if low in ("vue3d_anim.webm", "vue3d_anim.mp4"):            # l'animation prise dans la vue 3D (08/11/2026)
-        return f"Vues 3D/Animation{ext}"
+    m = re.fullmatch(r"vue3d_anim(?:_([a-z]+))?\.(webm|mp4)", low)   # les animations prises dans la vue 3D (08/11/2026)
+    if m:
+        return f"Vues 3D/Animation{' - ' + _ANIM_NAMES.get(m.group(1), m.group(1)) if m.group(1) else ''}{ext}"
     if ext == ".3mf":
         return f"3MF/{model} - tranché.3mf"
     if ext in (".mp4", ".webm", ".mov", ".m4v"):

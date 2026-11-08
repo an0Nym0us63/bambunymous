@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import client, { apiUrl } from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
-import { AnimPlayer } from "./Anim3D";
+import { AnimPlayer, ANIM_STYLES } from "./Anim3D";
 
 // Les vues 3D d'une impression ou d'un groupe (30/10/2026) : jusqu'a 4, prises dans la vue 3D (un plateau, l'assemblage,
 // de jour, de nuit, eclairee par derriere…). On en choisit une comme vignette, ou la vignette par defaut ; on en supprime ;
@@ -10,7 +10,7 @@ import { AnimPlayer } from "./Anim3D";
 function Picker({ kind, id, shot, onDone, close }) {
   const base = kind === "group" ? `/prints/groups/${id}` : `/prints/${id}`;
   const [d, setD] = useState(null), [busy, setBusy] = useState(false), [sure, setSure] = useState(0), [saved, setSaved] = useState(!shot);
-  const [play, setPlay] = useState(false);              // l'animation en grand (08/11/2026)
+  const [play, setPlay] = useState(null);               // l'animation lue en grand (son adresse) (08/11/2026)
   const load = async () => { try { setD((await client.get(`${base}/vue3d`)).data); } catch (e) { showAlert(e.response?.data?.detail || e.message); close(); } };
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const act = async f => {
@@ -107,20 +107,26 @@ function Picker({ kind, id, shot, onDone, close }) {
         <span>La vignette : les {sel.length} vues choisies défilent l'une après l'autre</span>
       </div>}
       {d && !d.slots.length && !shot && <span style={{ fontSize: 12.5 }}>Aucune vue : prends-en une avec 📸 dans la vue 3D.</span>}
-      {/* l'animation (08/11/2026) : en boucle ici, en grand au toucher ; une par impression ou groupe */}
-      {d?.anim && <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <video src={apiUrl(d.anim.url.replace(/^\/api\/v1/, ""))} autoPlay loop muted playsInline onClick={() => setPlay(true)}
-          style={{ width: 120, height: 120, objectFit: "cover", borderRadius: 14, cursor: "pointer", background: "#111", border: "1px solid var(--border)" }}/>
-        <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-          <span style={{ fontSize: 13, fontWeight: 900 }}>🎞 L'animation</span>
-          <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Faite avec 🎞 dans la vue 3D ; une nouvelle la remplace.</span>
-          <span style={{ display: "flex", gap: 6 }}>
-            <button type="button" onClick={() => setPlay(true)} style={{ padding: "5px 10px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>▶ En grand</button>
-            <button type="button" disabled={busy} onClick={async () => { if (await showConfirm("Supprimer l'animation ?", { danger: true, confirmLabel: "Supprimer" })) act(() => client.delete(`${base}/vue3d/anim`)); }}
-              style={{ padding: "5px 10px", borderRadius: 10, border: "1px solid color-mix(in srgb, #ef4444 40%, var(--border))", background: "transparent", color: "#ef4444", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>🗑 Supprimer</button>
-          </span>
-        </span>
-        {play && <AnimPlayer url={apiUrl(d.anim.url.replace(/^\/api\/v1/, ""))} onClose={() => setPlay(false)}/>}
+      {/* les animations (08/11/2026) : une par effet, en boucle ici, en grand au toucher ; la premiere tourne en tete de fiche */}
+      {!!d?.anims?.length && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 900 }}>🎞 {d.anims.length > 1 ? `Les animations (${d.anims.length})` : "L'animation"}
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}> · une par effet ; la première tourne en tête de la fiche</span></span>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {d.anims.map((a, i) => { const u = apiUrl(a.url.replace(/^\/api\/v1/, ""));
+            const mini = { padding: "4px 8px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontWeight: 800, fontSize: 11.5, cursor: "pointer" };
+            return <div key={a.name} style={tile}>
+              <video src={u} autoPlay loop muted playsInline onClick={() => setPlay(u)} data-tip="La lire en grand"
+                style={{ ...img(i === 0), width: 112, height: 112, objectFit: "cover", cursor: "pointer", background: "#111" }}/>
+              <span style={{ fontSize: 11.5, fontWeight: 900, textAlign: "center", lineHeight: 1.2 }}>{(ANIM_STYLES.find(s => s[0] === a.style) || [])[1] || "🎞"} {a.label}</span>
+              {i === 0 ? <span style={{ ...mini, cursor: "default", color: "#0EA5E9", borderColor: "#0EA5E9", textAlign: "center" }}>★ En tête</span>
+                : <button type="button" disabled={busy} onClick={() => act(() => client.post(`${base}/vue3d/anim/top`, null, { params: { name: a.name } }))}
+                    data-tip="La faire tourner en tête de la fiche" style={mini}>⭐ En tête</button>}
+              <button type="button" disabled={busy} onClick={async () => { if (await showConfirm(`Supprimer l'animation « ${a.label} » ?`, { danger: true, confirmLabel: "Supprimer" })) act(() => client.delete(`${base}/vue3d/anim`, { params: { name: a.name } })); }}
+                style={{ ...mini, background: "transparent", color: "#ef4444", borderColor: "color-mix(in srgb, #ef4444 40%, var(--border))" }}>🗑 Supprimer</button>
+            </div>; })}
+        </div>
+        <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Faites avec 🎞 dans la vue 3D ; refaire le même effet remplace la sienne.</span>
+        {play && <AnimPlayer url={play} onClose={() => setPlay(null)}/>}
       </div>}
       <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Jusqu'à {d?.max || 4} vues, prises avec 📸 dans la vue 3D : un plateau ou l'assemblage, de jour, de nuit ou éclairé par derrière, telle qu'affichée. Plusieurs choisies : elles défilent l'une après l'autre sur la vignette.</span>
     </div>
