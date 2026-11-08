@@ -337,15 +337,18 @@ export function StorageSettingsCard({ card, cardTitle }) {
 // ── La fenetre d'un rangement : ses zones, ses emplacements, tout se retouche ──
 // readOnly + focus / focusPlace (07/11/2026, « Localiser ») : la fenetre en consultation, le rangement s'ouvre comme un
 // tiroir qu'on tire, puis la case de la bobine (ou sa place) clignote et vient a l'ecran
-function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace = null, banner = null }) {
+// focus : une bobine ou plusieurs (08/11/2026, les echanges d'un plateau), marks : {bobine: « 1 »} leur numero sur la case ;
+// embed : la vue seule, a poser dans une autre fenetre (PlaceView)
+function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace = null, banner = null, embed = false, marks = null }) {
   const st = useStorage();
   const bodyRef = useRef(null);
+  const fset = new Set([].concat(focus ?? []).filter(Boolean)), fo = sid => fset.has(sid), fkey = [...fset].join(",");
   useEffect(() => {
-    if (!focus && !focusPlace) return undefined;
+    if (embed || (!fkey && !focusPlace)) return undefined;    // integree : la fenetre qui l'accueille garde son haut
     const t = setTimeout(() => { try { bodyRef.current?.querySelector("[data-hit='1']")?.scrollIntoView({ block: "center", behavior: "smooth" }); } catch { /* ancien navigateur */ } }, 450);
     return () => clearTimeout(t);
-  }, [focus, focusPlace]);
-  const isHit = p => (focus && p.spools.some(x => x.id === focus)) || (focusPlace != null && p.id === focusPlace);
+  }, [fkey, focusPlace, embed]);
+  const isHit = p => p.spools.some(x => fo(x.id)) || (focusPlace != null && p.id === focusPlace);
   const [ask, setAsk] = useState(null);
   const [fill, setFill] = useState(null);             // { place, spools } : y ranger une bobine
   const fillCell = async p => {
@@ -447,12 +450,13 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
     ],
   });
   const Cell = ({ p }) => {
-    const occ = (focus && p.spools.find(x => x.id === focus)) || p.spools[0], edge = edgeOf(p, by), info = infoOf(occ, null), hit = isHit(p);
+    const occ = p.spools.find(x => fo(x.id)) || p.spools[0], edge = edgeOf(p, by), info = infoOf(occ, null), hit = isHit(p);
     const num = `${p.single ? "" : "📚"}${shortName(p, by)}`;
     // (08/11/2026) le meme dessin que la vue du stock : numero, tranche, nom, sous-type · marque
     return <button type="button" className={`bn-cell${occ ? "" : " bn-free"}`} onClick={e => menu(e, p)} data-hit={hit ? "1" : undefined}
       data-tip={occ ? [occ.name, ...info, `#${occ.id}`].join(" · ") : p.single ? `${num} · case libre` : `${num} · emplacement commun`}
       style={{ cursor: readOnly ? "default" : "pointer", zIndex: hit ? 2 : undefined, animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined }}>
+      {occ && marks?.[occ.id] != null && <span className="bn-mark">{marks[occ.id]}</span>}
       {occ ? <>
         <span className="bn-num">{num}{!p.single && p.spools.length > 1 ? ` · ${p.spools.length}` : ""}</span>
         <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={40} thick={20}/> : edge ? <SpoolEdge s={occ} len="100%" thick={EDGE_H}/> : <Swatch s={occ} size={24}/>}</span>
@@ -473,7 +477,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
     </button>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 3, justifyContent: "center", minHeight: 24, alignItems: "center" }}>
       {p.spools.slice(0, 24).map(x => <span key={x.id} data-tip={`${x.name} · #${x.id}`} style={{ display: "inline-flex", borderRadius: "50%",
-        animation: focus === x.id ? "bnHit 1s ease-in-out .7s infinite" : undefined }}><Swatch s={x} size={focus === x.id ? 22 : 16}/></span>)}
+        animation: fo(x.id) ? "bnHit 1s ease-in-out .7s infinite" : undefined }}><Swatch s={x} size={fo(x.id) ? 22 : 16}/></span>)}
       {p.spools.length > 24 && <span style={{ ...small, fontSize: 10 }}>+{p.spools.length - 24}</span>}
       {!p.spools.length && <span style={{ ...small, fontSize: 10 }}>vide</span>}
     </div>
@@ -508,19 +512,16 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
   const direct = ch.filter(c => c.leaf && c.single), zones = ch.filter(c => !c.leaf || !c.single);
   const n = leafCountOf(root, kids), t = takenOf(root, kids);
 
-  return createPortal(<>
-    <FSheet onClose={onClose} z={readOnly ? 1500 : 1250} bottom={<>
-      {!readOnly && (!root.leaf || !root.spools.length) ? <>
-        <button onClick={() => addZone()} style={{ ...fBtn, flex: 1 }}>＋ Une zone</button>
-        <button onClick={() => addCells(root, null)} style={{ ...fBtn, flex: 1 }}>＋ Des emplacements</button></> : null}
-      <button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Fermer</button></>}>
+  const styles = <>
       <style>{CELL_CSS}</style>
       <style>{`@keyframes bnDrawer{0%{opacity:0;transform:perspective(900px) rotateX(38deg) translateY(-34px) scale(.92)}
         60%{opacity:1;transform:perspective(900px) rotateX(-4deg) translateY(4px) scale(1.01)}100%{transform:none}}
         @keyframes bnHit{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.9);transform:scale(1);border-color:#F59E0B}
-        50%{box-shadow:0 0 0 7px rgba(245,158,11,0),0 0 18px 4px rgba(245,158,11,.55);transform:scale(1.1);border-color:#FBBF24;background:color-mix(in srgb,#F59E0B 22%,var(--surface))}}`}</style>
-      <div ref={bodyRef} style={{ padding: "52px 16px 18px", display: "flex", flexDirection: "column", gap: 12,
-        animation: (focus || focusPlace != null) ? "bnDrawer .75s cubic-bezier(.2,.9,.25,1.05) both" : undefined, transformOrigin: "50% 0" }}>
+        50%{box-shadow:0 0 0 7px rgba(245,158,11,0),0 0 18px 4px rgba(245,158,11,.55);transform:scale(1.1);border-color:#FBBF24;background:color-mix(in srgb,#F59E0B 22%,var(--surface))}}
+        .bn-mark{position:absolute;top:2px;right:2px;z-index:3;min-width:16px;height:16px;padding:0 4px;border-radius:8px;font-size:10px;font-weight:900;
+          line-height:16px;color:#fff;background:#F59E0B;box-shadow:0 0 0 2px var(--surface)}`}</style></>;
+  const body = <div ref={bodyRef} style={{ padding: embed ? 0 : "52px 16px 18px", display: "flex", flexDirection: "column", gap: embed ? 8 : 12,
+        animation: (fkey || focusPlace != null) ? "bnDrawer .75s cubic-bezier(.2,.9,.25,1.05) both" : undefined, transformOrigin: "50% 0" }}>
         {banner}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={icoBox(root.stock ? "#D97706" : "#8B5CF6", 42, 13)}><PlaceIco p={root} size={21}/></span>
@@ -541,7 +542,15 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
         {direct.length > 0 && (a => <div style={{ display: "grid", gap: 3, gridTemplateColumns: a.tpl }}>
           {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(direct, root, false, "repeat(auto-fill, minmax(34px, 1fr))"))}
         {zones.length > 0 && <Zones parent={root} list={zones}/>}
-      </div>
+      </div>;
+  if (embed) return <>{styles}{body}</>;
+  return createPortal(<>
+    <FSheet onClose={onClose} z={readOnly ? 1500 : 1250} bottom={<>
+      {!readOnly && (!root.leaf || !root.spools.length) ? <>
+        <button onClick={() => addZone()} style={{ ...fBtn, flex: 1 }}>＋ Une zone</button>
+        <button onClick={() => addCells(root, null)} style={{ ...fBtn, flex: 1 }}>＋ Des emplacements</button></> : null}
+      <button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Fermer</button></>}>
+      {styles}{body}
     </FSheet>
     {ask && <Ask {...ask} onClose={() => setAsk(null)}/>}
     {fill && <CellFiller place={fill.place} spools={fill.spools} onClose={() => setFill(null)}/>}
@@ -591,17 +600,8 @@ export function LocateSheet({ spoolId, onClose, home = false }) {
 
 // dans l'imprimante (07/11/2026) : ses AMS, HT et support externe, le slot de la bobine qui clignote
 function PrinterLocate({ sp, spoolId, banner, onClose, home }) {
-  const status = usePrinter(s => s.status);
-  useEffect(() => { if (!status) usePrinter.getState().fetch?.(); }, [status]);
-  // la disposition de la tuile AMS de l'accueil (07/11/2026) : les unites a la meme place que sur l'accueil
-  const [order, setOrder] = useState(undefined);
-  useEffect(() => { client.get("/settings/ams-order").then(({ data }) => setOrder(data.order ?? null)).catch(() => setOrder(null)); }, []);
-  const units = (status?.ams_list || []).filter(a => (a.trays || []).length);
-  const rank = a => isExternal(a.id) ? 2 : isHt(a.id) ? 1 : 0;
-  units.sort((a, b) => rank(a) - rank(b) || a.id - b.id);
-  // le slot : celui ou l'imprimante voit la bobine, sinon celui que dit son emplacement (« AMS-A slot 2 »)
-  const hitOf = (a, t) => t.spool_id === spoolId || (!units.some(u => u.trays.some(x => x.spool_id === spoolId))
-    && (sp.location === `${amsName(a.id)} slot ${t.id + 1}` || (isHt(a.id) && sp.location === `AMS ${amsName(a.id)}`)));
+  // le slot : celui ou l'imprimante voit la bobine, sinon celui que dit son emplacement
+  const hitOf = (a, t, units) => t.spool_id === spoolId || (!units.some(u => u.trays.some(x => x.spool_id === spoolId)) && slotIs(a, t, sp.location));
   return createPortal(<FSheet onClose={onClose} z={1500} bottom={<>
     {home && <button onClick={home} style={{ ...fBtn, flex: 1 }} data-tip="La place qui l'attend dans tes rangements">📍 Sa place</button>}
     <button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Fermer</button></>}>
@@ -615,6 +615,25 @@ function PrinterLocate({ sp, spoolId, banner, onClose, home }) {
         <span style={icoBox("#0EA5E9", 42, 13)}><Printer size={21} strokeWidth={2.2}/></span>
         <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>Dans l'imprimante</div>
       </div>
+      <AmsMap isHit={hitOf}/>
+    </div>
+  </FSheet>, document.body);
+}
+
+// l'imprimante comme sur la tuile AMS de l'accueil (07/11/2026, sortie de PrinterLocate le 08/11/2026 pour les echanges) :
+// isHit(unite, slot) fait clignoter un slot, mark(unite, slot) y ecrit un numero (« 1 », l'echange qu'il attend)
+export function AmsMap({ isHit = () => false, mark = () => null }) {
+  const status = usePrinter(s => s.status);
+  useEffect(() => { if (!status) usePrinter.getState().fetch?.(); }, [status]);
+  const [order, setOrder] = useState(undefined);
+  useEffect(() => { client.get("/settings/ams-order").then(({ data }) => setOrder(data.order ?? null)).catch(() => setOrder(null)); }, []);
+  const units = (status?.ams_list || []).filter(a => (a.trays || []).length);
+  const rank = a => isExternal(a.id) ? 2 : isHt(a.id) ? 1 : 0;
+  units.sort((a, b) => rank(a) - rank(b) || a.id - b.id);
+  const hitOf = (a, t) => isHit(a, t, units);
+  return <>
+      <style>{`@keyframes bnHit{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.9);transform:scale(1)}
+        50%{box-shadow:0 0 0 7px rgba(245,158,11,0),0 0 18px 4px rgba(245,158,11,.55);transform:scale(1.12)}}`}</style>
       {!units.length && <div style={small}>L'état de l'imprimante n'est pas disponible pour l'instant.</div>}
       {(() => {
         const grid = units.filter(a => !isExternal(a.id)), ext = units.filter(a => isExternal(a.id));
@@ -632,7 +651,10 @@ function PrinterLocate({ sp, spoolId, banner, onClose, home }) {
                 <div style={{ width: "100%", height: 40, borderRadius: 9, position: "relative", zIndex: hit ? 2 : undefined,
                   border: hit ? "2px solid #F59E0B" : empty ? "1.5px dashed rgba(148,163,184,0.7)" : "1px solid rgba(0,0,0,0.15)",
                   animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined,
-                  ...(bg || { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 2px, transparent 2px, transparent 6px)" }) }}/>
+                  ...(bg || { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 2px, transparent 2px, transparent 6px)" }) }}>
+                  {mark(a, t) != null && <span style={{ position: "absolute", top: -6, right: -6, minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8,
+                    fontSize: 10, fontWeight: 900, lineHeight: "16px", textAlign: "center", color: "#fff", background: "#F59E0B", boxShadow: "0 0 0 2px var(--surface2)" }}>{mark(a, t)}</span>}
+                </div>
                 <span style={{ fontSize: hit ? 11 : 10, fontWeight: 900, lineHeight: 1, color: hit ? "#D97706" : "var(--text2)" }}>{slotLabel(a.id, t.id)}</span>
               </div>;
             })}
@@ -646,8 +668,19 @@ function PrinterLocate({ sp, spoolId, banner, onClose, home }) {
           {ext.length > 0 && <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>{ext.map(a => <Unit key={a.id} a={a}/>)}</div>}
         </>;
       })()}
-    </div>
-  </FSheet>, document.body);
+  </>;
+}
+
+// le slot d'une bobine : celui ou l'imprimante la voit, sinon celui que dit son emplacement (« AMS-A slot 2 », « AMS HT-A »)
+export const slotIs = (a, t, loc) => loc === `${amsName(a.id)} slot ${t.id + 1}` || (isHt(a.id) && loc === `AMS ${amsName(a.id)}`);
+// un rangement en consultation, a poser dans une autre fenetre (08/11/2026, les echanges) ; rootOfSpool : le rangement d'une bobine
+export const PlaceView = props => <PlaceEditor {...props} readOnly embed onClose={() => {}}/>;
+export function rootOfSpool(st, spoolId) {
+  if (!st) return null;
+  const { by } = index(st);
+  let p = st.places.find(x => x.spools.some(s => s.id === spoolId));
+  while (p && p.parent_id != null && by[p.parent_id]) p = by[p.parent_id];
+  return p?.id ?? null;
 }
 
 // ── Nouveau rangement ────────────────────────────────────────────────────────

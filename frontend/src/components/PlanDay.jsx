@@ -4,7 +4,7 @@ import { showConfirm } from "../utils/dialog";
 import { apiThumb, apiUrl } from "../api/client";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import MwImg from "./MwImg";
-import { LocateSheet, SpoolEdge } from "./Storage";
+import { LocateSheet, SpoolEdge, PlaceView, AmsMap, rootOfSpool, slotIs, useStorage } from "./Storage";
 import { FSheet, fBtn } from "./FicheKit";
 import { ArrowLeftRight } from "lucide-react";
 import { FilamentSheetFromSpool } from "./LazySheets";
@@ -429,12 +429,22 @@ function SwapCard({ fid, name, where, icon, tone, sub, onTap, empty }) {
 }
 export function SwapSheet({ j, onClose }) {
   const [loc, setLoc] = useState(null);                // { id, home }
+  const st = useStorage();
+  // (08/11/2026) les rangements et l'imprimante en entier, comme « Localiser » : les cases a vider et les slots a remplir
+  // clignotent, numerotes comme les echanges
+  const srcs = (j.load_spots || []).map((sp, i) => sp?.spool ? { id: sp.spool, n: i + 1 } : null).filter(Boolean);
+  const roots = {};
+  for (const s of srcs) { const r = rootOfSpool(st, s.id); if (r != null) (roots[r] = roots[r] || []).push(s); }
+  const tgts = (j.out_spots || []).map((os, i) => os?.slot ? { loc: os.slot, out: os.live ? os.out : null, n: i + 1 } : null).filter(Boolean);
+  const tgtOf = (a, t) => tgts.find(x => (x.out && t.spool_id === x.out) || slotIs(a, t, x.loc));
+  const sec = (ic, txt) => <div style={{ fontSize: 11, fontWeight: 900, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em", marginTop: 6 }}>{ic} {txt}</div>;
   const n = (j.load || []).length;
   const when = j.start ? new Date(j.start).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : null;
   return createPortal(<div onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
     <FSheet onClose={onClose} z={1450} bottom={<button onClick={onClose} style={{ ...fBtn, flex: 1 }}>Fermer</button>}>
       {/* la double fleche respire ; deux fantomes, aux couleurs des deux bobines, se croisent entre les cartes */}
-      <style>{`.bn-swap{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 30px minmax(0,1fr);gap:6px;align-items:center}
+      <style>{`.bn-swap{position:relative;display:grid;grid-template-columns:16px minmax(0,1fr) 30px minmax(0,1fr);gap:6px;align-items:center}
+        .bn-swap-n{width:16px;height:16px;border-radius:8px;font-size:10px;font-weight:900;line-height:16px;text-align:center;color:#fff;background:#F59E0B}
         .bn-swap-ar{animation:bnBreath 1.9s ease-in-out infinite;position:relative;z-index:2}
         @keyframes bnBreath{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(99,102,241,.45)}50%{transform:scale(1.14);box-shadow:0 0 0 8px rgba(99,102,241,0),0 0 14px 2px rgba(14,165,233,.35)}}
         .bn-ghost{position:absolute;top:50%;margin-top:-12px;pointer-events:none;z-index:1;opacity:0;filter:drop-shadow(0 2px 4px rgba(15,23,42,.3))}
@@ -454,13 +464,14 @@ export function SwapSheet({ j, onClose }) {
               {jobName ? jobName(j) : j.title}{when ? ` · ${when}` : ""}</span>
           </span>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 30px minmax(0,1fr)", gap: 6, fontSize: 10, fontWeight: 900, color: "var(--muted)",
-          textTransform: "uppercase", letterSpacing: ".04em" }}><span>📍 À prendre</span><span/><span>🖨 À sa place</span></div>
+        <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0,1fr) 30px minmax(0,1fr)", gap: 6, fontSize: 10, fontWeight: 900, color: "var(--muted)",
+          textTransform: "uppercase", letterSpacing: ".04em" }}><span/><span>📍 À prendre</span><span/><span>🖨 À sa place</span></div>
         {(j.load || []).map((x, i) => {
           const sp = j.load_spots?.[i], os = j.out_spots?.[i], [oname, ofid] = outOf(j, i), free = freeOf(j, i) && !oname;
           const after = !os?.where ? null : os.how === "swap" ? `puis range-la : ${os.where}` : os.how === "home" ? `puis à sa place : ${os.where}`
             : os.how === "single" ? `puis : ${os.where}` : "puis à ranger";
           return <div key={i} className="bn-swap">
+            <span className="bn-swap-n">{i + 1}</span>
             <span className="bn-ghost r" style={{ animationDelay: `${i * 0.35}s` }}><SpoolEdge s={FCOL[j.load_ids?.[i]] || {}} vertical len={24} thick={10}/></span>
             {!free && <span className="bn-ghost l" style={{ animationDelay: `${i * 0.35}s` }}><SpoolEdge s={FCOL[ofid] || {}} vertical len={24} thick={10}/></span>}
             <SwapCard fid={j.load_ids?.[i]} name={x} where={sp?.where || j.load_where?.[String(j.load_ids?.[i])] || null} icon="📍" tone="#D97706"
@@ -474,6 +485,14 @@ export function SwapSheet({ j, onClose }) {
                   onTap={os?.live && os?.out ? () => setLoc({ id: os.out }) : null}/>}
           </div>;
         })}
+        {Object.entries(roots).map(([r, ss]) => <React.Fragment key={r}>
+          {sec("📍", "Où les prendre")}
+          <PlaceView id={Number(r)} focus={ss.map(s => s.id)} marks={Object.fromEntries(ss.map(s => [s.id, s.n]))}/>
+        </React.Fragment>)}
+        {tgts.length > 0 && <>
+          {sec("🖨", "Dans l'imprimante")}
+          <AmsMap isHit={(a, t) => !!tgtOf(a, t)} mark={(a, t) => tgtOf(a, t)?.n ?? null}/>
+        </>}
       </div>
     </FSheet>
     {loc && <LocateSheet spoolId={loc.id} onClose={() => setLoc(null)}/>}
