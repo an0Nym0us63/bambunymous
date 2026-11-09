@@ -1566,6 +1566,12 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
     catch (err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
   };
   const reload = () => client.get("/prints/" + p.id).then(r => { setP(r.data); setRefreshKey(k => k + 1); }).catch(() => {});
+  // (09/11/2026) changee ailleurs (une animation finie en fond, une vue 3D) : relue sur place
+  useEffect(() => {
+    const f = e => { const d = e?.detail; if (d && d.kind !== "group" && Number(d.id) === Number(p?.id)) reload(); };
+    window.addEventListener("bn-prints-changed", f);
+    return () => window.removeEventListener("bn-prints-changed", f);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
   // hors des classements de la page Stats (echantillons, supports…) ; le groupe peut l'imposer a toutes ses impressions
   const toggleRanked = async () => {
     const v = !p.stats_excluded;
@@ -1976,6 +1982,12 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   const loadPrints = () => client.get("/prints", { params: { group_id: groupId, limit: 200 } }).then(r => {
     const d = r.data; setPrints(Array.isArray(d) ? d : Array.isArray(d?.prints) ? d.prints : []); }).catch(() => {});
   useEffect(() => { if (groupId) loadPrints(); }, [groupId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // (09/11/2026) une animation du groupe finie en fond (ou une vue 3D changee) : relue, elle passe en tete de la fiche
+  useEffect(() => {
+    const f = e => { const d = e?.detail; if (d?.kind === "group" && Number(d.id) === Number(groupId)) loadPrints(); };
+    window.addEventListener("bn-prints-changed", f);
+    return () => window.removeEventListener("bn-prints-changed", f);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!isAdmin) return;
     client.get("/objects/objects/quota", { params: { parent_type: "group", parent_id: groupId } }).then(r => setObjQ(r.data)).catch(() => setObjQ(null));

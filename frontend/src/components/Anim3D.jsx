@@ -178,6 +178,8 @@ export async function startAnim(animate, opts, target, onSaved) {
     egg("animation_3d");
     show({ state: "done", text: `${fx} ${what} enregistré${r.alpha ? " (fond transparent)" : ""} · en tête de la fiche et dans 🧊 Vues 3D`, url });
     onSaved?.(data.anim);
+    // (09/11/2026) la fiche ouverte (et la liste) se relisent : l'animation est en tete, on doit la voir sans rouvrir
+    window.dispatchEvent(new CustomEvent("bn-prints-changed", { detail: { kind: target.kind === "group" ? "group" : "print", id: target.id } }));
     setTimeout(() => { if (!busy) hide(); }, 12000);
   } catch (e) {
     show({ state: "error", text: `Animation : ${e.response?.data?.detail || e.message || e}` });
