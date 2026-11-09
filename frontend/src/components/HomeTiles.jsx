@@ -2372,10 +2372,11 @@ function MwPoints({ c, o, sz }) {
               <div style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)" }}>🏆 en tête sur 30 j</div>
               <div style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{best.title_fr || best.title}</div></div>
             <b data-pk="" style={{ fontSize: 13, color: "#16a34a", whiteSpace: "nowrap" }}>+{mwNum(best.p.points)}</b></div>}
-          {stats && <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4, marginTop: o.chart && ser ? 6 : "auto" }}>
+          {/* (09/11/2026) les cinq sur une ligne, depuis l'ajout des collections (la cinquieme passait seule dessous) */}
+          {stats && <div style={{ display: "grid", gridTemplateColumns: `repeat(${MW_STATS(head).length}, minmax(0, 1fr))`, gap: 2, marginTop: o.chart && ser ? 6 : "auto" }}>
             {MW_STATS(head).map(([e, n, l]) => <div key={l} data-pk="" style={{ textAlign: "center", minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{W >= 200 ? `${e} ` : ""}{mwNum(n)}</div>
-              <div style={{ fontSize: 10, color: "var(--muted)" }}>{l}</div></div>)}</div>}
+              <div style={{ fontSize: W >= 260 ? 12.5 : 11.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{W >= 240 ? `${e} ` : ""}{mwNum(n)}</div>
+              <div style={{ fontSize: 10, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l}</div></div>)}</div>}
         </>;
       }}
     </Tile>
