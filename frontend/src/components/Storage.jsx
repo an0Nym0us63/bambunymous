@@ -193,7 +193,8 @@ const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:
 // les bobines d'un emplacement en vrac (09/11/2026) : sa disposition (en colonne, en ligne, en grille), d'office 6 par ligne
 const vracCols = (p, n) => Math.max(1, p.layout === "col" ? 1 : p.layout === "row" ? n : p.layout === "grid" ? (p.cols || 3) : (p.cols || Math.min(n, 6)));
 const CELL_W = e => e === "s" ? 22 : e === "v" ? 40 : e ? 84 : 50;
-const tightTpl = (tpl, w, n) => tpl.includes("auto-fill") ? `repeat(${Math.max(1, Math.min(n, 6))}, ${w}px)` : tpl.replace(/minmax\(0, 1fr\)/g, `${w}px`);
+// minmax(0, …) (09/11/2026) : sur un telephone, les cases retrecissent plutot que de deborder ; jamais plus larges que w
+const tightTpl = (tpl, w, n) => tpl.includes("auto-fill") ? `repeat(${Math.max(1, Math.min(n, 6))}, minmax(0, ${w}px))` : tpl.replace(/minmax\(0, 1fr\)/g, `minmax(0, ${w}px)`);
 // la largeur d'une zone parmi ses soeurs (08/11/2026) : span colonnes, -1 toute la largeur ; elargie, ses cases vont en grille
 const spanOf = p => p.span === -1 ? { gridColumn: "1 / -1" } : p.span > 1 ? { gridColumn: `span ${p.span}` } : {};
 const wide = p => p.span === -1 || p.span > 1;
@@ -561,7 +562,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       {p.spools.length > 24 && <span style={{ ...small, fontSize: 10 }}>+{p.spools.length - 24}</span>}
       {!p.spools.length && <span style={{ ...small, fontSize: 10 }}>vide</span>}
     </div> : p.spools.length ? (() => { const e = edgeOf(p, by), list = p.rev ? [...p.spools].reverse() : p.spools;
-      return <div style={{ display: "grid", gap: 2, justifyContent: "center", gridTemplateColumns: `repeat(${vracCols(p, list.length)}, ${CELL_W(e)}px)` }}>
+      return <div style={{ display: "grid", gap: 2, justifyContent: "center", gridTemplateColumns: `repeat(${vracCols(p, list.length)}, minmax(0, ${CELL_W(e)}px))` }}>
         {list.map(x => <span key={x.id} className="bn-cell bn-tight" {...idTip(x, p.path)} data-swap-src={marks?.[x.id] != null ? marks[x.id] : undefined}
           onClick={ev => menu(ev, p)} style={{ cursor: readOnly ? "default" : "pointer", animation: fo(x.id) ? "bnHit 1s ease-in-out .7s infinite" : undefined }}>
           <span className="bn-band">{e === "v" ? <SpoolEdge s={x} vertical len={48} thick={24}/> : e === "s" ? <Swatch s={x} size={18}/> : e ? <SpoolEdge s={x} len="100%" thick={EDGE_H}/>
@@ -572,7 +573,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
   // rien ne s'etire pour remplir la fenetre. En integre (les echanges), la grille d'avant
   const cellW = q => CELL_W(edgeOf(q, by));
   const tightCells = (tpl, q, n) => embed ? tpl : tightTpl(tpl, cellW(q), n);
-  const tightZones = tpl => embed ? tpl : tpl.replace(/minmax\(0, 1fr\)/g, "max-content");
+  const tightZones = tpl => embed ? tpl : tpl.replace(/minmax\(0, 1fr\)/g, "minmax(0, max-content)");
   const Zone = ({ p, many }) => {
     const ch = kids[p.id] || [];
     const cells = ch.filter(c => c.leaf), subs = ch.filter(c => !c.leaf);
@@ -1154,7 +1155,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
     return <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: nested ? 5 : 0, borderRadius: 10,
       border: nested ? "1px dashed color-mix(in srgb, #8B5CF6 40%, var(--border))" : "none", background: nested ? "color-mix(in srgb, #8B5CF6 3%, var(--surface2))" : "transparent" }}>
       {nested && <div style={{ fontSize: 11.5, fontWeight: 900, color: "var(--text2)", whiteSpace: "nowrap" }}>{p.name} <span style={small}>vrac · {here.length}</span></div>}
-      {all.length ? <div style={{ display: "grid", gap: 2, gridTemplateColumns: `repeat(${vracCols(p, all.length)}, ${CELL_W(edgeOf(p, by))}px)` }}>{(p.rev ? [...all].reverse() : all).map(x => <Mini key={x.s.id} s={x.s} off={x.off} place={p}/>)}</div>
+      {all.length ? <div style={{ display: "grid", gap: 2, gridTemplateColumns: `repeat(${vracCols(p, all.length)}, minmax(0, ${CELL_W(edgeOf(p, by))}px))` }}>{(p.rev ? [...all].reverse() : all).map(x => <Mini key={x.s.id} s={x.s} off={x.off} place={p}/>)}</div>
         : <div style={{ padding: 10, borderRadius: 12, border: "1.5px dashed var(--border)", textAlign: "center", ...small }}>vide</div>}
       {away.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", ...small }}>🖨 dans l'imprimante :
         {away.map(x => <span key={x.id} data-tip={`${x.name} · ${x.location}`} style={{ display: "inline-flex" }}><Swatch s={x} size={20} dim/></span>)}</div>}
@@ -1175,7 +1176,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
         {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(76px, 1fr))"))}
       {/* les emplacements en vrac cote a cote (09/11/2026 : ils s'empilaient en colonne) */}
       {commons.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "flex-start" }}>{commons.map(c => <Common key={c.id} p={c} nested/>)}</div>}
-      {subs.length > 0 && (a => <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl.replace(/minmax\(0, 1fr\)/g, "max-content"), justifyContent: "start", alignItems: "start" }}>
+      {subs.length > 0 && (a => <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl.replace(/minmax\(0, 1fr\)/g, "minmax(0, max-content)"), justifyContent: "start", alignItems: "start" }}>
         {a.items.map(c => <div key={c.id} style={{ minWidth: 0, ...spanOf(c) }}><Group p={c} many={subs.length > 1 && !wide(c)}/></div>)}</div>)(arrange(subs, p, false, `repeat(${Math.min(subs.length, 4)}, minmax(0, 1fr))`))}
     </div>;
   };
