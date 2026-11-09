@@ -1043,7 +1043,42 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
           else if (start === "side") { az0 = Math.PI / 2; el0 = rad2(10); }
           else if (start === "top") el0 = rad2(78);
           const fov0 = cam.fov, vf = rad2(cam.fov), hf = 2 * Math.atan(Math.tan(vf / 2) * cam.aspect);
-          const d0 = rad / Math.sin(Math.min(vf, hf) / 2) * 1.1;
+          // (09/11/2026) le cadre serre sur le modele lui-meme, plus sur la sphere de sa boite (un modele haut, plat ou rond
+          // flottait au milieu d'un grand vide, la ou les vignettes sont rognees au plus pres). Pour chaque angle que prend
+          // l'effet (le tour entier, aux hauteurs qu'il parcourt) et chaque sommet (x, y dans le plan de l'image, z vers la
+          // camera) : il tient dans le champ des que d >= |x| / tan(champ/2) + z, perspective comprise ; 7 % de marge, et
+          // jamais plus loin qu'avant
+          const fitD = els => {
+            const pts = [];
+            let total = 0;
+            const meshes = [];
+            model.updateMatrixWorld(true);
+            model.traverseVisible(o => { if (o.isMesh && o.geometry?.attributes?.position) { meshes.push(o); total += o.geometry.attributes.position.count; } });
+            const step = Math.max(1, Math.ceil(total / 20000)), v = new THREE.Vector3();
+            for (const o of meshes) {
+              const pa = o.geometry.attributes.position;
+              for (let i = 0; i < pa.count; i += step) { v.fromBufferAttribute(pa, i).applyMatrix4(o.matrixWorld).sub(c); pts.push(v.x, v.y, v.z); }
+            }
+            if (!pts.length) return Infinity;
+            const th = Math.tan(hf / 2) / 1.07, tv = Math.tan(vf / 2) / 1.07;
+            let d = 0;
+            for (const el of els) for (let k = 0; k < 24; k++) {
+              const az = TAU * k / 24, ce = Math.cos(el), se = Math.sin(el);
+              const bx = ce * Math.sin(az), by = se, bz = ce * Math.cos(az);            // vers la camera
+              const rx = Math.cos(az), rz = -Math.sin(az);                                // a droite de l'image
+              const ux = -se * Math.sin(az), uy = ce, uz = -se * Math.cos(az);            // en haut de l'image
+              for (let i = 0; i < pts.length; i += 3) {
+                const px = pts[i], py = pts[i + 1], pz = pts[i + 2], z = px * bx + py * by + pz * bz;
+                d = Math.max(d, Math.abs(px * rx + pz * rz) / th + z, Math.abs(px * ux + py * uy + pz * uz) / tv + z);
+              }
+            }
+            return d || Infinity;
+          };
+          const span = (a, b) => [0, 0.25, 0.5, 0.75, 1].map(t => lerp(a, b, t));
+          const els = style === "spiral" ? span(THREE.MathUtils.clamp(el0 - 0.45, -0.25, 1.35), THREE.MathUtils.clamp(el0 + 0.45, -0.25, 1.35))
+            : style === "drone" ? [rad2(58)] : style === "reveal" ? span(el0, rad2(76)) : style === "dive" ? span(el0, rad2(62))
+            : style === "crane" ? span(rad2(2), rad2(72)) : [el0];
+          const d0 = Math.min(rad / Math.sin(Math.min(vf, hf) / 2) * 1.1, fitD(els));
           const place = (az, el, d, look = c) => {
             cam.position.set(c.x + d * Math.cos(el) * Math.sin(az), c.y + d * Math.sin(el), c.z + d * Math.cos(el) * Math.cos(az));
             cam.up.copy(up); cam.lookAt(look); cam.fov = fov0; cam.near = Math.max(0.1, d / 100); cam.far = d * 20; cam.updateProjectionMatrix();
@@ -1064,7 +1099,7 @@ function Viewer({ url, glb, onState, palette = null, finishes = null, multi = nu
               case "swing": place(az0, el0, d0); spin(dir * rad2(full ? 70 : arc) * (ab(u) - 0.5)); break;   // balancement
               case "travel": {                                                                     // travelling lateral, parallaxe
                 const s = (2 * ab(u) - 1) * dir, right = new THREE.Vector3(Math.cos(az0), 0, -Math.sin(az0));
-                place(az0 + 0.42 * s, el0, d0 * 0.88, c.clone().addScaledVector(right, rad * 0.16 * s)); break;
+                place(az0 + 0.42 * s, el0, d0, c.clone().addScaledVector(right, rad * 0.16 * s)); break;
               }
               case "zoom": { const t = ab(u); place(az0 + 0.45 * dir * (t - 0.5), el0, d0 * (1 - 0.45 * t)); break; }   // s'approcher
               case "reveal": { const t = ab(u);                                                    // vu du dessus, on descend en tournant
