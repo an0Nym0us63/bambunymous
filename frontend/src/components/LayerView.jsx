@@ -79,13 +79,8 @@ export function Layer3D({ s, d, now, w, h }) {
     const [bx0, by0, bx1, by1] = s.box, cx = (bx0 + bx1) * 5, cy = (by0 + by1) * 5;     // dixiemes de mm
     const ca = Math.cos(az), sa = Math.sin(az), el = 0.6, se = Math.sin(el), ce = Math.cos(el);
     const proj = (x, y, z) => { const dx = x - cx, dy = y - cy, rx = dx * ca - dy * sa, ry = dx * sa + dy * ca; return [rx, -ry * se - z * 10 * ce]; };
-    // le plateau sous les objets (09/11/2026, remis tres discret) : un peu plus grand que les objets
-    const m = Math.max(4, Math.min(12, Math.max(bx1 - bx0, by1 - by0) * 0.08));
-    const fx0 = bx0 - m, fy0 = by0 - m, fx1 = bx1 + m, fy1 = by1 + m;
-    // l'echelle : les coins du plateau, et ceux de la boite en haut
+    // l'echelle : les coins de la boite, en bas et en haut
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-    for (const [x, y] of [[fx0, fy0], [fx1, fy0], [fx0, fy1], [fx1, fy1]]) {
-      const [X, Y] = proj(x * 10, y * 10, 0); x0 = Math.min(x0, X); x1 = Math.max(x1, X); y0 = Math.min(y0, Y); y1 = Math.max(y1, Y); }
     for (const [x, y] of [[bx0, by0], [bx1, by0], [bx0, by1], [bx1, by1]]) for (const z of [0, s.ztop]) {
       const [X, Y] = proj(x * 10, y * 10, z); x0 = Math.min(x0, X); x1 = Math.max(x1, X); y0 = Math.min(y0, Y); y1 = Math.max(y1, Y); }
     const pad = 10, k = Math.min((w - 2 * pad) / Math.max(1, x1 - x0), (h - 2 * pad) / Math.max(1, y1 - y0));
@@ -95,17 +90,6 @@ export function Layer3D({ s, d, now, w, h }) {
     const sk = d?.skipped || {};
     g.lineCap = "round"; g.lineJoin = "round";
     const cur = now ?? s.last;
-    {
-      const P = (x, y) => { const [X, Y] = proj(x * 10, y * 10, 0); return [ox + X * k, oy + Y * k]; };
-      g.beginPath(); g.moveTo(...P(fx0, fy0)); g.lineTo(...P(fx1, fy0)); g.lineTo(...P(fx1, fy1)); g.lineTo(...P(fx0, fy1)); g.closePath();
-      g.fillStyle = "rgba(148,163,184,0.045)"; g.fill();
-      g.strokeStyle = "rgba(100,116,139,0.13)"; g.lineWidth = 1; g.stroke();
-      const st = Math.max(fx1 - fx0, fy1 - fy0) > 160 ? 20 : 10;
-      g.beginPath();
-      for (let x = Math.ceil(fx0 / st) * st; x < fx1; x += st) { g.moveTo(...P(x, fy0)); g.lineTo(...P(x, fy1)); }
-      for (let y = Math.ceil(fy0 / st) * st; y < fy1; y += st) { g.moveTo(...P(fx0, y)); g.lineTo(...P(fx1, y)); }
-      g.strokeStyle = "rgba(100,116,139,0.05)"; g.stroke();
-    }
     // le haut de chaque objet (09/11/2026) : son dernier contour, en fantome plus marque, dit ou est le dessus
     const topOf = {};
     for (const L of s.layers) for (const q of L.paths) { const o = q.o ?? "_"; if (!(topOf[o] >= L.n)) topOf[o] = L.n; }
