@@ -388,15 +388,24 @@ async def mine(ids: list) -> dict:
     return {"items": out, "collections_known": known}
 
 
+_REFRESHING: set = set()
+
+
 async def _page(path_fmt: str, offset: int, limit: int, fresh: bool = False) -> dict:
     """UNE page d'une liste de modeles : le front affiche les premiers tout de
     suite et demande la suite au defilement."""
-    import asyncio
+    import asyncio, time
     from .makerworld import _get_json
     tok = await _tok()
     key = (path_fmt, offset, limit)
     hit = None if fresh else _cache_get(key)
     if hit is not None:
+        # (09/11/2026) l'historique de navigation change a chaque modele vu : servi tout de suite, relu en fond s'il a
+        # plus de 2 min (la page suivante l'aura a jour)
+        if path_fmt == LISTS["history"] and time.time() - _LIST_CACHE[key][0] > 120 and key not in _REFRESHING:
+            _REFRESHING.add(key)
+            t = asyncio.ensure_future(_page(path_fmt, offset, limit, fresh=True))
+            t.add_done_callback(lambda _t: (_REFRESHING.discard(key), _t.exception() if not _t.cancelled() else None))
         return hit
     code, d = await asyncio.to_thread(_get_json, path_fmt.format(offset=offset, limit=limit), tok)
     _must(code, d)
@@ -1174,6 +1183,7 @@ async def warm_all() -> dict:
         cols = (await collections(fresh=True))["collections"]
         jobs = [run(_page(COLLECTION_DESIGNS.format(cid=c["id"]), 0, 30, fresh=True)) for c in cols]
         jobs.append(run(_page(LISTS["likes"], 0, 30, fresh=True)))
+        jobs.append(run(_page(LISTS["history"], 0, 30, fresh=True)))     # Vus : pret a l'ouverture
         creators = await following(fresh=True)
         jobs += [run(_published(c, 10, fresh=True)) for c in creators]
         await asyncio.gather(*jobs)
