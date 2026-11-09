@@ -712,9 +712,10 @@ function PlaceMaker({ onClose, onMade }) {
   const [single, setSingle] = useState(true);
   const [stock, setStock] = useState(false);
   const [quick, setQuick] = useState({ prefix: "Colonne", count: "3", n: "7" });
+  const [lay, setLay] = useState("auto");             // (09/11/2026) la disposition des zones, des la creation
   const [busy, setBusy] = useState(false);
   const nd = Math.max(0, Math.min(200, parseInt(direct) || 0));
-  const zs = zones.map(z => ({ name: z.name.trim(), vrac: !!z.vrac, n: z.vrac ? 1 : Math.max(0, Math.min(200, parseInt(z.n) || 0)) })).filter(z => z.name && z.n);
+  const zs = zones.map(z => ({ name: z.name.trim(), vrac: !!z.vrac, lay: z.lay || "auto", n: z.vrac ? 1 : Math.max(0, Math.min(200, parseInt(z.n) || 0)) })).filter(z => z.name && z.n);
   const total = kind === "common" ? 0 : nd + zs.reduce((s, z) => s + z.n, 0);
   const ok = name.trim() && (kind === "common" || total > 0);
   const create = async () => {
@@ -723,9 +724,9 @@ function PlaceMaker({ onClose, onMade }) {
       const children = kind === "common" ? [] : [
         ...Array.from({ length: nd }, (_, i) => ({ name: cellName(null, i + 1), single })),
         ...zs.map(z => z.vrac ? { name: z.name, single: false }
-          : { name: z.name, children: Array.from({ length: z.n }, (_, i) => ({ name: cellName(z.name, i + 1), single })) }),
+          : { name: z.name, ...layBody(z.lay), children: Array.from({ length: z.n }, (_, i) => ({ name: cellName(z.name, i + 1), single })) }),
       ];
-      const r = await write("post", "/storage/places", { name: name.trim(), single: false, stock, children });
+      const r = await write("post", "/storage/places", { name: name.trim(), single: false, stock, ...layBody(lay), children });
       if (r) { onClose(); if (r.made?.[0] && kind !== "common") onMade?.(r.made[0]); }
     } finally { setBusy(false); }
   };
@@ -754,12 +755,17 @@ function PlaceMaker({ onClose, onMade }) {
           <input type="number" min={0} max={200} value={direct} onChange={e => setDirect(e.target.value)} placeholder="0" style={{ ...inp, width: 80 }}/>
           <span style={small}>numérotés 1, 2, 3…</span></label>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text)" }}>Zones <span style={small}>chacune son nom et son nombre d'emplacements (« Colonne 1-3 »)</span></div>
-          {zones.map((z, i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <input value={z.name} onChange={e => setZ(i, "name", e.target.value)} placeholder="Colonne 1, Dessus…" style={{ ...inp, flex: 1 }}/>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text)", flex: 1, minWidth: 0 }}>Zones <span style={small}>chacune son nom, son nombre d'emplacements (« Colonne 1-3 ») et leur disposition</span></div>
+            {zones.length > 1 && <label style={{ display: "inline-flex", alignItems: "center", gap: 6, ...small }}>les zones
+              <LaySelect value={lay} onChange={setLay} tip="Comment les zones se placent entre elles"/></label>}
+          </div>
+          {zones.map((z, i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <input value={z.name} onChange={e => setZ(i, "name", e.target.value)} placeholder="Colonne 1, Dessus…" style={{ ...inp, flex: "1 1 120px", width: "auto", minWidth: 0 }}/>
             {!z.vrac && <input type="number" min={1} max={200} value={z.n} onChange={e => setZ(i, "n", e.target.value)} style={{ ...inp, width: 70 }}/>}
             <button type="button" onClick={() => setZ(i, "vrac", !z.vrac)} data-tip="En vrac : pas de cases, autant de bobines qu'on veut"
               style={{ ...seg, ...(z.vrac ? segOn : {}) }}>Vrac</button>
+            {!z.vrac && <LaySelect value={z.lay || "auto"} onChange={v => setZ(i, "lay", v)} tip="La disposition de ses emplacements"/>}
             <button type="button" onClick={() => setZones(l => l.filter((_, j) => j !== i))} aria-label="Retirer la zone" style={seg}>✕</button>
           </div>)}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -784,17 +790,26 @@ function PlaceMaker({ onClose, onMade }) {
         <div style={small}>Aperçu · {total} {single ? "cases" : "emplacements"}</div>
         {nd > 0 && <div style={{ display: "grid", gap: 3, gridTemplateColumns: "repeat(auto-fill, minmax(36px, 1fr))" }}>
           {Array.from({ length: Math.min(nd, 60) }, (_, i) => <div key={i} style={cellPrev(single)}>{i + 1}</div>)}</div>}
-        {zs.length > 0 && <div style={{ display: "grid", gap: 6, gridTemplateColumns: `repeat(auto-fit, minmax(${zs.length > 4 ? 90 : 70}px, 1fr))`, alignItems: "start" }}>
-          {zs.map((z, i) => <div key={i} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-            <div style={{ ...small, fontSize: 10.5, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{z.name}</div>
+        {zs.length > 0 && <div style={{ display: "grid", gap: 6, gridTemplateColumns: layTpl(lay, zs.length) || `repeat(auto-fit, minmax(${zs.length > 4 ? 90 : 70}px, 1fr))`, alignItems: "start" }}>
+          {zs.map((z, i) => <div key={i} style={{ display: z.lay === "auto" ? "flex" : "grid", flexDirection: "column", gap: 3, gridTemplateColumns: layTpl(z.lay, Math.min(z.n, 20)) || undefined, alignContent: "start" }}>
+            <div style={{ ...small, fontSize: 10.5, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", gridColumn: "1 / -1" }}>{z.name}</div>
             {z.vrac ? <div style={{ ...cellPrev(false), padding: "10px 2px" }}>en vrac</div> : <>
               {Array.from({ length: Math.min(z.n, 20) }, (_, k) => <div key={k} style={cellPrev(single)}>{cellName(z.name, k + 1)}</div>)}
-              {z.n > 20 && <div style={{ ...small, textAlign: "center" }}>… {z.n}</div>}</>}
+              {z.n > 20 && <div style={{ ...small, textAlign: "center", gridColumn: "1 / -1" }}>… {z.n}</div>}</>}
           </div>)}
         </div>}
       </div>}
     </div>
   </FSheet>, document.body);
+}
+// (09/11/2026) la disposition choisie a la creation : « auto », « col », « row », « g3 » (grille de 3 par ligne)
+const LAYS = [["auto", "Automatique"], ["col", "En colonne"], ["row", "En ligne"], ...[2, 3, 4, 5, 6, 8].map(n => [`g${n}`, `Grille de ${n}`])];
+const layBody = v => v === "col" || v === "row" ? { layout: v } : /^g\d+$/.test(v || "") ? { layout: "grid", cols: +v.slice(1) } : {};
+const layTpl = (v, n) => v === "col" ? "minmax(0, 1fr)" : v === "row" ? `repeat(${Math.max(1, n)}, minmax(0, 1fr))` : /^g\d+$/.test(v || "") ? `repeat(${v.slice(1)}, minmax(0, 1fr))` : null;
+function LaySelect({ value, onChange, tip }) {
+  return <select value={value} onChange={e => onChange(e.target.value)} data-tip={tip} aria-label={tip}
+    style={{ ...inp, width: "auto", padding: "6px 8px", fontSize: 12.5 }}>
+    {LAYS.map(([k, l]) => <option key={k} value={k}>▦ {l}</option>)}</select>;
 }
 const cellPrev = single => ({ padding: "4px 2px", borderRadius: 6, fontSize: 10, fontWeight: 800, textAlign: "center", color: "var(--text2)",
   border: `1px ${single ? "solid" : "dashed"} color-mix(in srgb, #8B5CF6 35%, var(--border))`, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" });
