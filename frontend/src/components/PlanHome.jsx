@@ -158,7 +158,9 @@ function NextUp({ p, onSheet }) {
   const todo = [
     j.load?.length > 0 && ["🧵", "color-mix(in srgb, #0891B2 78%, var(--text2))", <SwapLinks j={j}/>],
     j.bed_change && ["🔲", "#0369A1", bedTxt(j.bed_change).replace(/^🔲 /, "")],
-    j.merged && ["🧩", "#6366F1", "Regrouper ses plateaux dans Bambu Studio avant de lancer"],
+    j.merged && ["🧩", "#6366F1", `Regrouper ses plateaux dans Bambu Studio avant de lancer${j.merge_mode ? `, ${j.merge_mode}` : ""}`],
+    // (09/11/2026) comme la proposition de regroupement : le plateau trop haut pour passer sous la tige, en dernier
+    j.merge_last && ["⬆", "#B45309", `Plateau ${j.merge_last.plate} en dernier : ${j.merge_last.h} mm, plus haut que la tige (${j.merge_last.rod_h} mm)`],
     ...(j.runout || []).map(r => ["🔄", "#B45309", runoutTxt(r).replace(/^🔄 /, "") + " : prépare une autre bobine"]),
     j.awaits_order?.length > 0 && ["📬", "#0EA5E9", `Attend une commande : ${j.awaits_order.join(", ")}`],
   ].filter(Boolean);

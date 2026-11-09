@@ -1581,7 +1581,7 @@ def _merged(jobs: list, d: dict) -> list:
     """Les plateaux regroupes (06/11/2026, d["merge"] : {id: [cles]}) : un seul travail, a la place du premier, pour
     tous ; sa duree, celle de ses plateaux moins un lancement par plateau regroupe ; ses filaments, ceux de tous. Un
     regroupement dont il ne reste qu'un plateau (les autres imprimes, ou sortis de la file) s'efface."""
-    from .plate_merge import PREP_S
+    from .plate_merge import PREP_S, profile_info, _mixed
     if not d.get("merge"):
         return jobs
     by = {j["key"]: j for j in jobs}
@@ -1619,6 +1619,19 @@ def _merged(jobs: list, d: dict) -> list:
                     merged_thumbs=[x.get("thumb") for x in ms],      # chaque plateau en grand (08/11/2026)
                     plate_name=f"Regroupés : plateaux {', '.join(str(x['plate']) for x in ms)}",
                     weight_g=round(sum(x.get("weight_g") or 0 for x in ms), 1))
+        # (09/11/2026) comme la proposition : des couleurs differentes se regroupent objet par objet, et un plateau plus haut
+        # que la tige passe en dernier (en redescendant sur les autres, la tete butterait dessus) ; le « Prochain » le rappelle
+        try:
+            mixed = _mixed([{f.get("filament_id") for f in x["fils"] if f.get("filament_id")} for x in ms])
+            head["merge_mode"] = "objet par objet" if mixed else "couche par couche"
+            info = profile_info(head.get("mw_id") or str(head["design_id"]).split("~")[0], head.get("iid")) if mixed and head.get("iid") else None
+            if info:
+                hi = max(ms, key=lambda x: (info["sizes"].get(x["plate"]) or [0, 0, 0])[2])
+                h = (info["sizes"].get(hi["plate"]) or [0, 0, 0])[2]
+                if h > info["rod_h"]:
+                    head["merge_last"] = {"plate": hi["plate"], "h": round(h), "rod_h": round(info["rod_h"])}
+        except Exception:
+            logger.exception("[PLANNING] regroupement : ordre des objets")
         by[there[0]] = head
         gone.update(there[1:])
     for gid in drop:

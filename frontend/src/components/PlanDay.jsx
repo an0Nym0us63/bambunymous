@@ -230,6 +230,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
       {j.load?.length > 0 && tag(<>🧵 À charger : <LoadLinks j={j}/>{j.free_slot && !j.unload?.length ? " (emplacement libre)" : ""}</>, "#6366F1",
         j.free_slot && !j.unload?.length ? "Pas dans l'AMS à ce moment-là ; un emplacement est libre, rien à retirer" : "Pas dans l'AMS à ce moment-là")}
       {j.merged && tag(`🧩 ${j.plate_name || "Regroupés"}`, "#6366F1", "Imprimés ensemble sur un seul plateau : regroupe-les dans Bambu Studio avant de lancer")}
+      {j.merge_last && tag(`⬆ Plateau ${j.merge_last.plate} en dernier`, "#B45309", `${j.merge_last.h} mm, plus haut que la tige (${j.merge_last.rod_h} mm) : objet par objet, à imprimer en dernier`)}
       {j.bed_change && tag(bedTxt(j.bed_change), "#0369A1", j.bed_warn || "Le plateau que demande ce profil, ou un des tiens qui va à ce filament")}
       {!j.bed_change && j.bed_warn && tag(`🔲 ${j.bed_warn}`, "#B45309", "Paramètres › Imprimante › Plateaux d'impression")}
       {j.unload?.length > 0 && tag(<>↩ À retirer : <FilLinks labels={j.unload} ids={j.unload_ids}/></>, "#64748B", "Celle qui resservira le plus tard (ou plus du tout) : on la sort pour faire la place")}
