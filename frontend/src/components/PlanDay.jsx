@@ -438,13 +438,16 @@ function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow, rootOf }) 
       for (const p of ps) {
         const a = el.querySelector(`[data-swap-src="${p.n}"]`), b = el.querySelector(`[data-swap-dst="${p.n}"]`);
         if (!a || !b) continue;
-        const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
-        const ax = ra.right - o.left - 2, ay = ra.top + ra.height / 2 - o.top, bx = rb.left - o.left + 2, by = rb.top + rb.height / 2 - o.top;
+        // (10/11/2026) le centre (une mise a l'echelle ne le bouge pas) et la demi-largeur sans transformation : la case qui
+        // clignote grossit et retrecit, son bord bougeait et le lien sautait a chaque recalcul
+        const box = x => { const r = x.getBoundingClientRect(); return { cx: r.left + r.width / 2 - o.left, cy: r.top + r.height / 2 - o.top, hw: x.offsetWidth / 2 }; };
+        const A = box(a), B = box(b);
+        const ax = Math.round(A.cx + A.hw - 2), ay = Math.round(A.cy), bx = Math.round(B.cx - B.hw + 2), by = Math.round(B.cy);
         const mx = (ax + bx) / 2;
         const h = homeOf(p) ? el.querySelector(`[data-swap-src="↩${p.n}"]`) : null;
         let back = null;
         if (h) {                                      // du slot a sa case : de la gauche du slot a la droite de la case
-          const rh = h.getBoundingClientRect(), hx = rh.right - o.left - 2, hy = rh.top + rh.height / 2 - o.top, m2 = (hx + bx) / 2;
+          const H = box(h), hx = Math.round(H.cx + H.hw - 2), hy = Math.round(H.cy), m2 = (hx + bx) / 2;
           back = `M${bx},${by + 4} C${m2},${by + 4} ${m2},${hy} ${hx},${hy}`;
         }
         out.push({ n: p.n, d: `M${ax},${ay} C${mx},${ay} ${mx},${by} ${bx},${by}`, a: FCOL[p.fid], b: FCOL[p.ofid],
@@ -481,17 +484,16 @@ function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow, rootOf }) 
         <defs><linearGradient id="bnSwGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#F59E0B"/><stop offset="1" stopColor="#6366F1"/></linearGradient></defs>
         {links.filter(l => inGrp(l.n)).map(l => <g key={l.n} style={{ animation: "bnSwIn .4s ease-out" }}>
           <path id={`bnSw${title}${l.n}`.replace(/\W/g, "")} className="bn-sw-link" d={l.d}/>
-          <circle className="bn-sw-ghost" r="5" fill={hex(l.a)} stroke="#fff" strokeWidth="1.5">
-            <animateMotion dur="2.4s" repeatCount="indefinite" keyPoints="0;1" keyTimes="0;1" calcMode="linear"><mpath href={`#${`bnSw${title}${l.n}`.replace(/\W/g, "")}`}/></animateMotion></circle>
-          {l.b && l.swap && <circle className="bn-sw-ghost" r="5" fill={hex(l.b)} stroke="#fff" strokeWidth="1.5">
-            <animateMotion dur="2.4s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href={`#${`bnSw${title}${l.n}`.replace(/\W/g, "")}`}/></animateMotion></circle>}
-          {l.back && <>
-            <path id={`bnSwB${title}${l.n}`.replace(/\W/g, "")} className="bn-sw-link back" d={l.back}/>
-            {l.b && <circle className="bn-sw-ghost" r="5" fill={hex(l.b)} stroke="#fff" strokeWidth="1.5">
-              <animateMotion dur="2.4s" repeatCount="indefinite" calcMode="linear"><mpath href={`#${`bnSwB${title}${l.n}`.replace(/\W/g, "")}`}/></animateMotion></circle>}
-          </>}
+          {l.back && <path id={`bnSwB${title}${l.n}`.replace(/\W/g, "")} className="bn-sw-link back" d={l.back}/>}
         </g>)}
       </svg>
+      {/* (10/11/2026) les pastilles qui voyagent sur les liens : en CSS, chacune part du debut a son apparition (l'animation
+          SVG suivait l'horloge de la page : elle surgissait au milieu du trajet), plus vive, en fondu aux deux bouts */}
+      {links.filter(l => inGrp(l.n)).map(l => <React.Fragment key={l.n}>
+        <span className="bn-sw-dot" style={{ offsetPath: `path("${l.d}")`, background: hex(l.a) }}/>
+        {l.b && l.swap && <span className="bn-sw-dot" style={{ offsetPath: `path("${l.d}")`, background: hex(l.b), animationDirection: "reverse" }}/>}
+        {l.back && l.b && <span className="bn-sw-dot" style={{ offsetPath: `path("${l.back}")`, background: hex(l.b), animationDelay: ".8s" }}/>}
+      </React.Fragment>)}
     </div>
   </div>;
 }
@@ -553,7 +555,10 @@ export function SwapSheet({ j, onClose }) {
         .bn-sw-rail{display:flex;align-items:flex-start;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;gap:16px;scrollbar-width:none;transition:height .3s ease}
         .bn-sw-rail::-webkit-scrollbar{display:none}
         .bn-sw-rail>*{flex:0 0 100%;scroll-snap-align:start}
-        @media (prefers-reduced-motion:reduce){.bn-sw-link,.bn-sw-ar{animation:none}.bn-sw-ghost{display:none}}`}</style>
+        .bn-sw-dot{position:absolute;left:0;top:0;width:10px;height:10px;border-radius:50%;border:1.5px solid #fff;box-sizing:border-box;z-index:5;
+          pointer-events:none;offset-rotate:0deg;box-shadow:0 1px 4px rgba(15,23,42,.35);animation:bnSwRun 1.6s cubic-bezier(.45,.05,.55,.95) infinite both}
+        @keyframes bnSwRun{0%{offset-distance:0%;opacity:0}12%{opacity:1}88%{opacity:1}100%{offset-distance:100%;opacity:0}}
+        @media (prefers-reduced-motion:reduce){.bn-sw-link,.bn-sw-ar{animation:none}.bn-sw-ghost,.bn-sw-dot{display:none}}`}</style>
       <div style={{ padding: "52px 12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span className="bn-sw-ar" style={{ width: 38, height: 38, borderRadius: 12, display: "grid", placeItems: "center", flexShrink: 0, color: "#fff",
