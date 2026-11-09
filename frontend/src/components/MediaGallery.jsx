@@ -14,7 +14,7 @@ import { fBtn, lighten } from "./FicheKit";
 import { ANIM_STYLES } from "./Anim3D";
 import { openVue3D } from "./Vue3DPicker";
 import { egg } from "../eggs";
-import MediaLibrary from "./MediaLibrary";
+import MediaLibrary, { saveAnim } from "./MediaLibrary";
 
 const u = url => url ? apiUrl(String(url).replace(/^\/api\/v1/, "")) : null;
 const SNAP_ORDER = ["fail", "pct100", "pct99", "pct50", "layer2", "layer1"];       // la fin d'abord, puis en remontant
@@ -91,7 +91,7 @@ export default function MediaGallery({ kind, id, title = "", refreshKey = "", on
     return [...(v.slots || []).map(s => { const on = sel.includes(s.n);
         return { key: `${e.key}:v${s.n}`, kind: "vue", e, n: s.n, name: s.n === 1 ? "Vue3D.png" : `Vue3D_${s.n}.png`, src: u(s.url), fit: "contain",
           label: `Vue ${s.n}`, sel: on, sl: sel, t: vOf(s.url), toggle: () => client.put(`${e.base}/thumb`, { slots: on ? sel.filter(x => x !== s.n) : [...sel, s.n] }) }; }),
-      ...(v.anims || []).map((a, i) => ({ key: `${e.key}:${a.name}`, kind: "anim", e, name: a.name, src: u(a.url), video: true,
+      ...(v.anims || []).map((a, i) => ({ key: `${e.key}:${a.name}`, kind: "anim", e, name: a.name, src: u(a.url), raw: a.url, video: true,
         label: `${(ANIM_STYLES.find(s => s[0] === a.style) || [])[1] || "🎬"} ${a.label}`, top: i === 0 && !v.anim_off, t: a.v || 0,
         // en tete de fiche, ou (deja en tete) plus d'animation du tout : l'image revient (08/11/2026)
         toggleTop: () => i === 0 && !v.anim_off ? client.post(`${e.base}/vue3d/anim/none`) : client.post(`${e.base}/vue3d/anim/top`, null, { params: { name: a.name } }) }))]; };
@@ -117,7 +117,10 @@ export default function MediaGallery({ kind, id, title = "", refreshKey = "", on
   const open = it => setLb({ items: flat.map(x => ({ url: x.src, label: x.lbl })), i: flat.findIndex(x => x.key === it.key) });
 
   const tools = it => {
-    if (!admin) return it.kind === "photo" || it.kind === "vue" ? (cover === it.e.ref(it.name) ? <span style={dot({ top: 5, left: 5 }, true, "#F59E0B")}>⭐</span> : null) : null;
+    const dl = <button type="button" onClick={ev => { ev.stopPropagation(); saveAnim(it); }} style={dot({ bottom: 5, left: 5 }, false, "#0EA5E9")}
+      data-tip="La télécharger (version complète)">⬇</button>;
+    if (!admin) return it.kind === "photo" || it.kind === "vue" ? (cover === it.e.ref(it.name) ? <span style={dot({ top: 5, left: 5 }, true, "#F59E0B")}>⭐</span> : null)
+      : it.kind === "anim" ? dl : null;
     const isCover = (it.kind === "photo" || it.kind === "vue") && cover === it.e.ref(it.name);
     const trash = (what, run) => { const arm = armed === it.key;
       return <button type="button" disabled={busy} onClick={() => arm ? run() : setArmed(it.key)} onBlur={() => setArmed(a => a === it.key ? null : a)}
@@ -138,6 +141,7 @@ export default function MediaGallery({ kind, id, title = "", refreshKey = "", on
       <button type="button" disabled={busy} onClick={() => act(() => it.toggleTop())}
         style={{ ...dot({ bottom: 5, right: 5 }, it.top, "#0EA5E9") }}
         data-tip={it.top ? "Elle tourne en haut de la fiche, à la place de l'image : toucher pour l'enlever" : "La faire tourner en haut de la fiche, à la place de l'image"}>🧊</button>
+      {dl}
       {trash("cette animation", () => act(() => client.delete(`${it.e.base}/vue3d/anim`, { params: { name: it.name } })))}</>;
     if (it.kind === "snap") return trash("cette capture", () => act(() => client.delete(`/prints/${it.e.pid}/upload/${it.name}`)));
     return null;

@@ -12,6 +12,11 @@ import { apiAnim } from "../api/client";
 import { fBtn } from "./FicheKit";
 import { useStackZ } from "../utils/zstack";
 import { Images } from "lucide-react";
+import { saveBlob } from "./FilesSheet";
+
+// (09/11/2026) une animation a garder chez soi : la version complete, nommee d'apres la fiche et l'effet
+export const saveAnim = it => saveBlob(it.raw, `${[it.e.title, it.label].filter(Boolean).join(" - ")
+  .replace(/[^\p{L}\p{N} ._-]+/gu, " ").replace(/\s+/g, " ").trim().slice(0, 90) || "animation"}.${/\.mp4$/i.test(it.name) ? "mp4" : "webm"}`);
 
 const KINDS = [["all", "Tout"], ["photo", "📸 Photos"], ["vue", "🧊 Vues 3D"], ["anim", "🎬 Animations"], ["tl", "⏱ Timelapses"], ["snap", "🛠 Captures"], ["plate", "🖼 Plateaux"]];
 const KIND_RANK = { photo: 0, vue: 1, anim: 2, tl: 3, snap: 4, plate: 5 };
@@ -101,9 +106,11 @@ export default function MediaLibrary({ title, group, admin, ents, allOf, cover, 
           🧊 Fiche{group && it.e.pid ? " de l'impr." : ""}</Pill>}
       </>;
     }
-    if (it.kind === "anim") return <Pill on={it.top} c={C.fiche} disabled={!admin || busy} onClick={() => act(() => it.toggleTop())}
-      tip={it.top ? "Elle tourne en haut de la fiche, à la place de l'image : toucher pour l'enlever" : "La faire tourner en haut de la fiche, à la place de l'image (une seule à la fois)"}>
-      🧊 Fiche{group && it.e.pid ? " de l'impr." : ""}</Pill>;
+    if (it.kind === "anim") return <>
+      <Pill on={it.top} c={C.fiche} disabled={!admin || busy} onClick={() => act(() => it.toggleTop())}
+        tip={it.top ? "Elle tourne en haut de la fiche, à la place de l'image : toucher pour l'enlever" : "La faire tourner en haut de la fiche, à la place de l'image (une seule à la fois)"}>
+        🧊 Fiche{group && it.e.pid ? " de l'impr." : ""}</Pill>
+      {it.raw && <Pill c="#6366F1" onClick={() => saveAnim(it)} tip="La télécharger (version complète)">⬇</Pill>}</>;
     return null;
   };
   const ring = it => (it.kind === "photo" || it.kind === "vue") && cover && cover === it.e.ref(it.name) ? C.cover : it.kind === "vue" && it.sel ? C.fiche
