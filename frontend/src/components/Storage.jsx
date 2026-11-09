@@ -157,7 +157,10 @@ export function SpoolEdge({ s, vertical = false, len = "100%", thick = 18, dim =
   </span>;
 }
 // comment un rangement montre ses bobines : la pastille, ou la tranche (h a plat, v debout), pose sur le rangement
-const edgeOf = (p, by) => { let q = p, seen = 0; while (q && q.parent_id != null && by[q.parent_id] && seen++ < 20) q = by[q.parent_id]; return q?.edge || null; };
+// la vue des bobines (09/11/2026 : reglable par zone) : celle de la zone la plus proche qui en a une, sinon du rangement ;
+// « p » = pastille choisie expres (une zone en pastille dans un rangement sur la tranche)
+const edgeOf = (p, by) => { let q = p, seen = 0; while (q && seen++ < 20) { if (q.edge) return q.edge === "p" ? null : q.edge; q = q.parent_id != null ? by[q.parent_id] : null; } return null; };
+const EDGE_TXT = { h: "sur la tranche, à plat", v: "sur la tranche, debout", p: "pastille" };
 // les cases des rangements (08/11/2026) : le meme dessin dans la vue du stock et la fenetre d'un rangement ; le texte suit
 // la largeur de la case (le nom toujours, sur une ligne quand c'est etroit ; rien que la tranche dans une toute petite case)
 const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:flex;flex-direction:column;align-items:stretch;gap:3px;min-width:0;
@@ -422,9 +425,11 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
         onClick: () => fillCell(p) },
       p.leaf && { icon: p.single ? "📚" : "🔲", label: p.single ? "En faire un emplacement commun" : "En faire une case (une seule bobine)",
         hint: p.single ? "Autant de bobines qu'on veut" : "Réservée à une bobine tant qu'elle ne va pas ailleurs", onClick: () => patch(p, { single: !p.single }) },
-      p.id === root.id && { icon: "🧵", label: "Vue des bobines", hint: { h: "sur la tranche, à plat", v: "sur la tranche, debout" }[p.edge] || "pastille", onClick: () => openMenu(null, {
-        title: `Les bobines de « ${p.name} »`, subtitle: "comment les montrer dans ses cases", color: "#8B5CF6",
-        items: [[null, "🟣", "Pastille"], ["h", "▬", "Sur la tranche, à plat (horizontale)"], ["v", "▮", "Sur la tranche, debout (verticale)"]].map(([k, ic, l]) =>
+      !p.leaf && { icon: "🧵", label: "Vue des bobines",
+        hint: p.id === root.id ? EDGE_TXT[p.edge] || "pastille" : p.edge ? EDGE_TXT[p.edge] : `comme au-dessus (${EDGE_TXT[edgeOf(by[p.parent_id], by) || "p"]})`, onClick: () => openMenu(null, {
+        title: `Les bobines de « ${p.name} »`, subtitle: p.id === root.id ? "comment les montrer dans ses cases (une zone peut avoir la sienne)" : "comment les montrer dans les cases de cette zone", color: "#8B5CF6",
+        items: [...(p.id === root.id ? [] : [[null, "↩", `Comme au-dessus (${EDGE_TXT[edgeOf(by[p.parent_id], by) || "p"]})`]]),
+          [p.id === root.id ? null : "p", "🟣", "Pastille"], ["h", "▬", "Sur la tranche, à plat (horizontale)"], ["v", "▮", "Sur la tranche, debout (verticale)"]].map(([k, ic, l]) =>
           ({ icon: (p.edge || null) === k ? "✓" : ic, label: l, onClick: () => patch(p, { edge: k }) })),
       }) },
       // du stock : le rangement entier, ou une zone, une caisse en vrac (07/11/2026 : seulement le rangement avant)

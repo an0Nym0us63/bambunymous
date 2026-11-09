@@ -514,7 +514,8 @@ async def update(db, pid: int, body: dict) -> None:
     if "rev" in body:
         p.rev = bool(body["rev"])
     if "edge" in body:
-        p.edge = body["edge"] if body["edge"] in ("h", "v") else None
+        # « p » (09/11/2026) : une zone en pastille expres, dans un rangement montre sur la tranche
+        p.edge = body["edge"] if body["edge"] in ("h", "v", "p") else None
     if "span" in body:
         try:
             v = int(body["span"]) if body["span"] not in (None, "") else None
