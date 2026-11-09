@@ -2561,6 +2561,15 @@ async def lock(key: str, on: bool = True, keys: list | None = None, at: str | No
             d["locked"].pop(k, None)
             if unpin:
                 d["pins"].pop(k, None)
+            elif j:
+                # (09/11/2026) fige « jour et heure » -> « jour » : il reste a sa place. Fige, son rang dans la file ne
+                # comptait pas ; defige avec son ancien rang, ce qui passait avant lui dans la file remplissait la
+                # journee et il etait reporte au lendemain. Il reprend dans la file la place qu'il a sur le calendrier :
+                # devant le premier plateau (non fige) pose apres lui.
+                order = [x for x in d.get("order") or [] if x != k]
+                after = {x["key"] for x in r["jobs"] if x["start"] > j["start"] and x["key"] not in d["locked"] and x["key"] != k}
+                order.insert(next((n for n, x in enumerate(order) if x in after), len(order)), k)
+                d["order"] = order
     d["plan0"] = {}
     d["rev"] = int(d.get("rev") or 0) + 1
     await _save(d, "Figer" if on else "Défiger heures et jours" if unpin else "Défiger")
