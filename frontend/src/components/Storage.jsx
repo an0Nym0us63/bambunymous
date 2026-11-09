@@ -1138,17 +1138,21 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
   };
   const p0Of = s => by[s.place_id] || {};
   // une bobine en vrac, condensee (09/11/2026) comme une case : sa bobine seule, le nom au survol, la fiche au toucher
-  const Mini = ({ s }) => { const e = edgeOf(p0Of(s), by);
-    return <button type="button" className={`bn-cell bn-tight${filtering ? " bn-match" : ""}`} onClick={() => onOpen(s)} {...idTip(s, p0Of(s).path)}>
+  // off (09/11/2026) : hors de la recherche ou du filtre, elle reste a sa place, estompee (comme dans les cases)
+  const Mini = ({ s, off = false, place = null }) => { const e = edgeOf(place || p0Of(s), by);
+    return <button type="button" className={`bn-cell bn-tight${filtering && !off ? " bn-match" : ""}`} onClick={() => !off && onOpen(s)}
+      {...idTip(s, (place || p0Of(s)).path)} style={off ? { opacity: 0.3, cursor: "default" } : undefined}>
       <span className="bn-band">{e === "v" ? <SpoolEdge s={s} vertical len={48} thick={24}/> : e === "s" ? <Swatch s={s} size={18}/> : e ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/>
         : <span className="bn-pastille"><Swatch s={s} size={40}/></span>}</span></button>; };
   const Common = ({ p, nested }) => {
     const here = storedHere(p);
     const away = p.spools.filter(x => x.in_printer);
+    // toutes ses bobines rangees ; celles que la recherche ecarte restent, estompees
+    const all = p.spools.filter(x => !x.in_printer && !x.ordered).map(x => byId[x.id] ? { s: byId[x.id] } : { s: x, off: true });
     return <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: nested ? 5 : 0, borderRadius: 10,
       border: nested ? "1px dashed color-mix(in srgb, #8B5CF6 40%, var(--border))" : "none", background: nested ? "color-mix(in srgb, #8B5CF6 3%, var(--surface2))" : "transparent" }}>
       {nested && <div style={{ fontSize: 11.5, fontWeight: 900, color: "var(--text2)", whiteSpace: "nowrap" }}>{p.name} <span style={small}>vrac · {here.length}</span></div>}
-      {here.length ? <div style={{ display: "grid", gap: 2, gridTemplateColumns: `repeat(${vracCols(p, here.length)}, ${CELL_W(edgeOf(p, by))}px)` }}>{(p.rev ? [...here].reverse() : here).map(s => <Mini key={s.id} s={s}/>)}</div>
+      {all.length ? <div style={{ display: "grid", gap: 2, gridTemplateColumns: `repeat(${vracCols(p, all.length)}, ${CELL_W(edgeOf(p, by))}px)` }}>{(p.rev ? [...all].reverse() : all).map(x => <Mini key={x.s.id} s={x.s} off={x.off} place={p}/>)}</div>
         : <div style={{ padding: 10, borderRadius: 12, border: "1.5px dashed var(--border)", textAlign: "center", ...small }}>vide</div>}
       {away.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", ...small }}>🖨 dans l'imprimante :
         {away.map(x => <span key={x.id} data-tip={`${x.name} · ${x.location}`} style={{ display: "inline-flex" }}><Swatch s={x} size={20} dim/></span>)}</div>}
