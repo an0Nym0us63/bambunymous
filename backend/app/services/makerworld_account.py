@@ -177,7 +177,10 @@ def _design_of(it) -> dict:
     if not did or not str(did).isdigit():
         return None
     cr = d.get("designCreator") if isinstance(d.get("designCreator"), dict) else {}
-    return {"design_id": str(did), "title": d.get("title"),
+    # l'element qui enveloppe le modele (historique de navigation) : sa date, quand il en donne une
+    seen = next((it.get(k) for k in ("viewTime", "browseTime", "visitTime", "updateTime", "createTime", "time")
+                 if d is not it and isinstance(it.get(k), str)), None)
+    return {"design_id": str(did), "title": d.get("title"), **({"seen_at": seen} if seen else {}),
             "title_fr": d.get("titleTranslated") if isinstance(d.get("titleTranslated"), str) and d.get("titleTranslated") else None,
             "cover_url": d.get("cover") or d.get("coverUrl"),
             "creator_name": cr.get("name"),
@@ -219,6 +222,8 @@ async def _list(path_fmt: str, max_items: int = 300) -> list:
 
 LISTS = {
     "likes": "/design-service/my/design/like?offset={offset}&limit={limit}",
+    # (09/11/2026) l'historique de navigation du compte (celui de Bambu Handy), le plus recent d'abord
+    "history": "/design-service/my/design/history?offset={offset}&limit={limit}",
 }
 COLLECTIONS = "/design-service/my/favorites/listlite"
 COLLECTION_DESIGNS = "/design-service/favorites/{cid}/designs?offset={{offset}}&limit={{limit}}"
@@ -409,8 +414,31 @@ async def _paged(path_fmt: str, offset: int, limit: int, fresh: bool = False) ->
     return {**res, "total": total, "offset": offset, "has_more": bool(more)}
 
 
+async def printed_designs(offset: int = 0, limit: int = 30) -> dict:
+    """(09/11/2026) Les modeles MakerWorld deja imprimes (reussis ou partiels), la derniere impression d'abord, tires
+    de l'historique : rien n'est demande a MakerWorld, sans compte aussi."""
+    from sqlalchemy import select, func, desc
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    offset, limit = max(0, int(offset or 0)), max(1, min(int(limit or 30), 60))
+    cond = (Print.design_id.isnot(None), Print.design_id != "", Print.design_id != "0", Print.status.in_(DONE_STATUSES))
+    async with AsyncSessionLocal() as db:
+        total = (await db.execute(select(func.count(func.distinct(Print.design_id))).where(*cond))).scalar() or 0
+        rows = (await db.execute(select(Print.design_id, func.max(Print.print_date).label("last")).where(*cond)
+                                 .group_by(Print.design_id).order_by(desc("last")).offset(offset).limit(limit))).all()
+    last = {str(d): t for d, t in rows}
+    res = await _enrich([{"design_id": str(d)} for d, _ in rows])
+    for x in res["items"]:
+        t = last.get(x["design_id"])
+        if t:
+            x["last_print"] = t.isoformat() + ("Z" if t.tzinfo is None else "")
+    return {**res, "total": total, "offset": offset, "has_more": offset + len(rows) < total}
+
+
 async def collection(kind: str, offset: int = 0, limit: int = 30, fresh: bool = False) -> dict:
     """Modeles aimes, par pages, enrichis (fiche, deja imprime)."""
+    if kind == "printed":
+        return await printed_designs(offset, limit)
     if kind not in LISTS:
         raise AccountError("Liste inconnue")
     return await _paged(LISTS[kind], offset, limit, fresh)
