@@ -987,12 +987,27 @@ def _variant_counts(rows: list, entries: list, m: dict, iid) -> dict:
                 continue
         # plusieurs variantes sur un meme plateau (06/11/2026 : 4 echantillons de 4 couleurs, en un seul print de x4) :
         # chaque variante dont il a tous les filaments en prend sa part, a parts egales (le reste aux premieres)
+        # (10/11/2026) par couleurs distinctes : deux lignes de la meme couleur (Granit rouge deux fois dans la file) en
+        # prenaient chacune une part, et la derniere couleur du plateau de 7 restait a faire ; la part d'une couleur va a
+        # ses lignes dans l'ordre, la premiere remplie jusqu'a sa quantite (ce qu'elle a deja compris) avant la suivante
         full = [r for r in rows if r["_fids"] and r["_fids"] <= fids] if to is None and c > 1 else []
+        sets = []
+        for r in full:
+            g = next((x for x in sets if x[0] == r["_fids"]), None)
+            if g:
+                g[1].append(r)
+            else:
+                sets.append((r["_fids"], [r]))
         if len(full) >= 2:
-            share = [c // len(full) + (1 if i < c % len(full) else 0) for i in range(len(full))]
-            for r, k in zip(full, share):
-                for n in e["plates"]:
-                    counts[r["design_id"]][n] = counts[r["design_id"]].get(n, 0) + k
+            share = [c // len(sets) + (1 if i < c % len(sets) else 0) for i in range(len(sets))]
+            for (_f, rs), k in zip(sets, share):
+                for i, r in enumerate(rs):
+                    room = _qty(r.get("qty", 1)) - max((counts[r["design_id"]].get(n, 0) for n in e["plates"]), default=0)
+                    take = k if i == len(rs) - 1 else max(0, min(k, room))
+                    k -= take
+                    if take:
+                        for n in e["plates"]:
+                            counts[r["design_id"]][n] = counts[r["design_id"]].get(n, 0) + take
             continue
         if to is None:
             to = max(rows, key=lambda r: (len(fids & r["_fids"]) / max(1, len(r["_fids"])), -rows.index(r)))
